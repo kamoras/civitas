@@ -19,7 +19,11 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import BskySenatorSpotlight, Senator, TimelineEntry, WeekSummary
-from app.pipeline.analyze.bluesky_utils import BSKY_MAX_CHARS, publish_post
+from app.pipeline.analyze.bluesky_utils import (
+    BSKY_MAX_CHARS,
+    publish_post,
+    strip_hashtags_and_truncate,
+)
 from app.pipeline.analyze.grounding import (
     grounding_violations,
     hedge_and_editorializing_violations,
@@ -190,15 +194,7 @@ Return JSON: {{"post": "<your post text>"}}"""
         if not result or not isinstance(result.get("post"), str):
             return None
 
-        text = re.sub(r"#(\w+)", r"\1", result["post"]).strip()
-        if len(text) > MAX_SPOTLIGHT_CHARS:
-            trimmed = text[:MAX_SPOTLIGHT_CHARS]
-            cut = max(
-                (trimmed.rfind(p) + 1 for p in (".", "!", "?") if trimmed.rfind(p) > 0),
-                default=-1,
-            )
-            text = trimmed[:cut] if cut > 0 else trimmed[: trimmed.rfind(" ")]
-        text = text.strip()
+        text = strip_hashtags_and_truncate(result["post"], MAX_SPOTLIGHT_CHARS)
 
         problems = []
 
@@ -529,15 +525,7 @@ Return JSON: {{"post": "<your post text>"}}"""
         if not result or not isinstance(result.get("post"), str):
             return None
 
-        text = re.sub(r"#(\w+)", r"\1", result["post"]).strip()
-        if len(text) > max_chars:
-            trimmed = text[:max_chars]
-            cut = max(
-                (trimmed.rfind(p) + 1 for p in (".", "!", "?") if trimmed.rfind(p) > 0),
-                default=-1,
-            )
-            text = trimmed[:cut] if cut > 0 else trimmed[: trimmed.rfind(" ")]
-        text = text.strip()
+        text = strip_hashtags_and_truncate(result["post"], max_chars)
         if not text:
             return None
 

@@ -19,9 +19,10 @@ def truncate_on_boundary(text: str, budget: int) -> str:
     past the midpoint, else a word boundary, else a hard cut.
 
     Used to fit a generated body under Bluesky's 300-char limit while keeping
-    the trailing URL intact. (Distinct from bluesky_poster._sanitize, which
-    also strips hashtags and uses an any-position sentence cut for a different
-    budget.)
+    the trailing URL intact. (Distinct from strip_hashtags_and_truncate below,
+    which also strips hashtags and accepts an any-position sentence cut — this
+    one runs last, on already-sanitized text immediately before posting, where
+    cutting too early would waste too much of a short post.)
     """
     trimmed = text[:budget]
     cut = -1
@@ -35,6 +36,37 @@ def truncate_on_boundary(text: str, budget: int) -> str:
     if last_space > 0:
         return trimmed[:last_space]
     return trimmed
+
+
+_HASHTAG_RE = re.compile(r"#(\w+)")
+
+
+def strip_hashtags_and_truncate(text: str, budget: int) -> str:
+    """Convert #word to word, then trim to at most `budget` chars at the
+    nearest sentence-ending punctuation anywhere in range, falling back to
+    a word boundary, then a hard cut.
+
+    Shared by bluesky_poster's issue-post generator and bluesky_spotlight's
+    senator-spotlight and weekly-summary generators — all three hand-wrote
+    this independently before (2026-08 cleanup), and two of the three copies
+    had diverged into a real edge case: when the truncated text has no space
+    at all, `trimmed[:trimmed.rfind(" ")]` evaluates to `trimmed[:-1]`
+    (`rfind` returns -1), silently dropping the last character instead of
+    keeping the whole trimmed text. This keeps the one copy that got it right.
+    """
+    text = _HASHTAG_RE.sub(r"\1", text).strip()
+    if len(text) <= budget:
+        return text
+    trimmed = text[:budget]
+    cut = -1
+    for punct in (".", "!", "?"):
+        idx = trimmed.rfind(punct)
+        if idx > 0:
+            cut = max(cut, idx + 1)
+    if cut > 0:
+        return trimmed[:cut]
+    last_space = trimmed.rfind(" ")
+    return trimmed[:last_space] if last_space > 0 else trimmed
 
 
 def publish_post(text: str, url: str, *, success_msg: str, error_context: str) -> bool:
