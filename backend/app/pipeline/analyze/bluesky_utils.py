@@ -41,20 +41,32 @@ def truncate_on_boundary(text: str, budget: int) -> str:
 _HASHTAG_RE = re.compile(r"#(\w+)")
 
 
+def strip_hashtags(text: str) -> str:
+    """Convert #word to word. Its own function (not inlined) so the final
+    guard in bluesky_poster._publish — a defense-in-depth check at the
+    actual public-posting boundary, independent of whatever already ran
+    upstream — shares the same pattern instead of a 5th independent copy
+    that could drift from this one (2026-08 cleanup)."""
+    return _HASHTAG_RE.sub(r"\1", text).strip()
+
+
 def strip_hashtags_and_truncate(text: str, budget: int) -> str:
     """Convert #word to word, then trim to at most `budget` chars at the
     nearest sentence-ending punctuation anywhere in range, falling back to
     a word boundary, then a hard cut.
 
-    Shared by bluesky_poster's issue-post generator and bluesky_spotlight's
-    senator-spotlight and weekly-summary generators — all three hand-wrote
-    this independently before (2026-08 cleanup), and two of the three copies
-    had diverged into a real edge case: when the truncated text has no space
-    at all, `trimmed[:trimmed.rfind(" ")]` evaluates to `trimmed[:-1]`
-    (`rfind` returns -1), silently dropping the last character instead of
-    keeping the whole trimmed text. This keeps the one copy that got it right.
+    Shared by bluesky_poster's issue-post generator, bluesky_spotlight's
+    senator-spotlight and weekly-summary generators, and election_bluesky's
+    race-coverage posts — all four hand-wrote this independently before
+    (2026-08 cleanup; election_bluesky's was a plain hard-slice with no
+    boundary logic at all, upgraded here as a side benefit). Two of the
+    original three text-boundary copies had diverged into a real edge
+    case: when the truncated text has no space at all,
+    `trimmed[:trimmed.rfind(" ")]` evaluates to `trimmed[:-1]` (`rfind`
+    returns -1), silently dropping the last character instead of keeping
+    the whole trimmed text. This keeps the one copy that got it right.
     """
-    text = _HASHTAG_RE.sub(r"\1", text).strip()
+    text = strip_hashtags(text)
     if len(text) <= budget:
         return text
     trimmed = text[:budget]

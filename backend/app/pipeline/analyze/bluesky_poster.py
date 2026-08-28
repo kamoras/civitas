@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.issue_ids import to_public_id
-from app.pipeline.analyze.bluesky_utils import publish_post, strip_hashtags_and_truncate
+from app.pipeline.analyze.bluesky_utils import publish_post, strip_hashtags, strip_hashtags_and_truncate
 from app.pipeline.analyze.grounding import (
     grounding_violations,
     hedge_and_editorializing_violations,
@@ -225,7 +225,7 @@ Return JSON: {{"post": "<your post text>"}}"""
 
 def _publish(text: str, issue) -> bool:
     """Post to Bluesky. Returns True on success."""
-    text = re.sub(r"#(\w+)", r"\1", text).strip()  # final hashtag guard
+    text = strip_hashtags(text)  # final guard, independent of what ran upstream
     url = f"https://civitas-research.org/issue/{to_public_id(issue.id)}"
     return publish_post(
         text, url,
