@@ -556,6 +556,9 @@ async def get_recent_by_branch(
     db: Session = Depends(get_db),
 ):
     """Return the most recent explore documents for a government branch."""
+    # New documents land continuously as the explore index ingests them —
+    # shorter than most action.py endpoints since "most recent" is the
+    # whole point here.
     response.headers["Cache-Control"] = "public, max-age=120"
     chambers = _BRANCH_CHAMBERS.get(branch.lower())
     if not chambers:
@@ -599,6 +602,9 @@ async def get_recent_by_branch(
 @router.get("/country-news")
 async def get_country_news(response: Response):
     """Return recent news articles grouped by country mentioned."""
+    # Backed by a live external RSS fetch (fetch_news_articles), not a DB
+    # read — this bounds how often that external feed gets hit, not how
+    # fresh the DB is.
     response.headers["Cache-Control"] = "public, max-age=600"
     from app.pipeline.fetch.news_feeds import fetch_news_articles
 
@@ -757,6 +763,8 @@ async def get_my_reps(
     db: Session = Depends(get_db),
 ):
     """Return senators for a state with their connections to today's issues."""
+    # Ties to "today's issues", which only change on the next Action
+    # Center refresh — a few minutes of staleness is invisible in practice.
     response.headers["Cache-Control"] = "public, max-age=300"
     state_upper = state.upper()
 
@@ -875,6 +883,8 @@ async def get_my_reps(
 @router.get("/open-comments")
 def get_open_comments(response: Response, db: Session = Depends(get_db)):
     """Return Federal Register documents with open public comment periods, sorted by deadline."""
+    # Comment-period deadlines move in days, not minutes — an hour of
+    # staleness has no real effect on this list.
     response.headers["Cache-Control"] = "public, max-age=3600"
     today = utcnow().date().isoformat()
     docs = (
@@ -930,6 +940,8 @@ def is_election_season(today: date | None = None) -> bool:
 @router.get("/elections")
 async def get_election_info(response: Response, db: Session = Depends(get_db)):
     """Return upcoming election info: dates, senate races, state data."""
+    # Election dates and race rosters change on the order of days, not
+    # minutes — same reasoning as /open-comments above.
     response.headers["Cache-Control"] = "public, max-age=3600"
     today = utcnow().date()
     election_day = _next_election_day(today)
@@ -1068,6 +1080,8 @@ def _monitor_to_schema(m: NationalMonitor, include_updates: bool = False):
 @router.get("/monitors")
 async def list_monitors(response: Response, db: Session = Depends(get_db)):
     """List all active and watching national monitors."""
+    # Monitor creation/status changes on the pipeline's hourly cadence, not
+    # continuously — matches the other Action Center list endpoints.
     response.headers["Cache-Control"] = "public, max-age=300"
     monitors = (
         db.query(NationalMonitor)
@@ -1082,6 +1096,8 @@ async def list_monitors(response: Response, db: Session = Depends(get_db)):
 @router.get("/monitors/{slug}")
 async def get_monitor(response: Response, slug: str, db: Session = Depends(get_db)):
     """Get full detail for a national monitor including timeline."""
+    # Same cadence as the monitors list above — a single monitor's
+    # timeline only grows on the same hourly refresh.
     response.headers["Cache-Control"] = "public, max-age=300"
     monitor = (
         db.query(NationalMonitor)
@@ -1180,6 +1196,7 @@ async def get_timeline(
     db: Session = Depends(get_db),
 ):
     """Return the year's timeline with hierarchical week/month/year structure."""
+    # Same reasoning as the other Action Center aggregate views above.
     response.headers["Cache-Control"] = "public, max-age=300"
     if year is None:
         year = utcnow().date().year

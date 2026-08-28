@@ -103,12 +103,12 @@ async def test_clear_stuck_election_refuses_while_actively_running(db_session, m
 
 
 @pytest.mark.asyncio
-async def test_trigger_election_pipeline_spawns_background_thread(db_session):
+async def test_trigger_election_pipeline_spawns_background_thread():
     from unittest.mock import patch
     from app.api.admin import admin_trigger_election_pipeline
 
     with patch("app.api.admin.run_pipeline_in_thread") as mock_run:
-        result = await admin_trigger_election_pipeline(db=db_session)
+        result = await admin_trigger_election_pipeline()
 
     assert result == {"message": "Election pipeline triggered"}
     mock_run.assert_called_once()

@@ -168,7 +168,22 @@ def _is_cacheable_path(path: str) -> bool:
 
 class DataVersionCacheMiddleware(BaseHTTPMiddleware):
     """Attach ETag/Cache-Control keyed to the pipeline's data version, and
-    answer matching conditional requests with 304."""
+    answer matching conditional requests with 304.
+
+    2026-08 audit: this used to overwrite Cache-Control unconditionally,
+    silently discarding any value a route handler set on purpose — e.g.
+    action.py's recent-issues endpoint sets a deliberately short 30s
+    max-age specifically because a longer one caused a real incident (a
+    browser's stale cached response after a deploy added a field crashed
+    the whole Action Center; see TestCacheHeaderMatchesNginx). Confirmed
+    live via TestClient against the full app: that endpoint's real HTTP
+    response carried this middleware's 300s value, not its own 30s — the
+    route-level unit test only calls the handler function directly, so
+    it could never have caught the override happening one layer up. ETag
+    is still attached unconditionally (revalidation is a pure win
+    regardless of a route's own freshness policy); Cache-Control here is
+    only a default for routes that haven't chosen their own.
+    """
 
     async def dispatch(self, request, call_next):
         if request.method != "GET" or not _is_cacheable_path(request.url.path):
@@ -197,7 +212,8 @@ class DataVersionCacheMiddleware(BaseHTTPMiddleware):
         # cached under the data version — the next run would not clear it.
         if response.status_code == 200:
             response.headers["ETag"] = etag
-            response.headers["Cache-Control"] = _cache_control()
+            if "Cache-Control" not in response.headers:
+                response.headers["Cache-Control"] = _cache_control()
             existing_vary = response.headers.get("Vary")
             if existing_vary:
                 if "accept-encoding" not in existing_vary.lower():

@@ -9,7 +9,7 @@ served after tonight's run.
 from datetime import timedelta
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.testclient import TestClient
 
 from app.api import cache_headers as ch
@@ -50,6 +50,15 @@ def client(monkeypatch):
 
     @app.post("/api/senators")
     def create():
+        return {"ok": True}
+
+    @app.get("/api/senators/short-cache")
+    def short_cache(response: Response):
+        # Mirrors action.py's pattern: a route that sets its own
+        # deliberately short Cache-Control (e.g. because a longer one
+        # caused a real staleness incident) rather than taking the
+        # middleware's default.
+        response.headers["Cache-Control"] = "public, max-age=30"
         return {"ok": True}
 
     monkeypatch.setattr(ch, "data_version", lambda: "run-v1")
@@ -145,6 +154,23 @@ def test_cacheable_endpoint_gets_etag_and_cache_control(client):
     assert resp.headers["ETag"].startswith('W/"')
     assert "max-age=300" in resp.headers["Cache-Control"]
     assert "stale-while-revalidate=3600" in resp.headers["Cache-Control"]
+    assert "Accept-Encoding" in resp.headers["Vary"]
+
+
+def test_middleware_does_not_override_a_route_own_cache_control(client):
+    # 2026-08 audit: this used to overwrite Cache-Control unconditionally,
+    # silently discarding a route's own deliberately short value (real
+    # example: action.py's recent-issues endpoint, whose short TTL exists
+    # specifically because a longer one caused a real staleness incident).
+    # Confirmed live via TestClient against the full app before this fix —
+    # the route's 30s value never reached the actual HTTP response.
+    resp = client.get("/api/senators/short-cache")
+    assert resp.status_code == 200
+    assert resp.headers["Cache-Control"] == "public, max-age=30"
+    # The ETag/revalidation benefit still applies regardless — a route's
+    # own freshness policy and the shared conditional-GET machinery are
+    # independent concerns.
+    assert resp.headers["ETag"].startswith('W/"')
     assert "Accept-Encoding" in resp.headers["Vary"]
 
 
