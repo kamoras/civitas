@@ -408,7 +408,24 @@ def classify_policy_area(
         # into whichever common category the corpus happened to be
         # thickest around, even when the seed anchor for the correct
         # category was a strong, unambiguous match.
-        if ref_area == best_area or reference_corpus_label_share(best_area) >= MIN_SEED_CORPUS_SHARE_FOR_KNN_TRUST:
+        if ref_area == best_area:
+            # Corroborated by an independent seed-embedding match — trust
+            # it at face value regardless of how deep the corpus is here.
+            return ref_area, ref_confidence
+        if reference_corpus_label_share(best_area) >= MIN_SEED_CORPUS_SHARE_FOR_KNN_TRUST:
+            # kNN alone is overriding a well-represented alternative. If
+            # ref_area itself is a near-absent category, a handful of
+            # nearest neighbors can still tip the vote toward a label the
+            # corpus barely has examples of — the same "kNN can only vote
+            # for what it's seen" problem this gate exists to catch, just
+            # aimed at the winner instead of the alternative. Scale
+            # confidence down proportionally to how far below its "fair
+            # share" the category sits, so downstream consumers (scoring,
+            # UI) can tell a well-supported kNN win from a thinly-
+            # supported one instead of treating both as equally certain.
+            ref_area_share = reference_corpus_label_share(ref_area)
+            if ref_area_share < MIN_SEED_CORPUS_SHARE_FOR_KNN_TRUST:
+                ref_confidence *= ref_area_share / MIN_SEED_CORPUS_SHARE_FOR_KNN_TRUST
             return ref_area, ref_confidence
         # Else: fall through and let tier 2 (below) decide instead.
 

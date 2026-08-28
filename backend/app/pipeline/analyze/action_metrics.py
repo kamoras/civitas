@@ -40,6 +40,21 @@ def snapshot() -> dict[str, int]:
     return dict(_counters)
 
 
+def decile_bucket(value: float) -> int:
+    """Bucket a similarity score into its decile floor (0, 10, ..., 90),
+    clamped to that range. Shared by every similarity-calibration counter
+    in action_center.py (cluster_dedup_*, source_coherence_*,
+    summary_source_similarity_bucket_*) so a future change to bucket width
+    only has to happen in one place (2026-08 audit: was copy-pasted
+    verbatim at three call sites)."""
+    return min(90, max(0, int(value * 10) * 10))
+
+
+def increment_bucket(prefix: str, value: float, n: int = 1) -> None:
+    """increment(f"{prefix}_{decile_bucket(value)}", n) in one call."""
+    increment(f"{prefix}_{decile_bucket(value)}", n)
+
+
 def persist(db, run_key: str) -> None:
     """Write this run's counters to api_cache (tier "action-metrics")."""
     from app.pipeline.cache import api_cache_set

@@ -1,6 +1,12 @@
 """
 Hybrid donor classifier — tiered strategy for donor type and industry.
 
+Despite the "_ai" in the filename, no LLM runs anywhere in this module's
+live classification path — every tier below is deterministic (FEC
+metadata, embedding similarity, rule-based skip patterns, kNN). An
+earlier LLM-based approach was tried and replaced; see "Academic
+rationale" below for why.
+
 Classification tiers (donor TYPE):
 1. FEC committee type codes (structured data from the API itself)
 2. Semantic candidate-affiliated detection (embedding similarity)
@@ -727,7 +733,20 @@ def _classify_donors_hybrid_sync(
             if industry == "OTHER":
                 needs_nn.append(donor)
             if db_session is not None and source_type and source_type != "learned":
-                _store_donor_learning(db_session, name_upper, donor_type, industry or "OTHER", source_type)
+                # Don't persist a placeholder "OTHER" industry here when
+                # kNN is about to re-resolve it below in this same run —
+                # doing so would set _seen_this_run's industry entry to
+                # this tier's (often high) confidence, and the kNN pass's
+                # own _store_donor_learning call ("nn", confidence 0.75)
+                # would then be silently skipped by the guard right above,
+                # permanently stranding the industry at "OTHER" even
+                # though kNN found a real answer (2026-08 audit, bug 1).
+                # donor_type is real here regardless, so it's still stored.
+                _store_donor_learning(
+                    db_session, name_upper, donor_type,
+                    None if industry == "OTHER" else industry,
+                    source_type,
+                )
         else:
             needs_nn.append(donor)
             tier_stats["nn_needed"] += 1
@@ -745,6 +764,16 @@ def _classify_donors_hybrid_sync(
         for name_upper, classification in nn_results.items():
             existing = results.get(name_upper, {})
             merged = {**existing, **classification}
+            if existing.get("type"):
+                # donor_type was already established by a real tier
+                # (fec/semantic/learned) before this donor was queued for
+                # kNN to resolve just the industry — kNN independently
+                # re-guesses donor_type too, but its guess is weaker and
+                # must not silently replace the known-good value here
+                # (2026-08 audit, bug 2; the DB itself is already
+                # protected from this by _store_donor_learning's in-run
+                # confidence guard, this fixes the returned dict).
+                merged["type"] = existing["type"]
             merged["skip"] = merged.get("type") == "SKIP"
             results[name_upper] = merged
 
@@ -834,11 +863,15 @@ def _store_donor_learning(
     db_session: Session,
     name_upper: str,
     donor_type: str,
-    industry: str,
+    industry: str | None,
     source: str,
     match_metadata: dict | None = None,
 ) -> None:
-    """Store both type and industry classifications using SQL upsert.
+    """Store type and/or industry classifications using SQL upsert.
+
+    `industry=None` writes donor_type only, leaving industry untouched —
+    used when industry isn't actually known yet (see the 2026-08 audit
+    trace below) rather than persisting a placeholder value for it.
 
     Uses INSERT ... ON CONFLICT DO UPDATE to handle races atomically.
 
@@ -853,6 +886,18 @@ def _store_donor_learning(
     below only dedupes multiple writes to the same key *within this run*
     (keeping the highest-confidence one of those) — it is not a guard
     against a prior run's persisted value.
+
+    2026-08 audit trace: this is also safe *across* runs for the case
+    that matters most (a lower-confidence tier clobbering a high-
+    confidence one, e.g. "fec" then "nn"). A donor with a full learned
+    entry (both donor_type and industry already stored) is short-
+    circuited at the top of _classify_donors_hybrid_sync — the FEC,
+    semantic, and kNN tiers never re-run for it, so this function isn't
+    even called for that donor except via the one path that does update
+    a learned entry: the embedding cross-validation a few lines above
+    that short-circuit, which only ever touches `industry` and only past
+    its own measured, conservative threshold (_CORRECTION_THRESHOLD =
+    0.60). `donor_type` is never touched once learned.
     """
     import json
     from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -863,6 +908,8 @@ def _store_donor_learning(
     meta_json = json.dumps(match_metadata) if match_metadata else None
 
     for entity_type, value in [("donor_type", donor_type), ("industry", industry)]:
+        if value is None:
+            continue
         key = (name_upper, entity_type)
 
         prev_confidence = _seen_this_run.get(key, -1.0)

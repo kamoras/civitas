@@ -112,8 +112,22 @@ def get_similarity_model() -> SentenceTransformer:
     (action_center's policy filter, trending mask, explore-doc re-rank,
     topic-candidate/title-dedup sims) plus the search index (reindexed
     under it in the sqlite-vec migration). The centered-space clustering
-    gates and the classification subsystem (donor/kNN/bills) stay on the
-    primary model until their own measurement + recalibration pass.
+    gates — action_center.py's DEDUP_THRESHOLD (0.50) and SOURCE_SIM_FLOOR
+    (0.25), both still justified only anecdotally ("0.15 was too loose"),
+    not against a measured same-story/different-story distribution the
+    way this file's other gates (TOPIC_CHANGE_THRESHOLD,
+    _NEAR_IDENTICAL_TITLE_THRESHOLD) are — remain unmeasured under either
+    model. 2026-08 audit: rather than guess a number, both call sites now
+    log a bucketed action_metrics counter per merge/keep decision on every
+    run (cluster_dedup_{merged,kept}_sim_bucket_N,
+    source_coherence_{kept,dropped}_sim_bucket_N), so the same style of
+    measurement evaluate_embedding_models.py does elsewhere accumulates
+    automatically from live traffic — no one-off manual production pull
+    needed. Once enough runs have logged, read the accumulated
+    action-metrics history the same way past thresholds here were
+    calibrated (see the O1-O7 program) and set real thresholds from it.
+    The classification subsystem (donor/kNN/bills) stays on the primary
+    model until their own measurement + recalibration pass.
     """
     global _similarity_model
     if _similarity_model is None:

@@ -823,7 +823,30 @@ logger = logging.getLogger(__name__)
 # Bump when scoring formulas or their data inputs change in a way that
 # shifts scores. Recorded on every ScoreSnapshot so trend charts can
 # annotate methodology changes; keep frontend/src/lib/scoreVersions.ts
-# in sync (it holds the human-readable changelog).
+# in sync — it holds the full public changelog (v3 onward) and is the
+# place to read for the complete history. This comment block is a
+# shorter dev-facing index of the same transitions, starting where the
+# "Changes from vX -> vY" narrative above (Academic rationale section)
+# does; earlier per-version detail lives only in scoreVersions.ts.
+#
+# v5.10 (2026-07): two Promise Persistence fixes — excluded ceremonial
+# resolutions from bill-derived "promises" (same filter SUBSTANTIVE_
+# BILL_TYPES already applies elsewhere) and resized PRIOR_PSEUDOCOUNT
+# 6->3 after finding real evidence volume (~0.5 evaluable promises/
+# senator) was far below what the prior pseudocount assumed. See the
+# "v5.10" paragraph above for the full derivation.
+#
+# v5.11 (2026-07): replaced donor-vote "lobbying connection" detection's
+# uncalibrated 0.35 raw-text-similarity threshold with a two-stage,
+# measured gate (donor industry share of classified funding >=25%, plus
+# industry/vote policy-area similarity >=0.75). See the "v5.11"
+# paragraph above.
+#
+# v5.12 (2026-07): Legislative Effectiveness's leadership component
+# (cosponsorship PageRank) stopped punishing low tenure — missing data
+# now defaults to neutral 50 instead of a punitive 40, and raw
+# percentile is shrunk toward neutral by a tenure-scaled confidence
+# factor. See the "v5.12" paragraph above.
 #
 # v5.12 -> v6.0 (2026-07): removed promisePersistence as a scored dimension
 # (see config_definitions.SCORE_WEIGHTS's docstring for the empirical
