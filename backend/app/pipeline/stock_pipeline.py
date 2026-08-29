@@ -168,22 +168,28 @@ async def _classify_rows_industry(
     db: Session,
     client: httpx.AsyncClient,
     rows: list[TradeRow],
-    *,
-    classify_untickered: bool = False,
 ) -> None:
     """Mutate rows in place, setting `industry` from ticker -> company -> embedding.
 
-    `classify_untickered` additionally runs the *asset name itself* through
-    the same embedding classifier for rows that carry no ticker. Off by
-    default because a congressional PTR's untickered lines are mostly
-    non-tradeable holdings (rental property, private partnerships) that no
-    industry label describes usefully. It is on for presidential 278-T
-    filings, where the untickered lines are the substantive ones: virtual
-    currency has no SEC ticker to resolve at all, so a ticker-only pass
-    leaves every crypto transaction UNCLASSIFIED — the CRYPTO industry
-    prototype in industry_classifier.py ("cryptocurrency bitcoin blockchain
-    digital currency decentralized finance web3...") matches those asset
-    names directly. Same classifier, same learning store, no keyword list.
+    Rows with no ticker (virtual currency has no SEC ticker to resolve at
+    all; some congressional untickered lines are non-tradeable holdings
+    like rental property or private partnerships) run the *asset name
+    itself* through the same embedding classifier. The CRYPTO industry
+    prototype in industry_classifier.py matches crypto asset names
+    directly; a low-signal name like a rental-property description is
+    caught by the classifier's own confidence gate (SPREAD_THRESHOLD) and
+    stays UNCLASSIFIED, the same as it would if it had never been tried.
+    Same classifier, same learning store, no keyword list.
+
+    2026-08: this used to be House/Senate-disabled (an opt-in
+    classify_untickered flag, on only for presidential 278-Ts) on the
+    reasoning above about non-tradeable holdings — but that also silently
+    swept up Congress's genuinely-disclosed crypto holdings, leaving them
+    UNCLASSIFIED system-wide with no way to tell "crypto, unrecognized"
+    apart from "not even attempted." Unconditional now; this field is
+    UI-display-only, read by no scoring code (verified via grep across
+    app/pipeline/analyze), so an occasional noisy label on a non-tradeable
+    holding carries no scoring risk.
     """
     tickers = [r.ticker for r in rows if r.ticker]
     ticker_to_company: dict[str, str] = {}
@@ -191,8 +197,7 @@ async def _classify_rows_industry(
         ticker_to_company = await resolve_tickers(client, db, tickers)
 
     names = set(ticker_to_company.values())
-    if classify_untickered:
-        names.update(r.asset_name.strip() for r in rows if not r.ticker and r.asset_name.strip())
+    names.update(r.asset_name.strip() for r in rows if not r.ticker and r.asset_name.strip())
     if not names:
         return
 
@@ -202,7 +207,7 @@ async def _classify_rows_industry(
             company = ticker_to_company.get(row.ticker.upper())
             if company and company in industries:
                 row.industry = industries[company]
-        elif classify_untickered:
+        else:
             asset = row.asset_name.strip()
             if asset in industries:
                 row.industry = industries[asset]
@@ -342,7 +347,7 @@ async def _ingest_president(db: Session, client: httpx.AsyncClient) -> int:
         rows = await fetch_president_ptr(db, filing)
         if not rows:
             continue
-        await _classify_rows_industry(db, client, rows, classify_untickered=True)
+        await _classify_rows_industry(db, client, rows)
         for row in rows:
             days = _compute_days_to_disclose(row.transaction_date, row.disclosure_date)
             db.add(PresidentTrade(

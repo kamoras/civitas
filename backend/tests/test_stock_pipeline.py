@@ -217,3 +217,28 @@ class TestIngestSenateColdStartWindow:
         assert result == 0
         expected_since = (datetime(2026, 3, 15) - timedelta(days=COLD_START_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
         mock_search.assert_called_once_with(expected_since)
+
+
+class TestClassifyRowsIndustryUntickered:
+    """2026-08: untickered-line classification (crypto has no SEC ticker to
+    resolve at all) used to be an opt-in classify_untickered flag, on only
+    for presidential 278-Ts — House/Senate untickered lines silently stayed
+    UNCLASSIFIED, including their genuinely-disclosed crypto holdings. Now
+    unconditional; House/Senate rows get the same treatment as the
+    president's already did."""
+
+    async def test_house_style_untickered_crypto_row_gets_classified(self, db_session):
+        from app.pipeline.fetch.ptr_common import TradeRow
+        from app.pipeline.stock_pipeline import _classify_rows_industry
+
+        rows = [
+            TradeRow(
+                ticker=None, asset_name="Bitcoin", owner="self",
+                transaction_type="purchase", transaction_date="2026-01-01",
+                disclosure_date="2026-01-15", amount_low=1001.0, amount_high=15000.0,
+            ),
+        ]
+
+        await _classify_rows_industry(db_session, AsyncMock(), rows)
+
+        assert rows[0].industry == "CRYPTO"
