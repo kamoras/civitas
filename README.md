@@ -740,6 +740,14 @@ docker compose ps
 The pipeline supports two LLM backends, configured via `LLM_BACKEND` in `.env`:
 
 **Option A: llama.cpp (recommended for ARM/RPi)**
+
+On a Raspberry Pi 5, skip the build: grab the precompiled binary from
+[Releases](https://github.com/kamoras/civitas/releases/tag/llama-server-pi5-v1)
+(same one this project runs in production, checksum included). It's
+compiled specifically for the Pi 5's Cortex-A76 CPU and will not run on
+a Pi 4 or other non-Cortex-A76 boards — those still need to build from
+source below.
+
 ```bash
 # Compile llama.cpp with ARM optimizations
 git clone https://github.com/ggerganov/llama.cpp
