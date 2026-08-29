@@ -217,3 +217,59 @@ class TestIngestSenateColdStartWindow:
         assert result == 0
         expected_since = (datetime(2026, 3, 15) - timedelta(days=COLD_START_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
         mock_search.assert_called_once_with(expected_since)
+
+
+class TestClassifyRowsIndustryUntickered:
+    """2026-08: untickered-line classification (crypto has no SEC ticker to
+    resolve at all) used to be an opt-in classify_untickered flag, on only
+    for presidential 278-Ts — House/Senate untickered lines silently stayed
+    UNCLASSIFIED, including their genuinely-disclosed crypto holdings. Now
+    unconditional; House/Senate rows get the same treatment as the
+    president's already did."""
+
+    async def test_house_style_untickered_crypto_row_gets_classified(self, db_session):
+        from app.pipeline.fetch.ptr_common import TradeRow
+        from app.pipeline.stock_pipeline import _classify_rows_industry
+
+        rows = [
+            TradeRow(
+                ticker=None, asset_name="Bitcoin", owner="self",
+                transaction_type="purchase", transaction_date="2026-01-01",
+                disclosure_date="2026-01-15", amount_low=1001.0, amount_high=15000.0,
+            ),
+        ]
+
+        await _classify_rows_industry(db_session, AsyncMock(), rows)
+
+        assert rows[0].industry == "CRYPTO"
+
+    async def test_a_confident_other_classification_does_not_overwrite_unclassified(self, db_session):
+        # 2026-08 audit (independent review of #445): classify_batch_with_
+        # learning always returns an entry per name, including the literal
+        # string "OTHER" for names it can't confidently place — it never
+        # returns None/absent. An untickered line's asset_name is often a
+        # non-tradeable holding (rental property, private partnership)
+        # that was never a real classification candidate; writing "OTHER"
+        # for it would surface a spurious industry badge in the UI (which
+        # only hides for exactly "UNCLASSIFIED", not "OTHER") where none
+        # showed before this change made classification unconditional.
+        from unittest.mock import patch
+
+        from app.pipeline.fetch.ptr_common import TradeRow
+        from app.pipeline.stock_pipeline import _classify_rows_industry
+
+        rows = [
+            TradeRow(
+                ticker=None, asset_name="123 Main St Rental LLC", owner="self",
+                transaction_type="purchase", transaction_date="2026-01-01",
+                disclosure_date="2026-01-15", amount_low=1001.0, amount_high=15000.0,
+            ),
+        ]
+
+        with patch(
+            "app.pipeline.stock_pipeline.classify_batch_with_learning",
+            return_value=({"123 Main St Rental LLC": "OTHER"}, ["123 Main St Rental LLC"]),
+        ):
+            await _classify_rows_industry(db_session, AsyncMock(), rows)
+
+        assert rows[0].industry is None  # stays the model default (UNCLASSIFIED at the DB layer)
