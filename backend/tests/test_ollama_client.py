@@ -343,3 +343,72 @@ class TestExtractJsonRobustness:
     def test_array_still_parses(self):
         from app.pipeline.analyze.ollama_client import extract_json
         assert extract_json('prefix [1, 2, 3] suffix') == [1, 2, 3]
+
+
+class TestHttpErrorLogsResponseBody:
+    """2026-08 audit (live SSH investigation of "check back later" full-
+    story generation): logging just the HTTPError object prints only the
+    generic reason phrase ("HTTP Error 500: Internal Server Error"),
+    discarding the actual response body — which is where the real cause
+    lives. Live example this exact gap hid: llama-server's body was
+    {"error": "Invalid input batch."}, a server-side prompt-cache bug,
+    completely invisible from the reason phrase alone."""
+
+    def test_response_body_appears_in_the_warning_log(self, db_session, caplog):
+        import io
+        import logging
+        import urllib.error
+
+        error = urllib.error.HTTPError(
+            url="http://host.docker.internal:8070/v1/chat/completions",
+            code=500,
+            msg="Internal Server Error",
+            hdrs=None,
+            fp=io.BytesIO(b'{"error": "Invalid input batch."}'),
+        )
+
+        with (
+            patch("app.pipeline.analyze.ollama_client._call_llama_server", side_effect=error),
+            patch("app.pipeline.analyze.ollama_client.SessionLocal", return_value=db_session),
+            caplog.at_level(logging.WARNING),
+        ):
+            result = ollama_client.call_llm(
+                prompt_version="test_version",
+                system_prompt="sys",
+                user_prompt="user",
+                cache_key=None,
+            )
+
+        assert result is None
+        assert any("Invalid input batch" in r.message for r in caplog.records)
+
+    def test_unreadable_body_falls_back_without_crashing(self, db_session, caplog):
+        import logging
+        import urllib.error
+
+        class _BrokenStream:
+            def read(self, *_args):
+                raise OSError("connection already closed")
+
+            def close(self):
+                pass
+
+        error = urllib.error.HTTPError(
+            url="http://host.docker.internal:8070/v1/chat/completions",
+            code=500, msg="Internal Server Error", hdrs=None, fp=_BrokenStream(),
+        )
+
+        with (
+            patch("app.pipeline.analyze.ollama_client._call_llama_server", side_effect=error),
+            patch("app.pipeline.analyze.ollama_client.SessionLocal", return_value=db_session),
+            caplog.at_level(logging.WARNING),
+        ):
+            result = ollama_client.call_llm(
+                prompt_version="test_version",
+                system_prompt="sys",
+                user_prompt="user",
+                cache_key=None,
+            )
+
+        assert result is None
+        assert any("could not read response body" in r.message for r in caplog.records)
