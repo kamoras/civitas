@@ -464,7 +464,24 @@ def call_llm(
             return parsed
 
         except urllib.error.HTTPError as e:
-            logger.warning("LLM HTTP error for %s (attempt %d): %s", prompt_version, attempt, e)
+            # 2026-08 audit (live SSH investigation of "check back later"
+            # full-story generation): %s on an HTTPError only prints the
+            # generic reason phrase ("HTTP Error 500: Internal Server
+            # Error"), discarding the actual response body — which is
+            # where the real cause lives. Live example found this way:
+            # llama-server's body was {"error": "Invalid input batch."}
+            # (a server-side prompt-cache bug, not anything this app
+            # sent wrong), completely invisible from the reason phrase
+            # alone. Bounded read: an error body is normally a small
+            # JSON object, not worth risking an unbounded read for.
+            try:
+                error_body = e.read(2048).decode("utf-8", errors="replace")
+            except Exception:
+                error_body = "<could not read response body>"
+            logger.warning(
+                "LLM HTTP error for %s (attempt %d): %s | body: %s",
+                prompt_version, attempt, e, error_body,
+            )
             if attempt == _max_retries:
                 return None
             time.sleep(1.0)
