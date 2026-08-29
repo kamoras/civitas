@@ -19,6 +19,8 @@ from app.models import (
 from app.time_utils import utcnow
 from app.pipeline.fetch.news_feeds import NewsArticle
 from app.pipeline.analyze.action_center import (
+    MAX_ISSUES,
+    _rank_clusters,
     _deduplicate_top_clusters,
     _update_national_monitors,
     _cleanup_monitor_lifecycle,
@@ -103,6 +105,38 @@ class TestLargestCoherentSubgroup:
         # 2 of 10 articles (20%) is below _CLUSTER_SPLIT_MIN_SUBGROUP_SHARE.
         matrix = _block_sim_matrix([8, 2])
         assert _largest_coherent_subgroup(matrix, 0.4) == list(range(10))
+
+
+class TestRankClusters:
+    """2026-08 quality audit: MAX_ISSUES was lowered as a capacity choice,
+    not a calibrated one — the combined score has no absolute floor to
+    check against since it's normalized per-run. _rank_clusters logs where
+    the selected/rejected boundary actually falls so a real floor can be
+    derived later instead of guessed."""
+
+    @patch("app.pipeline.analyze.action_center._compute_action_link_boost")
+    @patch("app.pipeline.analyze.action_center._compute_trending_boost")
+    def test_logs_selected_vs_rejected_score_buckets_at_the_max_issues_boundary(
+        self, mock_trending, mock_civic,
+    ):
+        from app.pipeline.analyze import action_metrics
+
+        action_metrics.reset()
+        clusters = [[_make_article(f"Story {i}")] for i in range(4)]
+        # Strictly decreasing combined scores by construction (civic is the
+        # only nonzero, highest-weighted component) — cluster i's rank is
+        # deterministic, so which ones fall on which side of MAX_ISSUES is
+        # known in advance regardless of the exact score values.
+        mock_trending.return_value = [0.0, 0.0, 0.0, 0.0]
+        mock_civic.return_value = [0.8, 0.6, 0.4, 0.2]
+
+        _rank_clusters(clusters, trending=[], db=MagicMock())
+
+        counts = action_metrics.snapshot()
+        selected = sum(v for k, v in counts.items() if k.startswith("cluster_rank_score_selected_"))
+        rejected = sum(v for k, v in counts.items() if k.startswith("cluster_rank_score_rejected_"))
+        assert selected == MAX_ISSUES
+        assert rejected == len(clusters) - MAX_ISSUES
 
 
 class TestDeduplicateTopClusters:
@@ -1598,6 +1632,33 @@ class TestRetryUntilGrounded:
             user_prompt="generate the issue",
             reasons=["hedging attribution phrases (reports say)"],
             rank=1, db=self._mock_db(), issue_source_text="source article text",
+            title="Original Title",
+        )
+
+        assert result is None
+        assert mock_call_llm.call_count == 2
+
+    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    def test_retry_that_fixes_hedging_but_introduces_an_ungrounded_number_is_still_rejected(self, mock_call_llm):
+        # 2026-08 quality audit: this function's grounding check used to
+        # cover hedging/editorializing and former-official status only — a
+        # retry that fixed its hedging while fabricating a brand-new
+        # ungrounded number sailed through as "grounded" because nothing
+        # here ever ran the full grounding_violations() combinator
+        # (ungrounded numbers/titled names/electoral claims/relationships/
+        # party affiliation), even though the Bluesky post generated from
+        # this same summary already did. Both attempts fabricate a vote
+        # count absent from the source, so both must fail.
+        mock_call_llm.return_value = json.dumps({
+            "summary": "The Senate confirmed the nominee by a vote of 98-2.",
+            "facts": ["The vote took place Tuesday."],
+        })
+
+        result = _retry_until_grounded(
+            user_prompt="generate the issue",
+            reasons=["hedging attribution phrases (reports say)"],
+            rank=1, db=self._mock_db(),
+            issue_source_text="The Senate confirmed the nominee on Tuesday.",
             title="Original Title",
         )
 
