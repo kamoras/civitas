@@ -174,8 +174,8 @@ class TestDeduplicateTopClusters:
         assert merged == 1
         assert kept == 1
 
-    @pytest.mark.slow
-    def test_promoted_lower_ranked_cluster_is_logged_selected_not_the_merged_one(self):
+    @patch("app.pipeline.analyze.action_center._embed_texts")
+    def test_promoted_lower_ranked_cluster_is_logged_selected_not_the_merged_one(self, mock_embed):
         # 2026-08 quality audit (independent review of #443): logging
         # selected/rejected by raw rank position — as an earlier version
         # of this feature did in _rank_clusters — mislabels this exact
@@ -183,9 +183,15 @@ class TestDeduplicateTopClusters:
         # outranking c3); with max_issues=2, c3 is then promoted into the
         # 2nd slot even though it ranks below c2. The metric must reflect
         # what ACTUALLY got selected (c1, c3), not raw rank (c1, c2).
+        # Mocked embeddings (not @pytest.mark.slow, unlike this class's
+        # other tests) so this exercises the fast test suite CI's
+        # diff-coverage gate actually measures — c1/c2 identical raw
+        # vectors guarantee post-centering cosine ~1.0 (merge), c3
+        # orthogonal-ish guarantees a clear miss, deterministically.
         from app.pipeline.analyze import action_metrics
 
         action_metrics.reset()
+        mock_embed.return_value = np.array([[1.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
         c1 = [_make_article("Trade war tariffs increase on Chinese goods")]
         c2 = [_make_article("Trade war tariffs rise for Chinese imports")]
         c3 = [_make_article("Healthcare bill passes Senate committee")]
