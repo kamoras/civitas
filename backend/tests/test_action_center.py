@@ -19,7 +19,6 @@ from app.models import (
 from app.time_utils import utcnow
 from app.pipeline.fetch.news_feeds import NewsArticle
 from app.pipeline.analyze.action_center import (
-    MAX_ISSUES,
     _rank_clusters,
     _deduplicate_top_clusters,
     _update_national_monitors,
@@ -110,33 +109,30 @@ class TestLargestCoherentSubgroup:
 class TestRankClusters:
     """2026-08 quality audit: MAX_ISSUES was lowered as a capacity choice,
     not a calibrated one — the combined score has no absolute floor to
-    check against since it's normalized per-run. _rank_clusters logs where
-    the selected/rejected boundary actually falls so a real floor can be
-    derived later instead of guessed."""
+    check against since it's normalized per-run. The score-distribution
+    metric that would let a real floor be derived later lives in
+    _deduplicate_top_clusters, not here (see TestDeduplicateTopClusters) —
+    that function is what actually decides final selection, since it can
+    merge away a higher-ranked cluster and promote a lower-ranked one.
+    _rank_clusters' own job is just producing the ranking those decisions
+    are based on."""
 
     @patch("app.pipeline.analyze.action_center._compute_action_link_boost")
     @patch("app.pipeline.analyze.action_center._compute_trending_boost")
-    def test_logs_selected_vs_rejected_score_buckets_at_the_max_issues_boundary(
+    def test_returns_clusters_and_scores_in_matching_ranked_order(
         self, mock_trending, mock_civic,
     ):
-        from app.pipeline.analyze import action_metrics
-
-        action_metrics.reset()
         clusters = [[_make_article(f"Story {i}")] for i in range(4)]
-        # Strictly decreasing combined scores by construction (civic is the
-        # only nonzero, highest-weighted component) — cluster i's rank is
-        # deterministic, so which ones fall on which side of MAX_ISSUES is
-        # known in advance regardless of the exact score values.
         mock_trending.return_value = [0.0, 0.0, 0.0, 0.0]
-        mock_civic.return_value = [0.8, 0.6, 0.4, 0.2]
+        # Deliberately out of input order — civic is the only nonzero
+        # component, so it alone determines rank.
+        mock_civic.return_value = [0.2, 0.8, 0.4, 0.6]
 
-        _rank_clusters(clusters, trending=[], db=MagicMock())
+        ranked_clusters, ranked_scores = _rank_clusters(clusters, trending=[], db=MagicMock())
 
-        counts = action_metrics.snapshot()
-        selected = sum(v for k, v in counts.items() if k.startswith("cluster_rank_score_selected_"))
-        rejected = sum(v for k, v in counts.items() if k.startswith("cluster_rank_score_rejected_"))
-        assert selected == MAX_ISSUES
-        assert rejected == len(clusters) - MAX_ISSUES
+        assert [c[0].title for c in ranked_clusters] == ["Story 1", "Story 3", "Story 2", "Story 0"]
+        assert ranked_scores == sorted(ranked_scores, reverse=True)
+        assert len(ranked_scores) == len(ranked_clusters)
 
 
 class TestDeduplicateTopClusters:
@@ -148,7 +144,7 @@ class TestDeduplicateTopClusters:
         c2 = [_make_article("Trade war tariffs rise for Chinese imports")]
         c3 = [_make_article("Healthcare bill passes Senate committee")]
 
-        result = _deduplicate_top_clusters([c1, c2, c3], max_issues=4)
+        result = _deduplicate_top_clusters([c1, c2, c3], ranked_scores=[0.9, 0.8, 0.5], max_issues=4)
         assert len(result) == 2
         titles = [r[0].title for r in result]
         assert "Trade war tariffs increase on Chinese goods" in titles
@@ -168,7 +164,7 @@ class TestDeduplicateTopClusters:
         c2 = [_make_article("Trade war tariffs rise for Chinese imports")]
         c3 = [_make_article("Healthcare bill passes Senate committee")]
 
-        _deduplicate_top_clusters([c1, c2, c3], max_issues=4)
+        _deduplicate_top_clusters([c1, c2, c3], ranked_scores=[0.9, 0.8, 0.5], max_issues=4)
 
         counts = action_metrics.snapshot()
         merged = sum(v for k, v in counts.items() if k.startswith("cluster_dedup_merged_sim_bucket_"))
@@ -177,6 +173,41 @@ class TestDeduplicateTopClusters:
         # so exactly 2 decisions get logged: one merge, one keep.
         assert merged == 1
         assert kept == 1
+
+    @pytest.mark.slow
+    def test_promoted_lower_ranked_cluster_is_logged_selected_not_the_merged_one(self):
+        # 2026-08 quality audit (independent review of #443): logging
+        # selected/rejected by raw rank position — as an earlier version
+        # of this feature did in _rank_clusters — mislabels this exact
+        # case. c1/c2 are near-duplicates (c2 gets merged into c1 despite
+        # outranking c3); with max_issues=2, c3 is then promoted into the
+        # 2nd slot even though it ranks below c2. The metric must reflect
+        # what ACTUALLY got selected (c1, c3), not raw rank (c1, c2).
+        from app.pipeline.analyze import action_metrics
+
+        action_metrics.reset()
+        c1 = [_make_article("Trade war tariffs increase on Chinese goods")]
+        c2 = [_make_article("Trade war tariffs rise for Chinese imports")]
+        c3 = [_make_article("Healthcare bill passes Senate committee")]
+
+        result = _deduplicate_top_clusters([c1, c2, c3], ranked_scores=[0.9, 0.8, 0.5], max_issues=2)
+
+        result_titles = {a.title for cluster in result for a in cluster}
+        assert "Healthcare bill passes Senate committee" in result_titles
+
+        # Bucket-level check, not just aggregate counts: counting selected
+        # vs rejected alone can't tell "c1, c3 selected" apart from the
+        # raw-rank-position bug's "c1, c2 selected" when both mislabelings
+        # happen to produce the same totals (2 selected, 1 rejected) for
+        # this cluster count and max_issues — this caught a test that
+        # passed under the bug on first write. Checking WHICH score
+        # (c3's 0.5, not c2's 0.8) lands in "selected" is what actually
+        # proves the real outcome was logged.
+        counts = action_metrics.snapshot()
+        assert counts.get(f"cluster_rank_score_selected_{action_metrics.decile_bucket(0.5)}") == 1
+        assert counts.get(f"cluster_rank_score_rejected_{action_metrics.decile_bucket(0.8)}") == 1
+        assert f"cluster_rank_score_selected_{action_metrics.decile_bucket(0.8)}" not in counts
+        assert f"cluster_rank_score_rejected_{action_metrics.decile_bucket(0.5)}" not in counts
 
 
 class TestNationalMonitorCreation:
@@ -1592,6 +1623,35 @@ class TestRetryUntilGrounded:
 
         assert result == ("Original Title", "The Senate confirmed the nominee.", ["The vote was unanimous."])
         assert mock_call_llm.call_count == 1
+
+    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    def test_correction_prompt_covers_the_grounding_violation_categories(self, mock_call_llm):
+        # 2026-08 quality audit: the correction text used to only address
+        # hedging/former-status/vague-office — a rejection for an
+        # ungrounded number, titled name, electoral claim, relationship,
+        # or party label gave the retry no guidance on what to fix. This
+        # doesn't prove a real LLM acts on it, but does prove the guidance
+        # for every category the reasons list can now contain is actually
+        # present in the prompt sent to it.
+        mock_call_llm.return_value = json.dumps({
+            "summary": "The Senate confirmed the nominee.",
+            "facts": [],
+        })
+
+        _retry_until_grounded(
+            user_prompt="generate the issue",
+            reasons=["numbers not in source: 98-2"],
+            rank=1, db=self._mock_db(), issue_source_text="source article text",
+            title="Original Title",
+        )
+
+        prompt = mock_call_llm.call_args_list[0].kwargs["user_prompt"]
+        assert "do not state any number" in prompt
+        assert "do not name any titled official" in prompt
+        assert "do not describe any election" in prompt
+        assert "do not state a family relationship" in prompt
+        assert "do not attach a party label" in prompt
+        assert "do not call any official 'former'" in prompt
 
     @patch("app.pipeline.analyze.ollama_client.call_llm")
     def test_second_attempt_succeeds_after_first_still_hedges(self, mock_call_llm):

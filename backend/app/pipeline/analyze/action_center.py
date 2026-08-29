@@ -457,15 +457,32 @@ def _retry_until_grounded(
             "Issue text failed grounding for rank %d (attempt %d): %s — retrying",
             rank, attempt, "; ".join(reasons),
         )
+        # 2026-08 quality audit: this only ever addressed hedging/former-
+        # status/vague-office, but reasons can now also include the other
+        # four grounding_violations() categories (ungrounded numbers,
+        # titled names, electoral claims, family relationships, party
+        # affiliation) since the check they come from was extended to
+        # match what the Bluesky post already ran. A rejection reason the
+        # correction text never mentions gives the retry no signal on what
+        # to actually change, wasting the one extra attempt this loop
+        # exists to spend productively.
         correction = (
             f"\n\nYour previous response was rejected because it contained "
-            f"{'; '.join(reasons)}. Report events directly instead of "
-            "through phrases like 'reports say' or 'coverage indicates,' "
-            "do not call any official 'former' unless the articles do, "
-            "do not evaluate whether any action was warranted or "
-            "justified, and name the specific office-holder instead of "
-            "a vague indefinite phrase like 'a president' or 'a "
-            "Speaker' — there is only one at a time."
+            f"{'; '.join(reasons)}. Use ONLY information stated in the "
+            "articles: report events directly instead of through phrases "
+            "like 'reports say' or 'coverage indicates,' do not state any "
+            "number (vote count, dollar amount, date, statistic) not in "
+            "the articles, do not name any titled official the articles "
+            "don't name, do not describe any election, race, or campaign "
+            "unless the articles do, do not state a family relationship "
+            "between people unless the articles do, do not call any "
+            "official 'former' unless the articles do, do not attach a "
+            "party label (Republican/Democrat/GOP/(R-)/(D-)) to anyone "
+            "unless the articles state their party, do not evaluate "
+            "whether any action was warranted or justified, and name the "
+            "specific office-holder instead of a vague indefinite phrase "
+            "like 'a president' or 'a Speaker' — there is only one at a "
+            "time."
         )
         if attempt > 1:
             correction += (
@@ -1743,7 +1760,7 @@ def _rank_clusters(
     clusters: list[list[NewsArticle]],
     trending: list[TrendingTopic],
     db: "Session",
-) -> list[list[NewsArticle]]:
+) -> tuple[list[list[NewsArticle]], list[float]]:
     """Rank clusters by action surface, coverage breadth, and trending.
 
     Final score = 0.40 * action_link + 0.35 * coverage + 0.25 * trending.
@@ -1757,9 +1774,14 @@ def _rank_clusters(
     trending is weighted least because it is the most volatile signal
     (Bluesky/Google shift every run) and would otherwise churn the top
     issues hour to hour.
+
+    Returns (ranked_clusters, ranked_scores) — the combined score for
+    ranked_clusters[i] is ranked_scores[i] (2026-08 quality audit: needed
+    by _deduplicate_top_clusters to log the real selected/rejected score
+    boundary, since dedup — not raw rank — decides final selection).
     """
     if not clusters:
-        return []
+        return [], []
 
     coverage_scores = [len({a.source_name for a in c}) for c in clusters]
     max_cov = max(coverage_scores) if coverage_scores else 1.0
@@ -1784,18 +1806,6 @@ def _rank_clusters(
 
     ranked_indices = sorted(range(len(clusters)), key=lambda i: combined[i], reverse=True)
 
-    # 2026-08 quality audit: MAX_ISSUES was lowered as a capacity decision,
-    # not a calibrated one — there's no real absolute floor to check a
-    # cluster's combined score against, since it's normalized per-run
-    # against that day's own max. Logging where the selected/rejected
-    # boundary actually falls, run over run, is what would let a real
-    # floor be derived later instead of guessed (same measure-first
-    # pattern as DEDUP_THRESHOLD/SOURCE_SIM_FLOOR).
-    from app.pipeline.analyze import action_metrics
-    for i, idx in enumerate(ranked_indices[:6]):
-        outcome = "selected" if i < MAX_ISSUES else "rejected"
-        action_metrics.increment_bucket(f"cluster_rank_score_{outcome}", combined[idx])
-
     for i, idx in enumerate(ranked_indices[:6]):
         c = clusters[idx]
         titles = c[0].title[:60]
@@ -1805,11 +1815,20 @@ def _rank_clusters(
             len({a.source_name for a in c}), titles,
         )
 
-    return [clusters[i] for i in ranked_indices]
+    # combined scores travel alongside the reordered clusters (2026-08
+    # quality audit) so _deduplicate_top_clusters — the function that
+    # actually decides what gets published, since it can skip a
+    # higher-ranked cluster as a near-duplicate and promote a lower-ranked
+    # one instead — can log the real selected/rejected score boundary.
+    # Logging it here instead would label by raw rank position, which
+    # doesn't match final selection whenever dedup reorders things
+    # (independent review of #443 caught this).
+    return [clusters[i] for i in ranked_indices], [combined[i] for i in ranked_indices]
 
 
 def _deduplicate_top_clusters(
     ranked_clusters: list[list[NewsArticle]],
+    ranked_scores: list[float],
     max_issues: int,
 ) -> list[list[NewsArticle]]:
     """Select top clusters ensuring no two cover the same topic.
@@ -1822,6 +1841,14 @@ def _deduplicate_top_clusters(
     Remaining duplicates that slip through are merged into the earlier
     selected cluster rather than discarded, so their articles contribute
     to the LLM prompt for that issue.
+
+    ranked_scores[i] is ranked_clusters[i]'s combined _rank_clusters score
+    — needed here, not in _rank_clusters, because THIS function decides
+    final selection (a higher-ranked cluster can still be merged away as a
+    near-duplicate, promoting a lower-ranked one instead); logging the
+    selected/rejected boundary anywhere else would mislabel whatever this
+    merge step changes (2026-08 quality audit, caught by independent
+    review of #443).
     """
     if len(ranked_clusters) <= 1:
         return ranked_clusters[:max_issues]
@@ -1849,9 +1876,11 @@ def _deduplicate_top_clusters(
     embeddings = centered / np.where(norms < 1e-9, 1.0, norms)
 
     selected: list[int] = []
+    examined: list[int] = []
     for i in range(len(ranked_clusters)):
         if len(selected) >= max_issues:
             break
+        examined.append(i)
 
         merged_into = None
         best_sim = -1.0
@@ -1876,6 +1905,15 @@ def _deduplicate_top_clusters(
             )
         else:
             selected.append(i)
+
+    # Logged against the real outcome of the loop above, not raw rank
+    # position — `examined` can run past index max_issues-1 when earlier
+    # candidates get merged away, so a promoted lower-ranked cluster is
+    # correctly counted "selected" rather than silently excluded.
+    selected_set = set(selected)
+    for i in examined:
+        outcome = "selected" if i in selected_set else "rejected"
+        action_metrics.increment_bucket(f"cluster_rank_score_{outcome}", ranked_scores[i])
 
     logger.info(
         "Cluster dedup: selected %d of %d ranked clusters",
@@ -4592,11 +4630,11 @@ def _run_refresh(db: Session) -> int:
 
     # 5. Rank clusters using coverage breadth + trending relevance
     _set_refresh_state(stage="rank")
-    ranked_clusters = _rank_clusters(clusters, trending, db)
+    ranked_clusters, ranked_scores = _rank_clusters(clusters, trending, db)
 
     # 5b. Deduplicate top clusters so two angles on the same story
     # don't both appear (e.g., "Tariff hikes" and "Market fallout from tariffs")
-    top_clusters = _deduplicate_top_clusters(ranked_clusters, MAX_ISSUES)
+    top_clusters = _deduplicate_top_clusters(ranked_clusters, ranked_scores, MAX_ISSUES)
     action_metrics.increment("clusters_considered", len(top_clusters))
     _set_refresh_state(stage="issues", stage_detail=f"0/{len(top_clusters)}")
 
