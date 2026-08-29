@@ -78,12 +78,11 @@ function TradeRow({ trade }: { trade: StockTrade }) {
           {trade.ticker ? `${trade.ticker} — ${trade.assetName}` : trade.assetName}
         </span>
         {trade.parseConfidence === "ocr" && (
-          <span
-            className="text-xs px-1 py-0.5 border text-signal-amber border-signal-amber/40"
-            title="Extracted via OCR from a scanned filing — verify against the source before relying on exact figures."
-          >
-            LOW CONFIDENCE
-          </span>
+          <MetricTooltip text="Extracted via OCR because the underlying filing is a scanned paper form with no digital text layer to parse directly (this is the norm for presidential disclosures — the White House files on paper — and rare for Congress, which mostly files electronically). Not a sign of a data error; verify exact figures against the source.">
+            <span className="text-xs px-1 py-0.5 border text-signal-amber border-signal-amber/40">
+              LOW CONFIDENCE
+            </span>
+          </MetricTooltip>
         )}
       </div>
       <div className="flex items-center gap-2 flex-wrap text-xs text-ink-min">
