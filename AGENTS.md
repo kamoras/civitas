@@ -50,7 +50,7 @@ locally on a single self-hosted device with zero cloud AI calls.
 
 - **Frontend**: Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS — port 3000 (not published to the host under Swarm — see Deployment)
 - **Backend**: FastAPI (Python 3.13), SQLAlchemy ORM, SQLite — port 8000 (same)
-- **LLM**: LFM2.5-1.2B-Instruct via llama.cpp (native ARM, port 8070) or Ollama (Docker, port 11434)
+- **LLM**: LFM2.5-1.2B-Instruct via llama.cpp (native ARM, port 8070) or Ollama (not bundled — bring your own, port 11434)
 - **Embeddings**: sentence-transformers, two models in-process — Snowflake Arctic-XS
   (classification) and all-MiniLM-L6-v2 (search index + similarity gates)
 - **Vector Store**: sqlite-vec (`vec0` virtual tables in `/data/vectors.db`) — replaced

@@ -165,7 +165,7 @@ export IMAGE_TAG
 # `docker stack deploy -c a -c b` does its own, more limited multi-file
 # merge than `docker compose config` — live-verified two ways this breaks:
 # it doesn't apply the compose-spec `!reset` tag (docker-compose.swarm.yml
-# relies on it to clear backend/frontend/ollama's published ports — without
+# relies on it to clear backend/frontend's published ports — without
 # it they silently keep the base file's ports, live-tested), and it
 # rejects a couple of `docker compose config`'s own output quirks (a
 # top-level `name:` key, and `ports[].published` written as a quoted

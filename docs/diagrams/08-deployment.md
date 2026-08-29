@@ -16,7 +16,6 @@ flowchart TB
         subgraph OVERLAY["Swarm overlay network"]
             BE["<b>civitas_backend</b><br/>FastAPI :8000<br/>no host port"]
             FE["<b>civitas_frontend</b><br/>Next.js :3000<br/>no host port"]
-            OL["<b>civitas_ollama</b><br/>:11434, fallback LLM<br/>no host port"]
         end
 
         LLAMA["<b>llama-server</b> :8070<br/>systemd, NOT in the stack<br/>weights stay resident across redeploys"]
@@ -27,7 +26,6 @@ flowchart TB
     NGINX -->|"proxy_pass via service DNS"| FE
     FE -->|"JSON"| BE
     BE -->|"host.docker.internal:8070"| LLAMA
-    BE -.->|"only when LLM_BACKEND=ollama"| OL
     BE --> VOL
 ```
 
@@ -82,8 +80,9 @@ Health is judged purely on the Docker `HEALTHCHECK` exit code — the same
 `database` and `ollama` fields in the response body are informational for the
 admin dashboard and do not gate the rollout.
 
-`ollama` is a historical key name: it reports whichever backend `LLM_BACKEND`
-selects, so under the default it is llama-server's health.
+`ollama` is a historical key name (Ollama isn't bundled in the stack
+anymore): it reports whichever backend `LLM_BACKEND` selects, so under the
+default it is llama-server's health.
 
 Deploying restarts the backend, which kills any in-flight pipeline run — hence
 the stale-run detection in [02](02-nightly-pipeline.md).
@@ -95,7 +94,6 @@ the stale-run detection in [02](02-nightly-pipeline.md).
 | 8081 | `civitas_nginx` | Reverse proxy + caching. The only published port — don't change without updating the external forwarding rule. |
 | — | `civitas_backend` | FastAPI, overlay-network only |
 | — | `civitas_frontend` | Next.js, overlay-network only |
-| — | `civitas_ollama` | Fallback LLM backend, overlay-network only |
 | 8070 | *(none — systemd)* | llama.cpp inference, outside the stack |
 
 `docker swarm init` is a one-time host setup step, not part of any deploy
