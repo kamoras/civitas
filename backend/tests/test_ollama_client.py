@@ -370,6 +370,9 @@ class TestHttpErrorLogsResponseBody:
         with (
             patch("app.pipeline.analyze.ollama_client._call_llama_server", side_effect=error),
             patch("app.pipeline.analyze.ollama_client.SessionLocal", return_value=db_session),
+            # The real 3-attempt retry loop sleeps 1s between attempts on
+            # every HTTPError — no assertion value in actually waiting.
+            patch("app.pipeline.analyze.ollama_client.time.sleep"),
             caplog.at_level(logging.WARNING),
         ):
             result = ollama_client.call_llm(
@@ -401,6 +404,7 @@ class TestHttpErrorLogsResponseBody:
         with (
             patch("app.pipeline.analyze.ollama_client._call_llama_server", side_effect=error),
             patch("app.pipeline.analyze.ollama_client.SessionLocal", return_value=db_session),
+            patch("app.pipeline.analyze.ollama_client.time.sleep"),
             caplog.at_level(logging.WARNING),
         ):
             result = ollama_client.call_llm(
