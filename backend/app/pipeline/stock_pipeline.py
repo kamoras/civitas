@@ -202,15 +202,29 @@ async def _classify_rows_industry(
         return
 
     industries, _unknowns = classify_batch_with_learning(list(names), db)
+    # classify_batch_with_learning always returns an entry per name — a
+    # confident real industry, a learned value, or the literal string
+    # "OTHER" when it can't confidently place one (see its own source:
+    # results[name] = industry happens unconditionally, "OTHER" included).
+    # "OTHER" and "UNCLASSIFIED" are deliberately distinct display values
+    # elsewhere (config_definitions.py) — "OTHER" means "classified, and
+    # genuinely doesn't fit any category," which is real information for a
+    # donor. It is NOT that here: an untickered line's asset_name is often
+    # a non-tradeable holding (rental property, private partnership) that
+    # was never a classification candidate to begin with, and "OTHER" for
+    # those would surface a spurious industry badge in the UI (which only
+    # hides for exactly "UNCLASSIFIED", not "OTHER" — StockTrades.tsx)
+    # where none showed before. Skip "OTHER" here for both branches so an
+    # unplaceable name stays UNCLASSIFIED, the same as if it had never
+    # been tried (2026-08 audit, caught by independent review of #445).
     for row in rows:
         if row.ticker:
             company = ticker_to_company.get(row.ticker.upper())
-            if company and company in industries:
-                row.industry = industries[company]
+            industry = industries.get(company) if company else None
         else:
-            asset = row.asset_name.strip()
-            if asset in industries:
-                row.industry = industries[asset]
+            industry = industries.get(row.asset_name.strip())
+        if industry and industry != "OTHER":
+            row.industry = industry
 
 
 async def _ingest_house(db: Session, client: httpx.AsyncClient) -> int:

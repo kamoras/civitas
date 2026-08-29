@@ -42,7 +42,13 @@ def _backfill_model(db, model) -> tuple[int, int]:
     for row in rows:
         asset = (row.asset_name or "").strip()
         new_industry = industries.get(asset)
-        if new_industry and new_industry != "UNCLASSIFIED":
+        # classify_batch_with_learning always returns an entry, including
+        # the literal string "OTHER" for names it can't confidently place
+        # (never None/absent) — skip it the same way _classify_rows_industry
+        # does, so a genuinely non-tradeable holding stays UNCLASSIFIED
+        # instead of being overwritten with a label that isn't a real
+        # classification (2026-08 audit, caught by independent review).
+        if new_industry and new_industry not in ("UNCLASSIFIED", "OTHER"):
             row.industry = new_industry
             updated += 1
     db.commit()
