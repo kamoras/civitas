@@ -139,7 +139,21 @@ POLICY_RELEVANCE_THRESHOLD = 0.20
 CLUSTER_TITLE_THRESHOLD = 0.40
 # Floor of the self-calibrating pass-2 merge scan (see _cluster_articles).
 CLUSTER_CENTROID_MERGE_THRESHOLD = 0.20
-MAX_ISSUES = 4
+# How many candidate clusters get an LLM generation attempt per hourly run.
+# 2026-08: lowered from 4 to 2 as a deliberate capacity choice, not a
+# recalibrated quality threshold — there's a real difference between the
+# two. _rank_clusters' combined score is normalized against that day's OWN
+# maximum, so "top 4" always fills all 4 slots even on a quiet day where
+# only 1-2 clusters are genuinely newsworthy; the 3rd/4th ranked cluster
+# only has to beat its equally-weak peers, not clear any absolute bar. No
+# real per-signal absolute floor exists to calibrate against yet (that
+# would need the same measure-first approach as DEDUP_THRESHOLD/
+# SOURCE_SIM_FLOOR above), but a smaller quota directly does what was
+# asked for regardless: fewer issues attempted per run means only the
+# strongest candidates by the existing weighted ranking get a shot, at the
+# direct cost of quantity. Revisit the number itself once real per-cluster
+# score distributions are being logged (see _rank_clusters).
+MAX_ISSUES = 2
 
 # v20 -> v21 (2026-07 audit M6): added fact rule (6) against cross-topic
 # facts. Live issues carried facts from unrelated articles that survived
@@ -433,8 +447,8 @@ def _retry_until_grounded(
     but a worked example gives it a pattern to copy.
     """
     from app.pipeline.analyze.grounding import (
+        grounding_violations,
         hedge_and_editorializing_violations,
-        ungrounded_former_official_claims,
     )
     from app.pipeline.analyze.ollama_client import call_llm, extract_json
 
@@ -443,15 +457,32 @@ def _retry_until_grounded(
             "Issue text failed grounding for rank %d (attempt %d): %s — retrying",
             rank, attempt, "; ".join(reasons),
         )
+        # 2026-08 quality audit: this only ever addressed hedging/former-
+        # status/vague-office, but reasons can now also include the other
+        # four grounding_violations() categories (ungrounded numbers,
+        # titled names, electoral claims, family relationships, party
+        # affiliation) since the check they come from was extended to
+        # match what the Bluesky post already ran. A rejection reason the
+        # correction text never mentions gives the retry no signal on what
+        # to actually change, wasting the one extra attempt this loop
+        # exists to spend productively.
         correction = (
             f"\n\nYour previous response was rejected because it contained "
-            f"{'; '.join(reasons)}. Report events directly instead of "
-            "through phrases like 'reports say' or 'coverage indicates,' "
-            "do not call any official 'former' unless the articles do, "
-            "do not evaluate whether any action was warranted or "
-            "justified, and name the specific office-holder instead of "
-            "a vague indefinite phrase like 'a president' or 'a "
-            "Speaker' — there is only one at a time."
+            f"{'; '.join(reasons)}. Use ONLY information stated in the "
+            "articles: report events directly instead of through phrases "
+            "like 'reports say' or 'coverage indicates,' do not state any "
+            "number (vote count, dollar amount, date, statistic) not in "
+            "the articles, do not name any titled official the articles "
+            "don't name, do not describe any election, race, or campaign "
+            "unless the articles do, do not state a family relationship "
+            "between people unless the articles do, do not call any "
+            "official 'former' unless the articles do, do not attach a "
+            "party label (Republican/Democrat/GOP/(R-)/(D-)) to anyone "
+            "unless the articles state their party, do not evaluate "
+            "whether any action was warranted or justified, and name the "
+            "specific office-holder instead of a vague indefinite phrase "
+            "like 'a president' or 'a Speaker' — there is only one at a "
+            "time."
         )
         if attempt > 1:
             correction += (
@@ -476,18 +507,21 @@ def _retry_until_grounded(
             retry_facts = _validate_facts(retry_result.get("facts", []), source_text=issue_source_text)
             retry_facts = [_fix_impossible_senate_vote_counts(f) for f in retry_facts]
             retry_combined = retry_summary + " " + " ".join(retry_facts)
-            retry_reasons = hedge_and_editorializing_violations(retry_combined)
-            retry_former = ungrounded_former_official_claims(retry_combined, issue_source_text)
-            retry_all_reasons = retry_reasons + (
-                [f"'former' office-holder status the articles never state ({', '.join(retry_former)})"]
-                if retry_former else []
+            # 2026-08 quality audit: was hedge/former-status only — a retry
+            # that fixed its hedging could still sail through with an
+            # ungrounded number, name, electoral claim, relationship, or
+            # party label untouched, since nothing here ever checked for
+            # those. Same fix as the first-attempt check above.
+            retry_all_reasons = (
+                hedge_and_editorializing_violations(retry_combined)
+                + grounding_violations(retry_combined, issue_source_text)
             )
             _record_generation_sample(
                 db, "action_center_issue", rank, attempt + 1, user_prompt + correction,
                 {"title": title, "summary": retry_summary, "facts": retry_facts},
                 passed=not retry_all_reasons, violations=retry_all_reasons or None,
             )
-            if retry_summary and not retry_reasons and not retry_former:
+            if retry_summary and not retry_all_reasons:
                 fixed_title, fixed_summary, fixed_facts = _validate_politician_roles(
                     title, retry_summary, retry_facts, db,
                 )
@@ -495,10 +529,7 @@ def _retry_until_grounded(
             # Feed the NEXT attempt the reasons THIS attempt actually failed
             # for, not the original ones — a fixed hedge phrase replaced by a
             # different one needs a correction prompt naming the new problem.
-            reasons = retry_reasons + (
-                [f"'former' office-holder status the articles never state ({', '.join(retry_former)})"]
-                if retry_former else []
-            )
+            reasons = retry_all_reasons
     logger.error(
         "Issue text still had hedging/editorializing language for rank %d "
         "after 2 attempts — skipping: %s",
@@ -1729,7 +1760,7 @@ def _rank_clusters(
     clusters: list[list[NewsArticle]],
     trending: list[TrendingTopic],
     db: "Session",
-) -> list[list[NewsArticle]]:
+) -> tuple[list[list[NewsArticle]], list[float]]:
     """Rank clusters by action surface, coverage breadth, and trending.
 
     Final score = 0.40 * action_link + 0.35 * coverage + 0.25 * trending.
@@ -1743,9 +1774,14 @@ def _rank_clusters(
     trending is weighted least because it is the most volatile signal
     (Bluesky/Google shift every run) and would otherwise churn the top
     issues hour to hour.
+
+    Returns (ranked_clusters, ranked_scores) — the combined score for
+    ranked_clusters[i] is ranked_scores[i] (2026-08 quality audit: needed
+    by _deduplicate_top_clusters to log the real selected/rejected score
+    boundary, since dedup — not raw rank — decides final selection).
     """
     if not clusters:
-        return []
+        return [], []
 
     coverage_scores = [len({a.source_name for a in c}) for c in clusters]
     max_cov = max(coverage_scores) if coverage_scores else 1.0
@@ -1779,11 +1815,20 @@ def _rank_clusters(
             len({a.source_name for a in c}), titles,
         )
 
-    return [clusters[i] for i in ranked_indices]
+    # combined scores travel alongside the reordered clusters (2026-08
+    # quality audit) so _deduplicate_top_clusters — the function that
+    # actually decides what gets published, since it can skip a
+    # higher-ranked cluster as a near-duplicate and promote a lower-ranked
+    # one instead — can log the real selected/rejected score boundary.
+    # Logging it here instead would label by raw rank position, which
+    # doesn't match final selection whenever dedup reorders things
+    # (independent review of #443 caught this).
+    return [clusters[i] for i in ranked_indices], [combined[i] for i in ranked_indices]
 
 
 def _deduplicate_top_clusters(
     ranked_clusters: list[list[NewsArticle]],
+    ranked_scores: list[float],
     max_issues: int,
 ) -> list[list[NewsArticle]]:
     """Select top clusters ensuring no two cover the same topic.
@@ -1796,6 +1841,14 @@ def _deduplicate_top_clusters(
     Remaining duplicates that slip through are merged into the earlier
     selected cluster rather than discarded, so their articles contribute
     to the LLM prompt for that issue.
+
+    ranked_scores[i] is ranked_clusters[i]'s combined _rank_clusters score
+    — needed here, not in _rank_clusters, because THIS function decides
+    final selection (a higher-ranked cluster can still be merged away as a
+    near-duplicate, promoting a lower-ranked one instead); logging the
+    selected/rejected boundary anywhere else would mislabel whatever this
+    merge step changes (2026-08 quality audit, caught by independent
+    review of #443).
     """
     if len(ranked_clusters) <= 1:
         return ranked_clusters[:max_issues]
@@ -1823,9 +1876,11 @@ def _deduplicate_top_clusters(
     embeddings = centered / np.where(norms < 1e-9, 1.0, norms)
 
     selected: list[int] = []
+    examined: list[int] = []
     for i in range(len(ranked_clusters)):
         if len(selected) >= max_issues:
             break
+        examined.append(i)
 
         merged_into = None
         best_sim = -1.0
@@ -1850,6 +1905,15 @@ def _deduplicate_top_clusters(
             )
         else:
             selected.append(i)
+
+    # Logged against the real outcome of the loop above, not raw rank
+    # position — `examined` can run past index max_issues-1 when earlier
+    # candidates get merged away, so a promoted lower-ranked cluster is
+    # correctly counted "selected" rather than silently excluded.
+    selected_set = set(selected)
+    for i in examined:
+        outcome = "selected" if i in selected_set else "rejected"
+        action_metrics.increment_bucket(f"cluster_rank_score_{outcome}", ranked_scores[i])
 
     logger.info(
         "Cluster dedup: selected %d of %d ranked clusters",
@@ -4566,11 +4630,11 @@ def _run_refresh(db: Session) -> int:
 
     # 5. Rank clusters using coverage breadth + trending relevance
     _set_refresh_state(stage="rank")
-    ranked_clusters = _rank_clusters(clusters, trending, db)
+    ranked_clusters, ranked_scores = _rank_clusters(clusters, trending, db)
 
     # 5b. Deduplicate top clusters so two angles on the same story
     # don't both appear (e.g., "Tariff hikes" and "Market fallout from tariffs")
-    top_clusters = _deduplicate_top_clusters(ranked_clusters, MAX_ISSUES)
+    top_clusters = _deduplicate_top_clusters(ranked_clusters, ranked_scores, MAX_ISSUES)
     action_metrics.increment("clusters_considered", len(top_clusters))
     _set_refresh_state(stage="issues", stage_detail=f"0/{len(top_clusters)}")
 
@@ -4711,6 +4775,7 @@ def _run_refresh(db: Session) -> int:
         # summary/facts, so a bad title has a deterministic fallback instead
         # of a retry, same as the geographic-consistency correction above.
         from app.pipeline.analyze.grounding import (
+            grounding_violations,
             hedge_and_editorializing_violations,
             ungrounded_former_official_claims,
         )
@@ -4734,16 +4799,24 @@ def _run_refresh(db: Session) -> int:
         # forbids both (see _SYSTEM_PROMPT / _ISSUE_PROMPT_TEMPLATE) but the
         # local model doesn't reliably follow prompt-only instructions, and
         # unlike the full-story path this summary/facts generation had no
-        # mechanical backstop at all until this fix. Ungrounded "former
-        # <office>" status claims ride the same retry (2026-07 live case).
+        # mechanical backstop at all until this fix.
+        #
+        # 2026-08 quality audit: this was the ONLY generated text in the
+        # whole pipeline checked with hedge/editorializing plus a single
+        # hand-picked grounding rule (former-official status), while the
+        # Bluesky post generated FROM this same summary (bluesky_poster.py)
+        # already ran the full grounding_violations() combinator —
+        # ungrounded numbers, titled names, electoral claims, family
+        # relationships, party affiliation, in addition to former-status.
+        # A hallucination in any of those five categories could reach the
+        # published issue itself while only getting caught downstream (or
+        # not at all, since the Bluesky post is optional/best-effort and
+        # near-duplicate posts get suppressed before ever re-checking this
+        # text). Reusing the same battle-tested combinator here closes that
+        # gap — no new check invented, just applied where it was missing.
         combined_text = summary + " " + " ".join(facts)
         reasons = hedge_and_editorializing_violations(combined_text)
-        summary_former = ungrounded_former_official_claims(combined_text, issue_source_text)
-        if summary_former:
-            reasons.append(
-                "'former' office-holder status the articles never state "
-                f"({', '.join(summary_former)})"
-            )
+        reasons += grounding_violations(combined_text, issue_source_text)
         _record_generation_sample(
             db, "action_center_issue", rank, 1, user_prompt,
             {"title": title, "summary": summary, "facts": facts},
