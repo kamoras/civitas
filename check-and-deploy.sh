@@ -188,7 +188,11 @@ if [[ "$deploy_ok" == "1" ]]; then
       | grep -v '^name:' \
       | sed -E 's/published: "([0-9]+)"/published: \1/' \
       > "$RESOLVED"
-    docker stack deploy -c "$RESOLVED" civitas --detach=true
+    # --prune: without it, a service removed from the compose files (e.g.
+    # the ollama removal in #448) keeps running indefinitely as an orphan
+    # instead of being torn down on the next deploy — live-verified: the
+    # first post-#448 deploy left civitas_ollama at 1/1 with no prune.
+    docker stack deploy -c "$RESOLVED" civitas --prune --detach=true
   } >> deploy-poll.log 2>&1 || deploy_ok=0
 fi
 
