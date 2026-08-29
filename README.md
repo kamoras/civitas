@@ -762,9 +762,10 @@ cmake --build . --config Release -j4
 
 **Option B: Ollama (simpler setup)**
 ```bash
-# Ollama runs as a Swarm service alongside the app
-# Set LLM_BACKEND=ollama in .env
-docker exec "$(docker ps -q -f name=civitas_ollama)" ollama pull LiquidAI/lfm2.5-1.2b-instruct
+# Ollama is not bundled in docker-compose.yml — run your own instance
+# (host install or a compose service you add yourself), then:
+# Set LLM_BACKEND=ollama and OLLAMA_BASE_URL in .env
+ollama pull LiquidAI/lfm2.5-1.2b-instruct
 ```
 
 The data pipeline runs automatically on the cron schedule in `.env`
@@ -828,7 +829,6 @@ Host ports    Swarm service   Purpose
                               that forwarding rule)
 —             backend         FastAPI backend (overlay-network only)
 —             frontend        Next.js frontend (overlay-network only)
-—             ollama          Fallback LLM backend (overlay-network only)
 8070          llama-server    llama.cpp inference (systemd, not in the stack)
 ```
 
@@ -858,8 +858,9 @@ Swarm considers a task healthy purely by its Docker `HEALTHCHECK` exit code
 "HTTP 200, don't parse the body" criterion the old deploy script used.
 `database`/`ollama` in the response body are informational for the admin
 dashboard and don't gate the rolling update. The `ollama` key name is
-historical: it reports whichever backend `LLM_BACKEND` selects, so under the
-default it is the llama.cpp server's health, not Ollama's.
+historical (kept for API/dashboard compatibility even though Ollama isn't
+bundled anymore): it reports whichever backend `LLM_BACKEND` selects, so
+under the default it is the llama.cpp server's health, not Ollama's.
 
 ## Development Setup
 
