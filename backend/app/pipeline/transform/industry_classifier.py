@@ -128,7 +128,13 @@ INDUSTRY_DESCRIPTIONS: dict[str, str] = {
         "Remington Everytown for Gun Safety Giffords Brady Campaign"
     ),
     "TOBACCO": "tobacco cigarette vaping e-cigarette nicotine smoking Altria Philip Morris Reynolds JUUL",
-    "CRYPTO": "cryptocurrency bitcoin blockchain digital currency decentralized finance web3 Coinbase Binance",
+    "CRYPTO": (
+        "cryptocurrency bitcoin blockchain digital currency decentralized finance "
+        "web3 token coin. Bitcoin BTC Ethereum ETH Solana SOL Dogecoin DOGE "
+        "Cardano ADA XRP Ripple Litecoin LTC Polygon MATIC Avalanche AVAX "
+        "Chainlink LINK Polkadot Tron Stellar Uniswap USDC Tether USDT "
+        "stablecoin World Liberty Financial WLFI Coinbase Binance Kraken"
+    ),
     "PRIVATE_PRISON": "prison corrections incarceration detention correctional facility CoreCivic GEO Group",
     "LABOR_UNIONS": (
         "union labor workers organized labor collective bargaining. "
