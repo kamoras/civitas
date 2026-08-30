@@ -420,11 +420,10 @@ async def get_recent_action_issues(
     swallow "recent" as a path parameter.
 
     Deduped via dedupe_near_identical_issues before truncating to
-    `limit`: retiring a row for BEING a duplicate (see
-    retire_duplicate_current_issues.py) only flips is_current, which this
-    query ignores by design — without this, a duplicate retired off the
-    Action Center resurfaced right back here (2026-08-22 report: "I see 3
-    copies of the beef import issue on the homepage").
+    `limit`: retiring a row for BEING a duplicate only flips is_current,
+    which this query ignores by design — without this, a duplicate
+    retired off the Action Center resurfaced right back here (2026-08-22
+    report: "I see 3 copies of the beef import issue on the homepage").
     """
     from app.pipeline.analyze.action_center import dedupe_near_identical_issues
 

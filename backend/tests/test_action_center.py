@@ -1371,8 +1371,7 @@ class TestIssueSignatureMatching:
 class TestDedupeNearIdenticalIssues:
     """The homepage's recent-issues endpoint deliberately shows issues
     regardless of is_current (see get_recent_action_issues) — so a row
-    retired specifically for BEING a duplicate (via
-    retire_duplicate_current_issues.py) resurfaced there anyway
+    retired specifically for BEING a duplicate resurfaced there anyway
     (2026-08-22 report: "I see 3 copies of the beef import issue on the
     homepage"). This is the read-time dedup that fixes that without a
     second is_current flip."""

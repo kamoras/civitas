@@ -1,15 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
-import { fetchPresident, fetchPresidentLeaderboard } from "@/lib/api";
-import { useAsyncData } from "@/hooks/useAsyncData";
 import { getScoreColor, getPresidentLabel } from "@/lib/representation";
 import { MetricBar, StatBox } from "@/components/shared/ScoreMetric";
 import ScoreTrendSection from "@/components/checker/ScoreTrendSection";
 import StockTrades from "@/components/checker/StockTrades";
-import type { President, PresidentLeaderboardEntry } from "@/types/president";
+import type { President } from "@/types/president";
 
 const PARTY_META: Record<string, { label: string; color: string; bg: string; border: string }> = {
   D: {
@@ -318,111 +314,3 @@ export function PresidentCard({
   );
 }
 
-function PresidentSelector({
-  entries,
-  selectedId,
-  onSelect,
-}: {
-  entries: PresidentLeaderboardEntry[];
-  selectedId: string;
-  onSelect: (id: string) => void;
-}) {
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-8 gap-1.5 mb-8">
-      {entries.map((e) => {
-        const active = e.id === selectedId;
-        const pm = getPartyMeta(e.party);
-        const partyBorder = active
-          ? `${pm.border} ${pm.bg}`
-          : `${pm.border.replace("/40", "/20")} hover:${pm.border}`;
-        return (
-          <button
-            key={e.id}
-            onClick={() => onSelect(e.id)}
-            className={`px-2 py-1.5 border text-xs font-mono transition-all truncate ${partyBorder} ${
-              active ? "text-ink-hi" : "text-ink-lo hover:text-ink"
-            }`}
-          >
-            {e.name.split(" ").pop()}
-            <span className="text-ink-min ml-1">#{e.number}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-export default function PresidentClient() {
-  const searchParams = useSearchParams();
-  const initialId = searchParams.get("id") ?? "";
-
-  const [entries, setEntries] = useState<PresidentLeaderboardEntry[]>([]);
-  const [selectedId, setSelectedId] = useState(initialId);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchPresidentLeaderboard()
-      .then((data) => {
-        setEntries(data);
-        if (!selectedId && data.length > 0) {
-          const current = data.find((e) => e.isCurrent);
-          setSelectedId(current?.id ?? data[0].id);
-        }
-      })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-    // Mount-only: selectedId excluded to avoid refetching the leaderboard on selection change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Detail for the selected row. `detailLoading` is derived from whether the
-  // settled response belongs to the id currently selected, so selecting a new
-  // row cannot briefly show the previous one's detail — which storing the flag
-  // separately allowed.
-  const detail = useAsyncData(
-    `president:${selectedId ?? ""}`,
-    selectedId ? () => fetchPresident(selectedId) : null
-  );
-  const president = detail.data;
-  const detailLoading = detail.loading;
-
-  const chronological = useMemo(() => [...entries].sort((a, b) => a.number - b.number), [entries]);
-
-  if (loading) {
-    return (
-      <div className="panel max-w-md mx-auto p-6 text-center">
-        <div className="text-signal-cyan animate-pulse text-lg">
-          {">"} LOADING PRESIDENTIAL DATA...
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="panel max-w-md mx-auto p-6 text-center">
-        <div className="text-signal-red text-lg">{">"} ERROR</div>
-        <div className="text-ink-min text-sm mt-2">{error}</div>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <PresidentSelector entries={chronological} selectedId={selectedId} onSelect={setSelectedId} />
-
-      {detailLoading && (
-        <div className="panel max-w-md mx-auto p-6 text-center">
-          <div className="text-signal-cyan animate-pulse">{">"} LOADING PROFILE...</div>
-        </div>
-      )}
-
-      {!detailLoading && president && (
-        <div className="max-w-3xl mx-auto">
-          <PresidentCard president={president} />
-        </div>
-      )}
-    </div>
-  );
-}

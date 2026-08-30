@@ -726,9 +726,9 @@ def _same_story(
 def dedupe_near_identical_issues(issues: list["ActionIssue"]) -> list["ActionIssue"]:
     """One representative per cluster of near-identical titles (same
     _NEAR_IDENTICAL_TITLE_THRESHOLD/_is_exact_content_duplicate logic
-    _find_matching_issue and retire_duplicate_current_issues.py use),
-    keeping whichever cluster member has the latest created_at. Relative
-    order of the kept issues is preserved from the input.
+    _find_matching_issue uses), keeping whichever cluster member has the
+    latest created_at. Relative order of the kept issues is preserved
+    from the input.
 
     2026-08-22: retiring a duplicate only removes it from is_current —
     the homepage's recent-issues endpoint deliberately does NOT filter on
