@@ -8,9 +8,9 @@ name: civitas
 services:
   # 2026-08: ollama was bundled here as the LLM_BACKEND=ollama option's
   # runtime, but the default (and the only backend this project actually
-  # runs in production) is LLM_BACKEND=llama-server — a native systemd
-  # service (see llama.cpp setup in README), not a Docker service at all.
-  # Confirmed via a live production audit that the bundled ollama
+  # runs in production) is LLM_BACKEND=llama-server — the service defined
+  # below, not this one. Confirmed via a live production audit that the
+  # bundled ollama
   # container had sat completely idle since the switch: zero application
   # traffic, only its own baked-in Docker healthcheck (`ollama list`
   # every 30s) — while reserving 6G of RAM on a 15.8G Pi for a service
@@ -20,6 +20,65 @@ services:
   # ollama elsewhere and point OLLAMA_BASE_URL at it — add the service
   # block back (this file's git history has the exact definition) if you
   # want it bundled again.
+
+  # 2026-08-29: live-benchmarked the from-source ARM-optimized build
+  # (-mcpu=cortex-a76+dotprod+fp16) against this stock image on the same
+  # Pi with the same model: prompt-processing was ~12% faster on the
+  # custom build, but token-generation speed -- what actually dominates
+  # wall-clock for every real call here (summaries, full stories up to
+  # 2048 tokens) -- was statistically identical. Not worth hand-rolling a
+  # build pipeline for ~2s saved on a once-daily batch job when the
+  # official image lets Dependabot bump it like every other dependency.
+  llama-server:
+    image: ghcr.io/ggml-org/llama.cpp:server@sha256:db057ec90de0a423255a218b9612420993237ff33db68b3155dc3bba9b994a20
+    container_name: mp-llama-server
+    ports:
+      - "127.0.0.1:8070:8070"
+    volumes:
+      # Bind mount, not a named volume -- the model is a single static
+      # file the operator provides (see README's LLM Backend Options),
+      # not app-managed state.
+      - ${LLAMA_MODELS_DIR:-./llama-models}:/models:ro
+    command:
+      - -m
+      - /models/${LLAMA_MODEL_FILE:-lfm2.5-1.2b-instruct-q4_k_m.gguf}
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8070"
+      - --threads
+      - "4"
+      - --ctx-size
+      - "4096"
+      - --flash-attn
+      - "on"
+      - --cont-batching
+      # 0 (default 8): disables context-checkpoint save/restore. Live
+      # journalctl investigation (2026-08-29) found this exact path
+      # crashing the server ("restored context checkpoint" -> "decode:
+      # failed to initialize batch" -> HTTP 500) on near-duplicate prompts
+      # (e.g. an Action Center grounding retry). Upstream's own fix
+      # (ggml-org/llama.cpp#20819, #26004) is still an open, unmerged PR.
+      # Trade-off: near-duplicate prompts reprocess in full instead of
+      # resuming from a cached checkpoint -- slower, not incorrect.
+      - --ctx-checkpoints
+      - "0"
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8070/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   backend:
     build:
@@ -31,11 +90,14 @@ services:
       - "127.0.0.1:8000:8000"
     env_file: .env
     extra_hosts:
+      # Only still needed for LLM_BACKEND=ollama pointed at a host-level
+      # ollama install (OLLAMA_BASE_URL) -- llama-server is in-stack now
+      # and reached by service DNS instead.
       - "host.docker.internal:host-gateway"
     environment:
       - DATABASE_URL=sqlite:////data/civitas.db
       - LLM_BACKEND=llama-server
-      - LLAMA_SERVER_URL=http://host.docker.internal:8070
+      - LLAMA_SERVER_URL=http://llama-server:8070
     volumes:
       - app_data:/data
     restart: unless-stopped

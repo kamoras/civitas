@@ -41,7 +41,7 @@ flowchart TB
         NGINX["nginx :8081<br/>reverse proxy + cache"]
     end
 
-    LLAMA["llama.cpp :8070<br/>LFM2.5-1.2B-Instruct<br/>systemd, ARM-native"]
+    LLAMA["llama.cpp :8070<br/>LFM2.5-1.2B-Instruct<br/>Docker, overlay-network only"]
     EMBED["Two sentence-transformers, in-process<br/>Arctic-XS — classification<br/>all-MiniLM-L6-v2 — index + similarity gates<br/>both 384-dim, ~22M params"]
     BSKY["Bluesky<br/>@civitas-research.org"]
 
@@ -75,9 +75,11 @@ calls. Civitas is a semantic classification and retrieval system that uses a
 language model only at the final synthesis step, not an LLM application.
 
 **The two models live in different places.** The embedding model runs
-in-process inside the backend container (~90 MB resident). The LLM runs as a
-*host* systemd service outside Docker, so model weights stay in RAM across
-backend redeploys. The backend reaches it at `host.docker.internal:8070`.
+in-process inside the backend container (~90 MB resident). The LLM runs as
+its own Swarm service (`ghcr.io/ggml-org/llama.cpp:server`, overlay-network
+only) with an independent rolling-update lifecycle, so model weights don't
+reload every time backend redeploys — only when llama-server's own image or
+config changes. The backend reaches it at `llama-server:8070` (service DNS).
 
 **Only nginx is published to the host.** Backend and frontend bind to the
 overlay network only — Swarm's host-mode publishing cannot restrict to

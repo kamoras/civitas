@@ -79,7 +79,7 @@ class Settings(BaseSettings):
     # target, not just plumbing the argument through.
     OLLAMA_STORY_MODEL: str = ""
     LLM_BACKEND: str = "llama-server"
-    LLAMA_SERVER_URL: str = "http://host.docker.internal:8070"
+    LLAMA_SERVER_URL: str = "http://llama-server:8070"
     PIPELINE_CACHE_TTL_HOURS: int = 72
     # Skip re-deriving a member whose analysis inputs are byte-identical to
     # the last run's (see analyze/member_fingerprint.py). Defaults OFF: the

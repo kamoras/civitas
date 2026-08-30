@@ -122,3 +122,22 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - dependencies
+
+  # llama-server (docker-compose.yml) is pinned by digest, not a tag --
+  # ggml-org only publishes a floating `server` tag for this image, no
+  # per-build immutable tag (checked live 2026-08-29: neither
+  # `server-b10680` nor `b10680` exist even though that's the exact
+  # revision the floating tag pointed to that day). Dependabot's docker
+  # ecosystem still handles this: it watches the digest a pinned tag
+  # resolves to and opens a PR when it moves, same mechanism as any other
+  # digest-pinned image. A bad bump degrades gracefully -- the app already
+  # treats an unreachable/broken llama-server as a per-request timeout,
+  # not a hard failure (see AGENTS.md).
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies

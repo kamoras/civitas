@@ -4,25 +4,26 @@
 # What this changes and why:
 #
 # - `networks.default.driver: overlay` — gives every service a stable
-#   DNS name (backend/frontend/nginx) that keeps resolving to whichever
-#   task is currently healthy across a rolling update. This is what
-#   replaces deploy.sh's blue/green slot bookkeeping + dynamically
+#   DNS name (backend/frontend/llama-server/nginx) that keeps resolving to
+#   whichever task is currently healthy across a rolling update. This is
+#   what replaces deploy.sh's blue/green slot bookkeeping + dynamically
 #   rewritten nginx upstreams: Swarm's `update_config.order: start-first`
 #   below already IS zero-downtime blue/green, just built into the
 #   engine instead of hand-rolled in bash.
 #
-# - backend/frontend `ports: !reset []` — Swarm services can't restrict a
-#   published port to 127.0.0.1 the way plain `docker run -p
-#   127.0.0.1:PORT:PORT` can — confirmed live with a throwaway
+# - backend/frontend/llama-server `ports: !reset []` — Swarm services
+#   can't restrict a published port to 127.0.0.1 the way plain `docker
+#   run -p 127.0.0.1:PORT:PORT` can — confirmed live with a throwaway
 #   `docker service create --publish mode=host,...` test, reachable from
 #   another LAN host, not just localhost; the same limitation applies to
 #   the default `ingress` mode (the compose ports long-syntax `host_ip:`
 #   field is a plain-Docker-only feature, silently not enforceable by
-#   Swarm's PortConfig). Rather than accept that regression (both are
+#   Swarm's PortConfig). Rather than accept that regression (all three are
 #   deliberately loopback-only today — nginx is the only intended path to
-#   backend/frontend) or bolt on host firewall rules, neither publishes a
-#   host port under Swarm — nginx (below) is the only service published
-#   to the host, on the same port 8081 as before. This is *more*
+#   backend/frontend, and nothing outside the stack needs to reach
+#   llama-server at all) or bolt on host firewall rules, none of them
+#   publish a host port under Swarm — nginx (below) is the only service
+#   published to the host, on the same port 8081 as before. This is *more*
 #   restrictive than the pre-Swarm setup, not less. (`ports: []` alone
 #   does NOT work here — Compose's merge treats an empty list override as
 #   "no override," not "clear the base list"; `!reset` is the documented
@@ -56,6 +57,31 @@ volumes:
     name: civitas_app_data
 
 services:
+  llama-server:
+    ports: !reset []
+    volumes:
+      # The real production model lives at this fixed host path (verified
+      # live via `ls /mnt/nvme/llama-server/models`) -- set in the Pi's
+      # .env, not committed, same LLAMA_MODELS_DIR var docker-compose.yml
+      # already reads.
+      - ${LLAMA_MODELS_DIR}:/models:ro
+    deploy:
+      # stop-first, not start-first like backend/frontend below: running
+      # two model instances at once during a rolling update is needless
+      # memory pressure on the Pi for a service that isn't on any live
+      # user-facing request path (nightly batch pipeline only) -- the app
+      # already treats a temporarily-unreachable LLM as a per-request
+      # timeout, not a hard failure (see AGENTS.md), so a few seconds of
+      # restart gap here costs nothing in practice.
+      update_config:
+        order: stop-first
+        failure_action: rollback
+        delay: 5s
+        monitor: 15s
+      restart_policy:
+        condition: any
+        delay: 5s
+
   backend:
     ports: !reset []
     deploy:

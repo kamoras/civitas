@@ -89,7 +89,7 @@ external API calls to cloud AI services.
 │                                              ┌────────────────────────┐      │
 │  APScheduler ──▶ nightly pipeline            │  llama.cpp server      │      │
 │  APScheduler ──▶ hourly action refresh  ────▶│  LFM2.5-1.2B-Instruct  │      │
-│                                              │  port 8070 (ARM-native)│      │
+│                                              │  port 8070 (Docker)    │      │
 │                                              └────────────────────────┘      │
 └──────────────────────────┬───────────────────────────────────────────────────┘
                            │ JSON
@@ -707,7 +707,7 @@ See the [Methodology page](/about) for full details and inline citations.
 - A free **api.data.gov** API key — sign up at https://api.data.gov/signup/
 - ~16 GB RAM recommended
 - ~10 GB disk for Docker images and model weights
-- For native LLM inference: llama.cpp compiled for your architecture
+- A `.gguf` model file for llama-server (see LLM Backend Options below)
 
 ## Quick Start
 
@@ -739,25 +739,44 @@ docker compose ps
 
 The pipeline supports two LLM backends, configured via `LLM_BACKEND` in `.env`:
 
-**Option A: llama.cpp (recommended for ARM/RPi)**
+**Option A: llama.cpp via Docker (default, what production runs)**
 
-On a Raspberry Pi 5, skip the build: grab the precompiled binary from
-[Releases](https://github.com/kamoras/civitas/releases/tag/llama-server-pi5-v1)
-(same one this project runs in production, checksum included). It's
-compiled specifically for the Pi 5's Cortex-A76 CPU and will not run on
-a Pi 4 or other non-Cortex-A76 boards — those still need to build from
-source below.
+`docker-compose.yml` already includes a `llama-server` service running the
+official [ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp) server
+image — nothing to build. Download a `.gguf` model (e.g. from Hugging Face)
+into a local directory and point `.env` at it:
 
 ```bash
-# Compile llama.cpp with ARM optimizations
-git clone https://github.com/ggerganov/llama.cpp
+mkdir -p llama-models
+# download your .gguf model into llama-models/, matching LLAMA_MODEL_FILE in .env
+# LLAMA_MODELS_DIR=./llama-models
+# LLAMA_MODEL_FILE=lfm2.5-1.2b-instruct-q4_k_m.gguf
+# LLM_BACKEND=llama-server (default)
+```
+
+Dependabot tracks this image the same way it tracks every other
+dependency in this repo (`.github/dependabot.yml`'s `docker` ecosystem) —
+version bumps arrive as ordinary PRs, no manual "check for a new
+llama.cpp release" step. A from-source ARM-optimized build
+(`-mcpu=cortex-a76+dotprod+fp16`) was live-benchmarked against this image
+on the production Pi 5 (2026-08-29): prompt-processing was ~12% faster,
+but token-generation speed — what actually dominates wall-clock for every
+real call here — was statistically identical, so the custom build wasn't
+worth losing automatic updates over. If your workload is more
+concurrency- or prefill-heavy than this project's once-daily batch
+pipeline, building from source may still be worth it for you. On a Pi 5,
+skip the compile: grab the precompiled binary from
+[Releases](https://github.com/kamoras/civitas/releases/tag/llama-server-pi5-v1)
+(checksum included; Cortex-A76 only, won't run on a Pi 4 or other boards).
+
+```bash
+git clone https://github.com/ggml-org/llama.cpp
 cd llama.cpp && mkdir build && cd build
 cmake .. -DCMAKE_C_FLAGS="-mcpu=cortex-a76+dotprod+fp16" \
          -DCMAKE_CXX_FLAGS="-mcpu=cortex-a76+dotprod+fp16"
 cmake --build . --config Release -j4
-
-# Install as systemd service (see deploy docs)
-# Set LLM_BACKEND=llama-server in .env
+# Point LLAMA_SERVER_URL at wherever you run it instead of using the
+# bundled Docker service.
 ```
 
 **Option B: Ollama (simpler setup)**
@@ -793,8 +812,11 @@ blue/green script:
                                       │ proxy_pass (overlay network DNS)
                  ┌────────────────────┴────────────────────┐
                  ▼                                         ▼
-          backend (task)                            frontend (task)
-    start-first rolling update                start-first rolling update
+          backend (task) ──────┐                    frontend (task)
+    start-first rolling update │              start-first rolling update
+                                ▼
+                        llama-server (task)
+                     stop-first rolling update
 ```
 
 `docker stack deploy -c docker-compose.yml -c docker-compose.swarm.yml
@@ -829,17 +851,28 @@ Host ports    Swarm service   Purpose
                               that forwarding rule)
 —             backend         FastAPI backend (overlay-network only)
 —             frontend        Next.js frontend (overlay-network only)
-8070          llama-server    llama.cpp inference (systemd, not in the stack)
+—             llama-server    llama.cpp inference (overlay-network only)
 ```
 
-Backend and frontend publish **no host port** — Swarm's host-mode port
-publishing can't restrict to `127.0.0.1` the way plain `docker run -p
-127.0.0.1:PORT:PORT` can (confirmed live: it always binds `0.0.0.0`), so
-rather than accept LAN-wide exposure of ports that were deliberately
-loopback-only before, they simply aren't published to the host at all —
-nginx, inside the same overlay network, is the only path to either of them.
+Backend, frontend, and llama-server publish **no host port** — Swarm's
+host-mode port publishing can't restrict to `127.0.0.1` the way plain
+`docker run -p 127.0.0.1:PORT:PORT` can (confirmed live: it always binds
+`0.0.0.0`), so rather than accept LAN-wide exposure of ports that were
+deliberately loopback-only before, none of them are published to the host
+at all — nginx, inside the same overlay network, is the only path to any
+of them.
 
-llama.cpp runs as a systemd service (not Docker, not in the stack) so the model weights stay in RAM across backend redeploys. The backend connects to it via `http://host.docker.internal:8070`. If the llama.cpp server is unavailable, all LLM calls fall through to a timeout error and the pipeline records a per-member failure without aborting the run.
+llama-server is its own Swarm service (not baked into the backend image)
+with its own rolling-update lifecycle, so its model weights don't reload
+every time backend redeploys — only when llama-server's own image or
+config changes. It updates `stop-first` rather than `start-first` like
+backend/frontend (see `docker-compose.swarm.yml`): a brief restart gap is
+an acceptable trade for not running two model copies in memory at once on
+the Pi, since it isn't on any live user-facing request path. The backend
+connects to it via `http://llama-server:8070` (overlay-network service
+DNS). If llama-server is unavailable, all LLM calls fall through to a
+timeout error and the pipeline records a per-member failure without
+aborting the run.
 
 ### Health Check
 
@@ -985,7 +1018,9 @@ See `.env.example` for all options. Key variables:
 | `DATA_GOV_API_KEY` | Yes | API key from api.data.gov (covers Congress.gov, FEC, GovInfo) |
 | `ADMIN_TOKEN` | Yes | Bearer token for admin panel and pipeline triggers |
 | `LLM_BACKEND` | No | `llama-server` (default) or `ollama` |
-| `LLAMA_SERVER_URL` | No | llama.cpp server URL (default: `http://host.docker.internal:8070`) |
+| `LLAMA_SERVER_URL` | No | llama-server URL (default: `http://llama-server:8070`, the in-stack service) |
+| `LLAMA_MODELS_DIR` | No | Host directory bind-mounted into llama-server at `/models` (default: `./llama-models`) |
+| `LLAMA_MODEL_FILE` | No | `.gguf` filename inside `LLAMA_MODELS_DIR` (default: `lfm2.5-1.2b-instruct-q4_k_m.gguf`) |
 | `OLLAMA_MODEL` | No | Model name for cache keys and Ollama (default: `LiquidAI/lfm2.5-1.2b-instruct`) |
 | `DATABASE_URL` | No | SQLite path (default: `sqlite:///data/civitas.db`) |
 | `PIPELINE_CRON_SCHEDULE` | No | Cron schedule for nightly pipeline (default: `0 3 * * *`) |

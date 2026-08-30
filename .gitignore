@@ -76,6 +76,10 @@ venv/
 /deploy-poll.log
 /.last-deployed-sha
 
+# local .gguf model file(s) for the llama-server Docker service
+# (LLAMA_MODELS_DIR default) — large binaries, operator-provided
+/llama-models/
+
 # defense-in-depth: never commit these even if something creates them
 *.key
 *.sqlite

@@ -360,7 +360,7 @@ class TestHttpErrorLogsResponseBody:
         import urllib.error
 
         error = urllib.error.HTTPError(
-            url="http://host.docker.internal:8070/v1/chat/completions",
+            url="http://llama-server:8070/v1/chat/completions",
             code=500,
             msg="Internal Server Error",
             hdrs=None,
@@ -397,7 +397,7 @@ class TestHttpErrorLogsResponseBody:
                 pass
 
         error = urllib.error.HTTPError(
-            url="http://host.docker.internal:8070/v1/chat/completions",
+            url="http://llama-server:8070/v1/chat/completions",
             code=500, msg="Internal Server Error", hdrs=None, fp=_BrokenStream(),
         )
 
