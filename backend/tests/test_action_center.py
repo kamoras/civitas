@@ -49,6 +49,11 @@ from app.pipeline.analyze.action_center import (
     _learned_relevance_prototypes,
     _log_relevance_prototype_agreement,
     _LEARNED_PROTOTYPE_MIN_SAMPLE,
+    Claim,
+    _extract_cluster_claims,
+    _dedupe_claims,
+    _format_claims_for_prompt,
+    _run_claim_extraction_shadow,
 )
 
 
@@ -3209,3 +3214,174 @@ class TestMentionsFullName:
     ])
     def test_boundary_rule(self, text, name, expected):
         assert _mentions_full_name(text, name) is expected
+
+
+class TestExtractClusterClaims:
+    """Deconstructs a cluster's coverage into atomic, source-attributed
+    claims — shadow-only path, see _run_claim_extraction_shadow."""
+
+    def _cluster(self):
+        return [
+            _make_article("House passes funding bill", source="AP News"),
+            _make_article("Congress approves spending package", source="NPR"),
+        ]
+
+    @patch("app.pipeline.analyze.action_center.call_llm")
+    def test_keeps_grounded_claims_with_real_sources(self, mock_call_llm):
+        mock_call_llm.return_value = json.dumps({"claims": [
+            {"text": "Summary for House passes funding bill", "sources": ["AP News"], "type": "action"},
+        ]})
+
+        claims = _extract_cluster_claims(self._cluster())
+
+        assert len(claims) == 1
+        assert claims[0].sources == ["AP News"]
+        assert claims[0].claim_type == "action"
+
+    @patch("app.pipeline.analyze.action_center.call_llm")
+    def test_drops_hallucinated_source_and_keeps_valid_ones(self, mock_call_llm):
+        mock_call_llm.return_value = json.dumps({"claims": [
+            {
+                "text": "Summary for House passes funding bill",
+                "sources": ["AP News", "A Made-Up Outlet"],
+                "type": "action",
+            },
+        ]})
+
+        claims = _extract_cluster_claims(self._cluster())
+
+        assert len(claims) == 1
+        assert claims[0].sources == ["AP News"]
+
+    @patch("app.pipeline.analyze.action_center.call_llm")
+    def test_drops_claim_with_no_valid_sources(self, mock_call_llm):
+        mock_call_llm.return_value = json.dumps({"claims": [
+            {"text": "Something not actually reported", "sources": ["Not A Real Source"], "type": "action"},
+        ]})
+
+        assert _extract_cluster_claims(self._cluster()) == []
+
+    @patch("app.pipeline.analyze.action_center.call_llm")
+    def test_drops_claim_that_fails_grounding_against_its_cited_source(self, mock_call_llm):
+        mock_call_llm.return_value = json.dumps({"claims": [
+            {"text": "The bill passed by a vote of 412-3", "sources": ["AP News"], "type": "statistic"},
+        ]})
+
+        # AP News's article text (from _make_article's default summary)
+        # contains none of these numbers, so this must be rejected.
+        assert _extract_cluster_claims(self._cluster()) == []
+
+    @patch("app.pipeline.analyze.action_center.call_llm")
+    def test_invalid_type_falls_back_to_context(self, mock_call_llm):
+        mock_call_llm.return_value = json.dumps({"claims": [
+            {"text": "Summary for House passes funding bill", "sources": ["AP News"], "type": "not-a-real-type"},
+        ]})
+
+        claims = _extract_cluster_claims(self._cluster())
+
+        assert claims[0].claim_type == "context"
+
+    @patch("app.pipeline.analyze.action_center.call_llm")
+    def test_empty_or_malformed_result_returns_no_claims(self, mock_call_llm):
+        mock_call_llm.return_value = None
+        assert _extract_cluster_claims(self._cluster()) == []
+
+        mock_call_llm.return_value = json.dumps({"not_claims": []})
+        assert _extract_cluster_claims(self._cluster()) == []
+
+
+class TestDedupeClaims:
+    def test_single_claim_returned_unchanged(self):
+        claims = [Claim(text="The bill passed", sources=["AP News"], claim_type="outcome")]
+        assert _dedupe_claims(claims) == claims
+
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    def test_near_identical_claims_merge_sources(self, mock_embed):
+        # Two claims scoring above _CLAIM_DEDUP_THRESHOLD (0.92) merge;
+        # normalized vectors so the dot product IS the cosine similarity.
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.99, (1 - 0.99 ** 2) ** 0.5]])
+        claims = [
+            Claim(text="The House passed the bill 220-205", sources=["AP News"]),
+            Claim(text="House approves bill in 220-205 vote", sources=["NPR"]),
+        ]
+
+        result = _dedupe_claims(claims)
+
+        assert len(result) == 1
+        assert set(result[0].sources) == {"AP News", "NPR"}
+
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    def test_dissimilar_claims_stay_separate(self, mock_embed):
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.0, 1.0]])
+        claims = [
+            Claim(text="The House passed the bill", sources=["AP News"]),
+            Claim(text="The Senate held a hearing", sources=["NPR"]),
+        ]
+
+        result = _dedupe_claims(claims)
+
+        assert len(result) == 2
+
+
+class TestFormatClaimsForPrompt:
+    def test_tags_single_vs_multi_source_claims(self):
+        claims = [
+            Claim(text="Confirmed fact", sources=["AP News", "NPR"], claim_type="outcome"),
+            Claim(text="Single-source fact", sources=["Politico"], claim_type="context"),
+        ]
+
+        result = _format_claims_for_prompt(claims)
+
+        assert "CONFIRMED BY 2 SOURCES: AP News, NPR" in result
+        assert "REPORTED BY 1 SOURCE: Politico" in result
+        assert "Confirmed fact" in result
+        assert "Single-source fact" in result
+
+
+class TestRunClaimExtractionShadow:
+    """Non-blocking: logs an automated grounding-quality comparison,
+    never publishes anything, never raises."""
+
+    @patch("app.pipeline.analyze.action_center.call_llm")
+    def test_logs_comparison_metrics_on_success(self, mock_call_llm):
+        from app.pipeline.analyze import action_metrics
+
+        action_metrics.reset()
+        cluster = [_make_article("House passes funding bill", source="AP News")]
+        mock_call_llm.side_effect = [
+            # 1. Claim extraction call.
+            json.dumps({"claims": [
+                {"text": "Summary for House passes funding bill", "sources": ["AP News"], "type": "action"},
+            ]}),
+            # 2. Reconstruction call from the extracted claims.
+            json.dumps({"title": "t", "summary": "Summary for House passes funding bill", "facts": []}),
+        ]
+
+        _run_claim_extraction_shadow(cluster, rank=1, baseline_violation_count=2)
+
+        snap = action_metrics.snapshot()
+        assert snap["claim_extraction_shadow_runs"] == 1
+        assert snap["claim_extraction_shadow_baseline_violations"] == 2
+        assert "claim_extraction_shadow_violations" in snap
+
+    @patch("app.pipeline.analyze.action_center.call_llm")
+    def test_no_op_when_no_claims_survive_extraction(self, mock_call_llm):
+        from app.pipeline.analyze import action_metrics
+
+        action_metrics.reset()
+        mock_call_llm.return_value = json.dumps({"claims": []})
+
+        _run_claim_extraction_shadow(
+            [_make_article("Some story", source="AP News")], rank=1, baseline_violation_count=0,
+        )
+
+        assert action_metrics.snapshot() == {}
+
+    @patch("app.pipeline.analyze.action_center.call_llm")
+    def test_never_raises_on_failure(self, mock_call_llm):
+        mock_call_llm.side_effect = RuntimeError("model unavailable")
+
+        # Must not raise.
+        _run_claim_extraction_shadow(
+            [_make_article("Some story", source="AP News")], rank=1, baseline_violation_count=0,
+        )
