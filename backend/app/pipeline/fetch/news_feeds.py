@@ -162,11 +162,11 @@ _HTML_BLOCK_RE = re.compile(
 # of "the margin was < 6 > the forecast" as if it were markup.
 _HTML_TAG_RE = re.compile(r"</?[a-zA-Z!][^>]*>")
 # A source truncated mid-tag (this can only happen to a description that
-# reaches storage BEFORE stripping — see backfill_race_coverage_summary_html.py
-# for the historical rows this covers) leaves a tag with no closing ">" for
+# reaches storage BEFORE stripping) leaves a tag with no closing ">" for
 # _HTML_TAG_RE to match, e.g. "...(AP Photo/Chuck Burton)</s" — same
 # letter-must-follow-"<" guard as above so trailing prose like "score < 6"
-# survives.
+# survives. Rows ingested in the week before this fix landed needed a
+# one-time cleanup for exactly this; long since applied.
 _DANGLING_TAG_RE = re.compile(r"</?[a-zA-Z][^<>]*$")
 
 # Block boundaries are marked with a sentinel rather than written as "; "
