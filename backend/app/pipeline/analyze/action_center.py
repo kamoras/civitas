@@ -18,6 +18,7 @@ import json
 import logging
 import re
 import threading
+from dataclasses import dataclass, field
 from functools import lru_cache
 import time
 import uuid
@@ -2190,14 +2191,236 @@ def _validate_politician_roles(
     return title, summary, facts
 
 
-def _build_llm_prompt(cluster: list[NewsArticle]) -> str:
+def _format_articles_block(cluster: list[NewsArticle]) -> str:
+    """[source] title + teaser, one block per article — the raw-text
+    material both the real issue prompt and the claim-extraction shadow
+    prompt are built from."""
     parts: list[str] = []
     for a in cluster[:8]:
         line = f"[{a.source_name}] {a.title}"
         if a.summary:
             line += f"\n  {a.summary[:300]}"
         parts.append(line)
-    return _ISSUE_PROMPT_TEMPLATE.format(articles="\n\n".join(parts))
+    return "\n\n".join(parts)
+
+
+def _build_llm_prompt(cluster: list[NewsArticle]) -> str:
+    return _ISSUE_PROMPT_TEMPLATE.format(articles=_format_articles_block(cluster))
+
+
+# ── Claim-extraction shadow path ─────────────────────────────────────
+#
+# Experimental, gated by settings.ACTION_CENTER_CLAIM_EXTRACTION_SHADOW.
+# Deconstructs a cluster into discrete, source-attributed claims before
+# generation, instead of handing the LLM raw concatenated article text —
+# real cross-outlet corroboration becomes an explicit, checkable signal
+# instead of just repeated mentions inside one blob of prose. Runs
+# alongside the real generation path and never publishes anything; see
+# _run_claim_extraction_shadow.
+
+_CLAIM_EXTRACTION_PROMPT_TEMPLATE = """\
+Below are recent news articles about the same story, each tagged with its \
+source in [brackets]. Break the coverage down into a list of atomic, \
+individually-checkable claims — one claim per distinct fact, action, or \
+quote. Do NOT synthesize, summarize, or add interpretation; extract only \
+what the articles actually state.
+
+For each claim, list every source (the [source] tag) that reports it. If \
+two articles report the same fact in different words, that is ONE claim \
+with multiple sources, not two separate claims.
+
+"type" must be exactly one of: "action" (something a person or institution \
+did), "outcome" (a result — a vote passing, a ruling), "statistic" (a \
+number), "quote" (a statement attributed to someone), "context" \
+(background information).
+
+Articles:
+{articles}
+
+Respond with ONLY a JSON object: {{"claims": [{{"text": "...", "sources": \
+["..."], "type": "..."}}]}}"""
+
+_VALID_CLAIM_TYPES = {"action", "outcome", "statistic", "quote", "context"}
+
+# Reuses the issue-title dedup threshold (_NEAR_IDENTICAL_TITLE_THRESHOLD)
+# as a starting point for claim-text similarity rather than an
+# independently measured value — there's no real claim-pair sample to
+# calibrate against yet. Acceptable here because nothing published
+# depends on this being exactly right: the whole claim-extraction path is
+# shadow-only (see module note above), so a rough merge threshold just
+# means slightly noisier shadow comparison data, not a live-facing bug.
+_CLAIM_DEDUP_THRESHOLD = _NEAR_IDENTICAL_TITLE_THRESHOLD
+
+
+@dataclass
+class Claim:
+    text: str
+    sources: list[str] = field(default_factory=list)
+    claim_type: str = "context"
+
+
+def _extract_cluster_claims(cluster: list[NewsArticle]) -> list[Claim]:
+    """Ask the LLM to deconstruct a cluster's coverage into atomic,
+    source-attributed claims, then keep only the ones that actually pass
+    grounding against the specific source(s) they claim to come from.
+
+    One LLM call per cluster, same cost class as the real issue-generation
+    call. Real source names for this cluster gate which "sources" a claim
+    is allowed to cite — a hallucinated source name is dropped from that
+    claim rather than trusted, and a claim left with zero valid sources
+    afterward is discarded entirely (it was never a checkable claim from
+    the coverage as it actually stands).
+    """
+    real_sources = {a.source_name for a in cluster}
+    source_text = {
+        name: " ".join(f"{a.title} {a.summary}" for a in cluster if a.source_name == name)
+        for name in real_sources
+    }
+
+    prompt = _CLAIM_EXTRACTION_PROMPT_TEMPLATE.format(articles=_format_articles_block(cluster))
+    result = call_llm(
+        prompt_version="claim_extraction_v1",
+        system_prompt=_SYSTEM_PROMPT,
+        user_prompt=prompt,
+        cache_key=None,
+        db_session=None,
+        max_tokens=1024,
+        num_ctx=4096,
+    )
+    if isinstance(result, str):
+        result = extract_json(result)
+    if not isinstance(result, dict) or not isinstance(result.get("claims"), list):
+        return []
+
+    claims: list[Claim] = []
+    for raw in result["claims"]:
+        if not isinstance(raw, dict) or not isinstance(raw.get("text"), str) or not raw["text"].strip():
+            continue
+        # dict.fromkeys, not a set: de-dupes a source the LLM listed twice
+        # (which would otherwise inflate a claim's corroboration count —
+        # "AP News" cited twice reading as 2 sources instead of 1) while
+        # preserving the order the model returned them in.
+        cited = list(dict.fromkeys(
+            s for s in raw.get("sources", []) if isinstance(s, str) and s in real_sources
+        ))
+        if not cited:
+            continue
+        claim_source_text = " ".join(source_text[s] for s in cited)
+        if grounding_violations(raw["text"], claim_source_text):
+            continue
+        claim_type = raw.get("type") if raw.get("type") in _VALID_CLAIM_TYPES else "context"
+        claims.append(Claim(text=raw["text"].strip(), sources=cited, claim_type=claim_type))
+    return claims
+
+
+def _dedupe_claims(claims: list[Claim]) -> list[Claim]:
+    """Merge near-identical claims (the same fact, reworded by different
+    outlets) into one, unioning their sources — the whole point of
+    corroboration tracking is that a fact repeated by 3 outlets should
+    read as one 3-source claim, not three separate 1-source ones.
+
+    Complete-linkage, same as dedupe_near_identical_issues: two groups
+    only merge when EVERY claim in one matches every claim in the other.
+    A single-linkage pass (merge whatever's similar to the current
+    anchor) lets a hub claim bridge two claims that were never actually
+    similar to EACH OTHER into one falsely-inflated corroboration count —
+    exactly the transitive-merge failure mode dedupe_near_identical_issues
+    already had to fix once for full issues.
+    """
+    if len(claims) < 2:
+        return list(claims)
+
+    embs = _embed_texts_sim([c.text for c in claims])
+    sims = embs @ embs.T
+    n = len(claims)
+    same_claim = [
+        [i != j and float(sims[i, j]) >= _CLAIM_DEDUP_THRESHOLD for j in range(n)]
+        for i in range(n)
+    ]
+
+    clusters: list[list[int]] = [[i] for i in range(n)]
+    merged_any = True
+    while merged_any:
+        merged_any = False
+        for a in range(len(clusters)):
+            for b in range(a + 1, len(clusters)):
+                if all(same_claim[x][y] for x in clusters[a] for y in clusters[b]):
+                    clusters[a] = clusters[a] + clusters[b]
+                    del clusters[b]
+                    merged_any = True
+                    break
+            if merged_any:
+                break
+
+    result: list[Claim] = []
+    for members in clusters:
+        anchor = claims[members[0]]
+        sources = list(dict.fromkeys(s for idx in members for s in claims[idx].sources))
+        result.append(Claim(text=anchor.text, sources=sources, claim_type=anchor.claim_type))
+    return result
+
+
+def _format_claims_for_prompt(claims: list[Claim]) -> str:
+    """Same block shape _format_articles_block produces, so this plugs
+    into _ISSUE_PROMPT_TEMPLATE's {articles} slot unchanged — each claim
+    tagged with how many sources corroborate it, so the reconstruction
+    prompt's existing "use the specific names and numbers" instructions
+    apply the same way whether they're reading raw articles or claims."""
+    parts = []
+    for c in claims:
+        tag = (
+            f"CONFIRMED BY {len(c.sources)} SOURCES: {', '.join(c.sources)}"
+            if len(c.sources) > 1
+            else f"REPORTED BY 1 SOURCE: {c.sources[0] if c.sources else 'unknown'}"
+        )
+        parts.append(f"[{tag}] {c.text}")
+    return "\n\n".join(parts)
+
+
+def _run_claim_extraction_shadow(
+    filtered_cluster: list[NewsArticle], rank: int, baseline_violation_count: int,
+) -> None:
+    """Runs the deconstruct-then-reconstruct path for one cluster and logs
+    an automated grounding-quality comparison against the real path's
+    result. Never returns anything used for publication, never raises —
+    a shadow-path failure must not affect the real pipeline it runs
+    alongside.
+    """
+    try:
+        claims = _dedupe_claims(_extract_cluster_claims(filtered_cluster))
+        if not claims:
+            return
+        claims_source_text = " ".join(f"{a.title} {a.summary}" for a in filtered_cluster)
+        shadow_prompt = _ISSUE_PROMPT_TEMPLATE.format(articles=_format_claims_for_prompt(claims))
+        shadow_result = call_llm(
+            prompt_version="claim_extraction_shadow_v1",
+            system_prompt=_SYSTEM_PROMPT,
+            user_prompt=shadow_prompt,
+            cache_key=None,
+            db_session=None,
+            max_tokens=1024,
+            num_ctx=4096,
+        )
+        if isinstance(shadow_result, str):
+            shadow_result = extract_json(shadow_result)
+        if not isinstance(shadow_result, dict):
+            return
+        shadow_text = str(shadow_result.get("summary", "")) + " " + " ".join(
+            str(f) for f in shadow_result.get("facts", []) if isinstance(f, (str, int, float))
+        )
+        shadow_violations = len(
+            hedge_and_editorializing_violations(shadow_text)
+            + grounding_violations(shadow_text, claims_source_text)
+        )
+        action_metrics.increment("claim_extraction_shadow_violations", shadow_violations)
+        action_metrics.increment("claim_extraction_shadow_baseline_violations", baseline_violation_count)
+        action_metrics.increment("claim_extraction_shadow_runs")
+        logger.info(
+            "Claim extraction shadow for rank %d: %d claims, %d violations (baseline: %d)",
+            rank, len(claims), shadow_violations, baseline_violation_count,
+        )
+    except Exception:
+        logger.exception("Claim extraction shadow failed for rank %d (non-blocking)", rank)
 
 
 # Last names that are also common English words — require a full-name match
@@ -4800,6 +5023,8 @@ def _run_refresh(db: Session) -> int:
         combined_text = summary + " " + " ".join(facts)
         reasons = hedge_and_editorializing_violations(combined_text)
         reasons += grounding_violations(combined_text, issue_source_text)
+        if settings.ACTION_CENTER_CLAIM_EXTRACTION_SHADOW:
+            _run_claim_extraction_shadow(filtered_cluster, rank, len(reasons))
         _record_generation_sample(
             db, "action_center_issue", rank, 1, user_prompt,
             {"title": title, "summary": summary, "facts": facts},
