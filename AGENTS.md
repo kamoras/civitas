@@ -50,7 +50,7 @@ locally on a single self-hosted device with zero cloud AI calls.
 
 - **Frontend**: Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS — port 3000 (not published to the host under Swarm — see Deployment)
 - **Backend**: FastAPI (Python 3.13), SQLAlchemy ORM, SQLite — port 8000 (same)
-- **LLM**: LFM2.5-1.2B-Instruct via llama.cpp (native ARM, port 8070) or Ollama (not bundled — bring your own, port 11434)
+- **LLM**: LFM2.5-1.2B-Instruct via llama.cpp (`ghcr.io/ggml-org/llama.cpp:server`, in-stack, overlay-network only) or Ollama (not bundled — bring your own, port 11434)
 - **Embeddings**: sentence-transformers, two models in-process — Snowflake Arctic-XS
   (classification) and all-MiniLM-L6-v2 (search index + similarity gates)
 - **Vector Store**: sqlite-vec (`vec0` virtual tables in `/data/vectors.db`) — replaced
@@ -911,6 +911,18 @@ the Pi. Building on the Pi itself is reliably safe (compiling for itself
 can't produce an incompatible binary) — hence `check-and-deploy.sh`
 building locally on every deploy, slower but guaranteed
 instruction-set-compatible.
+
+**Not the same situation as `llama-server`'s image (2026-08-29):** the
+`ghcr.io/ggml-org/llama.cpp:server` image `docker-compose.yml` pulls is a
+different case, not a reintroduction of the pattern above — it's a
+third-party image ggml-org itself builds and publishes for arbitrary
+arm64 hardware (so it can't bake in one build machine's specific SIMD
+extensions the way our own from-source `pip install` compiles did), and
+it was live-tested doing real inference — actual prompt processing and
+token generation via `/v1/chat/completions`, not just a health check — on
+the production Pi 5 before adopting it. The SIMD trap below is still a
+real risk for reintroducing GHCR publishing of *our own* backend/frontend
+images.
 
 `ci.yml`'s `build-and-push` job was removed entirely (2026-07-23), not
 just left disabled — its actual consumer, the old `cd.yml`, had already

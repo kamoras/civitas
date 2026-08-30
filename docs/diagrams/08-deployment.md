@@ -16,16 +16,16 @@ flowchart TB
         subgraph OVERLAY["Swarm overlay network"]
             BE["<b>civitas_backend</b><br/>FastAPI :8000<br/>no host port"]
             FE["<b>civitas_frontend</b><br/>Next.js :3000<br/>no host port"]
+            LLAMA["<b>civitas_llama-server</b><br/>ghcr.io/ggml-org/llama.cpp:server<br/>:8070, no host port<br/>stop-first update (own lifecycle)"]
         end
 
-        LLAMA["<b>llama-server</b> :8070<br/>systemd, NOT in the stack<br/>weights stay resident across redeploys"]
         VOL[("civitas_app_data<br/>external volume → /data<br/>civitas.db + vectors.db")]
     end
 
     NGINX -->|"proxy_pass via service DNS"| BE
     NGINX -->|"proxy_pass via service DNS"| FE
     FE -->|"JSON"| BE
-    BE -->|"host.docker.internal:8070"| LLAMA
+    BE -->|"service DNS: llama-server:8070"| LLAMA
     BE --> VOL
 ```
 
@@ -39,9 +39,17 @@ inside the same overlay network, is the only path to either.
 touches it. Both SQLite files (`civitas.db`, `vectors.db`) survive image rebuilds and
 stack redeploys.
 
-**llama.cpp is not containerised** and not in the stack, so model weights stay
-in RAM across backend redeploys. If it's unreachable, LLM calls time out and the
-pipeline records a per-member failure without aborting the run.
+**llama-server is its own Swarm service** with its own rolling-update
+lifecycle (`stop-first`, unlike backend/frontend's `start-first` — see
+docker-compose.swarm.yml for why), so model weights don't reload every
+time backend redeploys, only when llama-server's own image/config
+changes. Runs the official `ghcr.io/ggml-org/llama.cpp:server` image,
+pinned by digest; Dependabot bumps it like any other dependency
+(2026-08-29: live-benchmarked against a from-source ARM-optimized build
+on this same Pi — generation speed was identical, prefill ~12% slower,
+not worth losing automatic updates over). If it's unreachable, LLM calls
+time out and the pipeline records a per-member failure without aborting
+the run.
 
 ## Rolling update
 
@@ -94,7 +102,7 @@ the stale-run detection in [02](02-nightly-pipeline.md).
 | 8081 | `civitas_nginx` | Reverse proxy + caching. The only published port — don't change without updating the external forwarding rule. |
 | — | `civitas_backend` | FastAPI, overlay-network only |
 | — | `civitas_frontend` | Next.js, overlay-network only |
-| 8070 | *(none — systemd)* | llama.cpp inference, outside the stack |
+| — | `civitas_llama-server` | llama.cpp inference, overlay-network only |
 
 `docker swarm init` is a one-time host setup step, not part of any deploy
 script.
