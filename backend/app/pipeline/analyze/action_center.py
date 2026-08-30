@@ -2296,7 +2296,13 @@ def _extract_cluster_claims(cluster: list[NewsArticle]) -> list[Claim]:
     for raw in result["claims"]:
         if not isinstance(raw, dict) or not isinstance(raw.get("text"), str) or not raw["text"].strip():
             continue
-        cited = [s for s in raw.get("sources", []) if isinstance(s, str) and s in real_sources]
+        # dict.fromkeys, not a set: de-dupes a source the LLM listed twice
+        # (which would otherwise inflate a claim's corroboration count —
+        # "AP News" cited twice reading as 2 sources instead of 1) while
+        # preserving the order the model returned them in.
+        cited = list(dict.fromkeys(
+            s for s in raw.get("sources", []) if isinstance(s, str) and s in real_sources
+        ))
         if not cited:
             continue
         claim_source_text = " ".join(source_text[s] for s in cited)
@@ -2313,33 +2319,45 @@ def _dedupe_claims(claims: list[Claim]) -> list[Claim]:
     corroboration tracking is that a fact repeated by 3 outlets should
     read as one 3-source claim, not three separate 1-source ones.
 
-    Simple greedy single-pass merge, not the complete-linkage clustering
-    dedupe_near_identical_issues uses for full issues — claim lists here
-    are short (extracted from at most 8 articles) and this path is
-    shadow-only, so the lower worst-case correctness bar of a greedy pass
-    is an acceptable trade for a smaller diff.
+    Complete-linkage, same as dedupe_near_identical_issues: two groups
+    only merge when EVERY claim in one matches every claim in the other.
+    A single-linkage pass (merge whatever's similar to the current
+    anchor) lets a hub claim bridge two claims that were never actually
+    similar to EACH OTHER into one falsely-inflated corroboration count —
+    exactly the transitive-merge failure mode dedupe_near_identical_issues
+    already had to fix once for full issues.
     """
     if len(claims) < 2:
         return list(claims)
 
     embs = _embed_texts_sim([c.text for c in claims])
     sims = embs @ embs.T
+    n = len(claims)
+    same_claim = [
+        [i != j and float(sims[i, j]) >= _CLAIM_DEDUP_THRESHOLD for j in range(n)]
+        for i in range(n)
+    ]
 
-    merged: list[Claim] = []
-    used = [False] * len(claims)
-    for i, claim in enumerate(claims):
-        if used[i]:
-            continue
-        sources = list(claim.sources)
-        for j in range(i + 1, len(claims)):
-            if not used[j] and float(sims[i, j]) >= _CLAIM_DEDUP_THRESHOLD:
-                used[j] = True
-                for s in claims[j].sources:
-                    if s not in sources:
-                        sources.append(s)
-        used[i] = True
-        merged.append(Claim(text=claim.text, sources=sources, claim_type=claim.claim_type))
-    return merged
+    clusters: list[list[int]] = [[i] for i in range(n)]
+    merged_any = True
+    while merged_any:
+        merged_any = False
+        for a in range(len(clusters)):
+            for b in range(a + 1, len(clusters)):
+                if all(same_claim[x][y] for x in clusters[a] for y in clusters[b]):
+                    clusters[a] = clusters[a] + clusters[b]
+                    del clusters[b]
+                    merged_any = True
+                    break
+            if merged_any:
+                break
+
+    result: list[Claim] = []
+    for members in clusters:
+        anchor = claims[members[0]]
+        sources = list(dict.fromkeys(s for idx in members for s in claims[idx].sources))
+        result.append(Claim(text=anchor.text, sources=sources, claim_type=anchor.claim_type))
+    return result
 
 
 def _format_claims_for_prompt(claims: list[Claim]) -> str:

@@ -3239,6 +3239,16 @@ class TestExtractClusterClaims:
         assert claims[0].claim_type == "action"
 
     @patch("app.pipeline.analyze.action_center.call_llm")
+    def test_a_source_listed_twice_is_not_double_counted(self, mock_call_llm):
+        mock_call_llm.return_value = json.dumps({"claims": [
+            {"text": "Summary for House passes funding bill", "sources": ["AP News", "AP News"], "type": "action"},
+        ]})
+
+        claims = _extract_cluster_claims(self._cluster())
+
+        assert claims[0].sources == ["AP News"]
+
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_drops_hallucinated_source_and_keeps_valid_ones(self, mock_call_llm):
         mock_call_llm.return_value = json.dumps({"claims": [
             {
@@ -3309,6 +3319,46 @@ class TestDedupeClaims:
 
         assert len(result) == 1
         assert set(result[0].sources) == {"AP News", "NPR"}
+
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    def test_does_not_transitively_merge_through_a_shared_hub(self, mock_embed):
+        """Complete-linkage regression: A~B and B~C both score above
+        threshold, but A~C does not (0.729, below 0.92) — a single-linkage
+        pass would merge all three through B into one falsely-inflated
+        3-source claim. Only a real A~C match should ever let that happen."""
+        angle = np.arccos(0.93)
+        vecs = np.array([
+            [np.cos(0), np.sin(0)],
+            [np.cos(angle), np.sin(angle)],
+            [np.cos(2 * angle), np.sin(2 * angle)],
+        ])
+        mock_embed.return_value = vecs
+        sims = vecs @ vecs.T
+        assert sims[0, 1] >= 0.92 and sims[1, 2] >= 0.92 and sims[0, 2] < 0.92
+
+        claims = [
+            Claim(text="Claim A", sources=["Hub Outlet"]),
+            Claim(text="Claim B", sources=["Outlet A"]),
+            Claim(text="Claim C", sources=["Outlet C"]),
+        ]
+
+        result = _dedupe_claims(claims)
+
+        assert len(result) == 2
+        assert not any(len(c.sources) == 3 for c in result)
+
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    def test_duplicate_source_in_merged_group_is_not_double_counted(self, mock_embed):
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.99, (1 - 0.99 ** 2) ** 0.5]])
+        claims = [
+            Claim(text="The House passed the bill 220-205", sources=["AP News"]),
+            Claim(text="House approves bill 220-205", sources=["AP News", "NPR"]),
+        ]
+
+        result = _dedupe_claims(claims)
+
+        assert len(result) == 1
+        assert result[0].sources == ["AP News", "NPR"]
 
     @patch("app.pipeline.analyze.action_center._embed_texts_sim")
     def test_dissimilar_claims_stay_separate(self, mock_embed):
