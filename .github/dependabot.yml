@@ -75,6 +75,14 @@ updates:
           # out is exactly the lone-unresolvable-line problem this config
           # exists to prevent, just one level down.
           - "hf-xet"
+          # Added 2026-08-30: transformers 5.16.1 raised its tokenizers
+          # floor to `>=0.23.1,<0.24.0` (was `<=0.23.0`) -- exactly the
+          # trigger condition the old tokenizers `ignore` entry named for
+          # bringing it back. Moved here instead of just un-ignoring it, so
+          # it moves *with* transformers instead of independently (a lone
+          # tokenizers bump would still be unresolvable against whatever
+          # transformers is pinned to at the time).
+          - "tokenizers"
     ignore:
       # pydantic-core is one case where grouping cannot help: pydantic
       # pins it with `==`, so there is exactly one correct pydantic-core for
@@ -85,24 +93,23 @@ updates:
       # and PEP 503 treats the two as the same name.
       - dependency-name: "pydantic-core"
       - dependency-name: "pydantic_core"
-      # tokenizers turned out to be the same case, though it did not look
-      # like it. transformers caps it by *range* (`tokenizers<=0.23.0`), and
-      # the first version of this config grouped it with transformers on the
-      # theory that Dependabot would then resolve the pair jointly to
-      # something inside the cap. It does not: the very first grouped PR
-      # (#340) proposed transformers 5.14.1 *and* tokenizers 0.23.1
-      # together, which is unresolvable, because every published
-      # transformers — 5.14.1 included — still caps at <=0.23.0.
+      # tokenizers WAS the same case (2026-07): transformers capped it by
+      # *range* (`tokenizers<=0.23.0`), and grouping it with transformers
+      # on the theory that Dependabot would resolve the pair jointly to
+      # something inside the cap didn't work — the first grouped PR (#340)
+      # proposed transformers 5.14.1 *and* tokenizers 0.23.1 together,
+      # unresolvable because every published transformers up to 5.14.1
+      # still capped at <=0.23.0, and tokenizers 0.23.0 itself was never
+      # released (PyPI has 0.23.0rc0 then 0.23.1, nothing between) — so
+      # `<=0.23.0` admitted no upgrade above the pinned 0.22.2 at all.
       #
-      # The detail that settles it: tokenizers 0.23.0 was never released.
-      # PyPI has 0.23.0rc0 and then 0.23.1, nothing between. So `<=0.23.0`
-      # admits no published version above the pinned 0.22.2, and there is
-      # no tokenizers upgrade to take at all until transformers raises its
-      # cap — at which point transformers' own grouped bump carries it.
-      #
-      # Re-check this if transformers ever ships a wider cap; the ignore can
-      # come back out then.
-      - dependency-name: "tokenizers"
+      # 2026-08-30: transformers 5.16.1 raised the floor to `>=0.23.1`,
+      # exactly the trigger this note said to watch for. tokenizers moved
+      # into the huggingface group above instead of staying ignored —
+      # verified locally (full `pip install --dry-run` of the resolved
+      # tree, then a real install + fast-test run) that transformers
+      # 5.16.1 + tokenizers 0.23.1 + the rest of the pinned tree resolves
+      # and behaves correctly together.
 
   - package-ecosystem: npm
     directory: /frontend
