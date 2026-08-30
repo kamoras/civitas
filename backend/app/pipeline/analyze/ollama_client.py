@@ -1,5 +1,5 @@
 """
-LLM client -- supports native llama-server (fast, ARM-optimized) and Ollama fallback.
+LLM client -- supports llama-server (default, Docker) and Ollama fallback.
 
 Backend selection via settings.LLM_BACKEND: "llama-server" or "ollama".
 """
@@ -173,7 +173,7 @@ def _call_llama_server(
     num_ctx: int,
     http_timeout: int,
 ) -> str | None:
-    """Call native llama-server via OpenAI-compatible /v1/chat/completions."""
+    """Call llama-server via OpenAI-compatible /v1/chat/completions."""
     url = f"{settings.LLAMA_SERVER_URL}/v1/chat/completions"
     body = json.dumps({
         "messages": [
@@ -233,7 +233,7 @@ async def _stream_llama_server(
     num_ctx: int,
     http_timeout: int,
 ) -> AsyncIterator[str]:
-    """Stream native llama-server via OpenAI-compatible /v1/chat/completions.
+    """Stream llama-server via OpenAI-compatible /v1/chat/completions.
 
     Same endpoint as _call_llama_server, minus response_format (streamed
     text isn't valid JSON mid-response anyway — see prompts.py's

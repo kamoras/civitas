@@ -89,7 +89,7 @@ external API calls to cloud AI services.
 │                                              ┌────────────────────────┐      │
 │  APScheduler ──▶ nightly pipeline            │  llama.cpp server      │      │
 │  APScheduler ──▶ hourly action refresh  ────▶│  LFM2.5-1.2B-Instruct  │      │
-│                                              │  port 8070 (ARM-native)│      │
+│                                              │  port 8070 (Docker)    │      │
 │                                              └────────────────────────┘      │
 └──────────────────────────┬───────────────────────────────────────────────────┘
                            │ JSON

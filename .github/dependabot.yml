@@ -133,7 +133,7 @@ updates:
   # digest-pinned image. A bad bump degrades gracefully -- the app already
   # treats an unreachable/broken llama-server as a per-request timeout,
   # not a hard failure (see AGENTS.md).
-  - package-ecosystem: docker
+  - package-ecosystem: docker-compose
     directory: /
     schedule:
       interval: weekly
