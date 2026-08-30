@@ -1090,7 +1090,7 @@ _DIGEST_ITEM_SPLIT_RE = re.compile(r"((?<=[.!?])\s+|\s*[;•·|]\s*)")
 _DIGEST_MIN_ITEMS = 3
 
 
-def _split_body_items(summary: str) -> list[tuple[str, bool]]:
+def _split_body_items(summary: str, truncated: bool = False) -> list[tuple[str, bool]]:
     """Split a feed description into (item, first_word_is_forced_capital).
 
     Grammar capitalizes the word that opens a sentence whether or not it
@@ -1100,9 +1100,12 @@ def _split_body_items(summary: str) -> list[tuple[str, bool]]:
     Which delimiter preceded an item is the only thing that distinguishes
     the two, hence the captured-group split.
 
-    A body that hit news_feeds' MAX_SUMMARY_CHARS cap was cut mid-item, and
-    the fragment left behind ("...Negotiators from Qatar") names entities
-    that by construction appear nowhere else in the text — one more
+    A body news_feeds cut at its length cap (NewsArticle.truncated — a
+    plain length check against a hardcoded constant stopped being reliable
+    once summaries could come from either a short teaser or full article
+    text, each with its own cap) was cut mid-item, and the fragment left
+    behind ("...Negotiators from Qatar") names entities that by
+    construction appear nowhere else in the text — one more
     guaranteed-disjoint item, enough to push a two-item blurb over the list
     threshold. The cap is the signal, not trailing punctuation: plenty of
     bodies legitimately end without a period (bulleted lists especially),
@@ -1118,7 +1121,7 @@ def _split_body_items(summary: str) -> list[tuple[str, bool]]:
     items: list[tuple[str, bool]] = [(parts[0], first_forced)]
     for delimiter, item in zip(delimiters, parts[2::2]):
         items.append((item, delimiter.strip() == ""))
-    if len(summary or "") >= MAX_SUMMARY_CHARS and len(items) > 1:
+    if truncated and len(items) > 1:
         items.pop()
     return items
 
@@ -1174,7 +1177,7 @@ def _item_entities(item: str, forced_capital: bool) -> set[str]:
 _DIGEST_MAX_TITLE_COVERED_ITEMS = 1
 
 
-def _multi_topic_body(summary: str, title: str) -> bool:
+def _multi_topic_body(summary: str, title: str, truncated: bool = False) -> bool:
     """True if ``summary`` reads as a list of separate stories.
 
     Two conditions, both required. The items must be pairwise disjoint in
@@ -1189,7 +1192,7 @@ def _multi_topic_body(summary: str, title: str) -> bool:
         entities
         for entities in (
             _item_entities(item, forced)
-            for item, forced in _split_body_items(summary)
+            for item, forced in _split_body_items(summary, truncated)
         )
         # A bare number is not a topic — an item must name something.
         if any(not token[0].isdigit() for token in entities)
@@ -1217,7 +1220,16 @@ def _digest_reason(article: NewsArticle) -> str | None:
         or _DIGEST_TITLE_SUFFIX_PATTERNS.search(title)
     ):
         return "recurring digest title"
-    if _multi_topic_body(article.summary, article.title):
+    # The body-shape check targets a specific, short-field phenomenon —
+    # several unrelated headlines crammed into one RSS <description> — not
+    # genuine long-form prose. A full article (see news_feeds'
+    # content:encoded handling) legitimately drifts across several named
+    # entities in the course of telling ONE story; that's normal narrative
+    # structure, not a compilation, and shouldn't be judged by a heuristic
+    # built around a one-paragraph teaser.
+    if len(article.summary) <= MAX_SUMMARY_CHARS and _multi_topic_body(
+        article.summary, article.title, article.truncated,
+    ):
         return "body lists unrelated stories"
     return None
 
@@ -2191,15 +2203,28 @@ def _validate_politician_roles(
     return title, summary, facts
 
 
+# Both prompts this feeds run at a default num_ctx=4096. An 8-article
+# cluster where every article is full-length (news_feeds.MAX_FULL_TEXT_
+# CHARS=3000, vs. a short teaser) exceeds that at this cap — ollama_client.
+# call_llm detects the overflow and raises num_ctx accordingly (capped at
+# 8192), so this doesn't fail, but a full-text-heavy cluster now runs a
+# meaningfully larger/slower call than before on the Pi's hardware. Was
+# 300 before articles could carry full text at all — now high enough that
+# a rich source's actual substance reaches the model instead of being cut
+# back down to teaser length.
+_ARTICLE_BLOCK_CHARS = 1200
+
+
 def _format_articles_block(cluster: list[NewsArticle]) -> str:
-    """[source] title + teaser, one block per article — the raw-text
+    """[source] title + summary (teaser or full text — see news_feeds'
+    content:encoded handling), one block per article — the raw-text
     material both the real issue prompt and the claim-extraction shadow
     prompt are built from."""
     parts: list[str] = []
     for a in cluster[:8]:
         line = f"[{a.source_name}] {a.title}"
         if a.summary:
-            line += f"\n  {a.summary[:300]}"
+            line += f"\n  {a.summary[:_ARTICLE_BLOCK_CHARS]}"
         parts.append(line)
     return "\n\n".join(parts)
 
