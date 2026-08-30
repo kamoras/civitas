@@ -46,6 +46,9 @@ from app.pipeline.analyze.action_center import (
     _surname_owned_by_other_name,
     _validate_facts,
     _log_summary_source_consistency,
+    _learned_relevance_prototypes,
+    _log_relevance_prototype_agreement,
+    _LEARNED_PROTOTYPE_MIN_SAMPLE,
 )
 
 
@@ -649,6 +652,84 @@ class TestLogSummarySourceConsistency:
         _log_summary_source_consistency("a generated summary", "the source article text")
 
         assert action_metrics.snapshot() == {}
+
+
+class TestLearnedRelevancePrototypes:
+    """Real published-issue text as an alternative to the hand-written
+    _POLICY_PROTOTYPES list — see _learned_relevance_prototypes's
+    docstring. Cold-start (too little history) must return None, not a
+    tiny unrepresentative sample."""
+
+    def test_returns_none_below_the_minimum_sample(self, db_session):
+        for i in range(_LEARNED_PROTOTYPE_MIN_SAMPLE - 1):
+            db_session.add(_make_issue(f"2026-08-{i % 28 + 1:02d}", f"Issue {i}", ["AP News"]))
+        db_session.commit()
+
+        assert _learned_relevance_prototypes(db_session) is None
+
+    def test_returns_real_issue_text_once_enough_history_exists(self, db_session):
+        for i in range(_LEARNED_PROTOTYPE_MIN_SAMPLE):
+            db_session.add(_make_issue(f"2026-08-{i % 28 + 1:02d}", f"Issue {i}", ["AP News"]))
+        db_session.commit()
+
+        result = _learned_relevance_prototypes(db_session)
+
+        assert result is not None
+        assert len(result) == _LEARNED_PROTOTYPE_MIN_SAMPLE
+        assert all("Issue" in text for text in result)
+
+
+class TestLogRelevancePrototypeAgreement:
+    """Non-blocking measurement: does a prototype set learned from real
+    published issues make the same relevant/not call as the hand-written
+    list, on the same articles? Never affects which articles the pipeline
+    actually keeps."""
+
+    def test_no_op_below_the_minimum_sample(self, db_session):
+        from app.pipeline.analyze import action_metrics
+
+        action_metrics.reset()
+        # Too little history for _learned_relevance_prototypes to return
+        # anything — nothing should be logged.
+        _log_relevance_prototype_agreement(
+            db_session, ["a"], np.array([[1.0, 0.0]]), np.array([True]),
+        )
+
+        assert action_metrics.snapshot() == {}
+
+    @patch("app.pipeline.analyze.action_center._learned_relevance_prototypes")
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    def test_counts_agreements_and_disagreements(self, mock_embed, mock_learned, db_session):
+        from app.pipeline.analyze import action_metrics
+
+        action_metrics.reset()
+        mock_learned.return_value = ["some real issue text"]
+        # One learned-prototype vector; two article vectors, one that
+        # scores above POLICY_RELEVANCE_THRESHOLD (0.20) against it, one
+        # that scores below.
+        mock_embed.return_value = np.array([[1.0, 0.0]])
+        article_embeddings = np.array([[1.0, 0.0], [0.0, 1.0]])
+        # Hardcoded set called both "relevant" (agrees with the first,
+        # disagrees with the second, which the learned set scores as 0.0).
+        hardcoded_relevant = np.array([True, True])
+
+        _log_relevance_prototype_agreement(
+            db_session, ["a", "b"], article_embeddings, hardcoded_relevant,
+        )
+
+        assert action_metrics.snapshot() == {
+            "relevance_prototype_agree": 1,
+            "relevance_prototype_disagree": 1,
+        }
+
+    @patch("app.pipeline.analyze.action_center._learned_relevance_prototypes")
+    def test_never_raises_on_failure(self, mock_learned, db_session):
+        mock_learned.side_effect = RuntimeError("db unavailable")
+
+        # Must not raise.
+        _log_relevance_prototype_agreement(
+            db_session, ["a"], np.array([[1.0, 0.0]]), np.array([True]),
+        )
 
 
 class TestFixImpossibleSenateVoteCounts:

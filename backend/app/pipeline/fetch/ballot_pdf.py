@@ -11,8 +11,8 @@ Cambridge MA, Ann Arbor MI). Only jurisdictions in ballot_pdf_sources.json
 have been individually verified to publish one.
 
 PARSING REALITY, not assumed: built directly against a real, currently-
-published PDF (Somerville MA's 2026-09-01 state primary ballot), not a
-guessed format. Two things a naive approach misses:
+published PDF (Somerville MA's state primary ballot), not a guessed
+format. Two things a naive approach misses:
 
 1. These ballots are laid out in visual COLUMNS (multiple offices side by
    side). pdfplumber's plain extract_text() interleaves words from
