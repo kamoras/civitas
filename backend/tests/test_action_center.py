@@ -2701,6 +2701,30 @@ class TestDigestFiltering:
         assert _multi_topic_body(body[:MAX_SUMMARY_CHARS - 1], "A quiet Tuesday", truncated=False) is True
         assert _multi_topic_body(body, "A quiet Tuesday", truncated=True) is False
 
+    def test_digest_reason_skips_the_body_check_for_full_text_length_summaries(self):
+        """_digest_reason exempts any summary over MAX_SUMMARY_CHARS from the
+        body-shape check, since that length can now only come from
+        content:encoded full text rather than a teaser. Accepted tradeoff:
+        a genuinely multi-topic body that happens to arrive via full text
+        (e.g. a source publishing a multi-item briefing through
+        content:encoded) is not caught by this check — only by the
+        title-pattern check, which runs independently."""
+        from app.pipeline.analyze.action_center import _digest_reason
+        from app.pipeline.fetch.news_feeds import MAX_SUMMARY_CHARS
+
+        body = (
+            "Israel and Hamas agreed to a ceasefire framework. "
+            "The Federal Reserve held interest rates steady. "
+            "Wildfires forced evacuations across Oregon. "
+        )
+        long_body = (body * ((MAX_SUMMARY_CHARS // len(body)) + 2)).strip()
+        assert len(long_body) > MAX_SUMMARY_CHARS
+
+        article = _make_article("A quiet Tuesday")
+        article.summary = long_body
+        article.truncated = False
+        assert _digest_reason(article) is None
+
     def test_bulleted_body_without_terminal_punctuation_is_still_analyzed(self):
         """Trailing punctuation was the original truncation signal and it
         discarded the final item of every list that ends without a period —

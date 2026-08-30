@@ -306,10 +306,16 @@ def _resolve_summary(desc: str, full_text: str) -> tuple[str, bool]:
     teaser whenever it's present and non-empty, per the module's own intent
     that it never be worse. Each candidate is checked against its OWN cap
     before slicing, so `truncated` reflects whichever cap actually applied.
+
+    Emptiness is judged AFTER stripping, not on the raw string: some feeds
+    populate content:encoded with only an <img>/embed and no prose, which
+    is non-empty raw text that strips to nothing — falling back to desc
+    in that case instead of returning an empty summary.
     """
     if full_text:
         stripped = _strip_html(full_text)
-        return stripped[:MAX_FULL_TEXT_CHARS], len(stripped) > MAX_FULL_TEXT_CHARS
+        if stripped:
+            return stripped[:MAX_FULL_TEXT_CHARS], len(stripped) > MAX_FULL_TEXT_CHARS
     if desc:
         stripped = _strip_html(desc)
         return stripped[:MAX_SUMMARY_CHARS], len(stripped) > MAX_SUMMARY_CHARS

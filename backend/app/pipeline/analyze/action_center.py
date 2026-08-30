@@ -2203,14 +2203,15 @@ def _validate_politician_roles(
     return title, summary, facts
 
 
-# Both prompts this feeds run at num_ctx=4096 with max_tokens=1024
-# reserved for the response, leaving ~3000 tokens for instructions +
-# articles; the template text itself runs a few hundred tokens, so 8
-# articles at this cap stay comfortably inside budget even when every one
-# is a full-length article (news_feeds.MAX_FULL_TEXT_CHARS=3000) rather
-# than a short teaser. Was 300 before articles could carry full text at
-# all — now high enough that a rich source's actual substance reaches the
-# model instead of being cut back down to teaser length.
+# Both prompts this feeds run at a default num_ctx=4096. An 8-article
+# cluster where every article is full-length (news_feeds.MAX_FULL_TEXT_
+# CHARS=3000, vs. a short teaser) exceeds that at this cap — ollama_client.
+# call_llm detects the overflow and raises num_ctx accordingly (capped at
+# 8192), so this doesn't fail, but a full-text-heavy cluster now runs a
+# meaningfully larger/slower call than before on the Pi's hardware. Was
+# 300 before articles could carry full text at all — now high enough that
+# a rich source's actual substance reaches the model instead of being cut
+# back down to teaser length.
 _ARTICLE_BLOCK_CHARS = 1200
 
 

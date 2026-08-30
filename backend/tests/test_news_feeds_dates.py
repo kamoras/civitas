@@ -441,6 +441,40 @@ class TestFullTextPreferredOverTeaser:
         )[0]
         assert entry.summary == "The committee will vote Thursday."
 
+    def test_rss_falls_back_to_description_when_content_encoded_is_markup_only(self):
+        """A source can populate content:encoded with only an image or embed
+        and no prose (e.g. a lead photo, a tracking pixel) — non-empty raw
+        text that strips to nothing. That must not discard a perfectly
+        usable teaser in <description>."""
+        article = _parse_rss_feed(
+            """<?xml version="1.0"?>
+            <rss xmlns:content="http://purl.org/rss/1.0/modules/content/">
+              <channel><item>
+                <title>Senate passes the bill</title>
+                <link>https://example.com/f</link>
+                <description>The Senate voted 60-40 Tuesday.</description>
+                <content:encoded><![CDATA[<img src="https://example.com/x.jpg"/>]]></content:encoded>
+              </item></channel>
+            </rss>""".encode(),
+            "Test",
+        )[0]
+        assert article.summary == "The Senate voted 60-40 Tuesday."
+
+    def test_atom_falls_back_to_summary_when_content_is_markup_only(self):
+        entry = _parse_rss_feed(
+            """<?xml version="1.0"?>
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry>
+                <title>Committee advances the nomination</title>
+                <link href="https://example.com/g"/>
+                <summary>The committee will vote Thursday.</summary>
+                <content type="html">&lt;img src="https://example.com/y.jpg"/&gt;</content>
+              </entry>
+            </feed>""".encode(),
+            "Test",
+        )[0]
+        assert entry.summary == "The committee will vote Thursday."
+
 
 def _feed_response(xml: bytes) -> MagicMock:
     resp = MagicMock()
