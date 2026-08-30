@@ -4874,6 +4874,9 @@ def _run_refresh(db: Session) -> int:
                 continue
 
         _log_summary_source_consistency(summary, source_text_for_check)
+        log_intensifier_usage(
+            "action_center_issue", summary + " " + " ".join(facts), source_text_for_check,
+        )
 
         # Minimum-substance gate (2026-07 audit): fewer than 2 facts
         # surviving validation means there isn't a publishable issue here —
