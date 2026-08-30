@@ -22,8 +22,7 @@ at the moment the page has just told them to go elsewhere. So:
 
 Same read path as the PVI files (score_calculator._read_pvi_json): prefer
 the writable volume's refreshed copy, fall back to the image-baked one.
-app/data/ is COPY'd into the Docker image and is NOT writable at runtime —
-writing there crashed a live pipeline run (2026-07-21, PermissionError),
+app/data/ is COPY'd into the Docker image and is NOT writable at runtime,
 so the verifier writes /data/ and this module reads both.
 """
 
