@@ -9,6 +9,7 @@ from xml.sax.saxutils import escape
 
 from app.pipeline.fetch.news_feeds import (
     MAX_ARTICLE_AGE_HOURS,
+    MAX_FULL_TEXT_CHARS,
     MAX_SUMMARY_CHARS,
     _extract_body_text,
     _is_multi_topic_digest,
@@ -352,6 +353,93 @@ class TestStripHtml:
         assert len(item.summary) == MAX_SUMMARY_CHARS
         assert "<" not in item.summary
         assert item.summary.startswith("Senators debated")
+
+
+class TestFullTextPreferredOverTeaser:
+    """<content:encoded> / Atom <content> carry an item's complete body,
+    when a source populates them at all — used over the <description>/
+    <summary> teaser whenever present and non-empty (_resolve_summary)."""
+
+    def test_rss_item_prefers_content_encoded_over_description(self):
+        article = _parse_rss_feed(
+            """<?xml version="1.0"?>
+            <rss xmlns:content="http://purl.org/rss/1.0/modules/content/">
+              <channel><item>
+                <title>Senate passes the bill</title>
+                <link>https://example.com/a</link>
+                <description>Short teaser.</description>
+                <content:encoded><![CDATA[<p>The Senate voted 60-40 Tuesday
+                  after a week of floor debate over amendments.</p>]]></content:encoded>
+              </item></channel>
+            </rss>""".encode(),
+            "Test",
+        )[0]
+        assert article.summary == (
+            "The Senate voted 60-40 Tuesday after a week of floor debate "
+            "over amendments."
+        )
+        assert article.truncated is False
+
+    def test_rss_item_with_no_content_encoded_behaves_as_before(self):
+        article = _parse_rss_feed(
+            """<?xml version="1.0"?><rss><channel><item>
+              <title>House takes it up</title>
+              <link>https://example.com/b</link>
+              <description>The House will vote Wednesday.</description>
+            </item></channel></rss>""".encode(),
+            "Test",
+        )[0]
+        assert article.summary == "The House will vote Wednesday."
+        assert article.truncated is False
+
+    def test_rss_item_truncated_flag_reflects_the_full_text_cap(self):
+        prose = "Senators debated the measure for hours. " * 100
+        article = _parse_rss_feed(
+            f"""<?xml version="1.0"?>
+            <rss xmlns:content="http://purl.org/rss/1.0/modules/content/">
+              <channel><item>
+                <title>Senate debates the measure</title>
+                <link>https://example.com/c</link>
+                <content:encoded><![CDATA[<p>{prose}</p>]]></content:encoded>
+              </item></channel>
+            </rss>""".encode(),
+            "Test",
+        )[0]
+        assert len(article.summary) == MAX_FULL_TEXT_CHARS
+        assert article.truncated is True
+
+    def test_atom_entry_prefers_content_over_summary(self):
+        entry = _parse_rss_feed(
+            """<?xml version="1.0"?>
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry>
+                <title>Committee advances the nomination</title>
+                <link href="https://example.com/d"/>
+                <summary>Short teaser.</summary>
+                <content>The committee voted 12-8 Thursday to advance the
+                  nomination to the full chamber.</content>
+              </entry>
+            </feed>""".encode(),
+            "Test",
+        )[0]
+        assert entry.summary == (
+            "The committee voted 12-8 Thursday to advance the nomination "
+            "to the full chamber."
+        )
+
+    def test_atom_entry_with_no_content_behaves_as_before(self):
+        entry = _parse_rss_feed(
+            """<?xml version="1.0"?>
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry>
+                <title>Committee advances the nomination</title>
+                <link href="https://example.com/e"/>
+                <summary>The committee will vote Thursday.</summary>
+              </entry>
+            </feed>""".encode(),
+            "Test",
+        )[0]
+        assert entry.summary == "The committee will vote Thursday."
 
 
 def _feed_response(xml: bytes) -> MagicMock:

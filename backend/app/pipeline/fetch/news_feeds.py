@@ -30,8 +30,25 @@ FEED_TIMEOUT = 15.0
 MAX_ARTICLE_AGE_HOURS = 48
 # Descriptions are capped here, which routinely cuts mid-sentence. Consumers
 # that reason about a description's STRUCTURE need to know the cap to tell a
-# body that ended from one that was cut (see action_center._split_body_items).
+# body that ended from one that was cut (see action_center._split_body_items) —
+# which is why NewsArticle.truncated exists rather than a caller re-deriving
+# it from length against this one constant: two different caps (this one and
+# MAX_FULL_TEXT_CHARS below) can each apply depending on the source.
 MAX_SUMMARY_CHARS = 500
+
+# <content:encoded> (the RSS content module, http://purl.org/rss/1.0/modules/
+# content/) is meant to carry an item's complete body, distinct from
+# <description>'s short teaser — some sources (confirmed live: Politico,
+# Roll Call) publish genuine multi-paragraph article text there for free,
+# already in their own public syndication feed; no scraping, no ToS
+# question. Others (AP, PBS, BBC, The Hill) don't populate it at all, and
+# NPR's is only marginally longer than its teaser — this is used whenever
+# present and non-empty regardless, since by the module's own spec it's
+# never meant to be worse than the teaser. Capped higher than
+# MAX_SUMMARY_CHARS since it's real prose, not a one-line blurb, but still
+# bounded so one long article can't dominate a cluster's LLM prompt budget.
+MAX_FULL_TEXT_CHARS = 3000
+_CONTENT_ENCODED_TAG = "{http://purl.org/rss/1.0/modules/content/}encoded"
 
 
 @dataclass
@@ -40,6 +57,10 @@ class NewsArticle:
     url: str
     source_name: str
     summary: str = ""
+    # True if `summary` was cut at whichever cap applied (MAX_SUMMARY_CHARS
+    # for a plain teaser, MAX_FULL_TEXT_CHARS when content:encoded was used)
+    # rather than ending where the source text actually ended.
+    truncated: bool = False
     published: datetime | None = None
     categories: list[str] = field(default_factory=list)
 
@@ -280,6 +301,21 @@ def _strip_html(raw: str) -> str:
     return _collapse(text)
 
 
+def _resolve_summary(desc: str, full_text: str) -> tuple[str, bool]:
+    """(summary, truncated) — prefers full_text (content:encoded) over the
+    teaser whenever it's present and non-empty, per the module's own intent
+    that it never be worse. Each candidate is checked against its OWN cap
+    before slicing, so `truncated` reflects whichever cap actually applied.
+    """
+    if full_text:
+        stripped = _strip_html(full_text)
+        return stripped[:MAX_FULL_TEXT_CHARS], len(stripped) > MAX_FULL_TEXT_CHARS
+    if desc:
+        stripped = _strip_html(desc)
+        return stripped[:MAX_SUMMARY_CHARS], len(stripped) > MAX_SUMMARY_CHARS
+    return "", False
+
+
 def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
     """Parse RSS 2.0 / Atom XML into NewsArticle objects."""
     articles: list[NewsArticle] = []
@@ -297,6 +333,7 @@ def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
         title = _extract_text(item.find("title"))
         link = _extract_text(item.find("link"))
         desc = _extract_body_text(item.find("description"))
+        full_text = _extract_body_text(item.find(_CONTENT_ENCODED_TAG))
         pub_date = _parse_pub_date(_extract_text(item.find("pubDate")))
         categories = [_extract_text(c) for c in item.findall("category") if _extract_text(c)]
 
@@ -307,11 +344,13 @@ def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
         if _is_multi_topic_digest(title):
             continue
 
+        summary, truncated = _resolve_summary(desc, full_text)
         articles.append(NewsArticle(
             title=title,
             url=link,
             source_name=source_name,
-            summary=_strip_html(desc)[:MAX_SUMMARY_CHARS] if desc else "",
+            summary=summary,
+            truncated=truncated,
             published=pub_date,
             categories=categories,
         ))
@@ -332,10 +371,15 @@ def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
         if link_el is None:
             link_el = entry.find("atom:link", ns)
         link = link_el.get("href", "") if link_el is not None else ""
-        summary_el = entry.find("atom:summary", ns)
-        if summary_el is None:
-            summary_el = entry.find("atom:content", ns)
-        desc = _extract_body_text(summary_el)
+        # Atom's <summary> is the short synopsis, <content> the full entry
+        # body when the feed provides one — same short-teaser/full-text
+        # split as RSS's <description>/<content:encoded>, so the same
+        # prefer-full-text-when-present resolution applies. Checked
+        # independently (not summary_el-falls-back-to-content_el) so a
+        # feed carrying both gets the fuller one even when <summary> is
+        # also populated, not just when it's missing entirely.
+        desc = _extract_body_text(entry.find("atom:summary", ns))
+        full_text = _extract_body_text(entry.find("atom:content", ns))
         # <published> is when the story ran; <updated> is when the entry was
         # last touched. Reading <updated> alone made a lightly-edited old
         # story look fresh, and left pub_date None for the many feeds that
@@ -362,11 +406,13 @@ def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
             continue
         if _is_multi_topic_digest(title):
             continue
+        summary, truncated = _resolve_summary(desc, full_text)
         articles.append(NewsArticle(
             title=title,
             url=link,
             source_name=source_name,
-            summary=_strip_html(desc)[:MAX_SUMMARY_CHARS] if desc else "",
+            summary=summary,
+            truncated=truncated,
             published=pub_date,
             categories=categories,
         ))
