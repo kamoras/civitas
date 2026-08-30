@@ -389,7 +389,7 @@ class TestNationalMonitorCreation:
         mock_db.delete.assert_any_call(m2)
         assert m3.status == "active"
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_generate_monitor_metadata_success(self, mock_call_llm):
         """Metadata generation should parse LLM JSON and validate categories."""
         mock_db = MagicMock()
@@ -410,7 +410,7 @@ class TestNationalMonitorCreation:
         assert result["category"] == "foreign_policy"
         assert result["description"].startswith("Ongoing")
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_generate_monitor_metadata_insignificant(self, mock_call_llm):
         """If LLM deems issue not significant, should return None."""
         mock_db = MagicMock()
@@ -423,7 +423,7 @@ class TestNationalMonitorCreation:
         result = _generate_monitor_metadata(issue, [], mock_db)
         assert result is None
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     @patch("app.pipeline.analyze.action_center._merge_monitors")
     @patch("app.pipeline.analyze.action_center.get_embedding_model")
     def test_llm_assisted_merge(self, mock_get_model, mock_merge, mock_call_llm):
@@ -525,7 +525,7 @@ class TestCheckSummaryRoles:
     issue #376 stated the plaintiff in a defamation case "was found guilty",
     when the defendant was the one a jury found liable)."""
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_accurate_summary_passes(self, mock_call_llm):
         mock_call_llm.return_value = json.dumps({"accurate": True})
         mock_db = MagicMock()
@@ -535,7 +535,7 @@ class TestCheckSummaryRoles:
         assert accurate is True
         assert reason == ""
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_reversed_roles_flagged_with_reason(self, mock_call_llm):
         mock_call_llm.return_value = json.dumps({
             "accurate": False,
@@ -548,7 +548,7 @@ class TestCheckSummaryRoles:
         assert accurate is False
         assert "plaintiff" in reason
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_unparseable_response_fails_open(self, mock_call_llm):
         # A broken verification call must not block issue creation — only a
         # confirmed reversal should trigger a retry. It must, however,
@@ -565,7 +565,7 @@ class TestCheckSummaryRoles:
         assert accurate is True
         assert action_metrics.snapshot().get("role_check_inconclusive_published") == 1
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_empty_response_fails_open(self, mock_call_llm):
         from app.pipeline.analyze import action_metrics
 
@@ -578,7 +578,7 @@ class TestCheckSummaryRoles:
         assert accurate is True
         assert action_metrics.snapshot().get("role_check_inconclusive_published") == 1
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_llm_exception_fails_open(self, mock_call_llm):
         from app.pipeline.analyze import action_metrics
 
@@ -591,7 +591,7 @@ class TestCheckSummaryRoles:
         assert accurate is True
         assert action_metrics.snapshot().get("role_check_inconclusive_published") == 1
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_genuinely_accurate_result_does_not_count_as_inconclusive(self, mock_call_llm):
         # A real accurate:true verdict is a successful check, not a failure
         # to check — it must not pollute the fail-open counter.
@@ -606,7 +606,7 @@ class TestCheckSummaryRoles:
         assert accurate is True
         assert "role_check_inconclusive_published" not in action_metrics.snapshot()
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_missing_accurate_key_defaults_to_true(self, mock_call_llm):
         # A dict response with no "accurate" key at all shouldn't be treated
         # as a reversal — only an explicit accurate:false should.
@@ -1612,7 +1612,7 @@ class TestRetryUntilGrounded:
         mock_db.query.return_value.all.return_value = []
         return mock_db
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_first_attempt_succeeds(self, mock_call_llm):
         mock_call_llm.return_value = json.dumps({
             "summary": "The Senate confirmed the nominee.",
@@ -1629,7 +1629,7 @@ class TestRetryUntilGrounded:
         assert result == ("Original Title", "The Senate confirmed the nominee.", ["The vote was unanimous."])
         assert mock_call_llm.call_count == 1
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_correction_prompt_covers_the_grounding_violation_categories(self, mock_call_llm):
         # 2026-08 quality audit: the correction text used to only address
         # hedging/former-status/vague-office — a rejection for an
@@ -1658,7 +1658,7 @@ class TestRetryUntilGrounded:
         assert "do not attach a party label" in prompt
         assert "do not call any official 'former'" in prompt
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_second_attempt_succeeds_after_first_still_hedges(self, mock_call_llm):
         mock_call_llm.side_effect = [
             json.dumps({
@@ -1686,7 +1686,7 @@ class TestRetryUntilGrounded:
         second_call_prompt = mock_call_llm.call_args_list[1].kwargs["user_prompt"]
         assert "Example fix" in second_call_prompt
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_both_attempts_still_hedging_returns_none(self, mock_call_llm):
         mock_call_llm.return_value = json.dumps({
             "summary": "Recent reports highlight the administration's plans.",
@@ -1703,7 +1703,7 @@ class TestRetryUntilGrounded:
         assert result is None
         assert mock_call_llm.call_count == 2
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_retry_that_fixes_hedging_but_introduces_an_ungrounded_number_is_still_rejected(self, mock_call_llm):
         # 2026-08 quality audit: this function's grounding check used to
         # cover hedging/editorializing and former-official status only — a
@@ -1730,7 +1730,7 @@ class TestRetryUntilGrounded:
         assert result is None
         assert mock_call_llm.call_count == 2
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_second_attempts_correction_names_the_new_failure_not_the_original(self, mock_call_llm):
         # Attempt 1 fixes the original hedge but introduces a DIFFERENT one —
         # attempt 2's prompt must name what attempt 1 actually got wrong.
@@ -1760,7 +1760,7 @@ class TestRetryUntilGrounded:
         assert "rejected because it contained hedging attribution phrases (Analysts note)" in second_call_prompt
         assert "rejected because it contained hedging attribution phrases (reports say)" not in second_call_prompt
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_unparseable_response_counts_as_a_failed_attempt(self, mock_call_llm):
         mock_call_llm.side_effect = [
             "not valid json at all",
@@ -1821,7 +1821,7 @@ class TestRecordGenerationSample:
             input_text="x", output={"summary": "y"}, passed=True,
         )  # must not raise
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_retry_until_grounded_records_every_attempt(self, mock_call_llm, db_session):
         mock_call_llm.side_effect = [
             json.dumps({
@@ -2363,7 +2363,7 @@ class TestGenerateFullStoryRelationshipGuard:
             calls.append(kwargs)
             return {"story": bad if len(calls) == 1 else clean}
 
-        with patch("app.pipeline.analyze.ollama_client.call_llm", side_effect=fake_call_llm):
+        with patch("app.pipeline.analyze.action_center.call_llm", side_effect=fake_call_llm):
             from app.pipeline.analyze.action_center import _generate_full_story
             story = _generate_full_story(issue, db_session=db_session)
 
@@ -2412,7 +2412,7 @@ class TestGenerateFullStoryFormerStatusGuard:
             calls.append(kwargs)
             return {"story": bad if len(calls) == 1 else clean}
 
-        with patch("app.pipeline.analyze.ollama_client.call_llm", side_effect=fake_call_llm):
+        with patch("app.pipeline.analyze.action_center.call_llm", side_effect=fake_call_llm):
             from app.pipeline.analyze.action_center import _generate_full_story
             story = _generate_full_story(issue, db_session=db_session)
 
