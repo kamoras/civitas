@@ -102,13 +102,25 @@ INDUSTRY_ANCHORS: dict[str, str] = {
     "EDUCATION": "university college school education academic research",
 }
 
+# Keys must cover every non-PROCEDURAL category in bill_analyzer.POLICY_
+# TAXONOMY (the taxonomy votes are actually classified into) — a category
+# missing here isn't a style gap, it's a silent zero: industry_policy_
+# similarity() falls back to 0.0 for any (industry, policy_area) pair
+# whose policy_area was never embedded, so every vote in that category
+# reads as unrelated to every industry regardless of true relevance. Found
+# 2026-08: ABORTION, ECONOMY, and FOREIGN_POLICY were missing this way —
+# a defense contractor's foreign-arms-sale vote, one of the clearer
+# regulatory-capture shapes this detector exists to catch, was invisible.
 POLICY_ANCHORS: dict[str, str] = {
     "LABOR": "labor unions workers employment wages collective bargaining workforce rights",
     "DEFENSE": "military defense national security armed forces veterans weapons Pentagon",
+    "FOREIGN_POLICY": "foreign policy international relations diplomacy foreign aid treaties sanctions United Nations",
     "GUNS": "firearms gun control second amendment weapons background checks",
     "HEALTHCARE": "healthcare medical insurance hospitals Medicare Medicaid prescription drugs",
+    "ABORTION": "abortion reproductive health access restrictions contraception family planning",
     "ENVIRONMENT": "environment climate change pollution EPA emissions conservation clean energy",
     "TAXES": "taxes federal budget government spending appropriations tax reform fiscal policy",
+    "ECONOMY": "macroeconomic conditions financial markets inflation recession Federal Reserve interest rates jobs unemployment",
     "IMMIGRATION": "immigration border security asylum refugees visa citizenship",
     "EDUCATION": "education schools universities student loans teachers curriculum",
     "FINANCIAL": "financial regulation banking oversight consumer protection Wall Street",
