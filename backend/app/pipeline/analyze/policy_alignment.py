@@ -108,13 +108,22 @@ INDUSTRY_ANCHORS: dict[str, str] = {
 # similarity() falls back to 0.0 for any (industry, policy_area) pair
 # whose policy_area was never embedded, so every vote in that category
 # reads as unrelated to every industry regardless of true relevance. Found
-# 2026-08: ABORTION, ECONOMY, and FOREIGN_POLICY were missing this way —
-# a defense contractor's foreign-arms-sale vote, one of the clearer
-# regulatory-capture shapes this detector exists to catch, was invisible.
+# 2026-08: ABORTION, ECONOMY, and FOREIGN_POLICY were missing this way.
+# FOREIGN_POLICY's anchor needs its own arms/military vocabulary, not
+# just DEFENSE's — a plain "diplomacy/treaties" anchor scored DEFENSE at
+# 0.686, under the 0.75 get_related_policies/detect_donor_vote_connections
+# gate, missing exactly the defense-contractor-arms-sale-vote case this
+# category exists to catch; measured live against the real embedding
+# model before landing on the wording below (DEFENSE 0.786, next-highest
+# industry LOBBYISTS 0.733, no other industry above 0.69).
 POLICY_ANCHORS: dict[str, str] = {
     "LABOR": "labor unions workers employment wages collective bargaining workforce rights",
     "DEFENSE": "military defense national security armed forces veterans weapons Pentagon",
-    "FOREIGN_POLICY": "foreign policy international relations diplomacy foreign aid treaties sanctions United Nations",
+    "FOREIGN_POLICY": (
+        "foreign policy international relations diplomacy foreign aid treaties "
+        "sanctions United Nations military aid arms sales weapons exports NATO "
+        "troop deployments"
+    ),
     "GUNS": "firearms gun control second amendment weapons background checks",
     "HEALTHCARE": "healthcare medical insurance hospitals Medicare Medicaid prescription drugs",
     "ABORTION": "abortion reproductive health access restrictions contraception family planning",
