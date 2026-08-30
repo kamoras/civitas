@@ -19,7 +19,7 @@ defusedxml==0.7.1
 diff-cover==10.5.1
 distro==1.9.0
 durationpy==0.10
-fastapi==0.139.0
+fastapi==0.141.1
 filelock==3.32.2
 flatbuffers==25.12.19
 fsspec==2026.7.0
