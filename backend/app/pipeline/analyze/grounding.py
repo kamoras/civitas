@@ -279,6 +279,50 @@ def editorializing_language(generated: str) -> list[str]:
     return sorted({m.group(0) for m in _EDITORIALIZING_RE.finditer(generated or "")})
 
 
+# Deliberately NOT part of hedge_and_editorializing_violations, and not a
+# rejection reason anywhere — every other list in this module started life
+# as a live failure a human actually saw published, then got promoted to a
+# blocking check (see hedge_language/editorializing_language's own history
+# in their docstrings). This one is the opposite direction: a rule added
+# proactively (2026-08, from a craft-writing review) with no observed live
+# incident yet showing this model actually reaches for one of these instead
+# of a real number. Measure it first via action_metrics
+# (intensifier_word_used_{surface}); only promote it to a blocking check if
+# that data shows the same reactive pattern the others did.
+_INTENSIFIER_RE = re.compile(
+    r"\b(?:significant(?:ly)?|substantial(?:ly)?|sweeping|dramatic(?:ally)?|"
+    r"major|massive|considerable|extensive|numerous|widespread)\b",
+    re.IGNORECASE,
+)
+
+
+def intensifier_words(generated: str) -> list[str]:
+    """Vague-magnitude words ("significant," "sweeping," "major") that a
+    specific number from the source material could replace. Observational
+    only — see the comment above this function for why it isn't a
+    rejection reason.
+    """
+    return sorted({m.group(0).lower() for m in _INTENSIFIER_RE.finditer(generated or "")})
+
+
+def log_intensifier_usage(surface: str, generated: str, source: str) -> None:
+    """Non-blocking metric: did the generated text reach for a vague
+    intensifier in a piece whose source material actually had a number it
+    could have used instead? Only counts that specific case — an
+    intensifier with no number anywhere in the source isn't necessarily a
+    missed opportunity. Never raises; a metrics failure must not affect
+    publishing.
+    """
+    try:
+        if not intensifier_words(generated) or not _DIGIT_GROUP_RE.search(source or ""):
+            return
+        from app.pipeline.analyze import action_metrics
+
+        action_metrics.increment(f"intensifier_word_used_{surface}")
+    except Exception:
+        pass
+
+
 # Electoral-contest framing in the GENERATED text — a claim that someone is
 # running, being challenged, or competing for an office. High-specificity
 # phrases only: bare "opponent"/"challenger" are excluded because they also

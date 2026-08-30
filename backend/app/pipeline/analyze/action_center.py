@@ -43,6 +43,22 @@ from app.models import (
     Representative,
     Senator,
 )
+from app.pipeline.analyze import action_metrics
+from app.pipeline.analyze.grounding import (
+    grounding_violations,
+    hedge_and_editorializing_violations,
+    log_intensifier_usage,
+    placeholder_tokens,
+    repeated_sentences,
+    ungrounded_electoral_claims,
+    ungrounded_former_official_claims,
+    ungrounded_numbers,
+    ungrounded_party_claims,
+    ungrounded_relationship_claims,
+    ungrounded_statistics,
+    ungrounded_titled_names,
+)
+from app.pipeline.analyze.ollama_client import call_llm, extract_json
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.pipeline.fetch.news_feeds import (
     MAX_SUMMARY_CHARS,
@@ -369,7 +385,6 @@ def _retire_untouched_issues(
     correct, so give it real time to accumulate before revisiting the
     number.
     """
-    from app.pipeline.analyze import action_metrics
 
     n_retired = n_graced = 0
     for row in all_current:
@@ -446,11 +461,6 @@ def _retry_until_grounded(
     local model doesn't reliably turn "don't hedge" into a fix on its own,
     but a worked example gives it a pattern to copy.
     """
-    from app.pipeline.analyze.grounding import (
-        grounding_violations,
-        hedge_and_editorializing_violations,
-    )
-    from app.pipeline.analyze.ollama_client import call_llm, extract_json
 
     for attempt in range(1, 3):
         logger.warning(
@@ -565,7 +575,6 @@ def _apply_matched_issue_update(
     model, and calls an LLM, so it can't reasonably be driven end-to-end in
     a unit test.
     """
-    from app.pipeline.analyze import action_metrics
 
     has_new_articles = primary_article_date > (match.primary_article_date or "1970-01-01")
     # A newer article date alone doesn't mean there's something NEW to
@@ -877,7 +886,13 @@ the direction of every action and legal outcome before writing it. In legal \
 or disputed matters, do not confuse the accuser/plaintiff/victim with the \
 accused/defendant, and never state that someone was "found guilty" or \
 "found liable" unless the articles say THAT SPECIFIC PERSON was the one \
-found guilty or liable, not the person who brought the case against them.
+found guilty or liable, not the person who brought the case against them. \
+The first sentence must state the concrete outcome or decision itself — \
+a vote tally, a ruling, a dollar figure, an action taken — not the \
+process or deliberation that led to it; save characterization ("bipartisan," \
+"controversial") for after the concrete fact, never in place of it. Never \
+substitute a vague intensifier ("significant," "sweeping," "dramatic") for \
+a specific number the articles already give you.
 - "facts": An array of 3-5 key factual bullet points citizens should know. \
 Each fact must cite specific numbers, dates, or names when available. \
 CRITICAL fact rules: (1) Every fact must be directly stated in the articles — \
@@ -894,7 +909,10 @@ facts; extract what X or Y actually is instead). (6) Every fact must be \
 about the single topic named in your title. If an article in the list \
 covers a different event — a different country's politics, a different \
 agency, an unrelated person — do NOT extract facts from it, even though \
-it appears above.
+it appears above. (7) If an article gives a number alongside a comparison \
+that makes its size legible (a prior figure, a total it's part of, a time \
+span), keep both in the same fact — a bare number is weaker than a number \
+with scale. Never invent a comparison the articles don't state.
 - "bills": An array of any specific bills or acts mentioned in the articles. \
 For each bill, provide an object with "name" (the bill's common name or \
 acronym EXACTLY AS WRITTEN in the articles above — never a bill name from \
@@ -982,7 +1000,6 @@ def _log_summary_source_consistency(summary: str, source_text: str) -> None:
     equivalent data for summary/source consistency instead of guessing a
     cutoff today. Never blocks publishing; failures here are swallowed.
     """
-    from app.pipeline.analyze import action_metrics
 
     try:
         summary_emb, source_emb = _embed_texts_sim([summary, source_text[:3000]])
@@ -1272,7 +1289,6 @@ def _filter_policy_relevant(
         # action_metrics' module docstring). Incremented before the
         # everything-was-a-digest early return, which is precisely the run
         # the counter has to explain.
-        from app.pipeline.analyze import action_metrics
 
         action_metrics.increment("articles_dropped_digest", n_digests)
 
@@ -1853,7 +1869,6 @@ def _deduplicate_top_clusters(
     if len(ranked_clusters) <= 1:
         return ranked_clusters[:max_issues]
 
-    from app.pipeline.analyze import action_metrics
 
     # Threshold in normalized-centered-embedding space. Must be high enough that
     # only genuinely same-story clusters are merged; 0.15 was too loose and caused
@@ -1991,12 +2006,6 @@ def _validate_facts(facts: list, source_text: str | None = None) -> list:
     _today = datetime.now(_US_EAST).date()
     _month_index = {m: i for i, m in enumerate(calendar.month_name) if m}
 
-    from app.pipeline.analyze import action_metrics
-    from app.pipeline.analyze.grounding import (
-        placeholder_tokens,
-        ungrounded_former_official_claims,
-        ungrounded_relationship_claims,
-    )
 
     clean = []
     for fact in facts:
@@ -2079,7 +2088,6 @@ def _validate_facts(facts: list, source_text: str | None = None) -> list:
 
         # Fabricated-statistic check against the articles the LLM was shown.
         if source_text:
-            from app.pipeline.analyze.grounding import ungrounded_numbers
             novel = ungrounded_numbers(fact, source_text)
             if novel:
                 logger.warning(
@@ -3029,7 +3037,6 @@ Use only information from the stories above. Be factual and neutral."""
 
 def _generate_period_summary(label: str, entries: list, cache_key: dict, db: "Session") -> dict:
     """LLM-generate a summary for a week/month/year period."""
-    from app.pipeline.analyze.ollama_client import call_llm, extract_json
 
     entries_text = "\n".join(
         f"- [{e.date}] {e.title}: {e.summary[:120]}"
@@ -3241,7 +3248,6 @@ def _generate_full_story(issue, db_session: Session | None = None) -> str | None
     Returns plain text (paragraphs separated by double newlines), or None on failure.
     Stored in action_issues.full_story so it is ready before users click through.
     """
-    from app.pipeline.analyze.ollama_client import call_llm
 
     facts = json.loads(issue.facts or "[]")
     source_names = json.loads(issue.source_names or "[]")
@@ -3267,7 +3273,18 @@ accurate article is far better than a longer one that repeats itself or invents 
 named in the key facts above.
 - Do NOT open with a generic hedge like "Recent coverage indicates," "Recent \
 reports say/suggest," "Recent developments show," or any similar throat-clearing \
-preamble. Start the first sentence with the concrete news itself — who did what.
+preamble. Start the first sentence with the concrete news itself — who did what. \
+If the key facts include a vote tally, dollar figure, or ruling, state that \
+number in the opening sentence before any characterization of it.
+- Vary sentence length — do not write every sentence to the same length or \
+shape. Let a short, direct sentence land after a longer explanatory one; \
+uniform sentence length reads as mechanical, not as prose written for a \
+person to read aloud.
+- When a procedural or technical term first appears (a bill stage, a \
+parliamentary procedure, an agency acronym), define it in the same sentence \
+in a few words — not as a separate explanatory aside.
+- Never substitute a vague intensifier ("significant," "sweeping," \
+"dramatic") for a specific number already given in the key facts.
 - Do NOT use hedging attribution phrases ANYWHERE in the piece — "sources say," \
 "reports indicate," "coverage shows," "officials suggest," and similar. State \
 facts directly as facts, not as something reports/coverage/sources are saying.
@@ -3369,16 +3386,6 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
         # agenda" — no Schumer mention anywhere in the source material, and
         # this generator had no check for fabricated names at all until
         # then, unlike the Bluesky poster which already ran this check.)
-        from app.pipeline.analyze.grounding import (
-            hedge_and_editorializing_violations,
-            repeated_sentences,
-            ungrounded_electoral_claims,
-            ungrounded_former_official_claims,
-            ungrounded_party_claims,
-            ungrounded_relationship_claims,
-            ungrounded_statistics,
-            ungrounded_titled_names,
-        )
         novel = ungrounded_statistics(story, source_material)
         names = ungrounded_titled_names(story, source_material)
         dupes = repeated_sentences(story)
@@ -3409,6 +3416,7 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
                 "Generated full story for issue %s (%d chars): %s",
                 issue.id, len(story), issue.title[:60],
             )
+            log_intensifier_usage("full_story", story, source_material)
             return story
 
         problems = []
@@ -3633,7 +3641,6 @@ def _should_merge_monitors_llm(
     db: Session,
 ) -> bool:
     """Use LLM to decide if two monitors should be merged."""
-    from app.pipeline.analyze.ollama_client import call_llm, extract_json
 
     user_prompt = _MONITOR_MERGE_PROMPT.format(
         title_a=a.title, desc_a=a.description[:300],
@@ -3673,7 +3680,6 @@ def _should_match_monitor_llm(
     db: Session,
 ) -> bool:
     """LLM gate for borderline embedding matches: does this issue genuinely belong to this monitor?"""
-    from app.pipeline.analyze.ollama_client import call_llm
 
     result = call_llm(
         prompt_version="monitor-match-v1",
@@ -3714,7 +3720,6 @@ def _reclassify_monitor_llm(
     db: Session,
 ) -> None:
     """Use LLM to re-evaluate and potentially re-categorize an existing monitor."""
-    from app.pipeline.analyze.ollama_client import call_llm, extract_json
     from app.config_definitions import POLICY_AREAS
 
     # Only re-classify if it's currently a generic or suspicious category
@@ -3853,7 +3858,6 @@ def _generate_monitor_metadata(
     db: Session,
 ) -> dict | None:
     """Use LLM to generate professional metadata for a new National Monitor."""
-    from app.pipeline.analyze.ollama_client import call_llm, extract_json
     from app.config_definitions import POLICY_AREAS
 
     all_issues = [issue] + past_issues
@@ -4338,8 +4342,6 @@ def _check_summary_roles(summary: str, articles_text: str, db: Session) -> tuple
     pattern as every other validator, see action_metrics.py) so that rate
     is queryable instead of silent.
     """
-    from app.pipeline.analyze import action_metrics
-    from app.pipeline.analyze.ollama_client import call_llm, extract_json
 
     try:
         result = call_llm(
@@ -4574,7 +4576,6 @@ def _persist_metrics(db: Session) -> dict[str, int]:
     broken?" was then unanswerable after the fact: a quiet hour and a
     failing feed both looked like an absent row.
     """
-    from app.pipeline.analyze import action_metrics
 
     snapshot = action_metrics.snapshot()
     action_metrics.persist(db, f"run-{datetime.now(_US_EAST).strftime('%Y-%m-%d-%H%M')}")
@@ -4588,7 +4589,6 @@ def _run_refresh(db: Session) -> int:
     today = datetime.now(_US_EAST).strftime("%Y-%m-%d")
 
     logger.info("Action center refresh starting for %s", today)
-    from app.pipeline.analyze import action_metrics
     action_metrics.reset()
     _set_refresh_state(
         is_running=True, stage="fetch", stage_detail=None,
@@ -4639,7 +4639,6 @@ def _run_refresh(db: Session) -> int:
     _set_refresh_state(stage="issues", stage_detail=f"0/{len(top_clusters)}")
 
     # 6. Generate analysis for each via LLM
-    from app.pipeline.analyze.ollama_client import call_llm, extract_json
 
     # Pre-load recent issues for topic-keyed matching.
     # Issues are keyed by TOPIC, not by (date, rank) slot — the same topic
@@ -4774,11 +4773,6 @@ def _run_refresh(db: Session) -> int:
         # the top article's real headline: the retry below regenerates only
         # summary/facts, so a bad title has a deterministic fallback instead
         # of a retry, same as the geographic-consistency correction above.
-        from app.pipeline.analyze.grounding import (
-            grounding_violations,
-            hedge_and_editorializing_violations,
-            ungrounded_former_official_claims,
-        )
         title_former = ungrounded_former_official_claims(title, issue_source_text)
         if title_former:
             logger.warning(
@@ -4880,6 +4874,9 @@ def _run_refresh(db: Session) -> int:
                 continue
 
         _log_summary_source_consistency(summary, source_text_for_check)
+        log_intensifier_usage(
+            "action_center_issue", summary + " " + " ".join(facts), source_text_for_check,
+        )
 
         # Minimum-substance gate (2026-07 audit): fewer than 2 facts
         # surviving validation means there isn't a publishable issue here —
