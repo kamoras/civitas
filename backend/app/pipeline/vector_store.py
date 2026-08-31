@@ -575,7 +575,17 @@ def search_explore_documents(
     """
     conn = get_vec_conn()
 
-    count = conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0]
+    try:
+        count = conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0]
+    except sqlite3.OperationalError:
+        # A model/schema-version bump briefly DROPs and recreates this
+        # table (see ensure_explore_index) — search doesn't hold _vec_lock
+        # (a read shouldn't block on a rebuild that can take minutes), so
+        # a query landing in that brief gap sees "no such table" rather
+        # than "0 rows". Same "not ready yet" contract as the empty-index
+        # case below, not a real error.
+        logger.warning("explore index mid-rebuild — not ready")
+        return None
     if count == 0:
         logger.warning("explore index empty — not ready")
         return None
@@ -770,8 +780,20 @@ def ensure_explore_index(db_session_factory) -> None:
                     "Explore index identity changed (%s -> %s) — rebuilding",
                     stored, index_identity(),
                 )
+                # DROP + recreate, not DELETE FROM: INDEX_SCHEMA_VERSION
+                # signals a COLUMN LAYOUT change (e.g. adding doc_id when
+                # chunking landed), and a vec0 virtual table's columns are
+                # fixed at creation — they can't be ALTERed. DELETE FROM
+                # only clears rows against whatever schema is already on
+                # disk, silently keeping a stale pre-migration table
+                # forever and failing every embed_explore_documents() call
+                # against it. Recreating picks up whatever _ensure_schema
+                # currently defines, so this is correct for a pure model-
+                # version bump too (identical schema either way) — a
+                # strict superset of the old behavior, not a special case.
                 with _vec_lock:
-                    conn.execute("DELETE FROM vec_explore")
+                    conn.execute("DROP TABLE IF EXISTS vec_explore")
+                    _ensure_schema(conn)
                     conn.commit()
 
             total = 0
