@@ -114,6 +114,68 @@ class TestFormerOfficialStatusGrounding:
         assert text is None
 
 
+class TestMagnitudeClaimRejection:
+    """Rule 2 in _generate_spotlight_post's own prompt tells the model not
+    to call the notable score "good, bad, high, low, strong, or weak" —
+    nothing enforced that mechanically, and it slipped live 2026-08-31: a
+    post named Legislative effectiveness (a senator's HIGHEST of the
+    three scores shown, furthest from 50 on the high side) as "the lowest
+    score." Real numbers from that incident: Funding independence 61.0,
+    Independent voting 52.0, Legislative effectiveness 74.0 — Legislative
+    effectiveness is the correct notable pick (furthest from 50), but
+    describing it as "lowest" is simply false."""
+
+    def _senator(self):
+        return Senator(
+            id="adam-schiff", name="Adam B. Schiff", state="CA", party="D",
+            score_funding_independence=61.0, score_independent_voting=52.0,
+            score_legislative_effectiveness=74.0,
+        )
+
+    def test_rejects_the_actual_live_failure(self):
+        with patch(
+            "app.pipeline.analyze.bluesky_spotlight.call_llm",
+            return_value={
+                "post": (
+                    "Sen. Adam B. Schiff (D-CA) ranks #10 of 100 senators. His "
+                    "legislative effectiveness score of 74.0 is the lowest of his "
+                    "three individual scores."
+                ),
+            },
+        ):
+            text = _generate_spotlight_post(self._senator(), rank=10, total=100)
+
+        assert text is None
+
+    def test_rejects_highest_too(self):
+        with patch(
+            "app.pipeline.analyze.bluesky_spotlight.call_llm",
+            return_value={
+                "post": (
+                    "Sen. Adam B. Schiff (D-CA) ranks #10 of 100 senators. His "
+                    "legislative effectiveness score, 74.0, is his highest."
+                ),
+            },
+        ):
+            text = _generate_spotlight_post(self._senator(), rank=10, total=100)
+
+        assert text is None
+
+    def test_a_clean_neutral_post_still_passes(self):
+        with patch(
+            "app.pipeline.analyze.bluesky_spotlight.call_llm",
+            return_value={
+                "post": (
+                    "Sen. Adam B. Schiff (D-CA) ranks #10 of 100 senators. "
+                    "Legislative effectiveness: 74.0/100."
+                ),
+            },
+        ):
+            text = _generate_spotlight_post(self._senator(), rank=10, total=100)
+
+        assert text is not None
+
+
 class TestPublishSpotlightUrl:
     """The spotlight post's link previously pointed at the old
     /scorecard?branch=senate&state=..&senator=.. query-param route instead
