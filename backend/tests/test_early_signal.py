@@ -1,0 +1,160 @@
+"""Tests for early_signal.py — drafting a hedged, primary-source-only
+ActionIssue from a Senate roll-call vote before press coverage exists."""
+
+from datetime import timedelta
+from unittest.mock import patch
+
+from app.models import ActionIssue, ActionIssueStatus
+from app.pipeline.analyze import early_signal as es
+from app.time_utils import utcnow
+
+
+def _vote(
+    congress=119, session=1, roll_number=42, question="On Passage of the Bill",
+    vote_title="On Passage", document_title="A bill to do a thing",
+    vote_date="2026-08-30", yeas=60, nays=40,
+) -> dict:
+    members = (
+        [{"voteCast": "Yea"} for _ in range(yeas)]
+        + [{"voteCast": "Nay"} for _ in range(nays)]
+    )
+    return {
+        "congress": congress,
+        "session": session,
+        "rollNumber": roll_number,
+        "voteTitle": vote_title,
+        "voteDate": vote_date,
+        "question": question,
+        "documentTitle": document_title,
+        "documentName": "S.1",
+        "members": members,
+    }
+
+
+class TestIsFinalPassage:
+    def test_on_passage_of_the_bill_matches(self):
+        assert es._is_final_passage(_vote(question="On Passage of the Bill")) is True
+
+    def test_on_the_joint_resolution_matches(self):
+        assert es._is_final_passage(_vote(question="On the Joint Resolution")) is True
+
+    def test_nomination_does_not_match(self):
+        assert es._is_final_passage(_vote(question="On the Nomination")) is False
+
+    def test_cloture_does_not_match(self):
+        assert es._is_final_passage(
+            _vote(question="On the Motion to Invoke Cloture")
+        ) is False
+
+    def test_amendment_does_not_match(self):
+        assert es._is_final_passage(_vote(question="On the Amendment")) is False
+
+
+class TestVoteMarginRatio:
+    def test_lopsided_vote(self):
+        assert es._vote_margin_ratio(_vote(yeas=90, nays=10)) == 0.8
+
+    def test_tied_vote(self):
+        assert es._vote_margin_ratio(_vote(yeas=50, nays=50)) == 0.0
+
+    def test_no_yea_nay_votes_is_zero(self):
+        vote = _vote(yeas=0, nays=0)
+        assert es._vote_margin_ratio(vote) == 0.0
+
+
+class TestCheckRollCallSignals:
+    def _mock_llm_result(self, title="Senate passes the bill", summary="text", facts=None):
+        return {"title": title, "summary": summary, "facts": facts or ["A fact stated in the record."]}
+
+    def test_procedural_vote_is_rejected(self, db_session):
+        with patch.object(es, "_fetch_recent_votes", return_value=[_vote()]), \
+                patch.object(es, "classify_policy_area", return_value=("PROCEDURAL", 0.9)):
+            created = es.check_roll_call_signals(db_session)
+        assert created == 0
+        assert db_session.query(ActionIssue).count() == 0
+
+    def test_non_final_passage_vote_is_rejected(self, db_session):
+        with patch.object(es, "_fetch_recent_votes", return_value=[_vote(question="On the Nomination")]), \
+                patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)):
+            created = es.check_roll_call_signals(db_session)
+        assert created == 0
+        assert db_session.query(ActionIssue).count() == 0
+
+    def test_qualifying_vote_creates_a_developing_issue(self, db_session):
+        with patch.object(es, "_fetch_recent_votes", return_value=[_vote()]), \
+                patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)), \
+                patch.object(es, "call_llm", return_value=self._mock_llm_result()):
+            created = es.check_roll_call_signals(db_session)
+        assert created == 1
+        row = db_session.query(ActionIssue).one()
+        assert row.status == ActionIssueStatus.DEVELOPING
+        assert row.source_type == "roll_call_vote"
+        assert row.primary_source_url
+        assert row.confirmation_deadline is not None
+        assert row.is_current is True
+
+    def test_same_vote_is_not_created_twice(self, db_session):
+        with patch.object(es, "_fetch_recent_votes", return_value=[_vote()]), \
+                patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)), \
+                patch.object(es, "call_llm", return_value=self._mock_llm_result()):
+            es.check_roll_call_signals(db_session)
+            created_second_pass = es.check_roll_call_signals(db_session)
+        assert created_second_pass == 0
+        assert db_session.query(ActionIssue).count() == 1
+
+    def test_generation_that_never_grounds_creates_nothing(self, db_session):
+        """A generation that keeps fabricating a number outside the vote
+        record must not create a row, not just a low-quality one."""
+        bad_result = {
+            "title": "Senate passes the bill",
+            "summary": "The Senate voted 999-1 on the measure.",
+            "facts": ["The vote passed 999-1."],
+        }
+        with patch.object(es, "_fetch_recent_votes", return_value=[_vote()]), \
+                patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)), \
+                patch.object(es, "call_llm", return_value=bad_result):
+            created = es.check_roll_call_signals(db_session)
+        assert created == 0
+        assert db_session.query(ActionIssue).count() == 0
+
+
+class TestExpireStaleDevelopingIssues:
+    def _make_developing_row(self, db_session, deadline_hours_from_now: float) -> ActionIssue:
+        row = ActionIssue(
+            date="2026-08-30", rank=999, title="A developing story", summary="s",
+            is_current=True, status=ActionIssueStatus.DEVELOPING,
+            source_type="roll_call_vote", primary_source_url="https://example.com/vote.xml",
+            confirmation_deadline=utcnow() + timedelta(hours=deadline_hours_from_now),
+        )
+        db_session.add(row)
+        db_session.flush()
+        return row
+
+    def test_past_deadline_is_retired(self, db_session):
+        row = self._make_developing_row(db_session, deadline_hours_from_now=-1)
+        expired = es.expire_stale_developing_issues(db_session, utcnow())
+        assert expired == 1
+        assert row.is_current is False
+        # Never deletes, never changes status — same "render the true
+        # state" mechanic as BallotMeasure.status / _retire_untouched_issues.
+        assert row.status == ActionIssueStatus.DEVELOPING
+
+    def test_within_deadline_is_left_alone(self, db_session):
+        row = self._make_developing_row(db_session, deadline_hours_from_now=24)
+        expired = es.expire_stale_developing_issues(db_session, utcnow())
+        assert expired == 0
+        assert row.is_current is True
+
+    def test_confirmed_issue_is_never_touched(self, db_session):
+        """A CONFIRMED issue must never be expired even if it happens to
+        carry a stale confirmation_deadline from before promotion."""
+        row = ActionIssue(
+            date="2026-08-30", rank=1, title="A confirmed story", summary="s",
+            is_current=True, status=ActionIssueStatus.CONFIRMED,
+            confirmation_deadline=utcnow() - timedelta(hours=1),
+        )
+        db_session.add(row)
+        db_session.flush()
+        expired = es.expire_stale_developing_issues(db_session, utcnow())
+        assert expired == 0
+        assert row.is_current is True

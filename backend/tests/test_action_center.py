@@ -9,9 +9,12 @@ import pytest
 
 from app.models import (
     ActionIssue,
+    ActionIssueStatus,
     ExploreDocument,
     Justice,
     LlmGenerationSample,
+    MonitorStatus,
+    MonitorUpdate,
     NationalMonitor,
     Representative,
     Senator,
@@ -33,6 +36,9 @@ from app.pipeline.analyze.action_center import (
     _find_matching_issue,
     dedupe_near_identical_issues,
     _apply_matched_issue_update,
+    _promote_developing_issue,
+    _bluesky_eligible_issues,
+    _rank_ordered_issues,
     _retire_untouched_issues,
     _retry_until_grounded,
     _record_generation_sample,
@@ -46,6 +52,14 @@ from app.pipeline.analyze.action_center import (
     _surname_owned_by_other_name,
     _validate_facts,
     _log_summary_source_consistency,
+    _learned_relevance_prototypes,
+    _log_relevance_prototype_agreement,
+    _LEARNED_PROTOTYPE_MIN_SAMPLE,
+    Claim,
+    _extract_cluster_claims,
+    _dedupe_claims,
+    _format_claims_for_prompt,
+    _run_claim_extraction_shadow,
 )
 
 
@@ -363,6 +377,42 @@ class TestNationalMonitorCreation:
         added_objects = [call.args[0] for call in mock_db.add.call_args_list]
         assert not any(isinstance(obj, NationalMonitor) for obj in added_objects)
 
+    @patch("app.pipeline.analyze.action_center.call_llm", return_value=None)
+    @patch("app.pipeline.analyze.action_center.get_embedding_model")
+    def test_developing_issue_is_never_written_as_a_monitor_update(
+        self, mock_get_model, mock_call_llm, db_session,
+    ):
+        """A hedged, unconfirmed, single-source DEVELOPING draft must not
+        surface publicly via a MonitorUpdate before press corroborates it
+        — same reasoning as excluding it from Bluesky/full-story. Uses a
+        real DB session and an EXISTING monitor the issue would otherwise
+        auto-match (identical embeddings, well above _MONITOR_ISSUE_SIM_
+        HIGH) — a single unmatched issue alone can't create/update
+        anything regardless of status, so that alone wouldn't have caught
+        a missing status filter here."""
+        mock_model = MagicMock()
+        mock_model.encode.return_value = np.array([[1.0] * 4], dtype=np.float32)
+        mock_get_model.return_value = mock_model
+
+        today = "2026-03-13"
+        monitor = NationalMonitor(
+            slug="ongoing-story", title="An ongoing story",
+            description="Long-running coverage.", status=MonitorStatus.ACTIVE,
+            last_article_date="2026-03-12",
+        )
+        db_session.add(monitor)
+        db_session.add(ActionIssue(
+            date=today, rank=1, title="An ongoing story", summary="s",
+            is_current=True, status=ActionIssueStatus.DEVELOPING,
+            source_urls=json.dumps(["https://www.senate.gov/vote.xml"]),
+            source_names=json.dumps(["Senate.gov roll call record"]),
+        ))
+        db_session.flush()
+
+        _update_national_monitors(today, db_session)
+
+        assert db_session.query(MonitorUpdate).count() == 0
+
     def test_lifecycle_closing_and_deletion(self):
         """Monitors should close after 30 days, and delete if they had few updates."""
         mock_db = MagicMock()
@@ -389,7 +439,7 @@ class TestNationalMonitorCreation:
         mock_db.delete.assert_any_call(m2)
         assert m3.status == "active"
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_generate_monitor_metadata_success(self, mock_call_llm):
         """Metadata generation should parse LLM JSON and validate categories."""
         mock_db = MagicMock()
@@ -410,7 +460,7 @@ class TestNationalMonitorCreation:
         assert result["category"] == "foreign_policy"
         assert result["description"].startswith("Ongoing")
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_generate_monitor_metadata_insignificant(self, mock_call_llm):
         """If LLM deems issue not significant, should return None."""
         mock_db = MagicMock()
@@ -423,7 +473,7 @@ class TestNationalMonitorCreation:
         result = _generate_monitor_metadata(issue, [], mock_db)
         assert result is None
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     @patch("app.pipeline.analyze.action_center._merge_monitors")
     @patch("app.pipeline.analyze.action_center.get_embedding_model")
     def test_llm_assisted_merge(self, mock_get_model, mock_merge, mock_call_llm):
@@ -525,7 +575,7 @@ class TestCheckSummaryRoles:
     issue #376 stated the plaintiff in a defamation case "was found guilty",
     when the defendant was the one a jury found liable)."""
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_accurate_summary_passes(self, mock_call_llm):
         mock_call_llm.return_value = json.dumps({"accurate": True})
         mock_db = MagicMock()
@@ -535,7 +585,7 @@ class TestCheckSummaryRoles:
         assert accurate is True
         assert reason == ""
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_reversed_roles_flagged_with_reason(self, mock_call_llm):
         mock_call_llm.return_value = json.dumps({
             "accurate": False,
@@ -548,7 +598,7 @@ class TestCheckSummaryRoles:
         assert accurate is False
         assert "plaintiff" in reason
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_unparseable_response_fails_open(self, mock_call_llm):
         # A broken verification call must not block issue creation — only a
         # confirmed reversal should trigger a retry. It must, however,
@@ -565,7 +615,7 @@ class TestCheckSummaryRoles:
         assert accurate is True
         assert action_metrics.snapshot().get("role_check_inconclusive_published") == 1
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_empty_response_fails_open(self, mock_call_llm):
         from app.pipeline.analyze import action_metrics
 
@@ -578,7 +628,7 @@ class TestCheckSummaryRoles:
         assert accurate is True
         assert action_metrics.snapshot().get("role_check_inconclusive_published") == 1
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_llm_exception_fails_open(self, mock_call_llm):
         from app.pipeline.analyze import action_metrics
 
@@ -591,7 +641,7 @@ class TestCheckSummaryRoles:
         assert accurate is True
         assert action_metrics.snapshot().get("role_check_inconclusive_published") == 1
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_genuinely_accurate_result_does_not_count_as_inconclusive(self, mock_call_llm):
         # A real accurate:true verdict is a successful check, not a failure
         # to check — it must not pollute the fail-open counter.
@@ -606,7 +656,7 @@ class TestCheckSummaryRoles:
         assert accurate is True
         assert "role_check_inconclusive_published" not in action_metrics.snapshot()
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_missing_accurate_key_defaults_to_true(self, mock_call_llm):
         # A dict response with no "accurate" key at all shouldn't be treated
         # as a reversal — only an explicit accurate:false should.
@@ -649,6 +699,84 @@ class TestLogSummarySourceConsistency:
         _log_summary_source_consistency("a generated summary", "the source article text")
 
         assert action_metrics.snapshot() == {}
+
+
+class TestLearnedRelevancePrototypes:
+    """Real published-issue text as an alternative to the hand-written
+    _POLICY_PROTOTYPES list — see _learned_relevance_prototypes's
+    docstring. Cold-start (too little history) must return None, not a
+    tiny unrepresentative sample."""
+
+    def test_returns_none_below_the_minimum_sample(self, db_session):
+        for i in range(_LEARNED_PROTOTYPE_MIN_SAMPLE - 1):
+            db_session.add(_make_issue(f"2026-08-{i % 28 + 1:02d}", f"Issue {i}", ["AP News"]))
+        db_session.commit()
+
+        assert _learned_relevance_prototypes(db_session) is None
+
+    def test_returns_real_issue_text_once_enough_history_exists(self, db_session):
+        for i in range(_LEARNED_PROTOTYPE_MIN_SAMPLE):
+            db_session.add(_make_issue(f"2026-08-{i % 28 + 1:02d}", f"Issue {i}", ["AP News"]))
+        db_session.commit()
+
+        result = _learned_relevance_prototypes(db_session)
+
+        assert result is not None
+        assert len(result) == _LEARNED_PROTOTYPE_MIN_SAMPLE
+        assert all("Issue" in text for text in result)
+
+
+class TestLogRelevancePrototypeAgreement:
+    """Non-blocking measurement: does a prototype set learned from real
+    published issues make the same relevant/not call as the hand-written
+    list, on the same articles? Never affects which articles the pipeline
+    actually keeps."""
+
+    def test_no_op_below_the_minimum_sample(self, db_session):
+        from app.pipeline.analyze import action_metrics
+
+        action_metrics.reset()
+        # Too little history for _learned_relevance_prototypes to return
+        # anything — nothing should be logged.
+        _log_relevance_prototype_agreement(
+            db_session, ["a"], np.array([[1.0, 0.0]]), np.array([True]),
+        )
+
+        assert action_metrics.snapshot() == {}
+
+    @patch("app.pipeline.analyze.action_center._learned_relevance_prototypes")
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    def test_counts_agreements_and_disagreements(self, mock_embed, mock_learned, db_session):
+        from app.pipeline.analyze import action_metrics
+
+        action_metrics.reset()
+        mock_learned.return_value = ["some real issue text"]
+        # One learned-prototype vector; two article vectors, one that
+        # scores above POLICY_RELEVANCE_THRESHOLD (0.20) against it, one
+        # that scores below.
+        mock_embed.return_value = np.array([[1.0, 0.0]])
+        article_embeddings = np.array([[1.0, 0.0], [0.0, 1.0]])
+        # Hardcoded set called both "relevant" (agrees with the first,
+        # disagrees with the second, which the learned set scores as 0.0).
+        hardcoded_relevant = np.array([True, True])
+
+        _log_relevance_prototype_agreement(
+            db_session, ["a", "b"], article_embeddings, hardcoded_relevant,
+        )
+
+        assert action_metrics.snapshot() == {
+            "relevance_prototype_agree": 1,
+            "relevance_prototype_disagree": 1,
+        }
+
+    @patch("app.pipeline.analyze.action_center._learned_relevance_prototypes")
+    def test_never_raises_on_failure(self, mock_learned, db_session):
+        mock_learned.side_effect = RuntimeError("db unavailable")
+
+        # Must not raise.
+        _log_relevance_prototype_agreement(
+            db_session, ["a"], np.array([[1.0, 0.0]]), np.array([True]),
+        )
 
 
 class TestFixImpossibleSenateVoteCounts:
@@ -1371,8 +1499,7 @@ class TestIssueSignatureMatching:
 class TestDedupeNearIdenticalIssues:
     """The homepage's recent-issues endpoint deliberately shows issues
     regardless of is_current (see get_recent_action_issues) — so a row
-    retired specifically for BEING a duplicate (via
-    retire_duplicate_current_issues.py) resurfaced there anyway
+    retired specifically for BEING a duplicate resurfaced there anyway
     (2026-08-22 report: "I see 3 copies of the beef import issue on the
     homepage"). This is the read-time dedup that fixes that without a
     second is_current flip."""
@@ -1613,7 +1740,7 @@ class TestRetryUntilGrounded:
         mock_db.query.return_value.all.return_value = []
         return mock_db
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_first_attempt_succeeds(self, mock_call_llm):
         mock_call_llm.return_value = json.dumps({
             "summary": "The Senate confirmed the nominee.",
@@ -1630,7 +1757,7 @@ class TestRetryUntilGrounded:
         assert result == ("Original Title", "The Senate confirmed the nominee.", ["The vote was unanimous."])
         assert mock_call_llm.call_count == 1
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_correction_prompt_covers_the_grounding_violation_categories(self, mock_call_llm):
         # 2026-08 quality audit: the correction text used to only address
         # hedging/former-status/vague-office — a rejection for an
@@ -1659,7 +1786,7 @@ class TestRetryUntilGrounded:
         assert "do not attach a party label" in prompt
         assert "do not call any official 'former'" in prompt
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_second_attempt_succeeds_after_first_still_hedges(self, mock_call_llm):
         mock_call_llm.side_effect = [
             json.dumps({
@@ -1687,7 +1814,7 @@ class TestRetryUntilGrounded:
         second_call_prompt = mock_call_llm.call_args_list[1].kwargs["user_prompt"]
         assert "Example fix" in second_call_prompt
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_both_attempts_still_hedging_returns_none(self, mock_call_llm):
         mock_call_llm.return_value = json.dumps({
             "summary": "Recent reports highlight the administration's plans.",
@@ -1704,7 +1831,7 @@ class TestRetryUntilGrounded:
         assert result is None
         assert mock_call_llm.call_count == 2
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_retry_that_fixes_hedging_but_introduces_an_ungrounded_number_is_still_rejected(self, mock_call_llm):
         # 2026-08 quality audit: this function's grounding check used to
         # cover hedging/editorializing and former-official status only — a
@@ -1731,7 +1858,7 @@ class TestRetryUntilGrounded:
         assert result is None
         assert mock_call_llm.call_count == 2
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_second_attempts_correction_names_the_new_failure_not_the_original(self, mock_call_llm):
         # Attempt 1 fixes the original hedge but introduces a DIFFERENT one —
         # attempt 2's prompt must name what attempt 1 actually got wrong.
@@ -1761,7 +1888,7 @@ class TestRetryUntilGrounded:
         assert "rejected because it contained hedging attribution phrases (Analysts note)" in second_call_prompt
         assert "rejected because it contained hedging attribution phrases (reports say)" not in second_call_prompt
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_unparseable_response_counts_as_a_failed_attempt(self, mock_call_llm):
         mock_call_llm.side_effect = [
             "not valid json at all",
@@ -1822,7 +1949,7 @@ class TestRecordGenerationSample:
             input_text="x", output={"summary": "y"}, passed=True,
         )  # must not raise
 
-    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    @patch("app.pipeline.analyze.action_center.call_llm")
     def test_retry_until_grounded_records_every_attempt(self, mock_call_llm, db_session):
         mock_call_llm.side_effect = [
             json.dumps({
@@ -2068,6 +2195,161 @@ class TestApplyMatchedIssueUpdate:
         _apply_matched_issue_update(match, new_values, 1, "2026-07-19", "2026-07-19", facts, "A different story entirely")
 
         assert match.full_story is None
+
+
+class TestFindMatchingIssueAgainstDevelopingRows:
+    """_find_matching_issue is content-agnostic — it never inspects
+    status — but a DEVELOPING row must be a valid match candidate for a
+    fresh news cluster, since that IS the corroboration mechanism (see
+    the approved early-signal plan). Pins that nothing about the
+    signature/embedding matching path silently excludes it."""
+
+    def test_a_developing_row_matches_a_near_identical_title(self):
+        existing = ActionIssue(
+            id=900, title="Senate passes the Foreign Military Sales Act",
+            facts=json.dumps(["The Senate voted 60-40 Tuesday."]),
+            status=ActionIssueStatus.DEVELOPING,
+        )
+        title = "Senate passes the Foreign Military Sales Act"
+        title_emb = np.array([1.0, 0.0])
+        recent_embs = np.array([[1.0, 0.0]])  # sim = 1.0, well above 0.92
+
+        match = _find_matching_issue(
+            title, ["A new fact from press coverage."], [existing], recent_embs, title_emb, set(),
+        )
+        assert match is existing
+
+    def test_a_developing_row_matches_on_shared_source_url(self):
+        existing = ActionIssue(
+            id=901, title="Senate action on arms sale",
+            facts=json.dumps(["A fact."]),
+            source_urls=json.dumps(["https://www.senate.gov/legislative/vote.xml"]),
+            status=ActionIssueStatus.DEVELOPING,
+        )
+        match = _find_matching_issue(
+            "A completely differently worded headline", ["fact"], [existing], None,
+            np.array([1.0, 0.0]), set(),
+            source_urls=["https://www.senate.gov/legislative/vote.xml"],
+        )
+        assert match is existing
+
+
+class TestPromoteDevelopingIssue:
+    """_promote_developing_issue: a full content swap (press coverage
+    supersedes the hedged primary-source draft) plus a status flip,
+    delegating rank/date/is_current/previous_facts/full-story bookkeeping
+    to the existing _apply_matched_issue_update rather than re-deriving
+    any of it."""
+
+    def test_flips_status_and_stamps_confirmed_at(self):
+        match = ActionIssue(
+            id=1, date="2026-08-29", rank=999, title="A floor vote occurred",
+            facts=json.dumps(["The Senate voted 60-40 Tuesday."]),
+            status=ActionIssueStatus.DEVELOPING, source_type="roll_call_vote",
+            primary_source_url="https://www.senate.gov/vote.xml",
+            confirmation_deadline=utcnow() + timedelta(hours=40),
+            created_at=utcnow() - timedelta(hours=8),
+            primary_article_date="2026-08-29",
+        )
+        facts = ["The Senate passed the bill 60-40, according to AP and Reuters."]
+        new_values = _new_values_for("Senate passes the bill", facts, "2026-08-30")
+
+        _promote_developing_issue(
+            match, new_values, 1, "2026-08-30", "2026-08-30", facts, "Senate passes the bill",
+        )
+
+        assert match.status == ActionIssueStatus.CONFIRMED
+        assert match.confirmed_at is not None
+        assert match.confirmation_deadline is None
+
+    def test_swaps_content_from_the_press_cluster_not_a_merge(self):
+        match = ActionIssue(
+            id=1, date="2026-08-29", rank=999, title="A floor vote occurred",
+            facts=json.dumps(["The Senate voted 60-40 Tuesday."]),
+            status=ActionIssueStatus.DEVELOPING, source_type="roll_call_vote",
+            primary_source_url="https://www.senate.gov/vote.xml",
+            confirmation_deadline=utcnow() + timedelta(hours=40),
+            primary_article_date="2026-08-29",
+        )
+        facts = ["The Senate passed the bill 60-40, according to AP and Reuters."]
+        new_values = _new_values_for("Senate passes the bill after floor debate", facts, "2026-08-30")
+
+        _promote_developing_issue(
+            match, new_values, 2, "2026-08-30", "2026-08-30", facts, "Senate passes the bill after floor debate",
+        )
+
+        assert match.title == "Senate passes the bill after floor debate"
+        assert json.loads(match.facts) == facts
+        assert match.rank == 2
+        assert match.date == "2026-08-30"
+        assert match.is_current is True
+
+
+class TestRankOrderedIssues:
+    """A hedged, unconfirmed DEVELOPING draft must never crowd out a real
+    top story — spared developing issues always sort after every spared
+    confirmed issue, regardless of their placeholder rank value."""
+
+    def test_touched_issues_keep_relative_order_first(self):
+        a = ActionIssue(id=1, rank=5, status=ActionIssueStatus.CONFIRMED)
+        b = ActionIssue(id=2, rank=1, status=ActionIssueStatus.CONFIRMED)
+        ordered = _rank_ordered_issues([a, b], matched_issue_ids={1, 2})
+        assert [r.id for r in ordered] == [2, 1]
+
+    def test_spared_developing_sorts_after_spared_confirmed_despite_a_lower_rank_value(self):
+        developing = ActionIssue(id=1, rank=1, status=ActionIssueStatus.DEVELOPING)
+        confirmed = ActionIssue(id=2, rank=999, status=ActionIssueStatus.CONFIRMED)
+        ordered = _rank_ordered_issues(
+            [developing, confirmed], matched_issue_ids=set(),
+        )
+        assert [r.id for r in ordered] == [2, 1]
+
+    def test_touched_then_spared_confirmed_then_spared_developing(self):
+        touched = ActionIssue(id=1, rank=3, status=ActionIssueStatus.CONFIRMED)
+        spared_confirmed = ActionIssue(id=2, rank=1, status=ActionIssueStatus.CONFIRMED)
+        spared_developing = ActionIssue(id=3, rank=1, status=ActionIssueStatus.DEVELOPING)
+        ordered = _rank_ordered_issues(
+            [spared_developing, spared_confirmed, touched], matched_issue_ids={1},
+        )
+        assert [r.id for r in ordered] == [1, 2, 3]
+
+
+class TestBlueskyEligibleIssues:
+    """DEVELOPING issues must never reach the Bluesky poster — there is no
+    correction mechanism for a wrong post, and Bluesky doesn't support
+    editing a published one."""
+
+    def test_excludes_developing_issues(self, db_session):
+        confirmed = ActionIssue(
+            date="2026-08-30", rank=1, title="A confirmed story", summary="s",
+            is_current=True, status=ActionIssueStatus.CONFIRMED,
+        )
+        developing = ActionIssue(
+            date="2026-08-30", rank=2, title="A developing story", summary="s",
+            is_current=True, status=ActionIssueStatus.DEVELOPING,
+        )
+        db_session.add_all([confirmed, developing])
+        db_session.flush()
+
+        eligible = _bluesky_eligible_issues(db_session, "2026-08-30")
+
+        assert [i.title for i in eligible] == ["A confirmed story"]
+
+    def test_excludes_retired_and_other_day_issues(self, db_session):
+        retired = ActionIssue(
+            date="2026-08-30", rank=1, title="Retired today", summary="s",
+            is_current=False, status=ActionIssueStatus.CONFIRMED,
+        )
+        yesterday = ActionIssue(
+            date="2026-08-29", rank=1, title="From yesterday", summary="s",
+            is_current=True, status=ActionIssueStatus.CONFIRMED,
+        )
+        db_session.add_all([retired, yesterday])
+        db_session.flush()
+
+        eligible = _bluesky_eligible_issues(db_session, "2026-08-30")
+
+        assert eligible == []
 
 
 class TestBskyRepostHasNewInformation:
@@ -2364,7 +2646,7 @@ class TestGenerateFullStoryRelationshipGuard:
             calls.append(kwargs)
             return {"story": bad if len(calls) == 1 else clean}
 
-        with patch("app.pipeline.analyze.ollama_client.call_llm", side_effect=fake_call_llm):
+        with patch("app.pipeline.analyze.action_center.call_llm", side_effect=fake_call_llm):
             from app.pipeline.analyze.action_center import _generate_full_story
             story = _generate_full_story(issue, db_session=db_session)
 
@@ -2413,7 +2695,7 @@ class TestGenerateFullStoryFormerStatusGuard:
             calls.append(kwargs)
             return {"story": bad if len(calls) == 1 else clean}
 
-        with patch("app.pipeline.analyze.ollama_client.call_llm", side_effect=fake_call_llm):
+        with patch("app.pipeline.analyze.action_center.call_llm", side_effect=fake_call_llm):
             from app.pipeline.analyze.action_center import _generate_full_story
             story = _generate_full_story(issue, db_session=db_session)
 
@@ -2606,11 +2888,39 @@ class TestDigestFiltering:
         body = (prefix + " Mediators from Qatar met in Cairo overnight")[:MAX_SUMMARY_CHARS]
 
         assert len(body) == MAX_SUMMARY_CHARS
-        # Same text one character under the cap is NOT treated as cut, and
-        # the trailing fragment does read as a third topic — which is what
-        # makes the cap check load-bearing rather than cosmetic.
-        assert _multi_topic_body(body[:MAX_SUMMARY_CHARS - 1], "A quiet Tuesday") is True
-        assert _multi_topic_body(body, "A quiet Tuesday") is False
+        # Same text one character under the cap, not marked truncated, is
+        # NOT treated as cut, and the trailing fragment does read as a
+        # third topic — which is what makes the truncated flag load-bearing
+        # rather than cosmetic. news_feeds sets it directly at parse time
+        # now (two different caps can apply depending on the source), so
+        # the caller passes it explicitly rather than _multi_topic_body
+        # re-deriving it from a length comparison.
+        assert _multi_topic_body(body[:MAX_SUMMARY_CHARS - 1], "A quiet Tuesday", truncated=False) is True
+        assert _multi_topic_body(body, "A quiet Tuesday", truncated=True) is False
+
+    def test_digest_reason_skips_the_body_check_for_full_text_length_summaries(self):
+        """_digest_reason exempts any summary over MAX_SUMMARY_CHARS from the
+        body-shape check, since that length can now only come from
+        content:encoded full text rather than a teaser. Accepted tradeoff:
+        a genuinely multi-topic body that happens to arrive via full text
+        (e.g. a source publishing a multi-item briefing through
+        content:encoded) is not caught by this check — only by the
+        title-pattern check, which runs independently."""
+        from app.pipeline.analyze.action_center import _digest_reason
+        from app.pipeline.fetch.news_feeds import MAX_SUMMARY_CHARS
+
+        body = (
+            "Israel and Hamas agreed to a ceasefire framework. "
+            "The Federal Reserve held interest rates steady. "
+            "Wildfires forced evacuations across Oregon. "
+        )
+        long_body = (body * ((MAX_SUMMARY_CHARS // len(body)) + 2)).strip()
+        assert len(long_body) > MAX_SUMMARY_CHARS
+
+        article = _make_article("A quiet Tuesday")
+        article.summary = long_body
+        article.truncated = False
+        assert _digest_reason(article) is None
 
     def test_bulleted_body_without_terminal_punctuation_is_still_analyzed(self):
         """Trailing punctuation was the original truncation signal and it
@@ -2918,7 +3228,9 @@ class TestPeriodicBlueskyPosts:
 
         import app.pipeline.analyze.action_center as ac
 
-        with patch.object(ac, "fetch_news_articles", return_value=[]), \
+        with patch.object(ac, "check_roll_call_signals"), \
+                patch.object(ac, "expire_stale_developing_issues"), \
+                patch.object(ac, "fetch_news_articles", return_value=[]), \
                 patch.object(ac, "_run_periodic_bluesky_posts") as periodic, \
                 patch.object(ac, "_persist_metrics"), \
                 patch.object(ac, "_set_refresh_state"):
@@ -2931,7 +3243,9 @@ class TestPeriodicBlueskyPosts:
 
         import app.pipeline.analyze.action_center as ac
 
-        with patch.object(ac, "fetch_news_articles", return_value=["an article"]), \
+        with patch.object(ac, "check_roll_call_signals"), \
+                patch.object(ac, "expire_stale_developing_issues"), \
+                patch.object(ac, "fetch_news_articles", return_value=["an article"]), \
                 patch.object(ac, "_filter_policy_relevant", return_value=[]), \
                 patch.object(ac, "_run_periodic_bluesky_posts") as periodic, \
                 patch.object(ac, "_persist_metrics"), \
@@ -3129,3 +3443,224 @@ class TestMentionsFullName:
     ])
     def test_boundary_rule(self, text, name, expected):
         assert _mentions_full_name(text, name) is expected
+
+
+class TestExtractClusterClaims:
+    """Deconstructs a cluster's coverage into atomic, source-attributed
+    claims — shadow-only path, see _run_claim_extraction_shadow."""
+
+    def _cluster(self):
+        return [
+            _make_article("House passes funding bill", source="AP News"),
+            _make_article("Congress approves spending package", source="NPR"),
+        ]
+
+    @patch("app.pipeline.analyze.action_center.call_llm")
+    def test_keeps_grounded_claims_with_real_sources(self, mock_call_llm):
+        mock_call_llm.return_value = json.dumps({"claims": [
+            {"text": "Summary for House passes funding bill", "sources": ["AP News"], "type": "action"},
+        ]})
+
+        claims = _extract_cluster_claims(self._cluster())
+
+        assert len(claims) == 1
+        assert claims[0].sources == ["AP News"]
+        assert claims[0].claim_type == "action"
+
+    @patch("app.pipeline.analyze.action_center.call_llm")
+    def test_a_source_listed_twice_is_not_double_counted(self, mock_call_llm):
+        mock_call_llm.return_value = json.dumps({"claims": [
+            {"text": "Summary for House passes funding bill", "sources": ["AP News", "AP News"], "type": "action"},
+        ]})
+
+        claims = _extract_cluster_claims(self._cluster())
+
+        assert claims[0].sources == ["AP News"]
+
+    @patch("app.pipeline.analyze.action_center.call_llm")
+    def test_drops_hallucinated_source_and_keeps_valid_ones(self, mock_call_llm):
+        mock_call_llm.return_value = json.dumps({"claims": [
+            {
+                "text": "Summary for House passes funding bill",
+                "sources": ["AP News", "A Made-Up Outlet"],
+                "type": "action",
+            },
+        ]})
+
+        claims = _extract_cluster_claims(self._cluster())
+
+        assert len(claims) == 1
+        assert claims[0].sources == ["AP News"]
+
+    @patch("app.pipeline.analyze.action_center.call_llm")
+    def test_drops_claim_with_no_valid_sources(self, mock_call_llm):
+        mock_call_llm.return_value = json.dumps({"claims": [
+            {"text": "Something not actually reported", "sources": ["Not A Real Source"], "type": "action"},
+        ]})
+
+        assert _extract_cluster_claims(self._cluster()) == []
+
+    @patch("app.pipeline.analyze.action_center.call_llm")
+    def test_drops_claim_that_fails_grounding_against_its_cited_source(self, mock_call_llm):
+        mock_call_llm.return_value = json.dumps({"claims": [
+            {"text": "The bill passed by a vote of 412-3", "sources": ["AP News"], "type": "statistic"},
+        ]})
+
+        # AP News's article text (from _make_article's default summary)
+        # contains none of these numbers, so this must be rejected.
+        assert _extract_cluster_claims(self._cluster()) == []
+
+    @patch("app.pipeline.analyze.action_center.call_llm")
+    def test_invalid_type_falls_back_to_context(self, mock_call_llm):
+        mock_call_llm.return_value = json.dumps({"claims": [
+            {"text": "Summary for House passes funding bill", "sources": ["AP News"], "type": "not-a-real-type"},
+        ]})
+
+        claims = _extract_cluster_claims(self._cluster())
+
+        assert claims[0].claim_type == "context"
+
+    @patch("app.pipeline.analyze.action_center.call_llm")
+    def test_empty_or_malformed_result_returns_no_claims(self, mock_call_llm):
+        mock_call_llm.return_value = None
+        assert _extract_cluster_claims(self._cluster()) == []
+
+        mock_call_llm.return_value = json.dumps({"not_claims": []})
+        assert _extract_cluster_claims(self._cluster()) == []
+
+
+class TestDedupeClaims:
+    def test_single_claim_returned_unchanged(self):
+        claims = [Claim(text="The bill passed", sources=["AP News"], claim_type="outcome")]
+        assert _dedupe_claims(claims) == claims
+
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    def test_near_identical_claims_merge_sources(self, mock_embed):
+        # Two claims scoring above _CLAIM_DEDUP_THRESHOLD (0.92) merge;
+        # normalized vectors so the dot product IS the cosine similarity.
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.99, (1 - 0.99 ** 2) ** 0.5]])
+        claims = [
+            Claim(text="The House passed the bill 220-205", sources=["AP News"]),
+            Claim(text="House approves bill in 220-205 vote", sources=["NPR"]),
+        ]
+
+        result = _dedupe_claims(claims)
+
+        assert len(result) == 1
+        assert set(result[0].sources) == {"AP News", "NPR"}
+
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    def test_does_not_transitively_merge_through_a_shared_hub(self, mock_embed):
+        """Complete-linkage regression: A~B and B~C both score above
+        threshold, but A~C does not (0.729, below 0.92) — a single-linkage
+        pass would merge all three through B into one falsely-inflated
+        3-source claim. Only a real A~C match should ever let that happen."""
+        angle = np.arccos(0.93)
+        vecs = np.array([
+            [np.cos(0), np.sin(0)],
+            [np.cos(angle), np.sin(angle)],
+            [np.cos(2 * angle), np.sin(2 * angle)],
+        ])
+        mock_embed.return_value = vecs
+        sims = vecs @ vecs.T
+        assert sims[0, 1] >= 0.92 and sims[1, 2] >= 0.92 and sims[0, 2] < 0.92
+
+        claims = [
+            Claim(text="Claim A", sources=["Hub Outlet"]),
+            Claim(text="Claim B", sources=["Outlet A"]),
+            Claim(text="Claim C", sources=["Outlet C"]),
+        ]
+
+        result = _dedupe_claims(claims)
+
+        assert len(result) == 2
+        assert not any(len(c.sources) == 3 for c in result)
+
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    def test_duplicate_source_in_merged_group_is_not_double_counted(self, mock_embed):
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.99, (1 - 0.99 ** 2) ** 0.5]])
+        claims = [
+            Claim(text="The House passed the bill 220-205", sources=["AP News"]),
+            Claim(text="House approves bill 220-205", sources=["AP News", "NPR"]),
+        ]
+
+        result = _dedupe_claims(claims)
+
+        assert len(result) == 1
+        assert result[0].sources == ["AP News", "NPR"]
+
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    def test_dissimilar_claims_stay_separate(self, mock_embed):
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.0, 1.0]])
+        claims = [
+            Claim(text="The House passed the bill", sources=["AP News"]),
+            Claim(text="The Senate held a hearing", sources=["NPR"]),
+        ]
+
+        result = _dedupe_claims(claims)
+
+        assert len(result) == 2
+
+
+class TestFormatClaimsForPrompt:
+    def test_tags_single_vs_multi_source_claims(self):
+        claims = [
+            Claim(text="Confirmed fact", sources=["AP News", "NPR"], claim_type="outcome"),
+            Claim(text="Single-source fact", sources=["Politico"], claim_type="context"),
+        ]
+
+        result = _format_claims_for_prompt(claims)
+
+        assert "CONFIRMED BY 2 SOURCES: AP News, NPR" in result
+        assert "REPORTED BY 1 SOURCE: Politico" in result
+        assert "Confirmed fact" in result
+        assert "Single-source fact" in result
+
+
+class TestRunClaimExtractionShadow:
+    """Non-blocking: logs an automated grounding-quality comparison,
+    never publishes anything, never raises."""
+
+    @patch("app.pipeline.analyze.action_center.call_llm")
+    def test_logs_comparison_metrics_on_success(self, mock_call_llm):
+        from app.pipeline.analyze import action_metrics
+
+        action_metrics.reset()
+        cluster = [_make_article("House passes funding bill", source="AP News")]
+        mock_call_llm.side_effect = [
+            # 1. Claim extraction call.
+            json.dumps({"claims": [
+                {"text": "Summary for House passes funding bill", "sources": ["AP News"], "type": "action"},
+            ]}),
+            # 2. Reconstruction call from the extracted claims.
+            json.dumps({"title": "t", "summary": "Summary for House passes funding bill", "facts": []}),
+        ]
+
+        _run_claim_extraction_shadow(cluster, rank=1, baseline_violation_count=2)
+
+        snap = action_metrics.snapshot()
+        assert snap["claim_extraction_shadow_runs"] == 1
+        assert snap["claim_extraction_shadow_baseline_violations"] == 2
+        assert "claim_extraction_shadow_violations" in snap
+
+    @patch("app.pipeline.analyze.action_center.call_llm")
+    def test_no_op_when_no_claims_survive_extraction(self, mock_call_llm):
+        from app.pipeline.analyze import action_metrics
+
+        action_metrics.reset()
+        mock_call_llm.return_value = json.dumps({"claims": []})
+
+        _run_claim_extraction_shadow(
+            [_make_article("Some story", source="AP News")], rank=1, baseline_violation_count=0,
+        )
+
+        assert action_metrics.snapshot() == {}
+
+    @patch("app.pipeline.analyze.action_center.call_llm")
+    def test_never_raises_on_failure(self, mock_call_llm):
+        mock_call_llm.side_effect = RuntimeError("model unavailable")
+
+        # Must not raise.
+        _run_claim_extraction_shadow(
+            [_make_article("Some story", source="AP News")], rank=1, baseline_violation_count=0,
+        )

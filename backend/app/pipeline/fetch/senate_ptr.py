@@ -8,28 +8,24 @@ report links. Electronic PTRs (the large majority since ~2012) render as an
 HTML transactions table and are parsed directly; older paper filings are
 PDF/scanned images and reuse the same pdfplumber/OCR path as House.
 
-Verified live against the real site 2026-07-25 (this module's original
-comment flagged that it never had been): the DataTables row's column order
-was wrong (first/last were swapped and the link-html column was
-mis-positioned — see _parse_search_row's own comment), so the original
-implementation would have silently produced zero rows even if it could
-reach the endpoint at all.
+The DataTables search row's column order matters (see _parse_search_row's
+own comment for the actual order) — getting it wrong silently produces
+zero rows rather than an error, since a swapped/mis-positioned column
+just means every row fails to parse cleanly.
 
-It couldn't: `/search/report/data/`, the actual search endpoint, is behind
-Akamai bot-management that a plain HTTP client cannot pass — confirmed live
-2026-07-25 that neither httpx nor requests nor curl_cffi's Chrome-TLS-
-impersonation get through (403/fake-503 "Site Under Maintenance" page)
-regardless of headers, cookies transplanted from a real authenticated
-browser session, or both combined. Only a genuine, OS-trusted UI event
-(a real click, not a scripted `fetch()` even from within the same page)
-gets a 200. search_ptr_filings below drives an actual headless Chromium
-tab (Playwright) through the real search form for this reason — every
-other request in this module (accept_terms, and fetch_and_parse_ptr's
+`/search/report/data/`, the actual search endpoint, is behind Akamai
+bot-management that a plain HTTP client cannot pass regardless of
+headers, cookies transplanted from a real authenticated browser session,
+or both combined — only a genuine, OS-trusted UI event (a real click, not
+a scripted `fetch()` even from within the same page) gets a 200.
+search_ptr_filings below drives an actual headless Chromium tab
+(Playwright) through the real search form for this reason — every other
+request in this module (accept_terms, and fetch_and_parse_ptr's
 per-filing page fetch) is NOT behind this gate and stays on the fast
-httpx path, confirmed live. Full historical backfill (~2,400 filings,
-~24 pages) took ~20s in testing; a normal incremental run (since_date
-watermark, usually well under 100 new filings) takes ~9s, almost all of
-it one-time browser launch/navigation overhead.
+httpx path. A full historical backfill (~2,400 filings, ~24 pages) runs in
+roughly 20s; a normal incremental run (since_date watermark, usually well
+under 100 new filings) is closer to 9s, almost all of it one-time browser
+launch/navigation overhead.
 
 See the Legal note in the issue #45 plan: efdsearch.senate.gov requires
 actually presenting/accepting the Ethics in Government Act use restriction
@@ -68,22 +64,20 @@ _PAGE_LEN = 100
 _MAX_PAGES = 50  # 5,000 filings — far above any real window; loop backstop
 # Individual Playwright actions get a short timeout and are treated as
 # best-effort (see _click below): a real click's own action reliably
-# completes well under this on the live site (confirmed live 2026-07-25,
-# ~9s for an entire incremental run including browser launch), and a click
-# that never resolves is more likely a page structure change than
-# something worth blocking a nightly pipeline run over.
+# completes well under this on the live site, and a click that never
+# resolves is more likely a page structure change than something worth
+# blocking a nightly pipeline run over.
 _ACTION_TIMEOUT_MS = 8000
 
 
 async def _click(locator) -> None:
     """Best-effort click: fires the action and swallows a timeout rather
     than propagating it. A genuine OS-trusted click (what Playwright
-    dispatches) reliably completes on this site even when Playwright's own
+    dispatches) reliably lands on this site even when Playwright's own
     post-click settle-state wait times out for unrelated reasons (a
-    lingering background request, an analytics beacon) — confirmed live
-    2026-07-25 the click itself still lands. Callers verify success by
-    checking resulting page state, not by trusting this to raise on
-    failure."""
+    lingering background request, an analytics beacon). Callers verify
+    success by checking resulting page state, not by trusting this to
+    raise on failure."""
     try:
         await locator.click(timeout=_ACTION_TIMEOUT_MS)
     except PlaywrightTimeoutError:
@@ -141,12 +135,10 @@ async def accept_terms(client: httpx.AsyncClient) -> str | None:
 def _parse_search_row(row: list) -> dict | None:
     """One DataTables row -> a filing dict, or None if it can't be parsed.
 
-    Column order confirmed live 2026-07-25: [first, last, office/filer
-    description (unused), link_html, filed_date] — NOT the [link_html,
-    last, first, office, filed_date] this module originally assumed
-    (never verified against a live session; would have searched for an
-    href inside a plain "Alan"/"Armstrong" string and silently matched
-    nothing on every single row).
+    Column order: [first, last, office/filer description (unused),
+    link_html, filed_date]. Getting this wrong (e.g. assuming link_html
+    comes first) means searching for an href inside a plain name string
+    and silently matching nothing on every row.
     """
     if len(row) < 5:
         return None
@@ -199,7 +191,7 @@ async def search_ptr_filings(since_date: str) -> list[dict]:
     Paginates via the DataTable's own "Next" control at its max page size
     (100) rather than reconstructing the AJAX call directly — an in-page
     `fetch()` to the same endpoint, even from this same authenticated
-    page, was ALSO blocked in live testing (2026-07-25): only an actual
+    page, is blocked the same way a plain HTTP client is: only an actual
     OS-trusted click gets through.
 
     Browser lifecycle only — the actual scraping steps are in

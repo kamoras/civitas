@@ -109,6 +109,3 @@ const UNKNOWN_STAGE: BillStageStyle = {
 export function billStageStyle(stageCode: string): BillStageStyle {
   return STAGE_STYLES[stageCode] ?? UNKNOWN_STAGE;
 }
-
-/** Every stage code this build styles deliberately. */
-export const STYLED_STAGE_CODES = Object.keys(STAGE_STYLES);

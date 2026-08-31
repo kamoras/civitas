@@ -45,6 +45,29 @@ export function TrendingBadge() {
   );
 }
 
+/** Amber, matching MonitorStatus's non-"active" badge — this flags lower
+ *  confidence (a primary-source-only draft, not yet corroborated by press
+ *  coverage), the opposite of phosphor's "computed positive figure"
+ *  meaning elsewhere on this page. See backend early_signal.py. */
+export function DevelopingBadge() {
+  return (
+    <span className="border border-signal-amber/40 px-2 py-0.5 font-mono text-xs tracking-[0.14em] text-signal-amber">
+      DEVELOPING
+    </span>
+  );
+}
+
+/** One-line disclosure paired with DevelopingBadge — explains what
+ *  "developing" means rather than leaving readers to guess. */
+export function DevelopingDisclosure() {
+  return (
+    <p className="mb-4 font-mono text-xs text-ink-min">
+      Based on a primary-source vote record; broader news coverage has not
+      yet confirmed this story.
+    </p>
+  );
+}
+
 /** Marks a fact added since this issue's last genuine content change (see
  *  backend/app/fact_diff.py). Phosphor, matching TrendingBadge/"TOP ISSUE" —
  *  this is a computed fact about the data, not decoration. `[NEW]` rather

@@ -15,16 +15,14 @@ import TownContestCard from "@/components/elections/TownContestCard";
 import { districtCountiesLabel, formatPvi, pviColor, raceShortLabel } from "@/lib/elections";
 import { safeHref } from "@/lib/formatting";
 import { fetchTownBallot, fetchTownsForState } from "@/lib/api";
-import type { StateBallot, RaceCoverageItem, TownBallot, TownEntry } from "@/types/election";
+import type { StateBallot, TownBallot, TownEntry } from "@/types/election";
 
 function HouseSection({
   state,
   houseRaces,
-  coverage,
 }: {
   state: string;
   houseRaces: StateBallot["houseRaces"];
-  coverage: RaceCoverageItem[];
 }) {
   const [selectedId, setSelectedId] = useState("");
 
@@ -109,10 +107,7 @@ function HouseSection({
             {selected.counties && (
               <p className="text-xs text-ink-min mb-3">Covers: {selected.counties.join(", ")}</p>
             )}
-            <RaceFullDetail
-              race={selected}
-              coverage={coverage.filter((item) => item.race?.id === selected.id)}
-            />
+            <RaceFullDetail race={selected} />
           </div>
         )}
       </div>
@@ -469,10 +464,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                         {race.isSpecial ? "SPECIAL ELECTION" : "REGULAR ELECTION"}
                       </p>
                     )}
-                    <RaceFullDetail
-                      race={race}
-                      coverage={ballot.coverage.filter((item) => item.race?.id === race.id)}
-                    />
+                    <RaceFullDetail race={race} />
                   </div>
                 ))}
               </div>
@@ -480,11 +472,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
           )}
 
           {ballot.houseRaces.length > 0 && (
-            <HouseSection
-              state={ballot.state}
-              houseRaces={ballot.houseRaces}
-              coverage={ballot.coverage}
-            />
+            <HouseSection state={ballot.state} houseRaces={ballot.houseRaces} />
           )}
 
           <TownSection state={ballot.state} pageElectionDate={ballot.electionDate} />

@@ -39,6 +39,19 @@ jobs:
       - run: npm ci
       - name: Lint
         run: npm run lint
+      - name: Unused code check
+        # tsc's noUnusedLocals/noUnusedParameters (tsconfig.json) catches
+        # dead locals/params at build time; knip catches the category those
+        # can't — an exported function/type never imported anywhere else
+        # (2026-08-30 audit found one real dead export this way,
+        # fetchBillDetail, that ESLint/tsc both missed). No equivalent gate
+        # existed before this. Backend's ruff F401/F811/F841 is not the
+        # same coverage despite the surface similarity — it catches unused
+        # imports/locals/redefinitions, not an unused top-level function:
+        # the same audit's independent review found senator_service.py's
+        # upsert_senator sitting dead (superseded by senate_pipeline.py's
+        # own function of the same name) with ruff clean the whole time.
+        run: npm run knip
       - name: Test
         # No coverage gate yet — this is the first test infra the frontend
         # has ever had (vitest + Testing Library, 2026-07-23); ratchet up
