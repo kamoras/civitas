@@ -200,19 +200,17 @@ class DataVersionCacheMiddleware(BaseHTTPMiddleware):
     """Attach ETag/Cache-Control keyed to the pipeline's data version, and
     answer matching conditional requests with 304.
 
-    2026-08 audit: this used to overwrite Cache-Control unconditionally,
-    silently discarding any value a route handler set on purpose — e.g.
+    Must never overwrite Cache-Control unconditionally — that would
+    silently discard any value a route handler set on purpose. E.g.
     action.py's recent-issues endpoint sets a deliberately short 30s
-    max-age specifically because a longer one caused a real incident (a
-    browser's stale cached response after a deploy added a field crashed
-    the whole Action Center; see TestCacheHeaderMatchesNginx). Confirmed
-    live via TestClient against the full app: that endpoint's real HTTP
-    response carried this middleware's 300s value, not its own 30s — the
-    route-level unit test only calls the handler function directly, so
-    it could never have caught the override happening one layer up. ETag
-    is still attached unconditionally (revalidation is a pure win
-    regardless of a route's own freshness policy); Cache-Control here is
-    only a default for routes that haven't chosen their own.
+    max-age, because a longer one lets a browser serve a stale cached
+    response after a deploy changes the response shape (see
+    TestCacheHeaderMatchesNginx). A route-level unit test that only calls
+    the handler function directly can't catch this middleware overriding
+    the header one layer up — verify via TestClient against the full app
+    instead. ETag is still attached unconditionally (revalidation is a
+    pure win regardless of a route's own freshness policy); Cache-Control
+    here is only a default for routes that haven't chosen their own.
     """
 
     async def dispatch(self, request, call_next):
@@ -228,15 +226,15 @@ class DataVersionCacheMiddleware(BaseHTTPMiddleware):
         # Short-circuit before doing any query work. This is the whole
         # point: a revalidation costs a memoised string comparison.
         #
-        # 2026-08 audit: the 200 path below can just read a route's own
-        # Cache-Control off the real response, because the route actually
-        # ran. This path can't — running the route to find out would
-        # defeat the entire optimization. So a route with its own shorter
-        # TTL (see _ROUTE_CACHE_CONTROL_OVERRIDES) needs a second lookup
-        # here, or 304s silently hand it back this middleware's longer
-        # default, re-extending a client's cache lifetime on every
-        # revalidation — the same staleness bug the 200-path fix closed,
-        # reopened through the other response path. test_cache_headers.py
+        # The 200 path below can just read a route's own Cache-Control off
+        # the real response, because the route actually ran. This path
+        # can't — running the route to find out would defeat the entire
+        # optimization. So a route with its own shorter TTL (see
+        # _ROUTE_CACHE_CONTROL_OVERRIDES) needs a second lookup here, or
+        # 304s silently hand it back this middleware's longer default,
+        # re-extending a client's cache lifetime on every revalidation —
+        # the same staleness bug the 200 path guards against, reopened
+        # through this response path instead. test_cache_headers.py
         # verifies every override's 304 value against its real route.
         if _if_none_match_matches(request.headers.get("if-none-match"), etag):
             override = _route_cache_control_override(request.url.path)

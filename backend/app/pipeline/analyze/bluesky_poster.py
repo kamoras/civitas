@@ -19,16 +19,20 @@ module does nothing (allows running without a Bluesky account configured).
 import json
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.issue_ids import to_public_id
+from app.models import ActionIssue
+from app.pipeline.analyze import action_metrics
 from app.pipeline.analyze.bluesky_utils import publish_post, strip_hashtags, strip_hashtags_and_truncate
 from app.pipeline.analyze.grounding import (
     grounding_violations,
     hedge_and_editorializing_violations,
+    log_intensifier_usage,
 )
 from app.pipeline.analyze.ollama_client import call_llm
 from app.time_utils import utcnow
@@ -163,6 +167,15 @@ speculate about its political purpose or effect.
 9. Write about what actually happened or was said — not about "the coverage," \
 "the discussion," or "the reporting" itself. Use specific names and numbers \
 from the Key facts rather than vaguer substitutes.
+10. Lead with the concrete outcome or decision, not the buildup to it — put \
+the number or result first if the Key facts include one (a vote tally, a \
+dollar figure, a ruling), and let any consequence or stakes trail as a \
+second clause in the same sentence rather than a separate sentence.
+11. If you need to name where a claim comes from, make the source the \
+grammatical subject ("The FEC says..." not "According to the FEC...") — it \
+costs no extra words and reads less like a citation.
+12. Never substitute a vague intensifier ("significant," "sweeping," \
+"major") for a specific number already given in the Key facts.
 
 Return JSON: {{"post": "<your post text>"}}"""
 
@@ -196,9 +209,9 @@ Return JSON: {{"post": "<your post text>"}}"""
         # follow, same as _generate_full_story in action_center.py.
         reasons = grounding_violations(post, source_material) + hedge_and_editorializing_violations(post)
         if not reasons:
+            log_intensifier_usage("bsky_post", post, source_material)
             return post
 
-        from app.pipeline.analyze import action_metrics
         action_metrics.increment("bsky_post_grounding_rejections")
         logger.warning(
             "Bluesky post failed grounding for issue %s (attempt %d): %s | post: %s",
@@ -244,11 +257,6 @@ def process_issues_for_bluesky(issues: list, db: Session) -> int:
     if not getattr(settings, "BSKY_HANDLE", "") or not getattr(settings, "BSKY_APP_PASSWORD", ""):
         return 0  # fast-path: no credentials configured
 
-    from datetime import timedelta
-    from zoneinfo import ZoneInfo
-
-    from app.models import ActionIssue
-
     _US_EAST = ZoneInfo("America/New_York")
     today = datetime.now(tz=_US_EAST).strftime("%Y-%m-%d")
 
@@ -283,7 +291,6 @@ def process_issues_for_bluesky(issues: list, db: Session) -> int:
             # Same story, nothing materially new to say — mark it handled so
             # the hourly pipeline doesn't regenerate and re-check it every run,
             # but publish nothing.
-            from app.pipeline.analyze import action_metrics
             action_metrics.increment("bsky_posts_suppressed_near_duplicate")
             logger.info(
                 "Suppressing near-duplicate Bluesky post for issue %s: %s",

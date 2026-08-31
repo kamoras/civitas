@@ -1,12 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
-import { fetchJustice, fetchJusticeLeaderboard } from "@/lib/api";
-import { useAsyncData } from "@/hooks/useAsyncData";
 import { getJusticeLabel, getScoreColor, getScoreBgColor } from "@/lib/representation";
 import { MetricBar, StatBox } from "@/components/shared/ScoreMetric";
-import type { Justice, JusticeLeaderboardEntry, JusticeScore } from "@/types/justice";
+import type { Justice, JusticeScore } from "@/types/justice";
 
 const PARTY_BADGE: Record<string, { label: string; color: string; bg: string; border: string }> = {
   R: {
@@ -251,113 +248,3 @@ export function JusticeCard({
   );
 }
 
-function JusticeSelector({
-  entries,
-  selectedId,
-  onSelect,
-}: {
-  entries: JusticeLeaderboardEntry[];
-  selectedId: string;
-  onSelect: (id: string) => void;
-}) {
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-1.5 mb-8">
-      {entries.map((e) => {
-        const active = e.id === selectedId;
-        const pb = getPartyBadge(e.appointingParty);
-        const overall = e.score.overall;
-        return (
-          <button
-            key={e.id}
-            onClick={() => onSelect(e.id)}
-            className={`px-2 py-2.5 border text-xs font-mono transition-all ${
-              active
-                ? `${pb.border} ${pb.bg} text-ink-hi`
-                : `${pb.border.replace("/40", "/20")} text-ink-lo hover:text-ink hover:${pb.border}`
-            }`}
-          >
-            <div className="truncate">{e.lastName}</div>
-            <div className={`text-xs tabular-nums ${getScoreColor(overall)}`}>{overall}</div>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-export default function JusticeClient() {
-  const [entries, setEntries] = useState<JusticeLeaderboardEntry[]>([]);
-  const [selectedId, setSelectedId] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchJusticeLeaderboard()
-      .then((data) => {
-        setEntries(data);
-        if (!selectedId && data.length > 0) {
-          setSelectedId(data[0].id);
-        }
-      })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-    // Mount-only: selectedId excluded to avoid refetching the leaderboard on selection change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Detail for the selected row. `detailLoading` is derived from whether the
-  // settled response belongs to the id currently selected, so selecting a new
-  // row cannot briefly show the previous one's detail — which storing the flag
-  // separately allowed.
-  const detail = useAsyncData(
-    `justice:${selectedId ?? ""}`,
-    selectedId ? () => fetchJustice(selectedId) : null
-  );
-  const justice = detail.data;
-  const detailLoading = detail.loading;
-
-  if (loading) {
-    return (
-      <div className="panel max-w-md mx-auto p-6 text-center">
-        <div className="text-signal-cyan animate-pulse text-lg">{">"} LOADING SCOTUS DATA...</div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="panel max-w-md mx-auto p-6 text-center">
-        <div className="text-signal-red text-lg">{">"} ERROR</div>
-        <div className="text-ink-min text-sm mt-2">{error}</div>
-      </div>
-    );
-  }
-
-  if (entries.length === 0) {
-    return (
-      <div className="panel max-w-md mx-auto p-6 text-center">
-        <div className="text-ink-min text-sm">
-          {">"} No justice data available yet. Run the justice pipeline to populate.
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <JusticeSelector entries={entries} selectedId={selectedId} onSelect={setSelectedId} />
-
-      {detailLoading && (
-        <div className="panel max-w-md mx-auto p-6 text-center">
-          <div className="text-signal-cyan animate-pulse">{">"} LOADING PROFILE...</div>
-        </div>
-      )}
-
-      {!detailLoading && justice && (
-        <div className="max-w-3xl mx-auto">
-          <JusticeCard justice={justice} />
-        </div>
-      )}
-    </div>
-  );
-}

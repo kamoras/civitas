@@ -88,10 +88,3 @@ export interface PoliticianProfile {
   activeIssues: PoliticianActiveIssue[];
   governmentRecord: GovernmentRecord;
 }
-
-export interface PaginatedDocs {
-  total: number;
-  page: number;
-  perPage: number;
-  docs: (GovernmentDoc & { summary?: string; chamber?: string })[];
-}

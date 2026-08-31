@@ -47,7 +47,3 @@ export interface JusticeScoreBreakdown {
   };
   [key: string]: unknown;
 }
-
-export function isSeedOnly(d: ScoreBreakdownDimension | SeedOnlyDimension): d is SeedOnlyDimension {
-  return "seedOnly" in d && d.seedOnly === true;
-}

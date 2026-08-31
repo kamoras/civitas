@@ -19,7 +19,7 @@ flowchart TB
     CLUSTER --> RANK
 
     RANK["<b>4. RANK</b><br/>0.40 × civic actionability<br/>0.35 × source breadth<br/>0.25 × trending relevance"]
-    RANK --> TOP["Select top 4 (MAX_ISSUES)"]
+    RANK --> TOP["Select top 2 (MAX_ISSUES)"]
     TOP --> LLM
 
     LLM["<b>5. LLM</b><br/>per cluster: neutral summary,<br/>key facts, citizen actions"]
