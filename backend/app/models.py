@@ -1553,7 +1553,7 @@ class BskySenatorSpotlight(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     senator_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
-    chamber: Mapped[str] = mapped_column(String(10), default="senate")
+    chamber: Mapped[str] = mapped_column(String(10), nullable=False, default="senate")
     posted_at: Mapped[datetime] = mapped_column(default=utcnow)
     post_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 

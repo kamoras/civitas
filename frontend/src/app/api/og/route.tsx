@@ -140,22 +140,34 @@ function issueImage(issue: { title?: string; summary?: string } | null) {
   );
 }
 
+export type OgPoliticianIdentity = {
+  name?: string; party?: string; state?: string; district?: number | null;
+  role?: string; thumbnailUrl?: string | null;
+};
+
+// A truthy check on district treats an at-large seat (0, FEC's own "00"
+// convention — see lib/elections.ts's districtToken) the same as "no
+// district" (a Senate identity), silently rendering it in the Senate's
+// format — this exact bug class already has a named regression test in
+// lib/elections.test.ts.
+export function formatStanding(identity: OgPoliticianIdentity | undefined): string {
+  if (identity?.district != null) {
+    const district = identity.district === 0 ? "AL" : identity.district;
+    return `${identity.party}-${identity.state}-${district}`;
+  }
+  if (identity?.state) return `${identity.party}-${identity.state}`;
+  return "";
+}
+
 async function politicianImage(profile: {
-  identity?: {
-    name?: string; party?: string; state?: string; district?: number | null;
-    role?: string; thumbnailUrl?: string | null;
-  };
+  identity?: OgPoliticianIdentity;
   overallScore?: number | null;
 } | null) {
   const identity = profile?.identity;
   const name = identity?.name ?? "Civitas";
   const party = identity?.party ?? "";
   const accent = PARTY_ACCENT[party] ?? "#00ff41";
-  const standing = identity?.district
-    ? `${party}-${identity.state}-${identity.district}`
-    : identity?.state
-      ? `${party}-${identity.state}`
-      : "";
+  const standing = formatStanding(identity);
   const overall = profile?.overallScore != null ? profile.overallScore.toFixed(1) : null;
 
   const photoDataUri = identity?.thumbnailUrl
