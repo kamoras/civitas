@@ -293,6 +293,7 @@ def _build_issue_response(
         not_priority_count=getattr(issue, "not_priority_count", 0) or 0,
         full_story=getattr(issue, "full_story", None),
         is_trending=is_trending,
+        status=getattr(issue, "status", None) or "confirmed",
     ).model_dump(by_alias=True)
 
 

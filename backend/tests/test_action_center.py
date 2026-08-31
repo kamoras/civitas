@@ -9,6 +9,7 @@ import pytest
 
 from app.models import (
     ActionIssue,
+    ActionIssueStatus,
     ExploreDocument,
     Justice,
     LlmGenerationSample,
@@ -33,6 +34,8 @@ from app.pipeline.analyze.action_center import (
     _find_matching_issue,
     dedupe_near_identical_issues,
     _apply_matched_issue_update,
+    _promote_developing_issue,
+    _bluesky_eligible_issues,
     _retire_untouched_issues,
     _retry_until_grounded,
     _record_generation_sample,
@@ -2155,6 +2158,132 @@ class TestApplyMatchedIssueUpdate:
         assert match.full_story is None
 
 
+class TestFindMatchingIssueAgainstDevelopingRows:
+    """_find_matching_issue is content-agnostic — it never inspects
+    status — but a DEVELOPING row must be a valid match candidate for a
+    fresh news cluster, since that IS the corroboration mechanism (see
+    the approved early-signal plan). Pins that nothing about the
+    signature/embedding matching path silently excludes it."""
+
+    def test_a_developing_row_matches_a_near_identical_title(self):
+        existing = ActionIssue(
+            id=900, title="Senate passes the Foreign Military Sales Act",
+            facts=json.dumps(["The Senate voted 60-40 Tuesday."]),
+            status=ActionIssueStatus.DEVELOPING,
+        )
+        title = "Senate passes the Foreign Military Sales Act"
+        title_emb = np.array([1.0, 0.0])
+        recent_embs = np.array([[1.0, 0.0]])  # sim = 1.0, well above 0.92
+
+        match = _find_matching_issue(
+            title, ["A new fact from press coverage."], [existing], recent_embs, title_emb, set(),
+        )
+        assert match is existing
+
+    def test_a_developing_row_matches_on_shared_source_url(self):
+        existing = ActionIssue(
+            id=901, title="Senate action on arms sale",
+            facts=json.dumps(["A fact."]),
+            source_urls=json.dumps(["https://www.senate.gov/legislative/vote.xml"]),
+            status=ActionIssueStatus.DEVELOPING,
+        )
+        match = _find_matching_issue(
+            "A completely differently worded headline", ["fact"], [existing], None,
+            np.array([1.0, 0.0]), set(),
+            source_urls=["https://www.senate.gov/legislative/vote.xml"],
+        )
+        assert match is existing
+
+
+class TestPromoteDevelopingIssue:
+    """_promote_developing_issue: a full content swap (press coverage
+    supersedes the hedged primary-source draft) plus a status flip,
+    delegating rank/date/is_current/previous_facts/full-story bookkeeping
+    to the existing _apply_matched_issue_update rather than re-deriving
+    any of it."""
+
+    def test_flips_status_and_stamps_confirmed_at(self):
+        match = ActionIssue(
+            id=1, date="2026-08-29", rank=999, title="A floor vote occurred",
+            facts=json.dumps(["The Senate voted 60-40 Tuesday."]),
+            status=ActionIssueStatus.DEVELOPING, source_type="roll_call_vote",
+            primary_source_url="https://www.senate.gov/vote.xml",
+            confirmation_deadline=utcnow() + timedelta(hours=40),
+            created_at=utcnow() - timedelta(hours=8),
+            primary_article_date="2026-08-29",
+        )
+        facts = ["The Senate passed the bill 60-40, according to AP and Reuters."]
+        new_values = _new_values_for("Senate passes the bill", facts, "2026-08-30")
+
+        _promote_developing_issue(
+            match, new_values, 1, "2026-08-30", "2026-08-30", facts, "Senate passes the bill",
+        )
+
+        assert match.status == ActionIssueStatus.CONFIRMED
+        assert match.confirmed_at is not None
+        assert match.confirmation_deadline is None
+
+    def test_swaps_content_from_the_press_cluster_not_a_merge(self):
+        match = ActionIssue(
+            id=1, date="2026-08-29", rank=999, title="A floor vote occurred",
+            facts=json.dumps(["The Senate voted 60-40 Tuesday."]),
+            status=ActionIssueStatus.DEVELOPING, source_type="roll_call_vote",
+            primary_source_url="https://www.senate.gov/vote.xml",
+            confirmation_deadline=utcnow() + timedelta(hours=40),
+            primary_article_date="2026-08-29",
+        )
+        facts = ["The Senate passed the bill 60-40, according to AP and Reuters."]
+        new_values = _new_values_for("Senate passes the bill after floor debate", facts, "2026-08-30")
+
+        _promote_developing_issue(
+            match, new_values, 2, "2026-08-30", "2026-08-30", facts, "Senate passes the bill after floor debate",
+        )
+
+        assert match.title == "Senate passes the bill after floor debate"
+        assert json.loads(match.facts) == facts
+        assert match.rank == 2
+        assert match.date == "2026-08-30"
+        assert match.is_current is True
+
+
+class TestBlueskyEligibleIssues:
+    """DEVELOPING issues must never reach the Bluesky poster — there is no
+    correction mechanism for a wrong post, and Bluesky doesn't support
+    editing a published one."""
+
+    def test_excludes_developing_issues(self, db_session):
+        confirmed = ActionIssue(
+            date="2026-08-30", rank=1, title="A confirmed story", summary="s",
+            is_current=True, status=ActionIssueStatus.CONFIRMED,
+        )
+        developing = ActionIssue(
+            date="2026-08-30", rank=2, title="A developing story", summary="s",
+            is_current=True, status=ActionIssueStatus.DEVELOPING,
+        )
+        db_session.add_all([confirmed, developing])
+        db_session.flush()
+
+        eligible = _bluesky_eligible_issues(db_session, "2026-08-30")
+
+        assert [i.title for i in eligible] == ["A confirmed story"]
+
+    def test_excludes_retired_and_other_day_issues(self, db_session):
+        retired = ActionIssue(
+            date="2026-08-30", rank=1, title="Retired today", summary="s",
+            is_current=False, status=ActionIssueStatus.CONFIRMED,
+        )
+        yesterday = ActionIssue(
+            date="2026-08-29", rank=1, title="From yesterday", summary="s",
+            is_current=True, status=ActionIssueStatus.CONFIRMED,
+        )
+        db_session.add_all([retired, yesterday])
+        db_session.flush()
+
+        eligible = _bluesky_eligible_issues(db_session, "2026-08-30")
+
+        assert eligible == []
+
+
 class TestBskyRepostHasNewInformation:
     """A matched issue's primary_article_date advancing used to be the only
     gate on allowing a Bluesky repost — but recap/ongoing coverage of the
@@ -3031,7 +3160,9 @@ class TestPeriodicBlueskyPosts:
 
         import app.pipeline.analyze.action_center as ac
 
-        with patch.object(ac, "fetch_news_articles", return_value=[]), \
+        with patch.object(ac, "check_roll_call_signals"), \
+                patch.object(ac, "expire_stale_developing_issues"), \
+                patch.object(ac, "fetch_news_articles", return_value=[]), \
                 patch.object(ac, "_run_periodic_bluesky_posts") as periodic, \
                 patch.object(ac, "_persist_metrics"), \
                 patch.object(ac, "_set_refresh_state"):
@@ -3044,7 +3175,9 @@ class TestPeriodicBlueskyPosts:
 
         import app.pipeline.analyze.action_center as ac
 
-        with patch.object(ac, "fetch_news_articles", return_value=["an article"]), \
+        with patch.object(ac, "check_roll_call_signals"), \
+                patch.object(ac, "expire_stale_developing_issues"), \
+                patch.object(ac, "fetch_news_articles", return_value=["an article"]), \
                 patch.object(ac, "_filter_policy_relevant", return_value=[]), \
                 patch.object(ac, "_run_periodic_bluesky_posts") as periodic, \
                 patch.object(ac, "_persist_metrics"), \
