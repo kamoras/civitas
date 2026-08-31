@@ -176,3 +176,45 @@ class TestEnsureExploreIndex:
                 t.join(timeout=10)
         results = vector_store.search_explore_documents("A real doc", n_results=1)
         assert results is not None and results[0]["title"] == "A real doc"
+
+    def test_rebuild_recreates_a_stale_pre_migration_schema(self, vec_env, db_session):
+        """Regression for a live 2026-08-30 incident: a prior deploy's
+        vec_explore table (created before `doc_id` existed in the schema)
+        survived on disk forever because CREATE VIRTUAL TABLE IF NOT
+        EXISTS is a no-op against it, and DELETE FROM only clears rows
+        against whatever schema is already there — a vec0 table's columns
+        can't be ALTERed. Every embed attempt failed with "no such
+        column: doc_id" and the index stayed at 0 rows against 7,127 real
+        documents. The rebuild path must DROP + recreate, not DELETE FROM."""
+        conn = vector_store.get_vec_conn()
+        conn.execute("DROP TABLE vec_explore")
+        conn.execute(
+            f"""CREATE VIRTUAL TABLE vec_explore USING vec0(
+                embedding float[{vector_store.EMBEDDING_DIMENSIONS}] distance_metric=cosine,
+                doc_type text,
+                chamber text,
+                politician_id text,
+                +title text,
+                +date text,
+                +source text,
+                +politician_name text,
+                +snippet text
+            )"""
+        )
+        vector_store._set_meta(conn, "explore_index_model", "minilm-l6-v2+1-old-schema")
+        conn.commit()
+
+        db_session.add(ExploreDocument(
+            doc_type="House Floor Speech", source="congress.gov",
+            title="A real doc", summary="s", body="b", date="2026-07-01",
+        ))
+        db_session.commit()
+
+        vector_store.ensure_explore_index(lambda: db_session)
+        import threading as _t
+        for t in _t.enumerate():
+            if t.name == "explore-reindex":
+                t.join(timeout=10)
+
+        results = vector_store.search_explore_documents("A real doc", n_results=1)
+        assert results is not None and results[0]["title"] == "A real doc"

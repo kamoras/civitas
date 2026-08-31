@@ -770,8 +770,39 @@ def ensure_explore_index(db_session_factory) -> None:
                     "Explore index identity changed (%s -> %s) — rebuilding",
                     stored, index_identity(),
                 )
+                # DROP + recreate, not DELETE FROM: INDEX_SCHEMA_VERSION
+                # exists specifically to signal a COLUMN LAYOUT change
+                # (e.g. adding doc_id when chunking landed), and a vec0
+                # virtual table's columns are fixed at creation — they
+                # can't be ALTERed. DELETE FROM only clears rows against
+                # whatever schema is already on disk, so a real schema
+                # bump silently kept the stale pre-migration table forever
+                # and every subsequent embed_explore_documents() call
+                # failed with "no such column: doc_id" (confirmed live
+                # 2026-08-30: vec_explore stuck at 0 rows against 7,127
+                # real ExploreDocument rows). Recreating picks up whatever
+                # _ensure_schema currently defines, so this is correct for
+                # a pure model-version bump too (identical schema either
+                # way) — this is a strict superset of the old behavior,
+                # not a special case for the failure above.
+                # DROP + recreate, not DELETE FROM: INDEX_SCHEMA_VERSION
+                # exists specifically to signal a COLUMN LAYOUT change
+                # (e.g. adding doc_id when chunking landed), and a vec0
+                # virtual table's columns are fixed at creation — they
+                # can't be ALTERed. DELETE FROM only clears rows against
+                # whatever schema is already on disk, so a real schema
+                # bump silently kept the stale pre-migration table forever
+                # and every subsequent embed_explore_documents() call
+                # failed with "no such column: doc_id" (confirmed live
+                # 2026-08-30: vec_explore stuck at 0 rows against 7,127
+                # real ExploreDocument rows). Recreating picks up whatever
+                # _ensure_schema currently defines, so this is correct for
+                # a pure model-version bump too (identical schema either
+                # way) — this is a strict superset of the old behavior,
+                # not a special case for the failure above.
                 with _vec_lock:
-                    conn.execute("DELETE FROM vec_explore")
+                    conn.execute("DROP TABLE IF EXISTS vec_explore")
+                    _ensure_schema(conn)
                     conn.commit()
 
             total = 0
