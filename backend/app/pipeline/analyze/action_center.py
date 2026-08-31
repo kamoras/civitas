@@ -4059,7 +4059,13 @@ def _update_national_monitors(today: str, db: Session) -> None:
 
     today_issues = (
         db.query(ActionIssue)
-        .filter(ActionIssue.date == today)
+        .filter(
+            ActionIssue.date == today,
+            # A hedged, unconfirmed, single-source draft must not surface
+            # publicly via a monitor update before press corroborates it —
+            # same reasoning as excluding it from Bluesky/full-story.
+            ActionIssue.status != ActionIssueStatus.DEVELOPING,
+        )
         .order_by(ActionIssue.rank)
         .all()
     )
@@ -4165,7 +4171,10 @@ def _update_national_monitors(today: str, db: Session) -> None:
 
     past_issues = (
         db.query(ActionIssue)
-        .filter(ActionIssue.date >= cutoff_date, ActionIssue.date < today)
+        .filter(
+            ActionIssue.date >= cutoff_date, ActionIssue.date < today,
+            ActionIssue.status != ActionIssueStatus.DEVELOPING,
+        )
         .all()
     )
 
@@ -4719,6 +4728,36 @@ def _persist_metrics(db: Session) -> dict[str, int]:
     return snapshot
 
 
+def _rank_ordered_issues(
+    still_current: list[ActionIssue], matched_issue_ids: set[int],
+) -> list[ActionIssue]:
+    """Final rank order for this run's renumbering pass — extracted for
+    direct testability, same precedent as _bluesky_eligible_issues/
+    _retire_untouched_issues.
+
+    Issues touched (matched or newly created) this run keep their
+    relative order first; spared survivors follow. Spared DEVELOPING
+    issues (not yet promoted or expired) always sort after every spared
+    CONFIRMED issue — a hedged, unconfirmed draft must never crowd out a
+    real top story on its own placeholder rank value.
+    """
+    touched = sorted(
+        (r for r in still_current if r.id in matched_issue_ids),
+        key=lambda r: r.rank or 0,
+    )
+    spared_confirmed = sorted(
+        (r for r in still_current
+         if r.id not in matched_issue_ids and r.status != ActionIssueStatus.DEVELOPING),
+        key=lambda r: r.rank or 0,
+    )
+    spared_developing = sorted(
+        (r for r in still_current
+         if r.id not in matched_issue_ids and r.status == ActionIssueStatus.DEVELOPING),
+        key=lambda r: r.rank or 0,
+    )
+    return touched + spared_confirmed + spared_developing
+
+
 def _bluesky_eligible_issues(db: Session, today: str) -> list[ActionIssue]:
     """Today's current issues, excluding DEVELOPING ones — extracted for
     direct testability, same precedent as _retire_untouched_issues/
@@ -4766,9 +4805,19 @@ def _run_refresh(db: Session) -> int:
     # not just the runs that make it to the main flush/retire stage.
     try:
         expire_stale_developing_issues(db, utcnow())
-        db.commit()
     except Exception:
         logger.exception("expire_stale_developing_issues failed (non-fatal)")
+    # Own try/except so this always fires regardless of which call above
+    # raised — otherwise a raise between check_roll_call_signals'
+    # db.add()/flush() and this commit silently dropped the flushed-but-
+    # uncommitted new row on the two early-abort paths below (neither
+    # commits on its own; refresh_action_issues' finally: db.close() would
+    # discard it). Self-healing either way (the next hourly poll re-drafts
+    # the same vote), but wasting a full LLM draft + grounding pass isn't.
+    try:
+        db.commit()
+    except Exception:
+        logger.exception("Commit after roll-call-signal stage failed (non-fatal)")
 
     # 1. Fetch articles
     _set_refresh_state(stage="fetch")
@@ -5254,26 +5303,7 @@ def _run_refresh(db: Session) -> int:
     # the public page (two simultaneous #4s, 2026-07 audit). Issues placed
     # by this run keep their relative order first; spared survivors follow.
     still_current = [r for r in all_current if r.is_current]
-    touched = sorted(
-        (r for r in still_current if r.id in _matched_issue_ids),
-        key=lambda r: r.rank or 0,
-    )
-    # Spared developing issues (not yet promoted or expired) rank after
-    # every confirmed issue, never competing with real top stories on
-    # their placeholder rank — see the approved plan's frontend design
-    # point. Split explicitly rather than relying on the placeholder rank
-    # value alone to sort last.
-    spared_confirmed = sorted(
-        (r for r in still_current
-         if r.id not in _matched_issue_ids and r.status != ActionIssueStatus.DEVELOPING),
-        key=lambda r: r.rank or 0,
-    )
-    spared_developing = sorted(
-        (r for r in still_current
-         if r.id not in _matched_issue_ids and r.status == ActionIssueStatus.DEVELOPING),
-        key=lambda r: r.rank or 0,
-    )
-    for new_rank, row in enumerate(touched + spared_confirmed + spared_developing, start=1):
+    for new_rank, row in enumerate(_rank_ordered_issues(still_current, _matched_issue_ids), start=1):
         row.rank = new_rank
 
     db.commit()

@@ -13,6 +13,8 @@ from app.models import (
     ExploreDocument,
     Justice,
     LlmGenerationSample,
+    MonitorStatus,
+    MonitorUpdate,
     NationalMonitor,
     Representative,
     Senator,
@@ -36,6 +38,7 @@ from app.pipeline.analyze.action_center import (
     _apply_matched_issue_update,
     _promote_developing_issue,
     _bluesky_eligible_issues,
+    _rank_ordered_issues,
     _retire_untouched_issues,
     _retry_until_grounded,
     _record_generation_sample,
@@ -373,6 +376,42 @@ class TestNationalMonitorCreation:
         # 3 days total (today, yesterday, day before). Min is 4.
         added_objects = [call.args[0] for call in mock_db.add.call_args_list]
         assert not any(isinstance(obj, NationalMonitor) for obj in added_objects)
+
+    @patch("app.pipeline.analyze.action_center.call_llm", return_value=None)
+    @patch("app.pipeline.analyze.action_center.get_embedding_model")
+    def test_developing_issue_is_never_written_as_a_monitor_update(
+        self, mock_get_model, mock_call_llm, db_session,
+    ):
+        """A hedged, unconfirmed, single-source DEVELOPING draft must not
+        surface publicly via a MonitorUpdate before press corroborates it
+        — same reasoning as excluding it from Bluesky/full-story. Uses a
+        real DB session and an EXISTING monitor the issue would otherwise
+        auto-match (identical embeddings, well above _MONITOR_ISSUE_SIM_
+        HIGH) — a single unmatched issue alone can't create/update
+        anything regardless of status, so that alone wouldn't have caught
+        a missing status filter here."""
+        mock_model = MagicMock()
+        mock_model.encode.return_value = np.array([[1.0] * 4], dtype=np.float32)
+        mock_get_model.return_value = mock_model
+
+        today = "2026-03-13"
+        monitor = NationalMonitor(
+            slug="ongoing-story", title="An ongoing story",
+            description="Long-running coverage.", status=MonitorStatus.ACTIVE,
+            last_article_date="2026-03-12",
+        )
+        db_session.add(monitor)
+        db_session.add(ActionIssue(
+            date=today, rank=1, title="An ongoing story", summary="s",
+            is_current=True, status=ActionIssueStatus.DEVELOPING,
+            source_urls=json.dumps(["https://www.senate.gov/vote.xml"]),
+            source_names=json.dumps(["Senate.gov roll call record"]),
+        ))
+        db_session.flush()
+
+        _update_national_monitors(today, db_session)
+
+        assert db_session.query(MonitorUpdate).count() == 0
 
     def test_lifecycle_closing_and_deletion(self):
         """Monitors should close after 30 days, and delete if they had few updates."""
@@ -2244,6 +2283,35 @@ class TestPromoteDevelopingIssue:
         assert match.rank == 2
         assert match.date == "2026-08-30"
         assert match.is_current is True
+
+
+class TestRankOrderedIssues:
+    """A hedged, unconfirmed DEVELOPING draft must never crowd out a real
+    top story — spared developing issues always sort after every spared
+    confirmed issue, regardless of their placeholder rank value."""
+
+    def test_touched_issues_keep_relative_order_first(self):
+        a = ActionIssue(id=1, rank=5, status=ActionIssueStatus.CONFIRMED)
+        b = ActionIssue(id=2, rank=1, status=ActionIssueStatus.CONFIRMED)
+        ordered = _rank_ordered_issues([a, b], matched_issue_ids={1, 2})
+        assert [r.id for r in ordered] == [2, 1]
+
+    def test_spared_developing_sorts_after_spared_confirmed_despite_a_lower_rank_value(self):
+        developing = ActionIssue(id=1, rank=1, status=ActionIssueStatus.DEVELOPING)
+        confirmed = ActionIssue(id=2, rank=999, status=ActionIssueStatus.CONFIRMED)
+        ordered = _rank_ordered_issues(
+            [developing, confirmed], matched_issue_ids=set(),
+        )
+        assert [r.id for r in ordered] == [2, 1]
+
+    def test_touched_then_spared_confirmed_then_spared_developing(self):
+        touched = ActionIssue(id=1, rank=3, status=ActionIssueStatus.CONFIRMED)
+        spared_confirmed = ActionIssue(id=2, rank=1, status=ActionIssueStatus.CONFIRMED)
+        spared_developing = ActionIssue(id=3, rank=1, status=ActionIssueStatus.DEVELOPING)
+        ordered = _rank_ordered_issues(
+            [spared_developing, spared_confirmed, touched], matched_issue_ids={1},
+        )
+        assert [r.id for r in ordered] == [1, 2, 3]
 
 
 class TestBlueskyEligibleIssues:

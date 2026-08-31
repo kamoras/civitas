@@ -98,7 +98,7 @@ def _vote_source_text(vote: dict) -> str:
         f"Roll call vote {vote.get('rollNumber')}, {vote.get('congress')}th "
         f"Congress, session {vote.get('session')}, dated {vote.get('voteDate')}. "
         f"Question: {vote.get('question', '')}. "
-        f"Document: {vote.get('documentTitle', '')}. "
+        f"Document: {vote.get('documentTitle', '')} ({vote.get('documentName', '')}). "
         f"Result: {yeas} Yea, {nays} Nay, {not_voting} Not Voting."
     )
 
