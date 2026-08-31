@@ -70,9 +70,8 @@ AMOUNT_RE = re.compile(r"\$?([\d,]+)")
 
 # Parenthetical suffixes real company names carry ("Kroger Co (The)",
 # "Cigna Group (The)") that TICKER_RE's own shape can't distinguish from
-# a genuine 1-5 letter ticker — confirmed live on a presidential 278-T
-# (2026-08 audit): "KROGER CO (THE)" and "CIGNA GROUP (THE)" both stored
-# ticker="THE". No real US equity ticker is the word "the".
+# a genuine 1-5 letter ticker, storing ticker="THE" instead. No real US
+# equity ticker is the word "the".
 _NON_TICKER_PARENS = {"THE"}
 
 
@@ -88,10 +87,10 @@ def extract_ticker(text: str) -> str | None:
 # the same documented-data-format exception OWNER_CODES and
 # TXN_TYPE_PATTERNS above already rely on.
 #
-# Until 2026-07-31 a single-figure cell simply failed to parse and the whole
-# row was dropped, so a member's (or the president's) largest disclosed
-# transactions were the ones silently missing from the record — precisely
-# inverted from what a reader would assume a gap meant.
+# Without this, a single-figure cell fails to parse and the whole row is
+# dropped, so a member's (or the president's) largest disclosed
+# transactions become the ones silently missing from the record —
+# precisely inverted from what a reader would assume a gap meant.
 OPEN_ENDED_AMOUNT_RE = re.compile(r"\bover\b|\bor more\b|\+\s*$", re.I)
 
 
@@ -235,9 +234,9 @@ def parse_table_rows(table: list[list[str | None]]) -> list[TradeRow]:
 # Anchoring the amount pair to this trailing segment (rather than
 # scanning the whole line, as the old fallback below still does) is what
 # keeps a leading row number from being read as part of the dollar
-# amount — confirmed live: "1 Goldman Sachs Group Inc purchase
-# 6/23/2026) No] $1,001 - $15,000" first extracted (1, 6) as the amount
-# pair (from the row number and the date) before this fix.
+# amount: without it, a line like "1 Goldman Sachs Group Inc purchase
+# 6/23/2026) No] $1,001 - $15,000" extracts (1, 6) — the row number and
+# the date — as the amount pair instead.
 _OCR_LINE_RE = re.compile(
     r"(?P<asset>[A-Za-z].*?)(?:\s|[\[\]{}|:.,])*(?P<type>purchase|sale(?:\s*\(partial\))?|exchange)\b[^\d$]*"
     r"(?P<date>\d{1,2}/\d{1,2}/\d{2,4})[^\d$]*"
@@ -263,11 +262,10 @@ def _parse_ocr_line(line: str) -> TradeRow | None:
         except ValueError:
             return None
         if low > high:
-            # A misread digit in one bound (confirmed live: "$31,001 -
-            # $15,000") is a fact about tesseract, not about the filing —
-            # every real bracket on this form has low <= high, so this
-            # is dropped rather than stored as a disclosed range it
-            # never was.
+            # A misread digit in one bound (e.g. "$31,001 - $15,000") is
+            # a fact about tesseract, not about the filing — every real
+            # bracket on this form has low <= high, so this is dropped
+            # rather than stored as a disclosed range it never was.
             return None
         return TradeRow(
             ticker=extract_ticker(asset_name),

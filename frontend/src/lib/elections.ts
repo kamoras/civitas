@@ -6,7 +6,8 @@
 import type { CandidateSummary } from "@/types/election";
 
 /** The minimal race shape the label/sort helpers need — lets tests and
- * callers pass either RaceSummary or RaceDetail. */
+ * callers pass any of the race types (RaceSummary, RaceWithCandidates)
+ * without depending on their full shape. */
 export interface RaceLike {
   /** "S" = Senate, "H" = House — FEC office codes. */
   office: string;

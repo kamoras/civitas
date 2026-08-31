@@ -17,7 +17,17 @@ Both checks compare generated text against ONLY the source material it
 was generated from — nothing here encodes what the text should say.
 """
 
+import calendar
+import logging
 import re
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+from app.pipeline.analyze import action_metrics
+
+logger = logging.getLogger(__name__)
+
+_US_EAST = ZoneInfo("America/New_York")
 
 # Digit groups, tolerant of thousands separators and decimals:
 # "120,000" -> "120000", "2.5" -> "2.5", "$67M" -> "67".
@@ -277,6 +287,50 @@ def editorializing_language(generated: str) -> list[str]:
     established fact rather than reporting only what was said or done.
     """
     return sorted({m.group(0) for m in _EDITORIALIZING_RE.finditer(generated or "")})
+
+
+# Deliberately NOT part of hedge_and_editorializing_violations, and not a
+# rejection reason anywhere — every other list in this module started life
+# as a live failure a human actually saw published, then got promoted to a
+# blocking check (see hedge_language/editorializing_language's own history
+# in their docstrings). This one is the opposite direction: a rule added
+# proactively (2026-08, from a craft-writing review) with no observed live
+# incident yet showing this model actually reaches for one of these instead
+# of a real number. Measure it first via action_metrics
+# (intensifier_word_used_{surface}); only promote it to a blocking check if
+# that data shows the same reactive pattern the others did.
+_INTENSIFIER_RE = re.compile(
+    r"\b(?:significant(?:ly)?|substantial(?:ly)?|sweeping|dramatic(?:ally)?|"
+    r"major|massive|considerable|extensive|numerous|widespread)\b",
+    re.IGNORECASE,
+)
+
+
+def intensifier_words(generated: str) -> list[str]:
+    """Vague-magnitude words ("significant," "sweeping," "major") that a
+    specific number from the source material could replace. Observational
+    only — see the comment above this function for why it isn't a
+    rejection reason.
+    """
+    return sorted({m.group(0).lower() for m in _INTENSIFIER_RE.finditer(generated or "")})
+
+
+def log_intensifier_usage(surface: str, generated: str, source: str) -> None:
+    """Non-blocking metric: did the generated text reach for a vague
+    intensifier in a piece whose source material actually had a number it
+    could have used instead? Only counts that specific case — an
+    intensifier with no number anywhere in the source isn't necessarily a
+    missed opportunity. Never raises; a metrics failure must not affect
+    publishing.
+    """
+    try:
+        if not intensifier_words(generated) or not _DIGIT_GROUP_RE.search(source or ""):
+            return
+        from app.pipeline.analyze import action_metrics
+
+        action_metrics.increment(f"intensifier_word_used_{surface}")
+    except Exception:
+        pass
 
 
 # Electoral-contest framing in the GENERATED text — a claim that someone is
@@ -599,7 +653,9 @@ def grounding_violations(generated: str, source: str) -> list[str]:
     return problems
 
 
-def hedge_and_editorializing_violations(generated: str) -> list[str]:
+def hedge_and_editorializing_violations(
+    generated: str, allow_hedging: bool = False,
+) -> list[str]:
     """Human-readable list of hedge-phrase and editorializing findings, empty
     when clean.
 
@@ -610,16 +666,24 @@ def hedge_and_editorializing_violations(generated: str) -> list[str]:
     unchecked for months after the checks were added elsewhere (2026-07).
     Centralizing the formatting here means a future third check only needs
     to be added in one place.
+
+    `allow_hedging=True` skips the hedge/editorializing checks only — for
+    early_signal.py's primary-source-only "developing" stories, where
+    stating that press coverage hasn't yet appeared IS the correct, honest
+    voice, not a defect. The remaining three checks (placeholders, vague
+    office/person references) stay unconditional: none of them are ever
+    desirable, regardless of confidence tier.
     """
     problems = []
-    hedges = hedge_language(generated)
-    if hedges:
-        problems.append(f"hedging attribution phrases ({', '.join(hedges)})")
-    editorial = editorializing_language(generated)
-    if editorial:
-        problems.append(
-            f"language evaluating whether an action was justified ({', '.join(editorial)})"
-        )
+    if not allow_hedging:
+        hedges = hedge_language(generated)
+        if hedges:
+            problems.append(f"hedging attribution phrases ({', '.join(hedges)})")
+        editorial = editorializing_language(generated)
+        if editorial:
+            problems.append(
+                f"language evaluating whether an action was justified ({', '.join(editorial)})"
+            )
     placeholders = placeholder_tokens(generated)
     if placeholders:
         problems.append(
@@ -636,3 +700,174 @@ def hedge_and_editorializing_violations(generated: str) -> list[str]:
             f"vague anaphoric reference to a person ({', '.join(vague_people)})"
         )
     return problems
+
+
+def validate_facts(facts: list, source_text: str | None = None) -> list:
+    """Drop hallucinated or self-referential facts before saving.
+
+    Lives here (not in action_center.py, its original home) rather than
+    behind a function-local import, so early_signal.py can reuse it
+    without an action_center<->early_signal circular import — a shared
+    fact validator belongs in this module alongside the other generated-
+    text-vs-source checks, not gated behind whichever caller happened to
+    need it first.
+
+    Catches five LLM failure modes:
+    - Self-comparison: "Meta surpasses Meta Platforms" — same root word on both sides
+    - Non-list return: LLM occasionally wraps facts in a dict or returns a string
+    - Stale future dates: fact says "will remain until December 2025" in June 2026
+    - Fabricated statistics: when ``source_text`` (the source text the LLM
+      was shown) is provided, any fact containing a digit group that never
+      appears in the source is dropped. The prompt already forbids inferred
+      numbers; this enforces it mechanically.
+    - Meta-facts: "No specific dates were provided in the articles" describes
+      the source material's limits, not something that happened in the world —
+      the prompt's fact rules already forbid this, but unlike the other
+      three prompt-only rules above it had no mechanical backstop. It's the
+      single most common failure mode of the current small local model:
+      self-referencing the source material as the fact's subject instead of
+      describing an actual event.
+    """
+    if not isinstance(facts, list):
+        return []
+
+    _DATE_MONTH_YEAR = re.compile(
+        r'\b(January|February|March|April|May|June|July|August|'
+        r'September|October|November|December)\s+(\d{4})\b',
+        re.IGNORECASE,
+    )
+    _FORWARD_PHRASES = ("will remain", "is expected", "continue", "until ", "through ", "by the end")
+    _META_PHRASES = (
+        "in the article", "in the articles", "in the coverage", "in the report",
+        "in the reporting", "the coverage ", "the reporting ",
+        # "The articles" can also be the sentence's grammatical SUBJECT
+        # ("The articles focused on...", "The articles referenced..."),
+        # which the "in the articles" form above doesn't catch.
+        "the article ", "the articles ",
+    )
+    # A second meta-fact shape _META_PHRASES doesn't cover: reporting that a
+    # detail is ABSENT, rather than naming "the article(s)" as the subject
+    # ("No specific date was provided...", "Specific names were not
+    # disclosed..."). Two grammatical shapes cover this (negation in the
+    # subject via "no", negation in the verb via "not"); both require one
+    # of the qualifying words below so a genuine positive fact is never
+    # caught, only the quantified-absence claim is. Narrow and
+    # evidence-based on purpose, like _HEDGE_PHRASE_RE above — widen with
+    # real examples, not speculative phrasing.
+    _ABSENCE_NO_SUBJECT_RE = re.compile(
+        r"\bno (?:specific|official|further|additional)\b[^.]{0,50}\b(?:was|were)\s+"
+        r"(?:provided|disclosed|specified|released|given|available)\b",
+        re.IGNORECASE,
+    )
+    _ABSENCE_NOT_VERB_RE = re.compile(
+        r"\b(?:specific|official)\b[^.]{0,50}\b(?:was|were)\s+not\s+"
+        r"(?:provided|disclosed|specified|released|given|available)\b",
+        re.IGNORECASE,
+    )
+    _today = datetime.now(_US_EAST).date()
+    _month_index = {m: i for i, m in enumerate(calendar.month_name) if m}
+
+    clean = []
+    for fact in facts:
+        if not isinstance(fact, str) or not fact.strip():
+            continue
+        lower = fact.lower()
+
+        # Literal unfilled placeholders — "[date]", "[name]". Every other
+        # check here is digit-based, so a placeholder with no digits in it
+        # would otherwise slip through untouched.
+        placeholders = placeholder_tokens(fact)
+        if placeholders:
+            logger.warning(
+                "Dropping fact with placeholder tokens (%s): %s",
+                ", ".join(placeholders), fact[:120],
+            )
+            action_metrics.increment("facts_dropped_placeholder")
+            continue
+
+        # Family-relationship claims with no family vocabulary anywhere in
+        # the source articles — same fabricated-relationship class as the
+        # electoral-claims guard.
+        if source_text and ungrounded_relationship_claims(fact, source_text):
+            logger.warning(
+                "Dropping fact with ungrounded family relationship: %s", fact[:120],
+            )
+            action_metrics.increment("facts_dropped_relationship")
+            continue
+
+        # "Former <office>" status the source articles never asserted — the
+        # model demoting a sitting official from its own stale training data.
+        if source_text and ungrounded_former_official_claims(fact, source_text):
+            logger.warning(
+                "Dropping fact with ungrounded 'former' office-holder status: %s", fact[:120],
+            )
+            action_metrics.increment("facts_dropped_former_status")
+            continue
+
+        # Detect self-referential comparisons: extract capitalized words and check
+        # if any word root appears on both sides of a comparison verb.
+        comparison_verbs = ("surpass", "overtake", "exceed", "beat", "top", "outpace")
+        if any(verb in lower for verb in comparison_verbs):
+            words = re.findall(r"\b[A-Z][a-z]{3,}\b", fact)
+            roots = [w.lower()[:6] for w in words]  # stem to first 6 chars
+            if len(roots) != len(set(roots)):  # duplicate root → self-comparison
+                logger.warning(
+                    "Dropping self-referential fact: %s", fact[:120],
+                )
+                action_metrics.increment("facts_dropped_self_comparison")
+                continue
+
+        # Detect stale future-tense facts with past dates — e.g. the LLM writes
+        # "the ban will remain until December 2025" when it's now June 2026.
+        stale = False
+        if any(phrase in lower for phrase in _FORWARD_PHRASES):
+            for m in _DATE_MONTH_YEAR.finditer(fact):
+                month_num = _month_index.get(m.group(1).capitalize(), 0)
+                if month_num == 0:
+                    continue
+                try:
+                    mentioned = datetime(int(m.group(2)), month_num, 1).date()
+                    if mentioned < _today:
+                        logger.warning(
+                            "Dropping stale future-dated fact: %s", fact[:120],
+                        )
+                        action_metrics.increment("facts_dropped_stale_date")
+                        stale = True
+                        break
+                except ValueError:
+                    pass
+        if stale:
+            continue
+
+        # Detect meta-facts that describe the source material's limits rather
+        # than an actual event — see the docstring for real production examples.
+        if any(phrase in lower for phrase in _META_PHRASES):
+            logger.warning(
+                "Dropping meta-fact referencing the coverage itself: %s", fact[:120],
+            )
+            action_metrics.increment("facts_dropped_meta")
+            continue
+
+        # Second meta-fact shape: reports the ABSENCE of a detail rather
+        # than naming "the article(s)" as subject — see the docstring.
+        if _ABSENCE_NO_SUBJECT_RE.search(fact) or _ABSENCE_NOT_VERB_RE.search(fact):
+            logger.warning(
+                "Dropping fact reporting an absence of information: %s", fact[:120],
+            )
+            action_metrics.increment("facts_dropped_absence_of_info")
+            continue
+
+        # Fabricated-statistic check against the articles the LLM was shown.
+        if source_text:
+            novel = ungrounded_numbers(fact, source_text)
+            if novel:
+                logger.warning(
+                    "Dropping fact with numbers not in source (%s): %s",
+                    ", ".join(novel), fact[:120],
+                )
+                action_metrics.increment("facts_dropped_ungrounded_number")
+                continue
+
+        clean.append(fact.strip())
+
+    return clean

@@ -7,7 +7,6 @@ vi.mock("./CandidateCard", () => ({
   default: ({ candidate }: { candidate: { name: string } }) => <div>{candidate.name}</div>,
 }));
 vi.mock("./RaceFinancials", () => ({ default: () => <div data-testid="financials" /> }));
-vi.mock("./CoverageFeed", () => ({ default: () => <div data-testid="coverage-feed" /> }));
 
 function candidate(overrides: Partial<RaceWithCandidates["candidates"][number]>) {
   return {
@@ -51,7 +50,6 @@ describe("RaceFullDetail", () => {
             candidate({ id: "other", name: "Paper Pete" }),
           ],
         })}
-        coverage={[]}
       />
     );
 
@@ -63,33 +61,16 @@ describe("RaceFullDetail", () => {
   });
 
   it("shows a fallback message with no candidates and no fundraising section", () => {
-    render(<RaceFullDetail race={race()} coverage={[]} />);
+    render(<RaceFullDetail race={race()} />);
 
     expect(screen.getByText(/No candidates on record/)).toBeInTheDocument();
     expect(screen.queryByTestId("financials")).not.toBeInTheDocument();
   });
 
-  it("only renders the per-race coverage section when there is coverage to show", () => {
-    const { rerender } = render(<RaceFullDetail race={race()} coverage={[]} />);
-    expect(screen.queryByTestId("coverage-feed")).not.toBeInTheDocument();
+  it("points to this race's badge in the page-level coverage feed instead of repeating it", () => {
+    render(<RaceFullDetail race={race({ office: "H", district: 6 })} />);
 
-    rerender(
-      <RaceFullDetail
-        race={race()}
-        coverage={[
-          {
-            id: 1,
-            sourceType: "news",
-            sourceName: "Times",
-            title: "t",
-            url: "https://example.com",
-            summary: "s",
-            author: null,
-            publishedAt: null,
-          },
-        ]}
-      />
-    );
-    expect(screen.getByTestId("coverage-feed")).toBeInTheDocument();
+    expect(screen.getByText(/News coverage of this race is tagged/)).toBeInTheDocument();
+    expect(screen.getByText("HOUSE-6")).toBeInTheDocument();
   });
 });

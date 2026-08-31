@@ -16,11 +16,11 @@ page, consistent format across election cycles (verified against real
 PDFs from two different elections: 2026 primary, 36.7MB / 64 pages, and
 2024 general, 5MB / 144 pages).
 
-REAL DOCUMENT, NOT ASSUMED: the November 2026 general election guide is not
-published yet at the standard CDN path (confirmed: HTTP 403 as of
-2026-08-06 — same timing constraint every other source in this codebase
-has for the upcoming general). Built and verified against the 2024 general
-guide instead, which has real propositions (the 2026 primary guide that IS
+REAL DOCUMENT, NOT ASSUMED: the 2026 general election guide isn't
+published yet at the standard CDN path when this is written, the same
+timing constraint every other source in this codebase has for a general
+still ahead of it. Built and verified against the 2024 general guide
+instead, which has real propositions (the 2026 primary guide that IS
 already published has none — CA propositions are a general-election-cycle
 thing, not guaranteed on primaries). The parser targets the DOCUMENT
 FORMAT, which is consistent guide-to-guide, not this specific election's

@@ -13,11 +13,11 @@ Flow:
   8. Persist as ActionIssue rows for the current date
 """
 
-import calendar
 import json
 import logging
 import re
 import threading
+from dataclasses import dataclass, field
 from functools import lru_cache
 import time
 import uuid
@@ -26,13 +26,14 @@ from zoneinfo import ZoneInfo
 
 import httpx
 import numpy as np
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
 from app.models import (
     ActionIssue,
+    ActionIssueStatus,
     ExploreDocument,
     Justice,
     LlmGenerationSample,
@@ -43,6 +44,26 @@ from app.models import (
     Representative,
     Senator,
 )
+from app.pipeline.analyze import action_metrics
+from app.pipeline.analyze.early_signal import (
+    CONFIRMATION_WINDOW_HOURS,
+    check_roll_call_signals,
+    expire_stale_developing_issues,
+)
+from app.pipeline.analyze.grounding import (
+    grounding_violations,
+    hedge_and_editorializing_violations,
+    log_intensifier_usage,
+    repeated_sentences,
+    ungrounded_electoral_claims,
+    ungrounded_former_official_claims,
+    ungrounded_party_claims,
+    ungrounded_relationship_claims,
+    ungrounded_statistics,
+    ungrounded_titled_names,
+    validate_facts,
+)
+from app.pipeline.analyze.ollama_client import call_llm, extract_json
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.pipeline.fetch.news_feeds import (
     MAX_SUMMARY_CHARS,
@@ -130,11 +151,9 @@ _US_CIVIC_PROTOTYPES = [
     "US healthcare Medicare Medicaid insurance federal program policy",
 ]
 
-# Measured under the similarity model (2026-07-22, real July articles):
-# civic headlines score 0.354-0.583 against the prototypes, non-civic
-# (World Cup / pop tour / recipes) 0.027-0.053 — threshold sits mid-gap
-# with wide margin on both sides. (Was 0.22 under the retrieval model,
-# where the same gap was paper-thin.)
+# Measured under the similarity model: civic headlines score 0.354-0.583
+# against the prototypes, non-civic (sports/entertainment/lifestyle)
+# 0.027-0.053 — threshold sits mid-gap with wide margin on both sides.
 POLICY_RELEVANCE_THRESHOLD = 0.20
 CLUSTER_TITLE_THRESHOLD = 0.40
 # Floor of the self-calibrating pass-2 merge scan (see _cluster_articles).
@@ -155,26 +174,23 @@ CLUSTER_CENTROID_MERGE_THRESHOLD = 0.20
 # score distributions are being logged (see _rank_clusters).
 MAX_ISSUES = 2
 
-# v20 -> v21 (2026-07 audit M6): added fact rule (6) against cross-topic
-# facts. Live issues carried facts from unrelated articles that survived
-# cluster-coherence filtering (a Zelenskyy army-chief fact inside a
-# Netanyahu-arrest issue; a PhRMA fact inside a cyclospora-outbreak
-# issue). A mechanical per-fact check was evaluated first and rejected on
-# measurement: fact-vs-title cosine on the production model does NOT
-# separate contaminants from legitimate facts (measured on the live
-# cases: contaminants 0.72-0.76, legitimate facts 0.73-0.97 — overlapping
-# ranges), so this class is addressed at the prompt and disclosed as not
-# mechanically enforced.
+# Fact rule (6) guards against cross-topic contamination: facts pulled
+# from an unrelated article that survived cluster-coherence filtering. A
+# mechanical per-fact check was evaluated and rejected on measurement —
+# fact-vs-title cosine on the production model doesn't separate
+# contaminants from legitimate facts (contaminants scored 0.72-0.76,
+# legitimate facts 0.73-0.97, overlapping ranges) — so this class is
+# addressed at the prompt only, and disclosed as not mechanically enforced.
 ACTION_CENTER_PROMPT_VERSION = "action-v21"
 
 # Minimum age (from created_at, i.e. first_surfaced) before an issue is
 # eligible for retirement just for not re-matching this run — see the
-# retirement pass in _run_refresh for the full reasoning (2026-08 audit).
+# retirement pass in _run_refresh for the full reasoning.
 _RETIREMENT_GRACE_HOURS = 24
 
 # No-signature fallback for topic matching (rows with no stored facts —
-# rare). Measured under the similarity model (2026-07-22): a reworded
-# same headline scores 0.823, a different-story same-vocab pair 0.552 —
+# rare). Measured under the similarity model: a reworded same headline
+# scores 0.823, a different-story same-vocab pair 0.552 —
 # 0.65 splits them. Signature overlap (see _signatures_match) remains
 # the primary same-story decider; this fires only when signatures are
 # unavailable. (The old 0.82 was calibrated to the retrieval model's
@@ -183,15 +199,12 @@ TOPIC_CHANGE_THRESHOLD = 0.65
 
 # Near-identical-title floor for treating a title-cosine match as
 # conclusive on its own, bypassing signature overlap entirely. Measured
-# against 120 real production issues (2026-08-22 audit, prompted by the
-# beef-tariff duplicate-row incident): every pair scoring >= 0.94 was a
-# genuine same-development duplicate (e.g. "...grant changes" vs "...grant
-# overhaul" at 0.957, "Trump's attorney general" vs "Trump attorney
-# general" at 0.994), while pairs scoring <= 0.883 included legitimately
-# DIFFERENT developments in the same ongoing saga (e.g. a funding bill's
-# separate House/Senate votes, or sequential distinct rulings in the same
-# court case) that must stay separate rows. 0.92 sits in that gap with
-# margin on both sides.
+# against 120 real production issues: pairs scoring >= 0.94 were reliably
+# a genuine same-development duplicate (a reworded headline for the same
+# story), while pairs scoring <= 0.883 included legitimately DIFFERENT
+# developments in the same ongoing saga (e.g. a bill's separate House and
+# Senate votes, or sequential distinct court rulings) that must stay
+# separate rows. 0.92 sits in that gap with margin on both sides.
 _NEAR_IDENTICAL_TITLE_THRESHOLD = 0.92
 
 
@@ -208,19 +221,17 @@ def _full_story_should_invalidate(
     is only ever generated once per issue (Stage 4 filters on
     ``full_story IS NULL``), so if the row's content is silently replaced
     without also clearing full_story, the page keeps showing old text about
-    a different event indefinitely. (2026-07 bug: a McConnell hospitalization
-    story's full_story survived a re-match onto a later Lindsey Graham
-    obituary issue.)
+    a different event indefinitely.
     """
     return old_title != new_title or old_facts != new_facts
 
 # Tokens that appear in most political stories and therefore carry no
 # STORY identity — a signature made of these matches everything. Identity
-# comes from specific entities and numbers ("216-212", "Taylor Farms",
-# "Netanyahu"), never from the shared civic vocabulary. Calibrated against
-# real production pairs (2026-07 audit, see _issue_signature): with these
-# stripped, two same-story rows measured overlap 0.78/1.00 while a
-# different-story pair whose TITLES scored 0.88 cosine measured 0.0.
+# comes from specific entities and numbers, never from shared civic
+# vocabulary. Calibrated against real production pairs (see
+# _issue_signature): with these stripped, two same-story rows measured
+# overlap 0.78-1.00 while a different-story pair whose TITLES scored 0.88
+# cosine measured 0.0.
 _SIGNATURE_GENERIC_TOKENS = {
     "the", "a", "an", "this", "these", "those", "several", "multiple",
     "recent", "new", "over", "under", "after", "before", "while", "with",
@@ -264,14 +275,11 @@ def _issue_signature(title: str, facts: list[str]) -> set[str]:
 # — and the near-duplicate text gate in bluesky_poster.py is the backstop if a
 # synonym swap ("approved" for "passed") slips one through here.
 #
-# 2026-08-26 live miss: "Democratic-controlled states filed a new lawsuit
-# challenging the executive order" was genuinely new information (no prior
-# fact mentioned a new suit) but added no new signature token ("Democratic"
-# is stripped as generic civic vocabulary) and "filed" wasn't tracked here
-# either — the repost gate saw nothing new and suppressed an update a
-# reader should have seen. "lifted" added the same day from the same
-# issue's real text ("a federal judge... lifted the nationwide blocking
-# order"), a real judicial-outcome verb missing for the same reason.
+# This list needs to stay broad: a new lawsuit being filed or a court
+# order being lifted is genuinely new information even when it introduces
+# no new named entity or number, so an incomplete marker set silently
+# suppresses updates a reader should see. Extend it whenever a real
+# outcome verb turns out to be missing.
 _DEVELOPMENT_MARKERS = frozenset({
     # Executive and administrative action
     "veto", "vetoed", "vetoes", "override", "overrode", "overridden",
@@ -303,35 +311,28 @@ def _bsky_repost_has_new_information(old_facts_json: str, new_facts: list[str]) 
     """True if the new facts introduce at least one specific named entity or
     figure — or one story development — the old ones didn't have.
 
-    _run_refresh's matching loop previously allowed a Bluesky repost purely
-    because a matched issue's primary_article_date advanced — but ongoing/
-    recap coverage of the same story often just rewords the same names and
-    numbers under a fresher timestamp, so that alone let a story repost
-    with nothing new to say (2026-07: reported live as Bluesky repeatedly
-    posting about the same story). Reuses the same entity/number signature
-    _issue_signature already computes for story-identity matching, but over
-    FACTS ONLY — not title, which is regenerated fresh by the LLM every run
-    and can shift wording/capitalization for the exact same underlying
-    facts (a live recap of the Taylor Farms cyclospora story retitled
-    "Cyclosporiasis outbreak investigation updates" would otherwise read as
-    new information purely from its own title). A repost is only warranted
-    when the new facts add something the old ones lacked, not just a later
-    publish date or a reworded headline.
+    A matched issue can requalify for a Bluesky repost purely because its
+    primary_article_date advanced, but ongoing/recap coverage of the same
+    story often just rewords the same names and numbers under a fresher
+    timestamp — reposting on that basis alone says nothing new. Reuses the
+    same entity/number signature _issue_signature already computes for
+    story-identity matching, but over FACTS ONLY — not title, which is
+    regenerated fresh by the LLM every run and can shift wording for the
+    exact same underlying facts. A repost is only warranted when the new
+    facts add something the old ones lacked, not just a later publish date
+    or a reworded headline.
 
     "Something" is a new signature token (name, figure) OR a new development
-    marker — the signature alone answered "is a new PARTICIPANT involved?"
-    when the question is "did anything HAPPEN?", so state changes that name
-    nobody new (a veto, a court blocking an order, a failed override) read as
-    pure rewords and suppressed the update. See _DEVELOPMENT_MARKERS.
+    marker — the signature alone answers "is a new PARTICIPANT involved?"
+    when the real question is "did anything HAPPEN?", so state changes that
+    name nobody new (a veto, a court blocking an order, a failed override)
+    would otherwise read as pure rewords. See _DEVELOPMENT_MARKERS.
 
-    2026-08-27 live case: old facts named "Saudi" (from "The Saudi
-    delegation referenced the agreement"); new facts spelled the same
-    country out as "Saudi Arabia". _issue_signature tokenizes word-by-word,
-    so the diff was the single token "arabia" — read as a brand-new named
-    entity when it's the same country already known, just referenced more
-    fully. A "new" token adjacent to an already-known token in a two-word
-    capitalized phrase in the new text is filtered out before deciding —
-    it's an expansion of an existing entity's name, not a new participant.
+    A two-word capitalized phrase in the new text where one word is already
+    known and the other is new (e.g. a country name spelled out more fully
+    than before) is filtered out before deciding — _issue_signature
+    tokenizes word-by-word, so an expanded reference to an already-known
+    entity would otherwise register as a brand-new participant.
     """
     old_facts = json.loads(old_facts_json or "[]")
     old_sig = _issue_signature("", old_facts)
@@ -354,22 +355,17 @@ def _retire_untouched_issues(
     """Flip is_current=False on rows this run didn't match, EXCEPT ones
     still younger than grace_cutoff — returns (n_retired, n_graced).
 
-    Extracted from _run_refresh (2026-08) for direct testability, same
-    precedent as _apply_matched_issue_update/_retry_until_grounded — this
-    is the exact mechanic _RETIREMENT_GRACE_HOURS controls, and a change
-    to that constant deserves a real test pinning what it actually does
-    rather than only a comment asserting it.
+    Extracted from _run_refresh for direct testability, same precedent as
+    _apply_matched_issue_update/_retry_until_grounded — this is the exact
+    mechanic _RETIREMENT_GRACE_HOURS controls, and a change to that
+    constant deserves a real test pinning what it actually does rather
+    than only a comment asserting it.
 
-    Also records issues_retired/issues_graced on action_metrics: every
-    other pipeline gate feeds admin_action_metrics, but retirement/grace
-    never did, which is exactly why _RETIREMENT_GRACE_HOURS (90min -> 24h,
-    2026-08) had no real history to validate against — there's no
-    retired_at column either, so free-text log lines were the only
-    record. This closes THAT gap; it isn't a claim that 24h is now proven
-    correct, so give it real time to accumulate before revisiting the
-    number.
+    Records issues_retired/issues_graced on action_metrics like every
+    other pipeline gate does, so a future change to _RETIREMENT_GRACE_HOURS
+    has real history to validate against instead of only free-text log
+    lines.
     """
-    from app.pipeline.analyze import action_metrics
 
     n_retired = n_graced = 0
     for row in all_current:
@@ -446,26 +442,19 @@ def _retry_until_grounded(
     local model doesn't reliably turn "don't hedge" into a fix on its own,
     but a worked example gives it a pattern to copy.
     """
-    from app.pipeline.analyze.grounding import (
-        grounding_violations,
-        hedge_and_editorializing_violations,
-    )
-    from app.pipeline.analyze.ollama_client import call_llm, extract_json
 
     for attempt in range(1, 3):
         logger.warning(
             "Issue text failed grounding for rank %d (attempt %d): %s — retrying",
             rank, attempt, "; ".join(reasons),
         )
-        # 2026-08 quality audit: this only ever addressed hedging/former-
-        # status/vague-office, but reasons can now also include the other
-        # four grounding_violations() categories (ungrounded numbers,
-        # titled names, electoral claims, family relationships, party
-        # affiliation) since the check they come from was extended to
-        # match what the Bluesky post already ran. A rejection reason the
-        # correction text never mentions gives the retry no signal on what
-        # to actually change, wasting the one extra attempt this loop
-        # exists to spend productively.
+        # The correction text below must name every category reasons can
+        # contain (hedging, former-status, vague-office, and the full
+        # grounding_violations() set — ungrounded numbers, titled names,
+        # electoral claims, family relationships, party affiliation) — a
+        # rejection reason the correction never mentions gives the retry no
+        # signal on what to actually change, wasting the one extra attempt
+        # this loop exists to spend productively.
         correction = (
             f"\n\nYour previous response was rejected because it contained "
             f"{'; '.join(reasons)}. Use ONLY information stated in the "
@@ -507,11 +496,10 @@ def _retry_until_grounded(
             retry_facts = _validate_facts(retry_result.get("facts", []), source_text=issue_source_text)
             retry_facts = [_fix_impossible_senate_vote_counts(f) for f in retry_facts]
             retry_combined = retry_summary + " " + " ".join(retry_facts)
-            # 2026-08 quality audit: was hedge/former-status only — a retry
-            # that fixed its hedging could still sail through with an
-            # ungrounded number, name, electoral claim, relationship, or
-            # party label untouched, since nothing here ever checked for
-            # those. Same fix as the first-attempt check above.
+            # Same full grounding_violations() check as the first attempt,
+            # not hedge/former-status alone — a retry that fixes its
+            # hedging could still sail through with an ungrounded number,
+            # name, electoral claim, relationship, or party label untouched.
             retry_all_reasons = (
                 hedge_and_editorializing_violations(retry_combined)
                 + grounding_violations(retry_combined, issue_source_text)
@@ -565,7 +553,6 @@ def _apply_matched_issue_update(
     model, and calls an LLM, so it can't reasonably be driven end-to-end in
     a unit test.
     """
-    from app.pipeline.analyze import action_metrics
 
     has_new_articles = primary_article_date > (match.primary_article_date or "1970-01-01")
     # A newer article date alone doesn't mean there's something NEW to
@@ -637,26 +624,63 @@ def _apply_matched_issue_update(
     return has_new_articles
 
 
+def _promote_developing_issue(
+    match: ActionIssue, new_values: dict, rank: int, today: str,
+    primary_article_date: str, facts: list, title: str,
+) -> bool:
+    """Promote a DEVELOPING (primary-source-only) issue to CONFIRMED once
+    a fresh news cluster matches it — a full content swap (the hedged
+    primary-source draft is superseded by real reporting), not a merge.
+
+    Delegates rank/date/is_current/previous_facts-snapshot/full-story-
+    invalidation/Bluesky-repost-eligibility bookkeeping to the existing
+    _apply_matched_issue_update rather than re-deriving any of it — one
+    function owns that logic, not two.
+    """
+    lead_hours = (
+        (utcnow() - match.created_at).total_seconds() / 3600
+        if match.created_at else 0.0
+    )
+    match.status = ActionIssueStatus.CONFIRMED
+    match.confirmed_at = utcnow()
+    match.confirmation_deadline = None
+    source_type = match.source_type or "unknown"
+    action_metrics.increment("early_signal_confirmed")
+    action_metrics.increment(f"early_signal_confirmed_{source_type}")
+    # Bucketed as a fraction of the confirmation window used, not raw
+    # hours — decile_bucket expects a 0-1 ratio, and "how much of the
+    # window elapsed before confirmation" is itself the more useful
+    # success metric (did press catch up quickly or right at the wire).
+    action_metrics.increment_bucket(
+        "early_signal_lead_time_fraction",
+        min(lead_hours / CONFIRMATION_WINDOW_HOURS, 1.0),
+    )
+    logger.info(
+        "Promoted developing issue %d to confirmed after %.1fh: '%s'",
+        match.id, lead_hours, title[:60],
+    )
+    return _apply_matched_issue_update(
+        match, new_values, rank, today, primary_article_date, facts, title,
+    )
+
+
 # Minimum signature containment for two issues to be the same story, and
 # the minimum shared-token count backing it (containment over a tiny
-# signature is noisy). Calibrated 2026-07 on real production pairs: the
-# two same-story pairs that WRONGLY became separate rows (defense bill
-# id394/id405, cyclospora id396/id401) measure 0.78 and 1.00; the
-# different-story pair that WRONGLY shared a row (post/permalink drift,
-# audit H1) measures 0.0 after generic-token stripping. Wide gap, so the
-# threshold sits in the middle of it.
+# signature is noisy). Calibrated on real production pairs: genuine
+# same-story pairs measured 0.78-1.00 containment after generic-token
+# stripping, while a different-story pair that wrongly shared a row
+# measured 0.0. Wide gap, so the threshold sits in the middle of it.
 _SIGNATURE_MATCH_MIN_CONTAINMENT = 0.35
 _SIGNATURE_MATCH_MIN_SHARED = 2
 
 # Candidate floor for topic matching by title similarity — a compute
 # guard, not a decider (signature overlap decides same-story; see
-# _run_refresh's matching loop). Measured under the similarity model
-# (2026-07-22, real production titles): SAME-story pairs score as low as
-# +0.134 (the cyclospora pair) while a fully unrelated pair scores
-# +0.082 — title cosine cannot decide identity under ANY model tested
-# (a different-story same-vocab pair outscored every same-story pair at
-# +0.552), which is exactly why signatures carry the decision. The floor
-# only excludes clearly-unrelated candidates from signature comparison.
+# _run_refresh's matching loop). Measured under the similarity model on
+# real production titles: title cosine cannot decide identity on its own
+# under any model tested — same-story pairs scored as low as +0.134 while
+# a different-story same-vocabulary pair outscored them at +0.552 — which
+# is exactly why signatures carry the decision. The floor only excludes
+# clearly-unrelated candidates from signature comparison.
 _TOPIC_MATCH_CANDIDATE_FLOOR = 0.10
 
 
@@ -677,12 +701,10 @@ def _is_exact_content_duplicate(
     """Byte-identical title+facts always means the same issue, checked
     BEFORE signature overlap. _signatures_match requires >=
     _SIGNATURE_MATCH_MIN_SHARED (2) tokens even for an exact match, but a
-    sparse, single-entity story (signature {'trump'}, nothing else
-    extractable) can never clear that floor — even against itself. Live
-    2026-07-23 bug: the same source article reprocessed an hour later
-    produced a second row (ids 420/421, "Republicans introduce crypto
-    legislation...") with title/facts equal but a 1-token signature, so it
-    silently created a duplicate instead of matching."""
+    sparse, single-entity story (e.g. one signature token, nothing else
+    extractable) can never clear that floor — even against itself, which
+    would otherwise let the same source article reprocessed later create
+    a duplicate row instead of matching the existing one."""
     return title == cand_title and facts == cand_facts
 
 
@@ -697,10 +719,9 @@ def _same_story(
 ) -> bool:
     """The single "is this the same real-world story" decision, shared by
     _find_matching_issue (write-time) and dedupe_near_identical_issues
-    (read-time) — 2026-08 audit: these two call sites used to hand-write
-    the same 4-condition boolean independently (on top of already sharing
-    _issue_signature/_signatures_match), which is exactly how they could
-    drift apart again. `sig`/`cand_sig` may be passed in precomputed
+    (read-time) so the two passes can't drift apart the way two
+    independent hand-written copies of the same 4-condition boolean would.
+    `sig`/`cand_sig` may be passed in precomputed
     (dedupe_near_identical_issues does this for all issues up front to
     avoid recomputing a signature per pair); left as None they're computed
     lazily here, only if the cheaper checks above don't already decide it —
@@ -726,42 +747,32 @@ def _same_story(
 def dedupe_near_identical_issues(issues: list["ActionIssue"]) -> list["ActionIssue"]:
     """One representative per cluster of near-identical titles (same
     _NEAR_IDENTICAL_TITLE_THRESHOLD/_is_exact_content_duplicate logic
-    _find_matching_issue and retire_duplicate_current_issues.py use),
-    keeping whichever cluster member has the latest created_at. Relative
-    order of the kept issues is preserved from the input.
+    _find_matching_issue uses), keeping whichever cluster member has the
+    latest created_at. Relative order of the kept issues is preserved
+    from the input.
 
-    2026-08-22: retiring a duplicate only removes it from is_current —
-    the homepage's recent-issues endpoint deliberately does NOT filter on
-    is_current (so a retired-for-real row doesn't vanish from the
-    record), which means a row retired specifically for BEING a
-    duplicate resurfaced there instead, undoing the whole point of
-    retiring it. Read-time dedup, not a second is_current flip, because
+    Retiring a duplicate only removes it from is_current — the homepage's
+    recent-issues endpoint deliberately does NOT filter on is_current (so a
+    retired-for-real row doesn't vanish from the record), so a row retired
+    specifically for BEING a duplicate would otherwise resurface there
+    anyway. Read-time dedup, not a second is_current flip, because
     "duplicate of something else" and "no longer current" are different
-    facts about a row and conflating them into one flag is exactly what
-    caused this.
+    facts about a row that shouldn't be conflated into one flag.
 
-    2026-08 audit: this pass only checked near-identical title / exact
-    content, missing the shared-source-URL and signature-overlap signals
-    _find_matching_issue gained from the #434 fix — so two rows that
-    write-time matching would treat as one story (same cited article,
-    reworded headline; or matching entities/numbers under a title cosine
-    too low to clear _NEAR_IDENTICAL_TITLE_THRESHOLD) could both survive
-    here as separate current rows. Calls the same _same_story predicate
-    _find_matching_issue calls (both were previously hand-writing the same
-    boolean independently, which is how they drifted apart in the first
-    place) rather than re-implementing the decision, so the two passes
-    cannot drift apart again.
+    Calls the same _same_story predicate _find_matching_issue calls,
+    covering the same shared-source-URL and signature-overlap signals, not
+    just near-identical title/exact content — rather than re-implementing
+    the decision, so the two passes can't drift apart.
 
-    2026-08 audit (independent review): clustering is complete-linkage
-    (a cluster only forms when every pair inside it matches directly),
-    not single-linkage union-find. Union-find would let one strong match
-    (A-B, e.g. shared URL) and one unrelated weak match (B-C, e.g. a
-    2-token signature overlap) transitively merge A and C even though
-    A-C never matched anything — silently dropping A (or C) from the
-    feed as a "duplicate" of a story it was never actually shown to
-    resemble. _find_matching_issue doesn't have this risk (it matches
-    one new issue against existing rows one at a time, never clusters
-    several issues against each other), so only this pass needed it.
+    Clustering is complete-linkage (a cluster only forms when every pair
+    inside it matches directly), not single-linkage union-find. Union-find
+    would let one strong match (A-B, e.g. shared URL) and one unrelated
+    weak match (B-C, e.g. a thin signature overlap) transitively merge A
+    and C even though A-C never matched anything — silently dropping A (or
+    C) from the feed as a "duplicate" of a story it was never actually
+    shown to resemble. _find_matching_issue doesn't have this risk (it
+    matches one new issue against existing rows one at a time, never
+    clusters several issues against each other), so only this pass needs it.
     """
     if len(issues) < 2:
         return list(issues)
@@ -877,7 +888,13 @@ the direction of every action and legal outcome before writing it. In legal \
 or disputed matters, do not confuse the accuser/plaintiff/victim with the \
 accused/defendant, and never state that someone was "found guilty" or \
 "found liable" unless the articles say THAT SPECIFIC PERSON was the one \
-found guilty or liable, not the person who brought the case against them.
+found guilty or liable, not the person who brought the case against them. \
+The first sentence must state the concrete outcome or decision itself — \
+a vote tally, a ruling, a dollar figure, an action taken — not the \
+process or deliberation that led to it; save characterization ("bipartisan," \
+"controversial") for after the concrete fact, never in place of it. Never \
+substitute a vague intensifier ("significant," "sweeping," "dramatic") for \
+a specific number the articles already give you.
 - "facts": An array of 3-5 key factual bullet points citizens should know. \
 Each fact must cite specific numbers, dates, or names when available. \
 CRITICAL fact rules: (1) Every fact must be directly stated in the articles — \
@@ -894,7 +911,10 @@ facts; extract what X or Y actually is instead). (6) Every fact must be \
 about the single topic named in your title. If an article in the list \
 covers a different event — a different country's politics, a different \
 agency, an unrelated person — do NOT extract facts from it, even though \
-it appears above.
+it appears above. (7) If an article gives a number alongside a comparison \
+that makes its size legible (a prior figure, a total it's part of, a time \
+span), keep both in the same fact — a bare number is weaker than a number \
+with scale. Never invent a comparison the articles don't state.
 - "bills": An array of any specific bills or acts mentioned in the articles. \
 For each bill, provide an object with "name" (the bill's common name or \
 acronym EXACTLY AS WRITTEN in the articles above — never a bill name from \
@@ -982,7 +1002,6 @@ def _log_summary_source_consistency(summary: str, source_text: str) -> None:
     equivalent data for summary/source consistency instead of guessing a
     cutoff today. Never blocks publishing; failures here are swallowed.
     """
-    from app.pipeline.analyze import action_metrics
 
     try:
         summary_emb, source_emb = _embed_texts_sim([summary, source_text[:3000]])
@@ -1115,7 +1134,7 @@ _DIGEST_ITEM_SPLIT_RE = re.compile(r"((?<=[.!?])\s+|\s*[;•·|]\s*)")
 _DIGEST_MIN_ITEMS = 3
 
 
-def _split_body_items(summary: str) -> list[tuple[str, bool]]:
+def _split_body_items(summary: str, truncated: bool = False) -> list[tuple[str, bool]]:
     """Split a feed description into (item, first_word_is_forced_capital).
 
     Grammar capitalizes the word that opens a sentence whether or not it
@@ -1125,9 +1144,12 @@ def _split_body_items(summary: str) -> list[tuple[str, bool]]:
     Which delimiter preceded an item is the only thing that distinguishes
     the two, hence the captured-group split.
 
-    A body that hit news_feeds' MAX_SUMMARY_CHARS cap was cut mid-item, and
-    the fragment left behind ("...Negotiators from Qatar") names entities
-    that by construction appear nowhere else in the text — one more
+    A body news_feeds cut at its length cap (NewsArticle.truncated — a
+    plain length check against a hardcoded constant stopped being reliable
+    once summaries could come from either a short teaser or full article
+    text, each with its own cap) was cut mid-item, and the fragment left
+    behind ("...Negotiators from Qatar") names entities that by
+    construction appear nowhere else in the text — one more
     guaranteed-disjoint item, enough to push a two-item blurb over the list
     threshold. The cap is the signal, not trailing punctuation: plenty of
     bodies legitimately end without a period (bulleted lists especially),
@@ -1143,7 +1165,7 @@ def _split_body_items(summary: str) -> list[tuple[str, bool]]:
     items: list[tuple[str, bool]] = [(parts[0], first_forced)]
     for delimiter, item in zip(delimiters, parts[2::2]):
         items.append((item, delimiter.strip() == ""))
-    if len(summary or "") >= MAX_SUMMARY_CHARS and len(items) > 1:
+    if truncated and len(items) > 1:
         items.pop()
     return items
 
@@ -1199,7 +1221,7 @@ def _item_entities(item: str, forced_capital: bool) -> set[str]:
 _DIGEST_MAX_TITLE_COVERED_ITEMS = 1
 
 
-def _multi_topic_body(summary: str, title: str) -> bool:
+def _multi_topic_body(summary: str, title: str, truncated: bool = False) -> bool:
     """True if ``summary`` reads as a list of separate stories.
 
     Two conditions, both required. The items must be pairwise disjoint in
@@ -1214,7 +1236,7 @@ def _multi_topic_body(summary: str, title: str) -> bool:
         entities
         for entities in (
             _item_entities(item, forced)
-            for item, forced in _split_body_items(summary)
+            for item, forced in _split_body_items(summary, truncated)
         )
         # A bare number is not a topic — an item must name something.
         if any(not token[0].isdigit() for token in entities)
@@ -1242,13 +1264,87 @@ def _digest_reason(article: NewsArticle) -> str | None:
         or _DIGEST_TITLE_SUFFIX_PATTERNS.search(title)
     ):
         return "recurring digest title"
-    if _multi_topic_body(article.summary, article.title):
+    # The body-shape check targets a specific, short-field phenomenon —
+    # several unrelated headlines crammed into one RSS <description> — not
+    # genuine long-form prose. A full article (see news_feeds'
+    # content:encoded handling) legitimately drifts across several named
+    # entities in the course of telling ONE story; that's normal narrative
+    # structure, not a compilation, and shouldn't be judged by a heuristic
+    # built around a one-paragraph teaser.
+    if len(article.summary) <= MAX_SUMMARY_CHARS and _multi_topic_body(
+        article.summary, article.title, article.truncated,
+    ):
         return "body lists unrelated stories"
     return None
 
 
+# Minimum number of already-published issues before the learned prototype
+# comparison below runs at all — a handful of rows can't represent the
+# breadth of civic topics this platform covers, and a small sample would
+# make the comparison noise, not data.
+_LEARNED_PROTOTYPE_MIN_SAMPLE = 50
+_LEARNED_PROTOTYPE_SAMPLE_SIZE = 300
+
+
+def _learned_relevance_prototypes(db: "Session") -> list[str] | None:
+    """Real published-issue text as an alternative relevance-prototype set,
+    for comparison against the hand-written _POLICY_PROTOTYPES below —
+    None on a fresh install with too little history to be representative.
+
+    Every ActionIssue row already passed the full pipeline (relevance
+    filter, clustering, grounding checks), so this is a real, growing
+    sample of confirmed-relevant civic text rather than one person's
+    guess at what each policy category sounds like. Most recent rows
+    first, so the sample tracks what the platform actually covers now
+    rather than getting diluted by years of accumulated history.
+    """
+    rows = (
+        db.query(ActionIssue.title, ActionIssue.summary)
+        .order_by(ActionIssue.created_at.desc())
+        .limit(_LEARNED_PROTOTYPE_SAMPLE_SIZE)
+        .all()
+    )
+    if len(rows) < _LEARNED_PROTOTYPE_MIN_SAMPLE:
+        return None
+    return [f"{title}. {summary}" for title, summary in rows if title]
+
+
+def _log_relevance_prototype_agreement(
+    db: "Session", texts: list[str], article_embeddings: np.ndarray, hardcoded_relevant: np.ndarray,
+) -> None:
+    """Non-blocking measurement: would a prototype set learned from real
+    published issues have made the same relevant/not-relevant call as the
+    hand-written _POLICY_PROTOTYPES list, on the same articles?
+
+    Purely observational — logs an agreement-rate counter and never
+    affects which articles the pipeline actually keeps. The hand-written
+    list remains the one that gates the pipeline until real comparison
+    data justifies recalibrating or replacing it; swapping the anchor set
+    would also shift the score distribution POLICY_RELEVANCE_THRESHOLD
+    was calibrated against, so a same-day one-shot replacement isn't
+    trustworthy without that data.
+    """
+    try:
+        learned_prototypes = _learned_relevance_prototypes(db)
+        if not learned_prototypes:
+            return
+        learned_embeddings = _embed_texts_sim(learned_prototypes)
+        learned_scores = (article_embeddings @ learned_embeddings.T).max(axis=1)
+        # Same threshold as the hardcoded set for now — comparing decisions
+        # made under one shared bar is the simplest first cut. A learned
+        # set may need its own separately-measured bar; that's exactly the
+        # kind of thing this comparison is meant to surface evidence for.
+        learned_relevant = learned_scores >= POLICY_RELEVANCE_THRESHOLD
+        agree = int(np.sum(learned_relevant == hardcoded_relevant))
+        action_metrics.increment("relevance_prototype_agree", agree)
+        action_metrics.increment("relevance_prototype_disagree", len(texts) - agree)
+    except Exception:
+        logger.exception("Learned-prototype relevance comparison failed (non-blocking)")
+
+
 def _filter_policy_relevant(
     articles: list[NewsArticle],
+    db: "Session | None" = None,
 ) -> list[tuple[NewsArticle, np.ndarray]]:
     """Keep only articles about US policy/legislation; drop digest articles."""
     if not articles:
@@ -1272,7 +1368,6 @@ def _filter_policy_relevant(
         # action_metrics' module docstring). Incremented before the
         # everything-was-a-digest early return, which is precisely the run
         # the counter has to explain.
-        from app.pipeline.analyze import action_metrics
 
         action_metrics.increment("articles_dropped_digest", n_digests)
 
@@ -1307,6 +1402,10 @@ def _filter_policy_relevant(
         len(relevant), len(articles),
         n_digests, n_penalized, POLICY_RELEVANCE_THRESHOLD,
     )
+    if db is not None:
+        _log_relevance_prototype_agreement(
+            db, texts, article_embeddings, effective_scores >= POLICY_RELEVANCE_THRESHOLD,
+        )
     return relevant
 
 
@@ -1776,9 +1875,9 @@ def _rank_clusters(
     issues hour to hour.
 
     Returns (ranked_clusters, ranked_scores) — the combined score for
-    ranked_clusters[i] is ranked_scores[i] (2026-08 quality audit: needed
-    by _deduplicate_top_clusters to log the real selected/rejected score
-    boundary, since dedup — not raw rank — decides final selection).
+    ranked_clusters[i] is ranked_scores[i], needed by
+    _deduplicate_top_clusters to log the real selected/rejected score
+    boundary, since dedup — not raw rank — decides final selection.
     """
     if not clusters:
         return [], []
@@ -1815,14 +1914,13 @@ def _rank_clusters(
             len({a.source_name for a in c}), titles,
         )
 
-    # combined scores travel alongside the reordered clusters (2026-08
-    # quality audit) so _deduplicate_top_clusters — the function that
-    # actually decides what gets published, since it can skip a
-    # higher-ranked cluster as a near-duplicate and promote a lower-ranked
-    # one instead — can log the real selected/rejected score boundary.
-    # Logging it here instead would label by raw rank position, which
-    # doesn't match final selection whenever dedup reorders things
-    # (independent review of #443 caught this).
+    # Combined scores travel alongside the reordered clusters so
+    # _deduplicate_top_clusters — the function that actually decides what
+    # gets published, since it can skip a higher-ranked cluster as a
+    # near-duplicate and promote a lower-ranked one instead — can log the
+    # real selected/rejected score boundary. Logging it here instead would
+    # label by raw rank position, which doesn't match final selection
+    # whenever dedup reorders things.
     return [clusters[i] for i in ranked_indices], [combined[i] for i in ranked_indices]
 
 
@@ -1847,22 +1945,20 @@ def _deduplicate_top_clusters(
     final selection (a higher-ranked cluster can still be merged away as a
     near-duplicate, promoting a lower-ranked one instead); logging the
     selected/rejected boundary anywhere else would mislabel whatever this
-    merge step changes (2026-08 quality audit, caught by independent
-    review of #443).
+    merge step changes.
     """
     if len(ranked_clusters) <= 1:
         return ranked_clusters[:max_issues]
 
-    from app.pipeline.analyze import action_metrics
 
-    # Threshold in normalized-centered-embedding space. Must be high enough that
-    # only genuinely same-story clusters are merged; 0.15 was too loose and caused
-    # unrelated clusters (e.g. abortion, World Cup) to be merged into Ukraine.
-    # 2026-08 audit: unlike this file's other similarity gates, this one was
-    # never re-measured against a real same-story/different-story sample —
-    # the merge/keep decision below is now logged as a bucketed action_metrics
-    # counter every run so that data accumulates automatically (no manual
-    # production pull needed) until there's enough of it to calibrate for real.
+    # Threshold in normalized-centered-embedding space. Must be high enough
+    # that only genuinely same-story clusters are merged — a looser floor
+    # let clearly unrelated clusters merge together. Unlike this file's
+    # other similarity gates, this one hasn't been re-measured against a
+    # real same-story/different-story sample yet; the merge/keep decision
+    # below is logged as a bucketed action_metrics counter every run so
+    # that data accumulates automatically until there's enough to
+    # calibrate for real.
     DEDUP_THRESHOLD = 0.50
 
     cluster_texts = [
@@ -1922,176 +2018,11 @@ def _deduplicate_top_clusters(
     return [ranked_clusters[i] for i in selected]
 
 
-def _validate_facts(facts: list, source_text: str | None = None) -> list:
-    """Drop hallucinated or self-referential facts before saving.
-
-    Catches five LLM failure modes:
-    - Self-comparison: "Meta surpasses Meta Platforms" — same root word on both sides
-    - Non-list return: LLM occasionally wraps facts in a dict or returns a string
-    - Stale future dates: fact says "will remain until December 2025" in June 2026
-    - Fabricated statistics: when ``source_text`` (the article texts the LLM
-      was shown) is provided, any fact containing a digit group that never
-      appears in the source is dropped. The prompt already forbids inferred
-      numbers; this enforces it mechanically (see grounding.py).
-    - Meta-facts: "No specific dates were provided in the articles" describes
-      the coverage's limits, not something that happened in the world — the
-      prompt's fact rule (5) already forbids this, but unlike the other
-      three prompt-only rules above it had no mechanical backstop, and it's
-      the single most common failure mode of the smaller LFM2.5-1.2B model
-      (2026-07-16 swap, #96) on real production output — spotted live on
-      2026-07-19 issues: "No specific dates or names of the bills were
-      provided in the articles," "Specific details about security
-      protocols were mentioned but not expanded in the articles," "No
-      formal policy changes or legal actions were reported in the
-      coverage." All three self-reference the source material as the
-      fact's subject instead of describing an actual event.
-    """
-    if not isinstance(facts, list):
-        return []
-
-    import re as _re
-
-    _DATE_MONTH_YEAR = _re.compile(
-        r'\b(January|February|March|April|May|June|July|August|'
-        r'September|October|November|December)\s+(\d{4})\b',
-        _re.IGNORECASE,
-    )
-    _FORWARD_PHRASES = ("will remain", "is expected", "continue", "until ", "through ", "by the end")
-    _META_PHRASES = (
-        "in the article", "in the articles", "in the coverage", "in the report",
-        "in the reporting", "the coverage ", "the reporting ",
-        # 2026-07 audit: "The articles focused on internal party dynamics
-        # rather than public policy outcomes" and "The articles referenced
-        # specific names and dates" both published — "the articles" as
-        # sentence SUBJECT wasn't covered by the "in the articles" form.
-        "the article ", "the articles ",
-    )
-    # A second meta-fact shape _META_PHRASES doesn't cover: reporting that a
-    # detail is ABSENT, rather than naming "the article(s)" as the subject.
-    # 2026-08-26 audit, ~30% of a sampled window: "No specific date was
-    # provided for when the new block may take effect," "Specific names of
-    # officials were not disclosed in the provided articles," "No official
-    # timeline was provided regarding when renovations would proceed." Two
-    # grammatical shapes cover all three (negation in the subject via "no",
-    # negation in the verb via "not"); both require one of the qualifying
-    # words below so a genuine positive fact — "the official statement was
-    # provided to reporters" — is never caught, only the quantified-absence
-    # claim is. Narrow and evidence-based on purpose, like _HEDGE_PHRASE_RE
-    # in grounding.py — widen with real examples, not speculative phrasing.
-    _ABSENCE_NO_SUBJECT_RE = _re.compile(
-        r"\bno (?:specific|official|further|additional)\b[^.]{0,50}\b(?:was|were)\s+"
-        r"(?:provided|disclosed|specified|released|given|available)\b",
-        _re.IGNORECASE,
-    )
-    _ABSENCE_NOT_VERB_RE = _re.compile(
-        r"\b(?:specific|official)\b[^.]{0,50}\b(?:was|were)\s+not\s+"
-        r"(?:provided|disclosed|specified|released|given|available)\b",
-        _re.IGNORECASE,
-    )
-    _today = datetime.now(_US_EAST).date()
-    _month_index = {m: i for i, m in enumerate(calendar.month_name) if m}
-
-    from app.pipeline.analyze import action_metrics
-    from app.pipeline.analyze.grounding import (
-        placeholder_tokens,
-        ungrounded_former_official_claims,
-        ungrounded_relationship_claims,
-    )
-
-    clean = []
-    for fact in facts:
-        if not isinstance(fact, str) or not fact.strip():
-            continue
-        lower = fact.lower()
-
-        # Literal unfilled placeholders — "[date]", "[name]". Every other
-        # check here is digit-based, which is exactly how "Thune announced
-        # the tribute details on [date]." published (and was posted to
-        # Bluesky) in 2026-07: no digits, nothing fired.
-        placeholders = placeholder_tokens(fact)
-        if placeholders:
-            logger.warning("Dropping fact with placeholder tokens (%s): %s",
-                           ", ".join(placeholders), fact[:120])
-            action_metrics.increment("facts_dropped_placeholder")
-            continue
-
-        # Family-relationship claims with no family vocabulary anywhere in
-        # the source articles — same fabricated-relationship class as the
-        # electoral-claims guard (2026-07: "for the seat left by her
-        # brother" published as fact with nothing able to check it).
-        if source_text and ungrounded_relationship_claims(fact, source_text):
-            logger.warning("Dropping fact with ungrounded family relationship: %s", fact[:120])
-            action_metrics.increment("facts_dropped_relationship")
-            continue
-
-        # "Former <office>" status the source articles never asserted — the
-        # stale-training-data class (2026-07: "former President Donald
-        # Trump" published while the sources said "President Trump").
-        if source_text and ungrounded_former_official_claims(fact, source_text):
-            logger.warning("Dropping fact with ungrounded 'former' office-holder status: %s", fact[:120])
-            action_metrics.increment("facts_dropped_former_status")
-            continue
-
-        # Detect self-referential comparisons: extract capitalized words and check
-        # if any word root appears on both sides of a comparison verb.
-        comparison_verbs = ("surpass", "overtake", "exceed", "beat", "top", "outpace")
-        if any(verb in lower for verb in comparison_verbs):
-            words = _re.findall(r"\b[A-Z][a-z]{3,}\b", fact)
-            roots = [w.lower()[:6] for w in words]  # stem to first 6 chars
-            if len(roots) != len(set(roots)):  # duplicate root → self-comparison
-                logger.warning("Dropping self-referential fact: %s", fact[:120])
-                action_metrics.increment("facts_dropped_self_comparison")
-                continue
-
-        # Detect stale future-tense facts with past dates — e.g. the LLM writes
-        # "the ban will remain until December 2025" when it's now June 2026.
-        stale = False
-        if any(phrase in lower for phrase in _FORWARD_PHRASES):
-            for m in _DATE_MONTH_YEAR.finditer(fact):
-                month_num = _month_index.get(m.group(1).capitalize(), 0)
-                if month_num == 0:
-                    continue
-                try:
-                    mentioned = datetime(int(m.group(2)), month_num, 1).date()
-                    if mentioned < _today:
-                        logger.warning("Dropping stale future-dated fact: %s", fact[:120])
-                        action_metrics.increment("facts_dropped_stale_date")
-                        stale = True
-                        break
-                except ValueError:
-                    pass
-        if stale:
-            continue
-
-        # Detect meta-facts that describe the source material's limits rather
-        # than an actual event — see the docstring for real production examples.
-        if any(phrase in lower for phrase in _META_PHRASES):
-            logger.warning("Dropping meta-fact referencing the coverage itself: %s", fact[:120])
-            action_metrics.increment("facts_dropped_meta")
-            continue
-
-        # Second meta-fact shape: reports the ABSENCE of a detail rather
-        # than naming "the article(s)" as subject — see the docstring.
-        if _ABSENCE_NO_SUBJECT_RE.search(fact) or _ABSENCE_NOT_VERB_RE.search(fact):
-            logger.warning("Dropping fact reporting an absence of information: %s", fact[:120])
-            action_metrics.increment("facts_dropped_absence_of_info")
-            continue
-
-        # Fabricated-statistic check against the articles the LLM was shown.
-        if source_text:
-            from app.pipeline.analyze.grounding import ungrounded_numbers
-            novel = ungrounded_numbers(fact, source_text)
-            if novel:
-                logger.warning(
-                    "Dropping fact with numbers not in source (%s): %s",
-                    ", ".join(novel), fact[:120],
-                )
-                action_metrics.increment("facts_dropped_ungrounded_number")
-                continue
-
-        clean.append(fact.strip())
-
-    return clean
+# validate_facts now lives in grounding.py (early_signal.py needs it too,
+# and importing it from here would be a circular import). Aliased under
+# its original private name since every call site and test in this file
+# already uses it.
+_validate_facts = validate_facts
 
 
 _ROLE_PATTERNS = [
@@ -2170,14 +2101,249 @@ def _validate_politician_roles(
     return title, summary, facts
 
 
-def _build_llm_prompt(cluster: list[NewsArticle]) -> str:
+# Both prompts this feeds run at a default num_ctx=4096. An 8-article
+# cluster where every article is full-length (news_feeds.MAX_FULL_TEXT_
+# CHARS=3000, vs. a short teaser) exceeds that at this cap — ollama_client.
+# call_llm detects the overflow and raises num_ctx accordingly (capped at
+# 8192), so this doesn't fail, but a full-text-heavy cluster now runs a
+# meaningfully larger/slower call than before on the Pi's hardware. Was
+# 300 before articles could carry full text at all — now high enough that
+# a rich source's actual substance reaches the model instead of being cut
+# back down to teaser length.
+_ARTICLE_BLOCK_CHARS = 1200
+
+
+def _format_articles_block(cluster: list[NewsArticle]) -> str:
+    """[source] title + summary (teaser or full text — see news_feeds'
+    content:encoded handling), one block per article — the raw-text
+    material both the real issue prompt and the claim-extraction shadow
+    prompt are built from."""
     parts: list[str] = []
     for a in cluster[:8]:
         line = f"[{a.source_name}] {a.title}"
         if a.summary:
-            line += f"\n  {a.summary[:300]}"
+            line += f"\n  {a.summary[:_ARTICLE_BLOCK_CHARS]}"
         parts.append(line)
-    return _ISSUE_PROMPT_TEMPLATE.format(articles="\n\n".join(parts))
+    return "\n\n".join(parts)
+
+
+def _build_llm_prompt(cluster: list[NewsArticle]) -> str:
+    return _ISSUE_PROMPT_TEMPLATE.format(articles=_format_articles_block(cluster))
+
+
+# ── Claim-extraction shadow path ─────────────────────────────────────
+#
+# Experimental, gated by settings.ACTION_CENTER_CLAIM_EXTRACTION_SHADOW.
+# Deconstructs a cluster into discrete, source-attributed claims before
+# generation, instead of handing the LLM raw concatenated article text —
+# real cross-outlet corroboration becomes an explicit, checkable signal
+# instead of just repeated mentions inside one blob of prose. Runs
+# alongside the real generation path and never publishes anything; see
+# _run_claim_extraction_shadow.
+
+_CLAIM_EXTRACTION_PROMPT_TEMPLATE = """\
+Below are recent news articles about the same story, each tagged with its \
+source in [brackets]. Break the coverage down into a list of atomic, \
+individually-checkable claims — one claim per distinct fact, action, or \
+quote. Do NOT synthesize, summarize, or add interpretation; extract only \
+what the articles actually state.
+
+For each claim, list every source (the [source] tag) that reports it. If \
+two articles report the same fact in different words, that is ONE claim \
+with multiple sources, not two separate claims.
+
+"type" must be exactly one of: "action" (something a person or institution \
+did), "outcome" (a result — a vote passing, a ruling), "statistic" (a \
+number), "quote" (a statement attributed to someone), "context" \
+(background information).
+
+Articles:
+{articles}
+
+Respond with ONLY a JSON object: {{"claims": [{{"text": "...", "sources": \
+["..."], "type": "..."}}]}}"""
+
+_VALID_CLAIM_TYPES = {"action", "outcome", "statistic", "quote", "context"}
+
+# Reuses the issue-title dedup threshold (_NEAR_IDENTICAL_TITLE_THRESHOLD)
+# as a starting point for claim-text similarity rather than an
+# independently measured value — there's no real claim-pair sample to
+# calibrate against yet. Acceptable here because nothing published
+# depends on this being exactly right: the whole claim-extraction path is
+# shadow-only (see module note above), so a rough merge threshold just
+# means slightly noisier shadow comparison data, not a live-facing bug.
+_CLAIM_DEDUP_THRESHOLD = _NEAR_IDENTICAL_TITLE_THRESHOLD
+
+
+@dataclass
+class Claim:
+    text: str
+    sources: list[str] = field(default_factory=list)
+    claim_type: str = "context"
+
+
+def _extract_cluster_claims(cluster: list[NewsArticle]) -> list[Claim]:
+    """Ask the LLM to deconstruct a cluster's coverage into atomic,
+    source-attributed claims, then keep only the ones that actually pass
+    grounding against the specific source(s) they claim to come from.
+
+    One LLM call per cluster, same cost class as the real issue-generation
+    call. Real source names for this cluster gate which "sources" a claim
+    is allowed to cite — a hallucinated source name is dropped from that
+    claim rather than trusted, and a claim left with zero valid sources
+    afterward is discarded entirely (it was never a checkable claim from
+    the coverage as it actually stands).
+    """
+    real_sources = {a.source_name for a in cluster}
+    source_text = {
+        name: " ".join(f"{a.title} {a.summary}" for a in cluster if a.source_name == name)
+        for name in real_sources
+    }
+
+    prompt = _CLAIM_EXTRACTION_PROMPT_TEMPLATE.format(articles=_format_articles_block(cluster))
+    result = call_llm(
+        prompt_version="claim_extraction_v1",
+        system_prompt=_SYSTEM_PROMPT,
+        user_prompt=prompt,
+        cache_key=None,
+        db_session=None,
+        max_tokens=1024,
+        num_ctx=4096,
+    )
+    if isinstance(result, str):
+        result = extract_json(result)
+    if not isinstance(result, dict) or not isinstance(result.get("claims"), list):
+        return []
+
+    claims: list[Claim] = []
+    for raw in result["claims"]:
+        if not isinstance(raw, dict) or not isinstance(raw.get("text"), str) or not raw["text"].strip():
+            continue
+        # dict.fromkeys, not a set: de-dupes a source the LLM listed twice
+        # (which would otherwise inflate a claim's corroboration count —
+        # "AP News" cited twice reading as 2 sources instead of 1) while
+        # preserving the order the model returned them in.
+        cited = list(dict.fromkeys(
+            s for s in raw.get("sources", []) if isinstance(s, str) and s in real_sources
+        ))
+        if not cited:
+            continue
+        claim_source_text = " ".join(source_text[s] for s in cited)
+        if grounding_violations(raw["text"], claim_source_text):
+            continue
+        claim_type = raw.get("type") if raw.get("type") in _VALID_CLAIM_TYPES else "context"
+        claims.append(Claim(text=raw["text"].strip(), sources=cited, claim_type=claim_type))
+    return claims
+
+
+def _dedupe_claims(claims: list[Claim]) -> list[Claim]:
+    """Merge near-identical claims (the same fact, reworded by different
+    outlets) into one, unioning their sources — the whole point of
+    corroboration tracking is that a fact repeated by 3 outlets should
+    read as one 3-source claim, not three separate 1-source ones.
+
+    Complete-linkage, same as dedupe_near_identical_issues: two groups
+    only merge when EVERY claim in one matches every claim in the other.
+    A single-linkage pass (merge whatever's similar to the current
+    anchor) lets a hub claim bridge two claims that were never actually
+    similar to EACH OTHER into one falsely-inflated corroboration count —
+    exactly the transitive-merge failure mode dedupe_near_identical_issues
+    already had to fix once for full issues.
+    """
+    if len(claims) < 2:
+        return list(claims)
+
+    embs = _embed_texts_sim([c.text for c in claims])
+    sims = embs @ embs.T
+    n = len(claims)
+    same_claim = [
+        [i != j and float(sims[i, j]) >= _CLAIM_DEDUP_THRESHOLD for j in range(n)]
+        for i in range(n)
+    ]
+
+    clusters: list[list[int]] = [[i] for i in range(n)]
+    merged_any = True
+    while merged_any:
+        merged_any = False
+        for a in range(len(clusters)):
+            for b in range(a + 1, len(clusters)):
+                if all(same_claim[x][y] for x in clusters[a] for y in clusters[b]):
+                    clusters[a] = clusters[a] + clusters[b]
+                    del clusters[b]
+                    merged_any = True
+                    break
+            if merged_any:
+                break
+
+    result: list[Claim] = []
+    for members in clusters:
+        anchor = claims[members[0]]
+        sources = list(dict.fromkeys(s for idx in members for s in claims[idx].sources))
+        result.append(Claim(text=anchor.text, sources=sources, claim_type=anchor.claim_type))
+    return result
+
+
+def _format_claims_for_prompt(claims: list[Claim]) -> str:
+    """Same block shape _format_articles_block produces, so this plugs
+    into _ISSUE_PROMPT_TEMPLATE's {articles} slot unchanged — each claim
+    tagged with how many sources corroborate it, so the reconstruction
+    prompt's existing "use the specific names and numbers" instructions
+    apply the same way whether they're reading raw articles or claims."""
+    parts = []
+    for c in claims:
+        tag = (
+            f"CONFIRMED BY {len(c.sources)} SOURCES: {', '.join(c.sources)}"
+            if len(c.sources) > 1
+            else f"REPORTED BY 1 SOURCE: {c.sources[0] if c.sources else 'unknown'}"
+        )
+        parts.append(f"[{tag}] {c.text}")
+    return "\n\n".join(parts)
+
+
+def _run_claim_extraction_shadow(
+    filtered_cluster: list[NewsArticle], rank: int, baseline_violation_count: int,
+) -> None:
+    """Runs the deconstruct-then-reconstruct path for one cluster and logs
+    an automated grounding-quality comparison against the real path's
+    result. Never returns anything used for publication, never raises —
+    a shadow-path failure must not affect the real pipeline it runs
+    alongside.
+    """
+    try:
+        claims = _dedupe_claims(_extract_cluster_claims(filtered_cluster))
+        if not claims:
+            return
+        claims_source_text = " ".join(f"{a.title} {a.summary}" for a in filtered_cluster)
+        shadow_prompt = _ISSUE_PROMPT_TEMPLATE.format(articles=_format_claims_for_prompt(claims))
+        shadow_result = call_llm(
+            prompt_version="claim_extraction_shadow_v1",
+            system_prompt=_SYSTEM_PROMPT,
+            user_prompt=shadow_prompt,
+            cache_key=None,
+            db_session=None,
+            max_tokens=1024,
+            num_ctx=4096,
+        )
+        if isinstance(shadow_result, str):
+            shadow_result = extract_json(shadow_result)
+        if not isinstance(shadow_result, dict):
+            return
+        shadow_text = str(shadow_result.get("summary", "")) + " " + " ".join(
+            str(f) for f in shadow_result.get("facts", []) if isinstance(f, (str, int, float))
+        )
+        shadow_violations = len(
+            hedge_and_editorializing_violations(shadow_text)
+            + grounding_violations(shadow_text, claims_source_text)
+        )
+        action_metrics.increment("claim_extraction_shadow_violations", shadow_violations)
+        action_metrics.increment("claim_extraction_shadow_baseline_violations", baseline_violation_count)
+        action_metrics.increment("claim_extraction_shadow_runs")
+        logger.info(
+            "Claim extraction shadow for rank %d: %d claims, %d violations (baseline: %d)",
+            rank, len(claims), shadow_violations, baseline_violation_count,
+        )
+    except Exception:
+        logger.exception("Claim extraction shadow failed for rank %d (non-blocking)", rank)
 
 
 # Last names that are also common English words — require a full-name match
@@ -2301,17 +2467,14 @@ def _find_related_senators(
     all_members = [(s, "senate") for s in senators] + [(r, "house") for r in representatives]
 
     # Full-name matches first, over every member, before any last-name-only
-    # candidacy is considered — 2026-07 fix: a same-surname collision (30+
-    # exist in the current roster: Smith x5, Johnson x5, Moore x5, Graham
-    # x2, etc.) used to slip through undetected, because the single-pass
-    # version below checked each member independently — Sen. Lindsey Graham
-    # got fuzzy-matched onto a story that was actually about candidate
-    # Darline Graham (also SC, also just "Graham" in the text), since
-    # nothing yet knew her full-name match already fully accounts for
-    # every "Graham" in the piece. Collecting every confirmed full-name
-    # match FIRST means a shared surname is only ever a live disambiguation
-    # candidate for whichever single member wasn't already explained by a
-    # more specific match.
+    # candidacy is considered. The roster has real surname collisions (Smith,
+    # Johnson, Moore, Graham all appear multiple times) — checking each
+    # member independently for a last-name match risks fuzzy-matching one
+    # member's story onto a different person who happens to share the same
+    # surname. Collecting every confirmed full-name match FIRST means a
+    # shared surname is only ever a live disambiguation candidate for
+    # whichever single member wasn't already explained by a more specific
+    # match.
     full_name_matched_last_names: set[str] = set()
     for s, chamber in all_members:
         if s.name and _mentions_full_name(issue_text, s.name, issue_text_lower):
@@ -2347,17 +2510,14 @@ def _find_related_senators(
             _surname_owned_by_other_name(issue_text, m, s.name) for m in occurrences
         ):
             # Every occurrence of this surname is part of a DIFFERENT
-            # person's full name ("Ferran Torres" is not Rep. Ritchie
-            # Torres). Generalizes the full-name-matched-member exclusion
-            # above to people the platform doesn't track — the 2026-07
-            # audit found a World Cup story tagging both Reps. Torres
-            # ("referenced in coverage") off soccer player Ferran Torres'
-            # surname, and the embedding disambiguation below is provably
-            # unable to catch this: measured on the live case, the sports
-            # context scored 0.78-0.80 against the "Representative X from
-            # NY" prototypes while genuine civic last-name references
-            # scored 0.77-0.85 — the ranges overlap completely, so no
-            # threshold separates them.
+            # person's full name — generalizes the full-name-matched-member
+            # exclusion above to people the platform doesn't track at all
+            # (e.g. an athlete sharing a surname with a member of Congress).
+            # The embedding disambiguation below can't catch this on its
+            # own: measured against real cases, an unrelated context scored
+            # 0.78-0.80 against the "Representative X from NY" style
+            # prototypes while genuine civic references scored 0.77-0.85 —
+            # the ranges overlap completely, so no threshold separates them.
             continue
         if occurrences:
             candidates_needing_disambiguation.append((s, last_name, pattern, chamber))
@@ -2528,9 +2688,9 @@ def _classify_issue_policy_areas(title: str, summary: str) -> list[str]:
     Uses the same embedding-based classifier as bills (tier 2) rather than
     relying on the LLM, which inconsistently returns empty or wrong labels.
     Single-area only — see classify_policy_areas_multi's docstring for why
-    secondary-area detection was removed (2026-07 audit: raw cosine
-    similarity across the category anchors can't distinguish genuine
-    secondary relevance from noise for this embedding model).
+    secondary-area detection was removed: raw cosine similarity across the
+    category anchors can't distinguish genuine secondary relevance from
+    noise for this embedding model.
     """
     from app.pipeline.analyze.bill_analyzer import classify_policy_areas_multi
 
@@ -2549,23 +2709,14 @@ def _classify_issue_policy_areas(title: str, summary: str) -> list[str]:
     return []
 
 
-# Calibrated 2026-07 against live production data: sampled ~15 real
-# Action Center issues, computed both sqlite-vec L2 distance (gate 1, full
-# document text) and title-only cosine similarity (gate 2, see below)
-# against their retrieved candidates, and hand-labeled each as a genuine
-# topical match or not. At the prior 1.10/0.40, essentially every issue
-# was returning 2-3 unrelated documents (confirmed live: a World Cup
-# soccer story matched to Chinese steel anti-dumping notices; an Attorney
-# General story matched to an unrelated advisory-committee meeting
-# notice) — neither gate was tight enough to reject a topic with no real
-# government-document counterpart in the corpus (most non-legislative
-# news: sports, foreign elections, market moves, celebrity legal news).
-# The observed score bands: genuinely unrelated topics cluster at
-# distance > 0.87; the best real match found in the sample (a data-center
-# buildout story matched to the actual data-center-permitting executive
-# order) sat at 0.80. Tightened to 0.85 rather than exactly at that
-# boundary, since a single sample isn't enough to trust to the second
-# decimal — this is a real improvement, not a perfect fix (see
+# Calibrated against real, hand-labeled Action Center issues: both
+# sqlite-vec L2 distance (gate 1, full document text) and title-only
+# cosine similarity (gate 2, see below) against retrieved candidates were
+# measured against a genuine-match/not-a-match labeling. Genuinely
+# unrelated topics cluster at distance > 0.87; the best real match found
+# in the sample sat at 0.80. Tightened to 0.85 rather than exactly at
+# that boundary, since a small sample isn't enough to trust to the second
+# decimal — a real improvement, not a perfect fix (see
 # _ADMINISTRATIVE_NOTICE_TITLE_RE below for the one false-positive
 # pattern tight enough to survive this threshold).
 _EXPLORE_DOC_MAX_DISTANCE = 0.85
@@ -2576,20 +2727,15 @@ _EXPLORE_DOC_MAX_DISTANCE = 0.85
 # what they announce (a routine data-collection renewal, an upcoming
 # committee meeting) — never substantively about any particular news
 # story, regardless of how their titles happen to embed. This is the one
-# false-positive pattern that survives _EXPLORE_DOC_MAX_DISTANCE/min_sim
-# tightening above: confirmed live, a "Notice of Public Meeting of the
-# Montana Advisory Committee" and an "Agency Information Collection
-# Activities" notice both scored well inside the "genuine match" distance
-# and similarity bands for unrelated issues. Matching the fixed template
-# phrasing (not a list of specific bad titles — every notice using this
-# legally-mandated language is generic, not just the ones seen so far) is
-# the same "measure the real property, don't guess" principle as
-# GENERIC_TITLE_REPEAT_THRESHOLD above, just for a structural pattern
-# repeat-counting can't catch since each notice is uniquely titled.
-# "proposed collection...comment request" and "solicitation of
-# nominations" (PRA/FACA phrasing variants) added after live
-# re-verification post-deploy caught them still leaking through on real
-# production titles the first pass didn't sample.
+# false-positive pattern that survives the distance/similarity tightening
+# above: this kind of notice reliably scores well inside the "genuine
+# match" bands for unrelated issues. Matching the fixed template phrasing
+# (not a list of specific bad titles — every notice using this
+# legally-mandated language is generic) is the same "measure the real
+# property, don't guess" principle as GENERIC_TITLE_REPEAT_THRESHOLD
+# above, just for a structural pattern repeat-counting can't catch since
+# each notice is uniquely titled. Extend the phrasing list with real
+# PRA/FACA variants as they're found, rather than guessing ahead of time.
 _ADMINISTRATIVE_NOTICE_TITLE_RE = re.compile(
     r"information collection|submission for omb review|proposed collection.*comment request|"
     r"notice of (public )?meeting|open meeting of|stakeholder consultation meeting|"
@@ -2647,12 +2793,9 @@ def _find_related_explore_docs(
     except Exception:
         sims = np.zeros(len(passed))
 
-    # Re-measured under the similarity model (2026-07-22, the same live
-    # cases that exposed the PROMESA/World Cup false anchor): genuine
-    # issue-doc matches score 0.467-0.776, unrelated floor-speech noise
-    # 0.128-0.183 — 0.33 sits mid-gap. (The old 0.75 was fit to the
-    # retrieval model's compressed band, where noise reached 0.84 and
-    # this bar still admitted the World Cup/PROMESA pair.)
+    # Measured under the similarity model: genuine issue-doc matches score
+    # 0.467-0.776, unrelated floor-speech noise 0.128-0.183 — 0.33 sits
+    # mid-gap.
     min_sim = 0.33
 
     scored = sorted(
@@ -3029,7 +3172,6 @@ Use only information from the stories above. Be factual and neutral."""
 
 def _generate_period_summary(label: str, entries: list, cache_key: dict, db: "Session") -> dict:
     """LLM-generate a summary for a week/month/year period."""
-    from app.pipeline.analyze.ollama_client import call_llm, extract_json
 
     entries_text = "\n".join(
         f"- [{e.date}] {e.title}: {e.summary[:120]}"
@@ -3241,7 +3383,6 @@ def _generate_full_story(issue, db_session: Session | None = None) -> str | None
     Returns plain text (paragraphs separated by double newlines), or None on failure.
     Stored in action_issues.full_story so it is ready before users click through.
     """
-    from app.pipeline.analyze.ollama_client import call_llm
 
     facts = json.loads(issue.facts or "[]")
     source_names = json.loads(issue.source_names or "[]")
@@ -3267,7 +3408,18 @@ accurate article is far better than a longer one that repeats itself or invents 
 named in the key facts above.
 - Do NOT open with a generic hedge like "Recent coverage indicates," "Recent \
 reports say/suggest," "Recent developments show," or any similar throat-clearing \
-preamble. Start the first sentence with the concrete news itself — who did what.
+preamble. Start the first sentence with the concrete news itself — who did what. \
+If the key facts include a vote tally, dollar figure, or ruling, state that \
+number in the opening sentence before any characterization of it.
+- Vary sentence length — do not write every sentence to the same length or \
+shape. Let a short, direct sentence land after a longer explanatory one; \
+uniform sentence length reads as mechanical, not as prose written for a \
+person to read aloud.
+- When a procedural or technical term first appears (a bill stage, a \
+parliamentary procedure, an agency acronym), define it in the same sentence \
+in a few words — not as a separate explanatory aside.
+- Never substitute a vague intensifier ("significant," "sweeping," \
+"dramatic") for a specific number already given in the key facts.
 - Do NOT use hedging attribution phrases ANYWHERE in the piece — "sources say," \
 "reports indicate," "coverage shows," "officials suggest," and similar. State \
 facts directly as facts, not as something reports/coverage/sources are saying.
@@ -3369,16 +3521,6 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
         # agenda" — no Schumer mention anywhere in the source material, and
         # this generator had no check for fabricated names at all until
         # then, unlike the Bluesky poster which already ran this check.)
-        from app.pipeline.analyze.grounding import (
-            hedge_and_editorializing_violations,
-            repeated_sentences,
-            ungrounded_electoral_claims,
-            ungrounded_former_official_claims,
-            ungrounded_party_claims,
-            ungrounded_relationship_claims,
-            ungrounded_statistics,
-            ungrounded_titled_names,
-        )
         novel = ungrounded_statistics(story, source_material)
         names = ungrounded_titled_names(story, source_material)
         dupes = repeated_sentences(story)
@@ -3409,6 +3551,7 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
                 "Generated full story for issue %s (%d chars): %s",
                 issue.id, len(story), issue.title[:60],
             )
+            log_intensifier_usage("full_story", story, source_material)
             return story
 
         problems = []
@@ -3633,7 +3776,6 @@ def _should_merge_monitors_llm(
     db: Session,
 ) -> bool:
     """Use LLM to decide if two monitors should be merged."""
-    from app.pipeline.analyze.ollama_client import call_llm, extract_json
 
     user_prompt = _MONITOR_MERGE_PROMPT.format(
         title_a=a.title, desc_a=a.description[:300],
@@ -3673,7 +3815,6 @@ def _should_match_monitor_llm(
     db: Session,
 ) -> bool:
     """LLM gate for borderline embedding matches: does this issue genuinely belong to this monitor?"""
-    from app.pipeline.analyze.ollama_client import call_llm
 
     result = call_llm(
         prompt_version="monitor-match-v1",
@@ -3714,7 +3855,6 @@ def _reclassify_monitor_llm(
     db: Session,
 ) -> None:
     """Use LLM to re-evaluate and potentially re-categorize an existing monitor."""
-    from app.pipeline.analyze.ollama_client import call_llm, extract_json
     from app.config_definitions import POLICY_AREAS
 
     # Only re-classify if it's currently a generic or suspicious category
@@ -3853,7 +3993,6 @@ def _generate_monitor_metadata(
     db: Session,
 ) -> dict | None:
     """Use LLM to generate professional metadata for a new National Monitor."""
-    from app.pipeline.analyze.ollama_client import call_llm, extract_json
     from app.config_definitions import POLICY_AREAS
 
     all_issues = [issue] + past_issues
@@ -3920,7 +4059,13 @@ def _update_national_monitors(today: str, db: Session) -> None:
 
     today_issues = (
         db.query(ActionIssue)
-        .filter(ActionIssue.date == today)
+        .filter(
+            ActionIssue.date == today,
+            # A hedged, unconfirmed, single-source draft must not surface
+            # publicly via a monitor update before press corroborates it —
+            # same reasoning as excluding it from Bluesky/full-story.
+            ActionIssue.status != ActionIssueStatus.DEVELOPING,
+        )
         .order_by(ActionIssue.rank)
         .all()
     )
@@ -4026,7 +4171,10 @@ def _update_national_monitors(today: str, db: Session) -> None:
 
     past_issues = (
         db.query(ActionIssue)
-        .filter(ActionIssue.date >= cutoff_date, ActionIssue.date < today)
+        .filter(
+            ActionIssue.date >= cutoff_date, ActionIssue.date < today,
+            ActionIssue.status != ActionIssueStatus.DEVELOPING,
+        )
         .all()
     )
 
@@ -4338,8 +4486,6 @@ def _check_summary_roles(summary: str, articles_text: str, db: Session) -> tuple
     pattern as every other validator, see action_metrics.py) so that rate
     is queryable instead of silent.
     """
-    from app.pipeline.analyze import action_metrics
-    from app.pipeline.analyze.ollama_client import call_llm, extract_json
 
     try:
         result = call_llm(
@@ -4574,7 +4720,6 @@ def _persist_metrics(db: Session) -> dict[str, int]:
     broken?" was then unanswerable after the fact: a quiet hour and a
     failing feed both looked like an absent row.
     """
-    from app.pipeline.analyze import action_metrics
 
     snapshot = action_metrics.snapshot()
     action_metrics.persist(db, f"run-{datetime.now(_US_EAST).strftime('%Y-%m-%d-%H%M')}")
@@ -4583,19 +4728,99 @@ def _persist_metrics(db: Session) -> dict[str, int]:
     return snapshot
 
 
+def _rank_ordered_issues(
+    still_current: list[ActionIssue], matched_issue_ids: set[int],
+) -> list[ActionIssue]:
+    """Final rank order for this run's renumbering pass — extracted for
+    direct testability, same precedent as _bluesky_eligible_issues/
+    _retire_untouched_issues.
+
+    Issues touched (matched or newly created) this run keep their
+    relative order first; spared survivors follow. Spared DEVELOPING
+    issues (not yet promoted or expired) always sort after every spared
+    CONFIRMED issue — a hedged, unconfirmed draft must never crowd out a
+    real top story on its own placeholder rank value.
+    """
+    touched = sorted(
+        (r for r in still_current if r.id in matched_issue_ids),
+        key=lambda r: r.rank or 0,
+    )
+    spared_confirmed = sorted(
+        (r for r in still_current
+         if r.id not in matched_issue_ids and r.status != ActionIssueStatus.DEVELOPING),
+        key=lambda r: r.rank or 0,
+    )
+    spared_developing = sorted(
+        (r for r in still_current
+         if r.id not in matched_issue_ids and r.status == ActionIssueStatus.DEVELOPING),
+        key=lambda r: r.rank or 0,
+    )
+    return touched + spared_confirmed + spared_developing
+
+
+def _bluesky_eligible_issues(db: Session, today: str) -> list[ActionIssue]:
+    """Today's current issues, excluding DEVELOPING ones — extracted for
+    direct testability, same precedent as _retire_untouched_issues/
+    _apply_matched_issue_update.
+
+    Nothing posts to Bluesky before press corroborates it: there is no
+    edit/correction mechanism for a wrong post, and Bluesky itself doesn't
+    support editing a published one.
+    """
+    return (
+        db.query(ActionIssue)
+        .filter(
+            ActionIssue.date == today,
+            ActionIssue.is_current == True,  # noqa: E712
+            ActionIssue.status != ActionIssueStatus.DEVELOPING,
+        )
+        .order_by(ActionIssue.rank)
+        .all()
+    )
+
+
 def _run_refresh(db: Session) -> int:
     t0 = time.perf_counter()
     today = datetime.now(_US_EAST).strftime("%Y-%m-%d")
 
     logger.info("Action center refresh starting for %s", today)
-    from app.pipeline.analyze import action_metrics
     action_metrics.reset()
     _set_refresh_state(
-        is_running=True, stage="fetch", stage_detail=None,
+        is_running=True, stage="roll_call_signals", stage_detail=None,
         started_at=utcnow(),
     )
 
+    # 0. Check primary-source signals (Senate roll-call votes) for anything
+    # notable enough to draft ahead of press coverage — see early_signal.py.
+    # Independent of the news fetch below (an empty/failed news pull must
+    # never block this, and vice versa), so it runs first and is wrapped
+    # non-fatally: a bug here must never take down the whole hourly refresh.
+    try:
+        check_roll_call_signals(db)
+    except Exception:
+        logger.exception("check_roll_call_signals failed (non-fatal)")
+    # Expiry must run on every exit path (mirrors _persist_metrics's own
+    # "called on every exit path" discipline below) — a quiet news day
+    # still needs to retire developing issues whose deadline has passed,
+    # not just the runs that make it to the main flush/retire stage.
+    try:
+        expire_stale_developing_issues(db, utcnow())
+    except Exception:
+        logger.exception("expire_stale_developing_issues failed (non-fatal)")
+    # Own try/except so this always fires regardless of which call above
+    # raised — otherwise a raise between check_roll_call_signals'
+    # db.add()/flush() and this commit silently dropped the flushed-but-
+    # uncommitted new row on the two early-abort paths below (neither
+    # commits on its own; refresh_action_issues' finally: db.close() would
+    # discard it). Self-healing either way (the next hourly poll re-drafts
+    # the same vote), but wasting a full LLM draft + grounding pass isn't.
+    try:
+        db.commit()
+    except Exception:
+        logger.exception("Commit after roll-call-signal stage failed (non-fatal)")
+
     # 1. Fetch articles
+    _set_refresh_state(stage="fetch")
     articles = fetch_news_articles()
     if not articles:
         logger.warning("No articles fetched — skipping action center refresh")
@@ -4611,7 +4836,7 @@ def _run_refresh(db: Session) -> int:
 
     # 2. Filter for policy relevance
     _set_refresh_state(stage="filter")
-    relevant = _filter_policy_relevant(articles)
+    relevant = _filter_policy_relevant(articles, db)
     if not relevant:
         logger.warning("No policy-relevant articles found")
         action_metrics.increment("refresh_aborted_no_relevant_articles")
@@ -4639,16 +4864,23 @@ def _run_refresh(db: Session) -> int:
     _set_refresh_state(stage="issues", stage_detail=f"0/{len(top_clusters)}")
 
     # 6. Generate analysis for each via LLM
-    from app.pipeline.analyze.ollama_client import call_llm, extract_json
 
     # Pre-load recent issues for topic-keyed matching.
     # Issues are keyed by TOPIC, not by (date, rank) slot — the same topic
     # always maps to the same DB row regardless of rank or whether it briefly
     # fell out of the top N and came back.
+    # DEVELOPING rows are included regardless of date/lookback — their
+    # corroboration window is independent of this unrelated "how far back
+    # do we re-match ordinary news" tuning knob, and decoupling the two
+    # means a longer confirmation_deadline later doesn't silently need a
+    # matching change here too.
     _lookback = (datetime.now(_US_EAST) - timedelta(days=2)).strftime("%Y-%m-%d")
     _recent_issues: list[ActionIssue] = (
         db.query(ActionIssue)
-        .filter(ActionIssue.date >= _lookback)
+        .filter(or_(
+            ActionIssue.date >= _lookback,
+            ActionIssue.status == ActionIssueStatus.DEVELOPING,
+        ))
         .all()
     )
     _recent_embs: "np.ndarray | None" = (
@@ -4774,11 +5006,6 @@ def _run_refresh(db: Session) -> int:
         # the top article's real headline: the retry below regenerates only
         # summary/facts, so a bad title has a deterministic fallback instead
         # of a retry, same as the geographic-consistency correction above.
-        from app.pipeline.analyze.grounding import (
-            grounding_violations,
-            hedge_and_editorializing_violations,
-            ungrounded_former_official_claims,
-        )
         title_former = ungrounded_former_official_claims(title, issue_source_text)
         if title_former:
             logger.warning(
@@ -4817,6 +5044,8 @@ def _run_refresh(db: Session) -> int:
         combined_text = summary + " " + " ".join(facts)
         reasons = hedge_and_editorializing_violations(combined_text)
         reasons += grounding_violations(combined_text, issue_source_text)
+        if settings.ACTION_CENTER_CLAIM_EXTRACTION_SHADOW:
+            _run_claim_extraction_shadow(filtered_cluster, rank, len(reasons))
         _record_generation_sample(
             db, "action_center_issue", rank, 1, user_prompt,
             {"title": title, "summary": summary, "facts": facts},
@@ -4880,6 +5109,9 @@ def _run_refresh(db: Session) -> int:
                 continue
 
         _log_summary_source_consistency(summary, source_text_for_check)
+        log_intensifier_usage(
+            "action_center_issue", summary + " " + " ".join(facts), source_text_for_check,
+        )
 
         # Minimum-substance gate (2026-07 audit): fewer than 2 facts
         # surviving validation means there isn't a publishable issue here —
@@ -5011,9 +5243,14 @@ def _run_refresh(db: Session) -> int:
 
         if match:
             _matched_issue_ids.add(match.id)
-            _apply_matched_issue_update(
-                match, _new_values, rank, today, primary_article_date, facts, title,
-            )
+            if match.status == ActionIssueStatus.DEVELOPING:
+                _promote_developing_issue(
+                    match, _new_values, rank, today, primary_article_date, facts, title,
+                )
+            else:
+                _apply_matched_issue_update(
+                    match, _new_values, rank, today, primary_article_date, facts, title,
+                )
             # Split from the new-topic case below: `issues_created` counts
             # both, so a run that only ever re-matched yesterday's stories
             # reported the same number as one that found four fresh ones.
@@ -5066,15 +5303,7 @@ def _run_refresh(db: Session) -> int:
     # the public page (two simultaneous #4s, 2026-07 audit). Issues placed
     # by this run keep their relative order first; spared survivors follow.
     still_current = [r for r in all_current if r.is_current]
-    touched = sorted(
-        (r for r in still_current if r.id in _matched_issue_ids),
-        key=lambda r: r.rank or 0,
-    )
-    spared = sorted(
-        (r for r in still_current if r.id not in _matched_issue_ids),
-        key=lambda r: r.rank or 0,
-    )
-    for new_rank, row in enumerate(touched + spared, start=1):
+    for new_rank, row in enumerate(_rank_ordered_issues(still_current, _matched_issue_ids), start=1):
         row.rank = new_rank
 
     db.commit()
@@ -5105,12 +5334,7 @@ def _run_refresh(db: Session) -> int:
     if issues_created > 0:
         try:
             from app.pipeline.analyze.bluesky_poster import process_issues_for_bluesky
-            today_issues = (
-                db.query(ActionIssue)
-                .filter(ActionIssue.date == today, ActionIssue.is_current == True)  # noqa: E712
-                .order_by(ActionIssue.rank)
-                .all()
-            )
+            today_issues = _bluesky_eligible_issues(db, today)
             bsky_posted = process_issues_for_bluesky(today_issues, db)
             _set_refresh_state(last_bsky_posted=bsky_posted or 0)
         except Exception:
@@ -5122,7 +5346,10 @@ def _run_refresh(db: Session) -> int:
     story_issues = (
         db.query(ActionIssue)
         .filter(ActionIssue.date == today, ActionIssue.is_current == True,  # noqa: E712
-                ActionIssue.full_story.is_(None))
+                ActionIssue.full_story.is_(None),
+                # A full-length narrative implies more depth than a
+                # primary-source-only draft has — skip until promoted.
+                ActionIssue.status != ActionIssueStatus.DEVELOPING)
         .order_by(ActionIssue.rank)
         .all()
     )

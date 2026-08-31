@@ -500,18 +500,15 @@ def _acquire_pipeline_lock(db: Session) -> PipelineRun | None:
     """Atomically create a new locked run, or return None if one is running.
 
     Uses the shared SQLite database so the lock works across blue/green
-    containers. Atomicity is enforced by the database itself (2026-07,
-    platform-review O15): a partial UNIQUE index allows at most one
-    status='running' row (see database._ensure_indexes), so the INSERT —
-    not a check racing ahead of it — is the lock acquisition. The old
-    check-then-insert shape meant two containers hitting the 03:00 tick
-    during a blue/green overlap could both pass the check and both start
-    a full pipeline run.
+    containers. Atomicity is enforced by the database itself: a partial
+    UNIQUE index allows at most one status='running' row (see
+    database._ensure_indexes), so the INSERT — not a check racing ahead
+    of it — is the lock acquisition. A check-then-insert shape would let
+    two containers hitting the same tick during a blue/green overlap
+    both pass the check and both start a full pipeline run.
 
-    Thin wrapper over run_tracker.acquire_pipeline_lock — this was the
-    original, Senate-only implementation; House/Stock/Supplementary now
-    share the same helper (2026-07-23) rather than each needing (and, for
-    a long time, NOT having) their own copy.
+    Thin wrapper over run_tracker.acquire_pipeline_lock, shared by
+    House/Stock/Supplementary too so none of them need their own copy.
     """
     from app.pipeline.run_tracker import acquire_pipeline_lock
 
@@ -621,10 +618,9 @@ def _build_donor_entries(senators: list[dict], fec_data: dict) -> list[dict]:
     Each entry must carry `fec_receipt` when one exists — it's the only way
     Tier 1 (classify_donor_type_from_fec) can resolve a donor from FEC's own
     entity_type instead of falling through to the noisy semantic-embedding
-    tier, which has no reliable signal for a bare company name (e.g. "Airbnb"
-    scored a hair closer to the Party/Ideological prototype than Org/
-    Employees — a 2026-07 audit found this misclassifies most well-known
-    companies with a one-word name, not just this one).
+    tier, which has no reliable signal for a bare company name: a one-word
+    company name (e.g. "Airbnb") can score closer to the Party/Ideological
+    prototype than Org/Employees.
     """
     entries: list[dict] = []
     for senator in senators:
@@ -1572,23 +1568,18 @@ async def run_senate_pipeline(
         # capped sample) and fetch their cosponsors to build a richer
         # senator-senator cosponsorship graph for SVD ideology and PageRank.
         #
-        # Previously capped at 10 bills/senator across two congresses
-        # (118th-119th): harmless for a senator who sponsors 8 bills a term
-        # (their whole record fit under the cap anyway), but for a prolific
-        # sponsor it meant computing their ideology position from under 15%
-        # of their actual legislative footprint — 2026-07 audit found this
-        # was the likely cause of a senator with 49 sponsored bills in the
-        # 119th Congress alone (and a real-world reputation as one of the
-        # most ideologically extreme senators, corroborated by GovTrack
-        # independently ranking them the most-left senator every year
-        # 2020-2024) landing near the ideological center on this platform's
-        # score instead. Restricting to the current congress only — instead
-        # of two — also brings this in line with this platform's "current
-        # term, not career" principle applied everywhere else (AGENTS.md
+        # Previously capped at 10 bills/senator across two congresses:
+        # harmless for a low-volume sponsor (their whole record fit under
+        # the cap anyway), but for a prolific sponsor it meant computing
+        # their ideology position from a small fraction of their actual
+        # legislative footprint, understating genuinely extreme positions.
+        # Restricting to the current congress only — instead of two —
+        # also brings this in line with this platform's "current term,
+        # not career" principle applied everywhere else (AGENTS.md
         # "6. Current term, not career"), and keeps the now-uncapped total
-        # bounded to a known, precedented quantity (2026-07 measurement:
-        # ~6,000 bills across all 100 senators — comparable to the official-
-        # titles fetch phase, which already handles a similar volume).
+        # bounded to a known quantity (measured at ~6,000 bills across all
+        # 100 senators — comparable to the official-titles fetch phase,
+        # which already handles a similar volume).
         sponsored_bills_for_cosponsor = _build_current_term_sponsored_for_cosponsor(senator_prepared)
 
         if sponsored_bills_for_cosponsor:
@@ -1681,14 +1672,12 @@ async def run_senate_pipeline(
         # senator's real score with None instead of leaving it as "couldn't
         # compute this run" — collapsing many senators' Constituent
         # Alignment (independentVoting) score toward the same shared
-        # neutral default (confirmed live 2026-07-24, the run right after
-        # O6 shipped: 59 of 101 senators landed on an identical IV score,
-        # tripping the ground-truth point-mass check). Same "keep what we
-        # had" principle president_pipeline.py already applies to its own
-        # live-fetch failures — backfilling here, once, means every
-        # consumer below (this dimension's score, the partisan-depth
-        # analysis, the persisted raw stat, and the label-threshold
-        # computation next) gets the same fix for free.
+        # neutral default. Same "keep what we had" principle
+        # president_pipeline.py already applies to its own live-fetch
+        # failures — backfilling here, once, means every consumer below
+        # (this dimension's score, the partisan-depth analysis, the
+        # persisted raw stat, and the label-threshold computation next)
+        # gets the same fix for free.
         _backfill_withheld_sponsorship_scores(
             db, senator_bio_ids,
             leadership_scores, ideology_scores,
@@ -1745,9 +1734,9 @@ async def run_senate_pipeline(
         progress.begin("analyze_senators", total=len(senator_prepared))
         # A fresh client — the Phase 1 client (opened at the top of this
         # function) is already closed by this point, and every sponsored
-        # bill's fetch_bill_actions() call below needs a live one (observed
-        # 2026-07: closed-client failures on every single call here, burning
-        # ~6s of retry backoff each across up to ~12,600 sponsored bills).
+        # bill's fetch_bill_actions() call below needs a live one, or every
+        # call fails and burns its retry backoff across the full sponsored-
+        # bill set.
         async with make_async_client() as client:
             for senator_idx in range(len(senator_prepared)):
                 prepared = senator_prepared[senator_idx]
@@ -1849,10 +1838,10 @@ async def run_senate_pipeline(
                     lobbying_matches = analysis.get("lobbyingMatches", [])
 
                     # Enrich matches with real registered lobbying activity
-                    # (LDA filings). lobbyingSpend was a hardcoded 0 for every
-                    # match before 2026-07; now it reflects actual disclosed
-                    # federal lobbying by the matched organization. Cached per
-                    # org+year, so only the first pipeline run pays the fetch.
+                    # (LDA filings) so lobbyingSpend reflects actual disclosed
+                    # federal lobbying by the matched organization, not a
+                    # placeholder. Cached per org+year, so only the first
+                    # pipeline run pays the fetch.
                     await enrich_lobbying_matches_with_lda(
                         lobbying_matches, db, utcnow().year - 1,
                     )
@@ -2068,9 +2057,9 @@ async def run_senate_pipeline(
             )
             gt_report = check_ground_truth(db)
             # Persist on the run record so failures surface in the admin
-            # dashboard instead of living only in logs (the 2026-06 audit
-            # found scores drifting from raw records across two algorithm
-            # versions with no automated alarm).
+            # dashboard instead of living only in logs — a silent drift
+            # between scores and their raw records across an algorithm
+            # change has no other automated alarm.
             gt_failures = gt_report.get("failures", [])
             # Population-level distribution check — catches the failure
             # mode the per-metric checks can't: everyone converging to

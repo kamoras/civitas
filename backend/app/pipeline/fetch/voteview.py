@@ -57,14 +57,14 @@ construct, BOTH parties in that chamber fall back to the existing
 seat-relative vote-alignment component alone (score_calculator.py) — the
 same footing they've always had.
 
-Confirmed, not assumed (2026-07-23, live Voteview data, 119th Congress):
-Senate Republicans' seat-PVI-vs-position relationship is not
-statistically real (OLS b=-0.00056 p=0.88; Theil-Sen, robust to
-outliers, gives an even more negative slope; Spearman rho=-0.10 p=0.47;
-excluding the two best-known crossers, Collins and Murkowski, changes
-nothing, r2=0.024 p=0.26) — three independent methods agree there is no
-relationship to detect, and it is not an artifact of a couple of famous
-outliers. Senate Democrats' fit over the same period IS real (r2=0.231).
+Confirmed, not assumed, against real Voteview data: Senate Republicans'
+seat-PVI-vs-position relationship is not statistically real (OLS
+b=-0.00056 p=0.88; Theil-Sen, robust to outliers, gives an even more
+negative slope; Spearman rho=-0.10 p=0.47; excluding the two best-known
+crossers changes nothing, r2=0.024 p=0.26) — three independent methods
+agree there is no relationship to detect, and it is not an artifact of a
+couple of famous outliers. Senate Democrats' fit over the same period IS
+real (r2=0.231).
 This is consistent with the congressional-elections literature's own
 long-standing distinction between candidate-centered Senate races and
 more partisan-lean-tracking House races (the construct's source paper,

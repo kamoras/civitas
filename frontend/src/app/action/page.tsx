@@ -19,6 +19,8 @@ import BackToTop from "@/components/BackToTop";
 import {
   PolicyBadge,
   TrendingBadge,
+  DevelopingBadge,
+  DevelopingDisclosure,
   NewFactTag,
   MonitorChips,
   RepresentativeContacts,
@@ -177,6 +179,7 @@ function HeroIssue({
         <span className="border border-phos/40 px-2 py-0.5 tracking-[0.14em] text-phos-mid">
           TOP ISSUE
         </span>
+        {issue.status === "developing" && <DevelopingBadge />}
         {issue.isTrending && <TrendingBadge />}
         <span className="text-ink-lo">{issueDateLabel(issue)}</span>
         <span className="text-ink-min" aria-hidden="true">
@@ -192,6 +195,8 @@ function HeroIssue({
       <p className="mb-6 max-w-3xl font-display text-base leading-relaxed text-ink sm:text-[17px]">
         {issue.summary}
       </p>
+
+      {issue.status === "developing" && <DevelopingDisclosure />}
 
       {issue.policyAreas.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap mb-6">
@@ -303,6 +308,7 @@ function SecondaryIssue({
             <span className="text-ink-min">
               {issueDateLabel(issue)} · {issueRef(issue.publicId)}
             </span>
+            {issue.status === "developing" && <DevelopingBadge />}
             {issue.isTrending && <TrendingBadge />}
             {issue.policyAreas.map((area) => (
               <PolicyBadge key={area} area={area} />
@@ -316,6 +322,7 @@ function SecondaryIssue({
               {issue.summary}
             </p>
           )}
+          {expanded && issue.status === "developing" && <DevelopingDisclosure />}
         </div>
         <span
           className="mt-0.5 shrink-0 font-mono text-lg leading-none text-ink-min"

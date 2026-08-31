@@ -55,14 +55,11 @@ def _nightly_pipeline() -> None:
 
     def _alert_if_skipped(label: str, result: dict) -> bool:
         """Returns True (and alerts) if `result` reports the step was
-        skipped — every step in the chain can genuinely report this now
-        (2026-07-23: House/Stock/Supplementary gained the same DB-row
-        lock Senate already had). Previously only Senate's skip was
-        checked at all, and even that alert didn't mention that a Senate
-        skip silently takes the ENTIRE rest of the chain with it —
-        confirmed live as the likely root cause of stock-trades data
-        going stale for 4+ days and supplementary data for 1+ day, with
-        no alert ever firing for either.
+        skipped. Every step in the nightly chain shares the same DB-row
+        lock, and a skip anywhere silently takes the rest of the chain
+        down with it — this alert exists so a skip is never silent,
+        since downstream data can otherwise go stale for days with no
+        signal that anything is wrong.
         """
         if result.get("status") != "skipped":
             return False
@@ -142,9 +139,9 @@ def _hourly_action_refresh() -> None:
     memory during the most intensive part of the pipeline, or when the
     previous hourly refresh is still running — a slow/degraded local LLM
     can make one cycle run long enough to still be active when the next
-    cron tick fires (confirmed live 2026-07-13), and without this guard
-    that spawns a second thread competing for the same LLM, compounding
-    the slowdown rather than just running a bit late.
+    cron tick fires, and without this guard that spawns a second thread
+    competing for the same LLM, compounding the slowdown rather than
+    just running a bit late.
     """
     def _run():
         try:
@@ -199,9 +196,9 @@ def _hourly_action_refresh() -> None:
                 house_age = house_pipeline_age()
                 if _is_stale(house_age, timedelta(hours=8)):
                     # Same reasoning as the stale PipelineRun check above: a
-                    # House run this old is wedged (normal runs are 1-2h), and
-                    # on 2026-07-04 one hung in Phase 1 for 17h, silently
-                    # starving the action center all day.
+                    # House run this old is wedged, not just slow (normal
+                    # runs are 1-2h) — left unchecked, a hung run would
+                    # silently starve the action center of fresh data all day.
                     from app.ops_alerts import send_ops_alert
                     logger.warning(
                         "House pipeline has been running for %s — treating as "
@@ -223,8 +220,8 @@ def _hourly_action_refresh() -> None:
                 supp_age = supplementary_pipeline_age()
                 # 8h, not stock's 2h: on its weekly SCOTUS-refresh day this
                 # pipeline includes the uncached per-case Oyez crawl, which
-                # took 5h+ in run 69 — a tight threshold would misfire as
-                # "hung" on a run that's just legitimately slow that day.
+                # can run 5h+ — a tight threshold would misfire as "hung"
+                # on a run that's just legitimately slow that day.
                 if _is_stale(supp_age, timedelta(hours=8)):
                     from app.ops_alerts import send_ops_alert
                     logger.warning(
@@ -246,8 +243,8 @@ def _hourly_action_refresh() -> None:
                 stock_age = stock_pipeline_age()
                 # Shorter overrun threshold than House's 8h: stock trades is
                 # PDF/OCR parsing over a bounded PTR filing set, not a
-                # 431-member scoring pass — a confirmed live run took ~90min
-                # (2026-07-15), so 2h already gives 20x headroom over that.
+                # 431-member scoring pass — normal runs finish in under
+                # 90 minutes, so 2h already gives ample headroom.
                 if _is_stale(stock_age, timedelta(hours=2)):
                     from app.ops_alerts import send_ops_alert
                     logger.warning(
@@ -354,10 +351,10 @@ def _election_coverage_refresh() -> None:
                 "Election pipeline has been running for %s — treating as hung "
                 "and proceeding with coverage refresh anyway", age,
             )
-        # Self-overlap guard (2026-07 review B3): the PREVIOUS 15-minute
-        # refresh may still be mid-flight (degraded LLM, slow network) —
-        # overlapping passes double-ingest and double-post. Same shape as
-        # _hourly_action_refresh's guard after the 2026-07-13 incident.
+        # Self-overlap guard: the PREVIOUS 15-minute refresh may still be
+        # mid-flight (degraded LLM, slow network) — overlapping passes
+        # double-ingest and double-post. Same shape as
+        # _hourly_action_refresh's guard above.
         if is_coverage_refresh_running():
             age = coverage_refresh_age()
             if not _is_stale(age, timedelta(hours=2)):

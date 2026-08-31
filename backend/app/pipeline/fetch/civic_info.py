@@ -33,21 +33,20 @@ Field names below are verified two ways, not assumed from prose:
    reliable discriminator, as this parser already assumed; Candidate
    carries `name`/`party`/`candidateUrl` as used below.
 
-2. Against a real authenticated call (2026-08-06, once a real
-   GOOGLE_CIVIC_API_KEY existed): confirmed the key works, the request
-   reaches Google and comes back well-formed, and — the thing the
-   schema alone couldn't show — that `contests` can be MISSING from the
-   response entirely, not just empty, when Google has election metadata
-   for an address but no contest-level data for it. `_parse_contests`'
-   `payload.get("contests") or []` already handled this; now it's a
-   verified real shape, not just defensive coding.
+2. Against a real authenticated call: confirmed the key works, the
+   request reaches Google and comes back well-formed, and — the thing
+   the schema alone couldn't show — that `contests` can be MISSING from
+   the response entirely, not just empty, when Google has election
+   metadata for an address but no contest-level data for it.
+   `_parse_contests`'s `payload.get("contests") or []` already handled
+   this; now it's a verified real shape, not just defensive coding.
 
 ELECTION COVERAGE IS TIME-LIMITED, confirmed the same way: querying
-`elections.electionQuery` on 2026-08-06 listed only primaries within
-days of their own election date (MI, WY, FL, ...) — nothing for a
-November general three months out, for ANY state, not just the pilot
-towns'. voterInfoQuery without an explicit electionId auto-selects from
-that index and returns "Election unknown" when nothing matches, which
+`elections.electionQuery` lists only primaries within days of their own
+election date — nothing for a general still months out, for any state,
+not just the pilot towns. voterInfoQuery without an explicit electionId
+auto-selects from that index and returns "Election unknown" when
+nothing matches, which
 every pilot town in town_directory.json does today. This is not a bug
 in this module or a wrong address — Google populates general-election
 data close to the election, and this feature's `ingest_failed` state is
@@ -69,9 +68,8 @@ logger = logging.getLogger(__name__)
 # Discovery document's rootUrl (https://civicinfo.googleapis.com/) + the
 # voterInfoQuery method's path (civicinfo/v2/voterinfo) — NOT
 # www.googleapis.com/civicinfo/v2, which is legacy generic routing that
-# happens to still work (confirmed live: it reaches the real API and
-# returns a real error, not a connection failure) but isn't the address
-# the API's own schema declares as canonical.
+# still reaches the real API but isn't the address the API's own schema
+# declares as canonical.
 CIVIC_BASE = "https://civicinfo.googleapis.com/civicinfo/v2"
 
 # Shorter than the platform's default 72h API cache, same reasoning as
@@ -181,11 +179,10 @@ async def fetch_town_ballot(
         payload = response.json()
     except httpx.HTTPStatusError as exc:
         # HTTPStatusError's own message embeds the full request URL, which
-        # carries `key` as a query param (confirmed live: a dummy-key test
-        # run put the real key straight into this exact log line before
-        # this fix) — logging it via logger.exception() would put the
-        # live Civic Info key in the server logs on every non-2xx
-        # response. Status code only, never the exception's own message.
+        # carries `key` as a query param — logging it via logger.exception()
+        # would put the live Civic Info key in the server logs on every
+        # non-2xx response. Status code only, never the exception's own
+        # message.
         logger.warning(
             "Civic Info lookup failed for %s, %s: HTTP %d",
             town, state, exc.response.status_code,
@@ -204,10 +201,8 @@ def _to_result(payload: dict, address: str) -> dict:
     # top-level `election` field) — surfaced so the caller can disclose
     # WHICH election these contests are actually for. Google auto-selects
     # from its own index (no electionId passed), and that index only
-    # carries elections close to their own date (verified live,
-    # 2026-08-06: only primaries indexed right now, nothing for a
-    # November general three months out) — so what comes back could be
-    # an odd/off-cycle election, not necessarily this cycle's general.
+    # carries elections close to their own date, so what comes back could
+    # be an odd/off-cycle election, not necessarily this cycle's general.
     election = payload.get("election") or {}
     return {
         "contests": _parse_contests(payload),
