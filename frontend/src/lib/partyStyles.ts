@@ -9,13 +9,11 @@
  * different label text, different opacity values) and are left as their
  * own local constants rather than forced into this one.
  *
- * Record<string, string>, not Record<Party, string>: most call sites index
- * with a plain `string`-typed party field (e.g. senator.party), not the
- * narrower "D"|"R"|"I" literal union, so a stricter key type would just
- * force `as Party` casts at every call site for no real safety gain.
+ * Record<string, string>, not keyed by a "D"|"R"|"I" literal union: most
+ * call sites index with a plain `string`-typed party field (e.g.
+ * senator.party), so a stricter key type would just force a cast at
+ * every call site for no real safety gain.
  */
-
-export type Party = "D" | "R" | "I";
 
 export const PARTY_COLORS: Record<string, string> = {
   D: "text-dem-blue",

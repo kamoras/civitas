@@ -60,6 +60,23 @@ class MonitorStatus(StrEnum):
     CLOSED = "closed"  # inactive >30 days, archived
 
 
+class ActionIssueStatus(StrEnum):
+    """Lifecycle of an ActionIssue's confidence, not its retirement state
+    (see ActionIssue.is_current for that — orthogonal: a DEVELOPING issue
+    can retire unconfirmed same as a CONFIRMED one can).
+
+    DEVELOPING issues are drafted from a primary source (e.g. a Senate
+    roll-call vote) before any press coverage exists — see
+    pipeline/analyze/early_signal.py. They never post to Bluesky and rank
+    below every CONFIRMED issue. A DEVELOPING row either gets promoted to
+    CONFIRMED once matching press coverage appears, or is retired
+    unconfirmed after its deadline — never silently deleted, same
+    render-the-true-state approach as BallotMeasure.status.
+    """
+    DEVELOPING = "developing"
+    CONFIRMED = "confirmed"
+
+
 class Senator(Base):
     __tablename__ = "senators"
 
@@ -946,6 +963,26 @@ class ActionIssue(Base):
     previous_facts: Mapped[str] = mapped_column(Text, default="[]")
     is_current: Mapped[bool] = mapped_column(Boolean, default=True)
     primary_article_date: Mapped[str | None] = mapped_column(String(10), nullable=True, default=None)
+
+    # Early-signal reporting (see pipeline/analyze/early_signal.py). Default
+    # "confirmed" means every ordinary news-derived issue (and every
+    # pre-existing row) needs no backfill — only a primary-source-drafted
+    # issue is ever created as "developing".
+    status: Mapped[str] = mapped_column(String(20), default=ActionIssueStatus.CONFIRMED)
+    # e.g. "roll_call_vote"; null for ordinary news-derived issues. Distinct
+    # from `status` so later source types (FEC filings, etc.) reuse this
+    # same column rather than adding a new one each time.
+    source_type: Mapped[str | None] = mapped_column(String(40), nullable=True, default=None)
+    primary_source_url: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    # Set only at DEVELOPING creation. Past this with no corroborating match,
+    # _expire_stale_developing_issues retires the row unconfirmed — never
+    # deletes it (see ActionIssueStatus docstring).
+    confirmation_deadline: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    # Set only by _promote_developing_issue. confirmed_at - created_at is
+    # the real per-row lead time (how long the signal ran before press
+    # coverage matched it) — durable, queryable success-metric data, not
+    # just an aggregate action_metrics bucket.
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
 
 
 class ScoreSnapshot(Base):

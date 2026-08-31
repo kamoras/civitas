@@ -66,6 +66,10 @@ export interface ActionIssue {
   /** Only ever true from the issues-list fetch — the single-issue lookup
    *  has no peer issues to judge traction against. */
   isTrending: boolean;
+  /** "developing" is a primary-source-only draft awaiting press
+   *  corroboration (see backend early_signal.py) — shown with a
+   *  disclosure badge and ranked after every "confirmed" issue. */
+  status: 'developing' | 'confirmed';
 }
 
 export interface MyRepSenator {

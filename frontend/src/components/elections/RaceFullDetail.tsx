@@ -1,20 +1,22 @@
-import { isActiveCandidate } from "@/lib/elections";
+import { isActiveCandidate, raceBadgeLabel } from "@/lib/elections";
 import CandidateCard from "./CandidateCard";
 import RaceFinancials from "./RaceFinancials";
-import CoverageFeed from "./CoverageFeed";
-import type { RaceWithCandidates, RaceCoverageItem } from "@/types/election";
+import type { RaceWithCandidates } from "@/types/election";
 
-/** Everything about one race, inline — candidates, fundraising, and its
- * own coverage — so a voter never has to leave the state ballot page for
- * "the full race detail" (2026-08 revamp: that used to live one click
- * away at /elections/[raceId], which was one nested page too many). */
-export default function RaceFullDetail({
-  race,
-  coverage,
-}: {
-  race: RaceWithCandidates;
-  coverage: RaceCoverageItem[];
-}) {
+/** Everything about one race, inline — candidates and fundraising — so a
+ * voter never has to leave the state ballot page for "the full race
+ * detail" (2026-08 revamp: that used to live one click away at
+ * /elections/[raceId], which was one nested page too many).
+ *
+ * Coverage is NOT repeated here: it used to render its own per-race
+ * CoverageFeed, which meant every Senate race's articles (that section
+ * always rendered) and the selected House race's articles appeared
+ * twice on the page — once here, once in the page-level feed (2026-08
+ * report: "the same articles show up twice on the state page"). The
+ * single top-level feed already tags each item with its race badge
+ * (CoverageFeed.tsx), so one list serves both "browse everything" and
+ * "what's about this race" without duplicating a single article. */
+export default function RaceFullDetail({ race }: { race: RaceWithCandidates }) {
   // FEC candidate files include paper filers and prior-cycle records —
   // collapse those under "Other FEC filers" so the page stays honest
   // without deleting anyone (same rule race-detail used to apply).
@@ -59,14 +61,13 @@ export default function RaceFullDetail({
         </div>
       )}
 
-      {coverage.length > 0 && (
-        <div className="mt-4">
-          <h3 className="mb-2 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-            Coverage of this race ({coverage.length})
-          </h3>
-          <CoverageFeed items={coverage} />
-        </div>
-      )}
+      <p className="mt-4 font-mono text-xs text-ink-min">
+        News coverage of this race is tagged{" "}
+        <span className="border border-white/15 px-1.5 py-0.5 tracking-[0.1em] text-ink-lo">
+          {raceBadgeLabel(race)}
+        </span>{" "}
+        in the News Coverage section above.
+      </p>
     </div>
   );
 }
