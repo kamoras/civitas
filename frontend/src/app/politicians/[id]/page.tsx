@@ -33,6 +33,8 @@ export async function generateMetadata({
   const title = `${name} — Civitas`;
   const description = `${role}${state} — public record, scorecard, and active issues on Civitas.`;
 
+  const ogImage = `${SITE}/api/og?politician=${id}`;
+
   return {
     title,
     description,
@@ -41,6 +43,13 @@ export async function generateMetadata({
       description,
       url: `${SITE}/politicians/${id}`,
       siteName: "Civitas",
+      images: [{ url: ogImage, width: 1200, height: 630, alt: name }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [ogImage],
     },
   };
 }

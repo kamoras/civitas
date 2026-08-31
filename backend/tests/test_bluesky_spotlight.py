@@ -9,11 +9,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.models import Senator, TimelineEntry, WeekSummary
+from app.models import BskySenatorSpotlight, Representative, Senator, TimelineEntry, WeekSummary
 from app.pipeline.analyze.bluesky_spotlight import (
     _generate_spotlight_post,
     _generate_weekly_post,
     _most_notable_score,
+    _pick_politician,
     _publish_spotlight,
     _publish_weekly,
     _week_label,
@@ -80,6 +81,101 @@ class TestMostNotableScore:
         assert key == "Funding independence"
 
 
+def _senator(id, score=50.0, **overrides):
+    kwargs = dict(
+        id=id, name=id, state="IA", party="R", is_current=True,
+        score_funding_independence=score, score_independent_voting=score,
+        score_legislative_effectiveness=score,
+    )
+    kwargs.update(overrides)
+    return Senator(**kwargs)
+
+
+def _representative(id, score=50.0, district=1, **overrides):
+    kwargs = dict(
+        id=id, name=id, state="CA", district=district, party="D", is_current=True,
+        score_funding_independence=score, score_independent_voting=score,
+        score_legislative_effectiveness=score,
+    )
+    kwargs.update(overrides)
+    return Representative(**kwargs)
+
+
+class TestPickPolitician:
+    """The daily pick is drawn from senators AND representatives combined
+    (one cycle, one pool) — confirmed with the user rather than assumed —
+    but rank/total must stay per-chamber, matching the site's own
+    leaderboard (separate Senate/House tabs), or the post would state a
+    number the reader can't find anywhere else on the site."""
+
+    def test_no_candidates_returns_none(self, db_session):
+        entity, rank, total, chamber = _pick_politician(db_session)
+        assert (entity, rank, total, chamber) == (None, 0, 0, "")
+
+    def test_combined_pool_can_pick_a_representative(self, db_session):
+        db_session.add(_senator("chuck-grassley"))
+        rep = _representative("nancy-pelosi")
+        db_session.add(rep)
+        db_session.flush()
+
+        with patch(
+            "app.pipeline.analyze.bluesky_spotlight.random.choice",
+            side_effect=lambda pool: next(p for p in pool if p[1] == "house"),
+        ):
+            entity, rank, total, chamber = _pick_politician(db_session)
+
+        assert chamber == "house"
+        assert entity.id == "nancy-pelosi"
+
+    def test_rank_is_computed_within_the_picked_entitys_own_chamber(self, db_session):
+        # Two senators (the rep's raw score would rank #1 among all three
+        # combined) — the rep's reported rank must still be "#1 of 1", not
+        # "#1 of 3", since House and Senate are ranked separately on the
+        # site's own leaderboard.
+        db_session.add(_senator("senator-a", score=90.0))
+        db_session.add(_senator("senator-b", score=80.0))
+        rep = _representative("rep-a", score=95.0)
+        db_session.add(rep)
+        db_session.flush()
+
+        with patch(
+            "app.pipeline.analyze.bluesky_spotlight.random.choice",
+            side_effect=lambda pool: next(p for p in pool if p[1] == "house"),
+        ):
+            entity, rank, total, chamber = _pick_politician(db_session)
+
+        assert (entity.id, rank, total, chamber) == ("rep-a", 1, 1, "house")
+
+    def test_cycle_resets_once_the_combined_pool_is_exhausted(self, db_session):
+        db_session.add(_senator("senator-a"))
+        db_session.add(_representative("rep-a"))
+        db_session.add(BskySenatorSpotlight(senator_id="senator-a", chamber="senate"))
+        db_session.add(BskySenatorSpotlight(senator_id="rep-a", chamber="house"))
+        db_session.commit()
+
+        entity, rank, total, chamber = _pick_politician(db_session)
+
+        assert entity is not None
+        assert db_session.query(BskySenatorSpotlight).count() == 0
+
+    def test_a_senator_and_representative_sharing_an_id_string_are_not_conflated(self, db_session):
+        # senator_id + chamber together identify "already spotlighted", not
+        # senator_id alone — a representative that happens to share an id
+        # with an already-spotlighted senator must still be pickable.
+        db_session.add(_senator("j-smith"))
+        db_session.add(_representative("j-smith"))
+        db_session.add(BskySenatorSpotlight(senator_id="j-smith", chamber="senate"))
+        db_session.flush()
+
+        with patch(
+            "app.pipeline.analyze.bluesky_spotlight.random.choice",
+            side_effect=lambda pool: pool[0],
+        ):
+            entity, rank, total, chamber = _pick_politician(db_session)
+
+        assert chamber == "house"
+
+
 class TestFormerOfficialStatusGrounding:
     """2026-07 stale-training-data class ("former President Donald Trump"
     published while the source said "President Trump") — same mechanical
@@ -96,7 +192,7 @@ class TestFormerOfficialStatusGrounding:
             "app.pipeline.analyze.bluesky_spotlight.call_llm",
             return_value={"post": "Former Senator Chuck Grassley ranks #1 of 100 senators."},
         ):
-            text = _generate_spotlight_post(senator, rank=1, total=100)
+            text = _generate_spotlight_post(senator, rank=1, total=100, chamber="senate")
 
         assert text is None
 
@@ -112,6 +208,51 @@ class TestFormerOfficialStatusGrounding:
             text = _generate_weekly_post(week, db_session)
 
         assert text is None
+
+
+class TestGenerateSpotlightPostForRepresentative:
+    """_generate_spotlight_post is chamber-generic (score reads and
+    compute_overall_score are duck-typed identically between Senator and
+    Representative) — only the identity string and standing/role nouns
+    differ. Confirms a representative candidate produces a prompt/post
+    the mechanical checks accept, with the right identity shape (state
+    AND district, not just state) and the right standing noun."""
+
+    def test_representative_identity_includes_district_and_is_accepted(self):
+        rep = _representative("nancy-pelosi", score=70.0, district=11, state="CA", party="D", name="Nancy Pelosi")
+        with patch(
+            "app.pipeline.analyze.bluesky_spotlight.call_llm",
+            return_value={
+                "post": "Nancy Pelosi (D-CA-11) ranks #40 of 435 representatives.",
+            },
+        ):
+            text = _generate_spotlight_post(rep, rank=40, total=435, chamber="house")
+
+        # strip_hashtags_and_truncate (shared with the issue/election
+        # posters) converts "#word" to "word" — pre-existing, unrelated to
+        # chamber generalization.
+        assert text == "Nancy Pelosi (D-CA-11) ranks 40 of 435 representatives."
+
+    def test_representative_standing_noun_is_enforced_via_the_prompt_not_hardcoded(self):
+        # A "senators" noun on a representative's post would misdescribe
+        # what was actually spotlighted — ungrounded_numbers won't catch a
+        # wrong NOUN, only wrong numbers, so this is really a prompt-
+        # correctness check: does the generated user_prompt itself ask for
+        # "representatives", not "senators", when chamber="house"?
+        rep = _representative("nancy-pelosi", score=70.0, district=11, name="Nancy Pelosi")
+        captured = {}
+
+        def _capture_prompt(**kwargs):
+            captured["user_prompt"] = kwargs["user_prompt"]
+            return {"post": "Nancy Pelosi (D-CA-11) ranks #40 of 435 representatives."}
+
+        with patch(
+            "app.pipeline.analyze.bluesky_spotlight.call_llm", side_effect=_capture_prompt,
+        ):
+            _generate_spotlight_post(rep, rank=40, total=435, chamber="house")
+
+        assert "representatives" in captured["user_prompt"]
+        assert "Representative: Nancy Pelosi (D-CA-11)" in captured["user_prompt"]
 
 
 class TestMagnitudeClaimRejection:
@@ -143,7 +284,7 @@ class TestMagnitudeClaimRejection:
                 ),
             },
         ):
-            text = _generate_spotlight_post(self._senator(), rank=10, total=100)
+            text = _generate_spotlight_post(self._senator(), rank=10, total=100, chamber="senate")
 
         assert text is None
 
@@ -157,7 +298,7 @@ class TestMagnitudeClaimRejection:
                 ),
             },
         ):
-            text = _generate_spotlight_post(self._senator(), rank=10, total=100)
+            text = _generate_spotlight_post(self._senator(), rank=10, total=100, chamber="senate")
 
         assert text is None
 
@@ -171,7 +312,7 @@ class TestMagnitudeClaimRejection:
                 ),
             },
         ):
-            text = _generate_spotlight_post(self._senator(), rank=10, total=100)
+            text = _generate_spotlight_post(self._senator(), rank=10, total=100, chamber="senate")
 
         assert text is not None
 
