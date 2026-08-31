@@ -65,6 +65,16 @@ class TestEmbedAndSearch:
     def test_empty_index_returns_none_not_empty_list(self, vec_env):
         assert vector_store.search_explore_documents("anything") is None
 
+    def test_table_dropped_mid_rebuild_returns_none_not_a_raise(self, vec_env):
+        """search_explore_documents doesn't hold _vec_lock (a read
+        shouldn't block on a rebuild that can take minutes) — a query
+        landing in ensure_explore_index's brief DROP-then-recreate window
+        sees "no such table" rather than 0 rows. Must be treated as the
+        same "not ready yet" case as an empty index, not surfaced as a
+        500 to a real /search request."""
+        vector_store.get_vec_conn().execute("DROP TABLE vec_explore")
+        assert vector_store.search_explore_documents("anything") is None
+
     def test_metadata_filter_pushed_into_query(self, vec_env):
         vector_store.embed_explore_documents([
             _doc(1, "Same title", doc_type="House Floor Speech"),
