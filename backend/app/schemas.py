@@ -591,6 +591,12 @@ class ActionIssueSchema(CamelModel):
     # the single-issue endpoint, which is mostly hit for OG-crawler
     # metadata and doesn't have peers to compare against.
     is_trending: bool = False
+    # "confirmed" for every ordinary news-derived issue; "developing" only
+    # for a primary-source-only draft awaiting press corroboration — see
+    # ActionIssueStatus and pipeline/analyze/early_signal.py. The frontend
+    # uses this to show a disclosure badge and to exclude these from
+    # normal top-story ranking competition.
+    status: str = "confirmed"
 
 
 class MonitorUpdateSchema(CamelModel):

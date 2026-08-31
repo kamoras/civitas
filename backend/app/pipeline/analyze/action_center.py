@@ -13,7 +13,6 @@ Flow:
   8. Persist as ActionIssue rows for the current date
 """
 
-import calendar
 import json
 import logging
 import re
@@ -27,13 +26,14 @@ from zoneinfo import ZoneInfo
 
 import httpx
 import numpy as np
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
 from app.models import (
     ActionIssue,
+    ActionIssueStatus,
     ExploreDocument,
     Justice,
     LlmGenerationSample,
@@ -45,19 +45,23 @@ from app.models import (
     Senator,
 )
 from app.pipeline.analyze import action_metrics
+from app.pipeline.analyze.early_signal import (
+    CONFIRMATION_WINDOW_HOURS,
+    check_roll_call_signals,
+    expire_stale_developing_issues,
+)
 from app.pipeline.analyze.grounding import (
     grounding_violations,
     hedge_and_editorializing_violations,
     log_intensifier_usage,
-    placeholder_tokens,
     repeated_sentences,
     ungrounded_electoral_claims,
     ungrounded_former_official_claims,
-    ungrounded_numbers,
     ungrounded_party_claims,
     ungrounded_relationship_claims,
     ungrounded_statistics,
     ungrounded_titled_names,
+    validate_facts,
 )
 from app.pipeline.analyze.ollama_client import call_llm, extract_json
 from app.pipeline.analyze.score_calculator import compute_overall_score
@@ -618,6 +622,46 @@ def _apply_matched_issue_update(
             rank, title[:60], primary_article_date,
         )
     return has_new_articles
+
+
+def _promote_developing_issue(
+    match: ActionIssue, new_values: dict, rank: int, today: str,
+    primary_article_date: str, facts: list, title: str,
+) -> bool:
+    """Promote a DEVELOPING (primary-source-only) issue to CONFIRMED once
+    a fresh news cluster matches it — a full content swap (the hedged
+    primary-source draft is superseded by real reporting), not a merge.
+
+    Delegates rank/date/is_current/previous_facts-snapshot/full-story-
+    invalidation/Bluesky-repost-eligibility bookkeeping to the existing
+    _apply_matched_issue_update rather than re-deriving any of it — one
+    function owns that logic, not two.
+    """
+    lead_hours = (
+        (utcnow() - match.created_at).total_seconds() / 3600
+        if match.created_at else 0.0
+    )
+    match.status = ActionIssueStatus.CONFIRMED
+    match.confirmed_at = utcnow()
+    match.confirmation_deadline = None
+    source_type = match.source_type or "unknown"
+    action_metrics.increment("early_signal_confirmed")
+    action_metrics.increment(f"early_signal_confirmed_{source_type}")
+    # Bucketed as a fraction of the confirmation window used, not raw
+    # hours — decile_bucket expects a 0-1 ratio, and "how much of the
+    # window elapsed before confirmation" is itself the more useful
+    # success metric (did press catch up quickly or right at the wire).
+    action_metrics.increment_bucket(
+        "early_signal_lead_time_fraction",
+        min(lead_hours / CONFIRMATION_WINDOW_HOURS, 1.0),
+    )
+    logger.info(
+        "Promoted developing issue %d to confirmed after %.1fh: '%s'",
+        match.id, lead_hours, title[:60],
+    )
+    return _apply_matched_issue_update(
+        match, new_values, rank, today, primary_article_date, facts, title,
+    )
 
 
 # Minimum signature containment for two issues to be the same story, and
@@ -1974,157 +2018,11 @@ def _deduplicate_top_clusters(
     return [ranked_clusters[i] for i in selected]
 
 
-def _validate_facts(facts: list, source_text: str | None = None) -> list:
-    """Drop hallucinated or self-referential facts before saving.
-
-    Catches five LLM failure modes:
-    - Self-comparison: "Meta surpasses Meta Platforms" — same root word on both sides
-    - Non-list return: LLM occasionally wraps facts in a dict or returns a string
-    - Stale future dates: fact says "will remain until December 2025" in June 2026
-    - Fabricated statistics: when ``source_text`` (the article texts the LLM
-      was shown) is provided, any fact containing a digit group that never
-      appears in the source is dropped. The prompt already forbids inferred
-      numbers; this enforces it mechanically (see grounding.py).
-    - Meta-facts: "No specific dates were provided in the articles" describes
-      the coverage's limits, not something that happened in the world — the
-      prompt's fact rule (5) already forbids this, but unlike the other
-      three prompt-only rules above it had no mechanical backstop. It's the
-      single most common failure mode of the current small local model:
-      self-referencing the source material as the fact's subject instead of
-      describing an actual event.
-    """
-    if not isinstance(facts, list):
-        return []
-
-    import re as _re
-
-    _DATE_MONTH_YEAR = _re.compile(
-        r'\b(January|February|March|April|May|June|July|August|'
-        r'September|October|November|December)\s+(\d{4})\b',
-        _re.IGNORECASE,
-    )
-    _FORWARD_PHRASES = ("will remain", "is expected", "continue", "until ", "through ", "by the end")
-    _META_PHRASES = (
-        "in the article", "in the articles", "in the coverage", "in the report",
-        "in the reporting", "the coverage ", "the reporting ",
-        # "The articles" can also be the sentence's grammatical SUBJECT
-        # ("The articles focused on...", "The articles referenced..."),
-        # which the "in the articles" form above doesn't catch.
-        "the article ", "the articles ",
-    )
-    # A second meta-fact shape _META_PHRASES doesn't cover: reporting that a
-    # detail is ABSENT, rather than naming "the article(s)" as the subject
-    # ("No specific date was provided...", "Specific names were not
-    # disclosed..."). Two grammatical shapes cover this (negation in the
-    # subject via "no", negation in the verb via "not"); both require one
-    # of the qualifying words below so a genuine positive fact is never
-    # caught, only the quantified-absence claim is. Narrow and
-    # evidence-based on purpose, like _HEDGE_PHRASE_RE in grounding.py —
-    # widen with real examples, not speculative phrasing.
-    _ABSENCE_NO_SUBJECT_RE = _re.compile(
-        r"\bno (?:specific|official|further|additional)\b[^.]{0,50}\b(?:was|were)\s+"
-        r"(?:provided|disclosed|specified|released|given|available)\b",
-        _re.IGNORECASE,
-    )
-    _ABSENCE_NOT_VERB_RE = _re.compile(
-        r"\b(?:specific|official)\b[^.]{0,50}\b(?:was|were)\s+not\s+"
-        r"(?:provided|disclosed|specified|released|given|available)\b",
-        _re.IGNORECASE,
-    )
-    _today = datetime.now(_US_EAST).date()
-    _month_index = {m: i for i, m in enumerate(calendar.month_name) if m}
-
-
-    clean = []
-    for fact in facts:
-        if not isinstance(fact, str) or not fact.strip():
-            continue
-        lower = fact.lower()
-
-        # Literal unfilled placeholders — "[date]", "[name]". Every other
-        # check here is digit-based, so a placeholder with no digits in it
-        # would otherwise slip through untouched.
-        placeholders = placeholder_tokens(fact)
-        if placeholders:
-            logger.warning("Dropping fact with placeholder tokens (%s): %s",
-                           ", ".join(placeholders), fact[:120])
-            action_metrics.increment("facts_dropped_placeholder")
-            continue
-
-        # Family-relationship claims with no family vocabulary anywhere in
-        # the source articles — same fabricated-relationship class as the
-        # electoral-claims guard.
-        if source_text and ungrounded_relationship_claims(fact, source_text):
-            logger.warning("Dropping fact with ungrounded family relationship: %s", fact[:120])
-            action_metrics.increment("facts_dropped_relationship")
-            continue
-
-        # "Former <office>" status the source articles never asserted — the
-        # model demoting a sitting official from its own stale training data.
-        if source_text and ungrounded_former_official_claims(fact, source_text):
-            logger.warning("Dropping fact with ungrounded 'former' office-holder status: %s", fact[:120])
-            action_metrics.increment("facts_dropped_former_status")
-            continue
-
-        # Detect self-referential comparisons: extract capitalized words and check
-        # if any word root appears on both sides of a comparison verb.
-        comparison_verbs = ("surpass", "overtake", "exceed", "beat", "top", "outpace")
-        if any(verb in lower for verb in comparison_verbs):
-            words = _re.findall(r"\b[A-Z][a-z]{3,}\b", fact)
-            roots = [w.lower()[:6] for w in words]  # stem to first 6 chars
-            if len(roots) != len(set(roots)):  # duplicate root → self-comparison
-                logger.warning("Dropping self-referential fact: %s", fact[:120])
-                action_metrics.increment("facts_dropped_self_comparison")
-                continue
-
-        # Detect stale future-tense facts with past dates — e.g. the LLM writes
-        # "the ban will remain until December 2025" when it's now June 2026.
-        stale = False
-        if any(phrase in lower for phrase in _FORWARD_PHRASES):
-            for m in _DATE_MONTH_YEAR.finditer(fact):
-                month_num = _month_index.get(m.group(1).capitalize(), 0)
-                if month_num == 0:
-                    continue
-                try:
-                    mentioned = datetime(int(m.group(2)), month_num, 1).date()
-                    if mentioned < _today:
-                        logger.warning("Dropping stale future-dated fact: %s", fact[:120])
-                        action_metrics.increment("facts_dropped_stale_date")
-                        stale = True
-                        break
-                except ValueError:
-                    pass
-        if stale:
-            continue
-
-        # Detect meta-facts that describe the source material's limits rather
-        # than an actual event — see the docstring for real production examples.
-        if any(phrase in lower for phrase in _META_PHRASES):
-            logger.warning("Dropping meta-fact referencing the coverage itself: %s", fact[:120])
-            action_metrics.increment("facts_dropped_meta")
-            continue
-
-        # Second meta-fact shape: reports the ABSENCE of a detail rather
-        # than naming "the article(s)" as subject — see the docstring.
-        if _ABSENCE_NO_SUBJECT_RE.search(fact) or _ABSENCE_NOT_VERB_RE.search(fact):
-            logger.warning("Dropping fact reporting an absence of information: %s", fact[:120])
-            action_metrics.increment("facts_dropped_absence_of_info")
-            continue
-
-        # Fabricated-statistic check against the articles the LLM was shown.
-        if source_text:
-            novel = ungrounded_numbers(fact, source_text)
-            if novel:
-                logger.warning(
-                    "Dropping fact with numbers not in source (%s): %s",
-                    ", ".join(novel), fact[:120],
-                )
-                action_metrics.increment("facts_dropped_ungrounded_number")
-                continue
-
-        clean.append(fact.strip())
-
-    return clean
+# validate_facts now lives in grounding.py (early_signal.py needs it too,
+# and importing it from here would be a circular import). Aliased under
+# its original private name since every call site and test in this file
+# already uses it.
+_validate_facts = validate_facts
 
 
 _ROLE_PATTERNS = [
@@ -4161,7 +4059,13 @@ def _update_national_monitors(today: str, db: Session) -> None:
 
     today_issues = (
         db.query(ActionIssue)
-        .filter(ActionIssue.date == today)
+        .filter(
+            ActionIssue.date == today,
+            # A hedged, unconfirmed, single-source draft must not surface
+            # publicly via a monitor update before press corroborates it —
+            # same reasoning as excluding it from Bluesky/full-story.
+            ActionIssue.status != ActionIssueStatus.DEVELOPING,
+        )
         .order_by(ActionIssue.rank)
         .all()
     )
@@ -4267,7 +4171,10 @@ def _update_national_monitors(today: str, db: Session) -> None:
 
     past_issues = (
         db.query(ActionIssue)
-        .filter(ActionIssue.date >= cutoff_date, ActionIssue.date < today)
+        .filter(
+            ActionIssue.date >= cutoff_date, ActionIssue.date < today,
+            ActionIssue.status != ActionIssueStatus.DEVELOPING,
+        )
         .all()
     )
 
@@ -4821,6 +4728,57 @@ def _persist_metrics(db: Session) -> dict[str, int]:
     return snapshot
 
 
+def _rank_ordered_issues(
+    still_current: list[ActionIssue], matched_issue_ids: set[int],
+) -> list[ActionIssue]:
+    """Final rank order for this run's renumbering pass — extracted for
+    direct testability, same precedent as _bluesky_eligible_issues/
+    _retire_untouched_issues.
+
+    Issues touched (matched or newly created) this run keep their
+    relative order first; spared survivors follow. Spared DEVELOPING
+    issues (not yet promoted or expired) always sort after every spared
+    CONFIRMED issue — a hedged, unconfirmed draft must never crowd out a
+    real top story on its own placeholder rank value.
+    """
+    touched = sorted(
+        (r for r in still_current if r.id in matched_issue_ids),
+        key=lambda r: r.rank or 0,
+    )
+    spared_confirmed = sorted(
+        (r for r in still_current
+         if r.id not in matched_issue_ids and r.status != ActionIssueStatus.DEVELOPING),
+        key=lambda r: r.rank or 0,
+    )
+    spared_developing = sorted(
+        (r for r in still_current
+         if r.id not in matched_issue_ids and r.status == ActionIssueStatus.DEVELOPING),
+        key=lambda r: r.rank or 0,
+    )
+    return touched + spared_confirmed + spared_developing
+
+
+def _bluesky_eligible_issues(db: Session, today: str) -> list[ActionIssue]:
+    """Today's current issues, excluding DEVELOPING ones — extracted for
+    direct testability, same precedent as _retire_untouched_issues/
+    _apply_matched_issue_update.
+
+    Nothing posts to Bluesky before press corroborates it: there is no
+    edit/correction mechanism for a wrong post, and Bluesky itself doesn't
+    support editing a published one.
+    """
+    return (
+        db.query(ActionIssue)
+        .filter(
+            ActionIssue.date == today,
+            ActionIssue.is_current == True,  # noqa: E712
+            ActionIssue.status != ActionIssueStatus.DEVELOPING,
+        )
+        .order_by(ActionIssue.rank)
+        .all()
+    )
+
+
 def _run_refresh(db: Session) -> int:
     t0 = time.perf_counter()
     today = datetime.now(_US_EAST).strftime("%Y-%m-%d")
@@ -4828,11 +4786,41 @@ def _run_refresh(db: Session) -> int:
     logger.info("Action center refresh starting for %s", today)
     action_metrics.reset()
     _set_refresh_state(
-        is_running=True, stage="fetch", stage_detail=None,
+        is_running=True, stage="roll_call_signals", stage_detail=None,
         started_at=utcnow(),
     )
 
+    # 0. Check primary-source signals (Senate roll-call votes) for anything
+    # notable enough to draft ahead of press coverage — see early_signal.py.
+    # Independent of the news fetch below (an empty/failed news pull must
+    # never block this, and vice versa), so it runs first and is wrapped
+    # non-fatally: a bug here must never take down the whole hourly refresh.
+    try:
+        check_roll_call_signals(db)
+    except Exception:
+        logger.exception("check_roll_call_signals failed (non-fatal)")
+    # Expiry must run on every exit path (mirrors _persist_metrics's own
+    # "called on every exit path" discipline below) — a quiet news day
+    # still needs to retire developing issues whose deadline has passed,
+    # not just the runs that make it to the main flush/retire stage.
+    try:
+        expire_stale_developing_issues(db, utcnow())
+    except Exception:
+        logger.exception("expire_stale_developing_issues failed (non-fatal)")
+    # Own try/except so this always fires regardless of which call above
+    # raised — otherwise a raise between check_roll_call_signals'
+    # db.add()/flush() and this commit silently dropped the flushed-but-
+    # uncommitted new row on the two early-abort paths below (neither
+    # commits on its own; refresh_action_issues' finally: db.close() would
+    # discard it). Self-healing either way (the next hourly poll re-drafts
+    # the same vote), but wasting a full LLM draft + grounding pass isn't.
+    try:
+        db.commit()
+    except Exception:
+        logger.exception("Commit after roll-call-signal stage failed (non-fatal)")
+
     # 1. Fetch articles
+    _set_refresh_state(stage="fetch")
     articles = fetch_news_articles()
     if not articles:
         logger.warning("No articles fetched — skipping action center refresh")
@@ -4881,10 +4869,18 @@ def _run_refresh(db: Session) -> int:
     # Issues are keyed by TOPIC, not by (date, rank) slot — the same topic
     # always maps to the same DB row regardless of rank or whether it briefly
     # fell out of the top N and came back.
+    # DEVELOPING rows are included regardless of date/lookback — their
+    # corroboration window is independent of this unrelated "how far back
+    # do we re-match ordinary news" tuning knob, and decoupling the two
+    # means a longer confirmation_deadline later doesn't silently need a
+    # matching change here too.
     _lookback = (datetime.now(_US_EAST) - timedelta(days=2)).strftime("%Y-%m-%d")
     _recent_issues: list[ActionIssue] = (
         db.query(ActionIssue)
-        .filter(ActionIssue.date >= _lookback)
+        .filter(or_(
+            ActionIssue.date >= _lookback,
+            ActionIssue.status == ActionIssueStatus.DEVELOPING,
+        ))
         .all()
     )
     _recent_embs: "np.ndarray | None" = (
@@ -5247,9 +5243,14 @@ def _run_refresh(db: Session) -> int:
 
         if match:
             _matched_issue_ids.add(match.id)
-            _apply_matched_issue_update(
-                match, _new_values, rank, today, primary_article_date, facts, title,
-            )
+            if match.status == ActionIssueStatus.DEVELOPING:
+                _promote_developing_issue(
+                    match, _new_values, rank, today, primary_article_date, facts, title,
+                )
+            else:
+                _apply_matched_issue_update(
+                    match, _new_values, rank, today, primary_article_date, facts, title,
+                )
             # Split from the new-topic case below: `issues_created` counts
             # both, so a run that only ever re-matched yesterday's stories
             # reported the same number as one that found four fresh ones.
@@ -5302,15 +5303,7 @@ def _run_refresh(db: Session) -> int:
     # the public page (two simultaneous #4s, 2026-07 audit). Issues placed
     # by this run keep their relative order first; spared survivors follow.
     still_current = [r for r in all_current if r.is_current]
-    touched = sorted(
-        (r for r in still_current if r.id in _matched_issue_ids),
-        key=lambda r: r.rank or 0,
-    )
-    spared = sorted(
-        (r for r in still_current if r.id not in _matched_issue_ids),
-        key=lambda r: r.rank or 0,
-    )
-    for new_rank, row in enumerate(touched + spared, start=1):
+    for new_rank, row in enumerate(_rank_ordered_issues(still_current, _matched_issue_ids), start=1):
         row.rank = new_rank
 
     db.commit()
@@ -5341,12 +5334,7 @@ def _run_refresh(db: Session) -> int:
     if issues_created > 0:
         try:
             from app.pipeline.analyze.bluesky_poster import process_issues_for_bluesky
-            today_issues = (
-                db.query(ActionIssue)
-                .filter(ActionIssue.date == today, ActionIssue.is_current == True)  # noqa: E712
-                .order_by(ActionIssue.rank)
-                .all()
-            )
+            today_issues = _bluesky_eligible_issues(db, today)
             bsky_posted = process_issues_for_bluesky(today_issues, db)
             _set_refresh_state(last_bsky_posted=bsky_posted or 0)
         except Exception:
@@ -5358,7 +5346,10 @@ def _run_refresh(db: Session) -> int:
     story_issues = (
         db.query(ActionIssue)
         .filter(ActionIssue.date == today, ActionIssue.is_current == True,  # noqa: E712
-                ActionIssue.full_story.is_(None))
+                ActionIssue.full_story.is_(None),
+                # A full-length narrative implies more depth than a
+                # primary-source-only draft has — skip until promoted.
+                ActionIssue.status != ActionIssueStatus.DEVELOPING)
         .order_by(ActionIssue.rank)
         .all()
     )

@@ -364,6 +364,24 @@ class TestHedgeAndEditorializingViolations:
         assert len(problems) == 1
         assert "was justified" in problems[0]
 
+    def test_allow_hedging_suppresses_hedge_and_editorializing_only(self):
+        """early_signal.py's developing stories WANT hedging ("coverage has
+        not yet appeared" is the honest voice there) — allow_hedging=True
+        must suppress hedge_language/editorializing_language specifically,
+        while the shape-only checks (never acceptable regardless of
+        confidence tier) still fire."""
+        problems = hedge_and_editorializing_violations(
+            "Sources say the move was warranted.", allow_hedging=True,
+        )
+        assert problems == []
+
+    def test_allow_hedging_still_flags_placeholders_and_vague_references(self):
+        problems = hedge_and_editorializing_violations(
+            "Details were shared on [date] by a president.", allow_hedging=True,
+        )
+        assert any("placeholder" in p for p in problems)
+        assert any("single-holder office" in p for p in problems)
+
 
 class TestGroundingLexicalTightening:
     """2026-07 fixes: word-boundary surnames; non-vacuous electoral context."""

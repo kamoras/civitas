@@ -510,13 +510,23 @@ async def fetch_roll_call_vote(
     congress: int,
     session_number: int,
     roll_call_number: int,
+    max_age_hours: int | None = None,
 ) -> dict | None:
     """Fetch Senate roll call vote details from senate.gov XML feed.
 
     Congress.gov API doesn't have Senate roll call votes -- only senate.gov does.
+
+    `max_age_hours` overrides the default cache TTL — the nightly scoring
+    caller wants the long default (a completed vote never changes), but
+    the near-real-time early-signal poller (early_signal.py) needs a much
+    shorter one (e.g. 1h) to actually notice a vote within the hour it
+    happened, not up to PIPELINE_CACHE_TTL_HOURS (72h) later. Passed
+    through to api_cache_set as normal_ttl_hours too — per that
+    function's own docstring, a mismatched pair silently defeats the
+    short-TTL safety net for empty results.
     """
     cache_key = f"rollcall-senate-{congress}-{session_number}-{roll_call_number}"
-    cached = api_cache_get(db, "congress", cache_key)
+    cached = api_cache_get(db, "congress", cache_key, max_age_hours=max_age_hours)
     if cached is not None:
         return cached
 
@@ -543,7 +553,7 @@ async def fetch_roll_call_vote(
             xml_text, congress, session_number, roll_call_number
         )
         if result:
-            api_cache_set(db, "congress", cache_key, result)
+            api_cache_set(db, "congress", cache_key, result, normal_ttl_hours=max_age_hours)
         return result
     except Exception as e:
         logger.error(
@@ -621,6 +631,7 @@ async def fetch_recent_roll_calls(
     congress: int = 119,
     session_number: int = 1,
     count: int = 15,
+    max_age_hours: int | None = None,
 ) -> list[dict]:
     """Fetch the last `count` Senate roll calls from the current session.
 
@@ -628,9 +639,14 @@ async def fetch_recent_roll_calls(
     until we find valid votes, then fetches `count` of them.
 
     Returns list of parsed roll call dicts (newest first).
+
+    `max_age_hours` overrides the default cache TTL — see fetch_roll_call_
+    vote's docstring for why the near-real-time early-signal poller needs
+    a much shorter one than the nightly scoring caller. Forwarded to each
+    underlying fetch_roll_call_vote call too.
     """
     cache_key = f"recent-rollcalls-{congress}-{session_number}-{count}"
-    cached = api_cache_get(db, "congress", cache_key)
+    cached = api_cache_get(db, "congress", cache_key, max_age_hours=max_age_hours)
     if cached is not None:
         return cached
 
@@ -664,13 +680,13 @@ async def fetch_recent_roll_calls(
             break
 
         roll_data = await fetch_roll_call_vote(
-            client, db, congress, session_number, roll
+            client, db, congress, session_number, roll, max_age_hours=max_age_hours
         )
         if roll_data:
             results.append(roll_data)
 
     logger.info("Fetched %d recent roll calls", len(results))
-    api_cache_set(db, "congress", cache_key, results)
+    api_cache_set(db, "congress", cache_key, results, normal_ttl_hours=max_age_hours)
     return results
 
 
