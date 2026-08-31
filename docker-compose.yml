@@ -30,7 +30,7 @@ services:
   # build pipeline for ~2s saved on a once-daily batch job when the
   # official image lets Dependabot bump it like every other dependency.
   llama-server:
-    image: ghcr.io/ggml-org/llama.cpp:server@sha256:db057ec90de0a423255a218b9612420993237ff33db68b3155dc3bba9b994a20
+    image: ghcr.io/ggml-org/llama.cpp:server@sha256:bb89e76130acc65e7c92ccc8fd3100c544e2b370ccd46ff6304caf47233c7188
     container_name: mp-llama-server
     ports:
       - "127.0.0.1:8070:8070"
