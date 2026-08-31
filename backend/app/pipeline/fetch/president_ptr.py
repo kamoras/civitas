@@ -21,15 +21,14 @@ only be an estimate this platform invented — see models.py PresidentTrade's
 docstring and president_service.py's own account of removing hand-set values
 presented as computed ones. Everything below stops at "what was disclosed."
 
-LIVE-VERIFIED (2026-08-26): the old Notes-view URL this module used to fetch
+The old Notes-view URL this module used to fetch
 (`.../201/Presiden.nsf/PAS%20Index?OpenView`) now 301s to a page whose filing
 table is populated client-side; the actual data comes from a DataTables
-server-side-processing REST endpoint (OGE_API_URL below) found via a live
+server-side-processing REST endpoint (OGE_API_URL below), found via a
 Playwright network trace of the new page. It's unauthenticated JSON, filtered
 server-side by a `name` column search, so the response for one president is a
-few dozen rows rather than the ~16k-row full index. Confirmed live: searching
-"trump" returns the sitting president's 278-T filings with direct
-`$FILE/....pdf` links.
+few dozen rows rather than the full multi-thousand-row index, and returns
+that president's 278-T filings with direct `$FILE/....pdf` links.
 """
 
 import hashlib
@@ -62,8 +61,7 @@ OGE_API_URL = "https://extapps2.oge.gov/201/Presiden.nsf/API.xsp/v2/rest"
 # classification decision.
 _OGE_API_COLUMNS = ("docDate", "title", "type", "name", "agency", "level")
 
-# Comfortably above any one president's filing count over a term (a live
-# check on 2026-08-26 found 26 total for the sitting president) — the
+# Comfortably above any one president's filing count over a term — the
 # endpoint orders newest-first, so a lower cap would silently drop the
 # oldest filings of a long term rather than erroring.
 _OGE_API_PAGE_SIZE = 500

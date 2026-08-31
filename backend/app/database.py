@@ -30,15 +30,15 @@ def _derive_visits_database_url(main_url: str) -> str:
     highest-frequency write in the app) get their own SQLite file,
     separate from the main database the nightly pipeline writes to.
 
-    2026-07 incident: SQLite allows only one writer at a time even in
-    WAL mode, and the nightly pipeline can hold that lock for extended
-    stretches while processing a batch between commits. track-visit
-    sharing that same file meant a blocked write held a pool connection
-    for the full busy-timeout under contention, which exhausted the
-    pool and OOM-killed the container. Graceful degradation (see
-    api/visits.py) makes that contention survivable; giving these two
-    tables their own file — SQLite's writer lock is scoped per-file —
-    means the two write patterns physically can't contend at all.
+    SQLite allows only one writer at a time even in WAL mode, and the
+    nightly pipeline can hold that lock for extended stretches while
+    processing a batch between commits. track-visit sharing that same
+    file means a blocked write holds a pool connection for the full
+    busy-timeout under contention, which can exhaust the pool and OOM
+    the container. Graceful degradation (see api/visits.py) makes that
+    contention survivable; giving these two tables their own file —
+    SQLite's writer lock is scoped per-file — means the two write
+    patterns physically can't contend at all.
 
     Only meaningful for SQLite: other backends (e.g. Postgres) handle
     concurrent writers natively via MVCC, so there's no lock to isolate
@@ -130,6 +130,11 @@ def _migrate_columns() -> None:
         ("action_issues", "is_current", "INTEGER DEFAULT 1"),
         ("action_issues", "primary_article_date", "TEXT"),
         ("action_issues", "previous_facts", "TEXT DEFAULT '[]'"),
+        ("action_issues", "status", "TEXT DEFAULT 'confirmed'"),
+        ("action_issues", "source_type", "TEXT"),
+        ("action_issues", "primary_source_url", "TEXT"),
+        ("action_issues", "confirmation_deadline", "DATETIME"),
+        ("action_issues", "confirmed_at", "DATETIME"),
         ("senators", "website_url", "TEXT DEFAULT ''"),
         ("senators", "contact_form_url", "TEXT DEFAULT ''"),
         ("senators", "office_phone", "TEXT DEFAULT ''"),
@@ -210,25 +215,22 @@ def _migrate_columns() -> None:
         ("key_votes", "pro_business_vote"),
         ("key_votes", "affected_industries"),
         ("senators", "punk_nickname"),
-        # 2026-07 incident: #215 removed Independence/Follow-Through from
-        # the President model, but never added the matching drops here —
-        # the two columns stayed in the live schema as NOT NULL, so any
-        # INSERT built from the current (post-#215) seed_presidents code,
-        # which no longer supplies them, violated the constraint. Harmless
+        # Independence/Follow-Through were removed from the President
+        # model, but a NOT NULL column left behind in the live schema
+        # blocks any fresh INSERT that no longer supplies them. Harmless
         # on a database that already has presidents rows (this only
         # matters for a fresh INSERT), but fatal — a startup-time crash,
         # not just a failed request — the moment presidents ever needs to
-        # re-seed: confirmed live when the table had been emptied by an
-        # unrelated reset_all_data() call and a routine backend restart
-        # then crash-looped on this exact constraint instead of reseeding.
+        # re-seed (e.g. after an unrelated reset_all_data() call empties
+        # the table).
         ("presidents", "score_independence"),
         ("presidents", "score_follow_through"),
-        # 2026-07 (#218 review): defensive backstop for the same four
-        # legacy columns _migrate_presidents_schema_rebuild handles via a
-        # full table rebuild (see that function's docstring for why a
-        # rebuild, not a plain drop, is the primary mechanism — these
-        # entries only matter if that rebuild's trigger condition is ever
-        # bypassed, e.g. a hand-edited schema missing score_competence).
+        # Defensive backstop for the same four legacy columns
+        # _migrate_presidents_schema_rebuild handles via a full table
+        # rebuild (see that function's docstring for why a rebuild, not a
+        # plain drop, is the primary mechanism) — these entries only
+        # matter if that rebuild's trigger condition is ever bypassed,
+        # e.g. a hand-edited schema missing score_competence.
         ("presidents", "score_competence"),
         ("presidents", "eo_court_success_pct"),
         ("presidents", "cabinet_turnover_pct"),
@@ -352,7 +354,7 @@ def _migrate_presidents_schema_rebuild() -> None:
 
 def _migrate_president_ids() -> None:
     """One-off id rename: George H.W. Bush's president_id changes from
-    "bush-41" to "ghwbush-41" (2026-07).
+    "bush-41" to "ghwbush-41".
 
     Every new UCSB-derived fetcher this platform's president pipeline
     uses (historical_executive_orders.py, presidential_elections.py,
@@ -385,10 +387,10 @@ def _migrate_president_ids() -> None:
             conn.execute(text("DELETE FROM presidents WHERE id = 'bush-41'"))
             if inspector.has_table("score_snapshots"):
                 # Move any bush-41 snapshot whose date doesn't already have
-                # a ghwbush-41 row (2026-07 fix: this branch used to drop
-                # bush-41's score_snapshots rows entirely, permanently
-                # orphaning that trend data — the single-row rename path
-                # below already migrates them, this branch just hadn't). A
+                # a ghwbush-41 row, rather than dropping bush-41's
+                # score_snapshots rows entirely and permanently orphaning
+                # that trend data — the single-row rename path below
+                # already migrates them, this branch just hadn't. A
                 # date with both is a genuine duplicate, dropped under
                 # bush-41 afterward.
                 conn.execute(text(
@@ -429,9 +431,7 @@ def _ensure_indexes() -> None:
     # which SQLAlchemy names ix_{table}_representative_id — this list used
     # to also request ix_{table}_rep_id for the same column under an older
     # naming convention, creating a second, genuinely redundant index on
-    # every affected table (2026-07 audit: confirmed via PRAGMA index_list
-    # on rep_lobbying_matches, rep_campaign_promises, rep_sponsored_bills —
-    # each had two separately-named indexes covering the identical column).
+    # every affected table.
     # Drop the old-named duplicates once; don't recreate them.
     legacy_duplicate_indexes = [
         "ix_rep_lobbying_matches_rep_id",
@@ -453,25 +453,20 @@ def _ensure_indexes() -> None:
                 ))
 
         # At most ONE running row per pipeline-run table, enforced by the
-        # database (2026-07, platform-review O15): _acquire_pipeline_lock
-        # was check-then-insert with no constraint, so its docstring's
-        # atomicity claim didn't hold — two containers hitting the 03:00
-        # tick during a blue/green overlap could both pass the check and
-        # both start a full pipeline. A partial UNIQUE index turns the
-        # second insert into an IntegrityError the acquirer handles
+        # database: a check-then-insert acquire pattern isn't atomic on
+        # its own — two containers hitting the same tick during a
+        # blue/green overlap could both pass the check and both start a
+        # full pipeline run. A partial UNIQUE index turns the second
+        # insert into an IntegrityError the acquirer handles
         # (insert-then-catch), which is race-free without transaction-
         # isolation gymnastics. Partial (WHERE status = 'running') so the
         # unbounded history of completed/failed/stale rows is unaffected.
         #
-        # Only pipeline_runs (Senate) had this until 2026-07-23 — House,
-        # Stock, and Supplementary had no equivalent protection AND no
-        # stale-row auto-clear (run_tracker.acquire_pipeline_lock, added
-        # the same day), so a row orphaned by a killed process (a deploy
-        # restarting the container mid-run) stayed "running" forever,
-        # silently blocking every future run of that pipeline. Confirmed
-        # live: this left stock-trades data stale 4+ days and
-        # supplementary data stale 1+ day after a since-fixed deploy-race
-        # incident (check-and-deploy.sh) killed pipelines mid-run.
+        # Applies to House, Stock, and Supplementary too, alongside a
+        # stale-row auto-clear (run_tracker.acquire_pipeline_lock) — a row
+        # orphaned by a killed process (a deploy restarting the container
+        # mid-run) would otherwise stay "running" forever, silently
+        # blocking every future run of that pipeline.
         for table, index_name in (
             ("pipeline_runs", "ux_pipeline_runs_one_running"),
             ("house_pipeline_runs", "ux_house_pipeline_runs_one_running"),

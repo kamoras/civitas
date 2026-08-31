@@ -25,6 +25,7 @@ function issue(o: Partial<ActionIssue> = {}): ActionIssue {
     relatedSenators: [],
     concernedCount: 0,
     notPriorityCount: 0,
+    status: "confirmed",
     ...o,
   };
 }

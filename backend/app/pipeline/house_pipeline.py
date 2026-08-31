@@ -96,9 +96,9 @@ def is_house_pipeline_running() -> bool:
 def house_pipeline_age() -> "timedelta | None":
     """Wall-clock age of the in-process House run, or None when idle.
 
-    Lets callers distinguish a live run from a hung one: on 2026-07-04 a
-    run wedged silently in Phase 1 held the running flag for 17h and the
-    action center skipped every hourly refresh behind it.
+    Lets callers distinguish a live run from a hung one — a run wedged
+    silently mid-phase would otherwise hold the running flag indefinitely
+    and block every hourly action-center refresh behind it.
     """
     return _tracker.age
 
@@ -108,10 +108,9 @@ async def run_house_pipeline() -> dict:
     db = SessionLocal()
 
     # Acquire the run lock BEFORE any global/DB mutation — same reasoning
-    # as senate_pipeline.py's _acquire_pipeline_lock call. Until 2026-07-23
-    # this pipeline had no lock at all (just an unconditional insert), so a
-    # row orphaned by a killed process (deploy restarting the container
-    # mid-run) stayed "running" forever, blocking every future House run.
+    # as senate_pipeline.py's _acquire_pipeline_lock call. Without it, a row
+    # orphaned by a killed process (a deploy restarting the container
+    # mid-run) stays "running" forever, blocking every future House run.
     house_run = acquire_pipeline_lock(db, HousePipelineRun, STALE_PIPELINE_TIMEOUT)
     if house_run is None:
         logger.warning("House pipeline already running in another process — skipping")
@@ -459,16 +458,14 @@ async def run_house_pipeline() -> dict:
                             })
                     # sp_list is already bounded to the current + previous
                     # congress (min_congress filter above), so this is a
-                    # generous safety net, not a real-world limit. A flat
-                    # [:50] here silently truncated the scoring input: a
-                    # 2026-07 audit found 169/431 reps (39%) hit exactly
-                    # 50, corrupting both Legislative Effectiveness's
-                    # volume AND advancement components (advancement is
-                    # computed over this same truncated list) — worse for
-                    # longer-tenured, more prolific sponsors. Embedding
-                    # the extra titles in positions_from_sponsored_bills
-                    # is cheap (no LLM), so there's no real cost to lifting
-                    # this.
+                    # generous safety net, not a real-world limit. A tighter
+                    # cap here would silently truncate the scoring input —
+                    # corrupting both Legislative Effectiveness's volume AND
+                    # advancement components (advancement is computed over
+                    # this same list), worse for longer-tenured, more
+                    # prolific sponsors. Embedding the extra titles in
+                    # positions_from_sponsored_bills is cheap (no LLM), so
+                    # there's no real cost to a generous cap.
                     r["sponsoredBills"] = sp_list[:500]
                     for sp_data in sp_list[:5]:
                         sp_bill_id = sp_data["billId"]
@@ -734,17 +731,15 @@ async def run_house_pipeline() -> dict:
 
                     vr = rep.get("votingRecord") or {}
                     all_votes = (vr.get("keyVotes") or []) + (vr.get("recentVotes") or [])
-                    # Campaign-promise tracking was removed entirely (2026-07)
-                    # — see policy_alignment.py's module docstring.
+                    # Campaign-promise tracking was removed entirely — see
+                    # policy_alignment.py's module docstring.
                     rep["campaignPromises"] = []
 
                     # Detect donor-industry-vs-vote connections (embeddings
                     # only, zero LLM — see cross_reference.detect_lobbying_matches).
-                    # Senate has had this since 2026-07; House never got it
-                    # wired up, so Constituent Alignment's donor-independence
-                    # component silently defaulted to a flat, fundraising-
-                    # size-based score for every House member regardless of
-                    # actual donor-vote behavior (2026-07 audit finding).
+                    # Without this, Constituent Alignment's donor-independence
+                    # component would default to a flat, fundraising-size-
+                    # based score regardless of actual donor-vote behavior.
                     lobbying_matches = detect_lobbying_matches(
                         rep["funding"].get("topDonors", []),
                         all_votes,

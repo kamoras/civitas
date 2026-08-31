@@ -116,6 +116,18 @@ _EMPHASIS_WORDS = (
     "disappointing", "impress",
 )
 
+# Rule 2's own instruction tells the model not to call the notable score
+# "good, bad, high, low, strong, or weak" — but nothing enforced that
+# mechanically, and it slipped: a live post named Legislative effectiveness
+# (a senator's HIGHEST of the three scores — furthest from 50 on the high
+# side) as "the lowest score" (2026-08-31 incident). Word-boundary regex,
+# not substring, since bare "low"/"high" would false-positive on ordinary
+# words ("below", "highlight"). Comparative/superlative forms included
+# since "lowest" was the actual observed failure, not the bare adjective.
+_MAGNITUDE_CLAIM_RE = re.compile(
+    r"\b(good|bad|high(?:er|est)?|low(?:er|est)?|strong|weak)\b", re.IGNORECASE,
+)
+
 
 def _most_notable_score(scores: dict[str, float]) -> tuple[str, float, bool]:
     """The dimension furthest from neutral, and whether it's actually notable."""
@@ -212,6 +224,16 @@ Return JSON: {{"post": "<your post text>"}}"""
         hit = next((w for w in _EMPHASIS_WORDS if w in lower), None)
         if hit:
             problems.append(f'evaluative language ("{hit}") — posts must stay neutral')
+
+        # Rule 2's own "good/bad/high/low/strong/weak" prohibition, enforced
+        # mechanically — see _MAGNITUDE_CLAIM_RE's docstring for the live
+        # failure this catches.
+        magnitude_hit = _MAGNITUDE_CLAIM_RE.search(text)
+        if magnitude_hit:
+            problems.append(
+                f'a magnitude/comparison claim ("{magnitude_hit.group(0)}") — '
+                "state the number, never whether it's high or low"
+            )
 
         # Same mechanical backstop as the issue poster and full-story
         # generator — prompt-only instructions aren't reliably followed.

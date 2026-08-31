@@ -97,15 +97,13 @@ def select_all_fec_ids_for_office(fec_ids: list[str], office: str) -> list[str]:
 
     A member with two candidacies in the SAME chamber across different
     cycles — one still active, one a stale/invalid id the crosswalk never
-    dropped — has more than one match here. 2026-08-26 audit: three
-    sitting members (one senator, two representatives) showed $0 raised
-    despite full voting records because select_fec_id_for_office picked
-    the first office-matching id without checking it actually resolves,
-    and for these three the first one happened to be the invalid one.
-    Callers with the means to verify (a live FEC lookup) should try each
-    of these in order rather than trust position in the list; callers
-    that can't should keep using select_fec_id_for_office, whose
-    first-match behavior is unchanged.
+    dropped — has more than one match here. select_fec_id_for_office picks
+    the first office-matching id without checking it actually resolves, so
+    a sitting member can show $0 raised despite a full voting record if
+    the first id happens to be the invalid one. Callers with the means to
+    verify (a live FEC lookup) should try each of these in order rather
+    than trust position in the list; callers that can't should keep using
+    select_fec_id_for_office, whose first-match behavior is unchanged.
     """
     return [fec_id for fec_id in fec_ids if fec_id[:1].upper() == office.upper()]
 
