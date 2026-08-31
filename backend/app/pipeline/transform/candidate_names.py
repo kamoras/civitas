@@ -1,12 +1,11 @@
 """Deterministic detection of a candidate's own money in donor records.
 
 The embedding-based donor-type classifier misses many "Lastname, Firstname"
-self-loan records (the 2026-07 adversarial audit found 19 senators with
-their own money typed as Org/Employees inside their top-10 external donors
-— e.g. "Scott, Rick — $19,000,000"). Those records corrupted the Funding
-Independence concentration signal (self-funders scored as "captured by a
-top donor") and surfaced senators as their own biggest donor-interest
-match in the UI.
+self-loan records, typing a candidate's own money as Org/Employees inside
+their top-10 external donors (e.g. "Scott, Rick — $19,000,000"). Left
+uncorrected, those records corrupt the Funding Independence concentration
+signal (self-funders scoring as "captured by a top donor") and surface
+senators as their own biggest donor-interest match in the UI.
 
 This module is a conservative, rule-based guard: it only matches when the
 candidate's last name appears in the donor name AND every other donor-name

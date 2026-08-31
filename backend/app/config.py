@@ -94,6 +94,19 @@ class Settings(BaseSettings):
     # exactly (services/qa.py::_numbers_are_preserved). Retrieval always
     # produces the answer; this only ever changes how it reads.
     QA_LLM_PHRASING: bool = False
+    # Runs a second, experimental issue-generation path (deconstruct each
+    # cluster into source-attributed claims first, then generate from that
+    # structured set instead of raw article text — see
+    # action_center._run_claim_extraction_shadow) alongside the real one,
+    # for every candidate cluster on every run. Never publishes anything;
+    # only logs an automated grounding-quality comparison via
+    # action_metrics, so enough real data accumulates to decide whether to
+    # promote it without needing a person to review samples. On by default
+    # because that data can only accumulate while it runs — but it costs
+    # two extra LLM calls per candidate cluster (small on the Pi's
+    # MAX_ISSUES=2 quota, real if that quota ever grows). Turn off once a
+    # promotion decision is made either way, to reclaim that headroom.
+    ACTION_CENTER_CLAIM_EXTRACTION_SHADOW: bool = True
     PIPELINE_LOG_LEVEL: str = "info"
     PIPELINE_CRON_SCHEDULE: str = "0 3 * * *"
     PIPELINE_TRIGGER_TOKEN: str = ""

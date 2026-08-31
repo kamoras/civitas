@@ -26,11 +26,6 @@ export function useIndustries(): Record<string, IndustryInfo> {
   return config?.industries ?? {};
 }
 
-export function useCategoryLabel(key: string): string {
-  const config = useConfig();
-  return config?.platformCategories[key] ?? key.toUpperCase();
-}
-
 export function usePolicyLabel(area: string): string {
   return area.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }

@@ -60,24 +60,9 @@ export interface RaceCoverageItem {
   publishedAt: string | null;
   /** Which race this item is about — only populated on the state
    * ballot's aggregated coverage feed (GET /elections/states/{state}),
-   * which spans every race in the state; a single-race feed like
-   * RaceDetail's doesn't need it since the page context already says
-   * which race. */
+   * which spans every race in the state; a single-race view doesn't
+   * need it since the page context already says which race. */
   race?: { id: string; office: string; district: number | null };
-}
-
-export interface RaceDetail {
-  id: string;
-  cycleYear: number;
-  office: string;
-  state: string;
-  district: number | null;
-  isSpecial: boolean;
-  pvi: number | null;
-  /** See RaceSummary.pviLevel. */
-  pviLevel: "district" | "state" | null;
-  candidates: CandidateSummary[];
-  coverage: RaceCoverageItem[];
 }
 
 /** A candidate's matching Senator/Representative scorecard row — only
@@ -100,11 +85,11 @@ export interface BallotCandidate extends CandidateSummary {
   incumbentRecord: IncumbentRecord | null;
 }
 
-/** One federal race with EVERY candidate — RaceDetail minus the
- * coverage feed, which is aggregated separately across the whole state
- * (StateBallot.coverage below) rather than repeated per-race. Backs the
- * ballot-centric per-state view (StateBallot below), which must show
- * every real option, not RaceSummary's top-2-by-funds. */
+/** One federal race with EVERY candidate — coverage is aggregated
+ * separately across the whole state (StateBallot.coverage below) rather
+ * than repeated per-race. Backs the ballot-centric per-state view
+ * (StateBallot below), which must show every real option, not
+ * RaceSummary's top-2-by-funds. */
 export interface RaceWithCandidates {
   id: string;
   cycleYear: number;

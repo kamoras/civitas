@@ -3,7 +3,7 @@ import json
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import CampaignPromise, Donor, IndustryDonation, KeyVote, LobbyingMatch, PromiseAlignment, Senator, StockTrade
+from app.models import IndustryDonation, KeyVote, PromiseAlignment, Senator, StockTrade
 
 # Promise quality rules are shared with the pipeline (which now cleans
 # promises before scoring/persisting); the read path keeps applying them
@@ -484,133 +484,6 @@ def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
         )
         for s in senators
     ]
-
-
-def upsert_senator(db: Session, senator_data: dict) -> Senator:
-    """Insert or update a senator and all related records.
-
-    ``senator_data`` is expected to match the SenatorSchema structure (camelCase keys).
-    Used by the pipeline to persist results.
-    """
-    sid = senator_data["id"]
-
-    # Upsert the senator row
-    existing = db.query(Senator).filter(Senator.id == sid).first()
-    if existing is None:
-        existing = Senator(id=sid)
-        db.add(existing)
-
-    cs = senator_data.get("representationScore", senator_data.get("corruptionScore", {}))
-    funding = senator_data.get("funding", {})
-
-    existing.name = senator_data.get("name", existing.name)
-    existing.state = senator_data.get("state", existing.state)
-    existing.party = senator_data.get("party", existing.party)
-    existing.years_in_office = senator_data.get("yearsInOffice", existing.years_in_office)
-    existing.initials = senator_data.get("initials", existing.initials)
-    existing.leadership_title = senator_data.get("leadershipTitle", existing.leadership_title)
-    if "committees" in senator_data:
-        existing.committees = json.dumps(senator_data["committees"])
-
-    # Only overwrite scores when representationScore is explicitly provided.
-    # A partial update (bio/contact only) must not zero out previously computed scores.
-    if cs:
-        existing.score_funding_independence = cs.get("fundingIndependence", existing.score_funding_independence)
-        existing.score_promise_persistence = cs.get("promisePersistence", existing.score_promise_persistence)
-        existing.score_independent_voting = cs.get("independentVoting", existing.score_independent_voting)
-        existing.score_funding_diversity = cs.get("fundingDiversity", existing.score_funding_diversity)
-        existing.score_legislative_effectiveness = cs.get("legislativeEffectiveness", existing.score_legislative_effectiveness)
-        if cs.get("confidence") is not None:
-            existing.score_confidence = json.dumps(cs["confidence"])
-
-    existing.total_raised = funding.get("totalRaised", 0)
-    existing.total_from_pacs = funding.get("totalFromPACs", 0)
-    existing.small_donor_percentage = funding.get("smallDonorPercentage", 0)
-    voting_record = senator_data.get("votingRecord", {})
-
-    db.flush()
-
-    # Replace related records (delete old, insert new)
-    db.query(Donor).filter(Donor.senator_id == sid).delete()
-    for rank, d in enumerate(funding.get("topDonors", []), start=1):
-        db.add(Donor(
-            senator_id=sid,
-            name=d["name"],
-            total=d["total"],
-            type=d["type"],
-            industry=d.get("industry", "OTHER"),
-            rank=rank,
-            pac_sponsor=d.get("pacSponsor"),
-            pac_industry=d.get("pacIndustry"),
-            pac_analysis=d.get("pacAnalysis"),
-        ))
-
-    db.query(IndustryDonation).filter(IndustryDonation.senator_id == sid).delete()
-    for ind in funding.get("industryBreakdown", []):
-        db.add(IndustryDonation(
-            senator_id=sid,
-            industry=ind["industry"],
-            name=ind["name"],
-            total=ind["total"],
-            percentage=ind["percentage"],
-        ))
-
-    db.query(KeyVote).filter(KeyVote.senator_id == sid).delete()
-    all_votes = (
-        [(v, "recent") for v in voting_record.get("recentVotes", [])]
-        + [(v, "key") for v in voting_record.get("keyVotes", [])]
-    )
-    # Fallback: if data uses old flat keyVotes list, treat all as "key"
-    if not all_votes and voting_record.get("keyVotes"):
-        all_votes = [(v, "key") for v in voting_record["keyVotes"]]
-    for v, category in all_votes:
-        db.add(KeyVote(
-            senator_id=sid,
-            bill_name=v.get("billName", "Unknown Bill"),
-            bill_id=v.get("billId", ""),
-            date=v.get("date", ""),
-            vote=v.get("vote", "Not Voting"),
-            policy_area=v.get("policyArea", "PROCEDURAL"),
-            stance=v.get("stance", "neutral"),
-            description=v.get("description", ""),
-            party_leaning=v.get("partyLeaning"),
-            voted_with_party=v.get("votedWithParty"),
-            vote_category=category,
-        ))
-
-    db.query(LobbyingMatch).filter(LobbyingMatch.senator_id == sid).delete()
-    for lm in senator_data.get("lobbyingMatches", []):
-        db.add(LobbyingMatch(
-            senator_id=sid,
-            lobbyist_org=lm.get("lobbyistOrg") or "Unknown",
-            industry=lm.get("industry") or "OTHER",
-            lobbying_spend=lm.get("lobbyingSpend") or 0,
-            donation_to_senator=lm.get("donationToSenator") or 0,
-            bills_influenced=json.dumps(lm.get("billsInfluenced") or []),
-            senator_vote_aligned=lm.get("senatorVoteAligned"),
-            description=lm.get("description") or "",
-        ))
-
-    db.query(CampaignPromise).filter(CampaignPromise.senator_id == sid).delete()
-    for cp in senator_data.get("campaignPromises", []):
-        db.add(CampaignPromise(
-            senator_id=sid,
-            promise_text=cp.get("promiseText") or "",
-            category=cp.get("category") or "other",
-            alignment=cp.get("alignment") or PromiseAlignment.UNCLEAR,
-            related_votes=json.dumps(cp.get("relatedVotes") or []),
-            related_bills=json.dumps(cp.get("relatedBills") or []),
-            analysis=cp.get("analysis") or "",
-            party_alignment=cp.get("partyAlignment"),
-        ))
-
-    partisan_depth_data = senator_data.get("partisanDepth")
-    if partisan_depth_data:
-        existing.partisan_depth = json.dumps(partisan_depth_data)
-
-    db.commit()
-    db.refresh(existing)
-    return existing
 
 
 def get_senator_votes(

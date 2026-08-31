@@ -7,6 +7,8 @@ from app.pipeline.analyze.grounding import (
     grounding_violations,
     hedge_and_editorializing_violations,
     hedge_language,
+    intensifier_words,
+    log_intensifier_usage,
     repeated_sentences,
     ungrounded_electoral_claims,
     ungrounded_numbers,
@@ -221,6 +223,50 @@ class TestEditorializingLanguage:
         assert len(editorializing_language(text)) == expected_count
 
 
+class TestIntensifierWords:
+    @pytest.mark.parametrize(
+        "text, expected_count",
+        [
+            pytest.param("The bill raised significant concerns among lawmakers.", 1, id="significant"),
+            pytest.param("The package includes sweeping changes to the tax code.", 1, id="sweeping"),
+            pytest.param("A major shift in policy followed the vote.", 1, id="major"),
+            pytest.param("The Senate passed the bill 68-32 after weeks of debate.", 0, id="plain_reporting_is_clean"),
+            pytest.param(
+                "Significant and substantial changes followed a dramatic vote.", 3,
+                id="counts_distinct_words_once_each",
+            ),
+        ],
+    )
+    def test_intensifier_words(self, text, expected_count):
+        assert len(intensifier_words(text)) == expected_count
+
+
+class TestLogIntensifierUsage:
+    def test_increments_only_when_source_has_a_number_and_text_has_an_intensifier(self):
+        from app.pipeline.analyze import action_metrics
+
+        action_metrics.reset()
+        log_intensifier_usage("test_surface", "A significant vote occurred.", "The vote was 68-32.")
+        assert action_metrics.snapshot().get("intensifier_word_used_test_surface") == 1
+
+    def test_no_increment_when_source_has_no_number(self):
+        from app.pipeline.analyze import action_metrics
+
+        action_metrics.reset()
+        log_intensifier_usage("test_surface", "A significant vote occurred.", "The vote happened today.")
+        assert "intensifier_word_used_test_surface" not in action_metrics.snapshot()
+
+    def test_no_increment_when_text_has_no_intensifier(self):
+        from app.pipeline.analyze import action_metrics
+
+        action_metrics.reset()
+        log_intensifier_usage("test_surface", "The vote passed 68-32.", "The vote was 68-32.")
+        assert "intensifier_word_used_test_surface" not in action_metrics.snapshot()
+
+    def test_never_raises_on_bad_input(self):
+        log_intensifier_usage("test_surface", None, None)  # must not raise
+
+
 class TestUngroundedElectoralClaims:
     # A source with no electoral vocabulary at all — a senator's death.
     NON_ELECTORAL = (
@@ -317,6 +363,24 @@ class TestHedgeAndEditorializingViolations:
         problems = hedge_and_editorializing_violations("The vote was justified.")
         assert len(problems) == 1
         assert "was justified" in problems[0]
+
+    def test_allow_hedging_suppresses_hedge_and_editorializing_only(self):
+        """early_signal.py's developing stories WANT hedging ("coverage has
+        not yet appeared" is the honest voice there) — allow_hedging=True
+        must suppress hedge_language/editorializing_language specifically,
+        while the shape-only checks (never acceptable regardless of
+        confidence tier) still fire."""
+        problems = hedge_and_editorializing_violations(
+            "Sources say the move was warranted.", allow_hedging=True,
+        )
+        assert problems == []
+
+    def test_allow_hedging_still_flags_placeholders_and_vague_references(self):
+        problems = hedge_and_editorializing_violations(
+            "Details were shared on [date] by a president.", allow_hedging=True,
+        )
+        assert any("placeholder" in p for p in problems)
+        assert any("single-holder office" in p for p in problems)
 
 
 class TestGroundingLexicalTightening:
