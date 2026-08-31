@@ -18,7 +18,7 @@ from typing import NamedTuple
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models import BskySenatorSpotlight, Senator, TimelineEntry, WeekSummary
+from app.models import BskySenatorSpotlight, Representative, Senator, TimelineEntry, WeekSummary
 from app.pipeline.analyze.bluesky_utils import (
     BSKY_MAX_CHARS,
     publish_post,
@@ -40,17 +40,29 @@ SITE = "https://civitas-research.org"
 
 _SYSTEM_PROMPT = (
     "You are a nonpartisan civic journalist writing brief, factual posts for "
-    "the Civitas transparency platform. Civitas scores U.S. senators on "
-    "funding independence, independent voting, and legislative effectiveness "
-    "into an overall representation score. Your posts are data-driven, "
-    "neutral, and written to help citizens understand how their representatives "
-    "are performing."
+    "the Civitas transparency platform. Civitas scores members of the U.S. "
+    "House and Senate on funding independence, independent voting, and "
+    "legislative effectiveness into an overall representation score. Your "
+    "posts are data-driven, neutral, and written to help citizens understand "
+    "how their representatives are performing."
 )
 
 
-def _pick_senator(db: Session) -> tuple["Senator | None", int, int]:
-    """Return (senator, rank, total), picked uniformly at random from senators
-    not yet spotlighted this cycle (cycling through all before repeating).
+def _scored_chamber_pool(db: Session, model) -> list:
+    return (
+        db.query(model)
+        .filter(model.score_funding_independence.isnot(None))
+        .filter(model.is_current.is_(True))
+        .all()
+    )
+
+
+def _pick_politician(
+    db: Session,
+) -> tuple["Senator | Representative | None", int, int, str]:
+    """Return (entity, rank, total, chamber), picked uniformly at random
+    from senators AND representatives not yet spotlighted this cycle,
+    combined into one pool (cycling through everyone before repeating).
 
     Deliberately NOT biased toward the highest or lowest scorer: always
     picking an extreme, combined with the LLM being told to frame it as
@@ -58,36 +70,46 @@ def _pick_senator(db: Session) -> tuple["Senator | None", int, int]:
     senator's score read as badly out of touch after negative news broke
     about him the same day. A random pick with objective, unevaluative
     framing (see _generate_spotlight_post) can't have the same failure mode.
+
+    rank/total are computed WITHIN the picked entity's own chamber, not
+    across the combined pool — the site's own leaderboard ranks Senate and
+    House in separate tabs, so a combined "#210 of 535" would state a
+    number the reader can't find anywhere else on the site.
     """
-    spotlighted_ids = {
-        row.senator_id
-        for row in db.query(BskySenatorSpotlight.senator_id).all()
+    # (id, chamber), not id alone — chamber is stored precisely so a
+    # senator and a representative that happened to share an id string
+    # could never be mistaken for the same "already spotlighted" entity.
+    spotlighted_keys = {
+        (row.senator_id, row.chamber)
+        for row in db.query(BskySenatorSpotlight.senator_id, BskySenatorSpotlight.chamber).all()
     }
 
-    senators = (
-        db.query(Senator)
-        .filter(Senator.score_funding_independence.isnot(None))
-        .filter(Senator.is_current.is_(True))
-        .all()
-    )
-    if not senators:
-        return None, 0, 0
+    chambers = {
+        "senate": sorted(_scored_chamber_pool(db, Senator), key=compute_overall_score, reverse=True),
+        "house": sorted(_scored_chamber_pool(db, Representative), key=compute_overall_score, reverse=True),
+    }
+    if not chambers["senate"] and not chambers["house"]:
+        return None, 0, 0, ""
 
-    # All senators ranked best → worst (for absolute rank lookup)
-    all_ranked = sorted(senators, key=compute_overall_score, reverse=True)
-    total = len(all_ranked)
-
-    unspotlighted = [s for s in all_ranked if s.id not in spotlighted_ids]
-    if not unspotlighted:
-        logger.info("All %d senators spotlighted — resetting cycle", total)
+    combined_unspotlighted = [
+        (entity, chamber)
+        for chamber, ranked in chambers.items()
+        for entity in ranked
+        if (entity.id, chamber) not in spotlighted_keys
+    ]
+    if not combined_unspotlighted:
+        logger.info("All senators and representatives spotlighted — resetting cycle")
         db.query(BskySenatorSpotlight).delete()
         db.commit()
-        unspotlighted = list(all_ranked)
+        combined_unspotlighted = [
+            (entity, chamber) for chamber, ranked in chambers.items() for entity in ranked
+        ]
 
-    pick = random.choice(unspotlighted)
+    pick, chamber = random.choice(combined_unspotlighted)
 
-    rank = next(i + 1 for i, s in enumerate(all_ranked) if s.id == pick.id)
-    return pick, rank, total
+    own_chamber = chambers[chamber]
+    rank = next(i + 1 for i, e in enumerate(own_chamber) if e.id == pick.id)
+    return pick, rank, len(own_chamber), chamber
 
 
 # Deviation from the neutral midpoint (50) required before a dimension is
@@ -136,32 +158,46 @@ def _most_notable_score(scores: dict[str, float]) -> tuple[str, float, bool]:
     return key, value, abs(value - 50) >= _NOTABLE_DEVIATION
 
 
-def _generate_spotlight_post(senator: "Senator", rank: int, total: int) -> str | None:
-    """Ask the LLM to write a score highlight post for this senator."""
+def _generate_spotlight_post(
+    entity: "Senator | Representative", rank: int, total: int, chamber: str,
+) -> str | None:
+    """Ask the LLM to write a score highlight post for this senator or
+    representative. Score fields and compute_overall_score are identical
+    (duck-typed) between the two models — only the identity string and
+    the standing/role nouns differ by chamber."""
+    role = "Senator" if chamber == "senate" else "Representative"
+    standing_noun = "senators" if chamber == "senate" else "representatives"
+    identity = (
+        f"{entity.name} ({entity.party}-{entity.state})" if chamber == "senate"
+        else f"{entity.name} ({entity.party}-{entity.state}-{entity.district})"
+    )
+
     # v6.5: funding diversity folded into funding independence — no longer
     # its own scored dimension (score_funding_independence already reflects
     # it), so it's deliberately not listed here alongside the other three.
     scores = {
-        "Funding independence": round(senator.score_funding_independence or 0, 1),
-        "Independent voting": round(senator.score_independent_voting or 0, 1),
-        "Legislative effectiveness": round(senator.score_legislative_effectiveness or 0, 1),
+        "Funding independence": round(entity.score_funding_independence or 0, 1),
+        "Independent voting": round(entity.score_independent_voting or 0, 1),
+        "Legislative effectiveness": round(entity.score_legislative_effectiveness or 0, 1),
     }
     # The posted overall must be the same weighted composite the site shows
     # (SCORE_WEIGHTS) — a plain mean of the five dimensions published a
     # different number than the leaderboard for every senator.
-    overall = round(compute_overall_score(senator), 1)
+    overall = round(compute_overall_score(entity), 1)
     score_lines = "\n".join(f"- {k}: {v}/100" for k, v in scores.items())
 
     # Rank is stated plainly — never characterized as an achievement or a
-    # failure. See module-level note on _pick_senator for why.
-    standing = f"ranks #{rank} of {total} senators"
+    # failure. See module-level note on _pick_politician for why. Computed
+    # within this entity's own chamber, not the combined pick pool — see
+    # _pick_politician's docstring for why.
+    standing = f"ranks #{rank} of {total} {standing_noun}"
 
     notable_key, notable_value, is_notable = _most_notable_score(scores)
     if is_notable:
         highlight_instruction = (
             f"2. Name {notable_key} ({notable_value}/100) — it is the score furthest from the "
-            f"neutral midpoint (50) for this senator. State the number as a plain fact. Do not "
-            f"say it is good, bad, high, low, strong, or weak — just report it."
+            f"neutral midpoint (50) for this {role.lower()}. State the number as a plain fact. "
+            f"Do not say it is good, bad, high, low, strong, or weak — just report it."
         )
     else:
         highlight_instruction = (
@@ -170,15 +206,15 @@ def _generate_spotlight_post(senator: "Senator", rank: int, total: int) -> str |
             "State the overall score and rank plainly."
         )
 
-    user_prompt = f"""Write a Bluesky post spotlighting this senator's Civitas representation score.
+    user_prompt = f"""Write a Bluesky post spotlighting this {role.lower()}'s Civitas representation score.
 
-Senator: {senator.name} ({senator.party}-{senator.state})
+{role}: {identity}
 Overall score: {overall}/100 ({standing})
 Individual scores:
 {score_lines}
 
 RULES:
-1. Mention the senator's name, state, and their overall score and rank.
+1. Mention the {role.lower()}'s name, state, and their overall score and rank.
 {highlight_instruction}
 3. State every number as a neutral fact. Do not praise, criticize, or use any evaluative
    language — no "good", "bad", "strong", "weak", "impressive", "concerning", or similar.
@@ -252,7 +288,7 @@ Return JSON: {{"post": "<your post text>"}}"""
             return text
         logger.warning(
             "Spotlight post rejected for %s (attempt %d): %s | post: %s",
-            senator.name, attempt + 1, "; ".join(problems), text[:160],
+            entity.name, attempt + 1, "; ".join(problems), text[:160],
         )
         retry_note = (
             "\n\nYour previous attempt was rejected because it contained "
@@ -265,18 +301,19 @@ Return JSON: {{"post": "<your post text>"}}"""
 
 
 
-def _publish_spotlight(text: str, senator: Senator) -> bool:
+def _publish_spotlight(text: str, entity: "Senator | Representative") -> bool:
     """Post the spotlight to Bluesky. Returns True on success."""
-    url = f"{SITE}/politicians/{senator.id}"
+    url = f"{SITE}/politicians/{entity.id}"
     return publish_post(
         text, url,
-        success_msg=f"Posted senator spotlight: {senator.name}",
-        error_context=f"senator {senator.id}",
+        success_msg=f"Posted spotlight: {entity.name}",
+        error_context=f"politician {entity.id}",
     )
 
 
 def post_daily_spotlight(db: Session) -> None:
-    """Post a daily senator score spotlight. No-op if already posted today."""
+    """Post a daily senator/representative score spotlight. No-op if
+    already posted today."""
     if not getattr(settings, "BSKY_HANDLE", "") or not getattr(settings, "BSKY_APP_PASSWORD", ""):
         return
 
@@ -290,24 +327,25 @@ def post_daily_spotlight(db: Session) -> None:
         logger.debug("Spotlight already posted today — skipping")
         return
 
-    senator, rank, total = _pick_senator(db)
-    if not senator:
-        logger.warning("No senators available for spotlight")
+    entity, rank, total, chamber = _pick_politician(db)
+    if not entity:
+        logger.warning("No senators or representatives available for spotlight")
         return
 
-    text = _generate_spotlight_post(senator, rank, total)
+    text = _generate_spotlight_post(entity, rank, total, chamber)
     if not text:
-        logger.warning("Failed to generate spotlight text for %s", senator.name)
+        logger.warning("Failed to generate spotlight text for %s", entity.name)
         return
 
-    if _publish_spotlight(text, senator):
+    if _publish_spotlight(text, entity):
         db.add(BskySenatorSpotlight(
-            senator_id=senator.id,
+            senator_id=entity.id,
+            chamber=chamber,
             posted_at=datetime.now(UTC),
             post_text=text,
         ))
         db.commit()
-        logger.info("Senator spotlight posted: %s", senator.name)
+        logger.info("Spotlight posted (%s): %s", chamber, entity.name)
 
 
 # There is no /timeline route — the timeline lives behind a tab on the action

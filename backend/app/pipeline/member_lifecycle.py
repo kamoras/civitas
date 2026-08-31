@@ -296,10 +296,15 @@ def _purge_member_traces(db: Session, member_id: str, chamber: str) -> None:
         ScoreSnapshot.entity_id == member_id,
     ).delete(synchronize_session=False)
 
-    if chamber == CHAMBER_SENATE:
-        db.query(BskySenatorSpotlight).filter(
-            BskySenatorSpotlight.senator_id == member_id,
-        ).delete(synchronize_session=False)
+    # Filtered on (senator_id, chamber) together, not id alone — the table
+    # holds both chambers (see bluesky_spotlight._pick_politician), keyed
+    # exactly this way so a senator and a representative that happen to
+    # share an id string are never conflated. An id-only filter here would
+    # delete a live, different-chamber member's spotlight row by accident.
+    db.query(BskySenatorSpotlight).filter(
+        BskySenatorSpotlight.senator_id == member_id,
+        BskySenatorSpotlight.chamber == chamber,
+    ).delete(synchronize_session=False)
 
     # Explore documents are kept — a floor speech is a government record
     # that outlives the member's term, and it still reads correctly under

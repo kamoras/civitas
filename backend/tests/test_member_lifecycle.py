@@ -312,6 +312,38 @@ def test_purge_leaves_another_chambers_snapshots_alone(db_session):
     assert db_session.query(Representative).filter_by(id="john-smith").count() == 1
 
 
+def test_purge_leaves_another_chambers_spotlight_row_alone(db_session):
+    """BskySenatorSpotlight holds both chambers, keyed on (senator_id,
+    chamber) together — see bluesky_spotlight._pick_politician. A purge
+    scoped by id alone would delete a live, different-chamber member's
+    spotlight row just because the id string happens to match."""
+    _senator(db_session, "john-smith", "S00001", is_current=False, left=LONG_AGO)
+    _rep(db_session, "john-smith", "H00001")
+    db_session.add(BskySenatorSpotlight(senator_id="john-smith", chamber="senate"))
+    db_session.add(BskySenatorSpotlight(senator_id="john-smith", chamber="house"))
+    db_session.flush()
+
+    purge_departed_members(db_session, CHAMBER_SENATE, today=TODAY)
+    db_session.flush()
+
+    remaining = db_session.query(BskySenatorSpotlight).all()
+    assert [(r.senator_id, r.chamber) for r in remaining] == [("john-smith", "house")]
+
+
+def test_house_purge_also_clears_the_departed_reps_spotlight_row(db_session):
+    """The chamber==CHAMBER_SENATE-only guard this replaces meant a
+    departed representative's spotlight row was never cleaned up at all —
+    silently orphaned forever, asymmetric with how senators were handled."""
+    _rep(db_session, "long-gone", "H00001", is_current=False, left=LONG_AGO)
+    db_session.add(BskySenatorSpotlight(senator_id="long-gone", chamber="house"))
+    db_session.flush()
+
+    purge_departed_members(db_session, CHAMBER_HOUSE, today=TODAY)
+    db_session.flush()
+
+    assert db_session.query(BskySenatorSpotlight).filter_by(senator_id="long-gone").count() == 0
+
+
 def test_house_purge_uses_the_house_snapshot_entity_type(db_session):
     _rep(db_session, "long-gone", "H00001", is_current=False, left=LONG_AGO)
     db_session.add(ScoreSnapshot(
