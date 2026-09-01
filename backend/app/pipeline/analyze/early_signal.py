@@ -1,8 +1,9 @@
 """Early-signal reporting: draft a deliberately hedged, primary-source-only
-ActionIssue from a Senate roll-call vote before conventional news covers it.
+ActionIssue from a Senate or House roll-call vote before conventional news
+covers it.
 
-Phase 1 scope, deliberately narrow (see the approved plan): Senate final-
-passage votes only, one source type. A completed roll-call tally is a
+Phase 1 scope, deliberately narrow (see the approved plan): final-passage
+votes only, one source type per chamber. A completed roll-call tally is a
 certified fact, not an interpretation — the one candidate among the sources
 researched where "we could be wrong about what happened" risk is close to
 zero. The remaining judgment call, "is this worth a story," is validated
@@ -32,7 +33,7 @@ from app.pipeline.analyze.grounding import (
     validate_facts,
 )
 from app.pipeline.analyze.ollama_client import call_llm, extract_json
-from app.pipeline.fetch.congress import fetch_recent_roll_calls
+from app.pipeline.fetch.congress import fetch_recent_house_roll_calls, fetch_recent_roll_calls
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,22 @@ _ROLL_CALL_POLL_COUNT_PER_SESSION = 2
 # widen once real confirm/expire outcomes justify it.
 _FINAL_PASSAGE_MARKERS = ("on passage of the bill", "on the joint resolution")
 
+# clerk.house.gov's equivalent vocabulary. "On Motion to Suspend the Rules
+# and Pass" is a genuine final-passage mechanism (confirmed live against
+# real vote XML), not a procedural motion, so it's included alongside the
+# House's own "On Passage" phrasing.
+_HOUSE_FINAL_PASSAGE_MARKERS = ("on passage", "suspend the rules and pass")
+
+
+def _chamber_labels(vote: dict) -> tuple[str, str]:
+    """(display chamber name, plural noun for its members) for prompt text
+    and source-text grounding — the vote dict only ever tags House votes
+    with chamber="House" (see parse_house_vote_xml), so absence means
+    Senate."""
+    if vote.get("chamber") == "House":
+        return "House of Representatives", "representatives"
+    return "Senate", "senators"
+
 
 def _senate_vote_url(congress: int, session: int, roll_number: int) -> str:
     padded = str(roll_number).zfill(5)
@@ -71,6 +88,16 @@ def _senate_vote_url(congress: int, session: int, roll_number: int) -> str:
         f"https://www.senate.gov/legislative/LIS/roll_call_votes/"
         f"vote{congress}{session}/vote_{congress}_{session}_{padded}.xml"
     )
+
+
+def _house_vote_url(year: int, roll_number: int) -> str:
+    return f"https://clerk.house.gov/evs/{year}/roll{roll_number}.xml"
+
+
+def _vote_url(vote: dict) -> str:
+    if vote.get("chamber") == "House":
+        return _house_vote_url(vote.get("year"), vote.get("rollNumber"))
+    return _senate_vote_url(vote.get("congress"), vote.get("session"), vote.get("rollNumber"))
 
 
 def _vote_margin_ratio(vote: dict) -> float:
@@ -84,18 +111,20 @@ def _vote_margin_ratio(vote: dict) -> float:
 
 def _is_final_passage(vote: dict) -> bool:
     text = f"{vote.get('question', '')} {vote.get('voteTitle', '')}".lower()
-    return any(marker in text for marker in _FINAL_PASSAGE_MARKERS)
+    markers = _HOUSE_FINAL_PASSAGE_MARKERS if vote.get("chamber") == "House" else _FINAL_PASSAGE_MARKERS
+    return any(marker in text for marker in markers)
 
 
 def _vote_source_text(vote: dict) -> str:
     """The ground-truth text a hedged draft's grounding check runs against
     — everything the vote record itself states, nothing more."""
+    chamber_name, _ = _chamber_labels(vote)
     casts = [m.get("voteCast", "") for m in vote.get("members", [])]
     yeas = sum(1 for c in casts if c == "Yea")
     nays = sum(1 for c in casts if c == "Nay")
     not_voting = sum(1 for c in casts if c not in ("Yea", "Nay"))
     return (
-        f"Roll call vote {vote.get('rollNumber')}, {vote.get('congress')}th "
+        f"{chamber_name} roll call vote {vote.get('rollNumber')}, {vote.get('congress')}th "
         f"Congress, session {vote.get('session')}, dated {vote.get('voteDate')}. "
         f"Question: {vote.get('question', '')}. "
         f"Document: {vote.get('documentTitle', '')} ({vote.get('documentName', '')}). "
@@ -105,17 +134,17 @@ def _vote_source_text(vote: dict) -> str:
 
 _EARLY_SIGNAL_SYSTEM_PROMPT = """\
 You are a nonpartisan civic information analyst. You are drafting a \
-PROVISIONAL report about a Senate floor vote that just occurred, based \
+PROVISIONAL report about a {chamber_name} floor vote that just occurred, based \
 ONLY on the official vote record below — no news coverage of this vote \
 exists yet. Report only what the vote record states: the matter voted \
 on, the outcome, and the tally. Do not speculate about what happens \
-next, why senators voted as they did, or how this will be covered. \
+next, why {member_noun} voted as they did, or how this will be covered. \
 State plainly that broader press coverage has not yet appeared. Never \
 advocate for or against any policy, and never state or imply that the \
 outcome was warranted, justified, or expected."""
 
 _EARLY_SIGNAL_PROMPT_TEMPLATE = """\
-A Senate roll-call vote just occurred. Below is the official vote record. \
+A {chamber_name} roll-call vote just occurred. Below is the official vote record. \
 Produce a JSON object with these fields:
 
 - "title": A concise, neutral headline for this vote (max 15 words), \
@@ -146,7 +175,9 @@ def _draft_developing_issue(vote: dict, db: Session) -> tuple[str, str, list[str
     `_validate_politician_roles` (news-cluster-specific) don't apply.
     """
     source_text = _vote_source_text(vote)
-    user_prompt = _EARLY_SIGNAL_PROMPT_TEMPLATE.format(vote_text=source_text)
+    chamber_name, member_noun = _chamber_labels(vote)
+    user_prompt = _EARLY_SIGNAL_PROMPT_TEMPLATE.format(vote_text=source_text, chamber_name=chamber_name)
+    system_prompt = _EARLY_SIGNAL_SYSTEM_PROMPT.format(chamber_name=chamber_name, member_noun=member_noun)
 
     for attempt in range(1, 3):
         prompt = user_prompt
@@ -160,7 +191,7 @@ def _draft_developing_issue(vote: dict, db: Session) -> tuple[str, str, list[str
             )
         result = call_llm(
             prompt_version=EARLY_SIGNAL_PROMPT_VERSION,
-            system_prompt=_EARLY_SIGNAL_SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             user_prompt=prompt,
             cache_key=None,
             db_session=db,
@@ -192,9 +223,11 @@ def _draft_developing_issue(vote: dict, db: Session) -> tuple[str, str, list[str
 
 
 def _fetch_recent_votes(db: Session) -> list[dict]:
-    """Fetch the latest Senate roll calls across both sessions of the
-    current Congress, deduped by identity — same pattern senate_pipeline
-    already uses for its own multi-session recent-vote sweep."""
+    """Fetch the latest Senate and House roll calls, deduped by identity —
+    Senate is swept across both sessions of the current Congress (same
+    pattern senate_pipeline uses for its own multi-session sweep); House
+    roll calls are numbered per calendar year instead, so no session loop
+    is needed there."""
     async def _fetch() -> list[dict]:
         async with make_async_client() as client:
             votes: list[dict] = []
@@ -207,6 +240,13 @@ def _fetch_recent_votes(db: Session) -> list[dict]:
                     max_age_hours=_ROLL_CALL_POLL_MAX_AGE_HOURS,
                 )
                 votes.extend(session_votes)
+            house_votes = await fetch_recent_house_roll_calls(
+                client, db,
+                year=utcnow().year,
+                count=_ROLL_CALL_POLL_COUNT_PER_SESSION,
+                max_age_hours=_ROLL_CALL_POLL_MAX_AGE_HOURS,
+            )
+            votes.extend(house_votes)
             return votes
 
     loop = asyncio.new_event_loop()
@@ -217,9 +257,9 @@ def _fetch_recent_votes(db: Session) -> list[dict]:
 
 
 def check_roll_call_signals(db: Session) -> int:
-    """Poll recent Senate roll calls, gate for notability, draft and store
-    a DEVELOPING ActionIssue for any genuinely new, non-procedural,
-    final-passage vote. Returns the number of new rows created.
+    """Poll recent Senate and House roll calls, gate for notability, draft
+    and store a DEVELOPING ActionIssue for any genuinely new, non-
+    procedural, final-passage vote. Returns the number of new rows created.
 
     Called from action_center._run_refresh, before the news-fetch stage,
     on the existing hourly cadence — a roll call only changes when
@@ -229,7 +269,12 @@ def check_roll_call_signals(db: Session) -> int:
     seen_keys: set[str] = set()
 
     for vote in _fetch_recent_votes(db):
-        key = recent_roll_call_key(vote)
+        chamber = vote.get("chamber") or "Senate"
+        # recent_roll_call_key is congress-session-rollNumber only — House
+        # and Senate roll numbers are independent per-chamber sequences, so
+        # without the chamber prefix a House and Senate vote sharing the
+        # same numbers would collide and one would be silently dropped.
+        key = f"{chamber}-{recent_roll_call_key(vote)}"
         if key in seen_keys:
             continue
         seen_keys.add(key)
@@ -250,9 +295,7 @@ def check_roll_call_signals(db: Session) -> int:
 
         action_metrics.increment("early_signal_gate_candidate")
 
-        vote_url = _senate_vote_url(
-            vote.get("congress"), vote.get("session"), vote.get("rollNumber"),
-        )
+        vote_url = _vote_url(vote)
         already_exists = (
             db.query(ActionIssue)
             .filter(ActionIssue.primary_source_url == vote_url)
@@ -267,6 +310,7 @@ def check_roll_call_signals(db: Session) -> int:
             continue
         title, summary, facts = drafted
 
+        is_house = chamber == "House"
         row = ActionIssue(
             date=vote.get("voteDate") or utcnow().strftime("%Y-%m-%d"),
             rank=999,  # placeholder — renumbered alongside every other row each run
@@ -274,10 +318,12 @@ def check_roll_call_signals(db: Session) -> int:
             summary=summary,
             facts=json.dumps(facts),
             source_urls=json.dumps([vote_url]),
-            source_names=json.dumps(["Senate.gov roll call record"]),
+            source_names=json.dumps(
+                ["Clerk of the House roll call record" if is_house else "Senate.gov roll call record"]
+            ),
             is_current=True,
             status=ActionIssueStatus.DEVELOPING,
-            source_type="roll_call_vote",
+            source_type="house_roll_call_vote" if is_house else "senate_roll_call_vote",
             primary_source_url=vote_url,
             confirmation_deadline=utcnow() + timedelta(hours=CONFIRMATION_WINDOW_HOURS),
             primary_article_date=vote.get("voteDate"),

@@ -3,6 +3,7 @@
 import logging
 import re
 from collections.abc import Callable
+from datetime import datetime
 
 import httpx
 from lxml import etree
@@ -695,10 +696,17 @@ async def fetch_house_roll_call_vote(
     db: Session,
     year: int,
     roll_call_number: int,
+    max_age_hours: int | None = None,
 ) -> dict | None:
-    """Fetch House roll call vote from clerk.house.gov XML feed."""
+    """Fetch House roll call vote from clerk.house.gov XML feed.
+
+    `max_age_hours` overrides the default cache TTL — see
+    fetch_roll_call_vote's (Senate) docstring for why the near-real-time
+    early-signal poller needs a much shorter one than the nightly
+    scoring caller.
+    """
     cache_key = f"rollcall-house-{year}-{roll_call_number}"
-    cached = api_cache_get(db, "congress", cache_key)
+    cached = api_cache_get(db, "congress", cache_key, max_age_hours=max_age_hours)
     if cached is not None:
         return cached
 
@@ -718,7 +726,7 @@ async def fetch_house_roll_call_vote(
 
         result = parse_house_vote_xml(resp.text, year, roll_call_number)
         if result:
-            api_cache_set(db, "congress", cache_key, result)
+            api_cache_set(db, "congress", cache_key, result, normal_ttl_hours=max_age_hours)
         return result
     except Exception as e:
         logger.error(
@@ -750,6 +758,19 @@ def parse_house_vote_xml(
     question = _meta_text("vote-question")
     legis_num = _meta_text("legis-num")
     vote_desc = _meta_text("vote-desc")
+    # e.g. "22-Jul-2026" — confirmed live against a real vote XML. Was
+    # never parsed at all before (voteDate hardcoded to ""), which early-
+    # signal reporting needs a real date for (ActionIssue.date). Left as
+    # "" (not raised) on a format this codebase hasn't seen, matching
+    # every other parse-failure in this module: log and degrade, never
+    # raise mid-pipeline over one malformed field.
+    action_date_raw = _meta_text("action-date")
+    vote_date = ""
+    if action_date_raw:
+        try:
+            vote_date = datetime.strptime(action_date_raw, "%d-%b-%Y").strftime("%Y-%m-%d")
+        except ValueError:
+            logger.warning("Unrecognized House action-date format: %r", action_date_raw)
 
     vote_data = root.find("vote-data")
     if vote_data is None:
@@ -780,7 +801,7 @@ def parse_house_vote_xml(
         "session": int(session_str) if session_str.isdigit() else 0,
         "rollNumber": roll_number,
         "voteTitle": vote_desc or legis_num,
-        "voteDate": "",
+        "voteDate": vote_date,
         "question": question,
         "documentTitle": vote_desc or legis_num,
         "documentName": legis_num,
@@ -794,14 +815,20 @@ async def fetch_recent_house_roll_calls(
     db: Session,
     year: int = 2025,
     count: int = 15,
+    max_age_hours: int | None = None,
 ) -> list[dict]:
     """Fetch the last `count` House roll calls for a given year.
 
     Probes clerk.house.gov starting from a high roll number, working
     backward until valid votes are found.
+
+    `max_age_hours` overrides the default cache TTL — see
+    fetch_recent_roll_calls's (Senate) docstring for why the near-real-time
+    early-signal poller needs a much shorter one than the nightly scoring
+    caller. Forwarded to each underlying fetch_house_roll_call_vote call too.
     """
     cache_key = f"recent-house-rollcalls-{year}-{count}"
-    cached = api_cache_get(db, "congress", cache_key)
+    cached = api_cache_get(db, "congress", cache_key, max_age_hours=max_age_hours)
     if cached is not None:
         return cached
 
@@ -824,12 +851,14 @@ async def fetch_recent_house_roll_calls(
     for roll in range(highest_valid, max(0, highest_valid - count - 5), -1):
         if len(results) >= count:
             break
-        roll_data = await fetch_house_roll_call_vote(client, db, year, roll)
+        roll_data = await fetch_house_roll_call_vote(
+            client, db, year, roll, max_age_hours=max_age_hours
+        )
         if roll_data:
             results.append(roll_data)
 
     logger.info("Fetched %d recent House roll calls", len(results))
-    api_cache_set(db, "congress", cache_key, results)
+    api_cache_set(db, "congress", cache_key, results, normal_ttl_hours=max_age_hours)
     return results
 
 

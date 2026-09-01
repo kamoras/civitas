@@ -31,6 +31,30 @@ def _vote(
     }
 
 
+def _house_vote(
+    year=2026, congress=119, session=1, roll_number=42, question="On Passage",
+    vote_title="On Passage", document_title="A bill to do a thing",
+    vote_date="2026-08-30", yeas=250, nays=180,
+) -> dict:
+    members = (
+        [{"voteCast": "Yea"} for _ in range(yeas)]
+        + [{"voteCast": "Nay"} for _ in range(nays)]
+    )
+    return {
+        "year": year,
+        "congress": congress,
+        "session": session,
+        "rollNumber": roll_number,
+        "voteTitle": vote_title,
+        "voteDate": vote_date,
+        "question": question,
+        "documentTitle": document_title,
+        "documentName": "H.R.1",
+        "members": members,
+        "chamber": "House",
+    }
+
+
 class TestIsFinalPassage:
     def test_on_passage_of_the_bill_matches(self):
         assert es._is_final_passage(_vote(question="On Passage of the Bill")) is True
@@ -48,6 +72,45 @@ class TestIsFinalPassage:
 
     def test_amendment_does_not_match(self):
         assert es._is_final_passage(_vote(question="On the Amendment")) is False
+
+    def test_house_on_passage_matches(self):
+        assert es._is_final_passage(_house_vote(question="On Passage")) is True
+
+    def test_house_suspend_the_rules_and_pass_matches(self):
+        assert es._is_final_passage(
+            _house_vote(question="On Motion to Suspend the Rules and Pass")
+        ) is True
+
+    def test_house_motion_to_recommit_does_not_match(self):
+        assert es._is_final_passage(
+            _house_vote(question="On Motion to Recommit", vote_title="On Motion to Recommit")
+        ) is False
+
+    def test_house_previous_question_does_not_match(self):
+        assert es._is_final_passage(
+            _house_vote(
+                question="On Ordering the Previous Question",
+                vote_title="On Ordering the Previous Question",
+            )
+        ) is False
+
+
+class TestChamberLabels:
+    def test_senate_vote_labels(self):
+        assert es._chamber_labels(_vote()) == ("Senate", "senators")
+
+    def test_house_vote_labels(self):
+        assert es._chamber_labels(_house_vote()) == ("House of Representatives", "representatives")
+
+
+class TestVoteUrl:
+    def test_senate_vote_url(self):
+        url = es._vote_url(_vote(congress=119, session=1, roll_number=42))
+        assert url == es._senate_vote_url(119, 1, 42)
+
+    def test_house_vote_url(self):
+        url = es._vote_url(_house_vote(year=2026, roll_number=42))
+        assert url == "https://clerk.house.gov/evs/2026/roll42.xml"
 
 
 class TestVoteMarginRatio:
@@ -88,7 +151,7 @@ class TestCheckRollCallSignals:
         assert created == 1
         row = db_session.query(ActionIssue).one()
         assert row.status == ActionIssueStatus.DEVELOPING
-        assert row.source_type == "roll_call_vote"
+        assert row.source_type == "senate_roll_call_vote"
         assert row.primary_source_url
         assert row.confirmation_deadline is not None
         assert row.is_current is True
@@ -101,6 +164,31 @@ class TestCheckRollCallSignals:
             created_second_pass = es.check_roll_call_signals(db_session)
         assert created_second_pass == 0
         assert db_session.query(ActionIssue).count() == 1
+
+    def test_qualifying_house_vote_creates_a_developing_issue(self, db_session):
+        with patch.object(es, "_fetch_recent_votes", return_value=[_house_vote()]), \
+                patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)), \
+                patch.object(es, "call_llm", return_value=self._mock_llm_result()):
+            created = es.check_roll_call_signals(db_session)
+        assert created == 1
+        row = db_session.query(ActionIssue).one()
+        assert row.source_type == "house_roll_call_vote"
+        assert row.primary_source_url == "https://clerk.house.gov/evs/2026/roll42.xml"
+
+    def test_senate_and_house_votes_sharing_a_roll_number_both_created(self, db_session):
+        """recent_roll_call_key is congress-session-rollNumber only — House
+        and Senate roll numbers are independent sequences, so a same-
+        numbered pair from each chamber must not collide in the per-run
+        dedup set."""
+        with patch.object(
+            es, "_fetch_recent_votes",
+            return_value=[_vote(roll_number=42), _house_vote(roll_number=42)],
+        ), patch.object(es, "classify_policy_area", return_value=("DEFENSE", 0.9)), \
+                patch.object(es, "call_llm", return_value=self._mock_llm_result()):
+            created = es.check_roll_call_signals(db_session)
+        assert created == 2
+        source_types = {row.source_type for row in db_session.query(ActionIssue).all()}
+        assert source_types == {"senate_roll_call_vote", "house_roll_call_vote"}
 
     def test_generation_that_never_grounds_creates_nothing(self, db_session):
         """A generation that keeps fabricating a number outside the vote
@@ -123,7 +211,7 @@ class TestExpireStaleDevelopingIssues:
         row = ActionIssue(
             date="2026-08-30", rank=999, title="A developing story", summary="s",
             is_current=True, status=ActionIssueStatus.DEVELOPING,
-            source_type="roll_call_vote", primary_source_url="https://example.com/vote.xml",
+            source_type="senate_roll_call_vote", primary_source_url="https://example.com/vote.xml",
             confirmation_deadline=utcnow() + timedelta(hours=deadline_hours_from_now),
         )
         db_session.add(row)

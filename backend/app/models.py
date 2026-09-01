@@ -969,9 +969,10 @@ class ActionIssue(Base):
     # pre-existing row) needs no backfill — only a primary-source-drafted
     # issue is ever created as "developing".
     status: Mapped[str] = mapped_column(String(20), default=ActionIssueStatus.CONFIRMED)
-    # e.g. "roll_call_vote"; null for ordinary news-derived issues. Distinct
-    # from `status` so later source types (FEC filings, etc.) reuse this
-    # same column rather than adding a new one each time.
+    # e.g. "senate_roll_call_vote"/"house_roll_call_vote"; null for ordinary
+    # news-derived issues. Distinct from `status` so later source types
+    # (FEC filings, etc.) reuse this same column rather than adding a new
+    # one each time.
     source_type: Mapped[str | None] = mapped_column(String(40), nullable=True, default=None)
     primary_source_url: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     # Set only at DEVELOPING creation. Past this with no corroborating match,
