@@ -29,7 +29,7 @@ def acquire_pipeline_lock(db: Session, model: type[_RunModel], stale_timeout: ti
     active (non-stale) run already holds the lock.
 
     Generalizes senate_pipeline.py's original _acquire_pipeline_lock
-    (2026-07, platform-review O15) to House/Stock/Supplementary, which
+    (2026-07) to House/Stock/Supplementary, which
     had no equivalent protection at all until 2026-07-23: no unique
     index (a real cross-container double-start race, not just a
     theoretical one — see database._ensure_indexes, where only

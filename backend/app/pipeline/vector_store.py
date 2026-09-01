@@ -22,10 +22,10 @@ Architecture note — two vector computation paths coexist by design:
 
   2. **Numpy matrix ops** (policy_alignment, industry_classifier,
      nn_classifier): pipeline-time batch classification via raw cosine
-     similarity matrices, still on the PRIMARY model (arctic) until the
-     O1-O7 ground-truth-validated recalibration program — swapping a
-     classification gate without re-measuring its threshold is how
-     thresholds go vacuous.
+     similarity matrices, still on the PRIMARY model (arctic) until each
+     classification threshold has been re-measured against real
+     ground truth on the new model — swapping a classification gate
+     without re-measuring its threshold is how thresholds go vacuous.
 
 Index versioning: the index's model id is stored inside vectors.db
 (meta table). A mismatch at startup drops the vec tables and triggers a
@@ -124,8 +124,8 @@ def get_similarity_model() -> SentenceTransformer:
     measurement evaluate_embedding_models.py does elsewhere accumulates
     automatically from live traffic — no one-off manual production pull
     needed. Once enough runs have logged, read the accumulated
-    action-metrics history the same way past thresholds here were
-    calibrated (see the O1-O7 program) and set real thresholds from it.
+    action-metrics history the same way past thresholds elsewhere in this
+    pipeline were calibrated and set real thresholds from it.
     The classification subsystem (donor/kNN/bills) stays on the primary
     model until their own measurement + recalibration pass.
     """
@@ -307,11 +307,12 @@ def embed_bills(bills: list[dict]) -> None:
     Uses the PRIMARY (classification-side) model, NOT the similarity
     model: this collection is the kNN reference corpus bill_learning.py
     classifies against — its vectors must live in the same space as the
-    classifier's query embeddings. Swapping it without the O1-O7
-    ground-truth recalibration would silently break bill classification
-    (see module docstring's scope discipline).
+    classifier's query embeddings. Swapping it without recalibrating every
+    measured similarity threshold across this pipeline against real
+    ground truth would silently break bill classification (see module
+    docstring's scope discipline).
 
-    2026-07 fix (O3): every classified bill, including low-confidence
+    2026-07 fix: every classified bill, including low-confidence
     guesses, used to be upserted here unconditionally and then treated as
     a real kNN reference example forever — the audited 55%-PROCEDURAL
     corpus skew was partly this (the procedural seed match used to report
@@ -675,7 +676,7 @@ def get_bill_reference(limit: int = 5000):
     """kNN reference corpus: (normalized embeddings ndarray, policy labels)
     from the stored bills, or (None, []) when empty.
 
-    2026-07 fix (O3): this LIMIT used to have no ORDER BY. rowid is a
+    2026-07 fix: this LIMIT used to have no ORDER BY. rowid is a
     deterministic hash of bill_id (_bill_rowid), not an insertion or
     recency order, so once the corpus grew past `limit` the excluded rows
     were an arbitrary hash-ordered slice — not "the most recent 5000,"

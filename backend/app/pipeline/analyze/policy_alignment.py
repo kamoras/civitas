@@ -190,7 +190,7 @@ def get_related_policies(
 
     Drop-in replacement for _INDUSTRY_POLICY_MAP[industry].
 
-    2026-07 fix (O1): threshold was 0.35, on the exact same 375-pair
+    2026-07 fix: threshold was 0.35, on the exact same 375-pair
     industry x policy anchor matrix detect_donor_vote_connections already
     measured (see its docstring): genuine matches 0.87-0.93, cross-category
     noise mean=0.66/p90=0.71 — a clean gap. At 0.35 this returned

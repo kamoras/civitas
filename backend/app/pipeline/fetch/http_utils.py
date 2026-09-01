@@ -105,20 +105,12 @@ async def fetch_with_retry(
     for attempt in range(1, retries + 1):
         try:
             logger.debug("%s: %s (attempt %d)", label, url, attempt)
-            # Hard backstop on top of `timeout=` below: confirmed live
-            # 2026-08-02, a House pipeline run sat wedged for 12h+ with a
-            # congress.gov connection stuck CLOSE_WAIT — httpx's own
-            # per-request timeout never fired (likely a stale pooled
-            # connection httpx handed back out without detecting the peer
-            # had already closed it). wait_for guarantees this call raises
-            # and retries/gives up within a bounded time no matter what
-            # state the client's connection pool gets into.
-            # Hard wall-clock backstop on top of `timeout=` — see
-            # app/http_client.py for the CLOSE_WAIT hang this exists to
-            # bound. Redundant when `client` came from make_async_client()
-            # (its send() applies the same bound), and deliberately kept
-            # anyway: this function accepts any AsyncClient a caller hands
-            # it, and the bound has to hold for those too.
+            # Hard wall-clock backstop on top of `timeout=` below — see
+            # app/http_client.py's module docstring for the CLOSE_WAIT hang
+            # this exists to bound. Redundant when `client` came from
+            # make_async_client() (its send() applies the same bound), and
+            # deliberately kept anyway: this function accepts any AsyncClient
+            # a caller hands it, and the bound has to hold for those too.
             resp = await bounded(
                 client.request(method, actual_url, timeout=timeout, **request_kwargs),
                 timeout,

@@ -147,7 +147,7 @@ def classify_bill_by_reference(
 
     Returns (policy_area, confidence) or (None, 0.0) if insufficient data.
 
-    2026-07 fix (O1): min_similarity was 0.30, far below the real floor
+    2026-07 fix: min_similarity was 0.30, far below the real floor
     for bill-title-to-bill-title cosine — live-measured (4534 same-
     policy-area title pairs, 179 cross-policy-area pairs, grouped by this
     module's own classification): same-area mean=0.766/p10=0.697,
@@ -358,7 +358,7 @@ def classify_motion_type(question: str) -> str:
     query_emb = query_emb / np.linalg.norm(query_emb)
 
     best_type = "unknown"
-    # 2026-07 fix (O1): was 0.30. Real Senate.gov "question" strings aren't
+    # 2026-07 fix: was 0.30. Real Senate.gov "question" strings aren't
     # persisted anywhere in this codebase to measure directly, but this is
     # the same short-text-vs-prototype comparison (no prompt_name="query")
     # as classify_bill_by_reference just above, where the real floor for

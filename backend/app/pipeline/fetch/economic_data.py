@@ -90,7 +90,7 @@ def calculate_jobs_created(
     """Calculate net jobs attributed to a presidential term, in millions.
 
     Baseline is January of the term's SECOND calendar year, not
-    inauguration January (2026-07 fix, platform-review O9): the GDP
+    inauguration January (2026-07 fix): the GDP
     component of the same Effectiveness score excludes year 1 per
     Blinder & Watson (2016) — outcomes in a president's first year
     primarily reflect the predecessor's policy — but jobs were counted
@@ -104,7 +104,7 @@ def calculate_jobs_created(
     For a term still in progress there is no term-end January yet — the
     old code returned None, silently scoring the incumbent on a
     different basis (no jobs component) than every completed term in
-    the same ranking (the other half of O9). The endpoint now falls
+    the same ranking (the other half of that same attribution fix). The endpoint now falls
     back to the latest available month in the series: the headline
     nonfarm series (CES0000000001) is seasonally adjusted, so a
     non-January endpoint is comparable, and the per-year normalization
