@@ -7,7 +7,7 @@ import { ActionIssue } from "@/types/action";
 import { usableRecord } from "@/lib/ssrPayload";
 import { formatUtcDate, isNewFact } from "@/lib/formatting";
 import { ACTION_CENTER_HREF } from "@/lib/routes";
-import { PolicyBadge, MonitorChips, NewFactTag } from "@/components/action/IssueEnrichment";
+import { PolicyBadge, MonitorChips, NewFactTag, IssueImage } from "@/components/action/IssueEnrichment";
 import IssueActions from "./IssueActions";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
@@ -141,6 +141,8 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
             </div>
             <MonitorChips slugs={issue.relatedMonitorSlugs} />
           </header>
+
+          <IssueImage issue={issue} />
 
           {/* Full story */}
           {paragraphs ? (

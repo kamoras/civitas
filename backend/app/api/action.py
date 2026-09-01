@@ -295,6 +295,8 @@ def _build_issue_response(
         is_trending=is_trending,
         status=getattr(issue, "status", None) or "confirmed",
         image_url=getattr(issue, "image_url", None),
+        image_alt=getattr(issue, "image_alt", "") or "",
+        image_credit=getattr(issue, "image_credit", "") or "",
     ).model_dump(by_alias=True)
 
 

@@ -23,6 +23,54 @@ import { PARTY_COLORS, PARTY_BORDER } from "@/lib/partyStyles";
 import { ACTION_CENTER_MONITORS_HREF } from "@/lib/routes";
 import type { ActionIssue, ActionItem, RelatedBill } from "@/types/action";
 
+/** An issue's rights-cleared source photo, in the two sizes it renders at.
+ *
+ *  Accessibility: the source's own caption (`imageAlt`) is shown as a
+ *  VISIBLE figcaption alongside the photo credit rather than only in the
+ *  `<img alt>` — a caption a sighted reader can already see must not also
+ *  be announced a second time via alt text for screen-reader users, so the
+ *  image itself is alt="" (decorative relative to its own visible
+ *  caption). The "thumbnail" size has no room for a caption and sits
+ *  directly beside the issue's own title/summary text, which already
+ *  conveys the same information, so alt="" applies there for the same
+ *  no-redundant-announcement reason.
+ *
+ *  Design: font-mono/tracked-uppercase/text-ink-min matches every other
+ *  small label on this page (SOURCES:, KEY FACTS) — this is that same
+ *  register, not a one-off caption style. */
+export function IssueImage({ issue, size = "full" }: { issue: ActionIssue; size?: "full" | "thumbnail" }) {
+  if (!issue.imageUrl) return null;
+
+  if (size === "thumbnail") {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- external, varied source-article hosts; not worth per-host next/image remotePatterns
+      <img
+        src={issue.imageUrl}
+        alt=""
+        className="h-16 w-16 shrink-0 border border-white/[0.07] object-cover sm:h-20 sm:w-20"
+      />
+    );
+  }
+
+  return (
+    <figure className="mb-6">
+      {/* eslint-disable-next-line @next/next/no-img-element -- external, varied source-article hosts; not worth per-host next/image remotePatterns */}
+      <img
+        src={issue.imageUrl}
+        alt=""
+        className="max-h-96 w-full border border-white/[0.07] object-cover"
+      />
+      {(issue.imageAlt || issue.imageCredit) && (
+        <figcaption className="mt-1.5 font-mono text-[10px] tracking-wide text-ink-min">
+          {issue.imageAlt}
+          {issue.imageAlt && issue.imageCredit && " — "}
+          {issue.imageCredit && `PHOTO: ${issue.imageCredit}`}
+        </figcaption>
+      )}
+    </figure>
+  );
+}
+
 export function PolicyBadge({ area }: { area: string }) {
   return (
     <span className="text-xs px-2 py-0.5 border font-mono tracking-wide border-signal-amber/40 text-signal-amber bg-signal-amber/10">

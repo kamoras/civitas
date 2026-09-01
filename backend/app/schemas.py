@@ -598,9 +598,15 @@ class ActionIssueSchema(CamelModel):
     # normal top-story ranking competition.
     status: str = "confirmed"
     # Only ever set from a source article whose feed explicitly granted
-    # redistribution rights — see news_feeds._rights_cleared_image_url.
-    # None for the large majority of issues; used for the OG image.
+    # redistribution rights — see news_feeds._rights_cleared_image. None
+    # for the large majority of issues; used for the OG image and the
+    # in-page renders on the Action Center and issue pages.
     image_url: str | None = None
+    # The source's own photo caption — real accessible alt text, not a
+    # generic fallback. "" when the source supplied none.
+    image_alt: str = ""
+    # Photographer/wire-service credit shown alongside the image.
+    image_credit: str = ""
 
 
 class MonitorUpdateSchema(CamelModel):

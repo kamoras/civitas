@@ -28,6 +28,7 @@ import {
   OfficialLegislation,
   RelatedDocuments,
   SourceList,
+  IssueImage,
   billLink,
   trackActionLink,
   trackActionText,
@@ -192,6 +193,8 @@ function HeroIssue({
         {issue.title}
       </h2>
 
+      <IssueImage issue={issue} />
+
       <p className="mb-6 max-w-3xl font-display text-base leading-relaxed text-ink sm:text-[17px]">
         {issue.summary}
       </p>
@@ -303,6 +306,7 @@ function SecondaryIssue({
         aria-expanded={expanded}
         aria-controls={`issue-detail-${issue.id}`}
       >
+        <IssueImage issue={issue} size="thumbnail" />
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex flex-wrap items-center gap-2 font-mono text-xs">
             <span className="text-ink-min">
