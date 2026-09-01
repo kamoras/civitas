@@ -55,11 +55,46 @@ describe("IssueImage", () => {
     expect(screen.getByText(/Tom Williams\/CQ Roll Call/)).toBeInTheDocument();
   });
 
-  it("omits the figcaption entirely when the source gave no caption or credit", () => {
+  it("omits the figcaption and falls back to the issue title for alt when there is no caption or credit", () => {
     const { container } = render(
-      <IssueImage issue={issue({ imageUrl: "https://rollcall.com/img.jpg" })} />
+      <IssueImage issue={issue({ imageUrl: "https://rollcall.com/img.jpg", title: "A story" })} />
     );
     expect(container.querySelector("figcaption")).toBeNull();
+    // No visible caption exists to stand in for a description, so the
+    // image must not be alt="" — that would silently drop it for
+    // screen-reader users entirely.
+    expect(container.querySelector("img")).toHaveAttribute("alt", "A story");
+  });
+
+  it("falls back to the issue title for alt when there is credit but no caption", () => {
+    // media:text (caption) and mi:licensorName (credit) are parsed
+    // independently from the feed — a real item can carry one without the
+    // other. A credit-only figcaption is attribution, not a description,
+    // so it must not suppress the image's alt text.
+    const { container } = render(
+      <IssueImage
+        issue={issue({
+          imageUrl: "https://rollcall.com/img.jpg",
+          title: "A story",
+          imageCredit: "Tom Williams/CQ Roll Call",
+        })}
+      />
+    );
+    expect(screen.getByText(/Tom Williams\/CQ Roll Call/)).toBeInTheDocument();
+    expect(container.querySelector("img")).toHaveAttribute("alt", "A story");
+  });
+
+  it("uses an empty alt when there is a caption but no credit", () => {
+    const { container } = render(
+      <IssueImage
+        issue={issue({
+          imageUrl: "https://rollcall.com/img.jpg",
+          imageAlt: "A member of Congress speaks.",
+        })}
+      />
+    );
+    expect(screen.getByText(/A member of Congress speaks\./)).toBeInTheDocument();
+    expect(container.querySelector("img")).toHaveAttribute("alt", "");
   });
 
   it("renders a bare thumbnail with no caption at the thumbnail size", () => {
