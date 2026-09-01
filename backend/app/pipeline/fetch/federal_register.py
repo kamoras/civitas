@@ -5,6 +5,7 @@ It contains presidential documents from Clinton (1994) onward.
 """
 
 import logging
+import re
 from datetime import date, timedelta
 
 import httpx
@@ -117,12 +118,22 @@ async def fetch_all_rulemaking_stats(
 SIGNIFICANT_RULE_LOOKBACK_DAYS = 3
 
 
+# A trailing "; Correction"-shaped clause marks a metadata/formatting fix
+# to an already-published rule, not a new substantive action — the
+# underlying rule was the actual news, days earlier, and would already
+# have been surfaced on its own publication. Confirmed live: the real
+# vocabulary is broader than the bare word "Correction" — "Correction and
+# Technical Amendment" and "Correcting Amendments" are both genuine
+# correction notices for otherwise-significant rules. Matching "correct"
+# immediately after a semicolon (not just the exact word "Correction")
+# catches all three without also matching a substantive clause that merely
+# mentions "correct" mid-sentence (e.g. "; Requiring Correct Labeling" —
+# "correct" there isn't adjacent to the semicolon).
+_CORRECTION_CLAUSE_RE = re.compile(r";\s*correct", re.IGNORECASE)
+
+
 def _is_correction(title: str) -> bool:
-    """A "; Correction" suffix (confirmed live as the real pattern) marks a
-    metadata/formatting fix to an already-published rule, not a new
-    substantive action — the underlying rule was the actual news, days
-    earlier, and would already have been surfaced on its own publication."""
-    return title.strip().lower().endswith("; correction")
+    return bool(_CORRECTION_CLAUSE_RE.search(title))
 
 
 async def fetch_recent_significant_rules(

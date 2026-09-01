@@ -39,13 +39,28 @@ class TestIsCorrection:
     def test_case_insensitive(self):
         assert _is_correction("Some Rule Title; CORRECTION")
 
+    def test_correction_and_technical_amendment_matches(self):
+        """Confirmed live (2026-17336): the real vocabulary is broader than
+        the bare word "Correction"."""
+        assert _is_correction("Streamlining Probationary and Trial Period Appeals; Correction and Technical Amendment")
+
+    def test_correcting_amendments_matches(self):
+        """Confirmed live (2026-17334)."""
+        assert _is_correction("Recruitment and Relocation Incentive Waivers; Correcting Amendments")
+
     def test_ordinary_title_does_not_match(self):
         assert not _is_correction("Process for Authorizing Seasonal Migratory Game Bird Hunting")
 
-    def test_correction_mid_title_does_not_match(self):
-        """Only a trailing "; Correction" marks a metadata fix — a rule
-        that merely discusses corrections in its body isn't one."""
+    def test_correction_mid_title_without_semicolon_does_not_match(self):
+        """A rule that merely discusses corrections in its body, with no
+        semicolon-separated correction clause, isn't a correction notice."""
         assert not _is_correction("Correction of prior enforcement guidance")
+
+    def test_correct_not_adjacent_to_semicolon_does_not_match(self):
+        """"correct" appearing later in a substantive clause must not be
+        mistaken for a correction-notice clause immediately after the
+        semicolon."""
+        assert not _is_correction("New Labeling Rule; Requiring Correct Nutritional Disclosures")
 
 
 def _mock_client(results: list[dict]):
