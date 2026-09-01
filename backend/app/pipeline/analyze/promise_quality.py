@@ -37,7 +37,7 @@ _BROKEN_RE = re.compile(
     re.IGNORECASE,
 )
 
-# 2026-07 fix (O7 disclosed exception): _KEPT_RE/_BROKEN_RE count raw
+# 2026-07 fix (a disclosed exception): _KEPT_RE/_BROKEN_RE count raw
 # keyword occurrences with no notion of which one the sentence is
 # actually ASSERTING — "voted against the bill, consistent with his
 # promise (to oppose it)" hits both ("consistent" is a KEPT word,

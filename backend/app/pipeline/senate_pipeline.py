@@ -1665,7 +1665,7 @@ async def run_senate_pipeline(
         )
         # compute_leadership_scores/compute_ideology_scores/compute_bipartisan
         # ship_scores each withhold (return {}) under whole-cohort data-quality
-        # gates (most recently O6's SVD-axis-not-partisan check) — every
+        # gates (most recently the SVD-axis-not-partisan check) — every
         # senator is missing from the dict at once, not just one. Every
         # downstream reader of these dicts previously did a bare
         # `.get(bio_id)`, so a withheld run silently overwrote every

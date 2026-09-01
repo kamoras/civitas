@@ -341,7 +341,7 @@ def _effectiveness_core(
     if jobs_created_millions is not None and term_years > 0:
         # The jobs figure is measured from January of the term's SECOND
         # year (Blinder & Watson year-1 exclusion — see economic_data.
-        # calculate_jobs_created, 2026-07 O9 fix), so the per-year rate
+        # calculate_jobs_created, 2026-07 fix), so the per-year rate
         # divides by that attributed window, not the full term — dividing
         # a 7-year jobs change by 8 term years would understate every
         # completed term's rate, short terms worst. Floor keeps a young
