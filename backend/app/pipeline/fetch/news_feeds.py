@@ -50,6 +50,28 @@ MAX_SUMMARY_CHARS = 500
 MAX_FULL_TEXT_CHARS = 3000
 _CONTENT_ENCODED_TAG = "{http://purl.org/rss/1.0/modules/content/}encoded"
 
+# MRSS (media:*) and Microsoft's ingestion namespace (mi:*) — confirmed live
+# against Roll Call's own feed, the only one of the configured sources that
+# carries an explicit, machine-readable redistribution-rights signal.
+# <media:content> images are common in WordPress-backed feeds purely as
+# attribution metadata (photographer/wire-service credit), which is NOT
+# permission to redistribute — only an item whose <mi:hasSyndicationRights>
+# is explicitly "1" is used as an issue's image; every other feed either
+# lacks media:content entirely or lacks this rights field, and is silently
+# skipped by the same check.
+_MEDIA_CONTENT_TAG = "{http://search.yahoo.com/mrss/}content"
+_SYNDICATION_RIGHTS_TAG = "{http://schemas.ingestion.microsoft.com/common/}hasSyndicationRights"
+
+
+def _rights_cleared_image_url(item: Element) -> str | None:
+    for media in item.findall(_MEDIA_CONTENT_TAG):
+        rights = media.find(_SYNDICATION_RIGHTS_TAG)
+        if rights is not None and (rights.text or "").strip() == "1":
+            url = media.get("url", "").strip()
+            if url:
+                return url
+    return None
+
 
 @dataclass
 class NewsArticle:
@@ -63,6 +85,9 @@ class NewsArticle:
     truncated: bool = False
     published: datetime | None = None
     categories: list[str] = field(default_factory=list)
+    # Only ever populated where the source explicitly granted redistribution
+    # rights — see _rights_cleared_image_url. None for every other article.
+    image_url: str | None = None
 
 
 # Title prefixes for known multi-story digest segments — one feed item
@@ -359,6 +384,7 @@ def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
             truncated=truncated,
             published=pub_date,
             categories=categories,
+            image_url=_rights_cleared_image_url(item),
         ))
 
     # Atom entries (fallback for Atom feeds)
@@ -421,6 +447,7 @@ def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
             truncated=truncated,
             published=pub_date,
             categories=categories,
+            image_url=_rights_cleared_image_url(entry),
         ))
 
     return articles

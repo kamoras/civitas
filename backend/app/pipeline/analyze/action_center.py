@@ -534,7 +534,7 @@ _ISSUE_UPDATE_ATTRS = (
     "title", "summary", "facts", "actions", "source_urls",
     "source_names", "policy_areas", "related_bill_ids",
     "related_explore_ids", "related_senators", "related_officials",
-    "primary_article_date",
+    "primary_article_date", "image_url",
 )
 
 
@@ -4963,6 +4963,11 @@ def _run_refresh(db: Session) -> int:
         source_names = list(seen_sources.keys())
         source_urls = list(seen_sources.values())
 
+        # Only ever set from an article whose feed explicitly granted
+        # redistribution rights (see news_feeds._rights_cleared_image_url) —
+        # first one found in cluster order, None if none qualify.
+        image_url = next((a.image_url for a in filtered_cluster if a.image_url), None)
+
         # Cache key uses the FILTERED titles so that when coherence filtering
         # changes which articles the LLM sees, the cache is invalidated and
         # a fresh generation reflects the cleaner cluster.
@@ -5239,6 +5244,7 @@ def _run_refresh(db: Session) -> int:
             "related_senators": json.dumps(related_senators),
             "related_officials": json.dumps(related_officials),
             "primary_article_date": primary_article_date,
+            "image_url": image_url,
         }
 
         if match:

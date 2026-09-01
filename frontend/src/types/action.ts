@@ -70,6 +70,10 @@ export interface ActionIssue {
    *  corroboration (see backend early_signal.py) — shown with a
    *  disclosure badge and ranked after every "confirmed" issue. */
   status: 'developing' | 'confirmed';
+  /** Only ever set from a source article whose feed explicitly granted
+   *  redistribution rights (see backend news_feeds._rights_cleared_image_url)
+   *  — null for the large majority of issues. Used for the OG image. */
+  imageUrl?: string | null;
 }
 
 export interface MyRepSenator {

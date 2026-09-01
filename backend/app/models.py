@@ -967,6 +967,11 @@ class ActionIssue(Base):
     previous_facts: Mapped[str] = mapped_column(Text, default="[]")
     is_current: Mapped[bool] = mapped_column(Boolean, default=True)
     primary_article_date: Mapped[str | None] = mapped_column(String(10), nullable=True, default=None)
+    # Only ever set from a source article whose feed explicitly granted
+    # redistribution rights (see pipeline/fetch/news_feeds.py's
+    # _rights_cleared_image_url) — null for every other issue, not a
+    # generic "any image we found" field.
+    image_url: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
 
     # Early-signal reporting (see pipeline/analyze/early_signal.py). Default
     # "confirmed" means every ordinary news-derived issue (and every

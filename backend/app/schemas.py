@@ -597,6 +597,10 @@ class ActionIssueSchema(CamelModel):
     # uses this to show a disclosure badge and to exclude these from
     # normal top-story ranking competition.
     status: str = "confirmed"
+    # Only ever set from a source article whose feed explicitly granted
+    # redistribution rights — see news_feeds._rights_cleared_image_url.
+    # None for the large majority of issues; used for the OG image.
+    image_url: str | None = None
 
 
 class MonitorUpdateSchema(CamelModel):
