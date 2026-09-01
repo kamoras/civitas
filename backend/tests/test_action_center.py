@@ -1632,13 +1632,16 @@ class TestDedupeNearIdenticalIssues:
         assert result == [b, c]
 
 
-def _new_values_for(title: str, facts: list[str], primary_article_date: str) -> dict:
+def _new_values_for(
+    title: str, facts: list[str], primary_article_date: str, image_url: str | None = None,
+) -> dict:
     return {
         "title": title, "summary": "summary", "facts": json.dumps(facts),
         "actions": "[]", "source_urls": "[]", "source_names": "[]",
         "policy_areas": "[]", "related_bill_ids": "[]", "related_explore_ids": "[]",
         "related_senators": "[]", "related_officials": "[]",
         "primary_article_date": primary_article_date,
+        "image_url": image_url,
     }
 
 
@@ -2008,6 +2011,37 @@ class TestApplyMatchedIssueUpdate:
 
         assert json.loads(match.previous_facts) == ["An old fact."]
         assert json.loads(match.facts) == facts
+
+    def test_image_url_is_applied_from_new_values(self):
+        match = ActionIssue(
+            id=1, date="2026-07-19", rank=1, title="Story",
+            facts=json.dumps(["A fact."]), primary_article_date="2026-07-19",
+            image_url="https://rollcall.com/app/uploads/old.jpg",
+        )
+        facts = ["A fact."]
+        new_values = _new_values_for(
+            "Story", facts, "2026-07-20", image_url="https://rollcall.com/app/uploads/new.jpg",
+        )
+
+        _apply_matched_issue_update(match, new_values, 1, "2026-07-20", "2026-07-20", facts, "Story")
+
+        assert match.image_url == "https://rollcall.com/app/uploads/new.jpg"
+
+    def test_image_url_cleared_when_fresh_cluster_has_none(self):
+        """Same full-content-swap semantics as source_urls/source_names —
+        a story that stops carrying a rights-cleared image this run loses
+        its OG image too, it isn't preserved from a stale prior run."""
+        match = ActionIssue(
+            id=1, date="2026-07-19", rank=1, title="Story",
+            facts=json.dumps(["A fact."]), primary_article_date="2026-07-19",
+            image_url="https://rollcall.com/app/uploads/old.jpg",
+        )
+        facts = ["A fact."]
+        new_values = _new_values_for("Story", facts, "2026-07-20")
+
+        _apply_matched_issue_update(match, new_values, 1, "2026-07-20", "2026-07-20", facts, "Story")
+
+        assert match.image_url is None
 
     def test_previous_facts_untouched_when_nothing_actually_changed(self):
         # An hourly touch that reconfirms the same facts (LLM regenerates

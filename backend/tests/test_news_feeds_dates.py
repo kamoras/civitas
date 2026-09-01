@@ -15,8 +15,16 @@ from app.pipeline.fetch.news_feeds import (
     _is_multi_topic_digest,
     _parse_pub_date,
     _parse_rss_feed,
+    _rights_cleared_image_url,
     _strip_html,
     fetch_news_articles,
+)
+
+_MRSS_HEADER = (
+    '<?xml version="1.0"?>'
+    '<rss xmlns:media="http://search.yahoo.com/mrss/" '
+    'xmlns:mi="http://schemas.ingestion.microsoft.com/common/">'
+    "<channel>"
 )
 
 
@@ -265,6 +273,48 @@ class TestStripHtml:
 
     def test_is_multi_topic_digest_matches_common_prefix_variants(self):
         assert _is_multi_topic_digest("News Wrap: Wildfire forces evacuations near Reno")
+
+
+class TestRightsClearedImageUrl:
+    """Confirmed live against Roll Call's own feed — <mi:hasSyndicationRights>
+    is the only explicit, machine-readable redistribution-rights signal
+    among any of the configured sources; a bare media:content (attribution
+    metadata) elsewhere must never be treated as permission."""
+
+    def _item(self, rights: str | None, url: str = "https://rollcall.com/img.jpg") -> str:
+        rights_el = f"<mi:hasSyndicationRights>{rights}</mi:hasSyndicationRights>" if rights is not None else ""
+        return (
+            _MRSS_HEADER + "<item>"
+            "<title>A story</title><link>https://rollcall.com/a-story</link>"
+            f'<media:content url="{url}" medium="image">{rights_el}</media:content>'
+            "</item></channel></rss>"
+        )
+
+    def test_rights_granted_image_is_used(self):
+        articles = _parse_rss_feed(self._item("1").encode(), "Roll Call")
+        assert articles[0].image_url == "https://rollcall.com/img.jpg"
+
+    def test_rights_denied_image_is_dropped(self):
+        articles = _parse_rss_feed(self._item("0").encode(), "Roll Call")
+        assert articles[0].image_url is None
+
+    def test_missing_rights_field_is_dropped(self):
+        articles = _parse_rss_feed(self._item(None).encode(), "Roll Call")
+        assert articles[0].image_url is None
+
+    def test_no_media_content_at_all_is_none(self):
+        articles = _parse_rss_feed(
+            """<?xml version="1.0"?><rss><channel><item>
+              <title>A story</title><link>https://apnews.com/a-story</link>
+            </item></channel></rss>""".encode(),
+            "AP News",
+        )
+        assert articles[0].image_url is None
+
+    def test_rights_cleared_image_url_direct(self):
+        root = ElementTree.fromstring(self._item("1"))
+        item = root.find(".//item")
+        assert _rights_cleared_image_url(item) == "https://rollcall.com/img.jpg"
         assert _is_multi_topic_digest("news wrap: lowercase variant")
         assert _is_multi_topic_digest("News Wrap - dash variant")
         assert not _is_multi_topic_digest("Supreme Court clears the way for Trump mail voting order")

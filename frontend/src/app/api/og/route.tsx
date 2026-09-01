@@ -97,13 +97,22 @@ function Footer({ label }: { label: string }) {
   );
 }
 
-function issueImage(issue: { title?: string; summary?: string } | null) {
+async function issueImage(
+  issue: { title?: string; summary?: string; imageUrl?: string | null } | null
+) {
   const title = issue?.title ?? "Civitas Action Center";
   const summary = issue?.summary
     ? issue.summary.length > 140
       ? issue.summary.slice(0, 137) + "…"
       : issue.summary
     : "Track what Congress is doing — and what you can do about it.";
+
+  // Only ever set from a source article whose feed explicitly granted
+  // redistribution rights (see backend news_feeds._rights_cleared_image_url)
+  // — same fetch-and-inline treatment as a politician's headshot, since
+  // there's no guarantee this URL is still live months after the source
+  // article ran.
+  const photoDataUri = issue?.imageUrl ? await fetchPhotoAsDataUri(issue.imageUrl) : null;
 
   return new ImageResponse(
     <div
@@ -119,20 +128,33 @@ function issueImage(issue: { title?: string; summary?: string } | null) {
       }}
     >
       <Header section="ACTION CENTER" />
-      <div
-        style={{
-          color: "#e8e8e8",
-          fontSize: title.length > 60 ? 38 : 46,
-          fontWeight: 700,
-          lineHeight: 1.2,
-          marginBottom: 32,
-          flex: 1,
-        }}
-      >
-        {title}
-      </div>
-      <div style={{ color: "#888", fontSize: 22, lineHeight: 1.5, marginBottom: 48 }}>
-        {summary}
+      <div style={{ display: "flex", alignItems: "center", gap: 40, flex: 1, marginBottom: 32 }}>
+        <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
+          <div
+            style={{
+              color: "#e8e8e8",
+              fontSize: title.length > 60 ? 38 : 46,
+              fontWeight: 700,
+              lineHeight: 1.2,
+              marginBottom: 32,
+            }}
+          >
+            {title}
+          </div>
+          <div style={{ color: "#888", fontSize: 22, lineHeight: 1.5 }}>
+            {summary}
+          </div>
+        </div>
+        {photoDataUri && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={photoDataUri}
+            alt=""
+            width={320}
+            height={320}
+            style={{ objectFit: "cover", border: "1px solid #1a1a1a" }}
+          />
+        )}
       </div>
       <Footer label="PUBLIC FEDERAL DATA" />
     </div>,
