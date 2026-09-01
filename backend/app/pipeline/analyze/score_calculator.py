@@ -986,9 +986,9 @@ logger = logging.getLogger(__name__)
 # is inert only until the first successful ingest. See the top-of-file
 # "Changes from v6.10 -> v6.11" note for the full account.
 #
-# v6.11 -> v6.12 (2026-07-23): Funding Independence recalibration (roadmap
-# item "FI recalibration O11/O12" — PAC caps and election windows, refit
-# together per that review's own instruction not to move them separately).
+# v6.11 -> v6.12 (2026-07-23): Funding Independence recalibration — PAC
+# caps and election windows, refit together per that audit's own
+# instruction not to move them separately.
 # Two constants had drifted hard from a fresh live audit (n=532, both
 # chambers): the fallback PAC-dollar penalty (no contributing PAC has a
 # resolved committee type) assumed a $2.0M median/$4.4M p90; live is
@@ -1060,7 +1060,7 @@ SUBSTANTIVE_BILL_TYPES = {"s", "hr", "sjres", "hjres"}
 # "did this bill advance" means the same thing in both Legislative
 # Effectiveness and Legislative Leadership.
 #
-# 2026-07 (O7 disclosed exception): this only runs for bills where isLaw
+# 2026-07 (a disclosed exception): this only runs for bills where isLaw
 # is already false (the strongest, non-keyword "did this advance" signal
 # — becoming law — is checked first and short-circuits before this ever
 # runs; see _cosponsorship_edge_weight). Live-measured against 1366 real
