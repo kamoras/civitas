@@ -282,7 +282,7 @@ def classify_donor_type_semantic(
     template using the candidate's last name so the model can detect entities
     like "Sullivan Victory" or "Cruz for Senate" without hardcoded patterns.
 
-    2026-07 fix (O1): threshold was 0.35, skip_threshold 0.45 — both far
+    2026-07 fix: threshold was 0.35, skip_threshold 0.45 — both far
     below the real floor. Live-measured against 800 real, already-labeled
     donors: when the embedding's own top-1 pick matches the stored label,
     score mean=0.745/p10=0.699/min=0.614; when it doesn't, mean=0.737/
@@ -620,7 +620,7 @@ def _classify_donors_hybrid_sync(
 
     # Threshold for overriding a stale learning store entry.
     #
-    # 2026-07 fix (O2): this comment used to claim industry scores were "in
+    # 2026-07 fix: this comment used to claim industry scores were "in
     # centered embedding space (baseline ~0)" and set 0.25 as a "strong
     # positive signal" bar on that assumption. classify_industries_batch_scored
     # returns the raw cosine score, never centered — and it already only
@@ -633,7 +633,7 @@ def _classify_donors_hybrid_sync(
     # 0.60 (just above the median of already-confident classifications)
     # requires genuinely above-average confidence before overriding a stored
     # label — matching the asymmetric risk _normalize_category's docstring
-    # describes (O5): a missed correction just leaves a stale label for one
+    # describes: a missed correction just leaves a stale label for one
     # more run, a wrong correction pollutes the learning store with a
     # confident-looking mistake.
     _CORRECTION_THRESHOLD = 0.60
@@ -870,7 +870,7 @@ def _store_donor_learning(
 
     Uses INSERT ... ON CONFLICT DO UPDATE to handle races atomically.
 
-    2026-07 (O2): this always overwrites the persisted row — there is no
+    2026-07: this always overwrites the persisted row — there is no
     comparison against the existing DB row's confidence, despite an
     earlier version of this docstring claiming one. That's the intended
     design, not a bug: AGENTS.md Sec.2 documents that the learning store

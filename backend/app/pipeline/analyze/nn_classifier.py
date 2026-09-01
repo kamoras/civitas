@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 
 _category_norm_cache: dict[str, str] = {}
 
-# 2026-07 fix (O4): caps the inverse-frequency kNN vote weight computed in
+# 2026-07 fix: caps the inverse-frequency kNN vote weight computed in
 # classify_batch_nn — see that function's inline comment for the measured
 # real-production numbers behind this value (5.0).
 _MAX_INV_FREQ_WEIGHT = 5.0
@@ -99,7 +99,7 @@ def _normalize_category(value: str) -> str:
     resolved by cosine similarity (Reimers & Gurevych 2019) rather than a
     hardcoded alias table.
 
-    2026-07-24 fix (platform-review O5): the query was encoded without
+    2026-07-24 fix: the query was encoded without
     prompt_name="query", unlike classify_industry (industry_classifier.py),
     which documents that snowflake-arctic-embed-xs requires it for queries
     (asymmetric retrieval model — encoding a query as a document shifts the
@@ -229,7 +229,7 @@ def classify_batch_nn(
         prototype_descriptions: Optional seed descriptions per category.
         k: Number of nearest neighbors to consider.
         min_similarity: Minimum cosine similarity to count as a neighbor.
-            2026-07 fix (O1): was 0.20, far below this model's real floor
+            2026-07 fix: was 0.20, far below this model's real floor
             for entity-name-to-entity-name comparisons — live-measured on
             real donor names (661 same-type pairs, 187 cross-type pairs):
             same-type cosine mean=0.734/p10=0.681, cross-type mean=0.708/
@@ -238,7 +238,8 @@ def classify_batch_nn(
             neighbors, while rejecting names that don't resemble anything
             in the reference set at all — the k-of-7 majority vote plus
             inverse-frequency weighting is what does the real precision
-            work, not this floor (see O4 for the weighting side).
+            work, not this floor (see the inverse-frequency weighting
+            comment below for that side).
 
     Returns:
         Dict mapping query name -> predicted category.
@@ -276,7 +277,7 @@ def classify_batch_nn(
     # FINANCE dominate kNN votes simply due to population, not semantic
     # proximity.  Each vote is divided by sqrt(class_frequency).
     #
-    # 2026-07 fix (O4): the sqrt alone is NOT bounded — it slows growth
+    # 2026-07 fix: the sqrt alone is NOT bounded — it slows growth
     # but a count-1 class still gets weight sqrt(total_refs), which grows
     # with the corpus. Live production counts (donor_type reference set,
     # prototype_descriptions seeded once per category, real SKIP-labeled
@@ -430,7 +431,7 @@ def cross_validate_donor_types(db_session: Session) -> int:
 
     corrected = 0
     _MARGIN = 0.05
-    # 2026-07 (O1): the org_scores floor was 0.30; live-measured on 246 real
+    # 2026-07: the org_scores floor was 0.30; live-measured on 246 real
     # PAC-labeled donors it was already functionally redundant — org_score
     # mean=0.700/p90=0.744, well above 0.30, so _MARGIN (org beating pac by
     # 0.05) was always the actual gate (6/246 real rows crossed it). Raised

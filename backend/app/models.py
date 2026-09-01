@@ -286,7 +286,9 @@ class SponsoredBill(Base):
 
 
 class StockTrade(Base):
-    """STOCK Act periodic transaction report (PTR) entry. See issue #45."""
+    """STOCK Act periodic transaction report (PTR) entry — informational only,
+    not part of the weighted score (see senator_service.get_senator_stock_trades
+    for the rationale)."""
     __tablename__ = "stock_trades"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -502,7 +504,9 @@ class RepSponsoredBill(Base):
 
 
 class RepStockTrade(Base):
-    """STOCK Act periodic transaction report (PTR) entry. See issue #45."""
+    """STOCK Act periodic transaction report (PTR) entry — informational only,
+    not part of the weighted score (see representative_service.get_rep_stock_trades
+    for the rationale)."""
     __tablename__ = "rep_stock_trades"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

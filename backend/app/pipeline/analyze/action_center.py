@@ -4520,7 +4520,7 @@ _REFRESH_LOCK_STALE_S = 4 * 3600
 
 
 def _acquire_refresh_lock(db: Session) -> bool:
-    """Cross-container refresh lock (2026-07, platform-review O15): the
+    """Cross-container refresh lock (2026-07): the
     hourly refresh previously had only a process-local guard, so during a
     blue/green deploy overlap two containers could both run it —
     duplicate Bluesky posts and contended SQLite writes. The lock is a

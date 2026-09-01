@@ -282,7 +282,7 @@ def compute_ideology_scores(
 
     scores = _rescale(spectrum)
 
-    # 2026-07 (O6): pinning the sign only fixes orientation — it does
+    # 2026-07: pinning the sign only fixes orientation — it does
     # nothing to confirm the second singular vector is actually the
     # partisan axis in the first place. In a sparse/unusual window (few
     # cosponsorship events, an off-cycle session) it can just as easily

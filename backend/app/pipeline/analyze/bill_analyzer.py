@@ -212,7 +212,7 @@ def _augmented_embedding_classify(text: str) -> str:
             best_score = score
             best_area = area
 
-    # 2026-07 fix (O1): was 0.18, below the measured floor for this same
+    # 2026-07 fix: was 0.18, below the measured floor for this same
     # augmented-prefix comparison (600 real titles: mean=0.772, p10=0.734,
     # min=0.649) — recalibrated the same way as EMBEDDING_CONFIDENCE_THRESHOLD
     # just above (same corpus, same lack of a clean genuine/noise gap).
@@ -271,7 +271,7 @@ def _get_policy_embeddings() -> dict[str, np.ndarray]:
 # ── Policy area classification (embeddings) ──────────────────────
 
 
-# 2026-07 fix (platform-review O1): this sat at 0.25, far below the
+# 2026-07 fix: this sat at 0.25, far below the
 # model's real similarity floor for this comparison. Live-measured
 # (600 real bill titles vs the 16 non-procedural POLICY_TAXONOMY
 # prototypes, no prompt_name="query" — matching this function's actual,
@@ -304,7 +304,7 @@ def _is_procedural_seed_match(text: str, threshold: float = 0.74) -> tuple[bool,
     substring matching. The procedural prototype captures the semantic
     signature of ceremonial/administrative bills.
 
-    Returns (is_match, score) — 2026-07 (O3): used to return just the bool,
+    Returns (is_match, score) — 2026-07: used to return just the bool,
     with the caller hardcoding confidence 1.0 for any match. Live-measured
     (600 real bill titles + 6 known-procedural cases): genuinely procedural
     titles score 0.772-0.848, but a real sample of other bills (which
@@ -432,7 +432,7 @@ def classify_policy_area(
 
     # If reference corpus suggested PROCEDURAL but seed embedding disagrees,
     # trust the embedding (reference corpus may have bad labels from prior runs).
-    # 2026-07 (O1): reuses EMBEDDING_CONFIDENCE_THRESHOLD rather than its own
+    # 2026-07: reuses EMBEDDING_CONFIDENCE_THRESHOLD rather than its own
     # independent magic number (was 0.20, also dead) — "confident enough to
     # override a PROCEDURAL vote" is the same bar as "confident enough to
     # accept outright" just below.
@@ -582,7 +582,7 @@ def derive_stance(bill_name: str, summary: str, policy_area: str) -> tuple[str, 
     best_score = scores[best_dir]
 
     # Require minimum absolute similarity to classify at all.
-    # 2026-07 fix (O1): was 0.10, far below the measured floor — live
+    # 2026-07 fix: was 0.10, far below the measured floor — live
     # data (28 real bill titles with an unambiguous tier-0 directional
     # verb, so the "true" direction is known) scored best_score
     # mean=0.779, p10=0.739, min=0.673 even on these genuinely directional
@@ -666,7 +666,7 @@ async def classify_all_bills(
         policy_area = areas[0]["area"]
         confidence = areas[0]["confidence"]
 
-        # 2026-07 (O3): PROCEDURAL only ever reaches here two ways — the
+        # 2026-07: PROCEDURAL only ever reaches here two ways — the
         # seed match (real score, always >= 0.74; see
         # _is_procedural_seed_match) or the low-confidence tier-2/3
         # fallback (score always < EMBEDDING_CONFIDENCE_THRESHOLD=0.70 by
@@ -809,7 +809,7 @@ async def classify_recent_votes(
 
         proc_areas = [{"area": "PROCEDURAL", "confidence": 0.95, "party": "bipartisan"}]
 
-        # 2026-07 (O7): a third signal, a regex matching nomination-style
+        # 2026-07: a third signal, a regex matching nomination-style
         # document-name phrasing ("X, of Y, to be Z"), used to run here
         # too. Live-measured against 182 real key-vote rows (53 genuine
         # PN-prefixed nominations): it caught zero cases that motion_type
@@ -848,7 +848,7 @@ async def classify_recent_votes(
         policy_area = areas[0]["area"]
         confidence = areas[0]["confidence"]
 
-        # See classify_all_bills' matching check (O3) for why this compares
+        # See classify_all_bills' matching check for why this compares
         # against EMBEDDING_CONFIDENCE_THRESHOLD rather than a hardcoded 0.9.
         if policy_area == "PROCEDURAL" and confidence >= EMBEDDING_CONFIDENCE_THRESHOLD:
             classified.append({
