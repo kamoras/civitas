@@ -969,9 +969,15 @@ class ActionIssue(Base):
     primary_article_date: Mapped[str | None] = mapped_column(String(10), nullable=True, default=None)
     # Only ever set from a source article whose feed explicitly granted
     # redistribution rights (see pipeline/fetch/news_feeds.py's
-    # _rights_cleared_image_url) — null for every other issue, not a
-    # generic "any image we found" field.
+    # _rights_cleared_image) — null for every other issue, not a generic
+    # "any image we found" field.
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    # The source's own photo caption — real accessible alt text pulled from
+    # the feed, not a generic/empty fallback. "" (not null) when the source
+    # supplied no caption for an otherwise rights-cleared image.
+    image_alt: Mapped[str] = mapped_column(Text, default="")
+    # Photographer/wire-service credit shown alongside the image.
+    image_credit: Mapped[str] = mapped_column(Text, default="")
 
     # Early-signal reporting (see pipeline/analyze/early_signal.py). Default
     # "confirmed" means every ordinary news-derived issue (and every

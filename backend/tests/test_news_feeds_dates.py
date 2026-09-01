@@ -15,7 +15,7 @@ from app.pipeline.fetch.news_feeds import (
     _is_multi_topic_digest,
     _parse_pub_date,
     _parse_rss_feed,
-    _rights_cleared_image_url,
+    _rights_cleared_image,
     _strip_html,
     fetch_news_articles,
 )
@@ -285,12 +285,17 @@ class TestRightsClearedImageUrl:
     among any of the configured sources; a bare media:content (attribution
     metadata) elsewhere must never be treated as permission."""
 
-    def _item(self, rights: str | None, url: str = "https://rollcall.com/img.jpg") -> str:
+    def _item(
+        self, rights: str | None, url: str = "https://rollcall.com/img.jpg",
+        text: str | None = None, credit: str | None = None,
+    ) -> str:
         rights_el = f"<mi:hasSyndicationRights>{rights}</mi:hasSyndicationRights>" if rights is not None else ""
+        text_el = f"<media:text>{text}</media:text>" if text is not None else ""
+        credit_el = f"<mi:licensorName>{credit}</mi:licensorName>" if credit is not None else ""
         return (
             _MRSS_HEADER + "<item>"
             "<title>A story</title><link>https://rollcall.com/a-story</link>"
-            f'<media:content url="{url}" medium="image">{rights_el}</media:content>'
+            f'<media:content url="{url}" medium="image">{rights_el}{credit_el}{text_el}</media:content>'
             "</item></channel></rss>"
         )
 
@@ -315,10 +320,26 @@ class TestRightsClearedImageUrl:
         )
         assert articles[0].image_url is None
 
-    def test_rights_cleared_image_url_direct(self):
-        root = ElementTree.fromstring(self._item("1"))
+    def test_caption_and_credit_are_captured(self):
+        articles = _parse_rss_feed(
+            self._item("1", text="A member of Congress speaks.", credit="Tom Williams/CQ Roll Call").encode(),
+            "Roll Call",
+        )
+        assert articles[0].image_alt == "A member of Congress speaks."
+        assert articles[0].image_credit == "Tom Williams/CQ Roll Call"
+
+    def test_missing_caption_and_credit_default_to_empty_string(self):
+        articles = _parse_rss_feed(self._item("1").encode(), "Roll Call")
+        assert articles[0].image_alt == ""
+        assert articles[0].image_credit == ""
+
+    def test_rights_cleared_image_direct(self):
+        root = ElementTree.fromstring(self._item("1", text="A caption.", credit="A Credit"))
         item = root.find(".//item")
-        assert _rights_cleared_image_url(item) == "https://rollcall.com/img.jpg"
+        image = _rights_cleared_image(item)
+        assert image.url == "https://rollcall.com/img.jpg"
+        assert image.alt == "A caption."
+        assert image.credit == "A Credit"
 
     def test_comment_text_is_not_treated_as_content(self):
         """This parser drops comments, but the extractor should not depend

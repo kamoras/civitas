@@ -61,15 +61,36 @@ _CONTENT_ENCODED_TAG = "{http://purl.org/rss/1.0/modules/content/}encoded"
 # skipped by the same check.
 _MEDIA_CONTENT_TAG = "{http://search.yahoo.com/mrss/}content"
 _SYNDICATION_RIGHTS_TAG = "{http://schemas.ingestion.microsoft.com/common/}hasSyndicationRights"
+# <media:text> is the actual photo caption (e.g. "Supreme Court Chief
+# Justice John G. Roberts Jr. attends...") — real accessible alt text
+# straight from the source, not a generic/empty fallback. <mi:licensorName>
+# is the photographer/wire-service credit (e.g. "Tom Williams/CQ Roll
+# Call"), sometimes empty even on a rights-cleared item.
+_MEDIA_TEXT_TAG = "{http://search.yahoo.com/mrss/}text"
+_LICENSOR_NAME_TAG = "{http://schemas.ingestion.microsoft.com/common/}licensorName"
 
 
-def _rights_cleared_image_url(item: Element) -> str | None:
+@dataclass
+class _RightsClearedImage:
+    url: str
+    alt: str = ""
+    credit: str = ""
+
+
+def _rights_cleared_image(item: Element) -> "_RightsClearedImage | None":
     for media in item.findall(_MEDIA_CONTENT_TAG):
         rights = media.find(_SYNDICATION_RIGHTS_TAG)
         if rights is not None and (rights.text or "").strip() == "1":
             url = media.get("url", "").strip()
-            if url:
-                return url
+            if not url:
+                continue
+            text_el = media.find(_MEDIA_TEXT_TAG)
+            credit_el = media.find(_LICENSOR_NAME_TAG)
+            return _RightsClearedImage(
+                url=url,
+                alt=(text_el.text or "").strip() if text_el is not None else "",
+                credit=(credit_el.text or "").strip() if credit_el is not None else "",
+            )
     return None
 
 
@@ -86,8 +107,15 @@ class NewsArticle:
     published: datetime | None = None
     categories: list[str] = field(default_factory=list)
     # Only ever populated where the source explicitly granted redistribution
-    # rights — see _rights_cleared_image_url. None for every other article.
+    # rights — see _rights_cleared_image. None for every other article.
     image_url: str | None = None
+    # The source's own photo caption — real accessible alt text, not a
+    # generic fallback. Empty string (not None) when the source supplied
+    # no caption for an otherwise rights-cleared image.
+    image_alt: str = ""
+    # Photographer/wire-service credit, shown alongside the image. Empty
+    # string when the source didn't supply one.
+    image_credit: str = ""
 
 
 # Title prefixes for known multi-story digest segments — one feed item
@@ -376,6 +404,7 @@ def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
             continue
 
         summary, truncated = _resolve_summary(desc, full_text)
+        image = _rights_cleared_image(item)
         articles.append(NewsArticle(
             title=title,
             url=link,
@@ -384,7 +413,9 @@ def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
             truncated=truncated,
             published=pub_date,
             categories=categories,
-            image_url=_rights_cleared_image_url(item),
+            image_url=image.url if image else None,
+            image_alt=image.alt if image else "",
+            image_credit=image.credit if image else "",
         ))
 
     # Atom entries (fallback for Atom feeds)
@@ -439,6 +470,7 @@ def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
         if _is_multi_topic_digest(title):
             continue
         summary, truncated = _resolve_summary(desc, full_text)
+        image = _rights_cleared_image(entry)
         articles.append(NewsArticle(
             title=title,
             url=link,
@@ -447,7 +479,9 @@ def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
             truncated=truncated,
             published=pub_date,
             categories=categories,
-            image_url=_rights_cleared_image_url(entry),
+            image_url=image.url if image else None,
+            image_alt=image.alt if image else "",
+            image_credit=image.credit if image else "",
         ))
 
     return articles

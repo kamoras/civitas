@@ -136,6 +136,8 @@ def _migrate_columns() -> None:
         ("action_issues", "confirmation_deadline", "DATETIME"),
         ("action_issues", "confirmed_at", "DATETIME"),
         ("action_issues", "image_url", "TEXT"),
+        ("action_issues", "image_alt", "TEXT DEFAULT ''"),
+        ("action_issues", "image_credit", "TEXT DEFAULT ''"),
         ("senators", "website_url", "TEXT DEFAULT ''"),
         ("senators", "contact_form_url", "TEXT DEFAULT ''"),
         ("senators", "office_phone", "TEXT DEFAULT ''"),

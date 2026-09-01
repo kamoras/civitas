@@ -1634,6 +1634,7 @@ class TestDedupeNearIdenticalIssues:
 
 def _new_values_for(
     title: str, facts: list[str], primary_article_date: str, image_url: str | None = None,
+    image_alt: str = "", image_credit: str = "",
 ) -> dict:
     return {
         "title": title, "summary": "summary", "facts": json.dumps(facts),
@@ -1642,6 +1643,8 @@ def _new_values_for(
         "related_senators": "[]", "related_officials": "[]",
         "primary_article_date": primary_article_date,
         "image_url": image_url,
+        "image_alt": image_alt,
+        "image_credit": image_credit,
     }
 
 
@@ -2021,11 +2024,14 @@ class TestApplyMatchedIssueUpdate:
         facts = ["A fact."]
         new_values = _new_values_for(
             "Story", facts, "2026-07-20", image_url="https://rollcall.com/app/uploads/new.jpg",
+            image_alt="A member of Congress speaks.", image_credit="Tom Williams/CQ Roll Call",
         )
 
         _apply_matched_issue_update(match, new_values, 1, "2026-07-20", "2026-07-20", facts, "Story")
 
         assert match.image_url == "https://rollcall.com/app/uploads/new.jpg"
+        assert match.image_alt == "A member of Congress speaks."
+        assert match.image_credit == "Tom Williams/CQ Roll Call"
 
     def test_image_url_cleared_when_fresh_cluster_has_none(self):
         """Same full-content-swap semantics as source_urls/source_names —

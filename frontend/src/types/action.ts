@@ -71,9 +71,15 @@ export interface ActionIssue {
    *  disclosure badge and ranked after every "confirmed" issue. */
   status: 'developing' | 'confirmed';
   /** Only ever set from a source article whose feed explicitly granted
-   *  redistribution rights (see backend news_feeds._rights_cleared_image_url)
-   *  — null for the large majority of issues. Used for the OG image. */
+   *  redistribution rights (see backend news_feeds._rights_cleared_image)
+   *  — null for the large majority of issues. Used for the OG image and
+   *  the in-page renders on the Action Center and issue pages. */
   imageUrl?: string | null;
+  /** The source's own photo caption — real accessible alt text, not a
+   *  generic fallback. Empty when the source supplied none. */
+  imageAlt?: string;
+  /** Photographer/wire-service credit shown alongside the image. */
+  imageCredit?: string;
 }
 
 export interface MyRepSenator {
