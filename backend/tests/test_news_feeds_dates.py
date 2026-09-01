@@ -273,6 +273,10 @@ class TestStripHtml:
 
     def test_is_multi_topic_digest_matches_common_prefix_variants(self):
         assert _is_multi_topic_digest("News Wrap: Wildfire forces evacuations near Reno")
+        assert _is_multi_topic_digest("news wrap: lowercase variant")
+        assert _is_multi_topic_digest("News Wrap - dash variant")
+        assert not _is_multi_topic_digest("Supreme Court clears the way for Trump mail voting order")
+        assert not _is_multi_topic_digest("Wrapping up the day's news wrap-up")
 
 
 class TestRightsClearedImageUrl:
@@ -315,10 +319,6 @@ class TestRightsClearedImageUrl:
         root = ElementTree.fromstring(self._item("1"))
         item = root.find(".//item")
         assert _rights_cleared_image_url(item) == "https://rollcall.com/img.jpg"
-        assert _is_multi_topic_digest("news wrap: lowercase variant")
-        assert _is_multi_topic_digest("News Wrap - dash variant")
-        assert not _is_multi_topic_digest("Supreme Court clears the way for Trump mail voting order")
-        assert not _is_multi_topic_digest("Wrapping up the day's news wrap-up")
 
     def test_comment_text_is_not_treated_as_content(self):
         """This parser drops comments, but the extractor should not depend
