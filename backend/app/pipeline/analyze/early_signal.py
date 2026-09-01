@@ -34,11 +34,17 @@ from app.pipeline.analyze.grounding import (
 )
 from app.pipeline.analyze.ollama_client import call_llm, extract_json
 from app.pipeline.fetch.congress import fetch_recent_house_roll_calls, fetch_recent_roll_calls
+from app.pipeline.fetch.federal_register import fetch_recent_significant_rules
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
 EARLY_SIGNAL_PROMPT_VERSION = "early-signal-v1"
+# Distinct from EARLY_SIGNAL_PROMPT_VERSION — different system/user prompt
+# text (a Federal Register rule, not a floor vote), and per cache.py's own
+# guidance a prompt-text change gets its own version rather than reusing
+# one string across two differently-shaped prompts.
+EARLY_SIGNAL_RULE_PROMPT_VERSION = "early-signal-rule-v1"
 
 # Deliberately conservative and NOT calibrated from data — there is no
 # history yet. action_metrics logs early_signal_confirmed/_expired so a
@@ -57,6 +63,10 @@ _ROLL_CALL_POLL_MAX_AGE_HOURS = 1
 # prior run. Kept small to bound the LLM/grounding cost of a stage that
 # runs every hour regardless of whether Congress is in session.
 _ROLL_CALL_POLL_COUNT_PER_SESSION = 2
+
+# Same reasoning as _ROLL_CALL_POLL_MAX_AGE_HOURS, for the Federal Register
+# significant-rule poll.
+_RULE_POLL_MAX_AGE_HOURS = 1
 
 # Senate.gov's own vocabulary for a final-passage vote (lowercased
 # substring match against `question`/`voteTitle`). Deliberately narrow for
@@ -362,3 +372,175 @@ def expire_stale_developing_issues(db: Session, now) -> int:
         action_metrics.increment(f"early_signal_expired_{row.source_type or 'unknown'}")
         logger.info("Expired unconfirmed developing issue %d: '%s'", row.id, row.title[:60])
     return len(stale)
+
+
+def _rule_source_text(rule: dict) -> str:
+    """The ground-truth text a hedged draft's grounding check runs against
+    — everything the Federal Register record itself states, nothing more."""
+    agencies = ", ".join(rule.get("agencies") or []) or "an unspecified agency"
+    return (
+        f"Federal Register document {rule.get('documentNumber', '')}, published "
+        f"{rule.get('publicationDate', '')} by {agencies}. "
+        f"Title: {rule.get('title', '')}. "
+        f"Abstract: {rule.get('abstract') or '(none provided)'}."
+    )
+
+
+_RULE_SYSTEM_PROMPT = """\
+You are a nonpartisan civic information analyst. You are drafting a \
+PROVISIONAL report about a federal regulatory action that was just \
+published in the Federal Register, based ONLY on the official record \
+below — no news coverage of this rule exists yet. Report only what the \
+record states: the agency involved, what the rule does, and when it was \
+published. Do not speculate about what happens next, why the agency \
+acted, or how this will be covered. State plainly that broader press \
+coverage has not yet appeared. Never advocate for or against the rule, \
+and never state or imply that it was warranted, justified, or expected."""
+
+_RULE_PROMPT_TEMPLATE = """\
+A federal agency just published a final rule in the Federal Register. \
+Below is the official record. Produce a JSON object with these fields:
+
+- "title": A concise, neutral headline for this rule (max 15 words), \
+naming the agency and the actual action taken.
+- "summary": 2-3 factual sentences describing what the rule does, stated \
+directly from the record below. Include one sentence noting this is \
+based on the official record and that broader news coverage has not yet \
+appeared.
+- "facts": An array of 2-4 factual bullet points — the agency, the \
+rule's official title, the publication date, and what it does. Every \
+fact must be directly stated in the record below — never infer intent \
+or predict impact.
+
+Official record:
+{rule_text}
+
+Respond with ONLY the JSON object, no other text.
+"""
+
+
+def _draft_developing_rule_issue(rule: dict, db: Session) -> tuple[str, str, list[str]] | None:
+    """Generate a hedged, grounded (title, summary, facts) from a Federal
+    Register rule record — same two-attempt retry shape as
+    _draft_developing_issue, this domain's own prompt/source text."""
+    source_text = _rule_source_text(rule)
+    user_prompt = _RULE_PROMPT_TEMPLATE.format(rule_text=source_text)
+
+    for attempt in range(1, 3):
+        prompt = user_prompt
+        if attempt > 1:
+            prompt += (
+                "\n\nYour previous response was rejected. Use ONLY the "
+                "record above: do not state any fact not in it, do not "
+                "predict what happens next, do not evaluate whether the "
+                "rule was warranted, and do not omit the note that "
+                "broader coverage has not yet appeared."
+            )
+        result = call_llm(
+            prompt_version=EARLY_SIGNAL_RULE_PROMPT_VERSION,
+            system_prompt=_RULE_SYSTEM_PROMPT,
+            user_prompt=prompt,
+            cache_key=None,
+            db_session=db,
+            max_tokens=512,
+            num_ctx=2048,
+        )
+        if isinstance(result, str):
+            result = extract_json(result)
+        if not isinstance(result, dict):
+            continue
+
+        title = (result.get("title") or "").strip()
+        summary = (result.get("summary") or "").strip()
+        facts = validate_facts(result.get("facts", []), source_text=source_text)
+        combined = f"{title} {summary} " + " ".join(facts)
+
+        reasons = (
+            grounding_violations(combined, source_text)
+            + hedge_and_editorializing_violations(combined, allow_hedging=True)
+        )
+        if title and summary and not reasons:
+            return title, summary, facts
+        logger.warning(
+            "Federal Register draft failed grounding (attempt %d): %s",
+            attempt, "; ".join(reasons) or "empty title/summary",
+        )
+
+    return None
+
+
+def _fetch_recent_rules(db: Session) -> list[dict]:
+    """Fetch recently published significant Federal Register rules — same
+    sync-via-new-event-loop pattern as _fetch_recent_votes."""
+    async def _fetch() -> list[dict]:
+        async with make_async_client() as client:
+            return await fetch_recent_significant_rules(
+                client, db, max_age_hours=_RULE_POLL_MAX_AGE_HOURS,
+            )
+
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(_fetch())
+    finally:
+        loop.close()
+
+
+def check_federal_register_signals(db: Session) -> int:
+    """Poll recently published significant Federal Register rules, draft
+    and store a DEVELOPING ActionIssue for any genuinely new one. Returns
+    the number of new rows created.
+
+    Same non-fatal, independent-of-the-news-fetch placement as
+    check_roll_call_signals — see action_center._run_refresh. No
+    classify_policy_area gate here: unlike a roll call (where the vote
+    TYPE can be purely procedural regardless of subject matter),
+    "significant under EO 12866" is already OMB's own substantive-impact
+    determination — the fetcher's own notability gate, not a raw feed of
+    every published document.
+    """
+    created = 0
+    for rule in _fetch_recent_rules(db):
+        doc_number = rule.get("documentNumber")
+        if not doc_number:
+            continue
+
+        action_metrics.increment("early_signal_rules_seen")
+
+        rule_url = rule.get("htmlUrl", "")
+        already_exists = (
+            db.query(ActionIssue)
+            .filter(ActionIssue.primary_source_url == rule_url)
+            .first()
+        )
+        if already_exists:
+            continue
+
+        drafted = _draft_developing_rule_issue(rule, db)
+        if drafted is None:
+            action_metrics.increment("early_signal_rule_gate_grounding_failed")
+            continue
+        title, summary, facts = drafted
+
+        row = ActionIssue(
+            date=rule.get("publicationDate") or utcnow().strftime("%Y-%m-%d"),
+            rank=999,  # placeholder — renumbered alongside every other row each run
+            title=title[:500],
+            summary=summary,
+            facts=json.dumps(facts),
+            source_urls=json.dumps([rule_url]),
+            source_names=json.dumps(["Federal Register"]),
+            is_current=True,
+            status=ActionIssueStatus.DEVELOPING,
+            source_type="federal_register_significant_rule",
+            primary_source_url=rule_url,
+            confirmation_deadline=utcnow() + timedelta(hours=CONFIRMATION_WINDOW_HOURS),
+            primary_article_date=rule.get("publicationDate"),
+        )
+        db.add(row)
+        created += 1
+        action_metrics.increment("early_signal_created")
+        logger.info("Created developing issue from FR rule %s: '%s'", doc_number, title[:60])
+
+    if created:
+        db.flush()
+    return created

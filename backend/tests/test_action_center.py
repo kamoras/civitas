@@ -3263,6 +3263,7 @@ class TestPeriodicBlueskyPosts:
         import app.pipeline.analyze.action_center as ac
 
         with patch.object(ac, "check_roll_call_signals"), \
+                patch.object(ac, "check_federal_register_signals"), \
                 patch.object(ac, "expire_stale_developing_issues"), \
                 patch.object(ac, "fetch_news_articles", return_value=[]), \
                 patch.object(ac, "_run_periodic_bluesky_posts") as periodic, \
@@ -3278,6 +3279,7 @@ class TestPeriodicBlueskyPosts:
         import app.pipeline.analyze.action_center as ac
 
         with patch.object(ac, "check_roll_call_signals"), \
+                patch.object(ac, "check_federal_register_signals"), \
                 patch.object(ac, "expire_stale_developing_issues"), \
                 patch.object(ac, "fetch_news_articles", return_value=["an article"]), \
                 patch.object(ac, "_filter_policy_relevant", return_value=[]), \
