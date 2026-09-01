@@ -55,6 +55,24 @@ def _house_vote(
     }
 
 
+def _rule(
+    title="Process for Authorizing Seasonal Migratory Game Bird Hunting",
+    abstract="The Service is changing the administrative process.",
+    document_number="2026-17733",
+    html_url="https://www.federalregister.gov/documents/2026/08/31/2026-17733/process",
+    publication_date="2026-08-31",
+    agencies=None,
+) -> dict:
+    return {
+        "title": title,
+        "abstract": abstract,
+        "documentNumber": document_number,
+        "htmlUrl": html_url,
+        "publicationDate": publication_date,
+        "agencies": agencies if agencies is not None else ["Interior Department"],
+    }
+
+
 class TestIsFinalPassage:
     def test_on_passage_of_the_bill_matches(self):
         assert es._is_final_passage(_vote(question="On Passage of the Bill")) is True
@@ -204,6 +222,62 @@ class TestCheckRollCallSignals:
             created = es.check_roll_call_signals(db_session)
         assert created == 0
         assert db_session.query(ActionIssue).count() == 0
+
+
+class TestCheckFederalRegisterSignals:
+    def _mock_llm_result(self, title="Interior changes hunting process", summary="text", facts=None):
+        return {"title": title, "summary": summary, "facts": facts or ["A fact stated in the record."]}
+
+    def test_qualifying_rule_creates_a_developing_issue(self, db_session):
+        with patch.object(es, "_fetch_recent_rules", return_value=[_rule()]), \
+                patch.object(es, "call_llm", return_value=self._mock_llm_result()):
+            created = es.check_federal_register_signals(db_session)
+        assert created == 1
+        row = db_session.query(ActionIssue).one()
+        assert row.status == ActionIssueStatus.DEVELOPING
+        assert row.source_type == "federal_register_significant_rule"
+        assert row.primary_source_url == _rule()["htmlUrl"]
+        assert row.confirmation_deadline is not None
+        assert row.is_current is True
+
+    def test_missing_document_number_is_skipped(self, db_session):
+        with patch.object(es, "_fetch_recent_rules", return_value=[_rule(document_number="")]):
+            created = es.check_federal_register_signals(db_session)
+        assert created == 0
+        assert db_session.query(ActionIssue).count() == 0
+
+    def test_same_rule_is_not_created_twice(self, db_session):
+        with patch.object(es, "_fetch_recent_rules", return_value=[_rule()]), \
+                patch.object(es, "call_llm", return_value=self._mock_llm_result()):
+            es.check_federal_register_signals(db_session)
+            created_second_pass = es.check_federal_register_signals(db_session)
+        assert created_second_pass == 0
+        assert db_session.query(ActionIssue).count() == 1
+
+    def test_generation_that_never_grounds_creates_nothing(self, db_session):
+        bad_result = {
+            "title": "Interior changes hunting process",
+            "summary": "The rule affects 10 million acres nationwide.",
+            "facts": ["It affects 10 million acres."],
+        }
+        with patch.object(es, "_fetch_recent_rules", return_value=[_rule()]), \
+                patch.object(es, "call_llm", return_value=bad_result):
+            created = es.check_federal_register_signals(db_session)
+        assert created == 0
+        assert db_session.query(ActionIssue).count() == 0
+
+
+class TestRuleSourceText:
+    def test_includes_agencies_title_and_abstract(self):
+        text = es._rule_source_text(_rule())
+        assert "2026-17733" in text
+        assert "Interior Department" in text
+        assert "Process for Authorizing Seasonal Migratory Game Bird Hunting" in text
+        assert "changing the administrative process" in text
+
+    def test_missing_agencies_falls_back(self):
+        text = es._rule_source_text(_rule(agencies=[]))
+        assert "an unspecified agency" in text
 
 
 class TestExpireStaleDevelopingIssues:

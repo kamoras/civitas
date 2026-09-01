@@ -47,6 +47,7 @@ from app.models import (
 from app.pipeline.analyze import action_metrics
 from app.pipeline.analyze.early_signal import (
     CONFIRMATION_WINDOW_HOURS,
+    check_federal_register_signals,
     check_roll_call_signals,
     expire_stale_developing_issues,
 )
@@ -4786,19 +4787,25 @@ def _run_refresh(db: Session) -> int:
     logger.info("Action center refresh starting for %s", today)
     action_metrics.reset()
     _set_refresh_state(
-        is_running=True, stage="roll_call_signals", stage_detail=None,
+        is_running=True, stage="primary_source_signals", stage_detail=None,
         started_at=utcnow(),
     )
 
-    # 0. Check primary-source signals (Senate roll-call votes) for anything
-    # notable enough to draft ahead of press coverage — see early_signal.py.
-    # Independent of the news fetch below (an empty/failed news pull must
-    # never block this, and vice versa), so it runs first and is wrapped
-    # non-fatally: a bug here must never take down the whole hourly refresh.
+    # 0. Check primary-source signals (Senate/House roll-call votes, Federal
+    # Register significant rules) for anything notable enough to draft
+    # ahead of press coverage — see early_signal.py. Independent of the
+    # news fetch below (an empty/failed news pull must never block this,
+    # and vice versa), so it runs first and each source is wrapped non-
+    # fatally: a bug in one must never take down the whole hourly refresh
+    # or block the other source.
     try:
         check_roll_call_signals(db)
     except Exception:
         logger.exception("check_roll_call_signals failed (non-fatal)")
+    try:
+        check_federal_register_signals(db)
+    except Exception:
+        logger.exception("check_federal_register_signals failed (non-fatal)")
     # Expiry must run on every exit path (mirrors _persist_metrics's own
     # "called on every exit path" discipline below) — a quiet news day
     # still needs to retire developing issues whose deadline has passed,
