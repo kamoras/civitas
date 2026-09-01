@@ -2245,7 +2245,7 @@ class TestPromoteDevelopingIssue:
         match = ActionIssue(
             id=1, date="2026-08-29", rank=999, title="A floor vote occurred",
             facts=json.dumps(["The Senate voted 60-40 Tuesday."]),
-            status=ActionIssueStatus.DEVELOPING, source_type="roll_call_vote",
+            status=ActionIssueStatus.DEVELOPING, source_type="senate_roll_call_vote",
             primary_source_url="https://www.senate.gov/vote.xml",
             confirmation_deadline=utcnow() + timedelta(hours=40),
             created_at=utcnow() - timedelta(hours=8),
@@ -2266,7 +2266,7 @@ class TestPromoteDevelopingIssue:
         match = ActionIssue(
             id=1, date="2026-08-29", rank=999, title="A floor vote occurred",
             facts=json.dumps(["The Senate voted 60-40 Tuesday."]),
-            status=ActionIssueStatus.DEVELOPING, source_type="roll_call_vote",
+            status=ActionIssueStatus.DEVELOPING, source_type="senate_roll_call_vote",
             primary_source_url="https://www.senate.gov/vote.xml",
             confirmation_deadline=utcnow() + timedelta(hours=40),
             primary_article_date="2026-08-29",
