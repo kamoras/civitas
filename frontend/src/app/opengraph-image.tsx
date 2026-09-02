@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { loadArchivoBold } from "@/lib/ogFonts";
 
 export const runtime = "edge";
 export const alt = "CIVITAS // PUBLIC RECORD";
@@ -26,44 +27,6 @@ const WORDMARK_STYLE = {
   letterSpacing: "0.1em",
   lineHeight: 1,
 };
-
-/** Vercel's documented next/og pattern: the Google Fonts CSS2 API returns a
- * direct woff/ttf src for a given text+weight, fetched only for the glyphs
- * this image actually uses rather than the whole family. next/font/google
- * (used everywhere else on the site) isn't reachable from an edge function's
- * ImageResponse — it needs raw font bytes handed to it directly.
- *
- * `text` has to cover every character rendered anywhere in the image, not
- * just the wordmark: Satori falls back to whatever font IS registered when
- * an element's own fontFamily isn't, and a subset built from "CIVITAS" alone
- * left it rendering stray glyphs elsewhere in bold Archivo and everything
- * else in its default face — a scrambled mix, not a design choice. One font
- * for the whole image reads as consistent even where the site itself would
- * use a second (monospace) face for labels; this is a compact preview
- * asset, not the site chrome.
- *
- * The User-Agent header is not incidental: Google's CSS2 API answers a
- * DIFFERENT font format depending on it — truetype for a plain/absent UA,
- * woff2 for a browser-like one — and confirmed live in this exact Next.js
- * version, handing Satori a woff2 buffer hard-crashes the edge function
- * (kills the connection outright, "failed to pipe response", no catchable
- * JS error to fall back from) rather than failing gracefully. An edge
- * runtime's own fetch() can plausibly send a browser-like default UA, so
- * this pins a deliberately non-browser one to force the truetype branch
- * every time rather than leaving it to whatever the runtime happens to
- * send. */
-async function loadArchivoBold(text: string): Promise<ArrayBuffer> {
-  const css = await (
-    await fetch(
-      `https://fonts.googleapis.com/css2?family=Archivo:wght@700&text=${encodeURIComponent(text)}`,
-      { headers: { "User-Agent": "civitas-og-image-generator" } }
-    )
-  ).text();
-  const src = css.match(/src: url\(([^)]+)\) format\('(?:opentype|truetype)'\)/);
-  if (!src) throw new Error("Archivo font source not found in Google Fonts CSS");
-  const res = await fetch(src[1]);
-  return res.arrayBuffer();
-}
 
 export default async function OgImage() {
   // The old version had no external dependency and never failed. This route
