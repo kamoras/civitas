@@ -326,10 +326,22 @@ async function politicianImage(profile: {
   );
 }
 
+// Every real link on the site points at an issue's public id (backend
+// issue_ids.py: "i" + 8 lowercase hex chars, e.g. "i9e3779b1") via
+// issue.publicId — page.tsx's generateMetadata builds this OG URL from
+// that same route param. A digits-only check here rejected every real
+// request and silently fell through to the generic fallback card for
+// every issue, photo or not; a bare numeric id is only ever a legacy
+// pre-public-id share link. Backend's own get_action_issue accepts both
+// formats (see its docstring) — mirrored here, not invented.
+export function parseIssueId(rawIssueId: string | null): string | null {
+  return rawIssueId && /^(i[0-9a-f]{8}|\d+)$/i.test(rawIssueId) ? rawIssueId : null;
+}
+
 export async function GET(req: NextRequest) {
   const rawPoliticianId = req.nextUrl.searchParams.get("politician");
   // Politician ids are slugs (e.g. "chuck-grassley"), unlike the issue
-  // route's numeric id — validated here rather than passed unvalidated
+  // route's id format — validated here rather than passed unvalidated
   // into the outgoing fetch URL.
   const politicianId =
     rawPoliticianId && /^[a-z0-9-]+$/.test(rawPoliticianId) ? rawPoliticianId : null;
@@ -338,8 +350,7 @@ export async function GET(req: NextRequest) {
     return politicianImage(profile);
   }
 
-  const rawIssueId = req.nextUrl.searchParams.get("issue");
-  const issueId = rawIssueId && /^\d+$/.test(rawIssueId) ? rawIssueId : null;
+  const issueId = parseIssueId(req.nextUrl.searchParams.get("issue"));
   const issue = issueId ? await fetchIssue(issueId) : null;
   return issueImage(issue);
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatStanding } from "./route";
+import { formatStanding, parseIssueId } from "./route";
 
 describe("formatStanding", () => {
   it("formats a senator as party-state, no district", () => {
@@ -22,5 +22,39 @@ describe("formatStanding", () => {
   it("returns an empty string when neither state nor district is known", () => {
     expect(formatStanding({})).toBe("");
     expect(formatStanding(undefined)).toBe("");
+  });
+});
+
+describe("parseIssueId", () => {
+  // The bug this guards against: every real link on the site points at
+  // issue.publicId ("i" + 8 hex chars, e.g. "i9e3779b1"), never the raw
+  // numeric id — a digits-only check here rejected every real request
+  // and silently fell through to the generic fallback card for every
+  // issue, photo or not, regardless of how much real content it had.
+  it("accepts a real public id", () => {
+    expect(parseIssueId("i9e3779b1")).toBe("i9e3779b1");
+  });
+
+  it("accepts a public id regardless of letter case", () => {
+    expect(parseIssueId("I9E3779B1")).toBe("I9E3779B1");
+  });
+
+  it("still accepts a legacy bare numeric id", () => {
+    expect(parseIssueId("650")).toBe("650");
+  });
+
+  it("rejects a public id with the wrong hex length", () => {
+    expect(parseIssueId("i9e3779b")).toBeNull();
+    expect(parseIssueId("i9e3779b12")).toBeNull();
+  });
+
+  it("rejects a non-hex suffix", () => {
+    expect(parseIssueId("i9e3779zz")).toBeNull();
+  });
+
+  it("rejects garbage and empty input", () => {
+    expect(parseIssueId("not-an-id")).toBeNull();
+    expect(parseIssueId("")).toBeNull();
+    expect(parseIssueId(null)).toBeNull();
   });
 });
