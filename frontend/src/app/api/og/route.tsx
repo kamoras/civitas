@@ -23,6 +23,7 @@ const SURFACE_BASE = "#0E0C0A";
 // Same 7%-white hairline used for every card/divider border on the site
 // (Tailwind's border-white/[0.07]) — not an ink-tinted line.
 const HAIRLINE = "rgba(255,255,255,0.07)";
+const DOMAIN = "civitas-research.org";
 
 const PARTY_ACCENT: Record<string, string> = {
   D: "#82acff",
@@ -119,7 +120,7 @@ function Footer({ label }: { label: string }) {
       }}
     >
       <span style={{ color: INK_LO, fontSize: 14, letterSpacing: 2 }}>
-        civitas-research.org
+        {DOMAIN}
       </span>
       <span style={{ color: INK_MIN, fontSize: 13, letterSpacing: 1 }}>{label}</span>
     </div>
@@ -137,7 +138,6 @@ async function issueImage(
     : "Track what Congress is doing — and what you can do about it.";
   const section = "ACTION CENTER";
   const footerLabel = "PUBLIC FEDERAL DATA";
-  const domain = "civitas-research.org";
 
   // Only ever set from a source article whose feed explicitly granted
   // redistribution rights (see backend news_feeds._rights_cleared_image)
@@ -152,7 +152,7 @@ async function issueImage(
   let archivoBold: ArrayBuffer | null = null;
   try {
     archivoBold = await loadArchivoBold(
-      `CIVITAS${section}${title}${summary}${domain}${footerLabel}|`
+      `CIVITAS${section}${title}${summary}${DOMAIN}${footerLabel}|`
     );
   } catch {
     // fall through with archivoBold still null — degrade to Satori's
@@ -246,7 +246,6 @@ async function politicianImage(profile: {
   const scoreLine = overall ? `Civitas score: ${overall}/100` : "";
   const section = identity?.role?.toUpperCase() ?? "PUBLIC RECORD";
   const footerLabel = "REPRESENTATION SCORE";
-  const domain = "civitas-research.org";
 
   const photoDataUri = identity?.thumbnailUrl
     ? await fetchPhotoAsDataUri(identity.thumbnailUrl)
@@ -258,7 +257,7 @@ async function politicianImage(profile: {
   let archivoBold: ArrayBuffer | null = null;
   try {
     archivoBold = await loadArchivoBold(
-      `CIVITAS${section}${name}${standing}${scoreLine}${domain}${footerLabel}|`
+      `CIVITAS${section}${name}${standing}${scoreLine}${DOMAIN}${footerLabel}|`
     );
   } catch {
     // fall through with archivoBold still null — degrade to Satori's
