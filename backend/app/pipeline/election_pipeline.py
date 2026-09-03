@@ -740,11 +740,39 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
             logger.info("--- Election: CONFIRMED CANDIDATES ---")
             progress.begin("confirmed_candidates")
             try:
-                from app.pipeline.fetch.state_candidates import sync_confirmed_candidates
+                from app.pipeline.fetch.state_candidates import (
+                    crawl_for_new_sources,
+                    sync_confirmed_candidates,
+                    sync_ballot_filings,
+                )
+
+                # Weekly, not nightly: this sweeps every state that has no
+                # hand-verified source, and what it looks for — a state
+                # standing up a results portal, a new cycle's file
+                # appearing — moves on the scale of weeks, not hours. Same
+                # self-gating shape as ops_alerts' weekly checks. Runs
+                # BEFORE the sync so anything it proves out contributes the
+                # same night.
+                if utcnow().weekday() == 6:
+                    leads = await crawl_for_new_sources(db, client, cycle)
+                    adopted = {s: r for s, r in leads.items() if r.startswith("adopted")}
+                    logger.info(
+                        "Source crawl: %d state(s) adopted%s",
+                        len(adopted), f" — {adopted}" if adopted else "",
+                    )
 
                 confirm_result = await sync_confirmed_candidates(db, client, cycle)
                 confirmed_total = sum(r["confirmed"] for r in confirm_result.values())
                 logger.info("Confirmed candidates: %s", confirm_result)
+
+                # What each state's own filing list says about both its
+                # ballots: who is on the primary one (the answer for the
+                # months before any primary), and who is on the general
+                # one — which is the only way to see a candidate who
+                # reaches November without running in a primary.
+                filing_result = await sync_ballot_filings(db, client, cycle)
+                if filing_result:
+                    logger.info("Ballot filings: %s", filing_result)
                 progress.complete(
                     "confirmed_candidates", detail=f"{confirmed_total} confirmed",
                 )
