@@ -16,6 +16,11 @@ three real races genuinely below the 50% majority Tennessee law
 requires (District 4 Democratic, District 5 Democratic, Senate
 Democratic in this county subset), which Tennessee sends to a runoff
 this module correctly does not attempt to resolve on its own.
+
+The real 2026 data has no same-surname collision within one race, and
+no candidate whose own PARTY column disagrees with their row's
+ELECTTYPE, so both of those safety behaviors are tested below with a
+small CONSTRUCTED row list instead of a fixture.
 """
 
 import json
@@ -77,6 +82,41 @@ class TestSumPrecinctVotes:
         for race_choices in choices.values():
             names = [name for name, _ in race_choices]
             assert not any("Write-In" in n for n in names)
+
+    def test_same_surname_candidates_are_not_merged(self):
+        # Constructed: two DISTINCT real-shaped candidates who happen to
+        # share a surname (plausible in a crowded 5-slot TN field, even
+        # though the real 2026 data has no such case) must never have
+        # their vote totals folded into one fabricated "Smith" entry.
+        rows = [
+            {
+                "OFFICENAME": "United States House of Representatives District 1",
+                "ELECTTYPE": "Republican Primary",
+                "RNAME1": "John Smith", "PARTY1": "Republican", "PVTALLY1": "100",
+                "RNAME2": "Jane Smith", "PARTY2": "Republican", "PVTALLY2": "150",
+            },
+        ]
+        choices = tn._sum_precinct_votes(rows)
+        votes = sorted(v for _, v in choices[("H", 1, "R")])
+        assert votes == [100, 150]  # NOT merged into a single 250
+
+    def test_candidate_party_disagreeing_with_electtype_is_excluded(self):
+        # Constructed: a real county data-entry slip could fill a
+        # candidate's own PARTY column with a different party than the
+        # row's own primary (ELECTTYPE) -- this candidate must be
+        # refused, not folded into the row's primary's total.
+        rows = [
+            {
+                "OFFICENAME": "United States House of Representatives District 1",
+                "ELECTTYPE": "Republican Primary",
+                "RNAME1": "John Smith", "PARTY1": "Republican", "PVTALLY1": "100",
+                "RNAME2": "Jane Doe", "PARTY2": "Democratic", "PVTALLY2": "999",
+            },
+        ]
+        choices = tn._sum_precinct_votes(rows)
+        names = [n for n, _ in choices[("H", 1, "R")]]
+        assert names == ["Smith"]
+        assert ("H", 1, "D") not in choices  # not folded into a phantom D race either
 
     def test_non_federal_rows_are_ignored(self):
         governor_rows = [r for r in ROWS if r.get("OFFICENAME") == "Governor"]

@@ -30,7 +30,7 @@ the last Thursday in August. runoff_threshold_pct is 50 for exactly
 this reason; pick_nominee already withholds a sub-threshold leader
 rather than mislabel a runoff-bound candidate as the nominee — verified
 live against the real 2026 primary, where 2 of 9 House Republican
-fields and 6 of 9 House Democratic fields (real 3+-way splits) came in
+fields and 4 of 9 House Democratic fields (real 3+-way splits) came in
 under 50% and are correctly left unconfirmed by this alone. Merging the
 runoff itself is the documented upgrade (ponytail: this file only ever
 carries the August primary; a second, later file decides those seats).
@@ -46,7 +46,9 @@ import httpx
 
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import normalize_party, pick_nominee, surname
-from app.pipeline.fetch.state_candidates_tabular import _discover_urls, _withheld, _xlsx_rows
+from app.pipeline.fetch.state_candidates_tabular import (
+    MAX_DOWNLOAD_BYTES, _discover_urls, _withheld, _xlsx_rows,
+)
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -75,17 +77,27 @@ _MAX_CANDIDATE_SLOTS = 5
 
 
 def _office_and_district(office_name: str) -> tuple[str, int | None] | None:
-    if office_name == "United States Senate":
+    if office_name.startswith("United States Senate") or office_name.startswith("United States Senator"):
         return "S", None
     if office_name.startswith("United States House of Representatives"):
         m = _DISTRICT_RE.search(office_name)
-        return ("H", int(m.group(1))) if m else None
+        if m:
+            return "H", int(m.group(1))
+        logger.info("TN: House race %r matched no district number", office_name)
+        return None
     return None
 
 
 def _sum_precinct_votes(rows: list[dict]) -> dict[tuple[str, int | None, str], list[tuple[str, int]]]:
-    """Every federal race's (name, statewide votes) choices, summed
-    across every precinct row — one entry per (office, district, party)."""
+    """Every federal race's (surname, statewide votes) choices, summed
+    across every precinct row — one entry per (office, district, party).
+
+    Aggregates by the candidate's FULL name, not surname alone, and only
+    reduces to a surname for the winner pick_nominee returns: two real
+    same-surname candidates in one crowded field (plausible in a 5+-slot
+    TN primary, even though the real 2026 field has none) would
+    otherwise silently merge into one fabricated vote total under
+    surname-only keying."""
     totals: dict[tuple[str, int | None, str, str], int] = {}
     for row in rows:
         office_district = _office_and_district(row.get("OFFICENAME") or "")
@@ -99,24 +111,25 @@ def _sum_precinct_votes(rows: list[dict]) -> dict[tuple[str, int | None, str], l
             rname = row.get(f"RNAME{i}")
             if not rname or rname.startswith("Write-In"):
                 continue
-            # A candidate's own party column, not the primary's — kept
-            # as a cross-check against ELECTTYPE rather than assumed
-            # to agree; a mismatch (like the write-in rows' bare "0")
-            # means this slot isn't a real primary candidate.
-            if normalize_party(row.get(f"PARTY{i}") or "") is None:
+            # A candidate's own party column must actually AGREE with
+            # the row's own primary (ELECTTYPE) — not just be SOME
+            # recognized party — so a county data-entry slip can never
+            # fold one party's candidate into the other party's total.
+            if normalize_party(row.get(f"PARTY{i}") or "") != party:
                 continue
-            last_name = surname(rname)
-            if not last_name:
-                continue
+            votes_raw = row.get(f"PVTALLY{i}")
             try:
-                votes = int(row.get(f"PVTALLY{i}"))
+                votes = int(votes_raw)
             except (TypeError, ValueError):
                 continue
-            key = (office, district, party, last_name)
+            key = (office, district, party, rname)
             totals[key] = totals.get(key, 0) + votes
 
     choices: dict[tuple[str, int | None, str], list[tuple[str, int]]] = {}
-    for (office, district, party, last_name), votes in totals.items():
+    for (office, district, party, full_name), votes in totals.items():
+        last_name = surname(full_name)
+        if not last_name:
+            continue
         choices.setdefault((office, district, party), []).append((last_name, votes))
     return choices
 
@@ -137,6 +150,9 @@ async def fetch_confirmed_candidates(
         log_label=f"TN precinct results {year}", headers=BROWSER_HEADERS,
     )
     if resp is None:
+        return None
+    if len(resp.content) > MAX_DOWNLOAD_BYTES:
+        logger.warning("TN precinct results download for %d exceeds the size ceiling", year)
         return None
 
     rows = _xlsx_rows(resp.content)
