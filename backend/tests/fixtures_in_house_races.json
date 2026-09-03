@@ -1,0 +1,261 @@
+{
+ "Root": {
+  "StatewideSummary": {
+   "Race": [
+    {
+     "OFFICEID": "9118",
+     "SubSortOrder": "United States Representative, (1) District",
+     "OFFICE_TITLE": "United States Representative, First District",
+     "NumofSeats": "1",
+     "BALLOT_ORDER": "100",
+     "Candidates": {
+      "Candidate": [
+       {
+        "NAME_ON_BALLOT": "Frank J. Mrvan",
+        "isWinner": "T",
+        "POLITICALPARTYID": "1019",
+        "PARTY": "D",
+        "DISPLAY_COLOR": "#0000CD",
+        "TOTAL": 42519,
+        "CandidateName": "Mrvan, Frank Frank",
+        "SORT_ORDER": "10"
+       },
+       {
+        "NAME_ON_BALLOT": "Barb Regnitz",
+        "isWinner": "T",
+        "POLITICALPARTYID": "1020",
+        "PARTY": "R",
+        "DISPLAY_COLOR": "#DC143C",
+        "TOTAL": 13007,
+        "CandidateName": "Regnitz, Barb Barbara",
+        "SORT_ORDER": "15"
+       },
+       {
+        "NAME_ON_BALLOT": "LaVetta Sparks-Wade",
+        "isWinner": "F",
+        "POLITICALPARTYID": "1019",
+        "PARTY": "D",
+        "DISPLAY_COLOR": "#08088A",
+        "TOTAL": 10467,
+        "CandidateName": "Sparks-Wade, LaVetta LaVetta",
+        "SORT_ORDER": "10"
+       },
+       {
+        "NAME_ON_BALLOT": "James Kent (Jim) Schenke",
+        "isWinner": "F",
+        "POLITICALPARTYID": "1020",
+        "PARTY": "R",
+        "DISPLAY_COLOR": "#8A0808",
+        "TOTAL": 8562,
+        "CandidateName": "Schenke, James James",
+        "SORT_ORDER": "15"
+       },
+       {
+        "NAME_ON_BALLOT": "Ben Ruiz",
+        "isWinner": "F",
+        "POLITICALPARTYID": "1020",
+        "PARTY": "R",
+        "DISPLAY_COLOR": "#610B0B",
+        "TOTAL": 6852,
+        "CandidateName": "Ruiz, Ben David",
+        "SORT_ORDER": "15"
+       }
+      ]
+     }
+    },
+    {
+     "OFFICEID": "3086",
+     "SubSortOrder": "United States Representative, (4) District",
+     "OFFICE_TITLE": "United States Representative, Fourth District",
+     "NumofSeats": "1",
+     "BALLOT_ORDER": "100",
+     "Candidates": {
+      "Candidate": [
+       {
+        "NAME_ON_BALLOT": "Jim Baird",
+        "isWinner": "T",
+        "POLITICALPARTYID": "1020",
+        "PARTY": "R",
+        "DISPLAY_COLOR": "#DC143C",
+        "TOTAL": 37855,
+        "CandidateName": "Baird, Jim Jim",
+        "SORT_ORDER": "15"
+       },
+       {
+        "NAME_ON_BALLOT": "Craig Haggard",
+        "isWinner": "F",
+        "POLITICALPARTYID": "1020",
+        "PARTY": "R",
+        "DISPLAY_COLOR": "#610B0B",
+        "TOTAL": 19102,
+        "CandidateName": "Haggard, Craig Craig",
+        "SORT_ORDER": "15"
+       },
+       {
+        "NAME_ON_BALLOT": "Drew Cox",
+        "isWinner": "T",
+        "POLITICALPARTYID": "1019",
+        "PARTY": "D",
+        "DISPLAY_COLOR": "#0000CD",
+        "TOTAL": 7550,
+        "CandidateName": "Cox, Drew Drew",
+        "SORT_ORDER": "10"
+       },
+       {
+        "NAME_ON_BALLOT": "Joe Mackey",
+        "isWinner": "F",
+        "POLITICALPARTYID": "1019",
+        "PARTY": "D",
+        "DISPLAY_COLOR": "#0000FF",
+        "TOTAL": 5671,
+        "CandidateName": "Mackey, Joe Joseph",
+        "SORT_ORDER": "10"
+       },
+       {
+        "NAME_ON_BALLOT": "John Piper",
+        "isWinner": "F",
+        "POLITICALPARTYID": "1020",
+        "PARTY": "R",
+        "DISPLAY_COLOR": "#8A0808",
+        "TOTAL": 5596,
+        "CandidateName": "Piper, John John",
+        "SORT_ORDER": "15"
+       },
+       {
+        "NAME_ON_BALLOT": "Paul McPherson",
+        "isWinner": "F",
+        "POLITICALPARTYID": "1019",
+        "PARTY": "D",
+        "DISPLAY_COLOR": "#5882FA",
+        "TOTAL": 3136,
+        "CandidateName": "McPherson, Paul Paul",
+        "SORT_ORDER": "10"
+       },
+       {
+        "NAME_ON_BALLOT": "Jayden McCash",
+        "isWinner": "F",
+        "POLITICALPARTYID": "1019",
+        "PARTY": "D",
+        "DISPLAY_COLOR": "#2E64FE",
+        "TOTAL": 1965,
+        "CandidateName": "McCash, Jayden Jayden",
+        "SORT_ORDER": "10"
+       },
+       {
+        "NAME_ON_BALLOT": "Darin Patrick Griesey",
+        "isWinner": "F",
+        "POLITICALPARTYID": "1019",
+        "PARTY": "D",
+        "DISPLAY_COLOR": "#0404B4",
+        "TOTAL": 1711,
+        "CandidateName": "Griesey, Darin Darin",
+        "SORT_ORDER": "10"
+       },
+       {
+        "NAME_ON_BALLOT": "John Phillip Whetstone",
+        "isWinner": "F",
+        "POLITICALPARTYID": "1019",
+        "PARTY": "D",
+        "DISPLAY_COLOR": "#084B8A",
+        "TOTAL": 1699,
+        "CandidateName": "Whetstone, John Phillip John Phillip",
+        "SORT_ORDER": "10"
+       },
+       {
+        "NAME_ON_BALLOT": "Thomas D. Hall, Jr.",
+        "isWinner": "F",
+        "POLITICALPARTYID": "1019",
+        "PARTY": "D",
+        "DISPLAY_COLOR": "#0101DF",
+        "TOTAL": 1635,
+        "CandidateName": "Hall, Thomas Thomas",
+        "SORT_ORDER": "10"
+       },
+       {
+        "NAME_ON_BALLOT": "Roger D. Day",
+        "isWinner": "F",
+        "POLITICALPARTYID": "1019",
+        "PARTY": "D",
+        "DISPLAY_COLOR": "#08088A",
+        "TOTAL": 1507,
+        "CandidateName": "Day, Roger Roger",
+        "SORT_ORDER": "10"
+       }
+      ]
+     }
+    },
+    {
+     "OFFICEID": "9112",
+     "SubSortOrder": "United States Representative, (7) District",
+     "OFFICE_TITLE": "United States Representative, Seventh District",
+     "NumofSeats": "1",
+     "BALLOT_ORDER": "100",
+     "Candidates": {
+      "Candidate": [
+       {
+        "NAME_ON_BALLOT": "Andr\u00e9 Carson",
+        "isWinner": "T",
+        "POLITICALPARTYID": "1019",
+        "PARTY": "D",
+        "DISPLAY_COLOR": "#0000CD",
+        "TOTAL": 44849,
+        "CandidateName": "Carson, Andr\u00e9 Andr\u00e9",
+        "SORT_ORDER": "10"
+       },
+       {
+        "NAME_ON_BALLOT": "Destiny Wells",
+        "isWinner": "F",
+        "POLITICALPARTYID": "1019",
+        "PARTY": "D",
+        "DISPLAY_COLOR": "#0101DF",
+        "TOTAL": 16852,
+        "CandidateName": "Wells, Destiny Destiny",
+        "SORT_ORDER": "10"
+       },
+       {
+        "NAME_ON_BALLOT": "Patrick McAuley",
+        "isWinner": "T",
+        "POLITICALPARTYID": "1020",
+        "PARTY": "R",
+        "DISPLAY_COLOR": "#DC143C",
+        "TOTAL": 10357,
+        "CandidateName": "McAuley, Patrick Patrick",
+        "SORT_ORDER": "15"
+       },
+       {
+        "NAME_ON_BALLOT": "George Hornedo",
+        "isWinner": "F",
+        "POLITICALPARTYID": "1019",
+        "PARTY": "D",
+        "DISPLAY_COLOR": "#0404B4",
+        "TOTAL": 7517,
+        "CandidateName": "Hornedo, George George",
+        "SORT_ORDER": "10"
+       },
+       {
+        "NAME_ON_BALLOT": "Denise Paul Hatch",
+        "isWinner": "F",
+        "POLITICALPARTYID": "1019",
+        "PARTY": "D",
+        "DISPLAY_COLOR": "#08088A",
+        "TOTAL": 2646,
+        "CandidateName": "Hatch, Denise Denise",
+        "SORT_ORDER": "10"
+       },
+       {
+        "NAME_ON_BALLOT": "Felipe Rios",
+        "isWinner": "F",
+        "POLITICALPARTYID": "1020",
+        "PARTY": "R",
+        "DISPLAY_COLOR": "#610B0B",
+        "TOTAL": 1915,
+        "CandidateName": "Rios, Felipe Felipe",
+        "SORT_ORDER": "15"
+       }
+      ]
+     }
+    }
+   ]
+  }
+ }
+}
