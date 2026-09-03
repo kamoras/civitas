@@ -45,6 +45,7 @@ from app.pipeline.fetch.ballot_measures_ca import parse_document as parse_ca_doc
 from app.pipeline.fetch.ballot_measures_co import parse_document as parse_co_document
 from app.pipeline.fetch.ballot_measures_la import parse_document as parse_la_document
 from app.pipeline.fetch.ballot_measures_ma import parse_information_for_voters as parse_ma_document
+from app.pipeline.fetch.ballot_measures_mo import fetch_measures as mo_fetch_measures
 from app.pipeline.fetch.ballot_measures_va import fetch_measures as va_fetch_measures
 
 logger = logging.getLogger(__name__)
@@ -145,14 +146,17 @@ STRATEGIES = {
 }
 
 # A strategy here doesn't fit STRATEGIES' `pdf.pages -> list[dict]`
-# shape at all — the state publishes its measures as several SEPARATE
-# documents (discovered from an index page, not one URL config can name)
-# rather than one combined guide, so the strategy function does its own
-# end-to-end fetching and hands back (parsed, source_url) pairs directly.
-# See ballot_measures_va.py's module docstring for why Virginia needs
-# this and every other state so far doesn't.
+# shape at all — the fetch/parse work can't be reduced to "hand this
+# module a PDF's pages", either because the state's measures are several
+# SEPARATE documents (Virginia — discovered from an index page, not one
+# URL config can name) or because there's no PDF at all (Missouri — a
+# single HTML page pdfplumber has nothing to do with). Either way the
+# strategy function does its own end-to-end fetching and hands back
+# (parsed, source_url) pairs directly. See each module's own docstring
+# for why that state specifically needs this and most states don't.
 MULTI_DOCUMENT_STRATEGIES = {
     "va_referenda": va_fetch_measures,
+    "mo_ballot_measures": mo_fetch_measures,
 }
 
 # Longer than Vote Smart's 12h (MEASURE_CACHE_TTL_HOURS in
