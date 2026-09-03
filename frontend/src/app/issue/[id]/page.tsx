@@ -59,7 +59,12 @@ export async function generateMetadata({
       card: "summary_large_image",
       title,
       description,
-      images: [`${SITE}/api/og?issue=${id}`],
+      images: [
+        {
+          url: `${SITE}/api/og?issue=${id}`,
+          alt: issue?.title ?? "Civitas Action Center",
+        },
+      ],
     },
   };
 }

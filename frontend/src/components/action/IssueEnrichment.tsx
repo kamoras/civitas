@@ -25,35 +25,36 @@ import type { ActionIssue, ActionItem, RelatedBill } from "@/types/action";
 
 /** An issue's rights-cleared source photo, in the two sizes it renders at.
  *
- *  Accessibility: the source's own caption (`imageAlt`) is shown as a
- *  VISIBLE figcaption alongside the photo credit rather than only in the
- *  `<img alt>` — a caption a sighted reader can already see must not also
- *  be announced a second time via alt text for screen-reader users, so the
- *  image is alt="" ONLY when that visible caption is actually present
- *  (decorative relative to it). `imageAlt` and `imageCredit` are parsed
- *  independently and either can be empty on its own — a feed item with
- *  credit but no caption still renders a figcaption (attribution only),
- *  which does NOT stand in for a description, so alt="" there would
- *  silently drop the image for screen-reader users entirely. Falls back
- *  to the issue's own title in that case: not a literal description, but
- *  real information (a relevant photo exists) beats an empty string. The
- *  "thumbnail" size has no room for a caption and sits directly beside
- *  the issue's own title/summary text, which already conveys the same
- *  information, so alt="" applies there unconditionally for the same
- *  no-redundant-announcement reason.
+ *  Accessibility: every image gets real alt text, always — no alt="".
+ *  WCAG technically permits alt="" when an equivalent description is
+ *  already in visible adjacent text, and an earlier version of this
+ *  component relied on that: empty alt whenever the figcaption (or, for
+ *  the thumbnail, the adjacent title/summary) already said the same
+ *  thing. That conditional logic already shipped one real bug (a
+ *  credit-only figcaption — attribution, not a description — still
+ *  suppressed alt, silently dropping the image for screen-reader users
+ *  entirely). Always-populate is the simpler rule and structurally
+ *  cannot have that failure mode: `imageAlt` (the source's own caption)
+ *  when present, else the issue's own title — never empty.
+ *
+ *  The source caption is also still shown as a VISIBLE figcaption
+ *  alongside the credit on the full size, for sighted readers — that's
+ *  a deliberate, accepted duplication with the alt text now, not an
+ *  oversight.
  *
  *  Design: font-mono/tracked-uppercase/text-ink-min matches every other
  *  small label on this page (SOURCES:, KEY FACTS) — this is that same
  *  register, not a one-off caption style. */
 export function IssueImage({ issue, size = "full" }: { issue: ActionIssue; size?: "full" | "thumbnail" }) {
   if (!issue.imageUrl) return null;
+  const alt = issue.imageAlt || issue.title;
 
   if (size === "thumbnail") {
     return (
       // eslint-disable-next-line @next/next/no-img-element -- external, varied source-article hosts; not worth per-host next/image remotePatterns
       <img
         src={issue.imageUrl}
-        alt=""
+        alt={alt}
         className="h-16 w-16 shrink-0 border border-white/[0.07] object-cover sm:h-20 sm:w-20"
       />
     );
@@ -64,7 +65,7 @@ export function IssueImage({ issue, size = "full" }: { issue: ActionIssue; size?
       {/* eslint-disable-next-line @next/next/no-img-element -- external, varied source-article hosts; not worth per-host next/image remotePatterns */}
       <img
         src={issue.imageUrl}
-        alt={issue.imageAlt ? "" : issue.title}
+        alt={alt}
         className="max-h-96 w-full border border-white/[0.07] object-cover"
       />
       {(issue.imageAlt || issue.imageCredit) && (
