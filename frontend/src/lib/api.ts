@@ -1089,10 +1089,22 @@ export interface AdminPipelineStatus {
   houseIsRunning?: boolean;
   stockTradesIsRunning?: boolean;
   supplementaryIsRunning?: boolean;
+  electionIsRunning?: boolean;
   lastRun?: PipelineRunInfo;
   houseLastRun?: HouseRunInfo;
   stockTradesLastRun?: StockTradesRunInfo;
   supplementaryLastRun?: SupplementaryRunInfo;
+  // PipelineHistoryRun (not the full PipelineRunInfo): an election run
+  // carries candidatesSynced/financialsRefreshed/coverageItemsIngested/
+  // progressSteps but never the Senate-only fields (senatorsProcessed,
+  // cacheHits, ...) PipelineRunInfo marks required — same reasoning
+  // PipelineHistoryRun's own comment gives for the mixed history feed.
+  // This field existed on the backend response and was typed for the
+  // shared history table, but never had its own live-progress section
+  // here (2026-09 gap: the confirmed-candidates step's per-state detail,
+  // and the weekly source crawler's findings, were invisible outside the
+  // server log).
+  electionLastRun?: PipelineHistoryRun;
   actionRefresh?: ActionRefreshState;
 }
 

@@ -3,6 +3,21 @@ import CandidateCard from "./CandidateCard";
 import RaceFinancials from "./RaceFinancials";
 import type { RaceWithCandidates } from "@/types/election";
 
+/** What this race's candidate list actually IS. Four quite different
+ * things get shown in the same shape — nominees a state has confirmed,
+ * people merely on a primary ballot, nominees inferred from primary
+ * results (which can't see a general-only Libertarian/Green/independent),
+ * and raw FEC filers who may never appear on any ballot — and a reader
+ * can't tell them apart without being told. The backend decides which
+ * (RaceWithCandidates.candidateSource); this only puts it into words. */
+const SOURCE_NOTE: Record<RaceWithCandidates["candidateSource"], string> = {
+  confirmed: "This state's official general-election ballot for this race.",
+  nominees:
+    "Nominees confirmed by this state's primary results. Candidates who reach the general election without running in a primary — Libertarian, Green or independent — aren't covered for this state yet, so this list may be short.",
+  primary: "On this state's primary ballot — the nominees aren't decided until the primary.",
+  filers: "Everyone who has filed with the FEC for this race. This state's official candidate list isn't covered yet, so some of these may never appear on a ballot.",
+};
+
 /** Everything about one race, inline — candidates and fundraising — so a
  * voter never has to leave the state ballot page for "the full race
  * detail" (2026-08 revamp: that used to live one click away at
@@ -28,11 +43,14 @@ export default function RaceFullDetail({ race }: { race: RaceWithCandidates }) {
       {active.length === 0 ? (
         <p className="text-xs text-ink-lo">No candidates on record for this race yet.</p>
       ) : (
-        <div className="space-y-3">
-          {active.map((c) => (
-            <CandidateCard key={c.id} candidate={c} />
-          ))}
-        </div>
+        <>
+          <p className="mb-2 font-mono text-xs text-ink-min">{SOURCE_NOTE[race.candidateSource]}</p>
+          <div className="space-y-3">
+            {active.map((c) => (
+              <CandidateCard key={c.id} candidate={c} />
+            ))}
+          </div>
+        </>
       )}
 
       {otherFilers.length > 0 && (

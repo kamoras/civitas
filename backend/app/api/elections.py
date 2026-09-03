@@ -42,6 +42,8 @@ from app.pipeline.fetch.ballot_pdf_sources import source_for_town as ballot_pdf_
 from app.pipeline.fetch.ballot_pdf_sources import town_names_for_state as ballot_pdf_town_names_for_state
 from app.pipeline.fetch.civic_info import fetch_town_ballot
 from app.pipeline.fetch.civic_info import is_configured as civic_is_configured
+from app.pipeline.fetch.state_candidate_sources import source_for_state
+from app.pipeline.fetch.state_election_dates import primary_date
 from app.pipeline.fetch.town_directory import address_for_town, towns_for_state
 from app.time_utils import utcnow
 
@@ -156,6 +158,14 @@ def _confirmed_or_all(candidates: list[Candidate]) -> list[Candidate]:
     no confirmed data at all (not yet covered, or genuinely pre-primary)
     returns every active FEC filer, unchanged from before this existed.
 
+    Failing that, a race whose state publishes a candidate FILING list
+    falls back to whoever is actually on that state's PRIMARY ballot,
+    which is the best answer available for the months before a primary
+    happens — an FEC filer who never filed with the state is not a ballot
+    option either. Deliberately the weaker rule and only reached when no
+    nominee is confirmed: being on a primary ballot says nothing about
+    surviving it.
+
     Shared by every endpoint that lists a race's candidates
     (_race_summary, _race_full, race_detail) — the bug this guards
     against previously resurfaced via race_detail even after _race_full
@@ -163,7 +173,36 @@ def _confirmed_or_all(candidates: list[Candidate]) -> list[Candidate]:
     than one route."""
     if any(c.confirmed_general for c in candidates):
         return [c for c in candidates if c.confirmed_general]
+    if any(c.on_primary_ballot for c in candidates):
+        return [c for c in candidates if c.on_primary_ballot]
     return candidates
+
+
+def _candidate_source(candidates: list[Candidate], state: str) -> str:
+    """WHICH of _confirmed_or_all's three answers a race's list is, so the
+    page can say so instead of presenting three quite different things as
+    one list. Computed here rather than in the frontend, which must not
+    re-derive what the filter already decided.
+
+    "confirmed"  — the state has named its whole November ballot, minor
+                   parties included.
+    "nominees"   — the state has confirmed nominees, but only from PRIMARY
+                   results, which structurally cannot see a Libertarian,
+                   Green or independent candidate who never ran in one. The
+                   list is real and incomplete, and saying so is the
+                   difference between a short ballot and a wrong one.
+    "primary"    — no nominee yet, but the state lists these as being on
+                   its primary ballot.
+    "filers"     — nobody has confirmed anything for this race, so this is
+                   every active FEC filer, some of whom may never appear on
+                   a ballot.
+    """
+    if any(c.confirmed_general for c in candidates):
+        source = source_for_state(state) or {}
+        return "confirmed" if source.get("general_ballot_complete") else "nominees"
+    if any(c.on_primary_ballot for c in candidates):
+        return "primary"
+    return "filers"
 
 
 def _race_summary(race: Race, state_pvi: dict, district_pvi: dict) -> dict:
@@ -268,6 +307,7 @@ def _race_full(
         "pvi": pvi,
         "pviLevel": pvi_level,
         "counties": counties,
+        "candidateSource": _candidate_source(race.candidates, race.state),
         "candidates": [
             {**_candidate_summary(c), "incumbentRecord": _incumbent_link(c, race, reps_by_district, senators)}
             for c in candidates
@@ -412,6 +452,10 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         # the November ballot is the next one a visitor will see.
         "electionDate": election_day,
         "electionType": "general",
+        # Read from this state's own election feed (state_election_dates.py),
+        # never a calendar maintained here — null for a state whose source
+        # doesn't date itself, which is the honest answer.
+        "primaryDate": primary_date(state, cycle),
         "statePvi": state_pvi.get(state),
         "senateRaces": senate_races,
         "houseRaces": house_races,
@@ -681,6 +725,7 @@ def race_detail(race_id: str, db: Session = Depends(get_db)):
         "isSpecial": race.is_special,
         "pvi": pvi,
         "pviLevel": pvi_level,
+        "candidateSource": _candidate_source(race.candidates, race.state),
         "candidates": [_candidate_summary(c) for c in candidates],
         "coverage": [_coverage_item(item) for item in coverage],
     }, max_age=CACHE_TTL_DETAIL_S)

@@ -1,12 +1,383 @@
 {
   "_source": "Hand-verified during research: each state's own Secretary of State (or equivalent) official candidate database, checked directly (live network inspection of the real API/page, not scraped from a third party like Ballotpedia) for a machine-readable, no-key, official source that distinguishes a real confirmed general-election candidate from an FEC filer who lost their primary or runoff.",
   "_method": "A state with no entry here is simply not yet covered — the ballot page falls back to its prior behavior (every active FEC filer shown) for that state, same as any other partial-coverage feature in this app (ballot measures, county-district crosswalk). This file only ever ADDS accuracy, never removes a state's chance at showing candidates.",
-  "_as_of": "2026-08-09",
+  "_as_of": "2026-08-16",
+  "_discovery": "This file is the HAND-VERIFIED directory, and it always wins. state_source_crawler.py also finds sources on its own each week and records what it proves in a separate discovered file, covering states nobody has written up here yet — so coverage grows, and a state that redesigns its website is re-found rather than silently broken. What the crawler will NEVER infer is the stable law in this file: a runoff threshold, a convention threshold, top-two counting. Those decide who is actually a nominee, and a state needing one must be written up here, which then overrides whatever was discovered.",
+  "_contract": "Adding a state is an entry in this file, not code. Every state — however unusual — is described with the SAME keys, and a state that needs a knob nobody has needed yet gets that knob added to its adapter for everyone, never a branch on its name: there is no state code anywhere in the fetch modules. Keys, and which strategy honours them: strategy (all: tx_civix | pa_returns | clarity | tabular | canvass_xml). runoff_threshold_pct (all: the state's own second-primary rule, e.g. 50 for TX/GA, 30 for NC; null where a plurality nominates). advance_count (all except canvass_xml, which is always a single-party contest by construction and has no top-two/top-four shape to advance more than one from — see canvass_xml below: how many candidates the contest sends to the general — 1 for a party primary, 2 for top-two CA/WA, 4 for AK). discovery.mode (tabular: direct_url | s3_listing | sos_api_report | landing_page, each with its own URL keys) — no cycle's path is ever hardcoded. discovery.election_name_regex (tabular/sos_api_report: one pattern, or a LIST when a state decides nominees across several same-day elections like Virginia's separate D and R primaries), discovery.runoff_name_regex, discovery.report_name, discovery.require_official (withhold until the portal certifies), discovery.settle_days (release anyway once the election is this far past — the failsafe for a portal that never flips its official flag, as Utah's doesn't, and the ONLY gate for a state that publishes no flag at all, as Florida doesn't). Both gate keys apply to every discovery mode, not just the portal one. format.format/delimiter/encoding/member_regex (tabular: how to read the download — csv, tsv, xlsx, zipped). format.contest_column/choice_column/party_column/votes_column (tabular: where the four facts live; contest_column and choice_column also accept a LIST of columns to join, for a state that splits the contest across race and party columns or a name across first and last, as Florida does). format.exclude_choices (tabular: summary rows like 'Ballots Cast' that sit in the same shape as a candidate). filings (optional, any strategy: where the state's candidate FILING list lives — discovery + format, with format.election_date_column naming the column that dates each filing). It answers a different question from results, at a different time: who is on the PRIMARY ballot months before anyone votes, and when that primary is. It is strictly weaker than a confirmed nominee and never overrides one. format.house_from_columns (tabular: for a state whose office LABEL can't be trusted to identify a federal seat — names the column, the value marking a congressional seat, and the district-number column). canvass_xml (discovery.base_url with a {year} slot, discovery.keyword, discovery.report_name default 'Results.Summary.xml', discovery.settle_days): for a state whose official canvass is a single per-election XML export served over plain FTP rather than any results-platform vendor — lists the year directory, keeps the entry whose name contains keyword, and reads that election's report_name file. No 'official' flag exists in this format, so settling is judged from the file itself (statewide precinctsReportingPercent=100.00) plus the same settle_days failsafe every other vendor uses.",
   "states": {
+    "CO": {
+      "source_name": "Colorado Secretary of State (Clarity Election Night Reporting)",
+      "strategy": "clarity",
+      "runoff_threshold_pct": null,
+      "description": "Official statewide results feed, verified live 2026-08-12 against the real 2026 primary (EID 126592): elections.json -> current_ver.txt -> json/sum.json, no API key or auth. All 18 federal contests (8 districts x 2 parties, plus both Senate primaries) parse cleanly. Ground-truthed against the CO-01 Democratic primary, where the feed shows Melat Kiros 83,855 (53.2%) defeating 15-term incumbent Diana DeGette 62,715 with Wanda James third — matching what actually happened on 2026-06-30. runoff_threshold_pct is null because Colorado awards its primary to the plurality leader outright, so the top vote-getter IS the nominee; a runoff state must set this or its runoff-bound leader would be mislabeled."
+    },
+    "IA": {
+      "source_name": "Iowa Secretary of State (Clarity Election Night Reporting)",
+      "strategy": "clarity",
+      "runoff_threshold_pct": 35.0,
+      "description": "Second state on the Clarity adapter, added 2026-08-16 on a re-probe of all 50 states' Clarity feeds — Iowa had published nothing for 2026 when the same probe ran on 2026-08-12, and its 2026-06-02 primary (EID 126082) is there now, so this file's coverage grows without code as states publish. All 10 federal contests parse (4 districts x 2 parties, plus both Senate primaries). Ground-truthed on the real result: Miller-Meeks holding IA-01 against Pautsch with Bohannan again taking the Democratic side, and Ashley Hinson winning the Senate primary — which is why IA-02 is an open-seat race. runoff_threshold_pct is 35, and it is NOT a runoff rule: Iowa Code 43.52 sends a nomination to a party CONVENTION when nobody clears 35%, so a sub-threshold leader isn't merely unconfirmed, they may well not be the nominee at all. IA-04's Democratic primary is the live case — Dawson took it on 39.0% of a three-way field, close enough to that line to matter."
+    },
+    "IL": {
+      "source_name": "Illinois State Board of Elections (official vote totals by office)",
+      "strategy": "tabular",
+      "runoff_threshold_pct": null,
+      "discovery": {
+        "mode": "landing_page",
+        "page_url": "https://www.elections.il.gov/ElectionOperations/ElectionVoteTotals.aspx",
+        "link_regex": "[\\\\/]Downloads[\\\\/]ElectionOperations[\\\\/]ElectionResults[\\\\/]ByOffice[\\\\/]\\d+[\\\\/][^\\\"]*(?:CONGRESS|SENATOR)[^\\\"]*-{year}GP\\.csv"
+      },
+      "format": {
+        "delimiter": ",",
+        "contest_column": [
+          "ContestName",
+          "PartyName"
+        ],
+        "choice_column": "CandidateName",
+        "party_column": "PartyName",
+        "votes_column": "VoteCount",
+        "exclude_choices": [
+          "Under Votes",
+          "Over Votes"
+        ]
+      },
+      "description": "Illinois posts one precinct-level CSV PER OFFICE rather than a single statewide export, so its 17 congressional files plus the Senate file are read as 18 stages off the board's own vote-totals page — which is also why the link pattern, not any one file's URL, is what's written down. '{year}GP' pins the cycle's General Primary and excludes the general election's own files. The contest label is bare ('1ST CONGRESS'), which parse_office reads as a federal seat because no state legislature is called a Congress; party lives only in its own column, so the contest key carries it, without which both parties' primaries for a district would tally as one race. Verified live 2026-08-17 against the real 2026-03-17 primary."
+    },
+    "MD": {
+      "source_name": "Maryland State Board of Elections (official primary results)",
+      "strategy": "tabular",
+      "runoff_threshold_pct": null,
+      "discovery": {
+        "mode": "landing_page",
+        "page_url": "https://elections.maryland.gov/elections/{year}/primary_results/index.html",
+        "link_regex": "gen_results_{year}_\\d+\\.html"
+      },
+      "format": {
+        "format": "html_table",
+        "contest_column": [
+          "heading_2",
+          "heading_3",
+          "heading_4"
+        ],
+        "choice_column": "Name",
+        "party_column": "Party",
+        "votes_column": "Total",
+        "exclude_choices": [
+          "Totals",
+          "Other Write-Ins"
+        ]
+      },
+      "description": "Maryland publishes results as HTML tables under headings rather than as any downloadable file, which is why the html_table reader exists — the table alone never says which contest it is, so every row carries the heading stack it appeared under and the contest is built from it ('Representative in Congress' + 'District 1'). The link pattern deliberately matches EVERY office summary page rather than pinning the congressional one's internal office number: parse_office already refuses Governor, Comptroller and the state legislature, so matching broadly costs a few extra pages and survives Maryland renumbering its offices. The party heading joins the contest key ('Democratic Candidates - Vote for 1'): without it both parties' candidates for a district tally as ONE race and, in a district that leans hard either way, the other party's nominee is dropped entirely — 8 records instead of 16. Verified live 2026-08-18 against the real 2026-06-23 primary: 92 candidate rows across all 8 districts."
+    },
+    "MN": {
+      "source_name": "Minnesota Secretary of State (election night reporting files)",
+      "strategy": "tabular",
+      "runoff_threshold_pct": null,
+      "discovery": {
+        "mode": "direct_url",
+        "url": "https://electionresultsfiles.sos.mn.gov/{primary_date_compact}/allracesbycounty.txt"
+      },
+      "format": {
+        "delimiter": ";",
+        "columns": [
+          "state",
+          "county_id",
+          "precinct_id",
+          "office_id",
+          "office_name",
+          "district",
+          "candidate_id",
+          "candidate",
+          "suffix",
+          "incumbent",
+          "party",
+          "precincts_reporting",
+          "precincts_total",
+          "votes",
+          "percent",
+          "total_votes"
+        ],
+        "contest_column": [
+          "office_name",
+          "party"
+        ],
+        "choice_column": "candidate",
+        "party_column": "party",
+        "votes_column": "votes"
+      },
+      "description": "Minnesota was written off twice as captcha-blocked, and the interesting part is HOW it is blocked: its bot manager challenges the SECOND request in a window, whatever client makes it — so the page listing its result files is effectively unreachable from a pipeline that also has to fetch anything else. Its FILE host is wide open and answers every time. So Minnesota is addressed directly by election date, which is known for every state from the FEC's national calendar (state_election_dates.py) — the calendar and the fetcher composing to reach a state neither could reach alone, with no browser and without touching the protected host. One semicolon-delimited file carries every race, county by county; it has NO header row, so the columns are named positionally in config. Minnesota's Democrats are the DFL, which normalize_party now reads, and its party column holds bare letter codes, read only when the whole value is the code. Verified live 2026-08-19 on the real 2026-08-11 primary: Pete Stauber taking MN-08's Republican primary with 87.29%."
+    },
+    "AK": {
+      "source_name": "Alaska Division of Elections (election night precinct CSV)",
+      "strategy": "tabular",
+      "advance_count": 4,
+      "runoff_threshold_pct": null,
+      "discovery": {
+        "mode": "landing_page",
+        "page_url": "https://www.elections.alaska.gov/election-results/",
+        "link_regex": "https://www\\.elections\\.alaska\\.gov/enr\\d+/results/[^\\\"']*_State_of_Alaska\\.csv",
+        "date_from_calendar": true,
+        "require_official": true,
+        "settle_days": 21
+      },
+      "format": {
+        "delimiter": ",",
+        "contest_column": "Contest_title",
+        "choice_column": "candidate_name",
+        "party_column": "Party_Code",
+        "votes_column": "total_votes",
+        "name_format": "last_first"
+      },
+      "description": "Alaska runs a NONPARTISAN TOP-FOUR primary, so advance_count is 4 and every candidate is in one contest regardless of party — the same structural fork California and Washington's top-two introduced, one step wider. Its results are one precinct-level CSV per election, linked from the division's own results page (the 'enr26' path segment is per-cycle, so the pattern is what's written down, never the URL). Names are printed FEC-style, 'Darden, Dustin Thomas House', where the surname is everything before the comma and the trailing token is a middle name — hence name_format. Alaska's file is election-night data with no certification flag, and its date comes from the national calendar, so it withholds until 21 days past the primary. Verified live 2026-08-19: both federal contests present, 28,455 precinct rows."
+    },
+    "HI": {
+      "source_name": "Hawaii Office of Elections (statewide summary file)",
+      "strategy": "tabular",
+      "runoff_threshold_pct": null,
+      "discovery": {
+        "mode": "landing_page",
+        "page_url": "https://elections.hawaii.gov/election-results/",
+        "link_regex": "https://elections\\.hawaii\\.gov/wp-content/results/{year}[^\\\"']*/summary\\.txt",
+        "date_from_calendar": true,
+        "require_official": true,
+        "settle_days": 21
+      },
+      "format": {
+        "delimiter": "\t",
+        "skip_lines": 1,
+        "contest_column": [
+          "Contest Title",
+          "Contest Party"
+        ],
+        "choice_column": "Candidate Name",
+        "party_column": "Contest Party",
+        "votes_column": "Total Votes",
+        "name_format": "last_first"
+      },
+      "description": "Hawaii publishes one tab-delimited summary per election, opening with a '#FormatVersion' banner before the header row (hence skip_lines). It numbers congressional districts in ROMAN numerals — 'U.S. Representative, Dist I' — which parse_office now reads, bounded to I-XX. Its party lives on the CONTEST ('N' nonpartisan, 'D', 'R', 'G'), so the contest key carries it and the nonpartisan races are skipped for having no party at all. Names are 'CASE, Ed', surname before the comma. The file carries no date, so its date comes from the national calendar and it withholds until 21 days past the primary."
+    },
+    "CA": {
+      "source_name": "California Secretary of State (certified Statement of Vote)",
+      "strategy": "tabular",
+      "advance_count": 2,
+      "runoff_threshold_pct": null,
+      "discovery": {
+        "mode": "direct_url",
+        "url": "https://elections.cdn.sos.ca.gov/sov/{year}-primary/sov/csv-voter-nominated.xlsx"
+      },
+      "format": {
+        "format": "xlsx",
+        "contest_column": "Contest Name",
+        "choice_column": "Candidate Name",
+        "party_column": "Party Name",
+        "votes_column": "Vote Total"
+      },
+      "description": "Certified Statement of Vote workbook for voter-nominated (top-two) offices, verified live 2026-08-15: county-level rows carrying Contest Name ('United States Representative District 10'), Candidate Name, Party Name and Vote Total, read with the standard library since an xlsx is a zip of XML and no Excel dependency is warranted. All 52 congressional districts are present; California has no Senate seat on the 2026 ballot. advance_count is 2 because California runs a single all-party primary and sends the TOP TWO to the general regardless of party — modelling it as one nominee per party would silently drop a real ballot option, including the same-party runoffs California regularly produces. runoff_threshold_pct is null: there is no runoff, the top two simply advance."
+    },
+    "WA": {
+      "source_name": "Washington Secretary of State (official results portal)",
+      "strategy": "tabular",
+      "advance_count": 2,
+      "runoff_threshold_pct": null,
+      "discovery": {
+        "mode": "sos_api_report",
+        "jurisdiction_url": "https://results.votewa.gov/results/public/api/jurisdictions/Washington",
+        "election_url": "https://results.votewa.gov/results/public/api/elections/washington/{election_id}",
+        "cdn_url": "https://results.votewa.gov/cdn/results/{jurisdiction_id}/{blob}",
+        "election_name_regex": "Primary",
+        "report_name": "All Results Excel",
+        "require_official": true,
+        "settle_days": 30
+      },
+      "format": {
+        "format": "xlsx",
+        "contest_column": "Office Name",
+        "choice_column": "Ballot Name",
+        "party_column": "Party",
+        "votes_column": "Total",
+        "exclude_choices": [
+          "Ballots Cast",
+          "Over Votes",
+          "Under Votes"
+        ]
+      },
+      "description": "Same portal software as Georgia's, reached through the identical sos_api_report discovery — which is the whole point of the vendor-adapter split: Washington cost a config entry, not a module. Verified live 2026-08-15 (publicElectionId 20260804, 'U.S. Representative - Congressional District N', 976 rows). advance_count is 2: Washington is a top-two state like California, and its party column is free-text candidate PREFERENCE ('Prefers Cascade Democrat Party', 'Prefers No Kings Party'), which is only ever a tiebreak here, never the match signal. require_official is set because Washington votes by mail and was still counting on 2026-08-15 — isOfficialResults was false, so this state correctly confirms nobody until certification on 2026-08-18, then lights up on its own. settle_days is the failsafe under that gate: Utah proved the portal's official flag is not reliably flipped, so a certified-but-unflagged election still counts once it is 30 days past. No Washington Senate seat is on the 2026 ballot."
+    },
+    "VA": {
+      "source_name": "Virginia Department of Elections (official results portal)",
+      "strategy": "tabular",
+      "runoff_threshold_pct": null,
+      "discovery": {
+        "mode": "sos_api_report",
+        "jurisdiction_url": "https://enr.elections.virginia.gov/results/public/api/jurisdictions/Virginia",
+        "election_url": "https://enr.elections.virginia.gov/results/public/api/elections/Virginia/{election_id}",
+        "cdn_url": "https://enr.elections.virginia.gov/cdn/results/{jurisdiction_id}/{blob}",
+        "election_name_regex": [
+          "Democratic Primary",
+          "Republican Primary"
+        ],
+        "report_name": "Election Results",
+        "require_official": true,
+        "settle_days": 30
+      },
+      "format": {
+        "contest_column": "OfficeTitle",
+        "choice_column": "CandidateName",
+        "party_column": "Party",
+        "votes_column": "TOTAL_VOTES",
+        "house_from_columns": {
+          "type_column": "DistrictType",
+          "type_value": "congressional",
+          "district_column": "DistrictName"
+        }
+      },
+      "description": "Third state on the same Enhanced Voting portal as Georgia and Washington, so again a config entry rather than a module. Two things make Virginia different, and both are why it waited: it runs its Democratic and Republican primaries as two SEPARATE elections on the same day (publicElectionIds 2026-August-Democratic-Primary and 2026-August-Republican-Primary, both 2026-08-04), hence a list of election patterns; and its federal label is 'Member, House of Representatives (2nd District)' with no 'U.S.' prefix, which parse_office deliberately refuses so a state lower chamber can't slip through — the export's own DistrictType == 'congressional' column is the discriminator instead. Verified live 2026-08-16 against the real CSVs: Elaine Luria taking the VA-02 Democratic primary, Don Beyer VA-08, Tom Perriello VA-05. Virginia nominates on a plurality, so there is no runoff threshold. require_official is set and both primaries were still uncertified 12 days out, so Virginia confirms nobody until the state board certifies, then lights up on its own — or, under settle_days, 30 days out if this portal never flips its official flag (Utah's never did). Only contested races appear in these files — an unopposed nominee is simply absent, and that seat keeps the FEC-filer fallback."
+    },
+    "FL": {
+      "source_name": "Florida Department of State, Division of Elections (election night results file)",
+      "strategy": "tabular",
+      "runoff_threshold_pct": null,
+      "discovery": {
+        "mode": "landing_page",
+        "page_url": "https://floridaelectionwatch.gov/Downloads",
+        "link_regex": "https://flelectionfiles\\.floridados\\.gov/enightfilespublic/\\d{8}_ElecResultsFL\\.txt",
+        "require_official": true,
+        "settle_days": 21
+      },
+      "format": {
+        "delimiter": "\t",
+        "contest_column": [
+          "RaceName",
+          "PartyCode"
+        ],
+        "choice_column": [
+          "CanNameFirst",
+          "CanNameLast"
+        ],
+        "party_column": "PartyCode",
+        "votes_column": "CanVotes",
+        "house_from_columns": {
+          "type_column": "RaceCode",
+          "type_value": "USR",
+          "district_column": "Juris1num"
+        }
+      },
+      "description": "Florida's own election-night file, one tab-delimited row per candidate per county, verified 2026-08-16 against the real 2024-08-20 primary (Republican Senate primary: Rick Scott 1,081,109 over three challengers) and against the 2026-08-18 file the state had already staged, zeroed, before polls opened. The URL carries the election DATE, so it is read off the state's own downloads page each run rather than written down here — and a file dated on the cycle's federal election day is skipped, because that one is the GENERAL, whose results can't confirm a nominee for the race they decide. Florida splits across columns what other states keep in one label: the contest is (RaceName, PartyCode) — without the party code both parties' primaries for a seat would tally as ONE race and the bigger primary would 'win' the seat outright — and the candidate is (CanNameFirst, CanNameLast). RaceName reads 'Representative in Congress, District 2', which parse_office rightly refuses, so RaceCode == 'USR' identifies the House seat and Juris1num carries the number. Florida abolished its primary runoff in 2002, so a plurality nominates and there is no threshold. It publishes no certification flag anywhere in this file — it starts filling with partial counts the moment polls close — so settle_days is the ONLY gate here, and Florida names nobody until 21 days past its primary."
+    },
+    "UT": {
+      "source_name": "Utah Lieutenant Governor's Office (official results portal)",
+      "strategy": "tabular",
+      "runoff_threshold_pct": null,
+      "discovery": {
+        "mode": "sos_api_report",
+        "jurisdiction_url": "https://electionresults.utah.gov/results/public/api/jurisdictions/Utah",
+        "election_url": "https://electionresults.utah.gov/results/public/api/elections/Utah/{election_id}",
+        "cdn_url": "https://electionresults.utah.gov/cdn/results/{jurisdiction_id}/{blob}",
+        "election_name_regex": "Utah Primary Election",
+        "report_name": "All Results Excel",
+        "require_official": true,
+        "settle_days": 30
+      },
+      "format": {
+        "format": "xlsx",
+        "contest_column": "Office Name",
+        "choice_column": "Ballot Name",
+        "party_column": "Party",
+        "votes_column": "Total",
+        "exclude_choices": [
+          "Ballots Cast",
+          "Over Votes",
+          "Under Votes"
+        ]
+      },
+      "description": "Fourth state on the Enhanced Voting portal, found on 2026-08-16 by probing /results/public/ across state results hosts — pure config, no code. Verified live against the real 2026-06-23 primary workbook: Ben McAdams taking the UT-01 Democratic primary, Blake Moore UT-02 and Celeste Maloy UT-03 on the Republican side (district numbers are the post-2026-redistricting map, which is exactly why they come from the state's own feed rather than being inferred). Only 3 federal contests exist — Utah's convention/signature path means most seats never reach a primary ballot, and an unopposed nominee is simply absent here. The name pattern excludes Utah's odd-year MUNICIPAL primary. Utah is why settle_days exists: this primary was canvassed and certified on 2026-07-22, its signed state canvass report is published on this very portal, and isOfficialResults was STILL false a month later — so require_official alone would have confirmed nobody here forever."
+    },
+    "GA": {
+      "source_name": "Georgia Secretary of State (official results portal)",
+      "strategy": "tabular",
+      "runoff_threshold_pct": 50.0,
+      "discovery": {
+        "mode": "sos_api_report",
+        "jurisdiction_url": "https://results.sos.ga.gov/results/public/api/jurisdictions/Georgia",
+        "election_url": "https://results.sos.ga.gov/results/public/api/elections/Georgia/{election_id}",
+        "cdn_url": "https://results.sos.ga.gov/cdn/results/{jurisdiction_id}/{blob}",
+        "election_name_regex": "General Primary(?!.*Runoff)",
+        "runoff_name_regex": "General Primary Runoff",
+        "report_name": "Total Votes Excel"
+      },
+      "format": {
+        "format": "xlsx",
+        "contest_column": "Office Name",
+        "choice_column": "Ballot Name",
+        "party_column": "Party",
+        "votes_column": "Total",
+        "exclude_choices": [
+          "Total Votes"
+        ]
+      },
+      "description": "Official statewide totals workbook, discovered live 2026-08-15 through the portal's own API rather than any hardcoded path: jurisdictions/Georgia lists every election (publicElectionId 'GeneralPrimary51926' for the 2026-05-19 General Primary) plus the portal id, the election document names its report blobs, and the blob GUID — which changes on every republish — is read each run. 30 federal contests. Georgia nominates on a majority, so runoff_threshold_pct is 50 AND the 2026-06-16 General Primary Runoff is fetched as a second stage that overrides the primary for every race it decides; without that merge the runoff seats would stay permanently unconfirmed. exclude_choices drops the per-contest 'Total Votes' summary row, which sits in the same shape as a candidate and would otherwise double the denominator and win uncontested races outright."
+    },
+    "NC": {
+      "source_name": "North Carolina State Board of Elections (public results export)",
+      "strategy": "tabular",
+      "runoff_threshold_pct": 30.0,
+      "discovery": {
+        "mode": "s3_listing",
+        "bucket_url": "https://s3.amazonaws.com/dl.ncsbe.gov",
+        "prefix": "ENRS/{year}",
+        "file_regex": "results_pct_\\d{8}\\.zip"
+      },
+      "format": {
+        "delimiter": "\t",
+        "encoding": "latin-1",
+        "contest_column": "Contest Name",
+        "choice_column": "Choice",
+        "party_column": "Choice Party",
+        "votes_column": "Total Votes"
+      },
+      "description": "Official statewide precinct-results export, verified live 2026-08-12 against the real 2026-03-03 primary: the S3 listing at dl.ncsbe.gov resolves ENRS/2026 -> results_pct_20260303.zip (1.4 MB, 103,517 rows, 49,884 federal) with no key or auth, yielding 21 federal contests. Ground-truthed on Virginia Foxx taking NC-05 Republican with 74.5% and Valerie Foushee NC-04 Democratic with 49.2%. runoff_threshold_pct is 30 because North Carolina nominates on 30%+1 and sends anything below to a second primary — NC-01 Republican was won on 39.5%, which clears it, but a sub-30% leader must not be confirmed while a second primary is still possible.",
+      "filings": {
+        "discovery": {
+          "mode": "s3_listing",
+          "bucket_url": "https://s3.amazonaws.com/dl.ncsbe.gov",
+          "prefix": "Elections/{year}/Candidate Filing",
+          "file_regex": "Candidate_Listing_\\d{4}\\.csv"
+        },
+        "format": {
+          "delimiter": ",",
+          "contest_column": "contest_name",
+          "choice_column": "name_on_ballot",
+          "party_column": "party_contest",
+          "election_date_column": "election_dt",
+          "candidate_party_column": "party_candidate"
+        },
+        "description": "Who is on the ballot — BOTH ballots — months before any result exists, plus the primary's own date. Verified live 2026-08-17 against the real file (8,300 rows, one per county per candidate; 71 federal primary candidates dated 03/03/2026, and 42 on the general ballot dated 11/03/2026). The general list is why this matters beyond the pre-primary window: 15 of those 42 are Libertarian or Green candidates who never appear in ANY primary, so confirming nominees from primary results cannot see them — and since a race with any confirmed candidate shows only confirmed candidates, they were being dropped from the page. North Carolina records the primary a candidate ran in (party_contest, empty for November) separately from the candidate's own party (party_candidate, which is where LIB/GRE appear), hence both columns. Only office, ballot name, party and election date are read: the same file also carries every candidate's home address, phone and email, which this platform has no reason to hold. general_ballot_complete is set on this state because these general-ballot rows ARE the November ballot, minor parties included."
+      },
+      "general_ballot_complete": true
+    },
+    "PA": {
+      "source_name": "Pennsylvania Department of State (electionreturns.pa.gov API)",
+      "strategy": "pa_returns",
+      "runoff_threshold_pct": null,
+      "description": "Pennsylvania looked unreachable for months because electionreturns.pa.gov's front page sits behind Imperva and answers a bot challenge — but its API does not, and serves a plain server-side request fine. The endpoints were read off the page's own network activity in a browser on 2026-08-18 and then confirmed with no browser involved. Election and office are matched by CODE, never wording: ElectionType 'P' is the general primary, OfficeCode 'USC'/'USS' the federal offices, so the ids (117 for 2026) never need writing down. Verified live against the real 2026-05-19 primary: Bob Harvie taking PA-01's Democratic primary with 65.14%. Pennsylvania has no Senate seat on the 2026 ballot and nominates on a plurality, so there is no runoff threshold."
+    },
     "TX": {
       "source_name": "Texas Secretary of State (Civix Candidate Bio Portal)",
       "strategy": "tx_civix",
-      "description": "Official statewide candidate database, verified live via network inspection (not scraping the rendered Angular SPA): GET .../getElectionsByYear/{year} to find the current cycle's 'GE' (General Election) id, then POST .../findQualifiedCandidates with that id. cdOfficeType='FD' isolates federal races; txOfficeName parses to office+district ('U. S. SENATOR' / 'U. S. REPRESENTATIVE DISTRICT N'); cdFilingStatus='CG' ('Candidate in the General Election') is the authoritative confirmed-nominee flag, verified against known-correct 2026 ground truth (Paxton beat Cornyn in the May runoff; Paxton alone carries CG, Cornyn is absent from the GE-scoped query entirely). No API key, no auth."
+      "description": "Official statewide candidate database, verified live via network inspection (not scraping the rendered Angular SPA): GET .../getElectionsByYear/{year} to find the current cycle's 'GE' (General Election) id, then POST .../findQualifiedCandidates with that id. cdOfficeType='FD' isolates federal races; txOfficeName parses to office+district ('U. S. SENATOR' / 'U. S. REPRESENTATIVE DISTRICT N'); cdFilingStatus='CG' ('Candidate in the General Election') is the authoritative confirmed-nominee flag, verified against known-correct 2026 ground truth (Paxton beat Cornyn in the May runoff; Paxton alone carries CG, Cornyn is absent from the GE-scoped query entirely). No API key, no auth. general_ballot_complete: Civix reports the state's own general-election FILING STATUS, so this list is the whole November ballot rather than the major-party nominees — live 2026-08-17 it carries 5 Green, 3 Libertarian and 1 independent candidate alongside the 39 Democrats and 39 Republicans.",
+      "general_ballot_complete": true
+    },
+    "AZ": {
+      "source_name": "Arizona Secretary of State (statewide canvass XML, FTP)",
+      "strategy": "canvass_xml",
+      "runoff_threshold_pct": null,
+      "discovery": {
+        "base_url": "ftp://ftp.azsos.gov/ElectionResults/{year}/State/",
+        "keyword": "Primary Election",
+        "settle_days": 30
+      },
+      "description": "Found specifically because azsos.gov's own website sits behind Cloudflare bot-detection this codebase won't attempt to defeat — the FTP host serving the SAME official canvass was never protected at all, same 'the listing page is guarded but its file host isn't' shape as Minnesota's adapter. Verified live 2026-09-02 against the real, certified 2026 primary (resultsTimestamp 2026-08-05, 100% of 1,786 precincts reporting): all 9 congressional districts present with real multi-candidate fields, third parties (LBT/GRN) included in the source data though normalize_party only recognises Libertarian/Green, not AZ's standalone No Labels party (NOL), which is correctly skipped rather than guessed at. runoff_threshold_pct is null because Arizona's runoff law was repealed in 1992 — federal primaries are decided by plurality, same as CA/CO/WA's top-line rule. No U.S. Senate contest appears in the 2026 primary file at all — not verified against Arizona's own Senate-seat-class calendar, so this is read as \"none this cycle\" rather than assumed; if one appears in a later cycle's file it needs no code change, since parse_office already recognises a Senate label on sight."
     }
-  }
+  },
+  "_dates": "A state's primary DATE is read off the same feed its results come from and cached in state_election_dates.json (see state_election_dates.py) — never a calendar anybody maintains here. The November general is statutory and computed instead (election_calendar.py). A state with no registered source has no known primary date, and says so rather than guessing.",
+  "_ballot_completeness": "KNOWN GAP, by source kind. A state confirmed from primary RESULTS can only ever show people who ran in a primary — Libertarian, Green and independent candidates reach November without one, so they are invisible to it, and because a race with any confirmed candidate shows only confirmed candidates, they are dropped from the page rather than merely unmarked. Two source kinds do not have this problem and prove the point: TEXAS confirms from the state's general-election FILING STATUS, and its 88 confirmed candidates include 5 Green, 3 Libertarian and 1 independent; NORTH CAROLINA now reads its filing list's general-ballot rows, which carry 10 Libertarians and 2 Greens the primary results never mentioned. The remaining results-only states (CA, CO, FL, GA, IA, UT, VA, WA) show nominees only until a filing list or general-ballot source is registered for them. Adding one is a `filings` block, not code."
 }

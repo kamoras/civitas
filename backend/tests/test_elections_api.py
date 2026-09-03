@@ -107,6 +107,36 @@ class TestListRaces:
         assert data[0]["candidateCount"] == 1
         assert [c["id"] for c in data[0]["topCandidates"]] == ["WINNER"]
 
+    def test_primary_ballot_filters_when_no_nominee_is_confirmed_yet(self, db_session):
+        """The months BEFORE a primary: nobody is a nominee yet, so the
+        best available answer is who the state says is actually on its
+        primary ballot — an FEC filer who never filed with the state is
+        not a ballot option either."""
+        _race(db_session, "2026-SEN-GA", "GA")
+        _candidate(db_session, "FILED", "2026-SEN-GA", "OSSOFF, JON",
+                   on_primary_ballot=True, cash_on_hand=1.0)
+        _candidate(db_session, "PAPER", "2026-SEN-GA", "NOBODY, A",
+                   on_primary_ballot=False, cash_on_hand=999.0)
+        db_session.commit()
+
+        data = _body(elections.list_races(db_session))
+        assert data[0]["candidateCount"] == 1
+        assert [c["id"] for c in data[0]["topCandidates"]] == ["FILED"]
+
+    def test_a_confirmed_nominee_outranks_the_primary_ballot(self, db_session):
+        """Being on a primary ballot says nothing about surviving it, so
+        once a state confirms nominees those win outright — including over
+        someone who was on the primary ballot and lost."""
+        _race(db_session, "2026-SEN-GA", "GA")
+        _candidate(db_session, "NOMINEE", "2026-SEN-GA", "PAXTON, KEN",
+                   confirmed_general=True, on_primary_ballot=True, cash_on_hand=1.0)
+        _candidate(db_session, "BEATEN", "2026-SEN-GA", "CORNYN, JOHN",
+                   confirmed_general=False, on_primary_ballot=True, cash_on_hand=999.0)
+        db_session.commit()
+
+        data = _body(elections.list_races(db_session))
+        assert [c["id"] for c in data[0]["topCandidates"]] == ["NOMINEE"]
+
 
 class TestRaceDetail:
     def test_404_for_unknown_race(self, db_session):
@@ -147,6 +177,10 @@ class TestRaceDetail:
 
         data = _body(elections.race_detail("2026-SEN-GA", db_session))
         assert [c["id"] for c in data["candidates"]] == ["WINNER"]
+        # _race_full computes this alongside the same filter; race_detail
+        # must too, or a reader here can't tell a confirmed nominee from a
+        # raw FEC filer the way the state-ballot page already says.
+        assert data["candidateSource"] == "nominees"
 
 
 class TestCandidateDetail:
