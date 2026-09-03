@@ -483,8 +483,17 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
               regular Senate race most cycles — an empty section with no
               explanation reads as missing data, not as "not up yet."
               Only shown when the backend actually has an answer (null
-              for DC, which has no Senate seats at all). */}
-          {ballot.senateRaces.length === 0 && ballot.nextSenateElection !== null && (
+              for DC, which has no Senate seats at all) AND there's real
+              House data on the page — otherwise this and the `!hasFederalRaces`
+              fallback below aren't mutually exclusive: a state with a
+              genuine full data gap (Senate AND House both unsynced) would
+              show "next Senate election is in 2028" directly above "no
+              federal races on record," two contradictory claims at once.
+              Every state always has ≥1 House seat, so a non-empty
+              houseRaces here means the gap (if any) is Senate-specific,
+              not "we haven't ingested this state yet." */}
+          {ballot.senateRaces.length === 0 && ballot.nextSenateElection !== null &&
+            ballot.houseRaces.length > 0 && (
             <section className="panel mb-6">
               <TerminalTitlebar title="Senate" />
               <div className="p-6">

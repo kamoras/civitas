@@ -62,26 +62,26 @@ def next_election_day(after: date) -> date:
         year += 2
 
 
+# Single source of truth for the rotation: each class's first modern
+# election year, and the state set it elects. seats_up_for_year and
+# next_senate_election_year both read this instead of each hand-typing
+# their own copy of the three base years — two independently-maintained
+# copies is exactly how one gets corrected (a typo fix, a rare mid-decade
+# reassignment) without the other, and silently drifts them apart.
+_CLASS_BASE_YEARS = {1: 2018, 2: 2020, 3: 2022}
+_CLASS_STATES = {1: CLASS_I_STATES, 2: CLASS_II_STATES, 3: CLASS_III_STATES}
+
+
 def seats_up_for_year(year: int) -> frozenset[str]:
     """States with a REGULAR Senate seat up in `year` (by class rotation).
 
     Special elections are additional to this set and are not derivable
     from the calendar — they exist only when a seat was vacated.
     """
-    if (year - 2020) % 6 == 0:
-        return CLASS_II_STATES
-    if (year - 2022) % 6 == 0:
-        return CLASS_III_STATES
-    if (year - 2018) % 6 == 0:
-        return CLASS_I_STATES
+    for cls, base_year in _CLASS_BASE_YEARS.items():
+        if (year - base_year) % 6 == 0:
+            return _CLASS_STATES[cls]
     return frozenset()
-
-
-# Each class's own rotation base — the same three years seats_up_for_year
-# checks against, just keyed the other direction (class -> base year
-# instead of year -> class) so next_senate_election_year can walk a
-# single class forward instead of re-deriving it from three checks.
-_CLASS_BASE_YEARS = {1: 2018, 2: 2020, 3: 2022}
 
 
 def next_senate_election_year(state: str, after_year: int) -> int | None:
@@ -98,9 +98,7 @@ def next_senate_election_year(state: str, after_year: int) -> int | None:
     aren't covered here — like seats_up_for_year, they only exist when a
     seat is vacated and aren't derivable from the calendar alone.
     """
-    classes = [c for c, states in (
-        (1, CLASS_I_STATES), (2, CLASS_II_STATES), (3, CLASS_III_STATES),
-    ) if state in states]
+    classes = [c for c, states in _CLASS_STATES.items() if state in states]
     if not classes:
         return None
     candidates = []
