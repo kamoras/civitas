@@ -91,6 +91,20 @@ def test_house_only_state_has_no_senate_race_this_cycle(db_session):
     data = _body(elections.state_ballot("GA", db_session))
     assert data["senateRaces"] == []
     assert len(data["houseRaces"]) == 1
+    # Computed from the real Senate class rotation, not fabricated —
+    # GA's soonest regular seat after 2026 is 2028 (Class III; its other
+    # seat, Class II, isn't up again until 2032).
+    assert data["nextSenateElection"] == 2028
+
+
+def test_senate_race_present_leaves_next_senate_election_null(db_session):
+    """The field only answers a question the page is actually asking —
+    once a Senate race exists this cycle, there's nothing to explain."""
+    _race(db_session, "2026-SEN-GA", "GA", office="S")
+    db_session.commit()
+
+    data = _body(elections.state_ballot("GA", db_session))
+    assert data["nextSenateElection"] is None
 
 
 def test_candidate_list_is_not_truncated_to_top_two(db_session):

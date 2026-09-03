@@ -75,3 +75,38 @@ def seats_up_for_year(year: int) -> frozenset[str]:
     if (year - 2018) % 6 == 0:
         return CLASS_I_STATES
     return frozenset()
+
+
+# Each class's own rotation base — the same three years seats_up_for_year
+# checks against, just keyed the other direction (class -> base year
+# instead of year -> class) so next_senate_election_year can walk a
+# single class forward instead of re-deriving it from three checks.
+_CLASS_BASE_YEARS = {1: 2018, 2: 2020, 3: 2022}
+
+
+def next_senate_election_year(state: str, after_year: int) -> int | None:
+    """The next year after `after_year` this state has a REGULAR Senate
+    seat up, or None for a jurisdiction with no Senate seats at all (DC,
+    territories) — every one of the 50 states is in exactly two of the
+    three class sets, one seat per class, so this never returns None for
+    an actual state.
+
+    For explaining an empty Senate section on a state's ballot page: a
+    reader who doesn't already know the three-class rotation (U.S.
+    Const. art. I §3) can't otherwise tell "this state's other seat
+    isn't up until later" from "the data is missing." Special elections
+    aren't covered here — like seats_up_for_year, they only exist when a
+    seat is vacated and aren't derivable from the calendar alone.
+    """
+    classes = [c for c, states in (
+        (1, CLASS_I_STATES), (2, CLASS_II_STATES), (3, CLASS_III_STATES),
+    ) if state in states]
+    if not classes:
+        return None
+    candidates = []
+    for c in classes:
+        year = _CLASS_BASE_YEARS[c]
+        while year <= after_year:
+            year += 6
+        candidates.append(year)
+    return min(candidates)

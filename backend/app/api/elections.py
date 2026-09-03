@@ -18,6 +18,7 @@ from app.election_calendar import (
     CLASS_II_STATES,
     CLASS_III_STATES,
     next_election_day,
+    next_senate_election_year,
 )
 from app.http_client import make_async_client
 from app.models import (
@@ -458,6 +459,13 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         "primaryDate": primary_date(state, cycle),
         "statePvi": state_pvi.get(state),
         "senateRaces": senate_races,
+        # Only meaningful (and only computed) when this state has no
+        # Senate race THIS cycle — a reader who doesn't already know the
+        # Senate's three-class rotation can't otherwise tell "this
+        # state's other seat isn't up until later" from "the data is
+        # missing." Null once senateRaces is non-empty, and null for a
+        # jurisdiction with no Senate seats at all (DC).
+        "nextSenateElection": None if senate_races else next_senate_election_year(state, cycle),
         "houseRaces": house_races,
         "coverage": _state_coverage(db, races),
         "measures": [_measure_json(m) for m in measures],
