@@ -390,13 +390,14 @@ def _weekly_header(week: WeekSummary) -> str:
 
 def _weekly_body_budget(header: str) -> int:
     """Characters left for the model's text once the header, the separating
-    blank line and the trailing link are spent out of Bluesky's per-post cap.
+    space before the trailing link, and the link itself are spent out of
+    Bluesky's per-post cap.
 
     Derived rather than hardcoded: a fixed constant silently overflows the
     moment the header or the URL is reworded, and publish_post would then
     truncate the body with nothing failing to warn us.
     """
-    return BSKY_MAX_CHARS - len(header) - 1 - len(TIMELINE_URL) - 2
+    return BSKY_MAX_CHARS - len(header) - 1 - len(TIMELINE_URL) - 1
 
 
 # Per-day detail handed to the model. TimelineEntry.date is unique, so a week

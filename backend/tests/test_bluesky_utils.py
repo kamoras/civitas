@@ -50,6 +50,23 @@ class TestTruncation:
         assert posted[: -len(url)].endswith(" ")
         assert not posted[: -len(url)].endswith("  ")
 
+    def test_hard_cut_lands_exactly_at_the_budget_boundary(self):
+        # No punctuation and no space anywhere in the body, so
+        # truncate_on_boundary can't find a sentence or word boundary and
+        # falls through to its hard-cut path: `trimmed` (== budget chars)
+        # exactly. A body built from repeated short sentences (as in the
+        # test above) lands on a sentence boundary well short of the real
+        # budget regardless of a small off-by-one in the budget math —
+        # this one pins the exact final length instead, so a
+        # `- 1` vs `- 2` regression in publish_post's separator accounting
+        # would actually fail it.
+        url = "https://civitas-research.org/issue/i9e3779b1"
+        long_body = "a" * 1000
+        posted = _post(long_body, url=url)
+
+        assert len(posted) == BSKY_MAX_CHARS
+        assert posted.endswith(f" {url}")
+
     def test_a_body_that_fits_within_budget_is_not_truncated(self):
         url = "https://civitas-research.org/issue/i9e3779b1"
         body = "a" * (BSKY_MAX_CHARS - len(url) - 1)  # exactly at the budget boundary
