@@ -326,6 +326,67 @@ async def test_fetch_uses_discovery_when_source_has_a_landing_page(monkeypatch, 
     assert fetched_urls == ["https://example.com/resolved-2026.pdf"]
 
 
+# ── multi-document strategies (a state whose measures are several
+# separate documents, not one combined guide — see ballot_measures_va.py
+# and MULTI_DOCUMENT_STRATEGIES) ────────────────────────────────────────
+
+
+def test_is_configured_true_via_multi_document_strategies(monkeypatch):
+    monkeypatch.setattr(pdf, "source_for_state", lambda state: _fake_source("fake_multi"))
+    monkeypatch.setitem(pdf.MULTI_DOCUMENT_STRATEGIES, "fake_multi", lambda client, year: None)
+    assert pdf.is_configured("ZZ") is True
+
+
+@pytest.mark.asyncio
+async def test_fetch_dispatches_to_a_multi_document_strategy_and_caches(monkeypatch, db_session):
+    monkeypatch.setattr(pdf, "source_for_state", lambda state: _fake_source("fake_multi"))
+
+    parsed = {"number": "1", "title": "T", "origin": None, "official_summary": "S",
+              "fiscal_impact": None, "yes_means": None, "no_means": None}
+
+    async def fake_multi(client, year):
+        return [(parsed, "https://example.com/q1.pdf")]
+
+    monkeypatch.setitem(pdf.MULTI_DOCUMENT_STRATEGIES, "fake_multi", fake_multi)
+
+    result = await pdf.fetch_state_measures_pdf(None, db_session, "ZZ", 2026, "2026-11-03")
+    assert result == [pdf._to_measure("ZZ", parsed, "2026-11-03", "https://example.com/q1.pdf")]
+
+    # Second call must hit the cache, not call the strategy again.
+    async def fail_multi(client, year):
+        raise AssertionError("should not fetch — cache hit")
+
+    monkeypatch.setitem(pdf.MULTI_DOCUMENT_STRATEGIES, "fake_multi", fail_multi)
+    cached_result = await pdf.fetch_state_measures_pdf(None, db_session, "ZZ", 2026, "2026-11-03")
+    assert cached_result == result
+
+
+@pytest.mark.asyncio
+async def test_fetch_returns_none_when_multi_document_strategy_returns_none(monkeypatch, db_session):
+    monkeypatch.setattr(pdf, "source_for_state", lambda state: _fake_source("fake_multi"))
+
+    async def fake_multi(client, year):
+        return None
+
+    monkeypatch.setitem(pdf.MULTI_DOCUMENT_STRATEGIES, "fake_multi", fake_multi)
+
+    result = await pdf.fetch_state_measures_pdf(None, db_session, "ZZ", 2026, "2026-11-03")
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_returns_none_when_multi_document_strategy_raises(monkeypatch, db_session):
+    monkeypatch.setattr(pdf, "source_for_state", lambda state: _fake_source("fake_multi"))
+
+    async def fake_multi(client, year):
+        raise RuntimeError("network error")
+
+    monkeypatch.setitem(pdf.MULTI_DOCUMENT_STRATEGIES, "fake_multi", fake_multi)
+
+    result = await pdf.fetch_state_measures_pdf(None, db_session, "ZZ", 2026, "2026-11-03")
+    assert result is None
+
+
 @pytest.mark.asyncio
 async def test_fetch_returns_none_when_discovery_finds_nothing(monkeypatch, db_session):
     monkeypatch.setattr(pdf, "source_for_state", lambda state: {
