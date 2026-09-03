@@ -68,6 +68,7 @@ from app.pipeline.fetch.state_candidates_ky import fetch_confirmed_candidates as
 from app.pipeline.fetch.state_candidates_nj import fetch_confirmed_candidates as _fetch_nj
 from app.pipeline.fetch.state_candidates_tabular import fetch_confirmed_candidates as _fetch_tabular
 from app.pipeline.fetch.state_candidates_pa import fetch_confirmed_candidates as _fetch_pa
+from app.pipeline.fetch.state_candidates_tn import fetch_confirmed_candidates as _fetch_tn
 from app.pipeline.fetch.state_candidates_tx import fetch_confirmed_candidates as _fetch_tx
 
 logger = logging.getLogger(__name__)
@@ -85,6 +86,7 @@ STRATEGIES = {
     "nj_certification": _fetch_nj,
     "ky_certification": _fetch_ky,
     "in_enr": _fetch_in,
+    "tn_precinct": _fetch_tn,
 }
 
 # A state's own party lettering (mostly single-letter) doesn't match FEC's
