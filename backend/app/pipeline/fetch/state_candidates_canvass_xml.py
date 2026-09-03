@@ -18,10 +18,13 @@ No vendor "official" flag exists in this format (unlike Enhanced
 Voting's isOfficialResults) — the file the FTP host serves IS the
 canvass, generated once per publish. Withholding instead checks that
 every precinct has reported (precinctsReportingPercent="100.00" at the
-statewide jurisdiction) and that resultsTimestamp is past the state's
-own certification-deadline window (settle_days, config, same failsafe
-role it plays for every other vendor here) — belt-and-suspenders against
-an early or corrected post, not a specific vendor quirk.
+statewide jurisdiction) and that electionDate is past the state's own
+certification-deadline window (settle_days, config, same failsafe role
+it plays for every other vendor here) — belt-and-suspenders against an
+early or corrected post, not a specific vendor quirk. Deliberately
+electionDate, not resultsTimestamp (also in the file): the latter is
+when the file was last generated, which a routine republish of an
+already-final canvass can push forward with no data change.
 """
 
 import asyncio
@@ -31,7 +34,12 @@ from urllib.parse import quote
 from urllib.request import urlopen
 from xml.etree import ElementTree as ET
 
-from app.pipeline.fetch.state_candidates_common import normalize_party, parse_office, surname
+from app.pipeline.fetch.state_candidates_common import (
+    normalize_party,
+    parse_office,
+    pick_nominees,
+    surname,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +75,11 @@ def _settled(root: ET.Element, settle_days: int) -> bool:
     state_jur = next((j for j in jurisdictions if j.get("name") == "State"), None)
     if state_jur is None or state_jur.get("precinctsReportingPercent") != "100.00":
         return False
-    raw = root.findtext("./electionInformation/resultsTimestamp") or ""
+    # electionDate, not resultsTimestamp — the latter is when this FILE was
+    # last generated, which a routine republish of an already-final canvass
+    # can push forward with no data change, restarting the settle_days
+    # countdown from a date that has nothing to do with the election itself.
+    raw = root.findtext("./electionInformation/electionDate") or ""
     try:
         held_on = datetime.fromisoformat(raw[:10]).date()
     except ValueError:
@@ -75,24 +87,44 @@ def _settled(root: ET.Element, settle_days: int) -> bool:
     return (datetime.now(UTC).date() - held_on).days >= settle_days
 
 
-def _nominee(contest: ET.Element) -> tuple[str, str] | None:
+def _nominee(contest: ET.Element, runoff_threshold_pct: float | None) -> tuple[str, str] | None:
     """(choiceName, partyCode) for the top vote-getter among this
     single-party contest's real choices, or None. Write-ins are excluded
     the same way a blank/placeholder ballot line is elsewhere — a write-in
-    total is real turnout, not a candidate anyone can be confirmed as."""
-    best: tuple[str, str, int] | None = None
-    for choice in contest.findall("./choices/choice"):
-        if choice.get("isWriteIn") == "true":
-            continue
-        name = choice.get("choiceName") or ""
-        party = choice.get("party") or ""
-        try:
-            votes = int(choice.get("totalVotes") or 0)
-        except ValueError:
-            votes = 0
-        if not name or best is None or votes > best[2]:
-            best = (name, party, votes)
-    return (best[0], best[1]) if best else None
+    total is real turnout, not a candidate anyone can be confirmed as.
+
+    Winner-picking itself is pick_nominees (state_candidates_common.py),
+    not hand-rolled here — its tie handling (truncate to nobody rather
+    than guess who a straddled cutoff favors) is the same safety guarantee
+    every other adapter gets, and its runoff_threshold_pct floor is the
+    same load-bearing rule tabular/clarity honor: config, not code, so a
+    future canvass_xml state whose primary law isn't plurality-take-all
+    like Arizona's (repealed its runoff in 1992) doesn't get a
+    sub-threshold leader silently confirmed as the nominee. A contest is
+    single-party here (AZ's own contestLongName already carries the
+    party), so advance_count is always 1."""
+    choices = [
+        (choice.get("choiceName") or "", choice.get("party") or "", _int(choice.get("totalVotes")))
+        for choice in contest.findall("./choices/choice")
+        if choice.get("isWriteIn") != "true" and choice.get("choiceName")
+    ]
+    if not choices:
+        return None
+    winners = pick_nominees(
+        [(name, votes) for name, _, votes in choices], runoff_threshold_pct=runoff_threshold_pct,
+    )
+    if len(winners) != 1:
+        return None
+    winner_name = winners[0][0]
+    party = next(p for n, p, _ in choices if n == winner_name)
+    return winner_name, party
+
+
+def _int(raw: str | None) -> int:
+    try:
+        return int(raw or 0)
+    except ValueError:
+        return 0
 
 
 async def _fetch_document(year: int, state: str, source: dict) -> ET.Element | None:
@@ -161,13 +193,14 @@ async def fetch_confirmed_candidates(
         logger.info("%s %d canvass not yet settled — withholding", state, year)
         return []
 
+    runoff_threshold_pct = source.get("runoff_threshold_pct")
     results = []
     for contest in root.findall(".//contests/contest"):
         parsed = parse_office(contest.get("contestLongName") or "")
         if parsed is None:
             continue
         office, district = parsed
-        won = _nominee(contest)
+        won = _nominee(contest, runoff_threshold_pct)
         if won is None:
             continue
         choice_name, party_code = won

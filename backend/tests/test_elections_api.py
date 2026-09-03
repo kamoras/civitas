@@ -177,6 +177,10 @@ class TestRaceDetail:
 
         data = _body(elections.race_detail("2026-SEN-GA", db_session))
         assert [c["id"] for c in data["candidates"]] == ["WINNER"]
+        # _race_full computes this alongside the same filter; race_detail
+        # must too, or a reader here can't tell a confirmed nominee from a
+        # raw FEC filer the way the state-ballot page already says.
+        assert data["candidateSource"] == "nominees"
 
 
 class TestCandidateDetail:

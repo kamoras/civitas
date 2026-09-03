@@ -59,6 +59,7 @@ describe("RaceFullDetail", () => {
     // doesn't apply the closed-<details> UA style that hides it visually.
     expect(screen.getByText("Paper Pete").closest("details")).not.toHaveAttribute("open");
     expect(screen.getByText("Other FEC filers (1)")).toBeInTheDocument();
+    expect(screen.getByText(/Everyone who has filed with the FEC/)).toBeInTheDocument();
   });
 
   it("shows a fallback message with no candidates and no fundraising section", () => {
@@ -66,6 +67,11 @@ describe("RaceFullDetail", () => {
 
     expect(screen.getByText(/No candidates on record/)).toBeInTheDocument();
     expect(screen.queryByTestId("financials")).not.toBeInTheDocument();
+    // The candidateSource note ("Everyone who has filed with the FEC...")
+    // must not render alongside "no candidates on record" — the two
+    // together would tell a reader both that a ballot answer exists AND
+    // that there's nobody on record for it.
+    expect(screen.queryByText(/Everyone who has filed with the FEC/)).not.toBeInTheDocument();
   });
 
   it("points to this race's badge in the page-level coverage feed instead of repeating it", () => {

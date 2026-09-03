@@ -86,6 +86,39 @@ class TestFetchConfirmedCandidates:
     async def test_missing_discovery_config_returns_none(self, monkeypatch):
         assert await cx.fetch_confirmed_candidates(None, 2026, "AZ", {}) is None
 
+    async def test_settling_is_judged_from_election_date_not_file_timestamp(self, monkeypatch):
+        # resultsTimestamp bumped to "now" (a routine republish of an
+        # already-final canvass, no data change) while electionDate stays
+        # the real, long-past 2026-07-21 — must still settle, because a
+        # file's own regeneration time says nothing about the election.
+        import re
+        from datetime import UTC, datetime
+
+        today = datetime.now(UTC).date().isoformat()
+        republished = re.sub(rb"<resultsTimestamp>[^<]+</resultsTimestamp>",
+                              f"<resultsTimestamp>{today}T00:00:00</resultsTimestamp>".encode(), _raw())
+        monkeypatch.setattr(cx, "_ftp_list", lambda url: ["2026 Primary Election"])
+        monkeypatch.setattr(cx, "_ftp_get", lambda url: republished)
+
+        results = await cx.fetch_confirmed_candidates(None, 2026, "AZ", _SOURCE)
+
+        assert results != []  # settled, not withheld
+        assert {"office": "H", "district": 1, "party": "D", "last_name": "Shah"} in results
+
+    async def test_exact_tie_confirms_nobody(self, monkeypatch):
+        # Two Republicans tied for CD1 confirms neither — the same
+        # never-guess-a-tie guarantee pick_nominees gives every other
+        # adapter, not a coin flip toward whoever the XML lists first.
+        tied = _raw().replace(b'totalVotes="43709"', b'totalVotes="31347"')
+        monkeypatch.setattr(cx, "_ftp_list", lambda url: ["2026 Primary Election"])
+        monkeypatch.setattr(cx, "_ftp_get", lambda url: tied)
+
+        results = await cx.fetch_confirmed_candidates(None, 2026, "AZ", _SOURCE)
+
+        assert not any(r["district"] == 1 and r["party"] == "R" for r in results)
+        # District 1 Democratic (untouched by the edit) still confirms.
+        assert {"office": "H", "district": 1, "party": "D", "last_name": "Shah"} in results
+
 
 @pytest.mark.asyncio
 class TestDiscoverPrimaryDate:

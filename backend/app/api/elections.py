@@ -725,6 +725,7 @@ def race_detail(race_id: str, db: Session = Depends(get_db)):
         "isSpecial": race.is_special,
         "pvi": pvi,
         "pviLevel": pvi_level,
+        "candidateSource": _candidate_source(race.candidates, race.state),
         "candidates": [_candidate_summary(c) for c in candidates],
         "coverage": [_coverage_item(item) for item in coverage],
     }, max_age=CACHE_TTL_DETAIL_S)

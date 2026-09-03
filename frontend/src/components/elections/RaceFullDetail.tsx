@@ -40,15 +40,17 @@ export default function RaceFullDetail({ race }: { race: RaceWithCandidates }) {
 
   return (
     <div id={`race-${race.id}`} className="scroll-mt-24">
-      <p className="mb-2 font-mono text-xs text-ink-min">{SOURCE_NOTE[race.candidateSource]}</p>
       {active.length === 0 ? (
         <p className="text-xs text-ink-lo">No candidates on record for this race yet.</p>
       ) : (
-        <div className="space-y-3">
-          {active.map((c) => (
-            <CandidateCard key={c.id} candidate={c} />
-          ))}
-        </div>
+        <>
+          <p className="mb-2 font-mono text-xs text-ink-min">{SOURCE_NOTE[race.candidateSource]}</p>
+          <div className="space-y-3">
+            {active.map((c) => (
+              <CandidateCard key={c.id} candidate={c} />
+            ))}
+          </div>
+        </>
       )}
 
       {otherFilers.length > 0 && (
