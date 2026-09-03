@@ -34,6 +34,7 @@ function race(overrides: Partial<RaceWithCandidates> = {}): RaceWithCandidates {
     isSpecial: false,
     pvi: null,
     pviLevel: null,
+    candidateSource: "filers",
     counties: null,
     candidates: [],
     ...overrides,

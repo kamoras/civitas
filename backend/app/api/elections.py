@@ -35,7 +35,7 @@ from app.pipeline.analyze.score_calculator import (
     get_pvi_meta,
     get_state_pvi_map,
 )
-from app.pipeline.election_pipeline import STATES_WITH_FEDERAL_RACES, current_election_cycle
+from app.pipeline.election_pipeline import current_election_cycle
 from app.pipeline.fetch import ballot_pdf
 from app.pipeline.fetch.ballot_lookup import lookup_for_state
 from app.pipeline.fetch.ballot_pdf_sources import source_for_town as ballot_pdf_source_for_town
