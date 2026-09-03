@@ -84,13 +84,45 @@ def test_splits_races_into_senate_and_house(db_session):
 
 def test_house_only_state_has_no_senate_race_this_cycle(db_session):
     """A state's OTHER Senate class isn't up this cycle — the response
-    must say "no Senate race", not error or fabricate one."""
+    must say "no Senate race", not error or fabricate one. AZ specifically
+    (not GA): AZ is Class I and III, neither of which is up in 2026
+    (Class II), so this is a genuine not-up-this-cycle case, not a data
+    gap — real-world ground truth verified against seats_up_for_year."""
+    _race(db_session, "2026-HOUSE-AZ-1", "AZ", office="H", district=1)
+    db_session.commit()
+
+    data = _body(elections.state_ballot("AZ", db_session))
+    assert data["senateRaces"] == []
+    assert len(data["houseRaces"]) == 1
+    # Computed from the real Senate class rotation, not fabricated — AZ's
+    # soonest regular seat after 2026 is 2028 (Class III; its other seat,
+    # Class I, isn't up again until 2030).
+    assert data["nextSenateElection"] == 2028
+
+
+def test_senate_race_present_leaves_next_senate_election_null(db_session):
+    """The field only answers a question the page is actually asking —
+    once a Senate race exists this cycle, there's nothing to explain."""
+    _race(db_session, "2026-SEN-GA", "GA", office="S")
+    db_session.commit()
+
+    data = _body(elections.state_ballot("GA", db_session))
+    assert data["nextSenateElection"] is None
+
+
+def test_senate_race_missing_but_state_is_up_this_cycle_stays_null(db_session):
+    """GA IS Class II — up in 2026 — but its Race row hasn't synced (a
+    real pipeline-lag failure mode this codebase has hit before). Must
+    NOT claim a fabricated "next election" year here: that would tell a
+    voter their real, on-the-ballot Senate race isn't up until later.
+    Empty senateRaces alone isn't enough to explain — the calendar has to
+    actually agree the seat isn't up this cycle."""
     _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
     db_session.commit()
 
     data = _body(elections.state_ballot("GA", db_session))
     assert data["senateRaces"] == []
-    assert len(data["houseRaces"]) == 1
+    assert data["nextSenateElection"] is None
 
 
 def test_candidate_list_is_not_truncated_to_top_two(db_session):

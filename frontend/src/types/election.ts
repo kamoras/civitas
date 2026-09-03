@@ -195,6 +195,14 @@ export interface StateBallot {
    * state, never a fabricated 0. */
   statePvi: number | null;
   senateRaces: RaceWithCandidates[];
+  /** Only set (and only meaningful) when senateRaces is empty — the
+   * Senate's three-class rotation (U.S. Const. art. I §3) means most
+   * states have no regular Senate race most cycles, and a reader who
+   * doesn't already know that can't tell "not up until later" from
+   * "the data is missing" from an empty section alone. Null once
+   * senateRaces is non-empty, and null for a jurisdiction with no
+   * Senate seats at all (DC). */
+  nextSenateElection: number | null;
   houseRaces: RaceWithCandidates[];
   /** Every race's news/Bluesky coverage in this state, newest first,
    * deduplicated by url and capped to a teaser count (see backend's

@@ -18,6 +18,8 @@ from app.election_calendar import (
     CLASS_II_STATES,
     CLASS_III_STATES,
     next_election_day,
+    next_senate_election_year,
+    seats_up_for_year,
 )
 from app.http_client import make_async_client
 from app.models import (
@@ -458,6 +460,22 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         "primaryDate": primary_date(state, cycle),
         "statePvi": state_pvi.get(state),
         "senateRaces": senate_races,
+        # Only meaningful (and only computed) when this state's seat
+        # genuinely ISN'T up this cycle — gated on the calendar
+        # (seats_up_for_year), not merely on senate_races being empty.
+        # Those are different claims: a state whose class IS up this
+        # cycle but whose Race row simply hasn't synced yet (a real,
+        # previously-seen pipeline-lag failure mode) would otherwise get
+        # a confidently wrong "next election isn't until [later year]"
+        # here — the same confirmed_none-vs-not_yet_covered distinction
+        # measureCoverage below exists to preserve, just for Senate.
+        # Null once senateRaces is non-empty (nothing to explain), and
+        # null for a jurisdiction with no Senate seats at all (DC).
+        "nextSenateElection": (
+            next_senate_election_year(state, cycle)
+            if not senate_races and state not in seats_up_for_year(cycle)
+            else None
+        ),
         "houseRaces": house_races,
         "coverage": _state_coverage(db, races),
         "measures": [_measure_json(m) for m in measures],
