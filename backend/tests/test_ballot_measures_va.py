@@ -37,10 +37,17 @@ class TestParseDocument:
         assert parsed["number"] == "1"
         assert parsed["title"] == "Fundamental right to reproductive freedom"
         assert parsed["origin"] == "Virginia General Assembly"
+        assert parsed["title_authority"] == "Virginia General Assembly"
         assert parsed["official_summary"].startswith(
             "Currently, the Virginia Constitution does not explicitly provide"
         )
-        assert "Ballot question: Should the Constitution of Virginia be amended" in parsed["official_summary"]
+        # Present Law flows straight into Proposed Amendment with the
+        # heading label itself dropped — not fused mid-sentence, and the
+        # separate BALLOT QUESTION section is never appended (that would
+        # be inserting unsourced connective text — see module docstring).
+        assert "Proposed Amendment" not in parsed["official_summary"]
+        assert "The proposed amendment would add to the Virginia Constitution" in parsed["official_summary"]
+        assert "Ballot question:" not in parsed["official_summary"]
         # No framing or fiscal data is published in this document — never
         # inferred from the question's own phrasing.
         assert parsed["yes_means"] is None
@@ -59,6 +66,11 @@ class TestParseDocument:
 
     def test_unrecognized_shape_returns_none(self):
         assert va.parse_document("Some unrelated PDF text with no matching sections.", "9") is None
+
+    def test_url_slug_disagreeing_with_the_pdf_s_own_heading_returns_none(self):
+        # Real fixture "1"'s document says "QUESTION 1" throughout — feed
+        # it in as if the index page's URL slug called it question 2.
+        assert va.parse_document(FIXTURE["1"], "2") is None
 
 
 class TestEnglishPdfUrl:
@@ -126,7 +138,11 @@ class TestFetchMeasures:
 
         assert await va.fetch_measures(None, 2026) == []
 
-    async def test_one_question_failing_does_not_drop_the_others(self, monkeypatch):
+    async def test_one_question_failing_fails_the_whole_fetch(self, monkeypatch):
+        # A question the index page names but that fails at a later step
+        # must NOT silently produce a shorter, still-"successful" list —
+        # that would get cached as if it were the complete ballot for 72h
+        # with no signal anything was missing (see module docstring).
         async def fake_get_text(client, url, label):
             if url == va._INDEX_URL:
                 return _INDEX_HTML
@@ -147,6 +163,34 @@ class TestFetchMeasures:
         monkeypatch.setattr(va, "_get_bytes", fake_get_bytes)
         monkeypatch.setattr(va, "_extract_text", lambda raw: FIXTURE[raw.decode().split(":")[1]])
 
+        assert await va.fetch_measures(None, 2026) is None
+
+    async def test_duplicate_index_link_keeps_the_first_and_warns(self, monkeypatch):
+        duplicate_index_html = _INDEX_HTML + (
+            '\n<a href="/election-law/proposed-constitutional-amendment-question-1/">'
+            "Question 1 (again, different URL)</a>"
+        )
+
+        async def fake_get_text(client, url, label):
+            if url == va._INDEX_URL:
+                return duplicate_index_html
+            for n in ("1", "2", "3"):
+                if f"question-{n}/" in url:
+                    return _QUESTION_PAGE_HTML.format(n=n)
+            raise AssertionError(f"unexpected URL {url}")
+
+        async def fake_get_bytes(client, url, label):
+            for n in ("1", "2", "3"):
+                if f"Q{n}-Topic.pdf" in url:
+                    return f"FIXTURE:{n}".encode()
+            raise AssertionError(f"unexpected URL {url}")
+
+        monkeypatch.setattr(va, "_get_text", fake_get_text)
+        monkeypatch.setattr(va, "_get_bytes", fake_get_bytes)
+        monkeypatch.setattr(va, "_extract_text", lambda raw: FIXTURE[raw.decode().split(":")[1]])
+
         results = await va.fetch_measures(None, 2026)
 
-        assert [parsed["number"] for parsed, _url in results] == ["1", "3"]
+        # Same duplicate URL both times -> not treated as a real conflict,
+        # question 1 still resolves once, not twice.
+        assert [parsed["number"] for parsed, _url in results] == ["1", "2", "3"]
