@@ -316,6 +316,26 @@
       },
       "description": "Official statewide totals workbook, discovered live 2026-08-15 through the portal's own API rather than any hardcoded path: jurisdictions/Georgia lists every election (publicElectionId 'GeneralPrimary51926' for the 2026-05-19 General Primary) plus the portal id, the election document names its report blobs, and the blob GUID — which changes on every republish — is read each run. 30 federal contests. Georgia nominates on a majority, so runoff_threshold_pct is 50 AND the 2026-06-16 General Primary Runoff is fetched as a second stage that overrides the primary for every race it decides; without that merge the runoff seats would stay permanently unconfirmed. exclude_choices drops the per-contest 'Total Votes' summary row, which sits in the same shape as a candidate and would otherwise double the denominator and win uncontested races outright."
     },
+    "NM": {
+      "source_name": "New Mexico Secretary of State (official election results portal)",
+      "strategy": "tabular",
+      "runoff_threshold_pct": null,
+      "discovery": {
+        "mode": "direct_url",
+        "url": "https://electionresults.sos.nm.gov/resultsCSV.aspx?text=All&type=FED&map=CTY",
+        "date_from_calendar": true,
+        "require_official": true,
+        "settle_days": 21
+      },
+      "format": {
+        "delimiter": ",",
+        "contest_column": ["RaceName", "AreaNum", "PartyCode"],
+        "choice_column": "CandidateName",
+        "party_column": "PartyCode",
+        "votes_column": "CandidateVotes"
+      },
+      "description": "Statewide CSV export off the SOS's own ASP.NET results portal (electionresults.sos.nm.gov), reached with no login, no session and no bot-detection friction — verified both via a real browser session and a plain unauthenticated server-side fetch on 2026-09-03. The URL carries no election id or date: it always serves whichever election is currently featured, which is exactly what makes it safe to leave unhardcoded across cycles. type=FED already scopes the export to the state's 4 federal contests (Senate + 3 House districts), so nothing else needs filtering out. RaceName alone doesn't carry the House district ('United States Representative', no number) — AreaNum does ('DISTRICT 1') — nor does either column carry the party on its own, so the contest key joins all three; without PartyCode a district's Democratic and Republican primaries would tally as ONE race and only the higher-turnout party's candidate would ever be picked (New Mexico's real 2026 primary had 574k Democratic ballots against 444k Republican, so every Republican nominee would have been silently dropped). Joining AreaNum in is also what lets parse_office's own District-number matching resolve the seat with no house_from_columns spec needed. The file carries no date or certification flag of its own, so held comes from the national FEC calendar (date_from_calendar) and require_official/settle_days gate on that: New Mexico is a runoff-free plurality state (NM Const. art. VII § 5; primary runoffs are constitutionally barred) and certified this cycle's primary in exactly 21 days (held 2026-06-02, State Canvass Board certification 2026-06-23), so settle_days matches the state's own real turnaround. Verified live against the certified 2026-06-02 primary: Ben Ray Lujan's Senate renomination, and Melanie Stansbury (NM-01), Gabe Vasquez (NM-02) and Teresa Leger Fernandez (NM-03) each renominated on the Democratic side, plus a Republican Senate write-in nominee (surname parsing strips the '(write in)' annotation the same way Georgia's incumbency markers are stripped)."
+    },
     "NC": {
       "source_name": "North Carolina State Board of Elections (public results export)",
       "strategy": "tabular",

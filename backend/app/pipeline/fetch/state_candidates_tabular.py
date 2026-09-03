@@ -336,7 +336,11 @@ async def _discover_urls(
                 return []
             url = url.replace("{primary_date_compact}", held.replace("-", ""))
             url = url.replace("{primary_date}", held)
-        return [_stage(url, held=held)]
+        # A stable URL that always serves whichever election is current
+        # (New Mexico's) carries no date of its own either — same problem
+        # landing_page solves with _calendar_date(), so the same fallback
+        # applies here.
+        return [_stage(url, held=held or _calendar_date())]
 
     if mode == "s3_listing":
         bucket = (discovery.get("bucket_url") or "").rstrip("/")
