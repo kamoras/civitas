@@ -193,6 +193,93 @@ class TestFetchConfirmedCandidates:
         assert await cl.fetch_confirmed_candidates(None, 2026, "CO", {}) is None
 
 
+def _wv_contests() -> list[dict]:
+    path = os.path.join(os.path.dirname(__file__), "fixtures_wv_clarity_summary.json")
+    with open(path, encoding="utf-8") as fh:
+        return json.load(fh)["Contests"]
+
+
+_WV_DISCOVERY = {
+    "mode": "landing_page",
+    "page_url": "https://sos.wv.gov/elections",
+    "link_regex": r"results\.enr\.clarityelections\.com/WV/(\d+)",
+}
+
+
+class TestDiscoverElectionId:
+    """West Virginia's own copy of elections.json is empty even though its
+    real results are live — verified 2026-09-03 — so it discovers its EID
+    off the link its own elections page keeps current instead."""
+
+    @pytest.mark.asyncio
+    async def test_landing_page_mode_extracts_the_eid(self, monkeypatch):
+        async def fake_get(client, url, label):
+            assert url == "https://sos.wv.gov/elections"
+            return _Resp(text='<a href="https://results.enr.clarityelections.com/WV/126209">2026</a>')
+
+        monkeypatch.setattr(cl, "_get", fake_get)
+        eid = await cl._discover_election_id(None, "WV", 2026, _WV_DISCOVERY)
+        assert eid == "126209"
+
+    @pytest.mark.asyncio
+    async def test_no_matching_link_returns_none(self, monkeypatch):
+        async def fake_get(client, url, label):
+            return _Resp(text="<html>nothing here</html>")
+
+        monkeypatch.setattr(cl, "_get", fake_get)
+        assert await cl._discover_election_id(None, "WV", 2026, _WV_DISCOVERY) is None
+
+    @pytest.mark.asyncio
+    async def test_page_fetch_failure_returns_none(self, monkeypatch):
+        async def fake_get(client, url, label):
+            return None
+
+        monkeypatch.setattr(cl, "_get", fake_get)
+        assert await cl._discover_election_id(None, "WV", 2026, _WV_DISCOVERY) is None
+
+    @pytest.mark.asyncio
+    async def test_no_discovery_config_falls_back_to_elections_json_unchanged(self, monkeypatch):
+        # Regression guard: a state with no discovery block (every
+        # existing Clarity state) must keep using elections.json exactly
+        # as before this landing_page mode was added.
+        async def fake_get(client, url, label):
+            assert url.endswith("elections.json")
+            return _Resp(json_body=[
+                {"EID": "126592", "ElectionName": "2026 Primary",
+                 "Date": "6/30/2026 12:00:00 AM"},
+            ])
+
+        monkeypatch.setattr(cl, "_get", fake_get)
+        assert await cl._discover_election_id(None, "CO", 2026, {}) == "126592"
+
+
+class TestFetchConfirmedCandidatesLandingPageDiscovery:
+    """End-to-end over the real West Virginia fixture, discovered via the
+    landing_page mode rather than elections.json."""
+
+    @pytest.mark.asyncio
+    async def test_real_wv_field_resolves_real_winners(self, monkeypatch):
+        async def fake_get(client, url, label):
+            if url == "https://sos.wv.gov/elections":
+                return _Resp(text='<a href="https://results.enr.clarityelections.com/WV/126209">2026</a>')
+            if url.endswith("current_ver.txt"):
+                return _Resp(text="375698")
+            return _Resp(json_body={"Contests": _wv_contests()})
+
+        monkeypatch.setattr(cl, "_get", fake_get)
+        source = {"runoff_threshold_pct": None, "discovery": _WV_DISCOVERY}
+        records = await cl.fetch_confirmed_candidates(None, 2026, "WV", source)
+
+        assert {"office": "S", "district": None, "party": "R", "last_name": "CAPITO"} in records
+        assert {"office": "S", "district": None, "party": "D", "last_name": "ANDERSON"} in records
+        assert {"office": "H", "district": 1, "party": "D", "last_name": "GEORGE"} in records
+        # A candidate with an Mc-surname (McKINNEY) is a real loser in this
+        # field and must not corrupt the winner pick.
+        assert not any(r["last_name"] == "McKINNEY" for r in records)
+        # The State Senator control contest must never appear.
+        assert all(r["office"] in ("S", "H") for r in records)
+
+
 class _Resp:
     def __init__(self, json_body=None, text=""):
         self._json = json_body
