@@ -29,13 +29,20 @@ function issue(overrides: Partial<ActionIssue> = {}): ActionIssue {
   };
 }
 
+// Alt text is always populated, no alt="" case at all — a prior version
+// suppressed it whenever an equivalent visible caption was shown (WCAG
+// technically permits this), but that conditional logic already shipped
+// one real bug (a credit-only figcaption, which is attribution rather
+// than a description, still suppressed alt and silently dropped the
+// image for screen-reader users). Always-populate can't have that
+// failure mode.
 describe("IssueImage", () => {
   it("renders nothing when there is no image", () => {
     const { container } = render(<IssueImage issue={issue()} />);
     expect(container.firstChild).toBeNull();
   });
 
-  it("renders the image with an empty alt when a visible caption is shown", () => {
+  it("uses the source caption as alt text when one is present", () => {
     const { container } = render(
       <IssueImage
         issue={issue({
@@ -45,32 +52,25 @@ describe("IssueImage", () => {
         })}
       />
     );
-    // alt="" removes the image from the accessibility tree's img role
-    // entirely (confirmed by this query failing with getByRole) — exactly
-    // the intended behavior for an image with an equivalent visible
-    // caption, so this asserts on the raw element instead.
-    const img = container.querySelector("img");
-    expect(img).toHaveAttribute("alt", "");
+    expect(container.querySelector("img")).toHaveAttribute("alt", "A member of Congress speaks.");
+    // The same caption is still shown visibly too, alongside credit —
+    // a deliberate duplication for sighted readers, not an oversight.
     expect(screen.getByText(/A member of Congress speaks\./)).toBeInTheDocument();
     expect(screen.getByText(/Tom Williams\/CQ Roll Call/)).toBeInTheDocument();
   });
 
-  it("omits the figcaption and falls back to the issue title for alt when there is no caption or credit", () => {
+  it("falls back to the issue title for alt when there is no caption or credit", () => {
     const { container } = render(
       <IssueImage issue={issue({ imageUrl: "https://rollcall.com/img.jpg", title: "A story" })} />
     );
     expect(container.querySelector("figcaption")).toBeNull();
-    // No visible caption exists to stand in for a description, so the
-    // image must not be alt="" — that would silently drop it for
-    // screen-reader users entirely.
     expect(container.querySelector("img")).toHaveAttribute("alt", "A story");
   });
 
   it("falls back to the issue title for alt when there is credit but no caption", () => {
     // media:text (caption) and mi:licensorName (credit) are parsed
-    // independently from the feed — a real item can carry one without the
-    // other. A credit-only figcaption is attribution, not a description,
-    // so it must not suppress the image's alt text.
+    // independently from the feed — a real item can carry one without
+    // the other.
     const { container } = render(
       <IssueImage
         issue={issue({
@@ -84,20 +84,7 @@ describe("IssueImage", () => {
     expect(container.querySelector("img")).toHaveAttribute("alt", "A story");
   });
 
-  it("uses an empty alt when there is a caption but no credit", () => {
-    const { container } = render(
-      <IssueImage
-        issue={issue({
-          imageUrl: "https://rollcall.com/img.jpg",
-          imageAlt: "A member of Congress speaks.",
-        })}
-      />
-    );
-    expect(screen.getByText(/A member of Congress speaks\./)).toBeInTheDocument();
-    expect(container.querySelector("img")).toHaveAttribute("alt", "");
-  });
-
-  it("renders a bare thumbnail with no caption at the thumbnail size", () => {
+  it("renders a thumbnail with real alt text, no caption", () => {
     const { container } = render(
       <IssueImage
         issue={issue({
@@ -109,6 +96,16 @@ describe("IssueImage", () => {
       />
     );
     expect(container.querySelector("figcaption")).toBeNull();
-    expect(container.querySelector("img")).toHaveAttribute("alt", "");
+    expect(container.querySelector("img")).toHaveAttribute("alt", "A member of Congress speaks.");
+  });
+
+  it("falls back to the issue title for a thumbnail with no caption", () => {
+    const { container } = render(
+      <IssueImage
+        issue={issue({ imageUrl: "https://rollcall.com/img.jpg", title: "A story" })}
+        size="thumbnail"
+      />
+    );
+    expect(container.querySelector("img")).toHaveAttribute("alt", "A story");
   });
 });
