@@ -190,6 +190,10 @@ async def discover_dates(
     if strategy == "tx_civix":
         return await _civix_dates(client, cycle, st)
 
+    if strategy == "canvass_xml":
+        from app.pipeline.fetch.state_candidates_canvass_xml import discover_primary_date
+        return await discover_primary_date(client, cycle, st, source)
+
     if strategy == "tabular":
         stages = await _discover_urls(client, st, cycle, source.get("discovery") or {})
         dated = [s for s in stages if s.get("held")]

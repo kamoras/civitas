@@ -1089,10 +1089,19 @@ export interface AdminPipelineStatus {
   houseIsRunning?: boolean;
   stockTradesIsRunning?: boolean;
   supplementaryIsRunning?: boolean;
+  electionIsRunning?: boolean;
   lastRun?: PipelineRunInfo;
   houseLastRun?: HouseRunInfo;
   stockTradesLastRun?: StockTradesRunInfo;
   supplementaryLastRun?: SupplementaryRunInfo;
+  // Same shape as the Senate pipeline's own lastRun (PipelineRunInfo
+  // already declares candidatesSynced/financialsRefreshed/
+  // coverageItemsIngested/progressSteps for exactly this run) — this was
+  // returned by the backend and typed for the shared history table, but
+  // never had its own live-progress section here (2026-09 gap: the
+  // confirmed-candidates step's per-state detail, and the weekly source
+  // crawler's findings, were invisible outside the server log).
+  electionLastRun?: PipelineRunInfo;
   actionRefresh?: ActionRefreshState;
 }
 

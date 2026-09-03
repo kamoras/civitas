@@ -1,0 +1,184 @@
+<?xml version='1.0' encoding='utf-8'?>
+<electionResult>
+  <electionInformation>
+    <resultsTimestamp>2026-08-05T14:22:24.35</resultsTimestamp>
+    <electionName>2026 Primary Election</electionName>
+    <electionDate>2026-07-21</electionDate>
+    <fileId>13065</fileId>
+  </electionInformation>
+  <voterTurnout>
+    <jurisdictions>
+      <jurisdiction key="0" name="State" totalVoters="4306554" ballotsCast="1181331" voterTurnout="27.97" precinctsParticipating="1786" precinctsReported="1786" precinctsReportingPercent="100.00" earlyBallotsRemaining="5" provisionalBallotsRemaining="0" ballotsReadyToProcess="0" ballotsRemaining="0" ballotProcessingCompletedPercentage="0.00" />
+    </jurisdictions>
+  </voterTurnout>
+  <contests>
+    <contest key="16058" contestLongName="U.S. Representative in Congress - District No. 1 (DEM)" districtKey="3" districtName="Congressional District 1" numberToElect="1" termYears="2" isQuestion="false" countiesParticipating="1" countiesReported="15" precinctsParticipating="210" precinctsReported="210" precinctsReportingPercent="100.00">
+      <participatingJurisdictions>
+        <jurisdiction key="0" name="State" precinctsParticipating="210" precinctsReported="210" precinctsReportingPercent="100.00" />
+        <jurisdiction key="8" name="Maricopa" precinctsParticipating="210" precinctsReported="210" precinctsReportingPercent="100.00" />
+      </participatingJurisdictions>
+      <choices>
+        <choice key="30252" choiceName="Galán-Woods, Marlene" partyKey="3" party="DEM" totalVotes="25267" isWriteIn="false">
+          <jurisdictions>
+            <jurisdiction key="0" name="State" votes="25267">
+              <voteTypes>
+                <voteType voteTypeName="Polling Place" votes="1875" />
+                <voteType voteTypeName="Early Ballots" votes="23384" />
+                <voteType voteTypeName="Provisional Ballots" votes="8" />
+              </voteTypes>
+            </jurisdiction>
+            <jurisdiction key="8" name="Maricopa" votes="25267">
+              <voteTypes>
+                <voteType voteTypeName="Polling Place" votes="1875" />
+                <voteType voteTypeName="Early Ballots" votes="23384" />
+                <voteType voteTypeName="Provisional Ballots" votes="8" />
+              </voteTypes>
+            </jurisdiction>
+          </jurisdictions>
+        </choice>
+        <choice key="30142" choiceName="McCartney, Rick" partyKey="3" party="DEM" totalVotes="6248" isWriteIn="false">
+          <jurisdictions>
+            <jurisdiction key="0" name="State" votes="6248">
+              <voteTypes>
+                <voteType voteTypeName="Polling Place" votes="369" />
+                <voteType voteTypeName="Early Ballots" votes="5877" />
+                <voteType voteTypeName="Provisional Ballots" votes="2" />
+              </voteTypes>
+            </jurisdiction>
+            <jurisdiction key="8" name="Maricopa" votes="6248">
+              <voteTypes>
+                <voteType voteTypeName="Polling Place" votes="369" />
+                <voteType voteTypeName="Early Ballots" votes="5877" />
+                <voteType voteTypeName="Provisional Ballots" votes="2" />
+              </voteTypes>
+            </jurisdiction>
+          </jurisdictions>
+        </choice>
+        <choice key="30251" choiceName="Shah, Amish" partyKey="3" party="DEM" totalVotes="29002" isWriteIn="false">
+          <jurisdictions>
+            <jurisdiction key="0" name="State" votes="29002">
+              <voteTypes>
+                <voteType voteTypeName="Polling Place" votes="1169" />
+                <voteType voteTypeName="Early Ballots" votes="27828" />
+                <voteType voteTypeName="Provisional Ballots" votes="5" />
+              </voteTypes>
+            </jurisdiction>
+            <jurisdiction key="8" name="Maricopa" votes="29002">
+              <voteTypes>
+                <voteType voteTypeName="Polling Place" votes="1169" />
+                <voteType voteTypeName="Early Ballots" votes="27828" />
+                <voteType voteTypeName="Provisional Ballots" votes="5" />
+              </voteTypes>
+            </jurisdiction>
+          </jurisdictions>
+        </choice>
+        <choice key="30249" choiceName="Treble, Jonathan" partyKey="3" party="DEM" totalVotes="13006" isWriteIn="false">
+          <jurisdictions>
+            <jurisdiction key="0" name="State" votes="13006">
+              <voteTypes>
+                <voteType voteTypeName="Polling Place" votes="760" />
+                <voteType voteTypeName="Early Ballots" votes="12241" />
+                <voteType voteTypeName="Provisional Ballots" votes="5" />
+              </voteTypes>
+            </jurisdiction>
+            <jurisdiction key="8" name="Maricopa" votes="13006">
+              <voteTypes>
+                <voteType voteTypeName="Polling Place" votes="760" />
+                <voteType voteTypeName="Early Ballots" votes="12241" />
+                <voteType voteTypeName="Provisional Ballots" votes="5" />
+              </voteTypes>
+            </jurisdiction>
+          </jurisdictions>
+        </choice>
+      </choices>
+    </contest>
+    <contest key="16286" contestLongName="U.S. Representative in Congress - District No. 1 (REP)" districtKey="3" districtName="Congressional District 1" numberToElect="1" termYears="2" isQuestion="false" countiesParticipating="1" countiesReported="15" precinctsParticipating="210" precinctsReported="210" precinctsReportingPercent="100.00">
+      <participatingJurisdictions>
+        <jurisdiction key="0" name="State" precinctsParticipating="210" precinctsReported="210" precinctsReportingPercent="100.00" />
+        <jurisdiction key="8" name="Maricopa" precinctsParticipating="210" precinctsReported="210" precinctsReportingPercent="100.00" />
+      </participatingJurisdictions>
+      <choices>
+        <choice key="30246" choiceName="Chaplik, Joseph" partyKey="9" party="REP" totalVotes="31347" isWriteIn="false">
+          <jurisdictions>
+            <jurisdiction key="0" name="State" votes="31347">
+              <voteTypes>
+                <voteType voteTypeName="Polling Place" votes="3570" />
+                <voteType voteTypeName="Early Ballots" votes="27768" />
+                <voteType voteTypeName="Provisional Ballots" votes="9" />
+              </voteTypes>
+            </jurisdiction>
+            <jurisdiction key="8" name="Maricopa" votes="31347">
+              <voteTypes>
+                <voteType voteTypeName="Polling Place" votes="3570" />
+                <voteType voteTypeName="Early Ballots" votes="27768" />
+                <voteType voteTypeName="Provisional Ballots" votes="9" />
+              </voteTypes>
+            </jurisdiction>
+          </jurisdictions>
+        </choice>
+        <choice key="29960" choiceName="Feely, Thomas 'Jay', IV" partyKey="9" party="REP" totalVotes="43709" isWriteIn="false">
+          <jurisdictions>
+            <jurisdiction key="0" name="State" votes="43709">
+              <voteTypes>
+                <voteType voteTypeName="Polling Place" votes="4900" />
+                <voteType voteTypeName="Early Ballots" votes="38796" />
+                <voteType voteTypeName="Provisional Ballots" votes="13" />
+              </voteTypes>
+            </jurisdiction>
+            <jurisdiction key="8" name="Maricopa" votes="43709">
+              <voteTypes>
+                <voteType voteTypeName="Polling Place" votes="4900" />
+                <voteType voteTypeName="Early Ballots" votes="38796" />
+                <voteType voteTypeName="Provisional Ballots" votes="13" />
+              </voteTypes>
+            </jurisdiction>
+          </jurisdictions>
+        </choice>
+        <choice key="29733" choiceName="Trobough, John" partyKey="9" party="REP" totalVotes="12718" isWriteIn="false">
+          <jurisdictions>
+            <jurisdiction key="0" name="State" votes="12718">
+              <voteTypes>
+                <voteType voteTypeName="Polling Place" votes="1001" />
+                <voteType voteTypeName="Early Ballots" votes="11714" />
+                <voteType voteTypeName="Provisional Ballots" votes="3" />
+              </voteTypes>
+            </jurisdiction>
+            <jurisdiction key="8" name="Maricopa" votes="12718">
+              <voteTypes>
+                <voteType voteTypeName="Polling Place" votes="1001" />
+                <voteType voteTypeName="Early Ballots" votes="11714" />
+                <voteType voteTypeName="Provisional Ballots" votes="3" />
+              </voteTypes>
+            </jurisdiction>
+          </jurisdictions>
+        </choice>
+      </choices>
+    </contest>
+    <contest key="16136" contestLongName="U.S. Representative in Congress - District No. 3 (GRN)" districtKey="5" districtName="Congressional District 3" numberToElect="1" termYears="2" isQuestion="false" countiesParticipating="1" countiesReported="15" precinctsParticipating="135" precinctsReported="135" precinctsReportingPercent="100.00">
+      <participatingJurisdictions>
+        <jurisdiction key="0" name="State" precinctsParticipating="135" precinctsReported="135" precinctsReportingPercent="100.00" />
+        <jurisdiction key="8" name="Maricopa" precinctsParticipating="135" precinctsReported="135" precinctsReportingPercent="100.00" />
+      </participatingJurisdictions>
+      <choices>
+        <choice key="31057" choiceName="Redkey, David (Write-In)" partyKey="4" party="GRN" totalVotes="5" isWriteIn="true">
+          <jurisdictions>
+            <jurisdiction key="0" name="State" votes="5">
+              <voteTypes>
+                <voteType voteTypeName="Polling Place" votes="0" />
+                <voteType voteTypeName="Early Ballots" votes="0" />
+                <voteType voteTypeName="Provisional Ballots" votes="0" />
+              </voteTypes>
+            </jurisdiction>
+            <jurisdiction key="8" name="Maricopa" votes="5">
+              <voteTypes>
+                <voteType voteTypeName="Polling Place" votes="0" />
+                <voteType voteTypeName="Early Ballots" votes="0" />
+                <voteType voteTypeName="Provisional Ballots" votes="0" />
+              </voteTypes>
+            </jurisdiction>
+          </jurisdictions>
+        </choice>
+      </choices>
+    </contest>
+  </contests>
+</electionResult>

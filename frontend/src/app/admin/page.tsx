@@ -2074,6 +2074,24 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
           </div>
         )}
 
+        {pipelineStatus?.electionIsRunning && pipelineStatus.electionLastRun && (
+          <div className="mb-6">
+            <PipelineProgressBar
+              title="ELECTION PIPELINE ACTIVE"
+              isRunning={pipelineStatus.electionIsRunning}
+              run={pipelineStatus.electionLastRun}
+              showPhaseBreadcrumb={false}
+              statsRow={
+                <>
+                  <span>Candidates: {pipelineStatus.electionLastRun.candidatesSynced}</span>
+                  <span>Financials: {pipelineStatus.electionLastRun.financialsRefreshed}</span>
+                  <span>Coverage: {pipelineStatus.electionLastRun.coverageItemsIngested}</span>
+                </>
+              }
+            />
+          </div>
+        )}
+
         {/* Uptime Tracker */}
         <UptimeTracker uptime={d?.uptime} hostUptime={d?.host?.uptimeSeconds} />
 
@@ -2783,6 +2801,29 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
                 <div>
                   <span className="text-ink-lo text-xs block">PRESIDENTS</span>
                   <span>{pipelineStatus.supplementaryLastRun.presidentsUpdated}</span>
+                </div>
+              </>
+            )
+          }
+        />
+
+        <PipelineRunDetailCard
+          title="last_run_detail_election"
+          run={pipelineStatus?.electionLastRun}
+          extraStats={
+            pipelineStatus?.electionLastRun && (
+              <>
+                <div>
+                  <span className="text-ink-lo text-xs block">CANDIDATES SYNCED</span>
+                  <span>{pipelineStatus.electionLastRun.candidatesSynced}</span>
+                </div>
+                <div>
+                  <span className="text-ink-lo text-xs block">FINANCIALS</span>
+                  <span>{pipelineStatus.electionLastRun.financialsRefreshed}</span>
+                </div>
+                <div>
+                  <span className="text-ink-lo text-xs block">COVERAGE</span>
+                  <span>{pipelineStatus.electionLastRun.coverageItemsIngested}</span>
                 </div>
               </>
             )

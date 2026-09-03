@@ -753,6 +753,7 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                 # self-gating shape as ops_alerts' weekly checks. Runs
                 # BEFORE the sync so anything it proves out contributes the
                 # same night.
+                adopted: dict[str, str] = {}
                 if utcnow().weekday() == 6:
                     leads = await crawl_for_new_sources(db, client, cycle)
                     adopted = {s: r for s, r in leads.items() if r.startswith("adopted")}
@@ -773,9 +774,20 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                 filing_result = await sync_ballot_filings(db, client, cycle)
                 if filing_result:
                     logger.info("Ballot filings: %s", filing_result)
-                progress.complete(
-                    "confirmed_candidates", detail=f"{confirmed_total} confirmed",
+
+                # The admin dashboard's only window into this phase beyond
+                # a bare total — which states are actually configured, and
+                # whether this week's crawl (Sundays only) found anything
+                # new — was previously log-only (2026-09 gap: an admin
+                # reading the dashboard had no way to tell "16 states
+                # confirmed" from "every state failed but one").
+                configured_states = sorted(
+                    s for s, r in confirm_result.items() if r["status"] == "ok"
                 )
+                detail = f"{confirmed_total} confirmed across {len(configured_states)} states"
+                if adopted:
+                    detail += f"; crawler adopted {len(adopted)} this week: {', '.join(sorted(adopted))}"
+                progress.complete("confirmed_candidates", detail=detail)
             except Exception:
                 db.rollback()
                 logger.exception("Confirmed-candidate sync failed — continuing")

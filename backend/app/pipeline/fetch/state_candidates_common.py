@@ -35,9 +35,10 @@ _CHAMBER_HOUSE = (
     r"|(?:Representative\s+in\s+|\d+(?:st|nd|rd|th)\s+)Congress)"
 )
 # Both orders occur live: "District 5" (most states) and "5th District"
-# / "1ST CONGRESS" (Florida's and Illinois' own labels).
+# / "1ST CONGRESS" (Florida's and Illinois' own labels). Arizona's own
+# canvass export inserts "No." ("District No.  1", double space and all).
 _HOUSE_DISTRICT_RE = re.compile(
-    rf"{_CHAMBER_HOUSE}.*?District\s+0*(\d+)", re.IGNORECASE | re.DOTALL,
+    rf"{_CHAMBER_HOUSE}.*?District\s+(?:No\.?\s*)?0*(\d+)", re.IGNORECASE | re.DOTALL,
 )
 _HOUSE_ORDINAL_RE = re.compile(
     rf"(?:0*(\d+)(?:st|nd|rd|th)\s+(?:District|Congress)|{_CHAMBER_HOUSE}[^\d]*0*(\d+)(?:st|nd|rd|th))",
@@ -69,8 +70,10 @@ _PARTY_PATTERNS = [
     # FEC files their candidates as DEM.
     (re.compile(r"\b(?:democratic|democrat|dem|dfl|d-npl|dnl|npl)\b", re.IGNORECASE), "D"),
     (re.compile(r"\b(?:republican|rep|gop)\b", re.IGNORECASE), "R"),
-    (re.compile(r"\b(?:libertarian|lib)\b", re.IGNORECASE), "L"),
-    (re.compile(r"\b(?:green|gre)\b", re.IGNORECASE), "G"),
+    # Arizona's own 3-letter codes ("LBT", "GRN") don't share a root with
+    # "lib"/"gre" — verified live off its canvass export.
+    (re.compile(r"\b(?:libertarian|lib|lbt)\b", re.IGNORECASE), "L"),
+    (re.compile(r"\b(?:green|gre|grn)\b", re.IGNORECASE), "G"),
     (re.compile(r"\b(?:constitution|con|cst)\b", re.IGNORECASE), "C"),
 ]
 
