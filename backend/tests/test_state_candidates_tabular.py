@@ -1015,6 +1015,10 @@ class TestNewMexico:
         records = await tb.fetch_confirmed_candidates(
             None, 2026, "NM", {"format": self._FMT},
         )
+        # H2 distinct from H1/H3 only holds if AreaNum (not RaceName alone,
+        # which is identical across all three districts) resolved the
+        # seat; MARKER with no "(write in)" suffix only holds if the ballot
+        # annotation didn't leak into the surname.
         assert sorted(
             (r["office"], r["district"], r["party"], r["last_name"]) for r in records
         ) == [
@@ -1027,21 +1031,6 @@ class TestNewMexico:
             ("S", None, "D", "LUJAN"),
             ("S", None, "R", "MARKER"),
         ]
-
-    def test_house_district_comes_from_area_num_not_the_race_name(self):
-        """RaceName alone is just "United States Representative" for all
-        three districts — AreaNum is what disambiguates them, and joining
-        it into the contest key is what lets parse_office's own district
-        matching resolve it with no house_from_columns spec."""
-        rows = tb._rows(self._CSV, self._FMT)
-        tally = tb._tally(rows, self._FMT)
-        assert "United States Representative DISTRICT 2 REP" in tally
-
-    def test_a_write_in_nominees_ballot_annotation_is_not_part_of_the_surname(self):
-        rows = tb._rows(self._CSV, self._FMT)
-        tally = tb._tally(rows, self._FMT)
-        senate = tally["United States Senator REP"]
-        assert "LARRY E MARKER (write in)" in senate["votes"]
 
 
 class _Resp:
