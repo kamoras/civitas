@@ -41,6 +41,7 @@ import re
 import httpx
 import pdfplumber
 
+from app.pipeline.fetch.ballot_measure_pdf_geometry import rows as _clustered_rows
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import normalize_party, surname
 from app.pipeline.rate_limiter import RateLimiter
@@ -78,14 +79,14 @@ _DISTRICT_RE = re.compile(
 
 
 def _rows_by_top(words: list[dict]) -> list[list[dict]]:
-    """Words grouped by row (rounded `top`), in row order — this is a
-    clean, computer-generated tabular report (not narrative prose like
-    some states' guides), so simple top-rounding is enough; no baseline-
-    drift calibration needed."""
-    by_top: dict[int, list[dict]] = {}
-    for w in words:
-        by_top.setdefault(round(w["top"]), []).append(w)
-    return [by_top[t] for t in sorted(by_top)]
+    """Words grouped by visual row, top to bottom — delegates to the
+    shared proximity-based clustering (ballot_measure_pdf_geometry.rows),
+    not a naive round(top): that approach broke on a real document (MA's
+    Voter Information Guide) where same-line words carried `top` values
+    differing enough to round into two different buckets, splitting one
+    row into two."""
+    clustered = _clustered_rows(words)
+    return [clustered[row_id] for row_id in sorted(clustered)]
 
 
 def _parse_page(words: list[dict], office: str | None, district: int | None) -> tuple[list[dict], str | None, int | None]:
@@ -157,6 +158,16 @@ async def fetch_confirmed_candidates(
                 results.extend(page_results)
     except Exception:
         logger.exception("NJ certification PDF for %d failed to parse", year)
+        return None
+
+    if not results:
+        # The PDF fetched and opened fine but not one row matched the
+        # Name/Party column bands — almost certainly means NJ changed the
+        # document's layout, not that there are genuinely zero candidates
+        # for a Senate+House cycle. Reported as a failure (None), not an
+        # empty confirmed list, so it doesn't silently read as "0
+        # candidates this cycle" downstream.
+        logger.warning("NJ certification PDF for %d parsed no candidate rows", year)
         return None
 
     return results
