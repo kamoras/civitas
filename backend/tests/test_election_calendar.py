@@ -12,6 +12,7 @@ from app.election_calendar import (
     CLASS_II_STATES,
     CLASS_III_STATES,
     next_election_day,
+    next_senate_election_year,
     seats_up_for_year,
 )
 
@@ -67,6 +68,28 @@ class TestClassRosters:
         _sync_roster's special-election derivation rests on."""
         assert "FL" not in CLASS_II_STATES
         assert "OH" not in CLASS_II_STATES
+
+
+class TestNextSenateElectionYear:
+    def test_state_not_up_in_2026_gets_its_real_next_year(self):
+        # AZ is Class I and III, not Class II — not up in 2026. Its
+        # soonest regular seat after 2026 is the Class III rotation
+        # (2022, 2028, ...), not the later Class I one (2018, ..., 2030).
+        assert next_senate_election_year("AZ", 2026) == 2028
+
+    def test_state_up_this_cycle_still_returns_its_OTHER_seat(self):
+        # GA is Class II (up in 2026) and Class III. Called with the
+        # current cycle year, this answers "when's the other one" — the
+        # caller only invokes it when THIS cycle's race is absent, but
+        # the function itself doesn't know that and shouldn't guess.
+        assert next_senate_election_year("GA", 2026) == 2028
+
+    def test_no_senate_seats_returns_none(self):
+        assert next_senate_election_year("DC", 2026) is None
+
+    def test_every_real_state_gets_an_answer(self):
+        for st in ALL_STATES:
+            assert next_senate_election_year(st, 2026) is not None, st
 
 
 class TestNextElectionDay:
