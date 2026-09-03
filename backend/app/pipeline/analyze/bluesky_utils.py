@@ -97,10 +97,18 @@ def publish_post(text: str, url: str, *, success_msg: str, error_context: str) -
         logger.debug("Bluesky credentials not set — skipping publish")
         return False
 
-    full_text = f"{text}\n\n{url}"
+    # A single space, not a blank line — confirmed live against NPR's own
+    # Bluesky posts (public.api.bsky.app getAuthorFeed), the account this
+    # was compared against: "...at age 53. n.pr/4h4XVR4", one space, no
+    # newline. Saves a character of the 300-char budget for content over
+    # the previous "\n\n" separator, though the real gap against an
+    # account like NPR is their own short-domain link shortener (n.pr,
+    # ~13 chars) vs. this platform's full civitas-research.org URL
+    # (~45 chars) — a separate, much bigger lever this doesn't address.
+    full_text = f"{text} {url}"
     if len(full_text) > BSKY_MAX_CHARS:
-        budget = BSKY_MAX_CHARS - len(url) - 2  # 2 for the \n\n separator
-        full_text = f"{truncate_on_boundary(text, budget)}\n\n{url}"
+        budget = BSKY_MAX_CHARS - len(url) - 1  # 1 for the space separator
+        full_text = f"{truncate_on_boundary(text, budget)} {url}"
 
     try:
         from atproto import Client, models  # imported here so a missing package only fails at post time
