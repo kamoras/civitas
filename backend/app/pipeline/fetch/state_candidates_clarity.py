@@ -127,14 +127,40 @@ async def _discover_election_id(
     whose `discovery.mode` is "landing_page" is read that way instead of
     via elections.json; every other state's behavior is unchanged."""
     if discovery.get("mode") == "landing_page":
-        resp = await _get(client, discovery["page_url"], f"{state} Clarity landing page")
+        page_url = discovery.get("page_url")
+        link_regex = discovery.get("link_regex")
+        if not page_url or not link_regex:
+            logger.warning("%s's landing_page discovery is missing page_url/link_regex", state)
+            return None
+        resp = await _get(client, page_url, f"{state} Clarity landing page")
         if resp is None:
             return None
-        m = re.search(discovery["link_regex"], resp.text)
-        if not m:
+        ids = {m.group(1) for m in re.finditer(link_regex, resp.text)}
+        if not ids:
+            # A page that answers 200 with none of its own links on it is
+            # usually a bot-manager challenge rather than a genuinely
+            # empty page — Minnesota's file host shows the identical
+            # symptom, and the retry succeeds once the challenge has set
+            # its cookie. One retry only: a truly empty page stays empty.
+            logger.info("%s's elections page had no results link — retrying once", state)
+            resp = await _get(client, page_url, f"{state} Clarity landing page (retry)") or resp
+            ids = {m.group(1) for m in re.finditer(link_regex, resp.text)}
+        if not ids:
             logger.warning("No Clarity results link found on %s's own elections page", state)
             return None
-        return m.group(1)
+        # Every DISTINCT id found, not just the first: this page carries
+        # no date to scope by (unlike elections.json's own Date field),
+        # so if it ever lists more than one election's link (an archived-
+        # results section added above the current one, say), there is no
+        # way to tell which is this cycle's without guessing — refuse
+        # rather than silently trust document order.
+        if len(ids) > 1:
+            logger.warning(
+                "%s's elections page lists %d different Clarity ids — refusing to guess which is current",
+                state, len(ids),
+            )
+            return None
+        return next(iter(ids))
 
     resp = await _get(client, f"{CLARITY_BASE}/{state}/elections.json", f"{state} Clarity elections")
     if resp is None:

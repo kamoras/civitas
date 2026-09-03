@@ -222,12 +222,80 @@ class TestDiscoverElectionId:
         assert eid == "126209"
 
     @pytest.mark.asyncio
+    async def test_missing_page_url_or_link_regex_returns_none_not_a_crash(self, monkeypatch):
+        # A future state's config with a typo'd/missing key must degrade
+        # gracefully, not raise a KeyError that takes down the whole sync.
+        async def fake_get(client, url, label):
+            raise AssertionError("should not fetch when config is incomplete")
+
+        monkeypatch.setattr(cl, "_get", fake_get)
+        assert await cl._discover_election_id(None, "WV", 2026, {"mode": "landing_page"}) is None
+        incomplete = {"mode": "landing_page", "page_url": "https://sos.wv.gov/elections"}
+        assert await cl._discover_election_id(None, "WV", 2026, incomplete) is None
+
+    @pytest.mark.asyncio
     async def test_no_matching_link_returns_none(self, monkeypatch):
         async def fake_get(client, url, label):
             return _Resp(text="<html>nothing here</html>")
 
         monkeypatch.setattr(cl, "_get", fake_get)
         assert await cl._discover_election_id(None, "WV", 2026, _WV_DISCOVERY) is None
+
+    @pytest.mark.asyncio
+    async def test_two_different_links_refuses_rather_than_guessing(self, monkeypatch):
+        # This page carries no date to scope by, unlike elections.json's
+        # own Date field -- if it ever lists an archived prior election's
+        # link alongside the current one, silently trusting document
+        # order could return a stale id with no error at all.
+        async def fake_get(client, url, label):
+            return _Resp(text=(
+                '<a href="https://results.enr.clarityelections.com/WV/119000">2024 archive</a>'
+                '<a href="https://results.enr.clarityelections.com/WV/126209">2026</a>'
+            ))
+
+        monkeypatch.setattr(cl, "_get", fake_get)
+        assert await cl._discover_election_id(None, "WV", 2026, _WV_DISCOVERY) is None
+
+    @pytest.mark.asyncio
+    async def test_same_link_repeated_is_not_treated_as_ambiguous(self, monkeypatch):
+        async def fake_get(client, url, label):
+            return _Resp(text=(
+                '<a href="https://results.enr.clarityelections.com/WV/126209">2026</a>'
+                '<a href="https://results.enr.clarityelections.com/WV/126209">same, again</a>'
+            ))
+
+        monkeypatch.setattr(cl, "_get", fake_get)
+        assert await cl._discover_election_id(None, "WV", 2026, _WV_DISCOVERY) == "126209"
+
+    @pytest.mark.asyncio
+    async def test_a_challenge_gated_empty_page_is_retried_once(self, monkeypatch):
+        # Same symptom Minnesota's file host shows: a 200 with none of
+        # the page's real links on it, usually a bot-manager challenge
+        # rather than a genuinely empty page.
+        calls = []
+
+        async def fake_get(client, url, label):
+            calls.append(url)
+            if len(calls) == 1:
+                return _Resp(text="<html>challenge page, no links yet</html>")
+            return _Resp(text='<a href="https://results.enr.clarityelections.com/WV/126209">2026</a>')
+
+        monkeypatch.setattr(cl, "_get", fake_get)
+        eid = await cl._discover_election_id(None, "WV", 2026, _WV_DISCOVERY)
+        assert eid == "126209"
+        assert len(calls) == 2
+
+    @pytest.mark.asyncio
+    async def test_a_genuinely_empty_page_is_not_retried_forever(self, monkeypatch):
+        calls = []
+
+        async def fake_get(client, url, label):
+            calls.append(url)
+            return _Resp(text="<html>truly nothing here</html>")
+
+        monkeypatch.setattr(cl, "_get", fake_get)
+        assert await cl._discover_election_id(None, "WV", 2026, _WV_DISCOVERY) is None
+        assert len(calls) == 2  # one retry, not an infinite loop
 
     @pytest.mark.asyncio
     async def test_page_fetch_failure_returns_none(self, monkeypatch):
