@@ -37,15 +37,14 @@ included the word "Other" (WENZEL's ballot-printed given name is
 as a distinct vote-total column anywhere in the document, only ever as
 an ordinary Title-Case header word).
 
-Never guessed: if a cluster doesn't resolve to EXACTLY one ALL-CAPS
-surname word, or the number of resolved candidate clusters doesn't
-match the number of real vote-total columns on that page (verified
-live on the real 2026 Democratic US Senate primary: 8 header names are
-printed for only 7 counted vote columns — one listed candidate
-received no tallied votes at all, most likely withdrawn, and nothing
-in the document says which — this strategy correctly refuses the whole
-contest rather than guess which name to drop), the whole contest is
-skipped rather than risk attributing real votes to the wrong name.
+Never guessed: if any one column's cluster doesn't resolve to EXACTLY
+one ALL-CAPS surname word — zero (a real given-name-only column would
+otherwise be silently skipped as if it had no candidate) or more than
+one (two real surnames landed in the same cluster) — the whole contest
+is skipped rather than risk attributing real votes to the wrong name.
+Every real contest examined resolved cleanly with this rule in place;
+nothing in the live document has yet exercised it, so it is validated
+here with a constructed (not fixture) word list.
 
 Kentucky decides its federal primaries by plain plurality (no runoff,
 no convention threshold), so runoff_threshold_pct is null and
@@ -61,6 +60,7 @@ import re
 import httpx
 import pdfplumber
 
+from app.pipeline.fetch.ballot_measure_pdf_geometry import rows as _clustered_rows
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import pick_nominee
 from app.pipeline.fetch.state_candidates_tabular import _discover_urls
@@ -88,7 +88,12 @@ _SENATE_RE = re.compile(r"United States Senator")
 _HOUSE_RE = re.compile(r"United States Representative in Congress|US Representative")
 _DISTRICT_RE = re.compile(r"(\d+)(?:st|nd|rd|th)\s+Congressional District")
 _PARTY_RE = re.compile(r"(Republican|Democratic)\s+Party")
-_SURNAME_RE = re.compile(r"^[A-Z][A-Z'\-]+$")
+# "ALL-CAPS" isn't quite literal: the real document prints Mc/Mac
+# surnames with the prefix's second letter lowercase even in its
+# all-caps header style ("McGRATH" for Amy McGrath, confirmed live) —
+# so a leading Mc/Mac keeps its natural casing here, and everything
+# after it must still be uppercase like every other surname.
+_SURNAME_RE = re.compile(r"^(?:(?:Mc|Mac)[A-Z][A-Z'\-]*|[A-Z][A-Z'\-]+)$")
 # The masthead/title vocabulary's only ALL-CAPS multi-letter token — "US"
 # in the short-form "US Representative" title, which a page can carry on
 # the SAME page as its Total Votes row (a short contest needs no
@@ -120,15 +125,19 @@ def _title_on_page(text: str) -> tuple[str, int | None, str] | None:
 
 
 def _rows_by_top(words: list[dict]) -> list[list[dict]]:
-    """Words grouped by shared row (exact-matching `top`), each row
-    sorted left to right — NOT meaningful for a rotated header, where
-    every word keeps its own distinct `top`, only for the upright
-    county-data rows and the Total Votes row this function is actually
-    used to find."""
-    by_top: dict[float, list[dict]] = {}
-    for w in words:
-        by_top.setdefault(round(w["top"], 1), []).append(w)
-    return [sorted(by_top[t], key=lambda w: w["x0"]) for t in sorted(by_top)]
+    """Words grouped by shared visual row, left to right — delegates to
+    the shared proximity-based clustering (ballot_measure_pdf_geometry.
+    rows), not exact-match rounding: the real Total Votes row spans up
+    to 11 candidate columns' worth of width, exactly the wide-row shape
+    where cross-column baseline jitter was observed live on another
+    state's document and split one visual row into two. NOT meaningful
+    for a rotated header, where every word keeps its own distinct
+    `top` — only used here to find the upright county-data rows and
+    the Total Votes row itself."""
+    clustered = _clustered_rows(words)
+    return [
+        sorted(clustered[i], key=lambda w: w["x0"]) for i in sorted(clustered)
+    ]
 
 
 def _parse_total_page(
@@ -224,9 +233,36 @@ async def fetch_confirmed_candidates(
             for page in pdf.pages:
                 text = page.extract_text() or ""
                 title = _title_on_page(text)
+                has_total = "Total Votes" in text
+
+                if title and current is not None and title != current and has_total:
+                    # This page both starts a NEW contest's title AND
+                    # carries a Total Votes row — nothing says whether
+                    # that row belongs to the contest just closing or
+                    # the one just opening. Not seen in the real 2026
+                    # document (every single-page contest's own title
+                    # and total agree), but a future cycle's pagination
+                    # could pack two short contests differently, and
+                    # guessing wrong would misattribute real votes to
+                    # the wrong contest — so neither is processed.
+                    logger.info(
+                        "KY: page starts contest %s while %s's Total "
+                        "Votes row may still be on it — skipping both "
+                        "rather than guessing which owns it",
+                        title, current,
+                    )
+                    current = title
+                    continue
+
                 if title:
                     current = title
-                if "Total Votes" not in text or current is None:
+                if not has_total:
+                    continue
+                if current is None:
+                    logger.info(
+                        "KY: a Total Votes row appeared before any "
+                        "contest title was seen — skipping it",
+                    )
                     continue
                 words = page.extract_words()
                 office, district, party = current

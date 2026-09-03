@@ -7,14 +7,20 @@ of Vote Totals" PDF, fetched live 2026-09-03 from elect.ky.gov. Five
 real pages, each the FINAL page (the one carrying "Total Votes") of its
 contest: the US Senate Republican primary (11 candidates, rotated
 column headers — Andy Barr's real 2026 field), the US Senate Democratic
-primary (a real case where the printed header names outnumber the
-counted vote columns 8 to 7 — one candidate drew zero tallied votes and
-this module must refuse to guess which), the 1st Congressional
-District Republican primary (upright headers, few candidates), the 2nd
+primary (7 candidates, including a real Mc-surname — Amy McGrath,
+printed "McGRATH" even in this document's all-caps header style, not
+"MCGRATH" — this module must match it as a surname rather than treat
+the lowercase "c" as disqualifying), the 1st Congressional District
+Republican primary (upright headers, few candidates), the 2nd
 Congressional District Republican primary (includes a real hyphenated
 surname, PERRY-ADELMANN), and the 6th Congressional District
 Democratic primary (a real 7-candidate field that exercises the
 word-center column-matching this module relies on).
+
+The "refuse to guess" safety branch (a column whose header doesn't
+resolve to exactly one surname) is NOT exercised by any page in the
+real 2026 document — every real contest resolves cleanly — so it is
+tested below with a small CONSTRUCTED word list instead of a fixture.
 """
 
 import json
@@ -57,12 +63,28 @@ class TestParseTotalPage:
         result = ky._parse_total_page(FIXTURE["senate_gop_total"], "S", None, "R")
         assert result == [{"office": "S", "district": None, "party": "R", "last_name": "BARR"}]
 
-    def test_senate_democratic_refuses_ambiguous_field(self):
-        # Real field: 8 printed candidate names, only 7 counted vote
-        # columns. Nothing in the document says which name to drop, so
-        # this contest must be skipped entirely rather than guess.
+    def test_senate_democratic_seven_candidate_field_with_a_mc_surname(self):
+        # Real 2026 field: Cory Booker won; Amy McGrath ("McGRATH" in
+        # this document's own header style) is a real, unambiguous
+        # runner-up — confirms Mc/Mac surnames are matched correctly.
         result = ky._parse_total_page(FIXTURE["senate_dem_total"], "S", None, "D")
-        assert result == []
+        assert result == [{"office": "S", "district": None, "party": "D", "last_name": "BOOKER"}]
+
+    def test_ambiguous_column_refuses_the_whole_contest(self):
+        # Constructed, not a fixture: column 1 resolves cleanly to
+        # "SMITH"; column 2's header carries TWO all-caps words
+        # ("JONES" and "DOE") with nothing in the data to say which is
+        # the real surname, so the whole contest must be refused.
+        words = [
+            {"text": "Total", "x0": 10.0, "x1": 30.0, "top": 300.0},
+            {"text": "Votes", "x0": 35.0, "x1": 55.0, "top": 300.0},
+            {"text": "100", "x0": 100.0, "x1": 120.0, "top": 300.0},
+            {"text": "50", "x0": 200.0, "x1": 215.0, "top": 300.0},
+            {"text": "SMITH", "x0": 95.0, "x1": 125.0, "top": 150.0},
+            {"text": "JONES", "x0": 195.0, "x1": 220.0, "top": 150.0},
+            {"text": "DOE", "x0": 195.0, "x1": 220.0, "top": 160.0},
+        ]
+        assert ky._parse_total_page(words, "H", 1, "R") == []
 
     def test_district1_upright_header_few_candidates(self):
         result = ky._parse_total_page(FIXTURE["district1_total"], "H", 1, "R")
