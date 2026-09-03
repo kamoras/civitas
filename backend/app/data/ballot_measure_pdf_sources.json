@@ -24,11 +24,22 @@
     },
     "LA": {
       "landing_page_url": "https://www.sos.la.gov/elections-voting/types-of-elections",
-      "keyword": ["nov", "constitutional"],
-      "exclude": ["primary", "summary"],
+      "keyword": [
+        "nov",
+        "constitutional"
+      ],
+      "exclude": [
+        "primary",
+        "summary"
+      ],
       "source_name": "Louisiana Secretary of State",
       "strategy": "la_proposed_amendments",
       "description": "'Proposed Constitutional Amendments' guide, plain single-column text. All amendments are legislature-referred (Louisiana has no citizen-initiative process for constitutional amendments), so origin is fixed; the document publishes no explicit 'A YES vote means.../A NO vote means...' framing (only the ballot question itself) and no fiscal impact statement, so yes_means/no_means/fiscal_impact stay null rather than being inferred from the question's phrasing. Old site URLs 404'd after a site redesign; landing_page_url points at the current site. keyword requires BOTH terms present (a lone 'nov' also matches an unrelated 'November Presidential Election' link on the real page); exclude drops both the primary-election variant AND a same-year 'Statement of Proposed Constitutional Amendment...Summary' document that carries a confusingly similar link label but a different, unhandled layout. Verified against all 4 real general-election years on record (2026, 2024, 2022, 2020) — 2022's document has a per-page footer ('Prepared by the Louisiana Secretary of State N') and 2020/2022 both have a per-page running header ('<date> PROPOSED CONSTITUTIONAL AMENDMENTS'); both are stripped from the full joined text before splitting so a page-boundary-spanning amendment can't pick either up."
+    },
+    "VA": {
+      "source_name": "Virginia Department of Elections",
+      "strategy": "va_referenda",
+      "description": "Per-question 'Explanation for Proposed Constitutional Amendment' PDFs, one per question rather than one combined guide — discovered from the stable elections.virginia.gov/election-law/referenda/ index page, which links each question's own explanation page, which links that question's PDF in four languages (English has no language-code filename suffix). Verified live 2026-09-03 against all 3 real questions on the November 3, 2026 ballot (reproductive freedom, marriage, felony voting-rights restoration): 3/3 parse with a real Present-Law/Proposed-Amendment summary and the real ballot question text. No 'A YES vote means/A NO vote means' framing is published (same as Louisiana) and no fiscal-impact statement (constitutional amendments, not spending measures), so yes_means/no_means/fiscal_impact stay null. All Virginia amendments are General-Assembly-referred (no citizen-initiative process for amendments), so origin is fixed. Structurally different enough from every other state here (separate documents, not one combined guide) that it uses its own end-to-end fetch strategy (MULTI_DOCUMENT_STRATEGIES in ballot_measures_pdf.py, see ballot_measures_va.py) rather than the shared single-PDF pipeline."
     }
   }
 }

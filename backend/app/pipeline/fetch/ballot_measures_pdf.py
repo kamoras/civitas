@@ -45,6 +45,7 @@ from app.pipeline.fetch.ballot_measures_ca import parse_document as parse_ca_doc
 from app.pipeline.fetch.ballot_measures_co import parse_document as parse_co_document
 from app.pipeline.fetch.ballot_measures_la import parse_document as parse_la_document
 from app.pipeline.fetch.ballot_measures_ma import parse_information_for_voters as parse_ma_document
+from app.pipeline.fetch.ballot_measures_va import fetch_measures as va_fetch_measures
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +144,17 @@ STRATEGIES = {
     "la_proposed_amendments": parse_la_document,
 }
 
+# A strategy here doesn't fit STRATEGIES' `pdf.pages -> list[dict]`
+# shape at all — the state publishes its measures as several SEPARATE
+# documents (discovered from an index page, not one URL config can name)
+# rather than one combined guide, so the strategy function does its own
+# end-to-end fetching and hands back (parsed, source_url) pairs directly.
+# See ballot_measures_va.py's module docstring for why Virginia needs
+# this and every other state so far doesn't.
+MULTI_DOCUMENT_STRATEGIES = {
+    "va_referenda": va_fetch_measures,
+}
+
 # Longer than Vote Smart's 12h (MEASURE_CACHE_TTL_HOURS in
 # ballot_measures.py) — that shorter window exists because Vote Smart's
 # own feed can change under us mid-cycle; these are static PDFs a state
@@ -157,7 +169,8 @@ def is_configured(state: str) -> bool:
     function for it — a source entry with a typo'd/unregistered strategy
     key is a config bug, not a signal to guess at parsing."""
     source = source_for_state(state)
-    return source is not None and source.get("strategy") in STRATEGIES
+    strategy = source.get("strategy") if source else None
+    return strategy in STRATEGIES or strategy in MULTI_DOCUMENT_STRATEGIES
 
 
 def _to_measure(state: str, parsed: dict, election_date: str, source_url: str) -> dict:
@@ -202,11 +215,13 @@ async def fetch_state_measures_pdf(
     source = source_for_state(state)
     if source is None:
         return None
-    strategy = STRATEGIES.get(source["strategy"])
-    if strategy is None:
+    strategy_key = source["strategy"]
+    strategy = STRATEGIES.get(strategy_key)
+    multi_strategy = MULTI_DOCUMENT_STRATEGIES.get(strategy_key)
+    if strategy is None and multi_strategy is None:
         logger.error(
             "Ballot measure PDF source for %s references unknown strategy %r",
-            state, source.get("strategy"),
+            state, strategy_key,
         )
         return None
 
@@ -214,6 +229,21 @@ async def fetch_state_measures_pdf(
     cached = api_cache_get(db, "ballot_measure_pdf", cache_key, max_age_hours=CACHE_TTL_HOURS)
     if cached is not None:
         return cached.get("measures")
+
+    if multi_strategy is not None:
+        try:
+            pairs = await multi_strategy(client, year)
+        except Exception:
+            logger.exception("Multi-document ballot measure fetch failed for %s %d", state, year)
+            return None
+        if pairs is None:
+            return None
+        measures = [_to_measure(state, parsed, election_date, url) for parsed, url in pairs]
+        api_cache_set(
+            db, "ballot_measure_pdf", cache_key, {"measures": measures},
+            normal_ttl_hours=CACHE_TTL_HOURS,
+        )
+        return measures
 
     if "landing_page_url" in source:
         keyword = source.get("keyword")
