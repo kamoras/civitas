@@ -185,6 +185,19 @@ async def discover_dates(
             key = "runoff" if _RUNOFF_RE.search(stamp) else "primary"
             if iso and key not in found:
                 found[key] = iso
+        if not found and (source.get("discovery") or {}).get("mode") == "landing_page":
+            # West Virginia's own elections.json is empty — its results
+            # ARE reachable (state_candidates_clarity.py's landing_page
+            # discovery finds them), but that page carries no exact day,
+            # only a year, so no date can be read here either. Logged
+            # explicitly rather than left as a silent empty dict, so this
+            # is distinguishable in logs from a state whose date genuinely
+            # isn't known yet.
+            logger.info(
+                "%s's Clarity elections list is empty; its landing_page-"
+                "discovered results carry no exact date either — leaving "
+                "the primary date unknown rather than guessing", st,
+            )
         return found
 
     if strategy == "tx_civix":

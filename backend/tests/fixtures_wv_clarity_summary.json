@@ -1,0 +1,452 @@
+{
+ "Contests": [
+  {
+   "CATKEY": null,
+   "CAT": null,
+   "C": "U.S. SENATOR - REP",
+   "K": "100",
+   "AggID": "100",
+   "regvoters": 0,
+   "BCxContest": 0,
+   "VF": 1,
+   "TP": 55,
+   "PR": 55,
+   "TV": 1198934,
+   "BC": 252008,
+   "RC": 0,
+   "RO": 0,
+   "CH": [
+    "SHELLEY MOORE CAPITO",
+    "TOM WILLIS",
+    "BRYAN McKINNEY",
+    "DAVID PURKEY",
+    "ALEXANDER GAASERUD",
+    "JANET McNULTY"
+   ],
+   "CHAggId": [
+    1,
+    10,
+    3,
+    5,
+    2,
+    4
+   ],
+   "P": [
+    "REP",
+    "REP",
+    "REP",
+    "REP",
+    "REP",
+    "REP"
+   ],
+   "PCT": [
+    66.4863389334194,
+    18.8839533133153,
+    4.62151855803989,
+    4.1690448420478,
+    3.69092819151136,
+    2.14821616166629
+   ],
+   "V": [
+    80376,
+    22829,
+    5587,
+    5040,
+    4462,
+    2597
+   ],
+   "T": 120891,
+   "W": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "CRC": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "CRO": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "IsCumulative": null,
+   "CumulativeVotes": null,
+   "CumulativeChoices": null,
+   "CumulativePercentages": null,
+   "IsContestNoChoice": 0,
+   "IsRCV": false,
+   "RCVAwaitingResults": false
+  },
+  {
+   "CATKEY": null,
+   "CAT": null,
+   "C": "U.S. SENATOR - DEM",
+   "K": "150",
+   "AggID": "150",
+   "regvoters": 0,
+   "BCxContest": 0,
+   "VF": 1,
+   "TP": 55,
+   "PR": 55,
+   "TV": 1198934,
+   "BC": 252008,
+   "RC": 0,
+   "RO": 0,
+   "CH": [
+    "RACHEL FETTY ANDERSON",
+    "JEFFREY V. KESSLER",
+    "ZACHARY SHREWSBURY",
+    "THORNTON COOPER",
+    "RIO PHILLIPS"
+   ],
+   "CHAggId": [
+    1,
+    3,
+    5,
+    2,
+    4
+   ],
+   "P": [
+    "DEM",
+    "DEM",
+    "DEM",
+    "DEM",
+    "DEM"
+   ],
+   "PCT": [
+    33.1521913887906,
+    27.0405264906696,
+    16.1591476681994,
+    12.675648734686,
+    10.9724857176544
+   ],
+   "V": [
+    30930,
+    25228,
+    15076,
+    11826,
+    10237
+   ],
+   "T": 93297,
+   "W": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "CRC": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "CRO": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "IsCumulative": null,
+   "CumulativeVotes": null,
+   "CumulativeChoices": null,
+   "CumulativePercentages": null,
+   "IsContestNoChoice": 0,
+   "IsRCV": false,
+   "RCVAwaitingResults": false
+  },
+  {
+   "CATKEY": null,
+   "CAT": null,
+   "C": "U.S. HOUSE OF REPRESENTATIVES, 1st Congressional District - REP",
+   "K": "200",
+   "AggID": "200",
+   "regvoters": 0,
+   "BCxContest": 0,
+   "VF": 1,
+   "TP": 28,
+   "PR": 28,
+   "TV": 581643,
+   "BC": 123984,
+   "RC": 0,
+   "RO": 0,
+   "CH": [
+    "CAROL MILLER",
+    "LARRY JACKSON"
+   ],
+   "CHAggId": [
+    2,
+    1
+   ],
+   "P": [
+    "REP",
+    "REP"
+   ],
+   "PCT": [
+    72.0477554578937,
+    27.9522445421063
+   ],
+   "V": [
+    40493,
+    15710
+   ],
+   "T": 56203,
+   "W": [
+    0,
+    0
+   ],
+   "CRC": [
+    0,
+    0
+   ],
+   "CRO": [
+    0,
+    0
+   ],
+   "IsCumulative": null,
+   "CumulativeVotes": null,
+   "CumulativeChoices": null,
+   "CumulativePercentages": null,
+   "IsContestNoChoice": 0,
+   "IsRCV": false,
+   "RCVAwaitingResults": false
+  },
+  {
+   "CATKEY": null,
+   "CAT": null,
+   "C": "U.S. HOUSE OF REPRESENTATIVES, 1st Congressional District - DEM",
+   "K": "250",
+   "AggID": "250",
+   "regvoters": 0,
+   "BCxContest": 0,
+   "VF": 1,
+   "TP": 28,
+   "PR": 28,
+   "TV": 581643,
+   "BC": 123984,
+   "RC": 0,
+   "RO": 0,
+   "CH": [
+    "VINCE GEORGE",
+    "BRITTA 'BRIT' AGUIRRE"
+   ],
+   "CHAggId": [
+    2,
+    1
+   ],
+   "P": [
+    "DEM",
+    "DEM"
+   ],
+   "PCT": [
+    52.9549602325215,
+    47.0450397674785
+   ],
+   "V": [
+    23503,
+    20880
+   ],
+   "T": 44383,
+   "W": [
+    0,
+    0
+   ],
+   "CRC": [
+    0,
+    0
+   ],
+   "CRO": [
+    0,
+    0
+   ],
+   "IsCumulative": null,
+   "CumulativeVotes": null,
+   "CumulativeChoices": null,
+   "CumulativePercentages": null,
+   "IsContestNoChoice": 0,
+   "IsRCV": false,
+   "RCVAwaitingResults": false
+  },
+  {
+   "CATKEY": null,
+   "CAT": null,
+   "C": "U.S. HOUSE OF REPRESENTATIVES, 2nd Congressional District - REP",
+   "K": "300",
+   "AggID": "300",
+   "regvoters": 0,
+   "BCxContest": 0,
+   "VF": 1,
+   "TP": 27,
+   "PR": 27,
+   "TV": 617291,
+   "BC": 128024,
+   "RC": 0,
+   "RO": 0,
+   "CH": [
+    "RILEY MOORE"
+   ],
+   "CHAggId": [
+    1
+   ],
+   "P": [
+    "REP"
+   ],
+   "PCT": [
+    100
+   ],
+   "V": [
+    48782
+   ],
+   "T": 48782,
+   "W": [
+    0
+   ],
+   "CRC": [
+    0
+   ],
+   "CRO": [
+    0
+   ],
+   "IsCumulative": null,
+   "CumulativeVotes": null,
+   "CumulativeChoices": null,
+   "CumulativePercentages": null,
+   "IsContestNoChoice": 0,
+   "IsRCV": false,
+   "RCVAwaitingResults": false
+  },
+  {
+   "CATKEY": null,
+   "CAT": null,
+   "C": "U.S. HOUSE OF REPRESENTATIVES, 2nd Congressional District - DEM",
+   "K": "350",
+   "AggID": "350",
+   "regvoters": 0,
+   "BCxContest": 0,
+   "VF": 1,
+   "TP": 27,
+   "PR": 27,
+   "TV": 617291,
+   "BC": 128024,
+   "RC": 0,
+   "RO": 0,
+   "CH": [
+    "ACE PARSI",
+    "STEPHANIE SPEARS TOMANA",
+    "STEVEN WENDELIN"
+   ],
+   "CHAggId": [
+    1,
+    4,
+    5
+   ],
+   "P": [
+    "DEM",
+    "DEM",
+    "DEM"
+   ],
+   "PCT": [
+    39.7646848697283,
+    37.8669822062468,
+    22.3683329240249
+   ],
+   "V": [
+    17811,
+    16961,
+    10019
+   ],
+   "T": 44791,
+   "W": [
+    0,
+    0,
+    0
+   ],
+   "CRC": [
+    0,
+    0,
+    0
+   ],
+   "CRO": [
+    0,
+    0,
+    0
+   ],
+   "IsCumulative": null,
+   "CumulativeVotes": null,
+   "CumulativeChoices": null,
+   "CumulativePercentages": null,
+   "IsContestNoChoice": 0,
+   "IsRCV": false,
+   "RCVAwaitingResults": false
+  },
+  {
+   "CATKEY": null,
+   "CAT": null,
+   "C": "STATE SENATOR, 1st Senatorial District - REP",
+   "K": "400",
+   "AggID": "400",
+   "regvoters": 0,
+   "BCxContest": 0,
+   "VF": 1,
+   "TP": 4,
+   "PR": 4,
+   "TV": 80894,
+   "BC": 14539,
+   "RC": 0,
+   "RO": 0,
+   "CH": [
+    "LAURA WAKIM CHAPMAN",
+    "JOE EDDY"
+   ],
+   "CHAggId": [
+    1,
+    2
+   ],
+   "P": [
+    "REP",
+    "REP"
+   ],
+   "PCT": [
+    59.2430220663452,
+    40.7569779336548
+   ],
+   "V": [
+    4054,
+    2789
+   ],
+   "T": 6843,
+   "W": [
+    0,
+    0
+   ],
+   "CRC": [
+    0,
+    0
+   ],
+   "CRO": [
+    0,
+    0
+   ],
+   "IsCumulative": null,
+   "CumulativeVotes": null,
+   "CumulativeChoices": null,
+   "CumulativePercentages": null,
+   "IsContestNoChoice": 0,
+   "IsRCV": false,
+   "RCVAwaitingResults": false
+  }
+ ]
+}

@@ -65,6 +65,52 @@ class TestFecCalendar:
         assert await dates.fetch_fec_calendar(None, 2026) == {}
 
 
+@pytest.mark.asyncio
+class TestDiscoverDatesClarity:
+    """discover_dates's own clarity branch had no test coverage at all
+    before this — added alongside the landing_page discovery mode
+    (state_candidates_clarity.py) to confirm West Virginia's empty
+    elections.json degrades honestly rather than silently."""
+
+    async def test_reads_the_primary_off_a_populated_elections_json(self, monkeypatch):
+        class _Resp:
+            def json(self):
+                return [{"Date": "6/30/2026 12:00:00 AM", "ElectionName": "2026 Primary"}]
+
+        async def fake_get(client, url, label):
+            return _Resp()
+
+        monkeypatch.setattr("app.pipeline.fetch.state_candidates_clarity._get", fake_get)
+        result = await dates.discover_dates(None, 2026, "CO", {"strategy": "clarity"})
+        assert result == {"primary": "2026-06-30"}
+
+    async def test_empty_elections_json_with_no_landing_page_config_is_a_quiet_unknown(self, monkeypatch, caplog):
+        async def fake_get(client, url, label):
+            return None
+
+        monkeypatch.setattr("app.pipeline.fetch.state_candidates_clarity._get", fake_get)
+        result = await dates.discover_dates(None, 2026, "XX", {"strategy": "clarity"})
+        assert result == {}
+
+    async def test_empty_elections_json_with_landing_page_config_logs_the_gap(self, monkeypatch, caplog):
+        # West Virginia's real shape: elections.json is empty, but its
+        # source entry carries a landing_page discovery block (used by
+        # state_candidates_clarity.py for candidate confirmation) --
+        # this must be distinguishable in logs from a plain unknown.
+        async def fake_get(client, url, label):
+            return None
+
+        monkeypatch.setattr("app.pipeline.fetch.state_candidates_clarity._get", fake_get)
+        source = {
+            "strategy": "clarity",
+            "discovery": {"mode": "landing_page", "page_url": "x", "link_regex": "y"},
+        }
+        with caplog.at_level("INFO"):
+            result = await dates.discover_dates(None, 2026, "WV", source)
+        assert result == {}
+        assert any("WV" in r.message for r in caplog.records)
+
+
 class TestSaveMerges:
     def test_a_later_read_does_not_drop_what_an_earlier_one_knew(self, tmp_path, monkeypatch):
         """The national calendar supplies a runoff the state's own feed may

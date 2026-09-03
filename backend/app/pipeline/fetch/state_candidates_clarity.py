@@ -16,7 +16,14 @@ auth, no scraping of the rendered Angular SPA:
    with `EID`, `ElectionName` and a real `Date`. Unlike Texas's Civix feed
    there is NO election-type code here, only free text, so `_is_primary`
    matches on the name and scopes by the `Date` YEAR — never a hardcoded
-   EID, which changes every cycle.
+   EID, which changes every cycle. A state whose OWN copy of this
+   endpoint is empty (West Virginia's is, even though its real results
+   are live) sets `discovery: {"mode": "landing_page", "page_url", "link_
+   regex"}` in its source entry instead — the EID is read off the link
+   the state's own elections page keeps current, same "the listing
+   endpoint is empty but a static page still points at the real data"
+   shape Minnesota's and Arizona's adapters already handle for their own
+   vendors. See `_discover_election_id`.
 
 2. GET /{ST}/{EID}/current_ver.txt — the current results version (plain
    text, e.g. "377440"). Also changes constantly as results are amended;
@@ -105,6 +112,74 @@ async def _get(client: httpx.AsyncClient, url: str, label: str) -> httpx.Respons
     )
 
 
+async def _discover_election_id(
+    client: httpx.AsyncClient, state: str, year: int, discovery: dict,
+) -> str | None:
+    """This cycle's Clarity EID, by whichever means this state needs.
+
+    Most Clarity states index every election at /{ST}/elections.json,
+    scoped to this cycle by `_is_primary`. West Virginia's own copy of
+    that endpoint is empty — its real results are reachable, but only
+    through the link the state's OWN elections page keeps current
+    (sos.wv.gov), the same "the listing endpoint is empty/blocked but a
+    static page still points at the real data" shape Minnesota's and
+    Arizona's adapters already handle for their own vendors. A state
+    whose `discovery.mode` is "landing_page" is read that way instead of
+    via elections.json; every other state's behavior is unchanged."""
+    if discovery.get("mode") == "landing_page":
+        page_url = discovery.get("page_url")
+        link_regex = discovery.get("link_regex")
+        if not page_url or not link_regex:
+            logger.warning("%s's landing_page discovery is missing page_url/link_regex", state)
+            return None
+        resp = await _get(client, page_url, f"{state} Clarity landing page")
+        if resp is None:
+            return None
+        ids = {m.group(1) for m in re.finditer(link_regex, resp.text)}
+        if not ids:
+            # A page that answers 200 with none of its own links on it is
+            # usually a bot-manager challenge rather than a genuinely
+            # empty page — Minnesota's file host shows the identical
+            # symptom, and the retry succeeds once the challenge has set
+            # its cookie. One retry only: a truly empty page stays empty.
+            logger.info("%s's elections page had no results link — retrying once", state)
+            resp = await _get(client, page_url, f"{state} Clarity landing page (retry)") or resp
+            ids = {m.group(1) for m in re.finditer(link_regex, resp.text)}
+        if not ids:
+            logger.warning("No Clarity results link found on %s's own elections page", state)
+            return None
+        # Every DISTINCT id found, not just the first: this page carries
+        # no date to scope by (unlike elections.json's own Date field),
+        # so if it ever lists more than one election's link (an archived-
+        # results section added above the current one, say), there is no
+        # way to tell which is this cycle's without guessing — refuse
+        # rather than silently trust document order.
+        if len(ids) > 1:
+            logger.warning(
+                "%s's elections page lists %d different Clarity ids — refusing to guess which is current",
+                state, len(ids),
+            )
+            return None
+        return next(iter(ids))
+
+    resp = await _get(client, f"{CLARITY_BASE}/{state}/elections.json", f"{state} Clarity elections")
+    if resp is None:
+        return None
+    try:
+        elections = resp.json() or []
+    except ValueError:
+        logger.warning("Clarity elections list for %s was not JSON", state)
+        return None
+
+    matches = [e for e in elections if isinstance(e, dict) and _is_primary(e, year)]
+    if not matches:
+        logger.warning("No %d primary indexed yet for %s — skipping", year, state)
+        return None
+    # Newest first: a state that indexes more than one matching election
+    # for the cycle (e.g. an amended re-post) should use the latest.
+    return matches[0].get("EID")
+
+
 async def fetch_confirmed_candidates(
     client: httpx.AsyncClient, year: int, state: str, source: dict,
 ) -> list[dict] | None:
@@ -120,22 +195,7 @@ async def fetch_confirmed_candidates(
     st = state.upper()
     threshold = source.get("runoff_threshold_pct")
 
-    resp = await _get(client, f"{CLARITY_BASE}/{st}/elections.json", f"{st} Clarity elections")
-    if resp is None:
-        return None
-    try:
-        elections = resp.json() or []
-    except ValueError:
-        logger.warning("Clarity elections list for %s was not JSON", st)
-        return None
-
-    matches = [e for e in elections if isinstance(e, dict) and _is_primary(e, year)]
-    if not matches:
-        logger.warning("No %d primary indexed yet for %s — skipping", year, st)
-        return None
-    # Newest first: a state that indexes more than one matching election
-    # for the cycle (e.g. an amended re-post) should use the latest.
-    election_id = matches[0].get("EID")
+    election_id = await _discover_election_id(client, st, year, source.get("discovery") or {})
     if not election_id:
         return None
 
