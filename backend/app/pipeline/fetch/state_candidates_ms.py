@@ -30,11 +30,20 @@ their row appears on — every earlier occurrence's rightmost value is just
 that page's own county's count, not a running sum, and only the genuinely
 final page's header row carries a "TOTAL" column at all. Rather than trying
 to detect which specific occurrence IS the final one, this keeps a running
-{(office, district, surname): (party, votes)} map and OVERWRITES it on every
-occurrence of that name found anywhere in the document — since a name's
-LAST occurrence in reading order is, by construction, the last page its row
-appears on, the map holds each candidate's true final total once the whole
-document has been read, with no special detection needed.
+{(office, district, RAW printed name): (party, votes)} map and OVERWRITES it
+on every occurrence of that exact name found anywhere in the document —
+since a name's LAST occurrence in reading order is, by construction, the
+last page its row appears on, the map holds each candidate's true final
+total once the whole document has been read, with no special detection
+needed. Keyed on the full raw name rather than the surname alone — reducing
+to a surname (state_candidates_common.surname()) happens only once, when
+building the final per-seat groups below, never as the resolution key
+itself: two different real candidates sharing a surname in the same contest
+(not rare in a crowded primary) would otherwise silently collide into one
+dict entry and one of them would vanish with no error, the same class of
+bug already learned the hard way building Tennessee's wide-format parser —
+never use the final output's identifying field as the INTERNAL aggregation
+key when a richer one is available.
 
 This also transparently absorbs a real oddity in the 2026 Democratic file:
 a late-qualified candidate (Jeffrey Hulum III, confirmed via AP/local
@@ -51,10 +60,19 @@ requirement, still the law): a candidate under 50% goes to a runoff three
 weeks later. Verified live against the real 2026-03-10 primary: every
 federal contest in both parties cleared 50% on its own (the closest,
 Republican CD2, at 51.1%), so the 2026-04-07 runoff decided no FEDERAL race
-— this module reads only the primary PDFs, and runoff_threshold_pct=50 is
-what correctly withholds a race if a future cycle's primary doesn't clear
-that bar, exactly like every other majority-runoff state already on this
-system (AL, AR, GA, OK, SC, TX).
+— this module reads only the primary PDFs, and the threshold (read from
+state_candidate_sources.json's "MS" entry, not hardcoded here) is what
+correctly withholds a race if a future cycle's primary doesn't clear that
+bar, exactly like every other majority-runoff state already on this system
+(AL, AR, GA, OK, SC, TX).
+
+ponytail: no runoff PDF is fetched — there is no code path that would ever
+resolve a race that DOES miss the 50% bar, unlike GA's config, which fetches
+and merges a real second-primary stage for exactly this reason. A future
+cycle where a race actually goes to a runoff will confirm nobody for that
+seat, forever, until someone adds a fourth discovery hop for the runoff
+recap PDF (same SOS site, same shape, a later date) alongside the primary
+one already here.
 """
 
 import io
@@ -76,8 +94,6 @@ logger = logging.getLogger(__name__)
 _INDEX_URL = "https://www.sos.ms.gov/elections-voting/election-results"
 _HEADERS = BROWSER_HEADERS
 _rate_limiter = RateLimiter(rps=1.0)
-
-_RUNOFF_THRESHOLD = 50.0
 
 _SENATE_RE = re.compile(r"United States-Senate")
 _HOUSE_RE = re.compile(r"US House Of Rep (\d+)-")
@@ -130,50 +146,56 @@ async def _discover_pdf_url(client: httpx.AsyncClient, year: int, party_label: s
     return urljoin(iframe_m.group(1), pdf_m.group(1))
 
 
-def _parse_recap_pdf(content: bytes) -> list[dict]:
-    """Every confirmed nominee in this one party's recap PDF. See the
-    module docstring for why a running {name: total} map, overwritten on
-    every occurrence, is what correctly resolves a candidate's real
-    final total out of a table that repeats their row once per page."""
+def _process_rows(line_tokens: list[list[str]], runoff_threshold_pct: float | None) -> list[dict]:
+    """The actual row-interpretation logic, taking each row's tokens
+    already in left-to-right reading order — split out from
+    `_parse_recap_pdf`'s pdfplumber/geometry plumbing so it can be
+    exercised directly with a small constructed row list, the same way
+    KY's own PDF module tests its row logic separately from the PDF
+    extraction around it.
+
+    See the module docstring for why a running {raw name: total} map,
+    overwritten on every occurrence, is what correctly resolves a
+    candidate's real final total out of a table that repeats their row
+    once per page — and why the key is the raw printed name, not the
+    surname."""
     running: dict[tuple[str, int | None, str], tuple[str, int]] = {}
     current: tuple[str, int | None] | None = None
 
-    with pdfplumber.open(io.BytesIO(content)) as pdf:
-        for page in pdf.pages:
-            words = page.extract_words()
-            clustered = rows(words)
-            for row_id in sorted(clustered):
-                tokens = [w["text"] for w in sorted(clustered[row_id], key=lambda w: w["x0"])]
-                line = " ".join(tokens)
-                if _SENATE_RE.search(line):
-                    current = ("S", None)
-                    continue
-                house_m = _HOUSE_RE.search(line)
-                if house_m:
-                    current = ("H", int(house_m.group(1)))
-                    continue
-                if current is None:
-                    continue
-                party_idx = next((i for i, t in enumerate(tokens) if t in _PARTY_WORDS), None)
-                if party_idx is None:
-                    continue
-                trailing = tokens[party_idx + 1:]
-                if not trailing:
-                    continue
-                last_name = surname(" ".join(tokens[:party_idx]))
-                party = normalize_party(tokens[party_idx])
-                if not last_name or not party:
-                    continue
-                office, district = current
-                running[(office, district, last_name)] = (party, _votes(trailing[-1]))
+    for tokens in line_tokens:
+        line = " ".join(tokens)
+        if _SENATE_RE.search(line):
+            current = ("S", None)
+            continue
+        house_m = _HOUSE_RE.search(line)
+        if house_m:
+            current = ("H", int(house_m.group(1)))
+            continue
+        if current is None:
+            continue
+        party_idx = next((i for i, t in enumerate(tokens) if t in _PARTY_WORDS), None)
+        if party_idx is None:
+            continue
+        trailing = tokens[party_idx + 1:]
+        if not trailing:
+            continue
+        raw_name = " ".join(tokens[:party_idx])
+        party = normalize_party(tokens[party_idx])
+        if not raw_name or not party:
+            continue
+        office, district = current
+        running[(office, district, raw_name)] = (party, _votes(trailing[-1]))
 
     by_seat: dict[tuple[str, int | None, str], list[tuple[str, int]]] = {}
-    for (office, district, last_name), (party, votes) in running.items():
+    for (office, district, raw_name), (party, votes) in running.items():
+        last_name = surname(raw_name)
+        if not last_name:
+            continue
         by_seat.setdefault((office, district, party), []).append((last_name, votes))
 
     results: list[dict] = []
     for (office, district, party), choices in by_seat.items():
-        won = pick_nominee(choices, runoff_threshold_pct=_RUNOFF_THRESHOLD)
+        won = pick_nominee(choices, runoff_threshold_pct=runoff_threshold_pct)
         if won:
             results.append({
                 "office": office, "district": district,
@@ -182,30 +204,70 @@ def _parse_recap_pdf(content: bytes) -> list[dict]:
     return results
 
 
+def _parse_recap_pdf(content: bytes, runoff_threshold_pct: float | None) -> list[dict]:
+    """Every confirmed nominee in this one party's recap PDF — extracts
+    each page's words into row-clustered, left-to-right token lists (see
+    ballot_measure_pdf_geometry.rows()) and hands them to `_process_rows`
+    for the actual interpretation."""
+    line_tokens: list[list[str]] = []
+    with pdfplumber.open(io.BytesIO(content)) as pdf:
+        for page in pdf.pages:
+            clustered = rows(page.extract_words())
+            for row_id in sorted(clustered):
+                line_tokens.append(
+                    [w["text"] for w in sorted(clustered[row_id], key=lambda w: w["x0"])],
+                )
+    return _process_rows(line_tokens, runoff_threshold_pct)
+
+
 async def fetch_confirmed_candidates(
-    client: httpx.AsyncClient, year: int, state: str, source: dict,  # noqa: ARG001 — state/source unused, this strategy is MS-only by construction
+    client: httpx.AsyncClient, year: int, state: str, source: dict,  # noqa: ARG001 — state unused, this strategy is MS-only by construction
 ) -> list[dict] | None:
-    results: list[dict] = []
-    found_any = False
+    threshold = source.get("runoff_threshold_pct")
+    urls: dict[str, str] = {}
     for party_label in ("republican", "democratic"):
         pdf_url = await _discover_pdf_url(client, year, party_label)
-        if pdf_url is None:
-            continue
+        if pdf_url is not None:
+            urls[party_label] = pdf_url
+
+    if not urls:
+        # Neither party's results page exists yet this cycle — healthy
+        # unknown (before the primary), not a fetch failure.
+        return []
+    if len(urls) == 1:
+        # One party's results page exists and the other doesn't: both
+        # primaries are held the same day and published together, so
+        # this split is a much stronger signal of a broken discovery
+        # regex (a page rename, a changed link format) than of a
+        # genuinely one-sided primary — treated as a fetch failure
+        # rather than silently returning half the state's nominees with
+        # no error.
+        missing = "democratic" if "republican" in urls else "republican"
+        logger.warning(
+            "MS: %s primary results page found but %s's is missing — "
+            "treating as a broken discovery rather than a one-sided primary",
+            next(iter(urls)), missing,
+        )
+        return None
+
+    results: list[dict] = []
+    for party_label, pdf_url in urls.items():
         resp = await _get(client, pdf_url, f"MS {party_label} primary recap {year}")
         if resp is None:
             return None
         try:
-            party_results = _parse_recap_pdf(resp.content)
+            party_results = _parse_recap_pdf(resp.content, threshold)
         except Exception:
             logger.exception("MS %s primary recap PDF for %d failed to parse", party_label, year)
             return None
-        found_any = True
+        if not party_results:
+            logger.warning(
+                "MS %s primary recap PDF for %d fetched but yielded no "
+                "candidates — a format change rather than a real empty "
+                "primary is the likely cause", party_label, year,
+            )
         results.extend(party_results)
 
-    if not found_any:
-        # Neither party's results page exists yet this cycle — healthy
-        # unknown (before the primary), not a fetch failure.
-        return []
     if not results:
         logger.warning("MS primary recap PDFs for %d yielded no confirmed nominees", year)
         return None
