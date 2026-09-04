@@ -3,7 +3,8 @@ import { NextRequest } from "next/server";
 import { loadArchivoBold } from "@/lib/ogFonts";
 import { STATE_CODES } from "@/lib/stateCodes";
 import { usableRecord } from "@/lib/ssrPayload";
-import type { StateBallot } from "@/types/election";
+import { isActiveCandidate, raceTitleLabel } from "@/lib/elections";
+import type { RaceWithCandidates, StateBallot } from "@/types/election";
 
 export const runtime = "nodejs";
 
@@ -28,10 +29,24 @@ const SURFACE_BASE = "#0E0C0A";
 const HAIRLINE = "rgba(255,255,255,0.07)";
 const DOMAIN = "civitas-research.org";
 
+// Single-letter party, from the politicians API (formatStanding's "D-CA").
 const PARTY_ACCENT: Record<string, string> = {
   D: "#82acff",
   R: "#ff8989",
   I: "#c995ff",
+};
+
+// FEC's own party codes ("DEM"/"REP"/"IND"/...), from a race's candidate
+// list — NOT the same alphabet as PARTY_ACCENT above (see CandidateCard.
+// tsx's identical comment). Hex mirrors of that component's PARTY_META
+// colors, since Satori can't resolve Tailwind classes.
+const CANDIDATE_PARTY_ACCENT: Record<string, string> = {
+  DEM: "#82acff", // dem-blue
+  DFL: "#82acff",
+  DNL: "#82acff",
+  REP: "#ff8989", // rep-red / signal.red
+  IND: "#c995ff", // ind-purple
+  GRE: "#04B831", // phos.mid
 };
 
 // Mirrors lib/representation.ts's getScoreColor exactly (same 81/61/41/21
@@ -508,6 +523,120 @@ async function electionImage(ballot: StateBallot | null, code: string) {
   );
 }
 
+function CandidateRow({ candidate }: { candidate: RaceWithCandidates["candidates"][number] }) {
+  const accent = CANDIDATE_PARTY_ACCENT[candidate.party] ?? INK_MIN;
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 16,
+        padding: "16px 0",
+        borderTop: `1px solid ${HAIRLINE}`,
+      }}
+    >
+      <div style={{ display: "flex", width: 10, height: 10, borderRadius: 5, background: accent }} />
+      <span style={{ color: INK_HI, fontSize: 26, fontWeight: 700, flex: 1 }}>
+        {candidate.name}
+      </span>
+      {candidate.incumbentRecord && (
+        <span style={{ color: INK_LO, fontSize: 14, letterSpacing: 2 }}>INCUMBENT</span>
+      )}
+      <span style={{ color: accent, fontSize: 18, letterSpacing: 1, textAlign: "right" }}>
+        {candidate.party || "?"}
+      </span>
+    </div>
+  );
+}
+
+const MAX_CANDIDATE_ROWS = 4;
+
+// Looks the race up inside the ballot's own senateRaces/houseRaces rather
+// than trusting the id on its own — a stale or mistyped id (an old post
+// linking to a race that's since been merged/renumbered, or a typo) must
+// fall back to the generic state card rather than rendering a card that
+// looks race-specific while showing nothing.
+export function findRace(ballot: StateBallot, raceId: string): RaceWithCandidates | null {
+  return (
+    ballot.senateRaces.find((r) => r.id === raceId) ??
+    ballot.houseRaces.find((r) => r.id === raceId) ??
+    null
+  );
+}
+
+async function raceImage(ballot: StateBallot, code: string, race: RaceWithCandidates) {
+  const section = "ELECTIONS";
+  const footerLabel = "FEDERAL & STATEWIDE BALLOT";
+  const title = raceTitleLabel(race);
+  const subtitle = race.isSpecial
+    ? `${code} | Special election | ${ballot.electionDate}`
+    : `${code} | ${ballot.electionDate}`;
+
+  const candidates = race.candidates
+    .filter(isActiveCandidate)
+    .sort((a, b) => (b.cashOnHand ?? -1) - (a.cashOnHand ?? -1))
+    .slice(0, MAX_CANDIDATE_ROWS);
+
+  const candidateText = candidates.map((c) => `${c.name}${c.party}`).join("");
+
+  // See lib/ogFonts.ts: subset text must cover every string actually
+  // rendered below, or the leftover characters fall back to Satori's own
+  // default face instead of Archivo.
+  let archivoBold: ArrayBuffer | null = null;
+  try {
+    archivoBold = await loadArchivoBold(
+      `CIVITAS${section}${title}${subtitle}${DOMAIN}${footerLabel}INCUMBENT?${candidateText}`
+    );
+  } catch {
+    // fall through with archivoBold still null — degrade to Satori's
+    // default face rather than fail the whole image over a font fetch.
+  }
+
+  return new ImageResponse(
+    <div
+      style={{
+        width: 1200,
+        height: 630,
+        background: SURFACE_BASE,
+        display: "flex",
+        flexDirection: "column",
+        padding: "60px 72px",
+        fontFamily: "Archivo",
+        border: `1px solid ${HAIRLINE}`,
+      }}
+    >
+      <Header section={section} />
+      <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "center" }}>
+        <div style={{ color: INK_HI, fontSize: 56, fontWeight: 700, lineHeight: 1.2 }}>
+          {title}
+        </div>
+        <div style={{ color: INK, fontSize: 22, marginTop: 16, marginBottom: 24 }}>
+          {subtitle}
+        </div>
+        {candidates.length > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            {candidates.map((c) => (
+              <CandidateRow key={c.id} candidate={c} />
+            ))}
+          </div>
+        ) : (
+          <div style={{ color: INK_LO, fontSize: 20, marginTop: 8 }}>
+            No confirmed candidates on record yet.
+          </div>
+        )}
+      </div>
+      <Footer label={footerLabel} />
+    </div>,
+    {
+      width: 1200,
+      height: 630,
+      ...(archivoBold
+        ? { fonts: [{ name: "Archivo", data: archivoBold, weight: 700 as const, style: "normal" as const }] }
+        : {}),
+    }
+  );
+}
+
 // Every real link on the site points at an issue's public id (backend
 // issue_ids.py: "i" + 8 lowercase hex chars, e.g. "i9e3779b1") via
 // issue.publicId — page.tsx's generateMetadata builds this OG URL from
@@ -549,6 +678,11 @@ export async function GET(req: NextRequest) {
   const stateCode = parseStateCode(req.nextUrl.searchParams.get("state"));
   if (stateCode) {
     const ballot = await fetchStateBallot(stateCode);
+    const raceId = req.nextUrl.searchParams.get("race");
+    const race = ballot && raceId ? findRace(ballot, raceId) : null;
+    if (ballot && race) {
+      return raceImage(ballot, stateCode, race);
+    }
     return electionImage(ballot, stateCode);
   }
 

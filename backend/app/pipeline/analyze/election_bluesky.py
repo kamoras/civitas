@@ -172,8 +172,12 @@ Return JSON: {{"post": "<your sentence>"}}"""
 def _publish(text: str, race: Race) -> bool:
     # 2026-08: race detail merged into the state ballot page — old
     # /elections/{race.id} links still redirect here, but new posts go
-    # straight to the merged page.
-    url = f"https://civitas-research.org/elections/states/{race.state}#race-{race.id}"
+    # straight to the merged page. The ?race= query param (in addition to
+    # the #race- fragment, which still does the in-page scroll) exists so
+    # the server can see which race this post is about: a URL fragment is
+    # never sent in the request, so /api/og could only ever render the
+    # generic state-level card without it (2026-09 review).
+    url = f"https://civitas-research.org/elections/states/{race.state}?race={race.id}#race-{race.id}"
     return publish_post(
         text, url,
         success_msg=f"Posted election coverage update: {race.id}",

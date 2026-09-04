@@ -29,8 +29,10 @@ async function fetchStateBallot(state: string): Promise<StateBallot | null> {
 // pointing at /elections.
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ state: string }>;
+  searchParams: Promise<{ race?: string }>;
 }): Promise<Metadata> {
   const { state } = await params;
   const code = state.toUpperCase();
@@ -43,7 +45,16 @@ export async function generateMetadata({
     ? `What ${code} votes on ${ballot.electionDate}: U.S. Senate and House contests and ${ballot.measures.length} statewide ballot ${ballot.measures.length === 1 ? "measure" : "measures"}, quoted from official sources.`
     : `Federal contests and statewide ballot measures for ${code}.`;
 
-  const ogImage = `${SITE}/api/og?state=${code}`;
+  // A link to one specific race (e.g. a Bluesky coverage post) carries
+  // ?race=<id> — the #race-<id> fragment it also sets never reaches the
+  // server, so it can't drive which OG card renders. /api/og itself
+  // re-validates the id against the fetched ballot and falls back to the
+  // generic state card on any mismatch, so an unrecognized id here is
+  // harmless: it's passed through, not validated twice.
+  const { race } = await searchParams;
+  const ogImage = race
+    ? `${SITE}/api/og?state=${code}&race=${encodeURIComponent(race)}`
+    : `${SITE}/api/og?state=${code}`;
 
   return {
     title,

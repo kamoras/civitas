@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { formatStanding, parseIssueId, parseStateCode } from "./route";
+import { findRace, formatStanding, parseIssueId, parseStateCode } from "./route";
+import type { RaceWithCandidates, StateBallot } from "@/types/election";
 
 describe("formatStanding", () => {
   it("formats a senator as party-state, no district", () => {
@@ -88,5 +89,46 @@ describe("parseStateCode", () => {
   it("rejects garbage and empty input", () => {
     expect(parseStateCode("")).toBeNull();
     expect(parseStateCode(null)).toBeNull();
+  });
+});
+
+function race(id: string, office: string): RaceWithCandidates {
+  return {
+    id, cycleYear: 2026, office, state: "GA", district: office === "H" ? 6 : null,
+    isSpecial: false, pvi: null, pviLevel: null, candidateSource: "confirmed",
+    counties: null, candidates: [],
+  };
+}
+
+function ballot(senateRaces: RaceWithCandidates[], houseRaces: RaceWithCandidates[]): StateBallot {
+  return {
+    state: "GA", cycleYear: 2026, electionDate: "2026-11-03", electionType: "general",
+    primaryDate: null, statePvi: null, senateRaces, nextSenateElection: null, houseRaces,
+    coverage: [], measures: [],
+    measureCoverage: { status: "not_yet_covered", sourceName: null, checkedAt: null },
+    officialLookup: { url: "https://example.com", label: "", sourceName: "", isStateSpecific: false, verifiedAt: null },
+    omits: [],
+  };
+}
+
+describe("findRace", () => {
+  const senate = race("2026-SEN-GA", "S");
+  const house = race("2026-HOUSE-GA-6", "H");
+  const b = ballot([senate], [house]);
+
+  it("finds a Senate race by id", () => {
+    expect(findRace(b, "2026-SEN-GA")).toBe(senate);
+  });
+
+  it("finds a House race by id", () => {
+    expect(findRace(b, "2026-HOUSE-GA-6")).toBe(house);
+  });
+
+  // The bug this guards against: a post's ?race= id that's stale (the
+  // race was merged/renumbered since the post went out) or mistyped must
+  // fall back to the generic state card, never render a card that looks
+  // race-specific while showing nothing for it.
+  it("returns null for an id not on this ballot", () => {
+    expect(findRace(b, "2026-HOUSE-GA-7")).toBeNull();
   });
 });

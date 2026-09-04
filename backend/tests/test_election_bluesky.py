@@ -327,7 +327,11 @@ class TestPublishUrl:
     to point at /elections/{race.id} (a standalone race-detail page); that
     page was merged into the state ballot page, so the link now points
     straight there instead of through the redirect that keeps old links
-    working."""
+    working. 2026-09: the race id is also carried as a ?race= query param,
+    not just a #race- fragment — a fragment is never sent to the server, so
+    without the query param /api/og had no way to render a race-specific
+    OG card and every post's link preview showed the same generic
+    state-level card regardless of which race the post was about."""
 
     def test_links_to_the_race_s_section_of_its_state_ballot_page(self, db_session):
         race = _race(db_session, race_id="2026-HOUSE-GA-6", state="GA", office="H")
@@ -337,4 +341,4 @@ class TestPublishUrl:
             assert election_bluesky._publish("some text", race) is True
 
         url = mock_publish.call_args.args[1]
-        assert url == "https://civitas-research.org/elections/states/GA#race-2026-HOUSE-GA-6"
+        assert url == "https://civitas-research.org/elections/states/GA?race=2026-HOUSE-GA-6#race-2026-HOUSE-GA-6"
