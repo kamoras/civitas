@@ -30,11 +30,16 @@ import re
 # to recognise, while a bare "House of Representatives" is NOT and must
 # keep being refused (it is a state chamber's name in most states; see
 # office_from_columns for how a state that publishes only that label is
-# handled).
+# handled). Every "Congress" alternative carries its own \b: without it,
+# "Congress" matches as a substring of "Congressional"/"Congressman" too
+# (a common county-export convention groups a LOCAL race under its
+# containing congressional district, e.g. "U.S. Congressional District 3
+# County Commissioner"), which would misread that county race as a real
+# federal contest.
 _CHAMBER_HOUSE = (
-    r"(?:United\s+States\s+(?:Congress|Representative)"
-    r"|U\.?\s*S\.?\s*(?:House|Representative|Congress)"
-    r"|(?:Representative\s+in\s+|\d+(?:st|nd|rd|th)\s+)Congress)"
+    r"(?:United\s+States\s+(?:Congress\b|Representative)"
+    r"|U\.?\s*S\.?\s*(?:House|Representative|Congress\b)"
+    r"|(?:Representative\s+in\s+|\d+(?:st|nd|rd|th)\s+)Congress\b)"
 )
 # Both orders occur live: "District 5" (most states) and "5th District"
 # / "1ST CONGRESS" (Florida's and Illinois' own labels). Arizona's own

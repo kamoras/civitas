@@ -42,6 +42,15 @@ on this system already uses. Verified live against the real 2026 cycle:
 the runoff election id carries zero federal contests (every federal race
 cleared 50% in the first round that cycle), so this path is proven to
 safely no-op, not just written and untested.
+
+The vendor's own payload carries no certification/official flag anywhere
+(confirmed empty across every real response captured) — the same shape as
+Tennessee and Florida in this codebase, so a nominee is confirmed only
+once `settle_days` has passed since that STAGE's own `electionDate`
+(reusing `_settled` from state_candidates_tabular.py rather than
+re-deriving the same freshness rule a third time). Without this, a
+provisional election-night lead — before absentee/late precincts are
+counted — could be confirmed as final.
 """
 
 import logging
@@ -51,6 +60,7 @@ import httpx
 
 from app.pipeline.fetch.http_utils import BROWSER_JSON_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import normalize_party, parse_office, pick_nominee, surname
+from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _settled
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -78,24 +88,24 @@ async def _get_json(client: httpx.AsyncClient, url: str, label: str) -> dict | l
         return None
 
 
-async def _discover_election_ids(client: httpx.AsyncClient, year: int) -> tuple[str | None, str | None]:
-    """(primary_id, runoff_id) for `year`, either None if that stage
-    isn't in the list yet — never a guessed/hardcoded id."""
+async def _discover_elections(client: httpx.AsyncClient, year: int) -> tuple[dict | None, dict | None]:
+    """(primary, runoff) for `year`, each {"id", "date"} or None if that
+    stage isn't in the list yet — never a guessed/hardcoded id."""
     elections = await _get_json(client, f"{BASE}/Election/GetElectionList?cid={CID}", f"AR election list {year}")
     if not isinstance(elections, list):
         return None, None
-    primary_id = runoff_id = None
+    primary = runoff = None
     for e in elections:
         date = str(e.get("electionDate") or "")
         name = e.get("electionName") or ""
         eid = e.get("electionID")
         if not date.startswith(str(year)) or not eid:
             continue
-        if primary_id is None and _PRIMARY_NAME_RE.search(name):
-            primary_id = eid
-        elif runoff_id is None and _RUNOFF_NAME_RE.search(name):
-            runoff_id = eid
-    return primary_id, runoff_id
+        if primary is None and _PRIMARY_NAME_RE.search(name):
+            primary = {"id": eid, "date": date}
+        elif runoff is None and _RUNOFF_NAME_RE.search(name):
+            runoff = {"id": eid, "date": date}
+    return primary, runoff
 
 
 async def _federal_contests_and_results(
@@ -110,7 +120,7 @@ async def _federal_contests_and_results(
         client, f"{BASE}/Contest/GetContestSearchList?cid={CID}&electionID={election_id}",
         f"AR contest names {year}",
     )
-    if search is None:
+    if not isinstance(search, dict):
         return None
     contests = ((search.get("response") or {}).get("contests")) or {}
     federal = {
@@ -124,7 +134,7 @@ async def _federal_contests_and_results(
         client, f"{BASE}/Contest/GetContestResults?cId={CID}&electionID={election_id}&contestType=Federal",
         f"AR federal results {year}",
     )
-    if results is None:
+    if not isinstance(results, dict):
         return None
     return federal, ((results.get("response") or {}).get("contests")) or {}
 
@@ -133,16 +143,17 @@ async def fetch_confirmed_candidates(
     client: httpx.AsyncClient, year: int, state: str, source: dict,  # noqa: ARG001 — state unused, this strategy is AR-only by construction
 ) -> list[dict] | None:
     threshold = source.get("runoff_threshold_pct")
-    primary_id, runoff_id = await _discover_election_ids(client, year)
-    if primary_id is None:
+    settle_days = source.get("settle_days", DEFAULT_SETTLE_DAYS)
+    primary, runoff = await _discover_elections(client, year)
+    if primary is None:
         return []  # not published yet this cycle — healthy unknown
 
     by_seat: dict[tuple[str, int | None, str], tuple[str, float]] = {}
     # Runoff processed second so its answer for a seat overrides the primary's.
-    for election_id, stage_threshold in ((primary_id, threshold), (runoff_id, None)):
-        if election_id is None:
-            continue
-        fetched = await _federal_contests_and_results(client, election_id, year)
+    for election, stage_threshold in ((primary, threshold), (runoff, None)):
+        if election is None or not _settled(election["date"], settle_days):
+            continue  # no stage yet, or this stage's count isn't settled
+        fetched = await _federal_contests_and_results(client, election["id"], year)
         if fetched is None:
             return None
         federal, result_contests = fetched
@@ -155,21 +166,19 @@ async def fetch_confirmed_candidates(
                 continue
             office, district = office_district
             choice_names = contest.get("choices") or {}
+            # Every choice's votes count toward the total (an unresolvable
+            # name still counted a real vote), but only a resolvable name
+            # can be confirmed the winner below -- a candidate the search
+            # list doesn't know about should shrink everyone else's
+            # percentage, never be silently excluded from both sides.
             choices = [
-                (surname(choice_names[ch["choiceID"]]["name"]), ch.get("totalVotes"))
+                (surname((choice_names.get(ch.get("choiceID")) or {}).get("name") or ""), ch.get("totalVotes"))
                 for ch in contest_result.get("choices") or []
-                if ch.get("choiceID") in choice_names
             ]
-            choices = [(n, v) for n, v in choices if n]
             seat = (office, district, party)
             won = pick_nominee(choices, runoff_threshold_pct=stage_threshold)
-            if won:
+            if won and won[0]:
                 by_seat[seat] = won
-            elif stage_threshold is not None:
-                # Below-majority in the PRIMARY: leave the seat unresolved
-                # so a same-cycle runoff stage (processed next) can still
-                # answer it, rather than a stale entry blocking it forever.
-                by_seat.pop(seat, None)
 
     return [
         {"office": o, "district": d, "party": p, "last_name": name}

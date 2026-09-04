@@ -33,6 +33,16 @@ class TestParseOffice:
         assert common.parse_office("DEM U.S. Congress District 04") == ("H", 4)
         assert common.parse_office("U.S. Senate") == ("S", None)
 
+    def test_congress_does_not_match_inside_a_longer_word(self):
+        """A county-export convention groups a local race under its
+        containing congressional district ("U.S. Congressional District 3
+        County Commissioner") -- without a word boundary after "Congress",
+        the abbreviated U.S. group added for Arkansas would misread that
+        substring as a real federal contest."""
+        assert common.parse_office("US Congressional Redistricting Commission") is None
+        assert common.parse_office("U.S. Congressional District Court Judge") is None
+        assert common.parse_office("U.S. Congressional District 3 County Commissioner") is None
+
     def test_leading_zero_district_is_not_octal_or_string(self):
         assert common.parse_office("US HOUSE OF REPRESENTATIVES DISTRICT 022") == ("H", 22)
 
