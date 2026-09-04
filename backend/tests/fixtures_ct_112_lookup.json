@@ -1,0 +1,427 @@
+{
+  "election": {
+    "ID": "112",
+    "NM": "08/11/2026 -- Republican Primary",
+    "DT": "08/11/2026",
+    "ET": "P",
+    "EC": "SP",
+    "P": "Republican Party",
+    "DNM": "2026 Republican Primary"
+  },
+  "officeList": [
+    {
+      "19669": {
+        "ID": "19669",
+        "NM": "Representative in Congress 4",
+        "OT": "C",
+        "OO": "1",
+        "DT": "Connecticut 04",
+        "D": "4"
+      }
+    },
+    {
+      "19670": {
+        "ID": "19670",
+        "NM": "Representative in Congress 5",
+        "OT": "C",
+        "OO": "2",
+        "DT": "Connecticut 05",
+        "D": "5"
+      }
+    },
+    {
+      "19843": {
+        "ID": "19843",
+        "NM": "State Senator 19",
+        "OT": "S",
+        "OO": "3",
+        "DT": "Connecticut 19",
+        "D": "19"
+      }
+    },
+    {
+      "19723": {
+        "ID": "19723",
+        "NM": "State Representative 50",
+        "OT": "A",
+        "OO": "4",
+        "DT": "Connecticut 50",
+        "D": "50"
+      }
+    },
+    {
+      "19744": {
+        "ID": "19744",
+        "NM": "State Representative 71",
+        "OT": "A",
+        "OO": "5",
+        "DT": "Connecticut 71",
+        "D": "71"
+      }
+    }
+  ],
+  "candidateIds": {
+    "44079": {
+      "NM": "Michael Ted Goldstein",
+      "LN": "Goldstein",
+      "FN": "Michael",
+      "MN": "Ted",
+      "P": "6",
+      "AD": "10 Sandy Lane, Greenwich, CT-06831",
+      "CO": "1"
+    },
+    "44078": {
+      "NM": "Jason Guidone",
+      "LN": "Guidone",
+      "FN": "Jason",
+      "MN": "",
+      "P": "6",
+      "AD": "94 Cone Rd, Hebron, CT-06248",
+      "CO": "1"
+    },
+    "44151": {
+      "NM": "Jadon E. MacCormack",
+      "LN": "MacCormack",
+      "FN": "Jadon",
+      "MN": "",
+      "P": "6",
+      "AD": "8 Wolf Den Road, Brooklyn, CT-06234",
+      "CO": "1"
+    },
+    "44081": {
+      "NM": "William Pizzuto",
+      "LN": "Pizzuto",
+      "FN": "William",
+      "MN": "",
+      "P": "6",
+      "AD": "20 Somerset Drive, Middlebury, CT-06762",
+      "CO": "1"
+    },
+    "43578": {
+      "NM": "Chris Shea",
+      "LN": "Shea",
+      "FN": "Chris",
+      "MN": "",
+      "P": "6",
+      "AD": "247 Forest Lane, Cheshire, CT-06410",
+      "CO": "1"
+    },
+    "43579": {
+      "NM": "Jonathan De Barros",
+      "LN": "De Barros",
+      "FN": "Jonathan",
+      "MN": "",
+      "P": "6",
+      "AD": "47 Jan Court, Terryville, CT-06785",
+      "CO": "2"
+    },
+    "44152": {
+      "NM": "Anthony J. Emilio",
+      "LN": "Emilio",
+      "FN": "Anthony",
+      "MN": "",
+      "P": "6",
+      "AD": "56 Babbitt Hill Road, Pomfret Center, CT-06258",
+      "CO": "2"
+    },
+    "43654": {
+      "NM": "Mike France",
+      "LN": "France",
+      "FN": "Mike",
+      "MN": "",
+      "P": "6",
+      "AD": "17 Garden Drive, Gales Ferry, CT-06335",
+      "CO": "2"
+    },
+    "44082": {
+      "NM": "Michael Grosso",
+      "LN": "Grosso",
+      "FN": "Michael",
+      "MN": "",
+      "P": "6",
+      "AD": "4 Norman St, Waterbury, CT-06708",
+      "CO": "2"
+    },
+    "44080": {
+      "NM": "Daniel Miressi",
+      "LN": "Miressi",
+      "FN": "Daniel",
+      "MN": "",
+      "P": "6",
+      "AD": "300 Glover Avenue, Norwalk, CT-06850",
+      "CO": "2"
+    }
+  },
+  "partyIds": {
+    "1": {
+      "CD": "D",
+      "NM": "Democratic Party",
+      "P": "250"
+    },
+    "2": {
+      "CD": "C",
+      "NM": "Conservative Party",
+      "P": "226"
+    },
+    "3": {
+      "CD": "IND",
+      "NM": "Independent Party",
+      "P": "204"
+    },
+    "4": {
+      "CD": "NL",
+      "NM": "Natural Law Party",
+      "P": "181"
+    },
+    "5": {
+      "CD": "INDP",
+      "NM": "Independance Party",
+      "P": "159"
+    },
+    "6": {
+      "CD": "R",
+      "NM": "Republican Party",
+      "P": "135"
+    },
+    "7": {
+      "CD": "G",
+      "NM": "Green Party",
+      "P": "112"
+    },
+    "8": {
+      "CD": "LI",
+      "NM": "Libertarian Party",
+      "P": "89"
+    },
+    "9": {
+      "CD": "RE",
+      "NM": "Reform Party",
+      "P": "65"
+    },
+    "11": {
+      "CD": "PE",
+      "NM": "People Party",
+      "P": "101"
+    },
+    "12": {
+      "CD": "WF",
+      "NM": "Working Families Party",
+      "P": "22"
+    },
+    "13": {
+      "CD": "O",
+      "NM": "Open Party",
+      "P": "103"
+    },
+    "14": {
+      "CD": "BL",
+      "NM": "The Bottom Line Party",
+      "P": "104"
+    },
+    "15": {
+      "CD": "PC",
+      "NM": "Petitioning Candidate",
+      "P": "0"
+    },
+    "16": {
+      "CD": "WE",
+      "NM": "We the People  Party",
+      "P": "106"
+    },
+    "17": {
+      "CD": "CC",
+      "NM": "Christian Center Party",
+      "P": "107"
+    },
+    "18": {
+      "CD": "IFM",
+      "NM": "Independence for Montville Party",
+      "P": "108"
+    },
+    "19": {
+      "CD": "SC",
+      "NM": "Smart Choice Party",
+      "P": "109"
+    },
+    "20": {
+      "CD": "SCF",
+      "NM": "Simsbury Citizens First Party",
+      "P": "110"
+    },
+    "21": {
+      "CD": "CP",
+      "NM": "Chatham Party",
+      "P": "111"
+    },
+    "22": {
+      "CD": "RB",
+      "NM": "Realistic Balance Party",
+      "P": "112"
+    },
+    "23": {
+      "CD": "WIP",
+      "NM": "Winsted Independent Party",
+      "P": "113"
+    },
+    "24": {
+      "CD": "11",
+      "NM": "A Brookfield Party",
+      "P": "114"
+    },
+    "25": {
+      "CD": "SWN",
+      "NM": "Save Westport Now Party",
+      "P": "115"
+    },
+    "26": {
+      "CD": "CFW",
+      "NM": "Coalition For Westport Party",
+      "P": "116"
+    },
+    "1023": {
+      "CD": "ASP",
+      "NM": "A Sentinel Party",
+      "P": "126"
+    },
+    "1024": {
+      "CD": "TP",
+      "NM": "Test Party",
+      "P": "127"
+    },
+    "1026": {
+      "CD": "WI",
+      "NM": "Write In",
+      "P": "274"
+    },
+    "1028": {
+      "CD": "CA",
+      "NM": "Red party",
+      "P": "131"
+    },
+    "1032": {
+      "CD": "PP",
+      "NM": "Peace and Progress Party",
+      "P": "135"
+    },
+    "1033": {
+      "CD": "NonP",
+      "NM": "Non Partisan",
+      "P": "136"
+    },
+    "1034": {
+      "CD": "CGP",
+      "NM": "Common Ground Party",
+      "P": "137"
+    },
+    "1035": {
+      "CD": "CFP",
+      "NM": "Clinton First Party",
+      "P": "138"
+    },
+    "1036": {
+      "CD": "KCP",
+      "NM": "Killingworth Conservative Party",
+      "P": "139"
+    },
+    "1037": {
+      "CD": "AIP",
+      "NM": "American Independent Party",
+      "P": "140"
+    },
+    "1038": {
+      "CD": "CIP",
+      "NM": "Colchester Independent Party",
+      "P": "141"
+    },
+    "1039": {
+      "CD": "URHP",
+      "NM": "Unite Rocky Hill Party",
+      "P": "142"
+    },
+    "1040": {
+      "CD": "U",
+      "NM": "Unaffiliated",
+      "P": "143"
+    },
+    "1041": {
+      "CD": "TW",
+      "NM": "Trump Winsted Party",
+      "P": "144"
+    },
+    "1042": {
+      "CD": "ABC",
+      "NM": "A Better Choice",
+      "P": "145"
+    },
+    "1044": {
+      "CD": "RCLP",
+      "NM": "Redding Civic League Party",
+      "P": "147"
+    },
+    "1045": {
+      "CD": "GFCT",
+      "NM": "Griebel Frank for CT Party",
+      "P": "0"
+    },
+    "1046": {
+      "CD": "ACL",
+      "NM": "Amigo Constitution Liberty Party",
+      "P": "0"
+    },
+    "1047": {
+      "CD": "AMP",
+      "NM": "A Meriden Party",
+      "P": "150"
+    },
+    "1048": {
+      "CD": "BTB",
+      "NM": "Back to Basics Party",
+      "P": "151"
+    },
+    "1049": {
+      "CD": "THP",
+      "NM": "The Hartford Party",
+      "P": "152"
+    },
+    "1050": {
+      "CD": "SCP",
+      "NM": "Second Chance Party",
+      "P": "153"
+    },
+    "1051": {
+      "CD": "FTP",
+      "NM": "For the People Party",
+      "P": "154"
+    },
+    "1052": {
+      "CD": "VFE",
+      "NM": "Voices for Enfield Party",
+      "P": "155"
+    },
+    "1053": {
+      "CD": "IPP",
+      "NM": "Independent Progressive Party",
+      "P": "156"
+    },
+    "1054": {
+      "CD": "EP",
+      "NM": "Epic Party",
+      "P": "0"
+    },
+    "1055": {
+      "CD": "RECP",
+      "NM": "Reclaim Party",
+      "P": "0"
+    },
+    "1056": {
+      "CD": "SR",
+      "NM": "Socialist Resurgence Party",
+      "P": "0"
+    },
+    "1068": {
+      "CD": "CGG",
+      "NM": "Cheaper Gas Groceries Party",
+      "P": "0"
+    }
+  }
+}

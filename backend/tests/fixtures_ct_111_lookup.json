@@ -1,0 +1,659 @@
+{
+  "election": {
+    "ID": "111",
+    "NM": "08/11/2026 -- Democratic Primary",
+    "DT": "08/11/2026",
+    "ET": "P",
+    "EC": "SP",
+    "P": "Democratic Party",
+    "DNM": "2026 Democratic Primary"
+  },
+  "officeList": [
+    {
+      "20035": {
+        "ID": "20035",
+        "NM": "Governor",
+        "OT": "SW",
+        "OO": "1",
+        "DT": "",
+        "D": "0"
+      }
+    },
+    {
+      "19666": {
+        "ID": "19666",
+        "NM": "Representative in Congress 1",
+        "OT": "C",
+        "OO": "2",
+        "DT": "Connecticut 01",
+        "D": "1"
+      }
+    },
+    {
+      "19826": {
+        "ID": "19826",
+        "NM": "State Senator 2",
+        "OT": "S",
+        "OO": "3",
+        "DT": "Connecticut 02",
+        "D": "2"
+      }
+    },
+    {
+      "19837": {
+        "ID": "19837",
+        "NM": "State Senator 13",
+        "OT": "S",
+        "OO": "4",
+        "DT": "Connecticut 13",
+        "D": "13"
+      }
+    },
+    {
+      "19677": {
+        "ID": "19677",
+        "NM": "State Representative 4",
+        "OT": "A",
+        "OO": "5",
+        "DT": "Connecticut 04",
+        "D": "4"
+      }
+    },
+    {
+      "19683": {
+        "ID": "19683",
+        "NM": "State Representative 10",
+        "OT": "A",
+        "OO": "6",
+        "DT": "Connecticut 10",
+        "D": "10"
+      }
+    },
+    {
+      "19704": {
+        "ID": "19704",
+        "NM": "State Representative 31",
+        "OT": "A",
+        "OO": "7",
+        "DT": "Connecticut 31",
+        "D": "31"
+      }
+    },
+    {
+      "19765": {
+        "ID": "19765",
+        "NM": "State Representative 92",
+        "OT": "A",
+        "OO": "8",
+        "DT": "Connecticut 92",
+        "D": "92"
+      }
+    },
+    {
+      "19770": {
+        "ID": "19770",
+        "NM": "State Representative 97",
+        "OT": "A",
+        "OO": "9",
+        "DT": "Connecticut 97",
+        "D": "97"
+      }
+    },
+    {
+      "19791": {
+        "ID": "19791",
+        "NM": "State Representative 118",
+        "OT": "A",
+        "OO": "10",
+        "DT": "Connecticut 118",
+        "D": "118"
+      }
+    },
+    {
+      "19909": {
+        "ID": "19909",
+        "NM": "Judge of Probate 13",
+        "OT": "PD",
+        "OO": "11",
+        "DT": "Connecticut 13",
+        "D": "13"
+      }
+    },
+    {
+      "19874": {
+        "ID": "19874",
+        "NM": "Judge of Probate 48",
+        "OT": "PD",
+        "OO": "12",
+        "DT": "Connecticut 48",
+        "D": "48"
+      }
+    }
+  ],
+  "candidateIds": {
+    "43493": {
+      "NM": "Ned Lamont",
+      "LN": "Lamont",
+      "FN": "Ned",
+      "MN": "",
+      "P": "1",
+      "AD": "4 Ashton Drive, Greenwich, CT-06831",
+      "CO": "0"
+    },
+    "43479": {
+      "NM": "Luke Bronin",
+      "LN": "Bronin",
+      "FN": "Luke",
+      "MN": "",
+      "P": "1",
+      "AD": "93 Elm St., Hartford, CT-06106",
+      "CO": "1"
+    },
+    "44124": {
+      "NM": "Moise \"Moses\" Carelus",
+      "LN": "Carelus",
+      "FN": "Moise \"Moses\"",
+      "MN": "",
+      "P": "1",
+      "AD": "457 Stanley Dr., Glastonbury, CT-06033",
+      "CO": "1"
+    },
+    "44140": {
+      "NM": "Julio Concepcion",
+      "LN": "Concepcion",
+      "FN": "Julio",
+      "MN": "",
+      "P": "1",
+      "AD": "221 Trumbull Street, Apt. 2301, Hartford, CT-06103",
+      "CO": "1"
+    },
+    "44142": {
+      "NM": "Patricia A Dillon",
+      "LN": "Dillon",
+      "FN": "Patricia",
+      "MN": "A",
+      "P": "1",
+      "AD": "68 West Rock Ave, New Haven, CT-06515",
+      "CO": "1"
+    },
+    "43527": {
+      "NM": "Jack Fazzino",
+      "LN": "Fazzino",
+      "FN": "Jonathan",
+      "MN": "W.",
+      "P": "1",
+      "AD": "225 Oxford Court, Meriden, CT-06450",
+      "CO": "1"
+    },
+    "44147": {
+      "NM": "Paul J Ganim",
+      "LN": "Ganim",
+      "FN": "Paul",
+      "MN": "J",
+      "P": "1",
+      "AD": "7 Battery Park Dr, Bridgeport, CT-06605",
+      "CO": "1"
+    },
+    "43584": {
+      "NM": "Maryam Khan",
+      "LN": "Khan",
+      "FN": "Maryam",
+      "MN": "",
+      "P": "1",
+      "AD": "25 Colton Street, Windsor, CT-06095",
+      "CO": "1"
+    },
+    "44114": {
+      "NM": "Toni Lombardi",
+      "LN": "Lombardi",
+      "FN": "Toni",
+      "MN": "",
+      "P": "1",
+      "AD": "195 Meadowside Rd., Milford, CT-06460",
+      "CO": "1"
+    },
+    "44143": {
+      "NM": "Leland J. Moore",
+      "LN": "Moore",
+      "FN": "Leland",
+      "MN": "",
+      "P": "1",
+      "AD": "189 Concord Street, New Haven, CT-06512",
+      "CO": "1"
+    },
+    "44134": {
+      "NM": "Angie Parkinson",
+      "LN": "Parkinson",
+      "FN": "Angie",
+      "MN": "",
+      "P": "1",
+      "AD": "31 High St, #7308, East Hartford, CT-06118",
+      "CO": "1"
+    },
+    "44013": {
+      "NM": "Thomas A. Robinson",
+      "LN": "Robinson",
+      "FN": "Thomas",
+      "MN": "A.",
+      "P": "1",
+      "AD": "124 Kent Drive, Manchester, CT-06042",
+      "CO": "1"
+    },
+    "44146": {
+      "NM": "Wildaliz Bermudez",
+      "LN": "Bermudez",
+      "FN": "Wildaliz",
+      "MN": "",
+      "P": "1",
+      "AD": "233 Front Street #A, New Haven, CT-06513",
+      "CO": "2"
+    },
+    "44148": {
+      "NM": "Mark Bradley",
+      "LN": "Bradley",
+      "FN": "Mark",
+      "MN": "",
+      "P": "1",
+      "AD": "528 Clinton Avenue, Bridgeport, CT-06605",
+      "CO": "2"
+    },
+    "44125": {
+      "NM": "Anthony DiLizia",
+      "LN": "DiLizia",
+      "FN": "Anthony",
+      "MN": "",
+      "P": "1",
+      "AD": "33 Clinton Street, Glastonbury, CT-06033",
+      "CO": "2"
+    },
+    "43494": {
+      "NM": "Josh Elliott",
+      "LN": "Elliott",
+      "FN": "Joshua",
+      "MN": "",
+      "P": "1",
+      "AD": "28 Cobblestone Dr., Hamden, CT-06518",
+      "CO": "2"
+    },
+    "44144": {
+      "NM": "Justin M. Farmer",
+      "LN": "Farmer",
+      "FN": "Justin",
+      "MN": "M.",
+      "P": "1",
+      "AD": "1205 Forest Road, New Haven, CT-06515",
+      "CO": "2"
+    },
+    "44150": {
+      "NM": "Ruth Fortune",
+      "LN": "Fortune",
+      "FN": "Ruth",
+      "MN": "",
+      "P": "1",
+      "AD": "140 Elizabeth St, Hartford, CT-06105",
+      "CO": "2"
+    },
+    "44137": {
+      "NM": "Tyron V. Harris",
+      "LN": "Harris",
+      "FN": "Tyron",
+      "MN": "V.",
+      "P": "1",
+      "AD": "118 Clayton Road, East Hartford, CT-06118",
+      "CO": "2"
+    },
+    "43528": {
+      "NM": "Jim Jinks",
+      "LN": "Jinks",
+      "FN": "Jim",
+      "MN": "",
+      "P": "1",
+      "AD": "244 Academy Rd, Cheshire, CT-06410",
+      "CO": "2"
+    },
+    "43526": {
+      "NM": "Douglas McCrory",
+      "LN": "McCrory",
+      "FN": "Douglas",
+      "MN": "",
+      "P": "1",
+      "AD": "235 Blue Hills Ave., Hartford, CT-06112",
+      "CO": "2"
+    },
+    "44012": {
+      "NM": "Paul Rubin",
+      "LN": "Rubin",
+      "FN": "Paul",
+      "MN": "",
+      "P": "1",
+      "AD": "40 Masters Way, Manchester, CT-06040",
+      "CO": "2"
+    },
+    "44118": {
+      "NM": "Christopher Saley",
+      "LN": "Saley",
+      "FN": "Christopher",
+      "MN": "",
+      "P": "1",
+      "AD": "150 Bittersweet Avenue, Milford, CT-06461",
+      "CO": "2"
+    },
+    "44141": {
+      "NM": "Venice Sotomayor",
+      "LN": "Sotomayor",
+      "FN": "Venice",
+      "MN": "",
+      "P": "1",
+      "AD": "20 Front Street, Hartford, CT-06103",
+      "CO": "2"
+    },
+    "44145": {
+      "NM": "Eli Sabin",
+      "LN": "Sabin",
+      "FN": "Eli",
+      "MN": "",
+      "P": "1",
+      "AD": "191 Willard Street #1, New Haven, CT-06515",
+      "CO": "3"
+    },
+    "43540": {
+      "NM": "Ayana Taylor",
+      "LN": "Taylor",
+      "FN": "Ayana",
+      "MN": "",
+      "P": "1",
+      "AD": "88 Farmstead Lane, Windsor, CT-06095",
+      "CO": "3"
+    },
+    "43478": {
+      "NM": "Jillian Gilchrest",
+      "LN": "Gilchrest",
+      "FN": "Jillian",
+      "MN": "",
+      "P": "1",
+      "AD": "115 Maplewood Ave., West Hartford, CT-06119",
+      "CO": "4"
+    },
+    "44087": {
+      "NM": "John B. Larson",
+      "LN": "Larson",
+      "FN": "John",
+      "MN": "B.",
+      "P": "1",
+      "AD": "1887 Main Street, East Hartford, CT-06108",
+      "CO": "5"
+    }
+  },
+  "partyIds": {
+    "1": {
+      "CD": "D",
+      "NM": "Democratic Party",
+      "P": "250"
+    },
+    "2": {
+      "CD": "C",
+      "NM": "Conservative Party",
+      "P": "226"
+    },
+    "3": {
+      "CD": "IND",
+      "NM": "Independent Party",
+      "P": "204"
+    },
+    "4": {
+      "CD": "NL",
+      "NM": "Natural Law Party",
+      "P": "181"
+    },
+    "5": {
+      "CD": "INDP",
+      "NM": "Independance Party",
+      "P": "159"
+    },
+    "6": {
+      "CD": "R",
+      "NM": "Republican Party",
+      "P": "135"
+    },
+    "7": {
+      "CD": "G",
+      "NM": "Green Party",
+      "P": "112"
+    },
+    "8": {
+      "CD": "LI",
+      "NM": "Libertarian Party",
+      "P": "89"
+    },
+    "9": {
+      "CD": "RE",
+      "NM": "Reform Party",
+      "P": "65"
+    },
+    "11": {
+      "CD": "PE",
+      "NM": "People Party",
+      "P": "101"
+    },
+    "12": {
+      "CD": "WF",
+      "NM": "Working Families Party",
+      "P": "22"
+    },
+    "13": {
+      "CD": "O",
+      "NM": "Open Party",
+      "P": "103"
+    },
+    "14": {
+      "CD": "BL",
+      "NM": "The Bottom Line Party",
+      "P": "104"
+    },
+    "15": {
+      "CD": "PC",
+      "NM": "Petitioning Candidate",
+      "P": "0"
+    },
+    "16": {
+      "CD": "WE",
+      "NM": "We the People  Party",
+      "P": "106"
+    },
+    "17": {
+      "CD": "CC",
+      "NM": "Christian Center Party",
+      "P": "107"
+    },
+    "18": {
+      "CD": "IFM",
+      "NM": "Independence for Montville Party",
+      "P": "108"
+    },
+    "19": {
+      "CD": "SC",
+      "NM": "Smart Choice Party",
+      "P": "109"
+    },
+    "20": {
+      "CD": "SCF",
+      "NM": "Simsbury Citizens First Party",
+      "P": "110"
+    },
+    "21": {
+      "CD": "CP",
+      "NM": "Chatham Party",
+      "P": "111"
+    },
+    "22": {
+      "CD": "RB",
+      "NM": "Realistic Balance Party",
+      "P": "112"
+    },
+    "23": {
+      "CD": "WIP",
+      "NM": "Winsted Independent Party",
+      "P": "113"
+    },
+    "24": {
+      "CD": "11",
+      "NM": "A Brookfield Party",
+      "P": "114"
+    },
+    "25": {
+      "CD": "SWN",
+      "NM": "Save Westport Now Party",
+      "P": "115"
+    },
+    "26": {
+      "CD": "CFW",
+      "NM": "Coalition For Westport Party",
+      "P": "116"
+    },
+    "1023": {
+      "CD": "ASP",
+      "NM": "A Sentinel Party",
+      "P": "126"
+    },
+    "1024": {
+      "CD": "TP",
+      "NM": "Test Party",
+      "P": "127"
+    },
+    "1026": {
+      "CD": "WI",
+      "NM": "Write In",
+      "P": "274"
+    },
+    "1028": {
+      "CD": "CA",
+      "NM": "Red party",
+      "P": "131"
+    },
+    "1032": {
+      "CD": "PP",
+      "NM": "Peace and Progress Party",
+      "P": "135"
+    },
+    "1033": {
+      "CD": "NonP",
+      "NM": "Non Partisan",
+      "P": "136"
+    },
+    "1034": {
+      "CD": "CGP",
+      "NM": "Common Ground Party",
+      "P": "137"
+    },
+    "1035": {
+      "CD": "CFP",
+      "NM": "Clinton First Party",
+      "P": "138"
+    },
+    "1036": {
+      "CD": "KCP",
+      "NM": "Killingworth Conservative Party",
+      "P": "139"
+    },
+    "1037": {
+      "CD": "AIP",
+      "NM": "American Independent Party",
+      "P": "140"
+    },
+    "1038": {
+      "CD": "CIP",
+      "NM": "Colchester Independent Party",
+      "P": "141"
+    },
+    "1039": {
+      "CD": "URHP",
+      "NM": "Unite Rocky Hill Party",
+      "P": "142"
+    },
+    "1040": {
+      "CD": "U",
+      "NM": "Unaffiliated",
+      "P": "143"
+    },
+    "1041": {
+      "CD": "TW",
+      "NM": "Trump Winsted Party",
+      "P": "144"
+    },
+    "1042": {
+      "CD": "ABC",
+      "NM": "A Better Choice",
+      "P": "145"
+    },
+    "1044": {
+      "CD": "RCLP",
+      "NM": "Redding Civic League Party",
+      "P": "147"
+    },
+    "1045": {
+      "CD": "GFCT",
+      "NM": "Griebel Frank for CT Party",
+      "P": "0"
+    },
+    "1046": {
+      "CD": "ACL",
+      "NM": "Amigo Constitution Liberty Party",
+      "P": "0"
+    },
+    "1047": {
+      "CD": "AMP",
+      "NM": "A Meriden Party",
+      "P": "150"
+    },
+    "1048": {
+      "CD": "BTB",
+      "NM": "Back to Basics Party",
+      "P": "151"
+    },
+    "1049": {
+      "CD": "THP",
+      "NM": "The Hartford Party",
+      "P": "152"
+    },
+    "1050": {
+      "CD": "SCP",
+      "NM": "Second Chance Party",
+      "P": "153"
+    },
+    "1051": {
+      "CD": "FTP",
+      "NM": "For the People Party",
+      "P": "154"
+    },
+    "1052": {
+      "CD": "VFE",
+      "NM": "Voices for Enfield Party",
+      "P": "155"
+    },
+    "1053": {
+      "CD": "IPP",
+      "NM": "Independent Progressive Party",
+      "P": "156"
+    },
+    "1054": {
+      "CD": "EP",
+      "NM": "Epic Party",
+      "P": "0"
+    },
+    "1055": {
+      "CD": "RECP",
+      "NM": "Reclaim Party",
+      "P": "0"
+    },
+    "1056": {
+      "CD": "SR",
+      "NM": "Socialist Resurgence Party",
+      "P": "0"
+    },
+    "1068": {
+      "CD": "CGG",
+      "NM": "Cheaper Gas Groceries Party",
+      "P": "0"
+    }
+  }
+}
