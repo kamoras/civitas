@@ -63,6 +63,19 @@ Arkansas/Tennessee/Florida in this system, so a nominee is confirmed
 only once `settle_days` has passed since the matched election's own
 date (reusing `_settled` from state_candidates_tabular.py rather than
 re-deriving the same freshness rule a fourth time).
+
+The August requirement is empirically load-bearing today, not
+decoration: checked against the real, unfiltered election list back to
+2016, year + party-phrase + non-special alone is NOT enough to
+disambiguate in every year -- 2021 also carries a real "Judge of Probate
+8th Democratic Primary" and 2026 a real "September 1st Democratic
+Primary", both of which share the exact "-- ... Democratic Primary"
+substring shape and would otherwise collide with the actual statewide
+primary. That said, Connecticut HAS moved this date by statute before
+(from September to August, 2013, for MOVE Act compliance) and could
+again -- a future such change would make this filter silently reject
+the real primary and report the cycle as "not yet published" with no
+error. A disclosed, real limitation, not a proven-impossible one.
 """
 
 import logging
@@ -71,7 +84,7 @@ import re
 import httpx
 
 from app.pipeline.fetch.http_utils import BROWSER_JSON_HEADERS, fetch_with_retry
-from app.pipeline.fetch.state_candidates_common import normalize_party, pick_nominee, surname
+from app.pipeline.fetch.state_candidates_common import normalize_party, office_from_columns, pick_nominee, surname
 from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _settled
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -80,6 +93,7 @@ logger = logging.getLogger(__name__)
 BASE = "https://ctemspublic.tgstg.net/ng-app/data"
 
 _ELECTION_NAME_RE = re.compile(r"^(\d{2})/(\d{2})/(\d{4})\s+--\s+(.*)$")
+_OFFICE_SPEC = {"type_column": "OT", "type_value": "C", "district_column": "D"}
 
 _HEADERS = BROWSER_JSON_HEADERS
 _rate_limiter = RateLimiter(rps=1.0)
@@ -135,12 +149,12 @@ async def _party_nominees(
     party = normalize_party((lookup.get("election") or {}).get("P") or "")
     if party is None:
         return None
-    congress_races = {
-        oid: office
-        for entry in lookup.get("officeList") or []
-        for oid, office in entry.items()
-        if office.get("OT") == "C" and (office.get("D") or "").isdigit()
-    }
+    congress_races: dict[str, int | None] = {}
+    for entry in lookup.get("officeList") or []:
+        for oid, office in entry.items():
+            office_district = office_from_columns(office, _OFFICE_SPEC)
+            if office_district is not None:
+                congress_races[oid] = office_district[1]
     if not congress_races:
         return []  # no federal House primary on this party's ballot this cycle
     candidates = lookup.get("candidateIds") or {}
@@ -152,16 +166,24 @@ async def _party_nominees(
         return None
 
     records = []
-    for office_id, office in congress_races.items():
-        district = int(office["D"])
-        choices = [
-            (surname(candidates.get(choice_id, {}).get("NM") or ""), int(vote.get("V") or 0))
-            for choice in votes.get(office_id) or []
-            for choice_id, vote in choice.items()
-        ]
-        choices = [(n, v) for n, v in choices if n]
+    for office_id, district in congress_races.items():
+        # Every choice's votes count toward the total (an unresolvable
+        # name -- a write-in bucket, a candidateIds gap -- still counted
+        # a real vote), but only a resolvable name can be confirmed the
+        # winner below: dropping an unresolvable choice before ranking
+        # would let a lower-vote resolvable candidate win by default if
+        # the TRUE leader is the one that's unresolvable.
+        choices = []
+        for choice in votes.get(office_id) or []:
+            for choice_id, vote in choice.items():
+                try:
+                    vote_count = int(vote.get("V"))
+                except (TypeError, ValueError):
+                    continue
+                name = surname(candidates.get(choice_id, {}).get("NM") or "")
+                choices.append((name, vote_count))
         won = pick_nominee(choices, runoff_threshold_pct=None)
-        if won:
+        if won and won[0]:
             records.append({"office": "H", "district": district, "party": party, "last_name": won[0]})
     return records
 

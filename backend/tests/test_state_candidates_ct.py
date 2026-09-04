@@ -18,7 +18,6 @@ elections that share the "-- ... Primary"/"-- ... Election" name shape.
 """
 
 import json
-from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -139,6 +138,36 @@ class TestPartyNominees:
         await self._patched(monkeypatch, election_id=DEM_ID, version=10138, lookup=empty_lookup, votes=DEM_VOTES)
         assert await ct._party_nominees(None, DEM_ID, 2026) == []
 
+    async def test_an_unresolvable_top_choice_blocks_confirmation_rather_than_winning(self, monkeypatch):
+        # If the real vote LEADER's own candidate id is missing from
+        # candidateIds (a write-in bucket, a vendor data gap), that
+        # leader's votes must still count toward the total -- dropping
+        # the choice before ranking would let a lower-vote, resolvable
+        # candidate win by default instead of correctly confirming
+        # nobody for the seat.
+        cd1_id = "19666"
+        votes = json.loads(json.dumps(DEM_VOTES))
+        votes[cd1_id] = [
+            {"unknown-leader": {"V": "90000", "TO": "90%"}},
+            {"43479": {"V": "10000", "TO": "10%"}},  # Luke Bronin, real candidate id
+        ]
+        await self._patched(monkeypatch, election_id=DEM_ID, version=10138, lookup=DEM_LOOKUP, votes=votes)
+        result = await ct._party_nominees(None, DEM_ID, 2026)
+        assert [r for r in result if r["district"] == 1] == []
+
+    async def test_a_malformed_vote_count_is_skipped_not_a_crash(self, monkeypatch):
+        cd1_id = "19666"
+        votes = json.loads(json.dumps(DEM_VOTES))
+        votes[cd1_id] = [
+            {"43479": {"V": "not-a-number", "TO": "0%"}},
+            {"44087": {"V": "5000", "TO": "100%"}},  # John Larson, real candidate id
+        ]
+        await self._patched(monkeypatch, election_id=DEM_ID, version=10138, lookup=DEM_LOOKUP, votes=votes)
+        result = await ct._party_nominees(None, DEM_ID, 2026)
+        assert [r for r in result if r["district"] == 1] == [
+            {"office": "H", "district": 1, "party": "D", "last_name": "Larson"},
+        ]
+
 
 @pytest.mark.asyncio
 class TestFetchConfirmedCandidates:
@@ -187,12 +216,12 @@ class TestFetchConfirmedCandidates:
 
     async def test_a_stage_not_yet_settled_confirms_nothing(self, monkeypatch):
         # The vendor publishes no certification flag at all -- an
-        # election dated in the future (relative to "now") must be
-        # treated as not-yet-settled, exactly like a portal that never
-        # certifies. A far-future August date stays "not settled" no
-        # matter when this suite runs, unlike a fixed near-past date
-        # that would eventually age past settle_days.
-        future_year = datetime.now(UTC).year + 4
+        # election dated in the far future must be treated as
+        # not-yet-settled, exactly like a portal that never certifies.
+        # A hardcoded far-future year stays "not settled" indefinitely,
+        # unlike a near-past date that would eventually age past
+        # settle_days as real time passes.
+        future_year = 2099
         future_elections = [
             {"ID": "d1", "Name": f"08/11/{future_year} -- Democratic Primary"},
             {"ID": "r1", "Name": f"08/11/{future_year} -- Republican Primary"},
