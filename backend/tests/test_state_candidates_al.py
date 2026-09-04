@@ -10,6 +10,9 @@ CD1/CD2/CD7 Democratic sections (they simply don't exist on the real page —
 Democrats fielded no candidate there) and correctly ignores a totals row
 whose vote-count cell reuses the same CSS class as a real candidate's, with
 no name cell before it.
+
+_votes() itself is not retested here — it's imported straight from
+state_candidates_tabular.py, whose own test file already covers it.
 """
 
 from pathlib import Path
@@ -19,15 +22,7 @@ import pytest
 from app.pipeline.fetch import state_candidates_al as al
 
 _FIXTURE = (Path(__file__).parent / "fixtures_al_special_primary_results.html").read_text()
-
-
-class TestVotes:
-    def test_parses_thousands_separators(self):
-        assert al._votes("23,325") == 23325
-
-    def test_non_numeric_contributes_nothing_rather_than_raising(self):
-        assert al._votes("n/a") == 0
-        assert al._votes("") == 0
+_SOURCE = {"ecode": 1001300}
 
 
 class TestContestResultsParser:
@@ -58,10 +53,20 @@ class TestContestResultsParser:
         contests = self._parse(_FIXTURE)
         assert "UNITED STATES REPRESENTATIVE, 1ST CONGRESSIONAL DISTRICT (DEM)" not in contests
 
+    def test_the_column_labels_row_is_not_mistaken_for_a_candidate(self):
+        # Real: every contest's candidate rows are preceded by a labels
+        # row ("enrCandidatesHeader enrCandNameCol", holding only &nbsp;)
+        # that shares the bare "CandNameCol" substring with a real
+        # candidate row's own class ("enrCandidateListItemCol
+        # enrCandNameCol") — only the latter also carries
+        # "CandidateListItemCol". If that weren't required, this fixture
+        # would show an extra empty-named "candidate" ahead of the first
+        # real one in every contest.
+        contests = self._parse(_FIXTURE)
+        cd1 = contests["UNITED STATES REPRESENTATIVE, 1ST CONGRESSIONAL DISTRICT (REP)"]
+        assert all(name.strip() for name, _ in cd1)
+
     def test_a_totals_rows_vote_cell_is_not_mistaken_for_a_candidate(self):
-        # Every real contest's candidate votes sum to less than the total
-        # ballots cast in that contest would suggest if a totals row were
-        # being double-counted as an extra candidate.
         html = """
         <table>
         <td class="enrContestHeader">UNITED STATES REPRESENTATIVE, 9TH CONGRESSIONAL DISTRICT (REP)</td>
@@ -74,8 +79,44 @@ class TestContestResultsParser:
         cd9 = contests["UNITED STATES REPRESENTATIVE, 9TH CONGRESSIONAL DISTRICT (REP)"]
         assert cd9 == [("Alpha Jones (REP)", 500)]
 
+    def test_a_name_with_no_votes_row_does_not_leak_into_the_next_contest(self):
+        # A candidate name captured just before the page is truncated (or
+        # a still-tabulating precinct simply has no votes cell yet) must
+        # not survive past the NEXT contest's header and get attributed
+        # to that contest's first real vote count.
+        html = """
+        <table>
+        <td class="enrContestHeader">UNITED STATES REPRESENTATIVE, 8TH CONGRESSIONAL DISTRICT (REP)</td>
+        <tr><td class="enrCandidateListItemCol enrCandNameCol">Stale Candidate (REP)</td></tr>
+        <td class="enrContestHeader">UNITED STATES REPRESENTATIVE, 9TH CONGRESSIONAL DISTRICT (REP)</td>
+        <tr><td class="enrCandidateListItemCol enrCandVoteNumCol"><div>9999</div></td></tr>
+        </table>
+        """
+        contests = self._parse(html)
+        assert contests["UNITED STATES REPRESENTATIVE, 8TH CONGRESSIONAL DISTRICT (REP)"] == []
+        assert contests["UNITED STATES REPRESENTATIVE, 9TH CONGRESSIONAL DISTRICT (REP)"] == []
+
     def test_a_page_with_no_contests_yields_an_empty_dict(self):
         assert self._parse("<html><body>no results yet</body></html>") == {}
+
+    def test_a_nested_matching_class_td_does_not_hijack_an_in_progress_capture(self):
+        # A matching-class td can only ever directly hold text on this
+        # page (never another td nested inside it) — but if some future
+        # markup variant did nest one, it must not steal the buffer the
+        # OUTER td is still filling, and the outer td's real close (not
+        # the nested one's) must be what ends the capture. The nested
+        # content ends up folded into the outer text rather than parsed
+        # as its own vote count — garbled, but not silently lost or
+        # misattributed to some other contest.
+        html = """
+        <table>
+        <td class="enrContestHeader">UNITED STATES REPRESENTATIVE, 5TH CONGRESSIONAL DISTRICT (REP)</td>
+        <tr><td class="enrCandidateListItemCol enrCandNameCol">Outer Name<td class="enrCandidateListItemCol enrCandVoteNumCol">42</td> tail (REP)</td></tr>
+        </table>
+        """
+        contests = self._parse(html)
+        cd5 = contests["UNITED STATES REPRESENTATIVE, 5TH CONGRESSIONAL DISTRICT (REP)"]
+        assert cd5 == []
 
 
 @pytest.mark.asyncio
@@ -87,7 +128,11 @@ class TestFetchConfirmedCandidates:
             return _Resp()
 
         monkeypatch.setattr(al, "fetch_with_retry", fake_fetch_with_retry)
-        result = await al.fetch_confirmed_candidates(None, 2026, "AL", {})
+        result = await al.fetch_confirmed_candidates(None, 2026, "AL", _SOURCE)
+        # CD1 REP is a real 4-candidate field (Burger, Carl, Mills,
+        # Sidwell) with no runoff by law, and CD2 REP a real 6-candidate
+        # field — this list already proves only each real plurality
+        # winner survives, not just that a winner exists.
         assert sorted(
             (r["office"], r["district"], r["party"], r["last_name"]) for r in result
         ) == [
@@ -98,26 +143,24 @@ class TestFetchConfirmedCandidates:
             ("H", 7, "R", "Akin"),
         ]
 
-    async def test_a_crowded_field_only_keeps_the_plurality_winner(self, monkeypatch):
-        # CD1 REP is a real 4-candidate field (Burger, Carl, Mills,
-        # Sidwell) with no runoff by law -- only Carl's real 74.70%
-        # plurality survives.
+    async def test_a_cycle_other_than_the_verified_one_confirms_nobody(self, monkeypatch):
+        # ecode=1001300 names one specific 2026 election with no date of
+        # its own; a later cycle asking this strategy for candidates must
+        # not get 2026's winners back just because nothing refuses them.
         async def fake_fetch_with_retry(client, rl, method, url, **kw):
             class _Resp:
                 text = _FIXTURE
             return _Resp()
 
         monkeypatch.setattr(al, "fetch_with_retry", fake_fetch_with_retry)
-        result = await al.fetch_confirmed_candidates(None, 2026, "AL", {})
-        cd1 = [r for r in result if r["district"] == 1]
-        assert cd1 == [{"office": "H", "district": 1, "party": "R", "last_name": "Carl"}]
+        assert await al.fetch_confirmed_candidates(None, 2028, "AL", _SOURCE) == []
 
     async def test_fetch_failure_returns_none(self, monkeypatch):
         async def fake(*a, **kw):
             return None
 
         monkeypatch.setattr(al, "fetch_with_retry", fake)
-        assert await al.fetch_confirmed_candidates(None, 2026, "AL", {}) is None
+        assert await al.fetch_confirmed_candidates(None, 2026, "AL", _SOURCE) is None
 
     async def test_a_page_with_no_parsable_contests_returns_none(self, monkeypatch):
         async def fake_fetch_with_retry(client, rl, method, url, **kw):
@@ -126,4 +169,4 @@ class TestFetchConfirmedCandidates:
             return _Resp()
 
         monkeypatch.setattr(al, "fetch_with_retry", fake_fetch_with_retry)
-        assert await al.fetch_confirmed_candidates(None, 2026, "AL", {}) is None
+        assert await al.fetch_confirmed_candidates(None, 2026, "AL", _SOURCE) is None

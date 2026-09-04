@@ -35,9 +35,21 @@ election) to still be a stable, permanent reference — Alabama does not
 appear to recycle an id the way New Mexico's single "always current" URL
 does. ponytail: this id is NOT rediscovered each run (no listing/API
 endpoint or dated results-announcement page was found that names it
-programmatically); the upgrade path for 2028+ is finding one, or hand-
-verifying and updating this id when the next redistricting-driven special
-primary (or any future AL special congressional primary) occurs.
+programmatically, and state_source_crawler.py's own landing-page probes
+only ever match a downloadable file extension, never an ASP.NET query-
+string results page like this one); the upgrade path for 2028+ is finding
+one, or hand-verifying and updating this id when the next redistricting-
+driven special primary (or any future AL special congressional primary)
+occurs. Kept in state_candidate_sources.json's "AL" entry rather than
+hardcoded here, so that update is a config edit, not a code change.
+
+Because that id has no cycle of its own baked into the URL, this module
+refuses to serve it for any cycle but the one it was verified against —
+`YEAR` below — rather than silently re-confirming 2026's winners against a
+LATER cycle's real FEC candidates on nothing but a surname match (Jerry
+Carl and Gary Palmer, among real 2026 winners here, are exactly the kind
+of repeat incumbent who could otherwise coincidentally "confirm" a false
+positive in 2028).
 
 Verified live 2026-09-03 against the real, certified-by-count special
 primary: Jerry Carl (CD1 R, 74.70%), Rhett Marques (CD2 R, 50.03%), Maurice
@@ -52,30 +64,18 @@ from html.parser import HTMLParser
 import httpx
 
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
-from app.pipeline.fetch.state_candidates_common import (
-    normalize_party, parse_office, pick_nominee, surname,
-)
+from app.pipeline.fetch.state_candidates_common import normalize_party, parse_office, pick_nominee, surname
+from app.pipeline.fetch.state_candidates_tabular import _votes
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 
-# Permanent for the 2026 special primary (see module docstring) — not a
-# per-cycle template, because nothing on the site names this id
-# programmatically.
-_SPECIAL_PRIMARY_ECODE = 1001300
-_RESULTS_URL = (
-    "https://www2.alabamavotes.gov/electionNight/statewideResultsByContest.aspx"
-    f"?ecode={_SPECIAL_PRIMARY_ECODE}"
-)
+# The only cycle ecode=1001300 (see below) is verified to mean — see the
+# module docstring for why an off-cycle call refuses rather than reuses it.
+YEAR = 2026
+
 _HEADERS = BROWSER_HEADERS
 _rate_limiter = RateLimiter(rps=1.0)
-
-
-def _votes(raw: str) -> int:
-    try:
-        return int(raw.replace(",", "").strip() or 0)
-    except ValueError:
-        return 0
 
 
 class _ContestResultsParser(HTMLParser):
@@ -85,10 +85,19 @@ class _ContestResultsParser(HTMLParser):
     td.enrCandNameCol ("Jerry Carl                             (REP)") and
     whose vote count sits in a td.enrCandVoteNumCol. Alternating rows carry
     an extra "enrAlt" class prefix (plain zebra striping), so matching is on
-    the class SUFFIX, not the exact class string. A totals row's vote cell
-    reuses the same class with no matching name cell before it — harmless
-    here, since a vote count is only ever recorded alongside a name already
-    captured for it.
+    the class SUFFIX, not the exact class string — but a plain "CandNameCol"
+    substring also matches the (different) column-labels row above the real
+    candidates ("enrCandidatesHeader enrCandNameCol", holding only &nbsp;),
+    so `CandidateListItemCol` — present only on a real candidate row's own
+    class, singular "Candidate" — is required too, or that label row would
+    be captured as a same-named "candidate" with an empty name.
+
+    Capture is entered only when nothing is already being captured, and
+    exited only by that SAME td's own close: a matching-class td can only
+    ever directly hold text (never a candidate/header td nested inside
+    another one on this page), so once inside a capture, a nested td
+    starttag only tracks a depth counter rather than hijacking the buffer
+    or ending the capture on ITS close instead of the outer td's.
     """
 
     def __init__(self) -> None:
@@ -96,21 +105,26 @@ class _ContestResultsParser(HTMLParser):
         self.contests: dict[str, list[tuple[str, int]]] = {}
         self._contest: str | None = None
         self._capture: str | None = None
+        self._capture_depth = 0
         self._buf: list[str] = []
         self._pending_name: str | None = None
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag != "td":
             return
+        if self._capture:
+            self._capture_depth += 1
+            return
         cls = dict(attrs).get("class") or ""
         if "enrContestHeader" in cls:
             self._capture = "header"
-        elif "CandNameCol" in cls:
+        elif "CandidateListItemCol" in cls and "CandNameCol" in cls:
             self._capture = "name"
-        elif "CandVoteNumCol" in cls:
+        elif "CandidateListItemCol" in cls and "CandVoteNumCol" in cls:
             self._capture = "votes"
         else:
             return
+        self._capture_depth = 1
         self._buf = []
 
     def handle_data(self, data: str) -> None:
@@ -120,10 +134,18 @@ class _ContestResultsParser(HTMLParser):
     def handle_endtag(self, tag: str) -> None:
         if tag != "td" or not self._capture:
             return
+        self._capture_depth -= 1
+        if self._capture_depth > 0:
+            return
         text = "".join(self._buf).strip()
         if self._capture == "header":
             self._contest = text
             self.contests.setdefault(text, [])
+            # A stray name with no votes row after it (page truncated
+            # mid-fetch, a still-tabulating precinct) must not survive
+            # into the NEXT contest and get attributed to its first
+            # unrelated vote count.
+            self._pending_name = None
         elif self._capture == "name":
             self._pending_name = text
         elif self._capture == "votes" and self._contest and self._pending_name:
@@ -133,10 +155,21 @@ class _ContestResultsParser(HTMLParser):
 
 
 async def fetch_confirmed_candidates(
-    client: httpx.AsyncClient, year: int, state: str, source: dict,  # noqa: ARG001 — state/source unused, this strategy is AL-only by construction
+    client: httpx.AsyncClient, year: int, state: str, source: dict,  # noqa: ARG001 — state unused, this strategy is AL-only by construction
 ) -> list[dict] | None:
+    if year != YEAR:
+        # See module docstring — ecode=1001300 names one specific 2026
+        # election with no date of its own; reusing it for any other
+        # cycle would confirm that cycle's candidates off a stale surname
+        # match rather than that cycle's real result.
+        return []
+
+    results_url = (
+        "https://www2.alabamavotes.gov/electionNight/statewideResultsByContest.aspx"
+        f"?ecode={source.get('ecode')}"
+    )
     resp = await fetch_with_retry(
-        client, _rate_limiter, "GET", _RESULTS_URL, timeout=30.0,
+        client, _rate_limiter, "GET", results_url, timeout=30.0,
         log_label=f"AL special primary results {year}", headers=_HEADERS,
     )
     if resp is None:
@@ -158,23 +191,26 @@ async def fetch_confirmed_candidates(
         if office_district is None:
             continue
         office, district = office_district
-        # Each contest section is scoped to one party already (Alabama
-        # runs separate ballots, not a top-two contest), but the party
-        # comes off each candidate's own row — same as every other
-        # results-derived strategy — rather than assumed from the header.
-        named = [(surname(name), normalize_party(name), votes) for name, votes in choices]
-        by_party: dict[str, list[tuple[str, int]]] = {}
-        for last_name, party, votes in named:
-            if not last_name or not party:
-                continue
-            by_party.setdefault(party, []).append((last_name, votes))
-        for party, party_choices in by_party.items():
-            won = pick_nominee(party_choices, runoff_threshold_pct=None)
-            if won:
-                results.append({
-                    "office": office, "district": district,
-                    "party": party, "last_name": won[0],
-                })
+        # Alabama runs separate per-party ballots, not a top-two contest,
+        # so every candidate under one contest header shares one party —
+        # taken from the header (same source parse_office already reads),
+        # not re-derived per candidate: normalize_party on a full "Name
+        # (PARTY)" cell is the only place in this codebase that runs it
+        # against a name rather than a party-only column, and a name that
+        # happened to contain a party word would misfile that candidate
+        # into a fabricated second party for an otherwise single-party
+        # contest.
+        party = normalize_party(contest)
+        if party is None:
+            continue
+        choices_by_name = [(surname(name), votes) for name, votes in choices]
+        choices_by_name = [(n, v) for n, v in choices_by_name if n]
+        won = pick_nominee(choices_by_name, runoff_threshold_pct=None)
+        if won:
+            results.append({
+                "office": office, "district": district,
+                "party": party, "last_name": won[0],
+            })
 
     if not results:
         logger.warning("AL special primary results yielded no confirmed nominees")
