@@ -43,6 +43,8 @@ export async function generateMetadata({
     ? `What ${code} votes on ${ballot.electionDate}: U.S. Senate and House contests and ${ballot.measures.length} statewide ballot ${ballot.measures.length === 1 ? "measure" : "measures"}, quoted from official sources.`
     : `Federal contests and statewide ballot measures for ${code}.`;
 
+  const ogImage = `${SITE}/api/og?state=${code}`;
+
   return {
     title,
     description,
@@ -51,6 +53,14 @@ export async function generateMetadata({
       description,
       url: `${SITE}/elections/states/${code}`,
       siteName: "Civitas",
+      images: [{ url: ogImage, width: 1200, height: 630, alt: title }],
+      type: "article",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [{ url: ogImage, alt: title }],
     },
   };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatStanding, parseIssueId } from "./route";
+import { formatStanding, parseIssueId, parseStateCode } from "./route";
 
 describe("formatStanding", () => {
   it("formats a senator as party-state, no district", () => {
@@ -56,5 +56,27 @@ describe("parseIssueId", () => {
     expect(parseIssueId("not-an-id")).toBeNull();
     expect(parseIssueId("")).toBeNull();
     expect(parseIssueId(null)).toBeNull();
+  });
+});
+
+describe("parseStateCode", () => {
+  it("accepts a real state code and uppercases it", () => {
+    expect(parseStateCode("tx")).toBe("TX");
+    expect(parseStateCode("CA")).toBe("CA");
+  });
+
+  it("accepts DC", () => {
+    expect(parseStateCode("dc")).toBe("DC");
+  });
+
+  it("rejects anything that isn't exactly 2 letters", () => {
+    expect(parseStateCode("texas")).toBeNull();
+    expect(parseStateCode("t")).toBeNull();
+    expect(parseStateCode("12")).toBeNull();
+  });
+
+  it("rejects garbage and empty input", () => {
+    expect(parseStateCode("")).toBeNull();
+    expect(parseStateCode(null)).toBeNull();
   });
 });

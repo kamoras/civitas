@@ -98,6 +98,18 @@ async function fetchPolitician(id: string) {
   }
 }
 
+async function fetchStateBallot(state: string) {
+  try {
+    const res = await fetch(`${BACKEND}/api/elections/states/${state}`, {
+      next: { revalidate: 120 },
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 function Header({ section }: { section: string }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 48 }}>
@@ -326,6 +338,98 @@ async function politicianImage(profile: {
   );
 }
 
+function StatTile({ value, label }: { value: string; label: string }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        flex: 1,
+        padding: "20px 24px",
+        border: `1px solid ${HAIRLINE}`,
+      }}
+    >
+      <span style={{ color: INK_HI, fontSize: 40, fontWeight: 700 }}>{value}</span>
+      <span style={{ color: INK_LO, fontSize: 15, letterSpacing: 1, marginTop: 8 }}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
+type OgStateBallot = {
+  state?: string;
+  cycleYear?: number;
+  electionDate?: string;
+  senateRaces?: unknown[];
+  houseRaces?: unknown[];
+  measures?: unknown[];
+};
+
+async function electionImage(ballot: OgStateBallot | null, code: string) {
+  const cycleYear = ballot?.cycleYear ?? new Date().getFullYear();
+  const title = `${code} Ballot ${cycleYear}`;
+  const description = ballot?.electionDate
+    ? `Votes ${ballot.electionDate}`
+    : "Federal contests and statewide ballot measures.";
+  const senateCount = ballot?.senateRaces?.length ?? 0;
+  const houseCount = ballot?.houseRaces?.length ?? 0;
+  const measureCount = ballot?.measures?.length ?? 0;
+  const section = "ELECTIONS";
+  const footerLabel = "FEDERAL & STATEWIDE BALLOT";
+
+  // See lib/ogFonts.ts: subset text must cover every string actually
+  // rendered below, or the leftover characters fall back to Satori's own
+  // default face instead of Archivo.
+  let archivoBold: ArrayBuffer | null = null;
+  try {
+    archivoBold = await loadArchivoBold(
+      `CIVITAS${section}${title}${description}${DOMAIN}${footerLabel}0123456789US HouseSenateBallotmeasuresrace|`
+    );
+  } catch {
+    // fall through with archivoBold still null — degrade to Satori's
+    // default face rather than fail the whole image over a font fetch.
+  }
+
+  return new ImageResponse(
+    <div
+      style={{
+        width: 1200,
+        height: 630,
+        background: SURFACE_BASE,
+        display: "flex",
+        flexDirection: "column",
+        padding: "60px 72px",
+        fontFamily: "Archivo",
+        border: `1px solid ${HAIRLINE}`,
+      }}
+    >
+      <Header section={section} />
+      <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "center" }}>
+        <div style={{ color: INK_HI, fontSize: 56, fontWeight: 700, lineHeight: 1.2 }}>
+          {title}
+        </div>
+        <div style={{ color: INK, fontSize: 24, marginTop: 16, marginBottom: 48 }}>
+          {description}
+        </div>
+        <div style={{ display: "flex", gap: 20 }}>
+          <StatTile value={String(senateCount)} label="U.S. SENATE RACE" />
+          <StatTile value={String(houseCount)} label="U.S. HOUSE RACES" />
+          <StatTile value={String(measureCount)} label="BALLOT MEASURES" />
+        </div>
+      </div>
+      <Footer label={footerLabel} />
+    </div>,
+    {
+      width: 1200,
+      height: 630,
+      ...(archivoBold
+        ? { fonts: [{ name: "Archivo", data: archivoBold, weight: 700 as const, style: "normal" as const }] }
+        : {}),
+    }
+  );
+}
+
 // Every real link on the site points at an issue's public id (backend
 // issue_ids.py: "i" + 8 lowercase hex chars, e.g. "i9e3779b1") via
 // issue.publicId — page.tsx's generateMetadata builds this OG URL from
@@ -338,6 +442,14 @@ export function parseIssueId(rawIssueId: string | null): string | null {
   return rawIssueId && /^(i[0-9a-f]{8}|\d+)$/i.test(rawIssueId) ? rawIssueId : null;
 }
 
+// USPS 2-letter state codes plus DC — matches lib/elections.ts's own
+// state-code shape. Case-insensitive on input (the route always
+// uppercases before using it), since a hand-typed or copy-pasted URL
+// param shouldn't 404 an OG card over letter case alone.
+export function parseStateCode(rawState: string | null): string | null {
+  return rawState && /^[a-z]{2}$/i.test(rawState) ? rawState.toUpperCase() : null;
+}
+
 export async function GET(req: NextRequest) {
   const rawPoliticianId = req.nextUrl.searchParams.get("politician");
   // Politician ids are slugs (e.g. "chuck-grassley"), unlike the issue
@@ -348,6 +460,12 @@ export async function GET(req: NextRequest) {
   if (politicianId) {
     const profile = await fetchPolitician(politicianId);
     return politicianImage(profile);
+  }
+
+  const stateCode = parseStateCode(req.nextUrl.searchParams.get("state"));
+  if (stateCode) {
+    const ballot = await fetchStateBallot(stateCode);
+    return electionImage(ballot, stateCode);
   }
 
   const issueId = parseIssueId(req.nextUrl.searchParams.get("issue"));
