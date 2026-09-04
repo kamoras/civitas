@@ -336,7 +336,15 @@ async def _discover_urls(
                 return []
             url = url.replace("{primary_date_compact}", held.replace("-", ""))
             url = url.replace("{primary_date}", held)
-        return [_stage(url, held=held)]
+        # A stable URL that always serves whichever election is current
+        # (New Mexico's) carries no date of its own either. Unlike
+        # landing_page, where _calendar_date() is a last-resort fallback
+        # behind the file's own dated link, this IS the only source of
+        # `held` — but _settled() below still protects a future cycle:
+        # until that cycle's real primary approaches, its calendar date is
+        # in the future, so "now - held >= settle_days" stays false and
+        # nothing gets confirmed from whatever this URL currently serves.
+        return [_stage(url, held=held or _calendar_date())]
 
     if mode == "s3_listing":
         bucket = (discovery.get("bucket_url") or "").rstrip("/")

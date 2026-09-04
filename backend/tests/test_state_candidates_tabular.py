@@ -849,6 +849,25 @@ class TestDiscoverUrl:
         assert url == [tb._stage("https://example.gov/2026/results.csv")]
 
     @pytest.mark.asyncio
+    async def test_direct_url_with_no_date_of_its_own_falls_back_to_the_calendar(
+        self, monkeypatch,
+    ):
+        """New Mexico's results URL carries no election id or date — it
+        always serves whichever election is current — so it has no way to
+        date itself the way a per-cycle path or a dated filename can. The
+        national calendar is the only source left standing."""
+        monkeypatch.setattr(
+            "app.pipeline.fetch.state_election_dates.primary_date",
+            lambda state, year: "2026-06-02",
+        )
+        url = await tb._discover_urls(
+            None, "NM", 2026,
+            {"mode": "direct_url", "url": "https://example.gov/results.csv",
+             "date_from_calendar": True},
+        )
+        assert url == [tb._stage("https://example.gov/results.csv", held="2026-06-02")]
+
+    @pytest.mark.asyncio
     async def test_s3_listing_picks_the_earliest_matching_key(self, monkeypatch):
         """Within a cycle the first matching election is the primary that
         decides nominees; a later folder is the general or a second
@@ -935,6 +954,83 @@ class TestFetchConfirmedCandidates:
         monkeypatch.setattr(tb, "_discover_urls", fake_discover)
         monkeypatch.setattr(tb, "_get", fake_get)
         assert await tb.fetch_confirmed_candidates(None, 2026, "NC", {}) is None
+
+
+class TestNewMexico:
+    """A real cut of New Mexico's official 2026-06-02 primary export
+    (electionresults.sos.nm.gov/resultsCSV.aspx?text=All&type=FED&map=CTY),
+    fetched live 2026-09-03 with no login and no session — a plain,
+    unauthenticated GET. Kept whole rather than trimmed: it is also what
+    proves RaceName alone doesn't carry the House district number (AreaNum
+    does), and that a Republican write-in nominee's "(write in)" annotation
+    doesn't survive into the recorded surname.
+    """
+
+    _CSV = (
+        b'RaceID,RaceName,PartyCode,AreaNum,CandidateID,CandidateName,VoteFor,'
+        b'CandidateVotes,CandidatePercentage,PrecinctsReporting,'
+        b'CandidateAbsenteeVotes,CandidateElectionDayVotes,CandidateEarlyVotes\r\n'
+        b'10778,"United States Senator","DEM","",18908,"BEN R LUJAN",1,182360,'
+        b'0.841730171844781,2204/2204,29120,76471,76769,\r\n'
+        b'10778,"United States Senator","DEM","",18933,"MATT DODSON",1,34289,'
+        b'0.158269828155219,2204/2204,4753,17327,12209,\r\n'
+        b'10778,"United States Senator","REP","",19598,"LARRY E MARKER (write in)",'
+        b'1,31220,1,2204/2204,2333,15209,13678,\r\n'
+        b'10779,"United States Representative","DEM","DISTRICT 1",18928,'
+        b'"MELANIE ANN STANSBURY",1,79823,1,778/778,15000,29285,35538,\r\n'
+        b'10779,"United States Representative","REP","DISTRICT 1",18909,'
+        b'"NDIDIAMAKA EKWUA CHARLENE OKPAREKE",1,31809,1,778/778,3523,13570,14716,\r\n'
+        b'10780,"United States Representative","DEM","DISTRICT 2",18913,'
+        b'"GABRIEL VASQUEZ",1,47123,1,663/663,8600,19629,18894,\r\n'
+        b'10780,"United States Representative","REP","DISTRICT 2",18906,'
+        b'"GREGORY G CUNNINGHAM",1,26836,0.845334845334845,663/663,2079,13690,11067,\r\n'
+        b'10780,"United States Representative","REP","DISTRICT 2",18929,'
+        b'"JOSE OROZCO",1,4910,0.154665154665155,663/663,437,2630,1843,\r\n'
+        b'10781,"United States Representative","DEM","DISTRICT 3",18912,'
+        b'"TERESA LEGER FERNANDEZ",1,68768,1,763/763,8012,34331,26425,\r\n'
+        b'10781,"United States Representative","REP","DISTRICT 3",18905,'
+        b'"MARTIN ZAMORA",1,32901,1,763/763,1884,18306,12711,\r\n'
+    )
+    _FMT = {
+        "delimiter": ",",
+        "contest_column": ["RaceName", "AreaNum", "PartyCode"],
+        "choice_column": "CandidateName",
+        "party_column": "PartyCode",
+        "votes_column": "CandidateVotes",
+    }
+
+    @pytest.mark.asyncio
+    async def test_confirms_every_real_2026_federal_nominee(self, monkeypatch):
+        async def fake_discover(client, state, year, discovery):
+            return [tb._stage(
+                "https://electionresults.sos.nm.gov/resultsCSV.aspx",
+                held="2026-06-02",
+            )]
+
+        async def fake_get(client, url, label):
+            return _Resp(content=self._CSV)
+
+        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
+        monkeypatch.setattr(tb, "_get", fake_get)
+        records = await tb.fetch_confirmed_candidates(
+            None, 2026, "NM", {"format": self._FMT},
+        )
+        # H2 distinct from H1/H3 only holds if AreaNum (not RaceName alone,
+        # which is identical across all three districts) resolved the
+        # seat; MARKER with no "(write in)" suffix only holds if the ballot
+        # annotation didn't leak into the surname.
+        assert sorted(
+            (r["office"], r["district"], r["party"], r["last_name"]) for r in records
+        ) == [
+            ("H", 1, "D", "STANSBURY"),
+            ("H", 1, "R", "OKPAREKE"),
+            ("H", 2, "D", "VASQUEZ"),
+            ("H", 2, "R", "CUNNINGHAM"),
+            ("H", 3, "D", "FERNANDEZ"),
+            ("H", 3, "R", "ZAMORA"),
+            ("S", None, "D", "LUJAN"),
+            ("S", None, "R", "MARKER"),
+        ]
 
 
 class _Resp:
