@@ -1,0 +1,317 @@
+[
+  {
+    "ID": "113",
+    "Name": "09/01/2026 -- September 1st Democratic Primary",
+    "DefaultElection": "Y"
+  },
+  {
+    "ID": "111",
+    "Name": "08/11/2026 -- Democratic Primary",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "112",
+    "Name": "08/11/2026 -- Republican Primary",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "110",
+    "Name": "06/23/2026 -- Middlebury Special Election Selectman to Fill Vacancy",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "105",
+    "Name": "02/03/2026 -- Fairfield Special Election (First Selectman)",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "107",
+    "Name": "01/13/2026 -- 139th Assembly District Special Election",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "106",
+    "Name": "01/06/2026 -- 25th Assembly District Special Election",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "97",
+    "Name": "11/04/2025 -- November 2025 Municipal Election",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "103",
+    "Name": "09/09/2025 -- Democratic Municipal Primary 2025",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "104",
+    "Name": "09/09/2025 -- Republican Municipal Primary 2025",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "96",
+    "Name": "05/05/2025 -- May 2025 Election",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "101",
+    "Name": "04/22/2025 -- Special Election 113th Assembly",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "98",
+    "Name": "02/25/2025 -- 40th Assembly District Special Election February 25, 2025",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "99",
+    "Name": "02/25/2025 -- 21st Senate District Special Election February 25, 2025",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "91",
+    "Name": "11/05/2024 -- Presidential Election 2024",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "94",
+    "Name": "08/13/2024 -- August 2024 Democratic Primary",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "95",
+    "Name": "08/13/2024 -- August 2024 Republican Primary",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "92",
+    "Name": "04/02/2024 -- Democratic Presidential Preference Primary",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "93",
+    "Name": "04/02/2024 -- Republican Presidential Preference Primary",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "89",
+    "Name": "02/27/2024 -- Bridgeport Special Election",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "88",
+    "Name": "01/23/2024 -- 115th Assembly District Special Election January 23, 2024",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "90",
+    "Name": "01/23/2024 -- BRIDGEPORT SPECIAL DEMOCRATIC PRIMARY",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "87",
+    "Name": "11/28/2023 -- November 2023 Special Municipal Election",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "83",
+    "Name": "11/07/2023 -- November 2023 Municipal",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "84",
+    "Name": "09/12/2023 -- Democratic Primary",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "85",
+    "Name": "09/12/2023 -- Republican Primary",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "80",
+    "Name": "11/08/2022 -- November 2022 State Election",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "81",
+    "Name": "08/09/2022 -- Democratic Primary",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "82",
+    "Name": "08/09/2022 -- Republican Primary",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "78",
+    "Name": "03/01/2022 -- 5th Assembly District Special Election March 1, 2022",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "77",
+    "Name": "02/22/2022 -- 71st Assembly Special Election February 22, 2022",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "75",
+    "Name": "01/25/2022 -- 144th Assembly Special Election January 25,2022",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "74",
+    "Name": "12/14/2021 -- 116th Special Election",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "64",
+    "Name": "11/02/2021 -- 2021 November Municipal",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "68",
+    "Name": "11/02/2021 -- Judge of Probate Special Election November 2, 2021",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "70",
+    "Name": "09/14/2021 -- Judge of Probate 8th Democratic Primary",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "71",
+    "Name": "09/14/2021 -- Democratic Primary",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "72",
+    "Name": "09/14/2021 -- Republican Primary",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "69",
+    "Name": "08/17/2021 -- 36th Senate Special Election",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "62",
+    "Name": "05/03/2021 -- May 2021 Municipal Election (Andover, Bethany, Union & Woodbridg",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "66",
+    "Name": "04/27/2021 -- Special Election 145th Assembly District (Stamford)",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "65",
+    "Name": "04/13/2021 -- Special Election 112th Assembly Newtown & Monroe",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "63",
+    "Name": "03/02/2021 -- 27th Senate Special Election (Stamford & Darien)",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "54",
+    "Name": "11/03/2020 -- Presidential Election",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "55",
+    "Name": "08/11/2020 -- Democratic Presidential Preference Primary",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "57",
+    "Name": "08/11/2020 -- Republican Presidential Preference Primary",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "58",
+    "Name": "08/11/2020 -- Republican Primary",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "59",
+    "Name": "08/11/2020 -- Democratic Primary",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "50",
+    "Name": "01/21/2020 -- Special Election 151st Assembly",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "49",
+    "Name": "01/14/2020 -- Special Election 48th & 132nd Assembly",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "36",
+    "Name": "11/05/2019 -- November 2019 Municipal Election",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "42",
+    "Name": "09/10/2019 -- Democratic Primary",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "43",
+    "Name": "09/10/2019 -- Republican Primary",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "39",
+    "Name": "05/07/2019 -- Special Election 130th Assembly District",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "38",
+    "Name": "05/06/2019 -- May 2019 Municipal Elections",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "37",
+    "Name": "04/16/2019 -- Special Election 19th Assembly District",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "35",
+    "Name": "02/26/2019 -- Special Election 3rd, 5th & 6th Senatorial Districts and 39th & ",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "31",
+    "Name": "11/06/2018 -- November 2018 State Election",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "33",
+    "Name": "08/14/2018 -- August 2018 Democratic Primary",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "34",
+    "Name": "08/14/2018 -- August 2018 Republican Primary",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "18",
+    "Name": "11/07/2017 -- November 2017 Municipal Election",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "24",
+    "Name": "04/25/2017 -- Special Election Assembly Districts 7th & 68th",
+    "DefaultElection": "N"
+  },
+  {
+    "ID": "1",
+    "Name": "11/08/2016 -- November Presidential Election",
+    "DefaultElection": "N"
+  }
+]
