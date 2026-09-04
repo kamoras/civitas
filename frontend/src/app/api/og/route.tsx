@@ -1,6 +1,9 @@
 import { ImageResponse } from "next/og";
 import { NextRequest } from "next/server";
 import { loadArchivoBold } from "@/lib/ogFonts";
+import { STATE_CODES } from "@/lib/stateCodes";
+import { usableRecord } from "@/lib/ssrPayload";
+import type { StateBallot } from "@/types/election";
 
 export const runtime = "nodejs";
 
@@ -98,13 +101,16 @@ async function fetchPolitician(id: string) {
   }
 }
 
-async function fetchStateBallot(state: string) {
+async function fetchStateBallot(state: string): Promise<StateBallot | null> {
   try {
-    const res = await fetch(`${BACKEND}/api/elections/states/${state}`, {
+    const res = await fetch(`${BACKEND}/api/elections/states/${encodeURIComponent(state)}`, {
       next: { revalidate: 120 },
     });
     if (!res.ok) return null;
-    return await res.json();
+    // Same guard the actual ballot page's own fetchStateBallot applies
+    // (lib/ssrPayload.ts) — a 200 with a `{}`-shaped body is truthy but
+    // has no real data, and must not be trusted as a real StateBallot.
+    return usableRecord<StateBallot>(await res.json(), "state", "senateRaces");
   } catch {
     return null;
   }
@@ -338,6 +344,62 @@ async function politicianImage(profile: {
   );
 }
 
+// A plain title/description card with no stat tiles — used when there is
+// no real per-state data to show (fetch failed, or the code doesn't map
+// to a real ballot jurisdiction), so nothing that LOOKS like a specific
+// fact ("0 U.S. Senate races") gets asserted about a state we couldn't
+// actually confirm anything for.
+async function genericCard({
+  section,
+  title,
+  description,
+  footerLabel,
+}: {
+  section: string;
+  title: string;
+  description: string;
+  footerLabel: string;
+}) {
+  let archivoBold: ArrayBuffer | null = null;
+  try {
+    archivoBold = await loadArchivoBold(`CIVITAS${section}${title}${description}${DOMAIN}${footerLabel}`);
+  } catch {
+    // fall through with archivoBold still null — degrade to Satori's
+    // default face rather than fail the whole image over a font fetch.
+  }
+
+  return new ImageResponse(
+    <div
+      style={{
+        width: 1200,
+        height: 630,
+        background: SURFACE_BASE,
+        display: "flex",
+        flexDirection: "column",
+        padding: "60px 72px",
+        fontFamily: "Archivo",
+        border: `1px solid ${HAIRLINE}`,
+      }}
+    >
+      <Header section={section} />
+      <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "center" }}>
+        <div style={{ color: INK_HI, fontSize: 46, fontWeight: 700, lineHeight: 1.2 }}>
+          {title}
+        </div>
+        <div style={{ color: INK, fontSize: 22, marginTop: 16 }}>{description}</div>
+      </div>
+      <Footer label={footerLabel} />
+    </div>,
+    {
+      width: 1200,
+      height: 630,
+      ...(archivoBold
+        ? { fonts: [{ name: "Archivo", data: archivoBold, weight: 700 as const, style: "normal" as const }] }
+        : {}),
+    }
+  );
+}
+
 function StatTile({ value, label }: { value: string; label: string }) {
   return (
     <div
@@ -357,34 +419,50 @@ function StatTile({ value, label }: { value: string; label: string }) {
   );
 }
 
-type OgStateBallot = {
-  state?: string;
-  cycleYear?: number;
-  electionDate?: string;
-  senateRaces?: unknown[];
-  houseRaces?: unknown[];
-  measures?: unknown[];
-};
+const SENATE_LABEL = "U.S. SENATE RACE";
+const HOUSE_LABEL = "U.S. HOUSE RACES";
+const MEASURES_LABEL = "BALLOT MEASURES";
 
-async function electionImage(ballot: OgStateBallot | null, code: string) {
-  const cycleYear = ballot?.cycleYear ?? new Date().getFullYear();
-  const title = `${code} Ballot ${cycleYear}`;
-  const description = ballot?.electionDate
-    ? `Votes ${ballot.electionDate}`
-    : "Federal contests and statewide ballot measures.";
-  const senateCount = ballot?.senateRaces?.length ?? 0;
-  const houseCount = ballot?.houseRaces?.length ?? 0;
-  const measureCount = ballot?.measures?.length ?? 0;
+async function electionImage(ballot: StateBallot | null, code: string) {
   const section = "ELECTIONS";
   const footerLabel = "FEDERAL & STATEWIDE BALLOT";
 
+  // A failed/unavailable fetch must never render as "this state has zero
+  // races and zero measures" — that's a specific, false claim, not an
+  // honest "we don't know" (see AGENTS.md's "Ballot content is quoted,
+  // never generated": absence must be able to say WHICH absence it is,
+  // the same discipline the actual ballot page already applies via
+  // MeasureCoverage's confirmed_none/not_yet_covered/ingest_failed split).
+  // A guessed `${code} Ballot ${currentYear}` title made the same mistake
+  // for the cycle year, so the whole card falls back to generic branding
+  // instead of asserting anything state-specific it can't back up.
+  if (!ballot) {
+    return genericCard({
+      section,
+      title: `${code} — Civitas Elections`,
+      description: "Federal contests and statewide ballot measures.",
+      footerLabel,
+    });
+  }
+
+  const title = `${code} Ballot ${ballot.cycleYear}`;
+  const description = `Votes ${ballot.electionDate}`;
+  const senateCount = String(ballot.senateRaces.length);
+  const houseCount = String(ballot.houseRaces.length);
+  const measureCount = String(ballot.measures.length);
+
   // See lib/ogFonts.ts: subset text must cover every string actually
   // rendered below, or the leftover characters fall back to Satori's own
-  // default face instead of Archivo.
+  // default face instead of Archivo. Every literal label is interpolated
+  // here rather than hand-typed as a word list, the same way issueImage/
+  // politicianImage build their subsets — a hand-typed guess at "the
+  // extra characters these labels need" previously left the OG cards
+  // rendering "BALLOT MEASURES" with a mismatched fallback-font glyph.
   let archivoBold: ArrayBuffer | null = null;
   try {
     archivoBold = await loadArchivoBold(
-      `CIVITAS${section}${title}${description}${DOMAIN}${footerLabel}0123456789US HouseSenateBallotmeasuresrace|`
+      `CIVITAS${section}${title}${description}${DOMAIN}${footerLabel}` +
+      `${SENATE_LABEL}${HOUSE_LABEL}${MEASURES_LABEL}${senateCount}${houseCount}${measureCount}`
     );
   } catch {
     // fall through with archivoBold still null — degrade to Satori's
@@ -413,9 +491,9 @@ async function electionImage(ballot: OgStateBallot | null, code: string) {
           {description}
         </div>
         <div style={{ display: "flex", gap: 20 }}>
-          <StatTile value={String(senateCount)} label="U.S. SENATE RACE" />
-          <StatTile value={String(houseCount)} label="U.S. HOUSE RACES" />
-          <StatTile value={String(measureCount)} label="BALLOT MEASURES" />
+          <StatTile value={senateCount} label={SENATE_LABEL} />
+          <StatTile value={houseCount} label={HOUSE_LABEL} />
+          <StatTile value={measureCount} label={MEASURES_LABEL} />
         </div>
       </div>
       <Footer label={footerLabel} />
@@ -442,12 +520,18 @@ export function parseIssueId(rawIssueId: string | null): string | null {
   return rawIssueId && /^(i[0-9a-f]{8}|\d+)$/i.test(rawIssueId) ? rawIssueId : null;
 }
 
-// USPS 2-letter state codes plus DC — matches lib/elections.ts's own
-// state-code shape. Case-insensitive on input (the route always
-// uppercases before using it), since a hand-typed or copy-pasted URL
-// param shouldn't 404 an OG card over letter case alone.
+// Checked against the real USPS-code list (lib/stateCodes.ts), not just
+// the 2-letter shape — a shape-only check let a garbage code like "ZZ"
+// through to render a fully-formed, plausible-looking "ZZ Ballot 2026"
+// share card asserting ZZ is a real jurisdiction, rather than falling
+// back to a generic one the way an unknown issue/politician id already
+// does. Case-insensitive on input (the route always uppercases before
+// using it), since a hand-typed or copy-pasted URL param shouldn't fail
+// over letter case alone.
 export function parseStateCode(rawState: string | null): string | null {
-  return rawState && /^[a-z]{2}$/i.test(rawState) ? rawState.toUpperCase() : null;
+  if (!rawState || !/^[a-z]{2}$/i.test(rawState)) return null;
+  const code = rawState.toUpperCase();
+  return STATE_CODES.includes(code) ? code : null;
 }
 
 export async function GET(req: NextRequest) {

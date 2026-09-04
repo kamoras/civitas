@@ -75,6 +75,16 @@ describe("parseStateCode", () => {
     expect(parseStateCode("12")).toBeNull();
   });
 
+  // The bug this guards against: a shape-only check (any 2 letters) let
+  // a syntactically-valid but non-existent code through to render a
+  // fully-formed, plausible-looking "ZZ Ballot 2026" share card —
+  // asserting ZZ is a real jurisdiction rather than falling back to a
+  // generic card the way an unknown issue/politician id already does.
+  it("rejects a syntactically valid but non-existent state code", () => {
+    expect(parseStateCode("zz")).toBeNull();
+    expect(parseStateCode("xx")).toBeNull();
+  });
+
   it("rejects garbage and empty input", () => {
     expect(parseStateCode("")).toBeNull();
     expect(parseStateCode(null)).toBeNull();
