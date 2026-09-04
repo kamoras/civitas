@@ -66,6 +66,7 @@ from app.pipeline.fetch.state_candidates_ar import fetch_confirmed_candidates as
 from app.pipeline.fetch.state_candidates_canvass_xml import fetch_confirmed_candidates as _fetch_canvass_xml
 from app.pipeline.fetch.state_candidates_clarity import fetch_confirmed_candidates as _fetch_clarity
 from app.pipeline.fetch.state_candidates_in import fetch_confirmed_candidates as _fetch_in
+from app.pipeline.fetch.state_candidates_ks import fetch_confirmed_candidates as _fetch_ks
 from app.pipeline.fetch.state_candidates_ky import fetch_confirmed_candidates as _fetch_ky
 from app.pipeline.fetch.state_candidates_ms import fetch_confirmed_candidates as _fetch_ms
 from app.pipeline.fetch.state_candidates_nj import fetch_confirmed_candidates as _fetch_nj
@@ -83,6 +84,7 @@ logger = logging.getLogger(__name__)
 STRATEGIES = {
     "al_special_primary": _fetch_al,
     "ar_enr": _fetch_ar,
+    "ks_official_totals": _fetch_ks,
     "tx_civix": _fetch_tx,
     "pa_returns": _fetch_pa,
     "clarity": _fetch_clarity,
