@@ -20,8 +20,24 @@ from app.pipeline.fetch import state_candidates_ks as ks
 _PRIMARY_PDF = (Path(__file__).parent / "fixtures_ks_primary_2026.pdf").read_bytes()
 
 
-def _resp(body=None, *, text=None, content=None):
-    return SimpleNamespace(text=text, content=content, json=lambda: body)
+def _resp(*, text=None, content=None):
+    return SimpleNamespace(text=text, content=content)
+
+
+class TestBannerRe:
+    def test_matches_a_title_line_pdfplumber_widens_with_extra_spaces(self):
+        # A real quirk found during initial build: pdfplumber's layout
+        # mode rendered this exact title line with multiple spaces per
+        # gap ("Kansas   Secretary   of State") to preserve its wider
+        # font's visual column alignment -- a literal-single-space
+        # pattern silently failed to recognise it as a banner on every
+        # page, which would drop real candidates on any future document
+        # whose federal race spans a page break. Kept even though the
+        # module has since switched to plain extract_text() (which
+        # doesn't widen gaps) -- \s+ is defense in depth against the
+        # NEXT extraction quirk, not just this one.
+        assert ks._BANNER_RE.match("Kansas   Secretary   of State")
+        assert ks._BANNER_RE.match("Kansas Secretary of State")
 
 
 class TestParseTotalsPdf:
@@ -104,6 +120,35 @@ class TestDiscoverPdfUrl:
         monkeypatch.setattr(ks, "fetch_with_retry", fake)
         assert await ks._discover_pdf_url(None, 2026) is None
 
+    async def test_an_empty_first_response_is_retried_once(self, monkeypatch):
+        # A 200 response with none of the page's own links on it usually
+        # means a bot-manager challenge intercepted the first request,
+        # same as state_candidates_tabular.py's identical retry (added
+        # for Minnesota) -- the second call succeeding must recover.
+        html = (
+            '<a href="26elec/2026-Primary-Election-Official-Vote-Totals.pdf" target="_blank" '
+            'title="Click to open the 2026 Primary Election Official results in a new window">x</a>'
+        )
+        calls = []
+
+        async def fake(client, rl, method, url, **kw):
+            calls.append(url)
+            if len(calls) == 1:
+                return _resp(text="<html>challenge page, no real links</html>")
+            return _resp(text=html)
+
+        monkeypatch.setattr(ks, "fetch_with_retry", fake)
+        result = await ks._discover_pdf_url(None, 2026)
+        assert result == "https://sos.ks.gov/elections/26elec/2026-Primary-Election-Official-Vote-Totals.pdf"
+        assert len(calls) == 2
+
+    async def test_a_genuinely_empty_page_stays_empty_after_the_retry(self, monkeypatch):
+        async def fake(client, rl, method, url, **kw):
+            return _resp(text="<html>nothing here, for real</html>")
+
+        monkeypatch.setattr(ks, "fetch_with_retry", fake)
+        assert await ks._discover_pdf_url(None, 2026) is None
+
 
 @pytest.mark.asyncio
 class TestFetchConfirmedCandidates:
@@ -163,4 +208,14 @@ class TestFetchConfirmedCandidates:
             raise AssertionError(f"unexpected URL: {url}")
 
         monkeypatch.setattr(ks, "fetch_with_retry", fake)
+        assert await ks.fetch_confirmed_candidates(None, 2026, "KS", {}) is None
+
+    async def test_a_pdf_that_parses_but_matches_no_rows_returns_none(self, monkeypatch):
+        # A well-formed PDF whose text simply doesn't match any of the
+        # race-header/candidate-row shapes (e.g. Kansas reformats the
+        # document) must be reported as a failure, not a real primary
+        # that genuinely confirmed zero candidates -- same convention as
+        # NJ/KY/AL's identical guard.
+        self._patched(monkeypatch)
+        monkeypatch.setattr(ks, "_parse_totals_pdf", lambda content: [])
         assert await ks.fetch_confirmed_candidates(None, 2026, "KS", {}) is None
