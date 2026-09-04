@@ -66,6 +66,7 @@ from app.pipeline.fetch.state_candidates_canvass_xml import fetch_confirmed_cand
 from app.pipeline.fetch.state_candidates_clarity import fetch_confirmed_candidates as _fetch_clarity
 from app.pipeline.fetch.state_candidates_in import fetch_confirmed_candidates as _fetch_in
 from app.pipeline.fetch.state_candidates_ky import fetch_confirmed_candidates as _fetch_ky
+from app.pipeline.fetch.state_candidates_ms import fetch_confirmed_candidates as _fetch_ms
 from app.pipeline.fetch.state_candidates_nj import fetch_confirmed_candidates as _fetch_nj
 from app.pipeline.fetch.state_candidates_tabular import fetch_confirmed_candidates as _fetch_tabular
 from app.pipeline.fetch.state_candidates_pa import fetch_confirmed_candidates as _fetch_pa
@@ -87,6 +88,7 @@ STRATEGIES = {
     "canvass_xml": _fetch_canvass_xml,
     "nj_certification": _fetch_nj,
     "ky_certification": _fetch_ky,
+    "ms_recap": _fetch_ms,
     "in_enr": _fetch_in,
     "tn_precinct": _fetch_tn,
 }
