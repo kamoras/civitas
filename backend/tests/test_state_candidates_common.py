@@ -21,6 +21,28 @@ class TestParseOffice:
         assert common.parse_office("United States Senator - Democratic Party") == ("S", None)
         assert common.parse_office("US SENATE (DEM)") == ("S", None)
 
+    def test_recognises_the_bare_abbreviated_us_congress(self):
+        """Arkansas's real label ("REP U.S. Congress District 02") uses
+        the short "U.S." form with "Congress" — previously only
+        "United States Congress" (spelled out) or "U.S. House/
+        Representative" were recognised, so this real label parsed as
+        None. "Congress" alone is already the decisive, state-legislature-
+        proof signal this function relies on elsewhere; the gap was only
+        in the abbreviation, not a new safety question."""
+        assert common.parse_office("REP U.S. Congress District 02") == ("H", 2)
+        assert common.parse_office("DEM U.S. Congress District 04") == ("H", 4)
+        assert common.parse_office("U.S. Senate") == ("S", None)
+
+    def test_congress_does_not_match_inside_a_longer_word(self):
+        """A county-export convention groups a local race under its
+        containing congressional district ("U.S. Congressional District 3
+        County Commissioner") -- without a word boundary after "Congress",
+        the abbreviated U.S. group added for Arkansas would misread that
+        substring as a real federal contest."""
+        assert common.parse_office("US Congressional Redistricting Commission") is None
+        assert common.parse_office("U.S. Congressional District Court Judge") is None
+        assert common.parse_office("U.S. Congressional District 3 County Commissioner") is None
+
     def test_leading_zero_district_is_not_octal_or_string(self):
         assert common.parse_office("US HOUSE OF REPRESENTATIVES DISTRICT 022") == ("H", 22)
 

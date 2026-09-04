@@ -21,18 +21,25 @@ invented:
 import re
 
 # Chamber wording varies ("United States Congress", "US HOUSE OF
-# REPRESENTATIVES", "U.S. Representative"); the ordinal in Colorado's label
-# advances every Congress, so nothing cycle-specific is matched.
+# REPRESENTATIVES", "U.S. Representative", Arkansas's real "U.S. Congress
+# District 02"); the ordinal in Colorado's label advances every Congress,
+# so nothing cycle-specific is matched.
 # The word "Congress" is itself decisive — no state legislature is called
-# one, so "Representative in Congress" (Florida) and "1ST CONGRESS"
-# (Illinois) are safe to recognise, while a bare "House of
-# Representatives" is NOT and must keep being refused (it is a state
-# chamber's name in most states; see office_from_columns for how a state
-# that publishes only that label is handled).
+# one, so "Representative in Congress" (Florida), "1ST CONGRESS"
+# (Illinois) and the bare abbreviated "U.S. Congress" (Arkansas) are safe
+# to recognise, while a bare "House of Representatives" is NOT and must
+# keep being refused (it is a state chamber's name in most states; see
+# office_from_columns for how a state that publishes only that label is
+# handled). Every "Congress" alternative carries its own \b: without it,
+# "Congress" matches as a substring of "Congressional"/"Congressman" too
+# (a common county-export convention groups a LOCAL race under its
+# containing congressional district, e.g. "U.S. Congressional District 3
+# County Commissioner"), which would misread that county race as a real
+# federal contest.
 _CHAMBER_HOUSE = (
-    r"(?:United\s+States\s+(?:Congress|Representative)"
-    r"|U\.?\s*S\.?\s*(?:House|Representative)"
-    r"|(?:Representative\s+in\s+|\d+(?:st|nd|rd|th)\s+)Congress)"
+    r"(?:United\s+States\s+(?:Congress\b|Representative)"
+    r"|U\.?\s*S\.?\s*(?:House|Representative|Congress\b)"
+    r"|(?:Representative\s+in\s+|\d+(?:st|nd|rd|th)\s+)Congress\b)"
 )
 # Both orders occur live: "District 5" (most states) and "5th District"
 # / "1ST CONGRESS" (Florida's and Illinois' own labels). Arizona's own

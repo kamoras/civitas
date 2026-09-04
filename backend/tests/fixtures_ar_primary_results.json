@@ -1,0 +1,153 @@
+{
+  "response": {
+    "contests": {
+      "1ff198fb-395a-4a8d-9083-eae9bbb9700a": {
+        "contestID": "1ff198fb-395a-4a8d-9083-eae9bbb9700a",
+        "districtID": null,
+        "precinctsReporting": 2897,
+        "precinctsPartiallyReporting": 0,
+        "totalPrecincts": 2897,
+        "totalVotes": 281973,
+        "recountType": 0,
+        "hasRecount": false,
+        "hasLocationResults": true,
+        "choices": [
+          {
+            "choiceID": "0b636a0b-ea9c-40c7-ad30-9fbd4e6ebfd3",
+            "totalVotes": 25724,
+            "partyID": "4c1a540e-cfe4-4ba0-8435-1dd7c3eeb1e6",
+            "votePercent": 9,
+            "isWinner": false
+          },
+          {
+            "choiceID": "e67e413d-6ead-403e-a723-bda311571806",
+            "totalVotes": 26040,
+            "partyID": "4c1a540e-cfe4-4ba0-8435-1dd7c3eeb1e6",
+            "votePercent": 9,
+            "isWinner": false
+          },
+          {
+            "choiceID": "335a7255-7211-4596-ae0e-c8b27106c0de",
+            "totalVotes": 230209,
+            "partyID": "4c1a540e-cfe4-4ba0-8435-1dd7c3eeb1e6",
+            "votePercent": 82,
+            "isWinner": false
+          }
+        ],
+        "writeInChoices": []
+      },
+      "50023b3b-3962-4604-9745-b91b4939e68d": {
+        "contestID": "50023b3b-3962-4604-9745-b91b4939e68d",
+        "districtID": null,
+        "precinctsReporting": 2897,
+        "precinctsPartiallyReporting": 0,
+        "totalPrecincts": 2897,
+        "totalVotes": 130683,
+        "recountType": 0,
+        "hasRecount": false,
+        "hasLocationResults": true,
+        "choices": [
+          {
+            "choiceID": "74cc6854-59e7-44d7-a077-eadd6771bd61",
+            "totalVotes": 28394,
+            "partyID": "f9d5fae6-a1fb-4278-a4d1-5784e643689e",
+            "votePercent": 22,
+            "isWinner": false
+          },
+          {
+            "choiceID": "de6a8173-f3e6-4b31-9dfb-6e886e795cd4",
+            "totalVotes": 102289,
+            "partyID": "f9d5fae6-a1fb-4278-a4d1-5784e643689e",
+            "votePercent": 78,
+            "isWinner": false
+          }
+        ],
+        "writeInChoices": []
+      },
+      "784bb10e-b4fe-4fc7-bf03-16c57e348225": {
+        "contestID": "784bb10e-b4fe-4fc7-bf03-16c57e348225",
+        "districtID": null,
+        "precinctsReporting": 869,
+        "precinctsPartiallyReporting": 0,
+        "totalPrecincts": 869,
+        "totalVotes": 24708,
+        "recountType": 0,
+        "hasRecount": false,
+        "hasLocationResults": true,
+        "choices": [
+          {
+            "choiceID": "60b202da-7073-4822-810f-44026c76e585",
+            "totalVotes": 11616,
+            "partyID": "f9d5fae6-a1fb-4278-a4d1-5784e643689e",
+            "votePercent": 47,
+            "isWinner": false
+          },
+          {
+            "choiceID": "0c65b63b-d008-42df-a5e4-9b4cc7bd1400",
+            "totalVotes": 13092,
+            "partyID": "f9d5fae6-a1fb-4278-a4d1-5784e643689e",
+            "votePercent": 53,
+            "isWinner": false
+          }
+        ],
+        "writeInChoices": []
+      },
+      "706a3599-9ca7-42b3-ab36-87fcd4ff9392": {
+        "contestID": "706a3599-9ca7-42b3-ab36-87fcd4ff9392",
+        "districtID": null,
+        "precinctsReporting": 400,
+        "precinctsPartiallyReporting": 0,
+        "totalPrecincts": 400,
+        "totalVotes": 63909,
+        "recountType": 0,
+        "hasRecount": false,
+        "hasLocationResults": true,
+        "choices": [
+          {
+            "choiceID": "fccb828c-bd7c-4290-bd02-5cbcc5df5735",
+            "totalVotes": 14830,
+            "partyID": "4c1a540e-cfe4-4ba0-8435-1dd7c3eeb1e6",
+            "votePercent": 23,
+            "isWinner": false
+          },
+          {
+            "choiceID": "0aea07c8-c529-46b6-ad04-6eb67fd35f6f",
+            "totalVotes": 49079,
+            "partyID": "4c1a540e-cfe4-4ba0-8435-1dd7c3eeb1e6",
+            "votePercent": 77,
+            "isWinner": false
+          }
+        ],
+        "writeInChoices": []
+      },
+      "98298822-ff47-4496-9ff6-8d762156bfdf": {
+        "contestID": "98298822-ff47-4496-9ff6-8d762156bfdf",
+        "districtID": null,
+        "precinctsReporting": 400,
+        "precinctsPartiallyReporting": 0,
+        "totalPrecincts": 400,
+        "totalVotes": 51318,
+        "recountType": 0,
+        "hasRecount": false,
+        "hasLocationResults": true,
+        "choices": [
+          {
+            "choiceID": "b0014d78-46fc-4366-89c2-48faaf73c8bf",
+            "totalVotes": 47512,
+            "partyID": "f9d5fae6-a1fb-4278-a4d1-5784e643689e",
+            "votePercent": 93,
+            "isWinner": false
+          },
+          {
+            "choiceID": "e496ff17-f673-4ae7-87e1-a3afae729409",
+            "totalVotes": 3806,
+            "partyID": "f9d5fae6-a1fb-4278-a4d1-5784e643689e",
+            "votePercent": 7,
+            "isWinner": false
+          }
+        ],
+        "writeInChoices": []
+      }
+    }
+  }
+}

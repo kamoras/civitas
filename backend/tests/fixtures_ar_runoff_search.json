@@ -1,0 +1,105 @@
+{
+  "response": {
+    "contests": {
+      "1f5c45de-d1b5-4acb-a853-b72b5f695363": {
+        "contestId": "1f5c45de-d1b5-4acb-a853-b72b5f695363",
+        "contestName": "REP Secretary of State",
+        "contestTypeCode": "Statewide",
+        "contestOrder": 1,
+        "voteFor": 1,
+        "locationType": null,
+        "locationID": null,
+        "message": "",
+        "messageLink": "",
+        "choices": {
+          "2240597e-d52e-4fd2-8dbe-589004342b94": {
+            "id": "2240597e-d52e-4fd2-8dbe-589004342b94",
+            "name": "Bryan Norris",
+            "pictureFilename": null,
+            "partyID": "4c1a540e-cfe4-4ba0-8435-1dd7c3eeb1e6",
+            "color": "rgb(160, 38, 38)",
+            "order": 0,
+            "isWriteIn": false,
+            "isWinner": false
+          },
+          "955a8e10-888e-4ae9-b740-bf370150cc9c": {
+            "id": "955a8e10-888e-4ae9-b740-bf370150cc9c",
+            "name": "Senator Kim Hammer",
+            "pictureFilename": null,
+            "partyID": "4c1a540e-cfe4-4ba0-8435-1dd7c3eeb1e6",
+            "color": "rgb(160, 38, 38)",
+            "order": 0,
+            "isWriteIn": false,
+            "isWinner": false
+          }
+        }
+      },
+      "105d38b3-7fe3-48ec-a94c-03d471cdfd98": {
+        "contestId": "105d38b3-7fe3-48ec-a94c-03d471cdfd98",
+        "contestName": "DEM Hornor Township Constable",
+        "contestTypeCode": "County",
+        "contestOrder": 1,
+        "voteFor": 1,
+        "locationType": null,
+        "locationID": null,
+        "message": "",
+        "messageLink": "",
+        "choices": {
+          "a9fbff3d-a8e3-4926-9e97-d7da133c9430": {
+            "id": "a9fbff3d-a8e3-4926-9e97-d7da133c9430",
+            "name": "Darryl Brown",
+            "pictureFilename": null,
+            "partyID": "f9d5fae6-a1fb-4278-a4d1-5784e643689e",
+            "color": "rgb(45, 74, 124)",
+            "order": 0,
+            "isWriteIn": false,
+            "isWinner": false
+          },
+          "ce391fd6-402d-4fdd-9c36-b3202cc84771": {
+            "id": "ce391fd6-402d-4fdd-9c36-b3202cc84771",
+            "name": "Wilburt Strotter",
+            "pictureFilename": null,
+            "partyID": "f9d5fae6-a1fb-4278-a4d1-5784e643689e",
+            "color": "rgb(45, 74, 124)",
+            "order": 0,
+            "isWriteIn": false,
+            "isWinner": false
+          }
+        }
+      },
+      "aa36bba0-6b93-4b90-9a47-21ec66cda440": {
+        "contestId": "aa36bba0-6b93-4b90-9a47-21ec66cda440",
+        "contestName": "DEM State Representative Dist. 35",
+        "contestTypeCode": "State Representative",
+        "contestOrder": 2,
+        "voteFor": 1,
+        "locationType": null,
+        "locationID": null,
+        "message": "",
+        "messageLink": "",
+        "choices": {
+          "a140b82b-e30e-4839-a2a0-f10cbe5a803e": {
+            "id": "a140b82b-e30e-4839-a2a0-f10cbe5a803e",
+            "name": "Audrey P. Willis",
+            "pictureFilename": null,
+            "partyID": "f9d5fae6-a1fb-4278-a4d1-5784e643689e",
+            "color": "rgb(45, 74, 124)",
+            "order": 0,
+            "isWriteIn": false,
+            "isWinner": false
+          },
+          "80675c1e-9e5b-4702-8bdf-c57435c84cb6": {
+            "id": "80675c1e-9e5b-4702-8bdf-c57435c84cb6",
+            "name": "Joyce Ann Gray",
+            "pictureFilename": null,
+            "partyID": "f9d5fae6-a1fb-4278-a4d1-5784e643689e",
+            "color": "rgb(45, 74, 124)",
+            "order": 0,
+            "isWriteIn": false,
+            "isWinner": false
+          }
+        }
+      }
+    }
+  }
+}

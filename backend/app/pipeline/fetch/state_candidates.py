@@ -62,6 +62,7 @@ from app.pipeline.fetch.state_source_crawler import (
     discover_source,
 )
 from app.pipeline.fetch.state_candidates_al import fetch_confirmed_candidates as _fetch_al
+from app.pipeline.fetch.state_candidates_ar import fetch_confirmed_candidates as _fetch_ar
 from app.pipeline.fetch.state_candidates_canvass_xml import fetch_confirmed_candidates as _fetch_canvass_xml
 from app.pipeline.fetch.state_candidates_clarity import fetch_confirmed_candidates as _fetch_clarity
 from app.pipeline.fetch.state_candidates_in import fetch_confirmed_candidates as _fetch_in
@@ -81,6 +82,7 @@ logger = logging.getLogger(__name__)
 # different vendor earns a new module.
 STRATEGIES = {
     "al_special_primary": _fetch_al,
+    "ar_enr": _fetch_ar,
     "tx_civix": _fetch_tx,
     "pa_returns": _fetch_pa,
     "clarity": _fetch_clarity,
