@@ -21,17 +21,19 @@ invented:
 import re
 
 # Chamber wording varies ("United States Congress", "US HOUSE OF
-# REPRESENTATIVES", "U.S. Representative"); the ordinal in Colorado's label
-# advances every Congress, so nothing cycle-specific is matched.
+# REPRESENTATIVES", "U.S. Representative", Arkansas's real "U.S. Congress
+# District 02"); the ordinal in Colorado's label advances every Congress,
+# so nothing cycle-specific is matched.
 # The word "Congress" is itself decisive — no state legislature is called
-# one, so "Representative in Congress" (Florida) and "1ST CONGRESS"
-# (Illinois) are safe to recognise, while a bare "House of
-# Representatives" is NOT and must keep being refused (it is a state
-# chamber's name in most states; see office_from_columns for how a state
-# that publishes only that label is handled).
+# one, so "Representative in Congress" (Florida), "1ST CONGRESS"
+# (Illinois) and the bare abbreviated "U.S. Congress" (Arkansas) are safe
+# to recognise, while a bare "House of Representatives" is NOT and must
+# keep being refused (it is a state chamber's name in most states; see
+# office_from_columns for how a state that publishes only that label is
+# handled).
 _CHAMBER_HOUSE = (
     r"(?:United\s+States\s+(?:Congress|Representative)"
-    r"|U\.?\s*S\.?\s*(?:House|Representative)"
+    r"|U\.?\s*S\.?\s*(?:House|Representative|Congress)"
     r"|(?:Representative\s+in\s+|\d+(?:st|nd|rd|th)\s+)Congress)"
 )
 # Both orders occur live: "District 5" (most states) and "5th District"

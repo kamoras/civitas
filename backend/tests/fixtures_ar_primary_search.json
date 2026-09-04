@@ -1,0 +1,247 @@
+{
+  "response": {
+    "contests": {
+      "1ff198fb-395a-4a8d-9083-eae9bbb9700a": {
+        "contestId": "1ff198fb-395a-4a8d-9083-eae9bbb9700a",
+        "contestName": "REP U.S. Senate",
+        "contestTypeCode": "Federal",
+        "contestOrder": 1,
+        "voteFor": 1,
+        "locationType": null,
+        "locationID": null,
+        "message": "",
+        "messageLink": "",
+        "choices": {
+          "0b636a0b-ea9c-40c7-ad30-9fbd4e6ebfd3": {
+            "id": "0b636a0b-ea9c-40c7-ad30-9fbd4e6ebfd3",
+            "name": "Jeb Little",
+            "pictureFilename": "",
+            "partyID": "4c1a540e-cfe4-4ba0-8435-1dd7c3eeb1e6",
+            "color": "rgb(160, 38, 38)",
+            "order": 0,
+            "isWriteIn": false,
+            "isWinner": false
+          },
+          "e67e413d-6ead-403e-a723-bda311571806": {
+            "id": "e67e413d-6ead-403e-a723-bda311571806",
+            "name": "Micah Ashby",
+            "pictureFilename": "",
+            "partyID": "4c1a540e-cfe4-4ba0-8435-1dd7c3eeb1e6",
+            "color": "rgb(160, 38, 38)",
+            "order": 0,
+            "isWriteIn": false,
+            "isWinner": false
+          },
+          "335a7255-7211-4596-ae0e-c8b27106c0de": {
+            "id": "335a7255-7211-4596-ae0e-c8b27106c0de",
+            "name": "Tom Cotton",
+            "pictureFilename": "",
+            "partyID": "4c1a540e-cfe4-4ba0-8435-1dd7c3eeb1e6",
+            "color": "rgb(160, 38, 38)",
+            "order": 0,
+            "isWriteIn": false,
+            "isWinner": false
+          }
+        }
+      },
+      "50023b3b-3962-4604-9745-b91b4939e68d": {
+        "contestId": "50023b3b-3962-4604-9745-b91b4939e68d",
+        "contestName": "DEM U.S. Senate",
+        "contestTypeCode": "Federal",
+        "contestOrder": 2,
+        "voteFor": 1,
+        "locationType": null,
+        "locationID": null,
+        "message": "",
+        "messageLink": "",
+        "choices": {
+          "74cc6854-59e7-44d7-a077-eadd6771bd61": {
+            "id": "74cc6854-59e7-44d7-a077-eadd6771bd61",
+            "name": "Ethan N. Dunbar",
+            "pictureFilename": "",
+            "partyID": "f9d5fae6-a1fb-4278-a4d1-5784e643689e",
+            "color": "rgb(45, 74, 124)",
+            "order": 0,
+            "isWriteIn": false,
+            "isWinner": false
+          },
+          "de6a8173-f3e6-4b31-9dfb-6e886e795cd4": {
+            "id": "de6a8173-f3e6-4b31-9dfb-6e886e795cd4",
+            "name": "Hallie Shoffner",
+            "pictureFilename": "",
+            "partyID": "f9d5fae6-a1fb-4278-a4d1-5784e643689e",
+            "color": "rgb(45, 74, 124)",
+            "order": 0,
+            "isWriteIn": false,
+            "isWinner": false
+          }
+        }
+      },
+      "706a3599-9ca7-42b3-ab36-87fcd4ff9392": {
+        "contestId": "706a3599-9ca7-42b3-ab36-87fcd4ff9392",
+        "contestName": "REP U.S. Congress District 02",
+        "contestTypeCode": "Federal",
+        "contestOrder": 3,
+        "voteFor": 1,
+        "locationType": null,
+        "locationID": null,
+        "message": "",
+        "messageLink": "",
+        "choices": {
+          "fccb828c-bd7c-4290-bd02-5cbcc5df5735": {
+            "id": "fccb828c-bd7c-4290-bd02-5cbcc5df5735",
+            "name": "Chase McDowell",
+            "pictureFilename": "",
+            "partyID": "4c1a540e-cfe4-4ba0-8435-1dd7c3eeb1e6",
+            "color": "rgb(160, 38, 38)",
+            "order": 0,
+            "isWriteIn": false,
+            "isWinner": false
+          },
+          "0aea07c8-c529-46b6-ad04-6eb67fd35f6f": {
+            "id": "0aea07c8-c529-46b6-ad04-6eb67fd35f6f",
+            "name": "French Hill",
+            "pictureFilename": "",
+            "partyID": "4c1a540e-cfe4-4ba0-8435-1dd7c3eeb1e6",
+            "color": "rgb(160, 38, 38)",
+            "order": 0,
+            "isWriteIn": false,
+            "isWinner": false
+          }
+        }
+      },
+      "98298822-ff47-4496-9ff6-8d762156bfdf": {
+        "contestId": "98298822-ff47-4496-9ff6-8d762156bfdf",
+        "contestName": "DEM U.S. Congress District 02",
+        "contestTypeCode": "Federal",
+        "contestOrder": 4,
+        "voteFor": 1,
+        "locationType": null,
+        "locationID": null,
+        "message": "",
+        "messageLink": "",
+        "choices": {
+          "b0014d78-46fc-4366-89c2-48faaf73c8bf": {
+            "id": "b0014d78-46fc-4366-89c2-48faaf73c8bf",
+            "name": "Chris Jones",
+            "pictureFilename": "",
+            "partyID": "f9d5fae6-a1fb-4278-a4d1-5784e643689e",
+            "color": "rgb(45, 74, 124)",
+            "order": 0,
+            "isWriteIn": false,
+            "isWinner": false
+          },
+          "e496ff17-f673-4ae7-87e1-a3afae729409": {
+            "id": "e496ff17-f673-4ae7-87e1-a3afae729409",
+            "name": "Zack Huffman",
+            "pictureFilename": "",
+            "partyID": "f9d5fae6-a1fb-4278-a4d1-5784e643689e",
+            "color": "rgb(45, 74, 124)",
+            "order": 0,
+            "isWriteIn": false,
+            "isWinner": false
+          }
+        }
+      },
+      "784bb10e-b4fe-4fc7-bf03-16c57e348225": {
+        "contestId": "784bb10e-b4fe-4fc7-bf03-16c57e348225",
+        "contestName": "DEM U.S. Congress District 04",
+        "contestTypeCode": "Federal",
+        "contestOrder": 5,
+        "voteFor": 1,
+        "locationType": null,
+        "locationID": null,
+        "message": "",
+        "messageLink": "",
+        "choices": {
+          "60b202da-7073-4822-810f-44026c76e585": {
+            "id": "60b202da-7073-4822-810f-44026c76e585",
+            "name": "Steven Layne O'Donnell",
+            "pictureFilename": "",
+            "partyID": "f9d5fae6-a1fb-4278-a4d1-5784e643689e",
+            "color": "rgb(45, 74, 124)",
+            "order": 0,
+            "isWriteIn": false,
+            "isWinner": false
+          },
+          "0c65b63b-d008-42df-a5e4-9b4cc7bd1400": {
+            "id": "0c65b63b-d008-42df-a5e4-9b4cc7bd1400",
+            "name": "James \"Rus\" Russell, III",
+            "pictureFilename": "",
+            "partyID": "f9d5fae6-a1fb-4278-a4d1-5784e643689e",
+            "color": "rgb(45, 74, 124)",
+            "order": 0,
+            "isWriteIn": false,
+            "isWinner": false
+          }
+        }
+      },
+      "32eedf4d-f628-4868-8ddc-10b83bdd8030": {
+        "contestId": "32eedf4d-f628-4868-8ddc-10b83bdd8030",
+        "contestName": "DEM Governor",
+        "contestTypeCode": "Statewide",
+        "contestOrder": 6,
+        "voteFor": 1,
+        "locationType": null,
+        "locationID": null,
+        "message": "",
+        "messageLink": "",
+        "choices": {
+          "7d4a212a-7563-4cf0-94d6-f72227a0de3e": {
+            "id": "7d4a212a-7563-4cf0-94d6-f72227a0de3e",
+            "name": "Supha Xayprasith-Mays",
+            "pictureFilename": "",
+            "partyID": "f9d5fae6-a1fb-4278-a4d1-5784e643689e",
+            "color": "rgb(45, 74, 124)",
+            "order": 0,
+            "isWriteIn": false,
+            "isWinner": false
+          },
+          "e3d0c94d-9bef-42f7-9a88-3fde06e894d0": {
+            "id": "e3d0c94d-9bef-42f7-9a88-3fde06e894d0",
+            "name": "Fred Love",
+            "pictureFilename": "",
+            "partyID": "f9d5fae6-a1fb-4278-a4d1-5784e643689e",
+            "color": "rgb(45, 74, 124)",
+            "order": 0,
+            "isWriteIn": false,
+            "isWinner": false
+          }
+        }
+      },
+      "0913ff7e-fe26-4f19-a817-f5a5cb46dfd2": {
+        "contestId": "0913ff7e-fe26-4f19-a817-f5a5cb46dfd2",
+        "contestName": "REP County Sheriff",
+        "contestTypeCode": "County",
+        "contestOrder": 7,
+        "voteFor": 1,
+        "locationType": null,
+        "locationID": null,
+        "message": "",
+        "messageLink": "",
+        "choices": {
+          "41ffc3e7-5f1b-4350-b419-674ba5f0be83": {
+            "id": "41ffc3e7-5f1b-4350-b419-674ba5f0be83",
+            "name": "Richard Rice (Rick)",
+            "pictureFilename": "",
+            "partyID": "4c1a540e-cfe4-4ba0-8435-1dd7c3eeb1e6",
+            "color": "rgb(160, 38, 38)",
+            "order": 0,
+            "isWriteIn": false,
+            "isWinner": false
+          },
+          "0526f5b7-2f14-4a63-9ed8-ac8f47532939": {
+            "id": "0526f5b7-2f14-4a63-9ed8-ac8f47532939",
+            "name": "Daniel Perry",
+            "pictureFilename": "",
+            "partyID": "4c1a540e-cfe4-4ba0-8435-1dd7c3eeb1e6",
+            "color": "rgb(160, 38, 38)",
+            "order": 0,
+            "isWriteIn": false,
+            "isWinner": false
+          }
+        }
+      }
+    }
+  }
+}

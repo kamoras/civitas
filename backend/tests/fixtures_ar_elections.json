@@ -1,0 +1,20 @@
+[
+  {
+    "electionID": "4b025e66-db9f-4e01-a7b8-3d06d87bccda",
+    "electionName": "2026 Primary Special Election",
+    "electionDate": "2026-08-18T00:00:00",
+    "isDefault": true
+  },
+  {
+    "electionID": "b412bdef-f97a-45bc-b3ec-6761d28caf9e",
+    "electionName": "2026 Primary Runoff",
+    "electionDate": "2026-03-31T00:00:00",
+    "isDefault": false
+  },
+  {
+    "electionID": "7f77a178-af02-40ec-92db-c5cc50882c68",
+    "electionName": "2026 Preferential Primary",
+    "electionDate": "2026-03-03T00:00:00",
+    "isDefault": false
+  }
+]
