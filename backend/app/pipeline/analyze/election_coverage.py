@@ -231,7 +231,22 @@ def _store_if_new(db: Session, race_id: str, **fields) -> bool:
 def _candidates_for_bluesky_search(db: Session, limit: int) -> list[Candidate]:
     """Rotating watermarked batch: active candidates only (statutory
     status, raised funds, or incumbent — paper filers don't get search
-    traffic), never-searched first, then longest-unsearched first."""
+    traffic), never-searched first, then longest-unsearched first.
+
+    Deliberately not deduped against app/candidate_dedup.py's merge rule:
+    this is a flat, cross-race batch, and applying dedupe here would mean
+    grouping it by race first. It wouldn't even reliably save a request —
+    this module's own _surname (raw "before the comma", unlike
+    candidate_dedup's normalized_surname) doesn't strip generational
+    suffixes, so a real duplicate pair like "ONDER JR, ROBERT FRANK" /
+    "ONDER, ROBERT FOR JR." still produces two different search strings
+    ("ROBERT ONDER JR" vs "ROBERT ONDER"). Any overlap in results is
+    absorbed downstream anyway (_store_if_new's per-race URL check). Not
+    worth the restructuring for a savings this inconsistent — unlike
+    _roster_fact (election_bluesky.py), which resolves a stored id
+    because posting a wrong/dropped one is a correctness problem, not
+    just wasted work.
+    """
     return (
         db.query(Candidate)
         .filter(or_(

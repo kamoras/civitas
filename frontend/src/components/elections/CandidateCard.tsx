@@ -1,13 +1,13 @@
 import Link from "next/link";
 import type { BallotCandidate } from "@/types/election";
-import { formatCurrency } from "@/lib/formatting";
+import { cashOnHandDisplay, formatCurrency } from "@/lib/formatting";
 import { getScoreColor } from "@/lib/representation";
 
 // FEC's party codes ("DEM"/"REP"/"IND"/...) don't match lib/partyStyles.ts's
 // D/R/I keys (those back President/Justice's own party codes), so this
 // mirrors PresidentClient.tsx's local PARTY_META + getPartyMeta fallback
 // pattern rather than reusing partyStyles.ts directly.
-const PARTY_META: Record<string, { label: string; color: string; rule: string }> = {
+export const PARTY_META: Record<string, { label: string; color: string; rule: string }> = {
   DEM: { label: "DEMOCRAT", color: "text-dem-blue", rule: "bg-dem-blue" },
   REP: { label: "REPUBLICAN", color: "text-signal-red", rule: "bg-signal-red" },
   IND: { label: "INDEPENDENT", color: "text-ind-purple", rule: "bg-ind-purple" },
@@ -23,7 +23,7 @@ const PARTY_META: Record<string, { label: string; color: string; rule: string }>
   UNK: { label: "UNAFFILIATED/UNKNOWN", color: "text-ink-lo", rule: "bg-ink-min" },
 };
 
-function getPartyMeta(party: string) {
+export function getPartyMeta(party: string) {
   return PARTY_META[party] ?? { label: party, color: "text-ink-lo", rule: "bg-ink-min" };
 }
 
@@ -35,6 +35,7 @@ const INCUMBENT_LABELS: Record<string, string> = {
 
 export default function CandidateCard({ candidate }: { candidate: BallotCandidate }) {
   const pm = getPartyMeta(candidate.party);
+  const cash = cashOnHandDisplay(candidate.cashOnHand);
   // UTC date only, sliced from the ISO string — deterministic across
   // server and client renders, so no locale/hydration hazard.
   const syncedOn = candidate.lastFinancialsSync?.slice(0, 10) ?? null;
@@ -96,11 +97,9 @@ export default function CandidateCard({ candidate }: { candidate: BallotCandidat
             </div>
             <div>
               <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-                Cash on hand
+                {cash?.label ?? "Cash on hand"}
               </dt>
-              <dd className="font-mono text-xl tabular-nums text-ink-hi">
-                {candidate.cashOnHand != null ? formatCurrency(candidate.cashOnHand) : "—"}
-              </dd>
+              <dd className="font-mono text-xl tabular-nums text-ink-hi">{cash?.amount ?? "—"}</dd>
             </div>
           </dl>
           <p className="mt-2 font-mono text-xs tracking-[0.08em] text-ink-min">AS OF {syncedOn}</p>

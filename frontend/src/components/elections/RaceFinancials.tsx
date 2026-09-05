@@ -9,7 +9,14 @@ import type { CandidateSummary } from "@/types/election";
  * paper filers don't pad the chart.
  */
 export default function RaceFinancials({ candidates }: { candidates: CandidateSummary[] }) {
-  const withFunds = candidates.filter((c) => c.cashOnHand != null);
+  // A negative cash on hand (FEC debt exceeding receipts — see
+  // CandidateCard) breaks this chart two ways: it would set `max` too
+  // low if the debt is deep, and (cashOnHand / max) * 100 goes negative,
+  // which CSS silently clamps to a 0-width bar with no explanation. This
+  // chart is about comparing who has runway, not who owes money, so a
+  // debt candidate is simply not part of the comparison here — their
+  // figure still shows on their own CandidateCard, labeled as debt.
+  const withFunds = candidates.filter((c) => c.cashOnHand != null && c.cashOnHand >= 0);
   if (withFunds.length === 0) {
     return (
       <p className="font-mono text-base text-ink-min">

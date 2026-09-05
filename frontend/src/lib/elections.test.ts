@@ -3,12 +3,13 @@ import {
   districtCountiesLabel,
   formatPvi,
   isActiveCandidate,
+  majorPartyOf,
   parseUtc,
   raceBadgeLabel,
-  raceShortLabel,
   raceTitleLabel,
+  tierCandidates,
 } from "./elections";
-import type { CandidateSummary } from "@/types/election";
+import type { BallotCandidate, CandidateSummary } from "@/types/election";
 
 describe("formatPvi", () => {
   it("formats R lean, D lean, even, and missing", () => {
@@ -26,12 +27,6 @@ describe("race labels", () => {
   // guards against: a truthy `race.district ?` check treated 0 like null.
   const atLarge = { office: "H", state: "AK", district: 0 };
 
-  it("raceShortLabel renders card-style caps labels", () => {
-    expect(raceShortLabel(senate)).toBe("GA SENATE");
-    expect(raceShortLabel(house)).toBe("GA-7");
-    expect(raceShortLabel(atLarge)).toBe("AK-AL");
-  });
-
   it("raceTitleLabel renders title-style labels", () => {
     expect(raceTitleLabel(senate)).toBe("GA Senate");
     expect(raceTitleLabel(house)).toBe("GA-7 House");
@@ -39,8 +34,8 @@ describe("race labels", () => {
   });
 
   it("does not conflate a null district (Senate) with at-large 0", () => {
-    expect(raceShortLabel({ office: "H", state: "TX", district: null })).toBe("TX HOUSE");
-    expect(raceShortLabel({ office: "H", state: "TX", district: 0 })).toBe("TX-AL");
+    expect(raceTitleLabel({ office: "H", state: "TX", district: null })).toBe("TX House");
+    expect(raceTitleLabel({ office: "H", state: "TX", district: 0 })).toBe("TX-AL House");
   });
 
   it("raceBadgeLabel omits the state for a page already scoped to one", () => {
@@ -126,5 +121,113 @@ describe("isActiveCandidate", () => {
     expect(isActiveCandidate({ ...base, candidateStatus: "N", incumbentChallenge: "C" })).toBe(
       false
     );
+  });
+});
+
+describe("tierCandidates", () => {
+  // Real Ohio 2026 Senate primary field, live-verified 2026-09-04 —
+  // 9 real active FEC filers behind one real matchup (Brown vs Husted).
+  function cand(overrides: Partial<BallotCandidate>): BallotCandidate {
+    return {
+      id: "id",
+      name: "name",
+      party: "DEM",
+      incumbentChallenge: "C",
+      candidateStatus: "C",
+      hasRaisedFunds: true,
+      contributions: null,
+      cashOnHand: null,
+      lastFinancialsSync: "2026-08-25T00:00:00Z",
+      incumbentRecord: null,
+      ...overrides,
+    };
+  }
+
+  const brown = cand({ id: "S6OH00163", name: "Brown, Sherrod", party: "DEM", cashOnHand: 16229741.32 });
+  const husted = cand({
+    id: "S6OH00304", name: "Husted, Jon", party: "REP", incumbentChallenge: "I", cashOnHand: 9419311.2,
+  });
+  const levy = cand({ id: "S6OH00395", name: "Levy, Gregory Lee", party: "IND", cashOnHand: 25971.13 });
+  const ode = cand({ id: "S6OH00387", name: "Ode, Frederick J", party: "DEM", cashOnHand: 25865.53 });
+  const kincaid = cand({ id: "S6OH00361", name: "Kincaid, Ronald E Jr", party: "DEM", cashOnHand: 17486.87 });
+  const redpath = cand({ id: "S6OH00429", name: "Redpath, William", party: "LIB", cashOnHand: 730.35 });
+  const volpe = cand({ id: "S6OH00353", name: "Volpe, Christopher", party: "DEM", cashOnHand: 168.3 });
+  const faris = cand({ id: "S6OH00243", name: "Faris, Stephen I Mr", party: "IND", cashOnHand: 155.94 });
+
+  const field = [brown, husted, levy, ode, kincaid, redpath, volpe, faris];
+
+  it("makes the real top-fundraiser-per-major-party the leaders", () => {
+    const { leaders } = tierCandidates(field);
+    expect(leaders.map((c) => c.id).sort()).toEqual([brown.id, husted.id].sort());
+  });
+
+  it("keeps every minor-party filer in the tail when none clears 10% of the leaders' cash", () => {
+    // Levy's real $26K is ~0.16% of Brown's $16.2M -- nowhere close to
+    // viable by this rule, so all six non-major candidates recede.
+    const { tail } = tierCandidates(field);
+    expect(tail.map((c) => c.id).sort()).toEqual(
+      [levy.id, ode.id, kincaid.id, redpath.id, volpe.id, faris.id].sort()
+    );
+  });
+
+  it("promotes a genuinely viable third-party candidate into the leader row", () => {
+    const viableIndependent = cand({ id: "IND1", party: "IND", cashOnHand: 2000000 });
+    const { leaders } = tierCandidates([brown, husted, viableIndependent]);
+    expect(leaders.map((c) => c.id)).toContain(viableIndependent.id);
+  });
+
+  it("always includes an incumbent as a leader regardless of party or cash", () => {
+    const brokeIncumbent = cand({ id: "INC1", party: "REP", incumbentChallenge: "I", cashOnHand: 100 });
+    const { leaders, tail } = tierCandidates([brown, brokeIncumbent]);
+    expect(leaders.map((c) => c.id)).toContain(brokeIncumbent.id);
+    expect(tail.map((c) => c.id)).not.toContain(brokeIncumbent.id);
+  });
+
+  it("shows fewer leader cards when one major party has no candidate, rather than inventing one", () => {
+    const { leaders } = tierCandidates([brown, levy, ode]);
+    expect(leaders).toEqual([brown]);
+  });
+
+  it("never tiers an inactive (paper-filer) candidate into either bucket incorrectly", () => {
+    const inactive = cand({
+      id: "PAPER1", party: "REP", candidateStatus: "P", hasRaisedFunds: false, incumbentChallenge: null,
+    });
+    const { leaders, tail } = tierCandidates([brown, inactive]);
+    expect(leaders.map((c) => c.id)).not.toContain(inactive.id);
+    expect(tail.map((c) => c.id)).not.toContain(inactive.id);
+  });
+
+  it("recognizes a DFL/DNL nominee as the Democratic leader, not a minor party", () => {
+    // Minnesota/North Dakota's Democratic-Party affiliates file under
+    // DFL/DNL, not DEM. The bug this guards against: hardcoding the
+    // literal "DEM" demoted a real, well-funded DFL nominee to the tail
+    // and left the leader row saying "no funded Democrat".
+    const dfl = cand({ id: "DFL1", party: "DFL", cashOnHand: 5000000 });
+    const { leaders, tail } = tierCandidates([dfl, husted]);
+    expect(leaders.map((c) => c.id).sort()).toEqual([dfl.id, husted.id].sort());
+    expect(tail).toEqual([]);
+  });
+
+  it("does not promote a $0 minor candidate just because both major leaders are in debt", () => {
+    // The bug this guards against: Math.max(0, ...) floored a negative
+    // (debt) major-leader cash up to 0, so the 10%-of-leader threshold
+    // became ">= 0" -- which every non-negative candidate clears.
+    const demInDebt = cand({ id: "DEM1", party: "DEM", cashOnHand: -500 });
+    const repInDebt = cand({ id: "REP1", party: "REP", cashOnHand: -300 });
+    const brokeIndependent = cand({ id: "IND1", party: "IND", cashOnHand: 0 });
+    const { leaders, tail } = tierCandidates([demInDebt, repInDebt, brokeIndependent]);
+    expect(leaders.map((c) => c.id).sort()).toEqual([demInDebt.id, repInDebt.id].sort());
+    expect(tail.map((c) => c.id)).toEqual([brokeIndependent.id]);
+  });
+});
+
+describe("majorPartyOf", () => {
+  it("maps DEM and its state affiliates to DEM, REP to REP, and everyone else to null", () => {
+    expect(majorPartyOf("DEM")).toBe("DEM");
+    expect(majorPartyOf("DFL")).toBe("DEM");
+    expect(majorPartyOf("DNL")).toBe("DEM");
+    expect(majorPartyOf("REP")).toBe("REP");
+    expect(majorPartyOf("IND")).toBeNull();
+    expect(majorPartyOf("GRE")).toBeNull();
   });
 });

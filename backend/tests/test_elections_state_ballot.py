@@ -171,6 +171,152 @@ def test_no_confirmed_data_falls_back_to_every_fec_filer(db_session):
     assert len(data["senateRaces"][0]["candidates"]) == 2
 
 
+def test_two_fec_ids_for_the_same_person_collapse_to_one(db_session):
+    """The real bug this fix addresses, verified live across 22 real 2026
+    races: Ohio's real House District 4 lists "WILSON, TAMARA" twice under
+    two different FEC candidate ids (one DEM, one IND) with byte-identical
+    contributions and cash on hand -- a refile that got a new id, not two
+    people. Real values, from the live production pull."""
+    _race(db_session, "2026-HOUSE-OH-4", "OH", office="H", district=4)
+    _candidate(
+        db_session, "H6OH04173", "2026-HOUSE-OH-4", "WILSON, TAMARA",
+        party="DEM", contributions=22049.51, cash_on_hand=520819.93,
+    )
+    _candidate(
+        db_session, "H2OH04164", "2026-HOUSE-OH-4", "WILSON, TAMARA",
+        party="IND", contributions=22049.51, cash_on_hand=520819.93,
+    )
+    db_session.commit()
+
+    data = _body(elections.state_ballot("OH", db_session))
+    candidates = data["houseRaces"][0]["candidates"]
+    assert len(candidates) == 1
+
+
+def test_a_refiled_candidate_with_a_typo_corrected_name_still_collapses(db_session):
+    """Real Maine Senate data: "CALABRESE, CARMEM VINCENT MR." and
+    "CALABRESE, CARMEN VINCENT MR." (one letter apart -- a name-typo
+    correction on refiling) under two ids, both reporting -$3,500 cash on
+    hand -- a real case where the shared fingerprint is NEGATIVE, and
+    where the surname match must survive a near-miss first name."""
+    _race(db_session, "2026-SEN-ME", "ME", office="S")
+    _candidate(
+        db_session, "S6ME00316", "2026-SEN-ME", "CALABRESE, CARMEM VINCENT MR.",
+        party="REP", contributions=17759.71, cash_on_hand=-3500.0,
+    )
+    _candidate(
+        db_session, "S6ME00324", "2026-SEN-ME", "CALABRESE, CARMEN VINCENT MR.",
+        party="REP", contributions=17759.71, cash_on_hand=-3500.0,
+    )
+    db_session.commit()
+
+    data = _body(elections.state_ballot("ME", db_session))
+    assert len(data["senateRaces"][0]["candidates"]) == 1
+
+
+def test_a_generational_suffix_on_either_side_of_the_name_still_matches(db_session):
+    """Real Missouri data: "ONDER JR, ROBERT FRANK" (suffix attached to
+    the surname) and "ONDER, ROBERT FOR JR." (suffix trailing the first
+    name instead) -- FEC doesn't put JR/SR in a consistent place, so the
+    surname normalization has to strip it from either side."""
+    _race(db_session, "2026-HOUSE-MO-3", "MO", office="H", district=3)
+    _candidate(
+        db_session, "H8MO09146", "2026-HOUSE-MO-3", "ONDER JR, ROBERT FRANK",
+        party="REP", contributions=878006.03, cash_on_hand=471458.89,
+    )
+    _candidate(
+        db_session, "H4MO03221", "2026-HOUSE-MO-3", "ONDER, ROBERT FOR JR.",
+        party="REP", contributions=878006.03, cash_on_hand=471458.89,
+    )
+    db_session.commit()
+
+    data = _body(elections.state_ballot("MO", db_session))
+    assert len(data["houseRaces"][0]["candidates"]) == 1
+
+
+def test_exact_name_duplicate_in_the_same_race_collapses(db_session):
+    """Real Ohio Senate data, live-verified 2026-09-04: "VOLPE,
+    CHRISTOPHER" appears twice with identical (contributions,
+    cash_on_hand) -- the plainest real case, no name-variant handling
+    needed, just two ids for the one real filer."""
+    _race(db_session, "2026-SEN-OH-SPECIAL", "OH", office="S", cycle_year=2026)
+    _candidate(
+        db_session, "S6OH00353", "2026-SEN-OH-SPECIAL", "VOLPE, CHRISTOPHER",
+        party="DEM", contributions=4317.18, cash_on_hand=168.3,
+    )
+    _candidate(
+        db_session, "S6OH00346", "2026-SEN-OH-SPECIAL", "VOLPE, CHRISTOPHER",
+        party="DEM", contributions=4317.18, cash_on_hand=168.3,
+    )
+    db_session.commit()
+
+    data = _body(elections.state_ballot("OH", db_session))
+    volpes = [c for c in data["senateRaces"][0]["candidates"] if c["name"] == "VOLPE, CHRISTOPHER"]
+    assert len(volpes) == 1
+
+
+def test_identical_financials_alone_do_not_merge_two_different_people(db_session):
+    """The real negative case that rules out a financials-only rule: real
+    California District 4 data shows "BROWN, SHARON" and "GHUSAR, MANDY"
+    -- two people with nothing in common -- both reporting exactly $7,000
+    raised and $0 cash on hand. Coincidental round numbers, not the same
+    candidate; the completely different surnames must block the merge."""
+    _race(db_session, "2026-HOUSE-CA-4", "CA", office="H", district=4)
+    _candidate(
+        db_session, "H6CA04206", "2026-HOUSE-CA-4", "BROWN, SHARON",
+        party="REP", contributions=7000.0, cash_on_hand=0.0,
+    )
+    _candidate(
+        db_session, "H6CA08223", "2026-HOUSE-CA-4", "GHUSAR, MANDY",
+        party="DEM", contributions=7000.0, cash_on_hand=0.0,
+    )
+    db_session.commit()
+
+    data = _body(elections.state_ballot("CA", db_session))
+    assert len(data["houseRaces"][0]["candidates"]) == 2
+
+
+def test_never_synced_or_zero_dollar_candidates_are_never_merged_on_that_alone(db_session):
+    """A shared (None, None) or (0, 0) fingerprint is common among minor
+    filers and proves nothing about being the same person -- must never
+    be treated as dedup evidence even when two such candidates also
+    happen to share a surname."""
+    _race(db_session, "2026-SEN-GA", "GA")
+    _candidate(db_session, "A", "2026-SEN-GA", "SMITH, JOHN", contributions=None, cash_on_hand=None)
+    _candidate(db_session, "B", "2026-SEN-GA", "SMITH, JANE", contributions=0.0, cash_on_hand=0.0)
+    db_session.commit()
+
+    data = _body(elections.state_ballot("GA", db_session))
+    assert len(data["senateRaces"][0]["candidates"]) == 2
+
+
+def test_dedup_keeps_the_confirmed_general_candidate_over_id_order(db_session):
+    """The tie-break bug this guards against: the old rule only trusted
+    "confirmed" when EXACTLY ONE dupe had confirmed_general OR
+    on_primary_ballot set, else fell back to an arbitrary id-sort over
+    the whole group. Here both flags are set, but on DIFFERENT rows (a
+    realistic case -- confirmed_general and on_primary_ballot come from
+    separate state-source lookups) and the id-sort would pick "A"
+    (confirmed_general=False) over "Z" (confirmed_general=True). The
+    fix ranks confirmed_general above on_primary_ballot above neither,
+    so the actually-confirmed row always survives regardless of id."""
+    _race(db_session, "2026-SEN-GA", "GA")
+    _candidate(
+        db_session, "A", "2026-SEN-GA", "SMITH, JOHN",
+        contributions=5000.0, cash_on_hand=1000.0, on_primary_ballot=True, confirmed_general=False,
+    )
+    _candidate(
+        db_session, "Z", "2026-SEN-GA", "SMITH, JOHN",
+        contributions=5000.0, cash_on_hand=1000.0, on_primary_ballot=False, confirmed_general=True,
+    )
+    db_session.commit()
+
+    data = _body(elections.state_ballot("GA", db_session))
+    candidates = data["senateRaces"][0]["candidates"]
+    assert len(candidates) == 1
+    assert candidates[0]["id"] == "Z"
+
+
 def test_pvi_fallback_matches_race_detail_behavior(db_session):
     """House PVI prefers the district map, flagged 'district'; falls
     back to statewide, flagged 'state' — same contract race_detail

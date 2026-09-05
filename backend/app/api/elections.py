@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.api.public import RateLimit
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cached_json
+from app.candidate_dedup import dedupe_candidates
 from app.database import get_db
 from app.election_calendar import (
     CLASS_I_STATES,
@@ -172,7 +173,9 @@ def _confirmed_or_all(candidates: list[Candidate]) -> list[Candidate]:
     (_race_summary, _race_full, race_detail) — the bug this guards
     against previously resurfaced via race_detail even after _race_full
     was fixed, since a race's full candidate list is reachable from more
-    than one route."""
+    than one route. Also the one place dedupe_candidates runs, so every
+    one of those endpoints gets it for free."""
+    candidates = dedupe_candidates(candidates)
     if any(c.confirmed_general for c in candidates):
         return [c for c in candidates if c.confirmed_general]
     if any(c.on_primary_ballot for c in candidates):
