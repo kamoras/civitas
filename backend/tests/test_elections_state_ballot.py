@@ -290,6 +290,33 @@ def test_never_synced_or_zero_dollar_candidates_are_never_merged_on_that_alone(d
     assert len(data["senateRaces"][0]["candidates"]) == 2
 
 
+def test_dedup_keeps_the_confirmed_general_candidate_over_id_order(db_session):
+    """The tie-break bug this guards against: the old rule only trusted
+    "confirmed" when EXACTLY ONE dupe had confirmed_general OR
+    on_primary_ballot set, else fell back to an arbitrary id-sort over
+    the whole group. Here both flags are set, but on DIFFERENT rows (a
+    realistic case -- confirmed_general and on_primary_ballot come from
+    separate state-source lookups) and the id-sort would pick "A"
+    (confirmed_general=False) over "Z" (confirmed_general=True). The
+    fix ranks confirmed_general above on_primary_ballot above neither,
+    so the actually-confirmed row always survives regardless of id."""
+    _race(db_session, "2026-SEN-GA", "GA")
+    _candidate(
+        db_session, "A", "2026-SEN-GA", "SMITH, JOHN",
+        contributions=5000.0, cash_on_hand=1000.0, on_primary_ballot=True, confirmed_general=False,
+    )
+    _candidate(
+        db_session, "Z", "2026-SEN-GA", "SMITH, JOHN",
+        contributions=5000.0, cash_on_hand=1000.0, on_primary_ballot=False, confirmed_general=True,
+    )
+    db_session.commit()
+
+    data = _body(elections.state_ballot("GA", db_session))
+    candidates = data["senateRaces"][0]["candidates"]
+    assert len(candidates) == 1
+    assert candidates[0]["id"] == "Z"
+
+
 def test_pvi_fallback_matches_race_detail_behavior(db_session):
     """House PVI prefers the district map, flagged 'district'; falls
     back to statewide, flagged 'state' — same contract race_detail

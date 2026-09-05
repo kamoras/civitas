@@ -1,14 +1,9 @@
 import { useState } from "react";
 import { isActiveCandidate, raceBadgeLabel, tierCandidates } from "@/lib/elections";
-import { formatCurrency } from "@/lib/formatting";
-import CandidateCard from "./CandidateCard";
+import { cashOnHandDisplay } from "@/lib/formatting";
+import CandidateCard, { getPartyMeta } from "./CandidateCard";
 import RaceFinancials from "./RaceFinancials";
 import type { BallotCandidate, RaceWithCandidates } from "@/types/election";
-
-const PARTY_SWATCH: Record<string, string> = {
-  DEM: "bg-dem-blue", REP: "bg-rep-red", IND: "bg-ind-purple",
-  DFL: "bg-dem-blue", DNL: "bg-dem-blue",
-};
 
 /** What this race's candidate list actually IS. Four quite different
  * things get shown in the same shape — nominees a state has confirmed,
@@ -32,20 +27,16 @@ const SOURCE_NOTE: Record<RaceWithCandidates["candidateSource"], string> = {
  * contenders and a long, real, much smaller tail — not a warning, a
  * shape. */
 function TailRow({ candidate }: { candidate: BallotCandidate }) {
-  const debt = candidate.cashOnHand != null && candidate.cashOnHand < 0;
+  const cash = cashOnHandDisplay(candidate.cashOnHand);
   return (
     <div className="flex items-center gap-2.5 border-b border-white/[0.05] py-1.5 text-sm last:border-b-0">
       <span
-        className={`h-2 w-2 shrink-0 ${PARTY_SWATCH[candidate.party] ?? "bg-ink-min"}`}
+        className={`h-2 w-2 shrink-0 ${getPartyMeta(candidate.party).rule}`}
         aria-hidden="true"
       />
       <span className="flex-1 truncate text-ink-lo">{candidate.name}</span>
       <span className="shrink-0 font-mono text-xs text-ink-min">
-        {candidate.cashOnHand == null
-          ? "—"
-          : debt
-            ? `debt ${formatCurrency(Math.abs(candidate.cashOnHand))}`
-            : formatCurrency(candidate.cashOnHand)}
+        {cash == null ? "—" : cash.label === "Debt" ? `debt ${cash.amount}` : cash.amount}
       </span>
     </div>
   );

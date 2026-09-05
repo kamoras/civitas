@@ -12,7 +12,7 @@ import AddressLookup from "@/components/elections/AddressLookup";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import BallotMeasureCard from "@/components/elections/BallotMeasureCard";
 import TownContestCard from "@/components/elections/TownContestCard";
-import { districtCountiesLabel, formatPvi, pviColor, tierCandidates } from "@/lib/elections";
+import { districtCountiesLabel, formatPvi, majorPartyOf, pviColor, tierCandidates } from "@/lib/elections";
 import { safeHref } from "@/lib/formatting";
 import { fetchTownBallot, fetchTownsForState } from "@/lib/api";
 import type { StateBallot, TownBallot, TownEntry } from "@/types/election";
@@ -33,8 +33,8 @@ function HouseDistrictRow({
   onToggle: () => void;
 }) {
   const { leaders } = tierCandidates(race.candidates);
-  const dem = leaders.find((c) => c.party === "DEM");
-  const rep = leaders.find((c) => c.party === "REP");
+  const dem = leaders.find((c) => majorPartyOf(c.party) === "DEM");
+  const rep = leaders.find((c) => majorPartyOf(c.party) === "REP");
   const countiesLabel = districtCountiesLabel(race.counties);
   const filedCount = race.candidates.length;
 
@@ -74,12 +74,23 @@ function HouseDistrictRow({
           </span>
         </span>
         <span className="flex flex-col items-end gap-0.5 whitespace-nowrap">
-          <span className={`font-mono text-xs ${pviColor(race.pvi)}`}>{formatPvi(race.pvi)}</span>
+          <span className={`font-mono text-xs ${pviColor(race.pvi)}`}>
+            {formatPvi(race.pvi)}
+            {/* No district-level PVI crosswalk data for this district yet —
+                the number shown is this whole state's lean, not this
+                district's. Silently showing the same figure with no
+                qualifier previously let it read as a precise district
+                measure. */}
+            {race.pviLevel === "state" && <span className="text-ink-min"> (statewide)</span>}
+          </span>
           <span className="text-[10px] text-ink-min">{filedCount} filed</span>
         </span>
       </button>
       {open && (
         <div className="border-t border-white/[0.09] p-4">
+          {race.counties && race.counties.length > 0 && (
+            <p className="mb-3 font-mono text-xs text-ink-min">Covers: {race.counties.join(", ")}</p>
+          )}
           <RaceFullDetail race={race} />
         </div>
       )}
@@ -94,7 +105,12 @@ function HouseSection({
   state: string;
   houseRaces: StateBallot["houseRaces"];
 }) {
-  const [openId, setOpenId] = useState<string | null>(null);
+  // undefined = "no explicit choice yet" (defer to the hash), distinct
+  // from null = "explicitly closed" — collapsing those into one `null`
+  // meant clicking a hash-opened row to close it called setOpenId(null)
+  // on a value that was ALREADY null, so nothing changed and the row
+  // could never be closed by the user.
+  const [openId, setOpenId] = useState<string | null | undefined>(undefined);
 
   // A #race-{id} deep link (old /elections/{raceId} redirects, and
   // Bluesky post links) opens that district's row. SSR always renders
@@ -103,7 +119,7 @@ function HouseSection({
   // avoid a hydration mismatch, here avoiding a setState-in-effect too.
   const mounted = useMounted();
   const hashRaceId = mounted ? (window.location.hash.match(/^#race-(.+)$/)?.[1] ?? null) : null;
-  const openRaceId = openId ?? hashRaceId;
+  const openRaceId = openId !== undefined ? openId : hashRaceId;
 
   useEffect(() => {
     if (openRaceId) {

@@ -103,6 +103,59 @@ describe("StateBallotClient — House section", () => {
     expect(screen.getByText(/News coverage of this race is tagged/)).toBeInTheDocument();
   });
 
+  it("collapses a district again on a second click", async () => {
+    render(<StateBallotClient ballot={ballot()} />);
+
+    const row = screen.getByText("Greg Landsman (I)");
+    await userEvent.click(row);
+    expect(screen.getByText(/News coverage of this race is tagged/)).toBeInTheDocument();
+    await userEvent.click(row);
+    expect(screen.queryByText(/News coverage of this race is tagged/)).not.toBeInTheDocument();
+  });
+
+  it("can still be closed after opening via a #race-{id} deep link", async () => {
+    // The bug this guards against: openId started as `null`, the same
+    // value used to mean "nothing chosen yet" (falling back to the URL
+    // hash). Clicking a hash-opened row to close it set openId to null
+    // again -- a no-op, since it was already null -- so the row could
+    // never be closed once a deep link opened it.
+    window.location.hash = "#race-2026-HOUSE-OH-1";
+    render(<StateBallotClient ballot={ballot()} />);
+
+    expect(screen.getByText(/News coverage of this race is tagged/)).toBeInTheDocument();
+    await userEvent.click(screen.getByText("Greg Landsman (I)"));
+    expect(screen.queryByText(/News coverage of this race is tagged/)).not.toBeInTheDocument();
+
+    window.location.hash = "";
+  });
+
+  it("flags a district's PVI as statewide when no district-level crosswalk data exists", () => {
+    render(<StateBallotClient ballot={ballot({ houseRaces: [houseRace({ pviLevel: "state" })] })} />);
+    expect(screen.getByText("(statewide)")).toBeInTheDocument();
+  });
+
+  it("does not flag PVI as statewide when real district-level data exists", () => {
+    render(<StateBallotClient ballot={ballot()} />);
+    expect(screen.queryByText("(statewide)")).not.toBeInTheDocument();
+  });
+
+  it("shows the district's full county list once expanded, not just the truncated preview", async () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          houseRaces: [
+            houseRace({ counties: ["Hamilton County (part)", "Butler County", "Warren County", "Clermont County", "Clinton County"] }),
+          ],
+        })}
+      />
+    );
+    expect(screen.queryByText(/Covers:/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByText("Greg Landsman (I)"));
+    expect(
+      screen.getByText("Covers: Hamilton County (part), Butler County, Warren County, Clermont County, Clinton County")
+    ).toBeInTheDocument();
+  });
+
   it("shows multiple districts, each independently collapsed", () => {
     render(
       <StateBallotClient

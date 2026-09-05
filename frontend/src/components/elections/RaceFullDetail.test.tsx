@@ -6,6 +6,7 @@ import type { RaceWithCandidates } from "@/types/election";
 
 vi.mock("./CandidateCard", () => ({
   default: ({ candidate }: { candidate: { name: string } }) => <div>{candidate.name}</div>,
+  getPartyMeta: () => ({ label: "", color: "", rule: "bg-ink-min" }),
 }));
 vi.mock("./RaceFinancials", () => ({ default: () => <div data-testid="financials" /> }));
 
