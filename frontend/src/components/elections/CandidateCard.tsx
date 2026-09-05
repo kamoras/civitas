@@ -95,11 +95,18 @@ export default function CandidateCard({ candidate }: { candidate: BallotCandidat
               </dd>
             </div>
             <div>
+              {/* FEC debt (disbursements/liabilities exceeding receipts)
+                  reports as negative cash on hand — a real, if
+                  confusing, campaign-finance fact (Maine's 2026 Senate
+                  race, live-verified: -$3,500). Relabeling it as debt
+                  reframes the SAME number as what it actually means,
+                  rather than printing "-$4K" next to a label that reads
+                  as an achievement. */}
               <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-                Cash on hand
+                {candidate.cashOnHand != null && candidate.cashOnHand < 0 ? "Debt" : "Cash on hand"}
               </dt>
               <dd className="font-mono text-xl tabular-nums text-ink-hi">
-                {candidate.cashOnHand != null ? formatCurrency(candidate.cashOnHand) : "—"}
+                {candidate.cashOnHand != null ? formatCurrency(Math.abs(candidate.cashOnHand)) : "—"}
               </dd>
             </div>
           </dl>

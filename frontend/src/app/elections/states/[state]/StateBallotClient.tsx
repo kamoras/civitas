@@ -12,10 +12,80 @@ import AddressLookup from "@/components/elections/AddressLookup";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import BallotMeasureCard from "@/components/elections/BallotMeasureCard";
 import TownContestCard from "@/components/elections/TownContestCard";
-import { districtCountiesLabel, formatPvi, pviColor, raceShortLabel } from "@/lib/elections";
+import { districtCountiesLabel, formatPvi, pviColor, tierCandidates } from "@/lib/elections";
 import { safeHref } from "@/lib/formatting";
 import { fetchTownBallot, fetchTownsForState } from "@/lib/api";
 import type { StateBallot, TownBallot, TownEntry } from "@/types/election";
+
+/** One district's collapsed row: number, area, lean, and — reusing the
+ * exact same tierCandidates split the Senate section renders leader
+ * cards from — the leading D/R names, so a reader learns this page's one
+ * visual grammar once and reads it correctly here too. Expands in place
+ * on click to the same RaceFullDetail every other race uses; there is no
+ * separate "district detail" view. */
+function HouseDistrictRow({
+  race,
+  open,
+  onToggle,
+}: {
+  race: StateBallot["houseRaces"][number];
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const { leaders } = tierCandidates(race.candidates);
+  const dem = leaders.find((c) => c.party === "DEM");
+  const rep = leaders.find((c) => c.party === "REP");
+  const countiesLabel = districtCountiesLabel(race.counties);
+  const filedCount = race.candidates.length;
+
+  return (
+    <div id={`race-${race.id}`} className="scroll-mt-24 border border-white/[0.09] bg-surface mb-1.5">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="grid w-full grid-cols-[34px_1fr_auto] items-center gap-3 px-3 py-2.5 text-left hover:bg-white/[0.02]"
+      >
+        <span className="border border-white/15 py-0.5 text-center font-mono text-sm text-ink-hi">
+          {race.district === 0 ? "AL" : race.district}
+        </span>
+        <span className="min-w-0">
+          {countiesLabel && (
+            <span className="block truncate text-[11px] text-ink-min">{countiesLabel}</span>
+          )}
+          <span className="flex flex-wrap items-baseline gap-x-1.5 text-sm">
+            {dem ? (
+              <span className="text-dem-blue">
+                {dem.name}
+                {dem.incumbentChallenge === "I" ? " (I)" : ""}
+              </span>
+            ) : (
+              <span className="text-ink-min">no funded Democrat</span>
+            )}
+            <span className="text-[11px] text-ink-min">vs</span>
+            {rep ? (
+              <span className="text-rep-red">
+                {rep.name}
+                {rep.incumbentChallenge === "I" ? " (I)" : ""}
+              </span>
+            ) : (
+              <span className="text-ink-min">no funded Republican</span>
+            )}
+          </span>
+        </span>
+        <span className="flex flex-col items-end gap-0.5 whitespace-nowrap">
+          <span className={`font-mono text-xs ${pviColor(race.pvi)}`}>{formatPvi(race.pvi)}</span>
+          <span className="text-[10px] text-ink-min">{filedCount} filed</span>
+        </span>
+      </button>
+      {open && (
+        <div className="border-t border-white/[0.09] p-4">
+          <RaceFullDetail race={race} />
+        </div>
+      )}
+    </div>
+  );
+}
 
 function HouseSection({
   state,
@@ -24,24 +94,22 @@ function HouseSection({
   state: string;
   houseRaces: StateBallot["houseRaces"];
 }) {
-  const [selectedId, setSelectedId] = useState("");
+  const [openId, setOpenId] = useState<string | null>(null);
 
-  // A House race only renders once selected, so a #race-{id} deep link
-  // (old /elections/{raceId} redirects, and new Bluesky post links) needs
-  // to select it before the browser's anchor-scroll would have any
-  // element to find. SSR always renders unselected (window is undefined
-  // there), so the hash is only read once mounted — same
-  // useSyncExternalStore idiom CoverageFeed uses to avoid a hydration
-  // mismatch, here avoiding a setState-in-effect too.
+  // A #race-{id} deep link (old /elections/{raceId} redirects, and
+  // Bluesky post links) opens that district's row. SSR always renders
+  // nothing open (window is undefined there), so the hash is only read
+  // once mounted — same useSyncExternalStore idiom CoverageFeed uses to
+  // avoid a hydration mismatch, here avoiding a setState-in-effect too.
   const mounted = useMounted();
   const hashRaceId = mounted ? (window.location.hash.match(/^#race-(.+)$/)?.[1] ?? null) : null;
-  const selected = houseRaces.find((r) => r.id === (selectedId || hashRaceId)) || null;
+  const openRaceId = openId ?? hashRaceId;
 
   useEffect(() => {
-    if (selected) {
-      document.getElementById(`race-${selected.id}`)?.scrollIntoView();
+    if (openRaceId) {
+      document.getElementById(`race-${openRaceId}`)?.scrollIntoView();
     }
-  }, [selected]);
+  }, [openRaceId]);
 
   return (
     <section className="panel mb-6">
@@ -50,12 +118,9 @@ function HouseSection({
         <h2 className="font-mono text-xs text-ink-lo mb-1">
           U.S. HOUSE — {houseRaces.length} {houseRaces.length === 1 ? "DISTRICT" : "DISTRICTS"}
         </h2>
-        {/* You vote in exactly one of these. The address lookup below is
-            optional and resolve-only (never stored) — entering your
-            address is not required; the dropdown works on its own. */}
         <p className="text-xs text-ink-min mb-3">
-          You vote in exactly one of these. Enter your address below to find it automatically, or
-          pick it from the dropdown, or{" "}
+          You vote in exactly one of these — every district is listed below. Enter your address to
+          jump straight to yours, or{" "}
           <a
             href="https://www.house.gov/representatives/find-your-representative"
             target="_blank"
@@ -71,45 +136,21 @@ function HouseSection({
           ballotState={state}
           onResolved={(district) => {
             const match = houseRaces.find((r) => r.district === district);
-            if (match) setSelectedId(match.id);
+            if (match) setOpenId(match.id);
             return match != null;
           }}
         />
-        <select
-          value={selected?.id ?? ""}
-          onChange={(e) => setSelectedId(e.target.value)}
-          className="bg-surface-base border border-white/15 text-ink-hi font-mono text-xs px-3 py-2 mb-4"
-          aria-label="Select your district"
-        >
-          <option value="">— select your district —</option>
-          {houseRaces.map((r) => {
-            const countiesLabel = districtCountiesLabel(r.counties);
-            return (
-              <option key={r.id} value={r.id}>
-                {raceShortLabel(r)}
-                {countiesLabel ? ` — ${countiesLabel}` : ""}
-              </option>
-            );
-          })}
-        </select>
 
-        {selected && (
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-mono text-xs text-ink-hi">{raceShortLabel(selected)}</span>
-              <span className={`font-mono text-xs ${pviColor(selected.pvi)}`}>
-                {formatPvi(selected.pvi)}
-                {selected.pviLevel === "state" && (
-                  <span className="ml-1 text-ink-min">(statewide lean)</span>
-                )}
-              </span>
-            </div>
-            {selected.counties && (
-              <p className="text-xs text-ink-min mb-3">Covers: {selected.counties.join(", ")}</p>
-            )}
-            <RaceFullDetail race={selected} />
-          </div>
-        )}
+        <div className="mt-1">
+          {houseRaces.map((r) => (
+            <HouseDistrictRow
+              key={r.id}
+              race={r}
+              open={r.id === openRaceId}
+              onToggle={() => setOpenId(r.id === openRaceId ? null : r.id)}
+            />
+          ))}
+        </div>
       </div>
     </section>
   );

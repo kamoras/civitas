@@ -9,7 +9,7 @@ import BackToTop from "@/components/BackToTop";
 import Link from "next/link";
 import RaceMap, { FIPS_TO_STATE } from "@/components/elections/RaceMap";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
-import { formatPvi, pviTextColor } from "@/lib/elections";
+import { formatPvi, pviColor } from "@/lib/elections";
 import { fetchPviMap } from "@/lib/api";
 import type { PviMap } from "@/types/election";
 
@@ -194,7 +194,7 @@ export default function ElectionsPage() {
                       >
                         <span className="font-mono text-sm text-ink-hi">{state}</span>
                         <span
-                          className={`font-mono text-xs ${pviTextColor(leanByState[state] ?? null)}`}
+                          className={`font-mono text-xs ${pviColor(leanByState[state] ?? null)}`}
                         >
                           {formatPvi(leanByState[state] ?? null)}
                         </span>
