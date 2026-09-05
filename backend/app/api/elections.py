@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.api.public import RateLimit
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cached_json
+from app.candidate_dedup import dedupe_candidates
 from app.database import get_db
 from app.election_calendar import (
     CLASS_I_STATES,
@@ -150,83 +151,6 @@ def _candidate_summary(cand: Candidate) -> dict:
     }
 
 
-_NAME_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
-
-
-def _normalized_surname(name: str) -> str:
-    """FEC's Candidate.name is "LAST, FIRST MIDDLE ..." -- the surname is
-    everything before the comma, with a trailing generational suffix
-    stripped, since FEC inconsistently attaches JR/SR/II/III to either
-    half of the name (see _dedupe_candidates)."""
-    tokens = name.split(",")[0].strip().lower().split()
-    while tokens and tokens[-1].strip(".") in _NAME_SUFFIXES:
-        tokens.pop()
-    return " ".join(tokens)
-
-
-def _dedupe_candidates(candidates: list[Candidate]) -> list[Candidate]:
-    """Collapse two FEC candidate_ids that are the same real person under
-    one race. A real, observed FEC artifact -- a candidate refiles (a name
-    correction, a party-declaration change) and is assigned a NEW
-    candidate_id, but FEC's own bulk data links the same committee's
-    financial totals to both. Verified live across 22 real 2026 races:
-    21 of 22 pairs share a name (exact or an obvious variant, e.g. "ONDER
-    JR, ROBERT FRANK" / "ONDER, ROBERT FOR JR."); the one exception
-    (CA-4's "BROWN, SHARON" / "GHUSAR, MANDY", both $7,000 raised / $0
-    cash) proves identical financials ALONE is not safe evidence -- it
-    takes a matching surname AND identical financials together, never
-    either alone.
-
-    Deliberately conservative: contributions and cash_on_hand must both
-    be non-null and at least one non-zero (a shared "never synced"/$0
-    pair is common and proves nothing). Unlike state_candidates.py's
-    _match_candidate, this never falls back to a looser rule on a miss --
-    the cost of NOT merging is one duplicate row; the cost of a wrong
-    merge is misattributing a real candidate's identity, which this
-    system treats as the worse failure everywhere else. Never touches the
-    DB: both FEC ids are real, independently-filed records worth keeping
-    for anyone who clicks through to fec.gov on either one -- this only
-    shapes which rows a response includes, the same "never delete source
-    data" precedent confirmed_general/on_primary_ballot already set.
-    """
-    by_fingerprint: dict[tuple[float, float], list[Candidate]] = {}
-    for c in candidates:
-        if c.contributions is None or c.cash_on_hand is None:
-            continue
-        if c.contributions == 0 and c.cash_on_hand == 0:
-            continue
-        by_fingerprint.setdefault((c.contributions, c.cash_on_hand), []).append(c)
-
-    drop_ids: set[str] = set()
-    for group in by_fingerprint.values():
-        if len(group) < 2:
-            continue
-        by_surname: dict[str, list[Candidate]] = {}
-        for c in group:
-            by_surname.setdefault(_normalized_surname(c.name), []).append(c)
-        for dupes in by_surname.values():
-            if len(dupes) < 2:
-                continue
-            # Rank confirmed_general over on_primary_ballot over neither, so
-            # whichever flag made the group real survives the merge -- not
-            # whichever id happens to sort first. A prior version treated
-            # "exactly one dupe carries confirmed_general OR on_primary_ballot"
-            # as the only safe case and fell back to an arbitrary id-sort
-            # otherwise, which could drop the one confirmed_general row when a
-            # second dupe separately had on_primary_ballot set.
-            def _rank(c: Candidate) -> tuple[int, str]:
-                if c.confirmed_general:
-                    return (0, c.id)
-                if c.on_primary_ballot:
-                    return (1, c.id)
-                return (2, c.id)
-
-            keep = min(dupes, key=_rank)
-            drop_ids.update(c.id for c in dupes if c.id != keep.id)
-
-    return [c for c in candidates if c.id not in drop_ids]
-
-
 def _confirmed_or_all(candidates: list[Candidate]) -> list[Candidate]:
     """If a registered state source (state_candidate_sources.json /
     state_candidates.py) has confirmed any candidate in this race as an
@@ -249,9 +173,9 @@ def _confirmed_or_all(candidates: list[Candidate]) -> list[Candidate]:
     (_race_summary, _race_full, race_detail) — the bug this guards
     against previously resurfaced via race_detail even after _race_full
     was fixed, since a race's full candidate list is reachable from more
-    than one route. Also the one place _dedupe_candidates runs, so every
+    than one route. Also the one place dedupe_candidates runs, so every
     one of those endpoints gets it for free."""
-    candidates = _dedupe_candidates(candidates)
+    candidates = dedupe_candidates(candidates)
     if any(c.confirmed_general for c in candidates):
         return [c for c in candidates if c.confirmed_general]
     if any(c.on_primary_ballot for c in candidates):
