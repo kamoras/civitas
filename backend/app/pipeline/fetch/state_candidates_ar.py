@@ -58,7 +58,7 @@ import re
 
 import httpx
 
-from app.pipeline.fetch.http_utils import BROWSER_JSON_HEADERS, fetch_with_retry
+from app.pipeline.fetch.http_utils import fetch_json_with_retry
 from app.pipeline.fetch.state_candidates_common import normalize_party, parse_office, pick_nominee, surname
 from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _settled
 from app.pipeline.rate_limiter import RateLimiter
@@ -71,27 +71,15 @@ CID = "arkansas"
 _PRIMARY_NAME_RE = re.compile(r"preferential primary", re.IGNORECASE)
 _RUNOFF_NAME_RE = re.compile(r"primary runoff", re.IGNORECASE)
 
-_HEADERS = BROWSER_JSON_HEADERS
 _rate_limiter = RateLimiter(rps=1.0)
-
-
-async def _get_json(client: httpx.AsyncClient, url: str, label: str) -> dict | list | None:
-    resp = await fetch_with_retry(
-        client, _rate_limiter, "GET", url, timeout=30.0, log_label=label, headers=_HEADERS,
-    )
-    if resp is None:
-        return None
-    try:
-        return resp.json()
-    except ValueError:
-        logger.warning("%s did not return valid JSON", label)
-        return None
 
 
 async def _discover_elections(client: httpx.AsyncClient, year: int) -> tuple[dict | None, dict | None]:
     """(primary, runoff) for `year`, each {"id", "date"} or None if that
     stage isn't in the list yet — never a guessed/hardcoded id."""
-    elections = await _get_json(client, f"{BASE}/Election/GetElectionList?cid={CID}", f"AR election list {year}")
+    elections = await fetch_json_with_retry(
+        client, _rate_limiter, f"{BASE}/Election/GetElectionList?cid={CID}", f"AR election list {year}",
+    )
     if not isinstance(elections, list):
         return None, None
     primary = runoff = None
@@ -116,8 +104,8 @@ async def _federal_contests_and_results(
     failure. `{}` for both is a healthy "this stage decided nothing
     federal" (the normal shape of a runoff stage in a cycle that needed
     none)."""
-    search = await _get_json(
-        client, f"{BASE}/Contest/GetContestSearchList?cid={CID}&electionID={election_id}",
+    search = await fetch_json_with_retry(
+        client, _rate_limiter, f"{BASE}/Contest/GetContestSearchList?cid={CID}&electionID={election_id}",
         f"AR contest names {year}",
     )
     if not isinstance(search, dict):
@@ -130,8 +118,8 @@ async def _federal_contests_and_results(
     if not federal:
         return {}, {}
 
-    results = await _get_json(
-        client, f"{BASE}/Contest/GetContestResults?cId={CID}&electionID={election_id}&contestType=Federal",
+    results = await fetch_json_with_retry(
+        client, _rate_limiter, f"{BASE}/Contest/GetContestResults?cId={CID}&electionID={election_id}&contestType=Federal",
         f"AR federal results {year}",
     )
     if not isinstance(results, dict):

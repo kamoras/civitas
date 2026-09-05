@@ -42,6 +42,7 @@ __all__ = [
     "DEFAULT_FETCH_TIMEOUT_S",
     "DEFAULT_MAX_RETRIES",
     "DEFAULT_RETRY_BACKOFF_S",
+    "fetch_json_with_retry",
     "fetch_with_retry",
     "fetch_with_retry_requests",
     "redact_url",
@@ -188,6 +189,36 @@ async def fetch_with_retry(
             await asyncio.sleep(backoff_s * attempt)
 
     return None
+
+
+async def fetch_json_with_retry(
+    client: httpx.AsyncClient,
+    rate_limiter: RateLimiter,
+    url: str,
+    label: str,
+    *,
+    headers: dict = BROWSER_JSON_HEADERS,
+    timeout: float = 30.0,
+) -> dict | list | None:
+    """fetch_with_retry + `.json()`, for the common case of a GET that
+    just wants the parsed body or None. Extracted once state_candidates_
+    ar.py, state_candidates_ct.py (byte-identical), and state_candidates_
+    in.py (differing only by an extra vendor-specific "Root" envelope
+    unwrap, kept local to that module rather than pulled in here — see
+    this module's docstring on why response-body extraction stays a
+    per-caller concern) each carried their own copy of this same
+    fetch-then-parse-then-log-on-bad-json wrapper.
+    """
+    resp = await fetch_with_retry(
+        client, rate_limiter, "GET", url, timeout=timeout, log_label=label, headers=headers,
+    )
+    if resp is None:
+        return None
+    try:
+        return resp.json()
+    except ValueError:
+        logger.warning("%s did not return valid JSON", label)
+        return None
 
 
 async def fetch_with_retry_requests(
