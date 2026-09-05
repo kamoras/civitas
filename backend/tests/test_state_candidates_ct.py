@@ -23,7 +23,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.pipeline.fetch import state_candidates_ct as ct
+from app.pipeline.fetch import http_utils, state_candidates_ct as ct
 
 FIXTURES = Path(__file__).parent
 ELECTIONS = json.loads((FIXTURES / "fixtures_ct_elections.json").read_text())
@@ -90,7 +90,7 @@ class TestPartyNominees:
                 return _resp(votes)
             raise AssertionError(f"unexpected URL: {url}")
 
-        monkeypatch.setattr(ct, "fetch_with_retry", fake)
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
 
     async def test_real_democratic_primary_resolves_to_the_real_upset_winner(self, monkeypatch):
         await self._patched(monkeypatch, election_id=DEM_ID, version=10138, lookup=DEM_LOOKUP, votes=DEM_VOTES)
@@ -108,7 +108,7 @@ class TestPartyNominees:
         async def fake(client, rl, method, url, **kw):
             return None
 
-        monkeypatch.setattr(ct, "fetch_with_retry", fake)
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
         assert await ct._party_nominees(None, DEM_ID, 2026) is None
 
     async def test_lookup_fetch_failure_returns_none(self, monkeypatch):
@@ -117,7 +117,7 @@ class TestPartyNominees:
                 return _resp({"Version": 1})
             return None
 
-        monkeypatch.setattr(ct, "fetch_with_retry", fake)
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
         assert await ct._party_nominees(None, DEM_ID, 2026) is None
 
     async def test_votes_fetch_failure_returns_none(self, monkeypatch):
@@ -128,7 +128,7 @@ class TestPartyNominees:
                 return _resp(DEM_LOOKUP)
             return None
 
-        monkeypatch.setattr(ct, "fetch_with_retry", fake)
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
         assert await ct._party_nominees(None, DEM_ID, 2026) is None
 
     async def test_no_federal_house_race_this_party_is_a_healthy_empty_list(self, monkeypatch):
@@ -189,7 +189,7 @@ class TestFetchConfirmedCandidates:
                 return _resp(REP_VOTES)
             raise AssertionError(f"unexpected URL: {url}")
 
-        monkeypatch.setattr(ct, "fetch_with_retry", fake)
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
 
     async def test_real_primaries_resolve_to_the_real_certified_winners(self, monkeypatch):
         self._patched(monkeypatch)
@@ -204,14 +204,14 @@ class TestFetchConfirmedCandidates:
         async def fake(client, rl, method, url, **kw):
             return _resp([])
 
-        monkeypatch.setattr(ct, "fetch_with_retry", fake)
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
         assert await ct.fetch_confirmed_candidates(None, 2026, "CT", {}) == []
 
     async def test_election_list_fetch_failure_returns_none(self, monkeypatch):
         async def fake(client, rl, method, url, **kw):
             return None
 
-        monkeypatch.setattr(ct, "fetch_with_retry", fake)
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
         assert await ct.fetch_confirmed_candidates(None, 2026, "CT", {}) is None
 
     async def test_a_stage_not_yet_settled_confirms_nothing(self, monkeypatch):
@@ -234,7 +234,7 @@ class TestFetchConfirmedCandidates:
                 return _resp(future_elections)
             raise AssertionError(f"unexpected URL: {url}")
 
-        monkeypatch.setattr(ct, "fetch_with_retry", fake)
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
         result = await ct.fetch_confirmed_candidates(None, future_year, "CT", {"settle_days": 21})
         assert result == []
         assert all(u.endswith("Elections.json") for u in requested)

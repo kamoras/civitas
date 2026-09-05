@@ -25,7 +25,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.pipeline.fetch import state_candidates_in as ind
+from app.pipeline.fetch import http_utils, state_candidates_in as ind
 
 MANIFEST = json.loads((Path(__file__).parent / "fixtures_in_manifest.json").read_text())
 RACES = json.loads((Path(__file__).parent / "fixtures_in_house_races.json").read_text())
@@ -104,7 +104,7 @@ class TestFetchConfirmedCandidates:
                 return None
             return SimpleNamespace(json=lambda: body)
 
-        monkeypatch.setattr(ind, "fetch_with_retry", fake_fetch_with_retry)
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake_fetch_with_retry)
 
     async def test_real_districts_resolve_to_real_winners(self, monkeypatch):
         self._patched(monkeypatch)
@@ -131,7 +131,7 @@ class TestFetchConfirmedCandidates:
         async def fake(*a, **kw):
             return None
 
-        monkeypatch.setattr(ind, "fetch_with_retry", fake)
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
         assert await ind.fetch_confirmed_candidates(None, 2026, "IN", {}) is None
 
     async def test_not_yet_certified_returns_empty_list(self, monkeypatch):
@@ -150,5 +150,5 @@ class TestFetchConfirmedCandidates:
                 return SimpleNamespace(json=lambda: MANIFEST)
             return None  # the OffCatC fetch fails
 
-        monkeypatch.setattr(ind, "fetch_with_retry", fake_fetch_with_retry)
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake_fetch_with_retry)
         assert await ind.fetch_confirmed_candidates(None, 2026, "IN", {}) is None

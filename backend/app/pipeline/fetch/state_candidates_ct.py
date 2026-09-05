@@ -83,7 +83,7 @@ import re
 
 import httpx
 
-from app.pipeline.fetch.http_utils import BROWSER_JSON_HEADERS, fetch_with_retry
+from app.pipeline.fetch.http_utils import fetch_json_with_retry
 from app.pipeline.fetch.state_candidates_common import normalize_party, office_from_columns, pick_nominee, surname
 from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _settled
 from app.pipeline.rate_limiter import RateLimiter
@@ -95,21 +95,7 @@ BASE = "https://ctemspublic.tgstg.net/ng-app/data"
 _ELECTION_NAME_RE = re.compile(r"^(\d{2})/(\d{2})/(\d{4})\s+--\s+(.*)$")
 _OFFICE_SPEC = {"type_column": "OT", "type_value": "C", "district_column": "D"}
 
-_HEADERS = BROWSER_JSON_HEADERS
 _rate_limiter = RateLimiter(rps=1.0)
-
-
-async def _get_json(client: httpx.AsyncClient, url: str, label: str) -> dict | list | None:
-    resp = await fetch_with_retry(
-        client, _rate_limiter, "GET", url, timeout=30.0, log_label=label, headers=_HEADERS,
-    )
-    if resp is None:
-        return None
-    try:
-        return resp.json()
-    except ValueError:
-        logger.warning("%s did not return valid JSON", label)
-        return None
 
 
 def _find_primary(elections: list[dict], year: int, party_phrase: str) -> dict | None:
@@ -136,13 +122,15 @@ async def _party_nominees(
 ) -> list[dict] | None:
     """Every confirmed federal House nominee ONE party's primary
     decides, or None on a real fetch failure."""
-    version = await _get_json(client, f"{BASE}/election/{election_id}/Version.json", f"CT election version {year}")
+    version = await fetch_json_with_retry(
+        client, _rate_limiter, f"{BASE}/election/{election_id}/Version.json", f"CT election version {year}",
+    )
     if not isinstance(version, dict) or not version.get("Version"):
         return None
     v = version["Version"]
 
-    lookup = await _get_json(
-        client, f"{BASE}/election/{election_id}/{v}/Lookupdata.json", f"CT lookup data {year}",
+    lookup = await fetch_json_with_retry(
+        client, _rate_limiter, f"{BASE}/election/{election_id}/{v}/Lookupdata.json", f"CT lookup data {year}",
     )
     if not isinstance(lookup, dict):
         return None
@@ -159,8 +147,8 @@ async def _party_nominees(
         return []  # no federal House primary on this party's ballot this cycle
     candidates = lookup.get("candidateIds") or {}
 
-    votes = await _get_json(
-        client, f"{BASE}/election/{election_id}/{v}/stateVotes_Electiondata.json", f"CT vote totals {year}",
+    votes = await fetch_json_with_retry(
+        client, _rate_limiter, f"{BASE}/election/{election_id}/{v}/stateVotes_Electiondata.json", f"CT vote totals {year}",
     )
     if not isinstance(votes, dict):
         return None
@@ -192,7 +180,9 @@ async def fetch_confirmed_candidates(
     client: httpx.AsyncClient, year: int, state: str, source: dict,  # noqa: ARG001 — state unused, this strategy is CT-only by construction
 ) -> list[dict] | None:
     settle_days = source.get("settle_days", DEFAULT_SETTLE_DAYS)
-    elections = await _get_json(client, f"{BASE}/Elections.json", f"CT election list {year}")
+    elections = await fetch_json_with_retry(
+        client, _rate_limiter, f"{BASE}/Elections.json", f"CT election list {year}",
+    )
     if not isinstance(elections, list):
         return None
 

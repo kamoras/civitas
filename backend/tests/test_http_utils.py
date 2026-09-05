@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.pipeline.fetch.http_utils import fetch_with_retry, fetch_with_retry_requests
+from app.pipeline.fetch.http_utils import fetch_json_with_retry, fetch_with_retry, fetch_with_retry_requests
 from app.pipeline.rate_limiter import RateLimiter
 
 
@@ -156,12 +156,46 @@ class TestFetchWithRetryRequests:
         assert result is ok
 
 
+class TestFetchJsonWithRetry:
+    """Extracted from three near-identical per-state _get_json copies
+    (state_candidates_ar.py, state_candidates_ct.py, state_candidates_in.py)
+    — the two things those copies each did on top of fetch_with_retry:
+    parse the response body, and turn a bad body into a logged None
+    instead of a raised ValueError."""
+
+    @pytest.mark.asyncio
+    async def test_returns_the_parsed_json_body_on_success(self):
+        resp = MagicMock(status_code=200, json=lambda: {"ok": True})
+        client = MagicMock()
+        client.request = AsyncMock(return_value=resp)
+        result = await fetch_json_with_retry(client, _limiter(), "https://example.test", "label")
+        assert result == {"ok": True}
+
+    @pytest.mark.asyncio
+    async def test_a_body_that_is_not_valid_json_returns_none_not_a_raise(self):
+        def _raise():
+            raise ValueError("no JSON object could be decoded")
+
+        resp = MagicMock(status_code=200, json=_raise)
+        client = MagicMock()
+        client.request = AsyncMock(return_value=resp)
+        result = await fetch_json_with_retry(client, _limiter(), "https://example.test", "label")
+        assert result is None
+
+    # A fetch failure (fetch_with_retry returning None) is not retested
+    # here -- fetch_json_with_retry's only new behavior over fetch_with_
+    # retry is the .json() parse and its error handling, both covered
+    # above; fetch_with_retry's own retry/failure behavior is covered by
+    # TestFetchWithRetryHangBackstop.
+
+
 if __name__ == "__main__":
     import asyncio
 
     async def demo():
         await TestFetchWithRetryHangBackstop().test_hung_request_is_bounded_and_gives_up()
         await TestFetchWithRetryRequests().test_returns_response_on_success()
+        await TestFetchJsonWithRetry().test_returns_the_parsed_json_body_on_success()
         await TestFetchWithRetryRequests().test_returns_none_after_exhausting_retries_on_4xx()
         await TestFetchWithRetryRequests().test_recovers_after_a_transient_failure()
         await TestFetchWithRetryRequests().test_429_retries_then_succeeds()
