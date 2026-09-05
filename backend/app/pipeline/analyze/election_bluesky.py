@@ -37,6 +37,7 @@ from datetime import timedelta
 
 from sqlalchemy.orm import Session
 
+from app.candidate_dedup import resolve_candidate_id
 from app.config import settings
 from app.models import Candidate, Race, RaceCoverageItem
 from app.pipeline.analyze.bluesky_utils import publish_post, strip_hashtags_and_truncate
@@ -89,10 +90,19 @@ def _roster_fact(item: RaceCoverageItem, race: Race, db: Session) -> str | None:
 
     Built from the matched candidate's actual roster row — the claim "this
     coverage concerns {race}" is only as good as the name match, which is
-    why eligibility requires match_basis == "full_name"."""
+    why eligibility requires match_basis == "full_name".
+
+    matched_candidate_id is resolved through the same dedupe rule the
+    on-site race page applies (app/candidate_dedup.py): a coverage item
+    can be matched against either of two FEC ids for a since-refiled
+    candidate, and by the time this posts, the site's own race list may
+    show only the surviving one. Posting a claim about an id the site
+    doesn't display for this race would be a live, unsupervised
+    inconsistency with no human catching it before it ships."""
     if item.matched_candidate_id is None:
         return None
-    cand = db.query(Candidate).filter(Candidate.id == item.matched_candidate_id).first()
+    resolved_id = resolve_candidate_id(item.matched_candidate_id, race.candidates)
+    cand = db.query(Candidate).filter(Candidate.id == resolved_id).first()
     if cand is None:
         return None
     return f"FEC filings list {cand.name} as a candidate in {_office_label(race)}."
