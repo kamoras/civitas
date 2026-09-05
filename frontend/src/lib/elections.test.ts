@@ -3,9 +3,9 @@ import {
   districtCountiesLabel,
   formatPvi,
   isActiveCandidate,
+  majorPartyOf,
   parseUtc,
   raceBadgeLabel,
-  raceShortLabel,
   raceTitleLabel,
   tierCandidates,
 } from "./elections";
@@ -27,12 +27,6 @@ describe("race labels", () => {
   // guards against: a truthy `race.district ?` check treated 0 like null.
   const atLarge = { office: "H", state: "AK", district: 0 };
 
-  it("raceShortLabel renders card-style caps labels", () => {
-    expect(raceShortLabel(senate)).toBe("GA SENATE");
-    expect(raceShortLabel(house)).toBe("GA-7");
-    expect(raceShortLabel(atLarge)).toBe("AK-AL");
-  });
-
   it("raceTitleLabel renders title-style labels", () => {
     expect(raceTitleLabel(senate)).toBe("GA Senate");
     expect(raceTitleLabel(house)).toBe("GA-7 House");
@@ -40,8 +34,8 @@ describe("race labels", () => {
   });
 
   it("does not conflate a null district (Senate) with at-large 0", () => {
-    expect(raceShortLabel({ office: "H", state: "TX", district: null })).toBe("TX HOUSE");
-    expect(raceShortLabel({ office: "H", state: "TX", district: 0 })).toBe("TX-AL");
+    expect(raceTitleLabel({ office: "H", state: "TX", district: null })).toBe("TX House");
+    expect(raceTitleLabel({ office: "H", state: "TX", district: 0 })).toBe("TX-AL House");
   });
 
   it("raceBadgeLabel omits the state for a page already scoped to one", () => {
@@ -201,5 +195,39 @@ describe("tierCandidates", () => {
     const { leaders, tail } = tierCandidates([brown, inactive]);
     expect(leaders.map((c) => c.id)).not.toContain(inactive.id);
     expect(tail.map((c) => c.id)).not.toContain(inactive.id);
+  });
+
+  it("recognizes a DFL/DNL nominee as the Democratic leader, not a minor party", () => {
+    // Minnesota/North Dakota's Democratic-Party affiliates file under
+    // DFL/DNL, not DEM. The bug this guards against: hardcoding the
+    // literal "DEM" demoted a real, well-funded DFL nominee to the tail
+    // and left the leader row saying "no funded Democrat".
+    const dfl = cand({ id: "DFL1", party: "DFL", cashOnHand: 5000000 });
+    const { leaders, tail } = tierCandidates([dfl, husted]);
+    expect(leaders.map((c) => c.id).sort()).toEqual([dfl.id, husted.id].sort());
+    expect(tail).toEqual([]);
+  });
+
+  it("does not promote a $0 minor candidate just because both major leaders are in debt", () => {
+    // The bug this guards against: Math.max(0, ...) floored a negative
+    // (debt) major-leader cash up to 0, so the 10%-of-leader threshold
+    // became ">= 0" -- which every non-negative candidate clears.
+    const demInDebt = cand({ id: "DEM1", party: "DEM", cashOnHand: -500 });
+    const repInDebt = cand({ id: "REP1", party: "REP", cashOnHand: -300 });
+    const brokeIndependent = cand({ id: "IND1", party: "IND", cashOnHand: 0 });
+    const { leaders, tail } = tierCandidates([demInDebt, repInDebt, brokeIndependent]);
+    expect(leaders.map((c) => c.id).sort()).toEqual([demInDebt.id, repInDebt.id].sort());
+    expect(tail.map((c) => c.id)).toEqual([brokeIndependent.id]);
+  });
+});
+
+describe("majorPartyOf", () => {
+  it("maps DEM and its state affiliates to DEM, REP to REP, and everyone else to null", () => {
+    expect(majorPartyOf("DEM")).toBe("DEM");
+    expect(majorPartyOf("DFL")).toBe("DEM");
+    expect(majorPartyOf("DNL")).toBe("DEM");
+    expect(majorPartyOf("REP")).toBe("REP");
+    expect(majorPartyOf("IND")).toBeNull();
+    expect(majorPartyOf("GRE")).toBeNull();
   });
 });

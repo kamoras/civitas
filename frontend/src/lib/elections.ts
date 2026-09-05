@@ -40,13 +40,6 @@ function districtToken(district: number): string {
   return district === 0 ? "AL" : String(district);
 }
 
-/** Card-style label in caps: "GA SENATE" / "GA-7" / "AK-AL". */
-export function raceShortLabel(race: RaceLike): string {
-  if (race.office === "S") return `${race.state} SENATE`;
-  if (race.district == null) return `${race.state} HOUSE`;
-  return `${race.state}-${districtToken(race.district)}`;
-}
-
 /** Title-style label: "GA Senate" / "GA-7 House" / "AK-AL House". */
 export function raceTitleLabel(race: RaceLike): string {
   if (race.office === "S") return `${race.state} Senate`;
@@ -121,6 +114,18 @@ export function isActiveCandidate(c: CandidateSummary): boolean {
   return c.candidateStatus === "C" || c.hasRaisedFunds || c.incumbentChallenge === "I";
 }
 
+/** Which major party a candidate's FEC code belongs to, or null for
+ * anyone else. DFL (Minnesota)/DNL (North Dakota) are the Democratic
+ * Party's state-level affiliate names on the FEC's own party-code list —
+ * same rule CandidateCard.tsx's PARTY_META already applies for color and
+ * label, so a real DFL/DNL nominee reads as the major-party candidate
+ * everywhere on the page, not just on their own card. */
+export function majorPartyOf(party: string): "DEM" | "REP" | null {
+  if (party === "DEM" || party === "DFL" || party === "DNL") return "DEM";
+  if (party === "REP") return "REP";
+  return null;
+}
+
 export interface RaceTiers {
   /** Gets a full CandidateCard: the top fundraiser in each major party,
    * every incumbent regardless of party or amount, and at most one real
@@ -150,11 +155,15 @@ export function tierCandidates(candidates: BallotCandidate[]): RaceTiers {
   const active = candidates.filter(isActiveCandidate);
   const byCash = (c: BallotCandidate) => c.cashOnHand ?? 0;
 
-  const topOf = (party: string) =>
-    active.filter((c) => c.party === party).sort((a, b) => byCash(b) - byCash(a))[0] ?? null;
+  const topOf = (party: "DEM" | "REP") =>
+    active.filter((c) => majorPartyOf(c.party) === party).sort((a, b) => byCash(b) - byCash(a))[0] ??
+    null;
   const majorLeaders = [topOf("DEM"), topOf("REP")].filter(
     (c): c is BallotCandidate => c != null,
   );
+  // Debt (negative cash on hand) floors at 0 rather than going negative:
+  // a leader in debt still means "no real minor-party threat", not "any
+  // non-negative minor candidate counts as one" (the >0 guard below).
   const bestMajorCash = Math.max(0, ...majorLeaders.map(byCash));
 
   const leaderIds = new Set<string>(majorLeaders.map((c) => c.id));
@@ -165,14 +174,16 @@ export function tierCandidates(candidates: BallotCandidate[]): RaceTiers {
   // bar for "this minor-party/independent run looks real" — not re-tuned
   // per race, and not meant to predict who wins, just who's worth a card.
   const bestOther = active
-    .filter((c) => c.party !== "DEM" && c.party !== "REP" && !leaderIds.has(c.id))
+    .filter((c) => majorPartyOf(c.party) == null && !leaderIds.has(c.id))
     .sort((a, b) => byCash(b) - byCash(a))[0];
-  if (bestOther && byCash(bestOther) >= bestMajorCash * 0.1) {
+  if (bestOther && bestMajorCash > 0 && byCash(bestOther) >= bestMajorCash * 0.1) {
     leaderIds.add(bestOther.id);
   }
 
-  return {
-    leaders: active.filter((c) => leaderIds.has(c.id)),
-    tail: active.filter((c) => !leaderIds.has(c.id)),
-  };
+  const leaders: BallotCandidate[] = [];
+  const tail: BallotCandidate[] = [];
+  for (const c of active) {
+    (leaderIds.has(c.id) ? leaders : tail).push(c);
+  }
+  return { leaders, tail };
 }

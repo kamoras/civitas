@@ -22,6 +22,19 @@ export function formatCurrency(amount: number): string {
   return `${sign}$${Math.round(abs).toLocaleString()}`;
 }
 
+/** FEC debt (disbursements/liabilities exceeding receipts) reports as
+ * negative cash on hand — a real, if confusing, campaign-finance fact
+ * (Maine's 2026 Senate race, live-verified: -$3,500). Relabeling it as
+ * debt reframes the SAME number as what it actually means, rather than
+ * printing "-$4K" next to a label that reads as an achievement. Shared
+ * by CandidateCard and RaceFullDetail's tail rows so the two don't drift
+ * (both used to compute this inline). */
+export function cashOnHandDisplay(cashOnHand: number | null): { label: string; amount: string } | null {
+  if (cashOnHand == null) return null;
+  const debt = cashOnHand < 0;
+  return { label: debt ? "Debt" : "Cash on hand", amount: formatCurrency(Math.abs(cashOnHand)) };
+}
+
 /** Returns the local date as "YYYY-MM-DD" — never UTC, so it matches the user's calendar. */
 export function localDateStr(d: Date = new Date()): string {
   const y = d.getFullYear();

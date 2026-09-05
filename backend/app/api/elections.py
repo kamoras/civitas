@@ -207,8 +207,21 @@ def _dedupe_candidates(candidates: list[Candidate]) -> list[Candidate]:
         for dupes in by_surname.values():
             if len(dupes) < 2:
                 continue
-            confirmed = [c for c in dupes if c.confirmed_general or c.on_primary_ballot]
-            keep = confirmed[0] if len(confirmed) == 1 else sorted(dupes, key=lambda c: c.id)[0]
+            # Rank confirmed_general over on_primary_ballot over neither, so
+            # whichever flag made the group real survives the merge -- not
+            # whichever id happens to sort first. A prior version treated
+            # "exactly one dupe carries confirmed_general OR on_primary_ballot"
+            # as the only safe case and fell back to an arbitrary id-sort
+            # otherwise, which could drop the one confirmed_general row when a
+            # second dupe separately had on_primary_ballot set.
+            def _rank(c: Candidate) -> tuple[int, str]:
+                if c.confirmed_general:
+                    return (0, c.id)
+                if c.on_primary_ballot:
+                    return (1, c.id)
+                return (2, c.id)
+
+            keep = min(dupes, key=_rank)
             drop_ids.update(c.id for c in dupes if c.id != keep.id)
 
     return [c for c in candidates if c.id not in drop_ids]
