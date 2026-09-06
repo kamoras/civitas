@@ -68,10 +68,12 @@ _ORDINALS = {
 }
 
 
-def _unwrap_root(body: dict | list | None) -> dict | None:
-    """This vendor wraps some (not all) payloads in a "Root" envelope —
-    unwrapped here rather than in the shared fetch helper, since that's
-    a vendor-specific shape, not part of the retry/parse mechanics."""
+async def _get_json(client: httpx.AsyncClient, url: str, label: str) -> dict | None:
+    """fetch_json_with_retry + this vendor's own "Root" envelope unwrap
+    (present on some, not all, payloads) — kept local to this module
+    rather than pulled into the shared helper, since that's a vendor-
+    specific shape, not part of the retry/parse mechanics."""
+    body = await fetch_json_with_retry(client, _rate_limiter, url, label)
     return body.get("Root", body) if isinstance(body, dict) else None
 
 
@@ -138,9 +140,7 @@ def _race_results(race: dict, office: str, district: int | None) -> list[dict]:
 async def fetch_confirmed_candidates(
     client: httpx.AsyncClient, year: int, state: str, source: dict,  # noqa: ARG001 — state/source unused, this strategy is IN-only by construction
 ) -> list[dict] | None:
-    settings = _unwrap_root(
-        await fetch_json_with_retry(client, _rate_limiter, f"{BASE}/data/settings.json", f"IN settings {year}")
-    )
+    settings = await _get_json(client, f"{BASE}/data/settings.json", f"IN settings {year}")
     if settings is None:
         return None
     if settings.get("Certified") != "T":
@@ -150,10 +150,9 @@ async def fetch_confirmed_candidates(
     if not version:
         return None
 
-    manifest = _unwrap_root(await fetch_json_with_retry(
-        client, _rate_limiter, f"{BASE}/data/statewideElectionsC_{version}.json",
-        f"IN office manifest {year}",
-    ))
+    manifest = await _get_json(
+        client, f"{BASE}/data/statewideElectionsC_{version}.json", f"IN office manifest {year}",
+    )
     if manifest is None:
         return None
 
@@ -170,10 +169,10 @@ async def fetch_confirmed_candidates(
 
     results: list[dict] = []
     for cat_id in category_ids:
-        data = _unwrap_root(await fetch_json_with_retry(
-            client, _rate_limiter, f"{BASE}/data/OffCatC_{cat_id}_{version}.json",
+        data = await _get_json(
+            client, f"{BASE}/data/OffCatC_{cat_id}_{version}.json",
             f"IN federal races (category {cat_id}) {year}",
-        ))
+        )
         if data is None:
             return None
         races = (data.get("StatewideSummary") or {}).get("Race", [])

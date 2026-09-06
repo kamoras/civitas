@@ -17,10 +17,14 @@ any caller's behavior:
     (they poll a stricter, more rate-limit-sensitive government site).
     -> rate_limit_backoff_multiplier
 
-URL construction (e.g. API key query params) and response-body
-extraction (.json() vs .content vs the raw Response) stay in each
-caller — those are genuinely per-source concerns, not part of the
-retry mechanics.
+URL construction (e.g. API key query params) stays in each caller — a
+genuinely per-source concern, not part of the retry mechanics.
+Response-body extraction is a per-caller concern too, EXCEPT for the one
+shape three callers converged on exactly (fetch_with_retry, then
+`.json()`, then log-and-return-None on a bad body): see
+fetch_json_with_retry below, extracted for that reason alone once a
+third copy showed up — `.content`/`.text`/the raw Response stay in each
+caller's own hands as before.
 """
 
 import asyncio
@@ -199,18 +203,26 @@ async def fetch_json_with_retry(
     *,
     headers: dict = BROWSER_JSON_HEADERS,
     timeout: float = 30.0,
+    **retry_kwargs,
 ) -> dict | list | None:
     """fetch_with_retry + `.json()`, for the common case of a GET that
     just wants the parsed body or None. Extracted once state_candidates_
     ar.py, state_candidates_ct.py (byte-identical), and state_candidates_
     in.py (differing only by an extra vendor-specific "Root" envelope
     unwrap, kept local to that module rather than pulled in here — see
-    this module's docstring on why response-body extraction stays a
-    per-caller concern) each carried their own copy of this same
+    this module's docstring) each carried their own copy of this same
     fetch-then-parse-then-log-on-bad-json wrapper.
+
+    `**retry_kwargs` forwards to fetch_with_retry (retries, backoff_s,
+    rate_limit_backoff_multiplier, retry_on_4xx, no_retry_statuses) —
+    none of today's three callers need anything but the defaults, but
+    without this a future JSON-fetching caller against a rate-limit-
+    sensitive site would have to bypass this helper entirely and
+    reimplement the parse-and-log-None wrapper just to tune backoff.
     """
     resp = await fetch_with_retry(
         client, rate_limiter, "GET", url, timeout=timeout, log_label=label, headers=headers,
+        **retry_kwargs,
     )
     if resp is None:
         return None
