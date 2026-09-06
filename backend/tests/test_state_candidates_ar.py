@@ -25,7 +25,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.pipeline.fetch import state_candidates_ar as ar
+from app.pipeline.fetch import http_utils, state_candidates_ar as ar
 
 FIXTURES = Path(__file__).parent
 ELECTIONS = json.loads((FIXTURES / "fixtures_ar_elections.json").read_text())
@@ -48,7 +48,7 @@ class TestDiscoverElections:
             assert "GetElectionList" in url
             return _resp(ELECTIONS)
 
-        monkeypatch.setattr(ar, "fetch_with_retry", fake)
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
         primary, runoff = await ar._discover_elections(None, 2026)
         assert primary["id"] == PRIMARY_ID
         assert runoff["id"] == RUNOFF_ID
@@ -62,7 +62,7 @@ class TestDiscoverElections:
         async def fake(client, rl, method, url, **kw):
             return _resp(ELECTIONS)
 
-        monkeypatch.setattr(ar, "fetch_with_retry", fake)
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
         primary, runoff = await ar._discover_elections(None, 2026)
         assert primary["id"] != "4b025e66-db9f-4e01-a7b8-3d06d87bccda"
         assert runoff["id"] != "4b025e66-db9f-4e01-a7b8-3d06d87bccda"
@@ -71,14 +71,14 @@ class TestDiscoverElections:
         async def fake(client, rl, method, url, **kw):
             return _resp(ELECTIONS)
 
-        monkeypatch.setattr(ar, "fetch_with_retry", fake)
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
         assert await ar._discover_elections(None, 2028) == (None, None)
 
     async def test_fetch_failure_is_none_not_empty(self, monkeypatch):
         async def fake(client, rl, method, url, **kw):
             return None
 
-        monkeypatch.setattr(ar, "fetch_with_retry", fake)
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
         assert await ar._discover_elections(None, 2026) == (None, None)
 
 
@@ -96,7 +96,7 @@ class TestFetchConfirmedCandidates:
                 return _resp(RUNOFF_SEARCH)
             raise AssertionError(f"unexpected URL: {url}")
 
-        monkeypatch.setattr(ar, "fetch_with_retry", fake)
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
 
     async def test_real_primary_resolves_to_the_real_certified_winners(self, monkeypatch):
         self._patched(monkeypatch)
@@ -122,7 +122,7 @@ class TestFetchConfirmedCandidates:
         async def fake(client, rl, method, url, **kw):
             return None
 
-        monkeypatch.setattr(ar, "fetch_with_retry", fake)
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
         assert await ar.fetch_confirmed_candidates(None, 2026, "AR", {}) == []
 
     async def test_contest_search_fetch_failure_returns_none(self, monkeypatch):
@@ -131,7 +131,7 @@ class TestFetchConfirmedCandidates:
                 return _resp(ELECTIONS)
             return None
 
-        monkeypatch.setattr(ar, "fetch_with_retry", fake)
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
         assert await ar.fetch_confirmed_candidates(None, 2026, "AR", {}) is None
 
     async def test_contest_search_returning_a_non_object_body_returns_none(self, monkeypatch):
@@ -145,7 +145,7 @@ class TestFetchConfirmedCandidates:
                 return _resp(["unexpected", "shape"])
             return None
 
-        monkeypatch.setattr(ar, "fetch_with_retry", fake)
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
         assert await ar.fetch_confirmed_candidates(None, 2026, "AR", {}) is None
 
     async def test_results_fetch_failure_returns_none(self, monkeypatch):
@@ -156,7 +156,7 @@ class TestFetchConfirmedCandidates:
                 return _resp(PRIMARY_SEARCH)
             return None
 
-        monkeypatch.setattr(ar, "fetch_with_retry", fake)
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
         assert await ar.fetch_confirmed_candidates(None, 2026, "AR", {}) is None
 
     async def test_a_runoff_stage_with_no_federal_contests_is_a_safe_no_op(self, monkeypatch):
@@ -188,7 +188,7 @@ class TestFetchConfirmedCandidates:
                 return _resp(RUNOFF_SEARCH)
             raise AssertionError(f"unexpected URL: {url}")
 
-        monkeypatch.setattr(ar, "fetch_with_retry", fake)
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
         result = await ar.fetch_confirmed_candidates(None, 2026, "AR", {"runoff_threshold_pct": 50.0})
         assert result == []
         assert not any(PRIMARY_ID in u for u in requested_urls if "GetElectionList" not in u)
@@ -221,7 +221,7 @@ class TestFetchConfirmedCandidates:
                 return _resp(RUNOFF_SEARCH)
             raise AssertionError(f"unexpected URL: {url}")
 
-        monkeypatch.setattr(ar, "fetch_with_retry", fake)
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
         result = await ar.fetch_confirmed_candidates(None, 2026, "AR", {"runoff_threshold_pct": 50.0})
         # 55 / (55 + 50) = 52.4% if the unknown choice is dropped from the
         # total it would read 100% -- either way the real number (52.4)
@@ -256,7 +256,7 @@ class TestFetchConfirmedCandidates:
                 return _resp(RUNOFF_SEARCH)
             raise AssertionError(f"unexpected URL: {url}")
 
-        monkeypatch.setattr(ar, "fetch_with_retry", fake)
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
         result = await ar.fetch_confirmed_candidates(None, 2026, "AR", {"runoff_threshold_pct": 50.0})
         assert [r for r in result if r["district"] == 4] == []
 
@@ -307,7 +307,7 @@ class TestFetchConfirmedCandidates:
                 })
             raise AssertionError(f"unexpected URL: {url}")
 
-        monkeypatch.setattr(ar, "fetch_with_retry", fake)
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
         result = await ar.fetch_confirmed_candidates(None, 2026, "AR", {"runoff_threshold_pct": 50.0})
         cd4 = [r for r in result if r["district"] == 4]
         assert cd4 == [{"office": "H", "district": 4, "party": "D", "last_name": "Winner"}]
