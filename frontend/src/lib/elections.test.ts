@@ -188,6 +188,21 @@ describe("tierCandidates", () => {
     expect(leaders).toEqual([brown]);
   });
 
+  it("never renders an empty leader set when real active candidates exist", () => {
+    // The bug this guards against: an early-cycle district where only
+    // third-party/independent candidates have filed FEC paperwork so
+    // far (no DEM, no REP, no incumbent) made every promotion check
+    // above impossible to satisfy -- bestOther's 10% threshold requires
+    // a major leader to compare against, so leaders came back empty
+    // even though real, active candidates existed. RaceFullDetail.tsx
+    // renders zero cards and no financials chart whenever leaders is
+    // empty, so a real race with real filers looked blank.
+    const { leaders, tail } = tierCandidates([levy, redpath]);
+    expect(leaders.length).toBeGreaterThan(0);
+    expect(leaders.map((c) => c.id)).toContain(levy.id); // higher cash of the two
+    expect(tail.map((c) => c.id)).toEqual([redpath.id]);
+  });
+
   it("never tiers an inactive (paper-filer) candidate into either bucket incorrectly", () => {
     const inactive = cand({
       id: "PAPER1", party: "REP", candidateStatus: "P", hasRaisedFunds: false, incumbentChallenge: null,

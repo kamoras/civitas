@@ -401,6 +401,21 @@ class TestIncumbentRecordLink:
         assert cand["incumbentRecord"]["id"] == "R-MCBATH"
         assert isinstance(cand["incumbentRecord"]["score"], float)
 
+    def test_house_incumbent_whose_own_surname_carries_a_generational_suffix_still_links(self, db_session):
+        """Real Missouri data: FEC's "ONDER JR, ROBERT FRANK" attaches
+        the suffix to the surname segment itself. Before _incumbent_link
+        reused candidate_dedup's normalized_surname, the raw
+        `name.split(",")[0]` extraction included "jr" as part of the
+        last name, which could never match a Representative row's plain
+        "Robert Onder" -- this incumbent would silently get no link."""
+        _race(db_session, "2026-HOUSE-MO-3", "MO", office="H", district=3)
+        _candidate(db_session, "H8MO09146", "2026-HOUSE-MO-3", "ONDER JR, ROBERT FRANK", incumbent_challenge="I")
+        _representative(db_session, "R-ONDER", "Robert Onder", "MO", 3)
+        db_session.commit()
+
+        data = _body(elections.state_ballot("MO", db_session))
+        assert data["houseRaces"][0]["candidates"][0]["incumbentRecord"]["id"] == "R-ONDER"
+
     def test_house_non_incumbent_gets_no_link(self, db_session):
         _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
         _candidate(db_session, "H1", "2026-HOUSE-GA-6", "CHALLENGER, PAT", incumbent_challenge="C")

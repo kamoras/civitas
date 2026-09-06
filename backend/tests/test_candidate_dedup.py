@@ -1,4 +1,4 @@
-"""Tests for app/candidate_dedup.py.
+"""Tests for app/pipeline/candidate_dedup.py.
 
 test_elections_state_ballot.py already covers dedupe_candidates end to
 end (via the state_ballot endpoint) with real 2026 fixture data — those
@@ -10,8 +10,8 @@ election_bluesky.py's _roster_fact depends on to avoid posting about a
 dropped id.
 """
 
-from app.candidate_dedup import dedupe_merge_map, normalized_surname, resolve_candidate_id
 from app.models import Candidate
+from app.pipeline.candidate_dedup import dedupe_merge_map, normalized_surname, resolve_candidate_id
 
 
 def _cand(cand_id, name, **overrides):

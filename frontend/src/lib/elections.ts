@@ -47,7 +47,7 @@ export function raceTitleLabel(race: RaceLike): string {
   return `${race.state}-${districtToken(race.district)} House`;
 }
 
-/** Same idea as raceShortLabel but without the state prefix — "SENATE" /
+/** Same idea as raceTitleLabel but without the state prefix — "SENATE" /
  * "HOUSE-7" / "HOUSE-AL" — for badges inside a page already scoped to
  * one state (e.g. the state ballot's aggregated coverage feed), where
  * repeating the state on every item would be redundant. */
@@ -114,14 +114,21 @@ export function isActiveCandidate(c: CandidateSummary): boolean {
   return c.candidateStatus === "C" || c.hasRaisedFunds || c.incumbentChallenge === "I";
 }
 
+/** FEC party codes that are the Democratic Party's state-level
+ * affiliates — DFL (Minnesota), D-NPL (North Dakota, FEC code DNL) —
+ * mapped to the display suffix CandidateCard.tsx's PARTY_META uses in
+ * its label ("DEMOCRAT (DFL)"). The single source of truth for "which
+ * codes count as Democratic": majorPartyOf and PARTY_META both read
+ * from this list instead of each keeping an independent copy, which
+ * previously meant a new affiliate added to one could silently miss
+ * the other. */
+export const DEM_AFFILIATE_PARTIES: Record<string, string> = { DFL: "DFL", DNL: "D-NPL" };
+
 /** Which major party a candidate's FEC code belongs to, or null for
- * anyone else. DFL (Minnesota)/DNL (North Dakota) are the Democratic
- * Party's state-level affiliate names on the FEC's own party-code list —
- * same rule CandidateCard.tsx's PARTY_META already applies for color and
- * label, so a real DFL/DNL nominee reads as the major-party candidate
- * everywhere on the page, not just on their own card. */
+ * anyone else — so a real DFL/DNL nominee reads as the major-party
+ * candidate everywhere on the page, not just on their own card. */
 export function majorPartyOf(party: string): "DEM" | "REP" | null {
-  if (party === "DEM" || party === "DFL" || party === "DNL") return "DEM";
+  if (party === "DEM" || party in DEM_AFFILIATE_PARTIES) return "DEM";
   if (party === "REP") return "REP";
   return null;
 }
@@ -178,6 +185,19 @@ export function tierCandidates(candidates: BallotCandidate[]): RaceTiers {
     .sort((a, b) => byCash(b) - byCash(a))[0];
   if (bestOther && bestMajorCash > 0 && byCash(bestOther) >= bestMajorCash * 0.1) {
     leaderIds.add(bestOther.id);
+  }
+
+  // Neither major party has filed yet and nobody's an incumbent (a real
+  // shape: an early-cycle district where only third-party/independent
+  // candidates have filed FEC paperwork so far) -- the checks above
+  // never promote anyone, since bestOther's threshold requires a major
+  // leader to compare against. Falling through to an empty leader set
+  // would render NO cards and NO financials chart for a race that does
+  // have real, active candidates. Show the top fundraiser overall
+  // instead, so a real race is never a blank one.
+  if (leaderIds.size === 0 && active.length > 0) {
+    const topOverall = [...active].sort((a, b) => byCash(b) - byCash(a))[0];
+    leaderIds.add(topOverall.id);
   }
 
   const leaders: BallotCandidate[] = [];

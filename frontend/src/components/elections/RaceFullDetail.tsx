@@ -135,9 +135,15 @@ export default function RaceFullDetail({ race }: { race: RaceWithCandidates }) {
         </details>
       )}
 
-      {leaders.length > 0 && (
+      {active.length > 0 && (
         <div className="mt-4">
-          <RaceFinancials candidates={leaders} />
+          {/* Every active candidate, not just leaders -- tiering narrows
+              which candidates get a full card, but the funding chart is a
+              comparison tool, not a visual-weight statement. A real
+              fundraiser at, say, 8% of the leader's cash (just under
+              tierCandidates' 10% promotion bar) still belongs in "who's
+              actually raising money here", not silently dropped from it. */}
+          <RaceFinancials candidates={active} />
           <p className="mt-3 font-mono text-xs leading-relaxed text-ink-min">
             Per FEC filings — totals lag by up to a quarter and amendments. Source: fec.gov.
           </p>

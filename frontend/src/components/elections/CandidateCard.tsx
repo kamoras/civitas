@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { BallotCandidate } from "@/types/election";
+import { DEM_AFFILIATE_PARTIES } from "@/lib/elections";
 import { cashOnHandDisplay, formatCurrency } from "@/lib/formatting";
 import { getScoreColor } from "@/lib/representation";
 
@@ -11,9 +12,15 @@ export const PARTY_META: Record<string, { label: string; color: string; rule: st
   DEM: { label: "DEMOCRAT", color: "text-dem-blue", rule: "bg-dem-blue" },
   REP: { label: "REPUBLICAN", color: "text-signal-red", rule: "bg-signal-red" },
   IND: { label: "INDEPENDENT", color: "text-ind-purple", rule: "bg-ind-purple" },
-  // State affiliates of the Democratic Party — styled as Democrats.
-  DFL: { label: "DEMOCRAT (DFL)", color: "text-dem-blue", rule: "bg-dem-blue" },
-  DNL: { label: "DEMOCRAT (D-NPL)", color: "text-dem-blue", rule: "bg-dem-blue" },
+  // State affiliates of the Democratic Party — styled as Democrats. Codes
+  // come from lib/elections.ts's DEM_AFFILIATE_PARTIES, the same list
+  // majorPartyOf reads, so the two can't silently drift apart.
+  ...Object.fromEntries(
+    Object.entries(DEM_AFFILIATE_PARTIES).map(([code, suffix]) => [
+      code,
+      { label: `DEMOCRAT (${suffix})`, color: "text-dem-blue", rule: "bg-dem-blue" },
+    ]),
+  ),
   LIB: { label: "LIBERTARIAN", color: "text-ink-lo", rule: "bg-ink-min" },
   GRE: { label: "GREEN", color: "text-phos-mid", rule: "bg-phos-mid" },
   CON: { label: "CONSTITUTION", color: "text-ink-lo", rule: "bg-ink-min" },

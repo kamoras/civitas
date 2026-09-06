@@ -21,11 +21,17 @@ to fec.gov on either one -- this only shapes which rows a caller's
 response/decision includes, the same "never delete source data"
 precedent confirmed_general/on_primary_ballot already set.
 
-Lives at the app root, not under app/api/, so both the API layer
-(app/api/elections.py, the original caller) and pipeline code
-(app/pipeline/analyze/election_bluesky.py's _roster_fact) can import it
-without the pipeline depending on the API layer. A pipeline consumer that
-looks up a Candidate by a STORED id (a coverage item's
+Lives under app/pipeline/, not app/api/ — Candidate rows are pipeline-
+owned data (FEC ingestion writes them), and app/api/elections.py already
+imports plenty of pipeline-derived logic the normal direction (e.g.
+app.pipeline.analyze.score_calculator, app.pipeline.election_pipeline) —
+this follows that same precedent rather than sitting at the app root,
+which would have implied the reverse (pipeline depending on API) was the
+risk being avoided, when the codebase's only real traffic runs api ->
+pipeline. Both app/api/elections.py (the original caller) and pipeline
+code (app/pipeline/analyze/election_bluesky.py's _roster_fact) import
+this without either depending on the other's own layer. A pipeline
+consumer that looks up a Candidate by a STORED id (a coverage item's
 matched_candidate_id, fetched in a prior run) needs dedupe_merge_map, not
 just dedupe_candidates: if that stored id was the one this rule would
 drop from a fresh race list, the caller must resolve it to the surviving

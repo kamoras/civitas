@@ -12,7 +12,6 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.api.public import RateLimit
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cached_json
-from app.candidate_dedup import dedupe_candidates
 from app.database import get_db
 from app.election_calendar import (
     CLASS_I_STATES,
@@ -38,6 +37,7 @@ from app.pipeline.analyze.score_calculator import (
     get_pvi_meta,
     get_state_pvi_map,
 )
+from app.pipeline.candidate_dedup import dedupe_candidates, normalized_surname
 from app.pipeline.election_pipeline import current_election_cycle
 from app.pipeline.fetch import ballot_pdf
 from app.pipeline.fetch.ballot_lookup import lookup_for_state
@@ -267,9 +267,13 @@ def _incumbent_link(
     """
     if cand.incumbent_challenge != "I":
         return None
-    # FEC's name field is "LAST, FIRST MIDDLE ..." (see fec.py's
-    # _fec_first_name) — the last name is everything before the comma.
-    last_name = cand.name.split(",")[0].strip().lower()
+    # Reuses candidate_dedup's surname extraction rather than a second
+    # inline copy — this also fixes a real, if narrow, matching gap: an
+    # incumbent whose OWN surname carries a generational suffix (FEC's
+    # real "ONDER JR, ROBERT FRANK") previously included "jr" as part of
+    # last_name, which could never match a Representative/Senator row's
+    # plain name.
+    last_name = normalized_surname(cand.name)
     if not last_name:
         return None
 
