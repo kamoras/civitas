@@ -3,7 +3,7 @@ test_house_pipeline.py's pattern), and the pure roster-sync/financial-
 prioritization/snapshot helper functions directly."""
 
 import asyncio
-from contextlib import ExitStack
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from unittest.mock import patch
 
@@ -20,9 +20,16 @@ from app.pipeline import election_pipeline
 from app.time_utils import utcnow
 
 
-def _mock_downstream_pipeline_phases(stack: ExitStack) -> None:
-    """Patches every real phase run_election_pipeline runs AFTER roster
-    sync. Each one already has its own dedicated tests elsewhere; left
+@contextmanager
+def _mock_downstream_pipeline_phases():
+    """One composed context manager patching every real phase
+    run_election_pipeline runs AFTER roster sync, for use as a single
+    item inside a caller's own `with (...)` tuple (same idiom as
+    test_ollama_client.py's `_patched_httpx`) — matches this suite's
+    existing parenthesized-multi-patch style (test_house_pipeline.py)
+    rather than introducing ExitStack, which nothing else here uses.
+
+    Each phase already has its own dedicated tests elsewhere; left
     unmocked here, they run for real inside a real make_async_client()
     context — genuine network attempts to every state's confirmed-
     candidates vendor, every ballot-lookup link, RSS feeds, etc., each
@@ -36,33 +43,23 @@ def _mock_downstream_pipeline_phases(stack: ExitStack) -> None:
     LOCK/cycle-selection behavior doesn't also pay for (and flake on)
     every downstream phase's real I/O.
     """
-    stack.enter_context(patch("app.pipeline.election_pipeline._refresh_financials", return_value=0))
-    stack.enter_context(
-        patch("app.pipeline.election_pipeline._sync_ballot_measures", return_value={"skipped": True})
-    )
-    # These three are imported locally inside run_election_pipeline
-    # (from app.pipeline.fetch.state_candidates import ...) rather than
-    # at module scope, so patching election_pipeline's own namespace
-    # wouldn't touch them — the local import re-reads the name from the
-    # source module every call, which is exactly what needs patching.
-    stack.enter_context(
-        patch("app.pipeline.fetch.state_candidates.crawl_for_new_sources", return_value={})
-    )
-    stack.enter_context(
-        patch("app.pipeline.fetch.state_candidates.sync_confirmed_candidates", return_value={})
-    )
-    stack.enter_context(
-        patch("app.pipeline.fetch.state_candidates.sync_ballot_filings", return_value={})
-    )
-    stack.enter_context(
-        patch("app.pipeline.fetch.ballot_lookup.refresh_link_verification", return_value={"failed": 0})
-    )
-    stack.enter_context(
-        patch("app.pipeline.analyze.election_coverage.ingest_race_coverage", return_value=0)
-    )
-    stack.enter_context(
-        patch("app.pipeline.analyze.election_bluesky.post_race_coverage_updates", return_value=0)
-    )
+    with (
+        patch("app.pipeline.election_pipeline._refresh_financials", return_value=0),
+        patch("app.pipeline.election_pipeline._sync_ballot_measures", return_value={"skipped": True}),
+        # These three are imported locally inside run_election_pipeline
+        # (from app.pipeline.fetch.state_candidates import ...) rather
+        # than at module scope, so patching election_pipeline's own
+        # namespace wouldn't touch them — the local import re-reads the
+        # name from the source module every call, which is exactly what
+        # needs patching.
+        patch("app.pipeline.fetch.state_candidates.crawl_for_new_sources", return_value={}),
+        patch("app.pipeline.fetch.state_candidates.sync_confirmed_candidates", return_value={}),
+        patch("app.pipeline.fetch.state_candidates.sync_ballot_filings", return_value={}),
+        patch("app.pipeline.fetch.ballot_lookup.refresh_link_verification", return_value={"failed": 0}),
+        patch("app.pipeline.analyze.election_coverage.ingest_race_coverage", return_value=0),
+        patch("app.pipeline.analyze.election_bluesky.post_race_coverage_updates", return_value=0),
+    ):
+        yield
 
 
 class TestElectionPipelineLock:
@@ -90,18 +87,58 @@ class TestElectionPipelineLock:
         # fetch_all_candidates mocked to fail fast, and every downstream
         # phase mocked off too — only the lock's clear-then-acquire
         # behavior is under test here.
-        with ExitStack() as stack:
-            stack.enter_context(patch("app.pipeline.election_pipeline.SessionLocal", return_value=db_session))
-            stack.enter_context(patch(
+        with (
+            patch("app.pipeline.election_pipeline.SessionLocal", return_value=db_session),
+            patch(
                 "app.pipeline.election_pipeline.fetch_all_candidates",
                 side_effect=RuntimeError("network mocked off"),
-            ))
-            _mock_downstream_pipeline_phases(stack)
+            ),
+            _mock_downstream_pipeline_phases(),
+        ):
             asyncio.run(election_pipeline.run_election_pipeline())
 
         cleared = db_session.query(ElectionPipelineRun).filter(ElectionPipelineRun.id == stale_id).one()
         assert cleared.status == PipelineStatus.STALE
         assert db_session.query(ElectionPipelineRun).count() == 2  # stale row + fresh one
+
+    def test_a_failure_in_one_downstream_phase_does_not_abort_the_rest(self, db_session):
+        """run_election_pipeline wraps each phase in its own try/except-
+        continue (see the module's own comments) specifically so one
+        phase's failure doesn't take down the phases after it. Every
+        other test in this file mocks every downstream phase to a
+        harmless success, which never exercises that recovery path —
+        this is the one place it's checked directly, by making
+        confirmed-candidates raise and confirming coverage ingestion
+        (two phases later) still runs and the run still reaches
+        COMPLETED, not stuck mid-run or marked failed."""
+        db_session.commit()
+
+        with (
+            patch("app.pipeline.election_pipeline.SessionLocal", return_value=db_session),
+            patch(
+                "app.pipeline.election_pipeline.fetch_all_candidates",
+                side_effect=RuntimeError("network mocked off"),
+            ),
+            patch("app.pipeline.election_pipeline._refresh_financials", return_value=0),
+            patch("app.pipeline.election_pipeline._sync_ballot_measures", return_value={"skipped": True}),
+            patch(
+                "app.pipeline.fetch.state_candidates.sync_confirmed_candidates",
+                side_effect=RuntimeError("confirmed-candidates phase mocked to fail"),
+            ),
+            patch("app.pipeline.fetch.state_candidates.crawl_for_new_sources", return_value={}),
+            patch("app.pipeline.fetch.state_candidates.sync_ballot_filings", return_value={}),
+            patch("app.pipeline.fetch.ballot_lookup.refresh_link_verification", return_value={"failed": 0}),
+            patch(
+                "app.pipeline.analyze.election_coverage.ingest_race_coverage", return_value=3,
+            ) as mock_ingest,
+            patch("app.pipeline.analyze.election_bluesky.post_race_coverage_updates", return_value=0),
+        ):
+            result = asyncio.run(election_pipeline.run_election_pipeline())
+
+        mock_ingest.assert_called_once()  # reached despite the earlier phase raising
+        run = db_session.query(ElectionPipelineRun).one()
+        assert run.status == PipelineStatus.COMPLETED
+        assert result["status"] == "completed"
 
 
 class TestCurrentElectionCycle:
@@ -125,14 +162,15 @@ class TestCurrentElectionCycle:
             seen_cycles.append(cycle)
             return []
 
-        with ExitStack() as stack:
-            stack.enter_context(patch("app.pipeline.election_pipeline.SessionLocal", return_value=db_session))
-            stack.enter_context(patch("app.pipeline.election_pipeline.utcnow", return_value=datetime(2026, 11, 4)))
-            stack.enter_context(patch(
+        with (
+            patch("app.pipeline.election_pipeline.SessionLocal", return_value=db_session),
+            patch("app.pipeline.election_pipeline.utcnow", return_value=datetime(2026, 11, 4)),
+            patch(
                 "app.pipeline.election_pipeline.fetch_all_candidates",
                 side_effect=_fake_fetch_all_candidates,
-            ))
-            _mock_downstream_pipeline_phases(stack)
+            ),
+            _mock_downstream_pipeline_phases(),
+        ):
             asyncio.run(election_pipeline.run_election_pipeline())
 
         assert seen_cycles == [2028, 2028]  # once for House, once for Senate
