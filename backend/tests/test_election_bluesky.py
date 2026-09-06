@@ -300,6 +300,53 @@ class TestPostRaceCoverageUpdates:
         mock_gen.assert_not_called()
 
 
+class TestRosterFact:
+    """_roster_fact resolves matched_candidate_id through app/candidate_
+    dedup.py before looking the candidate up — see that module for why:
+    a coverage item can be matched against either of two FEC ids for a
+    since-refiled candidate, and the site's own race list may by now show
+    only the surviving one."""
+
+    def test_resolves_a_dropped_duplicate_id_to_the_surviving_candidates_name(self, db_session):
+        # Real Ohio House District 4 data: "WILSON, TAMARA" filed under
+        # two FEC ids with byte-identical financials (same real fixture
+        # test_elections_state_ballot.py's dedup tests use). H6OH04173 is
+        # the id dedupe_candidates would drop from the on-site race list.
+        race = _race(db_session, race_id="2026-HOUSE-OH-4", state="OH", office="H")
+        race.district = 4
+        db_session.add(Candidate(
+            id="H2OH04164", race_id="2026-HOUSE-OH-4", name="WILSON, TAMARA", party="IND",
+            contributions=22049.51, cash_on_hand=520819.93,
+        ))
+        db_session.add(Candidate(
+            id="H6OH04173", race_id="2026-HOUSE-OH-4", name="WILSON, TAMARA", party="DEM",
+            contributions=22049.51, cash_on_hand=520819.93,
+        ))
+        item = _item(
+            db_session, race_id="2026-HOUSE-OH-4", matched_candidate_id="H6OH04173",
+        )
+        db_session.commit()
+
+        fact = election_bluesky._roster_fact(item, race, db_session)
+        assert fact == "FEC filings list WILSON, TAMARA as a candidate in the OH-4 House race."
+
+    def test_a_non_duplicate_id_resolves_to_itself_as_before(self, db_session):
+        race = _race(db_session)
+        _candidate(db_session)
+        item = _item(db_session)
+        db_session.commit()
+
+        fact = election_bluesky._roster_fact(item, race, db_session)
+        assert fact == "FEC filings list OSSOFF, JON as a candidate in the GA Senate race."
+
+    def test_no_matched_candidate_id_is_none(self, db_session):
+        race = _race(db_session)
+        item = _item(db_session, matched_candidate_id=None)
+        db_session.commit()
+
+        assert election_bluesky._roster_fact(item, race, db_session) is None
+
+
 class TestDrainStaleUnconsidered:
     def test_marks_old_unconsidered_items_and_keeps_fresh_ones(self, db_session):
         _race(db_session)

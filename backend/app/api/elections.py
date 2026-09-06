@@ -37,6 +37,7 @@ from app.pipeline.analyze.score_calculator import (
     get_pvi_meta,
     get_state_pvi_map,
 )
+from app.pipeline.candidate_dedup import dedupe_candidates, normalized_surname
 from app.pipeline.election_pipeline import current_election_cycle
 from app.pipeline.fetch import ballot_pdf
 from app.pipeline.fetch.ballot_lookup import lookup_for_state
@@ -172,7 +173,9 @@ def _confirmed_or_all(candidates: list[Candidate]) -> list[Candidate]:
     (_race_summary, _race_full, race_detail) — the bug this guards
     against previously resurfaced via race_detail even after _race_full
     was fixed, since a race's full candidate list is reachable from more
-    than one route."""
+    than one route. Also the one place dedupe_candidates runs, so every
+    one of those endpoints gets it for free."""
+    candidates = dedupe_candidates(candidates)
     if any(c.confirmed_general for c in candidates):
         return [c for c in candidates if c.confirmed_general]
     if any(c.on_primary_ballot for c in candidates):
@@ -264,9 +267,13 @@ def _incumbent_link(
     """
     if cand.incumbent_challenge != "I":
         return None
-    # FEC's name field is "LAST, FIRST MIDDLE ..." (see fec.py's
-    # _fec_first_name) — the last name is everything before the comma.
-    last_name = cand.name.split(",")[0].strip().lower()
+    # Reuses candidate_dedup's surname extraction rather than a second
+    # inline copy — this also fixes a real, if narrow, matching gap: an
+    # incumbent whose OWN surname carries a generational suffix (FEC's
+    # real "ONDER JR, ROBERT FRANK") previously included "jr" as part of
+    # last_name, which could never match a Representative/Senator row's
+    # plain name.
+    last_name = normalized_surname(cand.name)
     if not last_name:
         return None
 
