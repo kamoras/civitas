@@ -17,7 +17,18 @@ class TestNewFactsSince:
     def test_identical_lists_have_nothing_new(self):
         assert new_facts_since(["a", "b"], ["a", "b"]) == []
 
-    def test_only_the_added_fact_is_new(self):
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    def test_only_the_added_fact_is_new(self, mock_embed):
+        # Real bug this guards against (flaky under coverage
+        # instrumentation, confirmed live 2026-09-06): "a"/"b"/"c" are
+        # non-empty, so remaining=["c"] and previous_facts=["a","b"]
+        # both being truthy skips the early return and falls through to
+        # a REAL, unmocked embedding call — this test's actual intent
+        # (add-only detection) has nothing to do with embedding
+        # similarity, and letting real model output decide the result
+        # is fragile regardless of margin. Mocked orthogonal here so
+        # only the set-membership logic is under test.
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.0, 1.0], [0.0, 1.0]])
         assert new_facts_since(["a", "b", "c"], ["a", "b"]) == ["c"]
 
     def test_order_in_previous_facts_does_not_matter(self):
@@ -28,7 +39,12 @@ class TestNewFactsSince:
         # versions isn't something to flag on the current list at all.
         assert new_facts_since(["a"], ["a", "b"]) == []
 
-    def test_preserves_current_facts_order_for_the_new_subset(self):
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    def test_preserves_current_facts_order_for_the_new_subset(self, mock_embed):
+        # Same unmocked-real-model fragility as test_only_the_added_
+        # fact_is_new above -- mocked orthogonal so only order
+        # preservation is under test.
+        mock_embed.return_value = np.array([[1.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
         assert new_facts_since(["z", "a", "m"], ["a"]) == ["z", "m"]
 
     @patch("app.pipeline.analyze.action_center._embed_texts_sim")

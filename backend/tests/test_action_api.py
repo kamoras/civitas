@@ -3,6 +3,7 @@
 import json
 from unittest.mock import patch
 
+import numpy as np
 import pytest
 
 from app.api.action import _latest_current_issues
@@ -632,10 +633,21 @@ class TestNewFactsField:
 
         assert resp["newFacts"] == []
 
-    async def test_updated_issue_reports_only_the_added_fact(self, db_session):
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    async def test_updated_issue_reports_only_the_added_fact(self, mock_embed, db_session):
         from fastapi import Response
 
         from app.api.action import get_action_issue
+
+        # "Brand new fact." (remaining) and "Old fact." (previous_facts)
+        # are both non-empty, so app.fact_diff.new_facts_since falls
+        # through to a real, unmocked embedding call unless mocked here
+        # -- this test's intent (the API reports the right fact as new)
+        # has nothing to do with real embedding similarity, and letting
+        # real model output decide the result is fragile (confirmed
+        # flaky under coverage instrumentation, live 2026-09-06).
+        # Mocked orthogonal so only the response-shape logic is tested.
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.0, 1.0]])
 
         issue = ActionIssue(
             date="2026-08-19", rank=1, title="Issue", summary="s",
