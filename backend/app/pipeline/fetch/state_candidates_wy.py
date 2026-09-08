@@ -32,7 +32,12 @@ than summing 23 counties itself (verified live: the Total row's own
 values already match hand-summed county totals). Getting one candidate's
 statewide vote count means forward-filling the sparse race/party header
 cells leftward across their group before reading the Total row's value
-in that same column.
+in that same column. Like the sheet-by-name lookup above, the header
+rows themselves are found by CONTENT (the "Write-Ins" column every real
+group carries) rather than a fixed row index, and the Total row lookup
+requires there be exactly one match — a row inserted above the header
+block, or a second row ever also labelled "Total", fails closed (None,
+a real fetch_failed) instead of silently reading the wrong row.
 
 Wyoming's real 2026 field also carries a "* Withdrawn\\nCandidate" column
 in the House Republican group (2,162 votes still counted under that
@@ -132,6 +137,7 @@ def _find_summary_sheet_rows(zip_bytes: bytes) -> list[list[str]] | None:
         outer = zipfile.ZipFile(io.BytesIO(zip_bytes))
         member = next((n for n in outer.namelist() if _SUMMARY_MEMBER_RE.search(n)), None)
         if member is None:
+            logger.warning("WY results zip had no member matching 'Results Summaries...xlsx'")
             return None
         workbook_bytes = outer.read(member)
         wb = zipfile.ZipFile(io.BytesIO(workbook_bytes))
@@ -141,6 +147,7 @@ def _find_summary_sheet_rows(zip_bytes: bytes) -> list[list[str]] | None:
             (s for s in workbook_xml.iter(f"{_XL_NS}sheet") if s.get("name") == _SHEET_NAME), None,
         )
         if sheet_el is None:
+            logger.warning("WY results workbook has no sheet named %r", _SHEET_NAME)
             return None
         rid = sheet_el.get(f"{_R_NS}id")
 
@@ -150,7 +157,8 @@ def _find_summary_sheet_rows(zip_bytes: bytes) -> list[list[str]] | None:
              if r.get("Id") == rid and r.get("Type") == _OFFICE_DOC_REL),
             None,
         )
-        if rel_el is None:
+        if rel_el is None or not rel_el.get("Target"):
+            logger.warning("WY results workbook's %r sheet has no resolvable worksheet target", _SHEET_NAME)
             return None
         sheet_path = "xl/" + rel_el.get("Target")
 
@@ -207,17 +215,34 @@ def _page_election(rows: list[list[str]]) -> tuple[int, str] | None:
     return held.year, held.isoformat()
 
 
-def _federal_totals(rows: list[list[str]]) -> list[tuple[str, int | None, str, str, int]]:
+def _federal_totals(rows: list[list[str]]) -> list[tuple[str, int | None, str, str, int]] | None:
     """(office, district, party, surname, votes) for every real federal
     candidate column -- forward-filling the race/party header rows
     leftward across each group's blank cells before reading the Total
-    row in that same column."""
-    if len(rows) < 5:
-        return []
-    race_row, party_row, name_row = rows[2], rows[3], rows[4]
-    total_row = next((r for r in rows if r and r[0].strip().lower() == _TOTAL_ROW_LABEL), None)
-    if total_row is None:
-        return []
+    row in that same column. None (not []) if the sheet's own header/
+    total-row shape can't be found at all -- a real "this broke", not
+    "this cycle legitimately has zero federal contests".
+
+    The header rows are found by CONTENT (the "Write-Ins" column every
+    real candidate group carries), never a fixed row index -- the same
+    principle _find_summary_sheet_rows already applies to finding the
+    sheet by name and row_to_list applies to finding a cell by its own
+    column reference. A row inserted or removed above the header block
+    in some future cycle would otherwise silently shift fixed indices
+    onto the wrong rows with no error, misattributing real vote totals
+    to the wrong office/party.
+    """
+    name_row_idx = next((i for i, r in enumerate(rows) if "Write-Ins" in r), None)
+    if name_row_idx is None or name_row_idx < 2:
+        logger.warning("WY results workbook has no recognisable candidate-name header row")
+        return None
+    race_row, party_row, name_row = rows[name_row_idx - 2], rows[name_row_idx - 1], rows[name_row_idx]
+
+    total_rows = [r for r in rows if r and r[0].strip().lower() == _TOTAL_ROW_LABEL]
+    if len(total_rows) != 1:
+        logger.warning("WY results workbook has %d rows labelled 'Total', expected exactly 1", len(total_rows))
+        return None
+    total_row = total_rows[0]
 
     results = []
     cur_race, cur_party = "", ""
@@ -276,8 +301,12 @@ async def fetch_confirmed_candidates(
     if not _settled(held_on, settle_days):
         return []
 
+    totals = _federal_totals(rows)
+    if totals is None:
+        return None
+
     by_group: dict[tuple[str, int | None, str], list[tuple[str, int]]] = {}
-    for office, district, party, name, votes in _federal_totals(rows):
+    for office, district, party, name, votes in totals:
         by_group.setdefault((office, district, party), []).append((name, votes))
 
     runoff_threshold_pct = source.get("runoff_threshold_pct")

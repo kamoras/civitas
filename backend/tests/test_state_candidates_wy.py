@@ -1,33 +1,192 @@
 """Tests for Wyoming's confirmed-general-candidate strategy
 (state_candidates_wy.py).
 
-fixtures_wy_primary_results.zip is a HAND-BUILT fixture, not a raw slice
-of the real download -- the real zip is ~1.1MB (three full Excel
+ZIP_BYTES is built HERE, in Python, at collection time — not committed as
+a binary .zip fixture. The real download is ~1.1MB (three full Excel
 workbooks, one of them a 4.2MB-uncompressed county-by-precinct export),
 far too large to commit as a trimmed real-data fixture the way this
-system's HTML fixtures (MT/NE/SD) are. It faithfully reproduces the REAL,
-live-verified 2026 data and — critically — the real workbook's own
-structural quirk this module's docstring calls out: "Statewide
-Candidates" is NOT the workbook's first physical worksheet file (a decoy
-sheet sits at sheet1.xml/sheet2.xml; the real data is sheet3.xml), so a
-lookup that assumed a fixed sheet number would read the wrong data. Real
-candidates/parties/vote totals (Senate: Edwards/Hageman/Holtz/Mead/
-Skovgard R, Benavidez/Byrd D; House: Friess/Gray/Rasner R plus the real
-"* Withdrawn\\nCandidate" placeholder, Del Real/Kinney D) all come from
-the live workbook fetched 2026-09-08 — only trimmed to 2 of Wyoming's 23
-real counties (Albany, Big Horn; irrelevant to correctness since
+system's HTML fixtures (MT/NE/SD) are, and a binary blob would be opaque
+to review/diff (matching how test_state_candidates_tn.py sidesteps the
+same problem for its own xlsx-reading module, by not shipping real xlsx
+bytes at all). This module's own zip/XML-writing code (the same stdlib
+zipfile it reads with) builds a small but structurally faithful workbook:
+"Statewide Candidates" is deliberately NOT the first physical worksheet
+file (a decoy sheet sits at sheet1.xml/sheet2.xml; the real data is
+sheet3.xml), reproducing the real workbook's own quirk that a
+fixed-sheet-number lookup would silently read the wrong data.
+
+GROUPS below carries the REAL, live-verified 2026 primary data (Senate:
+Edwards/Hageman/Holtz/Mead/Skovgard R, Benavidez/Byrd D; House:
+Friess/Gray/Rasner R plus the real "* Withdrawn\\nCandidate" placeholder,
+Del Real/Kinney D — fetched live 2026-09-08), trimmed to 2 of Wyoming's
+23 real counties (Albany, Big Horn — irrelevant to correctness since
 _federal_totals reads the Total row directly, never sums counties
 itself) and a handful of the real House Republican field (trimmed from
 9 real candidates to 3, real vote counts kept for each one kept).
 """
 
+import io
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 
 from app.pipeline.fetch import state_candidates_wy as wy
 
 FIXTURES = Path(__file__).parent
-ZIP_BYTES = (FIXTURES / "fixtures_wy_primary_results.zip").read_bytes()
+
+_CONTENT_TYPES = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/worksheets/sheet3.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>
+</Types>"""
+
+_ROOT_RELS = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>"""
+
+# "Statewide Candidates" is deliberately r:id="rId3" (-> sheet3.xml), not
+# the first sheet -- see module docstring.
+_WORKBOOK = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets>
+<sheet name="Statewide Total Ballots Cast" sheetId="1" r:id="rId1"/>
+<sheet name="Statewide Candidates" sheetId="2" r:id="rId3"/>
+<sheet name="Statewide Senate Odd" sheetId="3" r:id="rId2"/>
+</sheets>
+</workbook>"""
+
+_WORKBOOK_RELS = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>
+<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/>
+<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>
+</Relationships>"""
+
+_DECOY_SHEET = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<sheetData>
+<row r="1"><c r="A1" t="inlineStr"><is><t>decoy sheet -- not read by this module</t></is></c></row>
+</sheetData>
+</worksheet>"""
+
+# (race, party, [(name, albany_votes, bighorn_votes), ...]) -- real,
+# live-verified 2026 statewide Total-row values are looked up by name
+# below rather than hand-typed alongside these, so the county columns
+# and the real totals can never silently drift apart.
+_GROUPS = [
+    ("United States Senator", "Republican", [
+        ("Jill M\nEdwards", "301", "109"), ("Harriet\nHageman", "2807", "2461"),
+        ("John\nHoltz", "152", "115"), ("Sam\nMead", "2561", "744"),
+        ("Jimmy\nSkovgard", "269", "160"), ("Write-Ins", "27", "8"),
+        ("Overvotes", "10", "7"), ("Undervotes", "114", "123"),
+    ]),
+    ("United States Senator, Continued", "Democratic", [
+        ("Billy\nBenavidez", "288", "41"), ("James\nByrd", "1266", "102"),
+        ("Write-Ins", "23", "2"), ("Overvotes", "0", "0"), ("Undervotes", "105", "11"),
+    ]),
+    ("United States Representative", "Republican", [
+        ("Steve\nFriess", "525", "154"), ("Chuck\nGray", "2959", "1224"),
+        ("Reid\nRasner", "1251", "1175"), ("* Withdrawn\nCandidate", "883", "603"),
+        ("Write-Ins", "0", "0"), ("Overvotes", "29", "11"), ("Undervotes", "2", "4"),
+    ]),
+    ("United States Representative, Continued", "Democratic", [
+        ("Elena\nDel Real", "212", "21"), ("Lisa\nKinney", "4758", "3106"),
+        ("Write-Ins", "41", "21"), ("Overvotes", "0", "0"), ("Undervotes", "1442", "600"),
+    ]),
+]
+_TOTALS = {
+    "Jill M\nEdwards": "3431", "Harriet\nHageman": "83807", "John\nHoltz": "2539",
+    "Sam\nMead": "35879", "Jimmy\nSkovgard": "3527",
+    "Billy\nBenavidez": "2499", "James\nByrd": "9591",
+    "Steve\nFriess": "25059", "Chuck\nGray": "31224", "Reid\nRasner": "10808",
+    "* Withdrawn\nCandidate": "2162",
+    "Elena\nDel Real": "2660", "Lisa\nKinney": "9344",
+}
+
+
+def _col_letter(col_idx: int) -> str:
+    letters = ""
+    n = col_idx + 1
+    while n > 0:
+        n, rem = divmod(n - 1, 26)
+        letters = chr(65 + rem) + letters
+    return letters
+
+
+def _build_fixture_zip() -> bytes:
+    race_row, party_row, name_row = [""], [""], [""]
+    albany_row, bighorn_row, total_row = ["Albany"], ["Big Horn"], ["Total"]
+    for race, party, candidates in _GROUPS:
+        for i, (name, albany_votes, bighorn_votes) in enumerate(candidates):
+            race_row.append(race if i == 0 else "")
+            party_row.append(party if i == 0 else "")
+            name_row.append(name)
+            albany_row.append(albany_votes)
+            bighorn_row.append(bighorn_votes)
+            total_row.append(_TOTALS.get(name, "0"))
+
+    rows_text = [
+        ["", "Statewide Candidates Official Summary\nWyoming Primary Election - August 18, 2026"],
+        [""],
+        race_row, party_row, name_row, albany_row, bighorn_row, total_row,
+    ]
+
+    shared: list[str] = []
+
+    def sidx(text: str) -> int:
+        if text not in shared:
+            shared.append(text)
+        return shared.index(text)
+
+    def cell_xml(col_idx: int, row_num: int, value: str) -> str:
+        if value == "":
+            return ""
+        ref = f"{_col_letter(col_idx)}{row_num}"
+        if value.isdigit():
+            return f'<c r="{ref}"><v>{value}</v></c>'
+        return f'<c r="{ref}" t="s"><v>{sidx(value)}</v></c>'
+
+    row_xml = "".join(
+        f'<row r="{i}">{"".join(cell_xml(j, i, v) for j, v in enumerate(row))}</row>'
+        for i, row in enumerate(rows_text, start=1)
+    )
+    sheet3 = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        f"<sheetData>{row_xml}</sheetData></worksheet>"
+    )
+    shared_strings = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        f'<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+        f'count="{len(shared)}" uniqueCount="{len(shared)}">'
+        + "".join(f"<si><t>{s}</t></si>" for s in shared) + "</sst>"
+    )
+
+    inner = io.BytesIO()
+    with zipfile.ZipFile(inner, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("[Content_Types].xml", _CONTENT_TYPES)
+        z.writestr("_rels/.rels", _ROOT_RELS)
+        z.writestr("xl/workbook.xml", _WORKBOOK)
+        z.writestr("xl/_rels/workbook.xml.rels", _WORKBOOK_RELS)
+        z.writestr("xl/sharedStrings.xml", shared_strings)
+        z.writestr("xl/worksheets/sheet1.xml", _DECOY_SHEET)
+        z.writestr("xl/worksheets/sheet2.xml", _DECOY_SHEET)
+        z.writestr("xl/worksheets/sheet3.xml", sheet3)
+
+    outer = io.BytesIO()
+    with zipfile.ZipFile(outer, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("2026 Primary Results Summaries - OFFICIAL.xlsx", inner.getvalue())
+    return outer.getvalue()
+
+
+ZIP_BYTES = _build_fixture_zip()
 
 
 def _patched(monkeypatch, content):
@@ -131,6 +290,33 @@ class TestFederalTotals:
         assert by_name["Byrd"] == ("S", "D")
         assert by_name["Gray"] == ("H", "R")
         assert by_name["Kinney"] == ("H", "D")
+
+    def test_a_row_inserted_above_the_header_block_doesnt_misattribute_votes(self):
+        # The header rows are found by CONTENT (the "Write-Ins" column
+        # every real group carries), not a fixed row index -- this proves
+        # it: an extra row spliced in above the real headers must not
+        # shift race_row/party_row/name_row onto the wrong data, which a
+        # fixed-index lookup would do silently (real votes attached to
+        # the wrong office/party, no error).
+        rows = wy._find_summary_sheet_rows(ZIP_BYTES)
+        rows_with_extra = [rows[0], ["", "unexpected extra row"], *rows[1:]]
+        by_name = {t[3]: (t[0], t[2]) for t in wy._federal_totals(rows_with_extra)}
+        assert by_name["Hageman"] == ("S", "R")
+        assert by_name["Kinney"] == ("H", "D")
+
+    def test_no_write_ins_column_anywhere_returns_none(self):
+        # A real shape break (the workbook no longer carries the
+        # landmark this module anchors on) must read as fetch_failed,
+        # never as "zero federal contests this cycle".
+        rows = wy._find_summary_sheet_rows(ZIP_BYTES)
+        stripped = [[c for c in row if c != "Write-Ins"] for row in rows]
+        assert wy._federal_totals(stripped) is None
+
+    def test_more_than_one_total_row_returns_none_rather_than_guessing(self):
+        rows = wy._find_summary_sheet_rows(ZIP_BYTES)
+        total_idx = next(i for i, r in enumerate(rows) if r and r[0] == "Total")
+        duplicated = [*rows, rows[total_idx]]
+        assert wy._federal_totals(duplicated) is None
 
 
 class TestFetchConfirmedCandidates:
