@@ -1,0 +1,196 @@
+                    <a id="lnkDateHeader" class="col header-box1 header-box1-alt" href="Default.aspx?"><h1>Unofficial Results</h1><h2>Primary Election July 28, 2026</h2>
+                        <div class="last-updated"></div>
+                    </a>
+                    <!--End Header Box 1-->
+                    <div class="col header-box2">
+                        <div class="header-box-content-top">
+                            <h1>
+                                <a id="lnkVoterTurnout" class="button" href="VoterTurnoutDetails.aspx?map=TURN">Statewide Voter Turnout</a>
+                            </h1>
+                        </div>
+                        <!--End header-box2-content-top-->
+                        <div class="header-box-content-bottom">
+                            
+                            <div class="animate-position desktop">
+                                <div style="height: 150px"><canvas id="voter-turnout-canvas"></canvas><div class="dough-percent"><span class="int">35</span><span class="dec">.92%</span></div></div>
+                            </div>
+                            <!--End Animate Position-->
+                            <div class="animate-position mobile" style="margin-top: -6px;">
+                                <div><canvas id="voter-turnout-mobile-canvas"></canvas><div class="dough-percent"><span class="int">35</span><span class="dec">.92%</span></div></div>
+                            </div>
+                            <!--End Animate Position-->
+                        </div>
+                        <!--End header-box-content-bottom-->
+                        <div class="header-box-content-reg">
+                            <h2><span class="header-ballot-text">Ballots Cast</span><span class="header-ballot-number">118,123</span><br /><span class="header-voter-text">Registered Voters</span><span class="header-voter-number">328,882</span></h2>
+                        </div>
+                    </div>
+                    <!--End Header Box 2-->
+                    <div class="col header-box3">
+                        <div class="header-box-content-top">
+                            <h1>
+                                <a id="lnkPrecinctsReporting" class="button" href="VoterTurnoutDetails.aspx?map=PREC">Precincts Reporting</a>
+                            </h1>
+                        </div>
+                        <!--End header-box2-content-top-->
+                        <div class="header-box-content-bottom">
+                            
+                            <div class="animate-position desktop">
+                                <div style="height: 150px"><canvas id="precinct-reported-canvas"></canvas><div class="dough-percent"><span class="int">0</span><span class="dec">%</span></div></div>
+                            </div>
+                            <!--End Animate Position-->
+                            <div class="animate-position mobile">
+                                <div><canvas id="precinct-reported-mobile-canvas"></canvas><div class="dough-percent"><span class="int">0</span><span class="dec">%</span></div></div>
+                            </div>
+                            <!--End Animate Position-->
+                        </div>
+                        <!--End header-box-content-bottom-->
+                        <div class="header-box-content-reg header-box-content-prec">
+                            <h2><div class='colordisc-yellow'></div><span class="header-partial-text">Partially</span><span class="header-partial-number">0</span><br/><div class='colordisc-orange'></div><span class="header-total-text">Fully</span><span class="header-total-number">0</span> </br><div></div><span class="header-partial-text">Total</span><span class="header-totalprecincts-text">625</span></h2>
+                        </div>
+                    </div>
+                    <div id="chartjs-tooltip"></div>
+                    <!--End Header Box 3-->
+                </div>
+                <!--End Section Group-->
+                
+            </div>
+            <!--End Header Box Wrapper-->
+            
+            
+            
+            <!--Main Content-->
+            
+    
+    
+    <div id="pnlResultsHeader" class="wrapper-results-header">
+	
+        <div class="legislative-header-wrapper">
+            <span id="MainContent_lblResultsHeader">Statewide Races</span>
+        </div>
+    
+</div>
+    
+    
+            <div class="wrapper-inside wrapper-border">
+                <div>
+                    <div class="display-results-box-wrapper recount-wrapper">
+                        <div class="display-results-box-a">
+                            <h1>Governor<span class="recount-text">(Run-Off required pending outcome of official canvass)</span></h1>
+                        </div>
+                        <div class="wrapper-mobile">
+                            <div class="section group">
+                                <div class="col display-results-box-b">
+                                    <div class="col follow-checkbox">
+                                        <input class="css-checkbox" type="checkbox" onclick="CheckboxChecked(this);" id="chk-67">
+                                        <label class="css-label" for="chk-67">Follow This Contest</label>
+                                    </div>
+                                    
+                                </div>
+                                <div class="display-results-box-g">
+                                    <div class="export-box dropdown" >
+                                        <div class="export dropbtn">Export</div>
+                                        <div id="export-67" class="dropdown-content export-container">
+                                            <div class="export-header">EXPORT:</div>
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl00$ctl00','')" name="ctl00$MainContent$rptRace$ctl00$ctl00" type="button" class="export-button" value="Precinct Level" raceid="14452" party="REP" officeseqno="200" countyid="0" />
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl00$ctl01','')" name="ctl00$MainContent$rptRace$ctl00$ctl01" type="button" class="export-button" value="County Level" raceid="14452" party="REP" officeseqno="200" />
+                                        </div>
+                                    </div>
+                                    <div class="share-box dropdown">
+                                        <img class="mtc-icon-inline-position dropbtn" alt="" title="Share" src="Images/my-tracked-contests-icon.png">
+                                        <div class="dropdown-content export-container">
+                                            <div class="share-header">SHARE ON</div>
+                                            <div class="share-icon-wrapper">
+                                                <div class="share-buttons">
+                                                    <a href="https://www.facebook.com/sharer/sharer.php?u=http://electionresults.sd.gov/SearchResults.aspx?ID=67" target="_blank">
+                                                        <img alt="Share on Facebook" title="Facebook" src="Images/facebook.png" /></a>
+                                                    <a href="https://twitter.com/intent/tweet?text=http://electionresults.sd.gov/SearchResults.aspx?ID=67&hashtags=Vote" target="_blank">
+                                                        <img alt="Share on Twitter" title="Twitter" src="Images/twitter.png" /></a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-c">
+                                    <div class="precinct-fully">
+                                        Precincts Fully: 650 / 650
+                                    </div>
+                                    <div class="precinct-separator">|</div>
+                                    <div class="precinct-partial">
+                                        Partially: 0 / 650
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>Toby  Doeden </h1>
+                                    <h2 class="Republican">Republican</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar1445224941"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>34,430</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>Larry  Rhoden </h1>
+                                    <h2 class="Republican">Republican</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar1445224940"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>83,582</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            
+                            <div class="section group">
+                                <div class="col display-results-box-totalvotes">
+                                    <h2>total votes</h2>
+                                </div>
+                                <div class="col display-results-box-total">
+                                    <h2>118,012</h2>
+                                </div>
+                            </div>
+                        
+                </div>
+                <input class="button-maps" type="button" onclick="CreateMap('SWR', '14452', '200', 'REP'); $(this).addClass('active-button');" value="Map" />
+                <input class="button-county" type="button" onclick="BuildCounty('SWR', '14452', '200', 'REP'); $(this).addClass('active-button');" value="County Results" />
+                <div id="Map14452REP" style="display: none;" class="slidingDiv-maps">
+                    <div class="section group">
+                        <div class="col map-col1" id="Mapinfo14452REP">
+                            <div id="countyInfoBox14452REP"></div>
+                        </div>
+                        <div class="col map-col2">
+                            <h1>Click on County Below</h1>
+                            <div class="map" id="Mapmap14452REP">
+                            </div>
+                        </div>
+                        <div class="col map-col3">
+                            <div id="legendInfoBox14452REP"></div>
+                        </div>
+                        <div class="modal"></div>
+                    </div>
+                </div>
+                <div id="County14452REP" style="display: none" class="slidingDiv-maps"></div>
+            </div>
+        
+    
