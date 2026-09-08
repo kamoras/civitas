@@ -80,7 +80,7 @@ from datetime import datetime
 
 import httpx
 
-from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
+from app.pipeline.fetch.http_utils import fetch_bytes_with_retry
 from app.pipeline.fetch.state_candidates_common import normalize_party, parse_office, pick_nominee, surname
 from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _settled
 from app.pipeline.rate_limiter import RateLimiter
@@ -119,13 +119,6 @@ def _col_index(cell_ref: str) -> int:
     for ch in m.group(1):
         idx = idx * 26 + (ord(ch) - ord("A") + 1)
     return idx - 1
-
-
-async def _fetch_zip(client: httpx.AsyncClient, url: str, label: str) -> bytes | None:
-    resp = await fetch_with_retry(
-        client, _rate_limiter, "GET", url, timeout=60.0, log_label=label, headers=BROWSER_HEADERS,
-    )
-    return resp.content if resp is not None else None
 
 
 def _find_summary_sheet_rows(zip_bytes: bytes) -> list[list[str]] | None:
@@ -272,7 +265,7 @@ async def fetch_confirmed_candidates(
     client: httpx.AsyncClient, year: int, state: str, source: dict,  # noqa: ARG001 — state unused, this strategy is WY-only by construction
 ) -> list[dict] | None:
     url = _ZIP_URL_PATTERN.format(year=year)
-    zip_bytes = await _fetch_zip(client, url, f"WY primary results {year}")
+    zip_bytes = await fetch_bytes_with_retry(client, _rate_limiter, url, f"WY primary results {year}")
     if zip_bytes is None:
         # No zip published yet at this year's predictable URL (a 404
         # before certification is the normal, expected state for weeks)

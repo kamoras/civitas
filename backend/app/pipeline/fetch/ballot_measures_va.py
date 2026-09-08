@@ -63,7 +63,7 @@ import httpx
 import pdfplumber
 
 from app.pipeline.fetch.ballot_measure_pdf_geometry import clean_text
-from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_text_with_retry, fetch_with_retry
+from app.pipeline.fetch.http_utils import fetch_bytes_with_retry, fetch_text_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -120,13 +120,6 @@ _BALLOT_QUESTION_RE = re.compile(
 )
 
 _rate_limiter = RateLimiter(rps=1.0)
-
-
-async def _get_bytes(client: httpx.AsyncClient, url: str, label: str) -> bytes | None:
-    resp = await fetch_with_retry(
-        client, _rate_limiter, "GET", url, timeout=60.0, log_label=label, headers=BROWSER_HEADERS,
-    )
-    return resp.content if resp is not None else None
 
 
 def _english_pdf_url(question_page_html: str, base_url: str) -> str | None:
@@ -233,7 +226,7 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
         if pdf_url is None:
             logger.warning("VA question %s: no unambiguous English PDF link found", number)
             return None
-        pdf_bytes = await _get_bytes(client, pdf_url, f"VA question {number} PDF")
+        pdf_bytes = await fetch_bytes_with_retry(client, _rate_limiter, pdf_url, f"VA question {number} PDF")
         if pdf_bytes is None:
             logger.warning("VA question %s PDF fetch failed", number)
             return None

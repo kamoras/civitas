@@ -28,7 +28,6 @@ itself) and a handful of the real House Republican field (trimmed from
 import io
 import zipfile
 from pathlib import Path
-from types import SimpleNamespace
 
 from app.pipeline.fetch import state_candidates_wy as wy
 
@@ -190,10 +189,10 @@ ZIP_BYTES = _build_fixture_zip()
 
 
 def _patched(monkeypatch, content):
-    async def fake(client, rl, method, url, **kw):
-        return SimpleNamespace(content=content)
+    async def fake(client, rl, url, label, **kw):
+        return content
 
-    monkeypatch.setattr(wy, "fetch_with_retry", fake)
+    monkeypatch.setattr(wy, "fetch_bytes_with_retry", fake)
 
 
 class TestColIndex:
@@ -330,10 +329,10 @@ class TestFetchConfirmedCandidates:
         assert len(result) == 4
 
     async def test_fetch_failure_returns_none(self, monkeypatch):
-        async def fake(client, rl, method, url, **kw):
+        async def fake(client, rl, url, label, **kw):
             return None
 
-        monkeypatch.setattr(wy, "fetch_with_retry", fake)
+        monkeypatch.setattr(wy, "fetch_bytes_with_retry", fake)
         assert await wy.fetch_confirmed_candidates(None, 2026, "WY", {}) is None
 
     async def test_a_malformed_zip_returns_none(self, monkeypatch):

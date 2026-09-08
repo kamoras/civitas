@@ -102,14 +102,14 @@ class TestFetchMeasures:
                     return _QUESTION_PAGE_HTML.format(n=n)
             raise AssertionError(f"unexpected URL {url}")
 
-        async def fake_get_bytes(client, url, label):
+        async def fake_get_bytes(client, rl, url, label, **kw):
             for n in ("1", "2", "3"):
                 if f"Q{n}-Topic.pdf" in url:
                     return f"FIXTURE:{n}".encode()
             raise AssertionError(f"unexpected URL {url}")
 
         monkeypatch.setattr(va, "fetch_text_with_retry", fake_get_text)
-        monkeypatch.setattr(va, "_get_bytes", fake_get_bytes)
+        monkeypatch.setattr(va, "fetch_bytes_with_retry", fake_get_bytes)
         # _extract_text normally opens a real PDF; here it just decodes the
         # marker fetch_bytes returned, so this test exercises discovery
         # (index -> per-question page -> English PDF) without needing a
@@ -153,14 +153,14 @@ class TestFetchMeasures:
                     return _QUESTION_PAGE_HTML.format(n=n)
             raise AssertionError(f"unexpected URL {url}")
 
-        async def fake_get_bytes(client, url, label):
+        async def fake_get_bytes(client, rl, url, label, **kw):
             for n in ("1", "3"):
                 if f"Q{n}-Topic.pdf" in url:
                     return f"FIXTURE:{n}".encode()
             raise AssertionError(f"unexpected URL {url}")
 
         monkeypatch.setattr(va, "fetch_text_with_retry", fake_get_text)
-        monkeypatch.setattr(va, "_get_bytes", fake_get_bytes)
+        monkeypatch.setattr(va, "fetch_bytes_with_retry", fake_get_bytes)
         monkeypatch.setattr(va, "_extract_text", lambda raw: FIXTURE[raw.decode().split(":")[1]])
 
         assert await va.fetch_measures(None, 2026) is None
@@ -179,14 +179,14 @@ class TestFetchMeasures:
                     return _QUESTION_PAGE_HTML.format(n=n)
             raise AssertionError(f"unexpected URL {url}")
 
-        async def fake_get_bytes(client, url, label):
+        async def fake_get_bytes(client, rl, url, label, **kw):
             for n in ("1", "2", "3"):
                 if f"Q{n}-Topic.pdf" in url:
                     return f"FIXTURE:{n}".encode()
             raise AssertionError(f"unexpected URL {url}")
 
         monkeypatch.setattr(va, "fetch_text_with_retry", fake_get_text)
-        monkeypatch.setattr(va, "_get_bytes", fake_get_bytes)
+        monkeypatch.setattr(va, "fetch_bytes_with_retry", fake_get_bytes)
         monkeypatch.setattr(va, "_extract_text", lambda raw: FIXTURE[raw.decode().split(":")[1]])
 
         results = await va.fetch_measures(None, 2026)

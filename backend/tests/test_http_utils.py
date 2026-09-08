@@ -17,6 +17,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.pipeline.fetch.http_utils import (
+    BROWSER_HEADERS,
+    fetch_bytes_with_retry,
     fetch_json_with_retry,
     fetch_text_with_retry,
     fetch_with_retry,
@@ -215,6 +217,60 @@ class TestFetchTextWithRetry:
             client, _limiter(), "https://example.test", "label", retries=0,
         )
         assert result is None
+
+
+class TestFetchBytesWithRetry:
+    """Extracted from three copies of the same fetch-then-return-content
+    wrapper (ballot_measures_va.py's `_get_bytes`, house_ptr.py's
+    `_fetch_bytes_with_retry`, state_candidates_wy.py's `_fetch_zip`)."""
+
+    @pytest.mark.asyncio
+    async def test_returns_the_response_content_on_success(self):
+        resp = MagicMock(status_code=200, content=b"\x50\x4b\x03\x04fake-zip-bytes")
+        client = MagicMock()
+        client.request = AsyncMock(return_value=resp)
+        result = await fetch_bytes_with_retry(client, _limiter(), "https://example.test", "label")
+        assert result == b"\x50\x4b\x03\x04fake-zip-bytes"
+
+    @pytest.mark.asyncio
+    async def test_a_fetch_failure_returns_none(self):
+        client = MagicMock()
+        client.request = AsyncMock(side_effect=Exception("boom"))
+        result = await fetch_bytes_with_retry(
+            client, _limiter(), "https://example.test", "label", retries=0,
+        )
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_retry_kwargs_forward_to_fetch_with_retry(self):
+        # house_ptr.py's own copy set retry_on_4xx=False -- this proves
+        # that per-caller difference is still honored through the shared
+        # helper rather than lost in extraction.
+        resp = MagicMock(status_code=404, content=b"not found")
+        client = MagicMock()
+        client.request = AsyncMock(return_value=resp)
+        result = await fetch_bytes_with_retry(
+            client, _limiter(), "https://example.test", "label", retry_on_4xx=False,
+        )
+        assert result is None
+        client.request.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_headers_default_to_browser_headers_but_none_opts_out(self):
+        # house_ptr.py passes headers=None deliberately to keep its
+        # pre-extraction behavior (httpx's own bare defaults, never
+        # BROWSER_HEADERS) -- this proves that override actually reaches
+        # the request rather than the default silently winning anyway.
+        resp = MagicMock(status_code=200, content=b"ok")
+        client = MagicMock()
+        client.request = AsyncMock(return_value=resp)
+
+        await fetch_bytes_with_retry(client, _limiter(), "https://example.test", "label")
+        assert client.request.await_args.kwargs["headers"] == BROWSER_HEADERS
+
+        client.request.reset_mock()
+        await fetch_bytes_with_retry(client, _limiter(), "https://example.test", "label", headers=None)
+        assert client.request.await_args.kwargs["headers"] is None
 
 
 if __name__ == "__main__":
