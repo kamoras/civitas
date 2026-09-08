@@ -32,6 +32,7 @@ CD3 ballots are silently dropped -- normalize_party doesn't recognise
 that label, matching this system's existing behaviour elsewhere.
 """
 
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -209,8 +210,6 @@ class TestFetchConfirmedCandidatesMontana:
         # future-proof relative construction) is never far enough past
         # for _settled to clear, regardless of the real fixture's actual
         # 2026-06-02 date.
-        from datetime import UTC, datetime
-
         today = datetime.now(UTC).date()
         recent_html = MT_HTML.replace(
             "Primary Election - June 2, 2026",
@@ -280,3 +279,37 @@ class TestFetchConfirmedCandidatesNebraska:
 
         monkeypatch.setattr(tv, "fetch_with_retry", fake)
         assert await tv.fetch_confirmed_candidates(None, 2026, "NE", NE_SOURCE) is None
+
+    async def test_two_queries_disagreeing_on_election_date_fails_rather_than_silently_merging(self, monkeypatch):
+        # Real risk this guards against: Nebraska's SW and CG queries are
+        # two independent HTTP calls, not two views onto one already-
+        # fetched page. If they ever roll over to a different election on
+        # different schedules (cache lag, partial deploy), merging one
+        # page's contests with another's under a title that was only
+        # checked once (page[0]'s) would silently combine two different
+        # elections' results into one "confirmed" answer.
+        mismatched_cg = NE_CG_HTML.replace("Primary Election May 12, 2026", "Primary Election May 19, 2026")
+        _patched_by_type(monkeypatch, {"SW": NE_SW_HTML, "CG": mismatched_cg})
+        assert await tv.fetch_confirmed_candidates(None, 2026, "NE", NE_SOURCE) is None
+
+    async def test_missing_base_url_or_queries_returns_none_without_fetching(self, monkeypatch):
+        async def fake(client, rl, method, url, **kw):
+            raise AssertionError("should never fetch with an incomplete config")
+
+        monkeypatch.setattr(tv, "fetch_with_retry", fake)
+        assert await tv.fetch_confirmed_candidates(None, 2026, "NE", {"queries": NE_SOURCE["queries"]}) is None
+        assert await tv.fetch_confirmed_candidates(None, 2026, "NE", {"base_url": NE_SOURCE["base_url"]}) is None
+
+    async def test_a_configured_runoff_threshold_withholds_a_sub_threshold_leader(self, monkeypatch):
+        # Real data: CD2's Democratic field is a genuine 7-way race where
+        # the real leader, Denise Powell, took 22,516 of 58,004 votes cast
+        # (38.8%) -- MT and NE both nominate by plurality so this
+        # confirms today, but the fix that made runoff_threshold_pct read
+        # from config (rather than hardcoded None) needs a real field
+        # where a threshold actually changes the outcome to prove it's
+        # wired through, not just harmlessly present.
+        _patched_by_type(monkeypatch, {"SW": NE_SW_HTML, "CG": NE_CG_HTML})
+        result = await tv.fetch_confirmed_candidates(None, 2026, "NE", {**NE_SOURCE, "runoff_threshold_pct": 50.0})
+        assert {"office": "H", "district": 2, "party": "D", "last_name": "Powell"} not in result
+        # Unopposed/majority races elsewhere are untouched by the same threshold.
+        assert {"office": "H", "district": 1, "party": "R", "last_name": "Flood"} in result

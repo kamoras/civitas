@@ -207,30 +207,54 @@ def _contests(html: str) -> list[tuple[str, int | None, list[tuple[str, str, int
 async def fetch_confirmed_candidates(
     client: httpx.AsyncClient, year: int, state: str, source: dict,
 ) -> list[dict] | None:
-    base_url = source["base_url"]
-    queries = source["queries"]
+    base_url = source.get("base_url")
+    queries = source.get("queries")
+    if not base_url or not queries:
+        logger.warning("%s totalvote config is missing base_url/queries", state)
+        return None
 
+    # Nebraska's SW and CG queries are two independent HTTP calls, not two
+    # views onto one already-fetched page -- each one's OWN title is
+    # checked as it comes in, not just the first query's. Trusting only
+    # pages[0] would let a second query that rolled over to the general
+    # (or is still serving a stale cycle) on a different schedule than the
+    # first get merged in silently; disagreement between queries is a real
+    # site anomaly, so it fails closed (None, a genuine fetch_failed)
+    # rather than picking one page's story over the other's.
     pages = []
+    election = None
     for query in queries:
         url = f"{base_url}/resultsSW.aspx?type={query['type']}&map={query['map']}"
         html = await _fetch_html(client, url, f"{state} results {query['type']} {year}")
         if html is None:
             return None
+
+        page_election = _page_election(html)
+        if page_election is None:
+            if _GENERAL_RE.search(html):
+                # The site rolled over to the general on this same no-eid
+                # URL, exactly as this module's own docstring says it
+                # will -- a healthy "nothing to confirm from this stage"
+                # outcome, not a failure. Without this branch, every run
+                # after rollover would log a fetch-failed warning forever
+                # for a page that is working exactly as intended.
+                logger.info(
+                    "%s results page has moved on to the general election -- nothing to confirm here", state,
+                )
+                return []
+            logger.warning("%s results page title didn't match the expected shape", state)
+            return None
+        if election is None:
+            election = page_election
+        elif page_election != election:
+            logger.warning(
+                "%s totalvote queries disagree on the election date (%s vs %s) -- treating as unreliable",
+                state, election, page_election,
+            )
+            return None
+
         pages.append(html)
 
-    election = _page_election(pages[0])
-    if election is None:
-        if _GENERAL_RE.search(pages[0]):
-            # The site rolled over to the general on this same no-eid
-            # URL, exactly as this module's own docstring says it will --
-            # a healthy "nothing to confirm from this stage" outcome, not
-            # a failure. Without this branch, every run after rollover
-            # would log a fetch-failed warning forever for a page that
-            # is working exactly as intended.
-            logger.info("%s results page has moved on to the general election -- nothing to confirm here", state)
-            return []
-        logger.warning("%s results page title didn't match the expected shape", state)
-        return None
     page_year, held_on = election
     if page_year != year:
         logger.info("%s results page is for %d, not the requested %d -- not yet rolled over", state, page_year, year)
@@ -246,9 +270,10 @@ async def fetch_confirmed_candidates(
             for name, party, votes in candidates:
                 by_party.setdefault((office, district, party), []).append((name, votes))
 
+    runoff_threshold_pct = source.get("runoff_threshold_pct")
     results = []
     for (office, district, party), choices in by_party.items():
-        won = pick_nominee(choices, runoff_threshold_pct=None)
+        won = pick_nominee(choices, runoff_threshold_pct=runoff_threshold_pct)
         if won:
             results.append({"office": office, "district": district, "party": party, "last_name": won[0]})
     return results
