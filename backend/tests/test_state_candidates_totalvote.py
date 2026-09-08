@@ -47,7 +47,6 @@ distinct from a fetch failure or a wrong-cycle miss.
 
 from datetime import UTC, datetime
 from pathlib import Path
-from types import SimpleNamespace
 
 from app.pipeline.fetch import state_candidates_totalvote as tv
 
@@ -71,25 +70,21 @@ NE_SOURCE = {
 }
 
 
-def _resp(text):
-    return SimpleNamespace(text=text)
-
-
 def _patched_single(monkeypatch, html):
-    async def fake(client, rl, method, url, **kw):
-        return _resp(html)
+    async def fake(client, rl, url, label, **kw):
+        return html
 
-    monkeypatch.setattr(tv, "fetch_with_retry", fake)
+    monkeypatch.setattr(tv, "fetch_text_with_retry", fake)
 
 
 def _patched_by_type(monkeypatch, by_type):
-    async def fake(client, rl, method, url, **kw):
+    async def fake(client, rl, url, label, **kw):
         for type_param, html in by_type.items():
             if f"type={type_param}" in url:
-                return _resp(html)
+                return html
         raise AssertionError(f"unexpected url: {url}")
 
-    monkeypatch.setattr(tv, "fetch_with_retry", fake)
+    monkeypatch.setattr(tv, "fetch_text_with_retry", fake)
 
 
 class TestPageElection:
@@ -250,10 +245,10 @@ class TestFetchConfirmedCandidatesMontana:
         assert result == []
 
     async def test_fetch_failure_returns_none(self, monkeypatch):
-        async def fake(client, rl, method, url, **kw):
+        async def fake(client, rl, url, label, **kw):
             return None
 
-        monkeypatch.setattr(tv, "fetch_with_retry", fake)
+        monkeypatch.setattr(tv, "fetch_text_with_retry", fake)
         assert await tv.fetch_confirmed_candidates(None, 2026, "MT", MT_SOURCE) is None
 
     async def test_a_malformed_title_returns_none(self, monkeypatch):
@@ -302,12 +297,12 @@ class TestFetchConfirmedCandidatesNebraska:
         # If either half of Nebraska's two-query fetch fails, the result
         # is incomplete (e.g. Senate with no House) -- must read as a
         # real fetch failure, never a partial confirm.
-        async def fake(client, rl, method, url, **kw):
+        async def fake(client, rl, url, label, **kw):
             if "type=SW" in url:
-                return _resp(NE_SW_HTML)
+                return NE_SW_HTML
             return None
 
-        monkeypatch.setattr(tv, "fetch_with_retry", fake)
+        monkeypatch.setattr(tv, "fetch_text_with_retry", fake)
         assert await tv.fetch_confirmed_candidates(None, 2026, "NE", NE_SOURCE) is None
 
     async def test_two_queries_disagreeing_on_election_date_fails_rather_than_silently_merging(self, monkeypatch):
@@ -323,10 +318,10 @@ class TestFetchConfirmedCandidatesNebraska:
         assert await tv.fetch_confirmed_candidates(None, 2026, "NE", NE_SOURCE) is None
 
     async def test_missing_base_url_or_queries_returns_none_without_fetching(self, monkeypatch):
-        async def fake(client, rl, method, url, **kw):
+        async def fake(client, rl, url, label, **kw):
             raise AssertionError("should never fetch with an incomplete config")
 
-        monkeypatch.setattr(tv, "fetch_with_retry", fake)
+        monkeypatch.setattr(tv, "fetch_text_with_retry", fake)
         assert await tv.fetch_confirmed_candidates(None, 2026, "NE", {"queries": NE_SOURCE["queries"]}) is None
         assert await tv.fetch_confirmed_candidates(None, 2026, "NE", {"base_url": NE_SOURCE["base_url"]}) is None
 

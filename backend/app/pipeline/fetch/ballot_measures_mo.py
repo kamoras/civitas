@@ -43,7 +43,7 @@ import httpx
 from lxml import html as lxml_html
 
 from app.pipeline.fetch.ballot_measure_pdf_geometry import clean_text
-from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
+from app.pipeline.fetch.http_utils import fetch_text_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -173,13 +173,6 @@ def _parse_measure(number: str, elements: list) -> dict | None:
     }
 
 
-async def _get_text(client: httpx.AsyncClient, url: str, label: str) -> str | None:
-    resp = await fetch_with_retry(
-        client, _rate_limiter, "GET", url, timeout=30.0, log_label=label, headers=BROWSER_HEADERS,
-    )
-    return resp.text if resp is not None else None
-
-
 async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dict, str]] | None:
     """[(parsed, source_url), ...] for every measure on `year`'s general-
     election ballot, or None on a fetch/HTML-parse failure. [] if the
@@ -188,7 +181,7 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
     referred to November some cycles) or that heading's section names no
     measures."""
     url = URL_PATTERN.format(year=year)
-    page_html = await _get_text(client, url, f"MO ballot measures {year}")
+    page_html = await fetch_text_with_retry(client, _rate_limiter, url, f"MO ballot measures {year}")
     if page_html is None:
         return None
     try:

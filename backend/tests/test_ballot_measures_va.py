@@ -94,7 +94,7 @@ class TestEnglishPdfUrl:
 @pytest.mark.asyncio
 class TestFetchMeasures:
     async def test_real_shaped_flow_returns_all_three_questions(self, monkeypatch):
-        async def fake_get_text(client, url, label):
+        async def fake_get_text(client, rl, url, label, **kw):
             if url == va._INDEX_URL:
                 return _INDEX_HTML
             for n in ("1", "2", "3"):
@@ -108,7 +108,7 @@ class TestFetchMeasures:
                     return f"FIXTURE:{n}".encode()
             raise AssertionError(f"unexpected URL {url}")
 
-        monkeypatch.setattr(va, "_get_text", fake_get_text)
+        monkeypatch.setattr(va, "fetch_text_with_retry", fake_get_text)
         monkeypatch.setattr(va, "_get_bytes", fake_get_bytes)
         # _extract_text normally opens a real PDF; here it just decodes the
         # marker fetch_bytes returned, so this test exercises discovery
@@ -123,18 +123,18 @@ class TestFetchMeasures:
         assert all(url.endswith(".pdf") and "-ES" not in url for _parsed, url in results)
 
     async def test_index_fetch_failure_returns_none(self, monkeypatch):
-        async def fake_get_text(client, url, label):
+        async def fake_get_text(client, rl, url, label, **kw):
             return None
 
-        monkeypatch.setattr(va, "_get_text", fake_get_text)
+        monkeypatch.setattr(va, "fetch_text_with_retry", fake_get_text)
 
         assert await va.fetch_measures(None, 2026) is None
 
     async def test_no_questions_linked_returns_empty(self, monkeypatch):
-        async def fake_get_text(client, url, label):
+        async def fake_get_text(client, rl, url, label, **kw):
             return "<html>nothing relevant here</html>"
 
-        monkeypatch.setattr(va, "_get_text", fake_get_text)
+        monkeypatch.setattr(va, "fetch_text_with_retry", fake_get_text)
 
         assert await va.fetch_measures(None, 2026) == []
 
@@ -143,7 +143,7 @@ class TestFetchMeasures:
         # must NOT silently produce a shorter, still-"successful" list —
         # that would get cached as if it were the complete ballot for 72h
         # with no signal anything was missing (see module docstring).
-        async def fake_get_text(client, url, label):
+        async def fake_get_text(client, rl, url, label, **kw):
             if url == va._INDEX_URL:
                 return _INDEX_HTML
             if "question-2/" in url:
@@ -159,7 +159,7 @@ class TestFetchMeasures:
                     return f"FIXTURE:{n}".encode()
             raise AssertionError(f"unexpected URL {url}")
 
-        monkeypatch.setattr(va, "_get_text", fake_get_text)
+        monkeypatch.setattr(va, "fetch_text_with_retry", fake_get_text)
         monkeypatch.setattr(va, "_get_bytes", fake_get_bytes)
         monkeypatch.setattr(va, "_extract_text", lambda raw: FIXTURE[raw.decode().split(":")[1]])
 
@@ -171,7 +171,7 @@ class TestFetchMeasures:
             "Question 1 (again, different URL)</a>"
         )
 
-        async def fake_get_text(client, url, label):
+        async def fake_get_text(client, rl, url, label, **kw):
             if url == va._INDEX_URL:
                 return duplicate_index_html
             for n in ("1", "2", "3"):
@@ -185,7 +185,7 @@ class TestFetchMeasures:
                     return f"FIXTURE:{n}".encode()
             raise AssertionError(f"unexpected URL {url}")
 
-        monkeypatch.setattr(va, "_get_text", fake_get_text)
+        monkeypatch.setattr(va, "fetch_text_with_retry", fake_get_text)
         monkeypatch.setattr(va, "_get_bytes", fake_get_bytes)
         monkeypatch.setattr(va, "_extract_text", lambda raw: FIXTURE[raw.decode().split(":")[1]])
 

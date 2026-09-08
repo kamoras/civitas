@@ -94,7 +94,7 @@ from datetime import datetime
 import httpx
 from lxml import html as lxml_html
 
-from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
+from app.pipeline.fetch.http_utils import fetch_text_with_retry
 from app.pipeline.fetch.state_candidates_common import normalize_party, parse_office, pick_nominee, surname
 from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _settled
 from app.pipeline.rate_limiter import RateLimiter
@@ -143,13 +143,6 @@ def _xpath_class(name: str) -> str:
     so a future vendor CSS change can't reintroduce the gap in just one
     of them."""
     return f'contains(concat(" ", normalize-space(@class), " "), " {name} ")'
-
-
-async def _fetch_html(client: httpx.AsyncClient, url: str, label: str) -> str | None:
-    resp = await fetch_with_retry(
-        client, _rate_limiter, "GET", url, timeout=30.0, log_label=label, headers=BROWSER_HEADERS,
-    )
-    return resp.text if resp is not None else None
 
 
 def _page_election(html: str) -> tuple[int, str] | None:
@@ -225,7 +218,7 @@ async def fetch_confirmed_candidates(
     election = None
     for query in queries:
         url = f"{base_url}/resultsSW.aspx?type={query['type']}&map={query['map']}"
-        html = await _fetch_html(client, url, f"{state} results {query['type']} {year}")
+        html = await fetch_text_with_retry(client, _rate_limiter, url, f"{state} results {query['type']} {year}")
         if html is None:
             return None
 

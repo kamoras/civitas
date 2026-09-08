@@ -94,11 +94,11 @@ class TestOriginFor:
 @pytest.mark.asyncio
 class TestFetchMeasures:
     async def test_real_shaped_flow_returns_all_three(self, monkeypatch):
-        async def fake_get_text(client, url, label):
+        async def fake_get_text(client, rl, url, label, **kw):
             assert url == mo.URL_PATTERN.format(year=2026)
             return FIXTURE_HTML
 
-        monkeypatch.setattr(mo, "_get_text", fake_get_text)
+        monkeypatch.setattr(mo, "fetch_text_with_retry", fake_get_text)
 
         results = await mo.fetch_measures(None, 2026)
 
@@ -107,10 +107,10 @@ class TestFetchMeasures:
         assert all(url == mo.URL_PATTERN.format(year=2026) for _parsed, url in results)
 
     async def test_fetch_failure_returns_none(self, monkeypatch):
-        async def fake_get_text(client, url, label):
+        async def fake_get_text(client, rl, url, label, **kw):
             return None
 
-        monkeypatch.setattr(mo, "_get_text", fake_get_text)
+        monkeypatch.setattr(mo, "fetch_text_with_retry", fake_get_text)
 
         assert await mo.fetch_measures(None, 2026) is None
 
@@ -118,17 +118,17 @@ class TestFetchMeasures:
         # lxml.html.fromstring raises ParserError on a genuinely empty
         # document (it's otherwise extremely forgiving of "weird" HTML,
         # so this is the realistic way the parse step itself fails).
-        async def fake_get_text(client, url, label):
+        async def fake_get_text(client, rl, url, label, **kw):
             return ""
 
-        monkeypatch.setattr(mo, "_get_text", fake_get_text)
+        monkeypatch.setattr(mo, "fetch_text_with_retry", fake_get_text)
 
         assert await mo.fetch_measures(None, 2026) is None
 
     async def test_no_general_election_heading_returns_empty(self, monkeypatch):
-        async def fake_get_text(client, url, label):
+        async def fake_get_text(client, rl, url, label, **kw):
             return "<html><body><h2>Nothing relevant this cycle</h2></body></html>"
 
-        monkeypatch.setattr(mo, "_get_text", fake_get_text)
+        monkeypatch.setattr(mo, "fetch_text_with_retry", fake_get_text)
 
         assert await mo.fetch_measures(None, 2026) == []

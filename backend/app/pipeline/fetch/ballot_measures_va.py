@@ -63,7 +63,7 @@ import httpx
 import pdfplumber
 
 from app.pipeline.fetch.ballot_measure_pdf_geometry import clean_text
-from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
+from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_text_with_retry, fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -120,13 +120,6 @@ _BALLOT_QUESTION_RE = re.compile(
 )
 
 _rate_limiter = RateLimiter(rps=1.0)
-
-
-async def _get_text(client: httpx.AsyncClient, url: str, label: str) -> str | None:
-    resp = await fetch_with_retry(
-        client, _rate_limiter, "GET", url, timeout=30.0, log_label=label, headers=BROWSER_HEADERS,
-    )
-    return resp.text if resp is not None else None
 
 
 async def _get_bytes(client: httpx.AsyncClient, url: str, label: str) -> bytes | None:
@@ -212,7 +205,7 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
     — verified real case: April 2026's special-election amendment uses a
     different URL shape entirely and is correctly not matched by
     _QUESTION_LINK_RE)."""
-    index_html = await _get_text(client, _INDEX_URL, "VA referenda index")
+    index_html = await fetch_text_with_retry(client, _rate_limiter, _INDEX_URL, "VA referenda index")
     if index_html is None:
         return None
 
@@ -232,7 +225,7 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
 
     results = []
     for number, question_url in sorted(question_urls.items(), key=lambda kv: int(kv[0])):
-        page_html = await _get_text(client, question_url, f"VA question {number} page")
+        page_html = await fetch_text_with_retry(client, _rate_limiter, question_url, f"VA question {number} page")
         if page_html is None:
             logger.warning("VA question %s page fetch failed", number)
             return None
