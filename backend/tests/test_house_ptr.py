@@ -48,7 +48,7 @@ def _sample_zip() -> bytes:
 @pytest.mark.asyncio
 async def test_fetch_ptr_filing_index_filters_to_ptr_only(db_session):
     with patch(
-        "app.pipeline.fetch.house_ptr._fetch_bytes_with_retry", new_callable=AsyncMock
+        "app.pipeline.fetch.house_ptr.fetch_bytes_with_retry", new_callable=AsyncMock
     ) as mock_fetch:
         mock_fetch.return_value = _sample_zip()
         filings = await fetch_ptr_filing_index(None, db_session, 2026)
@@ -64,7 +64,7 @@ async def test_fetch_ptr_filing_index_filters_to_ptr_only(db_session):
 @pytest.mark.asyncio
 async def test_fetch_ptr_filing_index_bad_zip_returns_empty(db_session):
     with patch(
-        "app.pipeline.fetch.house_ptr._fetch_bytes_with_retry", new_callable=AsyncMock
+        "app.pipeline.fetch.house_ptr.fetch_bytes_with_retry", new_callable=AsyncMock
     ) as mock_fetch:
         mock_fetch.return_value = b"not a zip file"
         filings = await fetch_ptr_filing_index(None, db_session, 2026)
@@ -74,7 +74,7 @@ async def test_fetch_ptr_filing_index_bad_zip_returns_empty(db_session):
 @pytest.mark.asyncio
 async def test_fetch_ptr_filing_index_fetch_failure_returns_empty(db_session):
     with patch(
-        "app.pipeline.fetch.house_ptr._fetch_bytes_with_retry", new_callable=AsyncMock
+        "app.pipeline.fetch.house_ptr.fetch_bytes_with_retry", new_callable=AsyncMock
     ) as mock_fetch:
         mock_fetch.return_value = None
         filings = await fetch_ptr_filing_index(None, db_session, 2026)
@@ -92,7 +92,7 @@ async def test_fetch_and_parse_ptr_tags_rows(db_session):
         )
     ]
     with patch(
-        "app.pipeline.fetch.house_ptr._fetch_bytes_with_retry", new_callable=AsyncMock
+        "app.pipeline.fetch.house_ptr.fetch_bytes_with_retry", new_callable=AsyncMock
     ) as mock_fetch, patch(
         "app.pipeline.fetch.house_ptr.parse_pdf_bytes"
     ) as mock_parse:
@@ -110,7 +110,7 @@ async def test_fetch_and_parse_ptr_tags_rows(db_session):
 async def test_fetch_and_parse_ptr_pdf_fetch_failure_returns_empty(db_session):
     filing = {"doc_id": "20026590", "pdf_url": "https://example.com/20026590.pdf"}
     with patch(
-        "app.pipeline.fetch.house_ptr._fetch_bytes_with_retry", new_callable=AsyncMock
+        "app.pipeline.fetch.house_ptr.fetch_bytes_with_retry", new_callable=AsyncMock
     ) as mock_fetch:
         mock_fetch.return_value = None
         rows = await fetch_and_parse_ptr(None, db_session, filing)
@@ -121,7 +121,7 @@ async def test_fetch_and_parse_ptr_pdf_fetch_failure_returns_empty(db_session):
 async def test_fetch_and_parse_ptr_parse_exception_returns_empty_not_raises(db_session):
     filing = {"doc_id": "20026590", "pdf_url": "https://example.com/20026590.pdf"}
     with patch(
-        "app.pipeline.fetch.house_ptr._fetch_bytes_with_retry", new_callable=AsyncMock
+        "app.pipeline.fetch.house_ptr.fetch_bytes_with_retry", new_callable=AsyncMock
     ) as mock_fetch, patch(
         "app.pipeline.fetch.house_ptr.parse_pdf_bytes"
     ) as mock_parse:

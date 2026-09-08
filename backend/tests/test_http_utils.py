@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.pipeline.fetch.http_utils import (
+    fetch_bytes_with_retry,
     fetch_json_with_retry,
     fetch_text_with_retry,
     fetch_with_retry,
@@ -215,6 +216,43 @@ class TestFetchTextWithRetry:
             client, _limiter(), "https://example.test", "label", retries=0,
         )
         assert result is None
+
+
+class TestFetchBytesWithRetry:
+    """Extracted from three copies of the same fetch-then-return-content
+    wrapper (ballot_measures_va.py's `_get_bytes`, house_ptr.py's
+    `_fetch_bytes_with_retry`, state_candidates_wy.py's `_fetch_zip`)."""
+
+    @pytest.mark.asyncio
+    async def test_returns_the_response_content_on_success(self):
+        resp = MagicMock(status_code=200, content=b"\x50\x4b\x03\x04fake-zip-bytes")
+        client = MagicMock()
+        client.request = AsyncMock(return_value=resp)
+        result = await fetch_bytes_with_retry(client, _limiter(), "https://example.test", "label")
+        assert result == b"\x50\x4b\x03\x04fake-zip-bytes"
+
+    @pytest.mark.asyncio
+    async def test_a_fetch_failure_returns_none(self):
+        client = MagicMock()
+        client.request = AsyncMock(side_effect=Exception("boom"))
+        result = await fetch_bytes_with_retry(
+            client, _limiter(), "https://example.test", "label", retries=0,
+        )
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_retry_kwargs_forward_to_fetch_with_retry(self):
+        # house_ptr.py's own copy set retry_on_4xx=False -- this proves
+        # that per-caller difference is still honored through the shared
+        # helper rather than lost in extraction.
+        resp = MagicMock(status_code=404, content=b"not found")
+        client = MagicMock()
+        client.request = AsyncMock(return_value=resp)
+        result = await fetch_bytes_with_retry(
+            client, _limiter(), "https://example.test", "label", retry_on_4xx=False,
+        )
+        assert result is None
+        client.request.assert_awaited_once()
 
 
 if __name__ == "__main__":

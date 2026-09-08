@@ -260,6 +260,40 @@ async def fetch_text_with_retry(
     return resp.text if resp is not None else None
 
 
+async def fetch_bytes_with_retry(
+    client: httpx.AsyncClient,
+    rate_limiter: RateLimiter,
+    url: str,
+    label: str,
+    *,
+    headers: dict = BROWSER_HEADERS,
+    timeout: float = 60.0,
+    **retry_kwargs,
+) -> bytes | None:
+    """fetch_with_retry + `.content`, for the common case of a GET that
+    just wants the raw response body (a PDF, a zip, ...) or None.
+    Extracted once ballot_measures_va.py's `_get_bytes`, house_ptr.py's
+    `_fetch_bytes_with_retry`, and state_candidates_wy.py each carried
+    their own copy of this same fetch-then-return-content wrapper — this
+    module's own "3 strikes" rule (see fetch_json_with_retry above).
+    Defaults to a longer 60s timeout than fetch_text_with_retry's 30s,
+    matching what every one of those three callers already used for a
+    binary download.
+
+    `**retry_kwargs` forwards to fetch_with_retry, same as
+    fetch_json_with_retry/fetch_text_with_retry — house_ptr.py's own
+    copy set `rate_limit_backoff_multiplier=2.0, retry_on_4xx=False`,
+    which is exactly the kind of per-caller difference this parameter
+    exists to carry rather than force every caller onto one fixed
+    policy.
+    """
+    resp = await fetch_with_retry(
+        client, rate_limiter, "GET", url, timeout=timeout, log_label=label, headers=headers,
+        **retry_kwargs,
+    )
+    return resp.content if resp is not None else None
+
+
 async def fetch_with_retry_requests(
     rate_limiter: RateLimiter,
     method: str,
