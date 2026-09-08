@@ -68,6 +68,36 @@ class TestContests:
         districts = sorted({d for office, d, _ in contests if office == "H"})
         assert districts == [1, 2]
 
+    def test_a_write_in_row_is_excluded(self):
+        # Constructed, self-contained (not spliced into the real
+        # fixture, which uses CRLF line endings that make byte-exact
+        # string surgery fragile): ENR platforms commonly render a
+        # write-in tally with the exact same markup as a real candidate
+        # row -- not present in Montana's real 2026 federal field, so
+        # this is a defensive-guard test, matching the real DOM shape
+        # confirmed against fixtures_mt_federal_results.html.
+        html = """
+        <div class="wrapper-inside wrapper-border">
+            <div class="display-results-box-a"><h1>UNITED STATES SENATOR</h1></div>
+            <div class="section group">
+                <div class="col display-results-box-d"><h1>KURT ALME</h1><h2 class="Republican">Republican</h2></div>
+                <div class="col display-results-box-f"><h1>128,716</h1></div>
+            </div>
+            <div class="section group">
+                <div class="col display-results-box-d"><h1>WRITE-IN</h1><h2 class="Republican">Republican</h2></div>
+                <div class="col display-results-box-f"><h1>12</h1></div>
+            </div>
+            <div class="section group">
+                <div class="col display-results-box-totalvotes"><h2>total votes</h2></div>
+                <div class="col display-results-box-total"><h2>128,728</h2></div>
+            </div>
+        </div>
+        """
+        contests = mt._contests(html)
+        assert len(contests) == 1
+        names = [name for name, _, _ in contests[0][2]]
+        assert names == ["ALME"]
+
 
 class TestFetchConfirmedCandidates:
     async def test_real_primary_resolves_to_the_real_certified_winners(self, monkeypatch):
@@ -101,6 +131,19 @@ class TestFetchConfirmedCandidates:
         # year's label.
         _patched(monkeypatch, REAL_HTML)
         result = await mt.fetch_confirmed_candidates(None, 2028, "MT", {})
+        assert result == []
+
+    async def test_a_page_that_has_moved_on_to_the_general_confirms_nothing_but_does_not_fail(self, monkeypatch):
+        # The bug this guards against: once the site rolls over to the
+        # November general on this same no-eid URL (which this module's
+        # own docstring says it will), the title no longer contains
+        # "Primary Election" -- that must read as a healthy "nothing to
+        # confirm from this stage", not the same fetch_failed status a
+        # genuine site redesign gets, which would otherwise fire on
+        # every run forever after a normal, expected rollover.
+        general_html = "<html><body><h2>General Election - November 3, 2026</h2></body></html>"
+        _patched(monkeypatch, general_html)
+        result = await mt.fetch_confirmed_candidates(None, 2026, "MT", {})
         assert result == []
 
     async def test_not_yet_settled_confirms_nothing(self, monkeypatch):

@@ -31,14 +31,15 @@ state law — so `runoff_threshold_pct` is null.
 
 No certification flag is published anywhere on the results page itself
 (same shape as AR/CT/TN/FL in this system), so `settle_days` is the
-only freshness gate, left at this system's DEFAULT_SETTLE_DAYS (30)
-rather than a state-specific override: Montana's own 2026 Primary
-Reconciliation Report (sosmt.gov/elections/results/) was still being
-updated as late as 7/17/2026 — 45 days after the June 2 primary — which
-argues for the wider default over AR/CT's tighter 21-day override, not
-a specific statutory deadline (none found in the time available for
-this research pass, so this is a deliberately conservative default, not
-a cited certification date).
+only freshness gate. Set to 45 in state_candidate_sources.json — not
+this system's DEFAULT_SETTLE_DAYS (30), and wider than AR/CT's 21 —
+because Montana's own 2026 Primary Reconciliation Report
+(sosmt.gov/elections/results/) was still being updated as late as
+7/17/2026, exactly 45 days after the June 2 primary: real, observed
+evidence of how long this state's own count kept moving, not a cited
+statutory deadline (none found in the time available for this research
+pass, so 45 is the directly-observed number itself, not a rounder or
+more conservative one built on top of it).
 
 Verified live 2026-09-06 against the real, certified 2026 primary (page
 dated "Results last updated: 6/29/2026", 100% precincts reporting):
@@ -78,6 +79,37 @@ _TITLE_RE = re.compile(
     r"Primary\s+Election\s*-\s*([A-Za-z]+\s+\d{1,2},\s+\d{4})",
 )
 
+# The same no-eid URL this module reads also serves the November
+# general once Montana's site rolls over to it -- a well-formed page,
+# not a redesign. Recognised explicitly so that transition reads as
+# "nothing to confirm from this stage" (like a primary not yet
+# published) rather than a fetch failure that would otherwise fire on
+# every run indefinitely, forever re-warning about a page that is
+# working exactly as intended.
+_GENERAL_RE = re.compile(r"General\s+Election", re.IGNORECASE)
+
+# ENR platforms commonly render a "Write-In" tally as its own row with
+# the same markup as a real candidate -- confirmed elsewhere in this
+# system as a real shape to guard against (state_candidates_tn.py,
+# state_candidates_canvass_xml.py). Not seen on Montana's real 2026
+# federal contests (no write-in drew enough votes to appear), so this
+# is a defensive guard against an untested-but-plausible shape, not a
+# fixture-driven fix.
+_WRITE_IN_RE = re.compile(r"write.?in", re.IGNORECASE)
+
+
+def _xpath_class(name: str) -> str:
+    """Whole-token class-match XPath predicate for `name` -- bare
+    `contains(@class, "foo")` would also match a future sibling class
+    like "foo-detail", silently grabbing the wrong element. Applied to
+    every class check in this module, not just the outer wrapper query
+    (which needed this from the start since "wrapper-inside" is itself
+    a substring of nothing else today, but a vendor CSS change adding
+    e.g. "wrapper-inside-mobile" would otherwise silently double-match),
+    so a future vendor CSS change can't reintroduce the gap in just one
+    of them."""
+    return f'contains(concat(" ", normalize-space(@class), " "), " {name} ")'
+
 
 async def _fetch_html(client: httpx.AsyncClient, url: str, label: str) -> str | None:
     resp = await fetch_with_retry(
@@ -106,10 +138,8 @@ def _contests(html: str) -> list[tuple[str, int | None, list[tuple[str, str, int
     federal contest block on the page."""
     tree = lxml_html.fromstring(html)
     contests = []
-    for wrapper in tree.xpath(
-        '//div[contains(concat(" ", normalize-space(@class), " "), " wrapper-inside ")]',
-    ):
-        headers = wrapper.xpath('.//div[contains(@class, "display-results-box-a")]/h1')
+    for wrapper in tree.xpath(f"//div[{_xpath_class('wrapper-inside')}]"):
+        headers = wrapper.xpath(f'.//div[{_xpath_class("display-results-box-a")}]/h1')
         if not headers:
             continue
         office_district = parse_office(headers[0].text_content().strip())
@@ -118,17 +148,18 @@ def _contests(html: str) -> list[tuple[str, int | None, list[tuple[str, str, int
         office, district = office_district
 
         candidates = []
-        for section in wrapper.xpath(
-            './/div[contains(concat(" ", normalize-space(@class), " "), " section group ")]',
-        ):
-            name_el = section.xpath('.//div[contains(@class, "display-results-box-d")]/h1')
-            party_el = section.xpath('.//div[contains(@class, "display-results-box-d")]/h2')
-            votes_el = section.xpath('.//div[contains(@class, "display-results-box-f")]/h1')
+        for section in wrapper.xpath(f'.//div[{_xpath_class("section")} and {_xpath_class("group")}]'):
+            name_el = section.xpath(f'.//div[{_xpath_class("display-results-box-d")}]/h1')
+            party_el = section.xpath(f'.//div[{_xpath_class("display-results-box-d")}]/h2')
+            votes_el = section.xpath(f'.//div[{_xpath_class("display-results-box-f")}]/h1')
             if not (name_el and party_el and votes_el):
                 continue  # the "total votes" row has no display-results-box-d at all
+            raw_name = name_el[0].text_content().strip()
+            if _WRITE_IN_RE.search(raw_name):
+                continue
             party = normalize_party(party_el[0].text_content().strip())
             votes_text = votes_el[0].text_content().strip().replace(",", "")
-            name = surname(name_el[0].text_content().strip())
+            name = surname(raw_name)
             if party is None or not name or not votes_text.isdigit():
                 continue
             candidates.append((name, party, int(votes_text)))
@@ -146,6 +177,15 @@ async def fetch_confirmed_candidates(
 
     election = _page_election(html)
     if election is None:
+        if _GENERAL_RE.search(html):
+            # The site rolled over to the general on this same no-eid
+            # URL, exactly as its own docstring says it will -- a
+            # healthy "nothing to confirm from this stage" outcome, not
+            # a failure. Without this branch, every run after rollover
+            # would log a fetch-failed warning forever for a page that
+            # is working exactly as intended.
+            logger.info("MT results page has moved on to the general election -- nothing to confirm here")
+            return []
         logger.warning("MT results page title didn't match the expected shape")
         return None
     page_year, held_on = election
