@@ -106,7 +106,7 @@ tomli_w==1.2.0
 torch==2.14.0
 tqdm==4.67.3
 transformers==5.16.1
-typer==0.27.1
+typer==0.27.2
 typing-inspection==0.4.4
 typing_extensions==4.15.0
 tzlocal==5.4.4
