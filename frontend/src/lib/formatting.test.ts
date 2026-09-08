@@ -207,7 +207,7 @@ describe("describeDaysLeft", () => {
   });
 
   it("treats an offset-less timestamp as UTC, not viewer-local", () => {
-    // The suite runs in America/Los_Angeles (see vitest.config.ts). Parsed as
+    // The suite runs in America/Los_Angeles (see vitest.config.mts). Parsed as
     // local time this would be 7-8h later and could round to a different day.
     expect(describeDaysLeft("2026-08-21T00:00:00", asOf)).toBe(
       describeDaysLeft("2026-08-21T00:00:00Z", asOf)
