@@ -16,7 +16,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.pipeline.fetch.http_utils import fetch_json_with_retry, fetch_with_retry, fetch_with_retry_requests
+from app.pipeline.fetch.http_utils import (
+    fetch_json_with_retry,
+    fetch_text_with_retry,
+    fetch_with_retry,
+    fetch_with_retry_requests,
+)
 from app.pipeline.rate_limiter import RateLimiter
 
 
@@ -187,6 +192,29 @@ class TestFetchJsonWithRetry:
     # retry is the .json() parse and its error handling, both covered
     # above; fetch_with_retry's own retry/failure behavior is covered by
     # TestFetchWithRetryHangBackstop.
+
+
+class TestFetchTextWithRetry:
+    """Extracted from three byte-identical per-module _get_text/_fetch_html
+    copies (ballot_measures_mo.py, ballot_measures_va.py,
+    state_candidates_totalvote.py)."""
+
+    @pytest.mark.asyncio
+    async def test_returns_the_response_text_on_success(self):
+        resp = MagicMock(status_code=200, text="<html>hello</html>")
+        client = MagicMock()
+        client.request = AsyncMock(return_value=resp)
+        result = await fetch_text_with_retry(client, _limiter(), "https://example.test", "label")
+        assert result == "<html>hello</html>"
+
+    @pytest.mark.asyncio
+    async def test_a_fetch_failure_returns_none(self):
+        client = MagicMock()
+        client.request = AsyncMock(side_effect=Exception("boom"))
+        result = await fetch_text_with_retry(
+            client, _limiter(), "https://example.test", "label", retries=0,
+        )
+        assert result is None
 
 
 if __name__ == "__main__":

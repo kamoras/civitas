@@ -233,6 +233,33 @@ async def fetch_json_with_retry(
         return None
 
 
+async def fetch_text_with_retry(
+    client: httpx.AsyncClient,
+    rate_limiter: RateLimiter,
+    url: str,
+    label: str,
+    *,
+    headers: dict = BROWSER_HEADERS,
+    timeout: float = 30.0,
+    **retry_kwargs,
+) -> str | None:
+    """fetch_with_retry + `.text`, for the common case of a GET that just
+    wants the response body as a string or None. Extracted once
+    ballot_measures_mo.py, ballot_measures_va.py, and state_candidates_
+    totalvote.py each carried their own byte-identical copy of this same
+    fetch-then-return-text wrapper — this module's own "3 strikes" rule
+    for when a helper earns extraction (see fetch_json_with_retry above).
+
+    `**retry_kwargs` forwards to fetch_with_retry, same as
+    fetch_json_with_retry.
+    """
+    resp = await fetch_with_retry(
+        client, rate_limiter, "GET", url, timeout=timeout, log_label=label, headers=headers,
+        **retry_kwargs,
+    )
+    return resp.text if resp is not None else None
+
+
 async def fetch_with_retry_requests(
     rate_limiter: RateLimiter,
     method: str,
