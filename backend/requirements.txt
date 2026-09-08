@@ -104,7 +104,7 @@ tokenizers==0.23.2
 tomli==2.4.0
 tomli_w==1.2.0
 torch==2.14.0
-tqdm==4.67.3
+tqdm==4.70.0
 transformers==5.16.1
 typer==0.27.2
 typing-inspection==0.4.4
