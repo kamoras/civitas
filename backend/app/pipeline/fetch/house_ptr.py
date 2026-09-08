@@ -50,9 +50,13 @@ async def fetch_ptr_filing_index(
     if cached is not None:
         return cached
 
+    # headers=None: this site has always been fetched with httpx's own
+    # bare defaults, never BROWSER_HEADERS (fetch_bytes_with_retry's own
+    # default) -- preserved explicitly rather than silently picked up as
+    # a side effect of sharing this helper with callers that do want it.
     zip_bytes = await fetch_bytes_with_retry(
         client, _rate_limiter, f"{CLERK_BASE}/financial-pdfs/{year}FD.zip", "House Clerk",
-        rate_limit_backoff_multiplier=2.0, retry_on_4xx=False,
+        headers=None, rate_limit_backoff_multiplier=2.0, retry_on_4xx=False,
     )
     if zip_bytes is None:
         return []
@@ -108,7 +112,7 @@ async def fetch_and_parse_ptr(
 
     pdf_bytes = await fetch_bytes_with_retry(
         client, _rate_limiter, filing["pdf_url"], "House Clerk",
-        rate_limit_backoff_multiplier=2.0, retry_on_4xx=False,
+        headers=None, rate_limit_backoff_multiplier=2.0, retry_on_4xx=False,
     )
     if pdf_bytes is None:
         return []

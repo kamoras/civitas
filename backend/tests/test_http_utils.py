@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.pipeline.fetch.http_utils import (
+    BROWSER_HEADERS,
     fetch_bytes_with_retry,
     fetch_json_with_retry,
     fetch_text_with_retry,
@@ -253,6 +254,23 @@ class TestFetchBytesWithRetry:
         )
         assert result is None
         client.request.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_headers_default_to_browser_headers_but_none_opts_out(self):
+        # house_ptr.py passes headers=None deliberately to keep its
+        # pre-extraction behavior (httpx's own bare defaults, never
+        # BROWSER_HEADERS) -- this proves that override actually reaches
+        # the request rather than the default silently winning anyway.
+        resp = MagicMock(status_code=200, content=b"ok")
+        client = MagicMock()
+        client.request = AsyncMock(return_value=resp)
+
+        await fetch_bytes_with_retry(client, _limiter(), "https://example.test", "label")
+        assert client.request.await_args.kwargs["headers"] == BROWSER_HEADERS
+
+        client.request.reset_mock()
+        await fetch_bytes_with_retry(client, _limiter(), "https://example.test", "label", headers=None)
+        assert client.request.await_args.kwargs["headers"] is None
 
 
 if __name__ == "__main__":
