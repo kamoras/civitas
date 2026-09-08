@@ -1,5 +1,5 @@
 """Tests for the "TotalVote" vendor strategy (state_candidates_totalvote.py),
-shared by Montana and Nebraska.
+shared by Montana, Nebraska, and South Dakota.
 
 fixtures_mt_federal_results.html is REAL -- a trimmed capture of
 electionresults.mt.gov's resultsSW.aspx?type=FED&map=CTY, fetched live
@@ -30,6 +30,19 @@ unopposed), Adrian Smith (CD3 R, 2-way field), Becky Kelly Stille (CD3
 D, unopposed). Real "Legal Marijuana Now" candidates on the Senate and
 CD3 ballots are silently dropped -- normalize_party doesn't recognise
 that label, matching this system's existing behaviour elsewhere.
+
+fixtures_sd_statewide_results.html is REAL -- a trimmed capture of
+electionresults.sd.gov's resultsSW.aspx?type=SWR&map=CTY, fetched live
+2026-09-07 (page title "Primary Election July 28, 2026", also boilerplate-
+labelled "Unofficial Results" like Nebraska's). It carries exactly ONE
+contest block for the real 2026 cycle -- Governor, whose office label
+carries an appended "(Run-Off required pending outcome of official
+canvass)" span parse_office must still correctly refuse as non-federal.
+South Dakota's real 2026 federal primaries (Senate and House, both
+parties) were ALL uncontested -- verified live against the SOS's own
+official candidate list -- so this fixture proves the real "the page
+loads fine but there is genuinely nothing federal to confirm" case,
+distinct from a fetch failure or a wrong-cycle miss.
 """
 
 from datetime import UTC, datetime
@@ -42,10 +55,15 @@ FIXTURES = Path(__file__).parent
 MT_HTML = (FIXTURES / "fixtures_mt_federal_results.html").read_text()
 NE_SW_HTML = (FIXTURES / "fixtures_ne_statewide_results.html").read_text()
 NE_CG_HTML = (FIXTURES / "fixtures_ne_congressional_results.html").read_text()
+SD_HTML = (FIXTURES / "fixtures_sd_statewide_results.html").read_text()
 
 MT_SOURCE = {
     "base_url": "https://electionresults.mt.gov",
     "queries": [{"type": "FED", "map": "CTY"}],
+}
+SD_SOURCE = {
+    "base_url": "https://electionresults.sd.gov",
+    "queries": [{"type": "SWR", "map": "CTY"}],
 }
 NE_SOURCE = {
     "base_url": "https://electionresults.nebraska.gov",
@@ -80,6 +98,9 @@ class TestPageElection:
 
     def test_reads_the_real_nebraska_title_with_no_hyphen(self):
         assert tv._page_election(NE_SW_HTML) == (2026, "2026-05-12")
+
+    def test_reads_the_real_south_dakota_title(self):
+        assert tv._page_election(SD_HTML) == (2026, "2026-07-28")
 
     def test_a_page_with_no_matching_title_returns_none(self):
         assert tv._page_election("<html><body>nothing here</body></html>") is None
@@ -125,6 +146,15 @@ class TestContests:
         senate = [c for c in tv._contests(NE_SW_HTML) if c[0] == "S"]
         parties = sorted({cand[1] for _, _, cands in senate for cand in cands})
         assert parties == ["D", "R"]
+
+    def test_south_dakotas_only_real_contest_is_dropped_as_non_federal(self):
+        # Real shape: the office label carries an appended recount-status
+        # span -- "Governor(Run-Off required pending outcome of official
+        # canvass)" once tags are stripped -- that a naive exact-match
+        # check on the office text would break on. parse_office's
+        # regex-search approach must still recognise this isn't federal
+        # and correctly find zero contests, not crash or misclassify it.
+        assert tv._contests(SD_HTML) == []
 
     def test_a_write_in_row_is_excluded(self):
         # Constructed, self-contained (not spliced into the real
@@ -313,3 +343,16 @@ class TestFetchConfirmedCandidatesNebraska:
         assert {"office": "H", "district": 2, "party": "D", "last_name": "Powell"} not in result
         # Unopposed/majority races elsewhere are untouched by the same threshold.
         assert {"office": "H", "district": 1, "party": "R", "last_name": "Flood"} in result
+
+
+class TestFetchConfirmedCandidatesSouthDakota:
+    async def test_a_real_settled_cycle_with_no_contested_federal_primaries_confirms_nothing(self, monkeypatch):
+        # Real, verified 2026 outcome: South Dakota's only real contest
+        # this cycle (Governor) is non-federal, and its actual Senate/
+        # House primaries were all uncontested -- fetch_confirmed_
+        # candidates must resolve this settled, healthy page to an empty
+        # list, not a fetch failure, since there is genuinely nothing to
+        # confirm rather than something that failed to be read.
+        _patched_single(monkeypatch, SD_HTML)
+        result = await tv.fetch_confirmed_candidates(None, 2026, "SD", {**SD_SOURCE, "settle_days": 1})
+        assert result == []
