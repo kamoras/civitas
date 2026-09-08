@@ -1,0 +1,1676 @@
+                    <a id="lnkDateHeader" class="col header-box1 header-box1-alt" href="Default.aspx?"><h1>Unofficial Results</h1><h2>Primary Election May 12, 2026</h2>
+                        <div class="last-updated">
+                            <span>Results last updated:</span><span>6/1/2026 2:27 PM CT</span></div>
+                    </a>
+                    <!--End Header Box 1-->
+                    <div class="col header-box2">
+                        <div class="header-box-content-top">
+                            <h1>
+                                <a id="lnkVoterTurnout" class="button" href="VoterTurnoutDetails.aspx?map=TURN">Statewide Voter Turnout</a>
+                            </h1>
+                        </div>
+                        <!--End header-box2-content-top-->
+                        <div class="header-box-content-bottom">
+                            
+                            <div class="animate-position desktop">
+                                <div style="height: 150px"><canvas id="voter-turnout-canvas"></canvas><div class="dough-percent"><span class="int">28</span><span class="dec">.53%</span></div></div>
+                            </div>
+                            <!--End Animate Position-->
+                            <div class="animate-position mobile" style="margin-top: -6px;">
+                                <div><canvas id="voter-turnout-mobile-canvas"></canvas><div class="dough-percent"><span class="int">28</span><span class="dec">.53%</span></div></div>
+                            </div>
+                            <!--End Animate Position-->
+                        </div>
+                        <!--End header-box-content-bottom-->
+                        <div class="header-box-content-reg">
+                            <h2><span class="header-ballot-text">Ballots Cast</span><span class="header-ballot-number">358,538</span><br /><span class="header-voter-text">Registered Voters</span><span class="header-voter-number">1,256,903</span></h2>
+                        </div>
+                    </div>
+                    <!--End Header Box 2-->
+                    <div class="col header-box3">
+                        <div class="header-box-content-top">
+                            <h1>
+                                <a id="lnkPrecinctsReporting" class="button" href="VoterTurnoutDetails.aspx?map=PREC">Precincts Fully Reported</a>
+                            </h1>
+                        </div>
+                        <!--End header-box2-content-top-->
+                        <div class="header-box-content-bottom">
+                            
+                            <div class="animate-position desktop">
+                                <div style="height: 150px"><canvas id="precinct-reported-canvas"></canvas><div class="dough-percent"><span class="int">100</span><span class="dec">%</span></div></div>
+                            </div>
+                            <!--End Animate Position-->
+                            <div class="animate-position mobile">
+                                <div><canvas id="precinct-reported-mobile-canvas"></canvas><div class="dough-percent"><span class="int">100</span><span class="dec">%</span></div></div>
+                            </div>
+                            <!--End Animate Position-->
+                        </div>
+                        <!--End header-box-content-bottom-->
+                        <div class="header-box-content-reg header-box-content-prec">
+                            <h2><div class='colordisc-yellow'></div><span class="header-partial-text">Partially</span><span class="header-partial-number">0</span><br/><div class='colordisc-orange'></div><span class="header-total-text">Fully</span><span class="header-total-number">1322</span> </br><div></div><span class="header-partial-text">Total</span><span class="header-totalprecincts-text">1322</span></h2>
+                        </div>
+                    </div>
+                    <div id="chartjs-tooltip"></div>
+                    <!--End Header Box 3-->
+                </div>
+                <!--End Section Group-->
+                
+            </div>
+            <!--End Header Box Wrapper-->
+            <!--Main Content-->
+            
+    
+    
+    
+    
+    
+            <div class="wrapper-inside wrapper-border">
+                <div>
+                    <div class="display-results-box-wrapper">
+                        <div class="display-results-box-a">
+                            <h1>For United States Senator - 6  Year Term</h1>
+                        </div>
+                        <div class="wrapper-mobile">
+                            <div class="section group">
+                                <div class="col display-results-box-b">
+                                    <div class="col follow-checkbox">
+                                        <input class="css-checkbox" type="checkbox" onclick="CheckboxChecked(this);" id="chk-49">
+                                        <label class="css-label" for="chk-49">Follow This Contest</label>
+                                    </div>
+                                    
+                                </div>
+                                <div class="display-results-box-g">
+                                    <div class="export-box dropdown" >
+                                        <div class="export dropbtn">Export</div>
+                                        <div id="export-49" class="dropdown-content export-container">
+                                            <div class="export-header">EXPORT:</div>
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl00$ctl00','')" name="ctl00$MainContent$rptRace$ctl00$ctl00" type="button" class="export-button" value="Precinct Level" raceid="12602" party="REP" officeseqno="102" countyid="0" />
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl00$ctl01','')" name="ctl00$MainContent$rptRace$ctl00$ctl01" type="button" class="export-button" value="County Level" raceid="12602" party="REP" officeseqno="102" />
+                                        </div>
+                                    </div>
+                                    <div class="share-box dropdown">
+                                        <img class="mtc-icon-inline-position dropbtn" alt="" title="Share" src="Images/my-tracked-contests-icon.png">
+                                        <div class="dropdown-content export-container">
+                                            <div class="share-header">SHARE ON</div>
+                                            <div class="share-icon-wrapper">
+                                                <div class="share-buttons">
+                                                    <a href="https://www.facebook.com/sharer/sharer.php?u=http://electionresults.nebraska.gov/SearchResults.aspx?ID=49" target="_blank">
+                                                        <img alt="Share on Facebook" title="Facebook" src="Images/facebook.png" /></a>
+                                                    <a href="https://twitter.com/intent/tweet?text=http://electionresults.nebraska.gov/SearchResults.aspx?ID=49&hashtags=Vote" target="_blank">
+                                                        <img alt="Share on Twitter" title="Twitter" src="Images/twitter.png" /></a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-c">
+                                    <div class="precinct-fully">
+                                        Precincts Fully: 1322 / 1322
+                                    </div>
+                                    <div class="precinct-separator">|</div>
+                                    <div class="precinct-partial">
+                                        Partially: 0 / 1322
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>Eric  Mortimore </h1>
+                                    <h2 class="Republican">Republican</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126021022902"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>3,667</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>Pete  Ricketts </h1>
+                                    <h2 class="Republican">Republican</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126021023012"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>160,547</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>Todd  Knobel </h1>
+                                    <h2 class="Republican">Republican</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126021023017"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>15,921</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>Mac  Stevens </h1>
+                                    <h2 class="Republican">Republican</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126021023231"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>5,204</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>Debb Axtell Schultz </h1>
+                                    <h2 class="Republican">Republican</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126021023243"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>11,735</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            
+                            <div class="section group">
+                                <div class="col display-results-box-totalvotes">
+                                    <h2>total votes</h2>
+                                </div>
+                                <div class="col display-results-box-total">
+                                    <h2>197,074</h2>
+                                </div>
+                            </div>
+                        
+                </div>
+                <input class="button-maps" type="button" onclick="CreateMap('SW', '12602', '102', 'REP'); $(this).addClass('active-button');" value="Map" />
+                <input class="button-county" type="button" onclick="BuildCounty('SW', '12602', '102', 'REP'); $(this).addClass('active-button');" value="County Results" />
+                <div id="Map12602REP" style="display: none;" class="slidingDiv-maps">
+                    <div class="section group">
+                        <div class="col map-col1" id="Mapinfo12602REP">
+                            <div id="countyInfoBox12602REP"></div>
+                        </div>
+                        <div class="col map-col2">
+                            <h1>Click on County Below</h1>
+                            <div class="map" id="Mapmap12602REP">
+                            </div>
+                        </div>
+                        <div class="col map-col3">
+                            <div id="legendInfoBox12602REP"></div>
+                        </div>
+                        <div class="modal"></div>
+                    </div>
+                </div>
+                <div id="County12602REP" style="display: none" class="slidingDiv-maps"></div>
+            </div>
+        
+            <div class="wrapper-inside wrapper-border">
+                <div>
+                    <div class="display-results-box-wrapper">
+                        <div class="display-results-box-a">
+                            <h1>For United States Senator - 6  Year Term</h1>
+                        </div>
+                        <div class="wrapper-mobile">
+                            <div class="section group">
+                                <div class="col display-results-box-b">
+                                    <div class="col follow-checkbox">
+                                        <input class="css-checkbox" type="checkbox" onclick="CheckboxChecked(this);" id="chk-59">
+                                        <label class="css-label" for="chk-59">Follow This Contest</label>
+                                    </div>
+                                    
+                                </div>
+                                <div class="display-results-box-g">
+                                    <div class="export-box dropdown" >
+                                        <div class="export dropbtn">Export</div>
+                                        <div id="export-59" class="dropdown-content export-container">
+                                            <div class="export-header">EXPORT:</div>
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl01$ctl00','')" name="ctl00$MainContent$rptRace$ctl01$ctl00" type="button" class="export-button" value="Precinct Level" raceid="12602" party="DEM" officeseqno="102" countyid="0" />
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl01$ctl01','')" name="ctl00$MainContent$rptRace$ctl01$ctl01" type="button" class="export-button" value="County Level" raceid="12602" party="DEM" officeseqno="102" />
+                                        </div>
+                                    </div>
+                                    <div class="share-box dropdown">
+                                        <img class="mtc-icon-inline-position dropbtn" alt="" title="Share" src="Images/my-tracked-contests-icon.png">
+                                        <div class="dropdown-content export-container">
+                                            <div class="share-header">SHARE ON</div>
+                                            <div class="share-icon-wrapper">
+                                                <div class="share-buttons">
+                                                    <a href="https://www.facebook.com/sharer/sharer.php?u=http://electionresults.nebraska.gov/SearchResults.aspx?ID=59" target="_blank">
+                                                        <img alt="Share on Facebook" title="Facebook" src="Images/facebook.png" /></a>
+                                                    <a href="https://twitter.com/intent/tweet?text=http://electionresults.nebraska.gov/SearchResults.aspx?ID=59&hashtags=Vote" target="_blank">
+                                                        <img alt="Share on Twitter" title="Twitter" src="Images/twitter.png" /></a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-c">
+                                    <div class="precinct-fully">
+                                        Precincts Fully: 1322 / 1322
+                                    </div>
+                                    <div class="precinct-separator">|</div>
+                                    <div class="precinct-partial">
+                                        Partially: 0 / 1322
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>William J. Forbes </h1>
+                                    <h2 class="Democratic">Democratic</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126021023238"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>12,863</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>Cindy  Burbank </h1>
+                                    <h2 class="Democratic">Democratic</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126021023246"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>110,210</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            
+                            <div class="section group">
+                                <div class="col display-results-box-totalvotes">
+                                    <h2>total votes</h2>
+                                </div>
+                                <div class="col display-results-box-total">
+                                    <h2>123,073</h2>
+                                </div>
+                            </div>
+                        
+                </div>
+                <input class="button-maps" type="button" onclick="CreateMap('SW', '12602', '102', 'DEM'); $(this).addClass('active-button');" value="Map" />
+                <input class="button-county" type="button" onclick="BuildCounty('SW', '12602', '102', 'DEM'); $(this).addClass('active-button');" value="County Results" />
+                <div id="Map12602DEM" style="display: none;" class="slidingDiv-maps">
+                    <div class="section group">
+                        <div class="col map-col1" id="Mapinfo12602DEM">
+                            <div id="countyInfoBox12602DEM"></div>
+                        </div>
+                        <div class="col map-col2">
+                            <h1>Click on County Below</h1>
+                            <div class="map" id="Mapmap12602DEM">
+                            </div>
+                        </div>
+                        <div class="col map-col3">
+                            <div id="legendInfoBox12602DEM"></div>
+                        </div>
+                        <div class="modal"></div>
+                    </div>
+                </div>
+                <div id="County12602DEM" style="display: none" class="slidingDiv-maps"></div>
+            </div>
+        
+            <div class="wrapper-inside wrapper-border">
+                <div>
+                    <div class="display-results-box-wrapper">
+                        <div class="display-results-box-a">
+                            <h1>For United States Senator - 6  Year Term</h1>
+                        </div>
+                        <div class="wrapper-mobile">
+                            <div class="section group">
+                                <div class="col display-results-box-b">
+                                    <div class="col follow-checkbox">
+                                        <input class="css-checkbox" type="checkbox" onclick="CheckboxChecked(this);" id="chk-9">
+                                        <label class="css-label" for="chk-9">Follow This Contest</label>
+                                    </div>
+                                    
+                                </div>
+                                <div class="display-results-box-g">
+                                    <div class="export-box dropdown" >
+                                        <div class="export dropbtn">Export</div>
+                                        <div id="export-9" class="dropdown-content export-container">
+                                            <div class="export-header">EXPORT:</div>
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl02$ctl00','')" name="ctl00$MainContent$rptRace$ctl02$ctl00" type="button" class="export-button" value="Precinct Level" raceid="12602" party="LMN" officeseqno="102" countyid="0" />
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl02$ctl01','')" name="ctl00$MainContent$rptRace$ctl02$ctl01" type="button" class="export-button" value="County Level" raceid="12602" party="LMN" officeseqno="102" />
+                                        </div>
+                                    </div>
+                                    <div class="share-box dropdown">
+                                        <img class="mtc-icon-inline-position dropbtn" alt="" title="Share" src="Images/my-tracked-contests-icon.png">
+                                        <div class="dropdown-content export-container">
+                                            <div class="share-header">SHARE ON</div>
+                                            <div class="share-icon-wrapper">
+                                                <div class="share-buttons">
+                                                    <a href="https://www.facebook.com/sharer/sharer.php?u=http://electionresults.nebraska.gov/SearchResults.aspx?ID=9" target="_blank">
+                                                        <img alt="Share on Facebook" title="Facebook" src="Images/facebook.png" /></a>
+                                                    <a href="https://twitter.com/intent/tweet?text=http://electionresults.nebraska.gov/SearchResults.aspx?ID=9&hashtags=Vote" target="_blank">
+                                                        <img alt="Share on Twitter" title="Twitter" src="Images/twitter.png" /></a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-c">
+                                    <div class="precinct-fully">
+                                        Precincts Fully: 1322 / 1322
+                                    </div>
+                                    <div class="precinct-separator">|</div>
+                                    <div class="precinct-partial">
+                                        Partially: 0 / 1322
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>Earl  Starkey </h1>
+                                    <h2 class="Legal Marijuana Now">Legal Marijuana Now</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126021022785"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>420</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>Mike  Marvin </h1>
+                                    <h2 class="Legal Marijuana Now">Legal Marijuana Now</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126021023249"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>829</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            
+                            <div class="section group">
+                                <div class="col display-results-box-totalvotes">
+                                    <h2>total votes</h2>
+                                </div>
+                                <div class="col display-results-box-total">
+                                    <h2>1,249</h2>
+                                </div>
+                            </div>
+                        
+                </div>
+                <input class="button-maps" type="button" onclick="CreateMap('SW', '12602', '102', 'LMN'); $(this).addClass('active-button');" value="Map" />
+                <input class="button-county" type="button" onclick="BuildCounty('SW', '12602', '102', 'LMN'); $(this).addClass('active-button');" value="County Results" />
+                <div id="Map12602LMN" style="display: none;" class="slidingDiv-maps">
+                    <div class="section group">
+                        <div class="col map-col1" id="Mapinfo12602LMN">
+                            <div id="countyInfoBox12602LMN"></div>
+                        </div>
+                        <div class="col map-col2">
+                            <h1>Click on County Below</h1>
+                            <div class="map" id="Mapmap12602LMN">
+                            </div>
+                        </div>
+                        <div class="col map-col3">
+                            <div id="legendInfoBox12602LMN"></div>
+                        </div>
+                        <div class="modal"></div>
+                    </div>
+                </div>
+                <div id="County12602LMN" style="display: none" class="slidingDiv-maps"></div>
+            </div>
+        
+            <div class="wrapper-inside wrapper-border">
+                <div>
+                    <div class="display-results-box-wrapper">
+                        <div class="display-results-box-a">
+                            <h1>For Governor</h1>
+                        </div>
+                        <div class="wrapper-mobile">
+                            <div class="section group">
+                                <div class="col display-results-box-b">
+                                    <div class="col follow-checkbox">
+                                        <input class="css-checkbox" type="checkbox" onclick="CheckboxChecked(this);" id="chk-53">
+                                        <label class="css-label" for="chk-53">Follow This Contest</label>
+                                    </div>
+                                    
+                                </div>
+                                <div class="display-results-box-g">
+                                    <div class="export-box dropdown" >
+                                        <div class="export dropbtn">Export</div>
+                                        <div id="export-53" class="dropdown-content export-container">
+                                            <div class="export-header">EXPORT:</div>
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl03$ctl00','')" name="ctl00$MainContent$rptRace$ctl03$ctl00" type="button" class="export-button" value="Precinct Level" raceid="12606" party="REP" officeseqno="104" countyid="0" />
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl03$ctl01','')" name="ctl00$MainContent$rptRace$ctl03$ctl01" type="button" class="export-button" value="County Level" raceid="12606" party="REP" officeseqno="104" />
+                                        </div>
+                                    </div>
+                                    <div class="share-box dropdown">
+                                        <img class="mtc-icon-inline-position dropbtn" alt="" title="Share" src="Images/my-tracked-contests-icon.png">
+                                        <div class="dropdown-content export-container">
+                                            <div class="share-header">SHARE ON</div>
+                                            <div class="share-icon-wrapper">
+                                                <div class="share-buttons">
+                                                    <a href="https://www.facebook.com/sharer/sharer.php?u=http://electionresults.nebraska.gov/SearchResults.aspx?ID=53" target="_blank">
+                                                        <img alt="Share on Facebook" title="Facebook" src="Images/facebook.png" /></a>
+                                                    <a href="https://twitter.com/intent/tweet?text=http://electionresults.nebraska.gov/SearchResults.aspx?ID=53&hashtags=Vote" target="_blank">
+                                                        <img alt="Share on Twitter" title="Twitter" src="Images/twitter.png" /></a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-c">
+                                    <div class="precinct-fully">
+                                        Precincts Fully: 1322 / 1322
+                                    </div>
+                                    <div class="precinct-separator">|</div>
+                                    <div class="precinct-partial">
+                                        Partially: 0 / 1322
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>Sheila J. Korth-Focken </h1>
+                                    <h2 class="Republican">Republican</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126061042789"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>14,621</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>Gary L. Rogge </h1>
+                                    <h2 class="Republican">Republican</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126061042864"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>6,986</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>Jim  Pillen </h1>
+                                    <h2 class="Republican">Republican</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126061042950"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>142,301</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>Jacy  Todd </h1>
+                                    <h2 class="Republican">Republican</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126061043021"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>5,125</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>Sal  Holguin </h1>
+                                    <h2 class="Republican">Republican</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126061043237"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>1,612</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>John  Walz </h1>
+                                    <h2 class="Republican">Republican</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126061043244"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>18,066</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            
+                            <div class="section group">
+                                <div class="col display-results-box-totalvotes">
+                                    <h2>total votes</h2>
+                                </div>
+                                <div class="col display-results-box-total">
+                                    <h2>188,711</h2>
+                                </div>
+                            </div>
+                        
+                </div>
+                <input class="button-maps" type="button" onclick="CreateMap('SW', '12606', '104', 'REP'); $(this).addClass('active-button');" value="Map" />
+                <input class="button-county" type="button" onclick="BuildCounty('SW', '12606', '104', 'REP'); $(this).addClass('active-button');" value="County Results" />
+                <div id="Map12606REP" style="display: none;" class="slidingDiv-maps">
+                    <div class="section group">
+                        <div class="col map-col1" id="Mapinfo12606REP">
+                            <div id="countyInfoBox12606REP"></div>
+                        </div>
+                        <div class="col map-col2">
+                            <h1>Click on County Below</h1>
+                            <div class="map" id="Mapmap12606REP">
+                            </div>
+                        </div>
+                        <div class="col map-col3">
+                            <div id="legendInfoBox12606REP"></div>
+                        </div>
+                        <div class="modal"></div>
+                    </div>
+                </div>
+                <div id="County12606REP" style="display: none" class="slidingDiv-maps"></div>
+            </div>
+        
+            <div class="wrapper-inside wrapper-border">
+                <div>
+                    <div class="display-results-box-wrapper">
+                        <div class="display-results-box-a">
+                            <h1>For Governor</h1>
+                        </div>
+                        <div class="wrapper-mobile">
+                            <div class="section group">
+                                <div class="col display-results-box-b">
+                                    <div class="col follow-checkbox">
+                                        <input class="css-checkbox" type="checkbox" onclick="CheckboxChecked(this);" id="chk-63">
+                                        <label class="css-label" for="chk-63">Follow This Contest</label>
+                                    </div>
+                                    
+                                </div>
+                                <div class="display-results-box-g">
+                                    <div class="export-box dropdown" >
+                                        <div class="export dropbtn">Export</div>
+                                        <div id="export-63" class="dropdown-content export-container">
+                                            <div class="export-header">EXPORT:</div>
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl04$ctl00','')" name="ctl00$MainContent$rptRace$ctl04$ctl00" type="button" class="export-button" value="Precinct Level" raceid="12606" party="DEM" officeseqno="104" countyid="0" />
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl04$ctl01','')" name="ctl00$MainContent$rptRace$ctl04$ctl01" type="button" class="export-button" value="County Level" raceid="12606" party="DEM" officeseqno="104" />
+                                        </div>
+                                    </div>
+                                    <div class="share-box dropdown">
+                                        <img class="mtc-icon-inline-position dropbtn" alt="" title="Share" src="Images/my-tracked-contests-icon.png">
+                                        <div class="dropdown-content export-container">
+                                            <div class="share-header">SHARE ON</div>
+                                            <div class="share-icon-wrapper">
+                                                <div class="share-buttons">
+                                                    <a href="https://www.facebook.com/sharer/sharer.php?u=http://electionresults.nebraska.gov/SearchResults.aspx?ID=63" target="_blank">
+                                                        <img alt="Share on Facebook" title="Facebook" src="Images/facebook.png" /></a>
+                                                    <a href="https://twitter.com/intent/tweet?text=http://electionresults.nebraska.gov/SearchResults.aspx?ID=63&hashtags=Vote" target="_blank">
+                                                        <img alt="Share on Twitter" title="Twitter" src="Images/twitter.png" /></a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-c">
+                                    <div class="precinct-fully">
+                                        Precincts Fully: 1322 / 1322
+                                    </div>
+                                    <div class="precinct-separator">|</div>
+                                    <div class="precinct-partial">
+                                        Partially: 0 / 1322
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>Lynne  Walz </h1>
+                                    <h2 class="Democratic">Democratic</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126061042980"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>116,458</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>Larry  Marvin </h1>
+                                    <h2 class="Democratic">Democratic</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126061043026"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>10,847</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            
+                            <div class="section group">
+                                <div class="col display-results-box-totalvotes">
+                                    <h2>total votes</h2>
+                                </div>
+                                <div class="col display-results-box-total">
+                                    <h2>127,305</h2>
+                                </div>
+                            </div>
+                        
+                </div>
+                <input class="button-maps" type="button" onclick="CreateMap('SW', '12606', '104', 'DEM'); $(this).addClass('active-button');" value="Map" />
+                <input class="button-county" type="button" onclick="BuildCounty('SW', '12606', '104', 'DEM'); $(this).addClass('active-button');" value="County Results" />
+                <div id="Map12606DEM" style="display: none;" class="slidingDiv-maps">
+                    <div class="section group">
+                        <div class="col map-col1" id="Mapinfo12606DEM">
+                            <div id="countyInfoBox12606DEM"></div>
+                        </div>
+                        <div class="col map-col2">
+                            <h1>Click on County Below</h1>
+                            <div class="map" id="Mapmap12606DEM">
+                            </div>
+                        </div>
+                        <div class="col map-col3">
+                            <div id="legendInfoBox12606DEM"></div>
+                        </div>
+                        <div class="modal"></div>
+                    </div>
+                </div>
+                <div id="County12606DEM" style="display: none" class="slidingDiv-maps"></div>
+            </div>
+        
+            <div class="wrapper-inside wrapper-border">
+                <div>
+                    <div class="display-results-box-wrapper">
+                        <div class="display-results-box-a">
+                            <h1>For Governor</h1>
+                        </div>
+                        <div class="wrapper-mobile">
+                            <div class="section group">
+                                <div class="col display-results-box-b">
+                                    <div class="col follow-checkbox">
+                                        <input class="css-checkbox" type="checkbox" onclick="CheckboxChecked(this);" id="chk-24">
+                                        <label class="css-label" for="chk-24">Follow This Contest</label>
+                                    </div>
+                                    
+                                </div>
+                                <div class="display-results-box-g">
+                                    <div class="export-box dropdown" >
+                                        <div class="export dropbtn">Export</div>
+                                        <div id="export-24" class="dropdown-content export-container">
+                                            <div class="export-header">EXPORT:</div>
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl05$ctl00','')" name="ctl00$MainContent$rptRace$ctl05$ctl00" type="button" class="export-button" value="Precinct Level" raceid="12606" party="LMN" officeseqno="104" countyid="0" />
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl05$ctl01','')" name="ctl00$MainContent$rptRace$ctl05$ctl01" type="button" class="export-button" value="County Level" raceid="12606" party="LMN" officeseqno="104" />
+                                        </div>
+                                    </div>
+                                    <div class="share-box dropdown">
+                                        <img class="mtc-icon-inline-position dropbtn" alt="" title="Share" src="Images/my-tracked-contests-icon.png">
+                                        <div class="dropdown-content export-container">
+                                            <div class="share-header">SHARE ON</div>
+                                            <div class="share-icon-wrapper">
+                                                <div class="share-buttons">
+                                                    <a href="https://www.facebook.com/sharer/sharer.php?u=http://electionresults.nebraska.gov/SearchResults.aspx?ID=24" target="_blank">
+                                                        <img alt="Share on Facebook" title="Facebook" src="Images/facebook.png" /></a>
+                                                    <a href="https://twitter.com/intent/tweet?text=http://electionresults.nebraska.gov/SearchResults.aspx?ID=24&hashtags=Vote" target="_blank">
+                                                        <img alt="Share on Twitter" title="Twitter" src="Images/twitter.png" /></a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-c">
+                                    <div class="precinct-fully">
+                                        Precincts Fully: 1322 / 1322
+                                    </div>
+                                    <div class="precinct-separator">|</div>
+                                    <div class="precinct-partial">
+                                        Partially: 0 / 1322
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>Rick  Beard </h1>
+                                    <h2 class="Legal Marijuana Now">Legal Marijuana Now</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126061042947"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>349</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>James J. Charvat III </h1>
+                                    <h2 class="Legal Marijuana Now">Legal Marijuana Now</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126061043003"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>156</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            
+                            <div class="section group">
+                                <div class="col display-results-box-totalvotes">
+                                    <h2>total votes</h2>
+                                </div>
+                                <div class="col display-results-box-total">
+                                    <h2>505</h2>
+                                </div>
+                            </div>
+                        
+                </div>
+                <input class="button-maps" type="button" onclick="CreateMap('SW', '12606', '104', 'LMN'); $(this).addClass('active-button');" value="Map" />
+                <input class="button-county" type="button" onclick="BuildCounty('SW', '12606', '104', 'LMN'); $(this).addClass('active-button');" value="County Results" />
+                <div id="Map12606LMN" style="display: none;" class="slidingDiv-maps">
+                    <div class="section group">
+                        <div class="col map-col1" id="Mapinfo12606LMN">
+                            <div id="countyInfoBox12606LMN"></div>
+                        </div>
+                        <div class="col map-col2">
+                            <h1>Click on County Below</h1>
+                            <div class="map" id="Mapmap12606LMN">
+                            </div>
+                        </div>
+                        <div class="col map-col3">
+                            <div id="legendInfoBox12606LMN"></div>
+                        </div>
+                        <div class="modal"></div>
+                    </div>
+                </div>
+                <div id="County12606LMN" style="display: none" class="slidingDiv-maps"></div>
+            </div>
+        
+            <div class="wrapper-inside wrapper-border">
+                <div>
+                    <div class="display-results-box-wrapper">
+                        <div class="display-results-box-a">
+                            <h1>For Secretary of State</h1>
+                        </div>
+                        <div class="wrapper-mobile">
+                            <div class="section group">
+                                <div class="col display-results-box-b">
+                                    <div class="col follow-checkbox">
+                                        <input class="css-checkbox" type="checkbox" onclick="CheckboxChecked(this);" id="chk-4">
+                                        <label class="css-label" for="chk-4">Follow This Contest</label>
+                                    </div>
+                                    
+                                </div>
+                                <div class="display-results-box-g">
+                                    <div class="export-box dropdown" >
+                                        <div class="export dropbtn">Export</div>
+                                        <div id="export-4" class="dropdown-content export-container">
+                                            <div class="export-header">EXPORT:</div>
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl06$ctl00','')" name="ctl00$MainContent$rptRace$ctl06$ctl00" type="button" class="export-button" value="Precinct Level" raceid="12607" party="REP" officeseqno="106" countyid="0" />
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl06$ctl01','')" name="ctl00$MainContent$rptRace$ctl06$ctl01" type="button" class="export-button" value="County Level" raceid="12607" party="REP" officeseqno="106" />
+                                        </div>
+                                    </div>
+                                    <div class="share-box dropdown">
+                                        <img class="mtc-icon-inline-position dropbtn" alt="" title="Share" src="Images/my-tracked-contests-icon.png">
+                                        <div class="dropdown-content export-container">
+                                            <div class="share-header">SHARE ON</div>
+                                            <div class="share-icon-wrapper">
+                                                <div class="share-buttons">
+                                                    <a href="https://www.facebook.com/sharer/sharer.php?u=http://electionresults.nebraska.gov/SearchResults.aspx?ID=4" target="_blank">
+                                                        <img alt="Share on Facebook" title="Facebook" src="Images/facebook.png" /></a>
+                                                    <a href="https://twitter.com/intent/tweet?text=http://electionresults.nebraska.gov/SearchResults.aspx?ID=4&hashtags=Vote" target="_blank">
+                                                        <img alt="Share on Twitter" title="Twitter" src="Images/twitter.png" /></a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-c">
+                                    <div class="precinct-fully">
+                                        Precincts Fully: 1322 / 1322
+                                    </div>
+                                    <div class="precinct-separator">|</div>
+                                    <div class="precinct-partial">
+                                        Partially: 0 / 1322
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>Bob  Evnen </h1>
+                                    <h2 class="Republican">Republican</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126071062737"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>80,850</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>Scott  Petersen </h1>
+                                    <h2 class="Republican">Republican</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126071063116"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>97,430</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            
+                            <div class="section group">
+                                <div class="col display-results-box-totalvotes">
+                                    <h2>total votes</h2>
+                                </div>
+                                <div class="col display-results-box-total">
+                                    <h2>178,280</h2>
+                                </div>
+                            </div>
+                        
+                </div>
+                <input class="button-maps" type="button" onclick="CreateMap('SW', '12607', '106', 'REP'); $(this).addClass('active-button');" value="Map" />
+                <input class="button-county" type="button" onclick="BuildCounty('SW', '12607', '106', 'REP'); $(this).addClass('active-button');" value="County Results" />
+                <div id="Map12607REP" style="display: none;" class="slidingDiv-maps">
+                    <div class="section group">
+                        <div class="col map-col1" id="Mapinfo12607REP">
+                            <div id="countyInfoBox12607REP"></div>
+                        </div>
+                        <div class="col map-col2">
+                            <h1>Click on County Below</h1>
+                            <div class="map" id="Mapmap12607REP">
+                            </div>
+                        </div>
+                        <div class="col map-col3">
+                            <div id="legendInfoBox12607REP"></div>
+                        </div>
+                        <div class="modal"></div>
+                    </div>
+                </div>
+                <div id="County12607REP" style="display: none" class="slidingDiv-maps"></div>
+            </div>
+        
+            <div class="wrapper-inside wrapper-border">
+                <div>
+                    <div class="display-results-box-wrapper">
+                        <div class="display-results-box-a">
+                            <h1>For Secretary of State</h1>
+                        </div>
+                        <div class="wrapper-mobile">
+                            <div class="section group">
+                                <div class="col display-results-box-b">
+                                    <div class="col follow-checkbox">
+                                        <input class="css-checkbox" type="checkbox" onclick="CheckboxChecked(this);" id="chk-21">
+                                        <label class="css-label" for="chk-21">Follow This Contest</label>
+                                    </div>
+                                    
+                                </div>
+                                <div class="display-results-box-g">
+                                    <div class="export-box dropdown" >
+                                        <div class="export dropbtn">Export</div>
+                                        <div id="export-21" class="dropdown-content export-container">
+                                            <div class="export-header">EXPORT:</div>
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl07$ctl00','')" name="ctl00$MainContent$rptRace$ctl07$ctl00" type="button" class="export-button" value="Precinct Level" raceid="12607" party="DEM" officeseqno="106" countyid="0" />
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl07$ctl01','')" name="ctl00$MainContent$rptRace$ctl07$ctl01" type="button" class="export-button" value="County Level" raceid="12607" party="DEM" officeseqno="106" />
+                                        </div>
+                                    </div>
+                                    <div class="share-box dropdown">
+                                        <img class="mtc-icon-inline-position dropbtn" alt="" title="Share" src="Images/my-tracked-contests-icon.png">
+                                        <div class="dropdown-content export-container">
+                                            <div class="share-header">SHARE ON</div>
+                                            <div class="share-icon-wrapper">
+                                                <div class="share-buttons">
+                                                    <a href="https://www.facebook.com/sharer/sharer.php?u=http://electionresults.nebraska.gov/SearchResults.aspx?ID=21" target="_blank">
+                                                        <img alt="Share on Facebook" title="Facebook" src="Images/facebook.png" /></a>
+                                                    <a href="https://twitter.com/intent/tweet?text=http://electionresults.nebraska.gov/SearchResults.aspx?ID=21&hashtags=Vote" target="_blank">
+                                                        <img alt="Share on Twitter" title="Twitter" src="Images/twitter.png" /></a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-c">
+                                    <div class="precinct-fully">
+                                        Precincts Fully: 1322 / 1322
+                                    </div>
+                                    <div class="precinct-separator">|</div>
+                                    <div class="precinct-partial">
+                                        Partially: 0 / 1322
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>Lee M. Cimfel </h1>
+                                    <h2 class="Democratic">Democratic</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126071062795"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>10,608</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>Sarah J. Slattery </h1>
+                                    <h2 class="Democratic">Democratic</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126071062951"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>109,344</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            
+                            <div class="section group">
+                                <div class="col display-results-box-totalvotes">
+                                    <h2>total votes</h2>
+                                </div>
+                                <div class="col display-results-box-total">
+                                    <h2>119,952</h2>
+                                </div>
+                            </div>
+                        
+                </div>
+                <input class="button-maps" type="button" onclick="CreateMap('SW', '12607', '106', 'DEM'); $(this).addClass('active-button');" value="Map" />
+                <input class="button-county" type="button" onclick="BuildCounty('SW', '12607', '106', 'DEM'); $(this).addClass('active-button');" value="County Results" />
+                <div id="Map12607DEM" style="display: none;" class="slidingDiv-maps">
+                    <div class="section group">
+                        <div class="col map-col1" id="Mapinfo12607DEM">
+                            <div id="countyInfoBox12607DEM"></div>
+                        </div>
+                        <div class="col map-col2">
+                            <h1>Click on County Below</h1>
+                            <div class="map" id="Mapmap12607DEM">
+                            </div>
+                        </div>
+                        <div class="col map-col3">
+                            <div id="legendInfoBox12607DEM"></div>
+                        </div>
+                        <div class="modal"></div>
+                    </div>
+                </div>
+                <div id="County12607DEM" style="display: none" class="slidingDiv-maps"></div>
+            </div>
+        
+            <div class="wrapper-inside wrapper-border">
+                <div>
+                    <div class="display-results-box-wrapper">
+                        <div class="display-results-box-a">
+                            <h1>For State Treasurer</h1>
+                        </div>
+                        <div class="wrapper-mobile">
+                            <div class="section group">
+                                <div class="col display-results-box-b">
+                                    <div class="col follow-checkbox">
+                                        <input class="css-checkbox" type="checkbox" onclick="CheckboxChecked(this);" id="chk-5">
+                                        <label class="css-label" for="chk-5">Follow This Contest</label>
+                                    </div>
+                                    
+                                </div>
+                                <div class="display-results-box-g">
+                                    <div class="export-box dropdown" >
+                                        <div class="export dropbtn">Export</div>
+                                        <div id="export-5" class="dropdown-content export-container">
+                                            <div class="export-header">EXPORT:</div>
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl08$ctl00','')" name="ctl00$MainContent$rptRace$ctl08$ctl00" type="button" class="export-button" value="Precinct Level" raceid="12608" party="REP" officeseqno="107" countyid="0" />
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl08$ctl01','')" name="ctl00$MainContent$rptRace$ctl08$ctl01" type="button" class="export-button" value="County Level" raceid="12608" party="REP" officeseqno="107" />
+                                        </div>
+                                    </div>
+                                    <div class="share-box dropdown">
+                                        <img class="mtc-icon-inline-position dropbtn" alt="" title="Share" src="Images/my-tracked-contests-icon.png">
+                                        <div class="dropdown-content export-container">
+                                            <div class="share-header">SHARE ON</div>
+                                            <div class="share-icon-wrapper">
+                                                <div class="share-buttons">
+                                                    <a href="https://www.facebook.com/sharer/sharer.php?u=http://electionresults.nebraska.gov/SearchResults.aspx?ID=5" target="_blank">
+                                                        <img alt="Share on Facebook" title="Facebook" src="Images/facebook.png" /></a>
+                                                    <a href="https://twitter.com/intent/tweet?text=http://electionresults.nebraska.gov/SearchResults.aspx?ID=5&hashtags=Vote" target="_blank">
+                                                        <img alt="Share on Twitter" title="Twitter" src="Images/twitter.png" /></a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-c">
+                                    <div class="precinct-fully">
+                                        Precincts Fully: 1322 / 1322
+                                    </div>
+                                    <div class="precinct-separator">|</div>
+                                    <div class="precinct-partial">
+                                        Partially: 0 / 1322
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>Joey  Spellerberg </h1>
+                                    <h2 class="Republican">Republican</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126081072801"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>156,208</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            
+                            <div class="section group">
+                                <div class="col display-results-box-totalvotes">
+                                    <h2>total votes</h2>
+                                </div>
+                                <div class="col display-results-box-total">
+                                    <h2>156,208</h2>
+                                </div>
+                            </div>
+                        
+                </div>
+                <input class="button-maps" type="button" onclick="CreateMap('SW', '12608', '107', 'REP'); $(this).addClass('active-button');" value="Map" />
+                <input class="button-county" type="button" onclick="BuildCounty('SW', '12608', '107', 'REP'); $(this).addClass('active-button');" value="County Results" />
+                <div id="Map12608REP" style="display: none;" class="slidingDiv-maps">
+                    <div class="section group">
+                        <div class="col map-col1" id="Mapinfo12608REP">
+                            <div id="countyInfoBox12608REP"></div>
+                        </div>
+                        <div class="col map-col2">
+                            <h1>Click on County Below</h1>
+                            <div class="map" id="Mapmap12608REP">
+                            </div>
+                        </div>
+                        <div class="col map-col3">
+                            <div id="legendInfoBox12608REP"></div>
+                        </div>
+                        <div class="modal"></div>
+                    </div>
+                </div>
+                <div id="County12608REP" style="display: none" class="slidingDiv-maps"></div>
+            </div>
+        
+            <div class="wrapper-inside wrapper-border">
+                <div>
+                    <div class="display-results-box-wrapper">
+                        <div class="display-results-box-a">
+                            <h1>For State Treasurer</h1>
+                        </div>
+                        <div class="wrapper-mobile">
+                            <div class="section group">
+                                <div class="col display-results-box-b">
+                                    <div class="col follow-checkbox">
+                                        <input class="css-checkbox" type="checkbox" onclick="CheckboxChecked(this);" id="chk-39">
+                                        <label class="css-label" for="chk-39">Follow This Contest</label>
+                                    </div>
+                                    
+                                </div>
+                                <div class="display-results-box-g">
+                                    <div class="export-box dropdown" >
+                                        <div class="export dropbtn">Export</div>
+                                        <div id="export-39" class="dropdown-content export-container">
+                                            <div class="export-header">EXPORT:</div>
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl09$ctl00','')" name="ctl00$MainContent$rptRace$ctl09$ctl00" type="button" class="export-button" value="Precinct Level" raceid="12608" party="DEM" officeseqno="107" countyid="0" />
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl09$ctl01','')" name="ctl00$MainContent$rptRace$ctl09$ctl01" type="button" class="export-button" value="County Level" raceid="12608" party="DEM" officeseqno="107" />
+                                        </div>
+                                    </div>
+                                    <div class="share-box dropdown">
+                                        <img class="mtc-icon-inline-position dropbtn" alt="" title="Share" src="Images/my-tracked-contests-icon.png">
+                                        <div class="dropdown-content export-container">
+                                            <div class="share-header">SHARE ON</div>
+                                            <div class="share-icon-wrapper">
+                                                <div class="share-buttons">
+                                                    <a href="https://www.facebook.com/sharer/sharer.php?u=http://electionresults.nebraska.gov/SearchResults.aspx?ID=39" target="_blank">
+                                                        <img alt="Share on Facebook" title="Facebook" src="Images/facebook.png" /></a>
+                                                    <a href="https://twitter.com/intent/tweet?text=http://electionresults.nebraska.gov/SearchResults.aspx?ID=39&hashtags=Vote" target="_blank">
+                                                        <img alt="Share on Twitter" title="Twitter" src="Images/twitter.png" /></a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-c">
+                                    <div class="precinct-fully">
+                                        Precincts Fully: 1322 / 1322
+                                    </div>
+                                    <div class="precinct-separator">|</div>
+                                    <div class="precinct-partial">
+                                        Partially: 0 / 1322
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>Daniel  Ebers </h1>
+                                    <h2 class="Democratic">Democratic</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126081073161"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>107,214</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            
+                            <div class="section group">
+                                <div class="col display-results-box-totalvotes">
+                                    <h2>total votes</h2>
+                                </div>
+                                <div class="col display-results-box-total">
+                                    <h2>107,214</h2>
+                                </div>
+                            </div>
+                        
+                </div>
+                <input class="button-maps" type="button" onclick="CreateMap('SW', '12608', '107', 'DEM'); $(this).addClass('active-button');" value="Map" />
+                <input class="button-county" type="button" onclick="BuildCounty('SW', '12608', '107', 'DEM'); $(this).addClass('active-button');" value="County Results" />
+                <div id="Map12608DEM" style="display: none;" class="slidingDiv-maps">
+                    <div class="section group">
+                        <div class="col map-col1" id="Mapinfo12608DEM">
+                            <div id="countyInfoBox12608DEM"></div>
+                        </div>
+                        <div class="col map-col2">
+                            <h1>Click on County Below</h1>
+                            <div class="map" id="Mapmap12608DEM">
+                            </div>
+                        </div>
+                        <div class="col map-col3">
+                            <div id="legendInfoBox12608DEM"></div>
+                        </div>
+                        <div class="modal"></div>
+                    </div>
+                </div>
+                <div id="County12608DEM" style="display: none" class="slidingDiv-maps"></div>
+            </div>
+        
+            <div class="wrapper-inside wrapper-border">
+                <div>
+                    <div class="display-results-box-wrapper">
+                        <div class="display-results-box-a">
+                            <h1>For Attorney General</h1>
+                        </div>
+                        <div class="wrapper-mobile">
+                            <div class="section group">
+                                <div class="col display-results-box-b">
+                                    <div class="col follow-checkbox">
+                                        <input class="css-checkbox" type="checkbox" onclick="CheckboxChecked(this);" id="chk-36">
+                                        <label class="css-label" for="chk-36">Follow This Contest</label>
+                                    </div>
+                                    
+                                </div>
+                                <div class="display-results-box-g">
+                                    <div class="export-box dropdown" >
+                                        <div class="export dropbtn">Export</div>
+                                        <div id="export-36" class="dropdown-content export-container">
+                                            <div class="export-header">EXPORT:</div>
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl10$ctl00','')" name="ctl00$MainContent$rptRace$ctl10$ctl00" type="button" class="export-button" value="Precinct Level" raceid="12609" party="REP" officeseqno="108" countyid="0" />
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl10$ctl01','')" name="ctl00$MainContent$rptRace$ctl10$ctl01" type="button" class="export-button" value="County Level" raceid="12609" party="REP" officeseqno="108" />
+                                        </div>
+                                    </div>
+                                    <div class="share-box dropdown">
+                                        <img class="mtc-icon-inline-position dropbtn" alt="" title="Share" src="Images/my-tracked-contests-icon.png">
+                                        <div class="dropdown-content export-container">
+                                            <div class="share-header">SHARE ON</div>
+                                            <div class="share-icon-wrapper">
+                                                <div class="share-buttons">
+                                                    <a href="https://www.facebook.com/sharer/sharer.php?u=http://electionresults.nebraska.gov/SearchResults.aspx?ID=36" target="_blank">
+                                                        <img alt="Share on Facebook" title="Facebook" src="Images/facebook.png" /></a>
+                                                    <a href="https://twitter.com/intent/tweet?text=http://electionresults.nebraska.gov/SearchResults.aspx?ID=36&hashtags=Vote" target="_blank">
+                                                        <img alt="Share on Twitter" title="Twitter" src="Images/twitter.png" /></a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-c">
+                                    <div class="precinct-fully">
+                                        Precincts Fully: 1322 / 1322
+                                    </div>
+                                    <div class="precinct-separator">|</div>
+                                    <div class="precinct-partial">
+                                        Partially: 0 / 1322
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>Mike  Hilgers </h1>
+                                    <h2 class="Republican">Republican</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126091083067"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>161,220</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            
+                            <div class="section group">
+                                <div class="col display-results-box-totalvotes">
+                                    <h2>total votes</h2>
+                                </div>
+                                <div class="col display-results-box-total">
+                                    <h2>161,220</h2>
+                                </div>
+                            </div>
+                        
+                </div>
+                <input class="button-maps" type="button" onclick="CreateMap('SW', '12609', '108', 'REP'); $(this).addClass('active-button');" value="Map" />
+                <input class="button-county" type="button" onclick="BuildCounty('SW', '12609', '108', 'REP'); $(this).addClass('active-button');" value="County Results" />
+                <div id="Map12609REP" style="display: none;" class="slidingDiv-maps">
+                    <div class="section group">
+                        <div class="col map-col1" id="Mapinfo12609REP">
+                            <div id="countyInfoBox12609REP"></div>
+                        </div>
+                        <div class="col map-col2">
+                            <h1>Click on County Below</h1>
+                            <div class="map" id="Mapmap12609REP">
+                            </div>
+                        </div>
+                        <div class="col map-col3">
+                            <div id="legendInfoBox12609REP"></div>
+                        </div>
+                        <div class="modal"></div>
+                    </div>
+                </div>
+                <div id="County12609REP" style="display: none" class="slidingDiv-maps"></div>
+            </div>
+        
+            <div class="wrapper-inside wrapper-border">
+                <div>
+                    <div class="display-results-box-wrapper">
+                        <div class="display-results-box-a">
+                            <h1>For Attorney General</h1>
+                        </div>
+                        <div class="wrapper-mobile">
+                            <div class="section group">
+                                <div class="col display-results-box-b">
+                                    <div class="col follow-checkbox">
+                                        <input class="css-checkbox" type="checkbox" onclick="CheckboxChecked(this);" id="chk-43">
+                                        <label class="css-label" for="chk-43">Follow This Contest</label>
+                                    </div>
+                                    
+                                </div>
+                                <div class="display-results-box-g">
+                                    <div class="export-box dropdown" >
+                                        <div class="export dropbtn">Export</div>
+                                        <div id="export-43" class="dropdown-content export-container">
+                                            <div class="export-header">EXPORT:</div>
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl11$ctl00','')" name="ctl00$MainContent$rptRace$ctl11$ctl00" type="button" class="export-button" value="Precinct Level" raceid="12609" party="DEM" officeseqno="108" countyid="0" />
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl11$ctl01','')" name="ctl00$MainContent$rptRace$ctl11$ctl01" type="button" class="export-button" value="County Level" raceid="12609" party="DEM" officeseqno="108" />
+                                        </div>
+                                    </div>
+                                    <div class="share-box dropdown">
+                                        <img class="mtc-icon-inline-position dropbtn" alt="" title="Share" src="Images/my-tracked-contests-icon.png">
+                                        <div class="dropdown-content export-container">
+                                            <div class="share-header">SHARE ON</div>
+                                            <div class="share-icon-wrapper">
+                                                <div class="share-buttons">
+                                                    <a href="https://www.facebook.com/sharer/sharer.php?u=http://electionresults.nebraska.gov/SearchResults.aspx?ID=43" target="_blank">
+                                                        <img alt="Share on Facebook" title="Facebook" src="Images/facebook.png" /></a>
+                                                    <a href="https://twitter.com/intent/tweet?text=http://electionresults.nebraska.gov/SearchResults.aspx?ID=43&hashtags=Vote" target="_blank">
+                                                        <img alt="Share on Twitter" title="Twitter" src="Images/twitter.png" /></a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-c">
+                                    <div class="precinct-fully">
+                                        Precincts Fully: 1322 / 1322
+                                    </div>
+                                    <div class="precinct-separator">|</div>
+                                    <div class="precinct-partial">
+                                        Partially: 0 / 1322
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>Jocelyn  Brasher </h1>
+                                    <h2 class="Democratic">Democratic</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126091083064"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>111,939</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            
+                            <div class="section group">
+                                <div class="col display-results-box-totalvotes">
+                                    <h2>total votes</h2>
+                                </div>
+                                <div class="col display-results-box-total">
+                                    <h2>111,939</h2>
+                                </div>
+                            </div>
+                        
+                </div>
+                <input class="button-maps" type="button" onclick="CreateMap('SW', '12609', '108', 'DEM'); $(this).addClass('active-button');" value="Map" />
+                <input class="button-county" type="button" onclick="BuildCounty('SW', '12609', '108', 'DEM'); $(this).addClass('active-button');" value="County Results" />
+                <div id="Map12609DEM" style="display: none;" class="slidingDiv-maps">
+                    <div class="section group">
+                        <div class="col map-col1" id="Mapinfo12609DEM">
+                            <div id="countyInfoBox12609DEM"></div>
+                        </div>
+                        <div class="col map-col2">
+                            <h1>Click on County Below</h1>
+                            <div class="map" id="Mapmap12609DEM">
+                            </div>
+                        </div>
+                        <div class="col map-col3">
+                            <div id="legendInfoBox12609DEM"></div>
+                        </div>
+                        <div class="modal"></div>
+                    </div>
+                </div>
+                <div id="County12609DEM" style="display: none" class="slidingDiv-maps"></div>
+            </div>
+        
+            <div class="wrapper-inside wrapper-border">
+                <div>
+                    <div class="display-results-box-wrapper">
+                        <div class="display-results-box-a">
+                            <h1>For Auditor of Public Accounts</h1>
+                        </div>
+                        <div class="wrapper-mobile">
+                            <div class="section group">
+                                <div class="col display-results-box-b">
+                                    <div class="col follow-checkbox">
+                                        <input class="css-checkbox" type="checkbox" onclick="CheckboxChecked(this);" id="chk-52">
+                                        <label class="css-label" for="chk-52">Follow This Contest</label>
+                                    </div>
+                                    
+                                </div>
+                                <div class="display-results-box-g">
+                                    <div class="export-box dropdown" >
+                                        <div class="export dropbtn">Export</div>
+                                        <div id="export-52" class="dropdown-content export-container">
+                                            <div class="export-header">EXPORT:</div>
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl12$ctl00','')" name="ctl00$MainContent$rptRace$ctl12$ctl00" type="button" class="export-button" value="Precinct Level" raceid="12610" party="REP" officeseqno="109" countyid="0" />
+                                            <input onclick="DownloadFile(); __doPostBack('ctl00$MainContent$rptRace$ctl12$ctl01','')" name="ctl00$MainContent$rptRace$ctl12$ctl01" type="button" class="export-button" value="County Level" raceid="12610" party="REP" officeseqno="109" />
+                                        </div>
+                                    </div>
+                                    <div class="share-box dropdown">
+                                        <img class="mtc-icon-inline-position dropbtn" alt="" title="Share" src="Images/my-tracked-contests-icon.png">
+                                        <div class="dropdown-content export-container">
+                                            <div class="share-header">SHARE ON</div>
+                                            <div class="share-icon-wrapper">
+                                                <div class="share-buttons">
+                                                    <a href="https://www.facebook.com/sharer/sharer.php?u=http://electionresults.nebraska.gov/SearchResults.aspx?ID=52" target="_blank">
+                                                        <img alt="Share on Facebook" title="Facebook" src="Images/facebook.png" /></a>
+                                                    <a href="https://twitter.com/intent/tweet?text=http://electionresults.nebraska.gov/SearchResults.aspx?ID=52&hashtags=Vote" target="_blank">
+                                                        <img alt="Share on Twitter" title="Twitter" src="Images/twitter.png" /></a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-c">
+                                    <div class="precinct-fully">
+                                        Precincts Fully: 1322 / 1322
+                                    </div>
+                                    <div class="precinct-separator">|</div>
+                                    <div class="precinct-partial">
+                                        Partially: 0 / 1322
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    
+                            <div class="section group">
+                                <div class="col display-results-box-d">
+                                    <h1>Mike  Foley </h1>
+                                    <h2 class="Republican">Republican</h2>
+                                </div>
+                                <div class="col display-results-box-e">
+                                    <div class="wrapper-mobile">
+                                        <div class="bar-graph-wrap">
+                                            <div id="bar126101092736"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col display-results-box-f">
+                                    <h1>165,602</h1>
+                                </div>
+                            </div>
+                            <hr />
+                        
+                            
+                            <div class="section group">
+                                <div class="col display-results-box-totalvotes">
+                                    <h2>total votes</h2>
+                                </div>
+                                <div class="col display-results-box-total">
+                                    <h2>165,602</h2>
+                                </div>
+                            </div>
+                        
+                </div>
+                <input class="button-maps" type="button" onclick="CreateMap('SW', '12610', '109', 'REP'); $(this).addClass('active-button');" value="Map" />
+                <input class="button-county" type="button" onclick="BuildCounty('SW', '12610', '109', 'REP'); $(this).addClass('active-button');" value="County Results" />
+                <div id="Map12610REP" style="display: none;" class="slidingDiv-maps">
+                    <div class="section group">
+                        <div class="col map-col1" id="Mapinfo12610REP">
+                            <div id="countyInfoBox12610REP"></div>
+                        </div>
+                        <div class="col map-col2">
+                            <h1>Click on County Below</h1>
+                            <div class="map" id="Mapmap12610REP">
+                            </div>
+                        </div>
+                        <div class="col map-col3">
+                            <div id="legendInfoBox12610REP"></div>
+                        </div>
+                        <div class="modal"></div>
+                    </div>
+                </div>
+                <div id="County12610REP" style="display: none" class="slidingDiv-maps"></div>
+            </div>
+        
+    

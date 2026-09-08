@@ -70,11 +70,11 @@ from app.pipeline.fetch.state_candidates_in import fetch_confirmed_candidates as
 from app.pipeline.fetch.state_candidates_ks import fetch_confirmed_candidates as _fetch_ks
 from app.pipeline.fetch.state_candidates_ky import fetch_confirmed_candidates as _fetch_ky
 from app.pipeline.fetch.state_candidates_ms import fetch_confirmed_candidates as _fetch_ms
-from app.pipeline.fetch.state_candidates_mt import fetch_confirmed_candidates as _fetch_mt
 from app.pipeline.fetch.state_candidates_nj import fetch_confirmed_candidates as _fetch_nj
 from app.pipeline.fetch.state_candidates_tabular import fetch_confirmed_candidates as _fetch_tabular
 from app.pipeline.fetch.state_candidates_pa import fetch_confirmed_candidates as _fetch_pa
 from app.pipeline.fetch.state_candidates_tn import fetch_confirmed_candidates as _fetch_tn
+from app.pipeline.fetch.state_candidates_totalvote import fetch_confirmed_candidates as _fetch_totalvote
 from app.pipeline.fetch.state_candidates_tx import fetch_confirmed_candidates as _fetch_tx
 
 logger = logging.getLogger(__name__)
@@ -96,7 +96,7 @@ STRATEGIES = {
     "nj_certification": _fetch_nj,
     "ky_certification": _fetch_ky,
     "ms_recap": _fetch_ms,
-    "mt_enr": _fetch_mt,
+    "totalvote_enr": _fetch_totalvote,
     "in_enr": _fetch_in,
     "tn_precinct": _fetch_tn,
 }
