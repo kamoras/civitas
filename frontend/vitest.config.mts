@@ -8,7 +8,7 @@ export default defineConfig({
     alias: {
       // Mirrors tsconfig.json's "@/*" -> "./src/*" path mapping — vitest
       // doesn't read tsconfig paths on its own.
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(import.meta.dirname, "./src"),
     },
   },
   test: {
