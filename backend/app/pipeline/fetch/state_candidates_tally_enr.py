@@ -25,28 +25,41 @@ hardcoded -- a state's own client id is the only thing that varies):
    whose `electionDate` falls in the target year -- never a hardcoded
    election id.
 2. GET {base_url}/Contest/GetContestSearchList?cid={cid}&electionID={id}
-   names every contest and candidate for that election. Arkansas's own
-   real contests carry a `contestTypeCode` of "Federal" for federal races
-   specifically, so `contest_type_filter: "Federal"` in config narrows to
-   those before any other processing (a real ~550-contest statewide
-   response, cheap to pre-filter). North Dakota's real contests are ALL
-   typed "SW" (statewide) regardless of office -- a real ballot measure,
+   names every contest and candidate for that election -- this endpoint's
+   own contestType param is accepted but silently ignored (verified live
+   for both states: identical response with or without it), so it is
+   never sent here regardless of config. Arkansas's own real contests
+   carry a `contestTypeCode` of "Federal" for federal races specifically;
+   `contest_type_filter: "Federal"` in config uses that as a cheap
+   client-side pre-filter. But parse_office() against each contest's own
+   contestName is ALWAYS applied too, for every state -- it is the real
+   source of truth for "is this federal", never bypassed just because a
+   contest_type_filter happens to be configured (a stale/typo'd filter
+   value must not be able to silently exclude every real contest with no
+   signal anything broke). North Dakota's real contests are all typed
+   "SW" (statewide) regardless of office -- a real ballot measure,
    Secretary of State, and Representative in Congress race all share that
-   one code -- so North Dakota's config omits `contest_type_filter`
-   entirely, and every contest is instead individually checked by the
-   shared parse_office() against its own contestName, which already
-   correctly refuses "Secretary of State"/"Attorney General"/ballot
-   measures the same way it refuses any other state's non-federal races.
+   one code -- so North Dakota configures no `contest_type_filter` at
+   all, and parse_office() alone does the whole job, correctly refusing
+   "Secretary of State"/"Attorney General"/ballot measures the same way
+   it refuses any other state's non-federal races.
 3. GET {base_url}/Contest/GetContestResults?cId={cid}&electionID={id}
-   &contestType={type or omitted} carries the actual vote totals, keyed
-   by the SAME contest/choice ids the search list uses. Arkansas's own
-   contestType filter on this endpoint DOES work (an off-year runoff with
-   zero federal races returns an empty federal contest list, not an
-   error) -- North Dakota's equivalent call, `contestType=SW`, returns
-   every statewide contest's results including ballot measures and
-   non-federal offices' locations/precinct breakdowns (~400KB real
-   response), which the shared per-contest office/party filtering below
-   already discards without needing the request itself narrowed further.
+   &contestType={results_scope, if configured} carries the actual vote
+   totals, keyed by the SAME contest/choice ids the search list uses.
+   Unlike GetContestSearchList, this endpoint's contestType param DOES
+   change what comes back, and DOES matter for real efficiency: verified
+   live that North Dakota's bare, unscoped call returns type `_ALL_`
+   (every county/city contest too, ~1500 total, ~2MB) where
+   `&contestType=SW` narrows it to the real 18 statewide-office ones
+   (~400KB) -- the federal contest DATA inside is byte-identical either
+   way, so this is purely about not making the vendor (and this module)
+   do ~80x the unneeded work every run, not a correctness question.
+   `results_scope` is therefore a SEPARATE config key from
+   `contest_type_filter` (defaulting to it when absent, which is correct
+   for Arkansas since its "Federal" value serves both roles identically)
+   -- the two diverge for North Dakota specifically, where "SW" is the
+   right REQUEST scope but cannot serve as the federal-detection filter
+   (it doesn't distinguish federal races at all, per point 2 above).
 
 Party is a literal suffix/prefix baked into the contest name on both
 real states ("REP U.S. Senate" in Arkansas, "Representative in Congress
@@ -120,7 +133,7 @@ async def _discover_elections(
 
 async def _federal_contests_and_results(
     client: httpx.AsyncClient, state: str, base_url: str, cid: str,
-    election_id: str, contest_type_filter: str | None, year: int,
+    election_id: str, contest_type_filter: str | None, results_scope: str | None, year: int,
 ) -> tuple[dict, dict] | None:
     """(federal contests by id from the search list, their vote totals
     from the results endpoint) for one election, or None on a real fetch
@@ -138,23 +151,25 @@ async def _federal_contests_and_results(
     for cid_key, c in contests.items():
         if not c.get("contestName"):
             continue
-        if contest_type_filter is not None:
-            if c.get("contestTypeCode") != contest_type_filter:
-                continue
-        elif parse_office(c["contestName"]) is None:
-            # No contestTypeCode distinguishes federal races on this
-            # vendor deployment (North Dakota's are all "SW") -- fall
-            # back to the shared office parser alone, which already
-            # refuses non-federal labels the same way every other
-            # module does.
+        if contest_type_filter is not None and c.get("contestTypeCode") != contest_type_filter:
+            continue
+        # parse_office() is always the real source of truth for "is this
+        # federal" -- contest_type_filter (where a state has one) is only
+        # a cheap pre-filter, never a substitute for it: a typo'd/stale
+        # contest_type_filter value would otherwise silently exclude
+        # every real contest with no signal anything broke. North
+        # Dakota's real contests all share one contestTypeCode ("SW")
+        # regardless of office, so it configures no contest_type_filter
+        # at all and this check does the whole job alone.
+        if parse_office(c["contestName"]) is None:
             continue
         federal[cid_key] = c
     if not federal:
         return {}, {}
 
     results_url = f"{base_url}/Contest/GetContestResults?cId={cid}&electionID={election_id}"
-    if contest_type_filter is not None:
-        results_url += f"&contestType={contest_type_filter}"
+    if results_scope is not None:
+        results_url += f"&contestType={results_scope}"
     results = await fetch_json_with_retry(client, _rate_limiter, results_url, f"{state} federal results {year}")
     if not isinstance(results, dict):
         return None
@@ -174,6 +189,18 @@ async def fetch_confirmed_candidates(
     runoff_name_regex = source.get("runoff_name_regex")
     runoff_re = re.compile(runoff_name_regex, re.IGNORECASE) if runoff_name_regex else None
     contest_type_filter = source.get("contest_type_filter")
+    # The value to scope the GetContestResults request with is usually the
+    # SAME as contest_type_filter (Arkansas's "Federal" narrows both the
+    # client-side federal check AND the request), but not always: North
+    # Dakota's real contestTypeCode ("SW") scopes the request down from
+    # ~1500 contests (every office AND ballot measure statewide) to the 18
+    # real statewide-office ones, verified live -- but "SW" does NOT
+    # distinguish federal races from Secretary of State/Attorney General/
+    # etc, so it can't double as contest_type_filter the way Arkansas's
+    # value does. results_scope defaults to contest_type_filter (the
+    # common case) and is only set separately when a state's two roles
+    # genuinely diverge.
+    results_scope = source.get("results_scope", contest_type_filter)
 
     threshold = source.get("runoff_threshold_pct")
     settle_days = source.get("settle_days", DEFAULT_SETTLE_DAYS)
@@ -187,7 +214,7 @@ async def fetch_confirmed_candidates(
         if election is None or not _settled(election["date"], settle_days):
             continue  # no stage yet, or this stage's count isn't settled
         fetched = await _federal_contests_and_results(
-            client, state, base_url, cid, election["id"], contest_type_filter, year,
+            client, state, base_url, cid, election["id"], contest_type_filter, results_scope, year,
         )
         if fetched is None:
             return None

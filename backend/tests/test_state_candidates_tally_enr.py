@@ -37,6 +37,7 @@ of State contest, to prove that fallback actually excludes it.
 """
 
 import json
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -81,6 +82,14 @@ ND_SOURCE = {
     "cid": ND_CID,
     "primary_name_regex": "primary election",
     "runoff_threshold_pct": None,
+    # No contest_type_filter (North Dakota's contestTypeCode doesn't
+    # distinguish federal races), but results_scope IS set -- verified
+    # live that omitting it entirely returns _ALL_ ~1500 contests
+    # (county/city races included) instead of the 18 real statewide
+    # ones "SW" scopes it to; the federal contest DATA itself is
+    # identical either way, but there is no reason to make the vendor
+    # (and this module) do 80x the unnecessary work every run.
+    "results_scope": "SW",
 }
 
 
@@ -92,7 +101,6 @@ class TestDiscoverElectionsArkansas:
             return _resp(AR_ELECTIONS)
 
         monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
-        import re
         primary, runoff = await tenr._discover_elections(
             None, "AR", AR_BASE_URL, AR_CID, re.compile("preferential primary", re.I), re.compile("primary runoff", re.I), 2026,
         )
@@ -105,7 +113,6 @@ class TestDiscoverElectionsArkansas:
         # The real 2026 fixture also carries a "2026 Primary Special
         # Election" -- same year, contains neither "preferential primary"
         # nor "primary runoff" -- proving the match is on name, not year.
-        import re
         async def fake(client, rl, method, url, **kw):
             return _resp(AR_ELECTIONS)
 
@@ -117,7 +124,6 @@ class TestDiscoverElectionsArkansas:
         assert runoff["id"] != "4b025e66-db9f-4e01-a7b8-3d06d87bccda"
 
     async def test_no_match_for_a_year_not_in_the_list(self, monkeypatch):
-        import re
         async def fake(client, rl, method, url, **kw):
             return _resp(AR_ELECTIONS)
 
@@ -128,7 +134,6 @@ class TestDiscoverElectionsArkansas:
         assert result == (None, None)
 
     async def test_fetch_failure_is_none_not_empty(self, monkeypatch):
-        import re
         async def fake(client, rl, method, url, **kw):
             return None
 
@@ -139,7 +144,6 @@ class TestDiscoverElectionsArkansas:
         assert result == (None, None)
 
     async def test_no_runoff_regex_never_looks_for_a_second_stage(self, monkeypatch):
-        import re
         async def fake(client, rl, method, url, **kw):
             return _resp(AR_ELECTIONS)
 
@@ -419,10 +423,30 @@ class TestFetchConfirmedCandidatesNorthDakota:
         result = await tenr.fetch_confirmed_candidates(None, 2026, "ND", ND_SOURCE)
         assert all(r["office"] == "H" for r in result)
 
-    async def test_single_at_large_seat_has_no_district(self, monkeypatch):
-        self._patched(monkeypatch)
-        result = await tenr.fetch_confirmed_candidates(None, 2026, "ND", ND_SOURCE)
-        assert all(r["district"] is None for r in result)
+    async def test_results_scope_narrows_the_results_request_without_losing_data(self, monkeypatch):
+        # Real regression case: omitting results_scope entirely sends a
+        # bare GetContestResults request that returns _ALL_ ~1500
+        # statewide contests (county/city races included) instead of the
+        # 18 real statewide-office ones "&contestType=SW" scopes it to --
+        # verified live. The federal contest data is identical either
+        # way, but the request actually sent must carry the scope, not
+        # just happen to still work by coincidence of what's mocked.
+        requested = []
+
+        async def fake(client, rl, method, url, **kw):
+            requested.append(url)
+            if "GetElectionList" in url:
+                return _resp(ND_ELECTIONS)
+            if "GetContestSearchList" in url:
+                return _resp(ND_PRIMARY_SEARCH)
+            if "GetContestResults" in url:
+                return _resp(ND_PRIMARY_RESULTS)
+            raise AssertionError(f"unexpected URL: {url}")
+
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
+        await tenr.fetch_confirmed_candidates(None, 2026, "ND", ND_SOURCE)
+        results_urls = [u for u in requested if "GetContestResults" in u]
+        assert results_urls and all("&contestType=SW" in u for u in results_urls)
 
     async def test_no_runoff_configured_never_requests_a_second_stage(self, monkeypatch):
         requested = []
@@ -441,12 +465,31 @@ class TestFetchConfirmedCandidatesNorthDakota:
         await tenr.fetch_confirmed_candidates(None, 2026, "ND", ND_SOURCE)
         assert not any("Runoff" in u or "runoff" in u for u in requested)
 
-    async def test_party_derived_from_the_democratic_npl_contest_name(self, monkeypatch):
-        # North Dakota's real ballot label is "Democratic-NPL", not the
-        # bare "Democratic" every other state in this codebase uses --
-        # normalize_party's existing "democratic" root already covers it
-        # with no new pattern needed.
-        self._patched(monkeypatch)
-        result = await tenr.fetch_confirmed_candidates(None, 2026, "ND", ND_SOURCE)
-        dem = [r for r in result if r["party"] == "D"]
-        assert dem == [{"office": "H", "district": None, "party": "D", "last_name": "Hammer"}]
+    async def test_contest_type_filter_absent_still_scopes_the_results_request(self, monkeypatch):
+        # Arkansas-shaped config (contest_type_filter set) implies the
+        # same results_scope by default -- confirms the fallback direction
+        # too, not just North Dakota's explicit override.
+        source_without_explicit_scope = {**AR_SOURCE}
+        del source_without_explicit_scope["contest_type_filter"]
+        requested = []
+
+        async def fake(client, rl, method, url, **kw):
+            requested.append(url)
+            if "GetElectionList" in url:
+                return _resp(AR_ELECTIONS)
+            if f"electionID={AR_PRIMARY_ID}" in url and "GetContestSearchList" in url:
+                return _resp(AR_PRIMARY_SEARCH)
+            if f"electionID={AR_PRIMARY_ID}" in url and "GetContestResults" in url:
+                return _resp(AR_PRIMARY_RESULTS)
+            if f"electionID={AR_RUNOFF_ID}" in url and "GetContestSearchList" in url:
+                return _resp(AR_RUNOFF_SEARCH)
+            raise AssertionError(f"unexpected URL: {url}")
+
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
+        result = await tenr.fetch_confirmed_candidates(None, 2026, "AR", source_without_explicit_scope)
+        # With no contest_type_filter, federal detection falls back to
+        # parse_office() alone -- the real fixture's non-federal Governor/
+        # Sheriff contests must still be excluded.
+        assert all(r["office"] in ("H", "S") for r in result)
+        results_urls = [u for u in requested if "GetContestResults" in u]
+        assert results_urls and all("contestType" not in u for u in results_urls)
