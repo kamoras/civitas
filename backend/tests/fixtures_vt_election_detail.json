@@ -1,0 +1,24 @@
+{
+  "electionDetails": {
+    "electionId": 7514,
+    "electionName": "AUGUST PRIMARY",
+    "electionDate": "2026-08-11T00:00:00",
+    "electionTypeCode": "P",
+    "electionCategoryCode": "S",
+    "isOfficial": true,
+    "isSync": true,
+    "isDefault": true,
+    "isReports": true,
+    "isSearch": true,
+    "isHomeLinks": true,
+    "electionType": "AUGUST PRIMARY",
+    "electionGuid": "a18f77e0-89f8-4a01-8d97-61a7c75ba200",
+    "electionDateWithName": "08/11/2026 AUGUST PRIMARY",
+    "isStateWideElection": true,
+    "isGeneralElection": false
+  },
+  "federal": {
+    "isEnable": true,
+    "path": "elections\\a18f77e0-89f8-4a01-8d97-61a7c75ba200-f-20260908223641.json"
+  }
+}
