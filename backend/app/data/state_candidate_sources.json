@@ -304,6 +304,36 @@
       },
       "description": "Fourth state on the Enhanced Voting portal, found on 2026-08-16 by probing /results/public/ across state results hosts — pure config, no code. Verified live against the real 2026-06-23 primary workbook: Ben McAdams taking the UT-01 Democratic primary, Blake Moore UT-02 and Celeste Maloy UT-03 on the Republican side (district numbers are the post-2026-redistricting map, which is exactly why they come from the state's own feed rather than being inferred). Only 3 federal contests exist — Utah's convention/signature path means most seats never reach a primary ballot, and an unopposed nominee is simply absent here. The name pattern excludes Utah's odd-year MUNICIPAL primary. Utah is why settle_days exists: this primary was canvassed and certified on 2026-07-22, its signed state canvass report is published on this very portal, and isOfficialResults was STILL false a month later — so require_official alone would have confirmed nobody here forever."
     },
+    "ID": {
+      "source_name": "Idaho Secretary of State (official results portal)",
+      "strategy": "tabular",
+      "runoff_threshold_pct": null,
+      "discovery": {
+        "mode": "sos_api_report",
+        "jurisdiction_url": "https://results.voteidaho.gov/results/public/api/jurisdictions/id",
+        "election_url": "https://results.voteidaho.gov/results/public/api/elections/id/{election_id}",
+        "cdn_url": "https://results.voteidaho.gov/cdn/results/{jurisdiction_id}/{blob}",
+        "election_name_regex": "Primary Election",
+        "report_name": "Summary and Precinct Results Excel",
+        "require_official": true,
+        "settle_days": 30
+      },
+      "format": {
+        "format": "xlsx",
+        "contest_column": "Office Name",
+        "choice_column": "Ballot Name",
+        "party_column": "Party",
+        "votes_column": "Total",
+        "exclude_choices": [
+          "Ballots Cast",
+          "Over Votes",
+          "Under Votes",
+          "Write-in: Not Assigned",
+          "Write-in: Not Certified"
+        ]
+      },
+      "description": "Fifth state on the Enhanced Voting portal (after GA/WA/VA/UT) — found 2026-09-08 not by the crawler's own probe but by a live browser network trace of results.voteidaho.gov's front end (a JS SPA whose own /data endpoint surfaces the same underlying jurisdiction/election/report-blob documents this system's existing sos_api_report discovery already reads three-hop). Pure config, no code, once the vendor was identified. The bulk export ('Summary and Precinct Results Excel') is the same row-per-county-per-choice long format every other Enhanced Voting state's xlsx already is: Office Name/Ballot Name/Party/Total columns, aggregated across county rows (Idaho reports at COUNTY granularity here, not precinct, but the aggregation logic is identical either way). Idaho's own two write-in summary buckets ('Write-in: Not Assigned', 'Write-in: Not Certified') needed adding to exclude_choices beyond Utah's three — real rows in this export, verified live, not a guess. Verified live 2026-09-08 against the real, OFFICIAL, 100%-reporting 2026 primary (cross-checked candidate-by-candidate against the front end's own live JSON, which separately exposes an isWinner flag per candidate — not trusted directly, per this system's standing policy of always recomputing through the shared, tie-safe pick_nominee, but every one matched): Jim Risch (Senate R, real incumbent), David Roth (Senate D), Matt Loesby (Senate L, unopposed), Russ Fulcher (CD1 R, real incumbent), Kaylee Peterson (CD1 D), Mike Simpson (CD2 R, real incumbent), Ellie Gilbreath (CD2 D), Will Johanson (CD2 L, unopposed). Idaho nominates by plurality, so runoff_threshold_pct is null."
+    },
     "GA": {
       "source_name": "Georgia Secretary of State (official results portal)",
       "strategy": "tabular",

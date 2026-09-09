@@ -1033,6 +1033,113 @@ class TestNewMexico:
         ]
 
 
+class TestIdaho:
+    """A trimmed, real cut of Idaho's official 2026 primary export (fifth
+    state found live on the Enhanced Voting portal, after GA/WA/VA/UT) --
+    'Summary and Precinct Results Excel', fetched live 2026-09-08 from
+    results.voteidaho.gov's own CDN blob. Real county-level rows for 2 of
+    Idaho's 44 counties (Ada, Canyon) kept whole rather than trimmed to
+    single rows -- aggregation across county rows is exactly what this
+    fixture proves, and Canyon County (entirely within CD1) legitimately
+    has no CD2 rows at all, a real shape the aggregation must not choke
+    on. Idaho's own two write-in summary buckets ("Write-in: Not
+    Assigned", "Write-in: Not Certified") are real rows in the export,
+    not present in every other Enhanced Voting state's exclude_choices.
+    """
+
+    _FMT = {
+        "format": "xlsx",
+        "contest_column": "Office Name",
+        "choice_column": "Ballot Name",
+        "party_column": "Party",
+        "votes_column": "Total",
+        "exclude_choices": [
+            "Ballots Cast", "Over Votes", "Under Votes",
+            "Write-in: Not Assigned", "Write-in: Not Certified",
+        ],
+    }
+
+    @staticmethod
+    def _rows():
+        header = ["County", "Office Name", "Ballot Name", "Party", "Total"]
+        real = [
+            ("Ada County", "United States Senator - Democratic", "Nickolas 007 Bonds", "Democratic", "1352"),
+            ("Ada County", "United States Senator - Democratic", "Brad Moore", "Democratic", "5978"),
+            ("Ada County", "United States Senator - Democratic", "David Roth", "Democratic", "14248"),
+            ("Ada County", "United States Senator - Republican", "Joe Evans", "Republican", "10398"),
+            ("Ada County", "United States Senator - Republican", "Denny LaVe", "Republican", "2168"),
+            ("Ada County", "United States Senator - Republican", "Jim Risch", "Republican", "29463"),
+            ("Ada County", "United States Senator - Republican", "Josh Roy", "Republican", "9524"),
+            ("Ada County", "United States Senator - Libertarian", "Matt Loesby", "Libertarian", "224"),
+            ("Ada County", "United States Senator - Republican", "Ballots Cast", "", "51553"),
+            ("Ada County", "United States Representative District 1 - Democratic", "Kenneth Brungardt", "Democratic", "850"),
+            ("Ada County", "United States Representative District 1 - Democratic", "Kaylee Peterson", "Democratic", "5949"),
+            ("Ada County", "United States Representative District 1 - Republican", "Andy Briner", "Republican", "3716"),
+            ("Ada County", "United States Representative District 1 - Republican", "Russ Fulcher", "Republican", "22707"),
+            ("Ada County", "United States Representative District 1 - Republican", "Joseph P Morrison", "Republican", "3141"),
+            ("Ada County", "United States Representative District 1 - Republican", "Write-in: Not Assigned", "", "12"),
+            ("Ada County", "United States Representative District 2 - Democratic", "Ellie Gilbreath", "Democratic", "11596"),
+            ("Ada County", "United States Representative District 2 - Democratic", "Julie Wiley", "Democratic", "3466"),
+            ("Ada County", "United States Representative District 2 - Republican", "Brian Keene", "Republican", "6017"),
+            ("Ada County", "United States Representative District 2 - Republican", "Perry Shumway", "Republican", "3068"),
+            ("Ada County", "United States Representative District 2 - Republican", "Mike Simpson", "Republican", "11682"),
+            ("Ada County", "United States Representative District 2 - Libertarian", "Will Johanson", "Libertarian", "97"),
+            ("Ada County", "United States Representative District 2 - Republican", "Write-in: Not Certified", "", "3"),
+            ("Canyon County", "United States Senator - Democratic", "Nickolas 007 Bonds", "Democratic", "285"),
+            ("Canyon County", "United States Senator - Democratic", "Brad Moore", "Democratic", "1206"),
+            ("Canyon County", "United States Senator - Democratic", "David Roth", "Democratic", "1942"),
+            ("Canyon County", "United States Senator - Libertarian", "Matt Loesby", "Libertarian", "88"),
+            ("Canyon County", "United States Senator - Republican", "Joe Evans", "Republican", "2593"),
+            ("Canyon County", "United States Senator - Republican", "Denny LaVe", "Republican", "828"),
+            ("Canyon County", "United States Senator - Republican", "Jim Risch", "Republican", "13924"),
+            ("Canyon County", "United States Senator - Republican", "Josh Roy", "Republican", "3502"),
+            ("Canyon County", "United States Representative District 1 - Democratic", "Kenneth Brungardt", "Democratic", "455"),
+            ("Canyon County", "United States Representative District 1 - Democratic", "Kaylee Peterson", "Democratic", "3034"),
+            ("Canyon County", "United States Representative District 1 - Republican", "Andy Briner", "Republican", "2479"),
+            ("Canyon County", "United States Representative District 1 - Republican", "Russ Fulcher", "Republican", "16134"),
+            ("Canyon County", "United States Representative District 1 - Republican", "Joseph P Morrison", "Republican", "1983"),
+            # Canyon County genuinely has no CD2 rows -- entirely within CD1.
+            ("Canyon County", "Governor - Republican", "Brad Little", "Republican", "22000"),
+        ]
+        return [header] + [list(r) for r in real]
+
+    @pytest.mark.asyncio
+    async def test_confirms_every_real_2026_federal_nominee(self, monkeypatch):
+        async def fake_discover(client, state, year, discovery):
+            return [tb._stage(
+                "https://results.voteidaho.gov/cdn/results/x/Results.xlsx",
+                held="2026-05-19", official=True,
+            )]
+
+        payload = _workbook(self._rows())
+
+        async def fake_get(client, url, label):
+            return _Resp(content=payload)
+
+        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
+        monkeypatch.setattr(tb, "_get", fake_get)
+        records = await tb.fetch_confirmed_candidates(
+            None, 2026, "ID", {"format": self._FMT, "discovery": {"require_official": True}},
+        )
+        # Real regression this proves: David Roth's real statewide total
+        # (Ada 14248 + Canyon 1942 = 16190) only holds if votes are SUMMED
+        # across both counties, not read from a single county's row --
+        # and "Governor" / write-in / Ballots-Cast rows must never leak
+        # into a federal result.
+        assert sorted(
+            (r["office"], r["district"], r["party"], r["last_name"]) for r in records
+        ) == [
+            ("H", 1, "D", "Peterson"),
+            ("H", 1, "R", "Fulcher"),
+            ("H", 2, "D", "Gilbreath"),
+            ("H", 2, "L", "Johanson"),
+            ("H", 2, "R", "Simpson"),
+            ("S", None, "D", "Roth"),
+            ("S", None, "L", "Loesby"),
+            ("S", None, "R", "Risch"),
+        ]
+
+
 class _Resp:
     def __init__(self, text="", content=b"", json_body=None):
         self.text = text
