@@ -165,7 +165,8 @@ class TestFetchWithRetryRequests:
 
 class TestFetchJsonWithRetry:
     """Extracted from three near-identical per-state _get_json copies
-    (state_candidates_ar.py, state_candidates_ct.py, state_candidates_in.py)
+    (Arkansas's own Tally ENR module, since generalized into
+    state_candidates_tally_enr.py; state_candidates_ct.py; state_candidates_in.py)
     — the two things those copies each did on top of fetch_with_retry:
     parse the response body, and turn a bad body into a logged None
     instead of a raised ValueError."""
