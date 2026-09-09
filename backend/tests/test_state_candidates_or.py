@@ -28,6 +28,7 @@ import io
 from pathlib import Path
 
 import pdfplumber
+import pytest
 
 from app.pipeline.fetch import state_candidates_or as orm
 
@@ -111,7 +112,31 @@ class TestPageCandidates:
         assert by_name == {"Ahmad": "D", "Bonamici": "D", "Kahl": "R", "Verbeek": "R"}
 
 
-class TestFederalContests:
+class _FakePage:
+    """Minimal stand-in for a pdfplumber Page: _page_candidates only ever
+    calls .extract_table(table_settings=...) on it."""
+
+    def __init__(self, table):
+        self._table = table
+
+    def extract_table(self, table_settings=None):  # noqa: ARG002
+        return self._table
+
+
+class TestPageCandidatesTotalRowGuard:
+    def test_a_total_row_with_a_different_column_count_is_skipped_not_misattributed(self):
+        # A malformed extraction (the "text" table strategy clustered the
+        # Total row's numeric columns differently than the surname row's)
+        # must not zip() the wrong vote total onto a candidate -- it should
+        # drop the whole block, matching state_candidates_wy.py's own
+        # fail-closed Total-row guard.
+        table = [
+            ["Democrat", "", ""],
+            ["", "Merkley", "Wells"],
+            ["County", "Jeff", "Paul"],
+            ["Total", "457006", "30544", "2907"],  # one extra column
+        ]
+        assert orm._page_candidates(_FakePage(table)) == []
     def test_finds_every_real_federal_candidate_across_all_three_pages(self):
         contests = orm._federal_contests(PDF_BYTES)
         assert sorted((o, d, p, n) for o, d, p, n, _v in contests) == [
@@ -144,19 +169,26 @@ class TestDiscoverPdfUrl:
         monkeypatch.setattr(orm, "fetch_json_with_retry", fake_json)
         assert await orm._discover_pdf_url(None, "OR", 2028) is None
 
-    async def test_fetch_failure_returns_none(self, monkeypatch):
+    async def test_fetch_failure_raises_discovery_failed(self, monkeypatch):
+        # A genuine fetch/parse failure must NOT read the same as "no rows
+        # for this year" -- it has to be distinguishable so the caller can
+        # report fetch_failed instead of a healthy empty result.
         async def fake_json(client, rl, url, label, **kw):
             return None
 
         monkeypatch.setattr(orm, "fetch_json_with_retry", fake_json)
-        assert await orm._discover_pdf_url(None, "OR", 2026) is None
+        with pytest.raises(orm._DiscoveryFailed):
+            await orm._discover_pdf_url(None, "OR", 2026)
 
-    async def test_no_matching_uri_in_results_field_returns_none(self, monkeypatch):
+    async def test_no_matching_uri_in_results_field_raises_discovery_failed(self, monkeypatch):
+        # A row for the right year with a malformed Results field is a
+        # genuine parse failure, not a healthy "nothing published yet".
         async def fake_json(client, rl, url, label, **kw):
             return {"value": [{"Election_x0020_Date": "2026-05-19T05:00:00Z", "Results": "no link here"}]}
 
         monkeypatch.setattr(orm, "fetch_json_with_retry", fake_json)
-        assert await orm._discover_pdf_url(None, "OR", 2026) is None
+        with pytest.raises(orm._DiscoveryFailed):
+            await orm._discover_pdf_url(None, "OR", 2026)
 
 
 class TestFetchConfirmedCandidates:
@@ -179,16 +211,16 @@ class TestFetchConfirmedCandidates:
         result = await orm.fetch_confirmed_candidates(None, 2026, "OR", {"settle_days": 36500})
         assert result == []
 
-    async def test_discovery_failure_returns_empty_not_none(self, monkeypatch):
-        # A missing/malformed SharePoint row reads as "not published yet"
-        # (an empty, healthy list is a real state early in a cycle),
-        # distinct from a PDF fetch failure below, which is a genuine
-        # fetch_failed.
+    async def test_discovery_failure_returns_none_not_empty(self, monkeypatch):
+        # A broken SharePoint fetch must surface as fetch_failed (None), not
+        # a healthy "0 confirmed" -- otherwise an outage looks identical to
+        # a legitimately-not-yet-published primary and nothing ever falls
+        # back or alerts on it.
         async def fake_json(client, rl, url, label, **kw):
             return None
 
         monkeypatch.setattr(orm, "fetch_json_with_retry", fake_json)
-        assert await orm.fetch_confirmed_candidates(None, 2026, "OR", {}) == []
+        assert await orm.fetch_confirmed_candidates(None, 2026, "OR", {}) is None
 
     async def test_pdf_fetch_failure_returns_none(self, monkeypatch):
         _patched(monkeypatch)

@@ -127,32 +127,50 @@ _NON_CANDIDATE_RE = re.compile(r"misc\.?|write.?in|over.?vote|under.?vote", re.I
 _TABLE_SETTINGS = {"vertical_strategy": "text", "horizontal_strategy": "text"}
 
 
+class _DiscoveryFailed(Exception):
+    """Raised by _discover_pdf_url on a genuine fetch/parse failure (network
+    error, malformed SharePoint response, or a row missing its expected
+    Results link) — never for a healthy "nothing published for this cycle
+    yet", which returns None instead. Collapsing the two into one outcome
+    would silently report a broken SharePoint query as a healthy empty
+    cycle — the exact failure class this system's Wyoming module
+    (state_candidates_wy.py) already treats as fetch_failed, not []."""
+
+
 async def _discover_pdf_url(client: httpx.AsyncClient, state: str, year: int) -> tuple[str, str] | None:
     """(pdf_url, held ISO date) for the current cycle's primary, or None if
-    the SharePoint list has nothing for `year`. The list's own real election
-    DATE field (never a record id — see module docstring) decides which row
-    is current."""
+    the SharePoint list's current row is for a different year (healthy: not
+    published yet). Raises _DiscoveryFailed if the list itself couldn't be
+    read. The list's own real election DATE field (never a record id — see
+    module docstring) decides which row is current."""
     item = await fetch_json_with_retry(client, _rate_limiter, _LIST_ITEMS_URL, f"{state} results list")
     if not item:
-        return None
+        raise _DiscoveryFailed(f"{state} results list fetch failed")
     row = (item.get("value") or [None])[0]
     if not row:
-        return None
+        raise _DiscoveryFailed(f"{state} results list returned no rows")
     held = str(row.get("Election_x0020_Date") or "")[:10]
     if not held.startswith(str(year)):
         return None
     m = _URI_RE.search(row.get("Results") or "")
     if not m:
-        return None
+        raise _DiscoveryFailed(f"{state} results list row has no Results link")
     return _PDF_URL_PATTERN.format(uri=m.group(1)), held
 
 
 def _page_office(text: str) -> tuple[str, int | None] | None:
+    """Office/district for this page, found by scanning the first few lines
+    for one that parse_office recognizes (paired with the line after it, for
+    "US Representative" + "1st District") rather than trusting a fixed line
+    index — the title line is one line on every page verified live, but
+    searching a small window survives it wrapping to two."""
     lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
-    if len(lines) < 2:
-        return None
-    office_line, second_line = lines[1], lines[2] if len(lines) > 2 else ""
-    return parse_office(f"{office_line} {second_line}") or parse_office(office_line)
+    for i in range(1, min(len(lines), 5)):
+        second_line = lines[i + 1] if i + 1 < len(lines) else ""
+        found = parse_office(f"{lines[i]} {second_line}") or parse_office(lines[i])
+        if found:
+            return found
+    return None
 
 
 def _page_candidates(page) -> list[tuple[str, str, int]]:
@@ -187,12 +205,27 @@ def _page_candidates(page) -> list[tuple[str, str, int]]:
             if party is not None:
                 current_party = party
                 awaiting_surnames = True
+            else:
+                logger.warning("OR results: unrecognized party label %r, skipping its block", head)
             continue
         if awaiting_surnames and head == "" and any(rest):
             pending_surnames = rest
             awaiting_surnames = False
             continue
         if head == "Total" and pending_surnames is not None and current_party is not None:
+            if len(rest) != len(pending_surnames):
+                # Column counts must line up 1:1 (see module docstring) --
+                # a mismatch means the "text" table strategy clustered this
+                # Total row's numeric columns differently than the surname
+                # row's, so zip()ping them would silently misattribute a
+                # vote total to the wrong candidate. Fail closed, matching
+                # state_candidates_wy.py's own Total-row guard.
+                logger.warning(
+                    "OR results: Total row has %d columns, surname row had %d, skipping block",
+                    len(rest), len(pending_surnames),
+                )
+                pending_surnames = None
+                continue
             for raw_name, votes_text in zip(pending_surnames, rest):
                 if not raw_name or _NON_CANDIDATE_RE.search(raw_name):
                     continue
@@ -225,7 +258,11 @@ def _federal_contests(pdf_bytes: bytes) -> list[tuple[str, int | None, str, str,
 async def fetch_confirmed_candidates(
     client: httpx.AsyncClient, year: int, state: str, source: dict,  # noqa: ARG001 — state unused, this strategy is OR-only by construction
 ) -> list[dict] | None:
-    discovered = await _discover_pdf_url(client, state, year)
+    try:
+        discovered = await _discover_pdf_url(client, state, year)
+    except _DiscoveryFailed as exc:
+        logger.warning("OR results: discovery failed: %s", exc)
+        return None
     if discovered is None:
         return []
     pdf_url, held_on = discovered
