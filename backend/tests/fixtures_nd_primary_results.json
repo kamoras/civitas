@@ -1,0 +1,101 @@
+{
+  "versionID": "v1",
+  "electionID": "346",
+  "isOfficial": true,
+  "response": {
+    "contestType": "SW",
+    "contests": {
+      "20042REP": {
+        "contestID": "20042REP",
+        "districtID": null,
+        "precinctsReporting": 358,
+        "precinctsPartiallyReporting": 0,
+        "totalPrecincts": 358,
+        "totalVotes": 82075,
+        "recountType": 0,
+        "hasRecount": false,
+        "hasLocationResults": true,
+        "choices": [
+          {
+            "choiceID": "34994",
+            "totalVotes": 22196,
+            "partyID": "REP",
+            "votePercent": 27.04,
+            "isWinner": false
+          },
+          {
+            "choiceID": "35452",
+            "totalVotes": 59719,
+            "partyID": "REP",
+            "votePercent": 72.76,
+            "isWinner": true
+          },
+          {
+            "choiceID": "9901",
+            "totalVotes": 160,
+            "partyID": "REP",
+            "votePercent": 0.19,
+            "isWinner": false
+          }
+        ],
+        "writeInChoices": []
+      },
+      "20042DEM": {
+        "contestID": "20042DEM",
+        "districtID": null,
+        "precinctsReporting": 358,
+        "precinctsPartiallyReporting": 0,
+        "totalPrecincts": 358,
+        "totalVotes": 34673,
+        "recountType": 0,
+        "hasRecount": false,
+        "hasLocationResults": true,
+        "choices": [
+          {
+            "choiceID": "35910",
+            "totalVotes": 34604,
+            "partyID": "DEM",
+            "votePercent": 99.8,
+            "isWinner": true
+          },
+          {
+            "choiceID": "9901",
+            "totalVotes": 69,
+            "partyID": "DEM",
+            "votePercent": 0.2,
+            "isWinner": false
+          }
+        ],
+        "writeInChoices": []
+      },
+      "20283REP": {
+        "contestID": "20283REP",
+        "districtID": null,
+        "precinctsReporting": 358,
+        "precinctsPartiallyReporting": 0,
+        "totalPrecincts": 358,
+        "totalVotes": 74431,
+        "recountType": 0,
+        "hasRecount": false,
+        "hasLocationResults": true,
+        "choices": [
+          {
+            "choiceID": "35012",
+            "totalVotes": 74102,
+            "partyID": "REP",
+            "votePercent": 99.56,
+            "isWinner": true
+          },
+          {
+            "choiceID": "9901",
+            "totalVotes": 329,
+            "partyID": "REP",
+            "votePercent": 0.44,
+            "isWinner": false
+          }
+        ],
+        "writeInChoices": []
+      }
+    }
+  }
+}

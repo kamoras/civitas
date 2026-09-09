@@ -1,0 +1,118 @@
+{
+  "versionID": "v1",
+  "electionID": "346",
+  "isOfficial": true,
+  "response": {
+    "contests": {
+      "20042REP": {
+        "contestId": "20042REP",
+        "contestName": "Representative in Congress Republican",
+        "contestTypeCode": "SW",
+        "contestOrder": 1,
+        "voteFor": 1,
+        "locationType": null,
+        "locationID": null,
+        "message": "",
+        "messageLink": "",
+        "choices": {
+          "34994": {
+            "id": "34994",
+            "name": "Alex  Balazs ",
+            "pictureFilename": "",
+            "partyID": "REP",
+            "color": "#9B493C",
+            "order": 0,
+            "isWriteIn": false,
+            "isWinner": false
+          },
+          "35452": {
+            "id": "35452",
+            "name": "Julie  Fedorchak ",
+            "pictureFilename": "",
+            "partyID": "REP",
+            "color": "#9B493C",
+            "order": 0,
+            "isWriteIn": false,
+            "isWinner": false
+          },
+          "9901": {
+            "id": "9901",
+            "name": "  write-in ",
+            "pictureFilename": "",
+            "partyID": "REP",
+            "color": "#9B493C",
+            "order": 99,
+            "isWriteIn": false,
+            "isWinner": false
+          }
+        }
+      },
+      "20042DEM": {
+        "contestId": "20042DEM",
+        "contestName": "Representative in Congress Democratic-NPL",
+        "contestTypeCode": "SW",
+        "contestOrder": 2,
+        "voteFor": 1,
+        "locationType": null,
+        "locationID": null,
+        "message": "",
+        "messageLink": "",
+        "choices": {
+          "35910": {
+            "id": "35910",
+            "name": "Trygve  Hammer ",
+            "pictureFilename": "",
+            "partyID": "DEM",
+            "color": "#414A5A",
+            "order": 0,
+            "isWriteIn": false,
+            "isWinner": false
+          },
+          "9901": {
+            "id": "9901",
+            "name": "  write-in ",
+            "pictureFilename": "",
+            "partyID": "DEM",
+            "color": "#414A5A",
+            "order": 99,
+            "isWriteIn": false,
+            "isWinner": false
+          }
+        }
+      },
+      "20283REP": {
+        "contestId": "20283REP",
+        "contestName": "Secretary of State Republican",
+        "contestTypeCode": "SW",
+        "contestOrder": 107,
+        "voteFor": 1,
+        "locationType": null,
+        "locationID": null,
+        "message": "",
+        "messageLink": "",
+        "choices": {
+          "35012": {
+            "id": "35012",
+            "name": "Michael  Howe ",
+            "pictureFilename": "",
+            "partyID": "REP",
+            "color": "#9B493C",
+            "order": 0,
+            "isWriteIn": false,
+            "isWinner": false
+          },
+          "9901": {
+            "id": "9901",
+            "name": "  write-in ",
+            "pictureFilename": "",
+            "partyID": "REP",
+            "color": "#9B493C",
+            "order": 99,
+            "isWriteIn": false,
+            "isWinner": false
+          }
+        }
+      }
+    }
+  }
+}
