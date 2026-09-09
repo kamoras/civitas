@@ -77,6 +77,7 @@ from app.pipeline.fetch.state_candidates_pa import fetch_confirmed_candidates as
 from app.pipeline.fetch.state_candidates_tn import fetch_confirmed_candidates as _fetch_tn
 from app.pipeline.fetch.state_candidates_totalvote import fetch_confirmed_candidates as _fetch_totalvote
 from app.pipeline.fetch.state_candidates_tx import fetch_confirmed_candidates as _fetch_tx
+from app.pipeline.fetch.state_candidates_vt import fetch_confirmed_candidates as _fetch_vt
 from app.pipeline.fetch.state_candidates_wy import fetch_confirmed_candidates as _fetch_wy
 
 logger = logging.getLogger(__name__)
@@ -103,6 +104,7 @@ STRATEGIES = {
     "tn_precinct": _fetch_tn,
     "wy_canvass_xlsx": _fetch_wy,
     "or_abstract_pdf": _fetch_or,
+    "vt_enr": _fetch_vt,
 }
 
 # A state's own party lettering (mostly single-letter) doesn't match FEC's
