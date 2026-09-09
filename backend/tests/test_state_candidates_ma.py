@@ -97,6 +97,26 @@ class TestParseElection:
     def test_wrong_year_in_title_returns_none(self):
         assert mam._parse_election(DISTRICT6, "172973", 2028, "H") is None
 
+    def test_wrong_chamber_returns_none(self):
+        # A real House election id passed off as "S" (e.g. a mis-tagged
+        # or stray link) must be refused, not silently mislabeled.
+        assert mam._parse_election(DISTRICT6, "172973", 2026, "S") is None
+
+    def test_a_title_attribute_after_the_totals_row_does_not_corrupt_results(self):
+        # Real regression case: the WINNING candidate's own Totals-row
+        # <td> carries the same candidate-id-{id} class as the header
+        # (verified live). Trailing page content with its own title=
+        # attribute (nav/footer -- absent from the trimmed fixture,
+        # which is exactly what let this slip through una-caught the
+        # first time) must not be pulled into the header scan.
+        with_trailing_title = DISTRICT2.replace(
+            "</body></html>", '<footer><a title="Other Elections">More</a></footer></body></html>',
+        )
+        district, party, choices = mam._parse_election(with_trailing_title, "172985", 2026, "H")
+        assert district == 2
+        assert party == "D"
+        assert choices == [("McGovern", 80813)]
+
     def test_a_mismatched_totals_column_count_is_refused(self):
         # Real markup shape drift: a Totals row missing one candidate's
         # own number_ column must not silently zip against the wrong
@@ -125,12 +145,15 @@ class TestDiscoverElectionIds:
         ids = await mam._discover_election_ids(None, "MA", 5, 2026)
         assert set(ids) == _REAL_HOUSE_IDS
 
-    async def test_fetch_failure_returns_empty(self, monkeypatch):
+    async def test_fetch_failure_returns_none(self, monkeypatch):
+        # A broken search page must not read the same as "genuinely no
+        # primaries filed this year" -- both would otherwise map to the
+        # same [] outcome.
         async def fake_text(client, rl, url, label, **kw):
             return None
 
         monkeypatch.setattr(mam, "fetch_text_with_retry", fake_text)
-        assert await mam._discover_election_ids(None, "MA", 5, 2026) == []
+        assert await mam._discover_election_ids(None, "MA", 5, 2026) is None
 
 
 class TestFetchConfirmedCandidates:
@@ -150,11 +173,42 @@ class TestFetchConfirmedCandidates:
         assert {"office": "S", "district": None, "party": "R", "last_name": "Deaton"} in result
         assert len(result) == 4
 
-    async def test_a_failed_race_page_fetch_returns_none_not_partial(self, monkeypatch):
+    async def test_a_known_primary_date_gates_via_settle_days(self, monkeypatch):
+        monkeypatch.setattr(mam, "primary_date", lambda state, year: "2026-09-01")
+        _patched(monkeypatch, {
+            "office_id:5": SEARCH_HOUSE_SMALL,
+            "office_id:6": SEARCH_SENATE,
+            "/172973/": DISTRICT6,
+            "/172985/": DISTRICT2,
+            "/172905/": SENATE_D,
+            "/172906/": SENATE_R,
+        })
+        # 36500 days is never settled -- proves the calendar-derived date
+        # actually reaches _settled() rather than being ignored.
+        assert await mam.fetch_confirmed_candidates(None, 2026, "MA", {"settle_days": 36500}) == []
+        # A small floor against the same real date clears normally.
+        result = await mam.fetch_confirmed_candidates(None, 2026, "MA", {"settle_days": 1})
+        assert len(result) == 4
+
+    async def test_no_known_primary_date_skips_the_gate_rather_than_blocking(self, monkeypatch):
+        monkeypatch.setattr(mam, "primary_date", lambda state, year: None)
+        _patched(monkeypatch, {
+            "office_id:5": SEARCH_HOUSE_SMALL,
+            "office_id:6": SEARCH_SENATE,
+            "/172973/": DISTRICT6,
+            "/172985/": DISTRICT2,
+            "/172905/": SENATE_D,
+            "/172906/": SENATE_R,
+        })
+        result = await mam.fetch_confirmed_candidates(None, 2026, "MA", {"settle_days": 36500})
+        assert len(result) == 4
+
+    async def test_one_failed_race_page_does_not_lose_the_others(self, monkeypatch):
         # 172973 fetches fine; 172985 deliberately returns None below,
-        # standing in for a genuine mid-run fetch failure -- the whole
-        # confirmation must fail, not silently return only 172973's
-        # result.
+        # standing in for a genuine mid-run fetch failure -- unlike
+        # Mississippi's two co-published same-day pages, MA's races are
+        # independently discovered and fetched, so one page's outage
+        # must not discard the other, already-successfully-parsed race.
         async def fake_text(client, rl, url, label, **kw):
             if "172973" in url:
                 return DISTRICT6
@@ -163,6 +217,15 @@ class TestFetchConfirmedCandidates:
             if "office_id:6" in url:
                 return "<html><body></body></html>"
             return None  # the 172985 page: simulates a fetch failure
+
+        monkeypatch.setattr(mam, "fetch_text_with_retry", fake_text)
+        result = await mam.fetch_confirmed_candidates(None, 2026, "MA", {})
+        assert {"office": "H", "district": 6, "party": "D", "last_name": "Koh"} in result
+        assert len(result) == 1
+
+    async def test_every_fetch_failing_returns_none_not_a_healthy_empty(self, monkeypatch):
+        async def fake_text(client, rl, url, label, **kw):
+            return None
 
         monkeypatch.setattr(mam, "fetch_text_with_retry", fake_text)
         assert await mam.fetch_confirmed_candidates(None, 2026, "MA", {}) is None
