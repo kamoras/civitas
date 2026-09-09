@@ -57,6 +57,20 @@ class TestParseOffice:
         # No number at all is an at-large seat, not a parse failure.
         assert common.parse_office("Representative in Congress") == ("H", None)
 
+    def test_recognises_the_bare_representative_to_congress(self):
+        """Vermont's real label ("REPRESENTATIVE TO CONGRESS") uses "to"
+        where Florida's uses "in" — no "U.S."/"United States" prefix
+        either. Same word-boundary/no-qualifier tradeoff this function
+        already accepted for "Representative in Congress" (see
+        test_congress_is_decisive_wherever_it_appears): a state whose
+        LABEL happens to contain this exact three-word run in an
+        unrelated context (a committee name, a filing-system free-text
+        field) would also be read as federal — an accepted, pre-existing
+        risk class for this whole no-qualifier branch, not one newly
+        opened by adding "to"."""
+        assert common.parse_office("REPRESENTATIVE TO CONGRESS") == ("H", None)
+        assert common.parse_office("Representative to Congress, District 2") == ("H", 2)
+
     def test_an_ordinal_district_needs_the_chamber_to_be_federal_first(self):
         """"5th District" on its own belongs to no chamber in particular —
         recognising it alone would sweep in judicial and state races."""

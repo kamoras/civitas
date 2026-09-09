@@ -151,6 +151,12 @@ async def _current_primary_guid(client: httpx.AsyncClient, state: str, year: int
     elections = await fetch_json_with_retry(client, _rate_limiter, _ELECTIONS_URL, f"{state} elections list")
     if not isinstance(elections, list):
         raise _DiscoveryFailed(f"{state} elections list fetch failed")
+    if not elections:
+        # The portal's own list "lists every election ever held" (see
+        # module docstring) -- a genuinely empty list is a broken response
+        # (an error page cached as `[]`, say), never a healthy state, so
+        # this must not read the same as "no match for this year" below.
+        raise _DiscoveryFailed(f"{state} elections list came back empty")
     matches = [
         e for e in elections
         if e.get("isStateWideElection") and e.get("electionTypeCode") == "P" and e.get("electionYear") == year
@@ -159,7 +165,10 @@ async def _current_primary_guid(client: httpx.AsyncClient, state: str, year: int
         return None
     if len(matches) > 1:
         raise _DiscoveryFailed(f"{state} elections list has {len(matches)} statewide primaries for {year}")
-    return matches[0].get("electionGuid")
+    guid = matches[0].get("electionGuid")
+    if not guid:
+        raise _DiscoveryFailed(f"{state} elections list's matched {year} primary has no electionGuid")
+    return guid
 
 
 async def _federal_report_url(client: httpx.AsyncClient, state: str, guid: str) -> tuple[str, str] | None:
@@ -176,15 +185,22 @@ async def _federal_report_url(client: httpx.AsyncClient, state: str, guid: str) 
     if not path:
         raise _DiscoveryFailed(f"{state} election {guid} has federal.isEnable but no path")
     held = str((detail.get("electionDetails") or {}).get("electionDate") or "")[:10]
+    if not held:
+        # Every real election detail carries its own date -- a missing one
+        # would otherwise flow silently into _settled() (which treats an
+        # unparseable date as "not settled") and read forever as "waiting
+        # on settle_days" with no log line anywhere pointing at the real
+        # cause.
+        raise _DiscoveryFailed(f"{state} election {guid} has no electionDate")
     return f"{_BASE_URL}/{path.replace(chr(92), '/')}", held
 
 
-def _federal_contests(report: dict) -> list[tuple[str, int | None, str, str, int]]:
-    """(office, district, party, cn, votes) for every real per-town
-    tally in the report -- callers group by (office, district, party,
-    cid) to aggregate statewide totals; cid isn't returned here since the
-    shared result contract only ever needs a surname, but grouping
-    upstream still happens by cid (see _fetch_federal_choices)."""
+def _federal_contests(report: dict) -> list[tuple[str, int | None, str, int, str, int]]:
+    """(office, district, party, cid, cn, votes) for every real per-town
+    tally in the report -- cid is returned alongside cn because
+    _fetch_federal_choices must aggregate by id, not display name (see
+    module docstring); reducing to a bare surname happens only once, in
+    fetch_confirmed_candidates, after a single winner has been picked."""
     results = []
     for party_block in report.get("d") or []:
         party = normalize_party(party_block.get("pn") or "")
@@ -213,6 +229,16 @@ def _fetch_federal_choices(report: dict) -> dict[tuple[str, int | None, str], li
     for off, district, party, cid, cn, votes in _federal_contests(report):
         group = by_group.setdefault((off, district, party), {})
         name, total = group.get(cid, (cn, 0))
+        if total and name != cn:
+            # cid is trusted to be a stable identity within one (office,
+            # district, party) group across every town (see module
+            # docstring) -- if a future report ever reuses one cid for two
+            # different display names within a single group, that's the
+            # assumption breaking, not a name variant to silently prefer.
+            logger.warning(
+                "VT results: cid %s in %s/%s/%s has two names (%r, %r) -- votes may be split across them",
+                cid, off, district, party, name, cn,
+            )
         group[cid] = (name, total + votes)
     return {key: list(candidates.values()) for key, candidates in by_group.items()}
 

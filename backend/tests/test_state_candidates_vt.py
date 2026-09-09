@@ -84,6 +84,15 @@ class TestFederalContests:
         assert "OTHER WRITE-INS" not in all_names
         assert "BLANK" not in all_names
 
+    def test_flowery_placeholder_is_in_the_exclusion_set(self):
+        # "FLOWERY" only ever appears live under Vermont's real Progressive
+        # Party block (verified against the full live 2026 report), which
+        # normalize_party already refuses upstream of this check -- so this
+        # module's own trimmed fixture can never exercise it end-to-end.
+        # Tested directly against the exclusion set instead of pretending
+        # a real per-party fixture proves it.
+        assert "FLOWERY" in vtm._NON_CANDIDATE_NAMES
+
     def test_same_candidate_different_cid_across_parties_does_not_merge(self):
         # Becca Balint carries a DIFFERENT cid in the D, R, and PR blocks
         # (her real declared D ballot line vs. scattered write-in tallies
@@ -92,6 +101,26 @@ class TestFederalContests:
         choices = vtm._fetch_federal_choices(RESULTS)
         assert dict(choices[("H", None, "D")])["BECCA BALINT"] == 1027
         assert dict(choices[("H", None, "R")])["BECCA BALINT"] == 1
+
+    def test_a_reused_cid_with_a_different_name_logs_a_warning_but_still_sums(self, caplog):
+        # The cid-scoped-per-(office,district,party) assumption is trusted,
+        # not enforced -- if it ever breaks, this must be loud (a log
+        # line), not a silent vote-count discrepancy with no diagnostic
+        # trail.
+        report = {
+            "d": [{
+                "pn": "DEMOCRATIC", "pc": "D", "o": [{
+                    "on": "REPRESENTATIVE TO CONGRESS", "cs": [
+                        {"tn": "TOWN A", "rc": [{"cid": 1, "cn": "ALICE ONE", "vc": 10}], "wc": []},
+                        {"tn": "TOWN B", "rc": [{"cid": 1, "cn": "BOB TWO", "vc": 5}], "wc": []},
+                    ],
+                }],
+            }],
+        }
+        with caplog.at_level("WARNING"):
+            choices = vtm._fetch_federal_choices(report)
+        assert dict(choices[("H", None, "D")])["ALICE ONE"] == 15
+        assert any("cid" in r.message and "1" in r.message for r in caplog.records)
 
 
 class TestCurrentPrimaryGuid:
@@ -124,6 +153,27 @@ class TestCurrentPrimaryGuid:
     async def test_fetch_failure_raises_discovery_failed(self, monkeypatch):
         async def fake_json(client, rl, url, label, **kw):
             return None
+
+        monkeypatch.setattr(vtm, "fetch_json_with_retry", fake_json)
+        with pytest.raises(vtm._DiscoveryFailed):
+            await vtm._current_primary_guid(None, "VT", 2026)
+
+    async def test_an_empty_elections_list_raises_discovery_failed(self, monkeypatch):
+        # The portal's own list always carries VT's full election history --
+        # a genuinely empty list is a broken response, not a healthy state,
+        # and must not read the same as "no match for this year".
+        async def fake_json(client, rl, url, label, **kw):
+            return []
+
+        monkeypatch.setattr(vtm, "fetch_json_with_retry", fake_json)
+        with pytest.raises(vtm._DiscoveryFailed):
+            await vtm._current_primary_guid(None, "VT", 2026)
+
+    async def test_a_matched_election_missing_its_guid_raises_discovery_failed(self, monkeypatch):
+        missing_guid = [{**ELECTIONS[0], "electionGuid": None}]
+
+        async def fake_json(client, rl, url, label, **kw):
+            return missing_guid
 
         monkeypatch.setattr(vtm, "fetch_json_with_retry", fake_json)
         with pytest.raises(vtm._DiscoveryFailed):
@@ -170,6 +220,17 @@ class TestFederalReportUrl:
     async def test_enabled_with_no_path_raises_discovery_failed(self, monkeypatch):
         async def fake_json(client, rl, url, label, **kw):
             return {**DETAIL, "federal": {"isEnable": True}}
+
+        monkeypatch.setattr(vtm, "fetch_json_with_retry", fake_json)
+        with pytest.raises(vtm._DiscoveryFailed):
+            await vtm._federal_report_url(None, "VT", _REAL_GUID)
+
+    async def test_missing_election_date_raises_discovery_failed(self, monkeypatch):
+        # Without this, a missing date would flow silently into _settled()
+        # (which treats an unparseable date as "not settled") and look
+        # forever like a healthy "waiting on settle_days", never a failure.
+        async def fake_json(client, rl, url, label, **kw):
+            return {**DETAIL, "electionDetails": {**DETAIL["electionDetails"], "electionDate": None}}
 
         monkeypatch.setattr(vtm, "fetch_json_with_retry", fake_json)
         with pytest.raises(vtm._DiscoveryFailed):
