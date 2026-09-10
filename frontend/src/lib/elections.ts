@@ -161,9 +161,16 @@ export interface RaceTiers {
 export function tierCandidates(candidates: BallotCandidate[]): RaceTiers {
   const active = candidates.filter(isActiveCandidate);
   const byCash = (c: BallotCandidate) => c.cashOnHand ?? 0;
+  // Money raised THIS cycle, not cash on hand: cash on hand can be a
+  // carryover balance sitting in a committee that was never wound down
+  // (an incumbent who announced they aren't running again keeps a real,
+  // often large, cash balance with no current campaign behind it) --
+  // contributions can't be inflated that way, since they're scoped to
+  // the current election cycle specifically.
+  const byRaised = (c: BallotCandidate) => c.contributions ?? 0;
 
   const topOf = (party: "DEM" | "REP") =>
-    active.filter((c) => majorPartyOf(c.party) === party).sort((a, b) => byCash(b) - byCash(a))[0] ??
+    active.filter((c) => majorPartyOf(c.party) === party).sort((a, b) => byRaised(b) - byRaised(a))[0] ??
     null;
   const majorLeaders = [topOf("DEM"), topOf("REP")].filter(
     (c): c is BallotCandidate => c != null,

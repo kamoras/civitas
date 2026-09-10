@@ -46,6 +46,23 @@ class TestListRaces:
         assert race["topCandidates"][0]["id"] == "S1"  # higher cash_on_hand first
         assert isinstance(race["pvi"], int)  # GA has a real PVI entry
 
+    def test_stale_incumbent_flag_is_dropped_in_top_candidates_too(self, db_session):
+        """Same correction as the ballot page and the candidate-detail
+        page (see TestStaleIncumbentFlag / TestCandidateDetail) — this
+        list backs the directory/map page, which also renders whatever
+        incumbentChallenge topCandidates carries."""
+        _race(db_session, "2026-SEN-MI", "MI")
+        _candidate(db_session, "PETERS", "2026-SEN-MI", "PETERS, GARY", incumbent_challenge="I", cash_on_hand=500.0)
+        _candidate(
+            db_session, "ROGERS", "2026-SEN-MI", "ROGERS, MICHAEL J", party="REP",
+            incumbent_challenge="O", cash_on_hand=200.0,
+        )
+        db_session.commit()
+
+        data = _body(elections.list_races(db_session))
+        top = {c["id"]: c for c in data[0]["topCandidates"]}
+        assert top["PETERS"]["incumbentChallenge"] is None
+
     def test_house_race_uses_district_pvi_not_state_pvi(self, db_session):
         _race(db_session, "2026-HOUSE-CA-12", "CA", office="H", district=12)
         db_session.commit()
@@ -198,6 +215,20 @@ class TestCandidateDetail:
         assert data["id"] == "S1"
         assert data["cashOnHand"] == 500.0
         assert data["race"]["id"] == "2026-SEN-GA"
+
+    def test_stale_incumbent_flag_is_dropped_here_too(self, db_session):
+        """A visitor landing directly on a stale-incumbent's own candidate
+        page (see test_elections_state_ballot.py's TestStaleIncumbentFlag
+        for the ballot-page half of this) must not see a trustworthy "I"
+        either — same correction, same race-mate-shape signal, just
+        reached through a different route."""
+        _race(db_session, "2026-SEN-MI", "MI")
+        _candidate(db_session, "PETERS", "2026-SEN-MI", "PETERS, GARY", incumbent_challenge="I")
+        _candidate(db_session, "ROGERS", "2026-SEN-MI", "ROGERS, MICHAEL J", party="REP", incumbent_challenge="O")
+        db_session.commit()
+
+        data = _body(elections.candidate_detail("PETERS", db_session))
+        assert data["incumbentChallenge"] is None
 
 
 class TestPviMap:

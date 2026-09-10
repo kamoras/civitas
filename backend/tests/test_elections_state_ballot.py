@@ -563,6 +563,53 @@ class TestIncumbentRecordLink:
         )
 
 
+class TestStaleIncumbentFlag:
+    """Real MI 2026 Senate shape, live-verified 2026-09: Sen. Gary Peters
+    stayed FEC-coded incumbent_challenge="I" months after announcing he
+    would not seek re-election, while every other filer in the race
+    correctly synced to "O" (open seat) — FEC has no "declined to run"
+    status code, so this O-vs-I mix is the only usable signal."""
+
+    def test_incumbent_flag_is_dropped_when_race_mixes_open_and_incumbent(self, db_session):
+        _race(db_session, "2026-SEN-MI", "MI")
+        _candidate(
+            db_session, "PETERS", "2026-SEN-MI", "PETERS, GARY",
+            incumbent_challenge="I", cash_on_hand=6_546_332, contributions=6_978_978,
+        )
+        _candidate(
+            db_session, "ROGERS", "2026-SEN-MI", "ROGERS, MICHAEL J", party="REP",
+            incumbent_challenge="O", cash_on_hand=4_473_237, contributions=7_681_046,
+        )
+        _candidate(
+            db_session, "ELSAYED", "2026-SEN-MI", "EL-SAYED, ABDUL",
+            incumbent_challenge="O", cash_on_hand=2_552_763, contributions=14_479_903,
+        )
+        _senator(db_session, "SEN-PETERS", "Gary Peters", "MI")
+        db_session.commit()
+
+        data = _body(elections.state_ballot("MI", db_session))
+        by_id = {c["id"]: c for c in data["senateRaces"][0]["candidates"]}
+        assert by_id["PETERS"]["incumbentChallenge"] is None
+        assert by_id["PETERS"]["incumbentRecord"] is None
+        assert by_id["ROGERS"]["incumbentChallenge"] == "O"
+        assert by_id["ELSAYED"]["incumbentChallenge"] == "O"
+
+    def test_a_genuine_defended_seat_keeps_its_incumbent_flag(self, db_session):
+        """The common, correct shape (one "I", the rest "C", no "O" at
+        all) must never be touched by this guard."""
+        _race(db_session, "2026-SEN-GA", "GA")
+        _candidate(db_session, "OSSOFF", "2026-SEN-GA", "OSSOFF, JON", incumbent_challenge="I")
+        _candidate(db_session, "CHALLENGER", "2026-SEN-GA", "CHALLENGER, PAT", party="REP", incumbent_challenge="C")
+        _senator(db_session, "SEN-OSSOFF", "Jon Ossoff", "GA")
+        db_session.commit()
+
+        data = _body(elections.state_ballot("GA", db_session))
+        by_id = {c["id"]: c for c in data["senateRaces"][0]["candidates"]}
+        assert by_id["OSSOFF"]["incumbentChallenge"] == "I"
+        assert by_id["OSSOFF"]["incumbentRecord"]["id"] == "SEN-OSSOFF"
+        assert by_id["CHALLENGER"]["incumbentChallenge"] == "C"
+
+
 class TestStateCoverage:
     """Front-and-center top-of-page coverage teaser (2026-08 review: news
     coverage and funding shouldn't require a click-through)."""
