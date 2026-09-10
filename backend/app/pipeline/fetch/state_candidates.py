@@ -69,6 +69,7 @@ from app.pipeline.fetch.state_candidates_in import fetch_confirmed_candidates as
 from app.pipeline.fetch.state_candidates_ks import fetch_confirmed_candidates as _fetch_ks
 from app.pipeline.fetch.state_candidates_ky import fetch_confirmed_candidates as _fetch_ky
 from app.pipeline.fetch.state_candidates_ma import fetch_confirmed_candidates as _fetch_ma
+from app.pipeline.fetch.state_candidates_me import fetch_confirmed_candidates as _fetch_me
 from app.pipeline.fetch.state_candidates_ms import fetch_confirmed_candidates as _fetch_ms
 from app.pipeline.fetch.state_candidates_nj import fetch_confirmed_candidates as _fetch_nj
 from app.pipeline.fetch.state_candidates_or import fetch_confirmed_candidates as _fetch_or
@@ -107,6 +108,7 @@ STRATEGIES = {
     "or_abstract_pdf": _fetch_or,
     "vt_enr": _fetch_vt,
     "ma_pd43": _fetch_ma,
+    "me_results": _fetch_me,
 }
 
 # A state's own party lettering (mostly single-letter) doesn't match FEC's
