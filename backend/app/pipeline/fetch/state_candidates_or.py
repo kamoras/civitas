@@ -107,7 +107,13 @@ import httpx
 import pdfplumber
 
 from app.pipeline.fetch.http_utils import fetch_bytes_with_retry, fetch_json_with_retry
-from app.pipeline.fetch.state_candidates_common import normalize_party, parse_office, pick_nominee, surname
+from app.pipeline.fetch.state_candidates_common import (
+    DiscoveryFailed,
+    normalize_party,
+    parse_office,
+    resolve_confirmed_nominees,
+    surname,
+)
 from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _settled
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -127,34 +133,24 @@ _NON_CANDIDATE_RE = re.compile(r"misc\.?|write.?in|over.?vote|under.?vote", re.I
 _TABLE_SETTINGS = {"vertical_strategy": "text", "horizontal_strategy": "text"}
 
 
-class _DiscoveryFailed(Exception):
-    """Raised by _discover_pdf_url on a genuine fetch/parse failure (network
-    error, malformed SharePoint response, or a row missing its expected
-    Results link) — never for a healthy "nothing published for this cycle
-    yet", which returns None instead. Collapsing the two into one outcome
-    would silently report a broken SharePoint query as a healthy empty
-    cycle — the exact failure class this system's Wyoming module
-    (state_candidates_wy.py) already treats as fetch_failed, not []."""
-
-
 async def _discover_pdf_url(client: httpx.AsyncClient, state: str, year: int) -> tuple[str, str] | None:
     """(pdf_url, held ISO date) for the current cycle's primary, or None if
     the SharePoint list's current row is for a different year (healthy: not
-    published yet). Raises _DiscoveryFailed if the list itself couldn't be
+    published yet). Raises DiscoveryFailed if the list itself couldn't be
     read. The list's own real election DATE field (never a record id — see
     module docstring) decides which row is current."""
     item = await fetch_json_with_retry(client, _rate_limiter, _LIST_ITEMS_URL, f"{state} results list")
     if not item:
-        raise _DiscoveryFailed(f"{state} results list fetch failed")
+        raise DiscoveryFailed(f"{state} results list fetch failed")
     row = (item.get("value") or [None])[0]
     if not row:
-        raise _DiscoveryFailed(f"{state} results list returned no rows")
+        raise DiscoveryFailed(f"{state} results list returned no rows")
     held = str(row.get("Election_x0020_Date") or "")[:10]
     if not held.startswith(str(year)):
         return None
     m = _URI_RE.search(row.get("Results") or "")
     if not m:
-        raise _DiscoveryFailed(f"{state} results list row has no Results link")
+        raise DiscoveryFailed(f"{state} results list row has no Results link")
     return _PDF_URL_PATTERN.format(uri=m.group(1)), held
 
 
@@ -260,7 +256,7 @@ async def fetch_confirmed_candidates(
 ) -> list[dict] | None:
     try:
         discovered = await _discover_pdf_url(client, state, year)
-    except _DiscoveryFailed as exc:
+    except DiscoveryFailed as exc:
         logger.warning("OR results: discovery failed: %s", exc)
         return None
     if discovered is None:
@@ -280,9 +276,4 @@ async def fetch_confirmed_candidates(
         by_group.setdefault((office, district, party), []).append((name, votes))
 
     runoff_threshold_pct = source.get("runoff_threshold_pct")
-    results = []
-    for (office, district, party), choices in by_group.items():
-        won = pick_nominee(choices, runoff_threshold_pct=runoff_threshold_pct)
-        if won:
-            results.append({"office": office, "district": district, "party": party, "last_name": won[0]})
-    return results
+    return resolve_confirmed_nominees(by_group, runoff_threshold_pct)

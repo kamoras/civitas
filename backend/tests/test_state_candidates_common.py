@@ -3,6 +3,8 @@
 matter which vendor's envelope the contest arrived in.
 """
 
+import pytest
+
 from app.pipeline.fetch import state_candidates_common as common
 
 
@@ -222,3 +224,52 @@ class TestPickNominees:
     def test_empty_field_advances_nobody(self):
         assert common.pick_nominees([], None, 2) == []
         assert common.pick_nominees([("A", 0)], None, 1) == []
+
+
+class TestResolveConfirmedNominees:
+    """The "group by seat, resolve via pick_nominee, shape the record"
+    tail extracted from OR/VT/MA/KS/MS/TotalVote — see that function's
+    own docstring for why."""
+
+    def test_builds_a_record_per_resolvable_seat(self):
+        by_seat = {
+            ("H", 1, "D"): [("Smith", 100), ("Jones", 50)],
+            ("S", None, "R"): [("Doe", 200)],
+        }
+        results = common.resolve_confirmed_nominees(by_seat, None)
+        assert {"office": "H", "district": 1, "party": "D", "last_name": "Smith"} in results
+        assert {"office": "S", "district": None, "party": "R", "last_name": "Doe"} in results
+        assert len(results) == 2
+
+    def test_a_seat_with_no_safe_winner_contributes_nothing(self):
+        # A tie for the lead in a one-winner race.
+        by_seat = {("H", 1, "D"): [("A", 50), ("B", 50)]}
+        assert common.resolve_confirmed_nominees(by_seat, None) == []
+
+    def test_runoff_threshold_is_forwarded_to_pick_nominee(self):
+        by_seat = {("H", 1, "D"): [("A", 40), ("B", 35), ("C", 25)]}
+        assert common.resolve_confirmed_nominees(by_seat, 50.0) == []
+        result = common.resolve_confirmed_nominees(by_seat, 30.0)
+        assert result == [{"office": "H", "district": 1, "party": "D", "last_name": "A"}]
+
+    def test_name_transform_runs_only_after_a_winner_is_resolved(self):
+        # Vermont's real shape: raw display names in, reduced to surname
+        # only AFTER pick_nominee has already picked from the real votes
+        # -- proves the transform doesn't affect ranking.
+        by_seat = {("H", None, "D"): [("Becca Balint", 100), ("Someone Else", 90)]}
+        result = common.resolve_confirmed_nominees(by_seat, None, name_transform=common.surname)
+        assert result == [{"office": "H", "district": None, "party": "D", "last_name": "Balint"}]
+
+    def test_a_transform_that_empties_the_name_drops_the_seat(self):
+        by_seat = {("H", None, "D"): [("   ", 100)]}
+        result = common.resolve_confirmed_nominees(by_seat, None, name_transform=common.surname)
+        assert result == []
+
+    def test_empty_grouping_returns_empty_list(self):
+        assert common.resolve_confirmed_nominees({}, None) == []
+
+
+class TestDiscoveryFailed:
+    def test_is_a_real_exception_distinct_from_a_bare_exception(self):
+        with pytest.raises(common.DiscoveryFailed):
+            raise common.DiscoveryFailed("a genuine fetch failure")

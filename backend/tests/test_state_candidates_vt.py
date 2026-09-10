@@ -155,7 +155,7 @@ class TestCurrentPrimaryGuid:
             return None
 
         monkeypatch.setattr(vtm, "fetch_json_with_retry", fake_json)
-        with pytest.raises(vtm._DiscoveryFailed):
+        with pytest.raises(vtm.DiscoveryFailed):
             await vtm._current_primary_guid(None, "VT", 2026)
 
     async def test_an_empty_elections_list_raises_discovery_failed(self, monkeypatch):
@@ -166,7 +166,7 @@ class TestCurrentPrimaryGuid:
             return []
 
         monkeypatch.setattr(vtm, "fetch_json_with_retry", fake_json)
-        with pytest.raises(vtm._DiscoveryFailed):
+        with pytest.raises(vtm.DiscoveryFailed):
             await vtm._current_primary_guid(None, "VT", 2026)
 
     async def test_a_matched_election_missing_its_guid_raises_discovery_failed(self, monkeypatch):
@@ -176,7 +176,7 @@ class TestCurrentPrimaryGuid:
             return missing_guid
 
         monkeypatch.setattr(vtm, "fetch_json_with_retry", fake_json)
-        with pytest.raises(vtm._DiscoveryFailed):
+        with pytest.raises(vtm.DiscoveryFailed):
             await vtm._current_primary_guid(None, "VT", 2026)
 
     async def test_more_than_one_match_raises_discovery_failed(self, monkeypatch):
@@ -186,7 +186,7 @@ class TestCurrentPrimaryGuid:
             return duped
 
         monkeypatch.setattr(vtm, "fetch_json_with_retry", fake_json)
-        with pytest.raises(vtm._DiscoveryFailed):
+        with pytest.raises(vtm.DiscoveryFailed):
             await vtm._current_primary_guid(None, "VT", 2026)
 
 
@@ -214,7 +214,7 @@ class TestFederalReportUrl:
             return None
 
         monkeypatch.setattr(vtm, "fetch_json_with_retry", fake_json)
-        with pytest.raises(vtm._DiscoveryFailed):
+        with pytest.raises(vtm.DiscoveryFailed):
             await vtm._federal_report_url(None, "VT", _REAL_GUID)
 
     async def test_enabled_with_no_path_raises_discovery_failed(self, monkeypatch):
@@ -222,7 +222,7 @@ class TestFederalReportUrl:
             return {**DETAIL, "federal": {"isEnable": True}}
 
         monkeypatch.setattr(vtm, "fetch_json_with_retry", fake_json)
-        with pytest.raises(vtm._DiscoveryFailed):
+        with pytest.raises(vtm.DiscoveryFailed):
             await vtm._federal_report_url(None, "VT", _REAL_GUID)
 
     async def test_missing_election_date_raises_discovery_failed(self, monkeypatch):
@@ -233,7 +233,7 @@ class TestFederalReportUrl:
             return {**DETAIL, "electionDetails": {**DETAIL["electionDetails"], "electionDate": None}}
 
         monkeypatch.setattr(vtm, "fetch_json_with_retry", fake_json)
-        with pytest.raises(vtm._DiscoveryFailed):
+        with pytest.raises(vtm.DiscoveryFailed):
             await vtm._federal_report_url(None, "VT", _REAL_GUID)
 
 
