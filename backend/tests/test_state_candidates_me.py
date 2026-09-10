@@ -195,6 +195,21 @@ class TestMunicipalityChoices:
         choices = dict(me._municipality_choices(rows))
         assert choices["COSTELLO, DAVID A"] != "BRUNSWICK"
 
+    def test_a_differently_cased_bookkeeping_column_is_still_excluded(self):
+        """Real files in this exact family have already proven twice
+        that Maine's own exports don't hold one consistent spelling for
+        the same column/row meaning (the _xlsx_rows column-shift bug;
+        the "State Totals"/"STATE TOTAL" row-spelling bug above) -- an
+        exact "BLANK"/"Municipality" match would repeat that class of
+        bug a third time the moment some future export spells either
+        header differently."""
+        rows = me._xlsx_rows(_workbook([
+            ["cty", "MUNICIPALITY", "PLATNER, GRAHAM C", " Blank ", "tbc"],
+            ["AND", "Auburn", "1894", "72", "1966"],
+        ]))
+        choices = dict(me._municipality_choices(rows))
+        assert choices == {"PLATNER, GRAHAM C": 1894}
+
 
 class TestParseRcvSummary:
     def test_reads_the_real_certified_winner(self):

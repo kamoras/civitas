@@ -119,7 +119,7 @@ logger = logging.getLogger(__name__)
 _rate_limiter = RateLimiter(rps=1.0)
 _LANDING_URL = "https://www.maine.gov/sos/elections-voting/election-results-data"
 
-_NON_CANDIDATE_COLUMNS = {"DIS", "CTY", "Municipality", "BLANK", "TBC"}
+_NON_CANDIDATE_COLUMNS = {"dis", "cty", "municipality", "blank", "tbc"}
 
 _RCV_LABEL_PREFIXES = (
     "Contest", "Jurisdiction", "Office", "Date", "Winner(s)",
@@ -234,14 +234,26 @@ def _municipality_choices(rows: list[dict]) -> list[tuple[str, int]]:
     caught only by cross-checking against that file's own row-level
     arithmetic (candidate votes + blanks == total ballots cast), not by
     inspection. No real Maine municipality name contains the word
-    "total", so this is safe as a general rule, not just for this file."""
+    "total", so this is safe as a general rule, not just for this file.
+
+    Column names are matched case/whitespace-insensitively for the same
+    reason: this exact file family has now proven twice (the column-
+    shift bug _xlsx_rows itself had to fix, and the total-row spelling
+    above) that Maine's real exports are not consistently formatted even
+    across files sharing one shape -- an exact "BLANK"/"Municipality"
+    match would silently start treating a same-meaning, differently-
+    cased header as a candidate the moment some future export spells it
+    any other way."""
     totals: dict[str, int] = {}
     for row in rows:
-        municipality = (row.get("Municipality") or "").strip()
+        municipality = next(
+            (v for k, v in row.items() if (k or "").strip().casefold() == "municipality"), "",
+        )
+        municipality = (municipality or "").strip()
         if not municipality or "total" in municipality.lower():
             continue
         for column, value in row.items():
-            if column in _NON_CANDIDATE_COLUMNS:
+            if (column or "").strip().casefold() in _NON_CANDIDATE_COLUMNS:
                 continue
             value = (value or "").strip()
             if value.isdigit():
