@@ -121,6 +121,31 @@ class TestCrawlAdoption:
         assert saved == {}
 
     @pytest.mark.asyncio
+    async def test_a_working_google_civic_hand_verified_state_still_gets_crawled(
+        self, db_session, monkeypatch,
+    ):
+        """google_civic is a national fallback, not a real per-district
+        vendor — unlike every other hand-verified strategy, it must
+        never shadow discover_source the way a real working source
+        rightly does, or these states' only path to a genuine vendor
+        being found is permanently blocked for the rest of the cycle.
+        Uses MI's real state_candidate_sources.json entry (strategy:
+        "google_civic") — no synthetic hand-verified entry needed."""
+        _race(db_session, "2026-HOUSE-MI-3", "MI", "H", 3)
+        _candidate(db_session, "c1", "2026-HOUSE-MI-3", "FLOOD, MIKE", party="REP")
+        db_session.commit()
+        saved = self._patch(
+            monkeypatch,
+            [{"office": "H", "district": 3, "party": "R", "last_name": "Flood"}],
+        )
+        sc.STRATEGIES["google_civic"] = _ok
+        monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"MI": ["michigan.gov"]})
+        monkeypatch.setattr(sc, "_refresh_dates", _ok)
+        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert outcomes["MI"].startswith("adopted")
+        assert "MI" in saved
+
+    @pytest.mark.asyncio
     async def test_a_BROKEN_hand_verified_state_is_crawled_for_a_replacement(
         self, db_session, monkeypatch,
     ):
