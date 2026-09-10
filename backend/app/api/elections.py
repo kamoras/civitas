@@ -243,6 +243,7 @@ def _race_summary(race: Race, state_pvi: dict, district_pvi: dict) -> dict:
     )
     top_candidates = candidates[:2]
     pvi, pvi_level = _pvi_for_race(race, state_pvi, district_pvi)
+    stale_incumbent_ids = _stale_incumbent_ids(race.candidates)
     return {
         "id": race.id,
         "cycleYear": race.cycle_year,
@@ -253,7 +254,7 @@ def _race_summary(race: Race, state_pvi: dict, district_pvi: dict) -> dict:
         "pvi": pvi,
         "pviLevel": pvi_level,
         "candidateCount": len(candidates),
-        "topCandidates": [_candidate_summary(c) for c in top_candidates],
+        "topCandidates": [_candidate_summary(c, stale_incumbent_ids) for c in top_candidates],
     }
 
 
@@ -795,8 +796,9 @@ def candidate_detail(candidate_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Candidate not found")
 
     race = cand.race
+    stale_incumbent_ids = _stale_incumbent_ids(race.candidates) if race else frozenset()
     return cached_json({
-        **_candidate_summary(cand),
+        **_candidate_summary(cand, stale_incumbent_ids),
         "disbursements": cand.disbursements,
         "individualItemizedContributions": cand.individual_itemized_contributions,
         "race": {
