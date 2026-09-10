@@ -120,7 +120,13 @@ import logging
 import httpx
 
 from app.pipeline.fetch.http_utils import fetch_json_with_retry
-from app.pipeline.fetch.state_candidates_common import normalize_party, parse_office, pick_nominee, surname
+from app.pipeline.fetch.state_candidates_common import (
+    DiscoveryFailed,
+    normalize_party,
+    parse_office,
+    resolve_confirmed_nominees,
+    surname,
+)
 from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _settled
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -133,30 +139,21 @@ _ELECTIONS_URL = f"{_BASE_URL}/elections/elections.json"
 _NON_CANDIDATE_NAMES = {"BLANK", "FLOWERY", "OTHER WRITE-IN", "OTHER WRITE-INS"}
 
 
-class _DiscoveryFailed(Exception):
-    """Raised on a genuine fetch/parse failure (network error, malformed
-    list/detail response, or a matched election missing its own federal
-    report path) — never for a healthy "nothing published for this cycle
-    yet" or "no matching election this year", both of which return None
-    instead. Collapsing the two would silently report a broken feed as a
-    healthy empty cycle."""
-
-
 async def _current_primary_guid(client: httpx.AsyncClient, state: str, year: int) -> str | None:
     """The one statewide primary election's own guid for `year`, or None
     if this year has no such election yet (healthy — not every year runs
-    one on this portal's own history). Raises _DiscoveryFailed if the
+    one on this portal's own history). Raises DiscoveryFailed if the
     list itself couldn't be read, or if more than one election matches
     (this module's own single-match safety floor — see module docstring)."""
     elections = await fetch_json_with_retry(client, _rate_limiter, _ELECTIONS_URL, f"{state} elections list")
     if not isinstance(elections, list):
-        raise _DiscoveryFailed(f"{state} elections list fetch failed")
+        raise DiscoveryFailed(f"{state} elections list fetch failed")
     if not elections:
         # The portal's own list "lists every election ever held" (see
         # module docstring) -- a genuinely empty list is a broken response
         # (an error page cached as `[]`, say), never a healthy state, so
         # this must not read the same as "no match for this year" below.
-        raise _DiscoveryFailed(f"{state} elections list came back empty")
+        raise DiscoveryFailed(f"{state} elections list came back empty")
     matches = [
         e for e in elections
         if e.get("isStateWideElection") and e.get("electionTypeCode") == "P" and e.get("electionYear") == year
@@ -164,26 +161,26 @@ async def _current_primary_guid(client: httpx.AsyncClient, state: str, year: int
     if not matches:
         return None
     if len(matches) > 1:
-        raise _DiscoveryFailed(f"{state} elections list has {len(matches)} statewide primaries for {year}")
+        raise DiscoveryFailed(f"{state} elections list has {len(matches)} statewide primaries for {year}")
     guid = matches[0].get("electionGuid")
     if not guid:
-        raise _DiscoveryFailed(f"{state} elections list's matched {year} primary has no electionGuid")
+        raise DiscoveryFailed(f"{state} elections list's matched {year} primary has no electionGuid")
     return guid
 
 
 async def _federal_report_url(client: httpx.AsyncClient, state: str, guid: str) -> tuple[str, str] | None:
     """(report_url, election date) for the current federal report, or
     None if this election doesn't publish federal results (healthy).
-    Raises _DiscoveryFailed on a genuine fetch/parse failure."""
+    Raises DiscoveryFailed on a genuine fetch/parse failure."""
     detail = await fetch_json_with_retry(client, _rate_limiter, f"{_BASE_URL}/elections/{guid}.json", f"{state} election detail")
     if not isinstance(detail, dict):
-        raise _DiscoveryFailed(f"{state} election detail fetch failed for {guid}")
+        raise DiscoveryFailed(f"{state} election detail fetch failed for {guid}")
     federal = detail.get("federal") or {}
     if not federal.get("isEnable"):
         return None
     path = federal.get("path")
     if not path:
-        raise _DiscoveryFailed(f"{state} election {guid} has federal.isEnable but no path")
+        raise DiscoveryFailed(f"{state} election {guid} has federal.isEnable but no path")
     held = str((detail.get("electionDetails") or {}).get("electionDate") or "")[:10]
     if not held:
         # Every real election detail carries its own date -- a missing one
@@ -191,7 +188,7 @@ async def _federal_report_url(client: httpx.AsyncClient, state: str, guid: str) 
         # unparseable date as "not settled") and read forever as "waiting
         # on settle_days" with no log line anywhere pointing at the real
         # cause.
-        raise _DiscoveryFailed(f"{state} election {guid} has no electionDate")
+        raise DiscoveryFailed(f"{state} election {guid} has no electionDate")
     return f"{_BASE_URL}/{path.replace(chr(92), '/')}", held
 
 
@@ -251,7 +248,7 @@ async def fetch_confirmed_candidates(
         if guid is None:
             return []
         discovered = await _federal_report_url(client, state, guid)
-    except _DiscoveryFailed as exc:
+    except DiscoveryFailed as exc:
         logger.warning("VT results: discovery failed: %s", exc)
         return None
     if discovered is None:
@@ -267,11 +264,5 @@ async def fetch_confirmed_candidates(
         return None
 
     runoff_threshold_pct = source.get("runoff_threshold_pct")
-    results = []
-    for (office, district, party), choices in _fetch_federal_choices(report).items():
-        won = pick_nominee(choices, runoff_threshold_pct=runoff_threshold_pct)
-        if won:
-            name = surname(won[0])
-            if name:
-                results.append({"office": office, "district": district, "party": party, "last_name": name})
-    return results
+    by_group = _fetch_federal_choices(report)
+    return resolve_confirmed_nominees(by_group, runoff_threshold_pct, name_transform=surname)

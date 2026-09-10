@@ -122,7 +122,7 @@ import re
 import httpx
 
 from app.pipeline.fetch.http_utils import fetch_text_with_retry
-from app.pipeline.fetch.state_candidates_common import normalize_party, pick_nominee, surname
+from app.pipeline.fetch.state_candidates_common import normalize_party, resolve_confirmed_nominees, surname
 from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _settled
 from app.pipeline.fetch.state_election_dates import primary_date
 from app.pipeline.rate_limiter import RateLimiter
@@ -263,11 +263,7 @@ async def fetch_confirmed_candidates(
                 continue
             by_group[key] = choices
 
-    results = []
-    for (office, district, party), choices in by_group.items():
-        won = pick_nominee(choices, runoff_threshold_pct=runoff_threshold_pct)
-        if won:
-            results.append({"office": office, "district": district, "party": party, "last_name": won[0]})
+    results = resolve_confirmed_nominees(by_group, runoff_threshold_pct)
     if not results and any_fetch_failed:
         return None
     return results

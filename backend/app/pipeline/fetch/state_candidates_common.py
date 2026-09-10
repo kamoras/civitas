@@ -19,6 +19,7 @@ invented:
 """
 
 import re
+from collections.abc import Callable
 
 # Chamber wording varies ("United States Congress", "US HOUSE OF
 # REPRESENTATIVES", "U.S. Representative", Arkansas's real "U.S. Congress
@@ -262,3 +263,53 @@ def pick_nominee(
     """Single-nominee convenience wrapper for the party-primary adapters."""
     won = pick_nominees(choices, runoff_threshold_pct, advance_count=1)
     return won[0] if won else None
+
+
+def resolve_confirmed_nominees(
+    by_seat: dict[tuple[str, int | None, str], list[tuple[str, int]]],
+    runoff_threshold_pct: float | None,
+    name_transform: Callable[[str], str | None] | None = None,
+) -> list[dict]:
+    """Every {"office", "district", "party", "last_name"} record this
+    by-seat grouping resolves to via the shared tie-safe pick_nominee --
+    the "group real vote choices by seat, pick a safe winner, shape the
+    confirmed-candidate record" tail that was hand-copied, near-
+    identically, in OR/VT/MA/KS/MS/TotalVote before being pulled in here
+    (crossing this system's own "3 strikes" extraction bar well before
+    the pull actually happened — flagged independently across four PR
+    reviews and deliberately deferred each time to keep those PRs
+    scoped). A seat with no safely-nameable winner (a tie, a sub-
+    threshold leader, an empty field) contributes nothing, never a
+    guess -- matching pick_nominee's own withholding behavior exactly.
+
+    `name_transform`, when given, runs on the winning name AFTER
+    pick_nominee has already resolved it from the real vote totals, and
+    the seat is skipped if it returns a falsy result. This is for a
+    state whose raw choices carry a full display name rather than an
+    already-reduced surname (Vermont) -- reducing every choice to a
+    surname BEFORE pick_nominee would risk quietly dropping a real
+    candidate's votes from the denominator if their own reduction were
+    ever empty, the same "never drop real votes from the total" rule
+    this system's Oregon/Arkansas/North Dakota modules already apply.
+    """
+    results = []
+    for (office, district, party), choices in by_seat.items():
+        won = pick_nominee(choices, runoff_threshold_pct=runoff_threshold_pct)
+        if not won:
+            continue
+        name = name_transform(won[0]) if name_transform else won[0]
+        if name:
+            results.append({"office": office, "district": district, "party": party, "last_name": name})
+    return results
+
+
+class DiscoveryFailed(Exception):
+    """Raised by a strategy's own discovery step on a genuine fetch/parse
+    failure (network error, malformed list/detail response, a matched
+    record missing a field it should always have) -- never for a healthy
+    "nothing published for this cycle yet" or "no match this year", both
+    of which a strategy should signal by returning None (or []) from its
+    own discovery function instead. Collapsing the two would silently
+    report a broken feed as a healthy empty cycle -- originally a private
+    class duplicated near-word-for-word in state_candidates_or.py and
+    state_candidates_vt.py before being pulled in here."""

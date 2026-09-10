@@ -61,7 +61,7 @@ import httpx
 import pdfplumber
 
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
-from app.pipeline.fetch.state_candidates_common import normalize_party, pick_nominee, surname
+from app.pipeline.fetch.state_candidates_common import normalize_party, resolve_confirmed_nominees, surname
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -153,12 +153,15 @@ def _parse_totals_pdf(content: bytes) -> list[dict]:
         else:
             current = None  # a non-federal race section -- stop attributing here
 
-    records = []
-    for (office, district, party), choices in by_seat.items():
-        choices = [(n, v) for n, v in ((surname(n), v) for n, v in choices) if n]
-        won = pick_nominee(choices, runoff_threshold_pct=None)
-        if won:
-            records.append({"office": office, "district": district, "party": party, "last_name": won[0]})
+    # Kansas has no runoff, so choices are reduced to surname (dropping any
+    # unresolvable name from the vote pool entirely) before ranking, not
+    # after -- unlike Vermont's "keep every real vote in the pool, only
+    # refuse to declare a winner without a resolvable name" approach.
+    by_seat = {
+        seat: [(n, v) for n, v in ((surname(n), v) for n, v in choices) if n]
+        for seat, choices in by_seat.items()
+    }
+    records = resolve_confirmed_nominees(by_seat, runoff_threshold_pct=None)
     return records
 
 

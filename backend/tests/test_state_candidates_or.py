@@ -177,7 +177,7 @@ class TestDiscoverPdfUrl:
             return None
 
         monkeypatch.setattr(orm, "fetch_json_with_retry", fake_json)
-        with pytest.raises(orm._DiscoveryFailed):
+        with pytest.raises(orm.DiscoveryFailed):
             await orm._discover_pdf_url(None, "OR", 2026)
 
     async def test_no_matching_uri_in_results_field_raises_discovery_failed(self, monkeypatch):
@@ -187,7 +187,7 @@ class TestDiscoverPdfUrl:
             return {"value": [{"Election_x0020_Date": "2026-05-19T05:00:00Z", "Results": "no link here"}]}
 
         monkeypatch.setattr(orm, "fetch_json_with_retry", fake_json)
-        with pytest.raises(orm._DiscoveryFailed):
+        with pytest.raises(orm.DiscoveryFailed):
             await orm._discover_pdf_url(None, "OR", 2026)
 
 

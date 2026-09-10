@@ -85,7 +85,7 @@ import pdfplumber
 
 from app.pipeline.fetch.ballot_measure_pdf_geometry import rows
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
-from app.pipeline.fetch.state_candidates_common import normalize_party, pick_nominee, surname
+from app.pipeline.fetch.state_candidates_common import normalize_party, resolve_confirmed_nominees, surname
 from app.pipeline.fetch.state_candidates_tabular import _votes
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -193,15 +193,7 @@ def _process_rows(line_tokens: list[list[str]], runoff_threshold_pct: float | No
             continue
         by_seat.setdefault((office, district, party), []).append((last_name, votes))
 
-    results: list[dict] = []
-    for (office, district, party), choices in by_seat.items():
-        won = pick_nominee(choices, runoff_threshold_pct=runoff_threshold_pct)
-        if won:
-            results.append({
-                "office": office, "district": district,
-                "party": party, "last_name": won[0],
-            })
-    return results
+    return resolve_confirmed_nominees(by_seat, runoff_threshold_pct)
 
 
 def _parse_recap_pdf(content: bytes, runoff_threshold_pct: float | None) -> list[dict]:

@@ -95,7 +95,7 @@ import httpx
 from lxml import html as lxml_html
 
 from app.pipeline.fetch.http_utils import fetch_text_with_retry
-from app.pipeline.fetch.state_candidates_common import normalize_party, parse_office, pick_nominee, surname
+from app.pipeline.fetch.state_candidates_common import normalize_party, parse_office, resolve_confirmed_nominees, surname
 from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _settled
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -264,9 +264,4 @@ async def fetch_confirmed_candidates(
                 by_party.setdefault((office, district, party), []).append((name, votes))
 
     runoff_threshold_pct = source.get("runoff_threshold_pct")
-    results = []
-    for (office, district, party), choices in by_party.items():
-        won = pick_nominee(choices, runoff_threshold_pct=runoff_threshold_pct)
-        if won:
-            results.append({"office": office, "district": district, "party": party, "last_name": won[0]})
-    return results
+    return resolve_confirmed_nominees(by_party, runoff_threshold_pct)
