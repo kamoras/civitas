@@ -133,12 +133,12 @@ def _coverage_item(item: RaceCoverageItem) -> dict:
     }
 
 
-def _candidate_summary(cand: Candidate) -> dict:
+def _candidate_summary(cand: Candidate, stale_incumbent_ids: frozenset[str] = frozenset()) -> dict:
     return {
         "id": cand.id,
         "name": cand.name,
         "party": cand.party,
-        "incumbentChallenge": cand.incumbent_challenge,
+        "incumbentChallenge": None if cand.id in stale_incumbent_ids else cand.incumbent_challenge,
         "hasRaisedFunds": cand.has_raised_funds,
         "candidateStatus": cand.candidate_status,
         "contributions": cand.contributions,
@@ -210,6 +210,31 @@ def _candidate_source(candidates: list[Candidate], state: str) -> str:
     return "filers"
 
 
+def _stale_incumbent_ids(candidates: list[Candidate]) -> frozenset[str]:
+    """FEC candidate_ids whose incumbent_challenge == "I" should NOT be
+    trusted for this race. FEC's own incumbent_challenge coding is
+    self-consistent for any real race shape: a defended seat has exactly
+    one "I" and the rest "C"; an open seat has every candidate "O". A
+    race carrying BOTH "O" and "I" at once is not a real shape -- it
+    happens when one candidate's own committee record went stale (e.g. an
+    incumbent announces they won't seek re-election but their still-open
+    committee never gets reclassified, while every other filer correctly
+    syncs to "O" once the seat is recognized as open). FEC has no
+    "declined to run" status code, so this O-vs-I mix is the only usable
+    signal -- not a financial threshold: a stale incumbent can still show
+    real, non-trivial fundraising activity, so "low recent activity"
+    would not reliably catch this either.
+
+    Race-scoped and conservative: an ordinary defended-seat race (one
+    "I", nobody "O") never matches, so this can only ever REMOVE a
+    trusted incumbent claim, never invent one.
+    """
+    statuses = {c.incumbent_challenge for c in candidates}
+    if "O" in statuses and "I" in statuses:
+        return frozenset(c.id for c in candidates if c.incumbent_challenge == "I")
+    return frozenset()
+
+
 def _race_summary(race: Race, state_pvi: dict, district_pvi: dict) -> dict:
     candidates = sorted(
         _confirmed_or_all(race.candidates),
@@ -248,6 +273,7 @@ def _last_name_matches(last_name: str, full_name: str) -> bool:
 
 def _incumbent_link(
     cand: Candidate, race: Race, reps_by_district: dict[int, Representative], senators: list[Senator],
+    stale_incumbent_ids: frozenset[str] = frozenset(),
 ) -> dict | None:
     """{id, score} for this candidate's matching Senator/Representative
     scorecard row, or None — only ever populated for a real, uniquely-
@@ -265,7 +291,7 @@ def _incumbent_link(
     "close enough". Both lookups are precomputed once per state_ballot
     call (not queried per-candidate here) — see that function.
     """
-    if cand.incumbent_challenge != "I":
+    if cand.incumbent_challenge != "I" or cand.id in stale_incumbent_ids:
         return None
     # Reuses candidate_dedup's surname extraction rather than a second
     # inline copy — this also fixes a real, if narrow, matching gap: an
@@ -302,6 +328,7 @@ def _race_full(
     here too, same as race_detail."""
     candidates = sorted(_confirmed_or_all(race.candidates), key=lambda c: (c.cash_on_hand or 0.0), reverse=True)
     pvi, pvi_level = _pvi_for_race(race, state_pvi, district_pvi)
+    stale_incumbent_ids = _stale_incumbent_ids(race.candidates)
     counties = None
     if race.office == "H":
         key = f"{race.state}-{race.district if race.district is not None else 0}"
@@ -318,7 +345,10 @@ def _race_full(
         "counties": counties,
         "candidateSource": _candidate_source(race.candidates, race.state),
         "candidates": [
-            {**_candidate_summary(c), "incumbentRecord": _incumbent_link(c, race, reps_by_district, senators)}
+            {
+                **_candidate_summary(c, stale_incumbent_ids),
+                "incumbentRecord": _incumbent_link(c, race, reps_by_district, senators, stale_incumbent_ids),
+            }
             for c in candidates
         ],
     }
@@ -732,6 +762,7 @@ def race_detail(race_id: str, db: Session = Depends(get_db)):
     state_pvi = get_state_pvi_map()
     district_pvi = get_district_pvi_map()
     candidates = sorted(_confirmed_or_all(race.candidates), key=lambda c: (c.cash_on_hand or 0.0), reverse=True)
+    stale_incumbent_ids = _stale_incumbent_ids(race.candidates)
     coverage = (
         db.query(RaceCoverageItem)
         .filter(RaceCoverageItem.race_id == race_id)
@@ -751,7 +782,7 @@ def race_detail(race_id: str, db: Session = Depends(get_db)):
         "pvi": pvi,
         "pviLevel": pvi_level,
         "candidateSource": _candidate_source(race.candidates, race.state),
-        "candidates": [_candidate_summary(c) for c in candidates],
+        "candidates": [_candidate_summary(c, stale_incumbent_ids) for c in candidates],
         "coverage": [_coverage_item(item) for item in coverage],
     }, max_age=CACHE_TTL_DETAIL_S)
 

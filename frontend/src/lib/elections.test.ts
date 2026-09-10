@@ -177,10 +177,44 @@ describe("tierCandidates", () => {
   });
 
   it("always includes an incumbent as a leader regardless of party or cash", () => {
+    // A genuinely trustworthy "I" (this codebase's backend only ever
+    // sends "I" once, per race, for a candidate whose siblings are never
+    // "O" — see _stale_incumbent_ids in elections.py) always reaches
+    // this force-promotion line unchanged. The stale-incumbent-flag
+    // correction for a race like MI's real 2026 Senate shape happens
+    // upstream in the backend, not here — see the "ranks a major-party
+    // leader by money raised" test below, which starts from the
+    // already-corrected (incumbentChallenge: null) payload.
     const brokeIncumbent = cand({ id: "INC1", party: "REP", incumbentChallenge: "I", cashOnHand: 100 });
     const { leaders, tail } = tierCandidates([brown, brokeIncumbent]);
     expect(leaders.map((c) => c.id)).toContain(brokeIncumbent.id);
     expect(tail.map((c) => c.id)).not.toContain(brokeIncumbent.id);
+  });
+
+  it("ranks a major-party leader by money raised this cycle, not stale carryover cash on hand", () => {
+    // Real MI 2026 Senate numbers, live-verified 2026-09. Peters'
+    // incumbentChallenge is null here because the backend fix
+    // (_stale_incumbent_ids) already nulled it before this ever reaches
+    // the frontend — see test_elections_state_ballot.py's
+    // TestStaleIncumbentFlag for that half of the fix. His cashOnHand is
+    // still the highest in the race (a carryover balance from a
+    // never-wound-down committee), which is exactly why ranking by
+    // cashOnHand got this wrong before.
+    const peters = cand({
+      id: "PETERS", name: "Peters, Gary", party: "DEM",
+      incumbentChallenge: null, cashOnHand: 6_546_332, contributions: 6_978_978,
+    });
+    const elSayed = cand({
+      id: "ELSAYED", name: "El-Sayed, Abdul", party: "DEM",
+      cashOnHand: 2_552_763, contributions: 14_479_903,
+    });
+    const rogers = cand({
+      id: "ROGERS", name: "Rogers, Michael J", party: "REP",
+      cashOnHand: 4_473_237, contributions: 7_681_046,
+    });
+    const { leaders, tail } = tierCandidates([peters, elSayed, rogers]);
+    expect(leaders.map((c) => c.id).sort()).toEqual([elSayed.id, rogers.id].sort());
+    expect(tail.map((c) => c.id)).toEqual([peters.id]);
   });
 
   it("shows fewer leader cards when one major party has no candidate, rather than inventing one", () => {
