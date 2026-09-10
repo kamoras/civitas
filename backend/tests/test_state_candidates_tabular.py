@@ -78,22 +78,38 @@ class TestTally:
         assert foxx[name] > single_row
 
 
-def _workbook(rows: list[list[str]]) -> bytes:
+def _col_letter(i: int) -> str:
+    """0-based column index -> spreadsheet column letters (0 -> "A", 26 -> "AA")."""
+    letters = ""
+    i += 1
+    while i:
+        i, rem = divmod(i - 1, 26)
+        letters = chr(ord("A") + rem) + letters
+    return letters
+
+
+def _workbook(rows: list[list[str | None]]) -> bytes:
     """Minimal real .xlsx: a zip of the two XML parts _xlsx_rows reads,
-    with every cell a shared-string reference (t="s"), which is how the
-    California workbook actually encodes its text."""
+    with every cell a shared-string reference (t="s") and a real column
+    reference (r="A1", "B1", ...) — both how the California workbook
+    actually encodes its text. A `None` entry OMITS that cell from the
+    row entirely, the real shape a spreadsheet writer produces for a
+    wholly blank interior cell (Maine's real per-town exports do this —
+    e.g. a UOCAVA summary row with no county name) — exactly the case
+    _xlsx_rows' own r=-based column placement exists to survive."""
     table = []
     for row in rows:
         for cell in row:
-            if cell not in table:
+            if cell is not None and cell not in table:
                 table.append(cell)
     ns = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
     shared = f"<sst {ns}>" + "".join(f"<si><t>{v}</t></si>" for v in table) + "</sst>"
     body = "".join(
         "<row>" + "".join(
-            f'<c t="s"><v>{table.index(c)}</v></c>' for c in row
+            f'<c r="{_col_letter(i)}{rownum}" t="s"><v>{table.index(cell)}</v></c>'
+            for i, cell in enumerate(row) if cell is not None
         ) + "</row>"
-        for row in rows
+        for rownum, row in enumerate(rows, start=1)
     )
     sheet = f"<worksheet {ns}><sheetData>{body}</sheetData></worksheet>"
     buf = io.BytesIO()
@@ -123,6 +139,25 @@ class TestXlsxRows:
     def test_non_workbook_payload_returns_none_rather_than_raising(self):
         assert tb._rows(b"not a zip at all", {"format": "xlsx"}) is None
         assert tb._rows(b"PK\x03\x04corrupt", {"format": "xlsx"}) is None
+
+    def test_a_row_with_an_omitted_interior_cell_does_not_shift_later_columns(self):
+        """Real bug, real data: Maine's per-town xlsx exports omit a
+        wholly-blank cell from a row's XML entirely rather than writing
+        an empty one (verified live 2026-09-09 against a real UOCAVA
+        summary row with no county name). Reading cells by POSITION among
+        whichever <c> elements a row happens to contain -- rather than by
+        each cell's own r="B2" column reference -- silently shifted every
+        later value one column left whenever an earlier cell was missing,
+        misattributing a vote total to the wrong candidate with no error.
+        Cell B (Municipality) is omitted here exactly like Maine's real
+        row; the fix must still place "150" under "Votes" (column C), not
+        under "Municipality" (column B)."""
+        payload = _workbook([
+            ["County", "Municipality", "Votes"],
+            ["CUM", None, "150"],
+        ])
+        rows = tb._rows(payload, {"format": "xlsx"})
+        assert rows == [{"County": "CUM", "Municipality": "", "Votes": "150"}]
 
 
 class TestTopTwo:

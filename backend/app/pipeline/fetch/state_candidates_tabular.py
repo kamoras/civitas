@@ -450,6 +450,17 @@ async def _discover_urls(
 _XL_NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 
 
+def _col_index(ref: str) -> int:
+    """0-based column index from a cell reference like "D130" — "D" -> 3.
+    Base-26, letters only (A=1 .. Z=26, AA=27 ...), 1-indexed then
+    shifted down by one."""
+    letters = ref.rstrip("0123456789")
+    index = 0
+    for ch in letters:
+        index = index * 26 + (ord(ch) - ord("A") + 1)
+    return index - 1
+
+
 def _xlsx_rows(payload: bytes) -> list[dict] | None:
     """Rows from a .xlsx workbook's first sheet, read with the standard
     library alone — an xlsx IS a zip of XML, so this needs no Excel
@@ -461,6 +472,17 @@ def _xlsx_rows(payload: bytes) -> list[dict] | None:
     its text runs) yields an empty cell rather than raising, on the same
     principle as _text elsewhere: a shape change should cost a field, not
     the whole download.
+
+    Placed by each cell's own reference (`r="D130"` -> column D), not by
+    position among the `<c>` elements present in the row: a spreadsheet
+    writer that omits a wholly-blank interior cell (real, live shape —
+    Maine's town-by-town exports do this for any candidate/column with no
+    value on a given row, e.g. a UOCAVA summary row's empty county field)
+    would otherwise silently shift every following value one column to
+    the left, misattributing a vote total to the wrong candidate with no
+    error. A row is padded out to the header's own width so a value in a
+    column the header never named is dropped, never misread as the next
+    named column's value.
     """
     try:
         archive = zipfile.ZipFile(io.BytesIO(payload))
@@ -484,9 +506,20 @@ def _xlsx_rows(payload: bytes) -> list[dict] | None:
                 return ""
         return v.text
 
-    rows = [[cell(c) for c in row.iter(f"{_XL_NS}c")] for row in sheet.iter(f"{_XL_NS}row")]
-    if not rows:
+    def sparse_row(row) -> dict[int, str]:
+        by_col = {}
+        for c in row.iter(f"{_XL_NS}c"):
+            ref = c.get("r")
+            if ref is None:
+                continue
+            by_col[_col_index(ref)] = cell(c)
+        return by_col
+
+    sparse_rows = [sparse_row(row) for row in sheet.iter(f"{_XL_NS}row")]
+    if not sparse_rows:
         return None
+    width = max(sparse_rows[0], default=-1) + 1
+    rows = [[r.get(i, "") for i in range(width)] for r in sparse_rows]
     header = rows[0]
     return [dict(zip(header, r)) for r in rows[1:]]
 
