@@ -63,6 +63,7 @@ from app.pipeline.fetch.state_source_crawler import (
 )
 from app.pipeline.fetch.state_candidates_al import fetch_confirmed_candidates as _fetch_al
 from app.pipeline.fetch.state_candidates_canvass_xml import fetch_confirmed_candidates as _fetch_canvass_xml
+from app.pipeline.fetch.state_candidates_civic import fetch_confirmed_candidates as _fetch_civic
 from app.pipeline.fetch.state_candidates_ct import fetch_confirmed_candidates as _fetch_ct
 from app.pipeline.fetch.state_candidates_clarity import fetch_confirmed_candidates as _fetch_clarity
 from app.pipeline.fetch.state_candidates_in import fetch_confirmed_candidates as _fetch_in
@@ -109,6 +110,7 @@ STRATEGIES = {
     "vt_enr": _fetch_vt,
     "ma_pd43": _fetch_ma,
     "me_results": _fetch_me,
+    "google_civic": _fetch_civic,
 }
 
 # A state's own party lettering (mostly single-letter) doesn't match FEC's
@@ -223,11 +225,25 @@ async def crawl_for_new_sources(
                 await _refresh_dates(client, cycle, state, hand)
                 if not hand.get("filings"):
                     outcomes[state] = await _adopt_filings(db, client, cycle, state, hand)
-                continue
-            logger.warning(
-                "Hand-verified source for %s is not fetching — looking for a "
-                "replacement location", state,
-            )
+                # google_civic is a national fallback for a state with no
+                # real per-district vendor at all — unlike every other
+                # hand-verified strategy, it must never shadow discovery
+                # the way a working per-state source rightly does, or
+                # this state's only path to a REAL vendor being found
+                # (Clarity, Enhanced Voting, ...) is permanently blocked
+                # for the rest of the cycle. Falls through to the same
+                # discover_source() probe an unregistered state gets — a
+                # find still can't auto-override the hand-verified civic
+                # entry (see save_discovered/source_for_state
+                # precedence), it just lands in the discovered-sources
+                # file, visible for a human to hand-promote.
+                if hand.get("strategy") != "google_civic":
+                    continue
+            else:
+                logger.warning(
+                    "Hand-verified source for %s is not fetching — looking for a "
+                    "replacement location", state,
+                )
         rules = {
             k: v for k, v in (hand or {}).items()
             if k in ("runoff_threshold_pct", "advance_count")
