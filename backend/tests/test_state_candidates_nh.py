@@ -111,7 +111,7 @@ class TestLinks:
 class TestOfficeChoices:
     def test_democratic_file_keeps_only_its_own_party_and_excludes_the_cross_listed_republican(self):
         rows = nh._xlsx_rows(_workbook(DEM_ROWS), skip=2)
-        choices = dict(nh._office_choices(rows))
+        choices = dict(nh._office_choices(rows, "d"))
         assert choices == {"Chris Pappas": 4954 + 5098, "David Jarvis": 50 + 42}
         assert "John E. Sununu" not in choices  # the other party's real cross-tab, not a genuine total
         assert "Richard A. McMenamon II" not in choices
@@ -121,14 +121,14 @@ class TestOfficeChoices:
         suffix in the real Republican file -- must still be counted as
         this file's own party, not silently dropped."""
         rows = nh._xlsx_rows(_workbook(REP_ROWS), skip=2)
-        choices = dict(nh._office_choices(rows))
+        choices = dict(nh._office_choices(rows, "r"))
         assert choices["John E. Sununu"] == 13 + 6
         assert choices["Richard A. McMenamon"] == 0 + 1
         assert "Chris Pappas" not in choices  # the other party's real cross-tab
 
     def test_totals_row_and_write_ins_column_are_excluded(self):
         rows = nh._xlsx_rows(_workbook(DEM_ROWS), skip=2)
-        choices = dict(nh._office_choices(rows))
+        choices = dict(nh._office_choices(rows, "d"))
         # If TOTALS (92/10052/...) were summed in as a third "county",
         # Pappas would be 2x his real total instead of matching it.
         assert choices["Chris Pappas"] == 10052
@@ -172,6 +172,29 @@ class TestDiscoverOfficeLinks:
         assert "belknap" not in offices[("S", None)]["d"].lower()
 
     @pytest.mark.asyncio
+    async def test_two_different_links_for_the_same_office_are_refused_not_guessed(self, monkeypatch):
+        """Never observed live (only Senate publishes per-county
+        breakdowns today, already excluded by the "summary" filter), but
+        if a second real link ever parsed to the same office/district/
+        party as one already found, silently keeping whichever came last
+        would risk confirming the wrong candidate with no error."""
+        dem_with_duplicate_house_link = DEM_PAGE_HTML.replace(
+            "</a><br>\n",
+            '</a><br>\n<a href="/sites/g/files/ehbemt561/files/inline-documents/sonh/decoy-cd1-democratic.xlsx">'
+            "Representative in Congress District No. 1</a><br>\n",
+            1,
+        )
+        _patch(monkeypatch, {
+            "/elections": ROOT_HTML,
+            "state-primary-election-results": INDEX_HTML,
+            "democratic-state-primary": dem_with_duplicate_house_link,
+            "republican-state-primary": REP_PAGE_HTML,
+        }, {})
+        offices = await nh._discover_office_links(None, 2026)
+        assert "d" not in offices.get(("H", 1), {})
+        assert "r" in offices.get(("H", 1), {})  # the OTHER party's own real link is unaffected
+
+    @pytest.mark.asyncio
     async def test_no_results_page_for_this_year_yet_is_healthy_empty(self, monkeypatch):
         _patch(monkeypatch, {"/elections": "<a href=\"/2024-election-results\">2024 Election Results</a>"}, {})
         assert await nh._discover_office_links(None, 2026) == {}
@@ -210,8 +233,13 @@ class TestFetchConfirmedCandidates:
     async def test_withheld_before_settle_days_even_though_files_already_exist(self, monkeypatch):
         """Real files appeared within 2 days of the real primary -- a
         live count, not a certified one. Must not confirm early just
-        because the download already succeeds."""
-        self._full_patch(monkeypatch, held="2026-09-08")  # "today" is within settle_days of this
+        because the download already succeeds. `held` is set in the
+        future rather than a near-real date, so `_settled`'s own
+        `(now - held).days >= settle_days` is guaranteed negative (never
+        settled) regardless of what day this test actually runs on —
+        an ordinary recent date would quietly stop proving anything once
+        real time caught up past the real settle_days floor."""
+        self._full_patch(monkeypatch, held="2099-01-01")
         assert await nh.fetch_confirmed_candidates(None, 2026, "NH", {}) == []
 
     @pytest.mark.asyncio

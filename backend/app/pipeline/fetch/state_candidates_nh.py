@@ -168,6 +168,7 @@ async def _discover_office_links(
         return {}
 
     offices: dict[tuple[str, int | None], dict[str, str]] = {}
+    ambiguous: set[tuple[tuple[str, int | None], str]] = set()
     for party_letter, page_url in party_pages.items():
         page_html = await _get_text(client, page_url, f"NH {party_letter} primary page {year}")
         if page_html is None:
@@ -180,30 +181,54 @@ async def _discover_office_links(
                 continue
             if office_district == ("S", None) and "summary" not in text.lower():
                 continue  # a per-county Senate breakdown, not the statewide summary
-            offices.setdefault(office_district, {})[party_letter] = urljoin(_ROOT_URL, href)
+            key = (office_district, party_letter)
+            if key in ambiguous:
+                continue
+            url = urljoin(_ROOT_URL, href)
+            existing = offices.setdefault(office_district, {}).get(party_letter)
+            if existing and existing != url:
+                # A second real link parsing to the SAME office/district/
+                # party as one already found — never seen live for House
+                # (only Senate publishes per-county breakdowns today),
+                # but if it ever happens, silently keeping whichever one
+                # was found last is exactly the wrong instinct: refuse
+                # this office/party combo entirely rather than guess
+                # which link is the real one. Tracked separately from
+                # `offices` so a THIRD colliding link can't accidentally
+                # get treated as if it were the first.
+                logger.warning(
+                    "NH %s: two different links both parsed to %s — refusing rather than guessing",
+                    party_letter, office_district,
+                )
+                ambiguous.add(key)
+                del offices[office_district][party_letter]
+                continue
+            offices[office_district][party_letter] = url
     return offices
 
 
-def _office_choices(rows: list[dict]) -> list[tuple[str, int]]:
+def _office_choices(rows: list[dict], own_suffix: str) -> list[tuple[str, int]]:
     """(display_name, votes) for every real per-geography row, counting
     ONLY the columns that belong to THIS file's own party (see module
     docstring for why the other party's own columns in the same file are
     real but small write-in cross-tabulation, not a genuine total, and
-    must never be summed in)."""
+    must never be summed in).
+
+    `own_suffix` ("d" or "r") is the caller's own known party for this
+    file — it names which page this file was discovered on, e.g. the
+    Republican-page's own export — rather than being INFERRED from
+    whichever candidate column happens to carry a party suffix first in
+    header order. Column order isn't a safe signal here: this module's
+    own docstring documents a real, live-observed case (a candidate's
+    suffix dropped entirely in one file but not the other), so a future
+    export that ever led with a suffixed OTHER-party write-in column
+    before any own-party one would silently invert which columns get
+    kept — the caller already knows the real answer without guessing."""
     if not rows:
         return []
     header = list(rows[0].keys())
     candidate_columns = header[1:]  # column 0 is the geography name, whatever its own header text says
-
-    # This file's own party is whichever suffix its OWN candidates carry
-    # — read from the first suffixed column found, rather than passed in
-    # separately, so a mislabeled caller can never silently swap the
-    # kept/excluded columns.
-    own_suffix = next(
-        (m.group(1).lower() for col in candidate_columns if (m := _PARTY_SUFFIX_RE.search(col))),
-        None,
-    )
-    other_suffix = {"d": "r", "r": "d"}.get(own_suffix)
+    other_suffix = {"d": "r", "r": "d"}[own_suffix]
 
     totals: dict[str, int] = {}
     for row in rows:
@@ -214,7 +239,7 @@ def _office_choices(rows: list[dict]) -> list[tuple[str, int]]:
             if col.strip().lower().startswith("write-in"):
                 continue
             m = _PARTY_SUFFIX_RE.search(col)
-            if m and other_suffix and m.group(1).lower() == other_suffix:
+            if m and m.group(1).lower() == other_suffix:
                 continue
             value = (row.get(col) or "").strip()
             if value.isdigit():
@@ -258,7 +283,7 @@ async def fetch_confirmed_candidates(
             if rows is None:
                 logger.warning("%s: download was not a readable xlsx workbook", label)
                 return None
-            won = pick_nominee(_office_choices(rows), runoff_threshold_pct=None)
+            won = pick_nominee(_office_choices(rows, party_letter), runoff_threshold_pct=None)
             if not won:
                 continue
             last_name = surname(won[0])
