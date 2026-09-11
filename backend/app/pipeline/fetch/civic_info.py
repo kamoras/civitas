@@ -114,7 +114,26 @@ def _parse_candidate_contest(raw: dict) -> dict | None:
             "party": _text(cand, "party"),
             "candidateUrl": _text(cand, "candidateUrl"),
         })
-    return {"kind": "contest", "office": office, "candidates": candidates}
+    # `district` (an ElectoralDistrict: id/name/scope, verified against
+    # the Discovery Document's own schema) names the electoral district
+    # this contest is FOR — not read by this module's own town-level
+    # feature (a town-level contest is never itself a statewide/
+    # district-scoped race worth disambiguating further), but real and
+    # needed by state_candidates_civic.py: a bare House office label
+    # ("U.S. Representative") carries no district number of its own, and
+    # `district.scope == "congressional"` + `district.id` is the actual,
+    # schema-guaranteed way to get one, rather than trying to parse a
+    # number out of free text.
+    district = raw.get("district")
+    return {
+        "kind": "contest",
+        "office": office,
+        "candidates": candidates,
+        "district": {
+            "id": _text(district, "id") if isinstance(district, dict) else None,
+            "scope": _text(district, "scope") if isinstance(district, dict) else None,
+        } if isinstance(district, dict) else None,
+    }
 
 
 def _parse_referendum(raw: dict) -> dict | None:
