@@ -159,6 +159,21 @@ class TestXlsxRows:
         rows = tb._rows(payload, {"format": "xlsx"})
         assert rows == [{"County": "CUM", "Municipality": "", "Votes": "150"}]
 
+    def test_skip_lines_drops_leading_rows_before_the_real_header(self):
+        """New Hampshire's own per-office exports open with two title/
+        date rows before the real candidate-name header row — the xlsx
+        counterpart to the delimited-text path's own skip_lines
+        handling just above _xlsx_rows, extended here since no xlsx
+        state needed it before."""
+        payload = _workbook([
+            ["State of New Hampshire - Primary Election"],
+            ["September 08, 2026", "United States Senator - Democratic"],
+            ["Summary By Counties", "Chris Pappas, d"],
+            ["Belknap", "4954"],
+        ])
+        rows = tb._rows(payload, {"format": "xlsx", "skip_lines": 2})
+        assert rows == [{"Summary By Counties": "Belknap", "Chris Pappas, d": "4954"}]
+
 
 class TestTopTwo:
     """California runs one all-party contest and advances the top two, so
