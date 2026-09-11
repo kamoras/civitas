@@ -45,10 +45,45 @@ _VOTERINFO_SENATE_AND_HOUSE = {
         {
             "type": "General",
             "office": "U.S. Representative",
-            "district": {"name": "Congressional District 12"},
+            "district": {"id": "12", "name": "Congressional District 12", "scope": "congressional"},
             "candidates": [
                 {"name": "A House Candidate", "party": "Democratic Party"},
             ],
+        },
+    ],
+}
+
+# A real house_addresses query response: the district field's own real
+# schema (id/name/scope — see civic_info.py's docstring) is the only
+# source of the district number this module trusts, matching the shape
+# a house_addresses-configured district 12 query would really return.
+_VOTERINFO_HOUSE_DISTRICT_12 = {
+    "election": {"id": "9999", "name": "Michigan General Election", "electionDay": "2026-11-03"},
+    "contests": [
+        {
+            "type": "General",
+            "office": "U.S. Representative",
+            "district": {"id": "12", "name": "Congressional District 12", "scope": "congressional"},
+            "candidates": [
+                {"name": "Rashida Tlaib", "party": "Democratic Party"},
+                {"name": "A Republican Candidate", "party": "Republican Party"},
+            ],
+        },
+    ],
+}
+
+# The real failure mode this module's own docstring documents: an
+# address configured for district 9 that actually resolves to district
+# 10 (Rep. McClain's real Shelby Township office, live-verified) — the
+# contest returned is for the WRONG district and must be refused.
+_VOTERINFO_HOUSE_WRONG_DISTRICT = {
+    "election": {"id": "9999", "name": "Michigan General Election", "electionDay": "2026-11-03"},
+    "contests": [
+        {
+            "type": "General",
+            "office": "U.S. Representative",
+            "district": {"id": "10", "name": "Congressional District 10", "scope": "congressional"},
+            "candidates": [{"name": "John James", "party": "Republican Party"}],
         },
     ],
 }
@@ -98,13 +133,14 @@ class TestParseContests:
         assert {"party": None, "last_name": "Else"} in results
         assert len(results) == 3
 
-    def test_house_contest_at_the_same_address_is_out_of_scope(self):
-        """A bare 'U.S. Representative' office label carries no district
-        number of its own -- parse_office correctly can't place it as a
-        House seat from the label alone (see module docstring on why
-        this module never reads the separate district field either), so
-        it resolves to neither ("S", None) nor a usable House id and is
-        excluded by the Senate-only filter, not silently mis-tagged."""
+    def test_house_contest_at_the_senate_address_is_out_of_scope(self):
+        """A House contest that happens to also appear when querying the
+        statewide Senate address is real (Civic returns every contest
+        for that precinct, not just Senate) but out of scope for THIS
+        query -- fetch_confirmed_candidates only asks house_addresses
+        entries about House races, never the Senate address, regardless
+        of whether the contest itself carries a real, schema-valid
+        district id (see TestHouseAddresses for that path)."""
         house_contest = _VOTERINFO_SENATE_AND_HOUSE["contests"][1]
         office_district = civic.parse_office(house_contest.get("office") or "")
         assert office_district != ("S", None)
@@ -180,3 +216,89 @@ class TestFetchConfirmedCandidates:
         assert by_name["Else"]["party"] is None  # independent, kept anyway
         assert "Candidate" not in by_name  # the House contest's own candidate never appears
         assert len(result) == 3
+
+
+class TestHouseAddresses:
+    """house_addresses is optional -- a state with none configured
+    (every existing test above) gets Senate-only confirmation exactly
+    as before. These tests are the only ones that set it."""
+
+    def _patch(self, monkeypatch, voterinfo_by_address: dict[str, dict]):
+        async def fake_get_json(client, url, params, label):
+            if url.endswith("/elections"):
+                return _ELECTIONS_INDEX
+            return voterinfo_by_address.get(params.get("address"))
+
+        monkeypatch.setattr(civic, "_get_json", fake_get_json)
+        monkeypatch.setattr(civic.settings, "GOOGLE_CIVIC_API_KEY", "test-key")
+
+    @pytest.mark.asyncio
+    async def test_confirms_a_house_district_whose_reported_id_matches(self, monkeypatch):
+        self._patch(monkeypatch, {
+            "capitol": _VOTERINFO_SENATE_AND_HOUSE,
+            "district-12-address": _VOTERINFO_HOUSE_DISTRICT_12,
+        })
+        result = await civic.fetch_confirmed_candidates(
+            None, 2026, "MI", {"address": "capitol", "house_addresses": {"12": "district-12-address"}},
+        )
+        assert result is not None
+        by_seat = {(r["office"], r["district"], r["party"]): r["last_name"] for r in result}
+        assert by_seat[("H", 12, "D")] == "Tlaib"
+        assert by_seat[("H", 12, "R")] == "Candidate"
+        assert by_seat[("S", None, "D")] == "El-Sayed"  # Senate still confirmed from the capitol address
+
+    @pytest.mark.asyncio
+    async def test_refuses_a_house_district_whose_reported_id_does_not_match(self, monkeypatch):
+        """Real regression case from this module's own docstring: an
+        address configured for district 9 (Rep. McClain's real Shelby
+        Township office) actually resolves to district 10. Must never
+        confirm a candidate under the WRONG district number — refuse
+        the whole contest instead."""
+        self._patch(monkeypatch, {
+            "capitol": {"election": {"id": "9999"}},  # no Senate contest this run
+            "shelby-township-address": _VOTERINFO_HOUSE_WRONG_DISTRICT,
+        })
+        result = await civic.fetch_confirmed_candidates(
+            None, 2026, "MI", {"address": "capitol", "house_addresses": {"9": "shelby-township-address"}},
+        )
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_refuses_a_house_contest_with_no_congressional_scope_district(self, monkeypatch):
+        """Never falls back to trusting the office label's own free text
+        when the schema-guaranteed district field is missing or isn't
+        scoped "congressional" — refuses rather than guessing."""
+        no_district_info = {
+            "election": {"id": "9999"},
+            "contests": [{
+                "type": "General", "office": "U.S. Representative",
+                "candidates": [{"name": "Someone", "party": "Democratic Party"}],
+            }],
+        }
+        self._patch(monkeypatch, {
+            "capitol": {"election": {"id": "9999"}},
+            "district-1-address": no_district_info,
+        })
+        result = await civic.fetch_confirmed_candidates(
+            None, 2026, "MI", {"address": "capitol", "house_addresses": {"1": "district-1-address"}},
+        )
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_a_non_numeric_house_addresses_key_is_skipped_not_fatal(self, monkeypatch):
+        self._patch(monkeypatch, {
+            "capitol": {"election": {"id": "9999"}},
+            "bad-address": _VOTERINFO_HOUSE_DISTRICT_12,
+        })
+        result = await civic.fetch_confirmed_candidates(
+            None, 2026, "MI", {"address": "capitol", "house_addresses": {"at-large": "bad-address"}},
+        )
+        assert result == []  # skipped, not a fetch_failed
+
+    @pytest.mark.asyncio
+    async def test_a_house_address_fetch_failure_fails_the_whole_run(self, monkeypatch):
+        self._patch(monkeypatch, {"capitol": {"election": {"id": "9999"}}})  # district-1-address -> None
+        result = await civic.fetch_confirmed_candidates(
+            None, 2026, "MI", {"address": "capitol", "house_addresses": {"1": "district-1-address"}},
+        )
+        assert result is None

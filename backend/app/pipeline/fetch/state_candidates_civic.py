@@ -1,31 +1,54 @@
 """Google Civic Information API (voterInfoQuery) as a confirmed-candidate
-source for states with no state-specific pipeline at all (MI, NY, OH, WI,
-NV, SC, MO, OK, DE, LA, RI, NH) — a single national source, not a per-
-state vendor, so one module serves all of them the same way `tabular`
-serves every Enhanced Voting state.
+source for states with no state-specific pipeline at all (NY, OH, WI, NV,
+SC, MO, OK, DE, LA, RI) — a single national source, not a per-state
+vendor, so one module serves all of them the same way `tabular` serves
+every Enhanced Voting state.
 
-**SENATE ONLY, deliberately.** voterInfoQuery resolves to the ONE
-precinct the given address sits in — one address per state can only ever
-honestly cover that state's statewide Senate race plus whichever single
-House district happens to contain it. Real House coverage needs one
-hand-curated address PER CONGRESSIONAL DISTRICT (~97 across these 12
-states), the same town_directory.json-style curation scaled way up — a
-real, separate, larger effort this module doesn't attempt.
-`civic_info.py`'s own `_parse_candidate_contest` doesn't even read a
-contest's district field today, and `state_candidates_common.parse_office`
-requires chamber wording and a district number in the SAME string, which
-a bare House `office` label ("U.S. Representative") never carries on its
-own — so this only ever asks `parse_office` about `office` strings that
-resolve unambiguously to a Senate seat, `("S", None)`, and anything else
-(a House contest that happens to be at this address, a state office) is
-silently out of scope, not an error.
+**SENATE is always covered, via one statewide address (`source["address"]`
+— that state's own capitol, same fixed-public-building discipline
+town_directory.json already establishes: never a visitor's address, the
+same input for every visitor regardless of where they actually live).**
+voterInfoQuery resolves to the ONE precinct a given address sits in, so
+that single address also happens to cover whichever ONE House district
+contains it — real, full House coverage needs a SEPARATE address PER
+CONGRESSIONAL DISTRICT, configured per state as `source["house_addresses"]`
+(`{"1": "...", "2": "...", ...}`, keyed by district number as a string).
+This is genuinely more curation work (~13 addresses for Michigan alone,
+each independently verified — see below) than the single capitol address
+Senate needs, so `house_addresses` starts empty for most states and is
+filled in one state at a time, same town_directory.json-style "hand-
+curated, spot-checked, shouldn't grow without a human looking at each
+address" discipline. A state with no `house_addresses` entry simply gets
+Senate-only confirmation, exactly as before — not an error, not a gap
+this module needs to apologize for in its own output.
 
-**Never a visitor's address** — same discipline civic_info.py/
-town_directory.json already establish: this module only ever sends one
-fixed, publicly-known address per state (that state's own capitol,
-configured in state_candidate_sources.json's `address` key), the same
-input for every visitor regardless of where they actually live, so
-nothing visitor-specific ever leaves the server.
+**Every address, for every district, must be independently VERIFIED
+before it's trusted** — not assumed from a member's residence or a
+district's largest city. Live-verified building this for Michigan
+(2026-09-11): starting from each district's own current member's
+residence city (Wikipedia's own current, cited "Member (Residence)"
+table) and geocoding each candidate address via the SAME free Census
+Bureau geocoder this codebase's own `/geocode` endpoint already uses,
+**3 of the first 13 addresses tried resolved to the WRONG district**
+(Rep. Moolenaar's own Midland office → district 8, not 2; Rep. Dingell's
+own Dearborn office → district 12, not 6; Rep. McClain's own Shelby
+Township office → district 10, not 9 — all three real, current district-
+office addresses that simply sit just outside their own member's
+redrawn 2022 district lines). This is exactly why an address here is
+never trusted on the strength of "it's a real, current official
+address" alone — every single one must independently geocode to the
+district it's configured for before it's added.
+
+Once a House contest is actually returned by voterinfo for a queried
+address, the SAME discipline applies again: Google's own `district.id`
+(schema-guaranteed, `district.scope == "congressional"` — verified
+against the Discovery Document, see civic_info.py's own
+`_parse_candidate_contest`) must match the district the address was
+configured for, or the contest is refused outright rather than
+confirmed under a number that might be wrong. A bare House office label
+("U.S. Representative") carries no district number of its own in free
+text, so this is the only reliable source for one — `parse_office` is
+still used first, only to confirm the contest is a House race at all.
 
 TWO-HOP discovery, both plain GETs, reusing civic_info.py's own
 `_parse_contests`/`CIVIC_BASE` for the response schema (verified against
@@ -42,9 +65,11 @@ duplicate the parsing):
    only a permanent test entry plus Delaware's and Rhode Island's real
    September PRIMARIES — nothing for the November general yet, for
    anyone) — so no match returns `[]`, healthy, never a failure.
-2. `voterinfo` with that election's own id passed EXPLICITLY, plus this
-   state's configured address. Explicit-id lookup is what actually
-   works: passing no electionId at all currently 400s "Election unknown"
+2. `voterinfo` with that election's own id passed EXPLICITLY, plus one
+   configured address — called once for the state's own Senate address,
+   then again for each configured `house_addresses` entry (the election
+   id lookup itself is shared, not repeated per address). Explicit-id
+   lookup is what actually works: passing no electionId at all currently 400s "Election unknown"
    for every address tried, live-verified the same day — auto-select
    finds nothing right now. Even with the real, currently-listed
    Delaware primary's own real id, `contests` came back MISSING
@@ -154,6 +179,38 @@ def is_configured() -> bool:
     return bool(settings.GOOGLE_CIVIC_API_KEY)
 
 
+async def _voterinfo_contests(
+    client: httpx.AsyncClient, election_id: str, address: str, label: str,
+) -> list[dict] | None:
+    """Parsed real contests for one address, or `None` on a genuine
+    fetch/parse failure. An empty list covers both "fetched fine, no
+    contests published yet" and "a 200 with an unexpected shape" — see
+    module docstring for why both read as healthy, not a failure."""
+    payload = await _get_json(
+        client, f"{CIVIC_BASE}/voterinfo", {"electionId": election_id, "address": address}, label,
+    )
+    if payload is None:
+        return None
+    if not isinstance(payload, dict):
+        return []
+    return _parse_contests(payload)
+
+
+def _contest_candidates(contest: dict, office: str, district: int | None) -> list[dict]:
+    results = []
+    for cand in contest.get("candidates") or []:
+        last_name = surname(cand.get("name") or "")
+        if not last_name:
+            continue
+        results.append({
+            "office": office,
+            "district": district,
+            "party": normalize_party(cand.get("party") or ""),
+            "last_name": last_name,
+        })
+    return results
+
+
 async def fetch_confirmed_candidates(
     client: httpx.AsyncClient, year: int, state: str, source: dict,
 ) -> list[dict] | None:
@@ -164,6 +221,7 @@ async def fetch_confirmed_candidates(
     if not address:
         logger.error("google_civic source for %s has no configured address", state)
         return None
+    house_addresses: dict = source.get("house_addresses") or {}
 
     election_id = await _current_general_election_id(client, state, year)
     if election_id is _FETCH_FAILED:
@@ -171,30 +229,63 @@ async def fetch_confirmed_candidates(
     if election_id is None:
         return []  # not listed yet this cycle -- healthy, today's reality everywhere
 
-    payload = await _get_json(
-        client, f"{CIVIC_BASE}/voterinfo", {"electionId": election_id, "address": address},
-        f"Civic voterinfo ({state})",
-    )
-    if payload is None:
-        return None  # genuine fetch/parse failure
-    if not isinstance(payload, dict):
-        return []  # a 200 with an unexpected shape reads the same as "no contests yet"
-
     results: list[dict] = []
-    for contest in _parse_contests(payload):
+
+    senate_contests = await _voterinfo_contests(client, election_id, address, f"Civic voterinfo ({state})")
+    if senate_contests is None:
+        return None  # genuine fetch/parse failure
+    for contest in senate_contests:
         if contest.get("kind") != "contest":
             continue
-        office_district = parse_office(contest.get("office") or "")
-        if office_district != ("S", None):
-            continue  # Senate only -- see module docstring
-        for cand in contest.get("candidates") or []:
-            last_name = surname(cand.get("name") or "")
-            if not last_name:
+        if parse_office(contest.get("office") or "") != ("S", None):
+            continue  # Senate only from the statewide address
+        results.extend(_contest_candidates(contest, "S", None))
+
+    for district_str, house_address in house_addresses.items():
+        try:
+            expected_district = int(district_str)
+        except (TypeError, ValueError):
+            logger.error("google_civic source for %s has a non-numeric house_addresses key %r", state, district_str)
+            continue
+
+        contests = await _voterinfo_contests(
+            client, election_id, house_address, f"Civic voterinfo ({state}-{expected_district})",
+        )
+        if contests is None:
+            return None  # genuine fetch/parse failure
+        for contest in contests:
+            if contest.get("kind") != "contest":
                 continue
-            results.append({
-                "office": "S",
-                "district": None,
-                "party": normalize_party(cand.get("party") or ""),
-                "last_name": last_name,
-            })
+            office_district = parse_office(contest.get("office") or "")
+            if office_district is None or office_district[0] != "H":
+                continue  # not a House contest at all
+
+            # The schema-guaranteed district id is the only number this
+            # module trusts -- a bare office label carries none of its
+            # own, and even when the label text DOES carry a number
+            # (rare), a mismatch against Civic's own structured answer
+            # is treated as untrustworthy, not resolved in the text's
+            # favor. Refuses outright — never confirms a candidate under
+            # a district number that isn't independently confirmed —
+            # rather than guessing which of two disagreeing signals to
+            # trust (see module docstring: 3 of 13 real, current
+            # Michigan addresses resolved to the WRONG district on
+            # first try, which is exactly the failure mode this guards
+            # against happening again silently).
+            district_info = contest.get("district") or {}
+            reported_district = None
+            if district_info.get("scope") == "congressional":
+                try:
+                    reported_district = int(district_info.get("id") or "")
+                except (TypeError, ValueError):
+                    reported_district = None
+            if reported_district != expected_district:
+                logger.warning(
+                    "Civic voterinfo for %s district %s reported district %s instead of the "
+                    "expected one -- refusing rather than guessing",
+                    state, expected_district, reported_district,
+                )
+                continue
+            results.extend(_contest_candidates(contest, "H", expected_district))
+
     return results

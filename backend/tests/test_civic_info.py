@@ -93,6 +93,26 @@ def test_parse_contests_empty_on_missing_key():
     assert civic_info._parse_contests({}) == []
 
 
+def test_district_scope_and_id_are_captured_when_present():
+    """Schema-verified against the real Discovery Document (Contest.
+    district -> ElectoralDistrict{id, name, scope}, scope one of a real
+    enum including "congressional") — needed by state_candidates_civic.py
+    to get a House contest's real district number, since a bare office
+    label ("U.S. Representative") carries none of its own."""
+    raw = {
+        "office": "U.S. Representative",
+        "district": {"id": "12", "name": "Congressional District 12", "scope": "congressional"},
+        "candidates": [{"name": "Jane Doe"}],
+    }
+    parsed = civic_info._parse_candidate_contest(raw)
+    assert parsed["district"] == {"id": "12", "scope": "congressional"}
+
+
+def test_district_is_none_when_absent_or_malformed():
+    assert civic_info._parse_candidate_contest({"office": "U.S. Senator"})["district"] is None
+    assert civic_info._parse_candidate_contest({"office": "U.S. Senator", "district": "not a dict"})["district"] is None
+
+
 # ── fetch layer ──────────────────────────────────────────────────────
 
 
