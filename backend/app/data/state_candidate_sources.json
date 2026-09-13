@@ -654,7 +654,11 @@
       "strategy": "google_civic",
       "runoff_threshold_pct": null,
       "address": "82 Smith St, Providence, RI 02903",
-      "description": "Same google_civic national-fallback strategy as DE's entry above — see that entry and state_candidates_civic.py's module docstring for the shared mechanism, Senate-only scope, and dormant-until-November caveats. RI's own real 2026-09-09 primary was re-checked live 2026-09-10 on its Enhanced Voting portal and still showed 0 ballots counted across every reporting channel — a genuine per-state pipeline may yet become buildable there once results actually post; this entry is the fallback in the meantime."
+      "house_addresses": {
+        "1": "10 Charles Street, Suite 200, Providence, RI 02904",
+        "2": "935 Jefferson Blvd, Suite 3003, Warwick, RI 02886"
+      },
+      "description": "Same google_civic national-fallback strategy as DE's entry above — see that entry and state_candidates_civic.py's module docstring for the shared mechanism and dormant-until-November caveats. Both of the 2 addresses above (each district's own current member's real district office) were independently VERIFIED against the Census Bureau geocoder and resolved correctly on the first try — unlike Michigan and Nevada, Rhode Island's own 2 districts didn't produce a wrong-district surprise. RI's own real 2026-09-09 primary was re-checked live 2026-09-10 on its Enhanced Voting portal and still showed 0 ballots counted across every reporting channel — a genuine per-state pipeline may yet become buildable there once results actually post; this entry is the fallback in the meantime."
     },
     "SC": {
       "source_name": "Google Civic Information API (voterInfoQuery) — no state-specific pipeline yet",
