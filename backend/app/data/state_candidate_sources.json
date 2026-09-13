@@ -665,7 +665,16 @@
       "strategy": "google_civic",
       "runoff_threshold_pct": null,
       "address": "1100 Gervais St, Columbia, SC 29201",
-      "description": "Same google_civic national-fallback strategy as DE's entry above — see that entry and state_candidates_civic.py's module docstring for the shared mechanism, Senate-only scope, and dormant-until-November caveats."
+      "house_addresses": {
+        "1": "652 Coleman Blvd, Mount Pleasant, SC 29464",
+        "2": "1700 Sunset Blvd, Suite 1, West Columbia, SC 29169",
+        "3": "303 West Beltline Boulevard, Anderson, SC 29625",
+        "4": "104 S. Main Street, Suite 801, Greenville, SC 29601",
+        "5": "516 Oakland Ave, Rock Hill, SC 29730",
+        "6": "1225 Lady Street, Suite 200, Columbia, SC 29201",
+        "7": "1831 W. Evans St, Suite 300, Florence, SC 29501"
+      },
+      "description": "Same google_civic national-fallback strategy as DE's entry above — see that entry and state_candidates_civic.py's module docstring for the shared mechanism and dormant-until-November caveats. Each of the 7 addresses above (each district's own current member's real district office) was independently VERIFIED against the Census Bureau geocoder: 6 of 7 verified correctly on the first try; district 7's own primary Surfside Beach office (1500 Highway 17 North) did not geocode at all (a real address the Census geocoder's own index doesn't recognize, not a wrong-district result), so Rep. Fry's OTHER real, current district office (Florence's Pee Dee District Office) was used instead and verified correctly."
     },
     "WI": {
       "source_name": "Google Civic Information API (voterInfoQuery) — no state-specific pipeline yet",
