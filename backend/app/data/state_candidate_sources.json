@@ -672,7 +672,17 @@
       "strategy": "google_civic",
       "runoff_threshold_pct": null,
       "address": "2 E Main St, Madison, WI 53703",
-      "description": "Same google_civic national-fallback strategy as DE's entry above — see that entry and state_candidates_civic.py's module docstring for the shared mechanism, Senate-only scope, and dormant-until-November caveats. Wisconsin has no centralized state results source at all today — the fallback here is a real gap-filler, not a downgrade from something better."
+      "house_addresses": {
+        "1": "20 S. Main St. Suite 10, Janesville, WI 53545",
+        "2": "10 East Doty Street, Suite 405, Madison, WI 53703",
+        "3": "404 S. Barstow St. Suite 2, Eau Claire, WI 54701",
+        "4": "250 East Wisconsin Ave, Suite 950, Milwaukee, WI 53202",
+        "5": "175 E Wisconsin Ave, Suite H, Oconomowoc, WI 53066",
+        "6": "400 University Drive, Suite D3, Fond du Lac, WI 54935",
+        "7": "2620 Stewart Ave, Suite 312, Wausau, WI 54401",
+        "8": "1702 Scheuring Road, Suite B, De Pere, WI 54115"
+      },
+      "description": "Same google_civic national-fallback strategy as DE's entry above — see that entry and state_candidates_civic.py's module docstring for the shared mechanism and dormant-until-November caveats. Wisconsin has no centralized state results source at all today — the fallback here is a real gap-filler, not a downgrade from something better. Each of the 8 addresses above (each district's own current member's real district office) was independently VERIFIED against the Census Bureau geocoder: 7 of 8 verified correctly on the first try; district 3's own primary office (210 7th St S, La Crosse) did not geocode at all (a real address the Census geocoder's own index doesn't recognize, not a wrong-district result), so Rep. Van Orden's OTHER real, current district office (404 S. Barstow St., Eau Claire) was used instead and verified correctly."
     },
     "ND": {
       "source_name": "North Dakota Secretary of State (Tally ENR election-night results)",
