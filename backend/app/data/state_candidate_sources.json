@@ -606,7 +606,17 @@
       "strategy": "google_civic",
       "runoff_threshold_pct": null,
       "address": "201 W Capitol Ave, Jefferson City, MO 65101",
-      "description": "Same google_civic national-fallback strategy as DE's entry above — see that entry and state_candidates_civic.py's module docstring for the shared mechanism, Senate-only scope, and dormant-until-November caveats. Missouri's own real per-district vendor (enr.sos.mo.gov) is a genuine, certified results source that this system's own crawler keeps probing weekly regardless (see crawl_for_new_sources' google_civic carve-out) — its legacy ASP.NET postback flow has just proven too fragile to reproduce server-side so far."
+      "house_addresses": {
+        "1": "1191 Dr. Martin Luther King Dr, St. Louis, MO 63101",
+        "2": "301 Sovereign Court, Suite 201, Ballwin, MO 63011",
+        "3": "5330 Highway N, Cottleville, MO 63304",
+        "4": "1272 W. Foxwood Drive, Raymore, MO 64083",
+        "5": "4001 Emanuel Cleaver II Blvd, Suite 210, Kansas City, MO 64130",
+        "6": "12200 North Ambassador Dr, Suite 234, Kansas City, MO 64163",
+        "7": "3232 E. Ridgeview St, Springfield, MO 65804",
+        "8": "2502 Tanner Drive, Suite 205, Cape Girardeau, MO 63703"
+      },
+      "description": "Same google_civic national-fallback strategy as DE's entry above — see that entry and state_candidates_civic.py's module docstring for the shared mechanism and dormant-until-November caveats. Missouri's own real per-district vendor (enr.sos.mo.gov) is a genuine, certified results source that this system's own crawler keeps probing weekly regardless (see crawl_for_new_sources' google_civic carve-out) — its legacy ASP.NET postback flow has just proven too fragile to reproduce server-side so far. Each of the 8 addresses above (each district's own current member's real district office) was independently VERIFIED against the Census Bureau geocoder: 7 of 8 verified correctly on the first try; district 5's own office address, commonly listed online as \"Dr Martin Luther King Jr Blvd\", did not geocode under that name — the street has since been officially renamed Emanuel Cleaver II Blvd (the same congressman's own name), and geocoding under that current name verified correctly. GENUINE, LIVE RISK worth flagging (checked 2026-09-13): Missouri's congressional map is under active litigation — a 2025 mid-decade redraw was passed, then repeatedly blocked/reinstated by dueling state and federal court orders through September 2026, with the U.S. Supreme Court's latest action leaving the ORIGINAL 2022 map (the one the Census geocoder's own current data and the addresses above were verified against) in effect for the November 2026 general, contingent on a voter referendum. If a later court order swaps back to the 2025 map before November, these addresses (and Civic's own district-id cross-check, which already refuses rather than guesses on any mismatch) would need re-verification against whichever map actually governs the election — not assumed to still be correct."
     },
     "NV": {
       "source_name": "Google Civic Information API (voterInfoQuery) — no state-specific pipeline yet",
