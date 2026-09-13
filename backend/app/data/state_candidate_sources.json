@@ -613,7 +613,13 @@
       "strategy": "google_civic",
       "runoff_threshold_pct": null,
       "address": "101 N Carson St, Carson City, NV 89701",
-      "description": "Same google_civic national-fallback strategy as DE's entry above — see that entry and state_candidates_civic.py's module docstring for the shared mechanism, Senate-only scope, and dormant-until-November caveats."
+      "house_addresses": {
+        "1": "401 California Ave, Boulder City, NV 89005",
+        "2": "5310 Kietzke Lane, Suite 103, Reno, NV 89511",
+        "3": "7785 W Sahara Ave, Suite 203, Las Vegas, NV 89117",
+        "4": "2250 N Las Vegas Blvd, Suite 500, North Las Vegas, NV 89030"
+      },
+      "description": "Same google_civic national-fallback strategy as DE's entry above — see that entry and state_candidates_civic.py's module docstring for the shared mechanism and dormant-until-November caveats. Each of the 4 addresses above was independently VERIFIED against the Census Bureau geocoder, not trusted on the strength of being a real official address: district 1's real current member's (Titus) own district office (495 South Main St, Las Vegas — Las Vegas City Hall) resolved to district 4, not 1, as did four other downtown Las Vegas landmarks tried afterward (Historic Fifth Street School, Clark County Government Center, The Smith Center, Las Vegas-Clark County Library) — downtown/central Las Vegas is not actually part of NV-1's real current, post-redistricting territory, which instead covers the area east of Interstate 15 and south of Nellis Air Force Base (Henderson, Paradise, Sunrise Manor, Winchester, and all of Boulder City). Boulder City's own City Hall was tried instead and verified correctly. Districts 2 (Reno), 3, and 4 (both Las Vegas Valley) verified on their first real district-office address tried."
     },
     "NH": {
       "source_name": "New Hampshire Secretary of State (real per-office county/town results, xlsx)",
