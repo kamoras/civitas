@@ -657,7 +657,14 @@
       "strategy": "google_civic",
       "runoff_threshold_pct": null,
       "address": "2300 N Lincoln Blvd, Oklahoma City, OK 73105",
-      "description": "Same google_civic national-fallback strategy as DE's entry above — see that entry and state_candidates_civic.py's module docstring for the shared mechanism, Senate-only scope, and dormant-until-November caveats. Oklahoma's own real, certified results ARE human-viewable via normal browser navigation, but the underlying REST API 500s on plain server-side replay — an ambiguous signal not pursued further per the standing refusal to build bot-detection bypasses."
+      "house_addresses": {
+        "1": "2488 E. 81st St, Suite 700, Tulsa, OK 74137",
+        "2": "223 W Patti Page Blvd, Claremore, OK 74017",
+        "3": "11528 SW 15th St, Suite 200, Yukon, OK 73099",
+        "4": "3219 Rock Creek Road, Suite 125, Norman, OK 73072",
+        "5": "101 N Robinson, Suite 1105, Oklahoma City, OK 73102"
+      },
+      "description": "Same google_civic national-fallback strategy as DE's entry above — see that entry and state_candidates_civic.py's module docstring for the shared mechanism and dormant-until-November caveats. Oklahoma's own real, certified results ARE human-viewable via normal browser navigation, but the underlying REST API 500s on plain server-side replay — an ambiguous signal not pursued further per the standing refusal to build bot-detection bypasses. Each of the 5 addresses above (each district's own current member's real district office) was independently VERIFIED against the Census Bureau geocoder and resolved correctly on the first try — no wrong-district or ungeocodable-address surprise, unlike several other states' house_addresses entries. No active congressional-map litigation found for Oklahoma as of 2026-09-13 (unlike Missouri's entry above), so no similar caveat applies here — checked, not assumed."
     },
     "RI": {
       "source_name": "Google Civic Information API (voterInfoQuery) — no state-specific pipeline yet",
