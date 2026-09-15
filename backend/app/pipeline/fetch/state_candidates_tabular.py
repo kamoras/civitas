@@ -461,11 +461,19 @@ def _col_index(ref: str) -> int:
     return index - 1
 
 
-def _xlsx_rows(payload: bytes) -> list[dict] | None:
+def _xlsx_rows(payload: bytes, skip: int = 0) -> list[dict] | None:
     """Rows from a .xlsx workbook's first sheet, read with the standard
     library alone — an xlsx IS a zip of XML, so this needs no Excel
     dependency for the several states (CA among them) that publish results
     only in that format.
+
+    `skip` drops that many leading rows before the next one is treated as
+    the header — the same role `_rows`' own `skip_lines` plays for a
+    delimited-text download that opens with a banner before its real
+    header (Hawaii's own "#FormatVersion 1"), extended here for a real
+    xlsx shape that needed it: New Hampshire's own per-office exports
+    open with two title/date rows before the real candidate-name header
+    row.
 
     Values come from the shared-string table when the cell says so
     (t="s"), otherwise inline. Anything else (formulas, rich text beyond
@@ -516,6 +524,8 @@ def _xlsx_rows(payload: bytes) -> list[dict] | None:
         return by_col
 
     sparse_rows = [sparse_row(row) for row in sheet.iter(f"{_XL_NS}row")]
+    if skip:
+        sparse_rows = sparse_rows[skip:]
     if not sparse_rows:
         return None
     width = max(sparse_rows[0], default=-1) + 1
@@ -604,7 +614,7 @@ def _rows(payload: bytes, fmt: dict) -> list[dict] | None:
     delimiter = fmt.get("delimiter") or ","
 
     if fmt.get("format") == "xlsx":
-        return _xlsx_rows(payload)
+        return _xlsx_rows(payload, skip=int(fmt.get("skip_lines") or 0))
 
     if fmt.get("format") == "html_table":
         return _html_rows(payload, fmt)
