@@ -1,6 +1,7 @@
 "use client";
 
 import type { KeyboardEvent } from "react";
+import { useState } from "react";
 import { FIPS_TO_STATE } from "@/lib/stateCodes";
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
 
@@ -35,6 +36,11 @@ export default function RaceMap({
   getFillColor,
   getHoverFillColor,
 }: RaceMapProps) {
+  // react-simple-maps v5 dropped Geography's built-in default/hover/pressed
+  // style object in favor of a plain `style` prop, same as any other SVG
+  // element — hover is now tracked ourselves.
+  const [hoveredFips, setHoveredFips] = useState<string | null>(null);
+
   return (
     <ComposableMap
       projection="geoAlbersUsa"
@@ -50,12 +56,15 @@ export default function RaceMap({
             const stateCode = FIPS_TO_STATE[fips];
             if (!stateCode) return null;
             const isSelected = selectedState === stateCode;
+            const isHovered = hoveredFips === fips;
 
             return (
               <Geography
                 key={geo.rsmKey}
                 geography={geo}
                 onClick={() => onStateClick(stateCode)}
+                onMouseEnter={() => setHoveredFips(fips)}
+                onMouseLeave={() => setHoveredFips(null)}
                 // react-simple-maps hardcodes tabIndex=0 on each path, but
                 // SVG paths don't fire onClick from Enter/Space — wire up
                 // button semantics + keyboard activation ourselves.
@@ -68,26 +77,15 @@ export default function RaceMap({
                   }
                 }}
                 style={{
-                  default: {
-                    fill: isSelected ? "#00ffff" : getFillColor(stateCode, isSelected),
-                    stroke: "#0a1a0a",
-                    strokeWidth: 0.5,
-                    outline: "none",
-                    cursor: "pointer",
-                  },
-                  hover: {
-                    fill: isSelected ? "#00ffff" : getHoverFillColor(stateCode, isSelected),
-                    stroke: "#00ff41",
-                    strokeWidth: 1,
-                    outline: "none",
-                    cursor: "pointer",
-                  },
-                  pressed: {
-                    fill: "#00ffff",
-                    stroke: "#00ff41",
-                    strokeWidth: 1,
-                    outline: "none",
-                  },
+                  fill: isSelected
+                    ? "#00ffff"
+                    : isHovered
+                      ? getHoverFillColor(stateCode, isSelected)
+                      : getFillColor(stateCode, isSelected),
+                  stroke: isHovered ? "#00ff41" : "#0a1a0a",
+                  strokeWidth: isHovered ? 1 : 0.5,
+                  outline: "none",
+                  cursor: "pointer",
                 }}
               />
             );
