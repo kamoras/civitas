@@ -66,8 +66,18 @@ _HOUSE_ROMAN_RE = re.compile(
     r"Dist(?:rict)?\.?\s+([IVX]{1,5})\b", re.IGNORECASE,
 )
 # "Senator" (Colorado) and "Senate" (North Carolina) both appear live.
+# "Senator in Congress" (Rhode Island's own label) carries no "U.S."
+# prefix at all, so it needs its own arm -- the mirror of the
+# "Representative in/to Congress" arm _CHAMBER_HOUSE already has, and
+# safe for the same reason: no STATE chamber is named "Congress", so
+# "in Congress" is only ever federal. This must stay narrow: a bare
+# "Senator, District 5" is a state-senate seat in most states and must
+# keep parsing as None (Rhode Island's own ballot proves the risk --
+# its legislature is literally the "General Assembly", whose seats are
+# labelled "Senator in General Assembly District 5").
 _SENATE_RE = re.compile(
-    r"(?:United\s+States|U\.?\s*S\.?)\s*Senat(?:e|or)", re.IGNORECASE,
+    r"(?:(?:United\s+States|U\.?\s*S\.?)\s*Senat(?:e|or)"
+    r"|Senator\s+(?:in|to)\s+Congress\b)", re.IGNORECASE,
 )
 
 # Spelled-out names and the states' own abbreviations both occur; the
@@ -90,6 +100,11 @@ _SINGLE_LETTER_PARTIES = {"D", "R", "L", "G", "C"}
 
 # Generational suffixes must not be mistaken for a surname.
 _NAME_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
+
+# Ballot annotations that are never part of a legal name: a parenthetical
+# (Georgia's "(I)" incumbency marker) or a bare asterisk (Rhode Island's
+# party-endorsement marker). See surname().
+_ANNOTATION_RE = re.compile(r"\([^)]*\)|\*")
 
 
 def parse_office(contest_name: str) -> tuple[str, int | None] | None:
@@ -178,9 +193,15 @@ def surname(display_name: str, last_first: bool = False) -> str | None:
     what the shared matcher compares against the surname FEC stores before
     the comma. "Robert Cruz Jr." -> "Cruz".
 
-    Parenthetical annotations are stripped first: Georgia's ballot names
-    carry an incumbency marker, and "Earl L. Carter (I)" would otherwise
-    yield a surname of "(I)" for every sitting member in the state.
+    Ballot annotations are stripped first, since no legal name carries
+    one: Georgia's names carry a parenthetical incumbency marker, and
+    "Earl L. Carter (I)" would otherwise yield a surname of "(I)" for
+    every sitting member in the state; Rhode Island appends a bare
+    asterisk to its party-ENDORSED candidates (verified live against its
+    2026 primary -- "John F. Reed*", and note the endorsee does not
+    always win: endorsed "Stephen T. Skoly*" lost RI-2's Republican
+    primary to unendorsed "Victor Mellor"), which would otherwise yield
+    "Reed*" and match no FEC row at all.
     """
     # Some states print the ballot name the way FEC files it — "CASE, Ed",
     # "Darden, Dustin Thomas House" — where the surname is everything
@@ -188,8 +209,8 @@ def surname(display_name: str, last_first: bool = False) -> str | None:
     # last token there is not a near miss, it is a different person's name.
     if last_first and "," in (display_name or ""):
         head = (display_name or "").split(",")[0].strip()
-        return re.sub(r"\s+", " ", re.sub(r"\([^)]*\)", " ", head)).strip() or None
-    cleaned = re.sub(r"\([^)]*\)", " ", display_name or "")
+        return re.sub(r"\s+", " ", re.sub(_ANNOTATION_RE, " ", head)).strip() or None
+    cleaned = re.sub(_ANNOTATION_RE, " ", display_name or "")
     tokens = [t for t in re.split(r"\s+", cleaned.strip()) if t]
     while tokens and tokens[-1].strip(".,").lower() in _NAME_SUFFIXES:
         tokens.pop()

@@ -1,0 +1,1878 @@
+{
+  "election": {
+    "id": "01000000-5459-b0f9-5a97-08df054196f3",
+    "name": [
+      {
+        "languageId": "en",
+        "text": "2026 Statewide Primary"
+      }
+    ],
+    "dateText": [
+      {
+        "languageId": "en",
+        "text": "September 9, 2026"
+      }
+    ],
+    "electionDate": "2026-09-09",
+    "isOfficialResults": true,
+    "asOf": "2026-09-15T21:17:17.466545Z",
+    "lastUpdated": "2026-09-15T20:21:33.8328962Z"
+  },
+  "ballotItems": [
+    {
+      "id": "01000000-553f-29ee-7b02-08df05419d0c",
+      "parentId": null,
+      "parentJurisdictionName": "",
+      "publishPublicElectionId": "RI2026StatewidePrimary",
+      "relatedIds": null,
+      "name": [
+        {
+          "languageId": "en",
+          "text": "DEM Senator in Congress"
+        }
+      ],
+      "voteFor": [
+        {
+          "languageId": "en",
+          "text": "Vote for 1"
+        }
+      ],
+      "referendum": [],
+      "turnout": null,
+      "reportingStatus": {
+        "reportingUnits": 40,
+        "totalUnits": 40,
+        "asOf": "2026-09-15T21:17:17.466545Z",
+        "reportingStatusDetails": null
+      },
+      "voteTotal": 128194,
+      "contestGroupId": "01000000-81eb-b7fd-7730-08df0776ad4e",
+      "contestType": "Candidate",
+      "summaryResults": {
+        "ballotOptions": [
+          {
+            "id": "01000000-553f-29ee-6b23-08df05419d14",
+            "nativeId": "1",
+            "name": [
+              {
+                "languageId": "en",
+                "text": "John F. Reed*"
+              }
+            ],
+            "voteCount": 98473,
+            "party": {
+              "id": "01000000-553f-29ee-02ce-08df05419d00",
+              "name": [
+                {
+                  "languageId": "en",
+                  "text": "DEMOCRAT"
+                }
+              ],
+              "abbreviation": "DEM",
+              "standardName": null,
+              "color": "#255C99",
+              "textColor": "#ffffff"
+            },
+            "groupResults": [
+              {
+                "groupId": "01000000-553f-29ee-6f07-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Election Day"
+                  }
+                ],
+                "voteCount": 61630
+              },
+              {
+                "groupId": "01000000-553f-29ee-7396-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Early Voting"
+                  }
+                ],
+                "voteCount": 25972
+              },
+              {
+                "groupId": "01000000-553f-29ee-7438-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Mail Ballots"
+                  }
+                ],
+                "voteCount": 10871
+              }
+            ],
+            "isWriteIn": false,
+            "isQualifiedWriteIn": false,
+            "isWinner": null
+          },
+          {
+            "id": "01000000-553f-29ee-884f-08df05419d14",
+            "nativeId": "2",
+            "name": [
+              {
+                "languageId": "en",
+                "text": "Connor F. Burbridge"
+              }
+            ],
+            "voteCount": 17192,
+            "party": {
+              "id": "01000000-553f-29ee-02ce-08df05419d00",
+              "name": [
+                {
+                  "languageId": "en",
+                  "text": "DEMOCRAT"
+                }
+              ],
+              "abbreviation": "DEM",
+              "standardName": null,
+              "color": "#255C99",
+              "textColor": "#ffffff"
+            },
+            "groupResults": [
+              {
+                "groupId": "01000000-553f-29ee-6f07-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Election Day"
+                  }
+                ],
+                "voteCount": 12120
+              },
+              {
+                "groupId": "01000000-553f-29ee-7396-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Early Voting"
+                  }
+                ],
+                "voteCount": 3870
+              },
+              {
+                "groupId": "01000000-553f-29ee-7438-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Mail Ballots"
+                  }
+                ],
+                "voteCount": 1202
+              }
+            ],
+            "isWriteIn": false,
+            "isQualifiedWriteIn": false,
+            "isWinner": null
+          },
+          {
+            "id": "01000000-553f-29ee-8a2b-08df05419d14",
+            "nativeId": "3",
+            "name": [
+              {
+                "languageId": "en",
+                "text": "Luis Daniel Muñoz"
+              }
+            ],
+            "voteCount": 12529,
+            "party": {
+              "id": "01000000-553f-29ee-02ce-08df05419d00",
+              "name": [
+                {
+                  "languageId": "en",
+                  "text": "DEMOCRAT"
+                }
+              ],
+              "abbreviation": "DEM",
+              "standardName": null,
+              "color": "#255C99",
+              "textColor": "#ffffff"
+            },
+            "groupResults": [
+              {
+                "groupId": "01000000-553f-29ee-6f07-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Election Day"
+                  }
+                ],
+                "voteCount": 9347
+              },
+              {
+                "groupId": "01000000-553f-29ee-7396-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Early Voting"
+                  }
+                ],
+                "voteCount": 2108
+              },
+              {
+                "groupId": "01000000-553f-29ee-7438-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Mail Ballots"
+                  }
+                ],
+                "voteCount": 1074
+              }
+            ],
+            "isWriteIn": false,
+            "isQualifiedWriteIn": false,
+            "isWinner": null
+          }
+        ]
+      },
+      "rankedChoiceSummaryResults": null,
+      "crossCounties": [],
+      "isCloseRace": false,
+      "partyName": "DEMOCRAT"
+    },
+    {
+      "id": "01000000-553f-29ee-4dca-08df05419e7c",
+      "parentId": null,
+      "parentJurisdictionName": "",
+      "publishPublicElectionId": "RI2026StatewidePrimary",
+      "relatedIds": null,
+      "name": [
+        {
+          "languageId": "en",
+          "text": "REP Senator in Congress"
+        }
+      ],
+      "voteFor": [
+        {
+          "languageId": "en",
+          "text": "Vote for 1"
+        }
+      ],
+      "referendum": [],
+      "turnout": null,
+      "reportingStatus": {
+        "reportingUnits": 40,
+        "totalUnits": 40,
+        "asOf": "2026-09-15T21:17:17.466545Z",
+        "reportingStatusDetails": null
+      },
+      "voteTotal": 20354,
+      "contestGroupId": "01000000-81eb-b7fd-7730-08df0776ad4e",
+      "contestType": "Candidate",
+      "summaryResults": {
+        "ballotOptions": [
+          {
+            "id": "01000000-553f-29ee-59da-08df05419e86",
+            "nativeId": "1",
+            "name": [
+              {
+                "languageId": "en",
+                "text": "Raymond T. McKay*"
+              }
+            ],
+            "voteCount": 20354,
+            "party": {
+              "id": "01000000-553f-29ee-07a5-08df05419d00",
+              "name": [
+                {
+                  "languageId": "en",
+                  "text": "REPUBLICAN"
+                }
+              ],
+              "abbreviation": "REP",
+              "standardName": null,
+              "color": "#960018",
+              "textColor": "#ffffff"
+            },
+            "groupResults": [
+              {
+                "groupId": "01000000-553f-29ee-6f07-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Election Day"
+                  }
+                ],
+                "voteCount": 15869
+              },
+              {
+                "groupId": "01000000-553f-29ee-7396-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Early Voting"
+                  }
+                ],
+                "voteCount": 3472
+              },
+              {
+                "groupId": "01000000-553f-29ee-7438-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Mail Ballots"
+                  }
+                ],
+                "voteCount": 1013
+              }
+            ],
+            "isWriteIn": false,
+            "isQualifiedWriteIn": false,
+            "isWinner": null
+          }
+        ]
+      },
+      "rankedChoiceSummaryResults": null,
+      "crossCounties": [],
+      "isCloseRace": false,
+      "partyName": "REPUBLICAN"
+    },
+    {
+      "id": "01000000-553f-29ee-6a60-08df05419d1b",
+      "parentId": null,
+      "parentJurisdictionName": "",
+      "publishPublicElectionId": "RI2026StatewidePrimary",
+      "relatedIds": null,
+      "name": [
+        {
+          "languageId": "en",
+          "text": "DEM Representative in Congress District 1"
+        }
+      ],
+      "voteFor": [
+        {
+          "languageId": "en",
+          "text": "Vote for 1"
+        }
+      ],
+      "referendum": [],
+      "turnout": null,
+      "reportingStatus": {
+        "reportingUnits": 20,
+        "totalUnits": 20,
+        "asOf": "2026-09-15T21:17:17.466545Z",
+        "reportingStatusDetails": null
+      },
+      "voteTotal": 56255,
+      "contestGroupId": "01000000-81eb-b7fd-7730-08df0776ad4e",
+      "contestType": "Candidate",
+      "summaryResults": {
+        "ballotOptions": [
+          {
+            "id": "01000000-553f-29ee-992a-08df05419d67",
+            "nativeId": "1",
+            "name": [
+              {
+                "languageId": "en",
+                "text": "Gabriel Amo*"
+              }
+            ],
+            "voteCount": 56255,
+            "party": {
+              "id": "01000000-553f-29ee-02ce-08df05419d00",
+              "name": [
+                {
+                  "languageId": "en",
+                  "text": "DEMOCRAT"
+                }
+              ],
+              "abbreviation": "DEM",
+              "standardName": null,
+              "color": "#255C99",
+              "textColor": "#ffffff"
+            },
+            "groupResults": [
+              {
+                "groupId": "01000000-553f-29ee-6f07-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Election Day"
+                  }
+                ],
+                "voteCount": 36159
+              },
+              {
+                "groupId": "01000000-553f-29ee-7396-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Early Voting"
+                  }
+                ],
+                "voteCount": 13990
+              },
+              {
+                "groupId": "01000000-553f-29ee-7438-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Mail Ballots"
+                  }
+                ],
+                "voteCount": 6106
+              }
+            ],
+            "isWriteIn": false,
+            "isQualifiedWriteIn": false,
+            "isWinner": null
+          }
+        ]
+      },
+      "rankedChoiceSummaryResults": null,
+      "crossCounties": [],
+      "isCloseRace": false,
+      "partyName": "DEMOCRAT"
+    },
+    {
+      "id": "01000000-553f-29ee-5adf-08df05419e8c",
+      "parentId": null,
+      "parentJurisdictionName": "",
+      "publishPublicElectionId": "RI2026StatewidePrimary",
+      "relatedIds": null,
+      "name": [
+        {
+          "languageId": "en",
+          "text": "REP Representative in Congress District 1"
+        }
+      ],
+      "voteFor": [
+        {
+          "languageId": "en",
+          "text": "Vote for 1"
+        }
+      ],
+      "referendum": [],
+      "turnout": null,
+      "reportingStatus": {
+        "reportingUnits": 20,
+        "totalUnits": 20,
+        "asOf": "2026-09-15T21:17:17.466545Z",
+        "reportingStatusDetails": null
+      },
+      "voteTotal": 7155,
+      "contestGroupId": "01000000-81eb-b7fd-7730-08df0776ad4e",
+      "contestType": "Candidate",
+      "summaryResults": {
+        "ballotOptions": [
+          {
+            "id": "01000000-553f-29ee-5f42-08df05419ebf",
+            "nativeId": "1",
+            "name": [
+              {
+                "languageId": "en",
+                "text": "Kellie Keenan*"
+              }
+            ],
+            "voteCount": 7155,
+            "party": {
+              "id": "01000000-553f-29ee-07a5-08df05419d00",
+              "name": [
+                {
+                  "languageId": "en",
+                  "text": "REPUBLICAN"
+                }
+              ],
+              "abbreviation": "REP",
+              "standardName": null,
+              "color": "#960018",
+              "textColor": "#ffffff"
+            },
+            "groupResults": [
+              {
+                "groupId": "01000000-553f-29ee-6f07-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Election Day"
+                  }
+                ],
+                "voteCount": 5433
+              },
+              {
+                "groupId": "01000000-553f-29ee-7396-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Early Voting"
+                  }
+                ],
+                "voteCount": 1273
+              },
+              {
+                "groupId": "01000000-553f-29ee-7438-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Mail Ballots"
+                  }
+                ],
+                "voteCount": 449
+              }
+            ],
+            "isWriteIn": false,
+            "isQualifiedWriteIn": false,
+            "isWinner": null
+          }
+        ]
+      },
+      "rankedChoiceSummaryResults": null,
+      "crossCounties": [],
+      "isCloseRace": false,
+      "partyName": "REPUBLICAN"
+    },
+    {
+      "id": "01000000-553f-29ee-bc25-08df05419f2a",
+      "parentId": null,
+      "parentJurisdictionName": "",
+      "publishPublicElectionId": "RI2026StatewidePrimary",
+      "relatedIds": null,
+      "name": [
+        {
+          "languageId": "en",
+          "text": "DEM Representative in Congress District 2"
+        }
+      ],
+      "voteFor": [
+        {
+          "languageId": "en",
+          "text": "Vote for 1"
+        }
+      ],
+      "referendum": [],
+      "turnout": null,
+      "reportingStatus": {
+        "reportingUnits": 22,
+        "totalUnits": 22,
+        "asOf": "2026-09-15T21:17:17.466545Z",
+        "reportingStatusDetails": null
+      },
+      "voteTotal": 55135,
+      "contestGroupId": "01000000-81eb-b7fd-7730-08df0776ad4e",
+      "contestType": "Candidate",
+      "summaryResults": {
+        "ballotOptions": [
+          {
+            "id": "01000000-553f-29ee-1949-08df05419f31",
+            "nativeId": "1",
+            "name": [
+              {
+                "languageId": "en",
+                "text": "Seth Magaziner*"
+              }
+            ],
+            "voteCount": 55135,
+            "party": {
+              "id": "01000000-553f-29ee-02ce-08df05419d00",
+              "name": [
+                {
+                  "languageId": "en",
+                  "text": "DEMOCRAT"
+                }
+              ],
+              "abbreviation": "DEM",
+              "standardName": null,
+              "color": "#255C99",
+              "textColor": "#ffffff"
+            },
+            "groupResults": [
+              {
+                "groupId": "01000000-553f-29ee-6f07-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Election Day"
+                  }
+                ],
+                "voteCount": 35333
+              },
+              {
+                "groupId": "01000000-553f-29ee-7396-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Early Voting"
+                  }
+                ],
+                "voteCount": 14192
+              },
+              {
+                "groupId": "01000000-553f-29ee-7438-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Mail Ballots"
+                  }
+                ],
+                "voteCount": 5610
+              }
+            ],
+            "isWriteIn": false,
+            "isQualifiedWriteIn": false,
+            "isWinner": null
+          }
+        ]
+      },
+      "rankedChoiceSummaryResults": null,
+      "crossCounties": [],
+      "isCloseRace": false,
+      "partyName": "DEMOCRAT"
+    },
+    {
+      "id": "01000000-553f-29ee-e03a-08df05419f36",
+      "parentId": null,
+      "parentJurisdictionName": "",
+      "publishPublicElectionId": "RI2026StatewidePrimary",
+      "relatedIds": null,
+      "name": [
+        {
+          "languageId": "en",
+          "text": "REP Representative in Congress District 2"
+        }
+      ],
+      "voteFor": [
+        {
+          "languageId": "en",
+          "text": "Vote for 1"
+        }
+      ],
+      "referendum": [],
+      "turnout": null,
+      "reportingStatus": {
+        "reportingUnits": 22,
+        "totalUnits": 22,
+        "asOf": "2026-09-15T21:17:17.466545Z",
+        "reportingStatusDetails": null
+      },
+      "voteTotal": 15217,
+      "contestGroupId": "01000000-81eb-b7fd-7730-08df0776ad4e",
+      "contestType": "Candidate",
+      "summaryResults": {
+        "ballotOptions": [
+          {
+            "id": "01000000-553f-29ee-1eea-08df05419f56",
+            "nativeId": "2",
+            "name": [
+              {
+                "languageId": "en",
+                "text": "Victor Mellor"
+              }
+            ],
+            "voteCount": 8837,
+            "party": {
+              "id": "01000000-553f-29ee-07a5-08df05419d00",
+              "name": [
+                {
+                  "languageId": "en",
+                  "text": "REPUBLICAN"
+                }
+              ],
+              "abbreviation": "REP",
+              "standardName": null,
+              "color": "#960018",
+              "textColor": "#ffffff"
+            },
+            "groupResults": [
+              {
+                "groupId": "01000000-553f-29ee-6f07-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Election Day"
+                  }
+                ],
+                "voteCount": 7280
+              },
+              {
+                "groupId": "01000000-553f-29ee-7396-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Early Voting"
+                  }
+                ],
+                "voteCount": 1306
+              },
+              {
+                "groupId": "01000000-553f-29ee-7438-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Mail Ballots"
+                  }
+                ],
+                "voteCount": 251
+              }
+            ],
+            "isWriteIn": false,
+            "isQualifiedWriteIn": false,
+            "isWinner": null
+          },
+          {
+            "id": "01000000-553f-29ee-1a74-08df05419f56",
+            "nativeId": "1",
+            "name": [
+              {
+                "languageId": "en",
+                "text": "Stephen T. Skoly*"
+              }
+            ],
+            "voteCount": 6380,
+            "party": {
+              "id": "01000000-553f-29ee-07a5-08df05419d00",
+              "name": [
+                {
+                  "languageId": "en",
+                  "text": "REPUBLICAN"
+                }
+              ],
+              "abbreviation": "REP",
+              "standardName": null,
+              "color": "#960018",
+              "textColor": "#ffffff"
+            },
+            "groupResults": [
+              {
+                "groupId": "01000000-553f-29ee-6f07-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Election Day"
+                  }
+                ],
+                "voteCount": 4747
+              },
+              {
+                "groupId": "01000000-553f-29ee-7396-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Early Voting"
+                  }
+                ],
+                "voteCount": 1252
+              },
+              {
+                "groupId": "01000000-553f-29ee-7438-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Mail Ballots"
+                  }
+                ],
+                "voteCount": 381
+              }
+            ],
+            "isWriteIn": false,
+            "isQualifiedWriteIn": false,
+            "isWinner": null
+          }
+        ]
+      },
+      "rankedChoiceSummaryResults": null,
+      "crossCounties": [],
+      "isCloseRace": false,
+      "partyName": "REPUBLICAN"
+    },
+    {
+      "id": "01000000-553f-29ee-a49d-08df0541a566",
+      "parentId": null,
+      "parentJurisdictionName": "",
+      "publishPublicElectionId": "RI2026StatewidePrimary",
+      "relatedIds": null,
+      "name": [
+        {
+          "languageId": "en",
+          "text": "DEM Senator in General Assembly District 5"
+        }
+      ],
+      "voteFor": [
+        {
+          "languageId": "en",
+          "text": "Vote for 1"
+        }
+      ],
+      "referendum": [],
+      "turnout": null,
+      "reportingStatus": {
+        "reportingUnits": 1,
+        "totalUnits": 1,
+        "asOf": "2026-09-15T21:17:17.466545Z",
+        "reportingStatusDetails": null
+      },
+      "voteTotal": 5420,
+      "contestGroupId": "01000000-3316-ef0a-bbd6-08df0776bb11",
+      "contestType": "Candidate",
+      "summaryResults": {
+        "ballotOptions": [
+          {
+            "id": "01000000-553f-29ee-4ce7-08df0541a56d",
+            "nativeId": "1",
+            "name": [
+              {
+                "languageId": "en",
+                "text": "Samuel W. Bell*"
+              }
+            ],
+            "voteCount": 3926,
+            "party": {
+              "id": "01000000-553f-29ee-02ce-08df05419d00",
+              "name": [
+                {
+                  "languageId": "en",
+                  "text": "DEMOCRAT"
+                }
+              ],
+              "abbreviation": "DEM",
+              "standardName": null,
+              "color": "#255C99",
+              "textColor": "#ffffff"
+            },
+            "groupResults": [
+              {
+                "groupId": "01000000-553f-29ee-6f07-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Election Day"
+                  }
+                ],
+                "voteCount": 2563
+              },
+              {
+                "groupId": "01000000-553f-29ee-7396-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Early Voting"
+                  }
+                ],
+                "voteCount": 960
+              },
+              {
+                "groupId": "01000000-553f-29ee-7438-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Mail Ballots"
+                  }
+                ],
+                "voteCount": 403
+              }
+            ],
+            "isWriteIn": false,
+            "isQualifiedWriteIn": false,
+            "isWinner": null
+          },
+          {
+            "id": "01000000-553f-29ee-50be-08df0541a56d",
+            "nativeId": "2",
+            "name": [
+              {
+                "languageId": "en",
+                "text": "Theodore Newcomer, Jr."
+              }
+            ],
+            "voteCount": 760,
+            "party": {
+              "id": "01000000-553f-29ee-02ce-08df05419d00",
+              "name": [
+                {
+                  "languageId": "en",
+                  "text": "DEMOCRAT"
+                }
+              ],
+              "abbreviation": "DEM",
+              "standardName": null,
+              "color": "#255C99",
+              "textColor": "#ffffff"
+            },
+            "groupResults": [
+              {
+                "groupId": "01000000-553f-29ee-6f07-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Election Day"
+                  }
+                ],
+                "voteCount": 542
+              },
+              {
+                "groupId": "01000000-553f-29ee-7396-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Early Voting"
+                  }
+                ],
+                "voteCount": 135
+              },
+              {
+                "groupId": "01000000-553f-29ee-7438-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Mail Ballots"
+                  }
+                ],
+                "voteCount": 83
+              }
+            ],
+            "isWriteIn": false,
+            "isQualifiedWriteIn": false,
+            "isWinner": null
+          },
+          {
+            "id": "01000000-553f-29ee-51b6-08df0541a56d",
+            "nativeId": "3",
+            "name": [
+              {
+                "languageId": "en",
+                "text": "Cameron Moquin"
+              }
+            ],
+            "voteCount": 734,
+            "party": {
+              "id": "01000000-553f-29ee-02ce-08df05419d00",
+              "name": [
+                {
+                  "languageId": "en",
+                  "text": "DEMOCRAT"
+                }
+              ],
+              "abbreviation": "DEM",
+              "standardName": null,
+              "color": "#255C99",
+              "textColor": "#ffffff"
+            },
+            "groupResults": [
+              {
+                "groupId": "01000000-553f-29ee-6f07-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Election Day"
+                  }
+                ],
+                "voteCount": 474
+              },
+              {
+                "groupId": "01000000-553f-29ee-7396-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Early Voting"
+                  }
+                ],
+                "voteCount": 187
+              },
+              {
+                "groupId": "01000000-553f-29ee-7438-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Mail Ballots"
+                  }
+                ],
+                "voteCount": 73
+              }
+            ],
+            "isWriteIn": false,
+            "isQualifiedWriteIn": false,
+            "isWinner": null
+          }
+        ]
+      },
+      "rankedChoiceSummaryResults": null,
+      "crossCounties": [],
+      "isCloseRace": false,
+      "partyName": "DEMOCRAT"
+    },
+    {
+      "id": "01000000-553f-29ee-6c00-08df0541a394",
+      "parentId": null,
+      "parentJurisdictionName": "",
+      "publishPublicElectionId": "RI2026StatewidePrimary",
+      "relatedIds": null,
+      "name": [
+        {
+          "languageId": "en",
+          "text": "REP Representative in General Assembly District 13"
+        }
+      ],
+      "voteFor": [
+        {
+          "languageId": "en",
+          "text": "Vote for 1"
+        }
+      ],
+      "referendum": [],
+      "turnout": null,
+      "reportingStatus": {
+        "reportingUnits": 2,
+        "totalUnits": 2,
+        "asOf": "2026-09-15T21:17:17.466545Z",
+        "reportingStatusDetails": null
+      },
+      "voteTotal": 125,
+      "contestGroupId": "01000000-3316-ef0a-bbd6-08df0776bb11",
+      "contestType": "Candidate",
+      "summaryResults": {
+        "ballotOptions": [
+          {
+            "id": "01000000-553f-29ee-7a11-08df0541a39a",
+            "nativeId": "1",
+            "name": [
+              {
+                "languageId": "en",
+                "text": "Derick A. Reels*"
+              }
+            ],
+            "voteCount": 125,
+            "party": {
+              "id": "01000000-553f-29ee-07a5-08df05419d00",
+              "name": [
+                {
+                  "languageId": "en",
+                  "text": "REPUBLICAN"
+                }
+              ],
+              "abbreviation": "REP",
+              "standardName": null,
+              "color": "#960018",
+              "textColor": "#ffffff"
+            },
+            "groupResults": [
+              {
+                "groupId": "01000000-553f-29ee-6f07-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Election Day"
+                  }
+                ],
+                "voteCount": 111
+              },
+              {
+                "groupId": "01000000-553f-29ee-7396-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Early Voting"
+                  }
+                ],
+                "voteCount": 11
+              },
+              {
+                "groupId": "01000000-553f-29ee-7438-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Mail Ballots"
+                  }
+                ],
+                "voteCount": 3
+              }
+            ],
+            "isWriteIn": false,
+            "isQualifiedWriteIn": false,
+            "isWinner": null
+          }
+        ]
+      },
+      "rankedChoiceSummaryResults": null,
+      "crossCounties": [],
+      "isCloseRace": false,
+      "partyName": "REPUBLICAN"
+    },
+    {
+      "id": "01000000-553f-29ee-a9b6-08df0541a335",
+      "parentId": null,
+      "parentJurisdictionName": "",
+      "publishPublicElectionId": "RI2026StatewidePrimary",
+      "relatedIds": null,
+      "name": [
+        {
+          "languageId": "en",
+          "text": "DEM Senatorial District Committee District 13"
+        }
+      ],
+      "voteFor": [
+        {
+          "languageId": "en",
+          "text": "Vote for 7"
+        }
+      ],
+      "referendum": [],
+      "turnout": null,
+      "reportingStatus": {
+        "reportingUnits": 2,
+        "totalUnits": 2,
+        "asOf": "2026-09-15T21:17:17.466545Z",
+        "reportingStatusDetails": null
+      },
+      "voteTotal": 13907,
+      "contestGroupId": "01000000-81eb-b7fd-636e-08df0776c5a7",
+      "contestType": "Candidate",
+      "summaryResults": {
+        "ballotOptions": [
+          {
+            "id": "01000000-553f-29ee-9e43-08df0541a341",
+            "nativeId": "8",
+            "name": [
+              {
+                "languageId": "en",
+                "text": "Angela Lima"
+              }
+            ],
+            "voteCount": 2170,
+            "party": {
+              "id": "01000000-553f-29ee-02ce-08df05419d00",
+              "name": [
+                {
+                  "languageId": "en",
+                  "text": "DEMOCRAT"
+                }
+              ],
+              "abbreviation": "DEM",
+              "standardName": null,
+              "color": "#255C99",
+              "textColor": "#ffffff"
+            },
+            "groupResults": [
+              {
+                "groupId": "01000000-553f-29ee-6f07-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Election Day"
+                  }
+                ],
+                "voteCount": 1293
+              },
+              {
+                "groupId": "01000000-553f-29ee-7396-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Early Voting"
+                  }
+                ],
+                "voteCount": 736
+              },
+              {
+                "groupId": "01000000-553f-29ee-7438-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Mail Ballots"
+                  }
+                ],
+                "voteCount": 141
+              }
+            ],
+            "isWriteIn": false,
+            "isQualifiedWriteIn": false,
+            "isWinner": null
+          },
+          {
+            "id": "01000000-553f-29ee-9caa-08df0541a341",
+            "nativeId": "7",
+            "name": [
+              {
+                "languageId": "en",
+                "text": "Mary E. Meagher*"
+              }
+            ],
+            "voteCount": 2012,
+            "party": {
+              "id": "01000000-553f-29ee-02ce-08df05419d00",
+              "name": [
+                {
+                  "languageId": "en",
+                  "text": "DEMOCRAT"
+                }
+              ],
+              "abbreviation": "DEM",
+              "standardName": null,
+              "color": "#255C99",
+              "textColor": "#ffffff"
+            },
+            "groupResults": [
+              {
+                "groupId": "01000000-553f-29ee-6f07-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Election Day"
+                  }
+                ],
+                "voteCount": 1050
+              },
+              {
+                "groupId": "01000000-553f-29ee-7396-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Early Voting"
+                  }
+                ],
+                "voteCount": 812
+              },
+              {
+                "groupId": "01000000-553f-29ee-7438-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Mail Ballots"
+                  }
+                ],
+                "voteCount": 150
+              }
+            ],
+            "isWriteIn": false,
+            "isQualifiedWriteIn": false,
+            "isWinner": null
+          },
+          {
+            "id": "01000000-553f-29ee-9a44-08df0541a341",
+            "nativeId": "4",
+            "name": [
+              {
+                "languageId": "en",
+                "text": "Aida G. Neary*"
+              }
+            ],
+            "voteCount": 1862,
+            "party": {
+              "id": "01000000-553f-29ee-02ce-08df05419d00",
+              "name": [
+                {
+                  "languageId": "en",
+                  "text": "DEMOCRAT"
+                }
+              ],
+              "abbreviation": "DEM",
+              "standardName": null,
+              "color": "#255C99",
+              "textColor": "#ffffff"
+            },
+            "groupResults": [
+              {
+                "groupId": "01000000-553f-29ee-6f07-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Election Day"
+                  }
+                ],
+                "voteCount": 1032
+              },
+              {
+                "groupId": "01000000-553f-29ee-7396-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Early Voting"
+                  }
+                ],
+                "voteCount": 677
+              },
+              {
+                "groupId": "01000000-553f-29ee-7438-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Mail Ballots"
+                  }
+                ],
+                "voteCount": 153
+              }
+            ],
+            "isWriteIn": false,
+            "isQualifiedWriteIn": false,
+            "isWinner": null
+          },
+          {
+            "id": "01000000-553f-29ee-9993-08df0541a341",
+            "nativeId": "3",
+            "name": [
+              {
+                "languageId": "en",
+                "text": "Amy Harrelson Machado*"
+              }
+            ],
+            "voteCount": 1758,
+            "party": {
+              "id": "01000000-553f-29ee-02ce-08df05419d00",
+              "name": [
+                {
+                  "languageId": "en",
+                  "text": "DEMOCRAT"
+                }
+              ],
+              "abbreviation": "DEM",
+              "standardName": null,
+              "color": "#255C99",
+              "textColor": "#ffffff"
+            },
+            "groupResults": [
+              {
+                "groupId": "01000000-553f-29ee-6f07-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Election Day"
+                  }
+                ],
+                "voteCount": 957
+              },
+              {
+                "groupId": "01000000-553f-29ee-7396-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Early Voting"
+                  }
+                ],
+                "voteCount": 656
+              },
+              {
+                "groupId": "01000000-553f-29ee-7438-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Mail Ballots"
+                  }
+                ],
+                "voteCount": 145
+              }
+            ],
+            "isWriteIn": false,
+            "isQualifiedWriteIn": false,
+            "isWinner": null
+          },
+          {
+            "id": "01000000-553f-29ee-93ed-08df0541a341",
+            "nativeId": "1",
+            "name": [
+              {
+                "languageId": "en",
+                "text": "Holly Spence Fisher*"
+              }
+            ],
+            "voteCount": 1695,
+            "party": {
+              "id": "01000000-553f-29ee-02ce-08df05419d00",
+              "name": [
+                {
+                  "languageId": "en",
+                  "text": "DEMOCRAT"
+                }
+              ],
+              "abbreviation": "DEM",
+              "standardName": null,
+              "color": "#255C99",
+              "textColor": "#ffffff"
+            },
+            "groupResults": [
+              {
+                "groupId": "01000000-553f-29ee-6f07-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Election Day"
+                  }
+                ],
+                "voteCount": 912
+              },
+              {
+                "groupId": "01000000-553f-29ee-7396-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Early Voting"
+                  }
+                ],
+                "voteCount": 642
+              },
+              {
+                "groupId": "01000000-553f-29ee-7438-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Mail Ballots"
+                  }
+                ],
+                "voteCount": 141
+              }
+            ],
+            "isWriteIn": false,
+            "isQualifiedWriteIn": false,
+            "isWinner": null
+          },
+          {
+            "id": "01000000-553f-29ee-9870-08df0541a341",
+            "nativeId": "2",
+            "name": [
+              {
+                "languageId": "en",
+                "text": "Cynthia Long-Raterron*"
+              }
+            ],
+            "voteCount": 1655,
+            "party": {
+              "id": "01000000-553f-29ee-02ce-08df05419d00",
+              "name": [
+                {
+                  "languageId": "en",
+                  "text": "DEMOCRAT"
+                }
+              ],
+              "abbreviation": "DEM",
+              "standardName": null,
+              "color": "#255C99",
+              "textColor": "#ffffff"
+            },
+            "groupResults": [
+              {
+                "groupId": "01000000-553f-29ee-6f07-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Election Day"
+                  }
+                ],
+                "voteCount": 866
+              },
+              {
+                "groupId": "01000000-553f-29ee-7396-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Early Voting"
+                  }
+                ],
+                "voteCount": 652
+              },
+              {
+                "groupId": "01000000-553f-29ee-7438-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Mail Ballots"
+                  }
+                ],
+                "voteCount": 137
+              }
+            ],
+            "isWriteIn": false,
+            "isQualifiedWriteIn": false,
+            "isWinner": null
+          },
+          {
+            "id": "01000000-553f-29ee-9ba1-08df0541a341",
+            "nativeId": "6",
+            "name": [
+              {
+                "languageId": "en",
+                "text": "Dennis H. Webster*"
+              }
+            ],
+            "voteCount": 1476,
+            "party": {
+              "id": "01000000-553f-29ee-02ce-08df05419d00",
+              "name": [
+                {
+                  "languageId": "en",
+                  "text": "DEMOCRAT"
+                }
+              ],
+              "abbreviation": "DEM",
+              "standardName": null,
+              "color": "#255C99",
+              "textColor": "#ffffff"
+            },
+            "groupResults": [
+              {
+                "groupId": "01000000-553f-29ee-6f07-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Election Day"
+                  }
+                ],
+                "voteCount": 728
+              },
+              {
+                "groupId": "01000000-553f-29ee-7396-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Early Voting"
+                  }
+                ],
+                "voteCount": 631
+              },
+              {
+                "groupId": "01000000-553f-29ee-7438-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Mail Ballots"
+                  }
+                ],
+                "voteCount": 117
+              }
+            ],
+            "isWriteIn": false,
+            "isQualifiedWriteIn": false,
+            "isWinner": null
+          },
+          {
+            "id": "01000000-553f-29ee-9b01-08df0541a341",
+            "nativeId": "5",
+            "name": [
+              {
+                "languageId": "en",
+                "text": "Sherman M. Pines*"
+              }
+            ],
+            "voteCount": 1279,
+            "party": {
+              "id": "01000000-553f-29ee-02ce-08df05419d00",
+              "name": [
+                {
+                  "languageId": "en",
+                  "text": "DEMOCRAT"
+                }
+              ],
+              "abbreviation": "DEM",
+              "standardName": null,
+              "color": "#255C99",
+              "textColor": "#ffffff"
+            },
+            "groupResults": [
+              {
+                "groupId": "01000000-553f-29ee-6f07-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Election Day"
+                  }
+                ],
+                "voteCount": 660
+              },
+              {
+                "groupId": "01000000-553f-29ee-7396-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Early Voting"
+                  }
+                ],
+                "voteCount": 497
+              },
+              {
+                "groupId": "01000000-553f-29ee-7438-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Mail Ballots"
+                  }
+                ],
+                "voteCount": 122
+              }
+            ],
+            "isWriteIn": false,
+            "isQualifiedWriteIn": false,
+            "isWinner": null
+          }
+        ]
+      },
+      "rankedChoiceSummaryResults": null,
+      "crossCounties": [],
+      "isCloseRace": true,
+      "partyName": "DEMOCRAT"
+    },
+    {
+      "id": "01000000-553f-29ee-5de0-08df0541a69b",
+      "parentId": null,
+      "parentJurisdictionName": "",
+      "publishPublicElectionId": "RI2026StatewidePrimary",
+      "relatedIds": null,
+      "name": [
+        {
+          "languageId": "en",
+          "text": "DEM Representative District Committee District 5"
+        }
+      ],
+      "voteFor": [
+        {
+          "languageId": "en",
+          "text": "Vote for 3"
+        }
+      ],
+      "referendum": [],
+      "turnout": null,
+      "reportingStatus": {
+        "reportingUnits": 1,
+        "totalUnits": 1,
+        "asOf": "2026-09-15T21:17:17.466545Z",
+        "reportingStatusDetails": null
+      },
+      "voteTotal": 2234,
+      "contestGroupId": "01000000-81eb-b7fd-636e-08df0776c5a7",
+      "contestType": "Candidate",
+      "summaryResults": {
+        "ballotOptions": [
+          {
+            "id": "01000000-553f-29ee-a3e0-08df0541a6a1",
+            "nativeId": "1",
+            "name": [
+              {
+                "languageId": "en",
+                "text": "Leslie A. Parrillo*"
+              }
+            ],
+            "voteCount": 876,
+            "party": {
+              "id": "01000000-553f-29ee-02ce-08df05419d00",
+              "name": [
+                {
+                  "languageId": "en",
+                  "text": "DEMOCRAT"
+                }
+              ],
+              "abbreviation": "DEM",
+              "standardName": null,
+              "color": "#255C99",
+              "textColor": "#ffffff"
+            },
+            "groupResults": [
+              {
+                "groupId": "01000000-553f-29ee-6f07-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Election Day"
+                  }
+                ],
+                "voteCount": 620
+              },
+              {
+                "groupId": "01000000-553f-29ee-7396-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Early Voting"
+                  }
+                ],
+                "voteCount": 122
+              },
+              {
+                "groupId": "01000000-553f-29ee-7438-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Mail Ballots"
+                  }
+                ],
+                "voteCount": 134
+              }
+            ],
+            "isWriteIn": false,
+            "isQualifiedWriteIn": false,
+            "isWinner": null
+          },
+          {
+            "id": "01000000-553f-29ee-a9b9-08df0541a6a1",
+            "nativeId": "3",
+            "name": [
+              {
+                "languageId": "en",
+                "text": "Brandon R. Furtado*"
+              }
+            ],
+            "voteCount": 469,
+            "party": {
+              "id": "01000000-553f-29ee-02ce-08df05419d00",
+              "name": [
+                {
+                  "languageId": "en",
+                  "text": "DEMOCRAT"
+                }
+              ],
+              "abbreviation": "DEM",
+              "standardName": null,
+              "color": "#255C99",
+              "textColor": "#ffffff"
+            },
+            "groupResults": [
+              {
+                "groupId": "01000000-553f-29ee-6f07-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Election Day"
+                  }
+                ],
+                "voteCount": 305
+              },
+              {
+                "groupId": "01000000-553f-29ee-7396-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Early Voting"
+                  }
+                ],
+                "voteCount": 78
+              },
+              {
+                "groupId": "01000000-553f-29ee-7438-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Mail Ballots"
+                  }
+                ],
+                "voteCount": 86
+              }
+            ],
+            "isWriteIn": false,
+            "isQualifiedWriteIn": false,
+            "isWinner": null
+          },
+          {
+            "id": "01000000-553f-29ee-a783-08df0541a6a1",
+            "nativeId": "2",
+            "name": [
+              {
+                "languageId": "en",
+                "text": "Antonino S. Giorgianni*"
+              }
+            ],
+            "voteCount": 460,
+            "party": {
+              "id": "01000000-553f-29ee-02ce-08df05419d00",
+              "name": [
+                {
+                  "languageId": "en",
+                  "text": "DEMOCRAT"
+                }
+              ],
+              "abbreviation": "DEM",
+              "standardName": null,
+              "color": "#255C99",
+              "textColor": "#ffffff"
+            },
+            "groupResults": [
+              {
+                "groupId": "01000000-553f-29ee-6f07-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Election Day"
+                  }
+                ],
+                "voteCount": 305
+              },
+              {
+                "groupId": "01000000-553f-29ee-7396-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Early Voting"
+                  }
+                ],
+                "voteCount": 69
+              },
+              {
+                "groupId": "01000000-553f-29ee-7438-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Mail Ballots"
+                  }
+                ],
+                "voteCount": 86
+              }
+            ],
+            "isWriteIn": false,
+            "isQualifiedWriteIn": false,
+            "isWinner": null
+          },
+          {
+            "id": "01000000-553f-29ee-aa7b-08df0541a6a1",
+            "nativeId": "4",
+            "name": [
+              {
+                "languageId": "en",
+                "text": "Paula Hodges"
+              }
+            ],
+            "voteCount": 429,
+            "party": {
+              "id": "01000000-553f-29ee-02ce-08df05419d00",
+              "name": [
+                {
+                  "languageId": "en",
+                  "text": "DEMOCRAT"
+                }
+              ],
+              "abbreviation": "DEM",
+              "standardName": null,
+              "color": "#255C99",
+              "textColor": "#ffffff"
+            },
+            "groupResults": [
+              {
+                "groupId": "01000000-553f-29ee-6f07-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Election Day"
+                  }
+                ],
+                "voteCount": 294
+              },
+              {
+                "groupId": "01000000-553f-29ee-7396-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Early Voting"
+                  }
+                ],
+                "voteCount": 73
+              },
+              {
+                "groupId": "01000000-553f-29ee-7438-08df0541a858",
+                "groupName": [
+                  {
+                    "languageId": "en",
+                    "text": "Mail Ballots"
+                  }
+                ],
+                "voteCount": 62
+              }
+            ],
+            "isWriteIn": false,
+            "isQualifiedWriteIn": false,
+            "isWinner": null
+          }
+        ]
+      },
+      "rankedChoiceSummaryResults": null,
+      "crossCounties": [],
+      "isCloseRace": true,
+      "partyName": "DEMOCRAT"
+    }
+  ]
+}
