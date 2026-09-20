@@ -16,6 +16,7 @@ each document's PageRank authority. See `services/explore_search.py` for how
 the three are combined at query time.
 """
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -159,7 +160,10 @@ async def _backfill_presidential_bodies(
             )
 
             for d, body_text in zip(batch, bodies):
-                if body_text:
+                # Same change-detection rule as the rulemaking backfill
+                # below: a re-fetch that returns the text already stored
+                # is not a refresh, and must not force a re-embed.
+                if body_text and body_text != d.body:
                     d.body = body_text
                     if not d.summary:
                         d.summary = body_text[:500]
@@ -222,7 +226,18 @@ async def _backfill_rulemaking_bodies(db: Session) -> list[int]:
             )
 
             for d, body_text in zip(batch, bodies):
-                if body_text:
+                # Only a body that actually CHANGED counts as refreshed.
+                # The query above selects on `length(body) < 2000`, and a
+                # short Federal Register notice whose real full text is
+                # genuinely under that never stops matching it: 469 real
+                # documents did on 2026-09-20, every one already complete
+                # (longest body: 1,999 characters). Appending regardless
+                # of change meant all 468 that fetched cleanly were
+                # reported as refreshed every night, and step 7 re-chunked
+                # and re-embedded each one into identical vectors -- a
+                # permanent, growing nightly cost for zero new
+                # information.
+                if body_text and body_text != d.body:
                     d.body = body_text
                     filled.append(d.id)
 
@@ -482,7 +497,22 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
             }
             for d in all_docs
         ]
-        embedded = embed_explore_documents(doc_dicts)
+        # Off the event loop: encoding is pure CPU inside sentence-
+        # transformers and ran for 23 MINUTES in one call against the real
+        # corpus (1,557 documents / 11,022 chunks, measured on the Pi
+        # 2026-09-20). Awaiting it inline froze the whole FastAPI process,
+        # so /api/health stopped answering, Swarm's healthcheck (every 30s,
+        # 5s timeout, 3 retries -- so ~90s of unresponsiveness is fatal)
+        # failed, and the container was SIGKILLed mid-run
+        # (exit 137, "unhealthy container") -- which is what actually
+        # broke every nightly run from 2026-09-02 onward. The killed
+        # process left its run row stuck "active", so the 12h "hang" in
+        # the admin view was the NEXT night's staleness sweep, not real
+        # running time; House/Stock/Election never ran again because they
+        # are chained behind this phase. Same asyncio.to_thread treatment
+        # donor_classifier_ai.py and api/explore.py already give their own
+        # CPU-bound calls.
+        embedded = await asyncio.to_thread(embed_explore_documents, doc_dicts)
 
         # --- 8. Rebuild the keyword index ---
         # Triggers keep explore_fts live between runs, but the backfill
@@ -491,14 +521,14 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
         # that differ from what was indexed. A full re-tokenise here makes
         # any drift self-healing within a day.
         logger.info("Explore pipeline: rebuilding keyword index...")
-        indexed = rebuild_index(db)
+        indexed = await asyncio.to_thread(rebuild_index, db)
 
         # --- 9. Recompute citation-graph authority ---
         # After ingestion, so today's documents both earn citations and
         # count as citing documents in the same pass.
         logger.info("Explore pipeline: recomputing citation authority...")
         try:
-            authority_stats = update_document_authority(db)
+            authority_stats = await asyncio.to_thread(update_document_authority, db)
         except Exception:
             logger.exception("Citation authority pass failed — ranking falls back "
                              "to relevance + freshness until the next run")
@@ -512,7 +542,7 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
         # survive filtering. Ranking parameters therefore always describe
         # the corpus actually being searched, and nobody ever types one.
         logger.info("Explore pipeline: recalibrating ranking...")
-        calibration = calibrate_and_store(db)
+        calibration = await asyncio.to_thread(calibrate_and_store, db)
 
         api_cache_set(db, "explore", "seed_version", EXPLORE_SEED_VERSION)
         db.commit()
