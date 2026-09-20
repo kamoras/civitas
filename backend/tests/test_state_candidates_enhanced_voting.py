@@ -111,11 +111,28 @@ class TestIsPrimary:
 
     def test_the_nine_real_special_elections_are_not_primaries(self):
         """The index is mostly local specials — town councils, referenda —
-        and one of them ("Special Election ... Senate District 4 Primary",
-        2025-07-08) even carries the word Primary, so the year scope is
-        doing real work here, not just the name."""
+        and one of them really is named "Special Election Central Falls
+        City Council Ward 4 & Referendum and Special Election Senate
+        District 4 Primary" (2025-07-08), carrying the word Primary for a
+        purely local contest."""
         assert sum(ev._is_primary(e, 2026) for e in INDEX["elections"]) == 1
-        assert sum(ev._is_primary(e, 2025) for e in INDEX["elections"]) == 1
+        assert sum(ev._is_primary(e, 2025) for e in INDEX["elections"]) == 0
+
+    def test_a_special_primary_later_in_the_same_year_cannot_hijack_the_match(self):
+        """The newest match wins, so without the special exclusion a
+        special primary held after the statewide one would be selected —
+        and its ballot carries no federal contest at all, so the state
+        would silently stop confirming anyone."""
+        later_special = {
+            "publicElectionId": "spec26",
+            "electionDate": "2026-11-10",
+            "name": [{"languageId": "en", "text": "Special Election Senate District 9 Primary"}],
+        }
+        assert ev._is_primary(later_special, 2026) is False
+        matches = [
+            e for e in INDEX["elections"] + [later_special] if ev._is_primary(e, 2026)
+        ]
+        assert [e["publicElectionId"] for e in matches] == ["RI2026StatewidePrimary"]
 
     def test_a_year_with_no_primary_indexed_matches_nothing(self):
         assert not any(ev._is_primary(e, 2028) for e in INDEX["elections"])

@@ -102,7 +102,18 @@ logger = logging.getLogger(__name__)
 _rate_limiter = RateLimiter(rps=1.0)
 
 _PRIMARY_RE = re.compile(r"primary", re.IGNORECASE)
-_PRESIDENTIAL_RE = re.compile(r"presidential", re.IGNORECASE)
+# A cycle's own regular primary is the only one that names federal
+# nominees. The other two kinds in this index have to be excluded by
+# name, and BOTH exclusions are load-bearing rather than defensive:
+# Rhode Island's real index carries "Special Election Central Falls City
+# Council Ward 4 & Referendum and Special Election Senate District 4
+# Primary", a purely local contest whose name really does contain
+# "Primary". Since the newest match wins below, a special primary held
+# LATER in the same year than the statewide one would otherwise be
+# chosen, and its ballot carries no federal contest at all -- so the
+# state would silently stop confirming anyone, which looks exactly like
+# a state that simply has no nominees yet.
+_EXCLUDED_RE = re.compile(r"presidential|special", re.IGNORECASE)
 
 
 def _text(entries: list | None) -> str:
@@ -124,14 +135,15 @@ def _text(entries: list | None) -> str:
 
 
 def _is_primary(election: dict, year: int) -> bool:
-    """This cycle's regular (non-presidential) primary. Scoped by the
-    `electionDate` YEAR rather than trusting the name to carry it, and
-    excluding both the separate presidential primary and the many local
-    special elections this index also carries."""
+    """This cycle's regular primary. Scoped by the `electionDate` YEAR
+    rather than trusting the name to carry it, and excluding both the
+    separate presidential primary and the local special elections this
+    index is mostly made of -- see _EXCLUDED_RE for why the special
+    exclusion is not merely defensive."""
     if not str(election.get("electionDate") or "").startswith(f"{year}-"):
         return False
     name = _text(election.get("name"))
-    return bool(_PRIMARY_RE.search(name)) and not _PRESIDENTIAL_RE.search(name)
+    return bool(_PRIMARY_RE.search(name)) and not _EXCLUDED_RE.search(name)
 
 
 def _candidates(ballot_item: dict) -> list[tuple[str, str, int]]:
