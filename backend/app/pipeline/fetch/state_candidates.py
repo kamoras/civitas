@@ -66,6 +66,9 @@ from app.pipeline.fetch.state_candidates_canvass_xml import fetch_confirmed_cand
 from app.pipeline.fetch.state_candidates_civic import fetch_confirmed_candidates as _fetch_civic
 from app.pipeline.fetch.state_candidates_ct import fetch_confirmed_candidates as _fetch_ct
 from app.pipeline.fetch.state_candidates_clarity import fetch_confirmed_candidates as _fetch_clarity
+from app.pipeline.fetch.state_candidates_enhanced_voting import (
+    fetch_confirmed_candidates as _fetch_enhanced_voting,
+)
 from app.pipeline.fetch.state_candidates_in import fetch_confirmed_candidates as _fetch_in
 from app.pipeline.fetch.state_candidates_ks import fetch_confirmed_candidates as _fetch_ks
 from app.pipeline.fetch.state_candidates_ky import fetch_confirmed_candidates as _fetch_ky
@@ -113,6 +116,7 @@ STRATEGIES = {
     "me_results": _fetch_me,
     "google_civic": _fetch_civic,
     "nh_results": _fetch_nh,
+    "enhanced_voting": _fetch_enhanced_voting,
 }
 
 # A state's own party lettering (mostly single-letter) doesn't match FEC's

@@ -73,6 +73,32 @@ class TestParseOffice:
         assert common.parse_office("REPRESENTATIVE TO CONGRESS") == ("H", None)
         assert common.parse_office("Representative to Congress, District 2") == ("H", 2)
 
+    def test_recognises_the_bare_senator_in_congress(self):
+        """Rhode Island's real label ("DEM Senator in Congress") carries
+        no "U.S."/"United States" prefix at all — the mirror of the
+        "Representative in/to Congress" case above, and safe for the same
+        reason: no STATE chamber is named "Congress"."""
+        assert common.parse_office("DEM Senator in Congress") == ("S", None)
+        assert common.parse_office("Senator to Congress") == ("S", None)
+
+    def test_rhode_islands_general_assembly_is_not_congress(self):
+        """The live regression control for the Senate branch above, and
+        the sharpest one this system has: Rhode Island's STATE legislature
+        is literally named the "General Assembly", so these sit on the
+        very same primary ballot as the federal contests — 140 of that
+        ballot's 192 contests — a few characters from the real thing."""
+        assert common.parse_office("DEM Senator in General Assembly District 5") is None
+        assert common.parse_office("REP Representative in General Assembly District 13") is None
+        assert common.parse_office("DEM Senatorial District Committee District 13") is None
+        assert common.parse_office("DEM Representative District Committee District 5") is None
+
+    def test_a_bare_senator_label_is_still_not_federal(self):
+        """The Senate branch must stay narrow: "Senator, District 5" is a
+        STATE senate seat in most states and always has been."""
+        assert common.parse_office("Senator, District 5") is None
+        assert common.parse_office("State Senator District 12") is None
+        assert common.parse_office("Senator in General Assembly") is None
+
     def test_an_ordinal_district_needs_the_chamber_to_be_federal_first(self):
         """"5th District" on its own belongs to no chamber in particular —
         recognising it alone would sweep in judicial and state races."""
@@ -185,6 +211,18 @@ class TestSurname:
         stripping it, every sitting member's surname became "(I)"."""
         assert common.surname('Earl L. "Buddy" Carter (I)') == "Carter"
         assert common.surname("Sanford Bishop (I)") == "Bishop"
+
+    def test_strips_rhode_islands_party_endorsement_asterisk(self):
+        """Rhode Island appends "*" to the party-ENDORSED candidate on its
+        real ballot. "Reed*" matches no FEC row, so leaving it on looks
+        like a missing nominee rather than a parsing bug."""
+        assert common.surname("John F. Reed*") == "Reed"
+        assert common.surname("Stephen T. Skoly*") == "Skoly"
+        assert common.surname("CASE, Ed*", last_first=True) == "CASE"
+
+    def test_an_annotation_only_name_yields_nothing(self):
+        assert common.surname("*") is None
+        assert common.surname("(I)") is None
 
 
 class TestPickNominees:

@@ -1,0 +1,164 @@
+{
+  "elections": [
+    {
+      "publicElectionId": "glocesterspec24",
+      "electionDate": "2024-08-06",
+      "name": [
+        {
+          "languageId": "en",
+          "text": "Glocester Special Election"
+        }
+      ],
+      "dateText": [
+        {
+          "languageId": "en",
+          "text": "August 6, 2024"
+        }
+      ]
+    },
+    {
+      "publicElectionId": "cranstonspec24",
+      "electionDate": "2024-06-04",
+      "name": [
+        {
+          "languageId": "en",
+          "text": "City of Cranston Special Election"
+        }
+      ],
+      "dateText": [
+        {
+          "languageId": "en",
+          "text": "June 4, 2024"
+        }
+      ]
+    },
+    {
+      "publicElectionId": "febspec26",
+      "electionDate": "2026-02-03",
+      "name": [
+        {
+          "languageId": "en",
+          "text": "Special Election Coventry Town Council Districts 4 and 5 <br>Special Referenda North Smithfield <br>Special Referendum Warwick"
+        }
+      ],
+      "dateText": [
+        {
+          "languageId": "en",
+          "text": "February 3, 2026"
+        }
+      ]
+    },
+    {
+      "publicElectionId": "specaug25",
+      "electionDate": "2025-08-05",
+      "name": [
+        {
+          "languageId": "en",
+          "text": "Special Election Senate District 4 and Coventry Town Council Districts 3 and 5"
+        }
+      ],
+      "dateText": [
+        {
+          "languageId": "en",
+          "text": "August 5, 2025"
+        }
+      ]
+    },
+    {
+      "publicElectionId": "spec25",
+      "electionDate": "2025-07-08",
+      "name": [
+        {
+          "languageId": "en",
+          "text": "Special Election Central Falls City Council Ward 4 & Referendum and Special Election Senate District 4 Primary"
+        }
+      ],
+      "dateText": [
+        {
+          "languageId": "en",
+          "text": "July 8, 2025"
+        }
+      ]
+    },
+    {
+      "publicElectionId": "woonspec24",
+      "electionDate": "2024-03-05",
+      "name": [
+        {
+          "languageId": "en",
+          "text": "Woonsocket Special Election"
+        }
+      ],
+      "dateText": [
+        {
+          "languageId": "en",
+          "text": "March 5, 2024"
+        }
+      ]
+    },
+    {
+      "publicElectionId": "westwarwickspec25",
+      "electionDate": "2025-10-08",
+      "name": [
+        {
+          "languageId": "en",
+          "text": "Special Election West Warwick Referendum"
+        }
+      ],
+      "dateText": [
+        {
+          "languageId": "en",
+          "text": "October 8, 2025"
+        }
+      ]
+    },
+    {
+      "publicElectionId": "kingstownspec24",
+      "electionDate": "2024-05-07",
+      "name": [
+        {
+          "languageId": "en",
+          "text": "May 7 Special Elections"
+        }
+      ],
+      "dateText": [
+        {
+          "languageId": "en",
+          "text": "May 7, 2024"
+        }
+      ]
+    },
+    {
+      "publicElectionId": "decspec25",
+      "electionDate": "2025-12-02",
+      "name": [
+        {
+          "languageId": "en",
+          "text": "Special Elections Charlestown Town Council, North Providence Town Council District 2, Providence City Council Ward 2 "
+        }
+      ],
+      "dateText": [
+        {
+          "languageId": "en",
+          "text": "December 2, 2025"
+        }
+      ]
+    },
+    {
+      "publicElectionId": "RI2026StatewidePrimary",
+      "electionDate": "2026-09-09",
+      "name": [
+        {
+          "languageId": "en",
+          "text": "2026 Statewide Primary"
+        }
+      ],
+      "dateText": [
+        {
+          "languageId": "en",
+          "text": "September 9, 2026"
+        }
+      ]
+    }
+  ]
+}
