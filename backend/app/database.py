@@ -324,6 +324,67 @@ def _backfill_bsky_posted_facts() -> None:
         )
 
 
+def _migrate_state_office_tables() -> None:
+    """Drop statewide_nominees / state_leg_nominees when they predate a
+    column or a uniqueness rule the current models rely on.
+
+    These two tables gained shape AFTER they first shipped, and
+    create_all never alters a table that already exists:
+    statewide_nominees gained `district` (a statewide body seated by
+    district, like Georgia's Public Service Commission) and
+    state_leg_nominees gained `seat` (Idaho and Washington elect two
+    members from one district). Both also widened their unique key to
+    include display_name, because a top-two state legitimately advances
+    two same-party candidates from one contest.
+
+    A database created before those changes therefore raises
+    "no such column: statewide_nominees.district" on the very first
+    ballot-page request — confirmed live against production, which
+    created the table under the original shape — and would reject a
+    second same-party nominee with an IntegrityError even once the
+    column existed, because SQLite cannot drop a table-level UNIQUE
+    constraint without rebuilding the table.
+
+    Every row in both tables is re-derived nightly from each state's own
+    results feed, exactly as presidents are (see
+    _migrate_presidents_schema_rebuild, whose reasoning this mirrors), so
+    there is nothing to preserve: dropping the stale table and letting
+    create_all rebuild it is the whole migration.
+
+    Must run BEFORE create_all.
+    """
+    inspector = inspect(engine)
+    required = {
+        "statewide_nominees": {"district", "display_name"},
+        "state_leg_nominees": {"seat", "display_name"},
+    }
+    for table, needed in required.items():
+        if not inspector.has_table(table):
+            continue
+        existing = {c["name"] for c in inspector.get_columns(table)}
+        missing = needed - existing
+        # A unique key that predates display_name would reject a
+        # legitimate second same-party nominee and cannot be altered in
+        # place, so it counts as a stale shape too. Read via
+        # get_unique_constraints, NOT get_indexes: these are table-level
+        # UNIQUE constraints, which SQLite implements as an autoindex
+        # that get_indexes hides by default — production's is exactly
+        # that, so checking indexes would have missed it entirely.
+        stale_unique = any(
+            "display_name" not in (uq.get("column_names") or [])
+            for uq in inspector.get_unique_constraints(table)
+        )
+        if not missing and not stale_unique:
+            continue
+        logger.info(
+            "Rebuilding %s: missing %s%s — rows are re-derived nightly",
+            table, sorted(missing) or "nothing",
+            ", stale unique index" if stale_unique else "",
+        )
+        with engine.begin() as conn:
+            conn.execute(text(f"DROP TABLE IF EXISTS {table}"))
+
+
 def _migrate_presidents_schema_rebuild() -> None:
     """#218 makes score_public_mandate/score_effectiveness/
     score_agency_alignment nullable (previously NOT NULL DEFAULT 0.0) and
@@ -668,6 +729,7 @@ def _init_db_locked() -> None:
 
     _migrate_president_ids()
     _migrate_presidents_schema_rebuild()
+    _migrate_state_office_tables()
     Base.metadata.create_all(bind=engine)
     VisitsBase.metadata.create_all(bind=visits_engine)
     _migrate_columns()
