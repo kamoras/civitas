@@ -73,6 +73,8 @@ function ballot(overrides: Partial<StateBallot> = {}): StateBallot {
     coverage: [],
     measures: [],
     measureCoverage: { status: "not_yet_covered", sourceName: null, checkedAt: null },
+    statewideRaces: [],
+    statewideCoverage: { status: "not_yet_covered", sourceName: null, checkedAt: null },
     officialLookup: {
       url: "https://www.usa.gov/election-office",
       label: "Find your election office",
@@ -178,5 +180,109 @@ describe("StateBallotClient — House section", () => {
     expect(screen.getByText("Greg Landsman (I)")).toBeInTheDocument();
     expect(screen.getByText("Second District Dem")).toBeInTheDocument();
     expect(screen.getByText("U.S. HOUSE — 2 DISTRICTS")).toBeInTheDocument();
+  });
+});
+
+describe("statewide executive offices", () => {
+  const covered = {
+    statewideCoverage: {
+      status: "covered" as const,
+      sourceName: "Rhode Island Board of Elections",
+      checkedAt: "2026-09-21T04:08:00.625851Z",
+    },
+    statewideRaces: [
+      {
+        office: "governor",
+        label: "Governor",
+        nominees: [
+          { party: "DEM", name: "Helena Buonanno Foulkes" },
+          { party: "REP", name: "Aaron C. Guckian" },
+        ],
+      },
+      {
+        office: "secretary_of_state",
+        label: "Secretary of State",
+        nominees: [{ party: "DEM", name: "Gregg M. Amore" }],
+      },
+    ],
+  };
+
+  it("renders each office with its nominees", () => {
+    render(<StateBallotClient ballot={ballot(covered)} />);
+    expect(screen.getByText("STATEWIDE EXECUTIVE OFFICES")).toBeInTheDocument();
+    expect(screen.getByText("Governor")).toBeInTheDocument();
+    expect(screen.getByText("Helena Buonanno Foulkes")).toBeInTheDocument();
+    expect(screen.getByText("Aaron C. Guckian")).toBeInTheDocument();
+    expect(screen.getByText("Secretary of State")).toBeInTheDocument();
+  });
+
+  it("names the source and the date it was checked", () => {
+    render(<StateBallotClient ballot={ballot(covered)} />);
+    expect(
+      screen.getByText(/Rhode Island Board of Elections · last checked 2026-09-21/)
+    ).toBeInTheDocument();
+  });
+
+  it("says plainly that no money or score exists for these offices", () => {
+    // They have no FEC filing. Without this line the absence of the
+    // funding bars every federal race on the page shows reads as missing
+    // data rather than as a fact about the office.
+    render(<StateBallotClient ballot={ballot(covered)} />);
+    expect(screen.getByText(/no federal campaign-finance filings/)).toBeInTheDocument();
+  });
+
+  it("states a confirmed absence in words rather than showing nothing", () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          statewideRaces: [],
+          statewideCoverage: {
+            status: "confirmed_none",
+            sourceName: "Ohio Secretary of State",
+            checkedAt: "2026-09-21T04:08:00Z",
+          },
+        })}
+      />
+    );
+    expect(
+      screen.getByText(/No statewide executive offices are on OH's 2026-11-03 ballot/)
+    ).toBeInTheDocument();
+    // ... without explaining the funding data missing from names that
+    // aren't there.
+    expect(screen.queryByText(/no federal campaign-finance filings/)).not.toBeInTheDocument();
+  });
+
+  it("renders no section at all for a state nobody has checked", () => {
+    // The page's own `omits` list already names these contests as out of
+    // scope. An empty panel would repeat that admission and, worse, read
+    // as a state that elects nobody.
+    render(<StateBallotClient ballot={ballot()} />);
+    expect(screen.queryByText("STATEWIDE EXECUTIVE OFFICES")).not.toBeInTheDocument();
+  });
+
+  it("colours nominees by the same party codes federal candidates use", () => {
+    render(<StateBallotClient ballot={ballot(covered)} />);
+    expect(screen.getByText("Helena Buonanno Foulkes").className).toContain("text-dem-blue");
+    expect(screen.getByText("Aaron C. Guckian").className).toContain("text-rep-red");
+  });
+
+  it("renders an independent nominee without forcing them into a major party", () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          statewideCoverage: covered.statewideCoverage,
+          statewideRaces: [
+            {
+              office: "governor",
+              label: "Governor",
+              nominees: [{ party: "IND", name: "Someone Unaffiliated" }],
+            },
+          ],
+        })}
+      />
+    );
+    const el = screen.getByText("Someone Unaffiliated");
+    expect(el.className).not.toContain("text-dem-blue");
+    expect(el.className).not.toContain("text-rep-red");
   });
 });

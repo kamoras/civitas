@@ -201,6 +201,81 @@ function HouseSection({ houseRaces }: { houseRaces: StateBallot["houseRaces"] })
   );
 }
 
+/** The state's own executive officers — Governor, Lieutenant Governor,
+ * Attorney General, Secretary of State, Treasurer — where its feed
+ * publishes them.
+ *
+ * Renders nothing at all when the state isn't covered yet. That is the
+ * one case where silence is right: the page's `omits` list still names
+ * these contests as out of scope, so an empty panel would repeat the
+ * same admission twice and, worse, look like a state that elects nobody.
+ * The two claims it CAN make — here they are, and this state elects none
+ * this cycle — both get real words, same discipline as MeasuresSection.
+ *
+ * Deliberately much plainer than a federal race: these offices have no
+ * FEC filing, so there is no money, no score and nothing to click
+ * through to. Showing a name and a party is the whole of what's true.
+ */
+function StatewideExecutiveSection({ ballot }: { ballot: StateBallot }) {
+  const { statewideRaces, statewideCoverage, state } = ballot;
+  if (statewideCoverage.status === "not_yet_covered") return null;
+
+  return (
+    <section className="panel mb-6">
+      <TerminalTitlebar title="State executive" />
+      <div className="p-6">
+        <h2 className="font-mono text-xs text-ink-lo mb-3">STATEWIDE EXECUTIVE OFFICES</h2>
+        {statewideRaces.length === 0 ? (
+          <p className="text-sm text-ink">
+            No statewide executive offices are on {state}&apos;s {ballot.electionDate} ballot.
+          </p>
+        ) : (
+          <div className="space-y-1.5">
+            {statewideRaces.map((race) => (
+              <div
+                key={race.office}
+                className="grid grid-cols-1 gap-1 border border-white/[0.09] bg-surface px-3 py-2.5 sm:grid-cols-[minmax(0,180px)_1fr] sm:gap-3"
+              >
+                <span className="font-mono text-xs text-ink-lo sm:self-center">{race.label}</span>
+                <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+                  {race.nominees.map((n) => (
+                    <span
+                      key={`${n.party}-${n.name}`}
+                      className={
+                        majorPartyOf(n.party) === "DEM"
+                          ? "text-dem-blue"
+                          : majorPartyOf(n.party) === "REP"
+                            ? "text-rep-red"
+                            : "text-ink"
+                      }
+                    >
+                      {n.name}
+                    </span>
+                  ))}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="mt-3 text-[10px] text-ink-min">
+          {statewideCoverage.sourceName
+            ? `Nominees as published by ${statewideCoverage.sourceName}`
+            : "Nominees as published by the state"}
+          {statewideCoverage.checkedAt
+            ? ` · last checked ${statewideCoverage.checkedAt.slice(0, 10)}`
+            : ""}
+          .
+          {/* Only meaningful next to actual nominees. Under a confirmed
+              absence it explains the funding data missing from names that
+              aren't there. */}
+          {statewideRaces.length > 0 &&
+            " These offices have no federal campaign-finance filings, so no funding figures or Representation Scores exist for them."}
+        </p>
+      </div>
+    </section>
+  );
+}
+
 /** The measures section, including the three ways it can be empty.
  *
  * The whole point of this component is that "this state has no measures"
@@ -597,6 +672,11 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
           {ballot.houseRaces.length > 0 && (
             <HouseSection houseRaces={ballot.houseRaces} />
           )}
+
+          {/* A real ballot runs federal offices first, then the state's
+              own general officers, then everything local — so this sits
+              between the House and the town selector. */}
+          <StatewideExecutiveSection ballot={ballot} />
 
           <TownSection state={ballot.state} pageElectionDate={ballot.electionDate} />
 
