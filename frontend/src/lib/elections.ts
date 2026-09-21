@@ -129,8 +129,14 @@ export function matchesDistrictQuery(
   // what an at-large district is searchable by.
   const districtLabel =
     race.district === 0 ? "al" : String(race.district ?? "").toLowerCase();
+  // A multi-member district renders as "1a"/"1b" (Idaho) or "5-1"/"5-2"
+  // (Washington), but a voter there knows they are in district 1 — and
+  // typing it must not come back empty. The numeric part matches both
+  // seats; "1" still does not match "10", because "10" leads with "10".
+  const districtNumber = districtLabel.match(/^\d+/)?.[0] ?? "";
   return (
     districtLabel === q ||
+    (districtNumber !== "" && districtNumber !== districtLabel && districtNumber === q) ||
     (race.areas ?? []).some((a) => a.toLowerCase().includes(q)) ||
     race.candidates.some((c) => c.name.toLowerCase().includes(q))
   );

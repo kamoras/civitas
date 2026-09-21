@@ -506,9 +506,10 @@ def _sync_state_leg_nominees(
     if not source.get("statewide_offices"):
         return 0
 
-    keep: set[tuple[str, str, str, str]] = set()
+    keep: set[tuple[str, str, str | None, str, str]] = set()
     for record in records:
         chamber, district, party = record["office"], record["district"], record["party"]
+        seat = record.get("seat")
         name = record["last_name"]
         row = (
             db.query(StateLegNominee)
@@ -517,6 +518,7 @@ def _sync_state_leg_nominees(
                 StateLegNominee.cycle_year == cycle,
                 StateLegNominee.chamber == chamber,
                 StateLegNominee.district == district,
+                StateLegNominee.seat == seat,
                 StateLegNominee.party == party,
                 StateLegNominee.display_name == name,
             )
@@ -525,19 +527,20 @@ def _sync_state_leg_nominees(
         if row is None:
             row = StateLegNominee(
                 state=state, cycle_year=cycle, chamber=chamber,
-                district=district, party=party, display_name=name,
+                district=district, seat=seat, party=party, display_name=name,
             )
             db.add(row)
         row.source_name = str(source.get("source_name") or source.get("strategy") or "")
         row.updated_at = utcnow()
-        keep.add((chamber, district, party, name))
+        keep.add((chamber, district, seat, party, name))
 
     for row in (
         db.query(StateLegNominee)
         .filter(StateLegNominee.state == state, StateLegNominee.cycle_year == cycle)
         .all()
     ):
-        if (row.chamber, row.district, row.party, row.display_name) not in keep:
+        if (row.chamber, row.district, row.seat, row.party,
+                row.display_name) not in keep:
             db.delete(row)
 
     db.commit()

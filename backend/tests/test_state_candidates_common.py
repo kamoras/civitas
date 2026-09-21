@@ -341,21 +341,21 @@ class TestParseStateLegOffice:
 
     def test_both_chambers_resolve(self):
         assert common.parse_state_leg_office(
-            "DEM Senator in General Assembly District 5") == ("upper", "5")
+            "DEM Senator in General Assembly District 5") == ("upper", "5", None)
         assert common.parse_state_leg_office(
-            "REP Representative in General Assembly District 13") == ("lower", "13")
+            "REP Representative in General Assembly District 13") == ("lower", "13", None)
 
     def test_leading_zeros_are_the_same_seat(self):
         assert common.parse_state_leg_office(
-            "DEM Senator in General Assembly District 05") == ("upper", "5")
+            "DEM Senator in General Assembly District 05") == ("upper", "5", None)
 
     def test_a_trailing_letter_is_part_of_the_district(self):
         """Minnesota names two house districts per senate district, "10A"
         and "10B". Dropping the letter would merge two real seats."""
         assert common.parse_state_leg_office(
-            "Representative in General Assembly District 10A") == ("lower", "10A")
+            "Representative in General Assembly District 10A") == ("lower", "10A", None)
         assert common.parse_state_leg_office(
-            "Representative in General Assembly District 10b") == ("lower", "10B")
+            "Representative in General Assembly District 10b") == ("lower", "10B", None)
 
     def test_party_committee_races_are_refused(self):
         for label in (
@@ -406,9 +406,9 @@ class TestStateLegChamberForms:
     """Minnesota's plain forms, alongside Rhode Island's."""
 
     def test_minnesota_forms_resolve(self):
-        assert common.parse_state_leg_office("State Senator District 10") == ("upper", "10")
+        assert common.parse_state_leg_office("State Senator District 10") == ("upper", "10", None)
         assert common.parse_state_leg_office(
-            "State Representative District 10A") == ("lower", "10A")
+            "State Representative District 10A") == ("lower", "10A", None)
 
     def test_a_judicial_district_contest_is_refused(self):
         """It names a district and would otherwise look like a seat."""
@@ -499,3 +499,60 @@ class TestStatewideOfficePhrases:
             assert code in common.STATEWIDE_OFFICE_LABELS
         for code, _pattern in common._STATEWIDE_OFFICES:
             assert code in common.STATEWIDE_OFFICE_LABELS
+
+
+class TestMultiMemberDistricts:
+    """Some states elect several members from ONE district, and the seat
+    is what tells their contests apart.
+
+    Idaho runs "District 1 Seat A" and "Seat B"; Washington runs
+    "Pos. 1" and "Pos. 2" of a Legislative District. Without the seat
+    both collapse onto one district identifier and one of the two real
+    contests disappears.
+
+    This is a different thing from Minnesota's "10A"/"10B", and Census
+    settles which is which: Minnesota has 134 lower-chamber polygons
+    named 10A, 10B, ..., while Idaho has 35 and Washington 49, numbered
+    plainly. So Minnesota's letter belongs to the district and Idaho's
+    belongs to the seat.
+    """
+
+    def test_idaho_seats_share_a_district(self):
+        assert common.parse_state_leg_office(
+            "State Representative District 1 Seat A - Republican") == ("lower", "1", "A")
+        assert common.parse_state_leg_office(
+            "State Representative District 1 Seat B - Democratic") == ("lower", "1", "B")
+
+    def test_washington_positions_share_a_district(self):
+        assert common.parse_state_leg_office(
+            "State Representative Pos. 2 - Legislative District 5") == ("lower", "5", "2")
+
+    def test_a_washington_senate_seat_has_no_position(self):
+        assert common.parse_state_leg_office(
+            "State Senator - Legislative District 5") == ("upper", "5", None)
+
+    def test_minnesotas_letter_stays_on_the_district(self):
+        """10A is its own district with its own boundaries, so the
+        letter must NOT become a seat — the town crosswalk is keyed on
+        the district and would resolve to the wrong polygon."""
+        assert common.parse_state_leg_office(
+            "State Representative District 10A") == ("lower", "10A", None)
+
+    def test_single_member_states_carry_no_seat(self):
+        assert common.parse_state_leg_office(
+            "DEM Senator in General Assembly District 5") == ("upper", "5", None)
+
+
+class TestDistrictLabel:
+    def test_a_lone_district_reads_as_its_number(self):
+        assert common.district_label("5", None) == "5"
+        assert common.district_label("10A", None) == "10A"
+
+    def test_a_lettered_seat_appends(self):
+        """Idaho writes them exactly this way."""
+        assert common.district_label("1", "A") == "1A"
+
+    def test_a_numbered_position_is_hyphenated(self):
+        """"52" would be a different district; "5-2" cannot be read that
+        way."""
+        assert common.district_label("5", "2") == "5-2"

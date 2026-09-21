@@ -190,6 +190,7 @@
     "WA": {
       "source_name": "Washington Secretary of State (official results portal)",
       "strategy": "tabular",
+      "statewide_offices": true,
       "advance_count": 2,
       "runoff_threshold_pct": null,
       "discovery": {
@@ -308,6 +309,7 @@
     "ID": {
       "source_name": "Idaho Secretary of State (official results portal)",
       "strategy": "tabular",
+      "statewide_offices": true,
       "runoff_threshold_pct": null,
       "discovery": {
         "mode": "sos_api_report",

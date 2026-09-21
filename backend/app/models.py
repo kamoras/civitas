@@ -1718,7 +1718,8 @@ class StateLegNominee(Base):
         # under top-two two same-party (or two no-party) candidates
         # legitimately advance from one seat.
         UniqueConstraint(
-            "state", "cycle_year", "chamber", "district", "party", "display_name",
+            "state", "cycle_year", "chamber", "district", "seat",
+            "party", "display_name",
             name="uq_state_leg_nominee_seat_party_name",
         ),
     )
@@ -1736,6 +1737,13 @@ class StateLegNominee(Base):
     # the country. Sorting is natural-order, not lexical, so 9 precedes
     # 10 — see _district_sort_key.
     district: Mapped[str] = mapped_column(String(8), nullable=False)
+    # Which seat OF that district, where a state elects more than one
+    # member from it: Idaho's "A"/"B", Washington's "1"/"2". Null almost
+    # everywhere else. The district still names the single geography the
+    # seats share, which is what keeps the town crosswalk correct — and
+    # is why this is a column rather than a suffix on `district`, since
+    # Minnesota's "10A" really is a district of its own.
+    seat: Mapped[str | None] = mapped_column(String(4), nullable=True)
     party: Mapped[str] = mapped_column(String(1), nullable=False)
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     source_name: Mapped[str] = mapped_column(String(200), default="")
