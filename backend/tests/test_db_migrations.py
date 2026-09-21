@@ -17,6 +17,7 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.pool import StaticPool
 
 import app.database as database
+import app.models  # noqa: F401  (registers the tables on Base.metadata)
 
 
 @pytest.fixture()
@@ -200,3 +201,91 @@ def test_bsky_posted_facts_backfill_repairs_a_half_applied_migration(patched_eng
             "SELECT bsky_posted_facts FROM action_issues WHERE id = 1"
         )).scalar()
     assert value == '["carried over"]'
+
+
+class TestStateOfficeTableRebuild:
+    """statewide_nominees and state_leg_nominees gained shape AFTER they
+    first shipped, and create_all never alters an existing table.
+
+    The schema below is production's real one, read off the deployed
+    database: created when the table first shipped, so it has no
+    `district` column and a unique index that predates `display_name`.
+    Left alone, the first ballot-page request raises "no such column:
+    statewide_nominees.district".
+    """
+
+    _PRODUCTION_SHAPE = """
+        CREATE TABLE statewide_nominees (
+            id INTEGER NOT NULL PRIMARY KEY,
+            state VARCHAR(2) NOT NULL,
+            cycle_year INTEGER NOT NULL,
+            office VARCHAR(32) NOT NULL,
+            party VARCHAR(1) NOT NULL,
+            display_name VARCHAR(200) NOT NULL,
+            source_name VARCHAR(200),
+            updated_at DATETIME,
+            UNIQUE (state, cycle_year, office, party)
+        )
+    """
+
+    def test_a_table_missing_a_column_is_dropped(self, patched_engine):
+        with patched_engine.begin() as conn:
+            conn.execute(text(self._PRODUCTION_SHAPE))
+            conn.execute(text(
+                "INSERT INTO statewide_nominees "
+                "(state, cycle_year, office, party, display_name) "
+                "VALUES ('RI', 2026, 'governor', 'D', 'Someone')"
+            ))
+        database._migrate_state_office_tables()
+        assert not inspect(patched_engine).has_table("statewide_nominees")
+
+    def test_create_all_then_rebuilds_it_with_the_column(self, patched_engine):
+        with patched_engine.begin() as conn:
+            conn.execute(text(self._PRODUCTION_SHAPE))
+        database._migrate_state_office_tables()
+        database.Base.metadata.create_all(bind=patched_engine)
+        columns = {c["name"] for c in inspect(patched_engine).get_columns("statewide_nominees")}
+        assert "district" in columns
+
+    def test_a_current_table_is_left_alone(self, patched_engine):
+        """The rebuild must not fire on every startup — it would discard
+        the day's sync each time the process restarts."""
+        database.Base.metadata.create_all(bind=patched_engine)
+        with patched_engine.begin() as conn:
+            conn.execute(text(
+                "INSERT INTO statewide_nominees "
+                "(state, cycle_year, office, party, display_name, source_name, updated_at) "
+                "VALUES ('RI', 2026, 'governor', 'D', 'Someone', 'src', '2026-09-21 00:00:00')"
+            ))
+        database._migrate_state_office_tables()
+        with patched_engine.begin() as conn:
+            kept = conn.execute(text("SELECT COUNT(*) FROM statewide_nominees")).scalar()
+        assert kept == 1
+
+    def test_a_stale_unique_index_alone_triggers_the_rebuild(self, patched_engine):
+        """Even with every column present, a unique key predating
+        display_name rejects the second same-party nominee a top-two
+        state legitimately produces — and SQLite cannot drop a
+        table-level UNIQUE without rebuilding."""
+        with patched_engine.begin() as conn:
+            conn.execute(text("""
+                CREATE TABLE state_leg_nominees (
+                    id INTEGER NOT NULL PRIMARY KEY,
+                    state VARCHAR(2) NOT NULL,
+                    cycle_year INTEGER NOT NULL,
+                    chamber VARCHAR(8) NOT NULL,
+                    district VARCHAR(8) NOT NULL,
+                    seat VARCHAR(4),
+                    party VARCHAR(1) NOT NULL,
+                    display_name VARCHAR(200) NOT NULL,
+                    source_name VARCHAR(200),
+                    updated_at DATETIME,
+                    UNIQUE (state, cycle_year, chamber, district, party)
+                )
+            """))
+        database._migrate_state_office_tables()
+        assert not inspect(patched_engine).has_table("state_leg_nominees")
+
+    def test_an_absent_table_is_not_an_error(self, patched_engine):
+        """A fresh install has neither table; create_all builds both."""
+        database._migrate_state_office_tables()
