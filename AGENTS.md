@@ -472,9 +472,21 @@ of `grounding.py`, it is a different kind of check.
 ## Data Pipeline
 
 The pipeline runs nightly (configurable via `PIPELINE_CRON_SCHEDULE`) or can
-be triggered manually via `POST /api/admin/pipeline/trigger`. It executes in
-4 phases per chamber, defined in `senate_pipeline.py`/`house_pipeline.py` and
-invoked by `scheduler.py`'s `_nightly_pipeline()`:
+be triggered manually via `POST /api/admin/pipeline/trigger`.
+
+`scheduler.py`'s `_nightly_pipeline()` runs FIVE pipelines as a chain, in
+order: **Senate → Supplementary → House → Stock trades → Election.** Each
+link starts only if the previous one finished, so a failure partway down
+means every pipeline after it does not run at all — and leaves no run row
+behind to look wrong. `ops_alerts.check_pipeline_staleness` watches for that
+(no successful completion in `PIPELINE_STALE_ALERT_DAYS`); `check_pipeline_
+overrun` watches the opposite case of a run that started and is taking too
+long. Note `POST /api/admin/pipeline/trigger` runs only the first three —
+it cannot recover Stock trades or Election, which reach completion solely
+via the nightly chain.
+
+Each member pipeline executes in 4 phases per chamber, defined in
+`senate_pipeline.py`/`house_pipeline.py`:
 
 1. **FETCH** — Pull senators, House representatives, bills, roll-call votes,
    bill cosponsors, floor speeches, FEC financial data, Supreme Court cases,
@@ -693,6 +705,7 @@ SQLAlchemy ORM models are in `backend/app/models.py`. Key tables: `senators`,
 | Action Center analysis (news → issues → monitors → timeline) | `backend/app/pipeline/analyze/action_center.py` |
 | Justice profile summary (LLM, from pre-computed statistics) | `backend/app/pipeline/justice_pipeline.py` |
 | Election cycle pipeline (candidates, financials, ballot measures, coverage) | `backend/app/pipeline/election_pipeline.py` |
+| Confirmed candidates — who is really on the November ballot, per state | `backend/app/pipeline/fetch/state_candidates.py` (`STRATEGIES` dispatch) + `backend/app/data/state_candidate_sources.json` (every URL/threshold; its `_contract` key documents the config shape). Adapters are per VENDOR, not per state — adding a state already on a supported vendor is a JSON entry, never new code, and no adapter branches on a state's name. Shared office/party/surname/winner parsing lives in `state_candidates_common.py`; that is what stops per-vendor decaying into per-state. |
 | Statewide ballot-measure ingestion (verbatim, no LLM) | `backend/app/pipeline/fetch/ballot_measures.py` |
 | Official-ballot link table + liveness gating | `backend/app/pipeline/fetch/ballot_lookup.py` |
 | Explore hybrid search ranking (RRF fusion, priors, dedup, diversity) | `backend/app/services/explore_search.py` |
