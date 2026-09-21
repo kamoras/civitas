@@ -423,3 +423,56 @@ class TestStateLegChamberForms:
         """Without the "State" qualifier this is a congressional seat in
         any state that prints its federal races that way."""
         assert common.parse_state_leg_office("Senator, District 5") is None
+
+
+class TestStatewideOfficePhrases:
+    """Four statewide constitutional offices that the general locality
+    gate was refusing on a word it is right to distrust in general.
+
+    Every label is real, off Georgia's 2026 primary, where these were
+    being missed while Governor/Lt Gov/AG/Secretary of State resolved —
+    so the page would have dropped its "statewide executive contests"
+    omission while still omitting four of them.
+    """
+
+    def test_the_commissioner_offices_resolve(self):
+        assert common.parse_statewide_office(
+            "Commissioner of Insurance - Rep") == "insurance_commissioner"
+        assert common.parse_statewide_office(
+            "Commissioner of Agriculture - Dem") == "agriculture_commissioner"
+        assert common.parse_statewide_office(
+            "Commissioner of Labor - Rep") == "labor_commissioner"
+
+    def test_either_word_order_works(self):
+        assert common.parse_statewide_office(
+            "Insurance Commissioner") == "insurance_commissioner"
+
+    def test_the_school_superintendent_resolves_in_both_common_wordings(self):
+        assert common.parse_statewide_office(
+            "State School Superintendent - Dem") == "school_superintendent"
+        assert common.parse_statewide_office(
+            "Superintendent of Public Instruction") == "school_superintendent"
+
+    def test_a_county_commissioner_is_still_refused(self):
+        """"commissioner" is in the locality gate precisely because of
+        these; the new phrases must not reopen that door."""
+        assert common.parse_statewide_office("County Commissioner District 1") is None
+        assert common.parse_statewide_office("County Park Commissioner District 3") is None
+
+    def test_a_school_committee_is_still_refused(self):
+        assert common.parse_statewide_office(
+            "DEM North Providence: School Committee At-Large") is None
+        assert common.parse_statewide_office("School Committee City of Pawtucket") is None
+
+    def test_a_locality_marker_beats_the_phrase(self):
+        """A county really can have a school superintendent."""
+        assert common.parse_statewide_office("County School Superintendent") is None
+        assert common.parse_statewide_office("Cranston: Commissioner of Labor") is None
+
+    def test_every_office_code_has_a_label(self):
+        """The API renders from this map; a code without one would show
+        a blank heading."""
+        for code, _pattern in common._STATEWIDE_PHRASES:
+            assert code in common.STATEWIDE_OFFICE_LABELS
+        for code, _pattern in common._STATEWIDE_OFFICES:
+            assert code in common.STATEWIDE_OFFICE_LABELS
