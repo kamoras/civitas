@@ -521,6 +521,8 @@ California, Florida and Utah bring it to nine. Each was one vocabulary gap from 
 
 California is also the first **top-two** state covered, where two candidates of the *same party* legitimately advance from one contest — its Board of Equalization District 2 sends two Democrats to November. That only survives because a nominee's name is part of the storage key.
 
+Maryland makes ten, and brought the **third** multi-member shape. Not Idaho's `Seat A`/`Seat B`, nor Washington's `Pos. 1`/`Pos. 2`, but `House of Delegates District 10 … Vote for up to 3` — three members from *one* contest with no seat designator, so the number advancing is a property of the contest and is read from its own label. That is applied only where a state runs one-nominee party primaries: under top-two exactly two advance no matter how many seats are filled, so a seat count there would answer the wrong question. Its District 3 correctly shows three Democratic and two Republican nominees.
+
 Minnesota is also why a district identifier is a **string**: it splits each of its 67 senate districts into two house districts, `10A` and `10B`. And why the town list is truncated for display but searched in full — one of its senate districts covers 292 townships, so the row shows three and "& 133 more", yet typing the 136th town still finds the seat.
 
 ---
