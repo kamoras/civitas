@@ -8,11 +8,10 @@ import BackToTop from "@/components/BackToTop";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import RaceFullDetail from "@/components/elections/RaceFullDetail";
 import CoverageFeed, { useMounted } from "@/components/elections/CoverageFeed";
-import AddressLookup from "@/components/elections/AddressLookup";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import BallotMeasureCard from "@/components/elections/BallotMeasureCard";
 import TownContestCard from "@/components/elections/TownContestCard";
-import { districtCountiesLabel, formatPvi, majorPartyOf, pviColor, tierCandidates } from "@/lib/elections";
+import { districtCountiesLabel, formatPvi, majorPartyOf, matchesDistrictQuery, pviColor, tierCandidates } from "@/lib/elections";
 import { safeHref } from "@/lib/formatting";
 import { fetchTownBallot, fetchTownsForState } from "@/lib/api";
 import type { StateBallot, TownBallot, TownEntry } from "@/types/election";
@@ -98,13 +97,17 @@ function HouseDistrictRow({
   );
 }
 
-function HouseSection({
-  state,
-  houseRaces,
-}: {
-  state: string;
-  houseRaces: StateBallot["houseRaces"];
-}) {
+function HouseSection({ houseRaces }: { houseRaces: StateBallot["houseRaces"] }) {
+  // Civitas never asks a visitor for their address. Finding "your"
+  // district is therefore a navigation problem, solved with the signals
+  // each row already carries — its counties and its sitting
+  // representative — rather than by collecting a street address and
+  // geocoding it (an address box lived here until 2026-09; it was
+  // resolve-only and never stored, but collecting the address at all was
+  // the wrong shape for this project).
+  const [filter, setFilter] = useState("");
+  const shown = houseRaces.filter((r) => matchesDistrictQuery(r, filter));
+
   // undefined = "no explicit choice yet" (defer to the hash), distinct
   // from null = "explicitly closed" — collapsing those into one `null`
   // meant clicking a hash-opened row to close it called setOpenId(null)
@@ -135,8 +138,8 @@ function HouseSection({
           U.S. HOUSE — {houseRaces.length} {houseRaces.length === 1 ? "DISTRICT" : "DISTRICTS"}
         </h2>
         <p className="text-xs text-ink-min mb-3">
-          You vote in exactly one of these — every district is listed below. Enter your address to
-          jump straight to yours, or{" "}
+          You vote in exactly one of these — every district is listed below, each with the counties
+          it covers and its current representative. Filter by any of those to find yours, or{" "}
           <a
             href="https://www.house.gov/representatives/find-your-representative"
             target="_blank"
@@ -148,17 +151,37 @@ function HouseSection({
           </a>
           .
         </p>
-        <AddressLookup
-          ballotState={state}
-          onResolved={(district) => {
-            const match = houseRaces.find((r) => r.district === district);
-            if (match) setOpenId(match.id);
-            return match != null;
-          }}
-        />
+
+        {/* Only worth the row of chrome once the list is long enough to
+            be a scroll; a 1-2 district state is already fully visible. */}
+        {houseRaces.length > 3 && (
+          <div className="mb-3">
+            <input
+              type="search"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="Filter by county, representative, or district number"
+              aria-label="Filter districts by county, representative, or district number"
+              className="w-full min-w-0 border border-white/15 bg-surface-base px-3 py-2 font-mono text-xs text-ink-hi placeholder:text-ink-min"
+            />
+            <p className="mt-1.5 text-[10px] text-ink-min">
+              Filtered here in your browser — nothing is sent anywhere, and Civitas never asks for
+              your address.
+            </p>
+            {/* Typing silently rewrites the list below, which a sighted
+                reader sees and a screen-reader user otherwise would not.
+                Announced only once a filter is active, so simply landing
+                on the page doesn't read out a district count. */}
+            <p role="status" aria-live="polite" className="sr-only">
+              {filter.trim()
+                ? `${shown.length} of ${houseRaces.length} districts match ${filter}`
+                : ""}
+            </p>
+          </div>
+        )}
 
         <div className="mt-1">
-          {houseRaces.map((r) => (
+          {shown.map((r) => (
             <HouseDistrictRow
               key={r.id}
               race={r}
@@ -166,6 +189,12 @@ function HouseSection({
               onToggle={() => setOpenId(r.id === openRaceId ? null : r.id)}
             />
           ))}
+          {shown.length === 0 && (
+            <p className="border border-white/[0.09] p-4 text-xs text-ink-min">
+              No district matches “{filter}”. Try a county name, your representative&apos;s
+              surname, or a district number.
+            </p>
+          )}
         </div>
       </div>
     </section>
@@ -566,7 +595,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
           )}
 
           {ballot.houseRaces.length > 0 && (
-            <HouseSection state={ballot.state} houseRaces={ballot.houseRaces} />
+            <HouseSection houseRaces={ballot.houseRaces} />
           )}
 
           <TownSection state={ballot.state} pageElectionDate={ballot.electionDate} />
