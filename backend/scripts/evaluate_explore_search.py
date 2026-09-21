@@ -174,8 +174,11 @@ def _rank_of(results: list[int], doc_id: int) -> int | None:
         return None
 
 
-def measure(db, probes: list[dict]) -> dict:
-    """Run every probe through all four configurations.
+CONFIGS = ("semantic", "keyword", "fusion", "hybrid")
+
+
+def measure(db, probes: list[dict], configs: tuple[str, ...] = CONFIGS) -> dict:
+    """Run every probe through the requested configurations.
 
     Returns `{style: {config: [rank or None, ...]}}`, with an "ALL" style
     aggregating across the rest.
@@ -185,29 +188,42 @@ def measure(db, probes: list[dict]) -> dict:
     misread result key and every configuration reports a clean 100% miss,
     which looks exactly like "this channel is broken" rather than "the
     harness is". That failure mode is why this exists as a function.
+
+    `configs` exists because three of the four channels embed the probe
+    query, and a caller that reads only `keyword` pays for three
+    sentence-transformer forward passes per probe to discard the result.
+    Measured against the live 8,372-document corpus, the field-weight fit
+    in `calibrate_ranking` ran 44,957 probe iterations: 15.5 hours running
+    all four, 28 minutes running only the channel it reads — with
+    identical output, since a channel whose ranks are never inspected
+    cannot change the fit. That is what wedged the nightly explore
+    pipeline past its 8-hour budget.
     """
-    CONFIGS = ("semantic", "keyword", "fusion", "hybrid")
     by_style: dict[str, dict[str, list]] = collections.defaultdict(
         lambda: collections.defaultdict(list))
 
     for probe in probes:
-        semantic = search_explore_documents(probe["query"], n_results=RANK_CUTOFF)
-        results = {
-            "semantic": [h["id"] for h in (semantic or [])],
-            "keyword": [
-                h["id"] for h in search_lexical(db, probe["query"], limit=RANK_CUTOFF)
-            ],
-            "fusion": [
+        query = probe["query"]
+        results: dict[str, list[int]] = {}
+        if "semantic" in configs:
+            semantic = search_explore_documents(query, n_results=RANK_CUTOFF)
+            results["semantic"] = [h["id"] for h in (semantic or [])]
+        if "keyword" in configs:
+            results["keyword"] = [
+                h["id"] for h in search_lexical(db, query, limit=RANK_CUTOFF)
+            ]
+        if "fusion" in configs:
+            results["fusion"] = [
                 r["id"] for r in hybrid_search(
-                    db, probe["query"], limit=RANK_CUTOFF,
+                    db, query, limit=RANK_CUTOFF,
                     include_priors=False)["results"]
-            ],
-            "hybrid": [
+            ]
+        if "hybrid" in configs:
+            results["hybrid"] = [
                 r["id"] for r in hybrid_search(
-                    db, probe["query"], limit=RANK_CUTOFF)["results"]
-            ],
-        }
-        for name in CONFIGS:
+                    db, query, limit=RANK_CUTOFF)["results"]
+            ]
+        for name in configs:
             rank = _rank_of(results[name], probe["doc_id"])
             by_style[probe["style"]][name].append(rank)
             by_style["ALL"][name].append(rank)
@@ -275,7 +291,7 @@ def main() -> int:
         for style in ("title", "paraphrase", "identifier", "rare", "ALL"):
             if style not in by_style:
                 continue
-            for config in ("semantic", "keyword", "fusion", "hybrid"):
+            for config in CONFIGS:
                 stats = _summarise(by_style[style][config])
                 print(f"{style:<12}{config:<10}{stats['n']:>6}"
                       f"{stats['mrr']:>8.3f}{stats['r@1']:>8.3f}"

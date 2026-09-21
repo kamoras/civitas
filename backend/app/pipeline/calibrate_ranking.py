@@ -138,8 +138,15 @@ def derive_field_weights(db, docs, probe_fn, measure_fn) -> dict:
         found = [r for r in ranks if r is not None]
         return sum(1.0 / r for r in found) / max(len(ranks), 1)
 
+    # The one line that was missing when this step ran for eight hours
+    # and the pipeline's last log was "recalibrating ranking...". Knowing
+    # the probe count and the round makes a slow fit legible from the
+    # logs instead of needing a thread-level CPU profile to localise.
+    logger.info(
+        "Calibrating field weights: %d probes, up to 3 rounds", len(probes))
+
     current = score(best)
-    for _ in range(3):
+    for round_no in range(1, 4):
         improved = False
         for field in ("title", "summary"):
             for value in _weight_ladder():
@@ -150,6 +157,9 @@ def derive_field_weights(db, docs, probe_fn, measure_fn) -> dict:
                 if trial_score > current + 1e-9:
                     best, current = trial, trial_score
                     improved = True
+        logger.info(
+            "Field weight round %d/3: mrr=%.4f weights=%s%s",
+            round_no, current, best, "" if improved else " (converged)")
         if not improved:
             break
     at_ceiling = [f for f, v in best.items() if v >= 1024.0]
@@ -314,7 +324,12 @@ def compute_calibration(db, samples: int = DEFAULT_SAMPLES) -> dict | None:
         return harness.build_probes(sample_docs, corpus_df, len(sample_docs))
 
     def measure_fn(session, probes):
-        return harness.measure(session, probes)["ALL"]
+        # Keyword only: derive_field_weights reads nothing else, and the
+        # other three channels embed the query — see harness.measure's
+        # `configs` docstring for the 15.5h-vs-28min measurement that
+        # motivated the parameter. Field weights are a BM25F property, so
+        # the semantic channel could not respond to them anyway.
+        return harness.measure(session, probes, configs=("keyword",))["ALL"]
 
     # Ordering matters: the first three come straight from the corpus text
     # and need no ranking at all, so they can be in force while the ranking

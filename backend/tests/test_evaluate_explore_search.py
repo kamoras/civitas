@@ -215,3 +215,62 @@ class TestMeasurementLoop:
     def test_no_probes_is_not_a_crash(self, harness, corpus):
         db, _docs = corpus
         assert harness.measure(db, []) == {}
+
+    def test_keyword_only_skips_the_embedding_channels(
+        self, harness, corpus, monkeypatch
+    ):
+        """The fix for the 15.5-hour nightly wedge.
+
+        derive_field_weights reads `keyword` alone, but every other
+        channel embeds the probe query — three forward passes per probe,
+        discarded. Asking for one channel must actually run one channel,
+        or the pipeline goes back to overrunning its 8-hour budget.
+        """
+        db, docs = corpus
+        calls = []
+        monkeypatch.setattr(
+            harness, "search_explore_documents",
+            lambda *a, **k: calls.append(a) or None,
+        )
+        probes = [
+            {"style": "title", "doc_id": d.id, "query": d.title} for d in docs
+        ]
+
+        keyword_only = harness.measure(db, probes, configs=("keyword",))
+
+        assert calls == [], "semantic channel ran for a keyword-only measure"
+        assert set(keyword_only["ALL"]) == {"keyword"}
+        # And the channel that IS read comes back unchanged — the saving
+        # is free, not a different (cheaper, worse) measurement.
+        assert keyword_only["ALL"]["keyword"] == \
+            harness.measure(db, probes)["ALL"]["keyword"]
+
+    def test_field_weight_fit_asks_for_keyword_only(
+        self, harness, corpus, monkeypatch
+    ):
+        """The call site, not just the capability.
+
+        Guards the actual regression: `measure` growing a cheap mode is
+        worthless if calibrate_ranking goes on calling the expensive one.
+        """
+        from app.pipeline import calibrate_ranking, vector_store
+
+        db, docs = corpus
+        # calibrate_ranking hands the real vector-store function to
+        # derive_retriever_resolution; the corpus fixture only silences
+        # the harness's and the service's copies of it.
+        monkeypatch.setattr(
+            vector_store, "search_explore_documents", lambda *a, **k: None)
+        asked = []
+        harness.measure = lambda session, probes, configs=None: (
+            asked.append(configs) or {"ALL": {"keyword": [1] * len(probes)}}
+        )
+        harness.build_probes = lambda d, df, total: [
+            {"style": "title", "doc_id": x["id"], "query": x["title"]} for x in d
+        ]
+        calibrate_ranking._harness = lambda: harness
+
+        calibrate_ranking.compute_calibration(db, samples=len(docs))
+
+        assert asked, "derive_field_weights never measured anything"
+        assert all(c == ("keyword",) for c in asked), asked

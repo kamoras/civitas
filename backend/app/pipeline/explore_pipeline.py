@@ -20,9 +20,12 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 import time
+from datetime import UTC, datetime
 
 import httpx
+from sqlalchemy import func as sa_func, or_
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
@@ -35,7 +38,10 @@ from app.pipeline.fetch.presidential_actions import (
     fetch_recent_presidential_actions,
     _fetch_body_text,
 )
-from app.pipeline.fetch.fr_rulemaking import fetch_fr_rulemaking
+from app.pipeline.fetch.fr_rulemaking import (
+    fetch_fr_rulemaking,
+    _fetch_body_text as _fetch_rulemaking_body_text,
+)
 from app.pipeline.fetch.supreme_court import fetch_scotus_cases
 from app.pipeline.analyze.document_authority import update_document_authority
 from app.pipeline.explore_ranking import calibrate_and_store
@@ -121,9 +127,6 @@ async def _backfill_presidential_bodies(
 
     Returns the ids of documents whose body changed, so the caller can
     re-embed exactly those."""
-    import asyncio
-    import re
-
     docs = (
         db.query(ExploreDocument)
         .filter(
@@ -180,16 +183,17 @@ async def _backfill_rulemaking_bodies(db: Session) -> list[int]:
 
     Returns the ids of documents whose body changed, same contract as
     _backfill_presidential_bodies."""
-    import asyncio
-    from sqlalchemy import func as sa_func
-    from app.pipeline.fetch.fr_rulemaking import _fetch_body_text
-
-    from sqlalchemy import or_
     docs = (
         db.query(ExploreDocument)
         .filter(
             ExploreDocument.chamber == "Regulatory",
             ExploreDocument.url.isnot(None),
+            # Never successfully fetched. Without this the selection below
+            # is non-convergent: it matches on body shape, which a
+            # genuinely short but complete document keeps matching after
+            # every fetch, so the same 476 documents were re-downloaded
+            # nightly forever. See ExploreDocument.body_fetched_at.
+            ExploreDocument.body_fetched_at.is_(None),
             or_(
                 sa_func.length(ExploreDocument.body) < 2000,
                 ExploreDocument.body.like("Document Headings%"),
@@ -204,6 +208,7 @@ async def _backfill_rulemaking_bodies(db: Session) -> list[int]:
 
     BATCH = 8
     filled: list[int] = []
+    fetched = 0
     async with make_async_client() as backfill_client:
         for i in range(0, len(docs), BATCH):
             batch = docs[i : i + BATCH]
@@ -212,7 +217,6 @@ async def _backfill_rulemaking_bodies(db: Session) -> list[int]:
                 doc_num = (d.external_id or "").removeprefix("fr-reg-")
                 html_url = ""
                 if doc_num and d.url:
-                    import re
                     m = re.search(r"/documents/(\d{4}/\d{2}/\d{2})/", d.url)
                     if m:
                         html_url = (
@@ -222,7 +226,8 @@ async def _backfill_rulemaking_bodies(db: Session) -> list[int]:
                 body_html_urls.append(html_url)
 
             bodies = await asyncio.gather(
-                *[_fetch_body_text(backfill_client, u) for u in body_html_urls]
+                *[_fetch_rulemaking_body_text(backfill_client, u)
+                  for u in body_html_urls]
             )
 
             for d, body_text in zip(batch, bodies):
@@ -237,15 +242,25 @@ async def _backfill_rulemaking_bodies(db: Session) -> list[int]:
                 # and re-embedded each one into identical vectors -- a
                 # permanent, growing nightly cost for zero new
                 # information.
-                if body_text and body_text != d.body:
+                if not body_text:
+                    continue  # leave body_fetched_at NULL so this retries
+                fetched += 1
+                d.body_fetched_at = datetime.now(UTC)
+                if body_text != d.body:
                     d.body = body_text
                     filled.append(d.id)
 
             await asyncio.sleep(0.3)
 
-    if filled:
+    # Commits on `fetched`, not on `filled`: the whole point of the marks
+    # is the run where nothing changed, and committing only on a change
+    # would throw them away and re-fetch the same documents tomorrow.
+    if fetched:
         db.commit()
-        logger.info("Backfilled body content for %d rulemaking documents", len(filled))
+        logger.info(
+            "Backfilled %d rulemaking documents (%d bodies changed)",
+            fetched, len(filled),
+        )
     return filled
 
 

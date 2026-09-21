@@ -95,13 +95,22 @@ class TestRulemakingBackfillChangeDetection:
     """
 
     def _run(self, db_session, doc, fetched_body):
-        db_session.add(doc)
+        if doc not in db_session:
+            db_session.add(doc)
         db_session.commit()
+        return self._rerun(db_session, fetched_body)
+
+    def _rerun(self, db_session, fetched_body):
+        # Patched where it is USED, not where it is defined: explore_pipeline
+        # binds the name at import, so patching fr_rulemaking's copy leaves
+        # the real fetcher in play — and two of the assertions below are
+        # `== []`, which a silently-real network call satisfies by accident.
         with patch(
-            "app.pipeline.fetch.fr_rulemaking._fetch_body_text",
+            "app.pipeline.explore_pipeline._fetch_rulemaking_body_text",
             new_callable=AsyncMock,
         ) as fetch:
             fetch.return_value = fetched_body
+            self.fetch = fetch
             return asyncio.run(_backfill_rulemaking_bodies(db_session))
 
     def test_an_unchanged_body_is_not_reported_as_refreshed(self, db_session):
@@ -119,6 +128,42 @@ class TestRulemakingBackfillChangeDetection:
         doc = _regulatory_doc("already stored text")
         assert self._run(db_session, doc, "") == []
         assert doc.body == "already stored text"
+
+    def test_a_complete_short_document_is_fetched_once_ever(self, db_session):
+        """The non-convergence, which change-detection alone did not fix.
+
+        Suppressing the re-embed (above) stopped the wasted encoding but
+        not the wasted download: the selection matches on body shape, so
+        a document whose real full text is genuinely under 2,000 chars
+        kept matching after every successful fetch. 476 documents were
+        re-downloaded nightly, forever. `body_fetched_at` records the one
+        fact the body's shape cannot.
+        """
+        complete = "Document Headings — a complete but short notice."
+        doc = _regulatory_doc(complete)
+
+        assert self._run(db_session, doc, complete) == []
+        assert self.fetch.await_count == 1
+        assert doc.body_fetched_at is not None
+
+        assert self._rerun(db_session, complete) == []
+        assert self.fetch.await_count == 0, "re-fetched an already-fetched document"
+
+    def test_a_failed_fetch_is_retried_on_the_next_run(self, db_session):
+        """The other half: convergence must not become giving up.
+
+        A fetch that returns nothing leaves body_fetched_at NULL, so a
+        transient Federal Register failure is retried rather than
+        permanently marked done.
+        """
+        doc = _regulatory_doc("stub")
+
+        assert self._run(db_session, doc, "") == []
+        assert doc.body_fetched_at is None
+
+        assert self._rerun(db_session, "the real, much longer rule text") == [doc.id]
+        assert self.fetch.await_count == 1
+        assert doc.body_fetched_at is not None
 
 
 class TestCpuWorkDoesNotBlockTheEventLoop:

@@ -910,6 +910,18 @@ class ExploreDocument(Base):
     policy_areas: Mapped[str] = mapped_column(Text, default="[]")
     external_id: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
 
+    # When the full text behind `url` was successfully fetched, for the
+    # sources whose listing endpoint yields only an abstract (Federal
+    # Register rulemaking, presidential actions). The backfill selects on
+    # the *shape* of the body — short, or starting "Document Headings" —
+    # and that is a proxy a genuinely short document never stops matching:
+    # 476 complete documents were re-fetched every night, converging on
+    # nothing. This records the fact the proxy cannot: that the fetch
+    # already happened. NULL means never fetched or the fetch failed, so
+    # a real failure still retries; a published document is immutable, so
+    # a success never needs repeating.
+    body_fetched_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
     # Canonical identifiers this document can be cited BY — its FR citation
     # ("89 FR 12345"), FR document number, executive order number, RINs.
     # JSON list of namespaced strings; see document_authority.declared_identifiers,
