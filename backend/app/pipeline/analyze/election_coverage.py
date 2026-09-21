@@ -123,6 +123,56 @@ def _word_pattern(word: str) -> "re.Pattern[str]":
     return re.compile(r"\b" + re.escape(word) + r"\b", re.IGNORECASE)
 
 
+def _matches_as_a_name(pattern: "re.Pattern[str]", text: str) -> bool:
+    """True only where the word occurs CAPITALISED — i.e. as a name.
+
+    Plenty of real candidate surnames are ordinary English nouns, and
+    case-insensitive matching attached their races to any article using
+    the word. Measured against the 554 live coverage items: HAND matched
+    "born without a right hand", REGISTER matched "deciding to register",
+    GREEN matched "waves the green flag", PEOPLE matched "describes
+    people who move somewhere", plus ELSE, CASE, LONG, DREW, LIGHT,
+    MILLION, MARKS, DRIVER.
+
+    Requiring a capital costs 6.3% of stored items (35 of 554) and every
+    one of the dozen sampled was a false positive — none was real
+    coverage. It needs no curated stop-word list, and it keeps intercaps
+    names, which is why the match is found case-insensitively and only
+    the matched TEXT is checked: lower-casing the tail to build
+    "Mcconnell" would reject every real "McConnell" (that error is what
+    a first, wrong measurement of this rule reported as an 18.8% cost).
+
+    ALL-CAPS headlines still qualify — the first character is a capital.
+    """
+    return any(m.group(0)[:1].isupper() for m in pattern.finditer(text))
+
+
+def _state_name_pattern(state_name: str) -> "re.Pattern[str]":
+    """Like _word_pattern, but refuses a match enclosed in a longer state name.
+
+    Word boundaries are not enough here: "Virginia" word-matches inside
+    "West Virginia", so every West Virginia story corroborated every
+    Virginia candidate whose surname appeared anywhere in it. Found live
+    — a story about a former WEST Virginia senator "deciding to register
+    as an independent" attached to VA-5 because the roster has a
+    candidate surnamed REGISTER.
+
+    Virginia/West Virginia is the ONLY such pair among the fifty (checked
+    exhaustively, not assumed: no other state name word-matches inside
+    another), but the guard is derived from STATE_NAMES rather than
+    hardcoded so it stays correct if that map ever changes.
+    """
+    guards = ""
+    for other in STATE_NAMES.values():
+        if other == state_name:
+            continue
+        m = re.search(r"\b" + re.escape(state_name) + r"\b", other, re.IGNORECASE)
+        if m:
+            # Fixed-width lookbehind ("West "), which Python's re requires.
+            guards += f"(?<!{re.escape(other[:m.start()])})"
+    return re.compile(guards + r"\b" + re.escape(state_name) + r"\b", re.IGNORECASE)
+
+
 @dataclass
 class CandidateMatcher:
     """Compiled match predicates for one candidate."""
@@ -135,7 +185,7 @@ class CandidateMatcher:
 
     def match_basis(self, text: str) -> str | None:
         """"full_name" / "surname_context" / None — see module docstring."""
-        if not self.surname_re.search(text):
+        if not _matches_as_a_name(self.surname_re, text):
             return None
         if self.first_re is not None and self.first_re.search(text):
             return "full_name"
@@ -165,7 +215,7 @@ def _build_matchers(db: Session) -> list[CandidateMatcher]:
             state=parts[2],
             surname_re=_word_pattern(surname),
             first_re=_word_pattern(first) if first else None,
-            state_re=_word_pattern(state_name),
+            state_re=_state_name_pattern(state_name),
         ))
     return matchers
 
@@ -219,6 +269,52 @@ def _already_ingested(db: Session, race_id: str, url: str) -> bool:
         .first()
         is not None
     )
+
+
+def _drop_items_the_matcher_would_now_reject(
+    db: Session, matchers: list[CandidateMatcher],
+) -> int:
+    """Re-validate stored coverage against the CURRENT matching rules.
+
+    Nothing ever deletes a RaceCoverageItem — there is no retention
+    sweep — so an item attached by a rule later found to be wrong stays
+    in the database for good. The API orders newest-first under a cap,
+    which pushes old items off a busy race's feed, but a quiet race
+    keeps showing its false positive indefinitely: NE-3's was an article
+    about a government shutdown, matched because a candidate there is
+    surnamed ELSE.
+
+    So every tightening of the matcher has to apply retroactively, or
+    the rules and the stored data drift apart permanently.
+
+    Deliberately keyed on the item's OWN matched candidate rather than
+    re-running the whole race: if that candidate has since left the
+    roster there is nothing to re-validate against, and dropping the
+    item would delete real coverage every time the roster churns. Those
+    are left alone.
+    """
+    by_candidate = {m.candidate_id: m for m in matchers}
+    if not by_candidate:
+        return 0  # never prune against an empty roster
+
+    doomed: list[int] = []
+    for item in db.query(RaceCoverageItem).all():
+        matcher = by_candidate.get(item.matched_candidate_id)
+        if matcher is None:
+            continue
+        if matcher.match_basis(f"{item.title or ''} {item.summary or ''}") is None:
+            doomed.append(item.id)
+
+    if not doomed:
+        return 0
+    for i in range(0, len(doomed), 500):
+        (db.query(RaceCoverageItem)
+           .filter(RaceCoverageItem.id.in_(doomed[i:i + 500]))
+           .delete(synchronize_session=False))
+    db.commit()
+    logger.info(
+        "Dropped %d stored coverage items the current matcher rejects", len(doomed))
+    return len(doomed)
 
 
 def _store_if_new(
@@ -292,6 +388,10 @@ async def ingest_race_coverage(db: Session, client: httpx.AsyncClient) -> int:
     matchers = _build_matchers(db)
     if not matchers:
         return 0
+
+    # Before ingesting, reconcile what is already stored with the rules
+    # as they stand now. A no-op once the corpus is clean.
+    _drop_items_the_matcher_would_now_reject(db, matchers)
 
     ingested = 0
     # Rows added in THIS pass, invisible to _already_ingested because

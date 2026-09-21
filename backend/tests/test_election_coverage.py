@@ -77,6 +77,39 @@ class TestResolveItemRace:
         assert matcher.race_id == "2026-SEN-GA"
         assert basis == "surname_context"
 
+    def test_west_virginia_does_not_corroborate_a_virginia_candidate(self, db_session):
+        """"Virginia" word-matches inside "West Virginia".
+
+        Found live: a story about a former WEST Virginia senator
+        "deciding to register as an independent" was attached to VA-5,
+        because the roster has a candidate surnamed REGISTER and the
+        state check saw "Virginia" inside "West Virginia". Virginia/West
+        Virginia is the only such pair among the fifty.
+        """
+        _race(db_session, "2026-HOUSE-VA-5", "VA")
+        _candidate(db_session, "H6VA001", "2026-HOUSE-VA-5", "REGISTER, CHRIS")
+        db_session.commit()
+
+        assert election_coverage.resolve_item_race(
+            self._matchers(db_session),
+            "The former West Virginia senator was a lifelong Democrat before "
+            "deciding to register as an independent two years ago.",
+        ) is None
+
+    def test_a_real_virginia_story_still_matches(self, db_session):
+        """The guard must not cost genuine Virginia coverage."""
+        _race(db_session, "2026-HOUSE-VA-5", "VA")
+        _candidate(db_session, "H6VA001", "2026-HOUSE-VA-5", "REGISTER, CHRIS")
+        db_session.commit()
+
+        resolved = election_coverage.resolve_item_race(
+            self._matchers(db_session),
+            "Register picks up a key endorsement in the Virginia race.",
+        )
+        assert resolved is not None
+        assert resolved[0].race_id == "2026-HOUSE-VA-5"
+        assert resolved[1] == "surname_context"
+
     def test_corroborated_matches_in_two_races_are_dropped(self, db_session):
         """Even when BOTH matches are individually corroborated, a text
         naming candidates in two different races doesn't identify one race
@@ -351,3 +384,129 @@ class TestIngestRaceCoverage:
             ingested = await election_coverage.ingest_race_coverage(db_session, client=None)
         assert ingested == 0
         mock_news.assert_not_called()
+
+
+class TestSurnameMustLookLikeAName:
+    """Many real candidate surnames are ordinary English nouns.
+
+    Case-insensitive matching attached their races to any article using
+    the word. Measured across the 554 live coverage items, requiring a
+    capital drops 6.3% and every sampled drop was a false positive.
+    """
+
+    def _matchers(self, db):
+        return election_coverage._build_matchers(db)
+
+    def test_a_lowercase_common_word_is_not_a_name(self, db_session):
+        _race(db_session, "2026-HOUSE-GA-2", "GA")
+        _candidate(db_session, "H6GA002", "2026-HOUSE-GA-2", "HAND, ALICE")
+        db_session.commit()
+
+        assert election_coverage.resolve_item_race(
+            self._matchers(db_session),
+            "Born without a right hand, she is set to play in Georgia.",
+        ) is None
+
+    def test_the_same_surname_capitalised_still_matches(self, db_session):
+        _race(db_session, "2026-HOUSE-GA-2", "GA")
+        _candidate(db_session, "H6GA002", "2026-HOUSE-GA-2", "HAND, ALICE")
+        db_session.commit()
+
+        resolved = election_coverage.resolve_item_race(
+            self._matchers(db_session), "Hand leads the Georgia primary field.")
+        assert resolved is not None
+        assert resolved[0].race_id == "2026-HOUSE-GA-2"
+
+    def test_intercaps_surnames_survive(self, db_session):
+        """The rule checks the MATCHED text, not a rebuilt "Mcconnell".
+
+        Lower-casing the tail to test capitalisation rejects every real
+        intercaps name — an error that made a first measurement of this
+        rule report a 18.8% recall cost instead of 6.3%.
+        """
+        _race(db_session, "2026-SEN-KY", "KY")
+        _candidate(db_session, "S6KY001", "2026-SEN-KY", "MCCONNELL, MITCH")
+        db_session.commit()
+
+        resolved = election_coverage.resolve_item_race(
+            self._matchers(db_session),
+            "McConnell to remain in rehab, will skip the Kentucky picnic.")
+        assert resolved is not None
+        assert resolved[0].race_id == "2026-SEN-KY"
+
+    def test_all_caps_headlines_still_match(self, db_session):
+        _race(db_session, "2026-SEN-KY", "KY")
+        _candidate(db_session, "S6KY001", "2026-SEN-KY", "MCCONNELL, MITCH")
+        db_session.commit()
+
+        resolved = election_coverage.resolve_item_race(
+            self._matchers(db_session), "MCCONNELL SKIPS KENTUCKY PICNIC")
+        assert resolved is not None
+
+
+class TestStoredItemsAreRevalidated:
+    """Nothing ever deletes a RaceCoverageItem — there is no retention
+    sweep — so a tightening of the matcher has to apply retroactively or
+    the rules and the stored data drift apart permanently."""
+
+    async def _run(self, db_session):
+        with patch.object(election_coverage, "fetch_news_articles", return_value=[]), \
+             patch.object(election_coverage, "search_posts", new=AsyncMock(return_value=[])):
+            return await election_coverage.ingest_race_coverage(db_session, client=None)
+
+    async def test_a_stored_false_positive_is_dropped(self, db_session):
+        """The live NE-3 case: a government-shutdown article attached
+        because a candidate there is surnamed ELSE."""
+        _race(db_session, "2026-HOUSE-NE-3", "NE")
+        _candidate(db_session, "H6NE003", "2026-HOUSE-NE-3", "ELSE, MARY",
+                   has_raised_funds=True)
+        db_session.add(RaceCoverageItem(
+            race_id="2026-HOUSE-NE-3", source_type="news", source_name="AP",
+            title="Senate funding patch secured",
+            url="https://example.com/shutdown",
+            summary="With a bipartisan deal in hand to avoid a shutdown, "
+                    "nobody else expects a vote before Nebraska's primary.",
+            matched_candidate_id="H6NE003", match_basis="surname_context",
+        ))
+        db_session.commit()
+
+        await self._run(db_session)
+
+        assert db_session.query(RaceCoverageItem).count() == 0
+
+    async def test_genuine_coverage_survives_revalidation(self, db_session):
+        _race(db_session, "2026-SEN-GA", "GA")
+        _candidate(db_session, "S6GA001", "2026-SEN-GA", "OSSOFF, JON",
+                   has_raised_funds=True)
+        db_session.add(RaceCoverageItem(
+            race_id="2026-SEN-GA", source_type="news", source_name="AP",
+            title="Ossoff holds narrow lead in Georgia Senate race",
+            url="https://example.com/ossoff",
+            summary="Polling shows a tight contest.",
+            matched_candidate_id="S6GA001", match_basis="surname_context",
+        ))
+        db_session.commit()
+
+        await self._run(db_session)
+
+        assert db_session.query(RaceCoverageItem).count() == 1
+
+    async def test_an_item_whose_candidate_left_the_roster_is_kept(self, db_session):
+        """Nothing to re-validate against, so dropping it would delete
+        real coverage every time the roster churns."""
+        _race(db_session, "2026-SEN-GA", "GA")
+        _candidate(db_session, "S6GA001", "2026-SEN-GA", "OSSOFF, JON",
+                   has_raised_funds=True)
+        db_session.add(RaceCoverageItem(
+            race_id="2026-SEN-GA", source_type="news", source_name="AP",
+            title="A withdrawn candidate's coverage",
+            url="https://example.com/gone",
+            summary="Text that no longer corroborates anyone on the roster.",
+            matched_candidate_id="S6GA999",  # no longer a candidate
+            match_basis="full_name",
+        ))
+        db_session.commit()
+
+        await self._run(db_session)
+
+        assert db_session.query(RaceCoverageItem).count() == 1
