@@ -244,7 +244,10 @@ function NomineeName({ nominee }: { nominee: StatewideNominee }) {
  * the 290th still has to find their seat by typing its name.
  */
 function StateLegSeatRow({ seat }: { seat: StateLegDistrict }) {
-  const townsLabel = districtAreaLabel(seat.towns);
+  // Suffixes kept: a county here is the fallback for a district with
+  // no incorporated place, and "Forsyth County" must not render as
+  // "Forsyth" beside Georgia's actual Forsyth city.
+  const townsLabel = districtAreaLabel(seat.towns, 3, false);
   return (
     <div className="grid grid-cols-[42px_1fr] items-baseline gap-3 border border-white/[0.09] bg-surface px-3 py-2">
       <span className="border border-white/15 py-0.5 text-center font-mono text-xs text-ink-hi">

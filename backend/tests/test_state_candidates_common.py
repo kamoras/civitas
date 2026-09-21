@@ -386,16 +386,16 @@ class TestStatewideOfficeCountyTraps:
     statewide office's exact words but are county offices."""
 
     def test_state_auditor_is_statewide_but_county_auditor_is_not(self):
-        assert common.parse_statewide_office("State Auditor") == "auditor"
+        assert common.parse_statewide_office("State Auditor") == ("auditor", None)
         assert common.parse_statewide_office("County Auditor/Treasurer") is None
 
     def test_county_attorney_is_not_the_attorney_general(self):
-        assert common.parse_statewide_office("Attorney General") == "attorney_general"
+        assert common.parse_statewide_office("Attorney General") == ("attorney_general", None)
         assert common.parse_statewide_office("County Attorney") is None
 
     def test_a_joint_governor_ticket_is_the_top_of_the_ticket(self):
         """Minnesota prints one contest for both offices."""
-        assert common.parse_statewide_office("Governor & Lt Governor") == "governor"
+        assert common.parse_statewide_office("Governor & Lt Governor") == ("governor", None)
 
     def test_a_bare_auditor_is_refused(self):
         """Unqualified, it is a county office in most states."""
@@ -437,21 +437,21 @@ class TestStatewideOfficePhrases:
 
     def test_the_commissioner_offices_resolve(self):
         assert common.parse_statewide_office(
-            "Commissioner of Insurance - Rep") == "insurance_commissioner"
+            "Commissioner of Insurance - Rep") == ("insurance_commissioner", None)
         assert common.parse_statewide_office(
-            "Commissioner of Agriculture - Dem") == "agriculture_commissioner"
+            "Commissioner of Agriculture - Dem") == ("agriculture_commissioner", None)
         assert common.parse_statewide_office(
-            "Commissioner of Labor - Rep") == "labor_commissioner"
+            "Commissioner of Labor - Rep") == ("labor_commissioner", None)
 
     def test_either_word_order_works(self):
         assert common.parse_statewide_office(
-            "Insurance Commissioner") == "insurance_commissioner"
+            "Insurance Commissioner") == ("insurance_commissioner", None)
 
     def test_the_school_superintendent_resolves_in_both_common_wordings(self):
         assert common.parse_statewide_office(
-            "State School Superintendent - Dem") == "school_superintendent"
+            "State School Superintendent - Dem") == ("school_superintendent", None)
         assert common.parse_statewide_office(
-            "Superintendent of Public Instruction") == "school_superintendent"
+            "Superintendent of Public Instruction") == ("school_superintendent", None)
 
     def test_a_county_commissioner_is_still_refused(self):
         """"commissioner" is in the locality gate precisely because of
@@ -468,6 +468,29 @@ class TestStatewideOfficePhrases:
         """A county really can have a school superintendent."""
         assert common.parse_statewide_office("County School Superintendent") is None
         assert common.parse_statewide_office("Cranston: Commissioner of Labor") is None
+
+    def test_a_statewide_body_seated_by_district_carries_its_seat(self):
+        """Georgia's Public Service Commission is elected statewide but
+        held by district, and runs District 3 and District 5 as separate
+        contests. Without the seat they are one office."""
+        assert common.parse_statewide_office(
+            "PSC - District 3 - Dem") == ("public_service_commission", "3")
+        assert common.parse_statewide_office(
+            "Public Service Commissioner District 2") == ("public_service_commission", "2")
+
+    def test_an_ordinary_statewide_office_never_carries_a_seat(self):
+        """There is one Secretary of State, so a seat number is never
+        attached to one."""
+        assert common.parse_statewide_office("Secretary of State") == (
+            "secretary_of_state", None)
+
+    def test_a_district_beside_a_seatless_office_is_refused_outright(self):
+        """"Secretary of State - District 4" is not a real contest, and
+        the general locality gate distrusts "district" — so the label is
+        refused rather than read as the statewide office. Only the
+        offices that genuinely have seats bypass that gate, and they do
+        it through _STATEWIDE_PHRASES."""
+        assert common.parse_statewide_office("Secretary of State - District 4") is None
 
     def test_every_office_code_has_a_label(self):
         """The API renders from this map; a code without one would show

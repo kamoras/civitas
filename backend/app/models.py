@@ -1659,7 +1659,7 @@ class StatewideNominee(Base):
         # delete-what-is-no-longer-reported pass, so a renamed candidate
         # still leaves exactly one row.
         UniqueConstraint(
-            "state", "cycle_year", "office", "party", "display_name",
+            "state", "cycle_year", "office", "district", "party", "display_name",
             name="uq_statewide_nominee_seat_party_name",
         ),
     )
@@ -1669,6 +1669,13 @@ class StatewideNominee(Base):
     cycle_year: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     # One of state_candidates_common.STATEWIDE_OFFICE_LABELS' keys.
     office: Mapped[str] = mapped_column(String(32), nullable=False)
+    # Null for almost every statewide office, because almost none has a
+    # seat: there is one Secretary of State. A few statewide BODIES seat
+    # their members by district while still electing them statewide —
+    # Georgia's Public Service Commission runs District 3 and District 5
+    # as separate contests — and without this they would be one office,
+    # the second overwriting the first.
+    district: Mapped[str | None] = mapped_column(String(8), nullable=True)
     party: Mapped[str] = mapped_column(String(1), nullable=False)
     # The name the state itself printed, annotations stripped (Rhode
     # Island marks its party-endorsed candidates with a bare asterisk).

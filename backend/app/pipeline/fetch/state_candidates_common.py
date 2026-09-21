@@ -195,11 +195,25 @@ _STATEWIDE_PHRASES = [
     ("school_superintendent", re.compile(
         r"\bState\s+School\s+Superintendent\b"
         r"|\bSuperintendent\s+of\s+Public\s+Instruction\b", re.IGNORECASE)),
+    # Georgia prints the bare initialism; spelled out elsewhere.
+    ("public_service_commission", re.compile(
+        r"\bPSC\b|\bPublic\s+Service\s+Commission(?:er)?\b", re.IGNORECASE)),
 ]
 
 # The locality markers that stay decisive even beside one of the phrases
 # above — deliberately much narrower than _LOCAL_QUALIFIER_RE, which
 # also distrusts office words like "commissioner" and "school".
+# A handful of statewide bodies seat their members BY DISTRICT while
+# electing them statewide — Georgia's Public Service Commission is
+# elected by the whole state, but a commissioner must reside in the
+# district whose seat they hold. They are statewide offices with a seat
+# number, which is why StatewideNominee carries an optional district:
+# without it, "PSC - District 3" and "PSC - District 5" are one office
+# and the second overwrites the first.
+_STATEWIDE_DISTRICT_SEATS = {"public_service_commission"}
+
+_STATEWIDE_SEAT_RE = re.compile(r"\bDistrict\s+(?:No\.?\s*)?0*(\d+)\b", re.IGNORECASE)
+
 _STRICT_LOCAL_RE = re.compile(
     r"\b(?:county|city|town|township|ward|borough|parish|village|precinct|municipal)\b|:",
     re.IGNORECASE,
@@ -252,22 +266,35 @@ STATEWIDE_OFFICE_LABELS = {
     "agriculture_commissioner": "Agriculture Commissioner",
     "labor_commissioner": "Labor Commissioner",
     "school_superintendent": "State School Superintendent",
+    "public_service_commission": "Public Service Commission",
 }
 
 
-def parse_statewide_office(contest_name: str) -> str | None:
-    """A statewide executive office code, or None for anything else.
+def _statewide_seat(code: str, name: str) -> tuple[str, str | None]:
+    """Attach a seat number to the offices that have one. A district on
+    any other statewide office would be a misread — "Secretary of State"
+    beside a district number is not a thing — so it is dropped rather
+    than stored."""
+    if code not in _STATEWIDE_DISTRICT_SEATS:
+        return code, None
+    match = _STATEWIDE_SEAT_RE.search(name)
+    return code, (match.group(1) if match else None)
 
-    None for every federal contest too: this is the complement of
-    parse_office, not a superset of it, and a caller asks whichever
-    question it means.
+
+def parse_statewide_office(contest_name: str) -> tuple[str, str | None] | None:
+    """(office code, seat) for a statewide executive contest, or None.
+
+    The seat is None for all but the handful of statewide bodies that
+    seat members by district (see _STATEWIDE_DISTRICT_SEATS). None for
+    every federal contest too: this is the complement of parse_office,
+    not a superset of it, and a caller asks whichever question it means.
     """
     name = contest_name or ""
     # Checked first — see _STATEWIDE_PHRASES for why these cannot go
     # through the general locality gate below.
     for code, pattern in _STATEWIDE_PHRASES:
         if pattern.search(name) and not _STRICT_LOCAL_RE.search(name):
-            return code
+            return _statewide_seat(code, name)
     if _LOCAL_QUALIFIER_RE.search(name):
         return None
     # A JOINT TICKET ("Governor and Lieutenant Governor", how several
@@ -277,10 +304,10 @@ def parse_statewide_office(contest_name: str) -> str | None:
     if _LT_GOVERNOR_RE.search(name):
         without_lt = _LT_GOVERNOR_RE.sub(" ", name)
         if not re.search(r"\bgovernor\b", without_lt, re.IGNORECASE):
-            return "lt_governor"
+            return _statewide_seat("lt_governor", name)
     for code, pattern in _STATEWIDE_OFFICES:
         if pattern.search(name):
-            return code
+            return _statewide_seat(code, name)
     return None
 
 

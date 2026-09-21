@@ -282,6 +282,24 @@ describe("majorPartyOf", () => {
   });
 });
 
+describe("districtAreaLabel county suffix", () => {
+  it("drops the suffix for a U.S. House row, where every entry is a county", () => {
+    expect(districtAreaLabel(["Rockdale County", "Newton County"])).toBe("Rockdale, Newton");
+  });
+
+  it("keeps it for a state legislative row, where a county is the exception", () => {
+    // Georgia has both a Forsyth County and a Forsyth city, and a
+    // district covering unincorporated county land is labelled with the
+    // county. Stripped, the two are indistinguishable.
+    expect(districtAreaLabel(["Forsyth County"], 3, false)).toBe("Forsyth County");
+  });
+
+  it("still truncates with a count either way", () => {
+    const many = ["A city", "B city", "C city", "D city", "E city"];
+    expect(districtAreaLabel(many, 3, false)).toBe("A city, B city, C city & 2 more");
+  });
+});
+
 describe("matchesDistrictQuery", () => {
   const race = {
     district: 4,

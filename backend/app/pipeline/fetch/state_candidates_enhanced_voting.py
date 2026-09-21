@@ -112,6 +112,7 @@ from app.pipeline.fetch.http_utils import fetch_json_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     clean_display_name,
     normalize_party,
+    STATEWIDE_OFFICE_LABELS,
     parse_office,
     parse_state_leg_office,
     parse_statewide_office,
@@ -264,8 +265,8 @@ async def fetch_confirmed_candidates(
             # contests that make up the rest of the file. A statewide
             # office has no district, and its code can never collide with
             # parse_office's "S"/"H".
-            office = parse_statewide_office(contest_name)
-            district = None
+            statewide = parse_statewide_office(contest_name)
+            office, district = statewide if statewide else (None, None)
             if office is None:
                 # Third and last gate: a seat in the state's own
                 # legislature. It has to refuse the party-committee and
@@ -279,7 +280,7 @@ async def fetch_confirmed_candidates(
                 office, district = seat
         if office_district is not None:
             bucket = by_seat
-        elif district is None:
+        elif office in STATEWIDE_OFFICE_LABELS:
             bucket = statewide_by_seat
         else:
             bucket = state_leg_by_seat

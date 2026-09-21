@@ -96,6 +96,16 @@ _STRONG_MCD_STATES = {
 _COUNTY_SUBDIVISION_LAYER = 1
 _INCORPORATED_PLACE_LAYER = 4
 
+# Counties, used only as a fallback. A district can contain no
+# incorporated place at all — three of Georgia's 180 House districts sit
+# entirely in unincorporated county land, mostly suburban Atlanta — and
+# a district with no place name is a district nobody can find. Its
+# county is the next thing a resident there knows about themselves.
+_COUNTY_URL = (
+    "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb"
+    "/State_County/MapServer/1/query"
+)
+
 # Census fills the gaps between real towns — open water, mostly — with a
 # placeholder "subdivision" carrying this name. It is a real polygon and
 # really does overlap districts along a coast, so it survives every
@@ -266,6 +276,17 @@ def _towns(state: str, state_fips: str) -> list[tuple[str, list]]:
     ]
 
 
+def _counties(state_fips: str) -> list[tuple[str, list]]:
+    features = _query_all(_COUNTY_URL, {
+        "where": f"STATE='{state_fips}'", "outFields": "NAME",
+        "returnGeometry": "true", "outSR": _SR, "f": "json",
+    })
+    return [
+        ((f.get("attributes") or {}).get("NAME") or "", f["geometry"]["rings"])
+        for f in features if (f.get("geometry") or {}).get("rings")
+    ]
+
+
 def _towns_for_districts(towns: list, districts: list) -> dict[str, set[str]]:
     covers: dict[str, set[str]] = collections.defaultdict(set)
     for name, rings in towns:
@@ -336,12 +357,36 @@ def main() -> int:
         # in a remap doesn't survive as a stale entry.
         districts_out = {k: v for k, v in districts_out.items()
                          if not k.startswith(f"{state}-")}
+        counties = None
         for chamber in ("upper", "lower"):
             seats = _districts(fips, chamber)
             covers = _towns_for_districts(towns, seats)
+            # Only the districts that came back empty are re-run against
+            # counties, so a district that HAS places keeps the tighter,
+            # more recognisable list.
+            uncovered = [d for d in seats if d[0] not in covers]
+            if uncovered:
+                if counties is None:
+                    counties = _counties(fips)
+                # Roles swapped deliberately: the districts play the part
+                # of "towns" and the counties the part of "districts", so
+                # the share is measured against the DISTRICT. Asked the
+                # other way round, a small district inside a large county
+                # covers a fraction of a percent of it and is dropped —
+                # leaving the district uncovered, which is the one thing
+                # this fallback exists to prevent.
+                by_county = _towns_for_districts(
+                    [(number, rings) for number, rings, _box in uncovered],
+                    [(name, rings, _bbox(rings)) for name, rings in counties],
+                )
+                for county_name, district_numbers in by_county.items():
+                    for number in district_numbers:
+                        covers.setdefault(number, set()).add(county_name)
+                print(f"   {chamber}: {len(uncovered)} district(s) had no place; "
+                      f"fell back to counties")
             for number, names in covers.items():
                 districts_out[f"{state}-{chamber}-{number}"] = sorted(names)
-            print(f"   {chamber}: {len(seats)} seats, {len(covers)} with town coverage")
+            print(f"   {chamber}: {len(seats)} seats, {len(covers)} with coverage")
 
     _OUTPUT.write_text(json.dumps({
         "_source": (

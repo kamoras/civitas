@@ -271,3 +271,48 @@ class TestTopTwoSameParty:
         ])
         rows = db_session.query(StateLegNominee).all()
         assert [r.display_name for r in rows] == ["Corrected Name"]
+
+
+PSC_3_D = {"office": "public_service_commission", "district": "3", "party": "D",
+           "last_name": "Third District Dem"}
+PSC_5_D = {"office": "public_service_commission", "district": "5", "party": "D",
+           "last_name": "Fifth District Dem"}
+
+
+class TestStatewideBodySeatedByDistrict:
+    """Georgia's Public Service Commission is elected statewide, but a
+    commissioner holds the seat for a district and each seat is its own
+    contest. Without a district on the row, "PSC - District 3" and
+    "PSC - District 5" are one office and the second overwrites the
+    first — a real Georgia ballot has both.
+    """
+
+    def test_two_seats_of_one_body_are_separate_rows(self, db_session):
+        _sync_statewide_nominees(db_session, CYCLE, "GA", SOURCE, [PSC_3_D, PSC_5_D])
+        assert db_session.query(StatewideNominee).count() == 2
+
+    def test_each_seat_renders_with_its_district(self, db_session):
+        _sync_statewide_nominees(db_session, CYCLE, "GA", SOURCE, [PSC_5_D, PSC_3_D])
+        races, _ = _statewide_section(db_session, "GA", CYCLE)
+        assert [r["label"] for r in races] == [
+            "Public Service Commission, District 3",
+            "Public Service Commission, District 5",
+        ]
+        assert [r["office"] for r in races] == [
+            "public_service_commission-3", "public_service_commission-5",
+        ]
+
+    def test_an_office_without_a_seat_keeps_its_plain_label(self, db_session):
+        _sync_statewide_nominees(db_session, CYCLE, "GA", SOURCE, [
+            {"office": "governor", "district": None, "party": "D", "last_name": "A Governor"},
+        ])
+        races, _ = _statewide_section(db_session, "GA", CYCLE)
+        assert races[0]["label"] == "Governor"
+        assert races[0]["office"] == "governor"
+
+    def test_seats_sort_numerically(self, db_session):
+        _sync_statewide_nominees(db_session, CYCLE, "GA", SOURCE, [
+            {**PSC_3_D, "district": "10"}, PSC_3_D, {**PSC_3_D, "district": "2"},
+        ])
+        races, _ = _statewide_section(db_session, "GA", CYCLE)
+        assert [r["label"].split("District ")[1] for r in races] == ["2", "3", "10"]
