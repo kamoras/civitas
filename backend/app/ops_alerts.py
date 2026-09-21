@@ -309,3 +309,89 @@ def check_pipeline_overrun() -> None:
                 f"this pipeline may start concurrently.",
                 dedupe_key=f"overrun-{label.lower().replace(' ', '-')}-{run.id}",
             )
+
+
+def check_pipeline_staleness() -> None:
+    """Watchdog: alert when a nightly pipeline has not COMPLETED recently.
+
+    This covers the gap every other alert in this module structurally
+    cannot, and it is not hypothetical — it is why the 2026-09-01
+    outage ran 19 nights before anyone noticed (see PR #562). In that
+    incident the container was SIGKILLed by Swarm's healthcheck partway
+    through Supplementary, and House, Stock trades and Election — which
+    are chained behind it in scheduler.py — simply never started again:
+
+    - ``_alert_if_skipped`` never fired: nothing was *skipped*, the
+      chain just stopped existing partway down.
+    - ``check_pipeline_overrun`` never fired: it reads rows whose status
+      is RUNNING, and a pipeline that never started has no row at all
+      (``if run is None: continue``).
+    - the scheduler's ``except BaseException`` crash alert never fired:
+      SIGKILL cannot be caught by a handler.
+
+    Every one of those watches a run that EXISTS. This one watches for
+    the absence of one, which is the only signal a silently-stopped
+    chain actually emits. It also covers Election, which
+    check_pipeline_overrun omits entirely.
+
+    A pipeline with no runs at all is left alone: that is a fresh
+    deployment, not a stall. One that has runs but has never completed
+    successfully IS reported, since that is a real never-worked state.
+    """
+    from app.database import SessionLocal
+    from app.models import (
+        ElectionPipelineRun, HousePipelineRun, PipelineRun, PipelineStatus,
+        StockTradesPipelineRun, SupplementaryPipelineRun,
+    )
+
+    budget = timedelta(days=settings.PIPELINE_STALE_ALERT_DAYS)
+    models = [
+        ("Senate", PipelineRun),
+        ("House", HousePipelineRun),
+        ("Supplementary", SupplementaryPipelineRun),
+        ("Stock trades", StockTradesPipelineRun),
+        ("Election", ElectionPipelineRun),
+    ]
+
+    db = SessionLocal()
+    try:
+        findings = []
+        for label, model in models:
+            last_done = (
+                db.query(model.completed_at)
+                .filter(model.status == PipelineStatus.COMPLETED,
+                        model.completed_at.isnot(None))
+                .order_by(model.completed_at.desc())
+                .first()
+            )
+            if last_done is None:
+                # Never completed. Only meaningful if it has ever tried —
+                # an empty table is a fresh install, not a stalled one.
+                if db.query(model.id).first() is not None:
+                    findings.append((label, None))
+                continue
+            age = utcnow() - last_done[0]
+            if age > budget:
+                findings.append((label, age))
+    finally:
+        db.close()
+
+    for label, age in findings:
+        if age is None:
+            detail = "has never completed successfully"
+        else:
+            detail = f"has not completed successfully in {age.total_seconds() / 86400:.1f} days"
+        send_ops_alert(
+            f"{label} pipeline is stale",
+            f"The {label} pipeline {detail} (expected nightly, alert "
+            f"threshold {budget.days}d). It is not overrunning — there is no "
+            f"run to overrun — so this is the only signal it emits. Likely "
+            f"causes: the nightly chain stopped partway (every pipeline after "
+            f"the failure point silently never starts), or the container was "
+            f"killed mid-run. Check the phase ABOVE this one in scheduler.py's "
+            f"chain first: Senate -> Supplementary -> House -> Stock trades -> "
+            f"Election.",
+            # Per pipeline per day: a genuine multi-day stall should keep
+            # reminding, but not once per watchdog tick.
+            dedupe_key=f"stale-pipeline-{label.lower().replace(' ', '-')}-{utcnow():%Y-%m-%d}",
+        )

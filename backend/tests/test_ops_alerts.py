@@ -9,10 +9,10 @@ from datetime import date, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 from app.models import (
-    HousePipelineRun, PipelineRun, PipelineStatus,
+    ElectionPipelineRun, HousePipelineRun, PipelineRun, PipelineStatus,
     StockTradesPipelineRun, SupplementaryPipelineRun,
 )
-from app.ops_alerts import check_pipeline_overrun
+from app.ops_alerts import check_pipeline_overrun, check_pipeline_staleness
 from app.time_utils import utcnow
 
 
@@ -184,3 +184,122 @@ class TestCheckStatePviStaleness:
     def test_silent_when_window_metadata_missing(self):
         mock_alert = self._check("", today=date(2030, 1, 1))
         mock_alert.assert_not_called()
+
+
+def _check_stale(db_session):
+    with patch("app.database.SessionLocal", return_value=db_session), \
+         patch("app.ops_alerts.send_ops_alert") as mock_alert:
+        check_pipeline_staleness()
+    return mock_alert
+
+
+def _labels(mock_alert):
+    return {call[0][0] for call in mock_alert.call_args_list}
+
+
+class TestCheckPipelineStaleness:
+    """The watchdog for a pipeline that never RAN, as opposed to one
+    running too long.
+
+    The 2026-09-01 outage went 19 nights unnoticed because every other
+    alert here watches a run that exists: nothing was skipped, an absent
+    pipeline has no RUNNING row for check_pipeline_overrun to find, and
+    the scheduler's `except BaseException` cannot catch the SIGKILL that
+    actually killed it. Absence was the only signal being emitted, and
+    nothing was watching for it.
+    """
+
+    def test_a_fresh_install_with_no_runs_at_all_is_silent(self, db_session):
+        """No rows anywhere is a new deployment, not a stall — alerting
+        would fire on day one of every install."""
+        _check_stale(db_session).assert_not_called()
+
+    def test_a_recent_successful_run_is_silent(self, db_session):
+        db_session.add(PipelineRun(
+            started_at=utcnow() - timedelta(hours=9),
+            completed_at=utcnow() - timedelta(hours=8),
+            status=PipelineStatus.COMPLETED,
+        ))
+        db_session.commit()
+        _check_stale(db_session).assert_not_called()
+
+    def test_one_missed_night_does_not_cry_wolf(self, db_session):
+        """Threshold is 2 days precisely so a single skipped night, which
+        self-heals the next evening, stays quiet."""
+        db_session.add(PipelineRun(
+            started_at=utcnow() - timedelta(days=1, hours=1),
+            completed_at=utcnow() - timedelta(days=1),
+            status=PipelineStatus.COMPLETED,
+        ))
+        db_session.commit()
+        _check_stale(db_session).assert_not_called()
+
+    def test_a_pipeline_that_stopped_completing_alerts(self, db_session):
+        db_session.add(PipelineRun(
+            started_at=utcnow() - timedelta(days=19),
+            completed_at=utcnow() - timedelta(days=19),
+            status=PipelineStatus.COMPLETED,
+        ))
+        db_session.commit()
+        mock_alert = _check_stale(db_session)
+        mock_alert.assert_called_once()
+        assert "Senate" in mock_alert.call_args[0][0]
+        assert "19." in mock_alert.call_args[0][1]
+
+    def test_the_real_outage_shape_alerts_on_every_downstream_pipeline(self, db_session):
+        """Reproduces 2026-09-01: Senate kept completing nightly while
+        House, Stock trades and Election silently never ran again. The
+        healthy pipeline must stay quiet and all three dead ones must
+        report — that combination is what makes the alert actionable,
+        since the first quiet one points at where the chain broke."""
+        db_session.add(PipelineRun(
+            started_at=utcnow() - timedelta(hours=9),
+            completed_at=utcnow() - timedelta(hours=8),
+            status=PipelineStatus.COMPLETED,
+        ))
+        for model in (HousePipelineRun, StockTradesPipelineRun, ElectionPipelineRun):
+            db_session.add(model(
+                started_at=utcnow() - timedelta(days=19),
+                completed_at=utcnow() - timedelta(days=19),
+                status=PipelineStatus.COMPLETED,
+            ))
+        db_session.commit()
+        labels = _labels(_check_stale(db_session))
+        assert labels == {
+            "House pipeline is stale",
+            "Stock trades pipeline is stale",
+            "Election pipeline is stale",
+        }
+
+    def test_election_is_covered_even_though_the_overrun_check_omits_it(self, db_session):
+        db_session.add(ElectionPipelineRun(
+            started_at=utcnow() - timedelta(days=19),
+            completed_at=utcnow() - timedelta(days=19),
+            status=PipelineStatus.COMPLETED,
+        ))
+        db_session.commit()
+        assert _labels(_check_stale(db_session)) == {"Election pipeline is stale"}
+
+    def test_a_pipeline_that_has_tried_but_never_succeeded_alerts(self, db_session):
+        """Distinct from a fresh install: rows exist, none ever completed."""
+        db_session.add(HousePipelineRun(
+            started_at=utcnow() - timedelta(days=3), status=PipelineStatus.FAILED,
+        ))
+        db_session.commit()
+        mock_alert = _check_stale(db_session)
+        mock_alert.assert_called_once()
+        assert "never completed successfully" in mock_alert.call_args[0][1]
+
+    def test_a_still_running_row_does_not_count_as_a_completion(self, db_session):
+        """A wedged run is exactly the 2026-09 shape — it must not mask
+        the staleness of the data it has failed to refresh."""
+        db_session.add(SupplementaryPipelineRun(
+            started_at=utcnow() - timedelta(days=5),
+            completed_at=utcnow() - timedelta(days=5),
+            status=PipelineStatus.COMPLETED,
+        ))
+        db_session.add(SupplementaryPipelineRun(
+            started_at=utcnow() - timedelta(hours=2), status=PipelineStatus.RUNNING,
+        ))
+        db_session.commit()
+        assert _labels(_check_stale(db_session)) == {"Supplementary pipeline is stale"}
