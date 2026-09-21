@@ -442,3 +442,71 @@ class TestSurnameMustLookLikeAName:
         resolved = election_coverage.resolve_item_race(
             self._matchers(db_session), "MCCONNELL SKIPS KENTUCKY PICNIC")
         assert resolved is not None
+
+
+class TestStoredItemsAreRevalidated:
+    """Nothing ever deletes a RaceCoverageItem — there is no retention
+    sweep — so a tightening of the matcher has to apply retroactively or
+    the rules and the stored data drift apart permanently."""
+
+    async def _run(self, db_session):
+        with patch.object(election_coverage, "fetch_news_articles", return_value=[]), \
+             patch.object(election_coverage, "search_posts", new=AsyncMock(return_value=[])):
+            return await election_coverage.ingest_race_coverage(db_session, client=None)
+
+    async def test_a_stored_false_positive_is_dropped(self, db_session):
+        """The live NE-3 case: a government-shutdown article attached
+        because a candidate there is surnamed ELSE."""
+        _race(db_session, "2026-HOUSE-NE-3", "NE")
+        _candidate(db_session, "H6NE003", "2026-HOUSE-NE-3", "ELSE, MARY",
+                   has_raised_funds=True)
+        db_session.add(RaceCoverageItem(
+            race_id="2026-HOUSE-NE-3", source_type="news", source_name="AP",
+            title="Senate funding patch secured",
+            url="https://example.com/shutdown",
+            summary="With a bipartisan deal in hand to avoid a shutdown, "
+                    "nobody else expects a vote before Nebraska's primary.",
+            matched_candidate_id="H6NE003", match_basis="surname_context",
+        ))
+        db_session.commit()
+
+        await self._run(db_session)
+
+        assert db_session.query(RaceCoverageItem).count() == 0
+
+    async def test_genuine_coverage_survives_revalidation(self, db_session):
+        _race(db_session, "2026-SEN-GA", "GA")
+        _candidate(db_session, "S6GA001", "2026-SEN-GA", "OSSOFF, JON",
+                   has_raised_funds=True)
+        db_session.add(RaceCoverageItem(
+            race_id="2026-SEN-GA", source_type="news", source_name="AP",
+            title="Ossoff holds narrow lead in Georgia Senate race",
+            url="https://example.com/ossoff",
+            summary="Polling shows a tight contest.",
+            matched_candidate_id="S6GA001", match_basis="surname_context",
+        ))
+        db_session.commit()
+
+        await self._run(db_session)
+
+        assert db_session.query(RaceCoverageItem).count() == 1
+
+    async def test_an_item_whose_candidate_left_the_roster_is_kept(self, db_session):
+        """Nothing to re-validate against, so dropping it would delete
+        real coverage every time the roster churns."""
+        _race(db_session, "2026-SEN-GA", "GA")
+        _candidate(db_session, "S6GA001", "2026-SEN-GA", "OSSOFF, JON",
+                   has_raised_funds=True)
+        db_session.add(RaceCoverageItem(
+            race_id="2026-SEN-GA", source_type="news", source_name="AP",
+            title="A withdrawn candidate's coverage",
+            url="https://example.com/gone",
+            summary="Text that no longer corroborates anyone on the roster.",
+            matched_candidate_id="S6GA999",  # no longer a candidate
+            match_basis="full_name",
+        ))
+        db_session.commit()
+
+        await self._run(db_session)
+
+        assert db_session.query(RaceCoverageItem).count() == 1

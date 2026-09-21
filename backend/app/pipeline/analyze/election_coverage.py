@@ -271,6 +271,52 @@ def _already_ingested(db: Session, race_id: str, url: str) -> bool:
     )
 
 
+def _drop_items_the_matcher_would_now_reject(
+    db: Session, matchers: list[CandidateMatcher],
+) -> int:
+    """Re-validate stored coverage against the CURRENT matching rules.
+
+    Nothing ever deletes a RaceCoverageItem — there is no retention
+    sweep — so an item attached by a rule later found to be wrong stays
+    in the database for good. The API orders newest-first under a cap,
+    which pushes old items off a busy race's feed, but a quiet race
+    keeps showing its false positive indefinitely: NE-3's was an article
+    about a government shutdown, matched because a candidate there is
+    surnamed ELSE.
+
+    So every tightening of the matcher has to apply retroactively, or
+    the rules and the stored data drift apart permanently.
+
+    Deliberately keyed on the item's OWN matched candidate rather than
+    re-running the whole race: if that candidate has since left the
+    roster there is nothing to re-validate against, and dropping the
+    item would delete real coverage every time the roster churns. Those
+    are left alone.
+    """
+    by_candidate = {m.candidate_id: m for m in matchers}
+    if not by_candidate:
+        return 0  # never prune against an empty roster
+
+    doomed: list[int] = []
+    for item in db.query(RaceCoverageItem).all():
+        matcher = by_candidate.get(item.matched_candidate_id)
+        if matcher is None:
+            continue
+        if matcher.match_basis(f"{item.title or ''} {item.summary or ''}") is None:
+            doomed.append(item.id)
+
+    if not doomed:
+        return 0
+    for i in range(0, len(doomed), 500):
+        (db.query(RaceCoverageItem)
+           .filter(RaceCoverageItem.id.in_(doomed[i:i + 500]))
+           .delete(synchronize_session=False))
+    db.commit()
+    logger.info(
+        "Dropped %d stored coverage items the current matcher rejects", len(doomed))
+    return len(doomed)
+
+
 def _store_if_new(
     db: Session, race_id: str, seen: set[tuple[str, str]], **fields,
 ) -> bool:
@@ -342,6 +388,10 @@ async def ingest_race_coverage(db: Session, client: httpx.AsyncClient) -> int:
     matchers = _build_matchers(db)
     if not matchers:
         return 0
+
+    # Before ingesting, reconcile what is already stored with the rules
+    # as they stand now. A no-op once the corpus is clean.
+    _drop_items_the_matcher_would_now_reject(db, matchers)
 
     ingested = 0
     # Rows added in THIS pass, invisible to _already_ingested because
