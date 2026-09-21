@@ -4,6 +4,7 @@ import {
   formatPvi,
   isActiveCandidate,
   majorPartyOf,
+  matchesDistrictQuery,
   parseUtc,
   raceBadgeLabel,
   raceTitleLabel,
@@ -278,5 +279,59 @@ describe("majorPartyOf", () => {
     expect(majorPartyOf("REP")).toBe("REP");
     expect(majorPartyOf("IND")).toBeNull();
     expect(majorPartyOf("GRE")).toBeNull();
+  });
+});
+
+describe("matchesDistrictQuery", () => {
+  const race = {
+    district: 4,
+    counties: ["Providence County", "Washington County", "Kent County"],
+    candidates: [{ name: "Gabe Amo" }, { name: "Gerry W. Leonard Jr." }],
+  };
+
+  it("matches on a county the reader lives in", () => {
+    expect(matchesDistrictQuery(race, "providence")).toBe(true);
+    expect(matchesDistrictQuery(race, "PROVIDENCE")).toBe(true);
+    // Partial county names work — a reader types what they remember.
+    expect(matchesDistrictQuery(race, "wash")).toBe(true);
+  });
+
+  it("matches a county the truncated display label would have elided", () => {
+    // districtCountiesLabel(counties, max=3) only shows the first few;
+    // the filter must see the full list or a reader in a hidden county
+    // is told their district doesn't exist.
+    const many = { ...race, counties: [...race.counties, "Bristol County", "Newport County"] };
+    expect(matchesDistrictQuery(many, "newport")).toBe(true);
+  });
+
+  it("matches on a candidate or sitting representative's name", () => {
+    expect(matchesDistrictQuery(race, "amo")).toBe(true);
+    expect(matchesDistrictQuery(race, "leonard")).toBe(true);
+  });
+
+  it("matches an exact district number but not a numeric substring", () => {
+    expect(matchesDistrictQuery(race, "4")).toBe(true);
+    // "1" must not match district 4 via some accidental substring path,
+    // and must not match district 14 either — a reader filtering "1"
+    // means district 1.
+    expect(matchesDistrictQuery(race, "1")).toBe(false);
+    expect(matchesDistrictQuery({ ...race, district: 14 }, "1")).toBe(false);
+  });
+
+  it("matches an at-large district by the 'AL' it renders as", () => {
+    const atLarge = { ...race, district: 0 };
+    expect(matchesDistrictQuery(atLarge, "al")).toBe(true);
+    expect(matchesDistrictQuery(atLarge, "0")).toBe(false);
+  });
+
+  it("shows everything for an empty or whitespace query", () => {
+    expect(matchesDistrictQuery(race, "")).toBe(true);
+    expect(matchesDistrictQuery(race, "   ")).toBe(true);
+  });
+
+  it("tolerates a race with no county data", () => {
+    const noCounties = { ...race, counties: null };
+    expect(matchesDistrictQuery(noCounties, "providence")).toBe(false);
+    expect(matchesDistrictQuery(noCounties, "amo")).toBe(true);
   });
 });

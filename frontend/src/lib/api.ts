@@ -4,7 +4,7 @@ import type { JusticeLeaderboardEntry } from "@/types/justice";
 import type { ActionIssue, ActionIssuesResponse, MyRepsResponse } from "@/types/action";
 import type { PoliticianCard } from "@/types/politicians";
 import type { PaginatedBills } from "@/types/bill";
-import type { GeocodeResult, PviMap, RaceSummary, TownBallot, TownEntry } from "@/types/election";
+import type { PviMap, RaceSummary, TownBallot, TownEntry } from "@/types/election";
 import type {
   JusticeScoreBreakdown,
   PresidentScoreBreakdown,
@@ -1489,13 +1489,6 @@ export async function fetchPviMap(): Promise<PviMap> {
   } as unknown as PviMap;
 }
 
-/** Not cached — every address is a distinct, user-entered, one-off
- * lookup; caching would just hold addresses in memory for no benefit. */
-export async function fetchDistrictForAddress(address: string): Promise<GeocodeResult> {
-  const res = await fetch(`${API_BASE}/elections/geocode?address=${encodeURIComponent(address)}`);
-  if (!res.ok) throw new Error(`Failed to resolve address: ${res.status}`);
-  return res.json();
-}
 
 /** The curated town list for a state — empty when the town-lookup feature
  * isn't configured or no town has been added for this state yet. Empty

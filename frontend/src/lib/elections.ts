@@ -76,6 +76,37 @@ export function districtCountiesLabel(counties: string[] | null, max = 3): strin
   return `${short.slice(0, max).join(", ")} & ${short.length - max} more`;
 }
 
+/** Does this district row match what the reader typed in the district
+ * filter?
+ *
+ * Deliberately matches on the three things a reader plausibly knows
+ * about themselves without being asked for an address: the county they
+ * live in, their sitting representative's name (or any candidate's), and
+ * the district number if they happen to know it. Civitas never asks for
+ * a street address, so the filter has to work from what a person can
+ * recall unprompted — see the House section's own copy.
+ *
+ * Matching is substring, case-insensitive, and runs against the county
+ * names in full ("Providence County"), not the truncated
+ * districtCountiesLabel display string — a reader typing "washington"
+ * must still match a district whose label elided it behind "& 2 more".
+ */
+export function matchesDistrictQuery(
+  race: { district: number | null; counties: string[] | null; candidates: { name: string }[] },
+  query: string
+): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  // "AL" is what an at-large district renders as, so it must also be
+  // what an at-large district is searchable by.
+  const districtLabel = race.district === 0 ? "al" : String(race.district ?? "");
+  return (
+    districtLabel === q ||
+    (race.counties ?? []).some((c) => c.toLowerCase().includes(q)) ||
+    race.candidates.some((c) => c.name.toLowerCase().includes(q))
+  );
+}
+
 /** Canonical href for a state's ballot page.
  *
  * Plural "states" deliberately, matching the API path

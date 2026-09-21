@@ -469,6 +469,44 @@ If a plain-language layer is ever revisited, the bar is a check that can
 detect polarity inversion and dropped qualifiers — which is not an extension
 of `grounding.py`, it is a different kind of check.
 
+### 8. The visitor is never asked who or where they are
+
+Civitas requires no account, stores no visitor data, and **does not ask a
+visitor for their address**. Getting a reader to the races that affect them
+is a navigation problem, solved with selection UI, not an input problem
+solved by collecting an identifier.
+
+This is stricter than "don't persist it". A resolve-only, never-logged
+address box shipped on the state ballot page in 2026-08 and was removed in
+2026-09: the storage was genuinely clean, but asking at all is the wrong
+shape for a project whose entire premise is that a voter can research their
+ballot without handing anything over. The box was also redundant — the
+district rows already showed each district's counties and its sitting
+representative, which is what a person can actually recall unprompted, so
+the replacement is a client-side filter over those (`matchesDistrictQuery`
+in `frontend/src/lib/elections.ts`).
+
+What this rules in and out:
+
+- **Out:** any field asking for a street address, ZIP, precinct, or
+  geolocation permission to personalise what's shown; any per-visitor
+  identifier retained across requests to remember such a choice.
+- **In:** filtering, maps, and drill-down over data the page already has;
+  explicit, unremembered navigation choices (the town selector, the state
+  picker); linking out to the official lookup for a reader who wants a
+  precinct-exact answer.
+- **In, server-side only:** the Census geocoder and Google Civic's
+  `voterInfoQuery`, called from the pipeline with **our own** fixed,
+  publicly-known building addresses (`town_directory.json`,
+  `state_candidate_sources.json`'s `house_addresses`) to resolve which
+  district a *known* place sits in. Every visitor who picks the same town
+  sends the identical request; nothing visitor-specific leaves the server.
+  That distinction — our address, not theirs — is the whole line.
+
+A feature that can only work by asking where the visitor lives is a feature
+this project doesn't ship. State the resulting limitation as content (see
+§7's `omits`) rather than closing the gap by collecting an address.
+
 ## Data Pipeline
 
 The pipeline runs nightly (configurable via `PIPELINE_CRON_SCHEDULE`) or can

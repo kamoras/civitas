@@ -10,7 +10,6 @@ import pathlib
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, selectinload
 
-from app.api.public import RateLimit
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cached_json
 from app.database import get_db
 from app.election_calendar import (
@@ -809,69 +808,3 @@ def candidate_detail(candidate_id: str, db: Session = Depends(get_db)):
         } if race else None,
     }, max_age=CACHE_TTL_DETAIL_S)
 
-
-_CENSUS_GEOCODER_URL = "https://geocoding.geo.census.gov/geocoder/geographies/onelineaddress"
-
-
-@router.get("/geocode")
-async def geocode_address(address: str, _rl: RateLimit):
-    """State + House district for a US mailing address, via the Census
-    Bureau's free, no-key geocoder — lets the ballot page auto-select a
-    visitor's district instead of requiring the manual dropdown (2026-08,
-    address collection scoped explicitly: optional, resolve-only, never
-    stored). The address is passed straight through to Census and never
-    logged, cached, or persisted here — only the resolved state/district
-    numbers are returned.
-
-    Rate-limited (same RateLimit as qa.py's LLM-calling /ask) — this is
-    the only /elections endpoint that makes a per-request outbound call
-    to a third party rather than just querying the local DB, so it's the
-    one route in this file an unauthenticated caller could otherwise use
-    to hammer Census on Civitas's behalf for free.
-
-    {"state": None, "district": None} for an address Census can't match
-    or that doesn't resolve to a congressional district (e.g. outside the
-    US) — never a guess. A malformed/empty address is a 400, not a
-    silent null result, so the frontend can tell "you typed something
-    Census rejected" apart from "a real address with no match"."""
-    address = (address or "").strip()
-    if not address:
-        raise HTTPException(status_code=400, detail="address is required")
-    if len(address) > 200:
-        raise HTTPException(status_code=400, detail="address is too long")
-
-    try:
-        async with make_async_client(timeout=15.0) as client:
-            response = await client.get(
-                _CENSUS_GEOCODER_URL,
-                params={
-                    "address": address,
-                    "benchmark": "Public_AR_Current",
-                    "vintage": "Current_Current",
-                    "layers": "54",
-                    "format": "json",
-                },
-            )
-            response.raise_for_status()
-            payload = response.json()
-    except Exception:
-        # Never log `address` itself (a real visitor-entered street
-        # address) — only that the lookup failed.
-        logger.exception("Census geocode lookup failed")
-        raise HTTPException(status_code=502, detail="Could not resolve that address right now.")
-
-    matches = (payload.get("result") or {}).get("addressMatches") or []
-    if not matches:
-        return {"state": None, "district": None}
-
-    match = matches[0]
-    state = (match.get("addressComponents") or {}).get("state")
-    districts = (match.get("geographies") or {}).get("119th Congressional Districts") or []
-    if not state or not districts:
-        return {"state": None, "district": None}
-
-    cd = districts[0].get("CD119")
-    if cd is None or not str(cd).isdigit():
-        return {"state": None, "district": None}
-
-    return {"state": state, "district": int(cd)}
