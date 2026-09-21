@@ -171,6 +171,40 @@ _STATEWIDE_OFFICES = [
 
 _LT_GOVERNOR_RE = re.compile(r"\b(?:lieutenant|lt\.?)\s+governor\b", re.IGNORECASE)
 
+# Offices whose FULL PHRASE is statewide by construction, checked BEFORE
+# the locality gate because that gate would otherwise refuse them on a
+# word it is right to distrust in general.
+#
+# "Commissioner of Insurance" is refused by _LOCAL_QUALIFIER_RE on
+# "commissioner", which exists to stop Minnesota's "County Commissioner
+# District 1"; "State School Superintendent" is refused on "school",
+# which exists to stop Rhode Island's "School Committee". Both of those
+# gates are correct and both must stay — so these phrases get their own
+# pass, and are still refused when the label carries a real locality
+# marker, since a "County School Superintendent" is a county office.
+#
+# Every phrase here is a real label off Georgia's 2026 primary, where
+# four genuine statewide constitutional offices were being missed.
+_STATEWIDE_PHRASES = [
+    ("insurance_commissioner", re.compile(
+        r"\bCommissioner\s+of\s+Insurance\b|\bInsurance\s+Commissioner\b", re.IGNORECASE)),
+    ("agriculture_commissioner", re.compile(
+        r"\bCommissioner\s+of\s+Agriculture\b|\bAgriculture\s+Commissioner\b", re.IGNORECASE)),
+    ("labor_commissioner", re.compile(
+        r"\bCommissioner\s+of\s+Labor\b|\bLabor\s+Commissioner\b", re.IGNORECASE)),
+    ("school_superintendent", re.compile(
+        r"\bState\s+School\s+Superintendent\b"
+        r"|\bSuperintendent\s+of\s+Public\s+Instruction\b", re.IGNORECASE)),
+]
+
+# The locality markers that stay decisive even beside one of the phrases
+# above — deliberately much narrower than _LOCAL_QUALIFIER_RE, which
+# also distrusts office words like "commissioner" and "school".
+_STRICT_LOCAL_RE = re.compile(
+    r"\b(?:county|city|town|township|ward|borough|parish|village|precinct|municipal)\b|:",
+    re.IGNORECASE,
+)
+
 _LOCAL_QUALIFIER_RE = re.compile(
     r"\b(?:county|city|town|township|ward|borough|parish|village|precinct|district|"
     r"municipal|school|council|mayor|alderman|commissioner|judge|justice|court|"
@@ -214,6 +248,10 @@ STATEWIDE_OFFICE_LABELS = {
     "secretary_of_state": "Secretary of State",
     "treasurer": "State Treasurer",
     "auditor": "State Auditor",
+    "insurance_commissioner": "Insurance Commissioner",
+    "agriculture_commissioner": "Agriculture Commissioner",
+    "labor_commissioner": "Labor Commissioner",
+    "school_superintendent": "State School Superintendent",
 }
 
 
@@ -225,6 +263,11 @@ def parse_statewide_office(contest_name: str) -> str | None:
     question it means.
     """
     name = contest_name or ""
+    # Checked first — see _STATEWIDE_PHRASES for why these cannot go
+    # through the general locality gate below.
+    for code, pattern in _STATEWIDE_PHRASES:
+        if pattern.search(name) and not _STRICT_LOCAL_RE.search(name):
+            return code
     if _LOCAL_QUALIFIER_RE.search(name):
         return None
     # A JOINT TICKET ("Governor and Lieutenant Governor", how several

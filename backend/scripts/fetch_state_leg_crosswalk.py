@@ -72,16 +72,29 @@ _LEG_URL = (
 )
 _CHAMBER_LAYERS = {"upper": 1, "lower": 2}
 
-# County Subdivisions — towns and cities. This is the right unit in the
-# states that actually govern by town (all of New England, plus the
-# upper Midwest and mid-Atlantic). A state that organises around
-# incorporated places instead should pass layer 4 of the same service;
-# see _TOWN_LAYER's use below.
 _TOWN_URL = (
     "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb"
     "/Places_CouSub_ConCity_SubMCD/MapServer/{layer}/query"
 )
-_TOWN_LAYER = 1
+
+# WHICH GEOGRAPHY NAMES A PLACE DEPENDS ON THE STATE, and getting it
+# wrong produces a list of names nobody recognises.
+#
+# Layer 1 is County Subdivisions. In the "strong MCD" states — Census's
+# own term — those are real units of government that people live in and
+# vote in: Rhode Island has 39 towns and only 8 incorporated places, so
+# places alone would miss where four out of five Rhode Islanders live.
+#
+# Layer 4 is Incorporated Places. Everywhere else, county subdivisions
+# are statistical inventions: Georgia's are Census County Divisions with
+# names like "Fairburn-Union City CCD" that appear on no sign and in no
+# address, while its incorporated places are "Roswell city" and
+# "Alpharetta city" — what a resident would actually type.
+_STRONG_MCD_STATES = {
+    "CT", "ME", "MA", "MI", "MN", "NH", "NJ", "NY", "PA", "RI", "VT", "WI",
+}
+_COUNTY_SUBDIVISION_LAYER = 1
+_INCORPORATED_PLACE_LAYER = 4
 
 # Census fills the gaps between real towns — open water, mostly — with a
 # placeholder "subdivision" carrying this name. It is a real polygon and
@@ -236,8 +249,12 @@ def _districts(state_fips: str, chamber: str) -> list[tuple[str, list, tuple]]:
     return out
 
 
-def _towns(state_fips: str) -> list[tuple[str, list]]:
-    features = _query_all(_TOWN_URL.format(layer=_TOWN_LAYER), {
+def _towns(state: str, state_fips: str) -> list[tuple[str, list]]:
+    layer = (
+        _COUNTY_SUBDIVISION_LAYER if state in _STRONG_MCD_STATES
+        else _INCORPORATED_PLACE_LAYER
+    )
+    features = _query_all(_TOWN_URL.format(layer=layer), {
         "where": f"STATE='{state_fips}'", "outFields": "NAME",
         "returnGeometry": "true", "outSR": _SR, "f": "json",
     })
@@ -309,11 +326,12 @@ def main() -> int:
         if not fips:
             print(f"unknown state {state}")
             return 1
-        towns = _towns(fips)
+        towns = _towns(state, fips)
         if not towns:
             print(f"{state}: no towns returned — refusing to write an empty crosswalk")
             return 1
-        print(f"{state}: {len(towns)} towns")
+        unit = "towns" if state in _STRONG_MCD_STATES else "places"
+        print(f"{state}: {len(towns)} {unit}")
         # Rebuild this state from scratch so a district that disappeared
         # in a remap doesn't survive as a stale entry.
         districts_out = {k: v for k, v in districts_out.items()

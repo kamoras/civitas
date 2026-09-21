@@ -54,6 +54,38 @@ refused despite containing the words the statewide gate keys on.
 Note that opting a tabular state in may require widening its discovery
 URL first: several entries deliberately fetch a federal-only export (New
 Mexico's carries type=FED), which contains no state contests to read.
+
+WHAT THE OTHER TABULAR STATES ACTUALLY HOLD, surveyed live 2026-09-21 by
+running these gates over each state's own 2026 export. A count alone
+never justifies opting a state in -- the flag asserts that its real
+labels were checked -- so the findings are recorded here rather than
+acted on blindly:
+
+  GA   30 federal, 236 legislative seats (exactly its 180 House + 56
+       Senate, which is the structural check), 4 statewide offices
+       resolved. BLOCKED: it elects EIGHT statewide constitutional
+       offices, and "PSC - District N" is a ninth of a different shape
+       -- statewide-elected but district-numbered, fitting neither
+       StatewideNominee nor StateLegNominee. Opting GA in today would
+       drop the statewide omission while still omitting the Public
+       Service Commission. The four Commissioner/Superintendent offices
+       it was also missing ARE fixed here.
+  ID   BLOCKED. "State Representative District N Seat A"/"Seat B": two
+       seats share one district number, so both would collide on the
+       same identifier. Idaho elects two representatives per district
+       from the SAME geography, unlike Minnesota's 10A/10B which are
+       genuinely different districts.
+  WA   BLOCKED, same shape: "State Representative Pos. N - Legislative
+       District N" carries two numbers, and the position is what
+       separates the seats.
+  NC   Only "NC STATE SENATE DISTRICT N" appears in its file; the House
+       wording is therefore unverified.
+  UT   7 seats, clean one-per-district labels, but too few contests to
+       confirm the state's full office set.
+  VA   No state contests at all, which is expected -- Virginia elects
+       its legislature and statewide officers in ODD years -- but its
+       export may simply be scoped, so "none" is not yet a verified
+       claim.
 """
 
 import csv
