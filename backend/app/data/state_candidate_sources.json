@@ -494,6 +494,7 @@
     "AR": {
       "source_name": "Arkansas Secretary of State (Tally ENR election-night results)",
       "strategy": "tally_enr",
+      "statewide_offices": true,
       "runoff_threshold_pct": 50.0,
       "base_url": "https://enr-results-api.totalresults.com",
       "cid": "arkansas",
@@ -752,6 +753,7 @@
     "ND": {
       "source_name": "North Dakota Secretary of State (Tally ENR election-night results)",
       "strategy": "tally_enr",
+      "statewide_offices": true,
       "runoff_threshold_pct": null,
       "base_url": "https://api.resultsnd.sos.nd.gov",
       "cid": "north-dakota",

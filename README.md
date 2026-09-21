@@ -529,6 +529,10 @@ Montana and South Dakota run on that same vendor and are deliberately **not** co
 
 Colorado, Iowa and West Virginia complete the Clarity vendor, bringing it to fourteen states. Each was blocked by exactly one wording: Colorado's `Regent of the University of Colorado — Congressional District N`, a statewide body seated by *congressional* district; Iowa's `Secretary of Agriculture` and `Auditor of State`, its own names for offices already known under others; and West Virginia's `HOUSE OF DELEGATES, 1st District`, which puts the number **before** the word — so the `District N` pattern read nothing and all 117 of its seats were invisible.
 
+Arkansas and North Dakota make sixteen. Their vendor pre-filtered contests by type — Arkansas to `Federal`, North Dakota's results to `SW` — which discarded every state contest before a gate could see one. Those filters exist only to narrow the federal case cheaply, so they are dropped for a state reading its own offices; the unscoped fetch was measured first at 1.9 MB in under a second. North Dakota also states a contest's seat count as a **structured field** (`voteFor: 2`) rather than in the label, which is how its two-members-per-district House reads correctly: District 1 nominates two Democrats and two Republicans.
+
+Arkansas exposed something the earlier states had hidden. It publishes only two of its seven statewide offices, because the other five were unopposed and its feed does not itemise them — so the statewide section now carries the same caveat the legislative one always had: only offices the state's own feed names appear, and an uncontested primary is often not published at all.
+
 Minnesota is also why a district identifier is a **string**: it splits each of its 67 senate districts into two house districts, `10A` and `10B`. And why the town list is truncated for display but searched in full — one of its senate districts covers 292 townships, so the row shows three and "& 133 more", yet typing the 136th town still finds the seat.
 
 ---

@@ -224,6 +224,16 @@ describe("statewide executive offices", () => {
     ).toBeInTheDocument();
   });
 
+  it("says the list is what the state published, not every office", () => {
+    // An office whose primary nobody contested is often not itemised in
+    // a results feed at all — Arkansas publishes two of its seven that
+    // way — so the section must not read as exhaustive.
+    render(<StateBallotClient ballot={ballot(covered)} />);
+    expect(
+      screen.getByText(/Only offices named in the state's own results feed appear/)
+    ).toBeInTheDocument();
+  });
+
   it("says plainly that no money or score exists for these offices", () => {
     // They have no FEC filing. Without this line the absence of the
     // funding bars every federal race on the page shows reads as missing
