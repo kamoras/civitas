@@ -1,6 +1,2661 @@
 {
  "_source": "U.S. Census Bureau TIGERweb: current-vintage state legislative district polygons (TIGERweb/Legislative layers 1 and 2) against county-subdivision polygons, resolved by point sampling inside each town. See scripts/fetch_state_leg_crosswalk.py for why the block assignment files and a plain spatial intersect both give wrong answers here.",
  "districts": {
+  "CA-lower-1": [
+   "Alturas city",
+   "Amador City city",
+   "Anderson city",
+   "Colfax city",
+   "Dorris city",
+   "Dunsmuir city",
+   "Etna city",
+   "Fort Jones city",
+   "Grass Valley city",
+   "Jackson city",
+   "Loyalton city",
+   "Montague city",
+   "Mount Shasta city",
+   "Nevada City city",
+   "Plymouth city",
+   "Portola city",
+   "Redding city",
+   "Shasta Lake city",
+   "South Lake Tahoe city",
+   "Susanville city",
+   "Sutter Creek city",
+   "Truckee town",
+   "Tulelake city",
+   "Weed city",
+   "Yreka city"
+  ],
+  "CA-lower-10": [
+   "Elk Grove city",
+   "Sacramento city"
+  ],
+  "CA-lower-11": [
+   "Benicia city",
+   "Dixon city",
+   "Fairfield city",
+   "Oakley city",
+   "Rio Vista city",
+   "Suisun City city",
+   "Vacaville city",
+   "Vallejo city"
+  ],
+  "CA-lower-12": [
+   "Belvedere city",
+   "Corte Madera town",
+   "Cotati city",
+   "Fairfax town",
+   "Larkspur city",
+   "Mill Valley city",
+   "Novato city",
+   "Petaluma city",
+   "Rohnert Park city",
+   "Ross town",
+   "San Anselmo town",
+   "San Rafael city",
+   "Santa Rosa city",
+   "Sausalito city",
+   "Tiburon town"
+  ],
+  "CA-lower-13": [
+   "Mountain House city",
+   "Stockton city",
+   "Tracy city"
+  ],
+  "CA-lower-14": [
+   "Albany city",
+   "Berkeley city",
+   "El Cerrito city",
+   "Hercules city",
+   "Oakland city",
+   "Piedmont city",
+   "Pinole city",
+   "Richmond city",
+   "San Pablo city"
+  ],
+  "CA-lower-15": [
+   "Antioch city",
+   "Brentwood city",
+   "Clayton city",
+   "Concord city",
+   "Martinez city",
+   "Pittsburg city",
+   "Pleasant Hill city"
+  ],
+  "CA-lower-16": [
+   "Danville town",
+   "Dublin city",
+   "Lafayette city",
+   "Livermore city",
+   "Moraga town",
+   "Orinda city",
+   "Pleasanton city",
+   "San Ramon city",
+   "Walnut Creek city"
+  ],
+  "CA-lower-17": [
+   "San Francisco city"
+  ],
+  "CA-lower-18": [
+   "Alameda city",
+   "Emeryville city",
+   "Oakland city"
+  ],
+  "CA-lower-19": [
+   "Colma town",
+   "Daly City city",
+   "San Bruno city",
+   "San Francisco city",
+   "South San Francisco city"
+  ],
+  "CA-lower-2": [
+   "Arcata city",
+   "Blue Lake city",
+   "Cloverdale city",
+   "Crescent City city",
+   "Eureka city",
+   "Ferndale city",
+   "Fort Bragg city",
+   "Fortuna city",
+   "Healdsburg city",
+   "Point Arena city",
+   "Rio Dell city",
+   "Santa Rosa city",
+   "Sebastopol city",
+   "Trinidad city",
+   "Ukiah city",
+   "Willits city",
+   "Windsor town"
+  ],
+  "CA-lower-20": [
+   "Dublin city",
+   "Hayward city",
+   "Oakland city",
+   "Pleasanton city",
+   "San Leandro city",
+   "Union City city"
+  ],
+  "CA-lower-21": [
+   "Atherton town",
+   "Belmont city",
+   "Brisbane city",
+   "Burlingame city",
+   "East Palo Alto city",
+   "Foster City city",
+   "Hillsborough town",
+   "Menlo Park city",
+   "Millbrae city",
+   "Redwood City city",
+   "San Bruno city",
+   "San Carlos city",
+   "San Mateo city",
+   "South San Francisco city"
+  ],
+  "CA-lower-22": [
+   "Ceres city",
+   "Gustine city",
+   "Modesto city",
+   "Newman city",
+   "Patterson city",
+   "Turlock city"
+  ],
+  "CA-lower-23": [
+   "Atherton town",
+   "Campbell city",
+   "Half Moon Bay city",
+   "Los Altos Hills town",
+   "Los Altos city",
+   "Menlo Park city",
+   "Mountain View city",
+   "Pacifica city",
+   "Palo Alto city",
+   "Portola Valley town",
+   "San Jose city",
+   "Saratoga city",
+   "Woodside town"
+  ],
+  "CA-lower-24": [
+   "Fremont city",
+   "Milpitas city",
+   "Newark city",
+   "San Jose city",
+   "Union City city"
+  ],
+  "CA-lower-25": [
+   "San Jose city"
+  ],
+  "CA-lower-26": [
+   "Cupertino city",
+   "San Jose city",
+   "Santa Clara city",
+   "Sunnyvale city"
+  ],
+  "CA-lower-27": [
+   "Atwater city",
+   "Chowchilla city",
+   "Coalinga city",
+   "Dos Palos city",
+   "Firebaugh city",
+   "Fresno city",
+   "Huron city",
+   "Kerman city",
+   "Livingston city",
+   "Los Banos city",
+   "Madera city",
+   "Mendota city",
+   "Merced city",
+   "San Joaquin city"
+  ],
+  "CA-lower-28": [
+   "Los Gatos town",
+   "Monte Sereno city",
+   "Morgan Hill city",
+   "San Jose city",
+   "Santa Cruz city",
+   "Scotts Valley city"
+  ],
+  "CA-lower-29": [
+   "Gilroy city",
+   "Gonzales city",
+   "Greenfield city",
+   "Hollister city",
+   "King City city",
+   "Salinas city",
+   "San Juan Bautista city",
+   "Soledad city",
+   "Watsonville city"
+  ],
+  "CA-lower-3": [
+   "Biggs city",
+   "Chico city",
+   "Corning city",
+   "Gridley city",
+   "Lincoln city",
+   "Live Oak city",
+   "Marysville city",
+   "Orland city",
+   "Oroville city",
+   "Paradise town",
+   "Red Bluff city",
+   "Tehama city",
+   "Wheatland city",
+   "Willows city",
+   "Yuba City city"
+  ],
+  "CA-lower-30": [
+   "Arroyo Grande city",
+   "Atascadero city",
+   "Capitola city",
+   "Carmel-by-the-Sea city",
+   "Del Rey Oaks city",
+   "El Paso de Robles (Paso Robles) city",
+   "Grover Beach city",
+   "Marina city",
+   "Monterey city",
+   "Morro Bay city",
+   "Pacific Grove city",
+   "Pismo Beach city",
+   "San Luis Obispo city",
+   "Sand City city",
+   "Seaside city",
+   "Watsonville city"
+  ],
+  "CA-lower-31": [
+   "Clovis city",
+   "Fowler city",
+   "Fresno city",
+   "Kingsburg city",
+   "Orange Cove city",
+   "Parlier city",
+   "Reedley city",
+   "Sanger city",
+   "Selma city"
+  ],
+  "CA-lower-32": [
+   "Bakersfield city",
+   "Exeter city",
+   "Lindsay city",
+   "Maricopa city",
+   "Ridgecrest city",
+   "Taft city",
+   "Tehachapi city",
+   "Tulare city",
+   "Visalia city",
+   "Woodlake city"
+  ],
+  "CA-lower-33": [
+   "Avenal city",
+   "Corcoran city",
+   "Dinuba city",
+   "Farmersville city",
+   "Hanford city",
+   "Kingsburg city",
+   "Lemoore city",
+   "Lindsay city",
+   "Parlier city",
+   "Porterville city",
+   "Reedley city",
+   "Selma city",
+   "Tulare city",
+   "Visalia city",
+   "Woodlake city"
+  ],
+  "CA-lower-34": [
+   "Apple Valley town",
+   "Barstow city",
+   "Big Bear Lake city",
+   "California City city",
+   "Hesperia city",
+   "Highland city",
+   "Lancaster city",
+   "Palmdale city",
+   "San Bernardino city",
+   "Twentynine Palms city",
+   "Victorville city"
+  ],
+  "CA-lower-35": [
+   "Arvin city",
+   "Bakersfield city",
+   "Delano city",
+   "McFarland city",
+   "Shafter city",
+   "Wasco city"
+  ],
+  "CA-lower-36": [
+   "Blythe city",
+   "Brawley city",
+   "Calexico city",
+   "Calipatria city",
+   "Coachella city",
+   "El Centro city",
+   "Hemet city",
+   "Holtville city",
+   "Imperial city",
+   "Indio city",
+   "Needles city",
+   "Westmorland city"
+  ],
+  "CA-lower-37": [
+   "Buellton city",
+   "Carpinteria city",
+   "Goleta city",
+   "Guadalupe city",
+   "Lompoc city",
+   "Santa Barbara city",
+   "Santa Maria city",
+   "Solvang city"
+  ],
+  "CA-lower-38": [
+   "Camarillo city",
+   "Fillmore city",
+   "Ojai city",
+   "Oxnard city",
+   "Port Hueneme city",
+   "San Buenaventura (Ventura) city",
+   "Santa Paula city"
+  ],
+  "CA-lower-39": [
+   "Adelanto city",
+   "Hesperia city",
+   "Lancaster city",
+   "Palmdale city",
+   "Victorville city"
+  ],
+  "CA-lower-4": [
+   "American Canyon city",
+   "Calistoga city",
+   "Clearlake city",
+   "Colusa city",
+   "Davis city",
+   "Lakeport city",
+   "Napa city",
+   "Sonoma city",
+   "St. Helena city",
+   "West Sacramento city",
+   "Williams city",
+   "Winters city",
+   "Woodland city",
+   "Yountville city"
+  ],
+  "CA-lower-40": [
+   "Los Angeles city",
+   "Santa Clarita city"
+  ],
+  "CA-lower-41": [
+   "Bradbury city",
+   "Claremont city",
+   "Duarte city",
+   "Fontana city",
+   "Hesperia city",
+   "La Ca\u00f1ada Flintridge city",
+   "La Verne city",
+   "Monrovia city",
+   "Pasadena city",
+   "Rancho Cucamonga city",
+   "San Dimas city",
+   "Sierra Madre city",
+   "Upland city"
+  ],
+  "CA-lower-42": [
+   "Agoura Hills city",
+   "Calabasas city",
+   "Camarillo city",
+   "Hidden Hills city",
+   "Los Angeles city",
+   "Malibu city",
+   "Moorpark city",
+   "Simi Valley city",
+   "Thousand Oaks city",
+   "Westlake Village city"
+  ],
+  "CA-lower-43": [
+   "Los Angeles city",
+   "San Fernando city"
+  ],
+  "CA-lower-44": [
+   "Burbank city",
+   "Glendale city",
+   "Los Angeles city"
+  ],
+  "CA-lower-45": [
+   "Fontana city",
+   "Highland city",
+   "Redlands city",
+   "Rialto city",
+   "San Bernardino city"
+  ],
+  "CA-lower-46": [
+   "Los Angeles city"
+  ],
+  "CA-lower-47": [
+   "Banning city",
+   "Beaumont city",
+   "Calimesa city",
+   "Cathedral City city",
+   "Desert Hot Springs city",
+   "Highland city",
+   "Indian Wells city",
+   "La Quinta city",
+   "Loma Linda city",
+   "Palm Desert city",
+   "Palm Springs city",
+   "Rancho Mirage city",
+   "Redlands city",
+   "San Jacinto city",
+   "Yucaipa city",
+   "Yucca Valley town"
+  ],
+  "CA-lower-48": [
+   "Azusa city",
+   "Baldwin Park city",
+   "Covina city",
+   "Duarte city",
+   "Glendora city",
+   "Irwindale city",
+   "Monrovia city",
+   "West Covina city"
+  ],
+  "CA-lower-49": [
+   "Alhambra city",
+   "Arcadia city",
+   "El Monte city",
+   "Monterey Park city",
+   "Rosemead city",
+   "San Gabriel city",
+   "San Marino city",
+   "South Pasadena city",
+   "Temple City city"
+  ],
+  "CA-lower-5": [
+   "Auburn city",
+   "Lincoln city",
+   "Loomis town",
+   "Placerville city",
+   "Rocklin city",
+   "Roseville city"
+  ],
+  "CA-lower-50": [
+   "Colton city",
+   "Fontana city",
+   "Loma Linda city",
+   "Ontario city",
+   "Rancho Cucamonga city",
+   "Redlands city",
+   "Rialto city",
+   "San Bernardino city"
+  ],
+  "CA-lower-51": [
+   "Beverly Hills city",
+   "Los Angeles city",
+   "Santa Monica city",
+   "West Hollywood city"
+  ],
+  "CA-lower-52": [
+   "Glendale city",
+   "Los Angeles city"
+  ],
+  "CA-lower-53": [
+   "Chino city",
+   "Montclair city",
+   "Ontario city",
+   "Pomona city",
+   "Upland city"
+  ],
+  "CA-lower-54": [
+   "Commerce city",
+   "Los Angeles city",
+   "Montebello city",
+   "Vernon city"
+  ],
+  "CA-lower-55": [
+   "Culver City city",
+   "Los Angeles city"
+  ],
+  "CA-lower-56": [
+   "Diamond Bar city",
+   "El Monte city",
+   "Industry city",
+   "La Habra Heights city",
+   "La Puente city",
+   "Pico Rivera city",
+   "South El Monte city",
+   "Walnut city",
+   "Whittier city"
+  ],
+  "CA-lower-57": [
+   "Los Angeles city"
+  ],
+  "CA-lower-58": [
+   "Corona city",
+   "Eastvale city",
+   "Grand Terrace city",
+   "Jurupa Valley city",
+   "Riverside city"
+  ],
+  "CA-lower-59": [
+   "Anaheim city",
+   "Brea city",
+   "Chino Hills city",
+   "Chino city",
+   "Fullerton city",
+   "Orange city",
+   "Placentia city",
+   "Villa Park city",
+   "Yorba Linda city"
+  ],
+  "CA-lower-6": [
+   "Sacramento city"
+  ],
+  "CA-lower-60": [
+   "Beaumont city",
+   "Hemet city",
+   "Moreno Valley city",
+   "Perris city",
+   "Riverside city",
+   "San Jacinto city"
+  ],
+  "CA-lower-61": [
+   "Gardena city",
+   "Hawthorne city",
+   "Inglewood city",
+   "Lawndale city",
+   "Los Angeles city"
+  ],
+  "CA-lower-62": [
+   "Bellflower city",
+   "Huntington Park city",
+   "Lakewood city",
+   "Lynwood city",
+   "Maywood city",
+   "Paramount city",
+   "South Gate city"
+  ],
+  "CA-lower-63": [
+   "Canyon Lake city",
+   "Corona city",
+   "Eastvale city",
+   "Lake Elsinore city",
+   "Menifee city",
+   "Norco city",
+   "Riverside city"
+  ],
+  "CA-lower-64": [
+   "Bell Gardens city",
+   "Bell city",
+   "Cudahy city",
+   "Downey city",
+   "La Habra city",
+   "La Mirada city",
+   "Norwalk city",
+   "Santa Fe Springs city"
+  ],
+  "CA-lower-65": [
+   "Carson city",
+   "Compton city",
+   "Long Beach city",
+   "Los Angeles city"
+  ],
+  "CA-lower-66": [
+   "El Segundo city",
+   "Gardena city",
+   "Hermosa Beach city",
+   "Lomita city",
+   "Los Angeles city",
+   "Manhattan Beach city",
+   "Palos Verdes Estates city",
+   "Rancho Palos Verdes city",
+   "Redondo Beach city",
+   "Rolling Hills Estates city",
+   "Rolling Hills city",
+   "Torrance city"
+  ],
+  "CA-lower-67": [
+   "Anaheim city",
+   "Artesia city",
+   "Buena Park city",
+   "Cerritos city",
+   "Cypress city",
+   "Fullerton city",
+   "Hawaiian Gardens city",
+   "La Palma city"
+  ],
+  "CA-lower-68": [
+   "Anaheim city",
+   "Orange city",
+   "Santa Ana city"
+  ],
+  "CA-lower-69": [
+   "Avalon city",
+   "Carson city",
+   "Long Beach city",
+   "Signal Hill city"
+  ],
+  "CA-lower-7": [
+   "Citrus Heights city",
+   "Folsom city",
+   "Rancho Cordova city"
+  ],
+  "CA-lower-70": [
+   "Fountain Valley city",
+   "Garden Grove city",
+   "Huntington Beach city",
+   "Los Alamitos city",
+   "Santa Ana city",
+   "Seal Beach city",
+   "Stanton city",
+   "Westminster city"
+  ],
+  "CA-lower-71": [
+   "Mission Viejo city",
+   "Murrieta city",
+   "Rancho Santa Margarita city",
+   "Temecula city",
+   "Wildomar city"
+  ],
+  "CA-lower-72": [
+   "Aliso Viejo city",
+   "Huntington Beach city",
+   "Laguna Beach city",
+   "Laguna Hills city",
+   "Laguna Woods city",
+   "Lake Forest city",
+   "Newport Beach city",
+   "Seal Beach city"
+  ],
+  "CA-lower-73": [
+   "Costa Mesa city",
+   "Irvine city",
+   "Tustin city"
+  ],
+  "CA-lower-74": [
+   "Dana Point city",
+   "Laguna Niguel city",
+   "Oceanside city",
+   "San Clemente city",
+   "San Juan Capistrano city",
+   "Vista city"
+  ],
+  "CA-lower-75": [
+   "Poway city",
+   "San Diego city",
+   "Santee city"
+  ],
+  "CA-lower-76": [
+   "Escondido city",
+   "San Diego city",
+   "San Marcos city"
+  ],
+  "CA-lower-77": [
+   "Carlsbad city",
+   "Coronado city",
+   "Del Mar city",
+   "Encinitas city",
+   "National City city",
+   "San Diego city",
+   "Solana Beach city"
+  ],
+  "CA-lower-78": [
+   "El Cajon city",
+   "San Diego city"
+  ],
+  "CA-lower-79": [
+   "El Cajon city",
+   "La Mesa city",
+   "Lemon Grove city",
+   "San Diego city"
+  ],
+  "CA-lower-8": [
+   "Angels city",
+   "Bishop city",
+   "Clovis city",
+   "Fresno city",
+   "Mammoth Lakes town",
+   "Sonora city"
+  ],
+  "CA-lower-80": [
+   "Chula Vista city",
+   "Imperial Beach city",
+   "National City city",
+   "San Diego city"
+  ],
+  "CA-lower-9": [
+   "Elk Grove city",
+   "Escalon city",
+   "Galt city",
+   "Hughson city",
+   "Ione city",
+   "Isleton city",
+   "Lathrop city",
+   "Lodi city",
+   "Manteca city",
+   "Modesto city",
+   "Oakdale city",
+   "Ripon city",
+   "Riverbank city",
+   "Stockton city",
+   "Waterford city"
+  ],
+  "CA-upper-1": [
+   "Alturas city",
+   "Anderson city",
+   "Auburn city",
+   "Biggs city",
+   "Chico city",
+   "Colfax city",
+   "Colusa city",
+   "Corning city",
+   "Dorris city",
+   "Dunsmuir city",
+   "Etna city",
+   "Fort Jones city",
+   "Grass Valley city",
+   "Gridley city",
+   "Live Oak city",
+   "Loyalton city",
+   "Marysville city",
+   "Montague city",
+   "Mount Shasta city",
+   "Nevada City city",
+   "Orland city",
+   "Oroville city",
+   "Paradise town",
+   "Portola city",
+   "Red Bluff city",
+   "Redding city",
+   "Shasta Lake city",
+   "Susanville city",
+   "Tehama city",
+   "Tulelake city",
+   "Weed city",
+   "Wheatland city",
+   "Williams city",
+   "Willows city",
+   "Yreka city",
+   "Yuba City city"
+  ],
+  "CA-upper-10": [
+   "Fremont city",
+   "Hayward city",
+   "Milpitas city",
+   "Newark city",
+   "San Jose city",
+   "Santa Clara city",
+   "Sunnyvale city",
+   "Union City city"
+  ],
+  "CA-upper-11": [
+   "Colma town",
+   "Daly City city",
+   "San Bruno city",
+   "San Francisco city",
+   "South San Francisco city"
+  ],
+  "CA-upper-12": [
+   "Bakersfield city",
+   "California City city",
+   "Clovis city",
+   "Exeter city",
+   "Fresno city",
+   "Lindsay city",
+   "Maricopa city",
+   "Ridgecrest city",
+   "Shafter city",
+   "Taft city",
+   "Tehachapi city",
+   "Tulare city",
+   "Visalia city",
+   "Woodlake city"
+  ],
+  "CA-upper-13": [
+   "Atherton town",
+   "Belmont city",
+   "Brisbane city",
+   "Burlingame city",
+   "Campbell city",
+   "Cupertino city",
+   "East Palo Alto city",
+   "Foster City city",
+   "Half Moon Bay city",
+   "Hillsborough town",
+   "Los Altos Hills town",
+   "Los Altos city",
+   "Los Gatos town",
+   "Menlo Park city",
+   "Millbrae city",
+   "Monte Sereno city",
+   "Mountain View city",
+   "Pacifica city",
+   "Palo Alto city",
+   "Portola Valley town",
+   "Redwood City city",
+   "San Bruno city",
+   "San Carlos city",
+   "San Mateo city",
+   "Saratoga city",
+   "South San Francisco city",
+   "Woodside town"
+  ],
+  "CA-upper-14": [
+   "Atwater city",
+   "Chowchilla city",
+   "Coalinga city",
+   "Dos Palos city",
+   "Firebaugh city",
+   "Fowler city",
+   "Fresno city",
+   "Gustine city",
+   "Huron city",
+   "Kerman city",
+   "Kingsburg city",
+   "Livingston city",
+   "Los Banos city",
+   "Madera city",
+   "Mendota city",
+   "Merced city",
+   "Orange Cove city",
+   "Parlier city",
+   "Reedley city",
+   "San Joaquin city",
+   "Sanger city",
+   "Selma city"
+  ],
+  "CA-upper-15": [
+   "Gilroy city",
+   "Morgan Hill city",
+   "San Jose city"
+  ],
+  "CA-upper-16": [
+   "Arvin city",
+   "Avenal city",
+   "Bakersfield city",
+   "Corcoran city",
+   "Delano city",
+   "Dinuba city",
+   "Farmersville city",
+   "Hanford city",
+   "Kingsburg city",
+   "Lemoore city",
+   "Lindsay city",
+   "McFarland city",
+   "Parlier city",
+   "Porterville city",
+   "Selma city",
+   "Shafter city",
+   "Tulare city",
+   "Visalia city",
+   "Wasco city",
+   "Woodlake city"
+  ],
+  "CA-upper-17": [
+   "Arroyo Grande city",
+   "Atascadero city",
+   "Capitola city",
+   "Carmel-by-the-Sea city",
+   "Del Rey Oaks city",
+   "El Paso de Robles (Paso Robles) city",
+   "Gonzales city",
+   "Greenfield city",
+   "Hollister city",
+   "King City city",
+   "Marina city",
+   "Monterey city",
+   "Morro Bay city",
+   "Pacific Grove city",
+   "Pismo Beach city",
+   "Salinas city",
+   "San Juan Bautista city",
+   "San Luis Obispo city",
+   "Sand City city",
+   "Santa Cruz city",
+   "Scotts Valley city",
+   "Seaside city",
+   "Soledad city",
+   "Watsonville city"
+  ],
+  "CA-upper-18": [
+   "Blythe city",
+   "Brawley city",
+   "Calexico city",
+   "Calipatria city",
+   "Chula Vista city",
+   "Coachella city",
+   "El Centro city",
+   "Holtville city",
+   "Imperial Beach city",
+   "Imperial city",
+   "Indio city",
+   "National City city",
+   "Needles city",
+   "San Diego city",
+   "Westmorland city"
+  ],
+  "CA-upper-19": [
+   "Apple Valley town",
+   "Banning city",
+   "Barstow city",
+   "Beaumont city",
+   "Big Bear Lake city",
+   "Calimesa city",
+   "Cathedral City city",
+   "Colton city",
+   "Desert Hot Springs city",
+   "Grand Terrace city",
+   "Hemet city",
+   "Highland city",
+   "Indian Wells city",
+   "La Quinta city",
+   "Loma Linda city",
+   "Moreno Valley city",
+   "Palm Desert city",
+   "Palm Springs city",
+   "Rancho Mirage city",
+   "Redlands city",
+   "San Bernardino city",
+   "Twentynine Palms city",
+   "Yucaipa city",
+   "Yucca Valley town"
+  ],
+  "CA-upper-2": [
+   "Arcata city",
+   "Belvedere city",
+   "Blue Lake city",
+   "Clearlake city",
+   "Cloverdale city",
+   "Corte Madera town",
+   "Crescent City city",
+   "Eureka city",
+   "Fairfax town",
+   "Ferndale city",
+   "Fort Bragg city",
+   "Fortuna city",
+   "Healdsburg city",
+   "Lakeport city",
+   "Larkspur city",
+   "Mill Valley city",
+   "Novato city",
+   "Petaluma city",
+   "Point Arena city",
+   "Rio Dell city",
+   "Ross town",
+   "San Anselmo town",
+   "San Rafael city",
+   "Santa Rosa city",
+   "Sausalito city",
+   "Sebastopol city",
+   "Tiburon town",
+   "Trinidad city",
+   "Ukiah city",
+   "Willits city",
+   "Windsor town"
+  ],
+  "CA-upper-20": [
+   "Burbank city",
+   "Los Angeles city",
+   "San Fernando city"
+  ],
+  "CA-upper-21": [
+   "Buellton city",
+   "Camarillo city",
+   "Carpinteria city",
+   "Fillmore city",
+   "Goleta city",
+   "Grover Beach city",
+   "Guadalupe city",
+   "Lompoc city",
+   "Ojai city",
+   "Oxnard city",
+   "Port Hueneme city",
+   "San Buenaventura (Ventura) city",
+   "Santa Barbara city",
+   "Santa Maria city",
+   "Santa Paula city",
+   "Solvang city"
+  ],
+  "CA-upper-22": [
+   "Azusa city",
+   "Baldwin Park city",
+   "Bradbury city",
+   "Chino city",
+   "Covina city",
+   "Duarte city",
+   "El Monte city",
+   "Irwindale city",
+   "La Verne city",
+   "Montclair city",
+   "Ontario city",
+   "Pomona city",
+   "San Dimas city",
+   "South El Monte city",
+   "West Covina city"
+  ],
+  "CA-upper-23": [
+   "Adelanto city",
+   "Hesperia city",
+   "Lancaster city",
+   "Palmdale city",
+   "Santa Clarita city",
+   "Victorville city"
+  ],
+  "CA-upper-24": [
+   "Agoura Hills city",
+   "Beverly Hills city",
+   "Calabasas city",
+   "El Segundo city",
+   "Gardena city",
+   "Hermosa Beach city",
+   "Hidden Hills city",
+   "Lomita city",
+   "Los Angeles city",
+   "Malibu city",
+   "Manhattan Beach city",
+   "Palos Verdes Estates city",
+   "Rancho Palos Verdes city",
+   "Redondo Beach city",
+   "Rolling Hills Estates city",
+   "Rolling Hills city",
+   "Santa Monica city",
+   "Torrance city",
+   "West Hollywood city",
+   "Westlake Village city"
+  ],
+  "CA-upper-25": [
+   "Alhambra city",
+   "Arcadia city",
+   "Claremont city",
+   "Fontana city",
+   "Glendale city",
+   "Glendora city",
+   "La Ca\u00f1ada Flintridge city",
+   "Monrovia city",
+   "Monterey Park city",
+   "Pasadena city",
+   "Rancho Cucamonga city",
+   "Rosemead city",
+   "San Gabriel city",
+   "San Marino city",
+   "Sierra Madre city",
+   "South Pasadena city",
+   "Temple City city",
+   "Upland city"
+  ],
+  "CA-upper-26": [
+   "Los Angeles city",
+   "Vernon city"
+  ],
+  "CA-upper-27": [
+   "Los Angeles city",
+   "Moorpark city",
+   "Simi Valley city",
+   "Thousand Oaks city"
+  ],
+  "CA-upper-28": [
+   "Culver City city",
+   "Los Angeles city"
+  ],
+  "CA-upper-29": [
+   "Colton city",
+   "Fontana city",
+   "Grand Terrace city",
+   "Highland city",
+   "Loma Linda city",
+   "Rancho Cucamonga city",
+   "Redlands city",
+   "Rialto city",
+   "San Bernardino city",
+   "Upland city"
+  ],
+  "CA-upper-3": [
+   "American Canyon city",
+   "Benicia city",
+   "Brentwood city",
+   "Calistoga city",
+   "Cotati city",
+   "Davis city",
+   "Dixon city",
+   "Fairfield city",
+   "Isleton city",
+   "Napa city",
+   "Oakley city",
+   "Rio Vista city",
+   "Rohnert Park city",
+   "Sonoma city",
+   "St. Helena city",
+   "Suisun City city",
+   "Vacaville city",
+   "Vallejo city",
+   "West Sacramento city",
+   "Winters city",
+   "Woodland city",
+   "Yountville city"
+  ],
+  "CA-upper-30": [
+   "Bellflower city",
+   "Brea city",
+   "Diamond Bar city",
+   "Downey city",
+   "Industry city",
+   "La Habra Heights city",
+   "La Mirada city",
+   "La Puente city",
+   "Montebello city",
+   "Norwalk city",
+   "Pico Rivera city",
+   "Placentia city",
+   "Santa Fe Springs city",
+   "Walnut city",
+   "West Covina city",
+   "Whittier city"
+  ],
+  "CA-upper-31": [
+   "Corona city",
+   "Eastvale city",
+   "Fontana city",
+   "Hemet city",
+   "Jurupa Valley city",
+   "Menifee city",
+   "Moreno Valley city",
+   "Perris city",
+   "Riverside city",
+   "San Jacinto city"
+  ],
+  "CA-upper-32": [
+   "Brea city",
+   "Canyon Lake city",
+   "Chino Hills city",
+   "Corona city",
+   "Lake Elsinore city",
+   "Menifee city",
+   "Murrieta city",
+   "Norco city",
+   "Riverside city",
+   "Temecula city",
+   "Wildomar city",
+   "Yorba Linda city"
+  ],
+  "CA-upper-33": [
+   "Avalon city",
+   "Bell Gardens city",
+   "Bell city",
+   "Commerce city",
+   "Cudahy city",
+   "Huntington Park city",
+   "Lakewood city",
+   "Long Beach city",
+   "Lynwood city",
+   "Maywood city",
+   "Paramount city",
+   "Signal Hill city",
+   "South Gate city"
+  ],
+  "CA-upper-34": [
+   "Anaheim city",
+   "Buena Park city",
+   "Fullerton city",
+   "Garden Grove city",
+   "La Habra city",
+   "Orange city",
+   "Placentia city",
+   "Santa Ana city"
+  ],
+  "CA-upper-35": [
+   "Carson city",
+   "Compton city",
+   "Gardena city",
+   "Hawthorne city",
+   "Inglewood city",
+   "Lawndale city",
+   "Los Angeles city"
+  ],
+  "CA-upper-36": [
+   "Artesia city",
+   "Buena Park city",
+   "Cerritos city",
+   "Cypress city",
+   "Dana Point city",
+   "Fountain Valley city",
+   "Garden Grove city",
+   "Hawaiian Gardens city",
+   "Huntington Beach city",
+   "La Palma city",
+   "Laguna Beach city",
+   "Los Alamitos city",
+   "Newport Beach city",
+   "San Clemente city",
+   "Seal Beach city",
+   "Stanton city",
+   "Westminster city"
+  ],
+  "CA-upper-37": [
+   "Aliso Viejo city",
+   "Anaheim city",
+   "Costa Mesa city",
+   "Fullerton city",
+   "Irvine city",
+   "Laguna Niguel city",
+   "Laguna Woods city",
+   "Lake Forest city",
+   "Orange city",
+   "Placentia city",
+   "Santa Ana city",
+   "Tustin city",
+   "Villa Park city",
+   "Yorba Linda city"
+  ],
+  "CA-upper-38": [
+   "Carlsbad city",
+   "Del Mar city",
+   "Encinitas city",
+   "Laguna Hills city",
+   "Mission Viejo city",
+   "Oceanside city",
+   "Rancho Santa Margarita city",
+   "San Diego city",
+   "San Juan Capistrano city",
+   "Solana Beach city",
+   "Vista city"
+  ],
+  "CA-upper-39": [
+   "Coronado city",
+   "El Cajon city",
+   "La Mesa city",
+   "Lemon Grove city",
+   "National City city",
+   "San Diego city"
+  ],
+  "CA-upper-4": [
+   "Amador City city",
+   "Angels city",
+   "Bishop city",
+   "Ceres city",
+   "Hughson city",
+   "Ione city",
+   "Jackson city",
+   "Mammoth Lakes town",
+   "Modesto city",
+   "Newman city",
+   "Oakdale city",
+   "Patterson city",
+   "Placerville city",
+   "Plymouth city",
+   "Riverbank city",
+   "Sonora city",
+   "South Lake Tahoe city",
+   "Sutter Creek city",
+   "Truckee town",
+   "Turlock city",
+   "Waterford city"
+  ],
+  "CA-upper-40": [
+   "Escondido city",
+   "Poway city",
+   "San Diego city",
+   "San Marcos city",
+   "Santee city"
+  ],
+  "CA-upper-5": [
+   "Dublin city",
+   "Escalon city",
+   "Lathrop city",
+   "Livermore city",
+   "Lodi city",
+   "Manteca city",
+   "Mountain House city",
+   "Pleasanton city",
+   "Ripon city",
+   "Stockton city",
+   "Tracy city"
+  ],
+  "CA-upper-6": [
+   "Auburn city",
+   "Citrus Heights city",
+   "Elk Grove city",
+   "Folsom city",
+   "Galt city",
+   "Lincoln city",
+   "Loomis town",
+   "Rancho Cordova city",
+   "Rocklin city",
+   "Roseville city"
+  ],
+  "CA-upper-7": [
+   "Alameda city",
+   "Albany city",
+   "Berkeley city",
+   "El Cerrito city",
+   "Emeryville city",
+   "Hercules city",
+   "Oakland city",
+   "Piedmont city",
+   "Pinole city",
+   "Richmond city",
+   "San Pablo city"
+  ],
+  "CA-upper-8": [
+   "Elk Grove city",
+   "Sacramento city"
+  ],
+  "CA-upper-9": [
+   "Antioch city",
+   "Clayton city",
+   "Concord city",
+   "Danville town",
+   "Lafayette city",
+   "Martinez city",
+   "Moraga town",
+   "Orinda city",
+   "Pittsburg city",
+   "Pleasant Hill city",
+   "San Leandro city",
+   "San Ramon city",
+   "Walnut Creek city"
+  ],
+  "FL-lower-1": [
+   "Century town",
+   "Pensacola city"
+  ],
+  "FL-lower-10": [
+   "Alachua city",
+   "Brooker town",
+   "Fort White town",
+   "Glen St. Mary town",
+   "Hampton city",
+   "High Springs city",
+   "La Crosse town",
+   "Lake Butler city",
+   "Lake City city",
+   "Lawtey city",
+   "Macclenny city",
+   "Newberry city",
+   "Raiford town",
+   "Starke city",
+   "Waldo city",
+   "Worthington Springs town"
+  ],
+  "FL-lower-100": [
+   "Deerfield Beach city",
+   "Fort Lauderdale city",
+   "Hillsboro Beach town",
+   "Lauderdale-by-the-Sea town",
+   "Lighthouse Point city",
+   "Pompano Beach city",
+   "Sea Ranch Lakes village"
+  ],
+  "FL-lower-101": [
+   "Dania Beach city",
+   "Davie town",
+   "Fort Lauderdale city",
+   "Hallandale Beach city",
+   "Hollywood city"
+  ],
+  "FL-lower-102": [
+   "Cooper City city",
+   "Davie town",
+   "Pembroke Pines city",
+   "Plantation city",
+   "Southwest Ranches town",
+   "Sunrise city"
+  ],
+  "FL-lower-103": [
+   "Davie town",
+   "Miramar city",
+   "Pembroke Pines city",
+   "Southwest Ranches town",
+   "Sunrise city",
+   "Weston city"
+  ],
+  "FL-lower-104": [
+   "Miami Gardens city",
+   "Miramar city",
+   "Pembroke Pines city"
+  ],
+  "FL-lower-105": [
+   "Hallandale Beach city",
+   "Hollywood city",
+   "Miramar city",
+   "Pembroke Park town",
+   "Pembroke Pines city",
+   "West Park city"
+  ],
+  "FL-lower-106": [
+   "Aventura city",
+   "Bal Harbour village",
+   "Bay Harbor Islands town",
+   "Golden Beach town",
+   "Indian Creek village",
+   "Miami Beach city",
+   "North Bay Village city",
+   "North Miami city",
+   "Sunny Isles Beach city",
+   "Surfside town"
+  ],
+  "FL-lower-107": [
+   "Miami Gardens city",
+   "North Miami Beach city",
+   "North Miami city"
+  ],
+  "FL-lower-108": [
+   "Biscayne Park village",
+   "El Portal village",
+   "Miami Shores village",
+   "Miami city",
+   "North Miami city"
+  ],
+  "FL-lower-109": [
+   "Miami city",
+   "Opa-locka city"
+  ],
+  "FL-lower-11": [
+   "Orange Park town"
+  ],
+  "FL-lower-110": [
+   "Hialeah city",
+   "Miami Lakes town"
+  ],
+  "FL-lower-111": [
+   "Doral city",
+   "Hialeah Gardens city",
+   "Hialeah city",
+   "Medley town",
+   "Sweetwater city"
+  ],
+  "FL-lower-112": [
+   "Hialeah city",
+   "Miami Springs city",
+   "Miami city",
+   "Virginia Gardens village"
+  ],
+  "FL-lower-113": [
+   "Key Biscayne village",
+   "Miami city"
+  ],
+  "FL-lower-114": [
+   "Coral Gables city",
+   "Miami city",
+   "South Miami city",
+   "West Miami city"
+  ],
+  "FL-lower-115": [
+   "Cutler Bay town",
+   "Palmetto Bay village",
+   "Pinecrest village"
+  ],
+  "FL-lower-116": [
+   "Sweetwater city"
+  ],
+  "FL-lower-117": [
+   "Florida City city",
+   "Homestead city"
+  ],
+  "FL-lower-118": [
+   "Miami-Dade County"
+  ],
+  "FL-lower-119": [
+   "Miami-Dade County"
+  ],
+  "FL-lower-12": [
+   "Jacksonville city"
+  ],
+  "FL-lower-120": [
+   "Homestead city",
+   "Islamorada, Village of Islands village",
+   "Key Colony Beach city",
+   "Key West city",
+   "Layton city",
+   "Marathon city"
+  ],
+  "FL-lower-13": [
+   "Jacksonville city"
+  ],
+  "FL-lower-14": [
+   "Jacksonville city"
+  ],
+  "FL-lower-15": [
+   "Baldwin town",
+   "Callahan town",
+   "Fernandina Beach city",
+   "Hilliard town",
+   "Jacksonville city"
+  ],
+  "FL-lower-16": [
+   "Atlantic Beach city",
+   "Jacksonville Beach city",
+   "Jacksonville city",
+   "Neptune Beach city"
+  ],
+  "FL-lower-17": [
+   "Jacksonville city"
+  ],
+  "FL-lower-18": [
+   "St. Johns County"
+  ],
+  "FL-lower-19": [
+   "Beverly Beach town",
+   "Bunnell city",
+   "Flagler Beach city",
+   "Marineland town",
+   "Palm Coast city",
+   "St. Augustine Beach city",
+   "St. Augustine city"
+  ],
+  "FL-lower-2": [
+   "Gulf Breeze city",
+   "Pensacola city"
+  ],
+  "FL-lower-20": [
+   "Crescent City city",
+   "Green Cove Springs city",
+   "Interlachen town",
+   "Keystone Heights city",
+   "Palatka city",
+   "Penney Farms town",
+   "Pomona Park town",
+   "Welaka town"
+  ],
+  "FL-lower-21": [
+   "Gainesville city",
+   "Hawthorne city",
+   "McIntosh town",
+   "Micanopy town",
+   "Ocala city",
+   "Reddick town"
+  ],
+  "FL-lower-22": [
+   "Archer city",
+   "Bell town",
+   "Bronson town",
+   "Cedar Key city",
+   "Chiefland city",
+   "Fanning Springs city",
+   "Gainesville city",
+   "Inglis town",
+   "Newberry city",
+   "Otter Creek town",
+   "Trenton city",
+   "Williston city",
+   "Yankeetown town"
+  ],
+  "FL-lower-23": [
+   "Crystal River city",
+   "Dunnellon city",
+   "Inverness city"
+  ],
+  "FL-lower-24": [
+   "Belleview city",
+   "Ocala city"
+  ],
+  "FL-lower-25": [
+   "Astatula town",
+   "Clermont city",
+   "Groveland city",
+   "Howey-in-the-Hills town",
+   "Leesburg city",
+   "Mascotte city",
+   "Minneola city",
+   "Montverde town"
+  ],
+  "FL-lower-26": [
+   "Eustis city",
+   "Fruitland Park city",
+   "Lady Lake town",
+   "Leesburg city",
+   "Mount Dora city",
+   "Tavares city",
+   "Umatilla city"
+  ],
+  "FL-lower-27": [
+   "Belleview city",
+   "DeBary city",
+   "Orange City city",
+   "Pierson town"
+  ],
+  "FL-lower-28": [
+   "Daytona Beach Shores city",
+   "Daytona Beach city",
+   "Flagler Beach city",
+   "Holly Hill city",
+   "Ormond Beach city",
+   "South Daytona city"
+  ],
+  "FL-lower-29": [
+   "Daytona Beach city",
+   "DeLand city",
+   "Deltona city",
+   "Lake Helen city"
+  ],
+  "FL-lower-3": [
+   "Crestview city",
+   "Jay town",
+   "Laurel Hill city",
+   "Milton city"
+  ],
+  "FL-lower-30": [
+   "Edgewater city",
+   "New Smyrna Beach city",
+   "Oak Hill city",
+   "Ponce Inlet town",
+   "Port Orange city",
+   "Titusville city"
+  ],
+  "FL-lower-31": [
+   "Cape Canaveral city",
+   "Cocoa Beach city",
+   "Cocoa city",
+   "Satellite Beach city",
+   "Titusville city"
+  ],
+  "FL-lower-32": [
+   "Indialantic town",
+   "Indian Harbour Beach city",
+   "Melbourne Village town",
+   "Melbourne city",
+   "Palm Shores town",
+   "Rockledge city"
+  ],
+  "FL-lower-33": [
+   "Malabar town",
+   "Melbourne Beach town",
+   "Melbourne city",
+   "Palm Bay city",
+   "West Melbourne city"
+  ],
+  "FL-lower-34": [
+   "Fellsmere city",
+   "Grant-Valkaria town",
+   "Indian River Shores town",
+   "Orchid town",
+   "Palm Bay city",
+   "Sebastian city",
+   "Vero Beach city"
+  ],
+  "FL-lower-35": [
+   "Orlando city",
+   "St. Cloud city"
+  ],
+  "FL-lower-36": [
+   "Lake Mary city",
+   "Longwood city",
+   "Sanford city",
+   "Winter Springs city"
+  ],
+  "FL-lower-37": [
+   "Oviedo city",
+   "Winter Springs city"
+  ],
+  "FL-lower-38": [
+   "Altamonte Springs city",
+   "Casselberry city",
+   "Winter Springs city"
+  ],
+  "FL-lower-39": [
+   "Apopka city",
+   "Ocoee city",
+   "Winter Garden city"
+  ],
+  "FL-lower-4": [
+   "Cinco Bayou town",
+   "Crestview city",
+   "Destin city",
+   "Fort Walton Beach city",
+   "Mary Esther city",
+   "Niceville city",
+   "Shalimar town",
+   "Valparaiso city"
+  ],
+  "FL-lower-40": [
+   "Ocoee city",
+   "Orlando city"
+  ],
+  "FL-lower-41": [
+   "Ocoee city",
+   "Orlando city"
+  ],
+  "FL-lower-42": [
+   "Belle Isle city",
+   "Eatonville town",
+   "Edgewood city",
+   "Maitland city",
+   "Orlando city",
+   "Winter Park city"
+  ],
+  "FL-lower-43": [
+   "Orlando city"
+  ],
+  "FL-lower-44": [
+   "Orlando city"
+  ],
+  "FL-lower-45": [
+   "Bay Lake city",
+   "Lake Buena Vista city",
+   "Oakland town",
+   "Ocoee city",
+   "Windermere town",
+   "Winter Garden city"
+  ],
+  "FL-lower-46": [
+   "Kissimmee city"
+  ],
+  "FL-lower-47": [
+   "Kissimmee city",
+   "St. Cloud city"
+  ],
+  "FL-lower-48": [
+   "Dundee town",
+   "Frostproof city",
+   "Haines City city",
+   "Highland Park village",
+   "Hillcrest Heights town",
+   "Lake Hamilton town",
+   "Lake Wales city",
+   "Winter Haven city"
+  ],
+  "FL-lower-49": [
+   "Bartow city",
+   "Eagle Lake city",
+   "Fort Meade city",
+   "Mulberry city"
+  ],
+  "FL-lower-5": [
+   "Alford town",
+   "Altha town",
+   "Bascom town",
+   "Blountstown city",
+   "Bonifay city",
+   "Campbellton town",
+   "Caryville town",
+   "Chipley city",
+   "Cottondale town",
+   "DeFuniak Springs city",
+   "Ebro town",
+   "Esto town",
+   "Freeport city",
+   "Graceville city",
+   "Grand Ridge town",
+   "Greenwood town",
+   "Jacob City city",
+   "Malone town",
+   "Marianna city",
+   "Noma town",
+   "Paxton town",
+   "Ponce de Leon town",
+   "Sneads town",
+   "Vernon city",
+   "Wausau town",
+   "Westville town"
+  ],
+  "FL-lower-50": [
+   "Lakeland city"
+  ],
+  "FL-lower-51": [
+   "Auburndale city",
+   "Davenport city",
+   "Haines City city",
+   "Lake Alfred city",
+   "Polk City town"
+  ],
+  "FL-lower-52": [
+   "Brooksville city",
+   "Bushnell city",
+   "Center Hill city",
+   "Coleman city",
+   "Webster city",
+   "Wildwood city"
+  ],
+  "FL-lower-53": [
+   "Hernando County",
+   "Pasco County"
+  ],
+  "FL-lower-54": [
+   "Dade City city",
+   "San Antonio city",
+   "St. Leo town",
+   "Zephyrhills city"
+  ],
+  "FL-lower-55": [
+   "Pasco County"
+  ],
+  "FL-lower-56": [
+   "New Port Richey city",
+   "Port Richey city"
+  ],
+  "FL-lower-57": [
+   "Dunedin city",
+   "Oldsmar city",
+   "Safety Harbor city",
+   "Tarpon Springs city"
+  ],
+  "FL-lower-58": [
+   "Belleair Beach city",
+   "Belleair Bluffs city",
+   "Belleair Shore town",
+   "Belleair town",
+   "Clearwater city",
+   "Dunedin city",
+   "Indian Rocks Beach city"
+  ],
+  "FL-lower-59": [
+   "Largo city",
+   "Pinellas Park city",
+   "Seminole city"
+  ],
+  "FL-lower-6": [
+   "Callaway city",
+   "Lynn Haven city",
+   "Mexico Beach city",
+   "Panama City Beach city",
+   "Panama City city",
+   "Parker city",
+   "Springfield city"
+  ],
+  "FL-lower-60": [
+   "Pinellas Park city",
+   "St. Petersburg city"
+  ],
+  "FL-lower-61": [
+   "Gulfport city",
+   "Indian Shores town",
+   "Kenneth City town",
+   "Madeira Beach city",
+   "North Redington Beach town",
+   "Pinellas Park city",
+   "Redington Beach town",
+   "Redington Shores town",
+   "Seminole city",
+   "South Pasadena city",
+   "St. Pete Beach city",
+   "St. Petersburg city",
+   "Treasure Island city"
+  ],
+  "FL-lower-62": [
+   "St. Petersburg city",
+   "Tampa city"
+  ],
+  "FL-lower-63": [
+   "Tampa city",
+   "Temple Terrace city"
+  ],
+  "FL-lower-64": [
+   "Tampa city"
+  ],
+  "FL-lower-65": [
+   "Tampa city"
+  ],
+  "FL-lower-66": [
+   "Tampa city"
+  ],
+  "FL-lower-67": [
+   "Tampa city",
+   "Temple Terrace city"
+  ],
+  "FL-lower-68": [
+   "Plant City city"
+  ],
+  "FL-lower-69": [
+   "Hillsborough County"
+  ],
+  "FL-lower-7": [
+   "Apalachicola city",
+   "Branford town",
+   "Bristol city",
+   "Carrabelle city",
+   "Cross City town",
+   "Horseshoe Beach town",
+   "Jasper city",
+   "Jennings town",
+   "Live Oak city",
+   "Mayo town",
+   "Perry city",
+   "Port St. Joe city",
+   "Sopchoppy city",
+   "St. Marks city",
+   "Wewahitchka city",
+   "White Springs town"
+  ],
+  "FL-lower-70": [
+   "Hillsborough County",
+   "Manatee County"
+  ],
+  "FL-lower-71": [
+   "Anna Maria city",
+   "Bradenton Beach city",
+   "Bradenton city",
+   "Holmes Beach city",
+   "Longboat Key town",
+   "Palmetto city"
+  ],
+  "FL-lower-72": [
+   "Manatee County"
+  ],
+  "FL-lower-73": [
+   "Longboat Key town",
+   "Sarasota city",
+   "Venice city"
+  ],
+  "FL-lower-74": [
+   "North Port city",
+   "Venice city"
+  ],
+  "FL-lower-75": [
+   "North Port city",
+   "Punta Gorda city"
+  ],
+  "FL-lower-76": [
+   "Arcadia city",
+   "Cape Coral city",
+   "Punta Gorda city"
+  ],
+  "FL-lower-77": [
+   "Fort Myers city"
+  ],
+  "FL-lower-78": [
+   "Fort Myers city"
+  ],
+  "FL-lower-79": [
+   "Cape Coral city"
+  ],
+  "FL-lower-8": [
+   "Chattahoochee city",
+   "Greensboro town",
+   "Gretna city",
+   "Havana town",
+   "Midway city",
+   "Quincy city",
+   "Tallahassee city"
+  ],
+  "FL-lower-80": [
+   "Bonita Springs city",
+   "Estero village",
+   "Fort Myers Beach town",
+   "Sanibel city"
+  ],
+  "FL-lower-81": [
+   "Marco Island city",
+   "Naples city"
+  ],
+  "FL-lower-82": [
+   "Clewiston city",
+   "Everglades city",
+   "LaBelle city"
+  ],
+  "FL-lower-83": [
+   "Avon Park city",
+   "Bowling Green city",
+   "Lake Placid town",
+   "Moore Haven city",
+   "Okeechobee city",
+   "Sebring city",
+   "Wauchula city",
+   "Zolfo Springs town"
+  ],
+  "FL-lower-84": [
+   "Fort Pierce city",
+   "Port St. Lucie city",
+   "St. Lucie Village town"
+  ],
+  "FL-lower-85": [
+   "Port St. Lucie city",
+   "Stuart city"
+  ],
+  "FL-lower-86": [
+   "Indiantown village",
+   "Jupiter Inlet Colony town",
+   "Jupiter Island town",
+   "Jupiter town",
+   "Ocean Breeze town",
+   "Sewall's Point town",
+   "Stuart city",
+   "Tequesta village"
+  ],
+  "FL-lower-87": [
+   "Hypoluxo town",
+   "Juno Beach town",
+   "Jupiter town",
+   "Lake Worth Beach city",
+   "Lantana town",
+   "Manalapan town",
+   "North Palm Beach village",
+   "Palm Beach Gardens city",
+   "Palm Beach Shores town",
+   "Palm Beach town",
+   "Riviera Beach city",
+   "South Palm Beach town",
+   "West Palm Beach city"
+  ],
+  "FL-lower-88": [
+   "Haverhill town",
+   "Lake Park town",
+   "Mangonia Park town",
+   "Riviera Beach city",
+   "Royal Palm Beach village",
+   "West Palm Beach city"
+  ],
+  "FL-lower-89": [
+   "Atlantis city",
+   "Cloud Lake town",
+   "Glen Ridge town",
+   "Greenacres city",
+   "Lake Clarke Shores town",
+   "Lake Worth Beach city",
+   "Palm Springs village",
+   "West Palm Beach city"
+  ],
+  "FL-lower-9": [
+   "Greenville town",
+   "Lee town",
+   "Madison city",
+   "Monticello city",
+   "Tallahassee city"
+  ],
+  "FL-lower-90": [
+   "Boynton Beach city",
+   "Briny Breezes town",
+   "Delray Beach city",
+   "Golf village",
+   "Gulf Stream town",
+   "Ocean Ridge town"
+  ],
+  "FL-lower-91": [
+   "Boca Raton city",
+   "Highland Beach town"
+  ],
+  "FL-lower-92": [
+   "Palm Beach County"
+  ],
+  "FL-lower-93": [
+   "Greenacres city",
+   "Royal Palm Beach village",
+   "Wellington village"
+  ],
+  "FL-lower-94": [
+   "Belle Glade city",
+   "Jupiter town",
+   "Loxahatchee Groves town",
+   "Pahokee city",
+   "Palm Beach Gardens city",
+   "Royal Palm Beach village",
+   "South Bay city",
+   "Wellington village",
+   "West Palm Beach city",
+   "Westlake city"
+  ],
+  "FL-lower-95": [
+   "Coconut Creek city",
+   "Coral Springs city",
+   "Margate city",
+   "Parkland city"
+  ],
+  "FL-lower-96": [
+   "Coral Springs city",
+   "Sunrise city",
+   "Tamarac city"
+  ],
+  "FL-lower-97": [
+   "Fort Lauderdale city",
+   "Lauderdale Lakes city",
+   "Lauderhill city",
+   "North Lauderdale city",
+   "Plantation city",
+   "Sunrise city",
+   "Tamarac city"
+  ],
+  "FL-lower-98": [
+   "Deerfield Beach city",
+   "Fort Lauderdale city",
+   "Lauderdale Lakes city",
+   "Oakland Park city",
+   "Pompano Beach city",
+   "Tamarac city"
+  ],
+  "FL-lower-99": [
+   "Fort Lauderdale city",
+   "Lauderdale Lakes city",
+   "Lauderhill city",
+   "Lazy Lake village",
+   "Plantation city",
+   "Wilton Manors city"
+  ],
+  "FL-upper-1": [
+   "Century town",
+   "Crestview city",
+   "Gulf Breeze city",
+   "Jay town",
+   "Laurel Hill city",
+   "Milton city",
+   "Pensacola city"
+  ],
+  "FL-upper-10": [
+   "Altamonte Springs city",
+   "Casselberry city",
+   "Lake Mary city",
+   "Longwood city",
+   "Maitland city",
+   "Orlando city",
+   "Oviedo city",
+   "Sanford city",
+   "Winter Park city",
+   "Winter Springs city"
+  ],
+  "FL-upper-11": [
+   "Brooksville city",
+   "Bushnell city",
+   "Center Hill city",
+   "Coleman city",
+   "Crystal River city",
+   "Inverness city",
+   "Webster city",
+   "Wildwood city"
+  ],
+  "FL-upper-12": [
+   "Auburndale city",
+   "Davenport city",
+   "Dundee town",
+   "Haines City city",
+   "Lake Alfred city",
+   "Lake Hamilton town",
+   "Lake Wales city",
+   "Lakeland city",
+   "Polk City town",
+   "Winter Haven city"
+  ],
+  "FL-upper-13": [
+   "Astatula town",
+   "Bay Lake city",
+   "Clermont city",
+   "Eustis city",
+   "Fruitland Park city",
+   "Groveland city",
+   "Howey-in-the-Hills town",
+   "Lady Lake town",
+   "Lake Buena Vista city",
+   "Leesburg city",
+   "Mascotte city",
+   "Minneola city",
+   "Montverde town",
+   "Mount Dora city",
+   "Oakland town",
+   "Ocoee city",
+   "Tavares city",
+   "Umatilla city",
+   "Windermere town",
+   "Winter Garden city"
+  ],
+  "FL-upper-14": [
+   "Tampa city"
+  ],
+  "FL-upper-15": [
+   "Apopka city",
+   "Eatonville town",
+   "Edgewood city",
+   "Oakland town",
+   "Ocoee city",
+   "Orlando city",
+   "Winter Garden city"
+  ],
+  "FL-upper-16": [
+   "St. Petersburg city",
+   "Tampa city",
+   "Temple Terrace city"
+  ],
+  "FL-upper-17": [
+   "Belle Isle city",
+   "Edgewood city",
+   "Orlando city"
+  ],
+  "FL-upper-18": [
+   "Belleair Beach city",
+   "Belleair Bluffs city",
+   "Belleair Shore town",
+   "Clearwater city",
+   "Gulfport city",
+   "Indian Rocks Beach city",
+   "Indian Shores town",
+   "Kenneth City town",
+   "Largo city",
+   "Madeira Beach city",
+   "North Redington Beach town",
+   "Pinellas Park city",
+   "Redington Beach town",
+   "Redington Shores town",
+   "Seminole city",
+   "South Pasadena city",
+   "St. Pete Beach city",
+   "St. Petersburg city",
+   "Treasure Island city"
+  ],
+  "FL-upper-19": [
+   "Cape Canaveral city",
+   "Cocoa Beach city",
+   "Cocoa city",
+   "Grant-Valkaria town",
+   "Indialantic town",
+   "Indian Harbour Beach city",
+   "Malabar town",
+   "Melbourne Beach town",
+   "Melbourne Village town",
+   "Melbourne city",
+   "Palm Bay city",
+   "Palm Shores town",
+   "Rockledge city",
+   "Satellite Beach city",
+   "West Melbourne city"
+  ],
+  "FL-upper-2": [
+   "Alford town",
+   "Altha town",
+   "Bascom town",
+   "Blountstown city",
+   "Bonifay city",
+   "Callaway city",
+   "Campbellton town",
+   "Caryville town",
+   "Chipley city",
+   "Cinco Bayou town",
+   "Cottondale town",
+   "Crestview city",
+   "DeFuniak Springs city",
+   "Destin city",
+   "Ebro town",
+   "Esto town",
+   "Fort Walton Beach city",
+   "Freeport city",
+   "Graceville city",
+   "Grand Ridge town",
+   "Greenwood town",
+   "Jacob City city",
+   "Lynn Haven city",
+   "Malone town",
+   "Marianna city",
+   "Mary Esther city",
+   "Mexico Beach city",
+   "Niceville city",
+   "Noma town",
+   "Panama City Beach city",
+   "Panama City city",
+   "Parker city",
+   "Paxton town",
+   "Ponce de Leon town",
+   "Shalimar town",
+   "Sneads town",
+   "Springfield city",
+   "Valparaiso city",
+   "Vernon city",
+   "Wausau town",
+   "Westville town"
+  ],
+  "FL-upper-20": [
+   "Anna Maria city",
+   "Bradenton Beach city",
+   "Bradenton city",
+   "Holmes Beach city",
+   "Longboat Key town",
+   "Palmetto city"
+  ],
+  "FL-upper-21": [
+   "Belleair town",
+   "Clearwater city",
+   "Dunedin city",
+   "New Port Richey city",
+   "Oldsmar city",
+   "Port Richey city",
+   "Safety Harbor city",
+   "Tarpon Springs city"
+  ],
+  "FL-upper-22": [
+   "Longboat Key town",
+   "North Port city",
+   "Sarasota city",
+   "Venice city"
+  ],
+  "FL-upper-23": [
+   "Dade City city",
+   "Plant City city",
+   "San Antonio city",
+   "St. Leo town",
+   "Tampa city",
+   "Temple Terrace city",
+   "Zephyrhills city"
+  ],
+  "FL-upper-24": [
+   "Atlantis city",
+   "Cloud Lake town",
+   "Glen Ridge town",
+   "Greenacres city",
+   "Haverhill town",
+   "Hypoluxo town",
+   "Lake Clarke Shores town",
+   "Lake Park town",
+   "Lake Worth Beach city",
+   "Lantana town",
+   "Manalapan town",
+   "Mangonia Park town",
+   "North Palm Beach village",
+   "Palm Beach Gardens city",
+   "Palm Beach Shores town",
+   "Palm Beach town",
+   "Palm Springs village",
+   "Riviera Beach city",
+   "South Palm Beach town",
+   "West Palm Beach city"
+  ],
+  "FL-upper-25": [
+   "Belle Isle city",
+   "Kissimmee city",
+   "Orlando city",
+   "St. Cloud city"
+  ],
+  "FL-upper-26": [
+   "Belle Glade city",
+   "Boca Raton city",
+   "Boynton Beach city",
+   "Briny Breezes town",
+   "Delray Beach city",
+   "Golf village",
+   "Gulf Stream town",
+   "Highland Beach town",
+   "Ocean Ridge town",
+   "Royal Palm Beach village",
+   "South Bay city",
+   "Wellington village"
+  ],
+  "FL-upper-27": [
+   "Arcadia city",
+   "Bartow city",
+   "Bowling Green city",
+   "Eagle Lake city",
+   "Fort Meade city",
+   "Fort Myers city",
+   "Frostproof city",
+   "Highland Park village",
+   "Hillcrest Heights town",
+   "Lake Wales city",
+   "Lakeland city",
+   "Mulberry city",
+   "Punta Gorda city",
+   "Wauchula city",
+   "Winter Haven city",
+   "Zolfo Springs town"
+  ],
+  "FL-upper-28": [
+   "Bonita Springs city",
+   "Clewiston city",
+   "Estero village",
+   "Everglades city",
+   "Fort Myers city",
+   "LaBelle city",
+   "Marco Island city",
+   "Naples city"
+  ],
+  "FL-upper-29": [
+   "Avon Park city",
+   "Fellsmere city",
+   "Fort Pierce city",
+   "Indian River Shores town",
+   "Lake Placid town",
+   "Moore Haven city",
+   "Okeechobee city",
+   "Orchid town",
+   "Port St. Lucie city",
+   "Sebastian city",
+   "Sebring city",
+   "St. Lucie Village town",
+   "Vero Beach city"
+  ],
+  "FL-upper-3": [
+   "Apalachicola city",
+   "Branford town",
+   "Bristol city",
+   "Carrabelle city",
+   "Chattahoochee city",
+   "Cross City town",
+   "Greensboro town",
+   "Greenville town",
+   "Gretna city",
+   "Havana town",
+   "Horseshoe Beach town",
+   "Jasper city",
+   "Jennings town",
+   "Lee town",
+   "Live Oak city",
+   "Madison city",
+   "Mayo town",
+   "Midway city",
+   "Monticello city",
+   "Perry city",
+   "Port St. Joe city",
+   "Quincy city",
+   "Sopchoppy city",
+   "St. Marks city",
+   "Tallahassee city",
+   "Wewahitchka city",
+   "White Springs town"
+  ],
+  "FL-upper-30": [
+   "Boca Raton city",
+   "Coconut Creek city",
+   "Coral Springs city",
+   "Deerfield Beach city",
+   "Margate city",
+   "Parkland city",
+   "Pompano Beach city"
+  ],
+  "FL-upper-31": [
+   "Indiantown village",
+   "Juno Beach town",
+   "Jupiter Inlet Colony town",
+   "Jupiter Island town",
+   "Jupiter town",
+   "Loxahatchee Groves town",
+   "Ocean Breeze town",
+   "Pahokee city",
+   "Palm Beach Gardens city",
+   "Port St. Lucie city",
+   "Royal Palm Beach village",
+   "Sewall's Point town",
+   "Stuart city",
+   "Tequesta village",
+   "Wellington village",
+   "West Palm Beach city",
+   "Westlake city"
+  ],
+  "FL-upper-32": [
+   "Davie town",
+   "Fort Lauderdale city",
+   "Lauderdale Lakes city",
+   "Lauderhill city",
+   "North Lauderdale city",
+   "Oakland Park city",
+   "Plantation city",
+   "Sunrise city",
+   "Tamarac city"
+  ],
+  "FL-upper-33": [
+   "Bonita Springs city",
+   "Cape Coral city",
+   "Estero village",
+   "Fort Myers Beach town",
+   "Fort Myers city",
+   "Sanibel city"
+  ],
+  "FL-upper-34": [
+   "Aventura city",
+   "Bal Harbour village",
+   "Bay Harbor Islands town",
+   "Biscayne Park village",
+   "El Portal village",
+   "Indian Creek village",
+   "Miami Beach city",
+   "Miami Gardens city",
+   "Miami Shores village",
+   "Miami city",
+   "North Bay Village city",
+   "North Miami Beach city",
+   "North Miami city",
+   "Opa-locka city",
+   "Surfside town"
+  ],
+  "FL-upper-35": [
+   "Cooper City city",
+   "Davie town",
+   "Hollywood city",
+   "Miramar city",
+   "Pembroke Pines city",
+   "Southwest Ranches town",
+   "Sunrise city",
+   "Weston city"
+  ],
+  "FL-upper-36": [
+   "Coral Gables city",
+   "Miami Beach city",
+   "Miami city",
+   "Sweetwater city",
+   "West Miami city"
+  ],
+  "FL-upper-37": [
+   "Aventura city",
+   "Dania Beach city",
+   "Davie town",
+   "Deerfield Beach city",
+   "Fort Lauderdale city",
+   "Golden Beach town",
+   "Hallandale Beach city",
+   "Hillsboro Beach town",
+   "Hollywood city",
+   "Lauderdale-by-the-Sea town",
+   "Lazy Lake village",
+   "Lighthouse Point city",
+   "Miramar city",
+   "North Miami Beach city",
+   "Pembroke Park town",
+   "Pompano Beach city",
+   "Sea Ranch Lakes village",
+   "Sunny Isles Beach city",
+   "West Park city",
+   "Wilton Manors city"
+  ],
+  "FL-upper-38": [
+   "Coral Gables city",
+   "Cutler Bay town",
+   "Key Biscayne village",
+   "Miami city",
+   "Palmetto Bay village",
+   "Pinecrest village",
+   "South Miami city"
+  ],
+  "FL-upper-39": [
+   "Doral city",
+   "Hialeah Gardens city",
+   "Hialeah city",
+   "Medley town",
+   "Miami Lakes town",
+   "Miami Springs city",
+   "Opa-locka city",
+   "Sweetwater city",
+   "Virginia Gardens village"
+  ],
+  "FL-upper-4": [
+   "Atlantic Beach city",
+   "Baldwin town",
+   "Callahan town",
+   "Fernandina Beach city",
+   "Hilliard town",
+   "Jacksonville Beach city",
+   "Jacksonville city",
+   "Neptune Beach city"
+  ],
+  "FL-upper-40": [
+   "Florida City city",
+   "Homestead city",
+   "Islamorada, Village of Islands village",
+   "Key Colony Beach city",
+   "Key West city",
+   "Layton city",
+   "Marathon city"
+  ],
+  "FL-upper-5": [
+   "Jacksonville city"
+  ],
+  "FL-upper-6": [
+   "Alachua city",
+   "Bell town",
+   "Brooker town",
+   "Fanning Springs city",
+   "Fort White town",
+   "Gainesville city",
+   "Glen St. Mary town",
+   "Green Cove Springs city",
+   "Hampton city",
+   "High Springs city",
+   "Keystone Heights city",
+   "La Crosse town",
+   "Lake Butler city",
+   "Lake City city",
+   "Lawtey city",
+   "Macclenny city",
+   "Newberry city",
+   "Orange Park town",
+   "Penney Farms town",
+   "Raiford town",
+   "Starke city",
+   "Trenton city",
+   "Waldo city",
+   "Worthington Springs town"
+  ],
+  "FL-upper-7": [
+   "Beverly Beach town",
+   "Bunnell city",
+   "Crescent City city",
+   "Daytona Beach city",
+   "Flagler Beach city",
+   "Holly Hill city",
+   "Interlachen town",
+   "Marineland town",
+   "Ormond Beach city",
+   "Palatka city",
+   "Palm Coast city",
+   "Pierson town",
+   "Pomona Park town",
+   "St. Augustine Beach city",
+   "St. Augustine city",
+   "Welaka town"
+  ],
+  "FL-upper-8": [
+   "Daytona Beach Shores city",
+   "Daytona Beach city",
+   "DeBary city",
+   "DeLand city",
+   "Deltona city",
+   "Edgewater city",
+   "Lake Helen city",
+   "New Smyrna Beach city",
+   "Oak Hill city",
+   "Orange City city",
+   "Ormond Beach city",
+   "Ponce Inlet town",
+   "Port Orange city",
+   "South Daytona city",
+   "Titusville city"
+  ],
+  "FL-upper-9": [
+   "Archer city",
+   "Belleview city",
+   "Bronson town",
+   "Cedar Key city",
+   "Chiefland city",
+   "Dunnellon city",
+   "Fanning Springs city",
+   "Gainesville city",
+   "Hawthorne city",
+   "Inglis town",
+   "McIntosh town",
+   "Micanopy town",
+   "Newberry city",
+   "Ocala city",
+   "Otter Creek town",
+   "Reddick town",
+   "Williston city",
+   "Yankeetown town"
+  ],
   "GA-lower-1": [
    "Fort Oglethorpe city",
    "LaFayette city",
@@ -10679,6 +13334,929 @@
   ],
   "RI-upper-9": [
    "West Warwick town"
+  ],
+  "UT-lower-1": [
+   "Bear River City city",
+   "Brigham City city",
+   "Clarkston town",
+   "Corinne city",
+   "Cornish town",
+   "Deweyville town",
+   "Elwood town",
+   "Fielding town",
+   "Garland city",
+   "Honeyville city",
+   "Howell town",
+   "Mantua town",
+   "Newton town",
+   "Plymouth town",
+   "Portage town",
+   "Snowville town",
+   "Tremonton city"
+  ],
+  "UT-lower-10": [
+   "Ogden city",
+   "Riverdale city",
+   "South Ogden city",
+   "Washington Terrace city"
+  ],
+  "UT-lower-11": [
+   "Clearfield city",
+   "Layton city",
+   "Riverdale city",
+   "Roy city",
+   "South Ogden city",
+   "South Weber city",
+   "Sunset city",
+   "Uintah town",
+   "Washington Terrace city"
+  ],
+  "UT-lower-12": [
+   "Clinton city",
+   "Hooper city",
+   "Marriott-Slaterville city",
+   "Roy city",
+   "Syracuse city",
+   "West Haven city",
+   "West Point city"
+  ],
+  "UT-lower-13": [
+   "Clearfield city",
+   "Clinton city",
+   "Sunset city",
+   "West Point city"
+  ],
+  "UT-lower-14": [
+   "Clearfield city",
+   "Layton city",
+   "Syracuse city"
+  ],
+  "UT-lower-15": [
+   "Kaysville city",
+   "Layton city",
+   "Syracuse city"
+  ],
+  "UT-lower-16": [
+   "Clearfield city",
+   "Layton city",
+   "South Weber city"
+  ],
+  "UT-lower-17": [
+   "Farmington city",
+   "Fruit Heights city",
+   "Kaysville city",
+   "Layton city"
+  ],
+  "UT-lower-18": [
+   "Bountiful city",
+   "Centerville city",
+   "Farmington city",
+   "Kaysville city"
+  ],
+  "UT-lower-19": [
+   "Bountiful city",
+   "Centerville city",
+   "West Bountiful city"
+  ],
+  "UT-lower-2": [
+   "Amalga town",
+   "Hyde Park city",
+   "Lewiston city",
+   "Logan city",
+   "North Logan city",
+   "Richmond city",
+   "Smithfield city",
+   "Trenton town"
+  ],
+  "UT-lower-20": [
+   "Bountiful city",
+   "North Salt Lake city",
+   "Woods Cross city"
+  ],
+  "UT-lower-21": [
+   "Magna city",
+   "Salt Lake City city"
+  ],
+  "UT-lower-22": [
+   "Salt Lake City city"
+  ],
+  "UT-lower-23": [
+   "Emigration Canyon city",
+   "Salt Lake City city"
+  ],
+  "UT-lower-24": [
+   "Salt Lake City city",
+   "South Salt Lake city"
+  ],
+  "UT-lower-25": [
+   "Salt Lake City city",
+   "West Valley City city"
+  ],
+  "UT-lower-26": [
+   "Magna city",
+   "Salt Lake City city",
+   "West Valley City city"
+  ],
+  "UT-lower-27": [
+   "Copperton city",
+   "Kearns city",
+   "Magna city",
+   "South Jordan city",
+   "West Jordan city",
+   "West Valley City city"
+  ],
+  "UT-lower-28": [
+   "Erda city",
+   "Lake Point city",
+   "Tooele city"
+  ],
+  "UT-lower-29": [
+   "Delta city",
+   "Erda city",
+   "Fillmore city",
+   "Grantsville city",
+   "Hinckley town",
+   "Holden town",
+   "Kanosh town",
+   "Lake Point city",
+   "Leamington town",
+   "Lynndyl town",
+   "Meadow town",
+   "Oak City town",
+   "Rush Valley town",
+   "Scipio town",
+   "Stockton town",
+   "Vernon town",
+   "Wendover city"
+  ],
+  "UT-lower-3": [
+   "Logan city",
+   "Providence city",
+   "Richmond city",
+   "River Heights city"
+  ],
+  "UT-lower-30": [
+   "West Valley City city"
+  ],
+  "UT-lower-31": [
+   "Taylorsville city",
+   "West Valley City city"
+  ],
+  "UT-lower-32": [
+   "Millcreek city",
+   "Salt Lake City city",
+   "South Salt Lake city"
+  ],
+  "UT-lower-33": [
+   "Holladay city",
+   "Millcreek city",
+   "Salt Lake City city"
+  ],
+  "UT-lower-34": [
+   "Holladay city",
+   "Millcreek city",
+   "Murray city"
+  ],
+  "UT-lower-35": [
+   "Millcreek city",
+   "Murray city",
+   "Taylorsville city"
+  ],
+  "UT-lower-36": [
+   "Taylorsville city",
+   "West Jordan city"
+  ],
+  "UT-lower-37": [
+   "Kearns city",
+   "Taylorsville city",
+   "West Jordan city"
+  ],
+  "UT-lower-38": [
+   "West Jordan city"
+  ],
+  "UT-lower-39": [
+   "Midvale city",
+   "Murray city",
+   "Sandy city",
+   "West Jordan city"
+  ],
+  "UT-lower-4": [
+   "Coalville city",
+   "Francis town",
+   "Garden City town",
+   "Henefer town",
+   "Kamas city",
+   "Laketown town",
+   "Morgan city",
+   "Oakley city",
+   "Park City city",
+   "Randolph town",
+   "Woodruff town"
+  ],
+  "UT-lower-40": [
+   "Midvale city",
+   "Murray city",
+   "Sandy city"
+  ],
+  "UT-lower-41": [
+   "Alta town",
+   "Brighton town",
+   "Cottonwood Heights city",
+   "Holladay city",
+   "Midvale city",
+   "Murray city"
+  ],
+  "UT-lower-42": [
+   "Cottonwood Heights city",
+   "Sandy city"
+  ],
+  "UT-lower-43": [
+   "Cottonwood Heights city",
+   "Midvale city",
+   "Sandy city",
+   "South Jordan city",
+   "White City city"
+  ],
+  "UT-lower-44": [
+   "South Jordan city",
+   "West Jordan city"
+  ],
+  "UT-lower-45": [
+   "Riverton city",
+   "Sandy city",
+   "South Jordan city",
+   "White City city"
+  ],
+  "UT-lower-46": [
+   "Bluffdale city",
+   "Draper city"
+  ],
+  "UT-lower-47": [
+   "Bluffdale city",
+   "Draper city",
+   "Riverton city"
+  ],
+  "UT-lower-48": [
+   "Herriman city",
+   "Riverton city",
+   "South Jordan city"
+  ],
+  "UT-lower-49": [
+   "Herriman city",
+   "Riverton city",
+   "South Jordan city"
+  ],
+  "UT-lower-5": [
+   "Hyrum city",
+   "Logan city",
+   "Mendon city",
+   "Millville city",
+   "Nibley city",
+   "Paradise town",
+   "Providence city",
+   "River Heights city",
+   "Wellsville city"
+  ],
+  "UT-lower-50": [
+   "Cedar Fort town",
+   "Eagle Mountain city",
+   "Fairfield town",
+   "Genola town",
+   "Saratoga Springs city"
+  ],
+  "UT-lower-51": [
+   "Bluffdale city",
+   "Eagle Mountain city",
+   "Lehi city",
+   "Saratoga Springs city"
+  ],
+  "UT-lower-52": [
+   "American Fork city",
+   "Lehi city",
+   "Saratoga Springs city"
+  ],
+  "UT-lower-53": [
+   "American Fork city",
+   "Lehi city"
+  ],
+  "UT-lower-54": [
+   "Alpine city",
+   "American Fork city",
+   "Cedar Hills city",
+   "Draper city",
+   "Highland city",
+   "Lehi city",
+   "Pleasant Grove city"
+  ],
+  "UT-lower-55": [
+   "American Fork city",
+   "Pleasant Grove city"
+  ],
+  "UT-lower-56": [
+   "American Fork city",
+   "Lindon city",
+   "Orem city",
+   "Pleasant Grove city",
+   "Vineyard town"
+  ],
+  "UT-lower-57": [
+   "Orem city",
+   "Vineyard town"
+  ],
+  "UT-lower-58": [
+   "Lindon city",
+   "Orem city",
+   "Provo city"
+  ],
+  "UT-lower-59": [
+   "Charleston town",
+   "Daniel town",
+   "Heber city",
+   "Hideout town",
+   "Independence town",
+   "Interlaken town",
+   "Midway city",
+   "Park City city",
+   "Wallsburg town"
+  ],
+  "UT-lower-6": [
+   "Brigham City city",
+   "Farr West city",
+   "Harrisville city",
+   "Marriott-Slaterville city",
+   "Ogden city",
+   "Perry city",
+   "Plain City city",
+   "Pleasant View city",
+   "Willard city"
+  ],
+  "UT-lower-60": [
+   "Provo city"
+  ],
+  "UT-lower-61": [
+   "Orem city",
+   "Provo city",
+   "Vineyard town"
+  ],
+  "UT-lower-62": [
+   "Provo city",
+   "Springville city"
+  ],
+  "UT-lower-63": [
+   "Mapleton city",
+   "Salem city",
+   "Spanish Fork city",
+   "Springville city"
+  ],
+  "UT-lower-64": [
+   "Salem city",
+   "Spanish Fork city",
+   "Woodland Hills city"
+  ],
+  "UT-lower-65": [
+   "Elk Ridge city",
+   "Payson city",
+   "Salem city",
+   "Santaquin city"
+  ],
+  "UT-lower-66": [
+   "Centerfield town",
+   "Ephraim city",
+   "Eureka city",
+   "Fairview city",
+   "Fayette town",
+   "Fountain Green city",
+   "Genola town",
+   "Goshen town",
+   "Gunnison city",
+   "Levan town",
+   "Manti city",
+   "Mayfield town",
+   "Mona city",
+   "Moroni city",
+   "Mount Pleasant city",
+   "Nephi city",
+   "Rocky Ridge town",
+   "Santaquin city",
+   "Spring City city",
+   "Sterling town",
+   "Wales town"
+  ],
+  "UT-lower-67": [
+   "Castle Dale city",
+   "Clawson town",
+   "Cleveland town",
+   "Duchesne city",
+   "East Carbon city",
+   "Elmo town",
+   "Ferron city",
+   "Helper city",
+   "Huntington city",
+   "Myton city",
+   "Orangeville city",
+   "Price city",
+   "Roosevelt city",
+   "Scofield town",
+   "Wellington city"
+  ],
+  "UT-lower-68": [
+   "Altamont town",
+   "Ballard town",
+   "Dutch John town",
+   "Manila town",
+   "Naples city",
+   "Tabiona town",
+   "Vernal city"
+  ],
+  "UT-lower-69": [
+   "Alton town",
+   "Antimony town",
+   "Bicknell town",
+   "Big Water town",
+   "Blanding city",
+   "Bluff town",
+   "Boulder town",
+   "Bryce Canyon City town",
+   "Cannonville town",
+   "Castle Valley town",
+   "Emery town",
+   "Escalante city",
+   "Ferron city",
+   "Glendale town",
+   "Green River city",
+   "Hanksville town",
+   "Hatch town",
+   "Henrieville town",
+   "Kanab city",
+   "Loa town",
+   "Lyman town",
+   "Moab city",
+   "Monticello city",
+   "Orderville town",
+   "Panguitch city",
+   "Torrey town",
+   "Tropic town"
+  ],
+  "UT-lower-7": [
+   "Harrisville city",
+   "North Ogden city",
+   "Ogden city",
+   "Pleasant View city"
+  ],
+  "UT-lower-70": [
+   "Annabella town",
+   "Aurora city",
+   "Beaver city",
+   "Cedar City city",
+   "Central Valley town",
+   "Circleville town",
+   "Elsinore town",
+   "Enoch city",
+   "Glenwood town",
+   "Joseph town",
+   "Junction town",
+   "Kingston town",
+   "Koosharem town",
+   "Marysvale town",
+   "Milford city",
+   "Minersville town",
+   "Monroe city",
+   "Parowan city",
+   "Redmond town",
+   "Richfield city",
+   "Salina city",
+   "Sigurd town"
+  ],
+  "UT-lower-71": [
+   "Brian Head town",
+   "Cedar City city",
+   "Kanarraville town",
+   "Paragonah town",
+   "Parowan city"
+  ],
+  "UT-lower-72": [
+   "Apple Valley town",
+   "Hildale city",
+   "Hurricane city",
+   "La Verkin city",
+   "New Harmony town",
+   "Rockville town",
+   "Springdale town",
+   "St. George city",
+   "Toquerville city",
+   "Virgin town",
+   "Washington city"
+  ],
+  "UT-lower-73": [
+   "Leeds town",
+   "St. George city",
+   "Washington city"
+  ],
+  "UT-lower-74": [
+   "Ivins city",
+   "Santa Clara city",
+   "St. George city"
+  ],
+  "UT-lower-75": [
+   "Enterprise city",
+   "St. George city"
+  ],
+  "UT-lower-8": [
+   "Huntsville town",
+   "North Ogden city",
+   "Ogden city",
+   "Pleasant View city"
+  ],
+  "UT-lower-9": [
+   "Marriott-Slaterville city",
+   "Ogden city",
+   "Roy city",
+   "West Haven city"
+  ],
+  "UT-upper-1": [
+   "Bear River City city",
+   "Brigham City city",
+   "Corinne city",
+   "Deweyville town",
+   "Elwood town",
+   "Erda city",
+   "Fielding town",
+   "Garland city",
+   "Grantsville city",
+   "Honeyville city",
+   "Howell town",
+   "Hyrum city",
+   "Lake Point city",
+   "Mantua town",
+   "Millville city",
+   "Nibley city",
+   "Paradise town",
+   "Perry city",
+   "Plymouth town",
+   "Portage town",
+   "Snowville town",
+   "Tremonton city",
+   "Wellsville city",
+   "Wendover city",
+   "Willard city"
+  ],
+  "UT-upper-10": [
+   "Magna city",
+   "Salt Lake City city",
+   "West Valley City city"
+  ],
+  "UT-upper-11": [
+   "Cedar Fort town",
+   "Copperton city",
+   "Eagle Mountain city",
+   "Erda city",
+   "Fairfield town",
+   "Grantsville city",
+   "Herriman city",
+   "Kearns city",
+   "Lake Point city",
+   "Magna city",
+   "Rush Valley town",
+   "South Jordan city",
+   "Stockton town",
+   "Tooele city",
+   "Vernon town",
+   "West Jordan city",
+   "West Valley City city"
+  ],
+  "UT-upper-12": [
+   "Kearns city",
+   "Taylorsville city",
+   "West Valley City city"
+  ],
+  "UT-upper-13": [
+   "Millcreek city",
+   "Murray city",
+   "Salt Lake City city",
+   "South Salt Lake city",
+   "West Valley City city"
+  ],
+  "UT-upper-14": [
+   "Holladay city",
+   "Millcreek city",
+   "Murray city",
+   "Salt Lake City city"
+  ],
+  "UT-upper-15": [
+   "Brighton town",
+   "Cottonwood Heights city",
+   "Holladay city",
+   "Midvale city",
+   "Sandy city",
+   "South Jordan city",
+   "West Jordan city",
+   "White City city"
+  ],
+  "UT-upper-16": [
+   "Taylorsville city",
+   "West Jordan city"
+  ],
+  "UT-upper-17": [
+   "Herriman city",
+   "Riverton city",
+   "South Jordan city",
+   "West Jordan city"
+  ],
+  "UT-upper-18": [
+   "Bluffdale city",
+   "Draper city",
+   "Herriman city",
+   "Lehi city",
+   "Riverton city",
+   "Saratoga Springs city"
+  ],
+  "UT-upper-19": [
+   "Alpine city",
+   "Alta town",
+   "Cottonwood Heights city",
+   "Draper city",
+   "Highland city",
+   "Lehi city",
+   "Sandy city",
+   "South Jordan city",
+   "White City city"
+  ],
+  "UT-upper-2": [
+   "Amalga town",
+   "Clarkston town",
+   "Cornish town",
+   "Garden City town",
+   "Hyde Park city",
+   "Laketown town",
+   "Lewiston city",
+   "Logan city",
+   "Mendon city",
+   "Millville city",
+   "Newton town",
+   "Nibley city",
+   "North Logan city",
+   "Providence city",
+   "Randolph town",
+   "Richmond city",
+   "River Heights city",
+   "Smithfield city",
+   "Trenton town",
+   "Woodruff town"
+  ],
+  "UT-upper-20": [
+   "Altamont town",
+   "Ballard town",
+   "Charleston town",
+   "Daniel town",
+   "Duchesne city",
+   "Dutch John town",
+   "Francis town",
+   "Heber city",
+   "Hideout town",
+   "Interlaken town",
+   "Kamas city",
+   "Manila town",
+   "Midway city",
+   "Myton city",
+   "Naples city",
+   "Oakley city",
+   "Park City city",
+   "Roosevelt city",
+   "Tabiona town",
+   "Vernal city"
+  ],
+  "UT-upper-21": [
+   "Alpine city",
+   "American Fork city",
+   "Cedar Hills city",
+   "Highland city",
+   "Lehi city",
+   "Lindon city",
+   "Pleasant Grove city"
+  ],
+  "UT-upper-22": [
+   "Draper city",
+   "Eagle Mountain city",
+   "Lehi city",
+   "Saratoga Springs city"
+  ],
+  "UT-upper-23": [
+   "Lindon city",
+   "Orem city",
+   "Pleasant Grove city",
+   "Provo city",
+   "Vineyard town"
+  ],
+  "UT-upper-24": [
+   "Orem city",
+   "Provo city",
+   "Wallsburg town"
+  ],
+  "UT-upper-25": [
+   "Elk Ridge city",
+   "Payson city",
+   "Provo city",
+   "Salem city",
+   "Santaquin city",
+   "Spanish Fork city",
+   "Springville city",
+   "Vineyard town",
+   "Woodland Hills city"
+  ],
+  "UT-upper-26": [
+   "Big Water town",
+   "Blanding city",
+   "Bluff town",
+   "Castle Dale city",
+   "Castle Valley town",
+   "Charleston town",
+   "Clawson town",
+   "Cleveland town",
+   "Daniel town",
+   "East Carbon city",
+   "Elmo town",
+   "Emery town",
+   "Ferron city",
+   "Green River city",
+   "Hanksville town",
+   "Helper city",
+   "Huntington city",
+   "Independence town",
+   "Kanab city",
+   "Mapleton city",
+   "Moab city",
+   "Monticello city",
+   "Orangeville city",
+   "Payson city",
+   "Price city",
+   "Santaquin city",
+   "Scofield town",
+   "Springville city",
+   "Wellington city"
+  ],
+  "UT-upper-27": [
+   "Alton town",
+   "Annabella town",
+   "Antimony town",
+   "Apple Valley town",
+   "Aurora city",
+   "Bicknell town",
+   "Boulder town",
+   "Bryce Canyon City town",
+   "Cannonville town",
+   "Centerfield town",
+   "Central Valley town",
+   "Circleville town",
+   "Elsinore town",
+   "Ephraim city",
+   "Escalante city",
+   "Eureka city",
+   "Fairview city",
+   "Fayette town",
+   "Fillmore city",
+   "Fountain Green city",
+   "Genola town",
+   "Glendale town",
+   "Glenwood town",
+   "Goshen town",
+   "Gunnison city",
+   "Hatch town",
+   "Henrieville town",
+   "Hildale city",
+   "Holden town",
+   "Hurricane city",
+   "Joseph town",
+   "Junction town",
+   "Kanab city",
+   "Kanosh town",
+   "Kingston town",
+   "Koosharem town",
+   "La Verkin city",
+   "Leamington town",
+   "Levan town",
+   "Loa town",
+   "Lyman town",
+   "Lynndyl town",
+   "Manti city",
+   "Marysvale town",
+   "Mayfield town",
+   "Meadow town",
+   "Mona city",
+   "Monroe city",
+   "Moroni city",
+   "Mount Pleasant city",
+   "Nephi city",
+   "Oak City town",
+   "Orderville town",
+   "Panguitch city",
+   "Redmond town",
+   "Richfield city",
+   "Rockville town",
+   "Rocky Ridge town",
+   "Salina city",
+   "Santaquin city",
+   "Scipio town",
+   "Sigurd town",
+   "Spring City city",
+   "Springdale town",
+   "St. George city",
+   "Sterling town",
+   "Toquerville city",
+   "Torrey town",
+   "Tropic town",
+   "Virgin town",
+   "Wales town",
+   "Washington city"
+  ],
+  "UT-upper-28": [
+   "Beaver city",
+   "Brian Head town",
+   "Cedar City city",
+   "Delta city",
+   "Enoch city",
+   "Hinckley town",
+   "Hurricane city",
+   "Kanarraville town",
+   "La Verkin city",
+   "Leeds town",
+   "Milford city",
+   "Minersville town",
+   "New Harmony town",
+   "Paragonah town",
+   "Parowan city",
+   "Toquerville city",
+   "Washington city"
+  ],
+  "UT-upper-29": [
+   "Enterprise city",
+   "Ivins city",
+   "Santa Clara city",
+   "St. George city"
+  ],
+  "UT-upper-3": [
+   "Coalville city",
+   "Harrisville city",
+   "Henefer town",
+   "Huntsville town",
+   "Marriott-Slaterville city",
+   "Morgan city",
+   "North Ogden city",
+   "Ogden city",
+   "Pleasant View city",
+   "West Haven city"
+  ],
+  "UT-upper-4": [
+   "Clinton city",
+   "Farr West city",
+   "Hooper city",
+   "Marriott-Slaterville city",
+   "Ogden city",
+   "Plain City city",
+   "Pleasant View city",
+   "Roy city",
+   "West Haven city",
+   "West Point city"
+  ],
+  "UT-upper-5": [
+   "Clearfield city",
+   "Huntsville town",
+   "Ogden city",
+   "Riverdale city",
+   "Roy city",
+   "South Ogden city",
+   "South Weber city",
+   "Sunset city",
+   "Uintah town",
+   "Washington Terrace city"
+  ],
+  "UT-upper-6": [
+   "Clearfield city",
+   "Clinton city",
+   "Kaysville city",
+   "Layton city",
+   "Syracuse city",
+   "West Point city"
+  ],
+  "UT-upper-7": [
+   "Centerville city",
+   "Farmington city",
+   "Fruit Heights city",
+   "Kaysville city",
+   "Layton city",
+   "Morgan city",
+   "South Weber city"
+  ],
+  "UT-upper-8": [
+   "Bountiful city",
+   "Centerville city",
+   "North Salt Lake city",
+   "Salt Lake City city",
+   "West Bountiful city",
+   "Woods Cross city"
+  ],
+  "UT-upper-9": [
+   "Emigration Canyon city",
+   "Salt Lake City city"
   ],
   "WA-lower-1": [
    "Bothell city",

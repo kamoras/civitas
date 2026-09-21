@@ -172,6 +172,7 @@
     "CA": {
       "source_name": "California Secretary of State (certified Statement of Vote)",
       "strategy": "tabular",
+      "statewide_offices": true,
       "advance_count": 2,
       "runoff_threshold_pct": null,
       "discovery": {
@@ -250,6 +251,7 @@
     "FL": {
       "source_name": "Florida Department of State, Division of Elections (election night results file)",
       "strategy": "tabular",
+      "statewide_offices": true,
       "runoff_threshold_pct": null,
       "discovery": {
         "mode": "landing_page",
@@ -281,6 +283,7 @@
     "UT": {
       "source_name": "Utah Lieutenant Governor's Office (official results portal)",
       "strategy": "tabular",
+      "statewide_offices": true,
       "runoff_threshold_pct": null,
       "discovery": {
         "mode": "sos_api_report",

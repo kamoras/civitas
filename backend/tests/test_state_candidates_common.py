@@ -599,3 +599,61 @@ class TestBareHouseOfRepresentatives:
         """North Carolina's judges carry both a district AND a seat."""
         assert common.parse_state_leg_office(
             "NC DISTRICT COURT JUDGE DISTRICT 3 SEAT 2 (REP)") is None
+
+
+class TestMoreStatewideOffices:
+    """Offices found by running the gates over California's, Florida's
+    and Utah's real 2026 exports. Each was the last thing standing
+    between its state and honest coverage.
+    """
+
+    def test_floridas_fourth_cabinet_officer(self):
+        assert common.parse_statewide_office(
+            "Chief Financial Officer DEM") == ("chief_financial_officer", None)
+
+    def test_boards_seated_by_district_carry_their_seat(self):
+        """California's Board of Equalization and Utah's State Board of
+        Education are elected statewide and held for a district, like
+        Georgia's Public Service Commission."""
+        assert common.parse_statewide_office(
+            "Board of Equalization Member District 1") == ("board_of_equalization", "1")
+        assert common.parse_statewide_office(
+            "REP State Board of Education District 3") == ("state_board_of_education", "3")
+
+    def test_a_county_board_of_education_is_not_the_state_one(self):
+        """North Carolina's export is full of these."""
+        assert common.parse_statewide_office(
+            "EDGECOMBE COUNTY BOARD OF EDUCATION DISTRICT 2") is None
+        assert common.parse_statewide_office(
+            "BEAUFORT COUNTY BOARD OF EDUCATION DISTRICT 1 (REP)") is None
+
+    def test_california_prints_its_officers_bare(self):
+        """No "State" prefix at all — just the office."""
+        assert common.parse_statewide_office("Treasurer") == ("treasurer", None)
+        assert common.parse_statewide_office("Controller") == ("controller", None)
+
+    def test_a_local_treasurer_is_still_refused(self):
+        """The bare arm is a last resort and only sees labels the
+        locality gate already cleared."""
+        assert common.parse_statewide_office("County Treasurer") is None
+        assert common.parse_statewide_office("County Auditor/Treasurer") is None
+        assert common.parse_statewide_office("Cranston: Treasurer") is None
+
+    def test_a_qualified_office_still_wins_over_the_bare_arm(self):
+        assert common.parse_statewide_office("State Treasurer") == ("treasurer", None)
+        assert common.parse_statewide_office("State Controller") == ("controller", None)
+
+
+class TestStateAssembly:
+    def test_californias_lower_chamber_resolves(self):
+        assert common.parse_state_leg_office(
+            "State Assembly Member District 1") == ("lower", "1", None)
+
+    def test_a_general_assembly_is_not_a_state_assembly(self):
+        """Rhode Island's "General Assembly" names its WHOLE legislature,
+        and its two chambers are told apart by the arms above — so the
+        State Assembly pattern must not reach either."""
+        assert common.parse_state_leg_office(
+            "DEM Senator in General Assembly District 5") == ("upper", "5", None)
+        assert common.parse_state_leg_office(
+            "REP Representative in General Assembly District 13") == ("lower", "13", None)
