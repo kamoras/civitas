@@ -96,7 +96,15 @@ import re
 import httpx
 
 from app.pipeline.fetch.http_utils import fetch_json_with_retry
-from app.pipeline.fetch.state_candidates_common import normalize_party, parse_office, pick_nominee, surname
+from app.pipeline.fetch.state_candidates_common import (
+    clean_display_name,
+    normalize_party,
+    parse_office,
+    parse_state_leg_office,
+    parse_statewide_office,
+    pick_nominees,
+    surname,
+)
 from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _settled
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -134,6 +142,7 @@ async def _discover_elections(
 async def _federal_contests_and_results(
     client: httpx.AsyncClient, state: str, base_url: str, cid: str,
     election_id: str, contest_type_filter: str | None, results_scope: str | None, year: int,
+    state_offices: bool = False,
 ) -> tuple[dict, dict] | None:
     """(federal contests by id from the search list, their vote totals
     from the results endpoint) for one election, or None on a real fetch
@@ -151,7 +160,14 @@ async def _federal_contests_and_results(
     for cid_key, c in contests.items():
         if not c.get("contestName"):
             continue
-        if contest_type_filter is not None and c.get("contestTypeCode") != contest_type_filter:
+        # The type pre-filter is dropped entirely for a state reading
+        # its own offices: it exists only to narrow the federal case
+        # cheaply, and Arkansas's "Federal" value would discard every
+        # state contest before the gates ever saw one. The gates below
+        # are the real source of truth either way, as this module has
+        # always said.
+        if (not state_offices and contest_type_filter is not None
+                and c.get("contestTypeCode") != contest_type_filter):
             continue
         # parse_office() is always the real source of truth for "is this
         # federal" -- contest_type_filter (where a state has one) is only
@@ -161,19 +177,34 @@ async def _federal_contests_and_results(
         # Dakota's real contests all share one contestTypeCode ("SW")
         # regardless of office, so it configures no contest_type_filter
         # at all and this check does the whole job alone.
-        if parse_office(c["contestName"]) is None:
+        if not _understood(c["contestName"], state_offices):
             continue
         federal[cid_key] = c
     if not federal:
         return {}, {}
 
     results_url = f"{base_url}/Contest/GetContestResults?cId={cid}&electionID={election_id}"
-    if results_scope is not None:
+    # Scoping the results request is likewise dropped: North Dakota's
+    # "SW" narrows to its 18 statewide contests and would leave its 100
+    # legislative ones with no votes at all. Unscoped is 1.9 MB in under
+    # a second, measured live, which is cheap for a nightly job.
+    if results_scope is not None and not state_offices:
         results_url += f"&contestType={results_scope}"
     results = await fetch_json_with_retry(client, _rate_limiter, results_url, f"{state} federal results {year}")
     if not isinstance(results, dict):
         return None
     return federal, ((results.get("response") or {}).get("contests")) or {}
+
+
+def _understood(name: str, state_offices: bool) -> bool:
+    """Whether any gate claims this contest. Kept beside the search-list
+    filter so a contest is never fetched and then silently dropped."""
+    if parse_office(name) is not None:
+        return True
+    if not state_offices:
+        return False
+    return (parse_statewide_office(name) is not None
+            or parse_state_leg_office(name) is not None)
 
 
 async def fetch_confirmed_candidates(
@@ -189,6 +220,7 @@ async def fetch_confirmed_candidates(
     runoff_name_regex = source.get("runoff_name_regex")
     runoff_re = re.compile(runoff_name_regex, re.IGNORECASE) if runoff_name_regex else None
     contest_type_filter = source.get("contest_type_filter")
+    state_offices = bool(source.get("statewide_offices"))
     # The value to scope the GetContestResults request with is usually the
     # SAME as contest_type_filter (Arkansas's "Federal" narrows both the
     # client-side federal check AND the request), but not always: North
@@ -208,41 +240,76 @@ async def fetch_confirmed_candidates(
     if primary is None:
         return []  # not published yet this cycle — healthy unknown
 
-    by_seat: dict[tuple[str, int | None, str], tuple[str, float]] = {}
+    by_seat: dict[tuple, list[tuple[str, float]]] = {}
     # Runoff processed second so its answer for a seat overrides the primary's.
     for election, stage_threshold in ((primary, threshold), (runoff, None)):
         if election is None or not _settled(election["date"], settle_days):
             continue  # no stage yet, or this stage's count isn't settled
         fetched = await _federal_contests_and_results(
-            client, state, base_url, cid, election["id"], contest_type_filter, results_scope, year,
+            client, state, base_url, cid, election["id"], contest_type_filter,
+            results_scope, year, state_offices,
         )
         if fetched is None:
             return None
         federal, result_contests = fetched
 
         for contest_id, contest in federal.items():
-            office_district = parse_office(contest["contestName"])
-            party = normalize_party(contest["contestName"])
+            name = contest["contestName"]
+            office_district = parse_office(name)
+            seat = None
+            if office_district is not None:
+                office, district = office_district
+                federal_race = True
+            else:
+                federal_race = False
+                statewide = parse_statewide_office(name)
+                if statewide is not None:
+                    office, district = statewide
+                else:
+                    parsed_seat = parse_state_leg_office(name)
+                    if parsed_seat is None:
+                        continue
+                    office, district, seat = parsed_seat
+            party = normalize_party(name)
             contest_result = result_contests.get(contest_id)
-            if office_district is None or party is None or contest_result is None:
+            if party is None or contest_result is None:
                 continue
-            office, district = office_district
             choice_names = contest.get("choices") or {}
             # Every choice's votes count toward the total (an unresolvable
             # name still counted a real vote), but only a resolvable name
             # can be confirmed the winner below -- a candidate the search
             # list doesn't know about should shrink everyone else's
             # percentage, never be silently excluded from both sides.
+            # A federal nominee is cut to a surname for FEC matching; a
+            # state-office nominee has no FEC row and keeps what the
+            # state printed.
+            reduce = surname if federal_race else clean_display_name
             choices = [
-                (surname((choice_names.get(ch.get("choiceID")) or {}).get("name") or ""), ch.get("totalVotes"))
+                (reduce((choice_names.get(ch.get("choiceID")) or {}).get("name") or ""),
+                 ch.get("totalVotes"))
                 for ch in contest_result.get("choices") or []
             ]
-            seat = (office, district, party)
-            won = pick_nominee(choices, runoff_threshold_pct=stage_threshold)
-            if won and won[0]:
-                by_seat[seat] = won
+            # This vendor states the seat count as a FIELD rather than in
+            # the label, which is how North Dakota's two-members-per-
+            # district House is read correctly. Honoured only where the
+            # state runs one-nominee party primaries, same guard the
+            # tabular adapter applies to "Vote for up to N".
+            vote_for = contest.get("voteFor")
+            advance = (
+                vote_for if (isinstance(vote_for, int) and 1 <= vote_for <= 10
+                             and not federal_race)
+                else 1
+            )
+            key = (office, district, party, seat)
+            won = pick_nominees(choices, stage_threshold, advance)
+            if won:
+                by_seat[key] = [(n, pct) for n, pct in won if n]
 
-    return [
-        {"office": o, "district": d, "party": p, "last_name": name}
-        for (o, d, p), (name, _pct) in by_seat.items()
-    ]
+    records = []
+    for (o, d, p, st_seat), winners in by_seat.items():
+        for name, _pct in winners:
+            record = {"office": o, "district": d, "party": p, "last_name": name}
+            if st_seat is not None:
+                record["seat"] = st_seat
+            records.append(record)
+    return records

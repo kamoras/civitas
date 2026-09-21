@@ -493,3 +493,25 @@ class TestFetchConfirmedCandidatesNorthDakota:
         assert all(r["office"] in ("H", "S") for r in result)
         results_urls = [u for u in requested if "GetContestResults" in u]
         assert results_urls and all("contestType" not in u for u in results_urls)
+
+
+class TestStateOffices:
+    """This vendor states a contest's seat count as a FIELD rather than
+    in the label — North Dakota's House elects two members per district
+    and says so with "voteFor": 2 — which is cleaner than Maryland's
+    "Vote for up to 3" wording and read the same way."""
+
+    def test_the_type_prefilter_is_dropped_only_when_opting_in(self):
+        """Arkansas filters to contestTypeCode "Federal", which would
+        discard every state contest before a gate ever saw one."""
+        assert tenr._understood("U.S. Senator", state_offices=False) is True
+        assert tenr._understood("REP State Senate District 5", state_offices=False) is False
+        assert tenr._understood("REP State Senate District 5", state_offices=True) is True
+
+    def test_a_local_contest_is_refused_either_way(self):
+        for label in ("Council Member Beulah Ward 2", "Prosecuting Attorney, District 4"):
+            assert tenr._understood(label, state_offices=True) is False, label
+
+    def test_a_statewide_office_is_understood_only_when_opting_in(self):
+        assert tenr._understood("Tax Commissioner Republican", state_offices=False) is False
+        assert tenr._understood("Tax Commissioner Republican", state_offices=True) is True

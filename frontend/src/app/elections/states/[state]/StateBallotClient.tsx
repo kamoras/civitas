@@ -411,9 +411,13 @@ function StatewideExecutiveSection({ ballot }: { ballot: StateBallot }) {
           .
           {/* Only meaningful next to actual nominees. Under a confirmed
               absence it explains the funding data missing from names that
-              aren't there. */}
+              aren't there — and the same caveat the legislative section
+              carries applies here: an office whose primary nobody
+              contested is often not itemised in a results feed at all,
+              so this list is what the state published, not necessarily
+              every statewide office on the ballot. */}
           {statewideRaces.length > 0 &&
-            " These offices have no federal campaign-finance filings, so no funding figures or Representation Scores exist for them."}
+            " Only offices named in the state's own results feed appear — one whose primary was uncontested is often not published at all. These offices have no federal campaign-finance filings, so no funding figures or Representation Scores exist for them."}
         </p>
       </div>
     </section>

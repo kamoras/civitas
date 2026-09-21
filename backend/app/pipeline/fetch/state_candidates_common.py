@@ -232,6 +232,13 @@ _STATEWIDE_PHRASES = [
         r"\bState\s+Board\s+of\s+Education\b", re.IGNORECASE)),
     ("university_regent", re.compile(
         r"\bRegent\s+of\s+the\s+University\b|\bUniversity\s+Regent\b", re.IGNORECASE)),
+    # North Dakota's own constitutional officer.
+    ("tax_commissioner", re.compile(
+        r"\bTax\s+Commissioner\b|\bCommissioner\s+of\s+Taxation\b", re.IGNORECASE)),
+    # Arkansas's, which it abbreviates as "Comm. of State Lands".
+    ("state_lands_commissioner", re.compile(
+        r"\bComm(?:issioner)?\.?\s+of\s+State\s+Lands\b"
+        r"|\bState\s+Lands\s+Commissioner\b", re.IGNORECASE)),
 ]
 
 # The locality markers that stay decisive even beside one of the phrases
@@ -318,6 +325,8 @@ STATEWIDE_OFFICE_LABELS = {
     "board_of_equalization": "Board of Equalization",
     "state_board_of_education": "State Board of Education",
     "university_regent": "University Regent",
+    "tax_commissioner": "Tax Commissioner",
+    "state_lands_commissioner": "Commissioner of State Lands",
 }
 
 
@@ -469,8 +478,11 @@ def vote_for_count(contest_name: str) -> int | None:
 # it would merge two different seats into one. Leading zeros are stripped
 # so "District 05" and "District 5" are the same seat, but the letter is
 # kept and upper-cased.
+# Arkansas abbreviates it on 15 of its own House contests ("REP State
+# Representative Dist. 42") while spelling it out on the rest, so both
+# spellings have to read the same seat.
 _STATE_LEG_DISTRICT_RE = re.compile(
-    r"\bDistrict\s+(?:No\.?\s*)?0*(\d+)([A-Za-z]?)\b", re.IGNORECASE,
+    r"\bDist(?:rict)?\.?\s+(?:No\.?\s*)?0*(\d+)([A-Za-z]?)\b", re.IGNORECASE,
 )
 
 # West Virginia puts the number FIRST: "HOUSE OF DELEGATES, 1st District"
