@@ -464,6 +464,19 @@ Corollaries that follow from the same rule, all enforced in code:
 - Removed measures are rendered as removed for a grace window, not deleted.
 - Scope is stated as content, not as a footnote: the API enumerates what a
   statewide page omits (`omits`) and the page renders it above the measures.
+- **`omits` is a live description, not a fixed disclaimer.** Each entry is
+  dropped once that gap genuinely closes for that state — the statewide
+  executive offices line went this way in 2026-09, and a state with
+  `statewideCoverage.status == "covered"` no longer sees it. A list that
+  keeps disclaiming what the page now shows stops describing the page and
+  becomes boilerplate a reader learns to skip past, including past the
+  entries that are still true. When you close one of these gaps, removing
+  its `omits` entry is part of closing it, not a follow-up.
+- A gap that is closed *by checking and finding nothing* is also closed.
+  `confirmed_none` drops the omission too: "this page omits Governor
+  contests" implies one is being withheld, when the honest claim is that
+  the state elects none this cycle — which the section says in its own
+  words.
 
 If a plain-language layer is ever revisited, the bar is a check that can
 detect polarity inversion and dropped qualifiers — which is not an extension

@@ -9,8 +9,6 @@ case that there is nothing to research. Same null-is-not-zero discipline
 MeasureCoverage already enforces for ballot measures.
 """
 
-import pytest
-
 from app.api.elections import StatewideCoverageStatus, _statewide_section
 from app.models import StatewideNominee
 from app.pipeline.fetch.state_candidates import _sync_statewide_nominees
