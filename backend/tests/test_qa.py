@@ -159,89 +159,6 @@ def test_industry_leaders_says_it_could_not_tell_rather_than_guessing(seeded):
     assert result["citations"] == []
 
 
-# --- The LLM guard -----------------------------------------------------
-
-def test_rephrasing_is_off_by_default(seeded):
-    text, used = qa._maybe_rephrase("Jane Doe raised $2.4M")
-    assert text == "Jane Doe raised $2.4M"
-    assert used is False
-
-
-def test_number_guard_accepts_a_faithful_rewrite():
-    assert qa._numbers_are_preserved(
-        "Acme PAC gave $250,000 to Jane Doe",
-        "Jane Doe's largest contributor was Acme PAC at $250,000.",
-    )
-
-
-def test_number_guard_accepts_dropping_a_figure():
-    """A terser sentence is fine. Only invention is disqualifying."""
-    assert qa._numbers_are_preserved(
-        "Acme PAC gave $250,000 and Beta Corp gave $100,000",
-        "Acme PAC was the largest contributor.",
-    )
-
-
-def test_number_guard_rejects_a_figure_reused_more_often_than_the_original():
-    """A plain set-containment check would accept this: every number in
-    the rewrite is a member of the original's number set. But 82 backing
-    two different claims when it only backed one originally means the
-    rewrite invented a second use for a real figure — exactly the
-    duplication-shaped half of a swap between two real numbers."""
-    assert not qa._numbers_are_preserved(
-        "Jane Doe scores 82, John Roe scores 31",
-        "Jane Doe scores 82, John Roe also scores 82",
-    )
-
-
-def test_number_guard_rejects_an_invented_figure():
-    """The whole reason the optional LLM path is safe to have at all."""
-    assert not qa._numbers_are_preserved(
-        "Acme PAC gave $250,000 to Jane Doe",
-        "Acme PAC gave $450,000 to Jane Doe.",
-    )
-
-
-def test_altered_rewrite_is_discarded_and_the_deterministic_answer_returned(monkeypatch):
-    """End-to-end on the guard: an LLM that changes a figure must not be
-    able to put that figure in front of a reader."""
-    monkeypatch.setattr(qa.settings, "QA_LLM_PHRASING", True)
-    monkeypatch.setattr(
-        "app.pipeline.analyze.ollama_client.call_llm",
-        lambda **kwargs: {"text": "Acme PAC gave $999,999 to Jane Doe."},
-    )
-
-    original = "Acme PAC — $250,000"
-    text, used = qa._maybe_rephrase(original)
-    assert text == original
-    assert used is False
-
-
-def test_faithful_rewrite_is_used(monkeypatch):
-    monkeypatch.setattr(qa.settings, "QA_LLM_PHRASING", True)
-    monkeypatch.setattr(
-        "app.pipeline.analyze.ollama_client.call_llm",
-        lambda **kwargs: {"text": "Acme PAC contributed $250,000."},
-    )
-
-    text, used = qa._maybe_rephrase("Acme PAC — $250,000")
-    assert text == "Acme PAC contributed $250,000."
-    assert used is True
-
-
-def test_llm_failure_falls_back_to_the_deterministic_answer(monkeypatch):
-    monkeypatch.setattr(qa.settings, "QA_LLM_PHRASING", True)
-
-    def _boom(**kwargs):
-        raise RuntimeError("llama-server down")
-
-    monkeypatch.setattr("app.pipeline.analyze.ollama_client.call_llm", _boom)
-
-    text, used = qa._maybe_rephrase("Acme PAC — $250,000")
-    assert text == "Acme PAC — $250,000"
-    assert used is False
-
-
 # --- Orchestration -----------------------------------------------------
 
 def test_answer_question_reports_latency_and_intent(seeded, monkeypatch):
@@ -251,10 +168,8 @@ def test_answer_question_reports_latency_and_intent(seeded, monkeypatch):
     assert result["intent"] == "member_donors"
     assert result["memberResolution"] == "full"
     assert result["latencyMs"] >= 0
-    assert result["usedLlm"] is False
     # The deterministic answer is always returned alongside, so a reviewer
     # can see exactly what retrieval produced.
-    assert result["deterministicAnswer"] == result["answer"]
     assert result["citations"]
 
 

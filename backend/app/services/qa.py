@@ -16,10 +16,12 @@ A language model asked to state a senator's donation total will sometimes
 state a plausible wrong one. For a project whose entire value proposition
 is that its numbers are checkable, that is not a quality problem to tune
 down — it is the failure mode that would discredit the whole thing. So no
-figure in an answer here is ever generated. The optional LLM path
-(QA_LLM_PHRASING) only rephrases already-rendered text, and its output is
-rejected outright if it contains any number the deterministic answer did
-not (see _numbers_are_preserved).
+figure in an answer here is ever generated, and no language model sits
+anywhere in this path at all. An optional LLM rephrasing layer existed
+behind a flag until 2026-09; it never ran in production, changed only
+how an answer READ rather than what it said, and was removed rather than
+left as a dormant way for generated text to reach a surface whose whole
+value is that its numbers are checkable.
 
 Intent classification uses embedding similarity against natural-language
 prototypes — the same tier-2 technique the pipeline's classifiers use —
@@ -37,7 +39,6 @@ import time
 
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.models import Donor, IndustryDonation, Representative, Senator
 
 logger = logging.getLogger(__name__)
@@ -415,80 +416,6 @@ def _answer_documents(db: Session, question: str, limit: int = 5) -> dict:
 # end of a sentence ("$250,000.") normalises to the same token as the same
 # figure mid-sentence ("$250,000"). Without that, sentence-final punctuation
 # alone made a faithful rewrite look like an invented number.
-_NUMBER_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
-
-
-def _numbers_are_preserved(original: str, rewritten: str) -> bool:
-    """True when the rewrite introduces no figure the original lacked, and
-    reuses no figure more often than the original did.
-
-    The guard on the optional LLM phrasing path. A model asked to rephrase
-    "$1.2M from Pfizer" can quietly emit "$1.4M", and for this project that
-    single altered digit is worse than no rephrasing at all. Digits added
-    is the failure we reject; digits dropped is merely a terser sentence.
-
-    Counted with a multiset, not a set: a two-figure answer like "Jane Doe
-    scores 82, John Roe scores 31" rewritten as "Jane Doe scores 31, John
-    Roe scores 82" swaps two real figures between two real people — every
-    number in the rewrite is still a member of the original's number set,
-    so a plain set-containment check would wave it through. Requiring each
-    figure's count not to increase catches a figure being duplicated onto
-    a second claim it didn't originally support.
-
-    What this still cannot catch: swapping two *distinct* figures that
-    each already appear exactly once, onto each other's claims (the exact
-    example above — the multiset is unchanged by the swap, only which
-    name pairs with which number). Closing that gap needs the rewrite to
-    preserve name-number adjacency, not just the figures present, which
-    is a much larger check than a presentation-layer guard is built for
-    here. Short-rewrite, faithful-paraphrase framing keeps this a narrow
-    risk in practice, but it is a real one — see PR review discussion.
-    """
-    import collections
-
-    original_numbers = collections.Counter(_NUMBER_RE.findall(original.replace(",", "")))
-    rewritten_numbers = collections.Counter(_NUMBER_RE.findall(rewritten.replace(",", "")))
-    return not (rewritten_numbers - original_numbers)
-
-
-def _maybe_rephrase(answer: str) -> tuple[str, bool]:
-    """Optionally rewrite a rendered answer as prose. Returns (text, used_llm).
-
-    Off by default. Even when on, the deterministic answer is what gets
-    returned unless the rewrite passes the number check — the LLM is a
-    presentation layer here and is never permitted to become a source of
-    figures.
-    """
-    if not settings.QA_LLM_PHRASING:
-        return answer, False
-
-    try:
-        from app.pipeline.analyze.ollama_client import call_llm
-
-        result = call_llm(
-            prompt_version="qa_phrasing_v1",
-            system_prompt=(
-                "You rewrite factual summaries as plain prose. You never "
-                "add, remove, or alter a number, name, or figure. Respond "
-                'with JSON: {"text": "<rewritten summary>"}'
-            ),
-            user_prompt=(
-                "Rewrite this as one or two plain sentences, preserving "
-                "every figure exactly:\n\n" + answer
-            ),
-            cache_key=answer,
-            max_tokens=400,
-        )
-        rewritten = (result or {}).get("text", "") if isinstance(result, dict) else ""
-        rewritten = str(rewritten).strip()
-    except Exception:
-        logger.warning("QA phrasing call failed — returning deterministic answer", exc_info=True)
-        return answer, False
-
-    if not rewritten or not _numbers_are_preserved(answer, rewritten):
-        logger.info("Discarding LLM rephrasing — it altered or invented figures")
-        return answer, False
-    return rewritten, True
 
 
 def answer_question(db: Session, question: str, *, limit: int = 5) -> dict:
@@ -525,17 +452,13 @@ def answer_question(db: Session, question: str, *, limit: int = 5) -> dict:
         intent = "documents"
         payload = _answer_documents(db, question, limit=limit)
 
-    text, used_llm = _maybe_rephrase(payload["answer"])
-
     return {
         "question": question,
         "intent": intent,
         "intentScore": round(score, 4),
         "intentMargin": round(margin, 4),
         "memberResolution": resolution,
-        "answer": text,
-        "deterministicAnswer": payload["answer"],
+        "answer": payload["answer"],
         "citations": payload["citations"],
-        "usedLlm": used_llm,
         "latencyMs": round((time.perf_counter() - started) * 1000, 1),
     }
