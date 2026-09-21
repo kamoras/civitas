@@ -429,9 +429,10 @@ def _sync_statewide_nominees(
     if not source.get("statewide_offices"):
         return 0
 
-    keep: set[tuple[str, str, str]] = set()
+    keep: set[tuple[str, str | None, str, str]] = set()
     for record in records:
         office, party = record["office"], record["party"]
+        district = record["district"]
         name = record["last_name"]
         row = (
             db.query(StatewideNominee)
@@ -439,6 +440,7 @@ def _sync_statewide_nominees(
                 StatewideNominee.state == state,
                 StatewideNominee.cycle_year == cycle,
                 StatewideNominee.office == office,
+                StatewideNominee.district == district,
                 StatewideNominee.party == party,
                 StatewideNominee.display_name == name,
             )
@@ -447,7 +449,7 @@ def _sync_statewide_nominees(
         if row is None:
             row = StatewideNominee(
                 state=state, cycle_year=cycle, office=office,
-                party=party, display_name=name,
+                district=district, party=party, display_name=name,
             )
             db.add(row)
         # `last_name` is the shared resolver's field name for "the name
@@ -457,14 +459,14 @@ def _sync_statewide_nominees(
         # printed name, which is what gets rendered.
         row.source_name = str(source.get("source_name") or source.get("strategy") or "")
         row.updated_at = utcnow()
-        keep.add((office, party, name))
+        keep.add((office, district, party, name))
 
     for row in (
         db.query(StatewideNominee)
         .filter(StatewideNominee.state == state, StatewideNominee.cycle_year == cycle)
         .all()
     ):
-        if (row.office, row.party, row.display_name) not in keep:
+        if (row.office, row.district, row.party, row.display_name) not in keep:
             db.delete(row)
 
     api_cache_set(

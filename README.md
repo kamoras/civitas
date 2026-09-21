@@ -509,6 +509,10 @@ The result is that typing "jamestown" returns House 74 and Senate 13, and nothin
 
 Coverage is not limited to one vendor: the bulk `tabular` exports carry the same contests, so a state there is a config opt-in too. Minnesota's real 2026 export resolves 18 federal, 8 statewide (including its joint `Governor & Lt Governor` ticket) and every one of the 32 legislative contests the file contains — while refusing `County Attorney` and `County Auditor/Treasurer`, which contain the exact words the statewide gate keys on. Note that some `tabular` entries deliberately fetch a federal-only export (New Mexico's URL carries `type=FED`), so opting such a state in means widening its discovery URL first.
 
+Georgia is the third state live, and the most complete: 30 federal races, all 236 legislative seats (exactly its 180 House + 56 Senate), and every one of its statewide contests — the eight constitutional offices plus both Public Service Commission seats, which are elected statewide but *held by district*, so each is its own row.
+
+Getting Georgia right needed two things the first two states didn't. Its county subdivisions are Census County Divisions named `Fairburn-Union City CCD` — names on no sign and in no address — so place-based states use incorporated places instead, chosen by Census's own "strong MCD" distinction. And three of its House districts lie entirely in unincorporated land with no place at all, so those fall back to their county; the county suffix is kept there, because Georgia has both a Forsyth County and a Forsyth city and the list would otherwise show the same word for two different places.
+
 Minnesota is also why a district identifier is a **string**: it splits each of its 67 senate districts into two house districts, `10A` and `10B`. And why the town list is truncated for display but searched in full — one of its senate districts covers 292 townships, so the row shows three and "& 133 more", yet typing the 136th town still finds the seat.
 
 ---

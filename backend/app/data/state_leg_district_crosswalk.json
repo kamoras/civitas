@@ -1,6 +1,1916 @@
 {
  "_source": "U.S. Census Bureau TIGERweb: current-vintage state legislative district polygons (TIGERweb/Legislative layers 1 and 2) against county-subdivision polygons, resolved by point sampling inside each town. See scripts/fetch_state_leg_crosswalk.py for why the block assignment files and a plain spatial intersect both give wrong answers here.",
  "districts": {
+  "GA-lower-1": [
+   "Fort Oglethorpe city",
+   "LaFayette city",
+   "Lookout Mountain city",
+   "Rossville city",
+   "Trenton city"
+  ],
+  "GA-lower-10": [
+   "Alto town",
+   "Baldwin city",
+   "Clarkesville city",
+   "Clayton city",
+   "Cornelia city",
+   "Demorest city",
+   "Dillard city",
+   "Mountain City town",
+   "Sky Valley city",
+   "Tallulah Falls town",
+   "Tiger town"
+  ],
+  "GA-lower-100": [
+   "Buford city",
+   "Flowery Branch city",
+   "Rest Haven town",
+   "Sugar Hill city",
+   "Suwanee city"
+  ],
+  "GA-lower-101": [
+   "Brookhaven city",
+   "Chamblee city"
+  ],
+  "GA-lower-102": [
+   "Grayson city",
+   "Lawrenceville city"
+  ],
+  "GA-lower-103": [
+   "Buford city",
+   "Flowery Branch city",
+   "Rest Haven town",
+   "Sugar Hill city",
+   "Suwanee city"
+  ],
+  "GA-lower-104": [
+   "Auburn city",
+   "Bethlehem town",
+   "Carl town",
+   "Mulberry city",
+   "Winder city"
+  ],
+  "GA-lower-105": [
+   "Buford city",
+   "Dacula city"
+  ],
+  "GA-lower-106": [
+   "Lawrenceville city",
+   "Lilburn city",
+   "Snellville city"
+  ],
+  "GA-lower-107": [
+   "Lawrenceville city",
+   "Suwanee city"
+  ],
+  "GA-lower-108": [
+   "Lilburn city"
+  ],
+  "GA-lower-109": [
+   "Lawrenceville city",
+   "Lilburn city"
+  ],
+  "GA-lower-11": [
+   "Ball Ground city",
+   "Jasper city",
+   "Nelson city",
+   "Talking Rock town"
+  ],
+  "GA-lower-110": [
+   "Grayson city",
+   "Loganville city",
+   "Snellville city"
+  ],
+  "GA-lower-111": [
+   "Between town",
+   "Dacula city",
+   "Loganville city",
+   "Monroe city"
+  ],
+  "GA-lower-112": [
+   "Good Hope city",
+   "Jersey city",
+   "Loganville city",
+   "Monroe city",
+   "Walnut Grove city"
+  ],
+  "GA-lower-113": [
+   "Covington city",
+   "Porterdale city"
+  ],
+  "GA-lower-114": [
+   "Bostwick city",
+   "Buckhead town",
+   "Covington city",
+   "Madison city",
+   "Mansfield city",
+   "Newborn town",
+   "Oxford city",
+   "Rutledge city",
+   "Social Circle city"
+  ],
+  "GA-lower-115": [
+   "Stockbridge city",
+   "Stonecrest city"
+  ],
+  "GA-lower-116": [
+   "Stockbridge city"
+  ],
+  "GA-lower-117": [
+   "Locust Grove city",
+   "McDonough city"
+  ],
+  "GA-lower-118": [
+   "Covington city",
+   "Flovilla city",
+   "Forsyth city",
+   "Jackson city",
+   "Jenkinsburg city",
+   "Porterdale city"
+  ],
+  "GA-lower-119": [
+   "Bethlehem town",
+   "Braselton town",
+   "Statham city",
+   "Winder city"
+  ],
+  "GA-lower-12": [
+   "Cave Spring city",
+   "Lyerly town",
+   "Menlo city",
+   "Rome city",
+   "Summerville city",
+   "Trion town"
+  ],
+  "GA-lower-120": [
+   "Arcade city",
+   "Athens-Clarke County unified government (balance)",
+   "Bogart town",
+   "Commerce city",
+   "Nicholson city",
+   "Statham city"
+  ],
+  "GA-lower-121": [
+   "Athens-Clarke County unified government (balance)",
+   "Bishop town",
+   "North High Shoals town",
+   "Watkinsville city"
+  ],
+  "GA-lower-122": [
+   "Athens-Clarke County unified government (balance)"
+  ],
+  "GA-lower-123": [
+   "Bowman city",
+   "Carlton city",
+   "Colbert city",
+   "Comer city",
+   "Danielsville city",
+   "Elberton city",
+   "Hull city",
+   "Lincolnton city",
+   "Rayle town",
+   "Tignall town",
+   "Washington city"
+  ],
+  "GA-lower-124": [
+   "Arnoldsville city",
+   "Athens-Clarke County unified government (balance)",
+   "Crawford city",
+   "Crawfordville city",
+   "Eatonton city",
+   "Greensboro city",
+   "Lexington city",
+   "Maxeys town",
+   "Sharon city",
+   "Siloam town",
+   "Union Point city",
+   "White Plains city",
+   "Winterville city",
+   "Woodville city"
+  ],
+  "GA-lower-125": [
+   "Dearing town",
+   "Grovetown city",
+   "Harlem city"
+  ],
+  "GA-lower-126": [
+   "Augusta-Richmond County consolidated government (balance)",
+   "Blythe city",
+   "Girard town",
+   "Hephzibah city",
+   "Keysville city",
+   "Midville city",
+   "Millen city",
+   "Sardis city",
+   "Vidette city",
+   "Waynesboro city"
+  ],
+  "GA-lower-127": [
+   "Augusta-Richmond County consolidated government (balance)"
+  ],
+  "GA-lower-128": [
+   "Camak town",
+   "Davisboro city",
+   "Deepstep town",
+   "Edge Hill city",
+   "Gibson city",
+   "Harrison town",
+   "Mitchell town",
+   "Norwood city",
+   "Oconee city",
+   "Riddleville town",
+   "Sandersville city",
+   "Sparta city",
+   "Tennille city",
+   "Thomson city",
+   "Warrenton city"
+  ],
+  "GA-lower-129": [
+   "Augusta-Richmond County consolidated government (balance)"
+  ],
+  "GA-lower-13": [
+   "Rome city"
+  ],
+  "GA-lower-130": [
+   "Augusta-Richmond County consolidated government (balance)"
+  ],
+  "GA-lower-131": [
+   "Columbia County"
+  ],
+  "GA-lower-132": [
+   "Augusta-Richmond County consolidated government (balance)",
+   "Avera city",
+   "Bartow town",
+   "Blythe city",
+   "Louisville city",
+   "Stapleton city",
+   "Wadley city",
+   "Wrens city"
+  ],
+  "GA-lower-133": [
+   "Allentown city",
+   "Chauncey city",
+   "Chester town",
+   "Cochran city",
+   "Danville town",
+   "Eastman city",
+   "Gordon city",
+   "Irwinton city",
+   "Ivey city",
+   "Jeffersonville city",
+   "McIntyre town",
+   "McRae-Helena city",
+   "Milan city",
+   "Rhine town",
+   "Toomsboro city"
+  ],
+  "GA-lower-134": [
+   "Aldora town",
+   "Barnesville city",
+   "Byron city",
+   "Roberta city",
+   "Thomaston city",
+   "Warner Robins city",
+   "Yatesville town"
+  ],
+  "GA-lower-135": [
+   "Aldora town",
+   "Barnesville city",
+   "Concord city",
+   "Griffin city",
+   "Meansville city",
+   "Milner city",
+   "Molena city",
+   "Orchard Hill town",
+   "Williamson city",
+   "Zebulon city"
+  ],
+  "GA-lower-136": [
+   "Gay town",
+   "Grantville city",
+   "Greenville city",
+   "Haralson town",
+   "LaGrange city",
+   "Lone Oak town",
+   "Luthersville city",
+   "Moreland town",
+   "Senoia city",
+   "Sharpsburg town",
+   "Turin town",
+   "Woodbury city"
+  ],
+  "GA-lower-137": [
+   "Columbus city",
+   "Geneva town",
+   "Junction City town",
+   "LaGrange city",
+   "Manchester city",
+   "Pine Mountain town",
+   "Talbotton city",
+   "Warm Springs city",
+   "Woodland city"
+  ],
+  "GA-lower-138": [
+   "Columbus city",
+   "Hamilton city",
+   "LaGrange city",
+   "Pine Mountain town",
+   "Shiloh city",
+   "West Point city"
+  ],
+  "GA-lower-139": [
+   "Columbus city",
+   "Waverly Hall town"
+  ],
+  "GA-lower-14": [
+   "Adairsville city",
+   "Euharlee city",
+   "Kingston city",
+   "Taylorsville town",
+   "Waleska city",
+   "White city"
+  ],
+  "GA-lower-140": [
+   "Columbus city"
+  ],
+  "GA-lower-141": [
+   "Columbus city"
+  ],
+  "GA-lower-142": [
+   "Macon-Bibb County"
+  ],
+  "GA-lower-143": [
+   "Centerville city",
+   "Macon-Bibb County",
+   "Warner Robins city"
+  ],
+  "GA-lower-144": [
+   "Eatonton city",
+   "Gray city",
+   "Macon-Bibb County",
+   "Monticello city",
+   "Shady Dale city"
+  ],
+  "GA-lower-145": [
+   "Culloden city",
+   "Forsyth city",
+   "Macon-Bibb County"
+  ],
+  "GA-lower-146": [
+   "Perry city",
+   "Warner Robins city"
+  ],
+  "GA-lower-147": [
+   "Byron city",
+   "Centerville city",
+   "Fort Valley city",
+   "Perry city",
+   "Warner Robins city"
+  ],
+  "GA-lower-148": [
+   "Abbeville city",
+   "Arabi town",
+   "Cordele city",
+   "Fitzgerald city",
+   "Hawkinsville city",
+   "Perry city",
+   "Pineview town",
+   "Pitts city",
+   "Rochelle city"
+  ],
+  "GA-lower-149": [
+   "Macon-Bibb County",
+   "Milledgeville city"
+  ],
+  "GA-lower-15": [
+   "Cartersville city",
+   "Emerson city"
+  ],
+  "GA-lower-150": [
+   "Americus city",
+   "Andersonville city",
+   "Butler city",
+   "Byromville town",
+   "Dooling town",
+   "Fort Valley city",
+   "Ideal city",
+   "Lilly city",
+   "Marshallville city",
+   "Montezuma city",
+   "Oglethorpe city",
+   "Pinehurst city",
+   "Reynolds city",
+   "Unadilla city",
+   "Vienna city"
+  ],
+  "GA-lower-151": [
+   "Albany city",
+   "Americus city",
+   "Bronwood town",
+   "Buena Vista city",
+   "Cusseta-Chattahoochee County unified government",
+   "Dawson city",
+   "De Soto city",
+   "Ellaville city",
+   "Leslie city",
+   "Lumpkin city",
+   "Parrott town",
+   "Plains city",
+   "Richland city",
+   "Sasser town",
+   "Webster County unified government"
+  ],
+  "GA-lower-152": [
+   "Albany city",
+   "Leesburg city",
+   "Poulan city",
+   "Smithville city",
+   "Sumner town",
+   "Sylvester city",
+   "Warwick city"
+  ],
+  "GA-lower-153": [
+   "Albany city"
+  ],
+  "GA-lower-154": [
+   "Albany city",
+   "Arlington city",
+   "Blakely city",
+   "Bluffton town",
+   "Colquitt city",
+   "Cuthbert city",
+   "Damascus city",
+   "Donalsonville city",
+   "Edison city",
+   "Fort Gaines city",
+   "Georgetown-Quitman County unified government",
+   "Iron City town",
+   "Jakin city",
+   "Leary city",
+   "Morgan city",
+   "Newton city",
+   "Shellman city"
+  ],
+  "GA-lower-155": [
+   "Adrian city",
+   "Allentown city",
+   "Cadwell town",
+   "Dexter town",
+   "Dublin city",
+   "Dudley city",
+   "East Dublin city",
+   "Kite city",
+   "Montrose town",
+   "Rentz city",
+   "Wrightsville city"
+  ],
+  "GA-lower-156": [
+   "Ailey city",
+   "Alamo town",
+   "Alston town",
+   "Cobbtown city",
+   "Fitzgerald city",
+   "Glenwood city",
+   "Higgston town",
+   "Jacksonville city",
+   "Lumber City city",
+   "Lyons city",
+   "McRae-Helena city",
+   "Mount Vernon city",
+   "Santa Claus city",
+   "Scotland city",
+   "Tarrytown town",
+   "Uvalda city",
+   "Vidalia city"
+  ],
+  "GA-lower-157": [
+   "Baxley city",
+   "Bellville city",
+   "Claxton city",
+   "Collins city",
+   "Daisy city",
+   "Denton city",
+   "Glennville city",
+   "Hagan city",
+   "Hazlehurst city",
+   "Manassas city",
+   "Reidsville city",
+   "Surrency town"
+  ],
+  "GA-lower-158": [
+   "Adrian city",
+   "Garfield city",
+   "Metter city",
+   "Nunez city",
+   "Oak Park town",
+   "Portal town",
+   "Pulaski town",
+   "Register town",
+   "Soperton city",
+   "Statesboro city",
+   "Stillmore city",
+   "Summertown city",
+   "Swainsboro city",
+   "Twin City city"
+  ],
+  "GA-lower-159": [
+   "Guyton city",
+   "Hiltonia town",
+   "Newington town",
+   "Oliver city",
+   "Rocky Ford town",
+   "Springfield city",
+   "Statesboro city",
+   "Sylvania city"
+  ],
+  "GA-lower-16": [
+   "Aragon city",
+   "Braswell town",
+   "Cedartown city",
+   "Rockmart city",
+   "Taylorsville town"
+  ],
+  "GA-lower-160": [
+   "Brooklet city",
+   "Pembroke city",
+   "Statesboro city"
+  ],
+  "GA-lower-161": [
+   "Garden City city",
+   "Pooler city",
+   "Port Wentworth city",
+   "Rincon city",
+   "Savannah city",
+   "Springfield city"
+  ],
+  "GA-lower-162": [
+   "Garden City city",
+   "Savannah city"
+  ],
+  "GA-lower-163": [
+   "Garden City city",
+   "Savannah city",
+   "Vernonburg town"
+  ],
+  "GA-lower-164": [
+   "Bloomingdale city",
+   "Garden City city",
+   "Pooler city",
+   "Richmond Hill city",
+   "Savannah city"
+  ],
+  "GA-lower-165": [
+   "Garden City city",
+   "Savannah city",
+   "Thunderbolt town"
+  ],
+  "GA-lower-166": [
+   "Richmond Hill city",
+   "Savannah city",
+   "Tybee Island city"
+  ],
+  "GA-lower-167": [
+   "Darien city",
+   "Ludowici city"
+  ],
+  "GA-lower-168": [
+   "Allenhurst city",
+   "Flemington city",
+   "Gumbranch city",
+   "Hinesville city",
+   "Midway city",
+   "Riceboro city",
+   "Walthourville city"
+  ],
+  "GA-lower-169": [
+   "Ambrose city",
+   "Ashburn city",
+   "Broxton city",
+   "Douglas city",
+   "Fitzgerald city",
+   "Nicholls city",
+   "Ocilla city",
+   "Rebecca town",
+   "Sycamore city",
+   "Ty Ty city"
+  ],
+  "GA-lower-17": [
+   "Braswell town",
+   "Dallas city"
+  ],
+  "GA-lower-170": [
+   "Adel city",
+   "Alapaha town",
+   "Enigma town",
+   "Lenox town",
+   "Nashville city",
+   "Omega city",
+   "Ray City city",
+   "Tifton city"
+  ],
+  "GA-lower-171": [
+   "Attapulgus city",
+   "Baconton city",
+   "Bainbridge city",
+   "Brinson town",
+   "Cairo city",
+   "Camilla city",
+   "Climax city",
+   "Meigs city",
+   "Pelham city",
+   "Sale City city",
+   "Whigham city"
+  ],
+  "GA-lower-172": [
+   "Adel city",
+   "Berlin city",
+   "Cecil city",
+   "Coolidge city",
+   "Doerun city",
+   "Ellenton town",
+   "Funston city",
+   "Moultrie city",
+   "Norman Park city",
+   "Omega city",
+   "Pavo city",
+   "Sparks town"
+  ],
+  "GA-lower-173": [
+   "Barwick city",
+   "Boston city",
+   "Cairo city",
+   "Meigs city",
+   "Ochlocknee town",
+   "Thomasville city"
+  ],
+  "GA-lower-174": [
+   "Argyle town",
+   "Dasher town",
+   "Du Pont town",
+   "Echols County consolidated government",
+   "Fargo city",
+   "Folkston city",
+   "Hoboken city",
+   "Homeland city",
+   "Homerville city",
+   "Lake Park city",
+   "Nahunta city",
+   "Waycross city"
+  ],
+  "GA-lower-175": [
+   "Barwick city",
+   "Hahira city",
+   "Lake Park city",
+   "Morven city",
+   "Pavo city",
+   "Quitman city",
+   "Valdosta city"
+  ],
+  "GA-lower-176": [
+   "Douglas city",
+   "Lakeland city",
+   "Pearson city",
+   "Ray City city",
+   "Waycross city",
+   "Willacoochee city"
+  ],
+  "GA-lower-177": [
+   "Remerton city",
+   "Valdosta city"
+  ],
+  "GA-lower-178": [
+   "Alma city",
+   "Baxley city",
+   "Blackshear city",
+   "Graham city",
+   "Jesup city",
+   "Odum city",
+   "Offerman city",
+   "Patterson city",
+   "Screven city",
+   "Waycross city"
+  ],
+  "GA-lower-179": [
+   "Brunswick city"
+  ],
+  "GA-lower-18": [
+   "Bowdon city",
+   "Bremen city",
+   "Buchanan city",
+   "Carrollton city",
+   "Mount Zion city",
+   "Tallapoosa city",
+   "Waco city"
+  ],
+  "GA-lower-180": [
+   "Kingsland city",
+   "St. Marys city",
+   "Woodbine city"
+  ],
+  "GA-lower-19": [
+   "Dallas city",
+   "Hiram city"
+  ],
+  "GA-lower-2": [
+   "Chickamauga city",
+   "Dalton city",
+   "Fort Oglethorpe city",
+   "Tunnel Hill city",
+   "Varnell city"
+  ],
+  "GA-lower-20": [
+   "Canton city",
+   "Holly Springs city",
+   "Woodstock city"
+  ],
+  "GA-lower-21": [
+   "Holly Springs city",
+   "Woodstock city"
+  ],
+  "GA-lower-22": [
+   "Acworth city",
+   "Kennesaw city"
+  ],
+  "GA-lower-23": [
+   "Canton city",
+   "Holly Springs city"
+  ],
+  "GA-lower-24": [
+   "Forsyth County"
+  ],
+  "GA-lower-25": [
+   "Alpharetta city"
+  ],
+  "GA-lower-26": [
+   "Cumming city"
+  ],
+  "GA-lower-27": [
+   "Clermont town",
+   "Gainesville city",
+   "Gillsville city",
+   "Lula city"
+  ],
+  "GA-lower-28": [
+   "Cumming city",
+   "Gainesville city"
+  ],
+  "GA-lower-29": [
+   "Flowery Branch city",
+   "Gainesville city",
+   "Oakwood city"
+  ],
+  "GA-lower-3": [
+   "Fort Oglethorpe city",
+   "Ringgold city"
+  ],
+  "GA-lower-30": [
+   "Braselton town",
+   "Buford city",
+   "Flowery Branch city",
+   "Gainesville city",
+   "Mulberry city",
+   "Oakwood city"
+  ],
+  "GA-lower-31": [
+   "Arcade city",
+   "Braselton town",
+   "Commerce city",
+   "Gainesville city",
+   "Hoschton city",
+   "Jefferson city",
+   "Pendergrass town",
+   "Talmo town"
+  ],
+  "GA-lower-32": [
+   "Alto town",
+   "Avalon town",
+   "Baldwin city",
+   "Commerce city",
+   "Gillsville city",
+   "Homer town",
+   "Jefferson city",
+   "Lula city",
+   "Martin town",
+   "Maysville town",
+   "Mount Airy town",
+   "Toccoa city"
+  ],
+  "GA-lower-33": [
+   "Bowersville town",
+   "Canon city",
+   "Carnesville city",
+   "Franklin Springs city",
+   "Hartwell city",
+   "Ila city",
+   "Lavonia city",
+   "Martin town",
+   "Royston city"
+  ],
+  "GA-lower-34": [
+   "Kennesaw city",
+   "Marietta city"
+  ],
+  "GA-lower-35": [
+   "Acworth city",
+   "Kennesaw city",
+   "Marietta city"
+  ],
+  "GA-lower-36": [
+   "Acworth city",
+   "Kennesaw city"
+  ],
+  "GA-lower-37": [
+   "Marietta city"
+  ],
+  "GA-lower-38": [
+   "Austell city",
+   "Mableton city",
+   "Powder Springs city"
+  ],
+  "GA-lower-39": [
+   "Austell city",
+   "Mableton city",
+   "Smyrna city"
+  ],
+  "GA-lower-4": [
+   "Dalton city"
+  ],
+  "GA-lower-40": [
+   "Douglasville city",
+   "Hiram city",
+   "Villa Rica city"
+  ],
+  "GA-lower-41": [
+   "Mableton city",
+   "Powder Springs city"
+  ],
+  "GA-lower-42": [
+   "Mableton city",
+   "Marietta city",
+   "Smyrna city"
+  ],
+  "GA-lower-43": [
+   "Marietta city"
+  ],
+  "GA-lower-44": [
+   "Woodstock city"
+  ],
+  "GA-lower-45": [
+   "Cobb County"
+  ],
+  "GA-lower-46": [
+   "Mountain Park city",
+   "Woodstock city"
+  ],
+  "GA-lower-47": [
+   "Alpharetta city",
+   "Milton city",
+   "Mountain Park city",
+   "Roswell city"
+  ],
+  "GA-lower-48": [
+   "Alpharetta city",
+   "Johns Creek city",
+   "Peachtree Corners city",
+   "Roswell city"
+  ],
+  "GA-lower-49": [
+   "Alpharetta city",
+   "Milton city",
+   "Roswell city"
+  ],
+  "GA-lower-5": [
+   "Calhoun city",
+   "Fairmount city",
+   "Plainville city",
+   "Resaca town"
+  ],
+  "GA-lower-50": [
+   "Alpharetta city",
+   "Johns Creek city"
+  ],
+  "GA-lower-51": [
+   "Johns Creek city",
+   "Roswell city",
+   "Sandy Springs city"
+  ],
+  "GA-lower-52": [
+   "Brookhaven city",
+   "Dunwoody city",
+   "Sandy Springs city"
+  ],
+  "GA-lower-53": [
+   "Atlanta city",
+   "Roswell city",
+   "Sandy Springs city"
+  ],
+  "GA-lower-54": [
+   "Atlanta city",
+   "Sandy Springs city"
+  ],
+  "GA-lower-55": [
+   "Atlanta city",
+   "South Fulton city"
+  ],
+  "GA-lower-56": [
+   "Atlanta city"
+  ],
+  "GA-lower-57": [
+   "Atlanta city"
+  ],
+  "GA-lower-58": [
+   "Atlanta city"
+  ],
+  "GA-lower-59": [
+   "Atlanta city",
+   "East Point city"
+  ],
+  "GA-lower-6": [
+   "Chatsworth city",
+   "Cohutta city",
+   "Eton city",
+   "Varnell city"
+  ],
+  "GA-lower-60": [
+   "Atlanta city",
+   "South Fulton city"
+  ],
+  "GA-lower-61": [
+   "Atlanta city",
+   "Mableton city",
+   "Smyrna city",
+   "South Fulton city"
+  ],
+  "GA-lower-62": [
+   "Atlanta city",
+   "College Park city",
+   "East Point city",
+   "South Fulton city"
+  ],
+  "GA-lower-63": [
+   "Atlanta city",
+   "College Park city",
+   "East Point city",
+   "Hapeville city",
+   "South Fulton city",
+   "Union City city"
+  ],
+  "GA-lower-64": [
+   "Douglasville city"
+  ],
+  "GA-lower-65": [
+   "Atlanta city",
+   "Chattahoochee Hills city",
+   "East Point city",
+   "Palmetto city",
+   "South Fulton city",
+   "Union City city"
+  ],
+  "GA-lower-66": [
+   "Austell city",
+   "Douglasville city"
+  ],
+  "GA-lower-67": [
+   "Fairburn city",
+   "Palmetto city",
+   "South Fulton city",
+   "Union City city"
+  ],
+  "GA-lower-68": [
+   "Fairburn city",
+   "Fayetteville city",
+   "Peachtree City city",
+   "South Fulton city",
+   "Tyrone town",
+   "Union City city"
+  ],
+  "GA-lower-69": [
+   "Fayetteville city",
+   "South Fulton city",
+   "Union City city"
+  ],
+  "GA-lower-7": [
+   "Blue Ridge city",
+   "East Ellijay city",
+   "Ellijay city",
+   "McCaysville city",
+   "Morganton city"
+  ],
+  "GA-lower-70": [
+   "Newnan city",
+   "Whitesburg city"
+  ],
+  "GA-lower-71": [
+   "Carrollton city",
+   "Temple city",
+   "Villa Rica city"
+  ],
+  "GA-lower-72": [
+   "Carrollton city",
+   "Centralhatchee town",
+   "Ephesus city",
+   "Franklin city",
+   "Hogansville city",
+   "Roopville town"
+  ],
+  "GA-lower-73": [
+   "Fayetteville city",
+   "Newnan city",
+   "Peachtree City city",
+   "Sharpsburg town",
+   "Tyrone town"
+  ],
+  "GA-lower-74": [
+   "Hampton city",
+   "Jonesboro city",
+   "Lovejoy city"
+  ],
+  "GA-lower-75": [
+   "Jonesboro city",
+   "Morrow city"
+  ],
+  "GA-lower-76": [
+   "Forest Park city",
+   "Lake City city",
+   "Morrow city"
+  ],
+  "GA-lower-77": [
+   "College Park city",
+   "Forest Park city",
+   "Lake City city",
+   "Morrow city",
+   "Riverdale city"
+  ],
+  "GA-lower-78": [
+   "Jonesboro city",
+   "McDonough city",
+   "Morrow city",
+   "Stockbridge city"
+  ],
+  "GA-lower-79": [
+   "Forest Park city",
+   "Morrow city",
+   "Riverdale city"
+  ],
+  "GA-lower-8": [
+   "Blairsville city",
+   "Cleveland city",
+   "Helen city",
+   "Hiawassee city",
+   "Young Harris city"
+  ],
+  "GA-lower-80": [
+   "Chamblee city",
+   "Doraville city",
+   "Dunwoody city"
+  ],
+  "GA-lower-81": [
+   "Locust Grove city",
+   "McDonough city",
+   "Stockbridge city"
+  ],
+  "GA-lower-82": [
+   "Brooks town",
+   "Fayetteville city",
+   "Griffin city",
+   "Peachtree City city",
+   "Woolsey town"
+  ],
+  "GA-lower-83": [
+   "Brookhaven city",
+   "Chamblee city"
+  ],
+  "GA-lower-84": [
+   "Decatur city",
+   "Stonecrest city"
+  ],
+  "GA-lower-85": [
+   "Avondale Estates city",
+   "Clarkston city"
+  ],
+  "GA-lower-86": [
+   "Clarkston city",
+   "Tucker city"
+  ],
+  "GA-lower-87": [
+   "Pine Lake city",
+   "Stone Mountain city",
+   "Tucker city"
+  ],
+  "GA-lower-88": [
+   "Lilburn city",
+   "Stone Mountain city",
+   "Tucker city"
+  ],
+  "GA-lower-89": [
+   "Atlanta city",
+   "Decatur city"
+  ],
+  "GA-lower-9": [
+   "Dahlonega city",
+   "Dawsonville city"
+  ],
+  "GA-lower-90": [
+   "Atlanta city"
+  ],
+  "GA-lower-91": [
+   "Stonecrest city"
+  ],
+  "GA-lower-92": [
+   "Conyers city"
+  ],
+  "GA-lower-93": [
+   "Lithonia city",
+   "Snellville city",
+   "Stonecrest city"
+  ],
+  "GA-lower-94": [
+   "Stonecrest city"
+  ],
+  "GA-lower-95": [
+   "Snellville city"
+  ],
+  "GA-lower-96": [
+   "Doraville city",
+   "Duluth city",
+   "Norcross city",
+   "Peachtree Corners city"
+  ],
+  "GA-lower-97": [
+   "Berkeley Lake city",
+   "Doraville city",
+   "Duluth city",
+   "Norcross city",
+   "Peachtree Corners city"
+  ],
+  "GA-lower-98": [
+   "Norcross city"
+  ],
+  "GA-lower-99": [
+   "Duluth city",
+   "Sugar Hill city",
+   "Suwanee city"
+  ],
+  "GA-upper-1": [
+   "Allenhurst city",
+   "Bloomingdale city",
+   "Flemington city",
+   "Gumbranch city",
+   "Hinesville city",
+   "Midway city",
+   "Pembroke city",
+   "Pooler city",
+   "Riceboro city",
+   "Richmond Hill city",
+   "Savannah city",
+   "Tybee Island city",
+   "Vernonburg town",
+   "Walthourville city"
+  ],
+  "GA-upper-10": [
+   "Avondale Estates city",
+   "Stockbridge city",
+   "Stonecrest city"
+  ],
+  "GA-upper-11": [
+   "Adel city",
+   "Attapulgus city",
+   "Bainbridge city",
+   "Barwick city",
+   "Berlin city",
+   "Boston city",
+   "Brinson town",
+   "Cairo city",
+   "Cecil city",
+   "Climax city",
+   "Coolidge city",
+   "Doerun city",
+   "Donalsonville city",
+   "Ellenton town",
+   "Funston city",
+   "Iron City town",
+   "Lenox town",
+   "Meigs city",
+   "Morven city",
+   "Moultrie city",
+   "Norman Park city",
+   "Ochlocknee town",
+   "Omega city",
+   "Pavo city",
+   "Quitman city",
+   "Sparks town",
+   "Thomasville city",
+   "Whigham city"
+  ],
+  "GA-upper-12": [
+   "Albany city",
+   "Americus city",
+   "Andersonville city",
+   "Arlington city",
+   "Baconton city",
+   "Blakely city",
+   "Bluffton town",
+   "Bronwood town",
+   "Camilla city",
+   "Colquitt city",
+   "Cuthbert city",
+   "Damascus city",
+   "Dawson city",
+   "De Soto city",
+   "Edison city",
+   "Fort Gaines city",
+   "Georgetown-Quitman County unified government",
+   "Jakin city",
+   "Leary city",
+   "Leslie city",
+   "Lumpkin city",
+   "Meigs city",
+   "Morgan city",
+   "Newton city",
+   "Parrott town",
+   "Pelham city",
+   "Plains city",
+   "Richland city",
+   "Sale City city",
+   "Sasser town",
+   "Shellman city",
+   "Webster County unified government"
+  ],
+  "GA-upper-13": [
+   "Alapaha town",
+   "Ambrose city",
+   "Arabi town",
+   "Ashburn city",
+   "Broxton city",
+   "Cordele city",
+   "Douglas city",
+   "Enigma town",
+   "Fitzgerald city",
+   "Leesburg city",
+   "Nashville city",
+   "Ocilla city",
+   "Omega city",
+   "Poulan city",
+   "Ray City city",
+   "Rebecca town",
+   "Smithville city",
+   "Sumner town",
+   "Sycamore city",
+   "Sylvester city",
+   "Tifton city",
+   "Ty Ty city",
+   "Warwick city"
+  ],
+  "GA-upper-14": [
+   "Alpharetta city",
+   "Atlanta city",
+   "Johns Creek city",
+   "Roswell city",
+   "Sandy Springs city"
+  ],
+  "GA-upper-15": [
+   "Buena Vista city",
+   "Butler city",
+   "Columbus city",
+   "Cusseta-Chattahoochee County unified government",
+   "Ellaville city",
+   "Geneva town",
+   "Ideal city",
+   "Junction City town",
+   "Manchester city",
+   "Marshallville city",
+   "Montezuma city",
+   "Oglethorpe city",
+   "Reynolds city",
+   "Talbotton city",
+   "Woodland city"
+  ],
+  "GA-upper-16": [
+   "Aldora town",
+   "Barnesville city",
+   "Brooks town",
+   "Concord city",
+   "Fayetteville city",
+   "Griffin city",
+   "Meansville city",
+   "Milner city",
+   "Molena city",
+   "Orchard Hill town",
+   "Peachtree City city",
+   "Tyrone town",
+   "Williamson city",
+   "Woolsey town",
+   "Zebulon city"
+  ],
+  "GA-upper-17": [
+   "Hampton city",
+   "Jonesboro city",
+   "Locust Grove city",
+   "Lovejoy city",
+   "McDonough city",
+   "Morrow city",
+   "Stockbridge city"
+  ],
+  "GA-upper-18": [
+   "Byron city",
+   "Centerville city",
+   "Culloden city",
+   "Forsyth city",
+   "Fort Valley city",
+   "Macon-Bibb County",
+   "Perry city",
+   "Roberta city",
+   "Thomaston city",
+   "Warner Robins city",
+   "Yatesville town"
+  ],
+  "GA-upper-19": [
+   "Ailey city",
+   "Alamo town",
+   "Alma city",
+   "Alston town",
+   "Baxley city",
+   "Cobbtown city",
+   "Collins city",
+   "Denton city",
+   "Douglas city",
+   "Glennville city",
+   "Glenwood city",
+   "Graham city",
+   "Hazlehurst city",
+   "Higgston town",
+   "Jacksonville city",
+   "Jesup city",
+   "Ludowici city",
+   "Lumber City city",
+   "Lyons city",
+   "Manassas city",
+   "McRae-Helena city",
+   "Milan city",
+   "Mount Vernon city",
+   "Nicholls city",
+   "Odum city",
+   "Reidsville city",
+   "Santa Claus city",
+   "Scotland city",
+   "Screven city",
+   "Surrency town",
+   "Tarrytown town",
+   "Uvalda city",
+   "Vidalia city"
+  ],
+  "GA-upper-2": [
+   "Garden City city",
+   "Port Wentworth city",
+   "Savannah city",
+   "Thunderbolt town"
+  ],
+  "GA-upper-20": [
+   "Abbeville city",
+   "Allentown city",
+   "Byromville town",
+   "Cadwell town",
+   "Chauncey city",
+   "Chester town",
+   "Cochran city",
+   "Dexter town",
+   "Dooling town",
+   "Dublin city",
+   "Dudley city",
+   "East Dublin city",
+   "Eastman city",
+   "Hawkinsville city",
+   "Lilly city",
+   "Milan city",
+   "Montrose town",
+   "Perry city",
+   "Pinehurst city",
+   "Pineview town",
+   "Pitts city",
+   "Rentz city",
+   "Rhine town",
+   "Rochelle city",
+   "Soperton city",
+   "Unadilla city",
+   "Vienna city",
+   "Warner Robins city"
+  ],
+  "GA-upper-21": [
+   "Alpharetta city",
+   "Ball Ground city",
+   "Canton city",
+   "Holly Springs city",
+   "Milton city",
+   "Nelson city",
+   "Roswell city",
+   "Waleska city"
+  ],
+  "GA-upper-22": [
+   "Augusta-Richmond County consolidated government (balance)",
+   "Hephzibah city"
+  ],
+  "GA-upper-23": [
+   "Adrian city",
+   "Augusta-Richmond County consolidated government (balance)",
+   "Avera city",
+   "Bartow town",
+   "Blythe city",
+   "Camak town",
+   "Crawfordville city",
+   "Dearing town",
+   "Edge Hill city",
+   "Garfield city",
+   "Gibson city",
+   "Girard town",
+   "Grovetown city",
+   "Harlem city",
+   "Hiltonia town",
+   "Keysville city",
+   "Louisville city",
+   "Midville city",
+   "Millen city",
+   "Mitchell town",
+   "Newington town",
+   "Norwood city",
+   "Nunez city",
+   "Oak Park town",
+   "Oliver city",
+   "Rocky Ford town",
+   "Sardis city",
+   "Sharon city",
+   "Stapleton city",
+   "Stillmore city",
+   "Summertown city",
+   "Swainsboro city",
+   "Sylvania city",
+   "Thomson city",
+   "Twin City city",
+   "Vidette city",
+   "Wadley city",
+   "Warrenton city",
+   "Waynesboro city",
+   "Wrens city"
+  ],
+  "GA-upper-24": [
+   "Arnoldsville city",
+   "Bowersville town",
+   "Bowman city",
+   "Canon city",
+   "Crawford city",
+   "Elberton city",
+   "Greensboro city",
+   "Hartwell city",
+   "Lavonia city",
+   "Lexington city",
+   "Lincolnton city",
+   "Maxeys town",
+   "Rayle town",
+   "Royston city",
+   "Siloam town",
+   "Tignall town",
+   "Union Point city",
+   "Washington city",
+   "White Plains city",
+   "Woodville city"
+  ],
+  "GA-upper-25": [
+   "Eatonton city",
+   "Flovilla city",
+   "Gray city",
+   "Jackson city",
+   "Jenkinsburg city",
+   "Locust Grove city",
+   "Macon-Bibb County",
+   "Milledgeville city",
+   "Monticello city",
+   "Shady Dale city"
+  ],
+  "GA-upper-26": [
+   "Adrian city",
+   "Allentown city",
+   "Centerville city",
+   "Danville town",
+   "Davisboro city",
+   "Deepstep town",
+   "Gordon city",
+   "Harrison town",
+   "Irwinton city",
+   "Ivey city",
+   "Jeffersonville city",
+   "Kite city",
+   "Macon-Bibb County",
+   "McIntyre town",
+   "Oconee city",
+   "Riddleville town",
+   "Sandersville city",
+   "Sparta city",
+   "Tennille city",
+   "Toomsboro city",
+   "Warner Robins city",
+   "Wrightsville city"
+  ],
+  "GA-upper-27": [
+   "Cumming city"
+  ],
+  "GA-upper-28": [
+   "Austell city",
+   "Chattahoochee Hills city",
+   "Douglasville city",
+   "Mableton city",
+   "Powder Springs city",
+   "Smyrna city",
+   "South Fulton city",
+   "Union City city"
+  ],
+  "GA-upper-29": [
+   "Columbus city",
+   "Gay town",
+   "Greenville city",
+   "Hamilton city",
+   "Haralson town",
+   "Hogansville city",
+   "LaGrange city",
+   "Lone Oak town",
+   "Luthersville city",
+   "Manchester city",
+   "Pine Mountain town",
+   "Shiloh city",
+   "Warm Springs city",
+   "Waverly Hall town",
+   "West Point city",
+   "Woodbury city"
+  ],
+  "GA-upper-3": [
+   "Brunswick city",
+   "Darien city",
+   "Folkston city",
+   "Hoboken city",
+   "Homeland city",
+   "Kingsland city",
+   "Nahunta city",
+   "St. Marys city",
+   "Waycross city",
+   "Woodbine city"
+  ],
+  "GA-upper-30": [
+   "Bremen city",
+   "Buchanan city",
+   "Carrollton city",
+   "Douglasville city",
+   "Mount Zion city",
+   "Tallapoosa city",
+   "Temple city",
+   "Villa Rica city",
+   "Waco city"
+  ],
+  "GA-upper-31": [
+   "Aragon city",
+   "Braswell town",
+   "Cedartown city",
+   "Dallas city",
+   "Hiram city",
+   "Rockmart city",
+   "Taylorsville town"
+  ],
+  "GA-upper-32": [
+   "Canton city",
+   "Holly Springs city",
+   "Kennesaw city",
+   "Marietta city",
+   "Woodstock city"
+  ],
+  "GA-upper-33": [
+   "Mableton city",
+   "Marietta city",
+   "Powder Springs city"
+  ],
+  "GA-upper-34": [
+   "College Park city",
+   "Fayetteville city",
+   "Forest Park city",
+   "Jonesboro city",
+   "Lake City city",
+   "Morrow city",
+   "Riverdale city"
+  ],
+  "GA-upper-35": [
+   "Atlanta city",
+   "Mableton city",
+   "Smyrna city",
+   "South Fulton city"
+  ],
+  "GA-upper-36": [
+   "Atlanta city",
+   "College Park city",
+   "East Point city",
+   "Hapeville city"
+  ],
+  "GA-upper-37": [
+   "Acworth city",
+   "Cartersville city",
+   "Emerson city",
+   "Kennesaw city",
+   "Marietta city"
+  ],
+  "GA-upper-38": [
+   "Atlanta city",
+   "Chattahoochee Hills city",
+   "East Point city",
+   "Fairburn city",
+   "Palmetto city",
+   "Sandy Springs city",
+   "South Fulton city",
+   "Union City city"
+  ],
+  "GA-upper-39": [
+   "Atlanta city",
+   "College Park city",
+   "East Point city",
+   "South Fulton city",
+   "Union City city"
+  ],
+  "GA-upper-4": [
+   "Bellville city",
+   "Bloomingdale city",
+   "Brooklet city",
+   "Claxton city",
+   "Daisy city",
+   "Garden City city",
+   "Guyton city",
+   "Hagan city",
+   "Metter city",
+   "Pooler city",
+   "Portal town",
+   "Pulaski town",
+   "Register town",
+   "Rincon city",
+   "Savannah city",
+   "Springfield city",
+   "Statesboro city"
+  ],
+  "GA-upper-40": [
+   "Brookhaven city",
+   "Chamblee city",
+   "Doraville city",
+   "Dunwoody city",
+   "Norcross city",
+   "Peachtree Corners city",
+   "Tucker city"
+  ],
+  "GA-upper-41": [
+   "Brookhaven city",
+   "Clarkston city",
+   "Pine Lake city",
+   "Stonecrest city",
+   "Tucker city"
+  ],
+  "GA-upper-42": [
+   "Bostwick city",
+   "Buckhead town",
+   "Covington city",
+   "Jersey city",
+   "Loganville city",
+   "Madison city",
+   "Mansfield city",
+   "McDonough city",
+   "Newborn town",
+   "Oxford city",
+   "Porterdale city",
+   "Rutledge city",
+   "Social Circle city",
+   "Walnut Grove city"
+  ],
+  "GA-upper-43": [
+   "Conyers city",
+   "Grayson city",
+   "Lithonia city",
+   "Loganville city",
+   "Snellville city",
+   "Stonecrest city"
+  ],
+  "GA-upper-44": [
+   "Atlanta city",
+   "Decatur city",
+   "Forest Park city",
+   "Lake City city",
+   "Morrow city"
+  ],
+  "GA-upper-45": [
+   "Auburn city",
+   "Braselton town",
+   "Buford city",
+   "Carl town",
+   "Dacula city",
+   "Lawrenceville city",
+   "Mulberry city",
+   "Rest Haven town",
+   "Sugar Hill city",
+   "Suwanee city",
+   "Winder city"
+  ],
+  "GA-upper-46": [
+   "Athens-Clarke County unified government (balance)",
+   "Bethlehem town",
+   "Between town",
+   "Bishop town",
+   "Bogart town",
+   "Dacula city",
+   "Good Hope city",
+   "Monroe city",
+   "North High Shoals town",
+   "Watkinsville city",
+   "Winder city"
+  ],
+  "GA-upper-47": [
+   "Arcade city",
+   "Athens-Clarke County unified government (balance)",
+   "Bethlehem town",
+   "Braselton town",
+   "Carlton city",
+   "Colbert city",
+   "Comer city",
+   "Danielsville city",
+   "Hoschton city",
+   "Hull city",
+   "Ila city",
+   "Jefferson city",
+   "Nicholson city",
+   "Pendergrass town",
+   "Statham city",
+   "Talmo town",
+   "Winder city",
+   "Winterville city"
+  ],
+  "GA-upper-48": [
+   "Alpharetta city",
+   "Buford city",
+   "Cumming city",
+   "Johns Creek city",
+   "Sugar Hill city",
+   "Suwanee city"
+  ],
+  "GA-upper-49": [
+   "Braselton town",
+   "Buford city",
+   "Clermont town",
+   "Flowery Branch city",
+   "Gainesville city",
+   "Lula city",
+   "Oakwood city",
+   "Rest Haven town"
+  ],
+  "GA-upper-5": [
+   "Doraville city",
+   "Lawrenceville city",
+   "Norcross city",
+   "Peachtree Corners city"
+  ],
+  "GA-upper-50": [
+   "Alto town",
+   "Avalon town",
+   "Baldwin city",
+   "Canon city",
+   "Carnesville city",
+   "Clarkesville city",
+   "Clayton city",
+   "Commerce city",
+   "Cornelia city",
+   "Demorest city",
+   "Dillard city",
+   "Franklin Springs city",
+   "Gillsville city",
+   "Helen city",
+   "Hiawassee city",
+   "Homer town",
+   "Jefferson city",
+   "Lavonia city",
+   "Lula city",
+   "Martin town",
+   "Maysville town",
+   "Mount Airy town",
+   "Mountain City town",
+   "Royston city",
+   "Sky Valley city",
+   "Tallulah Falls town",
+   "Tiger town",
+   "Toccoa city",
+   "Young Harris city"
+  ],
+  "GA-upper-51": [
+   "Blairsville city",
+   "Blue Ridge city",
+   "Cleveland city",
+   "Dahlonega city",
+   "Dawsonville city",
+   "East Ellijay city",
+   "Ellijay city",
+   "Jasper city",
+   "McCaysville city",
+   "Morganton city",
+   "Nelson city",
+   "Talking Rock town"
+  ],
+  "GA-upper-52": [
+   "Adairsville city",
+   "Cartersville city",
+   "Cave Spring city",
+   "Euharlee city",
+   "Kingston city",
+   "Plainville city",
+   "Rome city",
+   "Taylorsville town",
+   "White city"
+  ],
+  "GA-upper-53": [
+   "Chickamauga city",
+   "Fort Oglethorpe city",
+   "LaFayette city",
+   "Lookout Mountain city",
+   "Lyerly town",
+   "Menlo city",
+   "Ringgold city",
+   "Rome city",
+   "Rossville city",
+   "Summerville city",
+   "Trenton city",
+   "Trion town"
+  ],
+  "GA-upper-54": [
+   "Calhoun city",
+   "Chatsworth city",
+   "Cohutta city",
+   "Dalton city",
+   "Eton city",
+   "Fairmount city",
+   "Resaca town",
+   "Tunnel Hill city",
+   "Varnell city"
+  ],
+  "GA-upper-55": [
+   "Snellville city",
+   "Stone Mountain city",
+   "Stonecrest city",
+   "Tucker city"
+  ],
+  "GA-upper-56": [
+   "Holly Springs city",
+   "Mountain Park city",
+   "Roswell city",
+   "Woodstock city"
+  ],
+  "GA-upper-6": [
+   "Bowdon city",
+   "Carrollton city",
+   "Centralhatchee town",
+   "Chattahoochee Hills city",
+   "Ephesus city",
+   "Franklin city",
+   "Grantville city",
+   "Haralson town",
+   "Moreland town",
+   "Newnan city",
+   "Palmetto city",
+   "Roopville town",
+   "Senoia city",
+   "Sharpsburg town",
+   "Turin town",
+   "Whitesburg city"
+  ],
+  "GA-upper-7": [
+   "Berkeley Lake city",
+   "Duluth city",
+   "Lawrenceville city",
+   "Norcross city",
+   "Peachtree Corners city",
+   "Suwanee city"
+  ],
+  "GA-upper-8": [
+   "Argyle town",
+   "Blackshear city",
+   "Dasher town",
+   "Du Pont town",
+   "Echols County consolidated government",
+   "Fargo city",
+   "Hahira city",
+   "Homerville city",
+   "Lake Park city",
+   "Lakeland city",
+   "Offerman city",
+   "Patterson city",
+   "Pearson city",
+   "Ray City city",
+   "Remerton city",
+   "Valdosta city",
+   "Waycross city",
+   "Willacoochee city"
+  ],
+  "GA-upper-9": [
+   "Grayson city",
+   "Lawrenceville city",
+   "Lilburn city",
+   "Loganville city",
+   "Snellville city"
+  ],
   "MN-lower-10A": [
    "Aitkin city",
    "Aitkin township",

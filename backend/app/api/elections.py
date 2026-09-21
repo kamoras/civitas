@@ -497,9 +497,9 @@ def _statewide_section(db: Session, state: str, cycle: int) -> tuple[list[dict],
         .all()
     )
 
-    by_office: dict[str, list[dict]] = {}
+    by_office: dict[tuple[str, str | None], list[dict]] = {}
     for row in nominees:
-        by_office.setdefault(row.office, []).append({
+        by_office.setdefault((row.office, row.district), []).append({
             # FEC's own 3-letter codes, so the frontend colours a nominee
             # through the exact same majorPartyOf() every federal
             # candidate already goes through — a second party vocabulary
@@ -510,10 +510,21 @@ def _statewide_section(db: Session, state: str, cycle: int) -> tuple[list[dict],
 
     # STATEWIDE_OFFICE_LABELS is insertion-ordered by seniority of the
     # office, which is the order a state prints them on the real ballot.
+    # A statewide body seated by district (Georgia's Public Service
+    # Commission) contributes one entry per seat, labelled with it —
+    # otherwise District 3 and District 5 render as one indistinguishable
+    # "Public Service Commission" row.
     races = [
-        {"office": code, "label": label, "nominees": sorted(by_office[code], key=lambda n: n["party"])}
+        {
+            "office": code if district is None else f"{code}-{district}",
+            "label": label if district is None else f"{label}, District {district}",
+            "nominees": sorted(by_office[(code, district)], key=lambda n: n["party"]),
+        }
         for code, label in STATEWIDE_OFFICE_LABELS.items()
-        if code in by_office
+        for district in sorted(
+            (d for (c, d) in by_office if c == code),
+            key=lambda d: district_sort_key(d) if d else (-1, ""),
+        )
     ]
 
     if marker is None:
