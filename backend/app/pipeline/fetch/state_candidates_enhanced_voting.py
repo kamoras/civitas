@@ -253,6 +253,7 @@ async def fetch_confirmed_candidates(
         if not isinstance(ballot_item, dict) or ballot_item.get("contestType") != "Candidate":
             continue
         contest_name = _text(ballot_item.get("name"))
+        seat = None
         office_district = parse_office(contest_name)
         if office_district is not None:
             office, district = office_district
@@ -274,10 +275,10 @@ async def fetch_confirmed_candidates(
                 # and on this ballot those collide word-for-word with
                 # what it is looking for ("Senatorial District Committee
                 # District 13") -- see parse_state_leg_office.
-                seat = parse_state_leg_office(contest_name)
-                if seat is None:
+                parsed_seat = parse_state_leg_office(contest_name)
+                if parsed_seat is None:
                     continue  # local/committee contest -- see module docstring
-                office, district = seat
+                office, district, seat = parsed_seat
         if office_district is not None:
             bucket = by_seat
         elif office in STATEWIDE_OFFICE_LABELS:
@@ -285,7 +286,7 @@ async def fetch_confirmed_candidates(
         else:
             bucket = state_leg_by_seat
         for name, party, votes in _candidates(ballot_item):
-            bucket.setdefault((office, district, party), []).append((name, votes))
+            bucket.setdefault((office, district, party, seat), []).append((name, votes))
 
     threshold = source.get("runoff_threshold_pct")
     # The two kinds of contest are resolved by the same shared tie-safe

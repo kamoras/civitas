@@ -316,3 +316,59 @@ class TestStatewideBodySeatedByDistrict:
         ])
         races, _ = _statewide_section(db_session, "GA", CYCLE)
         assert [r["label"].split("District ")[1] for r in races] == ["2", "3", "10"]
+
+
+class TestMultiMemberSeats:
+    """Idaho and Washington elect two representatives from one district.
+    Both seats share a geography, so both share a town list — but they
+    are two separate contests with two separate nominees.
+    """
+
+    def _seat(self, district, seat, name, party="D"):
+        return {"office": "lower", "district": district, "seat": seat,
+                "party": party, "last_name": name}
+
+    def test_two_seats_of_one_district_are_separate_rows(self, db_session):
+        _sync_state_leg_nominees(db_session, CYCLE, "ID", SOURCE, [
+            self._seat("1", "A", "Seat A Person"),
+            self._seat("1", "B", "Seat B Person"),
+        ])
+        assert db_session.query(StateLegNominee).count() == 2
+
+    def test_each_seat_renders_with_its_own_label(self, db_session):
+        _sync_statewide_nominees(db_session, CYCLE, "ID", SOURCE, [])
+        _sync_state_leg_nominees(db_session, CYCLE, "ID", SOURCE, [
+            self._seat("1", "B", "Seat B Person"),
+            self._seat("1", "A", "Seat A Person"),
+        ])
+        section = _state_leg_section(db_session, "ID", CYCLE, _statewide_marker(db_session, "ID", CYCLE))
+        assert [d["district"] for d in section[0]["districts"]] == ["1A", "1B"]
+
+    def test_washington_positions_render_hyphenated(self, db_session):
+        _sync_statewide_nominees(db_session, CYCLE, "WA", SOURCE, [])
+        _sync_state_leg_nominees(db_session, CYCLE, "WA", SOURCE, [
+            self._seat("5", "1", "Position One"), self._seat("5", "2", "Position Two"),
+        ])
+        section = _state_leg_section(db_session, "WA", CYCLE, _statewide_marker(db_session, "WA", CYCLE))
+        assert [d["district"] for d in section[0]["districts"]] == ["5-1", "5-2"]
+
+    def test_both_seats_resolve_the_same_towns(self, db_session):
+        """They are one geography. The crosswalk is keyed on the bare
+        district for exactly this reason."""
+        _sync_statewide_nominees(db_session, CYCLE, "ID", SOURCE, [])
+        _sync_state_leg_nominees(db_session, CYCLE, "ID", SOURCE, [
+            self._seat("1", "A", "Seat A Person"), self._seat("1", "B", "Seat B Person"),
+        ])
+        section = _state_leg_section(db_session, "ID", CYCLE, _statewide_marker(db_session, "ID", CYCLE))
+        towns = [d["towns"] for d in section[0]["districts"]]
+        assert towns[0] == towns[1]
+
+    def test_a_withdrawn_seat_does_not_take_its_sibling(self, db_session):
+        _sync_state_leg_nominees(db_session, CYCLE, "ID", SOURCE, [
+            self._seat("1", "A", "Seat A Person"), self._seat("1", "B", "Seat B Person"),
+        ])
+        _sync_state_leg_nominees(db_session, CYCLE, "ID", SOURCE, [
+            self._seat("1", "A", "Seat A Person"),
+        ])
+        rows = db_session.query(StateLegNominee).all()
+        assert [(r.district, r.seat) for r in rows] == [("1", "A")]

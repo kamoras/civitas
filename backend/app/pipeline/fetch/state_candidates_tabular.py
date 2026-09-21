@@ -69,14 +69,17 @@ acted on blindly:
        Its county subdivisions are Census County Divisions and had to
        be swapped for incorporated places; three of its House districts
        lie entirely in unincorporated land and fall back to counties.
-  ID   BLOCKED. "State Representative District N Seat A"/"Seat B": two
-       seats share one district number, so both would collide on the
-       same identifier. Idaho elects two representatives per district
-       from the SAME geography, unlike Minnesota's 10A/10B which are
-       genuinely different districts.
-  WA   BLOCKED, same shape: "State Representative Pos. N - Legislative
-       District N" carries two numbers, and the position is what
-       separates the seats.
+  ID   LIVE. "State Representative District N Seat A"/"Seat B" —
+       two seats of ONE district, now kept apart by StateLegNominee.seat
+       rather than colliding: 35 districts, 70 lower seats, which is
+       Idaho's real House. All seven of its constitutional officers
+       resolve; State Controller had to be added for the last of them.
+  WA   LIVE, same shape via "Pos. N - Legislative District N": 49
+       districts, 98 lower seats, its real House. No statewide offices,
+       and that is a checked claim rather than an empty result — every
+       unmatched non-judicial contest in its file is a local levy,
+       proposition or PUD commissioner, because Washington elects its
+       statewide officers in presidential years.
   NC   Only "NC STATE SENATE DISTRICT N" appears in its file; the House
        wording is therefore unverified.
   UT   7 seats, clean one-per-district labels, but too few contests to
@@ -865,6 +868,7 @@ def _collect(
     """Fold one results file into `by_seat`, replacing (not appending to)
     any seat it covers so a later stage's answer wins outright."""
     for contest, entry in _tally(rows, fmt).items():
+        seat = None
         parsed = entry["office"] or parse_office(contest)
         if parsed is not None:
             office, district = parsed
@@ -884,10 +888,10 @@ def _collect(
             if statewide is not None:
                 office, district = statewide
             else:
-                seat = parse_state_leg_office(contest)
-                if seat is None:
+                parsed_seat = parse_state_leg_office(contest)
+                if parsed_seat is None:
                     continue
-                office, district = seat
+                office, district, seat = parsed_seat
         # A party-primary label carries its party ("US HOUSE OF
         # REPRESENTATIVES DISTRICT 01 (REP)"); a top-two label doesn't,
         # so each candidate's own party column is the fallback.
@@ -919,10 +923,13 @@ def _collect(
             )
             if not last_name:
                 continue
-            records.append({
+            record = {
                 "office": office, "district": district,
                 "party": party, "last_name": last_name,
-            })
+            }
+            if seat is not None:
+                record["seat"] = seat
+            records.append(record)
         # Keyed by each record's OWN party, not the contest's. A runoff must
         # replace its primary's answer for the same seat-and-party, but two
         # party primaries held the same day (Virginia runs separate
@@ -930,6 +937,6 @@ def _collect(
         # both survive — keying on the contest would let the second silently
         # erase the first.
         for record in records:
-            by_seat.setdefault((office, district, record["party"]), []).clear()
+            by_seat.setdefault((office, district, seat, record["party"]), []).clear()
         for record in records:
-            by_seat[(office, district, record["party"])].append(record)
+            by_seat[(office, district, seat, record["party"])].append(record)

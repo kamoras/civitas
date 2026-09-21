@@ -51,6 +51,7 @@ from app.pipeline.fetch.state_candidate_sources import source_for_state
 from app.pipeline.fetch.state_candidates_common import (
     PARTY_CODE_MAP,
     STATE_LEG_CHAMBER_LABELS,
+    district_label,
     district_sort_key,
     STATEWIDE_MARKER_TIER,
     STATEWIDE_MARKER_TTL_HOURS,
@@ -564,9 +565,9 @@ def _state_leg_section(db: Session, state: str, cycle: int, marker: dict | None)
         .filter(StateLegNominee.state == state, StateLegNominee.cycle_year == cycle)
         .all()
     )
-    seats: dict[tuple[str, str], list[dict]] = {}
+    seats: dict[tuple[str, str, str | None], list[dict]] = {}
     for row in rows:
-        seats.setdefault((row.chamber, row.district), []).append({
+        seats.setdefault((row.chamber, row.district, row.seat), []).append({
             "party": PARTY_CODE_MAP.get(row.party, row.party),
             "name": row.display_name,
         })
@@ -575,12 +576,16 @@ def _state_leg_section(db: Session, state: str, cycle: int, marker: dict | None)
     for chamber, label in STATE_LEG_CHAMBER_LABELS.items():
         districts = [
             {
-                "district": district,
+                # What the reader sees: "5" where a district elects one
+                # member, "1A" or "5-2" where it elects several. The
+                # TOWNS still come from the bare district, because both
+                # seats of a multi-member district share one geography.
+                "district": district_label(district, seat),
                 "towns": towns.get(f"{state}-{chamber}-{district}") or [],
                 "nominees": sorted(people, key=lambda n: n["party"]),
             }
-            for (ch, district), people in sorted(
-                seats.items(), key=lambda kv: district_sort_key(kv[0][1])
+            for (ch, district, seat), people in sorted(
+                seats.items(), key=lambda kv: (district_sort_key(kv[0][1]), kv[0][2] or "")
             )
             if ch == chamber
         ]

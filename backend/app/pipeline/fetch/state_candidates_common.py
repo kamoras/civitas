@@ -167,6 +167,11 @@ _STATEWIDE_OFFICES = [
     # qualifier means a state that prints a bare "Auditor" for a county
     # office cannot slip through either.
     ("auditor", re.compile(r"\b(?:state|general)\s+auditor\b", re.IGNORECASE)),
+    # Idaho's own constitutional officer. Qualified like the two above,
+    # because a county can have a controller too.
+    ("controller", re.compile(r"\bstate\s+controller\b", re.IGNORECASE)),
+    # The same role under the name most other states give it.
+    ("comptroller", re.compile(r"\b(?:state\s+)?comptroller\b", re.IGNORECASE)),
 ]
 
 _LT_GOVERNOR_RE = re.compile(r"\b(?:lieutenant|lt\.?)\s+governor\b", re.IGNORECASE)
@@ -262,6 +267,8 @@ STATEWIDE_OFFICE_LABELS = {
     "secretary_of_state": "Secretary of State",
     "treasurer": "State Treasurer",
     "auditor": "State Auditor",
+    "controller": "State Controller",
+    "comptroller": "State Comptroller",
     "insurance_commissioner": "Insurance Commissioner",
     "agriculture_commissioner": "Agriculture Commissioner",
     "labor_commissioner": "Labor Commissioner",
@@ -378,6 +385,21 @@ _STATE_LEG_DISTRICT_RE = re.compile(
     r"\bDistrict\s+(?:No\.?\s*)?0*(\d+)([A-Za-z]?)\b", re.IGNORECASE,
 )
 
+# SOME STATES ELECT SEVERAL MEMBERS FROM ONE DISTRICT, and the seat is
+# what tells their contests apart. Idaho runs "District 1 Seat A" and
+# "Seat B"; Washington runs "Pos. 1" and "Pos. 2" of a Legislative
+# District. Both are TWO seats in ONE geography.
+#
+# That is a different thing from Minnesota's "10A"/"10B", which are two
+# separate districts with their own boundaries — Census confirms it:
+# Minnesota has 134 lower-chamber polygons named 10A, 10B, ..., while
+# Idaho has 35 and Washington 49, numbered plainly. So the seat is
+# stored beside the district rather than folded into it, and the
+# district keeps pointing at the one real polygon both seats share.
+_STATE_LEG_SEAT_RE = re.compile(
+    r"\bSeat\s+([A-Za-z])\b|\bPos(?:ition|\.)?\s*(\d+)\b", re.IGNORECASE,
+)
+
 STATE_LEG_CHAMBER_LABELS = {"upper": "State Senate", "lower": "State House"}
 
 
@@ -389,9 +411,17 @@ def district_sort_key(district: str) -> tuple[int, str]:
     return (int(match.group(1)), match.group(2)) if match else (10**9, str(district))
 
 
-def parse_state_leg_office(contest_name: str) -> tuple[str, str] | None:
-    """("upper", "5") / ("lower", "10A") for a state legislative seat, or
-    None.
+def parse_state_leg_office(contest_name: str) -> tuple[str, str, str | None] | None:
+    """(chamber, district, seat) for a state legislative seat, or None.
+
+    ("upper", "5", None) for Rhode Island's Senate District 5,
+    ("lower", "10A", None) for one of Minnesota's two real districts,
+    ("lower", "1", "A") for Idaho's Seat A of District 1, and
+    ("lower", "5", "2") for Washington's Position 2 of District 5.
+
+    The seat is None wherever a district elects a single member, which
+    is most of the country. Where it is set, the district still names
+    the one geography both seats share — see _STATE_LEG_SEAT_RE.
 
     None for federal and statewide-executive contests too: like its two
     siblings this answers one question, and a caller asks whichever it
@@ -407,8 +437,22 @@ def parse_state_leg_office(contest_name: str) -> tuple[str, str] | None:
             district = _STATE_LEG_DISTRICT_RE.search(name)
             if not district:
                 return None
-            return chamber, district.group(1) + district.group(2).upper()
+            seat_match = _STATE_LEG_SEAT_RE.search(name)
+            seat = None
+            if seat_match:
+                seat = (seat_match.group(1) or seat_match.group(2) or "").upper() or None
+            return chamber, district.group(1) + district.group(2).upper(), seat
     return None
+
+
+def district_label(district: str, seat: str | None) -> str:
+    """How a seat is written on the page. "1A" for a lettered seat, the
+    way Idaho itself writes it; "5-2" for a numbered position, which no
+    state prints exactly but which stays compact, unambiguous and
+    obviously two seats of one district when both rows sit together."""
+    if not seat:
+        return district
+    return f"{district}{seat}" if seat.isalpha() else f"{district}-{seat}"
 
 
 def office_from_columns(row: dict, spec: dict | None) -> tuple[str, int | None] | None:
@@ -603,13 +647,28 @@ def resolve_confirmed_nominees(
     this system's Oregon/Arkansas/North Dakota modules already apply.
     """
     results = []
-    for (office, district, party), choices in by_seat.items():
+    for key, choices in by_seat.items():
+        # A fourth element is the SEAT, for the states that elect more
+        # than one member from a district (see parse_state_leg_office).
+        # Optional so every federal caller's three-part key still works
+        # unchanged.
+        office, district, party = key[0], key[1], key[2]
+        seat = key[3] if len(key) > 3 else None
         won = pick_nominee(choices, runoff_threshold_pct=runoff_threshold_pct)
         if not won:
             continue
         name = name_transform(won[0]) if name_transform else won[0]
         if name:
-            results.append({"office": office, "district": district, "party": party, "last_name": name})
+            record = {
+                "office": office, "district": district,
+                "party": party, "last_name": name,
+            }
+            # Present only where a district really has more than one
+            # seat. A federal or single-member record carries no seat
+            # concept at all, so it carries no key either.
+            if seat is not None:
+                record["seat"] = seat
+            results.append(record)
     return results
 
 

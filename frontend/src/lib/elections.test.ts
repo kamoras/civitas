@@ -336,6 +336,25 @@ describe("matchesDistrictQuery", () => {
     expect(matchesDistrictQuery({ ...race, district: 14 }, "1")).toBe(false);
   });
 
+  it("matches both seats of a multi-member district by its number", () => {
+    // Idaho renders District 1 as two rows, 1A and 1B. A voter there
+    // knows they are in district 1; typing it must not come back empty.
+    const seatA = { ...race, district: "1A" };
+    const seatB = { ...race, district: "1B" };
+    expect(matchesDistrictQuery(seatA, "1")).toBe(true);
+    expect(matchesDistrictQuery(seatB, "1")).toBe(true);
+    expect(matchesDistrictQuery(seatA, "1a")).toBe(true);
+    // Washington's hyphenated positions work the same way.
+    expect(matchesDistrictQuery({ ...race, district: "5-2" }, "5")).toBe(true);
+    expect(matchesDistrictQuery({ ...race, district: "5-2" }, "5-2")).toBe(true);
+  });
+
+  it("does not let the numeric part match a different district", () => {
+    // "1" must still not reach district 10, 1A or no.
+    expect(matchesDistrictQuery({ ...race, district: "10A" }, "1")).toBe(false);
+    expect(matchesDistrictQuery({ ...race, district: "10" }, "1")).toBe(false);
+  });
+
   it("matches an at-large district by the 'AL' it renders as", () => {
     const atLarge = { ...race, district: 0 };
     expect(matchesDistrictQuery(atLarge, "al")).toBe(true);
