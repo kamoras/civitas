@@ -429,9 +429,10 @@ def _sync_statewide_nominees(
     if not source.get("statewide_offices"):
         return 0
 
-    keep: set[tuple[str, str]] = set()
+    keep: set[tuple[str, str, str]] = set()
     for record in records:
         office, party = record["office"], record["party"]
+        name = record["last_name"]
         row = (
             db.query(StatewideNominee)
             .filter(
@@ -439,28 +440,31 @@ def _sync_statewide_nominees(
                 StatewideNominee.cycle_year == cycle,
                 StatewideNominee.office == office,
                 StatewideNominee.party == party,
+                StatewideNominee.display_name == name,
             )
             .first()
         )
         if row is None:
-            row = StatewideNominee(state=state, cycle_year=cycle, office=office, party=party)
+            row = StatewideNominee(
+                state=state, cycle_year=cycle, office=office,
+                party=party, display_name=name,
+            )
             db.add(row)
         # `last_name` is the shared resolver's field name for "the name
         # this seat resolved to". For a statewide contest the adapter
         # reduced it with clean_display_name rather than surname (see
         # state_candidates_enhanced_voting), so it holds the whole
         # printed name, which is what gets rendered.
-        row.display_name = record["last_name"]
         row.source_name = str(source.get("source_name") or source.get("strategy") or "")
         row.updated_at = utcnow()
-        keep.add((office, party))
+        keep.add((office, party, name))
 
     for row in (
         db.query(StatewideNominee)
         .filter(StatewideNominee.state == state, StatewideNominee.cycle_year == cycle)
         .all()
     ):
-        if (row.office, row.party) not in keep:
+        if (row.office, row.party, row.display_name) not in keep:
             db.delete(row)
 
     api_cache_set(
@@ -500,9 +504,10 @@ def _sync_state_leg_nominees(
     if not source.get("statewide_offices"):
         return 0
 
-    keep: set[tuple[str, str, str]] = set()
+    keep: set[tuple[str, str, str, str]] = set()
     for record in records:
         chamber, district, party = record["office"], record["district"], record["party"]
+        name = record["last_name"]
         row = (
             db.query(StateLegNominee)
             .filter(
@@ -511,29 +516,26 @@ def _sync_state_leg_nominees(
                 StateLegNominee.chamber == chamber,
                 StateLegNominee.district == district,
                 StateLegNominee.party == party,
+                StateLegNominee.display_name == name,
             )
             .first()
         )
         if row is None:
             row = StateLegNominee(
                 state=state, cycle_year=cycle, chamber=chamber,
-                district=district, party=party,
+                district=district, party=party, display_name=name,
             )
             db.add(row)
-        # Reduced by clean_display_name rather than surname -- see
-        # _sync_statewide_nominees for why the resolver's `last_name`
-        # field holds a whole printed name here.
-        row.display_name = record["last_name"]
         row.source_name = str(source.get("source_name") or source.get("strategy") or "")
         row.updated_at = utcnow()
-        keep.add((chamber, district, party))
+        keep.add((chamber, district, party, name))
 
     for row in (
         db.query(StateLegNominee)
         .filter(StateLegNominee.state == state, StateLegNominee.cycle_year == cycle)
         .all()
     ):
-        if (row.chamber, row.district, row.party) not in keep:
+        if (row.chamber, row.district, row.party, row.display_name) not in keep:
             db.delete(row)
 
     db.commit()

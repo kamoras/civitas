@@ -1198,3 +1198,103 @@ class _Resp:
 
     def json(self):
         return self._json
+
+
+class TestStateOffices:
+    """The same bulk export carries the state's own offices — North
+    Carolina's is 103,517 precinct rows of which only 49,884 are federal.
+
+    Every label below is a real shape from Minnesota's 2026 primary
+    export, including the traps: "County Attorney" and "County
+    Auditor/Treasurer" contain the words a statewide gate keys on, and
+    "Judge - Nh District Court 7" carries a district number.
+    """
+
+    _FMT = {
+        "delimiter": "\t", "encoding": "utf-8",
+        "contest_column": "office", "choice_column": "candidate",
+        "party_column": "party", "votes_column": "votes",
+    }
+    _TSV = (
+        "office\tcandidate\tparty\tvotes\n"
+        "U.S. Senator\tReal Senator\tDFL\t900\n"
+        "Governor & Lt Governor\tAmy Example and Ben Deputy\tDFL\t800\n"
+        "State Auditor\tZack Auditor\tDFL\t700\n"
+        "Attorney General\tKeith Example\tDFL\t650\n"
+        "State Senator District 10\tNathan Upper\tR\t600\n"
+        "State Representative District 10A\tMark Lower\tR\t500\n"
+        "State Representative District 10B\tOther Lower\tR\t450\n"
+        "County Attorney\tNot Statewide\tDFL\t400\n"
+        "County Auditor/Treasurer\tAlso Not\tDFL\t300\n"
+        "County Commissioner District 1\tLocal Person\tDFL\t200\n"
+        "Judge - Nh District Court 7\tA Judge\tDFL\t100\n"
+    ).encode()
+
+    async def _run(self, monkeypatch, state_offices):
+        async def fake_discover(client, state, year, discovery):
+            return [{"url": "https://example.gov/all.tsv", "runoff": False}]
+
+        async def fake_get(client, url, label):
+            return _Resp(content=self._TSV)
+
+        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
+        monkeypatch.setattr(tb, "_get", fake_get)
+        source = {"format": self._FMT}
+        if state_offices:
+            source["statewide_offices"] = True
+        return await tb.fetch_confirmed_candidates(None, 2026, "MN", source)
+
+    @pytest.mark.asyncio
+    async def test_a_state_that_has_not_opted_in_sees_only_federal(self, monkeypatch):
+        """The opt-in is a truth condition, not a toggle: without it a
+        zero count would be a claim nobody has checked."""
+        records = await self._run(monkeypatch, state_offices=False)
+        assert [(r["office"], r["district"]) for r in records] == [("S", None)]
+
+    @pytest.mark.asyncio
+    async def test_statewide_offices_resolve_including_a_joint_ticket(self, monkeypatch):
+        records = await self._run(monkeypatch, state_offices=True)
+        by_office = {r["office"]: r["last_name"] for r in records}
+        assert by_office["governor"] == "Amy Example and Ben Deputy"
+        assert by_office["auditor"] == "Zack Auditor"
+        assert by_office["attorney_general"] == "Keith Example"
+
+    @pytest.mark.asyncio
+    async def test_legislative_seats_keep_their_letter(self, monkeypatch):
+        """Minnesota splits each senate district into two house seats,
+        "10A" and "10B". Dropping the letter merges two real seats."""
+        records = await self._run(monkeypatch, state_offices=True)
+        seats = {(r["office"], r["district"]): r["last_name"] for r in records
+                 if r["office"] in ("upper", "lower")}
+        assert seats == {
+            ("upper", "10"): "Nathan Upper",
+            ("lower", "10A"): "Mark Lower",
+            ("lower", "10B"): "Other Lower",
+        }
+
+    @pytest.mark.asyncio
+    async def test_county_offices_are_never_read_as_statewide(self, monkeypatch):
+        """"County Attorney" and "County Auditor/Treasurer" both contain
+        a statewide office's words, and "County Commissioner District 1"
+        carries a district number."""
+        records = await self._run(monkeypatch, state_offices=True)
+        names = {r["last_name"] for r in records}
+        assert "Not Statewide" not in names
+        assert "Also Not" not in names
+        assert "Local Person" not in names
+
+    @pytest.mark.asyncio
+    async def test_a_judicial_contest_is_not_a_legislative_seat(self, monkeypatch):
+        """It names a district, and judicial races are a separate
+        omission this page still declares."""
+        records = await self._run(monkeypatch, state_offices=True)
+        assert "A Judge" not in {r["last_name"] for r in records}
+
+    @pytest.mark.asyncio
+    async def test_a_state_office_name_is_kept_whole(self, monkeypatch):
+        """No FEC row exists to match a surname against, so reducing one
+        would only discard what the ballot said."""
+        records = await self._run(monkeypatch, state_offices=True)
+        assert {r["last_name"] for r in records if r["office"] == "upper"} == {"Nathan Upper"}
+        # ... while the federal record on the same fetch still reduces.
+        assert {r["last_name"] for r in records if r["office"] == "S"} == {"Senator"}

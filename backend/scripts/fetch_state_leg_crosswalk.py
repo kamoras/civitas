@@ -126,12 +126,47 @@ _OUTPUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / \
 
 
 def _query(url: str, params: dict) -> dict:
-    """POST, not GET: a town polygon is far past any practical URL
-    length once it is sent back as a spatial filter, and the ring lists
-    fetched here run to thousands of points."""
+    """POST, not GET: the ring lists fetched here run to thousands of
+    points and are far past any practical URL length.
+
+    Raises on an error payload. ArcGIS reports a failed query as HTTP
+    200 with an {"error": ...} body, so a caller that just reads
+    `features` sees an empty list and cannot tell a broken request from a
+    state with nothing in it — which is exactly how Minnesota first came
+    back as "0 towns" and wrote an empty crosswalk without complaining.
+    """
     request = urllib.request.Request(url, data=urllib.parse.urlencode(params).encode())
     with urllib.request.urlopen(request, timeout=180) as response:
-        return json.loads(response.read())
+        payload = json.loads(response.read())
+    if isinstance(payload, dict) and "error" in payload:
+        raise RuntimeError(f"TIGERweb query failed: {payload['error']}")
+    return payload
+
+
+# Asking for every polygon at once fails outright above a few hundred:
+# Minnesota has 2,762 county subdivisions and that request errors rather
+# than truncating. Pages are requested explicitly instead, ordered so the
+# offsets are stable.
+_PAGE = 400
+
+
+def _query_all(url: str, params: dict) -> list[dict]:
+    """Every matching feature, paged. Stops when a page comes back short
+    AND the service is no longer flagging more to fetch, so a state that
+    fits in one page costs one request."""
+    features: list[dict] = []
+    while True:
+        payload = _query(url, {
+            **params, "resultOffset": len(features),
+            "resultRecordCount": _PAGE, "orderByFields": "OID",
+        })
+        page = payload.get("features") or []
+        features.extend(page)
+        if not page:
+            break
+        if len(page) < _PAGE and not payload.get("exceededTransferLimit"):
+            break
+    return features
 
 
 def _bbox(rings: list) -> tuple[float, float, float, float]:
@@ -181,12 +216,12 @@ def _span_lookup(spans: list[tuple[float, float, str]], x: float) -> str | None:
 
 
 def _districts(state_fips: str, chamber: str) -> list[tuple[str, list, tuple]]:
-    payload = _query(_LEG_URL.format(layer=_CHAMBER_LAYERS[chamber]), {
+    features = _query_all(_LEG_URL.format(layer=_CHAMBER_LAYERS[chamber]), {
         "where": f"STATE='{state_fips}'", "outFields": "BASENAME",
         "returnGeometry": "true", "outSR": _SR, "f": "json",
     })
     out = []
-    for feature in payload.get("features", []):
+    for feature in features:
         basename = (feature.get("attributes") or {}).get("BASENAME") or ""
         rings = (feature.get("geometry") or {}).get("rings")
         # Normalised the same way parse_state_leg_office normalises what
@@ -202,13 +237,13 @@ def _districts(state_fips: str, chamber: str) -> list[tuple[str, list, tuple]]:
 
 
 def _towns(state_fips: str) -> list[tuple[str, list]]:
-    payload = _query(_TOWN_URL.format(layer=_TOWN_LAYER), {
+    features = _query_all(_TOWN_URL.format(layer=_TOWN_LAYER), {
         "where": f"STATE='{state_fips}'", "outFields": "NAME",
         "returnGeometry": "true", "outSR": _SR, "f": "json",
     })
     return [
         ((f.get("attributes") or {}).get("NAME") or "", f["geometry"]["rings"])
-        for f in payload.get("features", [])
+        for f in features
         if (f.get("geometry") or {}).get("rings")
         and (f.get("attributes") or {}).get("NAME") != _NOT_A_TOWN
     ]
@@ -220,6 +255,16 @@ def _towns_for_districts(towns: list, districts: list) -> dict[str, set[str]]:
         if not name:
             continue
         x0, y0, x1, y1 = _bbox(rings)
+        # Narrow to the districts whose bounding box overlaps this town's
+        # AT ALL, once, before touching a single row. Filtering per row on
+        # latitude alone still re-scanned every district on the far side
+        # of the state: Minnesota has 2,762 county subdivisions against
+        # 201 districts, and without this the run does not finish in any
+        # useful time. A township typically overlaps one or two.
+        nearby = [
+            (number, drings, box) for number, drings, box in districts
+            if box[0] <= x1 and box[2] >= x0 and box[1] <= y1 and box[3] >= y0
+        ]
         hits: collections.Counter = collections.Counter()
         sampled = 0
         for j in range(_GRID):
@@ -227,10 +272,9 @@ def _towns_for_districts(towns: list, districts: list) -> dict[str, set[str]]:
             town_spans = _spans(rings, y)
             if not town_spans:
                 continue
-            # Only districts whose own bounding box straddles this row
-            # can contribute to it.
+            # Of those, only the ones this row actually crosses.
             row_spans = []
-            for number, drings, (bx0, by0, bx1, by1) in districts:
+            for number, drings, (bx0, by0, bx1, by1) in nearby:
                 if by0 <= y <= by1:
                     row_spans.extend((s0, s1, number) for s0, s1 in _spans(drings, y))
             for i in range(_GRID):
@@ -266,6 +310,9 @@ def main() -> int:
             print(f"unknown state {state}")
             return 1
         towns = _towns(fips)
+        if not towns:
+            print(f"{state}: no towns returned — refusing to write an empty crosswalk")
+            return 1
         print(f"{state}: {len(towns)} towns")
         # Rebuild this state from scratch so a district that disappeared
         # in a remap doesn't survive as a stale entry.

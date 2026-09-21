@@ -229,3 +229,45 @@ class TestStateLegislativeSection:
         _sync_state_leg_nominees(db_session, CYCLE, "RI", SOURCE, [LOWER_13_R, LOWER_13_D])
         nominees = self._section(db_session)[0]["districts"][0]["nominees"]
         assert {n["party"] for n in nominees} == {"DEM", "REP"}
+
+
+class TestTopTwoSameParty:
+    """California and Washington run one all-party contest and advance
+    the top TWO, who can be of the same party — and an unaffiliated
+    candidate normalises to no party at all, so two of them in one
+    contest share a party value entirely.
+
+    Keyed on seat-and-party alone, the second nominee silently replaced
+    the first and the page showed one name where the ballot has two.
+    """
+
+    def test_two_same_party_nominees_for_one_statewide_office_both_survive(self, db_session):
+        _sync_statewide_nominees(db_session, CYCLE, "CA", SOURCE, [
+            {"office": "governor", "district": None, "party": "D", "last_name": "First Democrat"},
+            {"office": "governor", "district": None, "party": "D", "last_name": "Second Democrat"},
+        ])
+        races, _ = _statewide_section(db_session, "CA", CYCLE)
+        assert sorted(n["name"] for n in races[0]["nominees"]) == [
+            "First Democrat", "Second Democrat",
+        ]
+
+    def test_two_unaffiliated_nominees_for_one_seat_both_survive(self, db_session):
+        """Both normalise to no party, so they differ only by name."""
+        _sync_state_leg_nominees(db_session, CYCLE, "CA", SOURCE, [
+            {"office": "lower", "district": "4", "party": "", "last_name": "No Party One"},
+            {"office": "lower", "district": "4", "party": "", "last_name": "No Party Two"},
+        ])
+        assert db_session.query(StateLegNominee).count() == 2
+
+    def test_a_renamed_nominee_still_leaves_exactly_one_row(self, db_session):
+        """Name is part of the key now, so a correction would add rather
+        than update — the delete-what-is-no-longer-reported pass is what
+        keeps that from accumulating."""
+        _sync_state_leg_nominees(db_session, CYCLE, "CA", SOURCE, [
+            {"office": "lower", "district": "4", "party": "D", "last_name": "Mispelled Name"},
+        ])
+        _sync_state_leg_nominees(db_session, CYCLE, "CA", SOURCE, [
+            {"office": "lower", "district": "4", "party": "D", "last_name": "Corrected Name"},
+        ])
+        rows = db_session.query(StateLegNominee).all()
+        assert [r.display_name for r in rows] == ["Corrected Name"]

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  districtCountiesLabel,
+  districtAreaLabel,
   formatPvi,
   isActiveCandidate,
   majorPartyOf,
@@ -46,29 +46,29 @@ describe("race labels", () => {
   });
 });
 
-describe("districtCountiesLabel", () => {
+describe("districtAreaLabel", () => {
   it("returns null for null or empty input", () => {
-    expect(districtCountiesLabel(null)).toBeNull();
-    expect(districtCountiesLabel([])).toBeNull();
+    expect(districtAreaLabel(null)).toBeNull();
+    expect(districtAreaLabel([])).toBeNull();
   });
 
   it("drops the generic County suffix but keeps Parish/Borough/city", () => {
-    expect(districtCountiesLabel(["Fulton County", "Orleans Parish", "Denali Borough"])).toBe(
+    expect(districtAreaLabel(["Fulton County", "Orleans Parish", "Denali Borough"])).toBe(
       "Fulton, Orleans Parish, Denali Borough"
     );
   });
 
   it("keeps a (part) tag attached to its county", () => {
-    expect(districtCountiesLabel(["Fulton County (part)"])).toBe("Fulton (part)");
+    expect(districtAreaLabel(["Fulton County (part)"])).toBe("Fulton (part)");
   });
 
   it("truncates long lists with a remainder count", () => {
     const counties = ["A County", "B County", "C County", "D County", "E County"];
-    expect(districtCountiesLabel(counties, 3)).toBe("A, B, C & 2 more");
+    expect(districtAreaLabel(counties, 3)).toBe("A, B, C & 2 more");
   });
 
   it("does not truncate when exactly at the max", () => {
-    expect(districtCountiesLabel(["A County", "B County"], 3)).toBe("A, B");
+    expect(districtAreaLabel(["A County", "B County"], 3)).toBe("A, B");
   });
 });
 
@@ -297,7 +297,7 @@ describe("matchesDistrictQuery", () => {
   });
 
   it("matches a county the truncated display label would have elided", () => {
-    // districtCountiesLabel(counties, max=3) only shows the first few;
+    // districtAreaLabel(counties, max=3) only shows the first few;
     // the filter must see the full list or a reader in a hidden county
     // is told their district doesn't exist.
     const many = { ...race, areas: [...race.areas, "Bristol County", "Newport County"] };

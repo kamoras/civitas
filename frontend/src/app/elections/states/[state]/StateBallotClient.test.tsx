@@ -372,6 +372,39 @@ describe("state legislature", () => {
     expect(screen.getByText(/No State House seat matches/)).toBeInTheDocument();
   });
 
+  it("truncates a long town list but still filters on the hidden names", async () => {
+    // A rural Minnesota senate district covers 292 townships. Rendering
+    // them all buries the row; dropping them loses the only way a reader
+    // in the 290th can find their seat.
+    const many = Array.from({ length: 40 }, (_, i) => `Township ${i + 1}`);
+    const user = userEvent.setup();
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          stateLegRaces: [
+            {
+              chamber: "lower",
+              label: "State House",
+              districts: [
+                { district: "1", towns: many, nominees: [{ party: "DEM", name: "Rural Rep" }] },
+                { district: "2", towns: ["Elsewhere city"], nominees: [{ party: "REP", name: "Other Rep" }] },
+                { district: "3", towns: ["Third city"], nominees: [{ party: "REP", name: "Third Rep" }] },
+                { district: "4", towns: ["Fourth city"], nominees: [{ party: "REP", name: "Fourth Rep" }] },
+              ],
+            },
+          ],
+        })}
+      />
+    );
+    // Shown: a few names and a count, not all forty.
+    expect(screen.getByText(/& 37 more/)).toBeInTheDocument();
+    expect(screen.queryByText(/Township 40/)).not.toBeInTheDocument();
+    // Hidden, but still findable.
+    await user.type(screen.getByLabelText(/Filter State House seats/), "Township 40");
+    expect(screen.getByText("Rural Rep")).toBeInTheDocument();
+    expect(screen.queryByText("Other Rep")).not.toBeInTheDocument();
+  });
+
   it("renders no section at all for a state whose seats are not covered", () => {
     render(<StateBallotClient ballot={ballot()} />);
     expect(screen.queryByText(/SEATS CONTESTED/)).not.toBeInTheDocument();

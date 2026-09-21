@@ -32,6 +32,28 @@ one cycle's date:
 Results are aggregated across precinct rows: these exports are one row per
 precinct per choice, so a candidate's real total is the SUM over every row
 naming them, never a single row's value.
+
+STATE OFFICES ride the same download. Only about half of North Carolina's
+103,517 precinct rows are federal; the rest are the state's own executive
+and legislative contests, which were being read and discarded. A state
+whose entry sets statewide_offices gets those too, through the same two
+conservative gates state_candidates_enhanced_voting uses
+(parse_statewide_office, parse_state_leg_office), and their names are
+kept whole rather than reduced to a surname because there is no FEC row
+to match them against.
+
+Verified live against Minnesota's real 2026 primary export: 18 federal,
+8 statewide (Keith Ellison AG, Steve Simon Secretary of State, a joint
+"Governor & Lt Governor" ticket resolving to the top of the ticket, and
+State Auditor) and 61 legislative records across all 32 legislative
+contests the file actually contains. Its house districts are "10A"/"10B",
+which is why a district identifier is a string. The county offices in
+the same file -- "County Attorney", "County Auditor/Treasurer" -- are
+refused despite containing the words the statewide gate keys on.
+
+Note that opting a tabular state in may require widening its discovery
+URL first: several entries deliberately fetch a federal-only export (New
+Mexico's carries type=FED), which contains no state contests to read.
 """
 
 import csv
@@ -50,7 +72,14 @@ import httpx
 from app.election_calendar import next_election_day
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
-    normalize_party, office_from_columns, parse_office, pick_nominees, surname,
+    clean_display_name,
+    normalize_party,
+    office_from_columns,
+    parse_office,
+    parse_state_leg_office,
+    parse_statewide_office,
+    pick_nominees,
+    surname,
 )
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -784,6 +813,7 @@ async def fetch_confirmed_candidates(
             rows, fmt, by_seat,
             None if stage["runoff"] else threshold,
             advance_count,
+            state_offices=bool(source.get("statewide_offices")),
         )
 
     if not parsed_any:
@@ -799,14 +829,34 @@ def _collect(
     by_seat: dict[tuple, list[dict]],
     threshold: float | None,
     advance_count: int,
+    state_offices: bool = False,
 ) -> None:
     """Fold one results file into `by_seat`, replacing (not appending to)
     any seat it covers so a later stage's answer wins outright."""
     for contest, entry in _tally(rows, fmt).items():
         parsed = entry["office"] or parse_office(contest)
-        if parsed is None:
+        if parsed is not None:
+            office, district = parsed
+            federal = True
+        elif not state_offices:
             continue
-        office, district = parsed
+        else:
+            # The same export carries this state's own executive offices
+            # and legislative seats — North Carolina's is 103,517 precinct
+            # rows of which only 49,884 are federal. They are read through
+            # the same two conservative gates the Enhanced Voting adapter
+            # uses, and only for a state whose entry opts in, because a
+            # count of zero is only a true claim once somebody has checked
+            # that state's real labels against them.
+            federal = False
+            statewide = parse_statewide_office(contest)
+            if statewide is not None:
+                office, district = statewide, None
+            else:
+                seat = parse_state_leg_office(contest)
+                if seat is None:
+                    continue
+                office, district = seat
         # A party-primary label carries its party ("US HOUSE OF
         # REPRESENTATIVES DISTRICT 01 (REP)"); a top-two label doesn't,
         # so each candidate's own party column is the fallback.
@@ -827,7 +877,15 @@ def _collect(
                 if advance_count == 1:
                     continue
                 party = ""
-            last_name = surname(name, last_first=fmt.get("name_format") == "last_first")
+            # A federal nominee is matched against an FEC row, which
+            # files surnames. A state-office nominee has no FEC row to
+            # match or to render from, so the printed name is kept whole
+            # with only the ballot annotations stripped — the same split
+            # state_candidates_enhanced_voting makes.
+            last_name = (
+                surname(name, last_first=fmt.get("name_format") == "last_first")
+                if federal else clean_display_name(name)
+            )
             if not last_name:
                 continue
             records.append({

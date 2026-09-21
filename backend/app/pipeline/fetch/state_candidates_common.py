@@ -161,6 +161,12 @@ _STATEWIDE_OFFICES = [
     # Bare "Treasurer" is a county/city office in most states; only the
     # qualified statewide forms count.
     ("treasurer", re.compile(r"\b(?:general|state)\s+treasurer\b", re.IGNORECASE)),
+    # Same rule, same reason: Minnesota's own ballot carries both "State
+    # Auditor" (statewide, elected) and "County Auditor/Treasurer" (not).
+    # The locality gate already refuses the county one; requiring the
+    # qualifier means a state that prints a bare "Auditor" for a county
+    # office cannot slip through either.
+    ("auditor", re.compile(r"\b(?:state|general)\s+auditor\b", re.IGNORECASE)),
 ]
 
 _LT_GOVERNOR_RE = re.compile(r"\b(?:lieutenant|lt\.?)\s+governor\b", re.IGNORECASE)
@@ -207,6 +213,7 @@ STATEWIDE_OFFICE_LABELS = {
     "attorney_general": "Attorney General",
     "secretary_of_state": "Secretary of State",
     "treasurer": "State Treasurer",
+    "auditor": "State Auditor",
 }
 
 
@@ -275,9 +282,17 @@ _NON_LEGISLATIVE_RE = re.compile(
 #   read "Senator in General Assembly District 5" and "Representative in
 #   General Assembly District 13" (verified live, 2026 primary: 43 upper
 #   and 90 lower contests).
+#   Minnesota: the plain "State Senator District 10" / "State
+#   Representative District 10A" forms, read off its real 2026 primary
+#   export (57 office names, of which these two shapes are the seats).
+#   The "State" qualifier is what makes them safe — a bare "Senator,
+#   District 5" stays refused, because in a state that prints its federal
+#   seats that way it would be a congressional race.
 _STATE_LEG_CHAMBERS = [
     ("upper", re.compile(r"\bSenator\s+in\s+General\s+Assembly\b", re.IGNORECASE)),
     ("lower", re.compile(r"\bRepresentative\s+in\s+General\s+Assembly\b", re.IGNORECASE)),
+    ("upper", re.compile(r"\bState\s+Senat(?:e|or)\b", re.IGNORECASE)),
+    ("lower", re.compile(r"\bState\s+(?:House|Representative)\b", re.IGNORECASE)),
 ]
 
 # Districts are identified per chamber, and the identifier is the whole
