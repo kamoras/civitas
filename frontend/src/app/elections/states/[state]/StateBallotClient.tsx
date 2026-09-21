@@ -11,12 +11,13 @@ import CoverageFeed, { useMounted } from "@/components/elections/CoverageFeed";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import BallotMeasureCard from "@/components/elections/BallotMeasureCard";
 import TownContestCard from "@/components/elections/TownContestCard";
-import { districtCountiesLabel, formatPvi, majorPartyOf, matchesDistrictQuery, pviColor, tierCandidates } from "@/lib/elections";
+import { districtAreaLabel, formatPvi, majorPartyOf, matchesDistrictQuery, pviColor, tierCandidates } from "@/lib/elections";
 import { safeHref } from "@/lib/formatting";
 import { fetchTownBallot, fetchTownsForState } from "@/lib/api";
 import type {
   StateBallot,
   StateLegChamber,
+  StateLegDistrict,
   StatewideNominee,
   TownBallot,
   TownEntry,
@@ -40,7 +41,7 @@ function HouseDistrictRow({
   const { leaders } = tierCandidates(race.candidates);
   const dem = leaders.find((c) => majorPartyOf(c.party) === "DEM");
   const rep = leaders.find((c) => majorPartyOf(c.party) === "REP");
-  const countiesLabel = districtCountiesLabel(race.counties);
+  const countiesLabel = districtAreaLabel(race.counties);
   const filedCount = race.candidates.length;
 
   return (
@@ -234,6 +235,35 @@ function NomineeName({ nominee }: { nominee: StatewideNominee }) {
   );
 }
 
+/** One legislative seat: its identifier, the places it covers, and who
+ * is on the ballot for it.
+ *
+ * The town list is TRUNCATED for display while matchesDistrictQuery
+ * searches the full one. A rural Minnesota senate district covers 292
+ * townships, so rendering them all would bury the row — but a reader in
+ * the 290th still has to find their seat by typing its name.
+ */
+function StateLegSeatRow({ seat }: { seat: StateLegDistrict }) {
+  const townsLabel = districtAreaLabel(seat.towns);
+  return (
+    <div className="grid grid-cols-[42px_1fr] items-baseline gap-3 border border-white/[0.09] bg-surface px-3 py-2">
+      <span className="border border-white/15 py-0.5 text-center font-mono text-xs text-ink-hi">
+        {seat.district}
+      </span>
+      <span className="min-w-0">
+        {townsLabel && (
+          <span className="block truncate text-[11px] text-ink-min">{townsLabel}</span>
+        )}
+        <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+          {seat.nominees.map((n) => (
+            <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
+          ))}
+        </span>
+      </span>
+    </div>
+  );
+}
+
 /** One chamber of the state legislature: every contested seat, filtered
  * by the same grammar the U.S. House section uses.
  *
@@ -279,26 +309,7 @@ function StateLegChamberSection({ chamber }: { chamber: StateLegChamber }) {
       )}
       <div className="space-y-1">
         {shown.map((d) => (
-          <div
-            key={d.district}
-            className="grid grid-cols-[34px_1fr] items-baseline gap-3 border border-white/[0.09] bg-surface px-3 py-2"
-          >
-            <span className="border border-white/15 py-0.5 text-center font-mono text-xs text-ink-hi">
-              {d.district}
-            </span>
-            <span className="min-w-0">
-              {d.towns.length > 0 && (
-                <span className="block truncate text-[11px] text-ink-min">
-                  {d.towns.join(", ")}
-                </span>
-              )}
-              <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
-                {d.nominees.map((n) => (
-                  <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
-                ))}
-              </span>
-            </span>
-          </div>
+          <StateLegSeatRow key={d.district} seat={d} />
         ))}
         {shown.length === 0 && (
           <p className="border border-white/[0.09] p-4 text-xs text-ink-min">
@@ -332,9 +343,10 @@ function StateLegislatureSection({ ballot }: { ballot: StateBallot }) {
           <StateLegChamberSection key={chamber.chamber} chamber={chamber} />
         ))}
         <p className="mt-1 text-[10px] text-ink-min">
-          Seats with no filed candidate are not listed. District boundaries from the U.S. Census
-          Bureau; these offices have no federal campaign-finance filings, so no funding figures
-          exist for them.
+          Only seats named in the state&apos;s own results feed appear — a seat whose primary was
+          uncontested is often not published at all, so this is not the full chamber. District
+          boundaries from the U.S. Census Bureau; these offices have no federal
+          campaign-finance filings, so no funding figures exist for them.
         </p>
       </div>
     </section>

@@ -58,20 +58,29 @@ export function raceBadgeLabel(race: { office: string; district: number | null }
 }
 
 /** "Rockdale, Newton, DeKalb (part) & 2 more" — a short, scannable hint
- * for a district picker, for a voter who knows their county but not
- * their district number. Drops the generic " County" suffix (kept for
- * Louisiana's "Parish"/Alaska's "Borough"/Virginia's "city" etc., which
- * carry real information); "(part)" is left as-is since it means that
- * county is split across districts. Null in, null out — a district
- * missing from the crosswalk stays unlabeled, never a guessed list. */
+ * for a district picker, for a voter who knows the place they live but
+ * not their district number. Counties for a U.S. House seat, towns for a
+ * state legislative one.
+ *
+ * TRUNCATION IS THE POINT, and it is why matchesDistrictQuery searches
+ * the full list rather than this string: a rural Minnesota senate
+ * district covers 292 townships, and rendering all of them would bury
+ * the row — but a reader in the 290th still has to be able to find their
+ * seat by typing its name.
+ *
+ * Drops the generic " County" suffix (kept for Louisiana's
+ * "Parish"/Alaska's "Borough"/Virginia's "city" etc., which carry real
+ * information); "(part)" is left as-is since it means that county is
+ * split across districts. Null in, null out — a district missing from
+ * the crosswalk stays unlabeled, never a guessed list. */
 /* parseUtc moved to lib/formatting.ts — it is a generic ISO-8601 concern,
    and the records band and homepage index need it too. Re-exported here so
    existing election call sites keep their import path. */
 export { parseUtc } from "./formatting";
 
-export function districtCountiesLabel(counties: string[] | null, max = 3): string | null {
-  if (!counties || counties.length === 0) return null;
-  const short = counties.map((c) => c.replace(/ County\b/, ""));
+export function districtAreaLabel(areas: string[] | null, max = 3): string | null {
+  if (!areas || areas.length === 0) return null;
+  const short = areas.map((a) => a.replace(/ County\b/, ""));
   if (short.length <= max) return short.join(", ");
   return `${short.slice(0, max).join(", ")} & ${short.length - max} more`;
 }
@@ -89,7 +98,7 @@ export function districtCountiesLabel(counties: string[] | null, max = 3): strin
  * `areas` is whatever place names that district is described by — the
  * counties on a U.S. House row, the towns on a state legislative one.
  * Matching runs against that list IN FULL, not the truncated
- * districtCountiesLabel display string: a reader typing "washington"
+ * districtAreaLabel display string: a reader typing "washington"
  * must still match a district whose label elided it behind "& 2 more".
  * Substring, case-insensitive.
  */

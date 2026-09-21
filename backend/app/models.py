@@ -1649,9 +1649,18 @@ class StatewideNominee(Base):
     """
     __tablename__ = "statewide_nominees"
     __table_args__ = (
+        # The NAME is part of the key, not just the seat and party. A
+        # top-two state (California, Washington) runs one all-party
+        # contest and advances two candidates, who can be of the SAME
+        # party — and an unaffiliated candidate normalises to no party at
+        # all, so two of them in one contest would share a key entirely.
+        # Keyed on seat and party alone, the second nominee silently
+        # overwrote the first. Stale rows are removed by the sync's own
+        # delete-what-is-no-longer-reported pass, so a renamed candidate
+        # still leaves exactly one row.
         UniqueConstraint(
-            "state", "cycle_year", "office", "party",
-            name="uq_statewide_nominee_seat_party",
+            "state", "cycle_year", "office", "party", "display_name",
+            name="uq_statewide_nominee_seat_party_name",
         ),
     )
 
@@ -1698,9 +1707,12 @@ class StateLegNominee(Base):
     """
     __tablename__ = "state_leg_nominees"
     __table_args__ = (
+        # Includes the name for the same reason StatewideNominee does:
+        # under top-two two same-party (or two no-party) candidates
+        # legitimately advance from one seat.
         UniqueConstraint(
-            "state", "cycle_year", "chamber", "district", "party",
-            name="uq_state_leg_nominee_seat_party",
+            "state", "cycle_year", "chamber", "district", "party", "display_name",
+            name="uq_state_leg_nominee_seat_party_name",
         ),
     )
 

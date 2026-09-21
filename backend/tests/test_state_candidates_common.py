@@ -379,3 +379,47 @@ class TestParseStateLegOffice:
     def test_a_seat_without_a_district_is_not_publishable(self):
         """It cannot be told apart from the other 74."""
         assert common.parse_state_leg_office("DEM Senator in General Assembly") is None
+
+
+class TestStatewideOfficeCountyTraps:
+    """Real labels off Minnesota's 2026 primary export that contain a
+    statewide office's exact words but are county offices."""
+
+    def test_state_auditor_is_statewide_but_county_auditor_is_not(self):
+        assert common.parse_statewide_office("State Auditor") == "auditor"
+        assert common.parse_statewide_office("County Auditor/Treasurer") is None
+
+    def test_county_attorney_is_not_the_attorney_general(self):
+        assert common.parse_statewide_office("Attorney General") == "attorney_general"
+        assert common.parse_statewide_office("County Attorney") is None
+
+    def test_a_joint_governor_ticket_is_the_top_of_the_ticket(self):
+        """Minnesota prints one contest for both offices."""
+        assert common.parse_statewide_office("Governor & Lt Governor") == "governor"
+
+    def test_a_bare_auditor_is_refused(self):
+        """Unqualified, it is a county office in most states."""
+        assert common.parse_statewide_office("Auditor") is None
+
+
+class TestStateLegChamberForms:
+    """Minnesota's plain forms, alongside Rhode Island's."""
+
+    def test_minnesota_forms_resolve(self):
+        assert common.parse_state_leg_office("State Senator District 10") == ("upper", "10")
+        assert common.parse_state_leg_office(
+            "State Representative District 10A") == ("lower", "10A")
+
+    def test_a_judicial_district_contest_is_refused(self):
+        """It names a district and would otherwise look like a seat."""
+        assert common.parse_state_leg_office("Judge - Nh District Court 7") is None
+
+    def test_a_county_commissioner_district_is_refused(self):
+        assert common.parse_state_leg_office("County Commissioner District 1") is None
+        assert common.parse_state_leg_office(
+            "Special Election for County Commissioner District 3") is None
+
+    def test_a_bare_senator_district_stays_refused(self):
+        """Without the "State" qualifier this is a congressional seat in
+        any state that prints its federal races that way."""
+        assert common.parse_state_leg_office("Senator, District 5") is None
