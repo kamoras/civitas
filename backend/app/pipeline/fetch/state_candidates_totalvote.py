@@ -85,6 +85,35 @@ field, 22,516 over runner-up John Cavanaugh's 21,115), Eric Michael
 Foreman (CD2 L, unopposed), Adrian Smith (CD3 R, real plurality winner of
 a 2-way field, 60,549 over 33,020), Becky Kelly Stille (CD3 D,
 unopposed).
+
+STATE OFFICES. This vendor's pages mix them in with the federal races --
+the module already noted that Nebraska's "SW" query carries Governor and
+the rest -- so a state whose entry opts in reads them through the same
+two gates every other adapter uses. Names come back raw from _contests
+and are reduced by the caller, because a federal nominee is cut to a
+surname for FEC matching while a state-office nominee keeps what the
+state printed.
+
+Surveyed live 2026-09-21 across all three states on this vendor, and
+only NEBRASKA is opted in:
+
+  NE   LIVE, all five statewide offices -- Governor, Attorney General,
+       Secretary of State, Treasurer and the Auditor of Public Accounts,
+       which is Nebraska's own name for the office and needed its own
+       arm. Its Legislature is unicameral AND officially non-partisan,
+       so no legislative contests reach these gates at all and the
+       "State legislative districts" omission correctly stays on its
+       page. That is the honest outcome, not a gap to paper over.
+  MT   NOT opted in. Its configured queries return three contests, all
+       federal, so there is nothing to check a statewide claim against
+       -- "no state offices" would be an artefact of the query, not a
+       fact about the ballot.
+  SD   NOT opted in, and this one is the trap: its page yields exactly
+       one contest, Governor, with nothing unmatched. Coverage would
+       therefore look complete while omitting the Attorney General,
+       Secretary of State, Auditor and Treasurer that South Dakota also
+       elects in a midterm. A clean unmatched list means nothing when
+       the page itself is scoped.
 """
 
 import logging
@@ -95,7 +124,15 @@ import httpx
 from lxml import html as lxml_html
 
 from app.pipeline.fetch.http_utils import fetch_text_with_retry
-from app.pipeline.fetch.state_candidates_common import normalize_party, parse_office, resolve_confirmed_nominees, surname
+from app.pipeline.fetch.state_candidates_common import (
+    clean_display_name,
+    normalize_party,
+    parse_office,
+    parse_state_leg_office,
+    parse_statewide_office,
+    resolve_confirmed_nominees,
+    surname,
+)
 from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _settled
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -160,21 +197,44 @@ def _page_election(html: str) -> tuple[int, str] | None:
     return held.year, held.isoformat()
 
 
-def _contests(html: str) -> list[tuple[str, int | None, list[tuple[str, str, int]]]]:
-    """(office, district, [(surname, party_code, votes), ...]) for every
-    federal contest block on the page. Non-federal contests mixed onto
-    the same page (Nebraska's "SW" query also carries Governor and other
-    state offices) are dropped here via parse_office returning None."""
+def _contests(
+    html: str, state_offices: bool = False,
+) -> list[tuple[str, str | int | None, str | None, list[tuple[str, str, int]]]]:
+    """(office, district, seat, [(raw name, party_code, votes), ...]) for
+    every contest block on the page this adapter understands.
+
+    Nebraska's "SW" query carries Governor and the other state offices on
+    the very same page as the federal races, and they were dropped here
+    by parse_office returning None. With `state_offices` they go through
+    the same two conservative gates the other adapters use instead.
+
+    Names come back RAW: a federal nominee is reduced to a surname to be
+    matched against an FEC row, while a state-office nominee has no FEC
+    row and keeps the name the state printed, so the caller decides which
+    reduction applies once it knows what kind of contest this is.
+    """
     tree = lxml_html.fromstring(html)
     contests = []
     for wrapper in tree.xpath(f"//div[{_xpath_class('wrapper-inside')}]"):
         headers = wrapper.xpath(f'.//div[{_xpath_class("display-results-box-a")}]/h1')
         if not headers:
             continue
-        office_district = parse_office(headers[0].text_content().strip())
-        if office_district is None:
+        label = headers[0].text_content().strip()
+        office_district = parse_office(label)
+        seat = None
+        if office_district is not None:
+            office, district = office_district
+        elif not state_offices:
             continue
-        office, district = office_district
+        else:
+            statewide = parse_statewide_office(label)
+            if statewide is not None:
+                office, district = statewide
+            else:
+                parsed_seat = parse_state_leg_office(label)
+                if parsed_seat is None:
+                    continue
+                office, district, seat = parsed_seat
 
         candidates = []
         for section in wrapper.xpath(f'.//div[{_xpath_class("section")} and {_xpath_class("group")}]'):
@@ -188,12 +248,11 @@ def _contests(html: str) -> list[tuple[str, int | None, list[tuple[str, str, int
                 continue
             party = normalize_party(party_el[0].text_content().strip())
             votes_text = votes_el[0].text_content().strip().replace(",", "")
-            name = surname(raw_name)
-            if party is None or not name or not votes_text.isdigit():
+            if party is None or not raw_name or not votes_text.isdigit():
                 continue
-            candidates.append((name, party, int(votes_text)))
+            candidates.append((raw_name, party, int(votes_text)))
         if candidates:
-            contests.append((office, district, candidates))
+            contests.append((office, district, seat, candidates))
     return contests
 
 
@@ -257,11 +316,22 @@ async def fetch_confirmed_candidates(
     if not _settled(held_on, settle_days):
         return []
 
-    by_party: dict[tuple[str, int | None, str], list[tuple[str, int]]] = {}
+    state_offices = bool(source.get("statewide_offices"))
+    federal: dict[tuple, list[tuple[str, int]]] = {}
+    non_federal: dict[tuple, list[tuple[str, int]]] = {}
     for html in pages:
-        for office, district, candidates in _contests(html):
+        for office, district, seat, candidates in _contests(html, state_offices):
+            bucket = federal if office in ("S", "H") else non_federal
+            key = (office, district, seat) if seat else (office, district)
             for name, party, votes in candidates:
-                by_party.setdefault((office, district, party), []).append((name, votes))
+                bucket.setdefault((*key[:2], party, *key[2:]), []).append((name, votes))
 
     runoff_threshold_pct = source.get("runoff_threshold_pct")
-    return resolve_confirmed_nominees(by_party, runoff_threshold_pct)
+    # Two reductions, same tie-safe machinery: a surname for the federal
+    # records that get matched against FEC rows, the whole printed name
+    # for a state office that has no FEC row to match or render from.
+    return resolve_confirmed_nominees(
+        federal, runoff_threshold_pct, name_transform=surname,
+    ) + resolve_confirmed_nominees(
+        non_federal, runoff_threshold_pct, name_transform=clean_display_name,
+    )
