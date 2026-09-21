@@ -491,6 +491,22 @@ Governor, Lieutenant Governor, Attorney General, Secretary of State and Treasure
 - **`statewide_offices` is a truth condition, not a feature toggle.** Every adapter returns only what its own state's feed contains, so a state nobody has checked returns zero executive contests — indistinguishable from a state that genuinely elects none. The flag says that state's real contest labels were checked against the parser, which is what makes a count of zero a claim rather than an admission.
 - **`omits` shrinks as the gaps close.** The page's "Governor and other statewide executive contests" omission is dropped for any state actually covered. A disclaimer list that keeps disclaiming what the page now shows stops describing the page and becomes boilerplate a reader learns to skip — past the entries that are still true.
 
+### State legislative seats
+
+The same feeds carry the state's own legislature — 133 of the 192 contests on Rhode Island's real 2026 primary ballot are General Assembly seats — so these are read by a third parser gate beside the federal and executive ones, and stored as `StateLegNominee` under the same `statewide_offices` opt-in.
+
+The hard part was not the data. It was **how a reader finds their seat without being asked where they live** (see core design principle 8). A U.S. House row can name its counties; a state legislative district is far smaller than a county, so the useful unit is the town — and no ready-made town-to-district list exists at the right vintage:
+
+- **The results feed** reports a legislative contest as a single reporting unit. No locality breakdown.
+- **Census Block Assignment Files** are ideal in shape and join cleanly (Rhode Island: exactly 75 lower and 38 upper districts), but the newest was published February 2021, so its boundaries predate nearly every state's 2021–22 redistricting.
+- **A plain spatial `intersects` query** is hopelessly over-broad, because a district that merely *touches* a town counts: Jamestown (~5,500 people, comfortably inside one ~14,000-person district) came back as 7 districts.
+
+`scripts/fetch_state_leg_crosswalk.py` instead takes the **current** district polygons from Census TIGERweb, lays a grid over each town, and asks which district contains each interior sample point. There is no sliver problem in that formulation — districts tile the state, so every sample is inside exactly one district and every count is a real overlap measure. A scanline makes it tractable (~12 seconds per state rather than billions of edge tests).
+
+Validated against the independent block-assignment answer: 97 of 113 Rhode Island districts match exactly, 7 more are safely over-inclusive, and **all 16 differences were confirmed to be genuine redistricting** — each re-measured at 4× resolution and found to have exactly 0.000% overlap under the current map. Nothing is under-inclusive, which is the direction that would hide a reader's race.
+
+The result is that typing "jamestown" returns House 74 and Senate 13, and nothing else, without a visitor ever entering an address.
+
 ---
 
 ## Bluesky Integration

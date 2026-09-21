@@ -86,23 +86,32 @@ export function districtCountiesLabel(counties: string[] | null, max = 3): strin
  * a street address, so the filter has to work from what a person can
  * recall unprompted — see the House section's own copy.
  *
- * Matching is substring, case-insensitive, and runs against the county
- * names in full ("Providence County"), not the truncated
- * districtCountiesLabel display string — a reader typing "washington"
+ * `areas` is whatever place names that district is described by — the
+ * counties on a U.S. House row, the towns on a state legislative one.
+ * Matching runs against that list IN FULL, not the truncated
+ * districtCountiesLabel display string: a reader typing "washington"
  * must still match a district whose label elided it behind "& 2 more".
+ * Substring, case-insensitive.
  */
 export function matchesDistrictQuery(
-  race: { district: number | null; counties: string[] | null; candidates: { name: string }[] },
+  race: {
+    /** A U.S. House district is a number (0 = at-large); a state
+     * legislative one is a string, because "10A" and "10B" are real. */
+    district: number | string | null;
+    areas: string[] | null;
+    candidates: { name: string }[];
+  },
   query: string
 ): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   // "AL" is what an at-large district renders as, so it must also be
   // what an at-large district is searchable by.
-  const districtLabel = race.district === 0 ? "al" : String(race.district ?? "");
+  const districtLabel =
+    race.district === 0 ? "al" : String(race.district ?? "").toLowerCase();
   return (
     districtLabel === q ||
-    (race.counties ?? []).some((c) => c.toLowerCase().includes(q)) ||
+    (race.areas ?? []).some((a) => a.toLowerCase().includes(q)) ||
     race.candidates.some((c) => c.name.toLowerCase().includes(q))
   );
 }

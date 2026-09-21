@@ -785,6 +785,18 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                     s for s, r in confirm_result.items() if r["status"] == "ok"
                 )
                 detail = f"{confirmed_total} confirmed across {len(configured_states)} states"
+                # Non-federal nominees are stored, not "confirmed"
+                # against an FEC row, so they are invisible in the count
+                # above — and there can be a lot of them (Rhode Island
+                # alone stores 9 executive and 133 legislative). Reporting
+                # only the federal number would let a run that did most of
+                # its work off-ballot look like a quiet one, which is the
+                # same misreading this detail line was added to prevent.
+                non_federal = sum(
+                    r.get("statewide", 0) + r.get("stateLeg", 0) for r in confirm_result.values()
+                )
+                if non_federal:
+                    detail += f"; {non_federal} state-office nominees"
                 if adopted:
                     detail += f"; crawler adopted {len(adopted)} this week: {', '.join(sorted(adopted))}"
                 progress.complete("confirmed_candidates", detail=detail)

@@ -285,7 +285,7 @@ describe("majorPartyOf", () => {
 describe("matchesDistrictQuery", () => {
   const race = {
     district: 4,
-    counties: ["Providence County", "Washington County", "Kent County"],
+    areas: ["Providence County", "Washington County", "Kent County"],
     candidates: [{ name: "Gabe Amo" }, { name: "Gerry W. Leonard Jr." }],
   };
 
@@ -300,7 +300,7 @@ describe("matchesDistrictQuery", () => {
     // districtCountiesLabel(counties, max=3) only shows the first few;
     // the filter must see the full list or a reader in a hidden county
     // is told their district doesn't exist.
-    const many = { ...race, counties: [...race.counties, "Bristol County", "Newport County"] };
+    const many = { ...race, areas: [...race.areas, "Bristol County", "Newport County"] };
     expect(matchesDistrictQuery(many, "newport")).toBe(true);
   });
 
@@ -330,7 +330,7 @@ describe("matchesDistrictQuery", () => {
   });
 
   it("tolerates a race with no county data", () => {
-    const noCounties = { ...race, counties: null };
+    const noCounties = { ...race, areas: null };
     expect(matchesDistrictQuery(noCounties, "providence")).toBe(false);
     expect(matchesDistrictQuery(noCounties, "amo")).toBe(true);
   });

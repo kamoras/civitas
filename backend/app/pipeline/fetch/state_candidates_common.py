@@ -234,6 +234,98 @@ def parse_statewide_office(contest_name: str) -> str | None:
     return None
 
 
+# ── State legislative seats ──────────────────────────────────────────
+#
+# The third gate, and the hardest of the three. parse_office must not
+# read a state chamber as federal; parse_statewide_office must not read a
+# county office as statewide; this one must not read a PARTY COMMITTEE or
+# a municipal seat as a legislative seat — and on a real ballot those
+# collide word-for-word with the thing being matched.
+#
+# Every rejection below is a real label off Rhode Island's live 2026
+# primary, not a hypothetical:
+#
+#   Senatorial District Committee District 13   <- "Senatorial", "District"
+#   Representative District Committee District 5 <- "Representative", "District"
+#   State Committeewoman District 1             <- "State", "District"
+#   Ward Committee Cranston Ward 5
+#   Pawtucket: City Council Pawtucket District 1 <- "District"
+#
+# The first three are the dangerous ones: each contains the exact words a
+# loose chamber pattern keys on, so a party-committee race would be
+# published as a legislative nominee. "Committee" is what actually
+# separates them, matched WITHOUT a trailing \b so that
+# "Committeewoman"/"Committeeman" are caught by the same rule.
+_NON_LEGISLATIVE_RE = re.compile(
+    r"\bcommittee"                      # ... and Committeeman/Committeewoman
+    r"|\b(?:council|mayor|alderman|school|ward|precinct|municipal"
+    r"|county|city|town|township|borough|parish|village"
+    r"|judge|justice|court|sheriff|clerk|register)\b"
+    r"|:",                              # "Pawtucket: ..." -- one town's race
+    re.IGNORECASE,
+)
+
+# Chamber patterns, each taken from a real fetched feed. A state whose
+# wording is not here yet simply yields None (no legislative nominee
+# published) rather than being guessed at — the same refuse-by-default
+# stance parse_office takes. Adding a verified state is one entry plus
+# the provenance note saying where its wording was read.
+#
+#   Rhode Island: its legislature is the "General Assembly", so its seats
+#   read "Senator in General Assembly District 5" and "Representative in
+#   General Assembly District 13" (verified live, 2026 primary: 43 upper
+#   and 90 lower contests).
+_STATE_LEG_CHAMBERS = [
+    ("upper", re.compile(r"\bSenator\s+in\s+General\s+Assembly\b", re.IGNORECASE)),
+    ("lower", re.compile(r"\bRepresentative\s+in\s+General\s+Assembly\b", re.IGNORECASE)),
+]
+
+# Districts are identified per chamber, and the identifier is the whole
+# point — a seat without one is not publishable, because it cannot be
+# told apart from the other 74.
+#
+# The trailing letter is not optional decoration: Minnesota names its
+# house districts "10A" and "10B" (two per senate district), so dropping
+# it would merge two different seats into one. Leading zeros are stripped
+# so "District 05" and "District 5" are the same seat, but the letter is
+# kept and upper-cased.
+_STATE_LEG_DISTRICT_RE = re.compile(
+    r"\bDistrict\s+(?:No\.?\s*)?0*(\d+)([A-Za-z]?)\b", re.IGNORECASE,
+)
+
+STATE_LEG_CHAMBER_LABELS = {"upper": "State Senate", "lower": "State House"}
+
+
+def district_sort_key(district: str) -> tuple[int, str]:
+    """Natural order for a district identifier: 9 before 10, and 10A
+    before 10B. Lexical order would put "10" before "9" and scatter
+    Minnesota's A/B pairs across the list."""
+    match = re.match(r"(\d+)([A-Za-z]*)$", str(district))
+    return (int(match.group(1)), match.group(2)) if match else (10**9, str(district))
+
+
+def parse_state_leg_office(contest_name: str) -> tuple[str, str] | None:
+    """("upper", "5") / ("lower", "10A") for a state legislative seat, or
+    None.
+
+    None for federal and statewide-executive contests too: like its two
+    siblings this answers one question, and a caller asks whichever it
+    means. In particular no pattern here can match a federal label —
+    Rhode Island's own "Senator in Congress" and "Senator in General
+    Assembly" sit on the same ballot, and only the second is ours.
+    """
+    name = contest_name or ""
+    if _NON_LEGISLATIVE_RE.search(name):
+        return None
+    for chamber, pattern in _STATE_LEG_CHAMBERS:
+        if pattern.search(name):
+            district = _STATE_LEG_DISTRICT_RE.search(name)
+            if not district:
+                return None
+            return chamber, district.group(1) + district.group(2).upper()
+    return None
+
+
 def office_from_columns(row: dict, spec: dict | None) -> tuple[str, int | None] | None:
     """The same ("H", 3) answer as parse_office, taken from a results row's
     OWN columns instead of its label, or None when `spec` is unset or the

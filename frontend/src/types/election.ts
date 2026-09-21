@@ -190,6 +190,32 @@ export interface StatewideNominee {
   name: string;
 }
 
+/** One chamber of a state's legislature and the seats being contested
+ * in it this cycle. Absent entirely for a state whose seats aren't
+ * covered — the page's `omits` list says so instead. */
+export interface StateLegChamber {
+  /** "upper" | "lower". Neutral on purpose: a state's own name for its
+   * chambers doesn't generalise (Rhode Island calls both halves the
+   * General Assembly, and "Assembly" is the lower house in New York but
+   * the whole body in Rhode Island). */
+  chamber: string;
+  /** Human label the backend owns — "State Senate" / "State House". */
+  label: string;
+  districts: StateLegDistrict[];
+}
+
+export interface StateLegDistrict {
+  /** A string, not a number: Minnesota names its house districts "10A"
+   * and "10B". The backend sorts them in natural order before sending. */
+  district: string;
+  /** Towns this district covers, so a reader can find their seat by a
+   * place they know. Civitas never asks where they live; this is the
+   * state-legislative equivalent of the counties shown on a U.S. House
+   * row. Empty when the crosswalk has no entry for the district. */
+  towns: string[];
+  nominees: StatewideNominee[];
+}
+
 /** Same three claims MeasureCoverage makes, for executive contests:
  * "covered", "this state elects none this cycle", and "we haven't
  * checked" are different things and must not render alike. */
@@ -244,6 +270,7 @@ export interface StateBallot {
   measureCoverage: MeasureCoverage;
   statewideRaces: StatewideRace[];
   statewideCoverage: StatewideCoverage;
+  stateLegRaces: StateLegChamber[];
   officialLookup: OfficialLookup;
   /** What this page deliberately does not cover, enumerated by the
    * backend so the limitation renders as content rather than a footnote. */

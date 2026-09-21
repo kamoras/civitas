@@ -14,7 +14,13 @@ import TownContestCard from "@/components/elections/TownContestCard";
 import { districtCountiesLabel, formatPvi, majorPartyOf, matchesDistrictQuery, pviColor, tierCandidates } from "@/lib/elections";
 import { safeHref } from "@/lib/formatting";
 import { fetchTownBallot, fetchTownsForState } from "@/lib/api";
-import type { StateBallot, TownBallot, TownEntry } from "@/types/election";
+import type {
+  StateBallot,
+  StateLegChamber,
+  StatewideNominee,
+  TownBallot,
+  TownEntry,
+} from "@/types/election";
 
 /** One district's collapsed row: number, area, lean, and — reusing the
  * exact same tierCandidates split the Senate section renders leader
@@ -106,7 +112,9 @@ function HouseSection({ houseRaces }: { houseRaces: StateBallot["houseRaces"] })
   // resolve-only and never stored, but collecting the address at all was
   // the wrong shape for this project).
   const [filter, setFilter] = useState("");
-  const shown = houseRaces.filter((r) => matchesDistrictQuery(r, filter));
+  const shown = houseRaces.filter(
+    (r) => matchesDistrictQuery({ ...r, areas: r.counties }, filter)
+  );
 
   // undefined = "no explicit choice yet" (defer to the hash), distinct
   // from null = "explicitly closed" — collapsing those into one `null`
@@ -201,6 +209,138 @@ function HouseSection({ houseRaces }: { houseRaces: StateBallot["houseRaces"] })
   );
 }
 
+/** A nominee for an office with no FEC filing behind it: the party in
+ * text, then the name in that party's colour.
+ *
+ * The party code is rendered, not just implied by the colour, because
+ * colour alone is not an accessible way to carry information (WCAG
+ * 1.4.1) — and unlike a federal row, which puts a Democrat and a
+ * Republican either side of a literal "vs", these rows can hold a single
+ * unopposed nominee, where there is no contrast to read the party from
+ * at all. */
+function NomineeName({ nominee }: { nominee: StatewideNominee }) {
+  const major = majorPartyOf(nominee.party);
+  return (
+    <span className="inline-flex items-baseline gap-1">
+      <span className="font-mono text-[10px] text-ink-min">{nominee.party}</span>
+      <span
+        className={
+          major === "DEM" ? "text-dem-blue" : major === "REP" ? "text-rep-red" : "text-ink"
+        }
+      >
+        {nominee.name}
+      </span>
+    </span>
+  );
+}
+
+/** One chamber of the state legislature: every contested seat, filtered
+ * by the same grammar the U.S. House section uses.
+ *
+ * These are the smallest districts on the page and there are a lot of
+ * them — Rhode Island alone elects 75 representatives and 38 senators —
+ * so the filter is not a convenience here, it is the only way the
+ * section is usable. It matches on the towns a district covers, on a
+ * candidate's name, or on the district number, because those are the
+ * three things a person knows about themselves without being asked
+ * where they live. Civitas does not ask.
+ */
+function StateLegChamberSection({ chamber }: { chamber: StateLegChamber }) {
+  const [filter, setFilter] = useState("");
+  const shown = chamber.districts.filter((d) =>
+    matchesDistrictQuery(
+      { district: d.district, areas: d.towns, candidates: d.nominees },
+      filter
+    )
+  );
+
+  return (
+    <div className="mb-5 last:mb-0">
+      <h3 className="font-mono text-xs text-ink-lo mb-1">
+        {chamber.label.toUpperCase()} — {chamber.districts.length}{" "}
+        {chamber.districts.length === 1 ? "SEAT" : "SEATS"} CONTESTED
+      </h3>
+      {chamber.districts.length > 3 && (
+        <div className="mb-2">
+          <input
+            type="search"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filter by town, candidate, or district number"
+            aria-label={`Filter ${chamber.label} seats by town, candidate, or district number`}
+            className="w-full min-w-0 border border-white/15 bg-surface-base px-3 py-2 font-mono text-xs text-ink-hi placeholder:text-ink-min"
+          />
+          <p role="status" aria-live="polite" className="sr-only">
+            {filter.trim()
+              ? `${shown.length} of ${chamber.districts.length} ${chamber.label} seats match ${filter}`
+              : ""}
+          </p>
+        </div>
+      )}
+      <div className="space-y-1">
+        {shown.map((d) => (
+          <div
+            key={d.district}
+            className="grid grid-cols-[34px_1fr] items-baseline gap-3 border border-white/[0.09] bg-surface px-3 py-2"
+          >
+            <span className="border border-white/15 py-0.5 text-center font-mono text-xs text-ink-hi">
+              {d.district}
+            </span>
+            <span className="min-w-0">
+              {d.towns.length > 0 && (
+                <span className="block truncate text-[11px] text-ink-min">
+                  {d.towns.join(", ")}
+                </span>
+              )}
+              <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+                {d.nominees.map((n) => (
+                  <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
+                ))}
+              </span>
+            </span>
+          </div>
+        ))}
+        {shown.length === 0 && (
+          <p className="border border-white/[0.09] p-4 text-xs text-ink-min">
+            No {chamber.label} seat matches “{filter}”. Try your town, a candidate&apos;s name,
+            or a district number.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** The state legislature, or nothing.
+ *
+ * Renders nothing at all when the state's seats aren't covered — the
+ * same call the executive section makes, for the same reason: the
+ * page's `omits` list still names them as out of scope, so an empty
+ * panel would say it twice and read as a state with no legislature. */
+function StateLegislatureSection({ ballot }: { ballot: StateBallot }) {
+  if (ballot.stateLegRaces.length === 0) return null;
+
+  return (
+    <section className="panel mb-6">
+      <TerminalTitlebar title="State legislature" />
+      <div className="p-6">
+        <p className="text-xs text-ink-min mb-3">
+          You vote in exactly one seat per chamber. Each is listed with the towns it covers —
+          filter by yours to find it.
+        </p>
+        {ballot.stateLegRaces.map((chamber) => (
+          <StateLegChamberSection key={chamber.chamber} chamber={chamber} />
+        ))}
+        <p className="mt-1 text-[10px] text-ink-min">
+          Seats with no filed candidate are not listed. District boundaries from the U.S. Census
+          Bureau; these offices have no federal campaign-finance filings, so no funding figures
+          exist for them.
+        </p>
+      </div>
+    </section>
+  );
+}
+
 /** The state's own executive officers — Governor, Lieutenant Governor,
  * Attorney General, Secretary of State, Treasurer — where its feed
  * publishes them.
@@ -239,18 +379,7 @@ function StatewideExecutiveSection({ ballot }: { ballot: StateBallot }) {
                 <span className="font-mono text-xs text-ink-lo sm:self-center">{race.label}</span>
                 <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
                   {race.nominees.map((n) => (
-                    <span
-                      key={`${n.party}-${n.name}`}
-                      className={
-                        majorPartyOf(n.party) === "DEM"
-                          ? "text-dem-blue"
-                          : majorPartyOf(n.party) === "REP"
-                            ? "text-rep-red"
-                            : "text-ink"
-                      }
-                    >
-                      {n.name}
-                    </span>
+                    <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
                   ))}
                 </span>
               </div>
@@ -677,6 +806,8 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
               own general officers, then everything local — so this sits
               between the House and the town selector. */}
           <StatewideExecutiveSection ballot={ballot} />
+
+          <StateLegislatureSection ballot={ballot} />
 
           <TownSection state={ballot.state} pageElectionDate={ballot.electionDate} />
 

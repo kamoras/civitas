@@ -507,7 +507,13 @@ What this rules in and out:
 - **In:** filtering, maps, and drill-down over data the page already has;
   explicit, unremembered navigation choices (the town selector, the state
   picker); linking out to the official lookup for a reader who wants a
-  precinct-exact answer.
+  precinct-exact answer. Where a district needs to be findable, give it
+  place names a person already knows and let them filter: counties for a
+  U.S. House seat (`county_district_crosswalk.json`), towns for a state
+  legislative one (`state_leg_district_crosswalk.json`). Building that
+  crosswalk is real work — `scripts/fetch_state_leg_crosswalk.py`
+  documents why three obvious sources give wrong answers — and doing it
+  is the price of not asking.
 - **In, server-side only:** the Census geocoder and Google Civic's
   `voterInfoQuery`, called from the pipeline with **our own** fixed,
   publicly-known building addresses (`town_directory.json`,

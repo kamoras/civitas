@@ -75,6 +75,7 @@ function ballot(overrides: Partial<StateBallot> = {}): StateBallot {
     measureCoverage: { status: "not_yet_covered", sourceName: null, checkedAt: null },
     statewideRaces: [],
     statewideCoverage: { status: "not_yet_covered", sourceName: null, checkedAt: null },
+    stateLegRaces: [],
     officialLookup: {
       url: "https://www.usa.gov/election-office",
       label: "Find your election office",
@@ -266,6 +267,15 @@ describe("statewide executive offices", () => {
     expect(screen.getByText("Aaron C. Guckian").className).toContain("text-rep-red");
   });
 
+  it("names each nominee's party in text, not only in colour", () => {
+    // WCAG 1.4.1. These rows can hold a single unopposed nominee, so
+    // unlike a federal row there is no opposing colour to read the party
+    // against — Secretary of State here has exactly one.
+    render(<StateBallotClient ballot={ballot(covered)} />);
+    const sos = screen.getByText("Gregg M. Amore").closest("span")!.parentElement!;
+    expect(sos.textContent).toContain("DEM");
+  });
+
   it("renders an independent nominee without forcing them into a major party", () => {
     render(
       <StateBallotClient
@@ -284,5 +294,99 @@ describe("statewide executive offices", () => {
     const el = screen.getByText("Someone Unaffiliated");
     expect(el.className).not.toContain("text-dem-blue");
     expect(el.className).not.toContain("text-rep-red");
+  });
+});
+
+describe("state legislature", () => {
+  const legislature = {
+    stateLegRaces: [
+      {
+        chamber: "upper",
+        label: "State Senate",
+        districts: [
+          {
+            district: "5",
+            towns: ["Providence city"],
+            nominees: [{ party: "DEM", name: "Samuel W. Bell" }],
+          },
+        ],
+      },
+      {
+        chamber: "lower",
+        label: "State House",
+        districts: [
+          { district: "9", towns: ["Cranston city"], nominees: [{ party: "DEM", name: "Nine Dem" }] },
+          { district: "13", towns: ["Foster town", "Glocester town"], nominees: [{ party: "REP", name: "Derick A. Reels" }] },
+          { district: "74", towns: ["Jamestown town"], nominees: [{ party: "DEM", name: "Island Dem" }] },
+          { district: "75", towns: ["Newport city"], nominees: [{ party: "REP", name: "Newport Rep" }] },
+        ],
+      },
+    ],
+  };
+
+  it("renders both chambers with their contested seat counts", () => {
+    render(<StateBallotClient ballot={ballot(legislature)} />);
+    expect(screen.getByText("STATE SENATE — 1 SEAT CONTESTED")).toBeInTheDocument();
+    expect(screen.getByText("STATE HOUSE — 4 SEATS CONTESTED")).toBeInTheDocument();
+  });
+
+  it("shows each seat's towns so a reader can find it without an address", () => {
+    render(<StateBallotClient ballot={ballot(legislature)} />);
+    expect(screen.getByText("Foster town, Glocester town")).toBeInTheDocument();
+    expect(screen.getByText("Derick A. Reels")).toBeInTheDocument();
+  });
+
+  it("offers no filter for a chamber short enough to read whole", () => {
+    // The Senate here has one seat; a filter box above it is chrome.
+    render(<StateBallotClient ballot={ballot(legislature)} />);
+    expect(
+      screen.queryByLabelText(/Filter State Senate seats/)
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/Filter State House seats/)).toBeInTheDocument();
+  });
+
+  it("filters a chamber by town", async () => {
+    const user = userEvent.setup();
+    render(<StateBallotClient ballot={ballot(legislature)} />);
+    await user.type(screen.getByLabelText(/Filter State House seats/), "jamestown");
+    expect(screen.getByText("Island Dem")).toBeInTheDocument();
+    expect(screen.queryByText("Derick A. Reels")).not.toBeInTheDocument();
+    expect(screen.queryByText("Newport Rep")).not.toBeInTheDocument();
+  });
+
+  it("filters by an exact district identifier rather than a substring", async () => {
+    // "9" must not also bring back 75 or 13. Districts are strings —
+    // Minnesota's are "10A"/"10B" — so this is a string comparison, not
+    // a numeric one.
+    const user = userEvent.setup();
+    render(<StateBallotClient ballot={ballot(legislature)} />);
+    await user.type(screen.getByLabelText(/Filter State House seats/), "9");
+    expect(screen.getByText("Nine Dem")).toBeInTheDocument();
+    expect(screen.queryByText("Newport Rep")).not.toBeInTheDocument();
+  });
+
+  it("explains an empty filter result instead of showing a blank chamber", async () => {
+    const user = userEvent.setup();
+    render(<StateBallotClient ballot={ballot(legislature)} />);
+    await user.type(screen.getByLabelText(/Filter State House seats/), "zzzz");
+    expect(screen.getByText(/No State House seat matches/)).toBeInTheDocument();
+  });
+
+  it("renders no section at all for a state whose seats are not covered", () => {
+    render(<StateBallotClient ballot={ballot()} />);
+    expect(screen.queryByText(/SEATS CONTESTED/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/STATE SENATE/)).not.toBeInTheDocument();
+  });
+
+  it("colours nominees with the same party codes as every other race", () => {
+    render(<StateBallotClient ballot={ballot(legislature)} />);
+    expect(screen.getByText("Samuel W. Bell").className).toContain("text-dem-blue");
+    expect(screen.getByText("Derick A. Reels").className).toContain("text-rep-red");
+  });
+
+  it("names each seat's party in text as well as colour", () => {
+    render(<StateBallotClient ballot={ballot(legislature)} />);
+    const row = screen.getByText("Derick A. Reels").closest("span")!.parentElement!;
+    expect(row.textContent).toContain("REP");
   });
 });
