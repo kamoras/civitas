@@ -46,7 +46,11 @@ from app.pipeline.fetch.supreme_court import fetch_scotus_cases
 from app.pipeline.analyze.document_authority import update_document_authority
 from app.pipeline.explore_ranking import calibrate_and_store
 from app.pipeline.lexical_index import rebuild_index
-from app.pipeline.vector_store import embed_explore_documents
+from app.pipeline.vector_store import (
+    delete_explore_vectors,
+    embed_explore_documents,
+    get_embedded_explore_ids,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -262,6 +266,87 @@ async def _backfill_rulemaking_bodies(db: Session) -> list[int]:
             fetched, len(filled),
         )
     return filled
+
+
+_FLOOR_ID_PREFIXES = ("senate-floor-", "house-floor-")
+
+
+def _purge_duplicate_floor_speeches(db: Session) -> list[int]:
+    """Remove floor speeches stored more than once, keeping the earliest.
+
+    Residue from an already-fixed bug, never cleaned up. Until the
+    2026-07 audit, external_id embedded Python's built-in hash(), which
+    is randomized per process — so every container restart re-ingested
+    the same recent speeches under new ids. `_stable_hash` (sha256)
+    fixed the cause; nobody removed what it had already produced.
+    Measured on the live corpus: 377 floor-speech groups, 111 of them
+    duplicated, 112 redundant documents, and 110 of the 111 are
+    byte-identical.
+
+    They are not harmless. The corpus backs a search index, so the same
+    speech returns two or three times in one result page; and
+    calibrate_ranking derives the fingerprint length and text shape from
+    a SAMPLE of this corpus, where duplicates distort the collision
+    curve those values are read off.
+
+    The key is the external_id minus its trailing hash — i.e. chamber,
+    speaker and date — plus the body. Body alone would be wrong:
+    procedural boilerplate ("I ask unanimous consent that the order for
+    the quorum call be rescinded") is genuinely uttered verbatim by
+    different senators on the same day, and those are distinct remarks.
+    """
+    rows = (
+        db.query(ExploreDocument.id, ExploreDocument.external_id,
+                 ExploreDocument.body)
+        .filter(or_(*[ExploreDocument.external_id.like(p + "%")
+                      for p in _FLOOR_ID_PREFIXES]))
+        .order_by(ExploreDocument.id)
+        .all()
+    )
+    seen: set[tuple[str, str]] = set()
+    doomed: list[int] = []
+    for r in rows:
+        key = ((r.external_id or "").rpartition("-")[0], r.body or "")
+        if key in seen:
+            doomed.append(r.id)       # a later copy of one already kept
+        else:
+            seen.add(key)
+    if not doomed:
+        return []
+
+    for i in range(0, len(doomed), 500):
+        (db.query(ExploreDocument)
+           .filter(ExploreDocument.id.in_(doomed[i:i + 500]))
+           .delete(synchronize_session=False))
+    db.commit()
+    logger.info("Purged %d duplicate floor-speech documents", len(doomed))
+    return doomed
+
+
+def _purge_orphaned_vectors(db: Session) -> int:
+    """Drop vectors whose ExploreDocument no longer exists.
+
+    Semantic search answers out of vec_explore's own columns without
+    joining back to explore_documents, so an orphaned vector is not
+    inert — it keeps being returned as a search hit. Nothing swept these
+    before: embed_explore_documents only clears vectors for documents it
+    is about to re-embed, which by definition still exist.
+    """
+    try:
+        embedded = get_embedded_explore_ids()
+    except Exception:
+        logger.warning("Could not read the vector index — skipping orphan sweep")
+        return 0
+    live = {row[0] for row in db.query(ExploreDocument.id).all()}
+    orphans = embedded - live
+    if not orphans:
+        return 0
+    removed = delete_explore_vectors(orphans)
+    logger.info(
+        "Purged %d orphaned vector chunks for %d deleted documents",
+        removed, len(orphans),
+    )
+    return removed
 
 
 async def run_explore_pipeline(days_back: int = 60) -> dict:
@@ -482,14 +567,19 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
         refreshed_ids |= set(await _backfill_rulemaking_bodies(db))
 
         # --- 7. Embed new/refreshed documents into ChromaDB ---
+        # Before embedding, not after: a duplicate removed now is one
+        # fewer document to encode, and the orphan sweep needs the
+        # deletions above to have happened. Both are no-ops on a clean
+        # corpus, so they cost one query a night once caught up.
+        _purge_duplicate_floor_speeches(db)
+        _purge_orphaned_vectors(db)
+
         # Only documents not yet in the collection (plus ones whose body
         # was just backfilled) are encoded — re-encoding the whole corpus
         # every night is what made the old 72h skip gate look necessary.
         logger.info("Explore pipeline: embedding documents into vector store...")
         all_docs = db.query(ExploreDocument).all()
         try:
-            from app.pipeline.vector_store import get_embedded_explore_ids
-
             _already_embedded = get_embedded_explore_ids()
         except Exception:
             _already_embedded = set()
