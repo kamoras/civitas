@@ -453,6 +453,15 @@ def _set_coverage(
     if row is None:
         row = MeasureCoverage(state=state, election_date=election_date)
         db.add(row)
+        # SessionLocal sets autoflush=False, so without this the query
+        # above cannot see a row added earlier in the same run: a second
+        # _set_coverage for the same state+date would add a SECOND row
+        # and fail uq_measure_coverage_state_date at commit, taking the
+        # whole election pipeline down with it. Seven call sites reach
+        # this function, several of them on paths that can both run for
+        # one state. Flushing makes the insert visible to the next
+        # lookup without committing it.
+        db.flush()
     row.status = status
     row.measure_count = count
     row.source_name = source_name

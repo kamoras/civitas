@@ -221,9 +221,30 @@ def _already_ingested(db: Session, race_id: str, url: str) -> bool:
     )
 
 
-def _store_if_new(db: Session, race_id: str, **fields) -> bool:
-    if _already_ingested(db, race_id, fields["url"]):
+def _store_if_new(
+    db: Session, race_id: str, seen: set[tuple[str, str]], **fields,
+) -> bool:
+    """Store one coverage item, skipping anything already ingested.
+
+    `seen` carries the rows added earlier in THIS pass, and it is not
+    redundant with the query: SessionLocal is built with
+    autoflush=False, so a pending row is invisible to
+    _already_ingested until the pass commits. Both halves are needed —
+    the query for previous passes, the set for this one.
+
+    Without it a pass that legitimately attaches one item to a race
+    twice raises IntegrityError on
+    uq_race_coverage_race_url at commit, losing the ENTIRE pass
+    including the news items. That is not hypothetical: one Bluesky
+    post naming two rivals in the same primary resolves to the same
+    race twice, which is exactly the case this module's own docstring
+    calls fine ("the attachment target is the race"). It stayed hidden
+    only because Bluesky search had been returning nothing at all.
+    """
+    key = (race_id, fields["url"])
+    if key in seen or _already_ingested(db, race_id, fields["url"]):
         return False
+    seen.add(key)
     db.add(RaceCoverageItem(race_id=race_id, **fields))
     return True
 
@@ -273,6 +294,10 @@ async def ingest_race_coverage(db: Session, client: httpx.AsyncClient) -> int:
         return 0
 
     ingested = 0
+    # Rows added in THIS pass, invisible to _already_ingested because
+    # SessionLocal sets autoflush=False. Shared by both loops: a news
+    # article and a Bluesky post can resolve to the same race+url.
+    seen: set[tuple[str, str]] = set()
 
     # ── News: re-classifies articles the Action Center already fetched
     # (fetch_news_articles is cheap/idempotent — it hits the same RSS
@@ -285,7 +310,7 @@ async def ingest_race_coverage(db: Session, client: httpx.AsyncClient) -> int:
             continue
         matcher, basis = resolved
         if _store_if_new(
-            db, matcher.race_id,
+            db, matcher.race_id, seen,
             source_type="news", source_name=article.source_name,
             title=(article.title or "")[:500], url=article.url,
             summary=article.summary,
@@ -337,7 +362,7 @@ async def ingest_race_coverage(db: Session, client: httpx.AsyncClient) -> int:
                 continue
             post_matcher, basis = resolved
             if _store_if_new(
-                db, post_matcher.race_id,
+                db, post_matcher.race_id, seen,
                 source_type="bluesky", source_name=f"@{post.author_handle}",
                 title=post.text[:200], url=post.url,
                 summary=post.text, author=post.author_handle,

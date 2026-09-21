@@ -246,6 +246,39 @@ class TestIngestRaceCoverage:
         assert active.last_coverage_search is not None
         assert paper.last_coverage_search is None
 
+    async def test_same_post_twice_in_one_pass_does_not_abort_it(self, db_session):
+        """Reproduces the live IntegrityError that #594 uncovered.
+
+        SessionLocal sets autoflush=False, so _already_ingested cannot
+        see rows added earlier in the same pass. Two candidates in ONE
+        race both matching the same post — which the module docstring
+        calls fine — therefore queued two rows with the same
+        (race_id, url) and blew up on uq_race_coverage_race_url at
+        commit, losing the whole pass including its news items. It stayed
+        hidden only because Bluesky search was returning nothing.
+        """
+        _race(db_session, "2026-SEN-GA", "GA")
+        _candidate(db_session, "S6GA001", "2026-SEN-GA", "OSSOFF, JON",
+                   has_raised_funds=True)
+        _candidate(db_session, "S6GA002", "2026-SEN-GA", "WARNOCK, RAPHAEL",
+                   has_raised_funds=True)
+        db_session.commit()
+
+        # One post naming both rivals, returned by BOTH candidates' searches.
+        post = BlueskyPost(
+            text="Jon Ossoff and Raphael Warnock both campaigned in Georgia today.",
+            url="https://bsky.app/profile/apnews.com/post/dupe1",
+            author_handle="apnews.com",
+        )
+        with patch.object(election_coverage, "fetch_news_articles", return_value=[]), \
+             patch.object(election_coverage, "search_posts",
+                          new=AsyncMock(return_value=[post])):
+            ingested = await election_coverage.ingest_race_coverage(
+                db_session, client=None)
+
+        assert ingested == 1, "the duplicate should be skipped, not counted"
+        assert db_session.query(RaceCoverageItem).count() == 1
+
     async def test_unavailable_source_does_not_advance_the_watermark(self, db_session):
         """An unavailable source is not a finding of no coverage.
 
