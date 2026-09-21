@@ -451,13 +451,27 @@ def start_scheduler() -> None:
     )
 
     # Pipeline overrun watchdog — alerts once per run past the budget
-    from app.ops_alerts import check_pipeline_overrun
+    from app.ops_alerts import check_pipeline_overrun, check_pipeline_staleness
     scheduler.add_job(
         lambda: threading.Thread(
             target=check_pipeline_overrun, daemon=True, name="pipeline-watchdog"
         ).start(),
         CronTrigger(minute="5,35"),
         id="pipeline_watchdog",
+        replace_existing=True,
+    )
+
+    # Pipeline staleness watchdog — the complement to the overrun check
+    # above: that one watches a run that EXISTS and is taking too long,
+    # this one watches for a run that never happened at all. Hourly
+    # rather than half-hourly since it is measured in days, and it
+    # dedupes per pipeline per day regardless.
+    scheduler.add_job(
+        lambda: threading.Thread(
+            target=check_pipeline_staleness, daemon=True, name="pipeline-staleness-watchdog"
+        ).start(),
+        CronTrigger(minute="20"),
+        id="pipeline_staleness_watchdog",
         replace_existing=True,
     )
 

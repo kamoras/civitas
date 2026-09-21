@@ -132,6 +132,12 @@ class Settings(BaseSettings):
     # Always logged + recorded for the admin dashboard; optionally pushed:
     ALERT_NTFY_URL: str = ""    # e.g. https://ntfy.sh/<private-topic>
     PIPELINE_OVERRUN_ALERT_HOURS: float = 8.0
+    # How long a nightly pipeline may go with no SUCCESSFUL completion
+    # before check_pipeline_staleness() calls it stale. Two days, not one:
+    # a single missed night is survivable and self-heals, so alerting at
+    # 1d would cry wolf on every transient blip. See that check's own
+    # docstring for why this gap needed its own watchdog at all.
+    PIPELINE_STALE_ALERT_DAYS: float = 2.0
 
 
 settings = Settings()
