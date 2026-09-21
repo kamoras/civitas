@@ -745,6 +745,35 @@ def get_embedded_explore_ids() -> set[int]:
         "SELECT DISTINCT doc_id FROM vec_explore").fetchall()}
 
 
+def delete_explore_vectors(doc_ids: set[int] | list[int]) -> int:
+    """Drop every chunk belonging to these documents. Returns rows deleted.
+
+    Search reads title/date/snippet straight out of vec_explore's own
+    columns rather than joining back to explore_documents, so a vector
+    left behind after its row is deleted keeps appearing as a result —
+    with metadata nothing can correct. Any code path that deletes an
+    ExploreDocument has to come through here too.
+    """
+    ids = list(doc_ids)
+    if not ids:
+        return 0
+    conn = get_vec_conn()
+    removed = 0
+    with _vec_lock:
+        # Chunked: SQLite caps host parameters per statement, and this is
+        # called with whole-corpus-sized id sets during a cleanup sweep.
+        for i in range(0, len(ids), 500):
+            chunk = ids[i:i + 500]
+            placeholders = ",".join("?" * len(chunk))
+            cur = conn.execute(
+                f"DELETE FROM vec_explore WHERE doc_id IN ({placeholders})",
+                chunk,
+            )
+            removed += cur.rowcount or 0
+        conn.commit()
+    return removed
+
+
 def reset_vector_db() -> None:
     """Reset the entire vector index (useful for fresh starts)."""
     conn = get_vec_conn()
