@@ -1669,3 +1669,55 @@ class StatewideNominee(Base):
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     source_name: Mapped[str] = mapped_column(String(200), default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class StateLegNominee(Base):
+    """A confirmed nominee for a seat in a STATE legislature.
+
+    The same shape as StatewideNominee and separate from it for the same
+    reason it is separate from Candidate: there is no FEC filing behind a
+    state house seat, so there is no finance data, no Representation
+    Score, and no surname to join on — the name the state printed is the
+    whole record. It is a distinct table rather than a nullable
+    `district` column on StatewideNominee because the two answer
+    different questions and are keyed differently: a statewide office is
+    unique per state, a legislative seat is unique per district, and
+    collapsing them would make the uniqueness constraint express neither.
+
+    `chamber` is "upper" or "lower" rather than a state's own name for
+    it, because those names do not generalise — Rhode Island's two
+    chambers are both "the General Assembly", Nebraska has one, and
+    "Assembly" means the lower house in New York and the whole body in
+    Rhode Island. parse_state_leg_office resolves a state's wording to
+    the neutral pair; STATE_LEG_CHAMBER_LABELS renders it back.
+
+    Which towns a district covers is NOT stored here. It comes from
+    app/data/state_leg_district_crosswalk.json, a static bundled file
+    keyed "{state}-{chamber}-{district}", because it changes only when a
+    state redistricts and has nothing to do with who is running.
+    """
+    __tablename__ = "state_leg_nominees"
+    __table_args__ = (
+        UniqueConstraint(
+            "state", "cycle_year", "chamber", "district", "party",
+            name="uq_state_leg_nominee_seat_party",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    state: Mapped[str] = mapped_column(String(2), nullable=False, index=True)
+    cycle_year: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    # "upper" | "lower" — see STATE_LEG_CHAMBER_LABELS.
+    chamber: Mapped[str] = mapped_column(String(8), nullable=False)
+    # A STRING, not an int, because legislative districts are not always
+    # numbered. Minnesota splits each of its 67 senate districts into two
+    # house districts named "10A" and "10B" (verified against its real
+    # 2026 primary export), and other states use letters too. Storing an
+    # int would work for Rhode Island and silently fail to represent half
+    # the country. Sorting is natural-order, not lexical, so 9 precedes
+    # 10 — see _district_sort_key.
+    district: Mapped[str] = mapped_column(String(8), nullable=False)
+    party: Mapped[str] = mapped_column(String(1), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    source_name: Mapped[str] = mapped_column(String(200), default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

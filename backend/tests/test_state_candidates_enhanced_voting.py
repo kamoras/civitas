@@ -47,6 +47,10 @@ from pathlib import Path
 import pytest
 
 from app.pipeline.fetch import state_candidates_enhanced_voting as ev
+from app.pipeline.fetch.state_candidates_common import (
+    STATE_LEG_CHAMBER_LABELS,
+    STATEWIDE_OFFICE_LABELS,
+)
 
 FIXTURES = Path(__file__).parent
 INDEX = json.loads((FIXTURES / "fixtures_ri_elections_index.json").read_text())
@@ -91,7 +95,14 @@ def _by_seat(records):
 def _statewide(records):
     return {
         (r["office"], r["party"]): r["last_name"]
-        for r in records if r["office"] not in ("S", "H")
+        for r in records if r["office"] in STATEWIDE_OFFICE_LABELS
+    }
+
+
+def _state_leg(records):
+    return {
+        (r["office"], r["district"], r["party"]): r["last_name"]
+        for r in records if r["office"] in STATE_LEG_CHAMBER_LABELS
     }
 
 
@@ -177,11 +188,16 @@ class TestFederalResults:
         }
 
     @pytest.mark.asyncio
-    async def test_no_state_general_assembly_seat_is_ever_confirmed(self, monkeypatch):
+    async def test_no_state_general_assembly_seat_is_ever_confirmed_as_federal(self, monkeypatch):
         """The whole federal-only risk in one assertion: Rhode Island's
         state legislature is the "General Assembly", and its seats sit on
         this same ballot under labels a few characters from the federal
-        ones. 140 of the real primary's 192 contests are these."""
+        ones. 133 of the real primary's 192 contests are these.
+
+        Those seats ARE published now, but as state legislative races
+        (see TestStateLegislativeResults) — the thing that must never
+        happen is one of them landing in a federal race, where it would
+        collide with a real congressional district number."""
         _patched(monkeypatch)
         records = await _fetch()
         assert len(_federal(records)) == 6  # not 6 + every state seat in the fixture
@@ -444,4 +460,88 @@ class TestStatewideExecutiveResults:
         number would build a Race id that collides with a real district."""
         _patched(monkeypatch)
         records = await _fetch()
-        assert all(r["district"] is None for r in records if r["office"] not in ("S", "H"))
+        assert all(
+            r["district"] is None for r in records
+            if r["office"] in STATEWIDE_OFFICE_LABELS
+        )
+
+
+class TestStateLegislativeResults:
+    """The third gate on the same ballot, and the one with the closest
+    collisions.
+
+    Rhode Island's 192 real contests split 6 federal / 9 statewide
+    executive / 133 legislative / 44 refused. The 44 are where this gets
+    dangerous: three of those shapes contain the exact words a chamber
+    pattern keys on — "Senatorial District Committee District 13",
+    "Representative District Committee District 5" and "State
+    Committeewoman District 1" are party-committee races, not seats, and
+    publishing one as a legislative nominee would put a party official on
+    the page as a candidate for office.
+    """
+
+    @pytest.mark.asyncio
+    async def test_resolves_both_chambers_from_the_same_ballot(self, monkeypatch):
+        _patched(monkeypatch)
+        # Real, certified: Samuel Bell took the District 5 Democratic
+        # primary 3,926 to 760 and 734 in a genuine three-way field;
+        # Derick Reels was unopposed for District 13's Republican
+        # nomination. Both carry Rhode Island's party-endorsement
+        # asterisk in the raw feed.
+        assert _state_leg(await _fetch()) == {
+            ("upper", "5", "D"): "Samuel W. Bell",
+            ("lower", "13", "R"): "Derick A. Reels",
+        }
+
+    @pytest.mark.asyncio
+    async def test_a_party_committee_race_is_never_a_legislative_seat(self, monkeypatch):
+        """"Senatorial District Committee District 13" and
+        "Representative District Committee District 5" are both in the
+        fixture, and both name a district. Only "Committee" tells them
+        apart from a real seat."""
+        _patched(monkeypatch)
+        records = await _fetch()
+        # The committee races carry districts 13 and 5 -- the same
+        # numbers as the two real seats -- so a leak would be invisible
+        # in a count and has to be checked by party/chamber.
+        assert ("upper", "13", "D") not in _state_leg(records)
+        assert ("lower", "5", "D") not in _state_leg(records)
+        assert len(_state_leg(records)) == 2
+
+    @pytest.mark.asyncio
+    async def test_a_legislative_seat_never_leaks_into_a_federal_race(self, monkeypatch):
+        """The mirror of the federal-only test: "Senator in General
+        Assembly District 5" must not become Senate, and "Representative
+        in General Assembly District 13" must not become RI-13 (a
+        congressional district Rhode Island does not have)."""
+        _patched(monkeypatch)
+        seats = _by_seat(await _fetch())
+        assert ("H", 13, "R") not in seats
+        assert len(_federal(await _fetch())) == 6
+
+    @pytest.mark.asyncio
+    async def test_legislative_names_are_kept_whole(self, monkeypatch):
+        """No FEC row exists for a state house seat, so there is nothing
+        a surname could be matched against — reducing one would only
+        destroy what the ballot actually said. The endorsement asterisk
+        ("Derick A. Reels*") still comes off, as everywhere else."""
+        _patched(monkeypatch)
+        assert _state_leg(await _fetch())[("lower", "13", "R")] == "Derick A. Reels"
+
+    @pytest.mark.asyncio
+    async def test_legislative_records_are_withheld_by_the_same_freshness_gate(self, monkeypatch):
+        results = json.loads(json.dumps(RESULTS))
+        results["election"]["isOfficialResults"] = False
+        results["election"]["electionDate"] = "2099-01-01"
+        _patched(monkeypatch, results=results)
+        assert await _fetch() == []
+
+    @pytest.mark.asyncio
+    async def test_every_legislative_record_carries_a_real_district(self, monkeypatch):
+        """district is the key a seat is stored and rendered under. A
+        None would collapse every seat in a chamber onto one row."""
+        _patched(monkeypatch)
+        for (_chamber, district, _party) in _state_leg(await _fetch()):
+            # A string, because Minnesota's house districts are "10A" and
+            # "10B" — but never empty, and never a bare letter.
+            assert isinstance(district, str) and district[:1].isdigit()

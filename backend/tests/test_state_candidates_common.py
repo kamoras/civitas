@@ -311,3 +311,71 @@ class TestDiscoveryFailed:
     def test_is_a_real_exception_distinct_from_a_bare_exception(self):
         with pytest.raises(common.DiscoveryFailed):
             raise common.DiscoveryFailed("a genuine fetch failure")
+
+
+class TestDistrictSortKey:
+    """Districts sort in natural order, not lexical.
+
+    Lexical order puts "10" before "9" — which would scatter a 75-seat
+    chamber — and separates Minnesota's "10A"/"10B" pairs.
+    """
+
+    def test_numeric_order_not_string_order(self):
+        assert sorted(["10", "9", "1", "100", "2"], key=common.district_sort_key) == [
+            "1", "2", "9", "10", "100",
+        ]
+
+    def test_lettered_districts_sort_after_their_number(self):
+        assert sorted(["10B", "9", "10A", "10"], key=common.district_sort_key) == [
+            "9", "10", "10A", "10B",
+        ]
+
+    def test_an_unparseable_identifier_sorts_last_rather_than_raising(self):
+        ordered = sorted(["5", "unknown", "1"], key=common.district_sort_key)
+        assert ordered[-1] == "unknown"
+
+
+class TestParseStateLegOffice:
+    """Grounded in Rhode Island's real 2026 primary labels; the refusals
+    are the three party-committee shapes that collide with them."""
+
+    def test_both_chambers_resolve(self):
+        assert common.parse_state_leg_office(
+            "DEM Senator in General Assembly District 5") == ("upper", "5")
+        assert common.parse_state_leg_office(
+            "REP Representative in General Assembly District 13") == ("lower", "13")
+
+    def test_leading_zeros_are_the_same_seat(self):
+        assert common.parse_state_leg_office(
+            "DEM Senator in General Assembly District 05") == ("upper", "5")
+
+    def test_a_trailing_letter_is_part_of_the_district(self):
+        """Minnesota names two house districts per senate district, "10A"
+        and "10B". Dropping the letter would merge two real seats."""
+        assert common.parse_state_leg_office(
+            "Representative in General Assembly District 10A") == ("lower", "10A")
+        assert common.parse_state_leg_office(
+            "Representative in General Assembly District 10b") == ("lower", "10B")
+
+    def test_party_committee_races_are_refused(self):
+        for label in (
+            "DEM Senatorial District Committee District 13",
+            "DEM Representative District Committee District 5",
+            "DEM State Committeewoman District 1",
+            "DEM State Committeeman District 3",
+            "DEM Ward Committee Cranston Ward 5",
+        ):
+            assert common.parse_state_leg_office(label) is None, label
+
+    def test_federal_and_municipal_contests_are_refused(self):
+        for label in (
+            "DEM Senator in Congress",
+            "DEM Representative in Congress District 1",
+            "DEM Pawtucket: City Council Pawtucket District 1",
+            "DEM Governor",
+        ):
+            assert common.parse_state_leg_office(label) is None, label
+
+    def test_a_seat_without_a_district_is_not_publishable(self):
+        """It cannot be told apart from the other 74."""
+        assert common.parse_state_leg_office("DEM Senator in General Assembly") is None

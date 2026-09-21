@@ -310,6 +310,52 @@ def test_state_ballot_drops_the_governor_omission_when_coverage_is_confirmed_non
     assert not any("Governor" in item for item in data["omits"])
 
 
+def test_state_ballot_drops_the_legislature_omission_once_seats_are_covered(db_session):
+    """The second omission to come off the list, by the same rule as the
+    first: it describes the page, so it goes when it stops being true."""
+    from app.pipeline.fetch.state_candidates import (
+        _sync_state_leg_nominees,
+        _sync_statewide_nominees,
+    )
+
+    before = _body(elections.state_ballot("GA", db=db_session))
+    assert any("State legislative" in item for item in before["omits"])
+    assert before["stateLegRaces"] == []
+
+    cycle = before["cycleYear"]
+    source = {"strategy": "tabular", "source_name": "GA SoS", "statewide_offices": True}
+    _sync_statewide_nominees(db_session, cycle, "GA", source, [])
+    _sync_state_leg_nominees(db_session, cycle, "GA", source, [
+        {"office": "lower", "district": "3", "party": "D", "last_name": "Real Person"},
+    ])
+
+    after = _body(elections.state_ballot("GA", db=db_session))
+    assert not any("State legislative" in item for item in after["omits"])
+    assert after["stateLegRaces"][0]["chamber"] == "lower"
+    assert after["stateLegRaces"][0]["districts"][0]["nominees"][0]["name"] == "Real Person"
+    # The omissions that are still true stay.
+    assert any("County and municipal" in item for item in after["omits"])
+    assert any("Judicial" in item for item in after["omits"])
+
+
+def test_state_ballot_keeps_the_legislature_omission_when_only_executives_are_covered(db_session):
+    """A state whose executive contests are published but whose seats
+    are not must still say the seats are missing. One flag opts a state
+    in to both, but coverage is claimed per section, from what is
+    actually there."""
+    from app.pipeline.fetch.state_candidates import _sync_statewide_nominees
+
+    cycle = _body(elections.state_ballot("GA", db=db_session))["cycleYear"]
+    _sync_statewide_nominees(
+        db_session, cycle, "GA",
+        {"strategy": "tabular", "source_name": "GA SoS", "statewide_offices": True},
+        [{"office": "governor", "district": None, "party": "D", "last_name": "A Governor"}],
+    )
+    data = _body(elections.state_ballot("GA", db=db_session))
+    assert not any("Governor" in item for item in data["omits"])
+    assert any("State legislative" in item for item in data["omits"])
+
+
 def test_state_ballot_lookup_falls_back_when_no_verified_link(db_session):
     """An unverified per-state URL is never handed to a user — a dead link
     on "see your real ballot" is the worst failure this feature has."""

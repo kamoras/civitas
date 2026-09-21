@@ -113,6 +113,7 @@ from app.pipeline.fetch.state_candidates_common import (
     clean_display_name,
     normalize_party,
     parse_office,
+    parse_state_leg_office,
     parse_statewide_office,
     resolve_confirmed_nominees,
     surname,
@@ -246,6 +247,7 @@ async def fetch_confirmed_candidates(
 
     by_seat: dict[tuple[str, int | None, str], list[tuple[str, int]]] = {}
     statewide_by_seat: dict[tuple[str, int | None, str], list[tuple[str, int]]] = {}
+    state_leg_by_seat: dict[tuple[str, int | None, str], list[tuple[str, int]]] = {}
     for ballot_item in payload.get("ballotItems") or []:
         if not isinstance(ballot_item, dict) or ballot_item.get("contestType") != "Candidate":
             continue
@@ -263,10 +265,24 @@ async def fetch_confirmed_candidates(
             # office has no district, and its code can never collide with
             # parse_office's "S"/"H".
             office = parse_statewide_office(contest_name)
-            if office is None:
-                continue  # state/local contest on the same ballot -- see module docstring
             district = None
-        bucket = by_seat if office_district is not None else statewide_by_seat
+            if office is None:
+                # Third and last gate: a seat in the state's own
+                # legislature. It has to refuse the party-committee and
+                # municipal contests that make up the rest of the file,
+                # and on this ballot those collide word-for-word with
+                # what it is looking for ("Senatorial District Committee
+                # District 13") -- see parse_state_leg_office.
+                seat = parse_state_leg_office(contest_name)
+                if seat is None:
+                    continue  # local/committee contest -- see module docstring
+                office, district = seat
+        if office_district is not None:
+            bucket = by_seat
+        elif district is None:
+            bucket = statewide_by_seat
+        else:
+            bucket = state_leg_by_seat
         for name, party, votes in _candidates(ballot_item):
             bucket.setdefault((office, district, party), []).append((name, votes))
 
@@ -282,4 +298,6 @@ async def fetch_confirmed_candidates(
         by_seat, threshold, name_transform=surname,
     ) + resolve_confirmed_nominees(
         statewide_by_seat, threshold, name_transform=clean_display_name,
+    ) + resolve_confirmed_nominees(
+        state_leg_by_seat, threshold, name_transform=clean_display_name,
     )

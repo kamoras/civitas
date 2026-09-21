@@ -9,9 +9,17 @@ case that there is nothing to research. Same null-is-not-zero discipline
 MeasureCoverage already enforces for ballot measures.
 """
 
-from app.api.elections import StatewideCoverageStatus, _statewide_section
-from app.models import StatewideNominee
-from app.pipeline.fetch.state_candidates import _sync_statewide_nominees
+from app.api.elections import (
+    StatewideCoverageStatus,
+    _state_leg_section,
+    _statewide_marker,
+    _statewide_section,
+)
+from app.models import StateLegNominee, StatewideNominee
+from app.pipeline.fetch.state_candidates import (
+    _sync_state_leg_nominees,
+    _sync_statewide_nominees,
+)
 
 CYCLE = 2026
 SOURCE = {
@@ -141,3 +149,83 @@ class TestPayloadShape:
         _sync_statewide_nominees(db_session, CYCLE, "RI", SOURCE, [GOVERNOR_D, TREASURER_D])
         races, _ = _statewide_section(db_session, "RI", CYCLE)
         assert [r["label"] for r in races] == ["Governor", "State Treasurer"]
+
+
+LOWER_13_R = {"office": "lower", "district": "13", "party": "R", "last_name": "Derick A. Reels"}
+LOWER_13_D = {"office": "lower", "district": "13", "party": "D", "last_name": "Someone Else"}
+UPPER_5_D = {"office": "upper", "district": "5", "party": "D", "last_name": "Samuel W. Bell"}
+
+
+class TestStateLegislativePersistence:
+    def test_seats_are_keyed_per_district_not_per_chamber(self, db_session):
+        """Two seats in the same chamber and party are different rows.
+        Keying on chamber alone would collapse all 75 of a state's House
+        seats onto one."""
+        _sync_state_leg_nominees(db_session, CYCLE, "RI", SOURCE, [
+            LOWER_13_R, {**LOWER_13_R, "district": "14", "last_name": "Another Person"},
+        ])
+        assert db_session.query(StateLegNominee).count() == 2
+
+    def test_both_parties_in_one_seat_are_kept(self, db_session):
+        _sync_state_leg_nominees(db_session, CYCLE, "RI", SOURCE, [LOWER_13_R, LOWER_13_D])
+        assert db_session.query(StateLegNominee).count() == 2
+
+    def test_the_same_district_number_in_each_chamber_does_not_collide(self, db_session):
+        """Chambers number their districts independently — upper 5 and
+        lower 5 are unrelated seats in different places."""
+        _sync_state_leg_nominees(db_session, CYCLE, "RI", SOURCE, [
+            UPPER_5_D, {**UPPER_5_D, "office": "lower", "last_name": "Lower Five"},
+        ])
+        rows = {(r.chamber, r.district): r.display_name
+                for r in db_session.query(StateLegNominee).all()}
+        assert rows == {("upper", "5"): "Samuel W. Bell", ("lower", "5"): "Lower Five"}
+
+    def test_a_withdrawn_nominee_is_deleted(self, db_session):
+        _sync_state_leg_nominees(db_session, CYCLE, "RI", SOURCE, [LOWER_13_R, UPPER_5_D])
+        _sync_state_leg_nominees(db_session, CYCLE, "RI", SOURCE, [UPPER_5_D])
+        rows = db_session.query(StateLegNominee).all()
+        assert [(r.chamber, r.district) for r in rows] == [("upper", "5")]
+
+    def test_a_state_that_has_not_opted_in_stores_nothing(self, db_session):
+        stored = _sync_state_leg_nominees(
+            db_session, CYCLE, "GA", {"strategy": "tabular"}, [LOWER_13_R],
+        )
+        assert stored == 0
+        assert db_session.query(StateLegNominee).count() == 0
+
+
+class TestStateLegislativeSection:
+    def _section(self, db):
+        return _state_leg_section(db, "RI", CYCLE, _statewide_marker(db, "RI", CYCLE))
+
+    def test_nothing_renders_before_the_state_has_been_checked(self, db_session):
+        """Rows without a marker cannot happen through the pipeline, but
+        the section must still refuse to claim coverage it has no record
+        of — the marker is the claim, not the rows."""
+        assert self._section(db_session) == []
+
+    def test_chambers_come_back_separately_and_in_district_order(self, db_session):
+        _sync_statewide_nominees(db_session, CYCLE, "RI", SOURCE, [])  # writes the marker
+        _sync_state_leg_nominees(db_session, CYCLE, "RI", SOURCE, [
+            {**LOWER_13_R, "district": "9"}, LOWER_13_R, UPPER_5_D,
+        ])
+        section = self._section(db_session)
+        assert [c["chamber"] for c in section] == ["upper", "lower"]
+        assert [c["label"] for c in section] == ["State Senate", "State House"]
+        lower = next(c for c in section if c["chamber"] == "lower")
+        assert [d["district"] for d in lower["districts"]] == ["9", "13"]
+
+    def test_a_district_carries_the_towns_it_covers(self, db_session):
+        """The whole point of the crosswalk: a reader finds their seat by
+        a place they know, never by being asked where they live."""
+        _sync_statewide_nominees(db_session, CYCLE, "RI", SOURCE, [])
+        _sync_state_leg_nominees(db_session, CYCLE, "RI", SOURCE, [UPPER_5_D])
+        district = self._section(db_session)[0]["districts"][0]
+        assert district["towns"], "RI-upper-5 should resolve to at least one town"
+        assert all(isinstance(t, str) and t for t in district["towns"])
+
+    def test_party_uses_the_same_codes_as_every_other_race(self, db_session):
+        _sync_statewide_nominees(db_session, CYCLE, "RI", SOURCE, [])
+        _sync_state_leg_nominees(db_session, CYCLE, "RI", SOURCE, [LOWER_13_R, LOWER_13_D])
+        nominees = self._section(db_session)[0]["districts"][0]["nominees"]
+        assert {n["party"] for n in nominees} == {"DEM", "REP"}

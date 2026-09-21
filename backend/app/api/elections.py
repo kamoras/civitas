@@ -29,6 +29,7 @@ from app.models import (
     RaceCoverageItem,
     Representative,
     Senator,
+    StateLegNominee,
     StatewideNominee,
 )
 from app.pipeline.cache import api_cache_get
@@ -49,6 +50,8 @@ from app.pipeline.fetch.civic_info import is_configured as civic_is_configured
 from app.pipeline.fetch.state_candidate_sources import source_for_state
 from app.pipeline.fetch.state_candidates_common import (
     PARTY_CODE_MAP,
+    STATE_LEG_CHAMBER_LABELS,
+    district_sort_key,
     STATEWIDE_MARKER_TIER,
     STATEWIDE_MARKER_TTL_HOURS,
     STATEWIDE_OFFICE_LABELS,
@@ -97,6 +100,30 @@ def _district_counties() -> dict[str, list[str]]:
             logger.exception("county_district_crosswalk.json unavailable")
             _district_counties_cache = {}
     return _district_counties_cache
+
+_STATE_LEG_CROSSWALK_PATH = (
+    pathlib.Path(__file__).resolve().parent.parent / "data" / "state_leg_district_crosswalk.json"
+)
+_state_leg_towns_cache: dict[str, list[str]] | None = None
+
+
+def _state_leg_towns() -> dict[str, list[str]]:
+    """"{ST}-{chamber}-{n}" -> the towns that district covers, so a reader
+    can find their seat by a place they know instead of by a number
+    nobody memorises. The state-legislative twin of _district_counties(),
+    and static for the same reason: it changes only when a state
+    redistricts. Built by scripts/fetch_state_leg_crosswalk.py, which
+    documents why the obvious sources give wrong answers. Empty dict —
+    never a guess — if the file is missing."""
+    global _state_leg_towns_cache
+    if _state_leg_towns_cache is None:
+        try:
+            _state_leg_towns_cache = json.loads(_STATE_LEG_CROSSWALK_PATH.read_text())["districts"]
+        except Exception:
+            logger.exception("state_leg_district_crosswalk.json unavailable")
+            _state_leg_towns_cache = {}
+    return _state_leg_towns_cache
+
 
 router = APIRouter(prefix="/elections")
 
@@ -421,6 +448,23 @@ def _state_coverage(db: Session, races: list[Race]) -> list[dict]:
     return coverage
 
 
+def _statewide_marker(db: Session, state: str, cycle: int) -> dict | None:
+    """The pipeline's record that it actually looked at this state's
+    non-federal contests, or None if it never has.
+
+    One marker covers both the executive offices and the legislature:
+    they ride the same ballot in the same response, and the
+    `statewide_offices` opt-in that gates writing it means the same thing
+    for each — this state's real contest labels were read against the
+    parsers. Split markers would let the two drift into disagreeing about
+    whether the state had been checked.
+    """
+    return api_cache_get(
+        db, STATEWIDE_MARKER_TIER, statewide_marker_key(state, cycle),
+        max_age_hours=STATEWIDE_MARKER_TTL_HOURS,
+    )
+
+
 class StatewideCoverageStatus:
     """The three things an empty statewide-executive section can mean.
 
@@ -446,10 +490,7 @@ def _statewide_section(db: Session, state: str, cycle: int) -> tuple[list[dict],
     status from the row count alone would collapse exactly the two cases
     this function exists to keep apart.
     """
-    marker = api_cache_get(
-        db, STATEWIDE_MARKER_TIER, statewide_marker_key(state, cycle),
-        max_age_hours=STATEWIDE_MARKER_TTL_HOURS,
-    )
+    marker = _statewide_marker(db, state, cycle)
     nominees = (
         db.query(StatewideNominee)
         .filter(StatewideNominee.state == state, StatewideNominee.cycle_year == cycle)
@@ -487,6 +528,54 @@ def _statewide_section(db: Session, state: str, cycle: int) -> tuple[list[dict],
         "sourceName": (marker or {}).get("sourceName") or None,
         "checkedAt": (marker or {}).get("checkedAt") or None,
     }
+
+
+def _state_leg_section(db: Session, state: str, cycle: int, marker: dict | None) -> list[dict]:
+    """This state's legislative seats, grouped by chamber and ordered by
+    district number.
+
+    Shares the statewide marker rather than keeping its own: one
+    `statewide_offices` opt-in covers both because it means the same
+    thing for each — this state's real contest labels were read against
+    the parsers. The two kinds ride the same ballot in the same response,
+    so a state that has one checked has both.
+
+    Only seats with a nominee appear. A chamber where every seat is
+    uncontested this cycle simply has fewer rows, which is the truth; the
+    page never invents a row for a seat nobody filed for.
+    """
+    if marker is None:
+        return []
+
+    towns = _state_leg_towns()
+    rows = (
+        db.query(StateLegNominee)
+        .filter(StateLegNominee.state == state, StateLegNominee.cycle_year == cycle)
+        .all()
+    )
+    seats: dict[tuple[str, str], list[dict]] = {}
+    for row in rows:
+        seats.setdefault((row.chamber, row.district), []).append({
+            "party": PARTY_CODE_MAP.get(row.party, row.party),
+            "name": row.display_name,
+        })
+
+    out = []
+    for chamber, label in STATE_LEG_CHAMBER_LABELS.items():
+        districts = [
+            {
+                "district": district,
+                "towns": towns.get(f"{state}-{chamber}-{district}") or [],
+                "nominees": sorted(people, key=lambda n: n["party"]),
+            }
+            for (ch, district), people in sorted(
+                seats.items(), key=lambda kv: district_sort_key(kv[0][1])
+            )
+            if ch == chamber
+        ]
+        if districts:
+            out.append({"chamber": chamber, "label": label, "districts": districts})
+    return out
 
 
 @router.get("/states/{state}")
@@ -558,6 +647,7 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         .first()
     )
     statewide_races, statewide_coverage = _statewide_section(db, state, cycle)
+    state_leg_races = _state_leg_section(db, state, cycle, _statewide_marker(db, state, cycle))
 
     return cached_json({
         "state": state,
@@ -602,14 +692,16 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         "officialLookup": lookup_for_state(state),
         "statewideRaces": statewide_races,
         "statewideCoverage": statewide_coverage,
+        "stateLegRaces": state_leg_races,
         "omits": ([
             # Dropped the moment this state's executive contests are
             # genuinely covered — the list has to shrink as the gaps
             # actually close, or it stops describing the page and starts
             # being boilerplate a reader learns to skip.
             "Governor and other statewide executive contests",
-        ] if statewide_coverage["status"] == StatewideCoverageStatus.NOT_YET_COVERED else []) + [
+        ] if statewide_coverage["status"] == StatewideCoverageStatus.NOT_YET_COVERED else []) + ([
             "State legislative districts",
+        ] if not state_leg_races else []) + [
             "Judicial contests and retention questions",
             "County and municipal offices",
             "Local ballot measures",

@@ -1,0 +1,431 @@
+{
+ "_source": "U.S. Census Bureau TIGERweb: current-vintage state legislative district polygons (TIGERweb/Legislative layers 1 and 2) against county-subdivision polygons, resolved by point sampling inside each town. See scripts/fetch_state_leg_crosswalk.py for why the block assignment files and a plain spatial intersect both give wrong answers here.",
+ "districts": {
+  "RI-lower-1": [
+   "Providence city"
+  ],
+  "RI-lower-10": [
+   "Providence city"
+  ],
+  "RI-lower-11": [
+   "Providence city"
+  ],
+  "RI-lower-12": [
+   "Providence city"
+  ],
+  "RI-lower-13": [
+   "Johnston town",
+   "Providence city"
+  ],
+  "RI-lower-14": [
+   "Cranston city",
+   "Providence city"
+  ],
+  "RI-lower-15": [
+   "Cranston city"
+  ],
+  "RI-lower-16": [
+   "Cranston city"
+  ],
+  "RI-lower-17": [
+   "Cranston city"
+  ],
+  "RI-lower-18": [
+   "Cranston city"
+  ],
+  "RI-lower-19": [
+   "Cranston city",
+   "Warwick city"
+  ],
+  "RI-lower-2": [
+   "Providence city"
+  ],
+  "RI-lower-20": [
+   "Cranston city",
+   "Warwick city"
+  ],
+  "RI-lower-21": [
+   "Warwick city"
+  ],
+  "RI-lower-22": [
+   "Warwick city"
+  ],
+  "RI-lower-23": [
+   "Warwick city"
+  ],
+  "RI-lower-24": [
+   "East Greenwich town",
+   "Warwick city"
+  ],
+  "RI-lower-25": [
+   "Coventry town",
+   "West Warwick town"
+  ],
+  "RI-lower-26": [
+   "Coventry town",
+   "Warwick city",
+   "West Warwick town"
+  ],
+  "RI-lower-27": [
+   "Coventry town",
+   "West Warwick town"
+  ],
+  "RI-lower-28": [
+   "Coventry town"
+  ],
+  "RI-lower-29": [
+   "Coventry town",
+   "West Greenwich town"
+  ],
+  "RI-lower-3": [
+   "Providence city"
+  ],
+  "RI-lower-30": [
+   "East Greenwich town",
+   "West Greenwich town"
+  ],
+  "RI-lower-31": [
+   "Exeter town",
+   "North Kingstown town"
+  ],
+  "RI-lower-32": [
+   "North Kingstown town"
+  ],
+  "RI-lower-33": [
+   "Narragansett town",
+   "South Kingstown town"
+  ],
+  "RI-lower-34": [
+   "Narragansett town",
+   "South Kingstown town"
+  ],
+  "RI-lower-35": [
+   "South Kingstown town"
+  ],
+  "RI-lower-36": [
+   "Charlestown town",
+   "New Shoreham town",
+   "South Kingstown town",
+   "Westerly town"
+  ],
+  "RI-lower-37": [
+   "Westerly town"
+  ],
+  "RI-lower-38": [
+   "Hopkinton town",
+   "Westerly town"
+  ],
+  "RI-lower-39": [
+   "Exeter town",
+   "Hopkinton town",
+   "Richmond town"
+  ],
+  "RI-lower-4": [
+   "Providence city"
+  ],
+  "RI-lower-40": [
+   "Coventry town",
+   "Foster town",
+   "Glocester town"
+  ],
+  "RI-lower-41": [
+   "Cranston city",
+   "Scituate town"
+  ],
+  "RI-lower-42": [
+   "Cranston city",
+   "Johnston town"
+  ],
+  "RI-lower-43": [
+   "Johnston town"
+  ],
+  "RI-lower-44": [
+   "Johnston town",
+   "Lincoln town",
+   "Smithfield town"
+  ],
+  "RI-lower-45": [
+   "Cumberland town",
+   "Lincoln town"
+  ],
+  "RI-lower-46": [
+   "Lincoln town",
+   "Pawtucket city"
+  ],
+  "RI-lower-47": [
+   "Burrillville town",
+   "Glocester town"
+  ],
+  "RI-lower-48": [
+   "Burrillville town",
+   "North Smithfield town"
+  ],
+  "RI-lower-49": [
+   "North Smithfield town",
+   "Woonsocket city"
+  ],
+  "RI-lower-5": [
+   "Providence city"
+  ],
+  "RI-lower-50": [
+   "Woonsocket city"
+  ],
+  "RI-lower-51": [
+   "Cumberland town",
+   "Woonsocket city"
+  ],
+  "RI-lower-52": [
+   "Cumberland town"
+  ],
+  "RI-lower-53": [
+   "Glocester town",
+   "Smithfield town"
+  ],
+  "RI-lower-54": [
+   "North Providence town"
+  ],
+  "RI-lower-55": [
+   "North Providence town"
+  ],
+  "RI-lower-56": [
+   "Central Falls city"
+  ],
+  "RI-lower-57": [
+   "Central Falls city",
+   "Cumberland town"
+  ],
+  "RI-lower-58": [
+   "Pawtucket city"
+  ],
+  "RI-lower-59": [
+   "Pawtucket city"
+  ],
+  "RI-lower-6": [
+   "North Providence town",
+   "Providence city"
+  ],
+  "RI-lower-60": [
+   "Central Falls city",
+   "Pawtucket city"
+  ],
+  "RI-lower-61": [
+   "Pawtucket city"
+  ],
+  "RI-lower-62": [
+   "Pawtucket city"
+  ],
+  "RI-lower-63": [
+   "East Providence city",
+   "Pawtucket city"
+  ],
+  "RI-lower-64": [
+   "East Providence city",
+   "Pawtucket city"
+  ],
+  "RI-lower-65": [
+   "East Providence city"
+  ],
+  "RI-lower-66": [
+   "Barrington town",
+   "East Providence city"
+  ],
+  "RI-lower-67": [
+   "Barrington town",
+   "Warren town"
+  ],
+  "RI-lower-68": [
+   "Bristol town",
+   "Warren town"
+  ],
+  "RI-lower-69": [
+   "Bristol town",
+   "Portsmouth town"
+  ],
+  "RI-lower-7": [
+   "Providence city"
+  ],
+  "RI-lower-70": [
+   "Tiverton town"
+  ],
+  "RI-lower-71": [
+   "Little Compton town",
+   "Portsmouth town",
+   "Tiverton town"
+  ],
+  "RI-lower-72": [
+   "Middletown town",
+   "Portsmouth town"
+  ],
+  "RI-lower-73": [
+   "Middletown town",
+   "Newport city"
+  ],
+  "RI-lower-74": [
+   "Jamestown town",
+   "Middletown town"
+  ],
+  "RI-lower-75": [
+   "Newport city"
+  ],
+  "RI-lower-8": [
+   "Providence city"
+  ],
+  "RI-lower-9": [
+   "Providence city"
+  ],
+  "RI-upper-1": [
+   "Providence city"
+  ],
+  "RI-upper-10": [
+   "Bristol town",
+   "Tiverton town",
+   "Warren town"
+  ],
+  "RI-upper-11": [
+   "Bristol town",
+   "Portsmouth town"
+  ],
+  "RI-upper-12": [
+   "Little Compton town",
+   "Middletown town",
+   "Newport city",
+   "Tiverton town"
+  ],
+  "RI-upper-13": [
+   "Jamestown town",
+   "Newport city"
+  ],
+  "RI-upper-14": [
+   "East Providence city"
+  ],
+  "RI-upper-15": [
+   "Pawtucket city",
+   "Providence city"
+  ],
+  "RI-upper-16": [
+   "Central Falls city",
+   "Pawtucket city"
+  ],
+  "RI-upper-17": [
+   "Lincoln town",
+   "North Providence town",
+   "North Smithfield town"
+  ],
+  "RI-upper-18": [
+   "East Providence city",
+   "Pawtucket city"
+  ],
+  "RI-upper-19": [
+   "Cumberland town",
+   "Lincoln town"
+  ],
+  "RI-upper-2": [
+   "Providence city"
+  ],
+  "RI-upper-20": [
+   "Cumberland town",
+   "Woonsocket city"
+  ],
+  "RI-upper-21": [
+   "Coventry town",
+   "Foster town",
+   "Scituate town",
+   "West Greenwich town"
+  ],
+  "RI-upper-22": [
+   "Lincoln town",
+   "North Providence town",
+   "Smithfield town"
+  ],
+  "RI-upper-23": [
+   "Burrillville town",
+   "Glocester town",
+   "North Smithfield town"
+  ],
+  "RI-upper-24": [
+   "North Smithfield town",
+   "Woonsocket city"
+  ],
+  "RI-upper-25": [
+   "Johnston town"
+  ],
+  "RI-upper-26": [
+   "Cranston city"
+  ],
+  "RI-upper-27": [
+   "Cranston city",
+   "West Warwick town"
+  ],
+  "RI-upper-28": [
+   "Cranston city",
+   "Providence city"
+  ],
+  "RI-upper-29": [
+   "Warwick city"
+  ],
+  "RI-upper-3": [
+   "Providence city"
+  ],
+  "RI-upper-30": [
+   "Warwick city"
+  ],
+  "RI-upper-31": [
+   "Cranston city",
+   "Warwick city"
+  ],
+  "RI-upper-32": [
+   "Barrington town",
+   "Bristol town",
+   "East Providence city"
+  ],
+  "RI-upper-33": [
+   "Coventry town",
+   "West Greenwich town"
+  ],
+  "RI-upper-34": [
+   "Charlestown town",
+   "Exeter town",
+   "Hopkinton town",
+   "Richmond town",
+   "West Greenwich town"
+  ],
+  "RI-upper-35": [
+   "East Greenwich town",
+   "North Kingstown town",
+   "South Kingstown town"
+  ],
+  "RI-upper-36": [
+   "Narragansett town",
+   "New Shoreham town",
+   "North Kingstown town"
+  ],
+  "RI-upper-37": [
+   "South Kingstown town"
+  ],
+  "RI-upper-38": [
+   "Charlestown town",
+   "South Kingstown town",
+   "Westerly town"
+  ],
+  "RI-upper-4": [
+   "North Providence town",
+   "Providence city"
+  ],
+  "RI-upper-5": [
+   "Providence city"
+  ],
+  "RI-upper-6": [
+   "Providence city"
+  ],
+  "RI-upper-7": [
+   "Johnston town",
+   "Providence city"
+  ],
+  "RI-upper-8": [
+   "Pawtucket city"
+  ],
+  "RI-upper-9": [
+   "West Warwick town"
+  ]
+ }
+}
