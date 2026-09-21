@@ -717,3 +717,48 @@ class TestNebraskaAuditor:
     def test_a_county_auditor_is_still_refused(self):
         assert common.parse_statewide_office("County Auditor") is None
         assert common.parse_statewide_office("County Auditor/Treasurer") is None
+
+
+class TestClarityStateOffices:
+    """Offices and district wordings found by running the gates over
+    Colorado's, Iowa's and West Virginia's real 2026 summaries."""
+
+    def test_colorado_elects_university_regents_by_congressional_district(self):
+        """Statewide body, seated by a CONGRESSIONAL district — a seat
+        number with nothing to do with any legislative map."""
+        assert common.parse_statewide_office(
+            "Regent of the University of Colorado - Congressional District 3 - Republican Party"
+        ) == ("university_regent", "3")
+
+    def test_a_regent_contest_is_not_a_federal_house_race(self):
+        """It says "Congressional District", which is close enough to a
+        federal label to be worth pinning."""
+        assert common.parse_office(
+            "Regent of the University of Colorado - Congressional District 3 - Republican Party"
+        ) is None
+
+    def test_iowas_own_names_for_two_offices(self):
+        assert common.parse_statewide_office(
+            "Secretary of Agriculture - Rep.") == ("agriculture_commissioner", None)
+        assert common.parse_statewide_office(
+            "Auditor of State - Dem.") == ("auditor", None)
+
+    def test_west_virginia_writes_the_district_number_first(self):
+        """"HOUSE OF DELEGATES, 1st District" — the ordinal comes before
+        the word, which the plain "District N" pattern cannot read."""
+        assert common.parse_state_leg_office(
+            "HOUSE OF DELEGATES, 1st District - REP") == ("lower", "1", None)
+        assert common.parse_state_leg_office(
+            "STATE SENATOR, 3rd Senatorial District - DEM") == ("upper", "3", None)
+
+    def test_a_party_executive_committee_is_still_refused(self):
+        """West Virginia's summary carries 56 of these, each naming a
+        district."""
+        assert common.parse_state_leg_office(
+            "STATE EXECUTIVE COMMITTEE - Female, 2nd District - DEM") is None
+
+    def test_the_ordinal_form_does_not_disturb_the_plain_one(self):
+        assert common.parse_state_leg_office(
+            "DEM Senator in General Assembly District 5") == ("upper", "5", None)
+        assert common.parse_state_leg_office(
+            "State Representative District 10A") == ("lower", "10A", None)

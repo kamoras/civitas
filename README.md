@@ -527,6 +527,8 @@ Nebraska is the eleventh, and the first on a different vendor — the TotalVote 
 
 Montana and South Dakota run on that same vendor and are deliberately **not** covered. South Dakota is the instructive one: its page yields exactly one contest, Governor, with nothing unmatched — so coverage would *look* complete while silently omitting the Attorney General, Secretary of State, Auditor and Treasurer it also elects. A clean unmatched list proves nothing when the page itself is scoped.
 
+Colorado, Iowa and West Virginia complete the Clarity vendor, bringing it to fourteen states. Each was blocked by exactly one wording: Colorado's `Regent of the University of Colorado — Congressional District N`, a statewide body seated by *congressional* district; Iowa's `Secretary of Agriculture` and `Auditor of State`, its own names for offices already known under others; and West Virginia's `HOUSE OF DELEGATES, 1st District`, which puts the number **before** the word — so the `District N` pattern read nothing and all 117 of its seats were invisible.
+
 Minnesota is also why a district identifier is a **string**: it splits each of its 67 senate districts into two house districts, `10A` and `10B`. And why the town list is truncated for display but searched in full — one of its senate districts covers 292 townships, so the row shows three and "& 133 more", yet typing the 136th town still finds the seat.
 
 ---

@@ -170,7 +170,7 @@ _STATEWIDE_OFFICES = [
     # Accounts" -- specific enough to stand without a "state" qualifier,
     # since no county calls its auditor that.
     ("auditor", re.compile(
-        r"\b(?:state|general)\s+auditor\b|\bAuditor\s+of\s+Public\s+Accounts\b",
+        r"\b(?:state|general)\s+auditor\b|\bAuditor\s+of\s+(?:Public\s+Accounts|State)\b",
         re.IGNORECASE)),
     # Idaho's own constitutional officer. Qualified like the two above,
     # because a county can have a controller too.
@@ -207,8 +207,10 @@ _LT_GOVERNOR_RE = re.compile(r"\b(?:lieutenant|lt\.?)\s+governor\b", re.IGNORECA
 _STATEWIDE_PHRASES = [
     ("insurance_commissioner", re.compile(
         r"\bCommissioner\s+of\s+Insurance\b|\bInsurance\s+Commissioner\b", re.IGNORECASE)),
+    # Iowa calls its agriculture officer a Secretary, not a Commissioner.
     ("agriculture_commissioner", re.compile(
-        r"\bCommissioner\s+of\s+Agriculture\b|\bAgriculture\s+Commissioner\b", re.IGNORECASE)),
+        r"\bCommissioner\s+of\s+Agriculture\b|\bAgriculture\s+Commissioner\b"
+        r"|\bSecretary\s+of\s+Agriculture\b", re.IGNORECASE)),
     ("labor_commissioner", re.compile(
         r"\bCommissioner\s+of\s+Labor\b|\bLabor\s+Commissioner\b", re.IGNORECASE)),
     ("school_superintendent", re.compile(
@@ -228,6 +230,8 @@ _STATEWIDE_PHRASES = [
     # and North Carolina's export is full of them.
     ("state_board_of_education", re.compile(
         r"\bState\s+Board\s+of\s+Education\b", re.IGNORECASE)),
+    ("university_regent", re.compile(
+        r"\bRegent\s+of\s+the\s+University\b|\bUniversity\s+Regent\b", re.IGNORECASE)),
 ]
 
 # The locality markers that stay decisive even beside one of the phrases
@@ -247,6 +251,10 @@ _STATEWIDE_DISTRICT_SEATS = {
     # the PSC: elected statewide, held for a district.
     "board_of_equalization",
     "state_board_of_education",
+    # Colorado elects its university regents statewide, one per
+    # CONGRESSIONAL district — a seat number that has nothing to do with
+    # any legislative map.
+    "university_regent",
 }
 
 _STATEWIDE_SEAT_RE = re.compile(r"\bDistrict\s+(?:No\.?\s*)?0*(\d+)\b", re.IGNORECASE)
@@ -309,6 +317,7 @@ STATEWIDE_OFFICE_LABELS = {
     "chief_financial_officer": "Chief Financial Officer",
     "board_of_equalization": "Board of Equalization",
     "state_board_of_education": "State Board of Education",
+    "university_regent": "University Regent",
 }
 
 
@@ -464,6 +473,13 @@ _STATE_LEG_DISTRICT_RE = re.compile(
     r"\bDistrict\s+(?:No\.?\s*)?0*(\d+)([A-Za-z]?)\b", re.IGNORECASE,
 )
 
+# West Virginia puts the number FIRST: "HOUSE OF DELEGATES, 1st District"
+# and "STATE SENATOR, 3rd Senatorial District". One optional word is
+# allowed between the ordinal and "District" to carry that "Senatorial".
+_STATE_LEG_ORDINAL_DISTRICT_RE = re.compile(
+    r"\b0*(\d+)(?:st|nd|rd|th)\s+(?:\w+\s+)?District\b", re.IGNORECASE,
+)
+
 # SOME STATES ELECT SEVERAL MEMBERS FROM ONE DISTRICT, and the seat is
 # what tells their contests apart. Idaho runs "District 1 Seat A" and
 # "Seat B"; Washington runs "Pos. 1" and "Pos. 2" of a Legislative
@@ -521,13 +537,18 @@ def parse_state_leg_office(contest_name: str) -> tuple[str, str, str | None] | N
     for chamber, pattern in _STATE_LEG_CHAMBERS:
         if pattern.search(name):
             district = _STATE_LEG_DISTRICT_RE.search(name)
-            if not district:
-                return None
+            if district:
+                number = district.group(1) + district.group(2).upper()
+            else:
+                ordinal = _STATE_LEG_ORDINAL_DISTRICT_RE.search(name)
+                if not ordinal:
+                    return None
+                number = ordinal.group(1)
             seat_match = _STATE_LEG_SEAT_RE.search(name)
             seat = None
             if seat_match:
                 seat = (seat_match.group(1) or seat_match.group(2) or "").upper() or None
-            return chamber, district.group(1) + district.group(2).upper(), seat
+            return chamber, number, seat
     return None
 
 
