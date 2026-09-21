@@ -8560,6 +8560,1700 @@
    "Wolverton township",
    "Woodside township"
   ],
+  "NC-lower-1": [
+   "Columbia town",
+   "Creswell town",
+   "Duck town",
+   "Edenton town",
+   "Hertford town",
+   "Kitty Hawk town",
+   "Plymouth town",
+   "Roper town",
+   "Southern Shores town",
+   "Winfall town"
+  ],
+  "NC-lower-10": [
+   "Eureka town",
+   "Fremont town",
+   "Goldsboro city",
+   "Pikeville town",
+   "Walnut Creek village"
+  ],
+  "NC-lower-100": [
+   "Charlotte city",
+   "Matthews town",
+   "Mint Hill town"
+  ],
+  "NC-lower-101": [
+   "Charlotte city",
+   "Huntersville town"
+  ],
+  "NC-lower-102": [
+   "Charlotte city"
+  ],
+  "NC-lower-103": [
+   "Charlotte city",
+   "Pineville town"
+  ],
+  "NC-lower-104": [
+   "Charlotte city"
+  ],
+  "NC-lower-105": [
+   "Charlotte city",
+   "Matthews town",
+   "Mint Hill town",
+   "Stallings town"
+  ],
+  "NC-lower-106": [
+   "Charlotte city",
+   "Huntersville town"
+  ],
+  "NC-lower-107": [
+   "Charlotte city"
+  ],
+  "NC-lower-108": [
+   "Belmont city",
+   "Cramerton town",
+   "Dallas town",
+   "Gastonia city",
+   "High Shoals city",
+   "Lowell city",
+   "McAdenville town",
+   "Mount Holly city",
+   "Ranlo town",
+   "Spencer Mountain town",
+   "Stanley town"
+  ],
+  "NC-lower-109": [
+   "Belmont city",
+   "Cramerton town",
+   "Gastonia city",
+   "Lowell city"
+  ],
+  "NC-lower-11": [
+   "Apex town",
+   "Cary town",
+   "Raleigh city"
+  ],
+  "NC-lower-110": [
+   "Belwood town",
+   "Bessemer City city",
+   "Casar town",
+   "Cherryville city",
+   "Dellview town",
+   "Fallston town",
+   "Gastonia city",
+   "High Shoals city",
+   "Kings Mountain city",
+   "Kingstown town",
+   "Lawndale town",
+   "Polkville city",
+   "Shelby city",
+   "Waco town"
+  ],
+  "NC-lower-111": [
+   "Boiling Springs town",
+   "Bostic town",
+   "Earl town",
+   "Ellenboro town",
+   "Grover town",
+   "Kings Mountain city",
+   "Lattimore town",
+   "Mooresboro town",
+   "Patterson Springs town",
+   "Shelby city"
+  ],
+  "NC-lower-112": [
+   "Charlotte city"
+  ],
+  "NC-lower-113": [
+   "Chimney Rock Village village",
+   "Columbus town",
+   "Flat Rock village",
+   "Forest City town",
+   "Hendersonville city",
+   "Lake Lure town",
+   "Laurel Park town",
+   "Marion city",
+   "Ruth town",
+   "Rutherfordton town",
+   "Saluda city",
+   "Spindale town",
+   "Tryon town"
+  ],
+  "NC-lower-114": [
+   "Asheville city",
+   "Biltmore Forest town",
+   "Black Mountain town",
+   "Montreat town"
+  ],
+  "NC-lower-115": [
+   "Asheville city",
+   "Weaverville town",
+   "Woodfin town"
+  ],
+  "NC-lower-116": [
+   "Asheville city",
+   "Biltmore Forest town",
+   "Woodfin town"
+  ],
+  "NC-lower-117": [
+   "Fletcher town",
+   "Hendersonville city",
+   "Laurel Park town",
+   "Mills River town"
+  ],
+  "NC-lower-118": [
+   "Canton town",
+   "Clyde town",
+   "Hot Springs town",
+   "Maggie Valley town",
+   "Mars Hill town",
+   "Marshall town",
+   "Waynesville town"
+  ],
+  "NC-lower-119": [
+   "Brevard city",
+   "Bryson City town",
+   "Dillsboro town",
+   "Forest Hills village",
+   "Highlands town",
+   "Rosman town",
+   "Sylva town",
+   "Webster town"
+  ],
+  "NC-lower-12": [
+   "Grifton town",
+   "Hookerton town",
+   "Kinston city",
+   "La Grange town",
+   "Maysville town",
+   "Pink Hill town",
+   "Pollocksville town",
+   "Snow Hill town",
+   "Trenton town",
+   "Walstonburg town"
+  ],
+  "NC-lower-120": [
+   "Andrews town",
+   "Fontana Dam town",
+   "Franklin town",
+   "Hayesville town",
+   "Highlands town",
+   "Lake Santeetlah town",
+   "Murphy town",
+   "Robbinsville town"
+  ],
+  "NC-lower-13": [
+   "Atlantic Beach town",
+   "Beaufort town",
+   "Bogue town",
+   "Cape Carteret town",
+   "Cedar Point town",
+   "Emerald Isle town",
+   "Havelock city",
+   "Indian Beach town",
+   "Morehead City town",
+   "Newport town",
+   "Peletier town",
+   "Pine Knoll Shores town"
+  ],
+  "NC-lower-14": [
+   "Jacksonville city",
+   "North Topsail Beach town",
+   "Swansboro town"
+  ],
+  "NC-lower-15": [
+   "Jacksonville city",
+   "Richlands town"
+  ],
+  "NC-lower-16": [
+   "Atkinson town",
+   "Burgaw town",
+   "Holly Ridge town",
+   "North Topsail Beach town",
+   "St. Helena village",
+   "Surf City town",
+   "Topsail Beach town",
+   "Wallace town",
+   "Watha town"
+  ],
+  "NC-lower-17": [
+   "Belville town",
+   "Calabash town",
+   "Carolina Shores town",
+   "Holden Beach town",
+   "Leland town",
+   "Navassa town",
+   "Northwest city",
+   "Ocean Isle Beach town",
+   "Sandy Creek town",
+   "Shallotte town",
+   "Sunset Beach town"
+  ],
+  "NC-lower-18": [
+   "Wilmington city"
+  ],
+  "NC-lower-19": [
+   "Bald Head Island village",
+   "Boiling Spring Lakes city",
+   "Bolivia town",
+   "Carolina Beach town",
+   "Caswell Beach town",
+   "Holden Beach town",
+   "Kure Beach town",
+   "Oak Island town",
+   "Southport city",
+   "St. James town",
+   "Varnamtown town",
+   "Wilmington city"
+  ],
+  "NC-lower-2": [
+   "Durham city",
+   "Roxboro city"
+  ],
+  "NC-lower-20": [
+   "Wilmington city",
+   "Wrightsville Beach town"
+  ],
+  "NC-lower-21": [
+   "Apex town",
+   "Cary town",
+   "Holly Springs town"
+  ],
+  "NC-lower-22": [
+   "Autryville town",
+   "Bladenboro town",
+   "Clarkton town",
+   "Clinton city",
+   "Dublin town",
+   "East Arcadia town",
+   "Elizabethtown town",
+   "Falcon town",
+   "Garland town",
+   "Harrells town",
+   "Newton Grove town",
+   "Roseboro town",
+   "Salemburg town",
+   "Tar Heel town",
+   "Turkey town",
+   "White Lake town"
+  ],
+  "NC-lower-23": [
+   "Askewville town",
+   "Aulander town",
+   "Bear Grass town",
+   "Colerain town",
+   "Conetoe town",
+   "Everetts town",
+   "Hamilton town",
+   "Hassell town",
+   "Jamesville town",
+   "Kelford town",
+   "Leggett town",
+   "Lewiston Woodville town",
+   "Macclesfield town",
+   "Oak City town",
+   "Parmele town",
+   "Pinetops town",
+   "Powellsville town",
+   "Princeville town",
+   "Robersonville town",
+   "Rocky Mount city",
+   "Roxobel town",
+   "Sharpsburg town",
+   "Speed town",
+   "Tarboro town",
+   "Whitakers town",
+   "Williamston town",
+   "Windsor town"
+  ],
+  "NC-lower-24": [
+   "Black Creek town",
+   "Elm City town",
+   "Kenly town",
+   "Lucama town",
+   "Rocky Mount city",
+   "Saratoga town",
+   "Sharpsburg town",
+   "Sims town",
+   "Stantonsburg town",
+   "Wilson city"
+  ],
+  "NC-lower-25": [
+   "Bailey town",
+   "Castalia town",
+   "Dortches town",
+   "Middlesex town",
+   "Momeyer town",
+   "Nashville town",
+   "Red Oak town",
+   "Rocky Mount city",
+   "Spring Hope town",
+   "Whitakers town"
+  ],
+  "NC-lower-26": [
+   "Archer Lodge town",
+   "Clayton town",
+   "Wilson's Mills town"
+  ],
+  "NC-lower-27": [
+   "Conway town",
+   "Enfield town",
+   "Garysburg town",
+   "Gaston town",
+   "Halifax town",
+   "Hobgood town",
+   "Jackson town",
+   "Lasker town",
+   "Littleton town",
+   "Macon town",
+   "Norlina town",
+   "Rich Square town",
+   "Roanoke Rapids city",
+   "Scotland Neck town",
+   "Seaboard town",
+   "Severn town",
+   "Warrenton town",
+   "Weldon town",
+   "Woodland town"
+  ],
+  "NC-lower-28": [
+   "Benson town",
+   "Clayton town",
+   "Four Oaks town",
+   "Kenly town",
+   "Micro town",
+   "Pine Level town",
+   "Princeton town",
+   "Selma town",
+   "Smithfield town",
+   "Wilson's Mills town"
+  ],
+  "NC-lower-29": [
+   "Chapel Hill town",
+   "Durham city"
+  ],
+  "NC-lower-3": [
+   "Bridgeton town",
+   "Cove City town",
+   "Dover town",
+   "Havelock city",
+   "New Bern city",
+   "River Bend town",
+   "Trent Woods town",
+   "Vanceboro town"
+  ],
+  "NC-lower-30": [
+   "Durham city"
+  ],
+  "NC-lower-31": [
+   "Durham city",
+   "Morrisville town",
+   "Raleigh city"
+  ],
+  "NC-lower-32": [
+   "Butner town",
+   "Creedmoor city",
+   "Henderson city",
+   "Middleburg town",
+   "Oxford city",
+   "Stem town",
+   "Stovall town"
+  ],
+  "NC-lower-33": [
+   "Garner town",
+   "Raleigh city"
+  ],
+  "NC-lower-34": [
+   "Raleigh city"
+  ],
+  "NC-lower-35": [
+   "Knightdale town",
+   "Raleigh city",
+   "Rolesville town",
+   "Wake Forest town",
+   "Wendell town"
+  ],
+  "NC-lower-36": [
+   "Apex town",
+   "Cary town",
+   "Fuquay-Varina town",
+   "Garner town",
+   "Holly Springs town"
+  ],
+  "NC-lower-37": [
+   "Angier town",
+   "Fuquay-Varina town",
+   "Garner town",
+   "Holly Springs town"
+  ],
+  "NC-lower-38": [
+   "Raleigh city"
+  ],
+  "NC-lower-39": [
+   "Clayton town",
+   "Knightdale town",
+   "Raleigh city",
+   "Rolesville town",
+   "Wendell town",
+   "Zebulon town"
+  ],
+  "NC-lower-4": [
+   "Beulaville town",
+   "Calypso town",
+   "Faison town",
+   "Goldsboro city",
+   "Greenevers town",
+   "Harrells town",
+   "Kenansville town",
+   "Magnolia town",
+   "Mount Olive town",
+   "Rose Hill town",
+   "Seven Springs town",
+   "Teachey town",
+   "Wallace town",
+   "Warsaw town"
+  ],
+  "NC-lower-40": [
+   "Raleigh city"
+  ],
+  "NC-lower-41": [
+   "Cary town",
+   "Morrisville town",
+   "Raleigh city"
+  ],
+  "NC-lower-42": [
+   "Fayetteville city",
+   "Spring Lake town"
+  ],
+  "NC-lower-43": [
+   "Eastover town",
+   "Falcon town",
+   "Fayetteville city",
+   "Godwin town",
+   "Hope Mills town",
+   "Linden town",
+   "Stedman town",
+   "Wade town"
+  ],
+  "NC-lower-44": [
+   "Fayetteville city"
+  ],
+  "NC-lower-45": [
+   "Fayetteville city",
+   "Hope Mills town"
+  ],
+  "NC-lower-46": [
+   "Boardman town",
+   "Bolton town",
+   "Brunswick town",
+   "Cerro Gordo town",
+   "Chadbourn town",
+   "Fair Bluff town",
+   "Lake Waccamaw town",
+   "Lumber Bridge town",
+   "Lumberton city",
+   "Orrum town",
+   "Parkton town",
+   "Proctorville town",
+   "Rennert town",
+   "Sandyfield town",
+   "St. Pauls town",
+   "Tabor City town",
+   "Whiteville city"
+  ],
+  "NC-lower-47": [
+   "Fairmont town",
+   "Lumberton city",
+   "Marietta town",
+   "Maxton town",
+   "McDonald town",
+   "Pembroke town",
+   "Raynham town",
+   "Red Springs town",
+   "Rowland town"
+  ],
+  "NC-lower-48": [
+   "Gibson town",
+   "Laurinburg city",
+   "Maxton town",
+   "Raeford city",
+   "Wagram town"
+  ],
+  "NC-lower-49": [
+   "Cary town",
+   "Raleigh city"
+  ],
+  "NC-lower-5": [
+   "Ahoskie town",
+   "Cofield village",
+   "Como town",
+   "Elizabeth City city",
+   "Gatesville town",
+   "Harrellsville town",
+   "Murfreesboro town",
+   "Winton town"
+  ],
+  "NC-lower-50": [
+   "Chapel Hill town",
+   "Hillsborough town",
+   "Mebane city",
+   "Milton town",
+   "Yanceyville town"
+  ],
+  "NC-lower-51": [
+   "Broadway town",
+   "Cameron town",
+   "Carthage town",
+   "Sanford city",
+   "Vass town"
+  ],
+  "NC-lower-52": [
+   "Aberdeen town",
+   "Carthage town",
+   "Dobbins Heights town",
+   "Ellerbe town",
+   "Foxfire village",
+   "Hamlet city",
+   "Hoffman town",
+   "Norman town",
+   "Pinebluff town",
+   "Pinehurst village",
+   "Rockingham city",
+   "Southern Pines town",
+   "Taylortown town",
+   "Whispering Pines village"
+  ],
+  "NC-lower-53": [
+   "Angier town",
+   "Coats town",
+   "Dunn city",
+   "Erwin town",
+   "Lillington town"
+  ],
+  "NC-lower-54": [
+   "Apex town",
+   "Cary town",
+   "Goldston town",
+   "Liberty town",
+   "Pittsboro town",
+   "Siler City town",
+   "Staley town"
+  ],
+  "NC-lower-55": [
+   "Ansonville town",
+   "Lilesville town",
+   "Marshville town",
+   "McFarlan town",
+   "Mineral Springs town",
+   "Monroe city",
+   "Morven town",
+   "Peachland town",
+   "Polkton town",
+   "Unionville town",
+   "Wadesboro town",
+   "Waxhaw town",
+   "Wingate town"
+  ],
+  "NC-lower-56": [
+   "Carrboro town",
+   "Chapel Hill town"
+  ],
+  "NC-lower-57": [
+   "Greensboro city"
+  ],
+  "NC-lower-58": [
+   "Greensboro city"
+  ],
+  "NC-lower-59": [
+   "Archdale city",
+   "Burlington city",
+   "Gibsonville town",
+   "Greensboro city",
+   "High Point city",
+   "Jamestown town",
+   "Pleasant Garden town",
+   "Sedalia town",
+   "Whitsett town"
+  ],
+  "NC-lower-6": [
+   "Broadway town",
+   "Dunn city",
+   "Erwin town",
+   "Lillington town"
+  ],
+  "NC-lower-60": [
+   "Archdale city",
+   "High Point city",
+   "Jamestown town"
+  ],
+  "NC-lower-61": [
+   "Greensboro city"
+  ],
+  "NC-lower-62": [
+   "Greensboro city",
+   "High Point city",
+   "Kernersville town",
+   "Oak Ridge town",
+   "Stokesdale town",
+   "Summerfield town"
+  ],
+  "NC-lower-63": [
+   "Alamance village",
+   "Burlington city",
+   "Elon town",
+   "Gibsonville town",
+   "Green Level town",
+   "Haw River town",
+   "Ossipee town"
+  ],
+  "NC-lower-64": [
+   "Burlington city",
+   "Graham city",
+   "Green Level town",
+   "Haw River town",
+   "Mebane city",
+   "Swepsonville town"
+  ],
+  "NC-lower-65": [
+   "Eden city",
+   "Madison town",
+   "Mayodan town",
+   "Reidsville city",
+   "Stoneville town",
+   "Wentworth town"
+  ],
+  "NC-lower-66": [
+   "Raleigh city",
+   "Rolesville town",
+   "Wake Forest town"
+  ],
+  "NC-lower-67": [
+   "Albemarle city",
+   "Badin town",
+   "Biscoe town",
+   "Candor town",
+   "Locust city",
+   "Misenheimer village",
+   "Mount Gilead town",
+   "New London town",
+   "Norwood town",
+   "Oakboro town",
+   "Red Cross town",
+   "Richfield town",
+   "Stanfield town",
+   "Star town",
+   "Troy town"
+  ],
+  "NC-lower-68": [
+   "Indian Trail town",
+   "Marvin village",
+   "Mineral Springs town",
+   "Monroe city",
+   "Waxhaw town",
+   "Weddington town",
+   "Wesley Chapel village"
+  ],
+  "NC-lower-69": [
+   "Fairview town",
+   "Hemby Bridge town",
+   "Indian Trail town",
+   "Lake Park village",
+   "Mint Hill town",
+   "Monroe city",
+   "Stallings town",
+   "Unionville town",
+   "Weddington town",
+   "Wesley Chapel village"
+  ],
+  "NC-lower-7": [
+   "Bunn town",
+   "Franklinton town",
+   "Henderson city",
+   "Kittrell town",
+   "Louisburg town",
+   "Wake Forest town",
+   "Youngsville town"
+  ],
+  "NC-lower-70": [
+   "Archdale city",
+   "Asheboro city",
+   "High Point city",
+   "Randleman city",
+   "Thomasville city",
+   "Trinity city"
+  ],
+  "NC-lower-71": [
+   "Winston-Salem city"
+  ],
+  "NC-lower-72": [
+   "Winston-Salem city"
+  ],
+  "NC-lower-73": [
+   "Concord city",
+   "Harrisburg town",
+   "Kannapolis city"
+  ],
+  "NC-lower-74": [
+   "Bethania town",
+   "Clemmons village",
+   "King city",
+   "Lewisville town",
+   "Tobaccoville village",
+   "Winston-Salem city"
+  ],
+  "NC-lower-75": [
+   "High Point city",
+   "Kernersville town",
+   "Walkertown town",
+   "Winston-Salem city"
+  ],
+  "NC-lower-76": [
+   "East Spencer town",
+   "Faith town",
+   "Granite Quarry town",
+   "Rockwell town",
+   "Salisbury city",
+   "Spencer town"
+  ],
+  "NC-lower-77": [
+   "Bermuda Run town",
+   "Boonville town",
+   "Cleveland town",
+   "Cooleemee town",
+   "East Bend town",
+   "Jonesville town",
+   "Mocksville town",
+   "Yadkinville town"
+  ],
+  "NC-lower-78": [
+   "Asheboro city",
+   "Candor town",
+   "Foxfire village",
+   "Franklinville town",
+   "Pinehurst village",
+   "Ramseur town",
+   "Robbins town",
+   "Seagrove town",
+   "Taylortown town"
+  ],
+  "NC-lower-79": [
+   "Alliance town",
+   "Arapahoe town",
+   "Aurora town",
+   "Bath town",
+   "Bayboro town",
+   "Belhaven town",
+   "Chocowinity town",
+   "Grantsboro town",
+   "Kill Devil Hills town",
+   "Manteo town",
+   "Mesic town",
+   "Minnesott Beach town",
+   "Nags Head town",
+   "Oriental town",
+   "Pantego town",
+   "Stonewall town",
+   "Vandemere town",
+   "Washington Park town",
+   "Washington city"
+  ],
+  "NC-lower-8": [
+   "Bethel town",
+   "Falkland town",
+   "Farmville town",
+   "Fountain town",
+   "Greenville city",
+   "Winterville town"
+  ],
+  "NC-lower-80": [
+   "Denton town",
+   "High Point city",
+   "Midway town",
+   "Thomasville city",
+   "Wallburg town"
+  ],
+  "NC-lower-81": [
+   "Lexington city",
+   "Midway town"
+  ],
+  "NC-lower-82": [
+   "Concord city",
+   "Harrisburg town",
+   "Kannapolis city",
+   "Locust city",
+   "Midland town",
+   "Mount Pleasant town"
+  ],
+  "NC-lower-83": [
+   "China Grove town",
+   "Kannapolis city",
+   "Landis town"
+  ],
+  "NC-lower-84": [
+   "Harmony town",
+   "Love Valley town",
+   "Mooresville town",
+   "Statesville city",
+   "Troutman town"
+  ],
+  "NC-lower-85": [
+   "Bakersville town",
+   "Banner Elk town",
+   "Beech Mountain town",
+   "Burnsville town",
+   "Crossnore town",
+   "Elk Park town",
+   "Grandfather Village village",
+   "Marion city",
+   "Newland town",
+   "Old Fort town",
+   "Seven Devils town",
+   "Spruce Pine town",
+   "Sugar Mountain village"
+  ],
+  "NC-lower-86": [
+   "Connelly Springs town",
+   "Drexel town",
+   "Glen Alpine town",
+   "Hickory city",
+   "Hildebran town",
+   "Long View town",
+   "Morganton city",
+   "Rhodhiss town",
+   "Rutherford College town",
+   "Valdese town"
+  ],
+  "NC-lower-87": [
+   "Blowing Rock town",
+   "Boone town",
+   "Cajah's Mountain town",
+   "Cedar Rock village",
+   "Gamewell town",
+   "Granite Falls town",
+   "Hickory city",
+   "Hudson town",
+   "Lenoir city",
+   "Rhodhiss town",
+   "Rutherford College town",
+   "Sawmills town"
+  ],
+  "NC-lower-88": [
+   "Charlotte city"
+  ],
+  "NC-lower-89": [
+   "Catawba town",
+   "Claremont city",
+   "Conover city",
+   "Hickory city",
+   "Maiden town",
+   "Newton city",
+   "Statesville city",
+   "Troutman town"
+  ],
+  "NC-lower-9": [
+   "Ayden town",
+   "Greenville city",
+   "Grifton town",
+   "Grimesland town",
+   "Simpson village",
+   "Winterville town"
+  ],
+  "NC-lower-90": [
+   "Dobson town",
+   "Elkin town",
+   "Mount Airy city",
+   "Pilot Mountain town",
+   "Ronda town"
+  ],
+  "NC-lower-91": [
+   "Danbury town",
+   "Kernersville town",
+   "King city",
+   "Rural Hall town",
+   "Tobaccoville village",
+   "Walkertown town",
+   "Walnut Cove town",
+   "Winston-Salem city"
+  ],
+  "NC-lower-92": [
+   "Charlotte city"
+  ],
+  "NC-lower-93": [
+   "Beech Mountain town",
+   "Blowing Rock town",
+   "Boone town",
+   "Jefferson town",
+   "Lansing town",
+   "Seven Devils town",
+   "Sparta town",
+   "West Jefferson town"
+  ],
+  "NC-lower-94": [
+   "North Wilkesboro town",
+   "Taylorsville town",
+   "Wilkesboro town"
+  ],
+  "NC-lower-95": [
+   "Davidson town",
+   "Mooresville town"
+  ],
+  "NC-lower-96": [
+   "Brookford town",
+   "Conover city",
+   "Hickory city",
+   "Long View town",
+   "Newton city"
+  ],
+  "NC-lower-97": [
+   "Lincolnton city",
+   "Maiden town"
+  ],
+  "NC-lower-98": [
+   "Cornelius town",
+   "Davidson town",
+   "Huntersville town"
+  ],
+  "NC-lower-99": [
+   "Charlotte city"
+  ],
+  "NC-upper-1": [
+   "Ahoskie town",
+   "Askewville town",
+   "Aulander town",
+   "Cofield village",
+   "Colerain town",
+   "Columbia town",
+   "Como town",
+   "Conway town",
+   "Duck town",
+   "Elizabeth City city",
+   "Garysburg town",
+   "Gaston town",
+   "Gatesville town",
+   "Harrellsville town",
+   "Hertford town",
+   "Jackson town",
+   "Kelford town",
+   "Kill Devil Hills town",
+   "Kitty Hawk town",
+   "Lasker town",
+   "Lewiston Woodville town",
+   "Manteo town",
+   "Murfreesboro town",
+   "Nags Head town",
+   "Powellsville town",
+   "Rich Square town",
+   "Roxobel town",
+   "Seaboard town",
+   "Severn town",
+   "Southern Shores town",
+   "Windsor town",
+   "Winfall town",
+   "Winton town",
+   "Woodland town"
+  ],
+  "NC-upper-10": [
+   "Archer Lodge town",
+   "Benson town",
+   "Clayton town",
+   "Four Oaks town",
+   "Kenly town",
+   "Micro town",
+   "Pine Level town",
+   "Princeton town",
+   "Selma town",
+   "Smithfield town",
+   "Wilson's Mills town"
+  ],
+  "NC-upper-11": [
+   "Bailey town",
+   "Bunn town",
+   "Castalia town",
+   "Dortches town",
+   "Elm City town",
+   "Franklinton town",
+   "Henderson city",
+   "Kittrell town",
+   "Louisburg town",
+   "Middleburg town",
+   "Middlesex town",
+   "Momeyer town",
+   "Nashville town",
+   "Red Oak town",
+   "Rocky Mount city",
+   "Sharpsburg town",
+   "Spring Hope town",
+   "Wake Forest town",
+   "Whitakers town",
+   "Youngsville town"
+  ],
+  "NC-upper-12": [
+   "Angier town",
+   "Broadway town",
+   "Coats town",
+   "Dunn city",
+   "Erwin town",
+   "Lillington town",
+   "Sanford city"
+  ],
+  "NC-upper-13": [
+   "Angier town",
+   "Apex town",
+   "Cary town",
+   "Fuquay-Varina town",
+   "Garner town",
+   "Holly Springs town",
+   "Knightdale town",
+   "Raleigh city"
+  ],
+  "NC-upper-14": [
+   "Clayton town",
+   "Garner town",
+   "Knightdale town",
+   "Raleigh city",
+   "Rolesville town",
+   "Wake Forest town",
+   "Wendell town",
+   "Zebulon town"
+  ],
+  "NC-upper-15": [
+   "Raleigh city",
+   "Wake Forest town"
+  ],
+  "NC-upper-16": [
+   "Apex town",
+   "Cary town",
+   "Raleigh city"
+  ],
+  "NC-upper-17": [
+   "Apex town",
+   "Cary town",
+   "Holly Springs town",
+   "Morrisville town",
+   "Raleigh city"
+  ],
+  "NC-upper-18": [
+   "Butner town",
+   "Creedmoor city",
+   "Knightdale town",
+   "Oxford city",
+   "Raleigh city",
+   "Rolesville town",
+   "Stem town",
+   "Stovall town",
+   "Wake Forest town",
+   "Wendell town",
+   "Zebulon town"
+  ],
+  "NC-upper-19": [
+   "Fayetteville city",
+   "Hope Mills town"
+  ],
+  "NC-upper-2": [
+   "Alliance town",
+   "Arapahoe town",
+   "Atlantic Beach town",
+   "Bayboro town",
+   "Bear Grass town",
+   "Beaufort town",
+   "Bogue town",
+   "Cape Carteret town",
+   "Cedar Point town",
+   "Creswell town",
+   "Edenton town",
+   "Emerald Isle town",
+   "Enfield town",
+   "Everetts town",
+   "Grantsboro town",
+   "Halifax town",
+   "Hamilton town",
+   "Hassell town",
+   "Hobgood town",
+   "Indian Beach town",
+   "Jamesville town",
+   "Littleton town",
+   "Macon town",
+   "Mesic town",
+   "Minnesott Beach town",
+   "Morehead City town",
+   "Newport town",
+   "Norlina town",
+   "Oak City town",
+   "Oriental town",
+   "Parmele town",
+   "Peletier town",
+   "Pine Knoll Shores town",
+   "Plymouth town",
+   "Roanoke Rapids city",
+   "Robersonville town",
+   "Roper town",
+   "Scotland Neck town",
+   "Stonewall town",
+   "Vandemere town",
+   "Warrenton town",
+   "Weldon town",
+   "Williamston town"
+  ],
+  "NC-upper-20": [
+   "Apex town",
+   "Cary town",
+   "Chapel Hill town",
+   "Durham city",
+   "Goldston town",
+   "Morrisville town",
+   "Pittsboro town",
+   "Siler City town"
+  ],
+  "NC-upper-21": [
+   "Aberdeen town",
+   "Cameron town",
+   "Candor town",
+   "Carthage town",
+   "Eastover town",
+   "Falcon town",
+   "Fayetteville city",
+   "Foxfire village",
+   "Godwin town",
+   "Hope Mills town",
+   "Linden town",
+   "Pinebluff town",
+   "Pinehurst village",
+   "Robbins town",
+   "Southern Pines town",
+   "Spring Lake town",
+   "Stedman town",
+   "Taylortown town",
+   "Vass town",
+   "Wade town",
+   "Whispering Pines village"
+  ],
+  "NC-upper-22": [
+   "Durham city"
+  ],
+  "NC-upper-23": [
+   "Carrboro town",
+   "Chapel Hill town",
+   "Hillsborough town",
+   "Mebane city",
+   "Milton town",
+   "Roxboro city",
+   "Yanceyville town"
+  ],
+  "NC-upper-24": [
+   "Fairmont town",
+   "Gibson town",
+   "Laurinburg city",
+   "Lumber Bridge town",
+   "Lumberton city",
+   "Marietta town",
+   "Maxton town",
+   "McDonald town",
+   "Orrum town",
+   "Parkton town",
+   "Pembroke town",
+   "Proctorville town",
+   "Raeford city",
+   "Raynham town",
+   "Red Springs town",
+   "Rennert town",
+   "Rowland town",
+   "St. Pauls town",
+   "Wagram town"
+  ],
+  "NC-upper-25": [
+   "Alamance village",
+   "Archdale city",
+   "Asheboro city",
+   "Burlington city",
+   "Elon town",
+   "Gibsonville town",
+   "Graham city",
+   "Green Level town",
+   "Haw River town",
+   "Liberty town",
+   "Mebane city",
+   "Ossipee town",
+   "Randleman city",
+   "Staley town",
+   "Swepsonville town"
+  ],
+  "NC-upper-26": [
+   "Archdale city",
+   "Burlington city",
+   "Eden city",
+   "Gibsonville town",
+   "Greensboro city",
+   "High Point city",
+   "Jamestown town",
+   "Kernersville town",
+   "Madison town",
+   "Mayodan town",
+   "Oak Ridge town",
+   "Pleasant Garden town",
+   "Reidsville city",
+   "Sedalia town",
+   "Stokesdale town",
+   "Stoneville town",
+   "Wentworth town",
+   "Whitsett town"
+  ],
+  "NC-upper-27": [
+   "Archdale city",
+   "Greensboro city",
+   "High Point city",
+   "Jamestown town",
+   "Oak Ridge town",
+   "Summerfield town"
+  ],
+  "NC-upper-28": [
+   "Greensboro city"
+  ],
+  "NC-upper-29": [
+   "Ansonville town",
+   "Archdale city",
+   "Asheboro city",
+   "Biscoe town",
+   "Candor town",
+   "Dobbins Heights town",
+   "Ellerbe town",
+   "Franklinville town",
+   "Hamlet city",
+   "High Point city",
+   "Hoffman town",
+   "Lilesville town",
+   "Marshville town",
+   "McFarlan town",
+   "Monroe city",
+   "Morven town",
+   "Mount Gilead town",
+   "Norman town",
+   "Peachland town",
+   "Polkton town",
+   "Ramseur town",
+   "Rockingham city",
+   "Seagrove town",
+   "Star town",
+   "Thomasville city",
+   "Trinity city",
+   "Troy town",
+   "Wadesboro town",
+   "Wingate town"
+  ],
+  "NC-upper-3": [
+   "Aurora town",
+   "Bath town",
+   "Belhaven town",
+   "Bridgeton town",
+   "Chocowinity town",
+   "Cove City town",
+   "Dover town",
+   "Grifton town",
+   "Havelock city",
+   "Kinston city",
+   "La Grange town",
+   "New Bern city",
+   "Pantego town",
+   "Pink Hill town",
+   "River Bend town",
+   "Trent Woods town",
+   "Vanceboro town",
+   "Washington Park town",
+   "Washington city"
+  ],
+  "NC-upper-30": [
+   "Bermuda Run town",
+   "Cooleemee town",
+   "Denton town",
+   "High Point city",
+   "Lexington city",
+   "Midway town",
+   "Mocksville town",
+   "Thomasville city",
+   "Wallburg town"
+  ],
+  "NC-upper-31": [
+   "Bethania town",
+   "Clemmons village",
+   "Danbury town",
+   "High Point city",
+   "Kernersville town",
+   "King city",
+   "Lewisville town",
+   "Rural Hall town",
+   "Tobaccoville village",
+   "Walkertown town",
+   "Walnut Cove town",
+   "Winston-Salem city"
+  ],
+  "NC-upper-32": [
+   "Walkertown town",
+   "Winston-Salem city"
+  ],
+  "NC-upper-33": [
+   "Albemarle city",
+   "Badin town",
+   "China Grove town",
+   "Cleveland town",
+   "East Spencer town",
+   "Faith town",
+   "Granite Quarry town",
+   "Kannapolis city",
+   "Landis town",
+   "Locust city",
+   "Misenheimer village",
+   "New London town",
+   "Norwood town",
+   "Oakboro town",
+   "Red Cross town",
+   "Richfield town",
+   "Rockwell town",
+   "Salisbury city",
+   "Spencer town",
+   "Stanfield town"
+  ],
+  "NC-upper-34": [
+   "Concord city",
+   "Harrisburg town",
+   "Kannapolis city",
+   "Locust city",
+   "Midland town",
+   "Mount Pleasant town"
+  ],
+  "NC-upper-35": [
+   "Fairview town",
+   "Harrisburg town",
+   "Hemby Bridge town",
+   "Indian Trail town",
+   "Lake Park village",
+   "Marvin village",
+   "Midland town",
+   "Mineral Springs town",
+   "Mint Hill town",
+   "Monroe city",
+   "Stallings town",
+   "Unionville town",
+   "Waxhaw town",
+   "Weddington town",
+   "Wesley Chapel village",
+   "Wingate town"
+  ],
+  "NC-upper-36": [
+   "Boonville town",
+   "Dobson town",
+   "East Bend town",
+   "Elkin town",
+   "Jonesville town",
+   "Mount Airy city",
+   "North Wilkesboro town",
+   "Pilot Mountain town",
+   "Ronda town",
+   "Taylorsville town",
+   "Wilkesboro town",
+   "Yadkinville town"
+  ],
+  "NC-upper-37": [
+   "Cornelius town",
+   "Davidson town",
+   "Harmony town",
+   "Love Valley town",
+   "Mooresville town",
+   "Statesville city",
+   "Troutman town"
+  ],
+  "NC-upper-38": [
+   "Charlotte city",
+   "Cornelius town",
+   "Davidson town",
+   "Huntersville town"
+  ],
+  "NC-upper-39": [
+   "Charlotte city",
+   "Pineville town"
+  ],
+  "NC-upper-4": [
+   "Black Creek town",
+   "Elm City town",
+   "Eureka town",
+   "Fremont town",
+   "Goldsboro city",
+   "Hookerton town",
+   "Kenly town",
+   "Lucama town",
+   "Mount Olive town",
+   "Pikeville town",
+   "Saratoga town",
+   "Seven Springs town",
+   "Sharpsburg town",
+   "Sims town",
+   "Snow Hill town",
+   "Stantonsburg town",
+   "Walnut Creek village",
+   "Walstonburg town",
+   "Wilson city"
+  ],
+  "NC-upper-40": [
+   "Charlotte city"
+  ],
+  "NC-upper-41": [
+   "Charlotte city"
+  ],
+  "NC-upper-42": [
+   "Charlotte city",
+   "Matthews town",
+   "Mint Hill town",
+   "Stallings town"
+  ],
+  "NC-upper-43": [
+   "Belmont city",
+   "Bessemer City city",
+   "Cramerton town",
+   "Dallas town",
+   "Gastonia city",
+   "High Shoals city",
+   "Kings Mountain city",
+   "Lowell city",
+   "McAdenville town",
+   "Mount Holly city",
+   "Ranlo town",
+   "Spencer Mountain town",
+   "Stanley town"
+  ],
+  "NC-upper-44": [
+   "Belwood town",
+   "Bessemer City city",
+   "Boiling Springs town",
+   "Casar town",
+   "Cherryville city",
+   "Dellview town",
+   "Earl town",
+   "Fallston town",
+   "Gastonia city",
+   "Grover town",
+   "High Shoals city",
+   "Kings Mountain city",
+   "Kingstown town",
+   "Lattimore town",
+   "Lawndale town",
+   "Lincolnton city",
+   "Maiden town",
+   "Mooresboro town",
+   "Patterson Springs town",
+   "Polkville city",
+   "Shelby city",
+   "Waco town"
+  ],
+  "NC-upper-45": [
+   "Brookford town",
+   "Cajah's Mountain town",
+   "Catawba town",
+   "Claremont city",
+   "Conover city",
+   "Gamewell town",
+   "Granite Falls town",
+   "Hickory city",
+   "Hudson town",
+   "Lenoir city",
+   "Long View town",
+   "Maiden town",
+   "Newton city",
+   "Rhodhiss town",
+   "Rutherford College town",
+   "Sawmills town"
+  ],
+  "NC-upper-46": [
+   "Black Mountain town",
+   "Connelly Springs town",
+   "Drexel town",
+   "Glen Alpine town",
+   "Hickory city",
+   "Hildebran town",
+   "Long View town",
+   "Marion city",
+   "Montreat town",
+   "Morganton city",
+   "Old Fort town",
+   "Rhodhiss town",
+   "Rutherford College town",
+   "Valdese town",
+   "Woodfin town"
+  ],
+  "NC-upper-47": [
+   "Bakersville town",
+   "Banner Elk town",
+   "Beech Mountain town",
+   "Blowing Rock town",
+   "Boone town",
+   "Burnsville town",
+   "Canton town",
+   "Cedar Rock village",
+   "Clyde town",
+   "Crossnore town",
+   "Elk Park town",
+   "Grandfather Village village",
+   "Hot Springs town",
+   "Jefferson town",
+   "Lansing town",
+   "Lenoir city",
+   "Mars Hill town",
+   "Marshall town",
+   "Newland town",
+   "Seven Devils town",
+   "Sparta town",
+   "Spruce Pine town",
+   "Sugar Mountain village",
+   "West Jefferson town"
+  ],
+  "NC-upper-48": [
+   "Bostic town",
+   "Chimney Rock Village village",
+   "Columbus town",
+   "Ellenboro town",
+   "Flat Rock village",
+   "Fletcher town",
+   "Forest City town",
+   "Hendersonville city",
+   "Lake Lure town",
+   "Laurel Park town",
+   "Mills River town",
+   "Ruth town",
+   "Rutherfordton town",
+   "Saluda city",
+   "Spindale town",
+   "Tryon town"
+  ],
+  "NC-upper-49": [
+   "Asheville city",
+   "Biltmore Forest town",
+   "Weaverville town",
+   "Woodfin town"
+  ],
+  "NC-upper-5": [
+   "Ayden town",
+   "Bethel town",
+   "Conetoe town",
+   "Falkland town",
+   "Farmville town",
+   "Fountain town",
+   "Greenville city",
+   "Grifton town",
+   "Grimesland town",
+   "Leggett town",
+   "Macclesfield town",
+   "Pinetops town",
+   "Princeville town",
+   "Rocky Mount city",
+   "Sharpsburg town",
+   "Simpson village",
+   "Speed town",
+   "Tarboro town",
+   "Whitakers town",
+   "Winterville town"
+  ],
+  "NC-upper-50": [
+   "Andrews town",
+   "Brevard city",
+   "Bryson City town",
+   "Canton town",
+   "Dillsboro town",
+   "Fontana Dam town",
+   "Forest Hills village",
+   "Franklin town",
+   "Hayesville town",
+   "Highlands town",
+   "Lake Santeetlah town",
+   "Maggie Valley town",
+   "Murphy town",
+   "Robbinsville town",
+   "Rosman town",
+   "Sylva town",
+   "Waynesville town",
+   "Webster town"
+  ],
+  "NC-upper-6": [
+   "Holly Ridge town",
+   "Jacksonville city",
+   "North Topsail Beach town",
+   "Richlands town",
+   "Surf City town",
+   "Swansboro town"
+  ],
+  "NC-upper-7": [
+   "Carolina Beach town",
+   "Kure Beach town",
+   "Wilmington city",
+   "Wrightsville Beach town"
+  ],
+  "NC-upper-8": [
+   "Bald Head Island village",
+   "Belville town",
+   "Boardman town",
+   "Boiling Spring Lakes city",
+   "Bolivia town",
+   "Bolton town",
+   "Brunswick town",
+   "Calabash town",
+   "Carolina Shores town",
+   "Caswell Beach town",
+   "Cerro Gordo town",
+   "Chadbourn town",
+   "Fair Bluff town",
+   "Holden Beach town",
+   "Lake Waccamaw town",
+   "Leland town",
+   "Navassa town",
+   "Northwest city",
+   "Oak Island town",
+   "Ocean Isle Beach town",
+   "Sandy Creek town",
+   "Sandyfield town",
+   "Shallotte town",
+   "Southport city",
+   "St. James town",
+   "Sunset Beach town",
+   "Tabor City town",
+   "Varnamtown town",
+   "Whiteville city",
+   "Wilmington city"
+  ],
+  "NC-upper-9": [
+   "Atkinson town",
+   "Autryville town",
+   "Beulaville town",
+   "Bladenboro town",
+   "Burgaw town",
+   "Calypso town",
+   "Clarkton town",
+   "Clinton city",
+   "Dublin town",
+   "East Arcadia town",
+   "Elizabethtown town",
+   "Faison town",
+   "Falcon town",
+   "Garland town",
+   "Greenevers town",
+   "Harrells town",
+   "Kenansville town",
+   "Magnolia town",
+   "Maysville town",
+   "Newton Grove town",
+   "Pollocksville town",
+   "Rose Hill town",
+   "Roseboro town",
+   "Salemburg town",
+   "St. Helena village",
+   "Surf City town",
+   "Tar Heel town",
+   "Teachey town",
+   "Topsail Beach town",
+   "Trenton town",
+   "Turkey town",
+   "Wallace town",
+   "Warsaw town",
+   "Watha town",
+   "White Lake town"
+  ],
   "RI-lower-1": [
    "Providence city"
   ],

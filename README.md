@@ -515,6 +515,8 @@ Getting Georgia right needed two things the first two states didn't. Its county 
 
 Idaho and Washington are the fourth and fifth, and they needed a distinction the first three didn't. Both elect **two representatives from one district** — Idaho as `Seat A`/`Seat B`, Washington as `Pos. 1`/`Pos. 2` — so the seat, not the district, is what tells their contests apart. Census settles which is which: it draws 134 lower-chamber polygons for Minnesota (`10A`, `10B`, …) but only 35 for Idaho and 49 for Washington. So Minnesota's letter belongs to the *district* and Idaho's to the *seat*, and the two seats of an Idaho district correctly share one town list. Read as one district instead, half of each state's House would simply have vanished.
 
+North Carolina is the sixth, and it exposed a gap that had been silently halving it: its lower chamber is labelled `NC HOUSE OF REPRESENTATIVES DISTRICT 1`, with no "State" anywhere, so only its Senate was matching. A **bare** "House of Representatives" is exactly what the federal gate must always refuse — it is a state chamber's name in most of the country — and that is what makes it safe to claim as a state seat here, since the legislative gate refuses anything the federal one recognises before testing a pattern at all.
+
 Minnesota is also why a district identifier is a **string**: it splits each of its 67 senate districts into two house districts, `10A` and `10B`. And why the town list is truncated for display but searched in full — one of its senate districts covers 292 townships, so the row shows three and "& 133 more", yet typing the 136th town still finds the seat.
 
 ---

@@ -370,6 +370,14 @@ _STATE_LEG_CHAMBERS = [
     ("lower", re.compile(r"\bRepresentative\s+in\s+General\s+Assembly\b", re.IGNORECASE)),
     ("upper", re.compile(r"\bState\s+Senat(?:e|or)\b", re.IGNORECASE)),
     ("lower", re.compile(r"\bState\s+(?:House|Representative)\b", re.IGNORECASE)),
+    #   North Carolina: "NC HOUSE OF REPRESENTATIVES DISTRICT 1", with no
+    #   "State" in it. A BARE "House of Representatives" is exactly what
+    #   parse_office must always refuse — it is a state chamber's name in
+    #   most of the country — which is what makes it safe to claim here:
+    #   this function refuses anything parse_office recognises before it
+    #   looks at a single pattern, so a label reaching this arm is one
+    #   that carries no federal marker at all.
+    ("lower", re.compile(r"\bHouse\s+of\s+Representatives\b", re.IGNORECASE)),
 ]
 
 # Districts are identified per chamber, and the identifier is the whole
@@ -431,6 +439,13 @@ def parse_state_leg_office(contest_name: str) -> tuple[str, str, str | None] | N
     """
     name = contest_name or ""
     if _NON_LEGISLATIVE_RE.search(name):
+        return None
+    # Refused here rather than relying on the caller having asked
+    # parse_office first. The bare "House of Representatives" arm below
+    # is only safe because nothing federal reaches it, and a contract
+    # that depends on call order is one that breaks the first time
+    # somebody calls this function on its own.
+    if parse_office(name) is not None:
         return None
     for chamber, pattern in _STATE_LEG_CHAMBERS:
         if pattern.search(name):

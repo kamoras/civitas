@@ -80,8 +80,16 @@ acted on blindly:
        unmatched non-judicial contest in its file is a local levy,
        proposition or PUD commissioner, because Washington elects its
        statewide officers in presidential years.
-  NC   Only "NC STATE SENATE DISTRICT N" appears in its file; the House
-       wording is therefore unverified.
+  NC   LIVE. Its House was being missed entirely: the label is "NC
+       HOUSE OF REPRESENTATIVES DISTRICT 1", with no "State" in it, so
+       only the Senate matched and the state looked like a 15-seat
+       chamber. parse_state_leg_office now reads a BARE "House of
+       Representatives" -- safe because it refuses anything parse_office
+       recognises first, and a bare one carries no federal marker. 14
+       Senate and 41 House seats, which is every contested primary its
+       file holds. No statewide offices, and that is checked: every
+       unmatched non-judicial contest is municipal, because North
+       Carolina elects its Council of State in presidential years.
   UT   7 seats, clean one-per-district labels, but too few contests to
        confirm the state's full office set.
   VA   No state contests at all, which is expected -- Virginia elects

@@ -556,3 +556,46 @@ class TestDistrictLabel:
         """"52" would be a different district; "5-2" cannot be read that
         way."""
         assert common.district_label("5", "2") == "5-2"
+
+
+class TestBareHouseOfRepresentatives:
+    """North Carolina labels its lower chamber "NC HOUSE OF
+    REPRESENTATIVES DISTRICT 1" — no "State" anywhere in it.
+
+    A bare "House of Representatives" is precisely what parse_office
+    must always refuse, because it is a state chamber's name in most of
+    the country. That is what makes it safe to claim here: this gate
+    refuses anything parse_office recognises before testing a single
+    pattern, so a label that reaches the bare arm carries no federal
+    marker at all.
+    """
+
+    def test_a_state_house_without_the_word_state_resolves(self):
+        assert common.parse_state_leg_office(
+            "NC HOUSE OF REPRESENTATIVES DISTRICT 1 (REP)") == ("lower", "1", None)
+
+    def test_the_federal_chamber_on_the_same_ballot_is_refused(self):
+        """Both sit in North Carolina's own export, two characters
+        apart."""
+        assert common.parse_state_leg_office(
+            "US HOUSE OF REPRESENTATIVES DISTRICT 11 (DEM)") is None
+        assert common.parse_state_leg_office("US SENATE (DEM)") is None
+
+    def test_the_gate_is_self_contained_not_order_dependent(self):
+        """The bare arm is only safe while nothing federal reaches it,
+        so this refuses federal labels itself rather than trusting the
+        caller to have asked parse_office first."""
+        for label in (
+            "United States Representative District 4",
+            "Representative in Congress District 1",
+            "U.S. Senator",
+        ):
+            assert common.parse_state_leg_office(label) is None, label
+
+    def test_an_officer_of_the_chamber_is_not_a_seat_in_it(self):
+        assert common.parse_state_leg_office("Clerk of the House of Representatives") is None
+
+    def test_a_judicial_district_seat_is_still_refused(self):
+        """North Carolina's judges carry both a district AND a seat."""
+        assert common.parse_state_leg_office(
+            "NC DISTRICT COURT JUDGE DISTRICT 3 SEAT 2 (REP)") is None
