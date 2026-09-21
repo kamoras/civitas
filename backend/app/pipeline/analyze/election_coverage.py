@@ -40,7 +40,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models import Candidate, RaceCoverageItem
-from app.pipeline.fetch.bluesky_search import search_posts
+from app.pipeline.fetch.bluesky_search import search_is_available, search_posts
 from app.pipeline.fetch.news_feeds import fetch_news_articles
 from app.pipeline.run_tracker import PipelineRunTracker
 from app.time_utils import utcnow
@@ -294,22 +294,44 @@ async def ingest_race_coverage(db: Session, client: httpx.AsyncClient) -> int:
         ):
             ingested += 1
 
+    searched = 0
     # ── Bluesky: one full-name search per candidate, rotating bounded
     # batch (see BLUESKY_SEARCH_BATCH). The query is the candidate's
     # "First Last" — not the bare surname — so the search itself is
     # already scoped to the person; results still pass through the same
     # corroborated matcher before anything is stored. ──
     for cand in _candidates_for_bluesky_search(db, BLUESKY_SEARCH_BATCH):
-        cand.last_coverage_search = utcnow()
         first = _first_name(cand.name or "")
         surname = _surname(cand.name or "")
         if not first or len(surname) < MIN_SURNAME_LENGTH:
             # Without a usable first name the search query would degrade
             # to the bare surname — exactly the noise source the matcher
             # exists to reject; skip the search (the news path still
-            # covers this candidate via corroborated matching).
+            # covers this candidate via corroborated matching). The
+            # watermark still advances: this candidate is unsearchable by
+            # name every run, so leaving it would wedge the queue's head.
+            cand.last_coverage_search = utcnow()
             continue
-        for post in await search_posts(client, f"{first} {surname}"):
+
+        posts = await search_posts(client, f"{first} {surname}")
+
+        # An unavailable SOURCE is not a finding of no coverage. Bluesky
+        # withdrew unauthenticated searchPosts in 2026-09 and every call
+        # 403'd for weeks, while this loop kept stamping the watermark —
+        # so candidates were rotated past as "searched" having never been
+        # searched. Stop the pass instead, leaving the watermark untouched
+        # so the same candidates come back first once the source returns.
+        if not search_is_available():
+            logger.warning(
+                "Bluesky search unavailable — ending this pass after %d "
+                "candidates; watermarks left unchanged so none are skipped",
+                searched,
+            )
+            break
+
+        cand.last_coverage_search = utcnow()
+        searched += 1
+        for post in posts:
             resolved = resolve_item_race(matchers, post.text)
             if resolved is None:
                 continue

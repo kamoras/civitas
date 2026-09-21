@@ -246,6 +246,31 @@ class TestIngestRaceCoverage:
         assert active.last_coverage_search is not None
         assert paper.last_coverage_search is None
 
+    async def test_unavailable_source_does_not_advance_the_watermark(self, db_session):
+        """An unavailable source is not a finding of no coverage.
+
+        last_coverage_search is a rotation cursor: "never searched first,
+        then longest-unsearched first". Stamping it while the source is
+        down rotates candidates past as searched having never been
+        searched — which is exactly what happened for weeks after Bluesky
+        withdrew unauthenticated searchPosts and every call 403'd.
+        """
+        _race(db_session, "2026-SEN-GA", "GA")
+        active = _candidate(
+            db_session, "S6GA001", "2026-SEN-GA", "OSSOFF, JON",
+            has_raised_funds=True,
+        )
+        db_session.commit()
+
+        with patch.object(election_coverage, "fetch_news_articles", return_value=[]), \
+             patch.object(election_coverage, "search_posts", new=AsyncMock(return_value=[])), \
+             patch.object(election_coverage, "search_is_available", return_value=False):
+            ingested = await election_coverage.ingest_race_coverage(db_session, client=None)
+
+        assert ingested == 0
+        assert active.last_coverage_search is None, \
+            "watermark advanced despite the source being unavailable"
+
     async def test_aware_published_at_stored_naive_utc(self, db_session):
         """Sources hand us aware datetimes; the DB convention is naive UTC
         (time_utils.utcnow) — normalization happens at the ingestion
