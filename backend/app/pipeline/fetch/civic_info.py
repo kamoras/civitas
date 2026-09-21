@@ -14,9 +14,8 @@ That said, this is a real approximation, not a precinct-accurate lookup:
 voterInfoQuery resolves to the ONE precinct the representative address is
 in, and a town can contain more than one (a different school board seat,
 water district, or city council ward a few blocks over). Town-level, not
-county- or state-level, was chosen specifically to keep that error small —
-see docs/ballot-measures.md's town-selection notes — but it is still an
-error, and the frontend must say so next to whatever renders from here.
+county- or state-level, was chosen specifically to keep that error small,
+but it is still an error, and the frontend must say so next to whatever renders from here.
 
 Field names below are verified two ways, not assumed from prose:
 

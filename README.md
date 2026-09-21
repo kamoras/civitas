@@ -114,7 +114,16 @@ external API calls to cloud AI services.
 
 ## Nightly Pipeline: Phase by Phase
 
-The nightly pipeline processes every senator and House representative through seven sequential phases before persisting scores and snapshots, followed by a stock-trade-disclosure ingestion pass (`stock_pipeline.py`) that runs as a sibling phase after both member pipelines complete.
+The nightly pipeline processes every senator and House representative through seven sequential phases before persisting scores and snapshots. Those phases are one link in a five-pipeline **chain**, run in this order by `scheduler.py`:
+
+```
+Senate ──▶ Supplementary ──▶ House ──▶ Stock trades ──▶ Election
+           (explore docs,              (stock_pipeline)  (election_pipeline)
+            SCOTUS, PVI,
+            presidents)
+```
+
+**Each link starts only if the one before it finished, so a failure partway down means every pipeline after it silently does not run at all** — not a degraded run, no run. That is an operational property worth knowing before reading the phases below: in September 2026 the chain stopped inside Supplementary and House, Stock trades and Election did not execute for 19 nights, because a pipeline that never starts leaves no row behind to look wrong. `ops_alerts.check_pipeline_staleness` exists specifically to catch that shape (a pipeline with no successful completion in `PIPELINE_STALE_ALERT_DAYS`), alongside `check_pipeline_overrun`, which catches the opposite case of a run that started and is taking too long.
 
 ### Phase 1 — FETCH
 
@@ -440,6 +449,22 @@ An independent pipeline (`app/pipeline/election_pipeline.py`) with no data depen
 5. BLUESKY ──────── one grounded, source-backed sentence per notable coverage item
 6. SNAPSHOT ─────── changed-only fundraising snapshots for trend charts
 ```
+
+### Confirmed candidates (who is actually on the ballot)
+
+The FEC roster in phase 1 lists everyone who *filed* — including candidates who already lost their primary months ago. Showing all of them on a ballot page is not a cosmetic problem: it presents losers as options. A second, independent layer answers "who is really on the November ballot" from each state's own election authority.
+
+The constraint that shapes it: **no 50 bespoke scrapers.** Adapters are per *vendor*, not per state, so a state whose vendor is already supported is a JSON entry in `backend/app/data/state_candidate_sources.json`, never new code. Only a genuinely different vendor earns a module. **No adapter branches on a state's name** — every URL, slug, election-name pattern and runoff threshold lives in that file, whose own `_contract` key documents which keys each strategy honours. A state that needs a knob nobody has needed yet gets that knob added to its adapter for everyone, never an `if state ==` special case.
+
+Current coverage: **50 states configured across 23 strategies.** Some serve many states (`tabular` 14, `clarity` 3, `totalvote_enr` 3, `tally_enr` 2); many are a single state whose election authority genuinely is unlike anyone else's. Ten states (DE, LA, MI, MO, NV, NY, OH, OK, SC, WI) have no usable per-state source and fall back to `google_civic`, a national source keyed on one fixed, publicly-known address per state — never a visitor's.
+
+Three rules do most of the work, all for the same reason — a wrong name here changes a vote:
+
+- **Federal contests only, and the label must say so positively.** `parse_office` refuses anything not explicitly federal rather than guessing. Rhode Island is the sharpest case: its *state* legislature is named the "General Assembly", so `Senator in General Assembly District 5` sits on the same primary ballot as the real `Senator in Congress`, and 140 of that ballot's 192 contests are state seats that must not leak into a federal race.
+- **A sub-threshold leader is not a nominee.** States that send a plurality leader to a runoff carry `runoff_threshold_pct`, and a contest whose leader is under it yields nothing rather than a guess — the same under-include-rather-than-fabricate rule applied throughout.
+- **Certification is a signal, not a promise.** Where a vendor publishes an official/certified flag it is honoured, but `settle_days` sits underneath as a failsafe, because that flag is not reliably flipped (Utah's stayed false a month after its own signed canvass was published on the same portal).
+
+What a visitor sees follows directly: a state with confirmed nominees renders a flat, confirmed list; a state without them falls back to FEC filers ranked by money raised, and the page says so rather than implying the ranking means anything about who will win.
 
 ### Ballot measures
 

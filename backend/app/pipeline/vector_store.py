@@ -102,7 +102,7 @@ def get_similarity_model() -> SentenceTransformer:
     The primary model (retrieval-asymmetric arctic) places all
     same-register text in a ~0.55-0.87 raw-cosine band, which made
     several similarity thresholds unable to separate genuine matches
-    from noise (docs/action_center_audit_2026-07.md; the eval harness in
+    from noise (measured by the eval harness in
     scripts/evaluate_embedding_models.py). all-MiniLM-L6-v2 — same ~22M
     size class, so no meaningful Pi cost — measured ~4x the separation
     margin on explore-doc anchoring and ~3x on policy relevance against
