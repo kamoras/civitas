@@ -50,6 +50,33 @@ those states carry `runoff_threshold_pct` in their source entry and a
 contest whose leader is under it yields NOTHING rather than a guess. Same
 under-include-rather-than-fabricate rule the Texas adapter follows for
 declaration-only independents.
+
+STATE OFFICES ride the same summary. A state whose entry opts in reads
+them through the same two conservative gates every other adapter uses,
+and their names are kept whole rather than cut to a surname, because
+there is no FEC row to match a state office against.
+
+All three states on this vendor are live, and each needed one wording
+the shared parsers had never seen:
+
+  CO   Regent of the University of Colorado, elected statewide but
+       seated by CONGRESSIONAL district -- a seat number with nothing to
+       do with any legislative map, and a label close enough to a
+       federal one that parse_office refusing it is worth a test. 86
+       legislative seats and six statewide office types, nothing
+       unmatched.
+  IA   "Secretary of Agriculture" and "Auditor of State", Iowa's own
+       names for offices the parsers knew under other wordings. 125
+       legislative seats, which is exactly its 25 Senate seats up plus
+       all 100 House, and nothing unmatched.
+  WV   Writes the district number FIRST -- "HOUSE OF DELEGATES, 1st
+       District", "STATE SENATOR, 3rd Senatorial District" -- so the
+       plain "District N" pattern read nothing and the whole legislature
+       was invisible. 117 seats, exactly its 17 Senate seats up plus all
+       100 Delegates. No statewide offices, which is checked: its
+       summary leaves only three local park-district supervisors
+       unmatched, because West Virginia elects its statewide officers in
+       presidential years.
 """
 
 import logging
@@ -60,7 +87,10 @@ import httpx
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     normalize_party as _parse_party,
+    clean_display_name as _clean_display_name,
     parse_office as _parse_office,
+    parse_state_leg_office as _parse_state_leg_office,
+    parse_statewide_office as _parse_statewide_office,
     pick_nominee,
     surname as _surname,
 )
@@ -194,6 +224,7 @@ async def fetch_confirmed_candidates(
     """
     st = state.upper()
     threshold = source.get("runoff_threshold_pct")
+    state_offices = bool(source.get("statewide_offices"))
 
     election_id = await _discover_election_id(client, st, year, source.get("discovery") or {})
     if not election_id:
@@ -228,20 +259,43 @@ async def fetch_confirmed_candidates(
             continue
         name = contest.get("C") or ""
         parsed = _parse_office(name)
-        if parsed is None:
+        seat = None
+        if parsed is not None:
+            office, district = parsed
+            federal = True
+        elif not state_offices:
             continue
+        else:
+            # This vendor's summary carries the state's own executive
+            # offices and legislative seats beside the federal ones,
+            # read through the same two conservative gates the other
+            # adapters use, and only for a state that opts in.
+            federal = False
+            statewide = _parse_statewide_office(name)
+            if statewide is not None:
+                office, district = statewide
+            else:
+                parsed_seat = _parse_state_leg_office(name)
+                if parsed_seat is None:
+                    continue
+                office, district, seat = parsed_seat
         party = _parse_party(name)
         if party is None:
             continue
         won = _nominee(contest, threshold)
         if won is None:
             continue
-        last_name = _surname(won[0])
+        # A federal nominee is matched against an FEC row, which files
+        # surnames; a state-office nominee has no FEC row to match or
+        # render from, so the printed name is kept whole.
+        last_name = _surname(won[0]) if federal else _clean_display_name(won[0])
         if not last_name:
             continue
-        office, district = parsed
-        results.append({
+        record = {
             "office": office, "district": district,
             "party": party, "last_name": last_name,
-        })
+        }
+        if seat is not None:
+            record["seat"] = seat
+        results.append(record)
     return results

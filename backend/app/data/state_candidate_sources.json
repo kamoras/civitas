@@ -8,12 +8,14 @@
     "CO": {
       "source_name": "Colorado Secretary of State (Clarity Election Night Reporting)",
       "strategy": "clarity",
+      "statewide_offices": true,
       "runoff_threshold_pct": null,
       "description": "Official statewide results feed, verified live 2026-08-12 against the real 2026 primary (EID 126592): elections.json -> current_ver.txt -> json/sum.json, no API key or auth. All 18 federal contests (8 districts x 2 parties, plus both Senate primaries) parse cleanly. Ground-truthed against the CO-01 Democratic primary, where the feed shows Melat Kiros 83,855 (53.2%) defeating 15-term incumbent Diana DeGette 62,715 with Wanda James third — matching what actually happened on 2026-06-30. runoff_threshold_pct is null because Colorado awards its primary to the plurality leader outright, so the top vote-getter IS the nominee; a runoff state must set this or its runoff-bound leader would be mislabeled."
     },
     "IA": {
       "source_name": "Iowa Secretary of State (Clarity Election Night Reporting)",
       "strategy": "clarity",
+      "statewide_offices": true,
       "runoff_threshold_pct": 35.0,
       "description": "Second state on the Clarity adapter, added 2026-08-16 on a re-probe of all 50 states' Clarity feeds — Iowa had published nothing for 2026 when the same probe ran on 2026-08-12, and its 2026-06-02 primary (EID 126082) is there now, so this file's coverage grows without code as states publish. All 10 federal contests parse (4 districts x 2 parties, plus both Senate primaries). Ground-truthed on the real result: Miller-Meeks holding IA-01 against Pautsch with Bohannan again taking the Democratic side, and Ashley Hinson winning the Senate primary — which is why IA-02 is an open-seat race. runoff_threshold_pct is 35, and it is NOT a runoff rule: Iowa Code 43.52 sends a nomination to a party CONVENTION when nobody clears 35%, so a sub-threshold leader isn't merely unconfirmed, they may well not be the nominee at all. IA-04's Democratic primary is the live case — Dawson took it on 39.0% of a three-way field, close enough to that line to matter."
     },
@@ -480,6 +482,7 @@
     "WV": {
       "source_name": "West Virginia Secretary of State (Clarity Election Night Reporting)",
       "strategy": "clarity",
+      "statewide_offices": true,
       "runoff_threshold_pct": null,
       "discovery": {
         "mode": "landing_page",
