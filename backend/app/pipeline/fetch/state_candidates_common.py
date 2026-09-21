@@ -137,6 +137,72 @@ def parse_office(contest_name: str) -> tuple[str, int | None] | None:
     return None
 
 
+# ── Statewide executive offices ──────────────────────────────────────
+#
+# A deliberately SHORT list of offices whose names are unambiguous
+# statewide once a locality qualifier is ruled out. These have no FEC
+# counterpart (no federal filing, no campaign-finance rows, no
+# Representation Score), so they are stored and rendered separately from
+# Race/Candidate — see models.StatewideNominee.
+#
+# The risk here is the mirror of parse_office's: where that must not read
+# a STATE legislative seat as federal, this must not read a COUNTY or
+# MUNICIPAL office as statewide. "County Treasurer", "District Attorney"
+# and "Cranston: Treasurer" are all real labels that contain a statewide
+# office's words. _LOCAL_QUALIFIER_RE refuses them outright rather than
+# trying to rank which reading is more likely.
+_STATEWIDE_OFFICES = [
+    ("governor", re.compile(r"\bgovernor\b", re.IGNORECASE)),
+    ("attorney_general", re.compile(r"\battorney\s+general\b", re.IGNORECASE)),
+    ("secretary_of_state", re.compile(r"\bsecretary\s+of\s+state\b", re.IGNORECASE)),
+    # Bare "Treasurer" is a county/city office in most states; only the
+    # qualified statewide forms count.
+    ("treasurer", re.compile(r"\b(?:general|state)\s+treasurer\b", re.IGNORECASE)),
+]
+
+_LT_GOVERNOR_RE = re.compile(r"\b(?:lieutenant|lt\.?)\s+governor\b", re.IGNORECASE)
+
+_LOCAL_QUALIFIER_RE = re.compile(
+    r"\b(?:county|city|town|township|ward|borough|parish|village|precinct|district|"
+    r"municipal|school|council|mayor|alderman|commissioner|judge|justice|court|"
+    r"assembly|senate|house|representative|senator|committee|delegate)\b"
+    r"|:",  # "Cranston: Treasurer" -- this vendor's locality prefix
+    re.IGNORECASE,
+)
+
+STATEWIDE_OFFICE_LABELS = {
+    "governor": "Governor",
+    "lt_governor": "Lieutenant Governor",
+    "attorney_general": "Attorney General",
+    "secretary_of_state": "Secretary of State",
+    "treasurer": "State Treasurer",
+}
+
+
+def parse_statewide_office(contest_name: str) -> str | None:
+    """A statewide executive office code, or None for anything else.
+
+    None for every federal contest too: this is the complement of
+    parse_office, not a superset of it, and a caller asks whichever
+    question it means.
+    """
+    name = contest_name or ""
+    if _LOCAL_QUALIFIER_RE.search(name):
+        return None
+    # A JOINT TICKET ("Governor and Lieutenant Governor", how several
+    # states print it) is the GOVERNOR's contest, not the deputy's. Strip
+    # the lieutenant phrase: if a bare "Governor" survives, both offices
+    # are named and this is the top of the ticket.
+    if _LT_GOVERNOR_RE.search(name):
+        without_lt = _LT_GOVERNOR_RE.sub(" ", name)
+        if not re.search(r"\bgovernor\b", without_lt, re.IGNORECASE):
+            return "lt_governor"
+    for code, pattern in _STATEWIDE_OFFICES:
+        if pattern.search(name):
+            return code
+    return None
+
+
 def office_from_columns(row: dict, spec: dict | None) -> tuple[str, int | None] | None:
     """The same ("H", 3) answer as parse_office, taken from a results row's
     OWN columns instead of its label, or None when `spec` is unset or the
