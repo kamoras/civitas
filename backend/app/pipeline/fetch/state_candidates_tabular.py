@@ -90,12 +90,41 @@ acted on blindly:
        file holds. No statewide offices, and that is checked: every
        unmatched non-judicial contest is municipal, because North
        Carolina elects its Council of State in presidential years.
-  UT   7 seats, clean one-per-district labels, but too few contests to
-       confirm the state's full office set.
+  UT   LIVE, once State Board of Education was added -- elected
+       statewide, held by district, the same shape as Georgia's PSC. Its
+       file carries only a handful of contests because only contested
+       primaries appear.
+  CA   LIVE. Its Assembly was being missed entirely ("State Assembly
+       Member District N"), so the state looked like a 20-seat
+       legislature; it is 100 this cycle (80 Assembly plus the 20 Senate
+       seats up). It also prints its statewide officers BARE -- just
+       "Treasurer", just "Controller" -- which the qualified patterns
+       could not see. Note it is a top-two state, so two same-party
+       nominees from one contest are correct, which is why display_name
+       is part of both tables' keys.
+  FL   LIVE, once Chief Financial Officer was added -- its fourth
+       cabinet officer, and the only thing its file was missing.
   VA   No state contests at all, which is expected -- Virginia elects
        its legislature and statewide officers in ODD years -- but its
        export may simply be scoped, so "none" is not yet a verified
        claim.
+  HI   Nothing discoverable for 2026 (its landing page yielded no file).
+  IL   36 federal, no state contests in the file it publishes.
+  MD   BLOCKED, and it is the most interesting of the blocked ones. All
+       three of its statewide offices resolve and its 47 Senate
+       districts are clean, but its 122 "House of Delegates" contests
+       need two things this does not have. Its label is a THIRD
+       multi-member shape: not Idaho's "Seat A"/"Seat B" nor
+       Washington's "Pos. 1"/"Pos. 2", but "House of Delegates District
+       10 ... Vote for up to 3" -- three members elected from one
+       contest with no seat designator at all, so the number advancing
+       has to be read per CONTEST rather than taken from the state's
+       config. (Its 11A/11B subdistricts are the easy half: those are
+       separate geographies, like Minnesota's, and the string district
+       already handles them.) Onboarding it without the Delegates would
+       claim a complete legislature while omitting 141 of its seats.
+  NM   Its URL is federal-only (type=FED), so there is nothing to read.
+  AK   No 2026 file discoverable from its landing page.
 """
 
 import csv

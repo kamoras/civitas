@@ -172,6 +172,15 @@ _STATEWIDE_OFFICES = [
     ("controller", re.compile(r"\bstate\s+controller\b", re.IGNORECASE)),
     # The same role under the name most other states give it.
     ("comptroller", re.compile(r"\b(?:state\s+)?comptroller\b", re.IGNORECASE)),
+    # LAST RESORT, and only ever reached by a label the locality gate
+    # already cleared. California prints its statewide officers as a
+    # bare "Treasurer" and "Controller" with nothing else in the label;
+    # a county or municipal one carries its locality ("County
+    # Treasurer", "Cranston: Treasurer") and was refused well before
+    # this point. The qualified arms above still match first, so a state
+    # that spells the office out is unaffected.
+    ("treasurer", re.compile(r"\btreasurer\b", re.IGNORECASE)),
+    ("controller", re.compile(r"\bcontroller\b", re.IGNORECASE)),
 ]
 
 _LT_GOVERNOR_RE = re.compile(r"\b(?:lieutenant|lt\.?)\s+governor\b", re.IGNORECASE)
@@ -203,6 +212,17 @@ _STATEWIDE_PHRASES = [
     # Georgia prints the bare initialism; spelled out elsewhere.
     ("public_service_commission", re.compile(
         r"\bPSC\b|\bPublic\s+Service\s+Commission(?:er)?\b", re.IGNORECASE)),
+    # Florida's fourth cabinet officer.
+    ("chief_financial_officer", re.compile(
+        r"\bChief\s+Financial\s+Officer\b", re.IGNORECASE)),
+    # Both of these carry a district and would otherwise be refused by
+    # the general locality gate, same as the PSC.
+    ("board_of_equalization", re.compile(
+        r"\bBoard\s+of\s+Equalization\b", re.IGNORECASE)),
+    # "State" is required: a COUNTY board of education is a local office,
+    # and North Carolina's export is full of them.
+    ("state_board_of_education", re.compile(
+        r"\bState\s+Board\s+of\s+Education\b", re.IGNORECASE)),
 ]
 
 # The locality markers that stay decisive even beside one of the phrases
@@ -215,7 +235,14 @@ _STATEWIDE_PHRASES = [
 # number, which is why StatewideNominee carries an optional district:
 # without it, "PSC - District 3" and "PSC - District 5" are one office
 # and the second overwrites the first.
-_STATEWIDE_DISTRICT_SEATS = {"public_service_commission"}
+_STATEWIDE_DISTRICT_SEATS = {
+    "public_service_commission",
+    # California seats its Board of Equalization by district, and
+    # Utah its State Board of Education, exactly as Georgia does
+    # the PSC: elected statewide, held for a district.
+    "board_of_equalization",
+    "state_board_of_education",
+}
 
 _STATEWIDE_SEAT_RE = re.compile(r"\bDistrict\s+(?:No\.?\s*)?0*(\d+)\b", re.IGNORECASE)
 
@@ -274,6 +301,9 @@ STATEWIDE_OFFICE_LABELS = {
     "labor_commissioner": "Labor Commissioner",
     "school_superintendent": "State School Superintendent",
     "public_service_commission": "Public Service Commission",
+    "chief_financial_officer": "Chief Financial Officer",
+    "board_of_equalization": "Board of Equalization",
+    "state_board_of_education": "State Board of Education",
 }
 
 
@@ -378,6 +408,11 @@ _STATE_LEG_CHAMBERS = [
     #   looks at a single pattern, so a label reaching this arm is one
     #   that carries no federal marker at all.
     ("lower", re.compile(r"\bHouse\s+of\s+Representatives\b", re.IGNORECASE)),
+    #   California: "State Assembly Member District 1" — its lower
+    #   chamber. "State" is required so Rhode Island's "General
+    #   Assembly", which names the WHOLE legislature and is matched by
+    #   the arms above, cannot reach this one.
+    ("lower", re.compile(r"\bState\s+Assembly\b", re.IGNORECASE)),
 ]
 
 # Districts are identified per chamber, and the identifier is the whole

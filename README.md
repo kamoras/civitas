@@ -517,6 +517,10 @@ Idaho and Washington are the fourth and fifth, and they needed a distinction the
 
 North Carolina is the sixth, and it exposed a gap that had been silently halving it: its lower chamber is labelled `NC HOUSE OF REPRESENTATIVES DISTRICT 1`, with no "State" anywhere, so only its Senate was matching. A **bare** "House of Representatives" is exactly what the federal gate must always refuse — it is a state chamber's name in most of the country — and that is what makes it safe to claim as a state seat here, since the legislative gate refuses anything the federal one recognises before testing a pattern at all.
 
+California, Florida and Utah bring it to nine. Each was one vocabulary gap from honest coverage: California's entire **Assembly** was unmatched (`State Assembly Member District N`), as were its bare `Treasurer` and `Controller` — it prints them with no "State" prefix at all — so it looked like a 20-seat legislature rather than the 100 seats actually up. Florida was missing `Chief Financial Officer`, its fourth cabinet officer; Utah its `State Board of Education`, seated by district like Georgia's PSC.
+
+California is also the first **top-two** state covered, where two candidates of the *same party* legitimately advance from one contest — its Board of Equalization District 2 sends two Democrats to November. That only survives because a nominee's name is part of the storage key.
+
 Minnesota is also why a district identifier is a **string**: it splits each of its 67 senate districts into two house districts, `10A` and `10B`. And why the town list is truncated for display but searched in full — one of its senate districts covers 292 townships, so the row shows three and "& 133 more", yet typing the 136th town still finds the seat.
 
 ---
