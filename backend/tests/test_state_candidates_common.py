@@ -657,3 +657,46 @@ class TestStateAssembly:
             "DEM Senator in General Assembly District 5") == ("upper", "5", None)
         assert common.parse_state_leg_office(
             "REP Representative in General Assembly District 13") == ("lower", "13", None)
+
+
+class TestVoteForCount:
+    """Maryland fills several delegate seats from ONE contest and says
+    so in the label: "House of Delegates District 10 ... Vote for up to
+    3". All three of that party's top finishers are its nominees.
+
+    This is the third multi-member shape, after Idaho's "Seat A"/"Seat
+    B" and Washington's "Pos. 1"/"Pos. 2" — and the only one where the
+    number belongs to the CONTEST rather than the state, so it cannot
+    come from config the way advance_count does.
+    """
+
+    def test_reads_both_wordings(self):
+        assert common.vote_for_count(
+            "House of Delegates District 10 Democratic Candidates - Vote for up to 3") == 3
+        assert common.vote_for_count(
+            "State Senator District 5 Democratic Candidates - Vote for 1") == 1
+
+    def test_a_silent_label_says_nothing(self):
+        """Most states never print it, and the caller must then keep
+        whatever its own configuration says."""
+        assert common.vote_for_count("DEM Senator in General Assembly District 5") is None
+        assert common.vote_for_count("State Assembly Member District 1") is None
+
+    def test_an_unusable_count_is_refused_rather_than_guessed(self):
+        """Zero would drop every candidate; an absurd number would
+        advance the whole field."""
+        assert common.vote_for_count("Something - Vote for 0") is None
+        assert common.vote_for_count("Something - Vote for 99") is None
+
+    def test_the_house_of_delegates_resolves(self):
+        assert common.parse_state_leg_office(
+            "House of Delegates District 10 Democratic Candidates - Vote for up to 3"
+        ) == ("lower", "10", None)
+
+    def test_a_maryland_subdistrict_keeps_its_letter(self):
+        """11A and 11B are separate geographies with their own Census
+        polygons, like Minnesota's 10A/10B — not two seats of one
+        district the way Idaho's are."""
+        assert common.parse_state_leg_office(
+            "House of Delegates District 11A Democratic Candidates - Vote for 1"
+        ) == ("lower", "11A", None)

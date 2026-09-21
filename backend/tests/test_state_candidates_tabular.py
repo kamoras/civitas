@@ -1298,3 +1298,65 @@ class TestStateOffices:
         assert {r["last_name"] for r in records if r["office"] == "upper"} == {"Nathan Upper"}
         # ... while the federal record on the same fetch still reduces.
         assert {r["last_name"] for r in records if r["office"] == "S"} == {"Senator"}
+
+
+class TestMultiMemberContest:
+    """A district that fills three seats from one contest sends three
+    nominees, and the count comes from the contest's own label."""
+
+    _FMT = {
+        "delimiter": "\t", "encoding": "utf-8",
+        "contest_column": "office", "choice_column": "candidate",
+        "party_column": "party", "votes_column": "votes",
+    }
+    _TSV = (
+        "office\tcandidate\tparty\tvotes\n"
+        "House of Delegates District 10 Democratic Candidates - Vote for up to 3\tFirst\tDEM\t900\n"
+        "House of Delegates District 10 Democratic Candidates - Vote for up to 3\tSecond\tDEM\t800\n"
+        "House of Delegates District 10 Democratic Candidates - Vote for up to 3\tThird\tDEM\t700\n"
+        "House of Delegates District 10 Democratic Candidates - Vote for up to 3\tFourth\tDEM\t600\n"
+        "State Senator District 5 Democratic Candidates - Vote for 1\tOnly One\tDEM\t500\n"
+        "State Senator District 5 Democratic Candidates - Vote for 1\tRunner Up\tDEM\t400\n"
+    ).encode()
+
+    async def _run(self, monkeypatch, advance_count=1):
+        async def fake_discover(client, state, year, discovery):
+            return [{"url": "https://example.gov/all.tsv", "runoff": False}]
+
+        async def fake_get(client, url, label):
+            return _Resp(content=self._TSV)
+
+        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
+        monkeypatch.setattr(tb, "_get", fake_get)
+        return await tb.fetch_confirmed_candidates(
+            None, 2026, "MD",
+            {"format": self._FMT, "statewide_offices": True, "advance_count": advance_count},
+        )
+
+    @pytest.mark.asyncio
+    async def test_three_seats_send_three_nominees(self, monkeypatch):
+        records = await self._run(monkeypatch)
+        lower = sorted(r["last_name"] for r in records if r["office"] == "lower")
+        assert lower == ["First", "Second", "Third"]
+
+    @pytest.mark.asyncio
+    async def test_the_fourth_place_finisher_is_not_a_nominee(self, monkeypatch):
+        """Three seats, four candidates — the label is what says where
+        the line falls."""
+        records = await self._run(monkeypatch)
+        assert "Fourth" not in {r["last_name"] for r in records}
+
+    @pytest.mark.asyncio
+    async def test_a_single_seat_contest_is_unaffected(self, monkeypatch):
+        records = await self._run(monkeypatch)
+        upper = [r["last_name"] for r in records if r["office"] == "upper"]
+        assert upper == ["Only One"]
+
+    @pytest.mark.asyncio
+    async def test_a_top_two_state_ignores_the_seat_count(self, monkeypatch):
+        """Under top-two exactly two advance no matter how many seats
+        are being filled, so the label's number is the wrong question
+        and must not override the state's own rule."""
+        records = await self._run(monkeypatch, advance_count=2)
+        lower = sorted(r["last_name"] for r in records if r["office"] == "lower")
+        assert lower == ["First", "Second"]

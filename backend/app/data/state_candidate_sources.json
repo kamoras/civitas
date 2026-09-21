@@ -45,6 +45,7 @@
     "MD": {
       "source_name": "Maryland State Board of Elections (official primary results)",
       "strategy": "tabular",
+      "statewide_offices": true,
       "runoff_threshold_pct": null,
       "discovery": {
         "mode": "landing_page",

@@ -5178,6 +5178,665 @@
    "Weiser city",
    "Wilder city"
   ],
+  "MD-lower-10": [
+   "Baltimore County"
+  ],
+  "MD-lower-11A": [
+   "Baltimore County"
+  ],
+  "MD-lower-11B": [
+   "Baltimore County"
+  ],
+  "MD-lower-12A": [
+   "Howard County"
+  ],
+  "MD-lower-12B": [
+   "Anne Arundel County"
+  ],
+  "MD-lower-13": [
+   "Howard County"
+  ],
+  "MD-lower-14": [
+   "Brookeville town",
+   "Laytonsville town"
+  ],
+  "MD-lower-15": [
+   "Barnesville town",
+   "Poolesville town"
+  ],
+  "MD-lower-16": [
+   "Glen Echo town",
+   "Somerset town"
+  ],
+  "MD-lower-17": [
+   "Gaithersburg city",
+   "Rockville city"
+  ],
+  "MD-lower-18": [
+   "Chevy Chase Section Five village",
+   "Chevy Chase Section Three village",
+   "Chevy Chase View town",
+   "Chevy Chase Village town",
+   "Chevy Chase town",
+   "Garrett Park town",
+   "Kensington town",
+   "Martin's Additions village",
+   "North Chevy Chase village"
+  ],
+  "MD-lower-19": [
+   "Gaithersburg city",
+   "Rockville city"
+  ],
+  "MD-lower-1A": [
+   "Accident town",
+   "Barton town",
+   "Deer Park town",
+   "Friendsville town",
+   "Frostburg city",
+   "Grantsville town",
+   "Kitzmiller town",
+   "Loch Lynn Heights town",
+   "Lonaconing town",
+   "Luke town",
+   "Mountain Lake Park town",
+   "Oakland town",
+   "Westernport town"
+  ],
+  "MD-lower-1B": [
+   "Cumberland city",
+   "Frostburg city",
+   "Midland town"
+  ],
+  "MD-lower-1C": [
+   "Clear Spring town",
+   "Hagerstown city",
+   "Hancock town",
+   "Williamsport town"
+  ],
+  "MD-lower-20": [
+   "Takoma Park city"
+  ],
+  "MD-lower-21": [
+   "College Park city",
+   "Laurel city"
+  ],
+  "MD-lower-22": [
+   "Berwyn Heights town",
+   "Brentwood town",
+   "Edmonston town",
+   "Glenarden city",
+   "Greenbelt city",
+   "Hyattsville city",
+   "Landover Hills town",
+   "New Carrollton city",
+   "North Brentwood town",
+   "Riverdale Park town",
+   "University Park town"
+  ],
+  "MD-lower-23": [
+   "Bowie city",
+   "Upper Marlboro town"
+  ],
+  "MD-lower-24": [
+   "Bowie city",
+   "Capitol Heights town",
+   "Fairmount Heights town",
+   "Glenarden city",
+   "Seat Pleasant city"
+  ],
+  "MD-lower-25": [
+   "Capitol Heights town",
+   "District Heights city",
+   "Morningside town",
+   "Seat Pleasant city"
+  ],
+  "MD-lower-26": [
+   "Forest Heights town",
+   "Morningside town"
+  ],
+  "MD-lower-27A": [
+   "Charles County",
+   "Prince George's County"
+  ],
+  "MD-lower-27B": [
+   "Chesapeake Beach town",
+   "Eagle Harbor town",
+   "North Beach town"
+  ],
+  "MD-lower-27C": [
+   "Calvert County"
+  ],
+  "MD-lower-28": [
+   "Indian Head town",
+   "La Plata town",
+   "Port Tobacco Village town"
+  ],
+  "MD-lower-29A": [
+   "Leonardtown town"
+  ],
+  "MD-lower-29B": [
+   "St. Mary's County"
+  ],
+  "MD-lower-29C": [
+   "Leonardtown town"
+  ],
+  "MD-lower-2A": [
+   "Boonsboro town",
+   "Emmitsburg town",
+   "Funkstown town",
+   "Hagerstown city",
+   "Keedysville town",
+   "Sharpsburg town",
+   "Smithsburg town",
+   "Thurmont town"
+  ],
+  "MD-lower-2B": [
+   "Hagerstown city"
+  ],
+  "MD-lower-3": [
+   "Frederick city",
+   "Walkersville town"
+  ],
+  "MD-lower-30A": [
+   "Annapolis city",
+   "Highland Beach town"
+  ],
+  "MD-lower-30B": [
+   "Anne Arundel County"
+  ],
+  "MD-lower-31": [
+   "Anne Arundel County"
+  ],
+  "MD-lower-32": [
+   "Anne Arundel County"
+  ],
+  "MD-lower-33A": [
+   "Anne Arundel County"
+  ],
+  "MD-lower-33B": [
+   "Anne Arundel County"
+  ],
+  "MD-lower-33C": [
+   "Anne Arundel County"
+  ],
+  "MD-lower-34A": [
+   "Aberdeen city",
+   "Havre de Grace city"
+  ],
+  "MD-lower-34B": [
+   "Bel Air town"
+  ],
+  "MD-lower-35A": [
+   "Aberdeen city",
+   "Bel Air town"
+  ],
+  "MD-lower-35B": [
+   "Charlestown town",
+   "North East town",
+   "Perryville town",
+   "Port Deposit town",
+   "Rising Sun town"
+  ],
+  "MD-lower-36": [
+   "Barclay town",
+   "Betterton town",
+   "Cecilton town",
+   "Centreville town",
+   "Chesapeake City town",
+   "Chestertown town",
+   "Church Hill town",
+   "Elkton town",
+   "Galena town",
+   "Goldsboro town",
+   "Greensboro town",
+   "Henderson town",
+   "Marydel town",
+   "Millington town",
+   "Queen Anne town",
+   "Queenstown town",
+   "Ridgely town",
+   "Rock Hall town",
+   "Sudlersville town",
+   "Templeville town"
+  ],
+  "MD-lower-37A": [
+   "Cambridge city",
+   "East New Market town",
+   "Hebron town",
+   "Hurlock town",
+   "Mardela Springs town",
+   "Salisbury city",
+   "Sharptown town",
+   "Vienna town"
+  ],
+  "MD-lower-37B": [
+   "Brookview town",
+   "Cambridge city",
+   "Church Creek town",
+   "Denton town",
+   "East New Market town",
+   "Easton town",
+   "Eldorado town",
+   "Federalsburg town",
+   "Fruitland city",
+   "Galestown town",
+   "Hillsboro town",
+   "Hurlock town",
+   "Oxford town",
+   "Preston town",
+   "Queen Anne town",
+   "Secretary town",
+   "Sharptown town",
+   "St. Michaels town",
+   "Trappe town",
+   "Vienna town"
+  ],
+  "MD-lower-38A": [
+   "Berlin town",
+   "Crisfield city",
+   "Pocomoke City city",
+   "Princess Anne town",
+   "Snow Hill town"
+  ],
+  "MD-lower-38B": [
+   "Delmar town",
+   "Fruitland city",
+   "Salisbury city"
+  ],
+  "MD-lower-38C": [
+   "Delmar town",
+   "Ocean City town",
+   "Pittsville town",
+   "Salisbury city",
+   "Willards town"
+  ],
+  "MD-lower-39": [
+   "Gaithersburg city",
+   "Washington Grove town"
+  ],
+  "MD-lower-4": [
+   "Brunswick city",
+   "Burkittsville town",
+   "Frederick city",
+   "Middletown town",
+   "Myersville town",
+   "New Market town",
+   "Rosemont village",
+   "Thurmont town",
+   "Walkersville town",
+   "Woodsboro town"
+  ],
+  "MD-lower-40": [
+   "Baltimore city"
+  ],
+  "MD-lower-41": [
+   "Baltimore city"
+  ],
+  "MD-lower-42A": [
+   "Baltimore County"
+  ],
+  "MD-lower-42B": [
+   "Baltimore County"
+  ],
+  "MD-lower-42C": [
+   "Hampstead town",
+   "Manchester town"
+  ],
+  "MD-lower-43A": [
+   "Baltimore city"
+  ],
+  "MD-lower-43B": [
+   "Baltimore County"
+  ],
+  "MD-lower-44A": [
+   "Baltimore County"
+  ],
+  "MD-lower-44B": [
+   "Baltimore County"
+  ],
+  "MD-lower-45": [
+   "Baltimore city"
+  ],
+  "MD-lower-46": [
+   "Baltimore city"
+  ],
+  "MD-lower-47A": [
+   "Bladensburg town",
+   "Brentwood town",
+   "Cheverly town",
+   "Colmar Manor town",
+   "Cottage City town",
+   "Edmonston town",
+   "Hyattsville city",
+   "Landover Hills town",
+   "Mount Rainier city",
+   "New Carrollton city",
+   "North Brentwood town"
+  ],
+  "MD-lower-47B": [
+   "Hyattsville city"
+  ],
+  "MD-lower-5": [
+   "Manchester town",
+   "Mount Airy town",
+   "New Windsor town",
+   "Sykesville town",
+   "Taneytown city",
+   "Union Bridge town",
+   "Westminster city"
+  ],
+  "MD-lower-6": [
+   "Baltimore County"
+  ],
+  "MD-lower-7A": [
+   "Baltimore County"
+  ],
+  "MD-lower-7B": [
+   "Bel Air town"
+  ],
+  "MD-lower-8": [
+   "Baltimore County"
+  ],
+  "MD-lower-9A": [
+   "Howard County",
+   "Montgomery County"
+  ],
+  "MD-lower-9B": [
+   "Howard County"
+  ],
+  "MD-upper-1": [
+   "Accident town",
+   "Barton town",
+   "Clear Spring town",
+   "Cumberland city",
+   "Deer Park town",
+   "Friendsville town",
+   "Frostburg city",
+   "Grantsville town",
+   "Hagerstown city",
+   "Hancock town",
+   "Kitzmiller town",
+   "Loch Lynn Heights town",
+   "Lonaconing town",
+   "Luke town",
+   "Midland town",
+   "Mountain Lake Park town",
+   "Oakland town",
+   "Westernport town",
+   "Williamsport town"
+  ],
+  "MD-upper-10": [
+   "Baltimore County"
+  ],
+  "MD-upper-11": [
+   "Baltimore County"
+  ],
+  "MD-upper-12": [
+   "Anne Arundel County",
+   "Howard County"
+  ],
+  "MD-upper-13": [
+   "Howard County"
+  ],
+  "MD-upper-14": [
+   "Brookeville town",
+   "Laytonsville town"
+  ],
+  "MD-upper-15": [
+   "Barnesville town",
+   "Poolesville town"
+  ],
+  "MD-upper-16": [
+   "Glen Echo town",
+   "Somerset town"
+  ],
+  "MD-upper-17": [
+   "Gaithersburg city",
+   "Rockville city"
+  ],
+  "MD-upper-18": [
+   "Chevy Chase Section Five village",
+   "Chevy Chase Section Three village",
+   "Chevy Chase View town",
+   "Chevy Chase Village town",
+   "Chevy Chase town",
+   "Garrett Park town",
+   "Kensington town",
+   "Martin's Additions village",
+   "North Chevy Chase village"
+  ],
+  "MD-upper-19": [
+   "Gaithersburg city",
+   "Rockville city"
+  ],
+  "MD-upper-2": [
+   "Boonsboro town",
+   "Emmitsburg town",
+   "Funkstown town",
+   "Hagerstown city",
+   "Keedysville town",
+   "Sharpsburg town",
+   "Smithsburg town",
+   "Thurmont town"
+  ],
+  "MD-upper-20": [
+   "Takoma Park city"
+  ],
+  "MD-upper-21": [
+   "College Park city",
+   "Laurel city"
+  ],
+  "MD-upper-22": [
+   "Berwyn Heights town",
+   "Brentwood town",
+   "Edmonston town",
+   "Glenarden city",
+   "Greenbelt city",
+   "Hyattsville city",
+   "Landover Hills town",
+   "New Carrollton city",
+   "North Brentwood town",
+   "Riverdale Park town",
+   "University Park town"
+  ],
+  "MD-upper-23": [
+   "Bowie city",
+   "Upper Marlboro town"
+  ],
+  "MD-upper-24": [
+   "Bowie city",
+   "Capitol Heights town",
+   "Fairmount Heights town",
+   "Glenarden city",
+   "Seat Pleasant city"
+  ],
+  "MD-upper-25": [
+   "Capitol Heights town",
+   "District Heights city",
+   "Morningside town",
+   "Seat Pleasant city"
+  ],
+  "MD-upper-26": [
+   "Forest Heights town",
+   "Morningside town"
+  ],
+  "MD-upper-27": [
+   "Chesapeake Beach town",
+   "Eagle Harbor town",
+   "North Beach town"
+  ],
+  "MD-upper-28": [
+   "Indian Head town",
+   "La Plata town",
+   "Port Tobacco Village town"
+  ],
+  "MD-upper-29": [
+   "Leonardtown town"
+  ],
+  "MD-upper-3": [
+   "Frederick city",
+   "Walkersville town"
+  ],
+  "MD-upper-30": [
+   "Annapolis city",
+   "Highland Beach town"
+  ],
+  "MD-upper-31": [
+   "Anne Arundel County"
+  ],
+  "MD-upper-32": [
+   "Anne Arundel County"
+  ],
+  "MD-upper-33": [
+   "Anne Arundel County"
+  ],
+  "MD-upper-34": [
+   "Aberdeen city",
+   "Bel Air town",
+   "Havre de Grace city"
+  ],
+  "MD-upper-35": [
+   "Aberdeen city",
+   "Bel Air town",
+   "Charlestown town",
+   "North East town",
+   "Perryville town",
+   "Port Deposit town",
+   "Rising Sun town"
+  ],
+  "MD-upper-36": [
+   "Barclay town",
+   "Betterton town",
+   "Cecilton town",
+   "Centreville town",
+   "Chesapeake City town",
+   "Chestertown town",
+   "Church Hill town",
+   "Elkton town",
+   "Galena town",
+   "Goldsboro town",
+   "Greensboro town",
+   "Henderson town",
+   "Marydel town",
+   "Millington town",
+   "Queen Anne town",
+   "Queenstown town",
+   "Ridgely town",
+   "Rock Hall town",
+   "Sudlersville town",
+   "Templeville town"
+  ],
+  "MD-upper-37": [
+   "Brookview town",
+   "Cambridge city",
+   "Church Creek town",
+   "Denton town",
+   "East New Market town",
+   "Easton town",
+   "Eldorado town",
+   "Federalsburg town",
+   "Fruitland city",
+   "Galestown town",
+   "Hebron town",
+   "Hillsboro town",
+   "Hurlock town",
+   "Mardela Springs town",
+   "Oxford town",
+   "Preston town",
+   "Queen Anne town",
+   "Salisbury city",
+   "Secretary town",
+   "Sharptown town",
+   "St. Michaels town",
+   "Trappe town",
+   "Vienna town"
+  ],
+  "MD-upper-38": [
+   "Berlin town",
+   "Crisfield city",
+   "Delmar town",
+   "Fruitland city",
+   "Ocean City town",
+   "Pittsville town",
+   "Pocomoke City city",
+   "Princess Anne town",
+   "Salisbury city",
+   "Snow Hill town",
+   "Willards town"
+  ],
+  "MD-upper-39": [
+   "Gaithersburg city",
+   "Washington Grove town"
+  ],
+  "MD-upper-4": [
+   "Brunswick city",
+   "Burkittsville town",
+   "Frederick city",
+   "Middletown town",
+   "Myersville town",
+   "New Market town",
+   "Rosemont village",
+   "Thurmont town",
+   "Walkersville town",
+   "Woodsboro town"
+  ],
+  "MD-upper-40": [
+   "Baltimore city"
+  ],
+  "MD-upper-41": [
+   "Baltimore city"
+  ],
+  "MD-upper-42": [
+   "Hampstead town",
+   "Manchester town"
+  ],
+  "MD-upper-43": [
+   "Baltimore city"
+  ],
+  "MD-upper-44": [
+   "Baltimore County"
+  ],
+  "MD-upper-45": [
+   "Baltimore city"
+  ],
+  "MD-upper-46": [
+   "Baltimore city"
+  ],
+  "MD-upper-47": [
+   "Bladensburg town",
+   "Brentwood town",
+   "Cheverly town",
+   "Colmar Manor town",
+   "Cottage City town",
+   "Edmonston town",
+   "Hyattsville city",
+   "Landover Hills town",
+   "Mount Rainier city",
+   "New Carrollton city",
+   "North Brentwood town"
+  ],
+  "MD-upper-5": [
+   "Manchester town",
+   "Mount Airy town",
+   "New Windsor town",
+   "Sykesville town",
+   "Taneytown city",
+   "Union Bridge town",
+   "Westminster city"
+  ],
+  "MD-upper-6": [
+   "Baltimore County"
+  ],
+  "MD-upper-7": [
+   "Bel Air town"
+  ],
+  "MD-upper-8": [
+   "Baltimore County"
+  ],
+  "MD-upper-9": [
+   "Howard County",
+   "Montgomery County"
+  ],
   "MN-lower-10A": [
    "Aitkin city",
    "Aitkin township",

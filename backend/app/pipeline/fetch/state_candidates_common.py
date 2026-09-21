@@ -413,7 +413,38 @@ _STATE_LEG_CHAMBERS = [
     #   Assembly", which names the WHOLE legislature and is matched by
     #   the arms above, cannot reach this one.
     ("lower", re.compile(r"\bState\s+Assembly\b", re.IGNORECASE)),
+    #   Maryland and West Virginia call their lower chamber the House of
+    #   Delegates; Virginia does too. No federal chamber is called that,
+    #   so the bare form is unambiguous.
+    ("lower", re.compile(r"\bHouse\s+of\s+Delegates\b", re.IGNORECASE)),
 ]
+
+# Some districts elect SEVERAL members from a single contest, with no
+# seat designator to tell the winners apart — Maryland prints "House of
+# Delegates District 10 ... Vote for up to 3", and all three of that
+# party's top finishers are its nominees.
+#
+# This is the third multi-member shape after Idaho's "Seat A"/"Seat B"
+# and Washington's "Pos. 1"/"Pos. 2", and the only one where the number
+# is a property of the CONTEST rather than of the state, so it cannot
+# come from config the way advance_count does.
+_VOTE_FOR_RE = re.compile(r"\bVote\s+for\s+(?:up\s+to\s+)?(\d+)\b", re.IGNORECASE)
+
+
+def vote_for_count(contest_name: str) -> int | None:
+    """How many seats this contest fills, when its own label says so.
+
+    None when the label is silent, which is most states — the caller
+    then keeps whatever its own configuration says.
+    """
+    match = _VOTE_FOR_RE.search(contest_name or "")
+    if not match:
+        return None
+    count = int(match.group(1))
+    # A zero or an absurd count is a label this does not understand, and
+    # guessing from it would either drop every candidate or advance the
+    # whole field.
+    return count if 1 <= count <= 10 else None
 
 # Districts are identified per chamber, and the identifier is the whole
 # point — a seat without one is not publishable, because it cannot be

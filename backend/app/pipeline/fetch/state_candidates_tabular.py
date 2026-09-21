@@ -110,19 +110,17 @@ acted on blindly:
        claim.
   HI   Nothing discoverable for 2026 (its landing page yielded no file).
   IL   36 federal, no state contests in the file it publishes.
-  MD   BLOCKED, and it is the most interesting of the blocked ones. All
-       three of its statewide offices resolve and its 47 Senate
-       districts are clean, but its 122 "House of Delegates" contests
-       need two things this does not have. Its label is a THIRD
-       multi-member shape: not Idaho's "Seat A"/"Seat B" nor
-       Washington's "Pos. 1"/"Pos. 2", but "House of Delegates District
-       10 ... Vote for up to 3" -- three members elected from one
-       contest with no seat designator at all, so the number advancing
-       has to be read per CONTEST rather than taken from the state's
-       config. (Its 11A/11B subdistricts are the easy half: those are
-       separate geographies, like Minnesota's, and the string district
-       already handles them.) Onboarding it without the Delegates would
-       claim a complete legislature while omitting 141 of its seats.
+  MD   LIVE, and it brought the third multi-member shape with it. Not
+       Idaho's "Seat A"/"Seat B" nor Washington's "Pos. 1"/"Pos. 2", but
+       "House of Delegates District 10 ... Vote for up to 3" -- three
+       members from ONE contest with no seat designator, so the number
+       advancing is a property of the contest and is read from its own
+       label (vote_for_count). Applied only where the state runs
+       one-nominee party primaries: under top-two exactly two advance no
+       matter how many seats are filled, so a seat count there would be
+       the wrong question. Its 11A/11B subdistricts are separate
+       geographies like Minnesota's, and Census names them the same way,
+       so the crosswalk resolves them directly.
   NM   Its URL is federal-only (type=FED), so there is nothing to read.
   AK   No 2026 file discoverable from its landing page.
 """
@@ -151,6 +149,7 @@ from app.pipeline.fetch.state_candidates_common import (
     parse_statewide_office,
     pick_nominees,
     surname,
+    vote_for_count,
 )
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -933,7 +932,16 @@ def _collect(
         # REPRESENTATIVES DISTRICT 01 (REP)"); a top-two label doesn't,
         # so each candidate's own party column is the fallback.
         contest_party = normalize_party(contest)
-        won = pick_nominees(list(entry["votes"].items()), threshold, advance_count)
+        # A district that fills several seats from one contest sends
+        # several nominees. The count is read from the contest's own
+        # label ("Vote for up to 3") and only where the state runs
+        # ONE-NOMINEE party primaries: under top-two the number
+        # advancing is two regardless of how many seats are being
+        # filled, so a seat count there would be the wrong question.
+        seats_filled = vote_for_count(contest) if advance_count == 1 else None
+        won = pick_nominees(
+            list(entry["votes"].items()), threshold, seats_filled or advance_count,
+        )
         if not won:
             continue
 
