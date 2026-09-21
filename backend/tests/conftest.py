@@ -37,7 +37,15 @@ def db_session():
     )
     Base.metadata.create_all(bind=engine)
     VisitsBase.metadata.create_all(bind=engine)
-    Session = sessionmaker(bind=engine)
+    # autoflush=False to match app.database.SessionLocal. Not cosmetic:
+    # under the default autoflush=True a query SEES rows added earlier in
+    # the same transaction, so a read-then-add dedupe check passes in
+    # tests and fails in production. That exact divergence let an
+    # IntegrityError on uq_race_coverage_race_url reach production and
+    # abort every election-coverage refresh (fixed in election_coverage
+    # ._store_if_new). A fixture that is easier to satisfy than production
+    # is not a test of production.
+    Session = sessionmaker(bind=engine, autoflush=False)
     session = Session()
     yield session
     session.close()

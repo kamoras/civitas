@@ -193,6 +193,12 @@ def test_member_past_grace_period_is_deleted(db_session):
     result = purge_departed_members(db_session, CHAMBER_SENATE, today=TODAY)
 
     assert result["purged"] == ["long-gone"]
+    # purge_departed_members issues ORM deletes but does not commit; both
+    # real callers (senate_pipeline, house_pipeline) commit immediately
+    # after. The fixture matches production's autoflush=False, so the
+    # delete is only observable once flushed — asserting without this
+    # was relying on autoflush to see an uncommitted delete.
+    db_session.commit()
     assert db_session.query(Senator).filter_by(id="long-gone").count() == 0
 
 
