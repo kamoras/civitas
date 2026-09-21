@@ -390,6 +390,7 @@
     "NC": {
       "source_name": "North Carolina State Board of Elections (public results export)",
       "strategy": "tabular",
+      "statewide_offices": true,
       "runoff_threshold_pct": 30.0,
       "discovery": {
         "mode": "s3_listing",
