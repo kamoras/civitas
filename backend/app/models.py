@@ -1661,9 +1661,11 @@ class StatewideNominee(Base):
     # One of state_candidates_common.STATEWIDE_OFFICE_LABELS' keys.
     office: Mapped[str] = mapped_column(String(32), nullable=False)
     party: Mapped[str] = mapped_column(String(1), nullable=False)
-    last_name: Mapped[str] = mapped_column(String(120), nullable=False)
-    # What the state itself printed, kept verbatim alongside the surname
-    # the matcher works in — the page shows a person, not a key.
-    display_name: Mapped[str] = mapped_column(String(200), default="")
+    # The name the state itself printed, annotations stripped (Rhode
+    # Island marks its party-endorsed candidates with a bare asterisk).
+    # There is deliberately no separate surname column: a surname exists
+    # on a Candidate to match FEC's own filing, and a statewide office
+    # has no FEC filing to match — this name is rendered, never joined on.
+    display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     source_name: Mapped[str] = mapped_column(String(200), default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

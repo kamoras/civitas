@@ -147,10 +147,13 @@ def parse_office(contest_name: str) -> tuple[str, int | None] | None:
 #
 # The risk here is the mirror of parse_office's: where that must not read
 # a STATE legislative seat as federal, this must not read a COUNTY or
-# MUNICIPAL office as statewide. "County Treasurer", "District Attorney"
-# and "Cranston: Treasurer" are all real labels that contain a statewide
-# office's words. _LOCAL_QUALIFIER_RE refuses them outright rather than
-# trying to rank which reading is more likely.
+# MUNICIPAL office as statewide. "County Treasurer" and "District
+# Attorney" both contain a statewide office's words, and the colon form
+# is this vendor's own real convention for a one-town contest -- Rhode
+# Island's live ballot carries "DEM Cranston: City Council Ward 1",
+# "DEM Providence: Mayor" and "Woonsocket: Non-Partisan Mayor".
+# _LOCAL_QUALIFIER_RE refuses all of them outright rather than trying to
+# rank which reading is more likely.
 _STATEWIDE_OFFICES = [
     ("governor", re.compile(r"\bgovernor\b", re.IGNORECASE)),
     ("attorney_general", re.compile(r"\battorney\s+general\b", re.IGNORECASE)),
@@ -166,9 +169,37 @@ _LOCAL_QUALIFIER_RE = re.compile(
     r"\b(?:county|city|town|township|ward|borough|parish|village|precinct|district|"
     r"municipal|school|council|mayor|alderman|commissioner|judge|justice|court|"
     r"assembly|senate|house|representative|senator|committee|delegate)\b"
-    r"|:",  # "Cranston: Treasurer" -- this vendor's locality prefix
+    r"|:",  # "Cranston: ..." -- a real vendor prefix marking one town's race
     re.IGNORECASE,
 )
+
+# A state's own party lettering (mostly single-letter) doesn't match FEC's
+# 3-letter codes. Used two ways, and it has to be the same map for both:
+# as a tiebreaker among same-surname candidates in one federal race, and
+# to render a statewide nominee's party through the very same
+# majorPartyOf() the frontend already applies to every federal candidate.
+PARTY_CODE_MAP = {
+    "R": "REP", "D": "DEM", "L": "LIB", "G": "GRE", "I": "IND", "C": "CON",
+}
+
+# Where the pipeline records that it checked a state's statewide-executive
+# contests, and the API reads that back. Shared here rather than in
+# state_candidates.py so the API doesn't import the whole strategy
+# registry (and its two dozen adapter modules) to read one cache key.
+STATEWIDE_MARKER_TIER = "statewide"
+
+# Deliberately long: this marker is a coverage RECORD, not an HTTP cache
+# entry. Its staleness is shown to the reader as a "last checked" date the
+# way MeasureCoverage.checked_at is, and a pipeline that stops running is
+# an operator concern ops_alerts' staleness watchdog already owns. At the
+# default 72h TTL every state page would instead revert to "not yet
+# covered" after three quiet days.
+STATEWIDE_MARKER_TTL_HOURS = 24 * 400
+
+
+def statewide_marker_key(state: str, cycle: int) -> str:
+    return f"synced-{state}-{cycle}"
+
 
 STATEWIDE_OFFICE_LABELS = {
     "governor": "Governor",
@@ -252,6 +283,21 @@ def normalize_party(text: str) -> str | None:
         if pattern.search(value):
             return code
     return None
+
+
+def clean_display_name(display_name: str) -> str:
+    """A ballot name with its annotations removed, kept otherwise
+    verbatim — "Aaron C. Guckian*" -> "Aaron C. Guckian".
+
+    The same annotations surname() strips, stripped for the same reason:
+    they are markers the state prints beside a name, not part of it.
+    Rhode Island's bare asterisk means the party ENDORSED that candidate
+    (and the endorsee does not always win), Georgia's "(I)" means
+    incumbent. Rendered as-is, both read as a typo in a person's name,
+    or worse as a footnote marker pointing at a footnote that does not
+    exist on the page.
+    """
+    return re.sub(r"\s+", " ", re.sub(_ANNOTATION_RE, " ", display_name or "")).strip()
 
 
 def surname(display_name: str, last_first: bool = False) -> str | None:

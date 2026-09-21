@@ -78,7 +78,25 @@ async def _fetch(source=RI_SOURCE, year=2026):
 
 
 def _by_seat(records):
-    return {(r["office"], r["district"], r["party"]): r["last_name"] for r in records}
+    """Federal records only, keyed by seat — the shape every federal
+    assertion in this file is written against. Statewide-executive
+    records travel in the same list (see _statewide) and would otherwise
+    silently inflate every count here."""
+    return {
+        (r["office"], r["district"], r["party"]): r["last_name"]
+        for r in records if r["office"] in ("S", "H")
+    }
+
+
+def _statewide(records):
+    return {
+        (r["office"], r["party"]): r["last_name"]
+        for r in records if r["office"] not in ("S", "H")
+    }
+
+
+def _federal(records):
+    return [r for r in records if r["office"] in ("S", "H")]
 
 
 class TestText:
@@ -166,7 +184,7 @@ class TestFederalResults:
         ones. 140 of the real primary's 192 contests are these."""
         _patched(monkeypatch)
         records = await _fetch()
-        assert len(records) == 6  # not 6 + every state seat in the fixture
+        assert len(_federal(records)) == 6  # not 6 + every state seat in the fixture
         # Both state contests in the fixture are district-numbered seats
         # that would collide with real federal districts if they leaked.
         assert ("H", 13, "R") not in _by_seat(records)
@@ -242,7 +260,7 @@ class TestFreshnessGate:
         settle_days is a failsafe under the flag, never an extra AND — a
         gate wanting both would make honest certification wait anyway."""
         _patched(monkeypatch)
-        assert len(await _fetch({**RI_SOURCE, "settle_days": 3650})) == 6
+        assert len(_federal(await _fetch({**RI_SOURCE, "settle_days": 3650}))) == 6
 
     @pytest.mark.asyncio
     async def test_uncertified_and_unsettled_confirms_nobody(self, monkeypatch):
@@ -270,7 +288,7 @@ class TestFreshnessGate:
         results = json.loads(json.dumps(RESULTS))
         results["election"]["isOfficialResults"] = False
         _patched(monkeypatch, index=index, results=results)
-        assert len(await _fetch()) == 6
+        assert len(_federal(await _fetch())) == 6
 
     @pytest.mark.asyncio
     async def test_the_settle_window_is_measured_from_the_indexed_election_date(self, monkeypatch):
@@ -345,3 +363,85 @@ class TestDiscoveryAndFailures:
         _patched(monkeypatch)
         assert await _fetch({"jurisdiction": "rhodeisland"}) is None
         assert await _fetch({"base_url": "https://example.gov"}) is None
+
+
+class TestStatewideExecutiveResults:
+    """The other half of the same ballot. Rhode Island's real 2026 primary
+    carries 192 contests: 6 federal, 9 statewide executive, 133 General
+    Assembly seats, 21 party committees and 23 local offices. The federal
+    tests above prove the 6 are found and the 177 refused; these prove the
+    9 are found WITHOUT any of the 177 coming with them.
+
+    The fixture's statewide and local contests are real captures, same
+    provenance as the federal ones. The local three are the load-bearing
+    refusals here — "DEM Cranston: City Council Ward 1", "DEM Providence:
+    Mayor" and "Woonsocket: Non-Partisan Mayor" show that this vendor
+    really does prefix a municipal contest with "Town:", which is why
+    parse_statewide_office refuses a bare colon outright.
+    """
+
+    @pytest.mark.asyncio
+    async def test_resolves_the_real_statewide_nominees(self, monkeypatch):
+        _patched(monkeypatch)
+        assert _statewide(await _fetch()) == {
+            ("governor", "D"): "Helena Buonanno Foulkes",
+            ("governor", "R"): "Aaron C. Guckian",
+            ("lt_governor", "D"): "Sabina Matos",
+            ("secretary_of_state", "D"): "Gregg M. Amore",
+            ("attorney_general", "D"): "Kimberly Ahern",
+            ("treasurer", "D"): "James A. Diossa",
+            ("treasurer", "R"): "Micholas A. Credle",
+        }
+
+    @pytest.mark.asyncio
+    async def test_a_statewide_name_is_kept_whole_not_reduced_to_a_surname(self, monkeypatch):
+        """A statewide nominee has no FEC row to match, so the surname
+        reduction the federal path needs would just destroy information —
+        "Foulkes" is not what the ballot says and not what a reader
+        recognises."""
+        _patched(monkeypatch)
+        assert _statewide(await _fetch())[("governor", "D")] == "Helena Buonanno Foulkes"
+        # ... while the federal path still reduces, on the same fetch.
+        assert _by_seat(await _fetch())[("S", None, "D")] == "Reed"
+
+    @pytest.mark.asyncio
+    async def test_the_endorsement_asterisk_is_stripped_from_a_statewide_name(self, monkeypatch):
+        """Rhode Island prints "Aaron C. Guckian*" for its party-endorsed
+        candidate. Rendered verbatim that reads as a footnote marker
+        pointing at a footnote the page doesn't have."""
+        _patched(monkeypatch)
+        assert _statewide(await _fetch())[("governor", "R")] == "Aaron C. Guckian"
+
+    @pytest.mark.asyncio
+    async def test_no_municipal_office_is_ever_read_as_statewide(self, monkeypatch):
+        """The mirror of the General Assembly risk. A mayor is not a
+        governor, and "Cranston:"/"Providence:" are how this vendor says
+        the contest is one town's."""
+        _patched(monkeypatch)
+        offices = {office for office, _ in _statewide(await _fetch())}
+        assert offices == {"governor", "lt_governor", "secretary_of_state",
+                           "attorney_general", "treasurer"}
+
+    @pytest.mark.asyncio
+    async def test_a_contested_statewide_field_resolves_to_the_top_vote_getter(self, monkeypatch):
+        """Lieutenant Governor D is the real five-candidate field."""
+        _patched(monkeypatch)
+        assert _statewide(await _fetch())[("lt_governor", "D")] == "Sabina Matos"
+
+    @pytest.mark.asyncio
+    async def test_statewide_records_are_withheld_by_the_same_freshness_gate(self, monkeypatch):
+        """An uncertified, unsettled result must not confirm a governor
+        any more than it confirms a senator — one gate, not two."""
+        results = json.loads(json.dumps(RESULTS))
+        results["election"]["isOfficialResults"] = False
+        results["election"]["electionDate"] = "2099-01-01"
+        _patched(monkeypatch, results=results)
+        assert await _fetch() == []
+
+    @pytest.mark.asyncio
+    async def test_a_statewide_office_never_carries_a_district(self, monkeypatch):
+        """district is the House's key. A statewide office that leaked a
+        number would build a Race id that collides with a real district."""
+        _patched(monkeypatch)
+        records = await _fetch()
+        assert all(r["district"] is None for r in records if r["office"] not in ("S", "H"))

@@ -72,6 +72,21 @@ Island's went the other way and flipped honestly — certified six days
 after its 2026-09-09 primary — which is precisely the case that must
 not be made to sit out an arbitrary extra fortnight.
 
+STATEWIDE EXECUTIVE CONTESTS ride the same ballot and the same two
+calls. parse_statewide_office is a second gate beside parse_office, as
+conservative in its own direction: where parse_office must not read a
+state legislative seat as federal, that one must not read a county or
+municipal office as statewide. Rhode Island's real primary splits
+192 contests into 6 federal, 9 statewide executive, 133 General
+Assembly seats, 21 party committees and 23 local offices; the last
+group is what the gate is for ("DEM Providence: Mayor"). A statewide
+nominee is reduced with clean_display_name rather than surname -- there
+is no FEC row to match them against, so the state's own printed name is
+all there will ever be -- and stored as a StatewideNominee, never a
+Candidate. A state only PUBLISHES them once its entry opts in with
+statewide_offices (see state_candidate_sources.json's _contract for why
+that flag is a truth condition, not a toggle).
+
 Verified live 2026-09-17 against Rhode Island's real, certified 2026
 statewide primary (40/40 localities reporting, isOfficialResults true),
 all six federal contests: John F. Reed (Senate D, real incumbent, 98,473
@@ -79,7 +94,13 @@ of 128,194 over Connor F. Burbridge and Luis Daniel Muñoz), Raymond T.
 McKay (Senate R, unopposed), Gabriel Amo (CD1 D, real incumbent,
 unopposed), Kellie Keenan (CD1 R, unopposed), Seth Magaziner (CD2 D,
 real incumbent, unopposed), Victor Mellor (CD2 R, real winner over the
-party-endorsed candidate).
+party-endorsed candidate). Re-verified 2026-09-21 for the statewide
+half, same certified data: all 9 executive contests resolve (Helena
+Buonanno Foulkes and Aaron C. Guckian for Governor, Sabina Matos and
+John J. Loughlin II for Lieutenant Governor, Kimberly Ahern and Alan
+Leonard Gordon for Attorney General, Gregg M. Amore for Secretary of
+State, James A. Diossa and Micholas A. Credle for General Treasurer),
+with all 177 non-federal, non-statewide contests still refused.
 """
 
 import logging
@@ -89,8 +110,10 @@ import httpx
 
 from app.pipeline.fetch.http_utils import fetch_json_with_retry
 from app.pipeline.fetch.state_candidates_common import (
+    clean_display_name,
     normalize_party,
     parse_office,
+    parse_statewide_office,
     resolve_confirmed_nominees,
     surname,
 )
@@ -222,16 +245,41 @@ async def fetch_confirmed_candidates(
             return []
 
     by_seat: dict[tuple[str, int | None, str], list[tuple[str, int]]] = {}
+    statewide_by_seat: dict[tuple[str, int | None, str], list[tuple[str, int]]] = {}
     for ballot_item in payload.get("ballotItems") or []:
         if not isinstance(ballot_item, dict) or ballot_item.get("contestType") != "Candidate":
             continue
-        office_district = parse_office(_text(ballot_item.get("name")))
-        if office_district is None:
-            continue  # state/local contest on the same ballot -- see module docstring
-        office, district = office_district
+        contest_name = _text(ballot_item.get("name"))
+        office_district = parse_office(contest_name)
+        if office_district is not None:
+            office, district = office_district
+        else:
+            # Not federal. The same ballot also elects this state's
+            # executive officers, and their contests were being parsed
+            # and thrown away -- parse_statewide_office is the second,
+            # equally conservative gate for them, and returns None for
+            # the state-legislative, municipal and party-committee
+            # contests that make up the rest of the file. A statewide
+            # office has no district, and its code can never collide with
+            # parse_office's "S"/"H".
+            office = parse_statewide_office(contest_name)
+            if office is None:
+                continue  # state/local contest on the same ballot -- see module docstring
+            district = None
+        bucket = by_seat if office_district is not None else statewide_by_seat
         for name, party, votes in _candidates(ballot_item):
-            by_seat.setdefault((office, district, party), []).append((name, votes))
+            bucket.setdefault((office, district, party), []).append((name, votes))
 
+    threshold = source.get("runoff_threshold_pct")
+    # The two kinds of contest are resolved by the same shared tie-safe
+    # machinery but reduced to DIFFERENT name forms, because they are
+    # asked different questions afterwards. A federal nominee is matched
+    # against an FEC row, which files surnames, so `surname` is the right
+    # reduction. A statewide nominee has no FEC row to match or to render
+    # from -- the state's own printed name is all there will ever be --
+    # so it is kept whole, with only the ballot annotations stripped.
     return resolve_confirmed_nominees(
-        by_seat, source.get("runoff_threshold_pct"), name_transform=surname,
+        by_seat, threshold, name_transform=surname,
+    ) + resolve_confirmed_nominees(
+        statewide_by_seat, threshold, name_transform=clean_display_name,
     )
