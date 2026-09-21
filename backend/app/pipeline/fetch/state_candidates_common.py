@@ -166,7 +166,12 @@ _STATEWIDE_OFFICES = [
     # The locality gate already refuses the county one; requiring the
     # qualifier means a state that prints a bare "Auditor" for a county
     # office cannot slip through either.
-    ("auditor", re.compile(r"\b(?:state|general)\s+auditor\b", re.IGNORECASE)),
+    # Nebraska's own name for the office is "Auditor of Public
+    # Accounts" -- specific enough to stand without a "state" qualifier,
+    # since no county calls its auditor that.
+    ("auditor", re.compile(
+        r"\b(?:state|general)\s+auditor\b|\bAuditor\s+of\s+Public\s+Accounts\b",
+        re.IGNORECASE)),
     # Idaho's own constitutional officer. Qualified like the two above,
     # because a county can have a controller too.
     ("controller", re.compile(r"\bstate\s+controller\b", re.IGNORECASE)),

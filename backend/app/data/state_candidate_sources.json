@@ -525,6 +525,7 @@
     "NE": {
       "source_name": "Nebraska Secretary of State (Election Night Reporting)",
       "strategy": "totalvote_enr",
+      "statewide_offices": true,
       "base_url": "https://electionresults.nebraska.gov",
       "queries": [{"type": "SW", "map": "CTY"}, {"type": "CG", "map": "DIST"}],
       "runoff_threshold_pct": null,

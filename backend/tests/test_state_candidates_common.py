@@ -700,3 +700,20 @@ class TestVoteForCount:
         assert common.parse_state_leg_office(
             "House of Delegates District 11A Democratic Candidates - Vote for 1"
         ) == ("lower", "11A", None)
+
+
+class TestNebraskaAuditor:
+    """Nebraska calls the office the "Auditor of Public Accounts", which
+    no qualified pattern could see — and it was the single contest
+    standing between the state and complete statewide coverage."""
+
+    def test_the_nebraska_wording_resolves(self):
+        assert common.parse_statewide_office(
+            "For Auditor of Public Accounts") == ("auditor", None)
+
+    def test_the_qualified_wordings_still_resolve(self):
+        assert common.parse_statewide_office("State Auditor") == ("auditor", None)
+
+    def test_a_county_auditor_is_still_refused(self):
+        assert common.parse_statewide_office("County Auditor") is None
+        assert common.parse_statewide_office("County Auditor/Treasurer") is None

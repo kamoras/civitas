@@ -523,6 +523,10 @@ California is also the first **top-two** state covered, where two candidates of 
 
 Maryland makes ten, and brought the **third** multi-member shape. Not Idaho's `Seat A`/`Seat B`, nor Washington's `Pos. 1`/`Pos. 2`, but `House of Delegates District 10 … Vote for up to 3` — three members from *one* contest with no seat designator, so the number advancing is a property of the contest and is read from its own label. That is applied only where a state runs one-nominee party primaries: under top-two exactly two advance no matter how many seats are filled, so a seat count there would answer the wrong question. Its District 3 correctly shows three Democratic and two Republican nominees.
 
+Nebraska is the eleventh, and the first on a different vendor — the TotalVote platform, which mixes state offices onto the same pages as the federal races. It needed one addition: `Auditor of Public Accounts`, Nebraska's own name for the office and the last of its five statewide contests. Its Legislature is unicameral **and officially non-partisan**, so no legislative contests reach the gates at all and its page correctly keeps the "State legislative districts" omission — five omissions rather than four, which is the honest count.
+
+Montana and South Dakota run on that same vendor and are deliberately **not** covered. South Dakota is the instructive one: its page yields exactly one contest, Governor, with nothing unmatched — so coverage would *look* complete while silently omitting the Attorney General, Secretary of State, Auditor and Treasurer it also elects. A clean unmatched list proves nothing when the page itself is scoped.
+
 Minnesota is also why a district identifier is a **string**: it splits each of its 67 senate districts into two house districts, `10A` and `10B`. And why the town list is truncated for display but searched in full — one of its senate districts covers 292 townships, so the row shows three and "& 133 more", yet typing the 136th town still finds the seat.
 
 ---

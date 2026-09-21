@@ -108,19 +108,19 @@ class TestContests:
     def test_the_real_montana_senate_field_splits_into_three_single_party_blocks(self):
         senate = [c for c in tv._contests(MT_HTML) if c[0] == "S"]
         assert len(senate) == 3
-        parties = sorted({cand[1] for _, _, cands in senate for cand in cands})
+        parties = sorted({cand[1] for *_, cands in senate for cand in cands})
         assert parties == ["D", "L", "R"]
 
     def test_the_total_votes_row_is_never_treated_as_a_candidate(self):
         # Real page shape: a "total votes" summary row shares the same
         # "section group" class as each candidate row but has no
         # display-results-box-d (name/party) element at all.
-        for _office, _district, candidates in tv._contests(MT_HTML):
+        for *_, candidates in tv._contests(MT_HTML):
             names = [c[0] for c in candidates]
             assert "total votes" not in [n.lower() for n in names]
 
     def test_montana_house_districts_are_read_from_the_real_office_labels(self):
-        districts = sorted({d for office, d, _ in tv._contests(MT_HTML) if office == "H"})
+        districts = sorted({d for office, d, *_ in tv._contests(MT_HTML) if office == "H"})
         assert districts == [1, 2]
 
     def test_nebraskas_non_federal_statewide_offices_are_dropped(self):
@@ -131,7 +131,7 @@ class TestContests:
         assert offices == {"S"}
 
     def test_nebraskas_three_real_house_districts_are_all_found(self):
-        districts = sorted({d for office, d, _ in tv._contests(NE_CG_HTML) if office == "H"})
+        districts = sorted({d for office, d, *_ in tv._contests(NE_CG_HTML) if office == "H"})
         assert districts == [1, 2, 3]
 
     def test_an_unrecognised_party_label_is_silently_dropped(self):
@@ -139,7 +139,7 @@ class TestContests:
         # Marijuana Now" field that normalize_party doesn't recognise --
         # that whole block must vanish, not surface with party=None.
         senate = [c for c in tv._contests(NE_SW_HTML) if c[0] == "S"]
-        parties = sorted({cand[1] for _, _, cands in senate for cand in cands})
+        parties = sorted({cand[1] for *_, cands in senate for cand in cands})
         assert parties == ["D", "R"]
 
     def test_south_dakotas_only_real_contest_is_dropped_as_non_federal(self):
@@ -178,8 +178,12 @@ class TestContests:
         """
         contests = tv._contests(html)
         assert len(contests) == 1
-        names = [name for name, _, _ in contests[0][2]]
-        assert names == ["ALME"]
+        # Raw names: _contests no longer reduces them, because a
+        # federal nominee is cut to a surname for FEC matching while a
+        # state-office nominee keeps what the state printed, and only
+        # the caller knows which kind this is.
+        names = [name for name, _, _ in contests[0][3]]
+        assert names == ["KURT ALME"]
 
 
 class TestFetchConfirmedCandidatesMontana:
@@ -351,3 +355,25 @@ class TestFetchConfirmedCandidatesSouthDakota:
         _patched_single(monkeypatch, SD_HTML)
         result = await tv.fetch_confirmed_candidates(None, 2026, "SD", {**SD_SOURCE, "settle_days": 1})
         assert result == []
+
+
+class TestStateOffices:
+    """This vendor mixes state offices into the same pages as the federal
+    races — Nebraska's "SW" query carries Governor and the rest."""
+
+    def test_state_offices_are_ignored_unless_the_state_opts_in(self):
+        """Default behaviour is unchanged: only federal contests."""
+        offices = {c[0] for c in tv._contests(NE_SW_HTML)}
+        assert offices == {"S"}
+
+    def test_opting_in_finds_the_statewide_offices_on_the_same_page(self):
+        found = {c[0] for c in tv._contests(NE_SW_HTML, state_offices=True)}
+        assert "S" in found
+        assert found - {"S"}, "expected at least one non-federal office"
+
+    def test_a_contest_block_reports_its_seat_slot(self):
+        """Every block now carries (office, district, seat, candidates);
+        the seat is None for a state that doesn't use one."""
+        for contest in tv._contests(NE_SW_HTML, state_offices=True):
+            assert len(contest) == 4
+            assert contest[2] is None
