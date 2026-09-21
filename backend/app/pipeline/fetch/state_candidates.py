@@ -44,8 +44,9 @@ import logging
 import httpx
 from sqlalchemy.orm import Session
 
-from app.models import Candidate, Race
+from app.models import Candidate, Race, StatewideNominee
 from app.time_utils import utcnow
+from app.pipeline.cache import api_cache_set
 from app.pipeline.fetch.state_candidate_sources import (
     _load as _sources_file,
     configured_states,
@@ -60,6 +61,13 @@ from app.pipeline.fetch.state_source_crawler import (
     ELECTION_DOMAINS,
     discover_filings,
     discover_source,
+)
+from app.pipeline.fetch.state_candidates_common import (
+    PARTY_CODE_MAP,
+    STATEWIDE_MARKER_TIER,
+    STATEWIDE_MARKER_TTL_HOURS,
+    STATEWIDE_OFFICE_LABELS,
+    statewide_marker_key,
 )
 from app.pipeline.fetch.state_candidates_al import fetch_confirmed_candidates as _fetch_al
 from app.pipeline.fetch.state_candidates_canvass_xml import fetch_confirmed_candidates as _fetch_canvass_xml
@@ -119,13 +127,6 @@ STRATEGIES = {
     "enhanced_voting": _fetch_enhanced_voting,
 }
 
-# A state's own party lettering (mostly single-letter) doesn't match FEC's
-# 3-letter codes — used only as a tiebreaker among same-surname candidates
-# in one race, never as the primary match signal (surname already scopes
-# tightly within one race's small candidate list).
-_PARTY_CODE_MAP = {
-    "R": "REP", "D": "DEM", "L": "LIB", "G": "GRE", "I": "IND", "C": "CON",
-}
 
 
 def is_configured(state: str) -> bool:
@@ -180,7 +181,7 @@ def _match_candidate(
     if len(matches) == 1:
         return matches[0]
     if len(matches) > 1:
-        expected_party = _PARTY_CODE_MAP.get(party_code)
+        expected_party = PARTY_CODE_MAP.get(party_code)
         party_matches = [c for c in matches if c.party == expected_party]
         if len(party_matches) == 1:
             return party_matches[0]
@@ -402,6 +403,82 @@ def _confirmed_match(db: Session, cycle: int, state: str, record: dict):
     return _match_candidate(race.candidates, record["last_name"], record["party"])
 
 
+def _sync_statewide_nominees(
+    db: Session, cycle: int, state: str, source: dict, records: list[dict],
+) -> int:
+    """Persist this state's statewide-executive nominees and record that
+    we looked. Returns how many were stored.
+
+    Only runs for a state whose source entry opts in with
+    `statewide_offices: true`. That flag is not a feature toggle — it is
+    the difference between a real claim and a false one. Every adapter
+    returns only what its state's feed contains, so a state nobody has
+    parsed executive contests for returns zero of them, which is
+    indistinguishable from a state that genuinely elects none this cycle.
+    Writing a marker for both would tell a Georgian that Georgia has no
+    governor's race. The flag says "this state's feed was checked and its
+    executive contests are understood", so a zero under it is a real
+    `confirmed none`.
+
+    Rows absent from this run are DELETED rather than left behind: a
+    nominee who withdraws, or one resolved from an amended re-post,
+    must not linger as a confirmed name. The feed is the whole truth for
+    (state, cycle) every time it is read.
+    """
+    if not source.get("statewide_offices"):
+        return 0
+
+    keep: set[tuple[str, str]] = set()
+    for record in records:
+        office, party = record["office"], record["party"]
+        row = (
+            db.query(StatewideNominee)
+            .filter(
+                StatewideNominee.state == state,
+                StatewideNominee.cycle_year == cycle,
+                StatewideNominee.office == office,
+                StatewideNominee.party == party,
+            )
+            .first()
+        )
+        if row is None:
+            row = StatewideNominee(state=state, cycle_year=cycle, office=office, party=party)
+            db.add(row)
+        # `last_name` is the shared resolver's field name for "the name
+        # this seat resolved to". For a statewide contest the adapter
+        # reduced it with clean_display_name rather than surname (see
+        # state_candidates_enhanced_voting), so it holds the whole
+        # printed name, which is what gets rendered.
+        row.display_name = record["last_name"]
+        row.source_name = str(source.get("source_name") or source.get("strategy") or "")
+        row.updated_at = utcnow()
+        keep.add((office, party))
+
+    for row in (
+        db.query(StatewideNominee)
+        .filter(StatewideNominee.state == state, StatewideNominee.cycle_year == cycle)
+        .all()
+    ):
+        if (row.office, row.party) not in keep:
+            db.delete(row)
+
+    api_cache_set(
+        db, STATEWIDE_MARKER_TIER, statewide_marker_key(state, cycle),
+        {
+            # Explicit Z: utcnow() is naive UTC, and JS Date parses an
+            # offset-less ISO string as LOCAL time — the same bug
+            # elections._iso_utc exists to prevent for every other
+            # timestamp this API returns.
+            "checkedAt": utcnow().isoformat() + "Z",
+            "count": len(keep),
+            "sourceName": str(source.get("source_name") or ""),
+        },
+        normal_ttl_hours=STATEWIDE_MARKER_TTL_HOURS,
+    )
+    db.commit()
+    return len(keep)
+
+
 async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycle: int) -> dict:
     """Confirm every registered state's general-election candidates
     against this cycle's Race/Candidate rows. Returns per-state counts —
@@ -451,6 +528,16 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
             results[state] = {"confirmed": 0, "unmatched": 0, "status": "fetch_failed"}
             continue
 
+        # A statewide executive office (Governor, AG, ...) has no FEC race
+        # to confirm against, so it takes an entirely different path: the
+        # state's own feed is the record, stored as-is. Split first rather
+        # than branching inside the federal loop, which otherwise counts
+        # every one of them as `unmatched` against a Race id that cannot
+        # exist.
+        statewide = [r for r in records if r["office"] in STATEWIDE_OFFICE_LABELS]
+        records = [r for r in records if r["office"] not in STATEWIDE_OFFICE_LABELS]
+        statewide_count = _sync_statewide_nominees(db, cycle, state, source, statewide)
+
         confirmed = unmatched = 0
         for record in records:
             race_id = _race_id_for(cycle, state, record["office"], record["district"])
@@ -471,7 +558,10 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
                 db.commit()
             confirmed += 1
 
-        results[state] = {"confirmed": confirmed, "unmatched": unmatched, "status": "ok"}
+        results[state] = {
+            "confirmed": confirmed, "unmatched": unmatched,
+            "statewide": statewide_count, "status": "ok",
+        }
 
     return results
 

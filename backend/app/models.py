@@ -1622,3 +1622,50 @@ class IssueView(VisitsBase):
     date: Mapped[str] = mapped_column(String(10), primary_key=True)  # YYYY-MM-DD
     issue_public_id: Mapped[str] = mapped_column(String(16), primary_key=True)
     count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class StatewideNominee(Base):
+    """A confirmed nominee for a STATEWIDE EXECUTIVE office (Governor,
+    Lieutenant Governor, Attorney General, Secretary of State, Treasurer).
+
+    Deliberately NOT a Candidate row. Candidate is FEC-derived — it carries
+    a filing id, campaign-finance totals and a Representation Score, none
+    of which exist for a state office, and forcing one in would mean a row
+    whose every financial field is permanently null while sitting in the
+    same table the federal scorecard reads from.
+
+    These come from the same per-state adapters that already resolve
+    federal nominees (see fetch/state_candidates.py): the state's own
+    primary results name them, so no new source is needed — the contests
+    were being parsed and discarded. parse_statewide_office is the gate,
+    and it is as conservative as parse_office is in the other direction:
+    a county or municipal office that happens to contain "Treasurer" or
+    "Attorney General" is refused rather than ranked.
+
+    A missing row is "not on this state's ballot this cycle OR not yet
+    ingested" — which of the two is answered by the sync marker
+    api_cache_get("statewide", f"synced-{state}-{year}"), the same
+    null-is-not-zero discipline MeasureCoverage enforces for measures.
+    """
+    __tablename__ = "statewide_nominees"
+    __table_args__ = (
+        UniqueConstraint(
+            "state", "cycle_year", "office", "party",
+            name="uq_statewide_nominee_seat_party",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    state: Mapped[str] = mapped_column(String(2), nullable=False, index=True)
+    cycle_year: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    # One of state_candidates_common.STATEWIDE_OFFICE_LABELS' keys.
+    office: Mapped[str] = mapped_column(String(32), nullable=False)
+    party: Mapped[str] = mapped_column(String(1), nullable=False)
+    # The name the state itself printed, annotations stripped (Rhode
+    # Island marks its party-endorsed candidates with a bare asterisk).
+    # There is deliberately no separate surname column: a surname exists
+    # on a Candidate to match FEC's own filing, and a statewide office
+    # has no FEC filing to match — this name is rendered, never joined on.
+    display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    source_name: Mapped[str] = mapped_column(String(200), default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

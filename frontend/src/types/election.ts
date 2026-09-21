@@ -168,6 +168,37 @@ export interface MeasureCoverage {
   checkedAt: string | null;
 }
 
+/** One statewide executive contest (Governor, Attorney General, ...) and
+ * the nominees each party sent to the general.
+ *
+ * Deliberately much thinner than a federal RaceWithCandidates: these
+ * offices have no FEC filing behind them, so there is no finance data,
+ * no Representation Score and no candidate detail page to link — the
+ * state's own printed name and party is the whole of what exists. */
+export interface StatewideRace {
+  /** Stable key ("governor", "lt_governor", ...). */
+  office: string;
+  /** Human label the backend owns, so the two never disagree. */
+  label: string;
+  nominees: StatewideNominee[];
+}
+
+export interface StatewideNominee {
+  /** FEC's own 3-letter code, so majorPartyOf() applies here exactly as
+   * it does to every federal candidate on the page. */
+  party: string;
+  name: string;
+}
+
+/** Same three claims MeasureCoverage makes, for executive contests:
+ * "covered", "this state elects none this cycle", and "we haven't
+ * checked" are different things and must not render alike. */
+export interface StatewideCoverage {
+  status: "covered" | "confirmed_none" | "not_yet_covered";
+  sourceName: string | null;
+  checkedAt: string | null;
+}
+
 /** Where to go for the parts of the ballot this page cannot show. */
 export interface OfficialLookup {
   url: string;
@@ -211,6 +242,8 @@ export interface StateBallot {
   coverage: RaceCoverageItem[];
   measures: BallotMeasure[];
   measureCoverage: MeasureCoverage;
+  statewideRaces: StatewideRace[];
+  statewideCoverage: StatewideCoverage;
   officialLookup: OfficialLookup;
   /** What this page deliberately does not cover, enumerated by the
    * backend so the limitation renders as content rather than a footnote. */

@@ -359,7 +359,7 @@ class TestSyncConfirmedCandidates:
 
         cand = db_session.query(Candidate).filter(Candidate.id == "C1").first()
         assert cand.confirmed_general is True
-        assert results["TX"] == {"confirmed": 1, "unmatched": 0, "status": "ok"}
+        assert results["TX"] == {"confirmed": 1, "unmatched": 0, "statewide": 0, "status": "ok"}
 
     @pytest.mark.asyncio
     async def test_never_hides_a_candidate_that_fails_to_match(self, db_session, monkeypatch):
@@ -378,7 +378,7 @@ class TestSyncConfirmedCandidates:
 
         cand = db_session.query(Candidate).filter(Candidate.id == "C1").first()
         assert cand.confirmed_general is False
-        assert results["TX"] == {"confirmed": 0, "unmatched": 1, "status": "ok"}
+        assert results["TX"] == {"confirmed": 0, "unmatched": 1, "statewide": 0, "status": "ok"}
 
     @pytest.mark.asyncio
     async def test_unmatched_when_no_race_exists_for_the_record(self, db_session, monkeypatch):
@@ -388,7 +388,7 @@ class TestSyncConfirmedCandidates:
         monkeypatch.setitem(sc.STRATEGIES, "tx_civix", mock_fetch)
         results = await sc.sync_confirmed_candidates(db_session, None, 2026)
 
-        assert results["TX"] == {"confirmed": 0, "unmatched": 1, "status": "ok"}
+        assert results["TX"] == {"confirmed": 0, "unmatched": 1, "statewide": 0, "status": "ok"}
 
     @pytest.mark.asyncio
     async def test_fetch_failure_reports_status_without_raising(self, db_session, monkeypatch):

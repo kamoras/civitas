@@ -137,6 +137,103 @@ def parse_office(contest_name: str) -> tuple[str, int | None] | None:
     return None
 
 
+# ── Statewide executive offices ──────────────────────────────────────
+#
+# A deliberately SHORT list of offices whose names are unambiguous
+# statewide once a locality qualifier is ruled out. These have no FEC
+# counterpart (no federal filing, no campaign-finance rows, no
+# Representation Score), so they are stored and rendered separately from
+# Race/Candidate — see models.StatewideNominee.
+#
+# The risk here is the mirror of parse_office's: where that must not read
+# a STATE legislative seat as federal, this must not read a COUNTY or
+# MUNICIPAL office as statewide. "County Treasurer" and "District
+# Attorney" both contain a statewide office's words, and the colon form
+# is this vendor's own real convention for a one-town contest -- Rhode
+# Island's live ballot carries "DEM Cranston: City Council Ward 1",
+# "DEM Providence: Mayor" and "Woonsocket: Non-Partisan Mayor".
+# _LOCAL_QUALIFIER_RE refuses all of them outright rather than trying to
+# rank which reading is more likely.
+_STATEWIDE_OFFICES = [
+    ("governor", re.compile(r"\bgovernor\b", re.IGNORECASE)),
+    ("attorney_general", re.compile(r"\battorney\s+general\b", re.IGNORECASE)),
+    ("secretary_of_state", re.compile(r"\bsecretary\s+of\s+state\b", re.IGNORECASE)),
+    # Bare "Treasurer" is a county/city office in most states; only the
+    # qualified statewide forms count.
+    ("treasurer", re.compile(r"\b(?:general|state)\s+treasurer\b", re.IGNORECASE)),
+]
+
+_LT_GOVERNOR_RE = re.compile(r"\b(?:lieutenant|lt\.?)\s+governor\b", re.IGNORECASE)
+
+_LOCAL_QUALIFIER_RE = re.compile(
+    r"\b(?:county|city|town|township|ward|borough|parish|village|precinct|district|"
+    r"municipal|school|council|mayor|alderman|commissioner|judge|justice|court|"
+    r"assembly|senate|house|representative|senator|committee|delegate)\b"
+    r"|:",  # "Cranston: ..." -- a real vendor prefix marking one town's race
+    re.IGNORECASE,
+)
+
+# A state's own party lettering (mostly single-letter) doesn't match FEC's
+# 3-letter codes. Used two ways, and it has to be the same map for both:
+# as a tiebreaker among same-surname candidates in one federal race, and
+# to render a statewide nominee's party through the very same
+# majorPartyOf() the frontend already applies to every federal candidate.
+PARTY_CODE_MAP = {
+    "R": "REP", "D": "DEM", "L": "LIB", "G": "GRE", "I": "IND", "C": "CON",
+}
+
+# Where the pipeline records that it checked a state's statewide-executive
+# contests, and the API reads that back. Shared here rather than in
+# state_candidates.py so the API doesn't import the whole strategy
+# registry (and its two dozen adapter modules) to read one cache key.
+STATEWIDE_MARKER_TIER = "statewide"
+
+# Deliberately long: this marker is a coverage RECORD, not an HTTP cache
+# entry. Its staleness is shown to the reader as a "last checked" date the
+# way MeasureCoverage.checked_at is, and a pipeline that stops running is
+# an operator concern ops_alerts' staleness watchdog already owns. At the
+# default 72h TTL every state page would instead revert to "not yet
+# covered" after three quiet days.
+STATEWIDE_MARKER_TTL_HOURS = 24 * 400
+
+
+def statewide_marker_key(state: str, cycle: int) -> str:
+    return f"synced-{state}-{cycle}"
+
+
+STATEWIDE_OFFICE_LABELS = {
+    "governor": "Governor",
+    "lt_governor": "Lieutenant Governor",
+    "attorney_general": "Attorney General",
+    "secretary_of_state": "Secretary of State",
+    "treasurer": "State Treasurer",
+}
+
+
+def parse_statewide_office(contest_name: str) -> str | None:
+    """A statewide executive office code, or None for anything else.
+
+    None for every federal contest too: this is the complement of
+    parse_office, not a superset of it, and a caller asks whichever
+    question it means.
+    """
+    name = contest_name or ""
+    if _LOCAL_QUALIFIER_RE.search(name):
+        return None
+    # A JOINT TICKET ("Governor and Lieutenant Governor", how several
+    # states print it) is the GOVERNOR's contest, not the deputy's. Strip
+    # the lieutenant phrase: if a bare "Governor" survives, both offices
+    # are named and this is the top of the ticket.
+    if _LT_GOVERNOR_RE.search(name):
+        without_lt = _LT_GOVERNOR_RE.sub(" ", name)
+        if not re.search(r"\bgovernor\b", without_lt, re.IGNORECASE):
+            return "lt_governor"
+    for code, pattern in _STATEWIDE_OFFICES:
+        if pattern.search(name):
+            return code
+    return None
+
+
 def office_from_columns(row: dict, spec: dict | None) -> tuple[str, int | None] | None:
     """The same ("H", 3) answer as parse_office, taken from a results row's
     OWN columns instead of its label, or None when `spec` is unset or the
@@ -186,6 +283,21 @@ def normalize_party(text: str) -> str | None:
         if pattern.search(value):
             return code
     return None
+
+
+def clean_display_name(display_name: str) -> str:
+    """A ballot name with its annotations removed, kept otherwise
+    verbatim — "Aaron C. Guckian*" -> "Aaron C. Guckian".
+
+    The same annotations surname() strips, stripped for the same reason:
+    they are markers the state prints beside a name, not part of it.
+    Rhode Island's bare asterisk means the party ENDORSED that candidate
+    (and the endorsee does not always win), Georgia's "(I)" means
+    incumbent. Rendered as-is, both read as a typo in a person's name,
+    or worse as a footnote marker pointing at a footnote that does not
+    exist on the page.
+    """
+    return re.sub(r"\s+", " ", re.sub(_ANNOTATION_RE, " ", display_name or "")).strip()
 
 
 def surname(display_name: str, last_first: bool = False) -> str | None:

@@ -29,7 +29,9 @@ from app.models import (
     RaceCoverageItem,
     Representative,
     Senator,
+    StatewideNominee,
 )
+from app.pipeline.cache import api_cache_get
 from app.pipeline.analyze.score_calculator import (
     compute_overall_score,
     get_district_pvi_map,
@@ -45,6 +47,13 @@ from app.pipeline.fetch.ballot_pdf_sources import town_names_for_state as ballot
 from app.pipeline.fetch.civic_info import fetch_town_ballot
 from app.pipeline.fetch.civic_info import is_configured as civic_is_configured
 from app.pipeline.fetch.state_candidate_sources import source_for_state
+from app.pipeline.fetch.state_candidates_common import (
+    PARTY_CODE_MAP,
+    STATEWIDE_MARKER_TIER,
+    STATEWIDE_MARKER_TTL_HOURS,
+    STATEWIDE_OFFICE_LABELS,
+    statewide_marker_key,
+)
 from app.pipeline.fetch.state_election_dates import primary_date
 from app.pipeline.fetch.town_directory import address_for_town, towns_for_state
 from app.time_utils import utcnow
@@ -412,6 +421,74 @@ def _state_coverage(db: Session, races: list[Race]) -> list[dict]:
     return coverage
 
 
+class StatewideCoverageStatus:
+    """The three things an empty statewide-executive section can mean.
+
+    Same null-is-not-zero discipline MeasureCoverage encodes for ballot
+    measures, and for the same reason: "Rhode Island elects no Secretary
+    of State this cycle" and "nobody has taught this state's feed to us
+    yet" render identically as an empty section, and a reader takes the
+    empty section to mean the first.
+    """
+    NOT_YET_COVERED = "not_yet_covered"
+    COVERED = "covered"
+    CONFIRMED_NONE = "confirmed_none"
+
+
+def _statewide_section(db: Session, state: str, cycle: int) -> tuple[list[dict], dict]:
+    """This state's statewide-executive contests and what we actually
+    know about them.
+
+    Coverage comes from the sync marker the pipeline writes, NOT from
+    whether rows happen to exist: a state with zero rows and no marker
+    has never been looked at, while a state with zero rows AND a marker
+    was checked and genuinely has none on this ballot. Deriving the
+    status from the row count alone would collapse exactly the two cases
+    this function exists to keep apart.
+    """
+    marker = api_cache_get(
+        db, STATEWIDE_MARKER_TIER, statewide_marker_key(state, cycle),
+        max_age_hours=STATEWIDE_MARKER_TTL_HOURS,
+    )
+    nominees = (
+        db.query(StatewideNominee)
+        .filter(StatewideNominee.state == state, StatewideNominee.cycle_year == cycle)
+        .all()
+    )
+
+    by_office: dict[str, list[dict]] = {}
+    for row in nominees:
+        by_office.setdefault(row.office, []).append({
+            # FEC's own 3-letter codes, so the frontend colours a nominee
+            # through the exact same majorPartyOf() every federal
+            # candidate already goes through — a second party vocabulary
+            # on one page is how the two drift apart.
+            "party": PARTY_CODE_MAP.get(row.party, row.party),
+            "name": row.display_name or row.last_name,
+        })
+
+    # STATEWIDE_OFFICE_LABELS is insertion-ordered by seniority of the
+    # office, which is the order a state prints them on the real ballot.
+    races = [
+        {"office": code, "label": label, "nominees": sorted(by_office[code], key=lambda n: n["party"])}
+        for code, label in STATEWIDE_OFFICE_LABELS.items()
+        if code in by_office
+    ]
+
+    if marker is None:
+        status = StatewideCoverageStatus.NOT_YET_COVERED
+    elif races:
+        status = StatewideCoverageStatus.COVERED
+    else:
+        status = StatewideCoverageStatus.CONFIRMED_NONE
+
+    return races, {
+        "status": status,
+        "sourceName": (marker or {}).get("sourceName") or None,
+        "checkedAt": (marker or {}).get("checkedAt") or None,
+    }
+
+
 @router.get("/states/{state}")
 def state_ballot(state: str, db: Session = Depends(get_db)):
     """Every federal (Senate + House) race on `state`'s ballot this cycle
@@ -480,6 +557,7 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         .filter(MeasureCoverage.state == state, MeasureCoverage.election_date == election_day)
         .first()
     )
+    statewide_races, statewide_coverage = _statewide_section(db, state, cycle)
 
     return cached_json({
         "state": state,
@@ -522,8 +600,15 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
             "checkedAt": _iso_utc(coverage.checked_at) if coverage else None,
         },
         "officialLookup": lookup_for_state(state),
-        "omits": [
+        "statewideRaces": statewide_races,
+        "statewideCoverage": statewide_coverage,
+        "omits": ([
+            # Dropped the moment this state's executive contests are
+            # genuinely covered — the list has to shrink as the gaps
+            # actually close, or it stops describing the page and starts
+            # being boilerplate a reader learns to skip.
             "Governor and other statewide executive contests",
+        ] if statewide_coverage["status"] == StatewideCoverageStatus.NOT_YET_COVERED else []) + [
             "State legislative districts",
             "Judicial contests and retention questions",
             "County and municipal offices",
