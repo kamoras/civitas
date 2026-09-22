@@ -762,3 +762,56 @@ class TestClarityStateOffices:
             "DEM Senator in General Assembly District 5") == ("upper", "5", None)
         assert common.parse_state_leg_office(
             "State Representative District 10A") == ("lower", "10A", None)
+
+
+class TestBareChamberDistrictForms:
+    """Alaska names its chambers with no qualifier at all — "House
+    District 1", "Senate District A" — the shortest form any state uses,
+    and its senate districts are LETTERS where every other state's
+    identifier is numeric.
+
+    The bare arms are safe for the same reason North Carolina's bare
+    "House of Representatives" is (see TestBareHouseOfRepresentatives):
+    this gate refuses whatever parse_office claims before testing any
+    pattern. A districted SENATE seat carries its own guarantee too —
+    U.S. Senate seats are elected statewide, never by district.
+    """
+
+    def test_a_bare_house_district_resolves(self):
+        assert common.parse_state_leg_office("House District 1") == ("lower", "1", None)
+        assert common.parse_state_leg_office("House District 40") == ("lower", "40", None)
+
+    def test_a_lettered_senate_district_resolves(self):
+        assert common.parse_state_leg_office("Senate District A") == ("upper", "A", None)
+        assert common.parse_state_leg_office("Senate District S") == ("upper", "S", None)
+
+    def test_the_federal_chambers_are_still_refused(self):
+        for label in ("U.S. Senator", "U.S. Representative",
+                      "United States Senate", "Representative in Congress District 1",
+                      "US HOUSE OF REPRESENTATIVES DISTRICT 11 (DEM)"):
+            assert common.parse_state_leg_office(label) is None, label
+
+    def test_a_numeric_district_is_never_read_as_a_letter(self):
+        """The letter pattern is tried LAST. Minnesota's "10A" must stay
+        district "10A" — not district "A" — and a lettered SEAT must stay
+        a seat."""
+        assert common.parse_state_leg_office(
+            "State Representative District 10A") == ("lower", "10A", None)
+        assert common.parse_state_leg_office(
+            "State Representative District 1 Seat A") == ("lower", "1", "A")
+
+    def test_district_attorney_is_not_district_a(self):
+        """The classic trap for a single-letter pattern: the "A" of
+        "Attorney" is not a standalone word, so there is no word boundary
+        after it. Asserted directly on the pattern as well, because
+        _NON_LEGISLATIVE_RE would mask a real failure here."""
+        assert common._STATE_LEG_LETTER_DISTRICT_RE.search("District Attorney") is None
+        assert common.parse_state_leg_office("District Attorney") is None
+        assert common.parse_state_leg_office("DISTRICT ATTORNEY 5TH DISTRICT") is None
+
+    def test_a_local_office_naming_a_district_is_still_refused(self):
+        assert common.parse_state_leg_office("Senate District A County Clerk") is None
+
+    def test_lettered_and_numeric_districts_sort_and_label_sanely(self):
+        assert sorted(["S", "A", "C"], key=common.district_sort_key) == ["A", "C", "S"]
+        assert common.district_label("A", None) == "A"
