@@ -90,7 +90,7 @@ pipeline_is_busy() {
     _busy_reason="couldn't reach pipeline status"
     return 0
   fi
-  # Checks only the four heavy/nightly pipelines this guard exists for, by
+  # Checks the five heavy/nightly pipelines this guard exists for, by
   # parsing the JSON and reading top-level keys, not a flat text match.
   # A plain grep for `"isRunning":true` also matched the unrelated,
   # lightweight actionRefresh.isRunning field nested in the same JSON blob
@@ -99,6 +99,19 @@ pipeline_is_busy() {
   # (is_running stuck true in-memory after an uncaught exception — see
   # action_center.py) blocked deploys for 5+ hours with no real pipeline
   # running.
+  #
+  # electionIsRunning was MISSING until 2026-09-22, and the omission cost
+  # a real run: a deploy landed 5 minutes into election run #39 and the
+  # restart killed it. Election is the LAST phase of the nightly chain
+  # (senate -> supplementary -> house -> stock -> election), so it is the
+  # phase most likely to still be going when a day's deploys finally get
+  # their turn — exactly the case this guard exists for. The admin
+  # endpoint has always published the field; only this tuple was short.
+  #
+  # Worse, its orphaned row is not swept: main._invalidate_orphaned_pipelines
+  # only marks PipelineRun rows stale on startup, so a killed election run
+  # stays "running" until the NEXT run's acquire_pipeline_lock ages it out
+  # past STALE_PIPELINE_TIMEOUT.
   if echo "$status" | python3 -c '
 import json, sys
 try:
@@ -106,7 +119,8 @@ try:
 except ValueError:
     sys.exit(1)
 sys.exit(0 if any(d.get(k) for k in
-    ("isRunning", "houseIsRunning", "stockTradesIsRunning", "supplementaryIsRunning")
+    ("isRunning", "houseIsRunning", "stockTradesIsRunning",
+     "supplementaryIsRunning", "electionIsRunning")
 ) else 1)
 '; then
     _busy_reason="a pipeline is running"

@@ -135,5 +135,30 @@ git -C "$REPO" push -q -f "$REMOTE" "$NEW_SHA:refs/heads/main"
 [[ -f "$REPO/.stack-deployed" ]] && fail "mid-build regression check: deployed THROUGH a pipeline that started mid-build (this is the 2026-07-23 bug)"
 [[ -f "$REPO/.last-deployed-sha" ]] && fail "mid-build regression check: marker written despite deferring — cron would never retry"
 
+# Scenario: EVERY gated pipeline must defer, one key at a time. The tuple
+# in check-and-deploy.sh was short by "electionIsRunning" until
+# 2026-09-22, and the omission cost a real run — a deploy landed 5 minutes
+# into election run #39 and the restart killed it. Election is the LAST
+# phase of the nightly chain, so it is the one most likely to still be
+# going when a day's deploys get their turn. Checked per-key rather than
+# as one blob so a future addition to the endpoint cannot be silently
+# left out of the guard again.
+for key in isRunning houseIsRunning stockTradesIsRunning supplementaryIsRunning electionIsRunning; do
+  cat > "$STUBS/curl" <<EOF
+#!/usr/bin/env bash
+echo '{"$key":true}'
+EOF
+  chmod +x "$STUBS/curl"
+  rm -f "$REPO/.build-ran" "$REPO/.stack-deployed" "$REPO/.last-deployed-sha"
+  git -C "$REPO" update-ref refs/heads/main "$NEW_SHA"
+  git -C "$REPO" checkout -q "$BASE_SHA" 2>/dev/null
+  git -C "$REPO" push -q -f "$REMOTE" "$BASE_SHA:refs/heads/main"
+  git -C "$REPO" push -q -f "$REMOTE" "$NEW_SHA:refs/heads/main"
+  ( cd "$REPO" && PATH="$STUBS:$PATH" bash check-and-deploy.sh )
+  [[ -f "$REPO/.build-ran" ]] && fail "$key: built despite that pipeline running"
+  [[ -f "$REPO/.stack-deployed" ]] && fail "$key: DEPLOYED THROUGH a running pipeline — it would be killed"
+  echo "  $key: correctly deferred"
+done
+
 echo
 echo "ALL SCENARIOS PASSED"
