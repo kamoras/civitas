@@ -11,12 +11,14 @@ MeasureCoverage already enforces for ballot measures.
 
 from app.api.elections import (
     StatewideCoverageStatus,
+    _judicial_section,
     _state_leg_section,
     _statewide_marker,
     _statewide_section,
 )
-from app.models import StateLegNominee, StatewideNominee
+from app.models import JudicialNominee, StateLegNominee, StatewideNominee
 from app.pipeline.fetch.state_candidates import (
+    _sync_judicial_nominees,
     _sync_state_leg_nominees,
     _sync_statewide_nominees,
 )
@@ -372,3 +374,111 @@ class TestMultiMemberSeats:
         ])
         rows = db_session.query(StateLegNominee).all()
         assert [(r.district, r.seat) for r in rows] == [("1", "A")]
+
+
+JUDICIAL_SOURCE = {
+    "strategy": "tabular",
+    "source_name": "NC State Board of Elections",
+    "statewide_offices": True,
+    "judicial_offices": True,
+}
+
+
+def _judicial(court, district, seat, party, name):
+    return {"office": court, "district": district, "seat": seat,
+            "party": party, "last_name": name}
+
+
+class TestJudicialOptIn:
+    """judicial_offices is a SEPARATE claim from statewide_offices, and
+    deliberately not implied by it.
+
+    statewide_offices asserts only that a state's real labels were read.
+    judicial_offices asserts something stronger — that this state's
+    judicial primaries NOMINATE rather than ELECT — because a
+    non-partisan judicial election usually elects a majority winner
+    outright, and publishing one as a November candidate would be
+    confidently wrong. Georgia's 92 judgeships parse through the same
+    gate and must stay unpublished for exactly that reason.
+    """
+
+    RECORDS = [_judicial("district", "3", "2", "R", "Lloyd Williams")]
+
+    def test_statewide_opt_in_alone_publishes_nothing(self, db_session):
+        source = {**SOURCE, "statewide_offices": True}   # no judicial_offices
+        assert _sync_judicial_nominees(
+            db_session, CYCLE, "GA", source, self.RECORDS) == 0
+        assert db_session.query(JudicialNominee).count() == 0
+
+    def test_its_own_opt_in_publishes(self, db_session):
+        assert _sync_judicial_nominees(
+            db_session, CYCLE, "NC", JUDICIAL_SOURCE, self.RECORDS) == 1
+        row = db_session.query(JudicialNominee).one()
+        assert (row.court, row.district, row.seat, row.party) == ("district", "3", "2", "R")
+        assert row.display_name == "Lloyd Williams"
+
+
+class TestJudicialPersistence:
+    def test_an_appellate_seat_stores_a_null_district(self, db_session):
+        _sync_judicial_nominees(db_session, CYCLE, "NC", JUDICIAL_SOURCE,
+                                [_judicial("appeals", None, "4", "R", "Michael C. Byrne")])
+        row = db_session.query(JudicialNominee).one()
+        assert row.district is None and row.seat == "4"
+
+    def test_a_seat_absent_from_the_next_run_is_deleted(self, db_session):
+        """The feed is the whole truth for (state, cycle) every run, same
+        as both sibling tables."""
+        _sync_judicial_nominees(db_session, CYCLE, "NC", JUDICIAL_SOURCE, [
+            _judicial("district", "3", "2", "R", "Lloyd Williams"),
+            _judicial("district", "14", "3", "D", "Sherry Miller"),
+        ])
+        assert db_session.query(JudicialNominee).count() == 2
+
+        _sync_judicial_nominees(db_session, CYCLE, "NC", JUDICIAL_SOURCE,
+                                [_judicial("district", "3", "2", "R", "Lloyd Williams")])
+        assert [r.display_name for r in db_session.query(JudicialNominee).all()] == [
+            "Lloyd Williams"]
+
+    def test_a_duplicate_record_in_one_run_does_not_blow_up(self, db_session):
+        """autoflush=False means the lookup cannot see a row added moments
+        ago, so a feed listing one nominee twice would queue two
+        identical rows and fail the unique constraint at commit — the
+        shape that took the coverage refresh down."""
+        stored = _sync_judicial_nominees(db_session, CYCLE, "NC", JUDICIAL_SOURCE, [
+            _judicial("district", "3", "2", "R", "Lloyd Williams"),
+            _judicial("district", "3", "2", "R", "Lloyd Williams"),
+        ])
+        assert stored == 1
+        assert db_session.query(JudicialNominee).count() == 1
+
+    def test_two_courts_can_share_a_seat_number(self, db_session):
+        """District seat 1 and Superior seat 1 are different benches —
+        which is why `court` is part of the key."""
+        _sync_judicial_nominees(db_session, CYCLE, "NC", JUDICIAL_SOURCE, [
+            _judicial("district", "3", "1", "R", "One Judge"),
+            _judicial("superior", "3", "1", "D", "Another Judge"),
+        ])
+        assert db_session.query(JudicialNominee).count() == 2
+
+
+class TestJudicialSection:
+    def test_seats_are_grouped_by_court_in_seniority_order(self, db_session):
+        _sync_judicial_nominees(db_session, CYCLE, "NC", JUDICIAL_SOURCE, [
+            _judicial("district", "14", "3", "D", "Sherry Miller"),
+            _judicial("appeals", None, "4", "R", "Michael C. Byrne"),
+            _judicial("supreme", None, "1", "D", "A Justice"),
+        ])
+        out = _judicial_section(db_session, "NC", CYCLE)
+        assert [s["court"] for s in out] == ["supreme", "appeals", "district"]
+
+    def test_a_trial_seat_names_its_district_and_an_appellate_one_does_not(self, db_session):
+        _sync_judicial_nominees(db_session, CYCLE, "NC", JUDICIAL_SOURCE, [
+            _judicial("district", "14", "3", "D", "Sherry Miller"),
+            _judicial("appeals", None, "4", "R", "Michael C. Byrne"),
+        ])
+        out = {s["court"]: s["seats"] for s in _judicial_section(db_session, "NC", CYCLE)}
+        assert out["district"][0]["seat"] == "District 14, Seat 3"
+        assert out["appeals"][0]["seat"] == "Seat 4"
+
+    def test_a_state_that_never_opted_in_has_no_section(self, db_session):
+        assert _judicial_section(db_session, "GA", CYCLE) == []

@@ -9,7 +9,16 @@ import pytest
 from fastapi import HTTPException
 
 from app.api import elections
-from app.models import BallotMeasure, Candidate, MeasureCoverage, Race, RaceCoverageItem, Representative, Senator
+from app.models import (
+    BallotMeasure,
+    Candidate,
+    JudicialNominee,
+    MeasureCoverage,
+    Race,
+    RaceCoverageItem,
+    Representative,
+    Senator,
+)
 
 
 def _body(response):
@@ -772,3 +781,54 @@ class TestBallotMeasures:
         with pytest.raises(HTTPException) as exc_info:
             elections.state_ballot("GU", db_session)
         assert exc_info.value.status_code == 404
+
+
+class TestJudicialOmitShrinks:
+    """`omits` has to describe the page as it actually is.
+
+    A disclaimer list that keeps disclaiming what the page now shows
+    stops being a description and becomes boilerplate a reader learns to
+    skip — the same rule that already governs the executive and
+    legislative lines.
+    """
+
+    @staticmethod
+    def _judicial_row(state="NC", court="district", district="3", seat="2",
+                      party="R", name="Lloyd Williams"):
+        return JudicialNominee(
+            state=state, cycle_year=2026, court=court, district=district,
+            seat=seat, party=party, display_name=name,
+            source_name="NC State Board of Elections",
+        )
+
+    def test_uncovered_state_names_contests_and_retention_together(self, db_session):
+        _race(db_session, "2026-SEN-GA", "GA")
+        db_session.commit()
+        data = _body(elections.state_ballot("GA", db_session))
+        assert "Judicial contests and retention questions" in data["omits"]
+        assert data["judicialRaces"] == []
+
+    def test_covered_state_still_declares_retention_questions(self, db_session):
+        """The line SHRINKS rather than disappearing: retention questions
+        are a separate yes/no ballot item, not a contest between
+        candidates, and nothing reads them yet. Claiming judicial is
+        covered while they are not would be the honest half-statement
+        this list exists to avoid."""
+        _race(db_session, "2026-SEN-NC", "NC")
+        db_session.add(self._judicial_row())
+        db_session.commit()
+
+        data = _body(elections.state_ballot("NC", db_session))
+        assert data["judicialRaces"], "the section should render"
+        assert "Judicial retention questions" in data["omits"]
+        assert "Judicial contests and retention questions" not in data["omits"]
+
+    def test_the_other_omissions_are_untouched(self, db_session):
+        _race(db_session, "2026-SEN-NC", "NC")
+        db_session.add(self._judicial_row())
+        db_session.commit()
+        data = _body(elections.state_ballot("NC", db_session))
+        for still_omitted in ("County and municipal offices",
+                              "Local ballot measures",
+                              "Primary and runoff ballots"):
+            assert still_omitted in data["omits"]

@@ -76,6 +76,7 @@ function ballot(overrides: Partial<StateBallot> = {}): StateBallot {
     statewideRaces: [],
     statewideCoverage: { status: "not_yet_covered", sourceName: null, checkedAt: null },
     stateLegRaces: [],
+    judicialRaces: [],
     officialLookup: {
       url: "https://www.usa.gov/election-office",
       label: "Find your election office",
@@ -431,5 +432,57 @@ describe("state legislature", () => {
     render(<StateBallotClient ballot={ballot(legislature)} />);
     const row = screen.getByText("Derick A. Reels").closest("span")!.parentElement!;
     expect(row.textContent).toContain("REP");
+  });
+});
+
+describe("JudicialSection", () => {
+  const withJudicial = (judicialRaces: StateBallot["judicialRaces"]) =>
+    ballot({ judicialRaces });
+
+  it("renders nothing when the state has no judicial coverage", () => {
+    render(<StateBallotClient ballot={withJudicial([])} />);
+    expect(screen.queryByText(/Judicial/i)).not.toBeInTheDocument();
+  });
+
+  it("groups seats under their court and shows each nominee's party in text", () => {
+    render(
+      <StateBallotClient
+        ballot={withJudicial([
+          {
+            court: "appeals",
+            label: "Court of Appeals",
+            seats: [{ seat: "Seat 4", nominees: [{ party: "R", name: "Michael C. Byrne" }] }],
+          },
+          {
+            court: "district",
+            label: "District Court",
+            seats: [
+              { seat: "District 14, Seat 3", nominees: [{ party: "D", name: "Sherry Miller" }] },
+            ],
+          },
+        ])}
+      />,
+    );
+
+    expect(screen.getByText("COURT OF APPEALS")).toBeInTheDocument();
+    expect(screen.getByText("DISTRICT COURT")).toBeInTheDocument();
+    expect(screen.getByText("District 14, Seat 3")).toBeInTheDocument();
+    expect(screen.getByText(/Michael C\. Byrne/)).toBeInTheDocument();
+    expect(screen.getByText(/Sherry Miller/)).toBeInTheDocument();
+  });
+
+  it("says retention questions are not covered, so the panel isn't read as the whole bench", () => {
+    render(
+      <StateBallotClient
+        ballot={withJudicial([
+          {
+            court: "district",
+            label: "District Court",
+            seats: [{ seat: "Seat 1", nominees: [{ party: "R", name: "A Judge" }] }],
+          },
+        ])}
+      />,
+    );
+    expect(screen.getByText(/Retention questions are a separate ballot item/i)).toBeInTheDocument();
   });
 });

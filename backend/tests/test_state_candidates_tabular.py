@@ -1286,10 +1286,25 @@ class TestStateOffices:
 
     @pytest.mark.asyncio
     async def test_a_judicial_contest_is_not_a_legislative_seat(self, monkeypatch):
-        """It names a district, and judicial races are a separate
-        omission this page still declares."""
+        """It names a district, so the legislative gate must refuse it.
+
+        The judgeship IS read now (parse_judicial_office, the fourth
+        gate), but as a COURT — never as a chamber. Whether it is then
+        published is a separate per-state opt-in, judicial_offices, which
+        _sync_judicial_nominees enforces downstream.
+        """
         records = await self._run(monkeypatch, state_offices=True)
-        assert "A Judge" not in {r["last_name"] for r in records}
+        judge = [r for r in records if r["last_name"] == "A Judge"]
+        assert len(judge) == 1
+        assert judge[0]["office"] == "district"       # a court
+        assert judge[0]["office"] not in ("upper", "lower")
+        # This fixture writes "District Court 7" — the number TRAILS the
+        # court's name rather than following the word "District", which
+        # is not a form the gate claims. Reading a bare trailing number
+        # as a district would be guessing, so it stays None. Every real
+        # label surveyed writes it the other way ("DISTRICT COURT JUDGE
+        # DISTRICT 3 SEAT 2"), and those do resolve.
+        assert judge[0]["district"] is None
 
     @pytest.mark.asyncio
     async def test_a_state_office_name_is_kept_whole(self, monkeypatch):

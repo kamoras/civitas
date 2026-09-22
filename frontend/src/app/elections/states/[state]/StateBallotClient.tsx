@@ -356,6 +356,60 @@ function StateLegislatureSection({ ballot }: { ballot: StateBallot }) {
   );
 }
 
+/** Elected judgeships, or nothing.
+ *
+ * Renders nothing when the state isn't covered, the same call the other
+ * two state sections make: the page's `omits` list still names judicial
+ * contests as out of scope, so an empty panel would say it twice.
+ *
+ * Plain like the executive section, and for the same reason — a judge
+ * has no FEC filing, so there is no money, no score and nothing to
+ * click through to. A name and a party is the whole of what's true. */
+function JudicialSection({ ballot }: { ballot: StateBallot }) {
+  if (ballot.judicialRaces.length === 0) return null;
+
+  return (
+    <section className="panel mb-6">
+      <TerminalTitlebar title="Judicial" />
+      <div className="p-6">
+        <p className="text-xs text-ink-min mb-3">
+          Judges are elected here on a partisan ballot, the same as any other office.
+        </p>
+        {ballot.judicialRaces.map((court) => (
+          <div key={court.court} className="mb-4 last:mb-0">
+            <h2 className="font-mono text-xs text-ink-lo mb-2">
+              {court.label.toUpperCase()}
+            </h2>
+            <div className="space-y-1.5">
+              {court.seats.map((seat) => (
+                <div
+                  key={seat.seat}
+                  className="grid grid-cols-1 gap-1 border border-white/[0.09] bg-surface px-3 py-2.5 sm:grid-cols-[minmax(0,180px)_1fr] sm:gap-3"
+                >
+                  <span className="font-mono text-xs text-ink-lo sm:self-center">
+                    {seat.seat}
+                  </span>
+                  <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+                    {seat.nominees.map((n) => (
+                      <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
+                    ))}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+        <p className="mt-1 text-[10px] text-ink-min">
+          Only seats named in the state&apos;s own results feed appear — a seat whose primary
+          was uncontested is often not published at all, so this is not the full bench.
+          Retention questions are a separate ballot item and are not covered. These offices
+          have no federal campaign-finance filings, so no funding figures exist for them.
+        </p>
+      </div>
+    </section>
+  );
+}
+
 /** The state's own executive officers — Governor, Lieutenant Governor,
  * Attorney General, Secretary of State, Treasurer — where its feed
  * publishes them.
@@ -827,6 +881,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
           <StatewideExecutiveSection ballot={ballot} />
 
           <StateLegislatureSection ballot={ballot} />
+          <JudicialSection ballot={ballot} />
 
           <TownSection state={ballot.state} pageElectionDate={ballot.electionDate} />
 

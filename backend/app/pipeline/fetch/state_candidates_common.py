@@ -535,6 +535,120 @@ _STATE_LEG_SEAT_RE = re.compile(
 
 STATE_LEG_CHAMBER_LABELS = {"upper": "State Senate", "lower": "State House"}
 
+# ── judicial ─────────────────────────────────────────────────────
+#
+# The fourth gate, and the same refuse-by-default stance as the other
+# three: a court whose wording is not here yields None rather than being
+# guessed at.
+#
+# Surveyed live 2026-09-21 across every tabular state's own real export:
+# 191 judgeships in five states (GA 92, ID 49, NC 23, FL 23, WA 4), and
+# EVERY ONE names a specific seat — "SEAT 2", "Group 4", "Position #1",
+# "Seat Bonner A", or the sitting judge's own surname in parentheses.
+# Judgeships are single-seat by construction, which is why they escape
+# the per-contest seat-count problem that still blocks county and
+# municipal offices (a town council electing 5 of 17).
+#
+# Only NORTH CAROLINA's are partisan, and only those are read today —
+# see parse_judicial_office's docstring for why the other 168 need a
+# piece of per-state statute this codebase does not have.
+JUDICIAL_COURT_LABELS = {
+    "supreme": "Supreme Court",
+    "appeals": "Court of Appeals",
+    "superior": "Superior Court",
+    "district": "District Court",
+}
+
+_JUDICIAL_COURTS = [
+    # Longest/most specific first: "Court of Appeals" must win before a
+    # bare "Court", and "Supreme Court" before "Superior Court" — they
+    # share no prefix but the ordering rule is what keeps it that way.
+    ("supreme", re.compile(r"\bSupreme\s+Court\b", re.IGNORECASE)),
+    ("appeals", re.compile(r"\bCourt\s+of\s+Appeals\b", re.IGNORECASE)),
+    ("superior", re.compile(r"\bSuperior\s+Court\b", re.IGNORECASE)),
+    ("district", re.compile(r"\bDistrict\s+Court\b", re.IGNORECASE)),
+]
+
+# The office must be the JUDGESHIP itself.
+_JUDICIAL_TITLE_RE = re.compile(r"\b(?:judge|justice)\b", re.IGNORECASE)
+
+# Every other office that names a court. A clerk of superior court and a
+# district attorney both sit squarely inside a court's name and are not
+# judgeships — North Carolina's own export carries 26 clerk contests and
+# Georgia's 10 district-attorney ones, all of which must be refused.
+_NON_JUDGESHIP_RE = re.compile(
+    r"\b(?:clerk|attorney|solicitor|sheriff|magistrate|register|"
+    r"reporter|marshal|constable)\b",
+    re.IGNORECASE,
+)
+
+# NC writes "SEAT 2"; the state-legislative seat pattern only accepts a
+# single letter (Idaho's "Seat A"), so judicial needs its own.
+_JUDICIAL_SEAT_RE = re.compile(
+    r"\bSeat\s+(\w+)\b|\bGroup\s+(\w+)\b|\bPos(?:ition|\.)?\s*#?\s*(\w+)\b",
+    re.IGNORECASE,
+)
+
+
+def parse_judicial_office(
+    contest_name: str,
+) -> tuple[str, str | None, str | None] | None:
+    """(court, district, seat) for an elected judgeship, or None.
+
+    ("district", "3", "2") for North Carolina's "NC DISTRICT COURT JUDGE
+    DISTRICT 3 SEAT 2 (REP)", and ("appeals", None, "4") for a statewide
+    appellate seat, which has no district.
+
+    None for everything the other three gates answer, and None for every
+    other office that merely names a court — a clerk of superior court
+    is not a judge, and neither is a district attorney.
+
+    WHY ONLY PARTISAN JUDICIAL CONTESTS ARE READ. In a party primary the
+    winner becomes that party's nominee and appears on the November
+    ballot, which is what this whole pipeline already models. A
+    NON-partisan judicial election inverts it: in most states a
+    candidate who clears a majority is ELECTED OUTRIGHT rather than
+    nominated, and only a field that fails to produce one sends two
+    candidates on to November. Reading those the same way would publish
+    a judge who has already won as though they were still standing —
+    the confidently-wrong failure this system refuses everywhere else.
+    Which of the two a state does is its own statute and appears in no
+    feed, so the 168 non-partisan judgeships surveyed stay omitted until
+    that rule is hand-verified per state, exactly as
+    `runoff_threshold_pct` already is.
+    """
+    name = contest_name or ""
+    if not _JUDICIAL_TITLE_RE.search(name):
+        return None
+    if _NON_JUDGESHIP_RE.search(name):
+        return None
+    # Never claim what an earlier gate answers. Federal judges are
+    # appointed, so nothing federal is a judgeship, but the check keeps
+    # this gate self-contained rather than order-dependent — the same
+    # reason parse_state_leg_office refuses federal labels itself.
+    if parse_office(name) is not None:
+        return None
+
+    for court, pattern in _JUDICIAL_COURTS:
+        if not pattern.search(name):
+            continue
+        district = None
+        match = _STATE_LEG_DISTRICT_RE.search(name)
+        if match:
+            district = match.group(1) + match.group(2).upper()
+        seat_match = _JUDICIAL_SEAT_RE.search(name)
+        seat = None
+        if seat_match:
+            seat = next((g for g in seat_match.groups() if g), None)
+            if seat:
+                # "SEAT 01" is seat 1. Stripped for the same reason the
+                # district pattern strips its own zeros: the state pads
+                # inconsistently within one file, and an unpadded "SEAT 3"
+                # and a padded "SEAT 03" are the same bench.
+                seat = seat.lstrip("0") or "0" if seat.isdigit() else seat.upper()
+        return court, district, seat
+    return None
+
 
 def district_sort_key(district: str) -> tuple[int, str]:
     """Natural order for a district identifier: 9 before 10, and 10A

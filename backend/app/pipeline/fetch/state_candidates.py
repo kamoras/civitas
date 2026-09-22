@@ -44,7 +44,13 @@ import logging
 import httpx
 from sqlalchemy.orm import Session
 
-from app.models import Candidate, Race, StateLegNominee, StatewideNominee
+from app.models import (
+    Candidate,
+    JudicialNominee,
+    Race,
+    StateLegNominee,
+    StatewideNominee,
+)
 from app.time_utils import utcnow
 from app.pipeline.cache import api_cache_set
 from app.pipeline.fetch.state_candidate_sources import (
@@ -64,6 +70,7 @@ from app.pipeline.fetch.state_source_crawler import (
 )
 from app.pipeline.fetch.state_candidates_common import (
     PARTY_CODE_MAP,
+    JUDICIAL_COURT_LABELS,
     STATE_LEG_CHAMBER_LABELS,
     STATEWIDE_MARKER_TIER,
     STATEWIDE_MARKER_TTL_HOURS,
@@ -434,6 +441,11 @@ def _sync_statewide_nominees(
         office, party = record["office"], record["party"]
         district = record["district"]
         name = record["last_name"]
+        # See the identical guard in _sync_state_leg_nominees: with
+        # autoflush=False a duplicate key in one run queues two rows and
+        # fails the unique constraint at commit.
+        if (office, district, party, name) in keep:
+            continue
         row = (
             db.query(StatewideNominee)
             .filter(
@@ -511,6 +523,15 @@ def _sync_state_leg_nominees(
         chamber, district, party = record["office"], record["district"], record["party"]
         seat = record.get("seat")
         name = record["last_name"]
+        # A key already handled in THIS run. The query below cannot see a
+        # row added moments ago because SessionLocal sets autoflush=False,
+        # so a feed that lists one nominee twice would queue two identical
+        # rows and fail the unique constraint at commit — the exact shape
+        # that took the coverage refresh down (see election_coverage
+        # ._store_if_new). Nothing observed emits a duplicate today; this
+        # is the guard, not a fix for a live symptom.
+        if (chamber, district, seat, party, name) in keep:
+            continue
         row = (
             db.query(StateLegNominee)
             .filter(
@@ -540,6 +561,73 @@ def _sync_state_leg_nominees(
         .all()
     ):
         if (row.chamber, row.district, row.seat, row.party,
+                row.display_name) not in keep:
+            db.delete(row)
+
+    db.commit()
+    return len(keep)
+
+
+def _sync_judicial_nominees(
+    db: Session, cycle: int, state: str, source: dict, records: list[dict],
+) -> int:
+    """Persist this state's judicial nominees. Returns how many were stored.
+
+    Gated on its OWN `judicial_offices` opt-in rather than riding
+    `statewide_offices`, which the executive and legislative tables
+    share. Those two really are one claim — a feed carrying a state's
+    executive contests carries its legislative ones, same ballot, same
+    response. Judicial is a genuinely separate claim: the flag asserts
+    not only that this state's labels were read, but that its judicial
+    contests are PARTISAN, so that a primary winner is a nominee for
+    November rather than a judge already elected outright. Georgia's 92
+    judgeships parse perfectly well through the same gate and must not
+    be published, because Georgia's are non-partisan — see
+    parse_judicial_office's docstring.
+
+    Rows absent from this run are DELETED, as in both sibling tables:
+    the feed is the whole truth for (state, cycle) every time it is read.
+    """
+    if not source.get("judicial_offices"):
+        return 0
+
+    keep: set[tuple[str, str | None, str | None, str, str]] = set()
+    for record in records:
+        court, party = record["office"], record["party"]
+        district, seat = record["district"], record.get("seat")
+        name = record["last_name"]
+        # Same autoflush=False guard as both siblings above.
+        if (court, district, seat, party, name) in keep:
+            continue
+        row = (
+            db.query(JudicialNominee)
+            .filter(
+                JudicialNominee.state == state,
+                JudicialNominee.cycle_year == cycle,
+                JudicialNominee.court == court,
+                JudicialNominee.district == district,
+                JudicialNominee.seat == seat,
+                JudicialNominee.party == party,
+                JudicialNominee.display_name == name,
+            )
+            .first()
+        )
+        if row is None:
+            row = JudicialNominee(
+                state=state, cycle_year=cycle, court=court, district=district,
+                seat=seat, party=party, display_name=name,
+            )
+            db.add(row)
+        row.source_name = str(source.get("source_name") or source.get("strategy") or "")
+        row.updated_at = utcnow()
+        keep.add((court, district, seat, party, name))
+
+    for row in (
+        db.query(JudicialNominee)
+        .filter(JudicialNominee.state == state, JudicialNominee.cycle_year == cycle)
+        .all()
+    ):
+        if (row.court, row.district, row.seat, row.party,
                 row.display_name) not in keep:
             db.delete(row)
 
@@ -604,13 +692,16 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
         # one of them as `unmatched` against a Race id that cannot exist.
         statewide = [r for r in records if r["office"] in STATEWIDE_OFFICE_LABELS]
         state_leg = [r for r in records if r["office"] in STATE_LEG_CHAMBER_LABELS]
+        judicial = [r for r in records if r["office"] in JUDICIAL_COURT_LABELS]
         records = [
             r for r in records
             if r["office"] not in STATEWIDE_OFFICE_LABELS
             and r["office"] not in STATE_LEG_CHAMBER_LABELS
+            and r["office"] not in JUDICIAL_COURT_LABELS
         ]
         statewide_count = _sync_statewide_nominees(db, cycle, state, source, statewide)
         state_leg_count = _sync_state_leg_nominees(db, cycle, state, source, state_leg)
+        judicial_count = _sync_judicial_nominees(db, cycle, state, source, judicial)
 
         confirmed = unmatched = 0
         for record in records:
@@ -635,6 +726,7 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
         results[state] = {
             "confirmed": confirmed, "unmatched": unmatched,
             "statewide": statewide_count, "stateLeg": state_leg_count,
+            "judicial": judicial_count,
             "status": "ok",
         }
 
