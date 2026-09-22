@@ -11,6 +11,7 @@ import io
 import os
 import zipfile
 
+import httpx
 import pytest
 
 from app.pipeline.fetch import state_candidates_tabular as tb
@@ -1360,3 +1361,87 @@ class TestMultiMemberContest:
         records = await self._run(monkeypatch, advance_count=2)
         lower = sorted(r["last_name"] for r in records if r["office"] == "lower")
         assert lower == ["First", "Second"]
+
+
+class TestElectionIdIndexHop:
+    """The optional FIRST hop of landing_page discovery.
+
+    For a state whose results page is keyed by an internal election id
+    rather than anything guessable. Alaska is the only state using it:
+    its results moved in 2026 from a flat /enr26/results/*.csv link on
+    the index to a per-election sub-page, /election-results/e/?id=26prim,
+    which broke discovery outright ("No 2026 results file discoverable
+    for AK") while the CSV itself was unchanged and still reachable.
+
+    The cycle is never written down — the HIGHEST id wins, which is the
+    newest election, the same rule every other discovery mode follows.
+    """
+
+    INDEX = """
+      <a href="/election-results/e/?id=22prim">2022 Primary</a>
+      <a href="/election-results/e/?id=26prim">2026 Primary</a>
+      <a href="/election-results/e/?id=24prim">2024 Primary</a>
+      <a href="/election-results/e/?id=26genr">2026 General</a>
+    """
+    PAGE_26 = ('<a href="https://www.elections.alaska.gov/enr26/results/'
+               'GA_ENR_Precinct_State_of_Alaska.csv">Precinct results</a>')
+    DISCOVERY = {
+        "mode": "landing_page",
+        "index_url": "https://example.gov/election-results/",
+        "index_regex": r"/election-results/e/\?id=(\d+)prim",
+        "page_url": "https://example.gov/election-results/e/?id={election_id}prim",
+        "link_regex": (r"https://www\.elections\.alaska\.gov/enr\d+/results/"
+                       r"[^\"']*_State_of_Alaska\.csv"),
+        "date_from_calendar": True,
+        "settle_days": 21,
+    }
+
+    def _client(self, index_body, page_bodies):
+        seen = []
+
+        def handler(request):
+            url = str(request.url)
+            seen.append(url)
+            if url.rstrip("/").endswith("election-results"):
+                return httpx.Response(200, text=index_body)
+            for frag, body in page_bodies.items():
+                if frag in url:
+                    return httpx.Response(200, text=body)
+            return httpx.Response(404, text="")
+
+        return httpx.AsyncClient(transport=httpx.MockTransport(handler)), seen
+
+    async def test_highest_id_resolves_the_page_and_finds_the_file(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.pipeline.fetch.state_election_dates.primary_date",
+            lambda s, y: "2026-08-18")
+        client, seen = self._client(self.INDEX, {"id=26prim": self.PAGE_26})
+        async with client:
+            stages = await tb._discover_urls(client, "AK", 2026, self.DISCOVERY)
+
+        assert [s["url"] for s in stages] == [
+            "https://www.elections.alaska.gov/enr26/results/"
+            "GA_ENR_Precinct_State_of_Alaska.csv"
+        ]
+        # 26 beat 24 despite 24 appearing later in the document: highest,
+        # not last, which is what makes it survive the next cycle.
+        assert any("id=26prim" in u for u in seen)
+        assert not any("id=24prim" in u for u in seen)
+
+    async def test_no_matching_id_returns_nothing_rather_than_guessing(self):
+        client, _ = self._client("<a href='/somewhere/else'>no ids</a>", {})
+        async with client:
+            assert await tb._discover_urls(client, "AK", 2026, self.DISCOVERY) == []
+
+    async def test_an_unreachable_index_does_not_fall_through_to_a_bare_page(self):
+        """Without the id there is no page to read, so failing the first
+        hop must stop — never request page_url with the token unresolved."""
+        def handler(request):
+            if str(request.url).rstrip("/").endswith("election-results"):
+                raise httpx.ConnectError("index down")
+            raise AssertionError("must not request the page without an id")
+
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(handler)
+        ) as client:
+            assert await tb._discover_urls(client, "AK", 2026, self.DISCOVERY) == []
