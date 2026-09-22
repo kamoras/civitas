@@ -302,3 +302,46 @@ class TestHouseAddresses:
             None, 2026, "MI", {"address": "capitol", "house_addresses": {"1": "district-1-address"}},
         )
         assert result is None
+
+
+class TestConfiguredAddressesAreParseable:
+    """Google's voterInfoQuery rejects an address with no numeric street
+    number outright — HTTP 400 "Failed to parse address", not an empty
+    result — so such an entry is a permanent dead end for that state, not
+    a slow day.
+
+    It is invisible until Google publishes real data for the election,
+    because every address returns an error either way until then. Two of
+    NY's addresses were in exactly that state (the statewide "State St,
+    Albany, NY 12224" and district 17's "One Blue Hill Plaza"), which
+    would have left the largest of these states the one still broken on
+    the day the rest started working. Checked here instead, where adding
+    a bad address fails immediately and offline.
+    """
+
+    def _entries(self):
+        import json
+        import pathlib
+
+        path = (pathlib.Path(__file__).resolve().parent.parent
+                / "app" / "data" / "state_candidate_sources.json")
+        states = json.loads(path.read_text())["states"]
+        for code, entry in states.items():
+            if entry.get("strategy") != "google_civic":
+                continue
+            if entry.get("address"):
+                yield f"{code} statewide", entry["address"]
+            for district, addr in (entry.get("house_addresses") or {}).items():
+                yield f"{code}-{district}", addr
+
+    def test_every_address_starts_with_a_street_number(self):
+        bad = [(label, addr) for label, addr in self._entries()
+               if not addr.strip()[:1].isdigit()]
+        assert bad == [], (
+            "Google 400s these — spell the street number as a digit "
+            f"('One Blue Hill Plaza' -> '1 Blue Hill Plaza'): {bad}")
+
+    def test_there_is_something_to_check(self):
+        """Guards the guard: a renamed strategy or moved key would make
+        the assertion above pass over an empty list forever."""
+        assert len(list(self._entries())) > 50
