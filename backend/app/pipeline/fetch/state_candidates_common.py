@@ -440,6 +440,15 @@ _STATE_LEG_CHAMBERS = [
     #   Delegates; Virginia does too. No federal chamber is called that,
     #   so the bare form is unambiguous.
     ("lower", re.compile(r"\bHouse\s+of\s+Delegates\b", re.IGNORECASE)),
+    #   Alaska: "Senate District A" / "House District 1" — the chamber
+    #   named with no qualifier at all, the shortest form any state uses.
+    #   Safe for the same reason the bare "House of Representatives" arm
+    #   above is: nothing federal reaches these patterns, because this
+    #   gate refuses whatever parse_office claims before testing any of
+    #   them. And a districted SENATE seat cannot be federal in any case
+    #   — U.S. Senate seats are elected statewide, never by district.
+    ("upper", re.compile(r"\bSenate\s+District\b", re.IGNORECASE)),
+    ("lower", re.compile(r"\bHouse\s+District\b", re.IGNORECASE)),
 ]
 
 # Some districts elect SEVERAL members from a single contest, with no
@@ -490,6 +499,23 @@ _STATE_LEG_DISTRICT_RE = re.compile(
 # allowed between the ordinal and "District" to carry that "Senatorial".
 _STATE_LEG_ORDINAL_DISTRICT_RE = re.compile(
     r"\b0*(\d+)(?:st|nd|rd|th)\s+(?:\w+\s+)?District\b", re.IGNORECASE,
+)
+
+# Alaska identifies its senate districts by a LETTER, not a number —
+# "Senate District A" through "Senate District T" — pairing each with the
+# two numbered house districts it contains. Every other state's district
+# identifier is numeric, which is why this is a separate pattern tried
+# only after the numeric and ordinal ones fail rather than a relaxation
+# of them: "District 10A" must keep parsing as district "10A", not as
+# the letter "A".
+#
+# The single-letter group is anchored on both sides by \b, so it matches
+# a letter standing alone as its own word and nothing else. That is what
+# keeps "District Attorney" out — the "A" there is followed by "ttorney",
+# so there is no word boundary after it (and _NON_LEGISLATIVE_RE already
+# refuses that label anyway; this pattern does not rely on it).
+_STATE_LEG_LETTER_DISTRICT_RE = re.compile(
+    r"\bDist(?:rict)?\.?\s+([A-Za-z])\b", re.IGNORECASE,
 )
 
 # SOME STATES ELECT SEVERAL MEMBERS FROM ONE DISTRICT, and the seat is
@@ -553,9 +579,14 @@ def parse_state_leg_office(contest_name: str) -> tuple[str, str, str | None] | N
                 number = district.group(1) + district.group(2).upper()
             else:
                 ordinal = _STATE_LEG_ORDINAL_DISTRICT_RE.search(name)
-                if not ordinal:
-                    return None
-                number = ordinal.group(1)
+                if ordinal:
+                    number = ordinal.group(1)
+                else:
+                    # Last, so a numeric district is never read as a letter.
+                    letter = _STATE_LEG_LETTER_DISTRICT_RE.search(name)
+                    if not letter:
+                        return None
+                    number = letter.group(1).upper()
             seat_match = _STATE_LEG_SEAT_RE.search(name)
             seat = None
             if seat_match:
