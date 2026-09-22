@@ -204,6 +204,26 @@ export interface StateLegChamber {
   districts: StateLegDistrict[];
 }
 
+/** One court's seats on this state's ballot. */
+export interface JudicialCourt {
+  /** "supreme" | "appeals" | "superior" | "district". Neutral on
+   * purpose, like `chamber`: what one state calls its Superior Court is
+   * another's Circuit Court, and "District Court" is a trial court in
+   * North Carolina and a federal court elsewhere. */
+  court: string;
+  /** Human label the backend owns — "Court of Appeals" etc. */
+  label: string;
+  seats: JudicialSeat[];
+}
+
+export interface JudicialSeat {
+  /** Already-formatted by the backend: "District 14, Seat 3" for a
+   * trial seat, "Seat 4" for an appellate one (elected statewide, so
+   * there is no district to name). */
+  seat: string;
+  nominees: StatewideNominee[];
+}
+
 export interface StateLegDistrict {
   /** A string, not a number: Minnesota names its house districts "10A"
    * and "10B". The backend sorts them in natural order before sending. */
@@ -271,6 +291,12 @@ export interface StateBallot {
   statewideRaces: StatewideRace[];
   statewideCoverage: StatewideCoverage;
   stateLegRaces: StateLegChamber[];
+  /** Elected judgeships, grouped by court in seniority order. Present
+   * only for a state whose judicial primaries NOMINATE rather than
+   * ELECT — a non-partisan judicial election usually elects a majority
+   * winner outright, so publishing one as a November candidate would be
+   * wrong. Absent entirely otherwise; the page's `omits` list says so. */
+  judicialRaces: JudicialCourt[];
   officialLookup: OfficialLookup;
   /** What this page deliberately does not cover, enumerated by the
    * backend so the limitation renders as content rather than a footnote. */

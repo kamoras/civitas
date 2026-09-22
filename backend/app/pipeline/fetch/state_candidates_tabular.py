@@ -145,6 +145,7 @@ from app.pipeline.fetch.state_candidates_common import (
     normalize_party,
     office_from_columns,
     parse_office,
+    parse_judicial_office,
     parse_state_leg_office,
     parse_statewide_office,
     pick_nominees,
@@ -925,9 +926,19 @@ def _collect(
                 office, district = statewide
             else:
                 parsed_seat = parse_state_leg_office(contest)
-                if parsed_seat is None:
-                    continue
-                office, district, seat = parsed_seat
+                if parsed_seat is not None:
+                    office, district, seat = parsed_seat
+                else:
+                    # The fourth gate, tried last so it can never take a
+                    # label one of the other three answers. Gated on its
+                    # own judicial_offices opt-in downstream, because a
+                    # judgeship parsing cleanly says nothing about
+                    # whether that state's judicial primaries NOMINATE or
+                    # ELECT — see parse_judicial_office's docstring.
+                    parsed_judicial = parse_judicial_office(contest)
+                    if parsed_judicial is None:
+                        continue
+                    office, district, seat = parsed_judicial
         # A party-primary label carries its party ("US HOUSE OF
         # REPRESENTATIVES DISTRICT 01 (REP)"); a top-two label doesn't,
         # so each candidate's own party column is the fallback.

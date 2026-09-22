@@ -815,3 +815,98 @@ class TestBareChamberDistrictForms:
     def test_lettered_and_numeric_districts_sort_and_label_sanely(self):
         assert sorted(["S", "A", "C"], key=common.district_sort_key) == ["A", "C", "S"]
         assert common.district_label("A", None) == "A"
+
+
+class TestParseJudicialOffice:
+    """The fourth gate. Surveyed live across every tabular state's own
+    2026 export: 191 judgeships in five states, and every one names a
+    specific seat — judgeships are single-seat by construction, which is
+    why they escape the per-contest seat-count problem that still blocks
+    county and municipal offices.
+    """
+
+    def test_a_trial_seat_resolves_court_district_and_seat(self):
+        assert common.parse_judicial_office(
+            "NC DISTRICT COURT JUDGE DISTRICT 3 SEAT 2 (REP)") == ("district", "3", "2")
+        assert common.parse_judicial_office(
+            "NC SUPERIOR COURT JUDGE DISTRICT 16B SEAT 1 (DEM)") == ("superior", "16B", "1")
+
+    def test_an_appellate_seat_has_no_district(self):
+        """Elected statewide, so there is no district to name — which is
+        why JudicialNominee.district is nullable and the legislative
+        one is not."""
+        assert common.parse_judicial_office(
+            "NC COURT OF APPEALS JUDGE SEAT 4 (REP)") == ("appeals", None, "4")
+        assert common.parse_judicial_office(
+            "NC SUPREME COURT ASSOCIATE JUSTICE SEAT 1 (DEM)") == ("supreme", None, "1")
+
+    def test_a_padded_seat_is_the_same_bench_as_an_unpadded_one(self):
+        """North Carolina pads inconsistently within one file."""
+        assert common.parse_judicial_office(
+            "NC DISTRICT COURT JUDGE DISTRICT 02 SEAT 01 (REP)") == ("district", "2", "1")
+
+    def test_a_clerk_of_court_is_not_a_judge(self):
+        """North Carolina's own export carries 26 of these, and every one
+        sits squarely inside a court's name."""
+        assert common.parse_judicial_office(
+            "ALAMANCE COUNTY CLERK OF SUPERIOR COURT (REP)") is None
+
+    def test_a_prosecutor_is_not_a_judge(self):
+        """Georgia's export carries 10 of these."""
+        assert common.parse_judicial_office(
+            "District Attorney - Atlantic Judicial Circuit - Rep") is None
+        assert common.parse_judicial_office("DISTRICT ATTORNEY 5TH DISTRICT") is None
+
+    def test_the_other_three_gates_answers_are_refused(self):
+        for label in ("US SENATE (DEM)", "U.S. Representative",
+                      "NC HOUSE OF REPRESENTATIVES DISTRICT 1 (REP)",
+                      "Governor / Lieutenant Governor", "Senate District A",
+                      "State Senator District 10"):
+            assert common.parse_judicial_office(label) is None, label
+
+    def test_an_unrecognised_court_yields_none_rather_than_a_guess(self):
+        """Idaho's "1st Judicial District Judge" and Florida's "Circuit
+        Judge, 11th Judicial Circuit, Group 4" are real judgeships this
+        gate deliberately does not claim — refuse by default, exactly as
+        the other three gates do with wording they have not been taught.
+        """
+        assert common.parse_judicial_office(
+            "1st Judicial District Judge - Seat Bonner A") is None
+        assert common.parse_judicial_office(
+            "Circuit Judge, 11th Judicial Circuit, Group 4") is None
+
+    def test_a_non_office_label_is_refused(self):
+        assert common.parse_judicial_office("") is None
+        assert common.parse_judicial_office("Register of Deeds") is None
+        assert common.parse_judicial_office("BM#1 23RCF2") is None
+
+
+class TestFourGatesPartition:
+    """No label may be claimed by more than one gate.
+
+    Verified live over 3,056 real contest labels across six states'
+    own 2026 exports (NC, GA, ID, FL, WA, AK): zero overlaps. These are
+    the specimens that make each boundary load-bearing.
+    """
+
+    SPECIMENS = [
+        "U.S. Senator", "US SENATE (DEM)", "U.S. Representative",
+        "Governor / Lieutenant Governor", "Attorney General",
+        "State Senator District 10", "House District 1", "Senate District A",
+        "NC HOUSE OF REPRESENTATIVES DISTRICT 1 (REP)",
+        "NC DISTRICT COURT JUDGE DISTRICT 3 SEAT 2 (REP)",
+        "NC COURT OF APPEALS JUDGE SEAT 4 (REP)",
+        "ALAMANCE COUNTY CLERK OF SUPERIOR COURT (REP)",
+        "District Attorney - Atlantic Judicial Circuit - Rep",
+    ]
+
+    def test_no_label_is_claimed_twice(self):
+        gates = (
+            ("federal", common.parse_office),
+            ("statewide", common.parse_statewide_office),
+            ("state_leg", common.parse_state_leg_office),
+            ("judicial", common.parse_judicial_office),
+        )
+        for label in self.SPECIMENS:
+            claimed = [name for name, fn in gates if fn(label) is not None]
+            assert len(claimed) <= 1, f"{label!r} claimed by {claimed}"

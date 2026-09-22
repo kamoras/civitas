@@ -24,6 +24,7 @@ from app.http_client import make_async_client
 from app.models import (
     BallotMeasure,
     Candidate,
+    JudicialNominee,
     MeasureCoverage,
     Race,
     RaceCoverageItem,
@@ -49,6 +50,7 @@ from app.pipeline.fetch.civic_info import fetch_town_ballot
 from app.pipeline.fetch.civic_info import is_configured as civic_is_configured
 from app.pipeline.fetch.state_candidate_sources import source_for_state
 from app.pipeline.fetch.state_candidates_common import (
+    JUDICIAL_COURT_LABELS,
     PARTY_CODE_MAP,
     STATE_LEG_CHAMBER_LABELS,
     district_label,
@@ -594,6 +596,62 @@ def _state_leg_section(db: Session, state: str, cycle: int, marker: dict | None)
     return out
 
 
+def _judicial_section(db: Session, state: str, cycle: int) -> list[dict]:
+    """This state's elected judgeships, grouped by court.
+
+    Keyed on its OWN opt-in rather than the statewide marker the two
+    sections above share, so it simply reads whatever rows exist: a
+    state that has not opted in has none, because _sync_judicial_nominees
+    never wrote any. The opt-in is a stronger claim than "labels were
+    checked" — it asserts this state's judicial primaries NOMINATE
+    rather than ELECT — which is why it does not ride the same flag.
+
+    Ordered by court seniority (supreme, appeals, superior, district)
+    rather than alphabetically, because that is how a ballot and a
+    reader both order them.
+    """
+    rows = (
+        db.query(JudicialNominee)
+        .filter(JudicialNominee.state == state, JudicialNominee.cycle_year == cycle)
+        .all()
+    )
+    if not rows:
+        return []
+
+    seats: dict[tuple[str, str | None, str | None], list[dict]] = {}
+    for row in rows:
+        seats.setdefault((row.court, row.district, row.seat), []).append({
+            "party": PARTY_CODE_MAP.get(row.party, row.party),
+            "name": row.display_name,
+        })
+
+    out = []
+    for court, label in JUDICIAL_COURT_LABELS.items():
+        entries = [
+            {
+                # "District 14, Seat 3" for a trial seat; "Seat 3" alone
+                # for an appellate one, which is elected statewide and
+                # has no district to name.
+                "seat": ", ".join(
+                    part for part in (
+                        f"District {district}" if district else "",
+                        f"Seat {seat}" if seat else "",
+                    ) if part
+                ) or label,
+                "nominees": sorted(people, key=lambda n: n["party"]),
+            }
+            for (ct, district, seat), people in sorted(
+                seats.items(),
+                key=lambda kv: (district_sort_key(kv[0][1] or ""),
+                                district_sort_key(kv[0][2] or "")),
+            )
+            if ct == court
+        ]
+        if entries:
+            out.append({"court": court, "label": label, "seats": entries})
+    return out
+
+
 @router.get("/states/{state}")
 def state_ballot(state: str, db: Session = Depends(get_db)):
     """Every federal (Senate + House) race on `state`'s ballot this cycle
@@ -664,6 +722,7 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
     )
     statewide_races, statewide_coverage = _statewide_section(db, state, cycle)
     state_leg_races = _state_leg_section(db, state, cycle, _statewide_marker(db, state, cycle))
+    judicial_races = _judicial_section(db, state, cycle)
 
     return cached_json({
         "state": state,
@@ -709,6 +768,7 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         "statewideRaces": statewide_races,
         "statewideCoverage": statewide_coverage,
         "stateLegRaces": state_leg_races,
+        "judicialRaces": judicial_races,
         "omits": ([
             # Dropped the moment this state's executive contests are
             # genuinely covered — the list has to shrink as the gaps
@@ -717,8 +777,17 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
             "Governor and other statewide executive contests",
         ] if statewide_coverage["status"] == StatewideCoverageStatus.NOT_YET_COVERED else []) + ([
             "State legislative districts",
-        ] if not state_leg_races else []) + [
-            "Judicial contests and retention questions",
+        ] if not state_leg_races else []) + (
+            # Same rule as the two above: the line shrinks the moment this
+            # state's judgeships are genuinely covered. It shrinks rather
+            # than disappearing, because retention questions are a
+            # separate yes/no ballot item — not a contest between
+            # candidates — and nothing here reads them yet. Saying
+            # "judicial contests" is covered while retention questions
+            # are not is the honest half-statement.
+            ["Judicial retention questions"] if judicial_races
+            else ["Judicial contests and retention questions"]
+        ) + [
             "County and municipal offices",
             "Local ballot measures",
             "Primary and runoff ballots",

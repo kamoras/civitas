@@ -1760,3 +1760,64 @@ class StateLegNominee(Base):
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     source_name: Mapped[str] = mapped_column(String(200), default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class JudicialNominee(Base):
+    """A confirmed nominee for an elected JUDGESHIP.
+
+    Third of the same family as StatewideNominee and StateLegNominee,
+    and separate from both for the same reason they are separate from
+    each other: the three are keyed differently. A statewide office is
+    unique per state, a legislative seat per district, and a judgeship
+    per court AND seat — a state has a District Court seat 2 in each of
+    many districts, and a Court of Appeals seat 4 with no district at
+    all. Collapsing any two would make the uniqueness constraint
+    express neither.
+
+    `court` is "supreme" | "appeals" | "superior" | "district" rather
+    than a state's own wording, for the same reason `chamber` is
+    "upper"/"lower": the names do not generalise. What one state calls
+    its Superior Court is another's Circuit Court, and "District Court"
+    is a trial court in North Carolina and a federal court elsewhere.
+    parse_judicial_office resolves a state's wording to the neutral set;
+    JUDICIAL_COURT_LABELS renders it back.
+
+    `district` is nullable because an appellate or supreme seat is
+    elected statewide and has no district, unlike a legislative seat
+    which always has one.
+
+    Only PARTISAN judicial contests are stored. A non-partisan judicial
+    election usually ELECTS a majority winner outright rather than
+    nominating them, so reading one the same way would publish a judge
+    who has already won as a candidate still standing — see
+    parse_judicial_office's docstring for the full reasoning and the
+    survey behind it.
+    """
+    __tablename__ = "judicial_nominees"
+    __table_args__ = (
+        # Name included for the same reason the other two include it:
+        # under a top-two or top-four rule two same-party candidates can
+        # legitimately advance from one seat.
+        UniqueConstraint(
+            "state", "cycle_year", "court", "district", "seat",
+            "party", "display_name",
+            name="uq_judicial_nominee_seat_party_name",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    state: Mapped[str] = mapped_column(String(2), nullable=False, index=True)
+    cycle_year: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    # "supreme" | "appeals" | "superior" | "district".
+    court: Mapped[str] = mapped_column(String(10), nullable=False)
+    # A STRING for the same reason a legislative district is: North
+    # Carolina's real trial districts include "10A" and "16B".
+    district: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    # Which seat of that court/district. Every judicial contest surveyed
+    # names one — "SEAT 2", "Group 4", "Position #1" — because a
+    # judgeship is a single office, never a multi-member body.
+    seat: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    party: Mapped[str] = mapped_column(String(1), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    source_name: Mapped[str] = mapped_column(String(200), default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
