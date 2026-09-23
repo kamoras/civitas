@@ -145,6 +145,7 @@ from app.pipeline.fetch.state_candidates_common import (
     normalize_party,
     office_from_columns,
     parse_office,
+    JUDICIAL_COURT_LABELS,
     parse_judicial_office,
     parse_state_leg_office,
     parse_statewide_office,
@@ -885,6 +886,7 @@ async def fetch_confirmed_candidates(
             None if stage["runoff"] else threshold,
             advance_count,
             state_offices=bool(source.get("statewide_offices")),
+            judicial_majority_ends=bool(source.get("judicial_majority_ends_contest")),
         )
 
     if not parsed_any:
@@ -901,6 +903,7 @@ def _collect(
     threshold: float | None,
     advance_count: int,
     state_offices: bool = False,
+    judicial_majority_ends: bool = False,
 ) -> None:
     """Fold one results file into `by_seat`, replacing (not appending to)
     any seat it covers so a later stage's answer wins outright."""
@@ -950,8 +953,16 @@ def _collect(
         # advancing is two regardless of how many seats are being
         # filled, so a seat count there would be the wrong question.
         seats_filled = vote_for_count(contest) if advance_count == 1 else None
+        # Scoped to JUDICIAL contests, never the whole file: in
+        # Washington the same export carries ordinary top-two races that
+        # advance two whatever the leader's share, alongside judicial
+        # ones where a majority leaves a single name on the general
+        # ballot (RCW 29A.36.170). Applying it state-wide would drop real
+        # candidates from every other contest.
+        majority_ends = judicial_majority_ends and office in JUDICIAL_COURT_LABELS
         won = pick_nominees(
             list(entry["votes"].items()), threshold, seats_filled or advance_count,
+            majority_ends_contest=majority_ends,
         )
         if not won:
             continue

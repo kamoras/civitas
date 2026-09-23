@@ -820,6 +820,7 @@ def pick_nominees(
     choices: list[tuple[str, int]],
     runoff_threshold_pct: float | None = None,
     advance_count: int = 1,
+    majority_ends_contest: bool = False,
 ) -> list[tuple[str, float]]:
     """Who advances to the general from one contest, as [(name, pct), ...]
     from [(name, votes), ...]. Empty when nobody can be named safely.
@@ -845,6 +846,25 @@ def pick_nominees(
     CONVENTION in Iowa (35%, Iowa Code 43.52), where a sub-threshold
     leader may end up not being the nominee at all. The threshold is the
     state's own rule from config either way.
+
+    `majority_ends_contest` is the OPPOSITE rule to that threshold, and
+    the two must not be confused. A threshold withholds a leader who
+    failed to clear it, because the contest is still being settled
+    elsewhere. This says the contest is OVER: a leader who cleared a
+    majority is the only name that reaches the general, so the
+    runner-up must NOT be published as a candidate.
+
+    Washington's judicial contests are the case it was added for.
+    RCW 29A.36.170: where a judicial candidate takes a majority of all
+    votes cast in a contested primary, "only the name of that candidate
+    may be printed for that position on the ballot at the general
+    election". Read as an ordinary top-two contest, two of its four 2026
+    Supreme Court seats would have published a runner-up who will not
+    appear on any ballot (Position 1, leader at 53.0%; Position 7, at
+    58.1%). It is deliberately NOT inferred from advance_count or from
+    the threshold: in the same state, the same file, an ordinary top-two
+    race still advances two whatever the leader's share, so this is a
+    per-contest-kind rule a state's entry has to state.
     """
     ranked = sorted(
         [(n, v) for n, v in choices if isinstance(v, int) and v > 0],
@@ -852,6 +872,13 @@ def pick_nominees(
     )
     if not ranked:
         return []
+
+    # Applied BEFORE the cutoff, because it changes what the cutoff is:
+    # a majority leaves one name on the general ballot, not two.
+    if majority_ends_contest and advance_count > 1:
+        cast = sum(v for _, v in ranked)
+        if cast and ranked[0][1] * 2 > cast:
+            advance_count = 1
 
     # Truncate at a tie that straddles the cutoff: everyone strictly above
     # the tied vote count advanced, and who broke the tie isn't ours to say.
