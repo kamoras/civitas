@@ -816,10 +816,30 @@ def surname(display_name: str, last_first: bool = False) -> str | None:
     return tokens[-1].strip(".,")
 
 
+# What a MAJORITY in a non-partisan judicial primary does. Two real
+# states, two opposite answers — which is exactly why this cannot be one
+# blanket rule inferred from advance_count, and why a state is not opted
+# in until its own statute has been read.
+#
+#   "sole_candidate"  Washington. RCW 29A.36.170: "only the name of that
+#                     candidate may be printed for that position on the
+#                     ballot at the general election". The winner IS a
+#                     November candidate, standing alone.
+#   "elects"          Idaho. Idaho Code 34-1217 certifies the majority
+#                     winner "as duly elected to such office" and says
+#                     "he shall not be required to stand for election at
+#                     the general election following". The seat is gone
+#                     from the November ballot entirely, so publishing
+#                     that judge as a candidate would be wrong.
+JUDICIAL_MAJORITY_SOLE_CANDIDATE = "sole_candidate"
+JUDICIAL_MAJORITY_ELECTS = "elects"
+
+
 def pick_nominees(
     choices: list[tuple[str, int]],
     runoff_threshold_pct: float | None = None,
     advance_count: int = 1,
+    judicial_majority: str | None = None,
 ) -> list[tuple[str, float]]:
     """Who advances to the general from one contest, as [(name, pct), ...]
     from [(name, votes), ...]. Empty when nobody can be named safely.
@@ -845,6 +865,30 @@ def pick_nominees(
     CONVENTION in Iowa (35%, Iowa Code 43.52), where a sub-threshold
     leader may end up not being the nominee at all. The threshold is the
     state's own rule from config either way.
+
+    `judicial_majority` answers a different question from that
+    threshold, and the two must not be confused. A threshold WITHHOLDS a
+    leader who failed to clear it, because the contest is still being
+    settled elsewhere. This says what a majority MEANS — and the two
+    states that have one mean opposite things by it, which is why it is
+    a value rather than a flag and why no state gets it by inference:
+
+      "sole_candidate"  Washington (RCW 29A.36.170) leaves that one name
+                        on the general ballot. Read as an ordinary
+                        top-two contest, two of its four 2026 Supreme
+                        Court seats would have published a runner-up who
+                        appears on no ballot (Position 1, 53.0%;
+                        Position 7, 58.1%).
+      "elects"          Idaho (Idaho Code 34-1217) seats the winner
+                        outright — "shall not be required to stand for
+                        election at the general election following" — so
+                        the seat is absent from November and NOBODY is
+                        published for it.
+
+    Deliberately NOT inferred from advance_count: in the same state and
+    the same file, an ordinary top-two race still advances two whatever
+    the leader's share, so this is a per-contest-kind rule a state's own
+    entry has to state.
     """
     ranked = sorted(
         [(n, v) for n, v in choices if isinstance(v, int) and v > 0],
@@ -852,6 +896,18 @@ def pick_nominees(
     )
     if not ranked:
         return []
+
+    # Applied BEFORE the cutoff, because it changes what the cutoff is.
+    # "A majority of all the votes cast" is strictly more than half, so a
+    # dead-even field has no majority and both names reach the general.
+    if judicial_majority and advance_count > 1:
+        cast = sum(v for _, v in ranked)
+        if cast and ranked[0][1] * 2 > cast:
+            if judicial_majority == JUDICIAL_MAJORITY_ELECTS:
+                # Seated already; the seat is not on the November ballot,
+                # so there is no candidate to publish for it.
+                return []
+            advance_count = 1
 
     # Truncate at a tie that straddles the cutoff: everyone strictly above
     # the tied vote count advanced, and who broke the tie isn't ours to say.

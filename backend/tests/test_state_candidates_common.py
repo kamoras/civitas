@@ -910,3 +910,91 @@ class TestFourGatesPartition:
         for label in self.SPECIMENS:
             claimed = [name for name, fn in gates if fn(label) is not None]
             assert len(claimed) <= 1, f"{label!r} claimed by {claimed}"
+
+
+class TestMajorityEndsContest:
+    """The OPPOSITE rule to runoff_threshold_pct, and they must not be
+    confused. A threshold WITHHOLDS a leader who fell short, because the
+    contest is still being settled. This says the contest is OVER: a
+    majority leaves one name on the general ballot, so the runner-up
+    must not be published as a candidate.
+
+    Washington's judicial contests are the case it exists for.
+    RCW 29A.36.170: where a judicial candidate takes a majority of all
+    votes cast in a contested primary, "only the name of that candidate
+    may be printed for that position on the ballot at the general
+    election."
+    """
+
+    # Real 2026 Washington Supreme Court primary totals.
+    POS1 = [("Colleen Melody", 923965), ("Scott Edwards", 513394),
+            ("Laura Christensen Colberg", 305110)]          # leader 53.0%
+    POS3 = [("David Stevens", 612267), ("Jaime Michelle Hawk", 578979),
+            ("Mike Diaz", 543721)]                          # leader 35.3%
+
+    def test_a_majority_leaves_one_name(self):
+        won = common.pick_nominees(self.POS1, None, 2, judicial_majority=common.JUDICIAL_MAJORITY_SOLE_CANDIDATE)
+        assert [n for n, _ in won] == ["Colleen Melody"]
+
+    def test_without_the_rule_a_runner_up_would_be_published(self):
+        """What the bug would look like: Scott Edwards appears on no
+        November ballot, but a plain top-two read publishes him."""
+        won = common.pick_nominees(self.POS1, None, 2)
+        assert [n for n, _ in won] == ["Colleen Melody", "Scott Edwards"]
+
+    def test_no_majority_still_advances_two(self):
+        won = common.pick_nominees(self.POS3, None, 2, judicial_majority=common.JUDICIAL_MAJORITY_SOLE_CANDIDATE)
+        assert [n for n, _ in won] == ["David Stevens", "Jaime Michelle Hawk"]
+
+    def test_exactly_half_is_not_a_majority(self):
+        """The boundary the statute's wording turns on: "a majority of
+        all votes cast" is strictly more than half. At 50/50 neither
+        candidate has one, so the contest is NOT over and both names
+        reach the general — which is also what actually happens. One
+        vote more and it is over."""
+        even = [("A", 500), ("B", 500)]
+        assert [n for n, _ in common.pick_nominees(
+            even, None, 2, judicial_majority=common.JUDICIAL_MAJORITY_SOLE_CANDIDATE)] == ["A", "B"]
+        uneven = [("A", 501), ("B", 500)]
+        assert [n for n, _ in common.pick_nominees(
+            uneven, None, 2, judicial_majority=common.JUDICIAL_MAJORITY_SOLE_CANDIDATE)] == ["A"]
+
+    def test_it_does_nothing_to_a_one_nominee_primary(self):
+        """advance_count == 1 already names one; the rule must not turn
+        a party primary into something else."""
+        won = common.pick_nominees(self.POS1, None, 1, judicial_majority=common.JUDICIAL_MAJORITY_SOLE_CANDIDATE)
+        assert [n for n, _ in won] == ["Colleen Melody"]
+
+    def test_it_is_not_the_runoff_threshold(self):
+        """A sub-majority leader is still published here (the general
+        decides), whereas runoff_threshold_pct would withhold them."""
+        advanced = common.pick_nominees(self.POS3, None, 2, judicial_majority=common.JUDICIAL_MAJORITY_SOLE_CANDIDATE)
+        assert advanced, "a sub-majority leader still reaches the general"
+        withheld = common.pick_nominees(self.POS3, 50.0, 1)
+        assert withheld == [], "the threshold rule withholds instead"
+
+    def test_elects_publishes_nobody_because_the_seat_is_gone(self):
+        """Idaho's opposite rule. Idaho Code 34-1217 certifies a judicial
+        majority winner "as duly elected" and says they "shall not be
+        required to stand for election at the general election
+        following" — so the seat is absent from November and there is no
+        candidate to publish. Verified against Idaho's real 2026 data:
+        all three matched contests were unopposed at 100%, all three
+        already elected, correctly yielding zero records.
+        """
+        unopposed = [("Gregory W. Moeller", 216640)]
+        assert common.pick_nominees(
+            unopposed, None, 2,
+            judicial_majority=common.JUDICIAL_MAJORITY_ELECTS) == []
+        # And the SAME data under Washington's rule publishes that name,
+        # which is the whole reason this is a per-state value.
+        assert [n for n, _ in common.pick_nominees(
+            unopposed, None, 2,
+            judicial_majority=common.JUDICIAL_MAJORITY_SOLE_CANDIDATE)] == [
+            "Gregory W. Moeller"]
+
+    def test_elects_still_advances_two_without_a_majority(self):
+        assert [n for n, _ in common.pick_nominees(
+            self.POS3, None, 2,
+            judicial_majority=common.JUDICIAL_MAJORITY_ELECTS)] == [
+            "David Stevens", "Jaime Michelle Hawk"]
