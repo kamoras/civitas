@@ -398,9 +398,15 @@ class TestHouseFromColumns:
         records = await tb.fetch_confirmed_candidates(
             None, 2026, "VA", {"format": self._FMT},
         )
+        # display_name rides along on every FEDERAL record so the shared
+        # matcher can break a same-surname tie it would otherwise refuse
+        # (see _match_candidate); it is never used to reject a match the
+        # surname already resolved uniquely.
         assert records == [
-            {"office": "H", "district": 2, "party": "D", "last_name": "Luria"},
-            {"office": "S", "district": None, "party": "R", "last_name": "Mizusawa"},
+            {"office": "H", "district": 2, "party": "D", "last_name": "Luria",
+             "display_name": "Elaine G. Luria"},
+            {"office": "S", "district": None, "party": "R", "last_name": "Mizusawa",
+             "display_name": "Bert Mizusawa"},
         ]
 
     def test_without_the_column_the_house_label_is_refused(self):
@@ -966,7 +972,8 @@ class TestFetchConfirmedCandidates:
             None, 2026, "NC", {"runoff_threshold_pct": 30.0, "format": _FORMAT},
         )
 
-        assert {"office": "H", "district": 5, "party": "R", "last_name": "Foxx"} in records
+        assert {"office": "H", "district": 5, "party": "R", "last_name": "Foxx",
+                "display_name": "Virginia Foxx"} in records
         # "NC HOUSE OF REPRESENTATIVES DISTRICT 022" is a state race whose
         # label looks federal — district 22 must not appear.
         assert all(r["district"] != 22 for r in records)
