@@ -14,6 +14,7 @@ so the raw CREATE, the migration, and the assertions all see one DB).
 
 import pytest
 from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import StaticPool
 
 import app.database as database
@@ -86,6 +87,46 @@ def test_drops_legacy_president_columns_and_keeps_data(patched_engine):
             text("SELECT id, avg_approval FROM presidents WHERE id = 'p1'")
         ).fetchone()
     assert row.avg_approval == 47  # non-dropped data untouched
+
+
+def test_drops_the_legacy_member_summary_columns_that_blocked_new_inserts(patched_engine):
+    """The live 2026-09-23 failure: a newly-seated member could not be
+    inserted at all, because voting_summary/platform_summary left NOT
+    NULL in the deployed schema are no longer supplied by the model.
+    House run #67 reported "431 success, 2 failed" for exactly this --
+    the 2 being the only new rows. Reproduced here by asserting the
+    INSERT fails before the migration and succeeds after."""
+    eng = patched_engine
+    for table in ("representatives", "senators"):
+        with eng.begin() as conn:
+            conn.execute(text(
+                f"CREATE TABLE {table} ("
+                " id TEXT PRIMARY KEY, name TEXT,"
+                " voting_summary TEXT NOT NULL,"
+                " platform_summary TEXT NOT NULL)"
+            ))
+            conn.execute(text(
+                f"INSERT INTO {table} (id, name, voting_summary, platform_summary)"
+                " VALUES ('m1', 'Sitting Member', 'legacy', 'legacy')"
+            ))
+        # Before: the model's own column set can't satisfy NOT NULL.
+        with pytest.raises(IntegrityError):
+            with eng.begin() as conn:
+                conn.execute(text(f"INSERT INTO {table} (id, name) VALUES ('new', 'New Member')"))
+
+    database._migrate_columns()
+
+    for table in ("representatives", "senators"):
+        cols = {c["name"] for c in inspect(eng).get_columns(table)}
+        assert "voting_summary" not in cols
+        assert "platform_summary" not in cols
+        # After: the insert that failed every night now lands.
+        with eng.begin() as conn:
+            conn.execute(text(f"INSERT INTO {table} (id, name) VALUES ('new', 'New Member')"))
+            row = conn.execute(
+                text(f"SELECT name FROM {table} WHERE id = 'm1'")
+            ).fetchone()
+        assert row.name == "Sitting Member"  # the existing member survives
 
 
 def test_absent_tables_are_skipped_not_errored(patched_engine):
