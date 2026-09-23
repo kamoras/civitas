@@ -5,7 +5,13 @@ import RaceFullDetail from "./RaceFullDetail";
 import type { RaceWithCandidates } from "@/types/election";
 
 vi.mock("./CandidateCard", () => ({
-  default: ({ candidate }: { candidate: { name: string } }) => <div>{candidate.name}</div>,
+  default: ({
+    candidate,
+    showUnconfirmed,
+  }: {
+    candidate: { name: string };
+    showUnconfirmed?: boolean;
+  }) => <div data-show-unconfirmed={String(!!showUnconfirmed)}>{candidate.name}</div>,
   getPartyMeta: () => ({ label: "", color: "", rule: "bg-ink-min" }),
 }));
 vi.mock("./RaceFinancials", () => ({
@@ -19,6 +25,7 @@ function candidate(overrides: Partial<RaceWithCandidates["candidates"][number]>)
     id: "c1",
     name: "Jane Doe",
     party: "DEM",
+    confirmed: true,
     incumbentChallenge: null,
     candidateStatus: null,
     hasRaisedFunds: false,
@@ -189,5 +196,45 @@ describe("RaceFullDetail", () => {
     expect(screen.getByText("Nominee Two")).toBeInTheDocument();
     expect(screen.queryByText("FEC-filed field")).not.toBeInTheDocument();
     expect(screen.queryByText(/more filed/)).not.toBeInTheDocument();
+  });
+  it("marks an unopposed candidate UNCONFIRMED inside an otherwise state-verified race", () => {
+    // Brian Mast's real shape: the other party's nominee came from the
+    // primary file, his own uncontested primary was never held, so he
+    // is real but unconfirmed. He must appear AND be distinguishable.
+    render(
+      <RaceFullDetail
+        race={race({
+          candidateSource: "nominees",
+          candidates: [
+            candidate({ id: "d", name: "Real Nominee", party: "DEM", hasRaisedFunds: true, cashOnHand: 100 }),
+            candidate({ id: "r", name: "Unopposed Rep", party: "REP", confirmed: false, hasRaisedFunds: true, cashOnHand: 90 }),
+          ],
+        })}
+      />
+    );
+
+    expect(screen.getByText("Real Nominee")).toBeInTheDocument();
+    expect(screen.getByText("Unopposed Rep")).toBeInTheDocument();
+    expect(screen.getByText(/drew no primary opponent/)).toBeInTheDocument();
+    // The card itself draws the badge (see CandidateCard.test.tsx); what
+    // this file owns is that the race turns it ON for a verified list.
+    expect(screen.getByText("Unopposed Rep").dataset.showUnconfirmed).toBe("true");
+  });
+
+  it("does not badge every card in a filers race, where nobody is confirmed", () => {
+    render(
+      <RaceFullDetail
+        race={race({
+          candidateSource: "filers",
+          candidates: [
+            candidate({ id: "a", name: "Filer One", confirmed: false, hasRaisedFunds: true, cashOnHand: 100 }),
+            candidate({ id: "b", name: "Filer Two", confirmed: false, hasRaisedFunds: true, cashOnHand: 90 }),
+          ],
+        })}
+      />
+    );
+
+    expect(screen.getByText("Filer One").dataset.showUnconfirmed).toBe("false");
+    expect(screen.queryByText(/drew no primary opponent/)).not.toBeInTheDocument();
   });
 });
