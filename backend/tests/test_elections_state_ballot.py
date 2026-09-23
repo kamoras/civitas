@@ -12,7 +12,6 @@ from app.api import elections
 from app.models import (
     BallotMeasure,
     Candidate,
-    JudicialNominee,
     MeasureCoverage,
     Race,
     RaceCoverageItem,
