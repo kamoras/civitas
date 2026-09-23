@@ -117,6 +117,7 @@ async def fetch_with_retry(
     rate_limit_backoff_multiplier: float = 1.0,
     retry_on_4xx: bool = True,
     no_retry_statuses: tuple[int, ...] = (),
+    expected_statuses: tuple[int, ...] = (),
     timeout: float = DEFAULT_FETCH_TIMEOUT_S,
     log_label: str = "",
     request_url: str | None = None,
@@ -142,6 +143,16 @@ async def fetch_with_retry(
     yet", which is an expected miss, not a transient error). It is checked
     before the generic >=400 handling, so it applies even when
     retry_on_4xx is True.
+
+    `expected_statuses` is the same idea for a caller that needs THREE
+    outcomes rather than two: the Response is returned as-is (not retried,
+    not collapsed to None), so the caller can tell an expected miss from a
+    genuine failure, which `no_retry_statuses`' None cannot express. Google
+    Civic's voterinfo is the real case — a 404 "No information for this
+    address" is its normal answer for a precinct whose ballot it hasn't
+    published yet, while None there must keep meaning the fetch itself
+    broke. Checked before `no_retry_statuses`, so a status in both wins
+    here.
     """
     await rate_limiter.acquire()
     actual_url = request_url or url
@@ -166,6 +177,10 @@ async def fetch_with_retry(
                 logger.warning("%s rate limited, waiting %.1fs...", label, wait)
                 await asyncio.sleep(wait)
                 continue
+
+            if resp.status_code in expected_statuses:
+                logger.debug("%s: %s — HTTP %d (expected)", label, url, resp.status_code)
+                return resp
 
             if resp.status_code in no_retry_statuses:
                 logger.debug("%s: %s — HTTP %d (no retry)", label, url, resp.status_code)

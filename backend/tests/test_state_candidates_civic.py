@@ -1,10 +1,13 @@
 """Tests for the Google Civic confirmed-candidate strategy
 (state_candidates_civic.py).
 
-No real fixture data exists for this module to test against: Google's
-election index carries nothing for the November 2026 general yet, for
-any state (live-verified 2026-09-10 against production's real
-GOOGLE_CIVIC_API_KEY — see the module's own docstring). The response
+No real fixture data exists for this module to test against. Google's
+election index DOES now carry the November 2026 general (live-verified
+2026-09-23 against production's real GOOGLE_CIVIC_API_KEY: one
+country-level entry, id 12000), but no address has real contest data
+behind it yet — 71 of the 80 configured addresses answer HTTP 404 "No
+information for this address", and the one that answers 200 carries no
+`contests` key. See the module's own docstring. The response
 shapes below are constructed directly from Google's public Discovery
 Document schema (the same one civic_info.py's own docstring verifies
 its parsing against) — labeled honestly as constructed, not claimed as
@@ -12,6 +15,7 @@ real captured data, the same discipline KY's own test fixtures use for
 their one genuinely-unverifiable branch.
 """
 
+import httpx
 import pytest
 
 from app.pipeline.fetch import state_candidates_civic as civic
@@ -148,7 +152,7 @@ class TestParseContests:
 
 class TestFetchConfirmedCandidates:
     def _patch(self, monkeypatch, elections=None, voterinfo=None):
-        async def fake_get_json(client, url, params, label):
+        async def fake_get_json(client, url, params, label, expected_statuses=()):
             if url.endswith("/elections"):
                 return elections
             return voterinfo
@@ -224,7 +228,7 @@ class TestHouseAddresses:
     as before. These tests are the only ones that set it."""
 
     def _patch(self, monkeypatch, voterinfo_by_address: dict[str, dict]):
-        async def fake_get_json(client, url, params, label):
+        async def fake_get_json(client, url, params, label, expected_statuses=()):
             if url.endswith("/elections"):
                 return _ELECTIONS_INDEX
             return voterinfo_by_address.get(params.get("address"))
@@ -345,3 +349,51 @@ class TestConfiguredAddressesAreParseable:
         """Guards the guard: a renamed strategy or moved key would make
         the assertion above pass over an empty list forever."""
         assert len(list(self._entries())) > 50
+
+
+class TestAddressWithNoPublishedBallot:
+    """Google answers HTTP 404 "No information for this address" for a
+    precinct whose ballot it has not published yet. That is its normal
+    answer, not a failure -- and because the shared retry path treats
+    any 4xx as transient, it read as one: on 2026-09-23, the morning
+    after Google first listed the November 3 general at all, 8 states
+    reported fetch_failed (3 attempts each) instead of a healthy empty
+    night. 71 of the 80 configured addresses answered 404 that morning,
+    every state capitol among them.
+
+    These exercise the REAL fetch_with_retry, not a patched _get_json,
+    because the bug lived in the status handling between them."""
+
+    def _patch(self, monkeypatch, voterinfo_status: int):
+        async def fake_fetch(client, limiter, method, url, **kwargs):
+            if url.endswith("/elections"):
+                return httpx.Response(200, json=_ELECTIONS_INDEX)
+            if voterinfo_status not in kwargs.get("expected_statuses", ()):
+                return None  # what the retry path does with an unexpected status
+            return httpx.Response(voterinfo_status, json={"error": {"message": "x"}})
+
+        monkeypatch.setattr(civic, "fetch_with_retry", fake_fetch)
+        monkeypatch.setattr(civic.settings, "GOOGLE_CIVIC_API_KEY", "test-key")
+
+    @pytest.mark.asyncio
+    async def test_a_404_for_the_address_is_a_healthy_empty_night(self, monkeypatch):
+        self._patch(monkeypatch, 404)
+        assert await civic.fetch_confirmed_candidates(None, 2026, "MI", {"address": "capitol"}) == []
+
+    @pytest.mark.asyncio
+    async def test_every_house_address_404ing_is_still_healthy(self, monkeypatch):
+        """The statewide 404 must not short-circuit the state into a
+        failure before its districts are even tried."""
+        self._patch(monkeypatch, 404)
+        result = await civic.fetch_confirmed_candidates(
+            None, 2026, "MI",
+            {"address": "capitol", "house_addresses": {"1": "a", "2": "b"}},
+        )
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_a_genuine_failure_is_still_not_healthy(self, monkeypatch):
+        """The other half of the same line: 404 reading as [] must not
+        drag a real fetch failure along with it."""
+        self._patch(monkeypatch, 500)
+        assert await civic.fetch_confirmed_candidates(None, 2026, "MI", {"address": "capitol"}) is None
