@@ -14,6 +14,7 @@ import asyncio
 import threading
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from app.pipeline.fetch.http_utils import (
@@ -287,3 +288,47 @@ if __name__ == "__main__":
         print("OK")
 
     asyncio.run(demo())
+
+
+class TestExpectedStatuses:
+    """`expected_statuses` exists for a caller needing three outcomes,
+    not two: Google Civic's voterinfo answers 404 "No information for
+    this address" for a precinct whose ballot isn't published yet, which
+    is its normal answer -- while None there must keep meaning the fetch
+    broke. `no_retry_statuses` can't express that, since it returns the
+    same None a real failure does."""
+
+    def _client(self, status):
+        client = MagicMock()
+        client.request = AsyncMock(return_value=httpx.Response(
+            status, request=httpx.Request("GET", "https://example.test/x"),
+        ))
+        return client
+
+    @pytest.mark.asyncio
+    async def test_an_expected_status_comes_back_as_the_response(self):
+        client = self._client(404)
+        resp = await fetch_with_retry(
+            client, _limiter(), "GET", "https://example.test/x", expected_statuses=(404,),
+        )
+        assert resp is not None and resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_an_expected_status_is_not_retried(self):
+        """The cost half of the bug: 4xx is retried by default, so every
+        one of these was 3 requests plus backoff sleeps per address."""
+        client = self._client(404)
+        await fetch_with_retry(
+            client, _limiter(), "GET", "https://example.test/x", expected_statuses=(404,),
+        )
+        assert client.request.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_an_unlisted_status_still_fails_the_normal_way(self):
+        client = self._client(500)
+        resp = await fetch_with_retry(
+            client, _limiter(), "GET", "https://example.test/x",
+            retries=2, backoff_s=0, expected_statuses=(404,),
+        )
+        assert resp is None
+        assert client.request.await_count == 2

@@ -59,12 +59,13 @@ duplicate the parsing):
    Google's index currently carries, matched by `ocdDivisionId` (this
    state's own division id, or the bare country-level one, in case a
    national general ever gets listed that way instead of per-state) and
-   `electionDay` falling in `year`'s real November window. **No match at
-   all is today's actual live reality for every state** (verified
-   2026-09-10 against production's real key: the index currently lists
-   only a permanent test entry plus Delaware's and Rhode Island's real
-   September PRIMARIES — nothing for the November general yet, for
-   anyone) — so no match returns `[]`, healthy, never a failure.
+   `electionDay` falling in `year`'s real November window. No match at
+   all returns `[]`, healthy, never a failure — which was every state's
+   live reality until 2026-09-23, when the index first carried the real
+   general: one country-level entry, `id` 12000, "2026 General Midterm
+   Election", 2026-11-03. That is matched by the bare country-level
+   `ocdDivisionId` branch above, which existed for exactly this case
+   and is no longer hypothetical.
 2. `voterinfo` with that election's own id passed EXPLICITLY, plus one
    configured address — called once for the state's own Senate address,
    then again for each configured `house_addresses` entry (the election
@@ -77,12 +78,21 @@ duplicate the parsing):
    well behind an election merely being listed, possibly until very
    close to, or on, election day itself. So a request that succeeds but
    carries no contests is ALSO `[]`, not a failure — matches that real,
-   directly-observed shape, not a guess.
+   directly-observed shape, not a guess. The same hop's HTTP 404 "No
+   information for this address" means the same thing and is handled
+   the same way (see `_NO_DATA`): on 2026-09-23, with the general now
+   listed, 71 of this file's 80 configured addresses answered exactly
+   that, every state capitol among them. Only LA's answered 200, and
+   even that one carried no `contests` key.
 
 Only a genuine network/JSON failure at either hop returns `None`
 (fetch_failed) — every "nothing here yet" shape above is `[]` (healthy,
 0 confirmed), which matters because until Google populates real November
 data, `[]` is the correct answer for literally every state, every night.
+That distinction is not theoretical: the morning the general was first
+listed, the second hop started answering 404 for real, and because 4xx
+is retried by default those 404s reported 8 states as fetch_failed
+before this was fixed.
 
 Party is deliberately NOT required to normalize for a candidate to be
 kept, unlike every vote-counting strategy elsewhere in this system
@@ -135,13 +145,34 @@ def _matches_november(election: dict, year: int) -> bool:
     return day.startswith(f"{year}-11")
 
 
-async def _get_json(client: httpx.AsyncClient, url: str, params: dict, label: str) -> dict | list | None:
+# Google's own normal answer for an address whose ballot it has not
+# published yet: HTTP 404 "No information for this address". Verified
+# live on 2026-09-23, the morning after Google first listed the November
+# 3 general at all -- 71 of this file's 80 configured addresses answered
+# exactly that, including every state capitol. It is a real, expected
+# miss, NOT a failure, and must not read as one: because the default
+# retry path treats any 4xx as transient, that first morning reported
+# fetch_failed for 8 states (3 attempts each) rather than a healthy
+# empty night. `_FETCH_FAILED` below draws the same line one level up,
+# for the elections index.
+_NO_DATA = object()
+
+
+async def _get_json(
+    client: httpx.AsyncClient, url: str, params: dict, label: str,
+    expected_statuses: tuple[int, ...] = (),
+) -> dict | list | None | object:
+    """The parsed body, `_NO_DATA` for one of `expected_statuses`, or
+    `None` on a genuine fetch/parse failure."""
     full_url = str(httpx.URL(url).copy_merge_params({**params, "key": settings.GOOGLE_CIVIC_API_KEY}))
     resp = await fetch_with_retry(
         client, _rate_limiter, "GET", url, request_url=full_url, log_label=label,
+        expected_statuses=expected_statuses,
     )
     if resp is None:
         return None
+    if resp.status_code in expected_statuses:
+        return _NO_DATA
     try:
         return resp.json()
     except ValueError:
@@ -183,15 +214,17 @@ async def _voterinfo_contests(
     client: httpx.AsyncClient, election_id: str, address: str, label: str,
 ) -> list[dict] | None:
     """Parsed real contests for one address, or `None` on a genuine
-    fetch/parse failure. An empty list covers both "fetched fine, no
-    contests published yet" and "a 200 with an unexpected shape" — see
-    module docstring for why both read as healthy, not a failure."""
+    fetch/parse failure. An empty list covers "fetched fine, no contests
+    published yet" (a 200 carrying no `contests`, or the 404 `_NO_DATA`
+    describes) and "a 200 with an unexpected shape" — see module
+    docstring for why all of those read as healthy, not a failure."""
     payload = await _get_json(
         client, f"{CIVIC_BASE}/voterinfo", {"electionId": election_id, "address": address}, label,
+        expected_statuses=(404,),
     )
     if payload is None:
         return None
-    if not isinstance(payload, dict):
+    if payload is _NO_DATA or not isinstance(payload, dict):
         return []
     return _parse_contests(payload)
 
