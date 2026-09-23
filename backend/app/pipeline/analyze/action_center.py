@@ -54,6 +54,7 @@ from app.pipeline.analyze.grounding import (
     grounding_violations,
     hedge_and_editorializing_violations,
     log_intensifier_usage,
+    proposal_stated_as_fact,
     repeated_sentences,
     ungrounded_electoral_claims,
     ungrounded_former_official_claims,
@@ -4842,9 +4843,25 @@ def _run_refresh(db: Session) -> int:
         # near-duplicate posts get suppressed before ever re-checking this
         # text). Reusing the same battle-tested combinator here closes that
         # gap — no new check invented, just applied where it was missing.
-        combined_text = summary + " " + " ".join(facts)
+        # The TITLE is checked with the body, not left to the three narrow
+        # title-only rules above. 2026-09-23: this platform published the
+        # headline "Iran War Ends Quickly to Lower Prices" over its own
+        # accurate summary ("...emphasize the NEED FOR an immediate
+        # conclusion... have CALLED FOR measures"). The war had not ended.
+        # The body passed every check because the body was right; nothing
+        # examined the headline, which is the part a reader believes
+        # first. proposal_stated_as_fact is the specific inversion —
+        # advocacy rendered as an accomplished event — and the rest of
+        # the combinator covers the title's numbers and names too.
+        combined_text = title + " " + summary + " " + " ".join(facts)
         reasons = hedge_and_editorializing_violations(combined_text)
         reasons += grounding_violations(combined_text, issue_source_text)
+        inverted = proposal_stated_as_fact(title, issue_source_text)
+        if inverted:
+            reasons.append(
+                "title states as done what the source only calls for: "
+                + ", ".join(inverted)
+            )
         _record_generation_sample(
             db, "action_center_issue", rank, 1, user_prompt,
             {"title": title, "summary": summary, "facts": facts},

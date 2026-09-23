@@ -63,6 +63,34 @@ MAX_POSTS_PER_DAY = 12
 # one busy race can't consume a whole run back-to-back.
 RACE_COOLDOWN_HOURS = 6
 
+# Which coverage sources Civitas will restate IN ITS OWN VOICE.
+#
+# 2026-09-23 incident: this platform posted "VOTE VERONICA FERNANDEZ!
+# ... She's better for Jersey than Booker!" about the NJ Senate race. The
+# source was one member of the public's campaign post, ingested as
+# "coverage" because it named a candidate on that race's FEC roster. Every
+# guard here worked as written — full_name match basis, grounding,
+# hedge/editorializing — because grounding verifies FAITHFULNESS TO the
+# source, and the post was perfectly faithful to a source that was itself
+# an endorsement. Nothing checked whether the source was a thing a
+# non-partisan platform should be repeating at all.
+#
+# A social post is one person's opinion, not reporting. Restating it here
+# launders it into Civitas's voice; showing it on the RACE PAGE, verbatim
+# and next to its author and link, lets a reader weigh it themselves,
+# which is why this filter is on posting only and the site is unchanged.
+#
+# Measured over the 257 race-coverage posts that existed when this
+# shipped: 233 came from news outlets, 24 from arbitrary Bluesky
+# accounts, and essentially every bad post in the account's history was
+# in that 24 — the endorsement above, "nominates Gary Palmer as a
+# candidate" (from "I nominate ... Gary Palmer! 😎"), "Morgan Wallen's
+# presence in local campaigns", plus race "coverage" derived from a 1969
+# Laugh-In listing, a jazz anniversary and a Reservoir Dogs iTunes sale.
+# The restriction removes the whole class rather than pattern-matching
+# its symptoms one at a time.
+POSTABLE_SOURCE_TYPES = ("news",)
+
 # Items older than this that were never considered are marked considered
 # without posting — news value decays fast, and without a drain the
 # not-yet-considered backlog (the posting query is capped per run) would
@@ -256,6 +284,7 @@ def post_race_coverage_updates(db: Session) -> int:
         .filter(
             RaceCoverageItem.bsky_posted_at.is_(None),
             RaceCoverageItem.match_basis == "full_name",
+            RaceCoverageItem.source_type.in_(POSTABLE_SOURCE_TYPES),
         )
         .order_by(RaceCoverageItem.fetched_at.desc())
         .limit(MAX_POSTS_PER_RUN)

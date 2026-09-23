@@ -14,6 +14,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.models import Candidate, Race, RaceCoverageItem
 from app.pipeline.analyze import election_bluesky
+from app.pipeline.analyze import election_bluesky as eb
 from app.time_utils import utcnow
 
 
@@ -385,3 +386,49 @@ class TestPublishUrl:
 
         url = mock_publish.call_args.args[1]
         assert url == "https://civitas-research.org/elections/states/GA#race-2026-HOUSE-GA-6"
+
+
+class TestOnlyVettedSourcesArePosted:
+    """The 2026-09-23 endorsement came from one member of the public's
+    Bluesky post, ingested as coverage because it named a candidate on
+    that race's FEC roster. Civitas restating a stranger's campaign post
+    in its own voice is what made it an endorsement, so the fix is at the
+    source, not in the wording."""
+
+    def test_an_arbitrary_social_post_is_never_eligible(self, db_session, monkeypatch):
+        monkeypatch.setattr(eb.settings, "BSKY_HANDLE", "h")
+        monkeypatch.setattr(eb.settings, "BSKY_APP_PASSWORD", "p")
+        published = []
+        monkeypatch.setattr(eb, "_publish", lambda text, race: published.append(text) or True)
+        monkeypatch.setattr(eb, "_generate_post_text", lambda *a, **k: "some sentence.")
+        monkeypatch.setattr(eb, "_roster_fact", lambda *a, **k: "FEC filings list X.")
+
+        db_session.add(Race(id="2026-SEN-NJ", cycle_year=2026, office="S", state="NJ"))
+        db_session.add(RaceCoverageItem(
+            race_id="2026-SEN-NJ", source_type="bluesky", source_name="@kaseylz.bsky.social",
+            title="VOTE VERONICA FERNANDEZ!", url="u1",
+            match_basis="full_name", fetched_at=utcnow(),
+        ))
+        db_session.commit()
+
+        assert eb.post_race_coverage_updates(db_session) == 0
+        assert published == []
+
+    def test_a_news_item_still_posts(self, db_session, monkeypatch):
+        monkeypatch.setattr(eb.settings, "BSKY_HANDLE", "h")
+        monkeypatch.setattr(eb.settings, "BSKY_APP_PASSWORD", "p")
+        published = []
+        monkeypatch.setattr(eb, "_publish", lambda text, race: published.append(text) or True)
+        monkeypatch.setattr(eb, "_generate_post_text", lambda *a, **k: "some sentence.")
+        monkeypatch.setattr(eb, "_roster_fact", lambda *a, **k: "FEC filings list X.")
+
+        db_session.add(Race(id="2026-SEN-NJ", cycle_year=2026, office="S", state="NJ"))
+        db_session.add(RaceCoverageItem(
+            race_id="2026-SEN-NJ", source_type="news", source_name="Roll Call",
+            title="A real article about the race", url="u2",
+            match_basis="full_name", fetched_at=utcnow(),
+        ))
+        db_session.commit()
+
+        assert eb.post_race_coverage_updates(db_session) == 1
+        assert published == ["some sentence."]

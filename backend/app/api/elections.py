@@ -477,6 +477,35 @@ def _race_full(
 STATE_COVERAGE_LIMIT = 20
 STATE_COVERAGE_QUERY_LIMIT = 100
 
+# Which coverage sources reach a reader at all.
+#
+# The Bluesky side of this feed is an open keyword search of the whole
+# network for a candidate's name (pipeline/fetch/bluesky_search.py), and
+# a name-mention is not coverage. What that produced on Connecticut's
+# page, verbatim: a tabloid item about a diver's death, five separate
+# reposts of one YouTube video, a bill-notification bot, and a Spanish
+# health-tip post — 74 items, of which 5 were journalism.
+#
+# Three cheaper filters were measured against the real corpus first and
+# all three failed, which is why this is a source restriction rather
+# than a smarter classifier:
+#   - electoral-vocabulary relevance (grounding._ELECTORAL_CONTEXT_RE)
+#     dropped a real Roll Call piece on the CT-1 primary while KEEPING
+#     three aggregator reposts of "Why baby boomer clout persists";
+#   - domain-verified handles (Bluesky only grants these after DNS
+#     verification) are 983 of 6,855 items and are mostly weather bots,
+#     a food blog, a pub and a dog-sports account;
+#   - the existing NEWS_OUTLET_HANDLES allowlist is three outlets, which
+#     would discard genuine local newsrooms like ctmirror.org.
+#
+# No cheap signal separates race coverage from incidental name-mentions
+# in an open search, so the honest move is to show only the vetted news
+# pipeline. The cost is real and deliberate: this drops ~93% of feed
+# volume and leaves 8 states with no coverage at all. For a platform
+# whose claim is accuracy, an empty feed is a better failure than a
+# confident wrong one — and an empty feed is visible, so it gets fixed.
+COVERAGE_SOURCE_TYPES = ("news",)
+
 
 def _state_coverage(db: Session, races: list[Race]) -> list[dict]:
     """Every race's coverage for this state, newest first, deduplicated
@@ -502,7 +531,10 @@ def _state_coverage(db: Session, races: list[Race]) -> list[dict]:
         return []
     rows = (
         db.query(RaceCoverageItem)
-        .filter(RaceCoverageItem.race_id.in_(races_by_id.keys()))
+        .filter(
+            RaceCoverageItem.race_id.in_(races_by_id.keys()),
+            RaceCoverageItem.source_type.in_(COVERAGE_SOURCE_TYPES),
+        )
         .order_by(
             RaceCoverageItem.published_at.desc().nullslast(),
             RaceCoverageItem.fetched_at.desc(),
@@ -1145,7 +1177,10 @@ def race_detail(race_id: str, db: Session = Depends(get_db)):
     stale_incumbent_ids = _stale_incumbent_ids(race.candidates)
     coverage = (
         db.query(RaceCoverageItem)
-        .filter(RaceCoverageItem.race_id == race_id)
+        .filter(
+            RaceCoverageItem.race_id == race_id,
+            RaceCoverageItem.source_type.in_(COVERAGE_SOURCE_TYPES),
+        )
         .order_by(RaceCoverageItem.published_at.desc().nullslast(), RaceCoverageItem.fetched_at.desc())
         .limit(50)
         .all()

@@ -368,3 +368,40 @@ class TestUnopposedNomineesAreNotTreatedAsLosers:
         by_id = {c["id"]: c for c in data["candidates"]}
         assert by_id["DNOM"]["confirmed"] is True
         assert by_id["MAST"]["confirmed"] is False
+
+
+class TestCoverageFeedShowsOnlyVettedSources:
+    """2026-09-23: Connecticut's ballot page served a tabloid item about a
+    diver's death, five reposts of one YouTube video, a bill bot and a
+    Spanish health-tip post — 74 items, 5 of them journalism. The Bluesky
+    half of this feed is an open keyword search for a candidate's name,
+    and a name-mention is not coverage."""
+
+    def _item(self, db, race_id, source_type, title, url):
+        it = RaceCoverageItem(
+            race_id=race_id, source_type=source_type, source_name="src",
+            title=title, url=url,
+        )
+        db.add(it)
+        return it
+
+    def test_social_noise_is_not_served_as_race_coverage(self, db_session):
+        _race(db_session, "2026-HOUSE-CT-3", "CT", office="H", district=3)
+        self._item(db_session, "2026-HOUSE-CT-3", "news",
+                   "Larson loses to younger primary challenger", "u1")
+        self._item(db_session, "2026-HOUSE-CT-3", "bluesky",
+                   "The body of experienced diver Andrew Rice, 43, was found", "u2")
+        db_session.commit()
+
+        data = _body(elections.race_detail("2026-HOUSE-CT-3", db_session))
+        titles = [c["title"] for c in data["coverage"]]
+        assert titles == ["Larson loses to younger primary challenger"]
+
+    def test_the_state_feed_applies_the_same_rule(self, db_session):
+        _race(db_session, "2026-SEN-CT", "CT")
+        self._item(db_session, "2026-SEN-CT", "news", "Real reporting", "n1")
+        self._item(db_session, "2026-SEN-CT", "bluesky", "Reservoir Dogs 4K on sale", "b1")
+        db_session.commit()
+
+        data = _body(elections.state_ballot("CT", db_session))
+        assert [c["title"] for c in data["coverage"]] == ["Real reporting"]

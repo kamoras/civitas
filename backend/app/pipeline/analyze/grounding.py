@@ -403,6 +403,93 @@ def ungrounded_electoral_claims(generated: str, source: str) -> list[str]:
     return sorted({m.group(0).strip() for m in _ELECTORAL_CLAIM_RE.finditer(generated or "")})
 
 
+# Telling a reader how to vote, or ranking candidates against each other.
+#
+# Unlike every other check in this module, this one takes NO source
+# argument and is deliberately absolute. The rest ask "is this supported
+# by the source?"; this one asks "may Civitas say this at all?", and the
+# answer is no regardless of support. That distinction is the whole
+# lesson of the 2026-09-23 incident: the platform posted "VOTE VERONICA
+# FERNANDEZ! ... She's better for Jersey than Booker!" and every existing
+# guard passed it, correctly — the source was a member of the public's
+# campaign post, so the endorsement was perfectly grounded, and
+# ungrounded_electoral_claims is (by design) silent whenever the source
+# carries real electoral vocabulary. A faithful restatement of an
+# endorsement is still an endorsement.
+#
+# Kept narrow so ordinary reporting survives: it fires on the imperative
+# voter directive ("vote for X", "re-elect X", "cast your ballot for")
+# and on a bare comparative ranking of candidates ("better for Jersey
+# than Booker"). Reporting that someone ELSE endorsed or outperformed
+# someone is untouched — "Smith endorsed Jones" has no imperative and no
+# first-person comparative, and "leads Booker by six points" is a
+# measurement, not a judgment.
+
+# What separates "vote for Fernandez" from the legislative floor-vote
+# sense that dominates this domain ("vote for the third time", "vote for
+# cloture") is what FOLLOWS the preposition: an endorsement names a
+# person, procedure names a thing. Listing the function words and
+# procedural nouns that can legitimately follow keeps the check
+# case-insensitive — needed for "VOTE VERONICA FERNANDEZ!" and "Vote for
+# ..." alike — without a capitalisation test that all-caps shouting
+# defeats anyway.
+_NOT_A_CANDIDATE = (
+    r"(?!(?:the|a|an|his|her|its|their|our|your|this|that|these|those|another|"
+    r"each|both|any|some|it|us|them|me|him|final|first|second|third|fourth|"
+    r"cloture|passage|impeachment|confirmation|adjournment|recess|amendments?|"
+    r"bills?|measures?|motions?|resolutions?|legislation|funding|approval)\b)"
+)
+
+_ELECTIONEERING_RE = re.compile(
+    "(?:"
+    rf"\b(?:go\s+)?vote\s+(?:for|against)\s+{_NOT_A_CANDIDATE}"
+    rf"|\bcast\s+(?:your|a)\s+ballot\s+for\s+{_NOT_A_CANDIDATE}"
+    rf"|\b(?:re-)?elect\s+(?!new\b){_NOT_A_CANDIDATE}"
+    r"|\bis\s+(?:the\s+)?(?:better|best)\s+(?:choice|candidate|for)\b"
+    r"|\bbetter\s+for\s+\w+\s+than\s+\w"
+    r"|\bdeserves?\s+your\s+vote\b"
+    ")",
+    re.IGNORECASE,
+)
+
+
+# The bare imperative with no preposition — "VOTE VERONICA FERNANDEZ!",
+# the literal text this platform published. _ELECTIONEERING_RE misses it
+# because that one keys on "vote for"/"vote against"; here the name
+# follows directly. Case-SENSITIVE on purpose: the capitalisation is what
+# separates the imperative-plus-name from the ordinary lowercase verb
+# ("lawmakers vote Tuesday"), and the stop-list covers the adverbs and
+# procedural words that legitimately follow a capitalised "Vote" at the
+# start of a sentence.
+# An imperative is clause-initial ("VOTE VERONICA FERNANDEZ!"), which is
+# what distinguishes it from the same capitalised word inside a Title Case
+# headline — "the House Came One Vote From Telling Trump to End the Iran
+# War" is a real coverage headline in this database and must not flag. So
+# Title-case "Vote" is only an imperative at the start of the text or
+# right after sentence-ending punctuation; all-caps VOTE is treated as
+# unambiguous anywhere, since headline case never shouts a single word.
+_ELECTIONEERING_IMPERATIVE_RE = re.compile(
+    r"(?:(?:^|(?<=[.!?\n]))\s*Vote|\bVOTE)\s+"
+    r"(?!(?:For|Against|On|To|Yes|No|Early|Today|Tomorrow|Now|Here|Again|From|By|In|At|"
+    r"Count|Counts|Tally|Tallies|Share|Shares|Total|Totals|Margin|Result|Results|"
+    r"Rigging|Fraud|Recount|Threshold)\b)"
+    r"[A-Z][\w.'’-]+"
+)
+
+
+def electioneering_language(generated: str) -> list[str]:
+    """Voter directives and candidate endorsements in ``generated``.
+
+    Source-independent on purpose — see _ELECTIONEERING_RE. A non-partisan
+    civic platform does not tell people how to vote, and "the source said
+    it first" is not a defence, because restating it in Civitas's own
+    voice is what makes it an endorsement.
+    """
+    found = {m.group(0).strip() for m in _ELECTIONEERING_RE.finditer(generated or "")}
+    found |= {m.group(0).strip() for m in _ELECTIONEERING_IMPERATIVE_RE.finditer(generated or "")}
+    return sorted(found)
+
+
 # Unfilled template tokens: "[date]", "[name]", "[specific date]". Every
 # other check in this module is digit- or name-based, which is exactly why
 # this class reached production unchecked (2026-07 audit: a published fact
@@ -623,6 +710,104 @@ def ungrounded_party_claims(generated: str, source: str) -> list[str]:
     return sorted({m.group(0).strip() for m in _PARTY_CLAIM_RE.finditer(generated or "")})
 
 
+# Wanting a thing to happen is not the thing happening.
+#
+# 2026-09-23: the Action Center published the headline "Iran War Ends
+# Quickly to Lower Prices". Its own summary was accurate — "Recent
+# statements emphasize the NEED FOR an immediate conclusion to the Iran
+# conflict... Officials from Michigan and Iowa have CALLED FOR measures"
+# — but the title turned that advocacy into a completed event. The war
+# had not ended. Titles are generated in the same call as the summary
+# and were never run through this module at all, so nothing looked.
+#
+# The check keys on the asymmetry that makes the error detectable: the
+# generated text asserts an event in plain indicative mood, while every
+# mention of that event in the source sits inside an advocacy frame.
+_ADVOCACY_FRAME_RE = re.compile(
+    r"\b(?:call(?:s|ed|ing)?\s+for|urg(?:e|es|ed|ing)|push(?:es|ed|ing)?\s+for|"
+    r"press(?:es|ed|ing)?\s+for|demand(?:s|ed|ing)?|need\s+for|needs?\s+to|"
+    r"should|must|ought\s+to|propos(?:e|es|ed|al|als)|plan(?:s|ned)?\s+to|"
+    r"seek(?:s|ing)?\s+to|aim(?:s|ing)?\s+to|want(?:s|ed)?\s+to|"
+    r"hop(?:e|es|ed)\s+to|effort\s+to|bid\s+to|would\s+\w+|"
+    r"push\s+to|drive\s+to|move\s+to|campaign\s+to|fight\s+to|"
+    r"legislation\s+to|bill\s+to|measure\s+to|resolution\s+to)\b",
+    re.IGNORECASE,
+)
+
+# Event words whose indicative use asserts that something HAS happened.
+# Each maps to the root to look for in the source. Kept explicit rather
+# than stemmed: a wrong stem here silently disables the check.
+_COMPLETED_EVENT_VERBS = {
+    "ends": "end", "ended": "end", "end": "end",
+    "passes": "pass", "passed": "pass",
+    "approves": "approv", "approved": "approv",
+    "signs": "sign", "signed": "sign",
+    "resigns": "resign", "resigned": "resign",
+    "wins": "win", "won": "win",
+    "halts": "halt", "halted": "halt",
+    "bans": "ban", "banned": "ban",
+    "cuts": "cut", "repeals": "repeal", "repealed": "repeal",
+    "withdraws": "withdraw", "withdrew": "withdraw",
+    "reaches": "reach", "reached": "reach",
+    "begins": "begin", "began": "begin",
+    "settles": "settl", "settled": "settl",
+    "releases": "releas", "released": "releas",
+}
+
+def _governing_clause(text: str, index: int) -> str:
+    """The text from the start of `index`'s own sentence up to it.
+
+    Sentence-bounded on purpose: a flat character window reached back
+    across a full stop and let "Advocates urged the Senate to pass it.
+    The Senate passed it Thursday." read as advocacy-governed, which
+    inverts the check — the second sentence is exactly the factual
+    report that should silence it.
+    """
+    start = max(text.rfind(".", 0, index), text.rfind("!", 0, index),
+                text.rfind("?", 0, index), text.rfind("\n", 0, index))
+    return text[start + 1:index]
+
+
+def proposal_stated_as_fact(generated: str, source: str) -> list[str]:
+    """Events ``generated`` asserts as done that ``source`` only wishes for.
+
+    Fires when the source is arguing FOR something and nowhere reports it
+    as having happened. Both halves are required, which is what keeps
+    ordinary paraphrase safe: a source that reports the event (in any
+    sentence, under any wording this list's root matches) silences the
+    check, and a source with no advocacy framing at all never triggers it
+    — so a title using a synonym of a plainly-reported event is not
+    flagged just for choosing a different word.
+
+    The absent-root case is deliberately INCLUDED, unlike the first draft
+    of this check: the real 2026-09-23 failure ("Iran War Ends Quickly")
+    drew on a source that said "conclusion", never "end", so requiring
+    the root to appear would have missed the very headline this exists
+    to catch.
+    """
+    src = source or ""
+    if not _ADVOCACY_FRAME_RE.search(src):
+        return []  # nothing is being urged here; this check has no opinion
+    low_src = src.lower()
+    problems = []
+    for hit in re.finditer(r"[A-Za-z]+", generated or ""):
+        word = hit.group(0)
+        root = _COMPLETED_EVENT_VERBS.get(word.lower())
+        if not root:
+            continue
+        # The generated text may be reporting the advocacy correctly
+        # ("Lawmakers call for an end to the war") — that is the right
+        # sentence, not the error. Only an unhedged assertion counts.
+        if _ADVOCACY_FRAME_RE.search(_governing_clause(generated, hit.start())):
+            continue
+        spots = [m.start() for m in re.finditer(re.escape(root), low_src)]
+        # Reported as fact anywhere in the source -> not an inversion.
+        if any(not _ADVOCACY_FRAME_RE.search(_governing_clause(src, i)) for i in spots):
+            continue
+        problems.append(word)
+    return sorted(set(problems))
+
+
 def grounding_violations(generated: str, source: str) -> list[str]:
     """Human-readable list of grounding failures, empty when clean."""
     problems = []
@@ -650,6 +835,16 @@ def grounding_violations(generated: str, source: str) -> list[str]:
     party = ungrounded_party_claims(generated, source)
     if party:
         problems.append(f"party affiliation not in source: {', '.join(party)}")
+    # Deliberately ignores `source`: the whole point is that a faithful
+    # restatement of someone else's endorsement is still an endorsement
+    # (2026-09-23). Placed in this combinator rather than at one call
+    # site because that is exactly how the Bluesky poster went unchecked
+    # for months — see hedge_and_editorializing_violations' docstring.
+    electioneering = electioneering_language(generated)
+    if electioneering:
+        problems.append(
+            f"tells the reader how to vote or ranks candidates: {', '.join(electioneering)}"
+        )
     return problems
 
 
