@@ -33,7 +33,6 @@ conservative at the 15-minute election-season cadence, 96 runs/day):
 """
 
 import logging
-import re
 from datetime import timedelta
 
 from sqlalchemy.orm import Session
@@ -46,6 +45,8 @@ from app.pipeline.analyze.grounding import (
     hedge_and_editorializing_violations,
 )
 from app.pipeline.analyze.ollama_client import call_llm
+from app.pipeline.analyze.post_composer import compose
+from app.pipeline.analyze import race_relevance
 from app.pipeline.candidate_dedup import resolve_candidate_id
 from app.time_utils import utcnow
 
@@ -147,102 +148,88 @@ def _roster_fact(item: RaceCoverageItem, race: Race, db: Session) -> str | None:
 
 
 def _generate_post_text(item: RaceCoverageItem, race: Race, roster_fact: str) -> str | None:
-    """Ask the LLM for ONE grounded sentence describing this coverage item.
+    """One sentence about this coverage item, or None if there is no fact.
 
-    Same retry/grounding shape as bluesky_poster._generate_new_post, sized
-    down to a single source item instead of an aggregated ActionIssue.
-    The race association enters the source material as the explicit
-    roster-fact line (see module docstring) — not as unexaminable framing.
+    The model LOCATES two spans; post_composer checks both are verbatim
+    and renders the sentence. It does not write prose — see
+    post_composer's module docstring for the three published failures
+    that made free-form generation untenable, and for what this shape
+    makes structurally impossible rather than merely detectable.
+
+    None is a normal outcome, not an error: an item whose source carries
+    no attributable fact simply produces no post, which is what stopped
+    60 of 160 live race posts from having said only that they existed.
     """
-    user_prompt = f"""Write ONE brief Bluesky sentence introducing this piece of \
-election coverage.
+    source_material = f"{item.title or ''}\n{item.summary or ''}".strip()
+    if not source_material:
+        return None
 
-Race: {_office_label(race)}
-Candidate on this race's FEC roster: {roster_fact}
-Source: {item.source_name}
-Title: {item.title}
-Content: {item.summary or '(no summary available)'}
+    user_prompt = f"""Copy the single most newsworthy fact out of this election \
+coverage. Do NOT summarise it in your own words — locate it and copy it.
 
-RULES — violating any rule means your response is unusable:
-1. Use ONLY information from the Race, Candidate, Title, and Content above. \
-Do not add details, numbers, or claims not stated there.
-2. STRICT MAXIMUM: {MAX_POST_CHARS} characters total.
-3. Exactly ONE sentence, ending with proper punctuation.
-4. No hashtags, no exclamation points, no editorializing, no "breaking news".
-5. Neutral and non-partisan.
-6. Report directly — never write "sources say," "reports indicate," or similar.
-7. Do not predict or assert a winner, margin, or outcome unless the Content \
-explicitly states one.
+EXAMPLE
+Source: "DDHQ shifts Florida governor race to toss-up. Decision Desk HQ (DDHQ) \
+shifted the Florida governor's race to a toss-up on Tuesday."
+Answer: {{"actor": "Decision Desk HQ (DDHQ)", "predicate": "shifted the Florida \
+governor's race to a toss-up on Tuesday"}}
 
-Return JSON: {{"post": "<your sentence>"}}"""
+EXAMPLE
+Source: "The (movie) Reservoir Dogs 4K (iTunes)(CA) C$4.99 (Crime) (iMDB) 8.3"
+Answer: {{"actor": "", "predicate": ""}}
 
-    source_material = f"{roster_fact}\n{item.title}\n{item.summary or ''}"
+NOW DO THIS ONE
+Source:
+{source_material}
 
-    retry_note = ""
+Rules:
+- Both spans must be COPIED EXACTLY from the Source, character for character.
+- "actor" is who did or said it: a named person, body or organisation.
+- "predicate" starts with the verb and runs to the END of the phrase — \
+include the object. "takes a selfie with" is wrong; "takes a selfie with \
+Maryland Sens. Chris Van Hollen and Angela Alsobrooks" is right.
+- If the Source names no one doing anything — an opinion, an advert, a \
+listing — answer with two empty strings. That is a correct answer.
+
+Return JSON: {{"actor": "<exact span>", "predicate": "<exact span>"}}"""
+
     for attempt in range(2):
         result = call_llm(
-            prompt_version="election_coverage_post_v2",
+            prompt_version="election_coverage_extract_v1",
             system_prompt=_SYSTEM_PROMPT,
-            user_prompt=user_prompt + retry_note,
+            user_prompt=user_prompt,
             model=settings.OLLAMA_STORY_MODEL or None,
             cache_key=None,  # time-sensitive, never cache
             db_session=None,
             max_tokens=200,
             num_ctx=2048,
         )
-        if not result or not isinstance(result.get("post"), str):
-            return None
-        post = strip_hashtags_and_truncate(result["post"], MAX_POST_CHARS)
+        if not result:
+            continue
+        post = compose(
+            str(result.get("actor") or ""),
+            str(result.get("predicate") or ""),
+            source_material,
+        )
+        if post is None:
+            # Not a failure worth retrying twice: an empty extraction on
+            # a source with no fact in it is the correct answer.
+            logger.debug("No attributable fact in item %s (attempt %d)", item.id, attempt + 1)
+            continue
+        post = strip_hashtags_and_truncate(post, MAX_POST_CHARS)
 
-        reasons = grounding_violations(post, source_material) + hedge_and_editorializing_violations(post)
-        if content_free_post(post):
-            reasons.append("says only that this is coverage of the race, with no fact")
+        # The spans are verbatim, so this should pass; kept as a cheap
+        # backstop because it is the shared combinator every other
+        # publishing path runs and a regression here would be silent.
+        reasons = grounding_violations(post, source_material)
+        reasons += hedge_and_editorializing_violations(post)
         if not reasons:
             return post
-
         logger.warning(
-            "Election coverage post failed grounding for item %s (attempt %d): %s | post: %s",
-            item.id, attempt + 1, "; ".join(reasons), post[:160],
-        )
-        retry_note = (
-            "\n\nYour previous attempt was rejected because it included "
-            f"{'; '.join(reasons)}. Rewrite using only the Race, Candidate, "
-            "Title, and Content, report directly instead of hedging "
-            "attribution, do not assert any electoral outcome the "
-            "Content doesn't state, do not attach a party label to anyone "
-            "the Race/Candidate/Title/Content doesn't state one for, and "
-            "name specific people by name "
-            "instead of a vague indefinite phrase like 'a president' or "
-            "'a Speaker' for an office only one person holds at a time."
+            "Composed post still failed grounding for item %s: %s | %s",
+            item.id, "; ".join(reasons), post[:160],
         )
 
-    return None  # ungrounded twice — skip; a later run can retry
-
-
-# A post that only asserts its own existence — "This coverage tracks the
-# TX-4 House race and related election developments." It is true, it is
-# grounded, and it tells a reader nothing they did not get from the link.
-# 23 of the 160 race posts live on 2026-09-23 were this shape, which is
-# what the "quality over quantity" standing rule exists to prevent, and
-# no grounding check can catch it: the failure is emptiness, not error.
-#
-# Keyed on the actual template the model falls into when the source has
-# nothing to say — an opener naming the coverage itself, closing on a
-# generic noun, with no fact in between.
-_CONTENT_FREE_RE = re.compile(
-    r"^\s*(?:this|these|the)\s+(?:week'?s?\s+)?"
-    r"(?:coverage|race|piece|update|article|report|story|analysis)\b"
-    r"[^.!?]*\b(?:races?|elections?|contests?|filings?|details?|candidates?|"
-    r"context|implications?|dynamics|developments?|priorities|updates?|"
-    r"information|options|landscape|odds|stakes|issues|matters|campaigns?|"
-    r"outlook|picture|field|emerging|standings?)\b[^.!?]{0,34}[.!]?\s*$",
-    re.IGNORECASE,
-)
-
-
-def content_free_post(text: str) -> bool:
-    """True when the post says only that it is coverage of a race."""
-    return bool(_CONTENT_FREE_RE.match(text or ""))
+    return None
 
 
 def _publish(text: str, race: Race) -> bool:
@@ -355,6 +342,14 @@ def post_race_coverage_updates(db: Session) -> int:
                 "Skipping post for race %s — posted within the last %dh",
                 item.race_id, RACE_COOLDOWN_HOURS,
             )
+            continue
+
+        # Is this story ABOUT the race, or does it merely name someone in
+        # it? The name match that attached it answers the second question
+        # only — see race_relevance's docstring for why that gap put a
+        # Paramount merger on TN-9 and a Tupac trial on NC-1.
+        if not race_relevance.is_relevant(item, race, db):
+            logger.info("Skipping item %s — not about race %s", item.id, race.id)
             continue
 
         roster_fact = _roster_fact(item, race, db)

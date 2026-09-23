@@ -888,6 +888,13 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                     logger.info("--- Election: BLUESKY POSTING ---")
                     progress.begin("bluesky_posting")
                     try:
+                        # Re-derive the relevance cut from the corpus this
+                        # run just ingested, before it gates that corpus —
+                        # same order and same stale-beats-nothing failure
+                        # mode as explore_ranking.calibrate_and_store.
+                        from app.pipeline.analyze import race_relevance
+                        race_relevance.calibrate_and_store(db)
+
                         from app.pipeline.analyze.election_bluesky import post_race_coverage_updates
                         posted = post_race_coverage_updates(db)
                         logger.info("Posted %d race coverage updates", posted)
