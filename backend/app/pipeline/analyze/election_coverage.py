@@ -123,6 +123,43 @@ def _word_pattern(word: str) -> "re.Pattern[str]":
     return re.compile(r"\b" + re.escape(word) + r"\b", re.IGNORECASE)
 
 
+def _full_name_pattern(first: str, surname: str) -> "re.Pattern[str]":
+    """The two names TOGETHER — "Bill Hill" or "Hill, Bill" — not merely
+    both present somewhere in the text.
+
+    The old rule asked only that the surname appear capitalised and the
+    first name appear anywhere at all, in any position, any case. That is
+    how Alaska's at-large race — which has a real, $1.3M-raised candidate
+    named BILL HILL — collected "The Hill" plus "I'm just a bill, sittin
+    here on Capitol Hill" as full-name coverage, and then posted about it
+    nine times. Measured across all 7,471 stored full_name matches, 25.1%
+    were incidental in exactly this way: "Cameron Hamilton to lead FEMA"
+    for Daniel Cameron, "Adam Driver will play Mister Sinister" for Adam
+    Delgado, "Warner Bros. bid" for William Todd Warner.
+
+    Up to two intervening tokens carry real middle names and initials
+    ("Robert F. Kennedy"). Compiled case-INSENSITIVELY, with
+    capitalisation verified on the matched text by the caller, for the
+    same reason _matches_as_a_name documents: building "Mcconnell" to
+    compare case-sensitively rejects every real "McConnell".
+    """
+    f, ln = re.escape(first), re.escape(surname)
+    return re.compile(
+        rf"\b{f}\b(?:\s+[A-Za-z][\w.'’-]*){{0,2}}\s+\b{ln}\b"
+        rf"|\b{ln}\b,?\s+\b{f}\b",
+        re.IGNORECASE,
+    )
+
+
+def _matches_full_name(pattern: "re.Pattern[str]", text: str) -> bool:
+    """True where first and last name occur together, both capitalised."""
+    for m in pattern.finditer(text):
+        tokens = [t for t in re.split(r"[\s,]+", m.group(0)) if t]
+        if len(tokens) >= 2 and tokens[0][:1].isupper() and tokens[-1][:1].isupper():
+            return True
+    return False
+
+
 def _matches_as_a_name(pattern: "re.Pattern[str]", text: str) -> bool:
     """True only where the word occurs CAPITALISED — i.e. as a name.
 
@@ -180,14 +217,14 @@ class CandidateMatcher:
     race_id: str
     state: str
     surname_re: "re.Pattern[str]"
-    first_re: "re.Pattern[str] | None"
+    full_name_re: "re.Pattern[str] | None"
     state_re: "re.Pattern[str]"
 
     def match_basis(self, text: str) -> str | None:
         """"full_name" / "surname_context" / None — see module docstring."""
         if not _matches_as_a_name(self.surname_re, text):
             return None
-        if self.first_re is not None and self.first_re.search(text):
+        if self.full_name_re is not None and _matches_full_name(self.full_name_re, text):
             return "full_name"
         if self.state_re.search(text):
             return "surname_context"
@@ -214,7 +251,7 @@ def _build_matchers(db: Session) -> list[CandidateMatcher]:
             race_id=race_id,
             state=parts[2],
             surname_re=_word_pattern(surname),
-            first_re=_word_pattern(first) if first else None,
+            full_name_re=_full_name_pattern(first, surname) if first else None,
             state_re=_state_name_pattern(state_name),
         ))
     return matchers

@@ -8,11 +8,13 @@ name ("surname_context") — and an item that still matches candidates in
 more than one race is dropped entirely rather than guessed or fanned out.
 """
 
+import pytest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
 from app.models import Candidate, Race, RaceCoverageItem
 from app.pipeline.analyze import election_coverage
+from app.pipeline.analyze import election_coverage as ec
 from app.pipeline.fetch.bluesky_search import BlueskyPost
 from app.pipeline.fetch.news_feeds import NewsArticle
 
@@ -510,3 +512,52 @@ class TestStoredItemsAreRevalidated:
         await self._run(db_session)
 
         assert db_session.query(RaceCoverageItem).count() == 1
+
+
+class TestFullNameMustAppearTogether:
+    """Alaska's at-large race has a real candidate — $1.3M raised — named
+    BILL HILL. The old rule asked only that the surname appear
+    capitalised and the first name appear ANYWHERE in the text, in any
+    position and any case, so "The Hill" plus "I'm just a bill, sittin
+    here on Capitol Hill" was a full-name match. The race collected that
+    as coverage and the account posted about it nine times.
+
+    Measured across all 7,471 stored full_name matches: 25.1% were
+    incidental in exactly this way."""
+
+    def _basis(self, first, surname, text):
+        pat = ec._full_name_pattern(first, surname)
+        return ec._matches_full_name(pat, text)
+
+    @pytest.mark.parametrize("text", [
+        "The Hill reports that Congress needs a bill on fixed recesses.",
+        "I'm just a bill, sittin here on Capitol Hill.",
+        "Stopgap funding bill seeks delay of Trump's science funding plan",
+    ])
+    def test_incidental_words_are_not_a_full_name(self, text):
+        assert not self._basis("BILL", "HILL", text)
+
+    @pytest.mark.parametrize("text", [
+        "Bill Hill announced his campaign for Alaska's at-large seat.",
+        "Hill, Bill filed with the FEC this week.",
+    ])
+    def test_the_real_candidate_still_matches(self, text):
+        assert self._basis("BILL", "HILL", text)
+
+    def test_intercaps_surnames_survive(self):
+        """The trap this module already documents: building "Mcconnell"
+        to compare case-sensitively rejects every real "McConnell"."""
+        assert self._basis("MITCH", "MCCONNELL",
+                           "Mitch McConnell's absence looms large over the picnic.")
+        assert self._basis("BETO", "O'ROURKE", "Beto O'Rourke campaigned in El Paso.")
+
+    def test_a_middle_name_or_initial_does_not_break_the_match(self):
+        assert self._basis("ROBERT", "KENNEDY", "Robert F. Kennedy Jr. spoke on Tuesday.")
+
+    @pytest.mark.parametrize("first,surname,text", [
+        ("DANIEL", "CAMERON", "Senate confirms Cameron Hamilton to lead FEMA."),
+        ("ADAM", "DELGADO", "Adam Driver will play Mister Sinister; Delgado was not involved."),
+        ("WILLIAM", "WARNER", "Paramount's Warner Bros. bid divides Hollywood."),
+    ])
+    def test_real_false_matches_from_production(self, first, surname, text):
+        assert not self._basis(first, surname, text)

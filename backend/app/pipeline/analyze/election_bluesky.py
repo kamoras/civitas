@@ -58,11 +58,19 @@ MAX_POSTS_PER_RUN = 5
 
 # Hard cap per rolling 24h across ALL runs. The per-run cap alone
 # multiplied to 480/day at the 15-minute election-season cadence.
-MAX_POSTS_PER_DAY = 12
+#
+# 12 was a ceiling on VOLUME when the real problem was repetition: over
+# 27 days the account posted 167 race updates, 6.2 a day, 12 on the
+# worst day — Michigan's Senate race 12 times, Alaska's at-large 9 times
+# and every one of those 9 either empty or wrong. Simulated against that
+# real history: the content-free filter alone takes 6.2/day to 3.7, and
+# these two settings take it to 2.9. The quality gates do most of the
+# work; these just stop a busy news day from burying a reader.
+MAX_POSTS_PER_DAY = 4
 
 # Minimum spacing between posts about the same race, so five items about
 # one busy race can't consume a whole run back-to-back.
-RACE_COOLDOWN_HOURS = 6
+RACE_COOLDOWN_HOURS = 48
 
 # Which coverage sources Civitas will restate IN ITS OWN VOICE.
 #

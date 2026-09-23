@@ -200,9 +200,15 @@ class TestPostRaceCoverageUpdates:
         _creds(monkeypatch)
         _race(db_session)
         _candidate(db_session)
+        # Budget-exhausting posts go on OTHER races: at 25h they are
+        # outside the 24h budget window but inside the 48h per-race
+        # cooldown, so keeping them on this race would test the cooldown
+        # instead of the budget.
         for i in range(election_bluesky.MAX_POSTS_PER_DAY):
+            _race(db_session, race_id=f"2026-SEN-Z{i}", state="GA")
             _item(
-                db_session, url=f"https://apnews.com/posted{i}",
+                db_session, race_id=f"2026-SEN-Z{i}",
+                url=f"https://apnews.com/posted{i}",
                 bsky_posted=True, bsky_posted_at=utcnow() - timedelta(hours=25),
             )
         _item(db_session, url="https://apnews.com/fresh")
