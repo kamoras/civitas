@@ -77,6 +77,7 @@ function ballot(overrides: Partial<StateBallot> = {}): StateBallot {
     statewideCoverage: { status: "not_yet_covered", sourceName: null, checkedAt: null },
     stateLegRaces: [],
     judicialRaces: [],
+    judicialCoverage: { status: "not_yet_covered", checkedAt: null, sourceName: null },
     officialLookup: {
       url: "https://www.usa.gov/election-office",
       label: "Find your election office",
@@ -437,7 +438,14 @@ describe("state legislature", () => {
 
 describe("JudicialSection", () => {
   const withJudicial = (judicialRaces: StateBallot["judicialRaces"]) =>
-    ballot({ judicialRaces });
+    ballot({
+      judicialRaces,
+      judicialCoverage: {
+        status: judicialRaces.length ? "covered" : "not_yet_covered",
+        checkedAt: "2026-09-22T00:00:00Z",
+        sourceName: "NC State Board of Elections",
+      },
+    });
 
   it("renders nothing when the state has no judicial coverage", () => {
     render(<StateBallotClient ballot={withJudicial([])} />);
@@ -484,5 +492,39 @@ describe("JudicialSection", () => {
       />,
     );
     expect(screen.getByText(/Retention questions are a separate ballot item/i)).toBeInTheDocument();
+  });
+});
+
+describe("JudicialSection confirmed-none", () => {
+  it("says none are on the ballot rather than rendering nothing", () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          state: "ID",
+          judicialRaces: [],
+          judicialCoverage: {
+            status: "confirmed_none",
+            checkedAt: "2026-09-22T00:00:00Z",
+            sourceName: "Idaho Secretary of State",
+          },
+        })}
+      />,
+    );
+    expect(screen.getByText(/No judicial contests are on ID/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/takes a majority wins the seat outright/i),
+    ).toBeInTheDocument();
+  });
+
+  it("renders nothing when the state has never been checked", () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          judicialRaces: [],
+          judicialCoverage: { status: "not_yet_covered", checkedAt: null, sourceName: null },
+        })}
+      />,
+    );
+    expect(screen.queryByText(/No judicial contests are on/i)).not.toBeInTheDocument();
   });
 });

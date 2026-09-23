@@ -12,7 +12,6 @@ from app.api import elections
 from app.models import (
     BallotMeasure,
     Candidate,
-    JudicialNominee,
     MeasureCoverage,
     Race,
     RaceCoverageItem,
@@ -793,12 +792,18 @@ class TestJudicialOmitShrinks:
     """
 
     @staticmethod
-    def _judicial_row(state="NC", court="district", district="3", seat="2",
-                      party="R", name="Lloyd Williams"):
-        return JudicialNominee(
-            state=state, cycle_year=2026, court=court, district=district,
-            seat=seat, party=party, display_name=name,
-            source_name="NC State Board of Elections",
+    def _sync_judicial(db, state="NC", court="district", district="3", seat="2",
+                       party="R", name="Lloyd Williams"):
+        """Through the real sync, which writes the row AND the coverage
+        marker — inserting a bare row would leave the page reporting
+        not_yet_covered, which is correct but not what this tests."""
+        from app.pipeline.fetch.state_candidates import _sync_judicial_nominees
+        _sync_judicial_nominees(
+            db, 2026, state,
+            {"strategy": "tabular", "source_name": "NC State Board of Elections",
+             "judicial_offices": True},
+            [{"office": court, "district": district, "seat": seat,
+              "party": party, "last_name": name}],
         )
 
     def test_uncovered_state_names_contests_and_retention_together(self, db_session):
@@ -815,8 +820,8 @@ class TestJudicialOmitShrinks:
         covered while they are not would be the honest half-statement
         this list exists to avoid."""
         _race(db_session, "2026-SEN-NC", "NC")
-        db_session.add(self._judicial_row())
         db_session.commit()
+        self._sync_judicial(db_session)
 
         data = _body(elections.state_ballot("NC", db_session))
         assert data["judicialRaces"], "the section should render"
@@ -825,10 +830,52 @@ class TestJudicialOmitShrinks:
 
     def test_the_other_omissions_are_untouched(self, db_session):
         _race(db_session, "2026-SEN-NC", "NC")
-        db_session.add(self._judicial_row())
         db_session.commit()
+        self._sync_judicial(db_session)
         data = _body(elections.state_ballot("NC", db_session))
         for still_omitted in ("County and municipal offices",
                               "Local ballot measures",
                               "Primary and runoff ballots"):
             assert still_omitted in data["omits"]
+
+
+class TestJudicialConfirmedNone:
+    """A state whose judicial seats were ALL decided in its primary.
+
+    Idaho is the live case: its three matched contests were unopposed,
+    so all three were elected in May under Idaho Code 34-1217 and none
+    is on the November ballot. That is a CHECKED answer, and the page
+    has to say so rather than render the same empty space a state
+    nobody has looked at gets.
+    """
+
+    @staticmethod
+    def _sync_empty(db, state="ID"):
+        from app.pipeline.fetch.state_candidates import _sync_judicial_nominees
+        _sync_judicial_nominees(
+            db, 2026, state,
+            {"strategy": "tabular", "source_name": "Idaho Secretary of State",
+             "judicial_offices": True, "judicial_majority": "elects"},
+            [],
+        )
+
+    def test_checked_and_empty_is_not_the_same_as_unchecked(self, db_session):
+        _race(db_session, "2026-SEN-ID", "ID")
+        db_session.commit()
+        self._sync_empty(db_session)
+
+        data = _body(elections.state_ballot("ID", db_session))
+        assert data["judicialRaces"] == []
+        assert data["judicialCoverage"]["status"] == "confirmed_none"
+        assert data["judicialCoverage"]["sourceName"] == "Idaho Secretary of State"
+        # And the omission shrinks, because judicial contests ARE now
+        # accounted for — the answer is simply that none are on the ballot.
+        assert "Judicial retention questions" in data["omits"]
+        assert "Judicial contests and retention questions" not in data["omits"]
+
+    def test_an_unchecked_state_still_declares_the_full_omission(self, db_session):
+        _race(db_session, "2026-SEN-GA", "GA")
+        db_session.commit()
+        data = _body(elections.state_ballot("GA", db_session))
+        assert data["judicialCoverage"]["status"] == "not_yet_covered"
+        assert "Judicial contests and retention questions" in data["omits"]

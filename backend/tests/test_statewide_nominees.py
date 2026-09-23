@@ -10,7 +10,9 @@ MeasureCoverage already enforces for ballot measures.
 """
 
 from app.api.elections import (
+    JudicialCoverageStatus,
     StatewideCoverageStatus,
+    _judicial_marker,
     _judicial_section,
     _state_leg_section,
     _statewide_marker,
@@ -468,7 +470,7 @@ class TestJudicialSection:
             _judicial("appeals", None, "4", "R", "Michael C. Byrne"),
             _judicial("supreme", None, "1", "D", "A Justice"),
         ])
-        out = _judicial_section(db_session, "NC", CYCLE)
+        out, _ = _judicial_section(db_session, "NC", CYCLE, {"checkedAt": "x", "count": 3})
         assert [s["court"] for s in out] == ["supreme", "appeals", "district"]
 
     def test_a_trial_seat_names_its_district_and_an_appellate_one_does_not(self, db_session):
@@ -476,9 +478,65 @@ class TestJudicialSection:
             _judicial("district", "14", "3", "D", "Sherry Miller"),
             _judicial("appeals", None, "4", "R", "Michael C. Byrne"),
         ])
-        out = {s["court"]: s["seats"] for s in _judicial_section(db_session, "NC", CYCLE)}
+        out = {s["court"]: s["seats"] for s in _judicial_section(
+            db_session, "NC", CYCLE, {"checkedAt": "x", "count": 2})[0]}
         assert out["district"][0]["seat"] == "District 14, Seat 3"
         assert out["appeals"][0]["seat"] == "Seat 4"
 
     def test_a_state_that_never_opted_in_has_no_section(self, db_session):
-        assert _judicial_section(db_session, "GA", CYCLE) == []
+        races, coverage = _judicial_section(db_session, "GA", CYCLE, None)
+        assert races == []
+        assert coverage["status"] == JudicialCoverageStatus.NOT_YET_COVERED
+
+
+class TestJudicialCoverageStatus:
+    """The distinction that lets Idaho be published at all.
+
+    A state whose judicial seats were ALL decided in its primary has
+    genuinely zero November contests. Idaho is exactly that: its three
+    matched contests were unopposed, so all three were elected in May
+    under Idaho Code 34-1217. Rendering that identically to "nobody has
+    read this state's judicial statute yet" tells a reader there is
+    nothing to research when the truth is that the races are over.
+    """
+
+    def test_never_checked_is_not_yet_covered(self, db_session):
+        races, coverage = _judicial_section(db_session, "GA", CYCLE, None)
+        assert races == []
+        assert coverage["status"] == JudicialCoverageStatus.NOT_YET_COVERED
+        assert coverage["checkedAt"] is None
+
+    def test_checked_with_no_seats_is_confirmed_none(self, db_session):
+        """Idaho's real shape — checked, and the answer is none."""
+        marker = {"checkedAt": "2026-09-22T00:00:00Z", "count": 0,
+                  "sourceName": "Idaho Secretary of State"}
+        races, coverage = _judicial_section(db_session, "ID", CYCLE, marker)
+        assert races == []
+        assert coverage["status"] == JudicialCoverageStatus.CONFIRMED_NONE
+        assert coverage["checkedAt"] == "2026-09-22T00:00:00Z"
+        assert coverage["sourceName"] == "Idaho Secretary of State"
+
+    def test_checked_with_seats_is_covered(self, db_session):
+        _sync_judicial_nominees(db_session, CYCLE, "NC", JUDICIAL_SOURCE,
+                                [_judicial("district", "3", "2", "R", "Lloyd Williams")])
+        marker = {"checkedAt": "2026-09-22T00:00:00Z", "count": 1, "sourceName": "NC"}
+        races, coverage = _judicial_section(db_session, "NC", CYCLE, marker)
+        assert races and coverage["status"] == JudicialCoverageStatus.COVERED
+
+    def test_the_sync_writes_a_marker_even_with_nothing_to_store(self, db_session):
+        """The load-bearing case: without this, a state with zero
+        November judicial contests is indistinguishable from one nobody
+        looked at."""
+        stored = _sync_judicial_nominees(
+            db_session, CYCLE, "ID",
+            {**JUDICIAL_SOURCE, "source_name": "Idaho Secretary of State"}, [])
+        assert stored == 0
+        marker = _judicial_marker(db_session, "ID", CYCLE)
+        assert marker is not None, "an empty result must still record that we looked"
+        assert marker["count"] == 0
+
+    def test_a_state_that_never_opted_in_writes_no_marker(self, db_session):
+        """Opt-out must stay distinguishable from checked-and-empty."""
+        assert _sync_judicial_nominees(
+            db_session, CYCLE, "GA", {**SOURCE, "judicial_offices": False}, []) == 0
+        assert _judicial_marker(db_session, "GA", CYCLE) is None

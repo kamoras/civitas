@@ -71,6 +71,9 @@ from app.pipeline.fetch.state_source_crawler import (
 from app.pipeline.fetch.state_candidates_common import (
     PARTY_CODE_MAP,
     JUDICIAL_COURT_LABELS,
+    JUDICIAL_MARKER_TIER,
+    JUDICIAL_MARKER_TTL_HOURS,
+    judicial_marker_key,
     STATE_LEG_CHAMBER_LABELS,
     STATEWIDE_MARKER_TIER,
     STATEWIDE_MARKER_TTL_HOURS,
@@ -631,6 +634,22 @@ def _sync_judicial_nominees(
                 row.display_name) not in keep:
             db.delete(row)
 
+    # Written even when `keep` is empty, which is the whole point: a
+    # state whose judicial seats were all decided in its primary has
+    # ZERO November contests, and that is a checked answer, not a gap.
+    # Idaho is exactly that case — all three of its matched contests
+    # were unopposed and therefore already elected under Idaho Code
+    # 34-1217. Without this marker an empty section is indistinguishable
+    # from a state nobody has looked at.
+    api_cache_set(
+        db, JUDICIAL_MARKER_TIER, judicial_marker_key(state, cycle),
+        {
+            "checkedAt": utcnow().isoformat() + "Z",
+            "count": len(keep),
+            "sourceName": str(source.get("source_name") or ""),
+        },
+        normal_ttl_hours=JUDICIAL_MARKER_TTL_HOURS,
+    )
     db.commit()
     return len(keep)
 
