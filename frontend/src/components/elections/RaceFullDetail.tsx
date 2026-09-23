@@ -71,6 +71,10 @@ export default function RaceFullDetail({ race }: { race: RaceWithCandidates }) {
   const active = race.candidates.filter(isActiveCandidate);
   const otherFilers = race.candidates.filter((c) => !isActiveCandidate(c));
   const tiered = race.candidateSource === "filers" || race.candidateSource === "primary";
+  // A state-verified list can still carry someone the primary file never
+  // listed, because an uncontested primary isn't held — say so, rather
+  // than letting them read as equally confirmed.
+  const hasUnconfirmed = !tiered && active.some((c) => !c.confirmed);
   const { leaders, tail } = tiered ? tierCandidates(active) : { leaders: active, tail: [] };
 
   return (
@@ -80,7 +84,10 @@ export default function RaceFullDetail({ race }: { race: RaceWithCandidates }) {
       ) : (
         <>
           <div className="mb-2 flex items-center gap-2">
-            <p className="font-mono text-xs text-ink-min">{SOURCE_NOTE[race.candidateSource]}</p>
+            <p className="font-mono text-xs text-ink-min">
+              {SOURCE_NOTE[race.candidateSource]}
+              {hasUnconfirmed && " Candidates marked UNCONFIRMED drew no primary opponent, so this state held no primary for them and its results file doesn't list them — they're shown from their FEC filing."}
+            </p>
             {tiered && (
               <span className="shrink-0 border border-white/15 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-min">
                 FEC-filed field
@@ -89,7 +96,7 @@ export default function RaceFullDetail({ race }: { race: RaceWithCandidates }) {
           </div>
           <div className="space-y-3">
             {leaders.map((c) => (
-              <CandidateCard key={c.id} candidate={c} />
+              <CandidateCard key={c.id} candidate={c} showUnconfirmed={!tiered} />
             ))}
           </div>
 

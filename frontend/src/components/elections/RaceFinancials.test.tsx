@@ -8,6 +8,7 @@ function candidate(overrides: Partial<CandidateSummary>): CandidateSummary {
     id: "id",
     name: "name",
     party: "DEM",
+    confirmed: true,
     incumbentChallenge: null,
     candidateStatus: "C",
     hasRaisedFunds: true,

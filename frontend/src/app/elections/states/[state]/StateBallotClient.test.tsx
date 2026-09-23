@@ -28,6 +28,7 @@ function candidate(overrides: Partial<RaceWithCandidates["candidates"][number]>)
     id: "c1",
     name: "Jane Doe",
     party: "DEM",
+    confirmed: true,
     incumbentChallenge: null as string | null,
     candidateStatus: "C" as string | null,
     hasRaisedFunds: true,

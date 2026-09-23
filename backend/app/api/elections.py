@@ -179,6 +179,12 @@ def _candidate_summary(cand: Candidate, stale_incumbent_ids: frozenset[str] = fr
         "id": cand.id,
         "name": cand.name,
         "party": cand.party,
+        # Per-CANDIDATE confidence, which `candidateSource` cannot carry:
+        # a race's list can now mix a state-confirmed nominee with an
+        # unopposed one the primary file never listed (see
+        # _unopposed_nominees). The page must render the second kind
+        # less confidently rather than silently promoting it.
+        "confirmed": bool(cand.confirmed_general),
         "incumbentChallenge": None if cand.id in stale_incumbent_ids else cand.incumbent_challenge,
         "hasRaisedFunds": cand.has_raised_funds,
         "candidateStatus": cand.candidate_status,
@@ -192,7 +198,73 @@ def _candidate_summary(cand: Candidate, stale_incumbent_ids: frozenset[str] = fr
     }
 
 
-def _confirmed_or_all(candidates: list[Candidate]) -> list[Candidate]:
+# Only these two nominate through a primary in the first place. An
+# independent or minor-party candidate qualifies by petition, so a
+# primary-results file structurally cannot see them — which is exactly
+# what `_candidate_source`'s "nominees" answer already discloses, and is
+# NOT something to paper over by re-admitting every such FEC filer.
+# Measured against real 2026 data: re-admitting every unconfirmed party
+# brought back 540 candidates, 118 of them independents; the rule below
+# brings back 36, all of them major-party.
+_PRIMARY_NOMINATING_PARTIES = frozenset({"DEM", "REP"})
+
+
+def _unopposed_nominees(
+    candidates: list[Candidate], confirmed: list[Candidate], state: str,
+) -> list[Candidate]:
+    """Real November candidates a primary-results file cannot see, because
+    their primary was never held.
+
+    A state that cancels an uncontested primary (Delaware does, and so in
+    practice do most party-primary states) publishes no row for a
+    candidate who drew no opponent. `_confirmed_or_all` would then treat
+    that candidate as a loser and drop them — which deleted 36 real
+    candidates from live races, 19 of them SITTING members of Congress
+    running for re-election: Warner and Ernst in their own Senate races,
+    Crockett, Himes, Castor, Griffith, Bilirakis and a dozen more in
+    theirs. A voter reading those pages saw a one-party ballot.
+
+    Scoped tightly, because the filter it relaxes exists for a real
+    reason (TX's 19 stale FEC filers). A candidate comes back only when
+    ALL of these hold:
+
+    * The state nominates one-per-party. In a top-two/top-four state the
+      single combined contest really does decide every advancer
+      regardless of party, so a party with nobody confirmed genuinely
+      has nobody — `advance_count > 1` is left alone entirely.
+    * Their party has NO confirmed nominee here. A party that actually
+      held a primary has one, which also means an incumbent who LOST a
+      primary stays filtered: losing implies the primary happened, which
+      implies their party is covered, which excludes this path.
+    * They are either the only filer of that party (nobody to lose to),
+      or the race's single FEC-coded incumbent. "Single" matters — FEC's
+      own incumbent coding is only self-consistent when one candidate
+      carries it, the same condition `_stale_incumbent_ids` already
+      refuses to trust below.
+
+    A party with several filers and no incumbent is deliberately NOT
+    guessed at: that is a genuine coverage gap in the state's own feed,
+    and inventing a nominee would be worse than the gap. Everything
+    returned here is unconfirmed, and `_candidate_summary` marks it so —
+    the page must not present it as a confirmed nominee."""
+    source = source_for_state(state) or {}
+    if (source.get("advance_count", 1) or 1) > 1:
+        return []
+    covered = {c.party for c in confirmed}
+    coded_incumbents = [c for c in candidates if c.incumbent_challenge == "I"]
+    sole_incumbent = coded_incumbents[0] if len(coded_incumbents) == 1 else None
+
+    recovered: list[Candidate] = []
+    for party in _PRIMARY_NOMINATING_PARTIES - covered:
+        pool = [c for c in candidates if c.party == party and not c.confirmed_general]
+        if len(pool) == 1:
+            recovered.append(pool[0])
+        elif sole_incumbent is not None and sole_incumbent in pool:
+            recovered.append(sole_incumbent)
+    return recovered
+
+
+def _confirmed_or_all(candidates: list[Candidate], state: str) -> list[Candidate]:
     """If a registered state source (state_candidate_sources.json /
     state_candidates.py) has confirmed any candidate in this race as an
     actual general-election nominee, return ONLY confirmed candidates — an
@@ -217,8 +289,9 @@ def _confirmed_or_all(candidates: list[Candidate]) -> list[Candidate]:
     than one route. Also the one place dedupe_candidates runs, so every
     one of those endpoints gets it for free."""
     candidates = dedupe_candidates(candidates)
-    if any(c.confirmed_general for c in candidates):
-        return [c for c in candidates if c.confirmed_general]
+    confirmed = [c for c in candidates if c.confirmed_general]
+    if confirmed:
+        return confirmed + _unopposed_nominees(candidates, confirmed, state)
     if any(c.on_primary_ballot for c in candidates):
         return [c for c in candidates if c.on_primary_ballot]
     return candidates
@@ -278,7 +351,7 @@ def _stale_incumbent_ids(candidates: list[Candidate]) -> frozenset[str]:
 
 def _race_summary(race: Race, state_pvi: dict, district_pvi: dict) -> dict:
     candidates = sorted(
-        _confirmed_or_all(race.candidates),
+        _confirmed_or_all(race.candidates, race.state),
         key=lambda c: (c.cash_on_hand or 0.0),
         reverse=True,
     )
@@ -368,7 +441,7 @@ def _race_full(
     news feed, which stays one click away on the existing race-detail
     page. Confirmed-general filtering (see _confirmed_or_all) applies
     here too, same as race_detail."""
-    candidates = sorted(_confirmed_or_all(race.candidates), key=lambda c: (c.cash_on_hand or 0.0), reverse=True)
+    candidates = sorted(_confirmed_or_all(race.candidates, race.state), key=lambda c: (c.cash_on_hand or 0.0), reverse=True)
     pvi, pvi_level = _pvi_for_race(race, state_pvi, district_pvi)
     stale_incumbent_ids = _stale_incumbent_ids(race.candidates)
     counties = None
@@ -1068,7 +1141,7 @@ def race_detail(race_id: str, db: Session = Depends(get_db)):
 
     state_pvi = get_state_pvi_map()
     district_pvi = get_district_pvi_map()
-    candidates = sorted(_confirmed_or_all(race.candidates), key=lambda c: (c.cash_on_hand or 0.0), reverse=True)
+    candidates = sorted(_confirmed_or_all(race.candidates, race.state), key=lambda c: (c.cash_on_hand or 0.0), reverse=True)
     stale_incumbent_ids = _stale_incumbent_ids(race.candidates)
     coverage = (
         db.query(RaceCoverageItem)

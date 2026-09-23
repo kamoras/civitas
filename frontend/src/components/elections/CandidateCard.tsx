@@ -40,7 +40,18 @@ const INCUMBENT_LABELS: Record<string, string> = {
   O: "OPEN SEAT",
 };
 
-export default function CandidateCard({ candidate }: { candidate: BallotCandidate }) {
+/** `showUnconfirmed` is off by default because in a "filers"/"primary"
+ * race NOBODY is confirmed — the race-level note already says so, and a
+ * badge on every card would be noise. It's switched on only for a race
+ * whose list is otherwise state-verified, where an unconfirmed entry is
+ * the exception worth marking. */
+export default function CandidateCard({
+  candidate,
+  showUnconfirmed = false,
+}: {
+  candidate: BallotCandidate;
+  showUnconfirmed?: boolean;
+}) {
   const pm = getPartyMeta(candidate.party);
   const cash = cashOnHandDisplay(candidate.cashOnHand);
   // UTC date only, sliced from the ISO string — deterministic across
@@ -73,6 +84,14 @@ export default function CandidateCard({ candidate }: { candidate: BallotCandidat
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
+          {showUnconfirmed && !candidate.confirmed && (
+            <span
+              className="border border-dashed border-white/20 px-2 py-0.5 font-mono text-xs tracking-[0.1em] text-ink-min"
+              title="This state's primary file doesn't list this candidate — an uncontested primary isn't held, so there is no result to read. Their FEC filing is the source."
+            >
+              UNCONFIRMED
+            </span>
+          )}
           {candidate.incumbentChallenge && (
             <span className="border border-white/15 px-2 py-0.5 font-mono text-xs tracking-[0.1em] text-ink-lo">
               {INCUMBENT_LABELS[candidate.incumbentChallenge] ?? candidate.incumbentChallenge}

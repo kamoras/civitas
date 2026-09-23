@@ -6,6 +6,13 @@ export interface CandidateSummary {
   id: string;
   name: string;
   party: string;
+  /** Whether a state source actually confirmed this person as a
+   * general-election nominee. A "confirmed"/"nominees" race can mix
+   * both: a candidate whose primary was uncontested is never listed in
+   * that state's primary-results file, so they are real but unconfirmed
+   * (backend: _unopposed_nominees). candidateSource is per-race and
+   * can't express that, which is why this is per-candidate. */
+  confirmed: boolean;
   /** FEC code: "I"=Incumbent, "C"=Challenger, "O"=Open seat. Null if FEC
    * hasn't classified this candidate yet. */
   incumbentChallenge: string | null;

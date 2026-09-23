@@ -255,3 +255,116 @@ class TestPviMap:
 
         data = _body(elections.pvi_map())
         assert data["cycleYear"] == current_election_cycle()
+
+
+class TestUnopposedNomineesAreNotTreatedAsLosers:
+    """A state that cancels an uncontested primary publishes no row for a
+    candidate who drew no opponent, so they never get confirmed_general
+    — and the defeated-filer filter then dropped them as if they had
+    lost. Measured against real 2026 production data on 2026-09-23: 36
+    real candidates deleted from live races, 19 of them SITTING members
+    of Congress running for re-election (Warner and Ernst in their own
+    Senate races; Crockett, Himes, Castor, Griffith, Bilirakis and a
+    dozen more in theirs). Those pages showed a one-party ballot."""
+
+    def test_sole_filer_of_an_unconfirmed_party_comes_back(self, db_session):
+        """Brian Mast's shape: the other party confirmed a nominee, his
+        own primary was uncontested so the file never listed him, and he
+        is the only Republican in the race."""
+        _race(db_session, "2026-HOUSE-FL-21", "FL", office="H", district=21)
+        _candidate(db_session, "DNOM", "2026-HOUSE-FL-21", "MARTIN, JAMES",
+                   party="DEM", confirmed_general=True)
+        _candidate(db_session, "MAST", "2026-HOUSE-FL-21", "MAST, BRIAN", party="REP")
+        db_session.commit()
+
+        race = db_session.query(Race).filter(Race.id == "2026-HOUSE-FL-21").first()
+        assert sorted(c.id for c in elections._confirmed_or_all(race.candidates, "FL")) == ["DNOM", "MAST"]
+
+    def test_the_single_fec_incumbent_comes_back_from_a_crowded_party(self, db_session):
+        """Mark Warner's shape: several Democrats hold FEC filings, so
+        "sole filer" cannot save him — but exactly one carries FEC's
+        incumbent coding, the same single-I condition _stale_incumbent_ids
+        already requires before trusting that field."""
+        _race(db_session, "2026-SEN-VA", "VA")
+        _candidate(db_session, "RNOM", "2026-SEN-VA", "MIZUSAWA, BERT",
+                   party="REP", confirmed_general=True)
+        _candidate(db_session, "WARNER", "2026-SEN-VA", "WARNER, MARK",
+                   party="DEM", incumbent_challenge="I")
+        _candidate(db_session, "PAPER", "2026-SEN-VA", "NOBODY, A", party="DEM")
+        db_session.commit()
+
+        race = db_session.query(Race).filter(Race.id == "2026-SEN-VA").first()
+        got = sorted(c.id for c in elections._confirmed_or_all(race.candidates, "VA"))
+        assert got == ["RNOM", "WARNER"]
+
+    def test_a_crowded_party_with_no_incumbent_is_not_guessed_at(self, db_session):
+        """A genuine coverage gap in the state's own feed. Inventing a
+        nominee from several equally-plausible filers would be worse than
+        the gap, so nothing comes back."""
+        _race(db_session, "2026-SEN-VA", "VA")
+        _candidate(db_session, "RNOM", "2026-SEN-VA", "MIZUSAWA, BERT",
+                   party="REP", confirmed_general=True)
+        _candidate(db_session, "D1", "2026-SEN-VA", "ONE, A", party="DEM")
+        _candidate(db_session, "D2", "2026-SEN-VA", "TWO, B", party="DEM")
+        db_session.commit()
+
+        race = db_session.query(Race).filter(Race.id == "2026-SEN-VA").first()
+        assert [c.id for c in elections._confirmed_or_all(race.candidates, "VA")] == ["RNOM"]
+
+    def test_independents_and_minor_parties_never_come_back(self, db_session):
+        """They qualify by petition, not by primary, so a primary file
+        structurally cannot see them — which is what candidateSource's
+        "nominees" already discloses. Re-admitting every such filer was
+        the naive version of this fix: 540 candidates instead of 36, 118
+        of them independents."""
+        _race(db_session, "2026-SEN-VA", "VA")
+        _candidate(db_session, "DNOM", "2026-SEN-VA", "REAL, D", party="DEM", confirmed_general=True)
+        _candidate(db_session, "RNOM", "2026-SEN-VA", "REAL, R", party="REP", confirmed_general=True)
+        _candidate(db_session, "IND", "2026-SEN-VA", "SOLO, I", party="IND")
+        _candidate(db_session, "LIB", "2026-SEN-VA", "FREE, L", party="LIB")
+        db_session.commit()
+
+        race = db_session.query(Race).filter(Race.id == "2026-SEN-VA").first()
+        assert sorted(c.id for c in elections._confirmed_or_all(race.candidates, "VA")) == ["DNOM", "RNOM"]
+
+    def test_a_top_four_state_is_left_alone_entirely(self, db_session):
+        """Alaska's single combined contest really does decide every
+        advancer regardless of party, so a party with nobody confirmed
+        genuinely has nobody — this relaxation must not touch it."""
+        _race(db_session, "2026-SEN-AK", "AK")
+        _candidate(db_session, "A1", "2026-SEN-AK", "PELTOLA, MARY", party="DEM", confirmed_general=True)
+        _candidate(db_session, "OUT", "2026-SEN-AK", "SOMEONE, R",
+                   party="REP", incumbent_challenge="I")
+        db_session.commit()
+
+        race = db_session.query(Race).filter(Race.id == "2026-SEN-AK").first()
+        assert [c.id for c in elections._confirmed_or_all(race.candidates, "AK")] == ["A1"]
+
+    def test_an_incumbent_who_lost_their_primary_stays_filtered(self, db_session):
+        """The regression this must not cause. Losing a primary implies
+        the primary happened, which implies that party HAS a confirmed
+        nominee, which excludes the party from re-admission entirely."""
+        _race(db_session, "2026-SEN-GA", "GA")
+        _candidate(db_session, "WINNER", "2026-SEN-GA", "CHALLENGER, A",
+                   party="REP", confirmed_general=True)
+        _candidate(db_session, "BEATEN", "2026-SEN-GA", "INCUMBENT, B",
+                   party="REP", incumbent_challenge="I")
+        db_session.commit()
+
+        race = db_session.query(Race).filter(Race.id == "2026-SEN-GA").first()
+        assert [c.id for c in elections._confirmed_or_all(race.candidates, "GA")] == ["WINNER"]
+
+    def test_the_payload_marks_which_candidates_are_actually_confirmed(self, db_session):
+        """A mixed list must not present the recovered candidate as a
+        state-confirmed nominee — candidateSource is per-race and cannot
+        carry this."""
+        _race(db_session, "2026-HOUSE-FL-21", "FL", office="H", district=21)
+        _candidate(db_session, "DNOM", "2026-HOUSE-FL-21", "MARTIN, JAMES",
+                   party="DEM", confirmed_general=True)
+        _candidate(db_session, "MAST", "2026-HOUSE-FL-21", "MAST, BRIAN", party="REP")
+        db_session.commit()
+
+        data = _body(elections.race_detail("2026-HOUSE-FL-21", db_session))
+        by_id = {c["id"]: c for c in data["candidates"]}
+        assert by_id["DNOM"]["confirmed"] is True
+        assert by_id["MAST"]["confirmed"] is False
