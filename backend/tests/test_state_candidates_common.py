@@ -865,15 +865,17 @@ class TestParseJudicialOffice:
             assert common.parse_judicial_office(label) is None, label
 
     def test_an_unrecognised_court_yields_none_rather_than_a_guess(self):
-        """Idaho's "1st Judicial District Judge" and Florida's "Circuit
-        Judge, 11th Judicial Circuit, Group 4" are real judgeships this
-        gate deliberately does not claim — refuse by default, exactly as
-        the other three gates do with wording they have not been taught.
+        """Idaho's trial wording ("1st Judicial District Judge - Seat
+        Bonner A") is a real judgeship this gate still does not claim —
+        refuse by default, exactly as the other three gates do with
+        wording they have not been taught. Its SUPREME and appellate
+        seats do resolve, which is why Idaho is covered at all.
+
+        Florida's "Circuit Judge" was in this list until the circuit
+        court type was added; see TestCircuitCourts.
         """
         assert common.parse_judicial_office(
             "1st Judicial District Judge - Seat Bonner A") is None
-        assert common.parse_judicial_office(
-            "Circuit Judge, 11th Judicial Circuit, Group 4") is None
 
     def test_a_non_office_label_is_refused(self):
         assert common.parse_judicial_office("") is None
@@ -998,3 +1000,35 @@ class TestMajorityEndsContest:
             self.POS3, None, 2,
             judicial_majority=common.JUDICIAL_MAJORITY_ELECTS)] == [
             "David Stevens", "Jaime Michelle Hawk"]
+
+
+class TestCircuitCourts:
+    """Florida keys its trial seats by a numbered CIRCUIT, not a
+    numbered district: "Circuit Judge, 9th Judicial Circuit, Group 1
+    NOP". Neither the plain district pattern nor the legislative ordinal
+    one (which requires the word "District") sees that.
+    """
+
+    def test_a_circuit_seat_resolves(self):
+        assert common.parse_judicial_office(
+            "Circuit Judge, 9th Judicial Circuit, Group 1 NOP") == ("circuit", "9", "1")
+        assert common.parse_judicial_office(
+            "Circuit Judge, 11th Judicial Circuit, Group 69 NOP") == ("circuit", "11", "69")
+
+    def test_georgias_circuit_is_a_superior_courts_geography_not_its_court(self):
+        """The reason the circuit arm is tried LAST. Georgia writes
+        "Judge - Superior Court - Alcovy Judicial Circuit", where the
+        circuit names WHERE the superior court sits; Florida's "Circuit
+        Judge" names the court itself."""
+        assert common.parse_judicial_office(
+            "Judge - Superior Court - Alcovy Judicial Circuit (McCamy)")[0] == "superior"
+
+    def test_a_prosecutor_of_a_circuit_is_still_refused(self):
+        assert common.parse_judicial_office(
+            "District Attorney - Atlantic Judicial Circuit - Rep") is None
+
+    def test_the_other_states_are_unchanged(self):
+        assert common.parse_judicial_office(
+            "NC DISTRICT COURT JUDGE DISTRICT 3 SEAT 2 (REP)") == ("district", "3", "2")
+        assert common.parse_judicial_office(
+            "Justice Position #1 - Supreme Court") == ("supreme", None, "1")

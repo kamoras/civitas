@@ -887,6 +887,7 @@ async def fetch_confirmed_candidates(
             advance_count,
             state_offices=bool(source.get("statewide_offices")),
             judicial_majority=source.get("judicial_majority"),
+            judicial_advance_count=source.get("judicial_advance_count"),
         )
 
     if not parsed_any:
@@ -904,6 +905,7 @@ def _collect(
     advance_count: int,
     state_offices: bool = False,
     judicial_majority: str | None = None,
+    judicial_advance_count: int | None = None,
 ) -> None:
     """Fold one results file into `by_seat`, replacing (not appending to)
     any seat it covers so a later stage's answer wins outright."""
@@ -952,18 +954,30 @@ def _collect(
         # ONE-NOMINEE party primaries: under top-two the number
         # advancing is two regardless of how many seats are being
         # filled, so a seat count there would be the wrong question.
-        seats_filled = vote_for_count(contest) if advance_count == 1 else None
+        # JUDICIAL contests can advance a different number from the
+        # party primaries in the SAME file. Florida sends one nominee per
+        # party primary but runs its judgeships as non-partisan top-two,
+        # so reading them at the state's advance_count silently dropped
+        # every one: a "NOP" party normalises to None, and the
+        # one-nominee branch below skips an unattributable contest by
+        # design. Defaults to the state's own count, so no other state
+        # changes.
+        is_judicial = office in JUDICIAL_COURT_LABELS
+        effective_advance = (
+            judicial_advance_count if is_judicial and judicial_advance_count
+            else advance_count
+        )
+        seats_filled = vote_for_count(contest) if effective_advance == 1 else None
         # Scoped to JUDICIAL contests, never the whole file: in
         # Washington the same export carries ordinary top-two races that
         # advance two whatever the leader's share, alongside judicial
         # ones where a majority leaves a single name on the general
         # ballot (RCW 29A.36.170). Applying it state-wide would drop real
         # candidates from every other contest.
-        majority_rule = (
-            judicial_majority if office in JUDICIAL_COURT_LABELS else None
-        )
+        majority_rule = judicial_majority if is_judicial else None
         won = pick_nominees(
-            list(entry["votes"].items()), threshold, seats_filled or advance_count,
+            list(entry["votes"].items()), threshold,
+            seats_filled or effective_advance,
             judicial_majority=majority_rule,
         )
         if not won:
@@ -978,7 +992,7 @@ def _collect(
                 # top-two the party is incidental — an independent or
                 # no-party-preference candidate really can advance — so
                 # they're kept, and the matcher falls back to surname.
-                if advance_count == 1:
+                if effective_advance == 1:
                     continue
                 party = ""
             # A federal nominee is matched against an FEC row, which

@@ -573,6 +573,7 @@ JUDICIAL_COURT_LABELS = {
     "appeals": "Court of Appeals",
     "superior": "Superior Court",
     "district": "District Court",
+    "circuit": "Circuit Court",
 }
 
 _JUDICIAL_COURTS = [
@@ -583,6 +584,13 @@ _JUDICIAL_COURTS = [
     ("appeals", re.compile(r"\bCourt\s+of\s+Appeals\b", re.IGNORECASE)),
     ("superior", re.compile(r"\bSuperior\s+Court\b", re.IGNORECASE)),
     ("district", re.compile(r"\bDistrict\s+Court\b", re.IGNORECASE)),
+    # LAST on purpose. Georgia writes "Judge - Superior Court - Alcovy
+    # Judicial Circuit", where the circuit is the GEOGRAPHY of a superior
+    # court seat, not the court itself — the superior arm above has to
+    # win there. Florida's "Circuit Judge, 9th Judicial Circuit, Group 1"
+    # names the court itself and reaches this arm only because nothing
+    # above claimed it.
+    ("circuit", re.compile(r"\bCircuit\s+(?:Court|Judge)\b", re.IGNORECASE)),
 ]
 
 # The office must be the JUDGESHIP itself.
@@ -596,6 +604,15 @@ _NON_JUDGESHIP_RE = re.compile(
     r"\b(?:clerk|attorney|solicitor|sheriff|magistrate|register|"
     r"reporter|marshal|constable)\b",
     re.IGNORECASE,
+)
+
+# A trial court's geography is a numbered CIRCUIT in some states rather
+# than a numbered district — Florida's "9th Judicial Circuit". Written
+# as an ordinal, which is why neither the plain district pattern ("Dist.
+# 3") nor the legislative ordinal one (which requires the word
+# "District") sees it.
+_JUDICIAL_CIRCUIT_RE = re.compile(
+    r"\b0*(\d+)(?:st|nd|rd|th)\s+Judicial\s+Circuit\b", re.IGNORECASE,
 )
 
 # NC writes "SEAT 2"; the state-legislative seat pattern only accepts a
@@ -652,6 +669,12 @@ def parse_judicial_office(
         match = _STATE_LEG_DISTRICT_RE.search(name)
         if match:
             district = match.group(1) + match.group(2).upper()
+        else:
+            # A numbered CIRCUIT is the same thing by another name, and
+            # is what Florida's trial seats are keyed by.
+            circuit = _JUDICIAL_CIRCUIT_RE.search(name)
+            if circuit:
+                district = circuit.group(1)
         seat_match = _JUDICIAL_SEAT_RE.search(name)
         seat = None
         if seat_match:
