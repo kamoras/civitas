@@ -7,6 +7,7 @@ ordering, and the stale-item drain, same style as test_bluesky_poster.py's
 process_issues_for_bluesky tests.
 """
 
+import pytest
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -432,3 +433,32 @@ class TestOnlyVettedSourcesArePosted:
 
         assert eb.post_race_coverage_updates(db_session) == 1
         assert published == ["some sentence."]
+
+
+class TestContentFreePosts:
+    """A post that only asserts its own existence is true, grounded, and
+    useless — no grounding check can catch it, because the failure is
+    emptiness rather than error. 41 of the 160 race posts live on
+    2026-09-23 were this shape."""
+
+    @pytest.mark.parametrize("text", [
+        "This coverage tracks the TX-4 House race and related election developments.",
+        "This update covers the KY Senate race with details on candidates and filings.",
+        "This coverage examines the ME Senate race and its political implications.",
+        "This race highlights candidates and election details in New Jersey.",
+        "This week's race highlights shifting dynamics in the AK-at-large House contest.",
+        "This coverage explores the NJ-7 House race and its implications for local elections.",
+        "This coverage examines the MD-4 House race and its political landscape.",
+    ])
+    def test_refuses_a_post_that_states_no_fact(self, text):
+        assert eb.content_free_post(text)
+
+    @pytest.mark.parametrize("text", [
+        "Democrat Adam Hamilton leads Republican Gov. Roger Marshall in a tight Kansas Senate race.",
+        "Emilia Sykes is listed as a candidate in the OH-13 House race according to FEC filings.",
+        "Trump says he still backs Salazar after criticizing him on immigration.",
+        "Democrat Christina Bohannan is targeting rural voters in Iowa's pivotal House race.",
+        "Senators demand detailed Pentagon spending breakdown for GA Senate race.",
+    ])
+    def test_allows_a_post_that_says_something(self, text):
+        assert not eb.content_free_post(text)

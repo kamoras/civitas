@@ -33,6 +33,7 @@ conservative at the 15-minute election-season cadence, 96 runs/day):
 """
 
 import logging
+import re
 from datetime import timedelta
 
 from sqlalchemy.orm import Session
@@ -186,6 +187,8 @@ Return JSON: {{"post": "<your sentence>"}}"""
         post = strip_hashtags_and_truncate(result["post"], MAX_POST_CHARS)
 
         reasons = grounding_violations(post, source_material) + hedge_and_editorializing_violations(post)
+        if content_free_post(post):
+            reasons.append("says only that this is coverage of the race, with no fact")
         if not reasons:
             return post
 
@@ -206,6 +209,32 @@ Return JSON: {{"post": "<your sentence>"}}"""
         )
 
     return None  # ungrounded twice — skip; a later run can retry
+
+
+# A post that only asserts its own existence — "This coverage tracks the
+# TX-4 House race and related election developments." It is true, it is
+# grounded, and it tells a reader nothing they did not get from the link.
+# 23 of the 160 race posts live on 2026-09-23 were this shape, which is
+# what the "quality over quantity" standing rule exists to prevent, and
+# no grounding check can catch it: the failure is emptiness, not error.
+#
+# Keyed on the actual template the model falls into when the source has
+# nothing to say — an opener naming the coverage itself, closing on a
+# generic noun, with no fact in between.
+_CONTENT_FREE_RE = re.compile(
+    r"^\s*(?:this|these|the)\s+(?:week'?s?\s+)?"
+    r"(?:coverage|race|piece|update|article|report|story|analysis)\b"
+    r"[^.!?]*\b(?:races?|elections?|contests?|filings?|details?|candidates?|"
+    r"context|implications?|dynamics|developments?|priorities|updates?|"
+    r"information|options|landscape|odds|stakes|issues|matters|campaigns?|"
+    r"outlook|picture|field|emerging|standings?)\b[^.!?]{0,34}[.!]?\s*$",
+    re.IGNORECASE,
+)
+
+
+def content_free_post(text: str) -> bool:
+    """True when the post says only that it is coverage of a race."""
+    return bool(_CONTENT_FREE_RE.match(text or ""))
 
 
 def _publish(text: str, race: Race) -> bool:
