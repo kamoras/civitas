@@ -935,7 +935,7 @@ class TestMajorityEndsContest:
             ("Mike Diaz", 543721)]                          # leader 35.3%
 
     def test_a_majority_leaves_one_name(self):
-        won = common.pick_nominees(self.POS1, None, 2, judicial_majority=common.JUDICIAL_MAJORITY_SOLE_CANDIDATE)
+        won = common.pick_nominees(self.POS1, None, 2, judicial_resolution=common.JUDICIAL_RESOLUTION_SOLE_CANDIDATE)
         assert [n for n, _ in won] == ["Colleen Melody"]
 
     def test_without_the_rule_a_runner_up_would_be_published(self):
@@ -945,7 +945,7 @@ class TestMajorityEndsContest:
         assert [n for n, _ in won] == ["Colleen Melody", "Scott Edwards"]
 
     def test_no_majority_still_advances_two(self):
-        won = common.pick_nominees(self.POS3, None, 2, judicial_majority=common.JUDICIAL_MAJORITY_SOLE_CANDIDATE)
+        won = common.pick_nominees(self.POS3, None, 2, judicial_resolution=common.JUDICIAL_RESOLUTION_SOLE_CANDIDATE)
         assert [n for n, _ in won] == ["David Stevens", "Jaime Michelle Hawk"]
 
     def test_exactly_half_is_not_a_majority(self):
@@ -956,21 +956,21 @@ class TestMajorityEndsContest:
         vote more and it is over."""
         even = [("A", 500), ("B", 500)]
         assert [n for n, _ in common.pick_nominees(
-            even, None, 2, judicial_majority=common.JUDICIAL_MAJORITY_SOLE_CANDIDATE)] == ["A", "B"]
+            even, None, 2, judicial_resolution=common.JUDICIAL_RESOLUTION_SOLE_CANDIDATE)] == ["A", "B"]
         uneven = [("A", 501), ("B", 500)]
         assert [n for n, _ in common.pick_nominees(
-            uneven, None, 2, judicial_majority=common.JUDICIAL_MAJORITY_SOLE_CANDIDATE)] == ["A"]
+            uneven, None, 2, judicial_resolution=common.JUDICIAL_RESOLUTION_SOLE_CANDIDATE)] == ["A"]
 
     def test_it_does_nothing_to_a_one_nominee_primary(self):
         """advance_count == 1 already names one; the rule must not turn
         a party primary into something else."""
-        won = common.pick_nominees(self.POS1, None, 1, judicial_majority=common.JUDICIAL_MAJORITY_SOLE_CANDIDATE)
+        won = common.pick_nominees(self.POS1, None, 1, judicial_resolution=common.JUDICIAL_RESOLUTION_SOLE_CANDIDATE)
         assert [n for n, _ in won] == ["Colleen Melody"]
 
     def test_it_is_not_the_runoff_threshold(self):
         """A sub-majority leader is still published here (the general
         decides), whereas runoff_threshold_pct would withhold them."""
-        advanced = common.pick_nominees(self.POS3, None, 2, judicial_majority=common.JUDICIAL_MAJORITY_SOLE_CANDIDATE)
+        advanced = common.pick_nominees(self.POS3, None, 2, judicial_resolution=common.JUDICIAL_RESOLUTION_SOLE_CANDIDATE)
         assert advanced, "a sub-majority leader still reaches the general"
         withheld = common.pick_nominees(self.POS3, 50.0, 1)
         assert withheld == [], "the threshold rule withholds instead"
@@ -987,18 +987,18 @@ class TestMajorityEndsContest:
         unopposed = [("Gregory W. Moeller", 216640)]
         assert common.pick_nominees(
             unopposed, None, 2,
-            judicial_majority=common.JUDICIAL_MAJORITY_ELECTS) == []
+            judicial_resolution=common.JUDICIAL_RESOLUTION_ELECTS) == []
         # And the SAME data under Washington's rule publishes that name,
         # which is the whole reason this is a per-state value.
         assert [n for n, _ in common.pick_nominees(
             unopposed, None, 2,
-            judicial_majority=common.JUDICIAL_MAJORITY_SOLE_CANDIDATE)] == [
+            judicial_resolution=common.JUDICIAL_RESOLUTION_SOLE_CANDIDATE)] == [
             "Gregory W. Moeller"]
 
     def test_elects_still_advances_two_without_a_majority(self):
         assert [n for n, _ in common.pick_nominees(
             self.POS3, None, 2,
-            judicial_majority=common.JUDICIAL_MAJORITY_ELECTS)] == [
+            judicial_resolution=common.JUDICIAL_RESOLUTION_ELECTS)] == [
             "David Stevens", "Jaime Michelle Hawk"]
 
 
@@ -1032,3 +1032,40 @@ class TestCircuitCourts:
             "NC DISTRICT COURT JUDGE DISTRICT 3 SEAT 2 (REP)") == ("district", "3", "2")
         assert common.parse_judicial_office(
             "Justice Position #1 - Supreme Court") == ("supreme", None, "1")
+
+
+class TestDecidedBeforeGeneral:
+    """Georgia's rule, and the third distinct answer to what a
+    non-partisan judicial contest resolves to.
+
+    O.C.G.A. 21-2-138 holds every judicial election "jointly with the
+    general primary", and 21-2-285.1 declares "duly elected" either the
+    majority winner there OR the winner of the nonpartisan RUNOFF —
+    both months before November. Neither branch reaches the general.
+    """
+
+    # Real 2026 Washington totals, reused purely as a no-majority field.
+    NO_MAJORITY = [("David Stevens", 612267), ("Jaime Michelle Hawk", 578979),
+                   ("Mike Diaz", 543721)]
+    UNOPPOSED = [("Some Judge", 216640)]
+
+    def test_a_no_majority_contest_publishes_nobody(self):
+        """The distinction from "elects": there a no-majority contest
+        still sends two candidates to NOVEMBER, where Georgia's goes to
+        a June runoff. Same data, different answers."""
+        assert common.pick_nominees(
+            self.NO_MAJORITY, None, 2,
+            judicial_resolution=common.JUDICIAL_RESOLUTION_DECIDED_EARLY) == []
+        assert [n for n, _ in common.pick_nominees(
+            self.NO_MAJORITY, None, 2,
+            judicial_resolution=common.JUDICIAL_RESOLUTION_ELECTS)] == [
+            "David Stevens", "Jaime Michelle Hawk"]
+
+    def test_a_majority_winner_is_dropped_too(self):
+        assert common.pick_nominees(
+            self.UNOPPOSED, None, 2,
+            judicial_resolution=common.JUDICIAL_RESOLUTION_DECIDED_EARLY) == []
+
+    def test_it_does_not_touch_a_state_without_the_value(self):
+        assert [n for n, _ in common.pick_nominees(self.NO_MAJORITY, None, 2)] == [
+            "David Stevens", "Jaime Michelle Hawk"]
