@@ -886,7 +886,7 @@ async def fetch_confirmed_candidates(
             None if stage["runoff"] else threshold,
             advance_count,
             state_offices=bool(source.get("statewide_offices")),
-            judicial_majority_ends=bool(source.get("judicial_majority_ends_contest")),
+            judicial_majority=source.get("judicial_majority"),
         )
 
     if not parsed_any:
@@ -903,7 +903,7 @@ def _collect(
     threshold: float | None,
     advance_count: int,
     state_offices: bool = False,
-    judicial_majority_ends: bool = False,
+    judicial_majority: str | None = None,
 ) -> None:
     """Fold one results file into `by_seat`, replacing (not appending to)
     any seat it covers so a later stage's answer wins outright."""
@@ -959,10 +959,12 @@ def _collect(
         # ones where a majority leaves a single name on the general
         # ballot (RCW 29A.36.170). Applying it state-wide would drop real
         # candidates from every other contest.
-        majority_ends = judicial_majority_ends and office in JUDICIAL_COURT_LABELS
+        majority_rule = (
+            judicial_majority if office in JUDICIAL_COURT_LABELS else None
+        )
         won = pick_nominees(
             list(entry["votes"].items()), threshold, seats_filled or advance_count,
-            majority_ends_contest=majority_ends,
+            judicial_majority=majority_rule,
         )
         if not won:
             continue
