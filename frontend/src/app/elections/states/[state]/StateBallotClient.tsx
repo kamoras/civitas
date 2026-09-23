@@ -366,7 +366,31 @@ function StateLegislatureSection({ ballot }: { ballot: StateBallot }) {
  * has no FEC filing, so there is no money, no score and nothing to
  * click through to. A name and a party is the whole of what's true. */
 function JudicialSection({ ballot }: { ballot: StateBallot }) {
-  if (ballot.judicialRaces.length === 0) return null;
+  const { judicialRaces, judicialCoverage, state } = ballot;
+  // Nothing at all only when nobody has read this state's judicial
+  // statute — the page's `omits` list still names these contests, so an
+  // empty panel would say it twice. "Checked, and none are on this
+  // ballot" is a different claim and gets real words, the same call
+  // StatewideExecutiveSection makes.
+  if (judicialCoverage?.status === "not_yet_covered") return null;
+
+  if (judicialRaces.length === 0) {
+    return (
+      <section className="panel mb-6">
+        <TerminalTitlebar title="Judicial" />
+        <div className="p-6">
+          <p className="text-sm text-ink">
+            No judicial contests are on {state}&apos;s {ballot.electionDate} ballot.
+          </p>
+          <p className="mt-2 text-[10px] text-ink-min">
+            Judges here are elected at the primary: a candidate who takes a majority
+            wins the seat outright, so it never reaches the general election ballot.
+            Retention questions are a separate ballot item and are not covered.
+          </p>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="panel mb-6">
@@ -375,7 +399,7 @@ function JudicialSection({ ballot }: { ballot: StateBallot }) {
         <p className="text-xs text-ink-min mb-3">
           Judges are elected here on a partisan ballot, the same as any other office.
         </p>
-        {ballot.judicialRaces.map((court) => (
+        {judicialRaces.map((court) => (
           <div key={court.court} className="mb-4 last:mb-0">
             <h2 className="font-mono text-xs text-ink-lo mb-2">
               {court.label.toUpperCase()}

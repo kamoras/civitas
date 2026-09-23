@@ -204,6 +204,14 @@ export interface StateLegChamber {
   districts: StateLegDistrict[];
 }
 
+export interface JudicialCoverage {
+  /** "not_yet_covered" | "covered" | "confirmed_none". */
+  status: string;
+  /** When the pipeline last read this state's judicial contests. */
+  checkedAt: string | null;
+  sourceName: string | null;
+}
+
 /** One court's seats on this state's ballot. */
 export interface JudicialCourt {
   /** "supreme" | "appeals" | "superior" | "district". Neutral on
@@ -297,6 +305,12 @@ export interface StateBallot {
    * winner outright, so publishing one as a November candidate would be
    * wrong. Absent entirely otherwise; the page's `omits` list says so. */
   judicialRaces: JudicialCourt[];
+  /** What an empty judicialRaces means — the same null-is-not-zero
+   * distinction statewideCoverage draws. "confirmed_none" is a real
+   * answer: a state whose judicial seats were all decided in its
+   * primary (Idaho elects a majority winner outright) has genuinely no
+   * November judicial contests. */
+  judicialCoverage: JudicialCoverage;
   officialLookup: OfficialLookup;
   /** What this page deliberately does not cover, enumerated by the
    * backend so the limitation renders as content rather than a footnote. */

@@ -51,6 +51,9 @@ from app.pipeline.fetch.civic_info import is_configured as civic_is_configured
 from app.pipeline.fetch.state_candidate_sources import source_for_state
 from app.pipeline.fetch.state_candidates_common import (
     JUDICIAL_COURT_LABELS,
+    JUDICIAL_MARKER_TIER,
+    JUDICIAL_MARKER_TTL_HOURS,
+    judicial_marker_key,
     PARTY_CODE_MAP,
     STATE_LEG_CHAMBER_LABELS,
     district_label,
@@ -596,27 +599,66 @@ def _state_leg_section(db: Session, state: str, cycle: int, marker: dict | None)
     return out
 
 
-def _judicial_section(db: Session, state: str, cycle: int) -> list[dict]:
-    """This state's elected judgeships, grouped by court.
+class JudicialCoverageStatus:
+    """The three things an empty judicial section can mean — the same
+    null-is-not-zero discipline StatewideCoverageStatus encodes, and it
+    matters more here than anywhere else on this page.
 
-    Keyed on its OWN opt-in rather than the statewide marker the two
-    sections above share, so it simply reads whatever rows exist: a
-    state that has not opted in has none, because _sync_judicial_nominees
-    never wrote any. The opt-in is a stronger claim than "labels were
-    checked" — it asserts this state's judicial primaries NOMINATE
-    rather than ELECT — which is why it does not ride the same flag.
+    A state whose judicial seats were ALL decided in its primary has
+    genuinely zero November contests. Idaho is exactly that: all three
+    of its matched contests were unopposed, so all three were elected in
+    May under Idaho Code 34-1217. Rendering that identically to "nobody
+    has read this state's judicial statute yet" tells a reader there is
+    nothing to research when the truth is that the races are over.
+    """
+    NOT_YET_COVERED = "not_yet_covered"
+    COVERED = "covered"
+    CONFIRMED_NONE = "confirmed_none"
+
+
+def _judicial_marker(db: Session, state: str, cycle: int) -> dict | None:
+    """The pipeline's record that it read this state's judicial contests.
+
+    Its OWN marker, not the statewide one: that covers the executive
+    offices and the legislature together because they are one claim,
+    whereas judicial additionally asserts that this state's statute on
+    what a majority MEANS has been read (Washington and Idaho mean
+    opposite things by it). A state can be checked for one and not the
+    other.
+    """
+    return api_cache_get(
+        db, JUDICIAL_MARKER_TIER, judicial_marker_key(state, cycle),
+        max_age_hours=JUDICIAL_MARKER_TTL_HOURS,
+    )
+
+
+def _judicial_section(
+    db: Session, state: str, cycle: int, marker: dict | None,
+) -> tuple[list[dict], dict]:
+    """This state's elected judgeships grouped by court, plus what an
+    empty list means.
 
     Ordered by court seniority (supreme, appeals, superior, district)
     rather than alphabetically, because that is how a ballot and a
     reader both order them.
     """
+    if marker is None:
+        return [], {"status": JudicialCoverageStatus.NOT_YET_COVERED,
+                    "checkedAt": None, "sourceName": None}
+
+    coverage = {
+        "checkedAt": marker.get("checkedAt"),
+        "sourceName": marker.get("sourceName") or None,
+    }
     rows = (
         db.query(JudicialNominee)
         .filter(JudicialNominee.state == state, JudicialNominee.cycle_year == cycle)
         .all()
     )
     if not rows:
-        return []
+        coverage["status"] = JudicialCoverageStatus.CONFIRMED_NONE
+        return [], coverage
+    coverage["status"] = JudicialCoverageStatus.COVERED
 
     seats: dict[tuple[str, str | None, str | None], list[dict]] = {}
     for row in rows:
@@ -649,7 +691,7 @@ def _judicial_section(db: Session, state: str, cycle: int) -> list[dict]:
         ]
         if entries:
             out.append({"court": court, "label": label, "seats": entries})
-    return out
+    return out, coverage
 
 
 @router.get("/states/{state}")
@@ -722,7 +764,8 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
     )
     statewide_races, statewide_coverage = _statewide_section(db, state, cycle)
     state_leg_races = _state_leg_section(db, state, cycle, _statewide_marker(db, state, cycle))
-    judicial_races = _judicial_section(db, state, cycle)
+    judicial_races, judicial_coverage = _judicial_section(
+        db, state, cycle, _judicial_marker(db, state, cycle))
 
     return cached_json({
         "state": state,
@@ -769,6 +812,7 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         "statewideCoverage": statewide_coverage,
         "stateLegRaces": state_leg_races,
         "judicialRaces": judicial_races,
+        "judicialCoverage": judicial_coverage,
         "omits": ([
             # Dropped the moment this state's executive contests are
             # genuinely covered — the list has to shrink as the gaps
@@ -785,7 +829,8 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
             # candidates — and nothing here reads them yet. Saying
             # "judicial contests" is covered while retention questions
             # are not is the honest half-statement.
-            ["Judicial retention questions"] if judicial_races
+            ["Judicial retention questions"]
+            if judicial_coverage["status"] != JudicialCoverageStatus.NOT_YET_COVERED
             else ["Judicial contests and retention questions"]
         ) + [
             "County and municipal offices",

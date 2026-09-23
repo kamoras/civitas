@@ -307,6 +307,22 @@ def statewide_marker_key(state: str, cycle: int) -> str:
     return f"synced-{state}-{cycle}"
 
 
+# Judicial gets its OWN marker rather than sharing the statewide one.
+# The statewide marker covers the executive offices and the legislature
+# together because they are one claim — same ballot, same response,
+# labels checked. Judicial is a separate and STRONGER claim: that this
+# state's own statute on what a judicial majority means has been read
+# (see JUDICIAL_MAJORITY_* — Washington and Idaho mean opposite things
+# by it). A state can be checked for one and not the other, and sharing
+# a marker would let it claim coverage it does not have.
+JUDICIAL_MARKER_TIER = "judicial"
+JUDICIAL_MARKER_TTL_HOURS = STATEWIDE_MARKER_TTL_HOURS
+
+
+def judicial_marker_key(state: str, cycle: int) -> str:
+    return f"judicial-synced-{state}-{cycle}"
+
+
 STATEWIDE_OFFICE_LABELS = {
     "governor": "Governor",
     "lt_governor": "Lieutenant Governor",
