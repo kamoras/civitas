@@ -221,6 +221,31 @@ def _migrate_columns() -> None:
         ("key_votes", "pro_business_vote"),
         ("key_votes", "affected_industries"),
         ("senators", "punk_nickname"),
+        # The same failure the presidents entries below describe, but on
+        # the two tables that gain rows ROUTINELY rather than only after a
+        # reset — so this one was live, every night. voting_summary and
+        # platform_summary were dropped from the Representative/Senator
+        # models but survive NOT NULL in the live schema, and SQLAlchemy
+        # only supplies the columns the model still declares. Every
+        # INSERT of a member therefore died on
+        # "NOT NULL constraint failed: representatives.voting_summary".
+        #
+        # Observed 2026-09-23: house run #67 reported "431 success, 2
+        # failed" and status partial, the 2 being newly-seated members
+        # (Aisha Wahab, Everton Blair) that no run could ever insert.
+        # An UPDATE of an existing row is unaffected, which is exactly
+        # why this stayed invisible -- 431 of 433 kept working. The real
+        # exposure is November: a whole freshman class is new rows, and
+        # every one of them would have failed the same way.
+        #
+        # Nothing reads either column (verified: no reference anywhere in
+        # backend/app), and a fresh database never had them, so no test
+        # or local run could reproduce it -- this is drift that exists
+        # only in the deployed database.
+        ("representatives", "voting_summary"),
+        ("representatives", "platform_summary"),
+        ("senators", "voting_summary"),
+        ("senators", "platform_summary"),
         # Independence/Follow-Through were removed from the President
         # model, but a NOT NULL column left behind in the live schema
         # blocks any fresh INSERT that no longer supplies them. Harmless
