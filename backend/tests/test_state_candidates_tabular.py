@@ -1467,3 +1467,75 @@ class TestElectionIdIndexHop:
             transport=httpx.MockTransport(handler)
         ) as client:
             assert await tb._discover_urls(client, "AK", 2026, self.DISCOVERY) == []
+
+
+class TestDelaware:
+    """A real cut of Delaware's official 2026-09-15 primary results,
+    fetched live 2026-09-23 from the state's own open-data portal
+    (data.delaware.gov/resource/yg7x-kgjc.csv?election_name=2026%20Primary%20Election)
+    -- a plain unauthenticated GET, one row per candidate per contest.
+
+    Trimmed to the rows that prove what could silently break: a U.S.
+    Senate contest whose DEMOCRATIC and REPUBLICAN primaries share one
+    office label (so contest_column must join office WITH party -- drop
+    the join and KATZ, the real Republican nominee, vanishes and the seat
+    publishes a single nominee), an at-large House seat whose label
+    carries no district number at all, a statewide executive and a
+    legislative contest, and a New Castle County contest that must be
+    claimed by NO parser gate -- county offices are out of scope and must
+    never be published as state ones.
+    """
+
+    _CSV = (
+        b'election_name,office,candidate_name,party,machine_votes,absentee_votes,early_votes,total_votes,percent_votes,electiondate,data_as_of\r\n'
+        b'2026 Primary Election,U.S. Senator,JEFF APPELHANS,Democratic Party,7316,447,1531,9294,10.634,2026-09-15T00:00:00.000,2026-09-16T00:59:22.000\r\n'
+        b'2026 Primary Election,U.S. Senator,CHRIS COONS,Democratic Party,44249,7744,16161,68154,77.986,2026-09-15T00:00:00.000,2026-09-16T00:59:22.000\r\n'
+        b'2026 Primary Election,U.S. Senator,E. NO-TRUMP HANSEN,Democratic Party,2561,246,560,3367,3.8527,2026-09-15T00:00:00.000,2026-09-16T00:59:22.000\r\n'
+        b'2026 Primary Election,U.S. Senator,MARY LOUVE,Democratic Party,4994,464,1119,6577,7.5258,2026-09-15T00:00:00.000,2026-09-16T00:59:22.000\r\n'
+        b'2026 Primary Election,U.S. Senator,"MICHAEL ""DR. MIKE"" KATZ",Republican Party,22963,1473,6460,30896,77.34,2026-09-15T00:00:00.000,2026-09-16T00:59:22.000\r\n'
+        b'2026 Primary Election,U.S. Senator,JOHN SHULLI,Republican Party,6271,667,2114,9052,22.659,2026-09-15T00:00:00.000,2026-09-16T00:59:22.000\r\n'
+        b'2026 Primary Election,Representative in Congress,"JOSEPH ""DR. JOE"" ARMINIO",Republican Party,14109,817,3703,18629,47.859,2026-09-15T00:00:00.000,2026-09-16T00:59:22.000\r\n'
+        b'2026 Primary Election,Representative in Congress,EARL L. COOPER,Republican Party,5320,477,1975,7772,19.967,2026-09-15T00:00:00.000,2026-09-16T00:59:22.000\r\n'
+        b'2026 Primary Election,Representative in Congress,JOHN J. WHALEN,Republican Party,9003,817,2703,12523,32.173,2026-09-15T00:00:00.000,2026-09-16T00:59:22.000\r\n'
+        b'2026 Primary Election,Attorney General,DWAYNE J. BENSING,Democratic Party,15107,1619,3633,20359,23.682,2026-09-15T00:00:00.000,2026-09-16T00:59:22.000\r\n'
+        b'2026 Primary Election,Attorney General,KATHY JENNINGS,Democratic Party,39844,6504,14843,61191,71.179,2026-09-15T00:00:00.000,2026-09-16T00:59:22.000\r\n'
+        b'2026 Primary Election,Attorney General,PATTY RICKMAN,Democratic Party,3207,467,743,4417,5.138,2026-09-15T00:00:00.000,2026-09-16T00:59:22.000\r\n'
+        b'2026 Primary Election,State Senator District 5,SHAY FRISBY,Democratic Party,2297,160,602,3059,58.377,2026-09-15T00:00:00.000,2026-09-16T00:59:22.000\r\n'
+        b'2026 Primary Election,State Senator District 5,RAY SEIGFRIED,Democratic Party,1459,245,477,2181,41.622,2026-09-15T00:00:00.000,2026-09-16T00:59:22.000\r\n'
+        b'2026 Primary Election,State Representative District 33,MATT BUCHER,Republican Party,685,25,300,1010,49.827,2026-09-15T00:00:00.000,2026-09-16T00:59:22.000\r\n'
+        b'2026 Primary Election,State Representative District 33,MORGAN HUDSON,Republican Party,699,27,291,1017,50.172,2026-09-15T00:00:00.000,2026-09-16T00:59:22.000\r\n'
+        b'2026 Primary Election,New Castle County Council District 3,KIRA ALEJANDRO,Democratic Party,2578,315,421,3314,68.769,2026-09-15T00:00:00.000,2026-09-16T00:59:22.000\r\n'
+        b'2026 Primary Election,New Castle County Council District 3,KYLE R. GRANTHAM,Democratic Party,1087,152,266,1505,31.23,2026-09-15T00:00:00.000,2026-09-16T00:59:22.000\r\n'
+    )
+    _FMT = {
+        "format": "csv",
+        "contest_column": [
+                "office",
+                "party"
+        ],
+        "choice_column": "candidate_name",
+        "party_column": "party",
+        "votes_column": "total_votes"
+    }
+
+    @pytest.mark.asyncio
+    async def test_confirms_both_parties_senate_nominees_and_skips_county(self, monkeypatch):
+        async def fake_discover(client, state, year, discovery):
+            return [tb._stage("https://data.delaware.gov/resource/yg7x-kgjc.csv", held="2026-09-15")]
+
+        async def fake_get(client, url, label):
+            return _Resp(content=self._CSV)
+
+        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
+        monkeypatch.setattr(tb, "_get", fake_get)
+        records = await tb.fetch_confirmed_candidates(
+            None, 2026, "DE", {"format": self._FMT, "advance_count": 1, "statewide_offices": True},
+        )
+        got = sorted((str(r["office"]), str(r["district"]), r["party"], r["last_name"]) for r in records)
+        assert ("S", "None", "D", "COONS") in got
+        assert ("S", "None", "R", "KATZ") in got
+        # At-large: the label carries no number, so district stays None
+        # (_race_id_for maps that to 0, which is how AK/ND/WY already work).
+        assert ("H", "None", "R", "ARMINIO") in got
+        assert not [g for g in got if "COUNCIL" in g[3].upper() or "DEEDS" in g[3].upper()]
+        assert {g[0] for g in got} == {"S", "H", "attorney_general", "upper", "lower"}
