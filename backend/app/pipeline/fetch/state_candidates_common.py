@@ -855,10 +855,10 @@ def surname(display_name: str, last_first: bool = False) -> str | None:
     return tokens[-1].strip(".,")
 
 
-# What a MAJORITY in a non-partisan judicial primary does. Two real
-# states, two opposite answers — which is exactly why this cannot be one
-# blanket rule inferred from advance_count, and why a state is not opted
-# in until its own statute has been read.
+# How a non-partisan judicial contest RESOLVES relative to the November
+# ballot. Three real states, three different answers — which is exactly
+# why this cannot be one blanket rule inferred from advance_count, and
+# why a state is not opted in until its own statute has been read.
 #
 #   "sole_candidate"  Washington. RCW 29A.36.170: "only the name of that
 #                     candidate may be printed for that position on the
@@ -870,15 +870,26 @@ def surname(display_name: str, last_first: bool = False) -> str | None:
 #                     the general election following". The seat is gone
 #                     from the November ballot entirely, so publishing
 #                     that judge as a candidate would be wrong.
-JUDICIAL_MAJORITY_SOLE_CANDIDATE = "sole_candidate"
-JUDICIAL_MAJORITY_ELECTS = "elects"
+JUDICIAL_RESOLUTION_SOLE_CANDIDATE = "sole_candidate"
+JUDICIAL_RESOLUTION_ELECTS = "elects"
+# Georgia. O.C.G.A. 21-2-138 puts EVERY judicial office -- superior
+# court, Court of Appeals, Supreme Court, state court -- "on the ballot
+# in a nonpartisan election to be held and conducted jointly with the
+# general primary", and 21-2-285.1 declares "duly elected" either the
+# candidate with a majority there OR the winner of the nonpartisan
+# RUNOFF. Both branches finish months before November, so no Georgia
+# judgeship is ever on the general ballot and none is published. This is
+# why the field describes RESOLUTION and not only what a majority does:
+# Georgia's no-majority branch goes to a June runoff, where Idaho's and
+# Florida's go to November.
+JUDICIAL_RESOLUTION_DECIDED_EARLY = "decided_before_general"
 
 
 def pick_nominees(
     choices: list[tuple[str, int]],
     runoff_threshold_pct: float | None = None,
     advance_count: int = 1,
-    judicial_majority: str | None = None,
+    judicial_resolution: str | None = None,
 ) -> list[tuple[str, float]]:
     """Who advances to the general from one contest, as [(name, pct), ...]
     from [(name, votes), ...]. Empty when nobody can be named safely.
@@ -905,7 +916,7 @@ def pick_nominees(
     leader may end up not being the nominee at all. The threshold is the
     state's own rule from config either way.
 
-    `judicial_majority` answers a different question from that
+    `judicial_resolution` answers a different question from that
     threshold, and the two must not be confused. A threshold WITHHOLDS a
     leader who failed to clear it, because the contest is still being
     settled elsewhere. This says what a majority MEANS — and the two
@@ -939,10 +950,14 @@ def pick_nominees(
     # Applied BEFORE the cutoff, because it changes what the cutoff is.
     # "A majority of all the votes cast" is strictly more than half, so a
     # dead-even field has no majority and both names reach the general.
-    if judicial_majority and advance_count > 1:
+    if judicial_resolution == JUDICIAL_RESOLUTION_DECIDED_EARLY:
+        # Settled before November either way — by a majority here or by a
+        # runoff that is itself held before the general.
+        return []
+    if judicial_resolution and advance_count > 1:
         cast = sum(v for _, v in ranked)
         if cast and ranked[0][1] * 2 > cast:
-            if judicial_majority == JUDICIAL_MAJORITY_ELECTS:
+            if judicial_resolution == JUDICIAL_RESOLUTION_ELECTS:
                 # Seated already; the seat is not on the November ballot,
                 # so there is no candidate to publish for it.
                 return []

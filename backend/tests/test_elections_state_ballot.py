@@ -855,7 +855,7 @@ class TestJudicialConfirmedNone:
         _sync_judicial_nominees(
             db, 2026, state,
             {"strategy": "tabular", "source_name": "Idaho Secretary of State",
-             "judicial_offices": True, "judicial_majority": "elects"},
+             "judicial_offices": True, "judicial_resolution": "elects"},
             [],
         )
 
