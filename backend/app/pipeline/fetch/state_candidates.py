@@ -167,8 +167,27 @@ def _candidate_surname(name: str) -> str:
     return name.split(",")[0].strip().lower()
 
 
+def _first_name_key(name: str) -> str:
+    """The leading given-name token, lowercased, for tie-breaking only.
+
+    Both sides are normalised the same way: FEC files "SULLIVAN, DANIEL
+    J" (surname, then given names) and a state prints "Sullivan, Daniel
+    J. Jr." or "Daniel J. Sullivan Jr.". Taking the first alphabetic
+    token AFTER any comma handles the first two; for the third the
+    leading token already is the given name. Punctuation and single
+    initials are dropped so "Dan S." and "DAN" agree.
+    """
+    tail = name.split(",", 1)[1] if "," in name else name
+    for token in tail.replace(".", " ").split():
+        word = "".join(ch for ch in token if ch.isalpha()).lower()
+        if len(word) > 1:
+            return word
+    return ""
+
+
 def _match_candidate(
     candidates: list[Candidate], last_name: str, party_code: str,
+    display_name: str | None = None,
 ) -> Candidate | None:
     target = last_name.strip().lower()
     matches = [c for c in candidates if _candidate_surname(c.name) == target]
@@ -196,6 +215,21 @@ def _match_candidate(
         party_matches = [c for c in matches if c.party == expected_party]
         if len(party_matches) == 1:
             return party_matches[0]
+        # Last resort, and ONLY ever reached where the answer would
+        # otherwise be None: two candidates in one race sharing a surname
+        # AND a party. Alaska's 2026 Senate top-four genuinely advances
+        # two Sullivans, so refusing both published a two-Democrat
+        # ballot for a seat its Republican incumbent is defending. A
+        # given name separates them where party cannot; it can only turn
+        # a refusal into a match, never change one the surname already
+        # resolved uniquely, and an ambiguous given name still refuses.
+        if display_name:
+            wanted = _first_name_key(display_name)
+            if wanted:
+                pool = party_matches or matches
+                named = [c for c in pool if _first_name_key(c.name) == wanted]
+                if len(named) == 1:
+                    return named[0]
     return None
 
 
@@ -411,7 +445,9 @@ def _confirmed_match(db: Session, cycle: int, state: str, record: dict):
     ).first()
     if race is None:
         return None
-    return _match_candidate(race.candidates, record["last_name"], record["party"])
+    return _match_candidate(
+        race.candidates, record["last_name"], record["party"], record.get("display_name"),
+    )
 
 
 def _sync_statewide_nominees(
@@ -729,7 +765,9 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
             if race is None:
                 unmatched += 1
                 continue
-            match = _match_candidate(race.candidates, record["last_name"], record["party"])
+            match = _match_candidate(
+                race.candidates, record["last_name"], record["party"], record.get("display_name"),
+            )
             if match is None:
                 unmatched += 1
                 logger.info(

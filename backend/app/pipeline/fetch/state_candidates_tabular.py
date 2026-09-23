@@ -1010,6 +1010,20 @@ def _collect(
                 "office": office, "district": district,
                 "party": party, "last_name": last_name,
             }
+            if federal:
+                # Carried ONLY so the shared matcher can break a tie it
+                # would otherwise refuse: two candidates sharing a
+                # surname AND a party in one race. Alaska's 2026 Senate
+                # top-four really does advance two of them -- "Sullivan,
+                # Dan S." (the sitting senator, 68,726 votes) and
+                # "Sullivan, Daniel J. Jr." (4,107) -- against FEC's own
+                # "SULLIVAN, DAN" and "SULLIVAN, DANIEL J". Surname plus
+                # party cannot separate those, so both went unmatched and
+                # the state's marquee race published two Democrats.
+                # Never used to REJECT a match the surname already
+                # resolved uniquely; see _match_candidate.
+                record["display_name"] = name
+
             if seat is not None:
                 record["seat"] = seat
             records.append(record)

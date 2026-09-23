@@ -327,6 +327,51 @@ class TestMatchCandidate:
         assert sc._match_candidate(candidates, "SMITH", "R") is None
 
 
+class TestSameSurnameSameParty:
+    """Alaska's real 2026 Senate top-four advances TWO Sullivans --
+    "Sullivan, Dan S." (the sitting senator, 68,726 votes) and
+    "Sullivan, Daniel J. Jr." (4,107) -- against FEC's own "SULLIVAN,
+    DAN" and "SULLIVAN, DANIEL J". Surname plus party cannot separate
+    them, so both went unmatched and the state's marquee race published
+    two Democrats with its Republican incumbent absent.
+
+    The given name is a LAST resort, reached only where the answer would
+    otherwise be None. It can turn a refusal into a match; it can never
+    change one the surname already resolved, and it still refuses when
+    the given name is ambiguous too."""
+
+    AK = [
+        Candidate(id="1", race_id="r", name="SULLIVAN, DAN", party="REP"),
+        Candidate(id="2", race_id="r", name="SULLIVAN, DANIEL J", party="REP"),
+    ]
+
+    def test_the_sitting_senator_is_matched_by_given_name(self):
+        match = sc._match_candidate(self.AK, "Sullivan", "R", "Sullivan, Dan S.")
+        assert match.id == "1"
+
+    def test_the_other_sullivan_is_matched_too(self):
+        """His own Party_Code is blank in Alaska's file, so party can't
+        even narrow the pool -- the given name has to carry it alone."""
+        match = sc._match_candidate(self.AK, "Sullivan", None, "Sullivan, Daniel J. Jr.")
+        assert match.id == "2"
+
+    def test_an_adapter_that_sends_no_display_name_is_unchanged(self):
+        """Every non-tabular adapter still omits it, and must behave
+        exactly as before."""
+        assert sc._match_candidate(self.AK, "Sullivan", "R") is None
+
+    def test_an_unrecognised_given_name_still_refuses(self):
+        assert sc._match_candidate(self.AK, "Sullivan", "R", "Sullivan, Mortimer Q.") is None
+
+    def test_a_unique_surname_is_never_overridden_by_a_mismatched_given_name(self):
+        """The rule is additive: a surname that already resolves uniquely
+        is returned without the given name being consulted at all, so a
+        state's nickname ("Chuck" for CHARLES) can't undo a good match."""
+        candidates = [Candidate(id="1", race_id="r", name="KOPP, CHARLES M.", party="REP")]
+        match = sc._match_candidate(candidates, "Kopp", "R", 'Kopp, Chuck')
+        assert match.id == "1"
+
+
 class TestSyncConfirmedCandidates:
     @pytest.fixture(autouse=True)
     def _no_calendar(self, monkeypatch):
