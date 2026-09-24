@@ -15,7 +15,6 @@ from unittest.mock import AsyncMock, patch
 from app.models import Candidate, Race, RaceCoverageItem
 from app.pipeline.analyze import election_coverage
 from app.pipeline.analyze import election_coverage as ec
-from app.pipeline.fetch.bluesky_search import BlueskyPost
 from app.pipeline.fetch.news_feeds import NewsArticle
 
 
@@ -235,84 +234,8 @@ class TestIngestRaceCoverage:
         assert ingested == 0
         assert db_session.query(RaceCoverageItem).count() == 0
 
-    async def test_bluesky_post_matched_and_stored(self, db_session):
-        _race(db_session, "2026-SEN-GA", "GA")
-        # has_raised_funds=True so the candidate qualifies for the rotating
-        # Bluesky search batch (paper filers don't get search traffic).
-        _candidate(
-            db_session, "S6GA001", "2026-SEN-GA", "OSSOFF, JON",
-            has_raised_funds=True,
-        )
-        db_session.commit()
 
-        post = BlueskyPost(
-            text="Jon Ossoff's campaign raised a record sum this quarter.",
-            url="https://bsky.app/profile/apnews.com/post/abc123",
-            author_handle="apnews.com",
-        )
-        with patch.object(election_coverage, "fetch_news_articles", return_value=[]), \
-             patch.object(election_coverage, "search_posts", new=AsyncMock(return_value=[post])) as mock_search:
-            ingested = await election_coverage.ingest_race_coverage(db_session, client=None)
 
-        assert ingested == 1
-        # The search query is the candidate's "First Last" — already scoped
-        # to the person, never the bare surname.
-        mock_search.assert_awaited_once_with(None, "JON OSSOFF")
-        item = db_session.query(RaceCoverageItem).one()
-        assert item.source_type == "bluesky"
-        assert item.author == "apnews.com"
-        assert item.summary == post.text  # verbatim post text, not LLM-touched
-        assert item.match_basis == "full_name"
-
-    async def test_bluesky_search_updates_watermark_and_skips_inactive(self, db_session):
-        _race(db_session, "2026-SEN-GA", "GA")
-        active = _candidate(
-            db_session, "S6GA001", "2026-SEN-GA", "OSSOFF, JON",
-            has_raised_funds=True,
-        )
-        paper = _candidate(db_session, "S6GA002", "2026-SEN-GA", "DOE, JOHNNY")
-        db_session.commit()
-
-        with patch.object(election_coverage, "fetch_news_articles", return_value=[]), \
-             patch.object(election_coverage, "search_posts", new=AsyncMock(return_value=[])) as mock_search:
-            await election_coverage.ingest_race_coverage(db_session, client=None)
-
-        mock_search.assert_awaited_once()  # only the active candidate searched
-        assert active.last_coverage_search is not None
-        assert paper.last_coverage_search is None
-
-    async def test_same_post_twice_in_one_pass_does_not_abort_it(self, db_session):
-        """Reproduces the live IntegrityError that #594 uncovered.
-
-        SessionLocal sets autoflush=False, so _already_ingested cannot
-        see rows added earlier in the same pass. Two candidates in ONE
-        race both matching the same post — which the module docstring
-        calls fine — therefore queued two rows with the same
-        (race_id, url) and blew up on uq_race_coverage_race_url at
-        commit, losing the whole pass including its news items. It stayed
-        hidden only because Bluesky search was returning nothing.
-        """
-        _race(db_session, "2026-SEN-GA", "GA")
-        _candidate(db_session, "S6GA001", "2026-SEN-GA", "OSSOFF, JON",
-                   has_raised_funds=True)
-        _candidate(db_session, "S6GA002", "2026-SEN-GA", "WARNOCK, RAPHAEL",
-                   has_raised_funds=True)
-        db_session.commit()
-
-        # One post naming both rivals, returned by BOTH candidates' searches.
-        post = BlueskyPost(
-            text="Jon Ossoff and Raphael Warnock both campaigned in Georgia today.",
-            url="https://bsky.app/profile/apnews.com/post/dupe1",
-            author_handle="apnews.com",
-        )
-        with patch.object(election_coverage, "fetch_news_articles", return_value=[]), \
-             patch.object(election_coverage, "search_posts",
-                          new=AsyncMock(return_value=[post])):
-            ingested = await election_coverage.ingest_race_coverage(
-                db_session, client=None)
-
-        assert ingested == 1, "the duplicate should be skipped, not counted"
-        assert db_session.query(RaceCoverageItem).count() == 1
 
     async def test_unavailable_source_does_not_advance_the_watermark(self, db_session):
         """An unavailable source is not a finding of no coverage.
@@ -561,3 +484,39 @@ class TestFullNameMustAppearTogether:
     ])
     def test_real_false_matches_from_production(self, first, surname, text):
         assert not self._basis(first, surname, text)
+
+
+class TestBlueskySearchIsDisabled:
+    """The open candidate-name search is off (2026-09-24).
+
+    It produced 7,740 of 8,239 stored coverage items — 94% — and the
+    content was not coverage. Minnesota's page carried "Dave Hughes
+    still a whiny cunt", and beneath it a post about the AUSTRALIAN
+    comedian of the same name defending Pauline Hanson's One Nation,
+    filed as MN-7 election coverage.
+
+    Four filters were built against this feed and each failed
+    differently; the last one, a domain-handle rule, does not catch
+    @crowbar.wtf because that IS a domain. This test exists so the
+    search cannot be quietly switched back on without a decision — the
+    matcher and the search module are deliberately still there.
+    """
+
+    @pytest.mark.asyncio
+    async def test_no_bluesky_search_is_performed(self, db_session):
+        db_session.add(Candidate(
+            id="S6MN001", race_id="2026-HOUSE-MN-7", name="HUGHES, DAVE",
+            party="REP", candidate_status="C",
+        ))
+        db_session.add(Race(id="2026-HOUSE-MN-7", cycle_year=2026,
+                            office="H", state="MN", district=7))
+        db_session.commit()
+
+        with patch.object(election_coverage, "search_posts", new=AsyncMock()) as searched, \
+             patch.object(election_coverage, "fetch_news_articles", return_value=[]):
+            await election_coverage.ingest_race_coverage(db_session, None)
+
+        searched.assert_not_awaited()
+        stored = db_session.query(RaceCoverageItem).filter(
+            RaceCoverageItem.source_type == "bluesky").count()
+        assert stored == 0

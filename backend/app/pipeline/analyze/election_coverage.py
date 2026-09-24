@@ -457,12 +457,28 @@ async def ingest_race_coverage(db: Session, client: httpx.AsyncClient) -> int:
             ingested += 1
 
     searched = 0
-    # ── Bluesky: one full-name search per candidate, rotating bounded
-    # batch (see BLUESKY_SEARCH_BATCH). The query is the candidate's
-    # "First Last" — not the bare surname — so the search itself is
-    # already scoped to the person; results still pass through the same
-    # corroborated matcher before anything is stored. ──
-    for cand in _candidates_for_bluesky_search(db, BLUESKY_SEARCH_BATCH):
+    # ── Bluesky candidate-name search: DISABLED 2026-09-24 ──
+    #
+    # An open keyword search of the whole network for a candidate's name
+    # produced 7,740 of the 8,239 stored coverage items — 94% — and the
+    # content was not coverage. Minnesota's page carried "Dave Hughes
+    # still a whiny cunt", and directly beneath it a post about the
+    # AUSTRALIAN comedian of the same name defending Pauline Hanson's One
+    # Nation, filed as MN-7 election coverage.
+    #
+    # Four successive filters were built against this feed and each
+    # failed in a different direction: source-type discarded real local
+    # newsrooms; relevance admitted campaign material (maximally on-topic
+    # for a campaign); no-advocacy still admitted mockery and a Celtic
+    # football post; and the domain-handle rule — shipped the same day —
+    # does not catch @crowbar.wtf, which is a domain.
+    #
+    # The signal being searched for is not there. A name mention is not
+    # coverage, four filters could not make it one, and every hour this
+    # ran it added more rows nobody should see. The search module and its
+    # matcher are kept intact for a future use with a real source list;
+    # what is removed is pointing it at the open network.
+    for cand in []:
         first = _first_name(cand.name or "")
         surname = _surname(cand.name or "")
         if not first or len(surname) < MIN_SURNAME_LENGTH:
