@@ -209,7 +209,7 @@ Persists everything computed in phases 3–6:
 - Writes senator/representative scores, key votes, lobbying matches, campaign promises, sponsored bills to SQLite
 - Appends a `ScoreSnapshot` record (all 5 sub-scores + overall) for each member — enables historical score trend charts
 - Records a `PipelineRun` with phase timings, counts, and any per-member errors
-- Runs a SHA-256 fingerprint over all analysis source files; if changed since last run, clears `AnalysisCache` and `LearnedClassification` so stale results from the old code are not served
+- Runs a SHA-256 fingerprint over all analysis source files (docstring-stripped ASTs, so comment-only edits don't count); if changed since last run, clears `AnalysisCache` and `LearnedClassification` so stale results from the old code are not served
 
 ---
 
@@ -243,7 +243,7 @@ Three independent caching systems serve different purposes:
 └────────────────────────────────────────────────────────────────────┘
 ```
 
-The fingerprint check at pipeline start compares `SHA-256(all analysis/*.py files)` to the hash stored in the last `PipelineRun`. If they differ, `AnalysisCache` and `LearnedClassification` are cleared so updated logic produces fresh results. `ApiCache` is never cleared by fingerprint — source data doesn't change when analysis code does.
+The fingerprint check at pipeline start compares a SHA-256 of every analysis module's docstring-stripped AST to the hash stored in the last `PipelineRun`. If they differ, `AnalysisCache` and `LearnedClassification` are cleared so updated logic produces fresh results. `ApiCache` is never cleared by fingerprint — source data doesn't change when analysis code does.
 
 ---
 
@@ -347,7 +347,7 @@ Confidence levels distinguish source quality:
 
 This enables selective re-verification: low-confidence classifications from previous runs can be re-evaluated when related code changes.
 
-**Version-aware artifact management** ensures updated analysis algorithms always produce fresh results. At pipeline start, a SHA-256 fingerprint of all analysis source files is compared to the stored hash from the last run. If the code has changed, stale artifacts (LLM cache, learned classifications, kNN reference corpus) are cleared so updated algorithms start clean. The API cache (raw Congress.gov / FEC / GovInfo responses) is never cleared — it reflects source data, not processing logic.
+**Version-aware artifact management** ensures updated analysis algorithms always produce fresh results. At pipeline start, a SHA-256 fingerprint of all analysis source files (their docstring-stripped syntax trees, so comment edits don't count) is compared to the stored hash from the last run. If the code has changed, stale artifacts (LLM cache, learned classifications, kNN reference corpus) are cleared so updated algorithms start clean. The API cache (raw Congress.gov / FEC / GovInfo responses) is never cleared — it reflects source data, not processing logic.
 
 ### Party Alignment (Content-Based)
 

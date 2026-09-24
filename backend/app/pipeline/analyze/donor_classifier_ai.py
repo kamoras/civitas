@@ -72,6 +72,7 @@ from app.pipeline.analyze.nn_classifier import (
     cross_validate_donor_types,
     normalize_donor_type,
     DONOR_TYPE_PROTOTYPES,
+    KNN_SOURCE,
 )
 from app.pipeline.transform.industry_classifier import (
     classify_industries_batch_scored,
@@ -832,7 +833,7 @@ def _classify_remaining_via_nn(
 
         all_results[name_upper] = {"type": dtype, "industry": industry}
 
-        _store_donor_learning(db_session, name_upper, dtype, industry, "nn")
+        _store_donor_learning(db_session, name_upper, dtype, industry, KNN_SOURCE)
 
     logger.info("kNN classification complete: %d donors classified", len(all_results))
 

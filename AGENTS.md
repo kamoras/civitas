@@ -220,7 +220,10 @@ improving accuracy over time without manual intervention.
 when analysis code changes. At pipeline start, `_compute_analysis_code_hash()`
 computes a SHA-256 fingerprint of all analysis-relevant source files
 (everything in `app/pipeline/` except `fetch/`, plus `config_definitions.py`).
-This fingerprint is compared to the stored hash from the last pipeline run:
+Each file is hashed as its docstring-stripped AST (`_normalized_source`), so
+editing a comment or docstring does not count as a code change — only code,
+string constants (prototypes, prompts) and thresholds do. This fingerprint is
+compared to the stored hash from the last pipeline run:
 
 - **Same hash** → all learning data is preserved (learning store, analysis
   cache, sqlite-vec reference corpus). The self-training system accumulates
@@ -233,6 +236,11 @@ The learning store upserts always overwrite prior entries (no confidence
 guards), ensuring the current run's classifications take precedence. Within
 a single pipeline run, this is harmless because learning store lookups
 short-circuit re-classification of already-seen entities.
+
+kNN's own outputs (`source == KNN_SOURCE`) are stored for lookup but are
+**never used as kNN reference examples** — only labels from an upstream tier
+(FEC metadata, rules, prototype similarity) vote. Otherwise one run's guess
+becomes the next run's evidence and errors compound across runs.
 
 The `normalize_learning_store()` function runs at the start of the kNN phase
 to fix case inconsistencies. Stale or hallucinated category labels (e.g.,

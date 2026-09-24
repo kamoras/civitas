@@ -452,6 +452,36 @@ def _acquire_pipeline_lock(db: Session) -> PipelineRun | None:
     return acquire_pipeline_lock(db, PipelineRun, timedelta(seconds=STALE_PIPELINE_TIMEOUT_S))
 
 
+def _normalized_source(source: str) -> bytes:
+    """A module's source reduced to what can change its behavior: the AST
+    with every docstring removed. Comments never reach the AST at all.
+
+    The raw-bytes hash this replaces cleared the learning store, analysis
+    cache and reference corpus on ANY edit to a hashed file — including a
+    comment reworded in a module that classifies nothing. In a codebase that
+    documents every calibration change inline, that meant self-training
+    rarely survived more than a few runs. Nothing in app/ reads `__doc__`,
+    so dropping docstrings can't hide a behavior change; any change to code,
+    a string constant, a prototype description, or a threshold still
+    changes the dump.
+    """
+    import ast
+
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            body = node.body
+            if (
+                body
+                and isinstance(body[0], ast.Expr)
+                and isinstance(body[0].value, ast.Constant)
+                and isinstance(body[0].value.value, str)
+            ):
+                # Keep the body non-empty so the tree stays well-formed.
+                node.body = body[1:] or [ast.Pass()]
+    return ast.dump(tree, annotate_fields=False).encode()
+
+
 def _compute_analysis_code_hash() -> str:
     """SHA-256 fingerprint of all analysis-relevant source files.
 
@@ -459,6 +489,9 @@ def _compute_analysis_code_hash() -> str:
     vector_store, cache) and config_definitions.py (weights, prototypes,
     industry codes).  Excludes fetch modules — raw data retrieval does not
     affect how that data is classified or scored.
+
+    Hashes each file's docstring-stripped AST (see _normalized_source), not
+    its raw bytes, so comment and docstring edits don't wipe learned data.
 
     Also folds in the resolved generative-model identity (backend + model
     id). Those live in config.py (env-driven), not in any hashed .py source,
@@ -484,7 +517,10 @@ def _compute_analysis_code_hash() -> str:
 
     h = hashlib.sha256()
     for p in sorted(paths):
-        h.update(p.read_bytes())
+        h.update(str(p.relative_to(app_dir)).encode())
+        h.update(b"\x00")
+        h.update(_normalized_source(p.read_text()))
+        h.update(b"\x00")
     h.update(b"\x00llm:")
     h.update((settings.LLM_BACKEND or "").encode())
     h.update(b"\x00")

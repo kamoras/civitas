@@ -1426,13 +1426,15 @@ export default function AboutPage() {
                   The learning store also feeds into the self-training loop
                   <Cite id="25">Yarowsky 1995</Cite> — high-confidence classifications from prior
                   runs become labeled examples for kNN and reference corpus retrieval in future
-                  runs. The system literally gets better each time the pipeline runs.
+                  runs. kNN&apos;s own guesses are stored but never reused as examples, so an
+                  early mistake can&apos;t teach later runs to repeat it.
                 </P>
                 <P>
                   To prevent stale data from persisting when analysis algorithms are updated, the
                   pipeline implements{" "}
                   <em className="text-ink">version-aware artifact management</em>. At the start of
-                  each run, a SHA-256 fingerprint of all analysis source files is compared to the
+                  each run, a SHA-256 fingerprint of all analysis source files (ignoring comments
+                  and documentation) is compared to the
                   stored hash from the previous run. If the code is unchanged, all learning data is
                   preserved to promote self-training. If the code has changed, stale artifacts (LLM
                   results, learned classifications, kNN reference corpus) are automatically cleared
