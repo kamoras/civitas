@@ -3822,9 +3822,35 @@ def _generate_monitor_metadata(
     if category not in POLICY_AREAS:
         category = "FOREIGN_POLICY"
     
+    title = str(result.get("title", issue.title))[:500]
+    description = str(result.get("description", issue.summary))[:1000]
+
+    # A National Monitor's title and description are published prose and
+    # were, until 2026-09-23, generated with no mechanical check at all —
+    # the same gap that let "Iran War Ends Quickly to Lower Prices" onto
+    # the site from the issue path next door. The articles assembled
+    # above are this generation's source material, so they are what it
+    # gets checked against; falling back to the originating issue's own
+    # already-checked title and summary keeps the monitor rather than
+    # dropping it.
+    source_material = "\n\n".join(articles)
+    reasons = grounding_violations(f"{title} {description}", source_material)
+    reasons += hedge_and_editorializing_violations(f"{title} {description}")
+    reasons += [
+        f"title states as done what the source only calls for: {', '.join(inverted)}"
+        for inverted in [proposal_stated_as_fact(title, source_material)] if inverted
+    ]
+    if reasons:
+        logger.warning(
+            "Monitor metadata failed grounding (%s) — falling back to the issue's own text",
+            "; ".join(reasons),
+        )
+        action_metrics.increment("monitor_metadata_ungrounded")
+        title, description = issue.title, issue.summary or ""
+
     return {
-        "title": str(result.get("title", issue.title))[:500],
-        "description": str(result.get("description", issue.summary))[:1000],
+        "title": title[:500],
+        "description": description[:1000],
         "category": category.lower(),
     }
 

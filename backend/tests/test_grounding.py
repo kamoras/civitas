@@ -889,3 +889,37 @@ class TestProposalStatedAsFact:
         assert grounding.proposal_stated_as_fact(
             "Governor resigns amid probe",
             "The governor faced questions about the contract.") == []
+
+
+class TestEveryPublishingPathIsChecked:
+    """The 2026-09-23 audit rule, as an executable invariant rather than a
+    note: a module that generates text with call_llm and publishes it must
+    also run the shared checks on what it publishes.
+
+    Two real gaps were found this way — justice_pipeline published prose
+    about a named Supreme Court justice with no mechanical check at all,
+    and action_center's National Monitor titles/descriptions went straight
+    to the site. Both were the same shape as the unchecked issue TITLE
+    that let "Iran War Ends Quickly to Lower Prices" through.
+    """
+
+    GENERATES_AND_PUBLISHES = [
+        "app/pipeline/analyze/action_center.py",
+        "app/pipeline/analyze/bluesky_poster.py",
+        "app/pipeline/analyze/bluesky_spotlight.py",
+        "app/pipeline/analyze/early_signal.py",
+        "app/pipeline/analyze/election_bluesky.py",
+        "app/pipeline/justice_pipeline.py",
+    ]
+
+    @pytest.mark.parametrize("relative_path", GENERATES_AND_PUBLISHES)
+    def test_a_generation_path_runs_the_shared_checks(self, relative_path):
+        import pathlib
+
+        root = pathlib.Path(__file__).resolve().parent.parent
+        source = (root / relative_path).read_text()
+        assert "call_llm(" in source, f"{relative_path} no longer generates — update this list"
+        assert "grounding_violations(" in source, (
+            f"{relative_path} generates published text but never calls "
+            "grounding_violations — see this class's docstring"
+        )
