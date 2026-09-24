@@ -931,13 +931,13 @@ class TestEveryPublishingPathIsChecked:
     # is the redesign's shape: the model points at text it did not
     # write, so "is this grounded" is answered by construction and the
     # combinator runs only as a backstop on the composed result.
-    SPAN_VERIFIED = {"_locate"}
+    SPAN_VERIFIED = {"_locate", "locate_claim"}
     # Functions whose LLM output is a DECISION, never published text.
     # A wrong answer here merges two monitors or mislabels a category —
     # a correctness bug, not a hallucination reaching a reader.
     JUDGMENT_ONLY = {
         "_should_merge_monitors_llm", "_should_match_monitor_llm",
-        "_reclassify_monitor_llm", "_check_summary_roles",
+        "_reclassify_monitor_llm",
     }
 
     def _generators(self, relative_path):
