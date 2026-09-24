@@ -95,3 +95,6 @@ credentials.json
 htmlcov/
 coverage.xml
 diff_coverage.md
+
+# Downloaded datasets for backend/scripts/research_*.py
+.research-cache/

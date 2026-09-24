@@ -281,8 +281,8 @@ def compute_ideology_scores(
     # projection), fall back to a deterministic anchor — the first
     # bioguide-sorted member with a non-negligible coordinate — so the axis
     # orientation is reproducible across environments instead of flipping
-    # with SVD's implementation-defined sign (which would flip the v6.7
-    # position-mismatch discount that reads party_ideology_bounds.json).
+    # with SVD's implementation-defined sign (which would swap the
+    # progressive/conservative ideology labels built from these scores).
     sign = 0.0
     if r_scores:
         r_mean = sum(r_scores) / len(r_scores)
@@ -312,7 +312,7 @@ def compute_ideology_scores(
     # to compare against (this codebase has never actually produced a
     # bad axis to measure) — below it, the safer failure is publishing
     # nothing this run rather than a confidently-oriented coin flip that
-    # feeds the v6.7 position-mismatch discount and partisan-depth priors.
+    # feeds the ideology labels and partisan-depth priors.
     _MIN_PARTY_MEAN_SEPARATION = 0.15
     if r_idx and d_idx:
         r_mean_final = sum(scores[i] for i in r_idx) / len(r_idx)

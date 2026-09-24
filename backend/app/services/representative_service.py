@@ -411,6 +411,7 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
 
     existing.total_raised = funding.get("totalRaised", 0)
     existing.total_contributions = funding.get("totalContributions")
+    existing.caucus_party = (rep_data.get("votingRecord") or {}).get("effectiveParty")
     existing.total_from_pacs = funding.get("totalFromPACs", 0)
     existing.small_donor_percentage = funding.get("smallDonorPercentage", 0)
     existing.outside_spending_for = funding.get("outsideSpendingFor")
@@ -467,7 +468,6 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
             stance=v.get("stance", "neutral"),
             description=v.get("description", ""),
             party_leaning=v.get("partyLeaning"),
-            opposing_party_unity_pct=v.get("opposingPartyUnityPct"),
             voted_with_party=v.get("votedWithParty"),
             vote_category=category,
         ))

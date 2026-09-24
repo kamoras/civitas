@@ -66,7 +66,6 @@ from app.pipeline.transform.normalize_votes import (
     normalize_votes,
     compute_party_split,
     compute_party_vote_split,
-    opposing_party_unity,
     _determine_party_alignment,
     house_roll_call_id,
 )
@@ -329,10 +328,6 @@ async def run_house_pipeline() -> dict:
                     bill["partyLeaning"] = refine_with_vote_data(
                         bill.get("partyLeaning", "bipartisan"), split,
                     )
-                    if vote_split and bill["partyLeaning"] in ("R", "D"):
-                        bill["opposingPartyUnityPct"] = opposing_party_unity(
-                            bill["partyLeaning"], vote_split["r_yea_pct"], vote_split["d_yea_pct"],
-                        )
 
             for bill in classified_recent:
                 bill_id = bill.get("billId", "")
@@ -343,10 +338,6 @@ async def run_house_pipeline() -> dict:
                     bill["partyLeaning"] = refine_with_vote_data(
                         bill.get("partyLeaning", "bipartisan"), split,
                     )
-                    if vote_split and bill["partyLeaning"] in ("R", "D"):
-                        bill["opposingPartyUnityPct"] = opposing_party_unity(
-                            bill["partyLeaning"], vote_split["r_yea_pct"], vote_split["d_yea_pct"],
-                        )
 
             progress.complete(
                 "classify_bills",
@@ -546,9 +537,7 @@ async def run_house_pipeline() -> dict:
                 ideology_bounds_by_party = party_ideology_bounds(
                     [(ideology_scores.get(bio), rep_party_map.get(bio)) for bio in rep_bio_ids]
                 )
-                from app.pipeline.analyze.score_calculator import write_party_ideology_bounds
-                write_party_ideology_bounds("house", ideology_bounds_by_party)
-                # Refresh this chamber's DW-NOMINATE ideal points from
+                # Refresh this chamber's roll-call ideal points from
                 # Voteview (position-congruence component, score_calculator
                 # v6.11). Best-effort: never raises; a fetch/gate failure
                 # keeps the last good /data/member_ideal_points.json section.
@@ -678,7 +667,6 @@ async def run_house_pipeline() -> dict:
                             "stance": rv.get("stance", "neutral"),
                             "description": rv.get("description", ""),
                             "partyLeaning": party_leaning,
-                            "opposingPartyUnityPct": rv.get("opposingPartyUnityPct"),
                             "votedWithParty": voted_with_party,
                             "voteCategory": "recent",
                             "rcKey": rv.get("billId", ""),
@@ -790,9 +778,15 @@ async def run_house_pipeline() -> dict:
             # measured from the whole population BEFORE anyone is scored
             # (the Senate pipeline already works this way). The PAC-share
             # median needs every rep's funding, which the pass above fetches.
-            from app.pipeline.senate_pipeline import _live_funding_reference
+            from app.pipeline.senate_pipeline import (
+                _live_constituent_reference,
+                _live_funding_reference,
+            )
             funding_reference = _live_funding_reference(
                 "house", [r.get("funding") or {} for r, _ in prepared_reps],
+            )
+            constituent_reference = _live_constituent_reference(
+                "house", [r for r, _ in prepared_reps],
             )
 
             for rep, bio_id in prepared_reps:
@@ -816,6 +810,7 @@ async def run_house_pipeline() -> dict:
                     # Calculate scores
                     scores = calculate_scores({
                         **rep, "lesReference": les_reference, "fundingReference": funding_reference,
+                        "constituentReference": constituent_reference,
                     })
                     scores["confidence"] = calculate_confidence(rep)
                     rep["representationScore"] = scores

@@ -1,4 +1,4 @@
-"""DW-NOMINATE member ideal points — per-run ingestion from Voteview.
+"""Roll-call member ideal points — per-run ingestion from Voteview.
 
 Feeds Constituent Alignment's position-congruence component
 (score_calculator v6.11): each member's roll-call ideal point scored
@@ -6,24 +6,37 @@ against what a same-party member of a comparably-leaning seat typically
 holds. Fully automated, like every other data source on this platform —
 each chamber's pipeline refreshes its own section of
 /data/member_ideal_points.json (the persistent writable volume) every
-run, the same read-merge-write, never-abort-the-run pattern as
-party_ideology_bounds.json. There is no offline generation step: the
-component is inert only until the first successful ingest, and a
+run, read-merge-write, never aborting the run. There is no offline
+generation step: the component is inert only until the first successful
+ingest, and a
 fetch/gate failure on a later run keeps the last good data rather than
 degrading scores (missing/stale data is never punitive).
 
 Source: Voteview / Lewis et al., "Voteview: Congressional Roll-Call
 Votes Database" (voteview.com), per-congress member-ideology exports —
-the canonical academic source for DW-NOMINATE estimates, updated weekly
+the canonical academic source for NOMINATE estimates, updated weekly
 while a congress sits. Two small CSVs per run (~15KB Senate, ~60KB
 House).
+
+Which position (v6.13): the congress-specific Nokken-Poole first
+dimension (Nokken & Poole 2004), not career-constrained DW-NOMINATE.
+DW-NOMINATE lets a member move only along a linear trend across their
+whole career, so a sitting member's "current" position is partly their
+record from past congresses — the opposite of AGENTS.md principle 6. And
+tested, not assumed: on the 108th House, a congress-specific position
+predicted incumbents' 2004 vote share better than DW-NOMINATE and
+dominated it when both were entered (docs/research/constituent-
+alignment.md). A chamber falls back to nominate_dim1 as a whole — never
+mixed within one fit — only when Voteview hasn't published Nokken-Poole
+estimates for most of it yet; the chosen column is recorded as
+"measure".
 
 Construct (Canes-Wrone, Brady & Cogan 2002, "Out of Step, Out of
 Office," APSR 96:1 — district-relative ideological extremity):
 
     For each chamber and each major party, fit an ordinary-least-squares
-    regression of nominate_dim1 on the seat's Cook PVI (the platform's
-    own state_pvi.json / district_pvi.json, positive = R lean):
+    regression of the member's dim1 position on the seat's Cook PVI (the
+    platform's own state_pvi.json / district_pvi.json, positive = R lean):
 
         expected_dim1(seat) = a_party + b_party * seat_pvi
 
@@ -98,12 +111,12 @@ MEMBERS_URL = "https://voteview.com/static/data/out/members/{letter}{congress}_m
 
 SOURCE_DESC = (
     "Voteview (Lewis et al., voteview.com) per-congress member-ideology "
-    "exports, nominate_dim1; seat lean from state_pvi.json / "
+    "exports, nokken_poole_dim1 (nominate_dim1 when unpublished); seat lean from state_pvi.json / "
     "district_pvi.json. Refreshed automatically each pipeline run by "
     "app/pipeline/fetch/voteview.py."
 )
 METHOD_DESC = (
-    "Per chamber, per major party: OLS nominate_dim1 = a + b*seat_pvi "
+    "Per chamber, per major party: OLS dim1 = a + b*seat_pvi "
     "(seat_pvi positive = R lean; state PVI for senators, district PVI "
     "for House). extremity = residual signed toward the party flank "
     "(-residual for D, +residual for R); extremity_p90 = 90th percentile "
@@ -182,19 +195,38 @@ def _ols(xs: list[float], ys: list[float]) -> tuple[float, float, float]:
     return a, b, r2
 
 
+# (CSV column, name shown in score breakdowns), in order of preference.
+POSITION_COLUMNS = (("nokken_poole_dim1", "Nokken-Poole"), ("nominate_dim1", "DW-NOMINATE"))
+
+
+def _position_column(rows: list[dict]) -> tuple[str, str]:
+    """The congress-specific Nokken-Poole column when Voteview has published
+    it for at least 90% of the members with any estimate, else DW-NOMINATE —
+    one column for the whole chamber, so every member is scored on the same
+    scale as the regression they are compared against."""
+    def count(col):
+        return sum(1 for r in rows if (r.get(col) or "").strip())
+    available = max(count(col) for col, _ in POSITION_COLUMNS)
+    for col, name in POSITION_COLUMNS:
+        if available and count(col) >= 0.9 * available:
+            return col, name
+    return POSITION_COLUMNS[-1]
+
+
 def build_chamber_ideal_points(
     rows: list[dict], chamber: str,
     state_pvi: dict[str, int], district_pvi: dict[str, int],
 ) -> tuple[dict, list[str]]:
     """One chamber's {members, fit, extremity_p90} section from parsed
     Voteview rows, plus build-stage failure strings (empty = clean)."""
+    column, measure = _position_column(rows)
     members: dict[str, float] = {}
     by_party: dict[str, list[tuple[float, float]]] = {"D": [], "R": []}
     unresolved_seats = 0
 
     for row in rows:
         bio = (row.get("bioguide_id") or "").strip()
-        raw_dim1 = (row.get("nominate_dim1") or "").strip()
+        raw_dim1 = (row.get(column) or "").strip()
         if not bio or not raw_dim1:
             continue  # no estimate yet (e.g. a freshman pre-first-scaling)
         try:
@@ -233,7 +265,9 @@ def build_chamber_ideal_points(
     if unresolved_seats:
         logger.info("voteview %s: %d members with no resolvable seat PVI (excluded from fit only)",
                     chamber, unresolved_seats)
-    return {"members": members, "fit": fit, "extremity_p90": extremity_p90}, failures
+    return {
+        "members": members, "fit": fit, "extremity_p90": extremity_p90, "measure": measure,
+    }, failures
 
 
 def ingestion_gates(chamber: str, data: dict) -> list[str]:
@@ -243,8 +277,10 @@ def ingestion_gates(chamber: str, data: dict) -> list[str]:
     lo, hi = (90, 105) if chamber == "senate" else (380, 450)
     if not (lo <= len(members) <= hi):
         failures.append(f"{chamber}: {len(members)} members with dim1, expected {lo}-{hi}")
-    if not all(-1.2 <= v <= 1.2 for v in members.values()):
-        failures.append(f"{chamber}: nominate_dim1 outside [-1.2, 1.2] — column drift?")
+    # Headroom beyond [-1, 1] so a legitimately extreme estimate never trips
+    # it; this guards against reading the wrong column, not against outliers.
+    if not all(-1.5 <= v <= 1.5 for v in members.values()):
+        failures.append(f"{chamber}: dim1 outside [-1.5, 1.5] — column drift?")
     for party in ("D", "R"):
         f = data["fit"].get(party)
         if not f:
@@ -273,7 +309,7 @@ async def refresh_member_ideal_points(
     never writes gated-bad data: any failure keeps the previous run's
     section on the volume (the scoring loader's stale-data posture), logs
     why, and lets the pipeline run continue — best-effort side artifact,
-    same contract as write_party_ideology_bounds.
+    never aborting the pipeline run.
     """
     from app.pipeline.analyze.score_calculator import (
         _district_pvi, _state_pvi, write_member_ideal_points,

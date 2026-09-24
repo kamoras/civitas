@@ -35,12 +35,13 @@ def house_roll_call_id(rc: dict) -> str:
 
 def dedupe_votes(votes: list[dict]) -> list[dict]:
     """Drop repeat entries for the same roll call (see vote_identity),
-    keeping the first occurrence."""
+    keeping the first occurrence. A vote with no identity at all can't be
+    shown to repeat anything, so it is kept."""
     seen: set[str] = set()
     out: list[dict] = []
     for v in votes:
         ident = vote_identity(v)
-        if ident in seen:
+        if ident and ident in seen:
             continue
         seen.add(ident)
         out.append(v)
@@ -312,7 +313,6 @@ def normalize_votes(
             "stance": bill.get("stance", "neutral"),
             "description": bill.get("description", ""),
             "partyLeaning": party_leaning,
-            "opposingPartyUnityPct": bill.get("opposingPartyUnityPct"),
             "votedWithParty": party_aligned,
             "voteCategory": "recent",
             "rcKey": bill.get("rcKey"),
@@ -401,7 +401,6 @@ def normalize_recent_votes(
             "stance": bill.get("stance", "neutral"),
             "description": bill.get("description", ""),
             "partyLeaning": party_leaning,
-            "opposingPartyUnityPct": bill.get("opposingPartyUnityPct"),
             "votedWithParty": party_aligned,
             "voteCategory": "recent",
             "rcKey": bill.get("rcKey"),
@@ -466,35 +465,6 @@ def compute_party_split(roll_call_data: dict) -> str | None:
     """
     result = compute_party_vote_split(roll_call_data)
     return result["label"] if result else None
-
-
-def opposing_party_unity(
-    label: str, r_yea_pct: float, d_yea_pct: float,
-) -> float | None:
-    """Cohesion of the party OPPOSITE `label`'s majority, in the direction
-    of its own majority.
-
-    By construction (the 65/35 labeling threshold in
-    compute_party_vote_split), this is always in [0.65, 1.0] whenever
-    `label` is "R" or "D" — a vote can't get a partisan label without one
-    party being at least 65% unified. 0.65 means the vote was barely
-    partisan once the labeling party's own near-unanimity is set aside;
-    1.0 means the opposing party voted in near lockstep on its own side.
-
-    Used to distinguish a crossing vote that reads as consensus-building
-    (the opposing party was barely unified) from one that reads as
-    adopting the opposition's own party line (the opposing party voted
-    in lockstep) — see _constituent_alignment_core's crossing_quality
-    discount in score_calculator.py.
-
-    Returns None for a "bipartisan"-labeled vote (there's no "opposing
-    party majority" to measure unity against).
-    """
-    if label == "R":
-        return max(d_yea_pct, 1.0 - d_yea_pct)
-    if label == "D":
-        return max(r_yea_pct, 1.0 - r_yea_pct)
-    return None
 
 
 def extract_senator_vote(

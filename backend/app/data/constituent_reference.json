@@ -1,0 +1,40 @@
+{
+ "_as_of": "2026-07",
+ "_source": "Pre-first-run fallback only: the pipeline measures this per chamber every run (score_calculator.compute_constituent_reference \u2014 per-party least squares of break rate on seat alignment, kinked at a swing seat) and writes /data/constituent_reference.json, which takes precedence. These values are the hand-set curve Constituent Alignment used before v6.13 (expected break rate 3% in a safe aligned seat, 8% in a swing seat, 20% in a strongly opposed one; saturation 25 points), rewritten in the fitted form (a + b*alignment + b_opposed*min(alignment, 0)) and applied to both parties; no measurement of the live population exists yet to replace them. The first pipeline run does. Regenerate from a populated database with backend/scripts/calibrate_constituent_reference.py.",
+ "house": {
+  "deviation_p90": 0.25,
+  "expected": {
+   "D": {
+    "a": 0.08,
+    "b": -0.05,
+    "b_opposed": -0.07,
+    "n": null
+   },
+   "R": {
+    "a": 0.08,
+    "b": -0.05,
+    "b_opposed": -0.07,
+    "n": null
+   }
+  },
+  "n": null
+ },
+ "senate": {
+  "deviation_p90": 0.25,
+  "expected": {
+   "D": {
+    "a": 0.08,
+    "b": -0.05,
+    "b_opposed": -0.07,
+    "n": null
+   },
+   "R": {
+    "a": 0.08,
+    "b": -0.05,
+    "b_opposed": -0.07,
+    "n": null
+   }
+  },
+  "n": null
+ }
+}

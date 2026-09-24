@@ -85,7 +85,6 @@ from app.pipeline.transform.normalize_votes import (
     find_senate_roll_call,
     normalize_recent_votes,
     normalize_votes,
-    opposing_party_unity,
     vote_identity,
 )
 
@@ -229,6 +228,7 @@ def upsert_senator(db: Session, data: dict) -> None:
         "score_legislative_effectiveness": corruption.get("legislativeEffectiveness", 50),
         "total_raised": funding.get("totalRaised") or 0,
         "total_contributions": funding.get("totalContributions"),
+        "caucus_party": (data.get("votingRecord") or {}).get("effectiveParty"),
         "total_from_pacs": funding.get("totalFromPACs") or 0,
         "small_donor_percentage": funding.get("smallDonorPercentage") or 0,
         "outside_spending_for": funding.get("outsideSpendingFor"),
@@ -306,7 +306,6 @@ def upsert_senator(db: Session, data: dict) -> None:
                 stance=vote_data.get("stance") or "neutral",
                 description=vote_data.get("description") or "",
                 party_leaning=vote_data.get("partyLeaning"),
-                opposing_party_unity_pct=vote_data.get("opposingPartyUnityPct"),
                 voted_with_party=vote_data.get("votedWithParty"),
                 vote_category=vote_data.get("voteCategory") or category,
             )
@@ -765,6 +764,31 @@ def _live_funding_reference(chamber: str, fundings: list[dict]) -> dict:
     ref = {**(FUNDING_REFERENCE.load().get(chamber) or {}), **ref}
     logger.info("Funding reference (%s): %s", chamber, ref)
     return FUNDING_REFERENCE.with_live(chamber, ref)
+
+
+def _live_constituent_reference(chamber: str, members: list[dict]) -> dict:
+    """This run's Constituent Alignment expectation for `chamber` (per-party
+    break rate by seat lean — see score_calculator.compute_constituent_
+    reference), persisted and merged the same way as _live_funding_reference.
+    `members` are calculate_scores-shaped dicts. Falls back to the last
+    persisted reference when either party has too few measurable members
+    (e.g. a single-member filtered run)."""
+    from app.pipeline.analyze.population_reference import CONSTITUENT_REFERENCE
+    from app.pipeline.analyze.score_calculator import (
+        compute_constituent_reference,
+        constituent_reference_inputs,
+    )
+
+    ref = compute_constituent_reference(constituent_reference_inputs(members))
+    if ref is None:
+        logger.warning(
+            "Too few %s members with party-labeled votes to measure the "
+            "Constituent Alignment expectation this run — scoring against the "
+            "last persisted one", chamber,
+        )
+        return CONSTITUENT_REFERENCE.load()
+    logger.info("Constituent Alignment reference (%s): %s", chamber, ref)
+    return CONSTITUENT_REFERENCE.with_live(chamber, ref)
 
 
 def _recent_not_covered_by_key_bills(
@@ -1443,10 +1467,6 @@ async def run_senate_pipeline(
                 bill["partyLeaning"] = refine_with_vote_data(
                     bill.get("partyLeaning", "bipartisan"), vote_split,
                 )
-                if split and bill["partyLeaning"] in ("R", "D"):
-                    bill["opposingPartyUnityPct"] = opposing_party_unity(
-                        bill["partyLeaning"], split["r_yea_pct"], split["d_yea_pct"],
-                    )
 
         # Use bill sponsor party as ground truth for the learning store.
         # Bills sponsored by R senators are examples of R-aligned legislation.
@@ -1489,10 +1509,6 @@ async def run_senate_pipeline(
                     rc["partyLeaning"] = refine_with_vote_data(
                         rc.get("partyLeaning", "bipartisan"), computed_split,
                     )
-                    if rc["partyLeaning"] in ("R", "D"):
-                        rc["opposingPartyUnityPct"] = opposing_party_unity(
-                            rc["partyLeaning"], split["r_yea_pct"], split["d_yea_pct"],
-                        )
 
         # 3a.3 Embed classified bills in vector database for semantic search
         logger.info("Embedding bills in vector database...")
@@ -1770,7 +1786,7 @@ async def run_senate_pipeline(
         ideology_scores = compute_ideology_scores(
             all_bills_for_analysis, cosponsors_map, senator_bio_ids, senator_party_map,
         )
-        # Refresh this chamber's DW-NOMINATE ideal points from Voteview
+        # Refresh this chamber's roll-call ideal points from Voteview
         # (position-congruence component, score_calculator v6.11).
         # Best-effort: never raises; a fetch/gate failure keeps the last
         # good /data/member_ideal_points.json section.
@@ -1813,8 +1829,6 @@ async def run_senate_pipeline(
         ideology_bounds_by_party = party_ideology_bounds(
             [(ideology_scores.get(bio), senator_party_map.get(bio)) for bio in senator_bio_ids]
         )
-        from app.pipeline.analyze.score_calculator import write_party_ideology_bounds
-        write_party_ideology_bounds("senate", ideology_bounds_by_party)
         logger.info(
             "Sponsorship analysis: %d leadership, %d ideology, %d bipartisanship scores",
             len(leadership_scores), len(ideology_scores), len(bipartisanship_scores),
@@ -1872,6 +1886,10 @@ async def run_senate_pipeline(
 
             funding_reference = _live_funding_reference(
                 "senate", [p.get("funding") or {} for p in senator_prepared],
+            )
+            constituent_reference = _live_constituent_reference(
+                "senate",
+                [{**p["senator"], "votingRecord": p["votingRecord"]} for p in senator_prepared],
             )
             les_reference = _live_les_reference(
                 "senate",
@@ -1952,6 +1970,7 @@ async def run_senate_pipeline(
                         "ideologyScore": ideology_scores.get(bio_id_for_score),
                         "lesReference": les_reference,
                         "fundingReference": funding_reference,
+                        "constituentReference": constituent_reference,
                     }
                     corruption_score = calculate_scores(temp_senator)
                     corruption_score["confidence"] = calculate_confidence(temp_senator)

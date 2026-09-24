@@ -132,6 +132,17 @@ TEST_PRESIDENT_REFERENCE = {
 }
 
 
+# Constituent Alignment's seat expectation, pinned to round numbers so test
+# arithmetic is readable: expected break rate 10% in a swing seat
+# (alignment 0), 5% in a maximally safe one (+1), 30% in a maximally
+# opposed one (-1); saturation at a 20-point deviation.
+_TEST_EXPECTED = {"a": 0.10, "b": -0.05, "b_opposed": -0.15, "n": 50}
+TEST_CONSTITUENT_REFERENCE = {
+    chamber: {"expected": {"D": _TEST_EXPECTED, "R": _TEST_EXPECTED}, "deviation_p90": 0.20, "n": 100}
+    for chamber in ("senate", "house")
+}
+
+
 @pytest.fixture(autouse=True)
 def pinned_population_references(tmp_path, monkeypatch):
     """Point every per-chamber reference at test-controlled files: no live
@@ -144,6 +155,7 @@ def pinned_population_references(tmp_path, monkeypatch):
         (population_reference.LES_REFERENCE, TEST_LES_REFERENCE),
         (population_reference.FUNDING_REFERENCE, TEST_FUNDING_REFERENCE),
         (population_reference.PRESIDENT_REFERENCE, TEST_PRESIDENT_REFERENCE),
+        (population_reference.CONSTITUENT_REFERENCE, TEST_CONSTITUENT_REFERENCE),
     ):
         bundled = tmp_path / f"{ref.name}_bundled.json"
         bundled.write_text(json.dumps(values))

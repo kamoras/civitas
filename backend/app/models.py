@@ -126,6 +126,10 @@ class Senator(Base):
     # are taken over (normalize_finance.summarize_election_totals). NULL on
     # rows scored before it existed — readers fall back to total_raised.
     total_contributions: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Party the member's votes are scored against: their own, or for an
+    # Independent the party they caucus with (normalize_votes). Read back by
+    # the score-breakdown API so it scores Independents as the pipeline did.
+    caucus_party: Mapped[str | None] = mapped_column(String(1), nullable=True)
     total_from_pacs: Mapped[float] = mapped_column(Float, default=0.0)
     small_donor_percentage: Mapped[float] = mapped_column(Float, default=0.0)
     # Super PAC independent expenditures supporting the candidate (FEC
@@ -217,14 +221,6 @@ class KeyVote(Base):
     stance: Mapped[str] = mapped_column(String, default="neutral")
     description: Mapped[str] = mapped_column(Text, default="")
     party_leaning: Mapped[str | None] = mapped_column(String, nullable=True)  # "R", "D", "bipartisan"
-    # For R/D-labeled crossing votes only: how unified the OPPOSING party
-    # was on its own side (0.65-1.0 by construction of the 65/35 labeling
-    # threshold — see normalize_votes.opposing_party_unity). None when the
-    # vote is "bipartisan"-labeled or lacks enough roll-call data. Used by
-    # Constituent Alignment to distinguish a crossing that reads as
-    # consensus-building from one that reads as adopting the opposition's
-    # own party line.
-    opposing_party_unity_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     voted_with_party: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     vote_category: Mapped[str] = mapped_column(String, default="key")  # "recent" or "key"
 
@@ -354,6 +350,10 @@ class Representative(Base):
     # are taken over (normalize_finance.summarize_election_totals). NULL on
     # rows scored before it existed — readers fall back to total_raised.
     total_contributions: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Party the member's votes are scored against: their own, or for an
+    # Independent the party they caucus with (normalize_votes). Read back by
+    # the score-breakdown API so it scores Independents as the pipeline did.
+    caucus_party: Mapped[str | None] = mapped_column(String(1), nullable=True)
     total_from_pacs: Mapped[float] = mapped_column(Float, default=0.0)
     small_donor_percentage: Mapped[float] = mapped_column(Float, default=0.0)
     # Super PAC independent expenditures supporting the candidate (FEC
@@ -449,8 +449,6 @@ class RepKeyVote(Base):
     stance: Mapped[str] = mapped_column(String, default="neutral")
     description: Mapped[str] = mapped_column(Text, default="")
     party_leaning: Mapped[str | None] = mapped_column(String, nullable=True)
-    # See KeyVote.opposing_party_unity_pct — same field, House side.
-    opposing_party_unity_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     voted_with_party: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     vote_category: Mapped[str] = mapped_column(String, default="key")
 

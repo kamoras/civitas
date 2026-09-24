@@ -176,6 +176,9 @@ def validate_senator(senator: dict) -> dict:
         "votedWithPartyCount": max(0, vr.get("votedWithPartyCount", 0)),
         "votedAgainstPartyCount": max(0, vr.get("votedAgainstPartyCount", 0)),
         "partyLoyaltyPct": max(0.0, vr.get("partyLoyaltyPct", 0.0)),
+        # The party an Independent caucuses with (normalize_votes); kept so
+        # it is persisted and the score breakdown scores them the same way.
+        "effectiveParty": vr.get("effectiveParty") if vr.get("effectiveParty") in ("D", "R") else None,
         "recentVotes": [
             _validate_vote(v, "recent")
             for v in (vr.get("recentVotes") or [])

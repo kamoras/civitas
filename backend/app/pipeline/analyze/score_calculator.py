@@ -72,13 +72,18 @@ effort.
 Constituent Alignment: raw party-line break rates are misleading without
 context. Following Carson et al. (2010, "The Electoral Costs of Party
 Loyalty," AJPS 54:3), we use Cook PVI as a proxy for constituent
-preferences and score each member against a seat-specific EXPECTED break
-rate — a senator in a safe R+20 state voting with their party is
-representing constituents, not failing at independence, while the same
-loyalty in a swing state diverges from the median voter. This is the
-delegate model of representation (Miller & Stokes 1963, "Constituency
-Influence in Congress," APSR 57:1), with state partisan lean standing in
-for issue-level constituent opinion. Donor independence via lobbying
+preferences and score each member against the break rate same-party
+members of their chamber show at the same seat lean — a senator in a safe
+R+20 state voting with their party is representing constituents, not
+failing at independence, while the same loyalty in a swing state diverges
+from the median voter. Roll-call position is scored the same way against
+a seat-conditional norm (Canes-Wrone, Brady & Cogan 2002, "Out of Step,
+Out of Office," APSR 96:1). This is the delegate model of representation
+(Miller & Stokes 1963, "Constituency Influence in Congress," APSR 57:1),
+with seat partisan lean standing in for issue-level constituent opinion.
+Both studies validate their measures by the incumbent's vote share; v6.13
+used that same test to choose this dimension's design
+(docs/research/constituent-alignment.md). Donor independence via lobbying
 matches follows Stratmann (2005) with the methodological caution from
 Ansolabehere, de Figueiredo & Snyder (2003, "Why Is There So Little
 Money in U.S. Politics?" JEP 17:1) that donation-vote correlations are
@@ -372,7 +377,8 @@ component (coalition breadth keeps its own independently-justified 20%)
 rather than being redistributed to prop up a three-way split that no
 longer has three genuinely distinct signals.
 
-Changes from v6.5 -> v6.6 (2026-07): Constituent Alignment's seat-relative
+Changes from v6.5 -> v6.6 (2026-07) [superseded in v6.13 — see the v6.13
+note by ALGORITHM_VERSION]: Constituent Alignment's seat-relative
 vote component (_constituent_alignment_core) reworked to stop penalizing
 party loyalty and to stop crediting party defection direction-blind,
 prompted by a fairness review of the "sticks with the party too much"
@@ -480,7 +486,7 @@ moves toward the seat's center, never to penalize failure to hit a derived
   higher evidentiary bar than "this position is an outlier for the seat,"
   and remains a named, open boundary rather than scaffolded half-built code.
 
-Changes from v6.6 -> v6.7 (2026-07): added a position-mismatch discount to
+Changes from v6.6 -> v6.7 (2026-07) [removed in v6.13]: added a position-mismatch discount to
 the below-expected-loyalty branch (_constituent_alignment_core), answering a
 direct question about the v6.6 design: if loyalty is never penalized, can a
 member who votes blatantly out of step with their state — e.g. a member
@@ -669,7 +675,8 @@ construction, regardless of real effectiveness.
   constant; re-run it after any pipeline run meaningfully shifts either
   chamber's per-congress credit distribution.
 
-Changes from v6.10 -> v6.11 (2026-07-23): Constituent Alignment restructured
+Changes from v6.10 -> v6.11 (2026-07-23) [position congruence's seat-safety
+scaling and DW-NOMINATE source superseded in v6.13]: Constituent Alignment restructured
 around the construct its own notes kept naming, prompted by a direct design
 question ("bipartisan doesn't always mean aligned to your constituents —
 what signals would make this metric stronger?"). Two changes, one shared
@@ -819,7 +826,11 @@ import math
 import statistics
 
 from app.models import PromiseAlignment
-from app.pipeline.analyze.population_reference import FUNDING_REFERENCE, LES_REFERENCE
+from app.pipeline.analyze.population_reference import (
+    CONSTITUENT_REFERENCE,
+    FUNDING_REFERENCE,
+    LES_REFERENCE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1048,6 +1059,20 @@ logger = logging.getLogger(__name__)
 # spread saturates — replaces fixed 0.15/0.40 anchors), House small-donor
 # share (House median = 50 — replaces a flat 40% cap), and the majority/
 # minority advancement rates. The duplicate small-donor-fit literal is gone.
+#
+# Also v6.13 — Constituent Alignment rebuilt on evidence (see
+# _calc_constituent_alignment and docs/research/constituent-alignment.md).
+# Every choice was tested against 2,545 House re-election results
+# (1994-2010): the measured per-party seat expectation replaces the
+# hand-set break-rate curve; below-expected loyalty now scores below
+# neutral (the v6.6 floor discarded the strongest signal in the test);
+# neither component is scaled by seat safety (no interaction in the data);
+# position congruence is symmetric and uses congress-specific Nokken-Poole
+# positions. Removed with it: the v6.7 cosponsorship-SVD position-mismatch
+# discount, CROSSING_QUALITY_DISCOUNT (inert at 0.0; flank-side defectors
+# showed no penalty to discount for), and the party_ideology_bounds.json
+# file that only the discount read. The v6.6-v6.11 notes above describe
+# designs this replaces.
 ALGORITHM_VERSION = "v6.13"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
@@ -1199,98 +1224,6 @@ def _state_pvi() -> dict[str, int]:
             )
             _state_pvi_cache = {}
     return _state_pvi_cache
-
-_party_ideology_bounds_cache: dict[str, dict[str, tuple[float, float]]] | None = None
-
-
-_PARTY_IDEOLOGY_BOUNDS_PATH = "/data/party_ideology_bounds.json"
-
-
-def _party_ideology_bounds(chamber: str) -> dict[str, tuple[float, float]]:
-    """Per-party (low, high) ideology-score terciles for one chamber ("senate"
-    or "house"), used by _constituent_alignment_core's position-mismatch
-    discount (see that function and the v6.7 changelog note) to tell whether
-    a below-expected loyalist's ideology_score sits in their own party's
-    extreme third.
-
-    Ingested from /data/party_ideology_bounds.json (the app's persistent
-    writable volume — same one civitas.db and the Chroma vector store live
-    on, see docker-compose.yml's app_data:/data mount and
-    vector_store.py's hardcoded /data/chroma for the established
-    convention this follows), written each pipeline run right after
-    sponsorship_analysis.party_ideology_bounds() computes it from that
-    run's live ideology_score distribution (senate_pipeline.py /
-    house_pipeline.py). Deliberately NOT under app/data/ like state_pvi.json
-    — that path is baked into the Docker image at build time (COPY'd from
-    the repo, not writable at runtime) and only ever written by an offline
-    script + committed to git; this file is generated by the running app
-    itself every pipeline run, so it needs the writable volume instead.
-    Getting this wrong crashed a live pipeline run in production
-    (2026-07-21): PermissionError writing to app/data/ from inside the
-    container, ~90 minutes into a run, right as it reached this step —
-    see write_party_ideology_bounds's docstring for the fix.
-
-    Falls back to an empty dict (discount never triggers) if the file or
-    the chamber's key is missing — missing data is never punitive, same
-    convention as every other loader in this file.
-    """
-    global _party_ideology_bounds_cache
-    if _party_ideology_bounds_cache is None:
-        import json
-        import pathlib
-        path = pathlib.Path(_PARTY_IDEOLOGY_BOUNDS_PATH)
-        try:
-            raw = json.loads(path.read_text())
-            _party_ideology_bounds_cache = {
-                ch: {p: (float(v[0]), float(v[1])) for p, v in parties.items()}
-                for ch, parties in raw.items()
-            }
-        except Exception:
-            logger.warning(
-                "party_ideology_bounds.json unavailable — position-mismatch "
-                "discount will not trigger for any senator/representative"
-            )
-            _party_ideology_bounds_cache = {}
-    return _party_ideology_bounds_cache.get(chamber, {})
-
-
-def write_party_ideology_bounds(chamber: str, bounds: dict[str, tuple[float, float]]) -> None:
-    """Persist one chamber's party_ideology_bounds() output to
-    /data/party_ideology_bounds.json (see _party_ideology_bounds's
-    docstring for why this path, not app/data/), called by
-    senate_pipeline.py / house_pipeline.py right after computing it for
-    that run. Read-merge-write (not overwrite) because the two pipelines
-    run independently and each owns only its own chamber's key in the
-    shared file — a House run must not clobber the Senate section written
-    by the last Senate run, and vice versa.
-
-    Never raises: this is a best-effort side artifact (missing data is
-    never punitive — see the reader), not core pipeline output, so a
-    failure writing it must never abort an otherwise-successful run. It
-    did exactly that in production once already (2026-07-21, wrong path —
-    see _party_ideology_bounds's docstring) before this function caught
-    its own exceptions.
-    """
-    import json
-    import pathlib
-    global _party_ideology_bounds_cache
-    path = pathlib.Path(_PARTY_IDEOLOGY_BOUNDS_PATH)
-    try:
-        try:
-            existing = json.loads(path.read_text())
-        except Exception:
-            existing = {}
-        existing[chamber] = {p: [lo, hi] for p, (lo, hi) in bounds.items()}
-        path.write_text(json.dumps(existing, indent=2, sort_keys=True) + "\n")
-        _party_ideology_bounds_cache = None  # force reload next _party_ideology_bounds() call
-    except Exception:
-        logger.warning(
-            "Failed to write party_ideology_bounds.json for %s — position-"
-            "mismatch discount will use stale or empty bounds until the "
-            "next successful write; pipeline run continues.",
-            chamber, exc_info=True,
-        )
-
 
 _member_ideal_points_cache: dict | None = None
 
@@ -1522,8 +1455,8 @@ def calculate_scores(senator: dict) -> dict:
             senator.get("state", ""),
             senator.get("party", "I"),
             district=senator.get("district"),
-            ideology_score=senator.get("ideologyScore"),
             bioguide_id=senator.get("bioguideId"),
+            reference=senator.get("constituentReference"),
         ),
         "fundingDiversity": _calc_funding_diversity(funding),
         "legislativeEffectiveness": _calc_legislative_effectiveness(
@@ -1567,8 +1500,8 @@ def explain_scores(senator: dict) -> dict:
             senator.get("state", ""),
             senator.get("party", "I"),
             district=senator.get("district"),
-            ideology_score=senator.get("ideologyScore"),
             bioguide_id=senator.get("bioguideId"),
+            reference=senator.get("constituentReference"),
         ),
         "fundingDiversity": _funding_diversity_core(funding),
         "legislativeEffectiveness": _legislative_effectiveness_core(
@@ -2390,64 +2323,140 @@ def _seat_pvi(state: str, district: int | None = None) -> int:
     return pvi
 
 
-# How much surplus-crossing credit is discounted when a member's crossings
-# concentrate on votes where the OPPOSING party voted in near lockstep on
-# its own side — reading as adopting the opposition's platform position
-# rather than building bipartisan consensus.
-#
-# Intentionally 0.0 (inert) at ship time: opposing_party_unity_pct is a
-# brand new per-vote field (2026-07) with zero historical data — every
-# existing KeyVote/RepKeyVote row has it NULL until the next full pipeline
-# run recomputes votes with the new signal, so avg_crossing_unity is None
-# for every senator today regardless of this constant's value. Every other
-# calibration constant in this file was fit against real data before
-# shipping (the FI small-donor baseline, LE volume ceilings, ...) — this
-# one can't be, yet. Once a pipeline run has populated real unity data,
-# run scripts/calibrate_crossing_quality.py (grid search against
-# ground_truth.py's derived consistency gate — there's no natural
-# continuous target to fit against, unlike e.g. the FI baseline's OLS
-# regression) and raise this from 0.0 to the largest value that still
-# passes every check.
-CROSSING_QUALITY_DISCOUNT = 0.0
+# Constituent Alignment's seat expectation is measured, not hand-set
+# (v6.13). Each run fits, per chamber and per party, the chamber's own
+# break rate on seat alignment (compute_constituent_reference); the members
+# it is about to score are the population. A party needs this many members
+# for its fit, and the fit only bends at a swing seat (the kink term) when
+# at least _MIN_OPPOSED_SEATS_FOR_KINK of them hold seats that lean to the
+# other party — otherwise a line through a handful of points decides every
+# opposed-seat member's expectation.
+_MIN_CONSTITUENT_REFERENCE_PARTY = 20
+_MIN_OPPOSED_SEATS_FOR_KINK = 5
 
-# Max points below neutral (50) for the position-mismatch discount (v6.7 —
-# see _constituent_alignment_core and the module changelog): applies only
-# to a below-expected loyalist whose ideology_score sits in their own
-# party's extreme tercile (party_ideology_bounds) while their seat is not
-# safely aligned for that extremity.
-#
-# Revised 25.0 -> 10.0 in v6.8 (2026-07-21), after the first full pipeline
-# run under v6.7 made real fairness auditing possible for the first time.
-# Found this discount and Coalition Breadth (the other component of this
-# same dimension) are not independent signals: within-party ideology_score
-# extremity correlates with bipartisanship_score at r=-0.76 (r²=0.58,
-# n=99) — both are different linear-algebra projections of the SAME
-# cosponsorship matrix, so a member with a narrow cosponsorship network
-# was effectively penalized for it twice in one 100%-weighted dimension.
-# Concretely, this over-penalized senators with no real-world reputation
-# for flank extremism — Tammy Duckworth (a veteran-focused senator
-# broadly regarded as center-left, not progressive-flank) landed in the
-# "10 most extreme" Democrats purely on this metric, alongside Chris
-# Murphy and Cory Booker, all scoring 32-36 on this dimension before this
-# fix. 25.0 -> 10.0 (roughly (1 - r²) of the original, keeping the ~42%
-# of the signal that ISN'T already captured by Coalition Breadth) was
-# grid-searched against every GROUND_TRUTH range and the IV stdev floor
-# using the live population (all pass at every value 0-25 — no data-
-# driven ceiling exists here, same situation as when this constant was
-# first set) AND checked that it still leaves a real, discernible penalty
-# for the cases the discount is actually meant to catch — a swing-state
-# member with an extreme-tercile position, e.g. David McCormick (PA,
-# swing) still lands at 46 instead of the pre-fix 37, a genuine but no
-# longer punitive discount, while Ted Budd and Rick Scott (also swing-
-# state Republicans in the extreme tercile) stay clearly below neutral
-# too. See Coalition Breadth's own comment below for the companion v6.8
-# change (seat-safety-scaling its below-median case), which independently
-# improves its fairness and further reduces this redundancy since a safe-
-# seat member's narrow network is no longer double-penalized through
-# either channel. Re-run this grid search after any pipeline run
-# meaningfully shifts the ideology_score or bipartisanship_score
-# distributions.
-POSITION_MISMATCH_MAX_PENALTY = 10.0
+
+def party_break_rate(voting_record: dict) -> tuple[float | None, int]:
+    """(weighted share of party-labeled votes cast against the member's
+    party, count of those votes). None when fewer than 3 are usable. The
+    one definition both the per-run reference and the member's score read,
+    so the expectation is measured on exactly the statistic it is compared
+    with. Each roll call counts once (dedupe_votes), matching what the
+    scorecard shows."""
+    from app.pipeline.transform.normalize_votes import dedupe_votes
+
+    votes = dedupe_votes(
+        (voting_record.get("keyVotes") or []) + (voting_record.get("recentVotes") or [])
+    )
+    with_party = against = 0.0
+    n = 0
+    for v in votes:
+        wp = v.get("votedWithParty") if isinstance(v, dict) else None
+        if wp is None:
+            continue
+        weight = v.get("partyAlignmentWeight") or 0.0
+        weight = weight if weight > 0.0 else 1.0
+        if wp is True:
+            with_party += weight
+        else:
+            against += weight
+        n += 1
+    if n < 3 or with_party + against <= 0:
+        return None, n
+    return against / (with_party + against), n
+
+
+def _expected_break_rate(fit: dict, alignment: float) -> float:
+    rate = (
+        float(fit["a"])
+        + float(fit["b"]) * alignment
+        + float(fit.get("b_opposed") or 0.0) * min(alignment, 0.0)
+    )
+    return min(max(rate, 0.0), 1.0)
+
+
+def compute_constituent_reference(members: list[tuple[str, float, float]]) -> dict | None:
+    """Measure the seat expectation Constituent Alignment scores against.
+
+    `members` is (party, seat alignment, break rate) for every D/R member of
+    one chamber with a measurable break rate. Per party, least squares:
+
+        break_rate = a + b * alignment + b_opposed * min(alignment, 0)
+
+    alignment is the party-signed seat lean (_signed_state_alignment), so
+    the kink lets the slope differ between seats that lean to the member's
+    party and seats that lean away. Per-party because the two parties'
+    break rates differ at the same seat lean (majority status, whip
+    strength — measured 2026-09 on the 108th House: D intercept 0.128, R
+    0.076), and a per-party expectation predicted re-election vote share
+    better than a pooled one (see the research note in
+    docs/research/constituent-alignment.md).
+
+    deviation_p90 is the 90th percentile of |break rate - expected| across
+    both parties: the saturation scale, so the most out-of-pattern decile
+    spans the component's full range. Returns None unless BOTH parties have
+    enough members — one party scored against a measured expectation and
+    the other against a fallback would not be comparable (the same
+    both-or-neither rule as fetch/voteview.py's ingestion gates).
+    """
+    import numpy as np
+
+    fits: dict[str, dict] = {}
+    deviations: list[float] = []
+    for party in ("D", "R"):
+        rows = [(al, br) for p, al, br in members if p == party and br is not None]
+        if len(rows) < _MIN_CONSTITUENT_REFERENCE_PARTY:
+            return None
+        al = np.array([r[0] for r in rows])
+        br = np.array([r[1] for r in rows])
+        kinked = int((al < 0).sum()) >= _MIN_OPPOSED_SEATS_FOR_KINK
+        cols = [np.ones_like(al), al] + ([np.minimum(al, 0.0)] if kinked else [])
+        coef, *_ = np.linalg.lstsq(np.column_stack(cols), br, rcond=None)
+        fit = {
+            "a": round(float(coef[0]), 5),
+            "b": round(float(coef[1]), 5),
+            "b_opposed": round(float(coef[2]), 5) if kinked else 0.0,
+            "n": len(rows),
+        }
+        fits[party] = fit
+        deviations += [abs(r - _expected_break_rate(fit, a)) for a, r in rows]
+    p90 = float(np.quantile(deviations, 0.9))
+    if p90 <= 0:
+        return None
+    return {"expected": fits, "deviation_p90": round(p90, 5), "n": len(deviations)}
+
+
+def constituent_reference_inputs(members: list[dict]) -> list[tuple[str, float, float]]:
+    """(party, seat alignment, break rate) for each member dict (the shape
+    calculate_scores consumes: state, party, district, votingRecord) with a
+    measurable break rate — exactly the values _constituent_alignment_core
+    compares, so the reference and the scores can't disagree."""
+    out = []
+    for m in members:
+        record = m.get("votingRecord") or {}
+        party = record.get("effectiveParty") or m.get("party")
+        rate, _ = party_break_rate(record)
+        if party not in ("D", "R") or rate is None:
+            continue
+        alignment = _signed_state_alignment(
+            m.get("state", ""), m.get("party", "I"),
+            effective_party=record.get("effectiveParty"), district=m.get("district"),
+        )
+        out.append((party, alignment, rate))
+    return out
+
+
+def _constituent_reference(chamber: str, reference: dict | None) -> dict:
+    return (reference or {}).get(chamber) or CONSTITUENT_REFERENCE.load().get(chamber) or {}
+
+
+# Weight of position congruence when a roll-call ideal point exists; the
+# seat-relative vote component carries the rest. A design weight, not a
+# calibrated one — see the research note: the one election where both
+# could be tested (2004 House) gave the vote component the larger
+# independent association with re-election vote share, so the vote
+# component keeps the majority weight, but no multi-election estimate of
+# the ratio exists to fit this from.
+POSITION_CONGRUENCE_WEIGHT = 0.30
 
 
 def _calc_constituent_alignment(
@@ -2457,131 +2466,66 @@ def _calc_constituent_alignment(
     state: str = "",
     party: str = "I",
     district: int | None = None,
-    ideology_score: float | None = None,
     bioguide_id: str | None = None,
+    reference: dict | None = None,
 ) -> int:
     """
-    Constituent Alignment Score (0-100, higher = better). v4.2 rebuild of
-    the former Independent Voting dimension (stored under the same key).
+    Constituent Alignment Score (0-100, higher = better). Stored under the
+    legacy key "independentVoting".
 
-    Purpose shift (2026-07): the dimension measures how a member's voting
-    compares to what their state elected them to do — NOT raw defection.
-    The v4.1 curve treated any break rate ≤3% as a hard floor of 20,
-    which pinned 73/100 senators into a 26–38 band (live mean 34): it
-    called the median elected official a failure for party-line voting
-    that, in a safe seat, IS constituent representation.
+    How far a member's voting sits from what members of their party in
+    comparably-leaning seats do, in the direction their seat leans. v6.13
+    rebuilt it on evidence rather than argument: every design choice below
+    was tested against U.S. House re-election results (1994-2010, 2,545
+    incumbent-elections) — whether the measure predicts the incumbent's
+    vote share once district partisanship, the national tide and seniority
+    are controlled, the test Canes-Wrone, Brady & Cogan (2002) and Carson,
+    Koger, Lebo & Young (2010) use to show constituents judge these things.
+    Full method, numbers and caveats: docs/research/constituent-alignment.md
+    (reproduce with scripts/research_constituent_alignment.py).
 
     Components:
-      1. Seat-relative vote alignment (70%, or 100% when roll-call
-         ideal-point data is unavailable): the member's contested-vote break rate
-         compared to an EXPECTED break rate derived from state partisan
-         lean (Cook PVI):
-           aligned safe seat → ~3% expected (base-rate dissent),
-           swing seat        → ~8%,
-           opposed seat      → up to ~20% (a member whose party opposes
-                               the state median should cross more often).
-         Matching expectation scores ~50 ("typical partisan for this
-         seat"). The score is ASYMMETRIC by design (v6.6) under one
-         governing principle: move off neutral only for LEGIBLE evidence of
-         alignment (a deviation we can sign as toward or away from the
-         seat's center); treat behavior whose meaning we cannot read as
-         neutral.
-
-         - Below-expected loyalty is NOT penalized — it floors at neutral
-           (50), never below. A low party-defection rate is UNREADABLE, not
-           damning: its direction is unobservable; it is structurally
-           near-universal in the modern Senate (party-unity ≈90%+ for both
-           parties even in competitive states — Levendusky 2009; Hopkins
-           2018; Krehbiel 2000), so it carries little individual signal; and
-           it may be faithful representation of the coalition that actually
-           elected the member (Fenno 1978; Bishin 2009; Clinton 2006). A
-           loyalty rate is also not the misrepresentation construct — that
-           is district-relative ideological EXTREMITY (Canes-Wrone, Brady &
-           Cogan 2002). So we decline to score the loyal case rather than
-           penalize it (symmetric twin of the safe-seat crossing rule
-           below, where surplus defection is near-neutral, not a virtue).
-           Note this is NOT positive credit either: a loyalist who is
-           genuinely congruent with a lopsided state still scores 50 —
-           congruence is not what a rate/direction metric can see (the
-           coalition papers here establish that loyalty is unreadable, they
-           do not set the score's target; see the v6.6 changelog note's
-           "deviation, not congruence" limitation). Prior to v6.6 this
-           branch drove swing/opposed-seat loyalists as low as 25.
-
-         - Above-expected crossing earns credit ONLY where it plausibly
-           moves toward the state's median voter, via a SEAT-direction
-           discount: full credit in opposed/swing seats, shrinking to a
-           near-neutral 0.25 in deep aligned seats, where the median sits
-           with the party so surplus crossing moves away from it (an
-           undiscounted credit once let a 9%-break party leader score ≈72;
-           see 2026-06 audit). Missing seat lean never triggers a discount.
-           A raw defection rate is also direction-blind at the MEMBER level
-           (the highest defectors are often flank extremists, not moderates
-           — Kirkland & Slapin 2017), and a member-ideology directional
-           discount that would address that was designed but NOT shipped in
-           v6.6 — it cannot be calibrated without the live scored ideology
-           distribution, and this file does not ship un-fit calibration
-           constants (see the v6.6 changelog note and the same posture for
-           CROSSING_QUALITY_DISCOUNT).
-
-      2. Position congruence (30%, when roll-call ideal-point data
-         exists — v6.11): the member's DW-NOMINATE first-dimension
-         position (Voteview; Lewis et al.) scored against a
-         seat-conditional expectation — a per-chamber, per-party OLS of
-         position on seat PVI, fit from real data at ingest time by
-         fetch/voteview.py (refreshed automatically every pipeline
-         run). This measures the actual
-         misrepresentation construct the branch notes above keep naming
-         (district-relative ideological EXTREMITY — Canes-Wrone, Brady &
-         Cogan 2002) with a roll-call-based position, the signal the
-         v6.6 "DELIBERATELY NOT SHIPPED" note said this file lacked.
-         Sitting toward the party flank of the seat-conditional norm
-         scores below neutral (scaled by how UNSAFE the seat is — the
-         v6.7 pattern); sitting toward the seat's center scores above
-         (scaled by the same seat-direction credit as surplus crossing).
-         When this component is active it SUPERSEDES the loyal-branch
-         position-mismatch discount below (same construct, better
-         signal — measuring it twice would repeat the v6.8 double-count
-         mistake); when the generated data file is absent the component
-         is skipped entirely and the discount still applies.
-
-    Moved out (v6.11, 2026-07): "Coalition breadth," the 20%-weighted
-    cross-party cosponsorship component (v5-v6.10). Bipartisan
-    coalition-building is not a constituent-alignment construct — demand
-    for bipartisanship varies with seat composition (Harbridge &
-    Malhotra 2011), and v6.8 already found the component was partially
-    re-measuring this dimension's position signal (r=-0.76). What
-    cross-party cosponsorship attraction DOES robustly predict is
-    legislative effectiveness (Harbridge-Yong, Volden & Wiseman 2023),
-    so the signal now lives there — see _calc_legislative_effectiveness.
-
-    Removed (2026-07): "Donor independence," a 25%-weighted component
-    based on donor-vote connection matches with a fundraising-total-scaled
-    baseline. It measured essentially the same underlying signal as the
-    Funding Independence dimension (both driven by total raised and
-    donor-industry concentration — see config_definitions.py's r=0.72
-    funding-pair rationale for the analogous Funding Independence/Funding
-    Diversity finding), and in practice reduced to a coarse function of
-    total_raised: senatorVoteAligned is always None (structural data
-    limitation — no source discloses per-bill donor positions, see the
-    module docstring under "Independent Voting"), and 85% of senators
-    have zero detected lobbying matches, leaving one of four fixed
-    baseline values by fundraising bucket for the large majority. The
-    freed weight now goes entirely to seat-relative alignment (and
-    coalition breadth keeps its own independently-justified 20%) rather
-    than being redistributed to preserve a three-way split that no
-    longer has three genuinely distinct signals.
-
-    Removed in v4.2: the "state-relevant policy" exemption that skipped
-    party-line votes on policy areas related to the member's TOP DONOR
-    industries. Donor industries are not a proxy for state interests —
-    that exemption shielded exactly the votes most suspect for capture,
-    and gave bigger fundraisers more exemptions. Seat-relative
-    expectations now carry the constituent-representation adjustment.
+      1. Seat-relative vote alignment (70%, or 100% without ideal-point
+         data): the member's break rate on party-labeled votes minus the
+         break rate their chamber's same-party members show at the same seat
+         lean — both measured each run (compute_constituent_reference).
+         Symmetric: 50 at expectation, above for breaking more, below for
+         breaking less, saturating at the chamber's 90th-percentile
+         deviation.
+           - Loyalty below expectation is scored, not held neutral. In the
+             2004 House test the below-expectation side carried the
+             strongest association with vote share (2.3 pts per SD, t=3.4),
+             consistent with Carson et al. 2010. The pre-v6.13 floor
+             ("unreadable") discarded it.
+           - No seat-safety discount on either side: the association was
+             the same in safe and competitive seats (1.5 vs 1.4 pts/SD).
+           - No discount for flank-side defectors (Kirkland & Slapin 2017's
+             concern): members breaking from the flank did not fare worse
+             for it — if anything better (difference +2.2, t=1.9), the
+             wrong sign for a discount.
+      2. Position congruence (30%, when Voteview ideal points exist): the
+         member's congress-specific Nokken-Poole first-dimension position
+         minus what a same-party member of a seat with this lean holds
+         (per-party OLS on seat PVI, fit each run by fetch/voteview.py).
+         Symmetric, saturating at the chamber's 90th-percentile extremity.
+           - 1 SD toward the party flank cost 0.8-1.0 pts of vote share,
+             robust to flexible partisanship controls; the center-ward side
+             earned the same slope (equal-slopes p=0.92), so it is credited
+             symmetrically — the pre-v6.13 0.25 credit floor in safe seats
+             had no support.
+           - No safe-seat scaling (interaction t=0.1; the pre-v6.13 severity
+             weighting predicted worse than none).
+           - Per-party residual predicted best of the three designs tried
+             (per-party, pooled slope, raw position), marginally.
+           - Congress-specific (Nokken & Poole 2004) positions predicted the
+             2004 result better than career-constrained DW-NOMINATE and
+             dominated it when both were entered — and "current term, not
+             career" (AGENTS.md principle 6) wants the congress-specific one
+             anyway.
     """
     return _constituent_alignment_core(
         voting_record, lobbying_matches, funding, state, party,
-        district, ideology_score, bioguide_id,
+        district, bioguide_id, reference,
     )["score"]
 
 
@@ -2592,281 +2536,64 @@ def _constituent_alignment_core(
     state: str = "",
     party: str = "I",
     district: int | None = None,
-    ideology_score: float | None = None,
     bioguide_id: str | None = None,
+    reference: dict | None = None,
 ) -> dict:
     """Same math as _calc_constituent_alignment, returning every intermediate
     value alongside the final score. Single implementation, same reuse
     contract as _funding_independence_core above."""
     effective_party = voting_record.get("effectiveParty", party)
+    eval_party = effective_party or party
     alignment = _signed_state_alignment(
         state, party, effective_party=effective_party, district=district,
     )
     chamber = "house" if district is not None else "senate"
-    ideology_bounds = _party_ideology_bounds(chamber).get(party)
 
-    # Position congruence (v6.11) — computed before the vote loop because
-    # the loyal branch below gates its position-mismatch discount on
-    # whether this richer signal exists for the member. All numeric
-    # inputs (dim1, regression coefficients, saturation) come from the
-    # generated member_ideal_points.json (see _member_ideal_points);
-    # Independents are scored against the fit of the party they caucus
-    # with (eval_party), consistent with how every other seat-relative
-    # branch here treats them. The two branch shapes deliberately REUSE
-    # this dimension's established seat-scaling forms rather than
-    # inventing new ones: flank-ward extremity is discounted to nothing
-    # in a deep safe aligned seat (extremity there is the structural
-    # norm — Bafumi & Herron 2010; the v6.7 position-mismatch pattern),
-    # and center-ward position earns full credit only where the seat's
-    # median plausibly sits toward the center (the surplus-crossing
-    # credit pattern, floor 0.25). Saturation is the chamber's real p90
-    # |extremity| (fit by the script), so ~the most out-of-step decile
-    # spans the full component range — a data-derived scale, not a
-    # hand-picked constant.
-    eval_party = effective_party or party
     ideal = _member_ideal_points(chamber)
     dim1 = (ideal.get("members") or {}).get(bioguide_id) if bioguide_id else None
-    fit = (ideal.get("fit") or {}).get(eval_party)
+    position_fit = (ideal.get("fit") or {}).get(eval_party)
     congruence_sat = ideal.get("extremity_p90")
     congruence_score = None
     congruence_detail = ""
-    if dim1 is not None and fit is not None and congruence_sat:
-        expected_dim1 = float(fit["a"]) + float(fit["b"]) * _seat_pvi(state, district)
+    if dim1 is not None and position_fit is not None and congruence_sat:
+        expected_dim1 = float(position_fit["a"]) + float(position_fit["b"]) * _seat_pvi(state, district)
         residual = float(dim1) - expected_dim1
         extremity = -residual if eval_party == "D" else residual
-        magnitude = min(abs(extremity) / float(congruence_sat), 1.0)
-        base_detail = (
-            f"NOMINATE dim1 {float(dim1):+.2f} vs {expected_dim1:+.2f} expected "
-            f"for a {eval_party} member of this seat"
+        scaled = max(-1.0, min(extremity / float(congruence_sat), 1.0))
+        congruence_score = 50.0 - 50.0 * scaled
+        congruence_detail = (
+            f"{ideal.get('measure', 'NOMINATE')} dim1 {float(dim1):+.2f} vs "
+            f"{expected_dim1:+.2f} expected for a {eval_party} member of this seat — "
+            + ("toward the party flank" if extremity > 0 else "toward the seat's center")
         )
-        if extremity > 0:
-            severity = 1.0 - max(alignment, 0.0)
-            congruence_score = 50.0 - 50.0 * magnitude * severity
-            congruence_detail = (
-                f"{base_detail} — toward the party flank of the seat-conditional "
-                f"norm (severity ×{severity:.2f} for seat safety)"
-            )
-        else:
-            credit = max(0.25, 1.0 - 0.75 * max(alignment, 0.0))
-            congruence_score = 50.0 + 50.0 * magnitude * credit
-            congruence_detail = (
-                f"{base_detail} — toward the seat's center relative to the "
-                f"seat-conditional norm (credit ×{credit:.2f} for seat direction)"
-            )
 
-    all_votes = (voting_record.get("keyVotes") or []) + (
-        voting_record.get("recentVotes") or []
-    )
-
-    voted_with = 0.0
-    voted_against = 0.0
-    n_party = 0  # raw count of usable party-labeled votes, for the data gate
-    crossing_unity_sum = 0.0
-    crossing_unity_weight = 0.0
-    for v in all_votes:
-        wp = v.get("votedWithParty") if isinstance(v, dict) else None
-        if wp is None:
-            continue
-
-        # Multi-area alignment weight: when a bill spans multiple policy
-        # areas, some may align with the senator's party and some may not.
-        # The weight reflects the proportion of areas that lean toward the
-        # overall party alignment. A vote on a 60/40 D-leaning bill is
-        # less informative about party loyalty than a vote on a 100% D bill.
-        # This implements the weighted-expert aggregation framework from
-        # Clemen (1989, "Combining Forecasts," Intl J Forecasting 5:4).
-        # NOTE on composition: nominations are ~43% of party-labeled votes
-        # in the current Senate (2026-07 audit). They are deliberately
-        # weighted the same as legislation — an experiment down-weighting
-        # them ×0.5 inflated the score for members whose loyalty
-        # concentrates on nominations while their breaks are legislative
-        # (a party leader jumped from 55 to 68 and out of the
-        # ground-truth range). Confirmation votes are genuine, whipped
-        # party-line tests.
-        weight = 1.0
-        if isinstance(v, dict):
-            raw_weight = v.get("partyAlignmentWeight", 0.0)
-            if raw_weight > 0.0:
-                weight = raw_weight
-
-        if wp is True:
-            voted_with += weight
-            n_party += 1
-        elif wp is False:
-            voted_against += weight
-            n_party += 1
-            unity = v.get("opposingPartyUnityPct") if isinstance(v, dict) else None
-            if unity is not None:
-                crossing_unity_sum += unity * weight
-                crossing_unity_weight += weight
-
-    avg_crossing_unity = (
-        crossing_unity_sum / crossing_unity_weight if crossing_unity_weight > 0 else None
-    )
-    party_total = voted_with + voted_against
-
-    # Expected break rate for the seat. BASE_RATE: CQ party-unity data
-    # puts typical dissent at 3-5%; every senator strays occasionally on
-    # procedural or home-state matters.
-    BASE_RATE = 0.03
-    if alignment >= 0:
-        expected = BASE_RATE + 0.05 * (1.0 - alignment)
+    break_rate, n_party = party_break_rate(voting_record)
+    ref = _constituent_reference(chamber, reference)
+    vote_fit = (ref.get("expected") or {}).get(eval_party)
+    deviation_scale = ref.get("deviation_p90")
+    expected = None
+    if break_rate is None:
+        party_score = 50.0
+        party_alignment_detail = "fewer than 3 party-labeled votes available — neutral 50"
+    elif vote_fit is None or not deviation_scale:
+        party_score = 50.0
+        party_alignment_detail = (
+            f"break rate {break_rate:.1%}; no measured expectation for a "
+            f"{eval_party or 'non-caucusing'} member of this chamber — neutral 50"
+        )
     else:
-        expected = 0.08 + 0.12 * (-alignment)
+        expected = _expected_break_rate(vote_fit, alignment)
+        deviation = break_rate - expected
+        party_score = 50.0 + 50.0 * max(-1.0, min(deviation / float(deviation_scale), 1.0))
+        party_alignment_detail = (
+            f"broke with party on {break_rate:.1%} of {n_party} party-labeled votes; "
+            f"{eval_party} members of this chamber in seats with this lean "
+            f"(signal {alignment:+.2f}) break on {expected:.1%}"
+        )
 
-    position_mismatch = 0.0
-    # Gate on the RAW vote count, not the confidence-weighted sum: party_total
-    # accumulates per-vote weights in ~(0.5, 1.0], so a member with 5 genuine
-    # multi-area votes could sum below 3.0 and be wrongly dropped to a flat 50
-    # and labeled "fewer than 3 votes." The weighted sums are still used for
-    # the rate itself (against_pct); only the data-sufficiency test is by count.
-    if n_party >= 3:
-        against_pct = voted_against / party_total
-        if against_pct >= expected:
-            # Crossing beyond the seat's expectation earns credit ONLY to
-            # the extent it plausibly moves toward the state's median
-            # voter: full credit in opposed/swing seats (the median sits
-            # across or between the parties), shrinking to 0.25 in deep
-            # aligned seats — there, surplus crossing moves AWAY from the
-            # state median and is not itself representation. The small
-            # residual (rather than zero or a penalty) reflects that we
-            # cannot observe WHICH WAY a break points relative to state
-            # opinion, so safe-seat crossing is treated as near-neutral,
-            # not as virtue and not as defiance. Saturates at +25pts of
-            # surplus break rate.
-            surplus = against_pct - expected
-            credit = max(0.25, 1.0 - 0.75 * max(alignment, 0.0))
-            # Second, independent discount: how partisan were the actual
-            # crossings? avg_crossing_unity in [0.65, 1.0] by construction
-            # (see normalize_votes.opposing_party_unity) — 0.65 means the
-            # opposing party was barely unified (crossing reads as
-            # consensus-building), 1.0 means it voted in lockstep
-            # (crossing reads as adopting the opposition's own line, not
-            # building consensus). No signal (older data, or insufficient
-            # roll-call member data) never triggers a discount — missing
-            # data is never punitive, same principle as every other
-            # component in this file.
-            if avg_crossing_unity is not None:
-                normalized_partisanship = min(
-                    max((avg_crossing_unity - 0.65) / 0.35, 0.0), 1.0
-                )
-                crossing_quality = 1.0 - CROSSING_QUALITY_DISCOUNT * normalized_partisanship
-            else:
-                crossing_quality = 1.0
-            credit *= crossing_quality
-            party_score = 50.0 + 50.0 * min(surplus / 0.25, 1.0) * credit
-        else:
-            # More loyal than the seat expects. Under the governing principle
-            # (v6.6 — see module changelog), a below-expected defection rate
-            # is UNREADABLE, not damning, so it maps to neutral: its direction
-            # is unobservable, it is structurally near-universal in the modern
-            # Senate (so it carries little individual signal — Levendusky 2009;
-            # Hopkins 2018; Krehbiel 2000), and it may be faithful
-            # representation of the coalition that elected the member (Fenno
-            # 1978; Bishin 2009; Clinton 2006). A loyalty rate is also not the
-            # misrepresentation construct — that is district-relative
-            # ideological EXTREMITY (Canes-Wrone/Brady/Cogan 2002). We decline
-            # to score the illegible case rather than penalize it. Symmetric
-            # twin of the safe-seat crossing rule above (surplus defection in
-            # an aligned seat is near-neutral, not a virtue). NOTE: this is not
-            # a positive credit either — a loyalist who is genuinely congruent
-            # with a lopsided state still scores 50, because congruence is not
-            # what this rate/direction metric measures (see the changelog's
-            # "deviation, not congruence" limitation). Floors at neutral.
-            #
-            # Position-mismatch discount (v6.7): the loyalty RATE is
-            # unreadable, but ideology_score gives a second, independent,
-            # legible signal this branch previously ignored entirely — WHERE
-            # the member actually sits, not how often they cross. A loyalist
-            # whose position is in their own party's extreme tercile
-            # (party_ideology_bounds — cohort-relative, so "extreme" means
-            # extreme AMONG their party, not vs. the opposing party) AND
-            # whose seat isn't safely aligned for that extremity IS the
-            # district-relative ideological EXTREMITY construct the
-            # Canes-Wrone/Brady/Cogan citation above names as the real
-            # misrepresentation signal — e.g. a member whose cosponsorship
-            # pattern reads as their party's most progressive/conservative
-            # third, representing a seat that isn't a lopsided safe seat for
-            # that party. Discount strength scales with how UNSAFE the seat
-            # is (0 in a deep safe seat — extremity there is the structural
-            # norm, Bafumi & Herron 2010 — up to full strength in a swing or
-            # opposed seat), mirroring the surplus-crossing seat-direction
-            # discount above. Missing ideology_score or bounds (too few
-            # scored members of this party, or an Independent) never
-            # triggers a discount — same missing-data-is-never-punitive
-            # convention as everywhere else in this file.
-            #
-            # SUPERSEDED when the position-congruence component is active
-            # for this member (v6.11): that component measures the same
-            # Canes-Wrone/Brady/Cogan construct with a roll-call-based
-            # position (the signal v6.7's own notes wished for) and does so
-            # continuously for EVERY member, not just extreme-tercile
-            # loyalists. Applying both would penalize the same underlying
-            # fact twice inside one dimension — exactly the double-count
-            # v6.8 existed to fix (and this discount's cosponsorship-SVD
-            # input is the coupled signal from that finding). The discount
-            # remains the fallback whenever member_ideal_points.json is
-            # absent or doesn't cover the member.
-            position_mismatch = 0.0
-            if congruence_score is None and ideology_score is not None and ideology_bounds is not None:
-                lo, hi = ideology_bounds
-                extreme = (
-                    (party == "D" and ideology_score < lo)
-                    or (party == "R" and ideology_score > hi)
-                )
-                if extreme:
-                    position_mismatch = 1.0 - max(alignment, 0.0)
-            party_score = 50.0 - POSITION_MISMATCH_MAX_PENALTY * position_mismatch
-    else:
-        against_pct = None
-        party_score = 50
-        position_mismatch = 0.0
-
-    # Coalition breadth (v5-v6.10) MOVED to Legislative Effectiveness in
-    # v6.11 — see _calc_legislative_effectiveness's coalition-attraction
-    # component and the module changelog. Cross-party cosponsorship is a
-    # legislative-style/effectiveness signal (Harbridge-Yong, Volden &
-    # Wiseman 2023), not a constituent-alignment one: demand for
-    # bipartisanship varies with seat composition (Harbridge & Malhotra
-    # 2011), and v6.8 had already found the component partially
-    # re-measured this dimension's position signal (r=-0.76).
-    #
-    # Position congruence (v6.11, computed above): weight matches the
-    # construct's centrality — the branch notes above repeatedly name
-    # district-relative ideological extremity as the REAL
-    # misrepresentation construct, but as a first-run signal it doesn't
-    # take majority weight from the established seat-relative vote
-    # component. Skipped entirely (weight renormalized to the vote
-    # component, exactly like breadth's old missing-data handling) when
-    # the generated ideal-point data is absent.
-    congruence_weight = 0.30 if congruence_score is not None else 0.0
+    congruence_weight = POSITION_CONGRUENCE_WEIGHT if congruence_score is not None else 0.0
     party_weight = 1.0 - congruence_weight
-    score = clamp(
-        party_score * party_weight
-        + (congruence_score or 0.0) * congruence_weight
-    )
-
-    party_alignment_detail = (
-        f"expected break rate {expected:.1%} for this seat (state lean "
-        f"signal {alignment:+.2f}), actual {against_pct:.1%}"
-        if against_pct is not None
-        else "fewer than 3 party-labeled votes available — neutral 50"
-    )
-    if against_pct is not None and against_pct < expected:
-        if position_mismatch > 0.0:
-            party_alignment_detail += (
-                " — more loyal than the seat expects; loyalty itself is not "
-                f"penalized, but ideology_score places this member in their "
-                f"party's extreme tercile for a seat that isn't safely "
-                f"aligned for that position (position-mismatch discount "
-                f"{-POSITION_MISMATCH_MAX_PENALTY * position_mismatch:.1f}pts)"
-            )
-        else:
-            party_alignment_detail += " — more loyal than the seat expects, held at neutral (loyalty is not penalized)"
-    if against_pct is not None and avg_crossing_unity is not None:
-        party_alignment_detail += (
-            f", crossings averaged {avg_crossing_unity:.0%} opposing-party unity"
-        )
+    score = clamp(party_score * party_weight + (congruence_score or 0.0) * congruence_weight)
 
     components = [
         {

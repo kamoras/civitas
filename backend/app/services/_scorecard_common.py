@@ -16,7 +16,6 @@ def _vote_dict(v: Any) -> dict:
         "votedWithParty": v.voted_with_party,
         "partyAlignmentWeight": v.party_alignment_weight,
         "partyLeaning": v.party_leaning,
-        "opposingPartyUnityPct": v.opposing_party_unity_pct,
     }
 
 
@@ -31,8 +30,8 @@ def build_score_breakdown_entity(entity: Any, *, lobbying_donation_attr: str) ->
     ``None``.
     """
     voting_record = {
-        # not persisted — see score_calculator.py note; only matters for Independents
-        "effectiveParty": None,
+        # Only differs from party for an Independent (the party they caucus with).
+        "effectiveParty": getattr(entity, "caucus_party", None),
         "keyVotes": [_vote_dict(v) for v in entity.key_votes if v.vote_category == "key"],
         "recentVotes": [_vote_dict(v) for v in entity.key_votes if v.vote_category == "recent"],
     }

@@ -142,7 +142,7 @@ Pulls raw data from each government API and stores the complete response verbati
 | House Clerk / Senate eFD | STOCK Act periodic transaction reports (PDF/HTML, parsed) | 1.0 / 0.5 RPS |
 | OGE | Sitting president's OGE Form 278-T periodic transaction reports — disclosed securities and virtual-currency buys/sells (PDF, parsed) | 0.5 RPS |
 | SEC | Ticker -> company name resolution for trade-industry classification | batch |
-| Voteview | DW-NOMINATE member ideal points (per-congress CSV exports), feeding Constituent Alignment's position-congruence component | batch |
+| Voteview | Congress-specific (Nokken-Poole) member ideal points (per-congress CSV exports), feeding Constituent Alignment's position-congruence component | batch |
 
 Nothing from the API cache is ever cleared — it represents immutable source data. A fresh run can replay against the cached responses without re-hitting the external APIs (controlled by `PIPELINE_CACHE_TTL_HOURS`).
 
@@ -573,7 +573,7 @@ The weights live in `SCORE_WEIGHTS` (`backend/app/config_definitions.py`) and ar
 The exact formulas are actively iterated (v1 → v6.12 as of this writing, each change measured against real data) and are documented in full — every component's weight, calibration source, and academic citation — in the module docstring of `backend/app/pipeline/analyze/score_calculator.py`, which is the source of truth. Rather than duplicate formulas here that will drift out of sync as the algorithm evolves (as this section previously did), a summary:
 
 - **Funding Independence**: PAC dependency (share scaled by how close contributing PACs run to their legal caps, chamber-specific multiplier), state-relative small-donor share, relative top-donor concentration, plus the two signals folded in from the former Funding Diversity dimension (source breadth, inverse-HHI industry concentration).
-- **Constituent Alignment** (stored/keyed as `independentVoting` for API compatibility — the dimension was rebuilt in v4.2): how a member's voting compares to what their *seat* elected them to do, using Cook PVI as a proxy for constituent preference. Party-line voting in a safe seat that elected that platform scores as representation, not as a failure of independence — the delegate model of representation (Miller & Stokes 1963), not independence as an intrinsic virtue. Since v6.6, below-expected loyalty floors at neutral rather than being penalized. v6.11 adds a position-congruence component: the member's DW-NOMINATE roll-call position (Voteview) scored against a seat-conditional per-party expectation (Canes-Wrone, Brady & Cogan 2002's district-relative extremity), superseding v6.7's cosponsorship-based position-mismatch discount. Ideal points are ingested automatically every pipeline run (`app/pipeline/fetch/voteview.py`, ingestion-gated) — no manual step.
+- **Constituent Alignment** (stored/keyed as `independentVoting` for API compatibility — the dimension was rebuilt in v4.2): how a member's voting compares to what their *seat* elected them to do. Party-line voting in a safe seat that elected that platform scores as representation, not as a failure of independence — the delegate model of representation (Miller & Stokes 1963), not independence as an intrinsic virtue. The member's break rate is scored against the break rate same-party members show at the same seat lean, measured from the chamber every run (`compute_constituent_reference`); the member's Nokken-Poole roll-call position (Voteview) is scored against a seat-conditional per-party expectation (Canes-Wrone, Brady & Cogan 2002's district-relative extremity). Both are symmetric and apply the same way in safe and competitive seats — v6.13 decided each of those choices by testing them against House re-election results (see `docs/research/constituent-alignment.md`). Ideal points are ingested automatically every pipeline run (`app/pipeline/fetch/voteview.py`, ingestion-gated) — no manual step.
 - **Legislative Effectiveness**: significance-weighted, cumulative-stage bill credit (Volden & Wiseman 2014-based, benchmarked against the sponsor's chamber and majority/minority baseline, not an absolute threshold — the chamber's reference is re-measured from its current members every pipeline run), cosponsorship-network leadership (PageRank, tenure-confidence-scaled), and bipartisan coalition attraction (v6.11, moved from Constituent Alignment — the receive-only share of cross-party cosponsors a member attracts to their own bills, the construct Harbridge-Yong, Volden & Wiseman 2023 show predicts lawmaking success).
 
 ### Senate & House Scores
@@ -583,7 +583,7 @@ Each senator and House representative carries five sub-scores (0-100, higher = b
 | Metric | Weight | What It Measures | Key Reference |
 |--------|--------|------------------|---------------|
 | **Funding Independence** | 33% | PAC dependency + small-donor share + top-donor concentration + source breadth + industry concentration | Stratmann 2005; Parmigiani 2025 |
-| **Constituent Alignment** | 33% | Seat-relative voting + roll-call position congruence (DW-NOMINATE vs. seat-conditional norm) | Carson et al. 2010; Canes-Wrone, Brady & Cogan 2002 |
+| **Constituent Alignment** | 33% | Break rate vs. same-party members in same-lean seats + roll-call position congruence (Nokken-Poole vs. seat-conditional norm) | Carson et al. 2010; Canes-Wrone, Brady & Cogan 2002; Nokken & Poole 2004 |
 | **Legislative Effectiveness** | 34% | Significance-weighted stage credit (majority-status-benchmarked) + cosponsorship leadership (PageRank) + bipartisan coalition attraction | Volden & Wiseman 2014; Harbridge-Yong, Volden & Wiseman 2023 |
 | Promise Persistence | unweighted (v6.0) | Campaign commitments kept vs. broken + vote participation | Naurin 2011; Martin 2011 |
 | Funding Diversity | unweighted (v6.5, folded into FI) | Donor traceability + industry diversity (inverse HHI) | Rhoades 1993; Parmigiani 2025 |
@@ -1132,6 +1132,7 @@ Key references:
 - Bonica, A. (2014). Mapping the Ideological Marketplace. *AJPS*, 58(2), 367-386.
 - Budge, I. et al. (2001). *Mapping Policy Preferences*. Oxford UP.
 - Brin, S. & Page, L. (1998). The Anatomy of a Large-Scale Hypertextual Web Search Engine. *Proc. WWW 1998*.
+- Canes-Wrone, B., Brady, D. & Cogan, J. (2002). Out of Step, Out of Office. *APSR*, 96(1), 127-140.
 - Carson, J. et al. (2010). The Electoral Costs of Party Loyalty. *AJPS*, 54(3), 598-616.
 - Clinton, J., Jackman, S. & Rivers, D. (2004). The Statistical Analysis of Roll Call Data. *APSR*, 98(2), 355-370.
 - Cover, T. & Hart, P. (1967). Nearest Neighbor Pattern Classification. *IEEE Trans. Info Theory*, 13(1), 21-27.
@@ -1139,6 +1140,7 @@ Key references:
 - Grimmer, J. & Stewart, B. (2013). Text as Data. *Political Analysis*, 21(3), 267-297.
 - Laver, M., Benoit, K. & Garry, J. (2003). Extracting Policy Positions from Political Texts. *APSR*, 97(2).
 - Lewis, P. et al. (2020). Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks. *NeurIPS 2020*.
+- Nokken, T. & Poole, K. (2004). Congressional Party Defection in American History. *Legislative Studies Quarterly*, 29(4), 545-568.
 - Poole, K. & Rosenthal, H. (1985). A Spatial Model for Legislative Roll Call Analysis. *AJPS*, 29(2), 357-384.
 - Reimers, N. & Gurevych, I. (2019). Sentence-BERT. *EMNLP 2019*, 3982-3992.
 - Snell, J. et al. (2017). Prototypical Networks for Few-Shot Learning. *NeurIPS 2017*, 4077-4087.
