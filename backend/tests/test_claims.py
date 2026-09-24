@@ -163,3 +163,29 @@ class TestOnTopic:
         claims = [_claim("A did X.")]
         arts = [_Article("t1", "s1"), _Article("t2", "s2")]
         assert mod.on_topic(claims, arts) == claims
+
+
+class TestTheLedeIsNotRepeatedAsAFact:
+    """Caught by the first end-to-end run against live articles, not by
+    any unit test: the Trump/Xi issue's summary and its first key fact
+    were the same sentence, because build_lede takes claims[0] and
+    build_facts was given the whole list."""
+
+    def test_facts_exclude_the_claim_used_as_the_lede(self):
+        claims = [
+            _claim("Trump and Xi will hold high-stakes meetings.", "The Hill"),
+            _claim("Xi arrived in Washington.", "PBS NewsHour"),
+        ]
+        lede = build_lede(claims)
+        facts, sources = build_facts(claims[1:])
+        assert lede == "Trump and Xi will hold high-stakes meetings."
+        assert lede not in facts
+        assert facts == ["Xi arrived in Washington."]
+        assert sources == ["PBS NewsHour"]
+
+    def test_a_single_claim_leaves_no_supporting_facts(self):
+        """Which is why the substance gate counts CLAIMS, not facts —
+        one claim is a lede with nothing corroborating it."""
+        claims = [_claim("Only one thing happened.")]
+        assert build_lede(claims)
+        assert build_facts(claims[1:]) == ([], [])

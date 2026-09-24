@@ -4587,7 +4587,12 @@ def _run_refresh(db: Session) -> int:
         # now the only path.
         title = filtered_cluster[0].title
         summary = claim_layer.build_lede(cluster_claims)
-        facts, fact_sources = claim_layer.build_facts(cluster_claims)
+        # Facts are the SUPPORTING claims — the lede already states the
+        # headline one. Passing the whole list made the summary a
+        # verbatim duplicate of fact 1, which the first end-to-end run
+        # against live articles showed immediately (Trump/Xi: the
+        # summary and the first key fact were the same sentence).
+        facts, fact_sources = claim_layer.build_facts(cluster_claims[1:])
 
         # Backstop, not the primary defence. Every word here is either a
         # verbatim span or a real outlet's headline, so this should
@@ -4641,16 +4646,20 @@ def _run_refresh(db: Session) -> int:
             "action_center_issue", summary + " " + " ".join(facts), source_text_for_check,
         )
 
-        # Minimum-substance gate (2026-07 audit): fewer than 2 facts
-        # surviving validation means there isn't a publishable issue here —
-        # observed live as issues consisting entirely of vacuous filler
-        # ("Congressional scheduling adjustments": no name, no number, no
-        # bill anywhere in its facts). Fail closed, same posture as the
-        # grounding retries above.
-        if len(facts) < 2:
+        # Minimum-substance gate (2026-07 audit): an issue resting on a
+        # single piece of evidence isn't a publishable issue — observed
+        # live as issues of pure filler ("Congressional scheduling
+        # adjustments": no name, no number, no bill anywhere).
+        #
+        # Counted in CLAIMS rather than facts since the redesign: the
+        # lede is itself a claim, so two claims means a headline fact
+        # plus one corroborating fact — the same "at least two pieces of
+        # evidence" bar the original gate set, now that `facts` holds
+        # only the supporting ones.
+        if len(cluster_claims) < 2:
             logger.info(
-                "Skipping rank %d — only %d fact(s) survived validation: '%s'",
-                rank, len(facts), title[:60],
+                "Skipping rank %d — only %d claim(s) survived: '%s'",
+                rank, len(cluster_claims), title[:60],
             )
             action_metrics.increment("issues_skipped_too_few_facts")
             continue
