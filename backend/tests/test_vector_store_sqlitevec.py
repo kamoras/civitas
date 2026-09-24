@@ -115,6 +115,7 @@ class TestBillsAndMaintenance:
         vector_store.embed_bills([])
         assert vector_store.collection_stats()["totalVectors"] == 0
 
+    @pytest.mark.slow
     def test_embed_bills_and_stats(self, vec_env):
         vector_store.embed_bills([
             {"billId": "hr-1234-119", "billName": "Test Act", "description": "",
@@ -136,6 +137,7 @@ class TestBillsAndMaintenance:
         stats = vector_store.collection_stats()
         assert {"name": "bills", "count": 0, "metadata": {}} in stats["collections"]
 
+    @pytest.mark.slow
     def test_get_bill_reference_prefers_recent_bills_over_the_cap(self, vec_env):
         """O3: LIMIT with no ORDER BY returned an arbitrary hash-ordered
         slice once the corpus grew past the cap (rowid is a deterministic

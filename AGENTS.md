@@ -744,14 +744,16 @@ cd backend && .venv/bin/python -m pytest tests/ -v
 # Via Docker
 docker compose run --rm --no-deps backend python -m pytest tests/ -v
 
-# Fast tests only (skip embedding model loading)
-docker compose run --rm --no-deps backend python -m pytest tests/ -v \
-  -k "not Embedding and not PolicyArea"
+# Fast tests only (no embedding model; runs offline)
+docker compose run --rm --no-deps backend python -m pytest tests/ -v -m "not slow"
 ```
 
 Test configuration is in `backend/pytest.ini`. Async tests use
-`asyncio_mode = auto`. Tests marked `@pytest.mark.slow` load the
-sentence-transformer model (~10s startup).
+`asyncio_mode = auto`. **Mark any test that loads a sentence-transformer
+model `@pytest.mark.slow`** (~10s startup). CI runs both halves (`-m "not
+slow"`, then `-m slow`), so a slow mark moves a test to the second step
+rather than dropping it. The fast half must pass with no network access and
+no model.
 
 ### Environment variables
 

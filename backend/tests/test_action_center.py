@@ -272,6 +272,7 @@ class TestNationalMonitorCreation:
         added_objects = [call.args[0] for call in mock_db.add.call_args_list]
         assert not any(isinstance(obj, NationalMonitor) for obj in added_objects)
 
+    @pytest.mark.slow
     @patch("app.pipeline.analyze.action_center._generate_monitor_metadata")
     @patch("app.pipeline.analyze.action_center.get_embedding_model")
     def test_sufficient_breadth_creates_monitor(self, mock_get_model, mock_gen_meta):

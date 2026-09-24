@@ -15,6 +15,7 @@ from app.pipeline.analyze.donor_classifier_ai import classify_donor_type_semanti
 class TestCandidateAffiliation:
     """Detect candidate-controlled PACs via semantic classification."""
 
+    @pytest.mark.slow
     def test_personal_contribution(self):
         result = classify_donor_type_semantic(
             "CRUZ, RAPHAEL EDWARD TED",
@@ -29,10 +30,12 @@ class TestCandidateAffiliation:
         )
         assert result != "CandidateAffiliated" or result is None
 
+    @pytest.mark.slow
     def test_empty_candidate(self):
         result = classify_donor_type_semantic("TEAM SOMEONE", candidate_name="")
         assert result != "CandidateAffiliated" or result is None
 
+    @pytest.mark.slow
     def test_short_last_name_skipped(self):
         result = classify_donor_type_semantic(
             "MR FO FOR SENATE",
@@ -139,6 +142,7 @@ class TestNormalizeFinance:
         )
         assert result["totalRaised"] == 100  # 2024 only, not 2018 or 2012
 
+    @pytest.mark.slow
     def test_non_contribution_receipts_excluded_from_donors(self):
         # Schedule A itemizes ALL receipts. Only line 11 is contributions:
         # line 14 is vendor refunds (a media buyer appeared as a senator's

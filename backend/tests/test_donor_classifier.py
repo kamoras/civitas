@@ -73,6 +73,7 @@ class TestSkipDetection:
     def test_skip_entities(self, name):
         assert is_skip_entity(name) is True
 
+    @pytest.mark.slow
     def test_non_skip_entities(self):
         assert is_skip_entity("PFIZER INC") is False
         assert is_skip_entity("GOLDMAN SACHS") is False
@@ -81,6 +82,7 @@ class TestSkipDetection:
 class TestSemanticClassification:
     """Tier 2: Embedding-based semantic donor type classification."""
 
+    @pytest.mark.slow
     def test_candidate_self_funded_personal_contribution(self):
         """When donor name matches the candidate's name, it's a self-funded contribution."""
         result = classify_donor_type_semantic(
@@ -93,6 +95,7 @@ class TestSemanticClassification:
         assert classify_donor_type_semantic("") is None
         assert classify_donor_type_semantic("AB") is None
 
+    @pytest.mark.slow
     def test_a_victory_fund_committee_is_not_self_funded(self):
         """A 2026-08 audit found "Rutherford Victory Fund" (and similar
         candidate-surname committee names) classified Self-Funded — the
@@ -362,6 +365,7 @@ class TestLearningStoreCorrectionThreshold:
         ))
         db_session.flush()
 
+    @pytest.mark.slow
     @pytest.mark.asyncio
     async def test_requires_above_median_confidence(self, db_session):
         """A weak embedding disagreement (below the measured real floor
@@ -377,6 +381,7 @@ class TestLearningStoreCorrectionThreshold:
             result = await classify_donors_hybrid(donors, db_session=db_session)
         assert result["STALE CO"]["industry"] == "TECH"
 
+    @pytest.mark.slow
     @pytest.mark.asyncio
     async def test_fires_above_threshold(self, db_session):
         self._seed_stale(db_session)
@@ -437,6 +442,7 @@ class TestOtherPlaceholderDoesNotBlockKnn:
     the function's *returned* dict (the DB stayed correct only because
     the placeholder write happened to protect donor_type too)."""
 
+    @pytest.mark.slow
     @pytest.mark.asyncio
     async def test_knn_resolved_industry_persists_past_the_other_placeholder(self, db_session):
         donors = [{
@@ -469,6 +475,7 @@ class TestOtherPlaceholderDoesNotBlockKnn:
         assert stored.value == "MANUFACTURING"
         assert stored.source == "nn"
 
+    @pytest.mark.slow
     @pytest.mark.asyncio
     async def test_knn_industry_pass_does_not_downgrade_the_known_donor_type(self, db_session):
         # entity_type "ORG" (not "PAC") deliberately avoids

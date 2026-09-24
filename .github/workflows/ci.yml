@@ -65,8 +65,10 @@ jobs:
     name: Backend — Fast Tests
     runs-on: ubuntu-latest
     # See frontend job's comment on why every job here has one of these.
-    # Normal run: 4-5 minutes.
-    timeout-minutes: 15
+    # Normal run: 4-5 minutes before the slow step was added (2026-09);
+    # raised to leave room for it. The job keeps its name — it may be a
+    # required check.
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: backend
@@ -126,10 +128,20 @@ jobs:
       #      aspirational number that routine fixes can't meet. Ratchet
       #      it up (60 -> 70 -> 80) as testing culture matures; when the
       #      total rises meaningfully, drag the floor up behind it.
-      - name: Run fast tests with total-coverage floor (no embedding model)
+      - name: Run fast tests (no embedding model)
         run: >
           python -m pytest tests/ -v -m "not slow"
-          --cov=app --cov-report=term --cov-report=html --cov-report=xml
+          --cov=app --cov-report=
+
+      # The model-loading tests. Until 2026-09 nothing ran `-m slow`: 74
+      # tests marked slow never executed anywhere, and 56 more that load
+      # the model ran here only because they weren't marked. Coverage
+      # appends to the fast run's, so the floor and the changed-lines gate
+      # below see both.
+      - name: Run slow tests (loads the sentence-transformer models) with total-coverage floor
+        run: >
+          python -m pytest tests/ -v -m slow
+          --cov=app --cov-append --cov-report=term --cov-report=html --cov-report=xml
           --cov-fail-under=46
 
       - name: Changed-lines coverage gate (diff-cover)

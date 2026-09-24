@@ -11,6 +11,7 @@ Usage:
     pytest tests/test_classification_quality.py -v -k "donor_type"
 """
 
+import pytest
 from collections import Counter
 
 # ── Holdout sets ────────────────────────────────────────────────
@@ -227,6 +228,7 @@ def _print_metrics(metrics: dict, title: str) -> None:
 class TestIndustryClassificationQuality:
     """Evaluate industry classifier against the holdout set."""
 
+    @pytest.mark.slow
     def test_industry_accuracy_above_threshold(self):
         from app.pipeline.transform.industry_classifier import classify_industry
 
@@ -255,6 +257,7 @@ class TestIndustryClassificationQuality:
             f"Failures:\n" + "\n".join(failures)
         )
 
+    @pytest.mark.slow
     def test_no_critical_misclassifications(self):
         """Entities previously reported as misclassified must be correct."""
         from app.pipeline.transform.industry_classifier import classify_industry
@@ -277,6 +280,7 @@ class TestIndustryClassificationQuality:
 class TestDonorTypeClassificationQuality:
     """Evaluate donor type classifier against the holdout set."""
 
+    @pytest.mark.slow
     def test_donor_type_accuracy_above_threshold(self):
         from app.pipeline.analyze.donor_classifier_ai import classify_donor_type_semantic
 
@@ -313,6 +317,7 @@ class TestDonorTypeClassificationQuality:
 class TestBillStanceQuality:
     """Evaluate stance direction derivation against the holdout set."""
 
+    @pytest.mark.slow
     def test_stance_direction_accuracy(self):
         from app.pipeline.analyze.bill_analyzer import derive_stance
 
@@ -352,6 +357,7 @@ class TestBillPartyAlignmentQuality:
     stance signal to correctly identify the aligning party.
     """
 
+    @pytest.mark.slow
     def test_party_alignment_accuracy(self):
         from app.pipeline.analyze.party_platform import classify_party_alignment
 
@@ -385,6 +391,7 @@ class TestBillPartyAlignmentQuality:
             f"Failures:\n" + "\n".join(failures)
         )
 
+    @pytest.mark.slow
     def test_gun_control_never_republican(self):
         """Gun control bills must never classify as Republican."""
         from app.pipeline.analyze.party_platform import classify_party_alignment
@@ -423,6 +430,7 @@ class TestPolicyAreaClassificationQuality:
         ("United States-Mexico-Canada Agreement trade tariffs imports exports", "TRADE"),
     ]
 
+    @pytest.mark.slow
     def test_policy_area_accuracy(self):
         from app.pipeline.analyze.bill_analyzer import classify_policy_area
 

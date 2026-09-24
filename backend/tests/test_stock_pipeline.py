@@ -227,6 +227,7 @@ class TestClassifyRowsIndustryUntickered:
     unconditional; House/Senate rows get the same treatment as the
     president's already did."""
 
+    @pytest.mark.slow
     async def test_house_style_untickered_crypto_row_gets_classified(self, db_session):
         from app.pipeline.fetch.ptr_common import TradeRow
         from app.pipeline.stock_pipeline import _classify_rows_industry
