@@ -5,13 +5,14 @@ the *currently installed* scoring code over it — without touching stored
 scores. Use it to preview the population-level impact of an algorithm
 change before deploying it:
 
-    docker exec mp-backend-<slot> python3 scripts/rescore.py
+    docker exec "$(docker ps -q -f name=civitas_backend)" python3 scripts/rescore.py
 
 or, to test uncommitted code, copy the tree into the container and put it
 first on PYTHONPATH:
 
-    docker cp backend/app <container>:/tmp/newcode/app
-    docker exec -e PYTHONPATH=/tmp/newcode <container> python3 scripts/rescore.py
+    C="$(docker ps -q -f name=civitas_backend)"
+    docker cp backend/app "$C":/tmp/newcode/app
+    docker exec -e PYTHONPATH=/tmp/newcode "$C" python3 scripts/rescore.py
 
 Outputs per-senator old→new comparisons, distribution statistics,
 dimension correlations, party means, the FI-vs-fundraising-scale

@@ -1,5 +1,6 @@
 """
-Score calculator — computes the five representation sub-scores from real data.
+Score calculator — computes the representation sub-scores from real data:
+three weighted into the overall (SCORE_WEIGHTS), two informational.
 
 Higher score = better representation of constituents.
 All scores are 0-100 where 100 = ideal representative, 0 = fully captured.
@@ -8,9 +9,9 @@ The scored dimensions (SCORE_WEIGHTS) — Promise Persistence (removed
 v6.0) and Funding Diversity (folded into Funding Independence, v6.5)
 still run and still store their score_* columns, just excluded from
 the weighted sum below:
-  1. Funding Independence       — donor concentration, PAC dependency, self-funding,
-                                  source breadth, industry diversification (v6.5: incl.
-                                  the former Funding Diversity dimension)
+  1. Funding Independence       — PAC share, small-donor share, top-donor
+                                  concentration, industry concentration (v6.13;
+                                  v6.5 folded in the former Funding Diversity)
   2. Constituent Alignment      — voting behavior vs what the seat's electorate
                                   expects (PVI-relative; stored/keyed as
                                   independentVoting for compatibility)
@@ -62,9 +63,11 @@ Promise Persistence: follows Naurin (2011, "Election Promises, Party
 Behaviour and Voter Perceptions," Palgrave) who showed that promise
 fulfillment is measurable and varies meaningfully across legislators.
 The confidence penalty (blending toward 50 when few promises are
-evaluable) implements a Bayesian shrinkage toward the prior, standard
-in small-sample estimation (Efron & Morris 1975, "Data Analysis Using
-Stein's Estimator," JASA 70:350). Floor advocacy uses Martin (2011,
+evaluable) is linear shrinkage toward 50 at a fixed rate, min(n/k, 1).
+It borrows the idea of Stein-type shrinkage (Efron & Morris 1975, "Data
+Analysis Using Stein's Estimator," JASA 70:350) but is not their
+estimator: the rate comes from a count threshold, not from the
+population's measured variance, and it stops shrinking at n >= k. Floor advocacy uses Martin (2011,
 "Using Parliamentary Questions to Measure Constituency Focus," Political
 Studies 59:2) as precedent for floor speech as a proxy for legislative
 effort.
@@ -1435,10 +1438,12 @@ def get_pvi_meta() -> dict:
 
 def calculate_scores(senator: dict) -> dict:
     """
-    Calculate the five representation sub-scores from real data.
+    Calculate the representation sub-scores from real data — the three in
+    SCORE_WEIGHTS plus the informational Promise Persistence and Funding
+    Diversity.
 
     Returns:
-        Dict with the five representationScore sub-fields.
+        Dict with those five representationScore sub-fields.
     """
     voting_record = senator.get("votingRecord", {})
     funding = senator.get("funding", {})
@@ -3287,7 +3292,7 @@ def _calc_legislative_effectiveness(
          live correlation after the first full run, same standing check
          as the v6.8 r=-0.76 finding.
 
-    Components apply Bayesian shrinkage toward 50 when data is
+    Components apply linear count-confidence shrinkage toward 50 when data is
     sparse, preventing extreme scores from thin evidence — including a
     confirmed-zero-bills record after real tenure, which is a weak but
     real negative signal, not the same as a freshman with no data yet

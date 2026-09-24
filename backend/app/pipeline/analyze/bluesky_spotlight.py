@@ -113,7 +113,7 @@ def _pick_politician(
 
 # Deviation from the neutral midpoint (50) required before a dimension is
 # worth singling out by name at all. Below this band a score is unremarkable
-# no matter which of the five dimensions happens to be furthest from 50: with
+# no matter which dimension happens to be furthest from 50: with
 # Promise Persistence's shrinkage prior compressing most senators into the
 # low-to-mid 50s (2026-07 audit), the *least-bad* of five middling scores
 # was still being singled out ("Her highest score is Promise Persistence at
@@ -180,7 +180,7 @@ def _generate_spotlight_post(
         "Legislative effectiveness": round(entity.score_legislative_effectiveness or 0, 1),
     }
     # The posted overall must be the same weighted composite the site shows
-    # (SCORE_WEIGHTS) — a plain mean of the five dimensions published a
+    # (SCORE_WEIGHTS) — a plain mean of the dimensions published a
     # different number than the leaderboard for every senator.
     overall = round(compute_overall_score(entity), 1)
     score_lines = "\n".join(f"- {k}: {v}/100" for k, v in scores.items())

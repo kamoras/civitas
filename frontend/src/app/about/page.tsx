@@ -177,10 +177,12 @@ export default function AboutPage() {
             <P>
               When data is missing or insufficient, scores default to a neutral 50 out of 100. No
               politician is penalized for something we cannot measure, and no politician receives a
-              perfect score without evidence. This implements Bayesian shrinkage toward a neutral
-              prior — a standard statistical technique for preventing extreme estimates from small
-              samples.
-              <Cite id="19">Efron &amp; Morris 1975</Cite>
+              perfect score without evidence. Scores backed by little data are pulled toward that
+              neutral 50 in proportion to how little data there is. This borrows the idea of
+              shrinkage estimation, which keeps small samples from producing extreme estimates
+              <Cite id="19">Efron &amp; Morris 1975</Cite>, but it is a simpler version: the pull
+              is set by a fixed count of observations, not estimated from the data the way their
+              estimator is.
             </P>
             <P>
               The Action Center extends this mission to daily civic engagement. It automatically
@@ -715,7 +717,7 @@ export default function AboutPage() {
                 <P>
                   The ideology score is oriented so that lower values correspond to progressive
                   positions and higher values to conservative positions, calibrated by checking the
-                  mean score of each party. It serves as a Bayesian prior for the partisan depth
+                  mean score of each party. It serves as a prior for the partisan depth
                   calculation: when a senator has few recorded votes, the ideology score regularizes
                   the estimate; as vote data accumulates, the prior weight drops to zero. The prior is
                   first put on the same scale as the vote-based lean, using the relationship between

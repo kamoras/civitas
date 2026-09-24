@@ -145,7 +145,7 @@ of these approaches:
   semantically and the runner-up classification preferred
 - **Self-training** via the learning store (Yarowsky 1995): high-confidence
   classifications become labeled examples for future runs
-- **Statistical formulas** with Bayesian shrinkage for scoring metrics
+- **Statistical formulas** with shrinkage toward neutral for scoring metrics
 - **LLM inference** for tasks that require natural language synthesis from
   unstructured input: Action Center issue generation and justice profile
   summaries. (Per-senator/rep narrative generation and promise evaluation
@@ -250,14 +250,17 @@ alias table. This prevents label fragmentation from diluting kNN vote weights.
 
 ### 3. Deterministic, auditable scoring
 
-The five representation sub-scores (Funding Independence, Promise Persistence,
-Constituent Alignment, Funding Diversity, Legislative Effectiveness) use
+The representation sub-scores — Funding Independence, Constituent Alignment
+and Legislative Effectiveness (weighted, `SCORE_WEIGHTS`), plus the
+informational Promise Persistence and Funding Diversity — use
 transparent statistical formulas with no LLM input. All formulas include
 inline academic citations.
 
 Key mathematical properties:
-- **Bayesian shrinkage**: Scores regress toward 50 when data is sparse (e.g.,
-  a senator with 1 campaign promise gets a score near 50, not 0 or 100)
+- **Linear shrinkage**: Scores regress toward 50 when data is sparse (e.g.,
+  a senator with 1 campaign promise gets a score near 50, not 0 or 100).
+  The rate is the count confidence below — fixed, not estimated from the
+  population's variance, so do not call it Bayesian or empirical Bayes
 - **Count confidence**: `min(n / threshold, 1.0)` ensures minimum sample
   sizes before trusting extreme scores
 - **State-adjusted baselines**: Independent voting scores account for Cook
@@ -371,11 +374,16 @@ silently demotes every document that had no way to earn it.
 
 ### 4. Content-based party alignment
 
-Party alignment for bills is determined by what the bill does (embedding
-similarity to party platform positions), not how senators voted on it. Vote
-tallies refine but do not override the content-based signal, because senators
-trade votes, face whip pressure, and make tactical compromises that don't
-reflect the bill's actual ideological alignment.
+A bill's party alignment comes from **how the parties actually voted on it**
+whenever a roll call exists, and from its content (embedding similarity to
+party platform positions) only when none does (`refine_with_vote_data`). The
+consumer is the voted-with-party computation, and "did this member break with
+their party" is defined by the parties' real split: a bill whose content
+reads partisan but passed with both party majorities must not count as a
+party-line vote. (Content used to win over a bipartisan split; a 2026-06
+audit found that pinned every House member's score near 87–89.) Content
+alignment still drives bills with no roll call and the per-area partisan
+depth breakdown.
 
 Partisan depth (how strongly a senator leans D or R) is computed primarily
 from the senator's actual voting record: for each policy area, the ratio of
@@ -385,12 +393,13 @@ Poole & Rosenthal (1985) in using roll-call data as the primary indicator of
 ideological position.
 
 When available, the SVD-derived ideology score (from tier 2b sponsorship
-analysis) serves as a Bayesian prior for the partisan depth calculation.
-The prior weight decreases as the senator accumulates more vote data:
+analysis) serves as a prior for the partisan depth calculation, in a
+linear blend whose weight decreases as the senator accumulates vote data:
 `data_confidence = min(partisan_vote_count / 15, 1.0)`. With 15+ votes,
 the ideology prior has zero weight; with fewer votes, it regularizes the
-estimate toward the senator's revealed cosponsorship ideology (Efron &
-Morris 1975). The prior is first mapped onto the vote-lean scale by a line
+estimate toward the senator's revealed cosponsorship ideology. (Shrinkage in
+the Efron & Morris 1975 sense, but at a fixed rate rather than an estimated
+one.) The prior is first mapped onto the vote-lean scale by a line
 fitted over the chamber's full-data members each run, and the depth label
 (deep / moderate / centrist) is the member's tercile within their own party
 — both in `finalize_partisan_depth`, which runs over the whole chamber after
@@ -696,15 +705,12 @@ together.
 Each senator is processed independently. The pipeline uses `PipelineRun`
 records to track progress and supports resumption.
 
-The ANALYZE phase uses a **producer-consumer pattern** to overlap embedding
-work with LLM inference. A background "Librarian" thread
-(`_embedding_producer` in `senate_pipeline.py`) pre-computes all embedding-based
-analyses for the next senator via `precompute_senator_analysis()` in
-`cross_reference.py`, while the main "Analyst" thread waits for the LLM HTTP
-response. Results flow through a bounded `queue.Queue(maxsize=3)`. On a Pi 5,
-this overlaps ~2-4s of embedding work with ~15-30s LLM calls. LLM prompts use
-**context compression**: platform text is distilled into concise policy topic
-bullets via `_extract_platform_topics()` rather than feeding raw scraped text.
+The ANALYZE phase runs members one at a time: `precompute_senator_analysis()`
+(`cross_reference.py`) does the member's embedding work, then
+`analyze_senator_batch()` consumes it and scoring follows. There is no
+background thread. The old "Librarian" producer thread existed to overlap
+embedding work with per-senator LLM calls; ANALYZE makes no LLM call now, and
+the thread is gone.
 
 ## Development
 

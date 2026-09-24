@@ -40,15 +40,15 @@ external API calls to cloud AI services.
 │  ┌─────────┐   ┌───────────┐   ┌───────────────────────────────────────┐     │
 │  │ 1.FETCH │──▶│2.TRANSFORM│──▶│            3. ANALYZE                 │     │
 │  └─────────┘   └───────────┘   │                                       │     │
-│                                │  ┌─────────────────┬────────────────┐ │     │
-│                                │  │ Librarian thread│ Score thread   │ │     │
-│                                │  │ (batch embed)   │ (deterministic)│ │     │
-│                                │  │                 │                │ │     │
-│                                │  │ bill embeddings │ score + persist│ │     │
-│                                │  │ donor kNN       │ (no LLM call)  │ │     │
-│                                │  │ lobbying match  │                │ │     │
-│                                │  │ promise align   │                │ │     │
-│                                │  └─────────────────┴────────────────┘ │     │
+│                                │  ┌──────────────────────────────────┐ │     │
+│                                │  │ per member, in order:            │ │     │
+│                                │  │ embed (batches) → score → persist│ │     │
+│                                │  │                                  │ │     │
+│                                │  │ bill embeddings   donor kNN      │ │     │
+│                                │  │ lobbying match    promise align  │ │     │
+│                                │  │ (deterministic — no LLM call)    │ │     │
+│                                │  │                                  │ │     │
+│                                │  └──────────────────────────────────┘ │     │
 │                                └───────────────────────────────────────┘     │
 │                                                │                             │
 │  ┌──────────┐   ┌──────────┐   ┌────────────┐  │   ┌──────────────────────┐  │
@@ -598,7 +598,7 @@ Additional senator metrics (informational, not scored):
 |--------|------------------|-----------|
 | **Leadership Score** | Legislative influence — how many peers cosponsor this senator's bills | PageRank on cosponsorship graph (Brin & Page 1998) |
 | **Ideology Score** | Behavioral ideological position derived from cosponsorship patterns | SVD on cosponsorship matrix (Tauberer 2012) |
-| **Partisan Depth** | How deeply aligned with their party across policy areas | Content-based voting analysis with SVD ideology as Bayesian prior |
+| **Partisan Depth** | How deeply aligned with their party across policy areas | Content-based voting analysis with SVD ideology as a prior (linear blend) |
 
 ### Supreme Court Justice Scores
 
@@ -768,12 +768,12 @@ Key algorithmic decisions and their academic backing:
 | Content-based party alignment | Vote tallies conflate strategy with ideology | Clinton, Jackman & Rivers 2004; Laver et al. 2003 |
 | Learning store as experience replay | Past classifications bootstrap future accuracy | Lin 1992; Yarowsky 1995 |
 | Inverse HHI for funding diversity | Standard concentration metric from IO economics | Rhoades 1993 |
-| Bayesian shrinkage for promise scores | Prevents inflation when few promises are evaluable | Efron & Morris 1975 |
+| Linear shrinkage toward 50 for promise scores (fixed rate `min(n/k, 1)`, not empirical Bayes) | Prevents inflation when few promises are evaluable | Stein-type shrinkage idea: Efron & Morris 1975 |
 | Cook PVI adjustment for independence | Raw party-break rates mislead without constituency context | Carson et al. 2010 |
 | Donation-vote correlation ≠ causation | Methodological caution in interpreting funding influence | Ansolabehere et al. 2003 |
 | Fuzzy name matching for self-funded detection | SequenceMatcher handles spelling variations, middle names | Ratcliff & Obershelp 1988 |
 | PageRank for legislative leadership | Cosponsorship network centrality measures peer influence | Brin & Page 1998; Tauberer 2012 |
-| SVD ideology as Bayesian prior for partisan depth | Behavioral ideological signal regularizes sparse vote data | Poole & Rosenthal 1985; Efron & Morris 1975 |
+| SVD ideology as a prior for partisan depth (linear blend) | Behavioral ideological signal regularizes sparse vote data | Poole & Rosenthal 1985; Efron & Morris 1975 |
 
 See the [Methodology page](/about) for full details and inline citations.
 

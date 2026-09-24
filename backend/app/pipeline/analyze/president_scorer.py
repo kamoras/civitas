@@ -282,7 +282,7 @@ def _gdp_reference_key(term_start_year: int | None) -> str:
 
 def jobs_per_attributed_year(jobs_created_millions: float, term_years: float) -> float:
     """Jobs per year over the window the jobs figure covers: from January of
-    the term's second year (Blinder & Watson year-1 exclusion — see
+    the term's second year (the same year-1 exclusion as GDP — see
     economic_data.calculate_jobs_created), so the divisor is the term minus
     one year, floored so a young in-progress term doesn't divide by ~zero.
     One definition for the score and the population it is compared with."""
@@ -319,8 +319,8 @@ def _effectiveness_core(
     Components, each scored against the presidential population measured
     every run (compute_president_reference), like Public Mandate:
       - GDP growth (60%): average annual real growth over the term, first
-        year excluded (Blinder & Watson 2016; Romer & Romer 2010 on the
-        policy lag) and peak-relative after a contraction
+        year excluded (an annual stand-in for Blinder & Watson 2016's
+        attribution lag; see historical_gdp) and peak-relative after a contraction
         (historical_gdp.compute_term_gdp_growth). Compared with presidents
         in the same data regime, split at 1947 (see _GDP_REGIME_SPLIT_YEAR).
       - Jobs created (40%): payroll jobs per attributed year, BLS 1939

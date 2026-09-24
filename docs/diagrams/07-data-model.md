@@ -114,10 +114,8 @@ erDiagram
         int id PK
         string name
         string appointing_president
-        float score_consistency "35%"
-        float score_independence "30%"
-        float score_judicial_restraint "20%"
-        float score_bipartisan_agreement "15%"
+        float score_consistency "0.35/0.80"
+        float score_independence "0.45/0.80"
         int cases_decided
         json agreement_matrix
     }

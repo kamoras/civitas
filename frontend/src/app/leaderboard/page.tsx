@@ -1190,7 +1190,7 @@ function LeaderboardContent() {
                     Click any row to view full profile.
                   </p>
                   <p className="font-sans text-xs text-ink-min">
-                    Scores use Bayesian shrinkage — members with limited public data are pulled
+                    Scores are shrunk toward 50 when data is thin — members with limited public data are pulled
                     toward 50, not penalized or rewarded
                   </p>
                 </div>

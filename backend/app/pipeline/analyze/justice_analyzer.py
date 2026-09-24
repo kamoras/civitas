@@ -5,11 +5,12 @@ Scoring methodology adapted from quantitative judicial politics literature:
 Consistency (Ideological Independence)
     Measures how much a justice's votes are predictable from their appointing
     party's ideology.  Uses the *agreement-rate differential* between own-bloc
-    and opposing-bloc justices, weighted by each case's Fisher information
-    content — the variance of a Bernoulli with p = minority_votes / total_votes.
-    Close decisions (5-4) contribute roughly 2.5× more per case than lopsided
-    ones (8-1), matching the IRT insight that a case's discrimination is highest
-    near the ideological center of the court (Martin & Quinn, 2002).
+    and opposing-bloc justices, weighted by the variance of each case's
+    split, p·(1−p) with p = minority_votes / total_votes. Under a logistic
+    response model that is the Fisher information one vote carries about the
+    logit, so close decisions (5-4) weigh roughly 2.5× lopsided ones (8-1).
+    It is a heuristic weight: Martin & Quinn (2002) estimate each case's
+    discrimination as a parameter, and this does not.
 
     score = (1 − |own_rate − opp_rate|) × 100
     An absolute differential of 0 → 100 (agrees with both sides equally;
@@ -59,7 +60,7 @@ this module, plus a simulation of a 6-3 Court):
   Bipartisan Agreement — pairwise agreement with opposing-bloc justices.
     Spearman 0.86 with Independence (same construct) and it also averaged
     in unanimous cases, which carry no information about partisanship
-    (Fisher weight 0). Its weight was folded into Independence.
+    (split-variance weight 0). Its weight was folded into Independence.
 
 Both remaining bloc measures showed no bloc-size bias in the simulation
 (gaps within 2 points between a 6- and a 3-member bloc, with and without
@@ -95,9 +96,9 @@ def _expected_bloc(appointing_party: str) -> str:
 def _fisher_weight(majority_votes: int, minority_votes: int) -> float:
     """Case information weight: p·(1−p) where p = minority/total.
 
-    Returns 0 for unanimous decisions, ~0.25 for 5-4 splits.
-    This is the Fisher information for a binary response model — the
-    standard IRT measure of how much a case reveals about ideology.
+    Returns 0 for unanimous decisions, ~0.25 for 5-4 splits — the
+    Bernoulli variance of the split, i.e. the Fisher information about the
+    logit in a logistic response model (see the module docstring).
     """
     total = majority_votes + minority_votes
     if total <= 0:
@@ -266,7 +267,7 @@ def analyze_justice_votes(
                 cross_bloc_credit_sum += opp_frac * (1.0 - own_frac)
 
     # --- Score: Consistency (Ideological Independence) ---
-    # ABSOLUTE agreement-rate differential weighted by Fisher information.
+    # ABSOLUTE agreement-rate differential weighted by split variance.
     # |differential| = 0 → score 100 (agrees with both sides equally: votes
     #   are uncorrelated with appointing party — maximally independent).
     # |differential| = 1 → score 0 (perfectly party-predictable).

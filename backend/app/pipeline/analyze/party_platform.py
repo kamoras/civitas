@@ -21,7 +21,7 @@ Bayesian MAP estimation:
 The posterior centroid is:
     centroid = (seed · w_prior + data · n_bills) / (w_prior + n_bills)
 
-With ``_PRIOR_WEIGHT=3``, four real bills halve the seed influence.
+With ``_PRIOR_WEIGHT=3``, three real bills halve the seed influence.
 As the corpus grows, centroids converge to pure data.  On cold start
 (no bill history), pure seeds are used.
 
@@ -304,7 +304,7 @@ D_PLATFORM_POSITIONS: dict[str, str] = {
 
 # Bayesian prior weight: the seed descriptions count as this many
 # "virtual bills."  As real bill data accumulates, the data centroid
-# dominates.  A value of 3 means ~4 real bills halve the seed influence.
+# dominates.  A value of 3 means 3 real bills halve the seed influence.
 _PRIOR_WEIGHT = 3.0
 
 # Below this R/D score margin, a bill is classified "bipartisan" rather
@@ -655,11 +655,13 @@ def classify_party_alignment_multi(
 
     Per-area alignment uses the same nearest-centroid classifier as
     classify_party_alignment, with stance-conditioned query construction
-    and directional platform descriptions.  The aggregate uses
-    confidence-weighted voting: each area's alignment vote is weighted
-    by its embedding confidence, following the weighted-expert framework
-    in Clemen (1989, "Combining Forecasts: A Review and Annotated
-    Bibliography," Intl J Forecasting 5:4).
+    and directional platform descriptions.  The aggregate is a
+    confidence-weighted vote: each area's alignment vote is weighted by its
+    embedding confidence. That is a design choice, not a result — the
+    forecast-combination literature finds equal weights hard to beat
+    (Clemen 1989, "Combining Forecasts: A Review and Annotated
+    Bibliography," Intl J Forecasting 5(4)), and these weights have not
+    been measured against equal ones.
 
     Returns:
         {
@@ -839,8 +841,9 @@ def analyze_partisan_depth(
 
     Tertiary signal: SVD-derived ideology score from cosponsorship patterns
     (Tauberer 2012, adapted from Poole & Rosenthal 1985).  This serves as
-    a Bayesian prior — with sparse vote data it has more influence, with
-    rich vote data the observations dominate.
+    a prior in a linear blend, weight 1 - min(votes/15, 1) — with sparse
+    vote data it has more influence, with 15+ votes none. (A fixed-rate
+    blend, not a posterior: no variance is estimated.)
 
     Args:
         promises: List of dicts with at least 'promiseText' and 'category'.

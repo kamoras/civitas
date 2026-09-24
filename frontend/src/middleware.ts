@@ -3,7 +3,7 @@ import type { NextFetchEvent, NextRequest } from "next/server";
 
 // Matches the fallback next.config.mjs already uses for its API rewrite —
 // the frontend container isn't given BACKEND_URL at runtime, so both rely
-// on the Docker network alias set up by deploy.sh.
+// on the `backend` service name, which Swarm's overlay DNS resolves.
 const BACKEND_URL = process.env.BACKEND_URL || "http://backend:8000";
 
 export function middleware(request: NextRequest, event: NextFetchEvent) {

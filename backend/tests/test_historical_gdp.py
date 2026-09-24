@@ -60,7 +60,7 @@ class TestComputeTermGdpGrowth:
         # observations (2001->02, 02->03, 03->04) — year-1's own growth
         # (2000->01, before the term even starts) is correctly never
         # computed at all, but year-2's growth (2001->02, the president's
-        # own first full year under Blinder-Watson) must be counted.
+        # own first attributed year) must be counted.
         gdp = {2000: 100.0, 2001: 110.0, 2002: 100.0, 2003: 200.0, 2004: 400.0}
         growth = compute_term_gdp_growth(gdp, 2001, 2004)
         # Plain average of the 3 real observations: 2001->02 = -9.09%,

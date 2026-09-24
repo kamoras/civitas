@@ -22,7 +22,7 @@ score from, using the same constructs the scores claim to measure (v6.13):
 
 Run after algorithm changes, inside the backend container:
 
-    docker exec <backend> python3 scripts/benchmark_validation.py --chamber both
+    docker exec "$(docker ps -q -f name=civitas_backend)" python3 scripts/benchmark_validation.py --chamber both
 
 Baselines: the v4.1/v4.2 figures this script used to print compared the
 pre-v6.13 design (raw break rate; DW-NOMINATE). v6.13 has no baseline yet —

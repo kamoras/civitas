@@ -1,7 +1,7 @@
 """Unit tests for bluesky_spotlight helpers.
 
 _most_notable_score is a pure function (no LLM, no network) — it decides
-server-side which of the five score dimensions is worth emphasizing,
+server-side which of the weighted score dimensions is worth emphasizing,
 instead of leaving that choice and its framing to the model.
 """
 

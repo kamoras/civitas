@@ -13,7 +13,7 @@ and an entity-relationship view of the schema.
 | Diagram | What it covers |
 |---|---|
 | [01 — System architecture](01-system-architecture.md) | End-to-end: sources → pipelines → storage → API → frontend |
-| [02 — Nightly pipeline](02-nightly-pipeline.md) | The seven phases, and the Librarian/Analyst producer-consumer overlap |
+| [02 — Nightly pipeline](02-nightly-pipeline.md) | The seven phases, roster lifecycle, and why ANALYZE runs one member at a time |
 | [03 — Action Center](03-action-center.md) | The hourly news pipeline, including the topic-keyed persistence branch |
 | [04 — Classification tiers](04-classification-tiers.md) | The tier 1→4 escalation and the disclosed pre-filter exceptions |
 | [05 — Scoring](05-scoring.md) | Score composition for members, presidents, and justices |

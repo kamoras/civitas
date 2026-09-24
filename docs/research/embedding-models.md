@@ -83,7 +83,7 @@ tier 3, which would be a different change.
 Run the harness once inside the backend container on the Pi, where Hugging
 Face and the bill cache are both available:
 
-    docker exec <backend> python3 scripts/evaluate_embedding_models.py
+    docker exec "$(docker ps -q -f name=civitas_backend)" python3 scripts/evaluate_embedding_models.py
 
 It prints both tasks for all five candidates, including arctic. The decision
 rule, fixed before seeing the numbers:

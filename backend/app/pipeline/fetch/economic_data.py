@@ -25,7 +25,8 @@ TERM_YEARS: dict[str, tuple[int, int]] = {
     "trump-45":   (2017, 2021),
     "biden-46":   (2021, 2025),
     "trump-47":   (2025, 2029),
-    # Extended set for economics-only recalculation (Blinder & Watson 2016)
+    # Extended set for economics-only recalculation (the postwar
+    # presidencies Blinder & Watson 2016 study)
     "eisenhower-34": (1953, 1961),
     "jfk-35":        (1961, 1963),
     "lbj-36":        (1963, 1969),
@@ -91,9 +92,9 @@ def calculate_jobs_created(
 
     Baseline is January of the term's SECOND calendar year, not
     inauguration January (2026-07 fix): the GDP
-    component of the same Effectiveness score excludes year 1 per
-    Blinder & Watson (2016) — outcomes in a president's first year
-    primarily reflect the predecessor's policy — but jobs were counted
+    component of the same Effectiveness score excludes year 1 (the
+    four-quarter end of the attribution lags Blinder & Watson 2016 test;
+    see historical_gdp.compute_term_gdp_growth) — but jobs were counted
     from inauguration month, so the two components of one score used
     opposite attribution rules. Both now start the attribution clock at
     the same point. Endpoint stays January of the term-end year
