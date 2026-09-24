@@ -4569,7 +4569,22 @@ def _run_refresh(db: Session) -> int:
                 located = extract_json(located)
             return located if isinstance(located, dict) else None
 
-        cluster_claims = claim_layer.extract_claims(filtered_cluster, _locate)
+        # Extract from the WHOLE cluster, not the coherence-filtered
+        # subset. SOURCE_SIM_FLOOR exists to keep a free-writing model on
+        # topic by removing stray articles before it sees them; the claim
+        # layer now does that job better and at the right granularity, by
+        # checking each extracted CLAIM against the cluster.
+        #
+        # Keeping both compounded: the first production run of this
+        # redesign published ZERO issues. Its counters show the coherence
+        # filter had cut both top clusters to 5 articles between them, and
+        # at the measured ~39% per-article yield that is about one claim
+        # per cluster against a two-claim substance gate. Two filters each
+        # reasonable alone, multiplying into nothing.
+        #
+        # filtered_cluster still supplies the title and the source list —
+        # those should come from the coherent core.
+        cluster_claims = claim_layer.extract_claims(cluster, _locate)
         cluster_claims = claim_layer.on_topic(cluster_claims, filtered_cluster)
         if not cluster_claims:
             # A cluster with no attributable fact produces NO ISSUE.
