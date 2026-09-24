@@ -801,6 +801,18 @@ class RaceCoverageItem(Base):
     # True only if a post was actually published (bsky_posted_at alone
     # means "considered") — the daily posting budget counts these.
     bsky_posted: Mapped[bool] = mapped_column(Boolean, default=False)
+    # How much this item is ABOUT its matched race, 0..1 cosine in the
+    # similarity-embedding space (analyze/race_relevance.py). Computed at
+    # INGEST, not per request: the API cannot afford to embed a feed on
+    # every page load. NULL means never scored, which the feed treats as
+    # not-displayable — fail closed, and the next ingest fills it in.
+    relevance: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+    # Whether the source text tells a reader how to vote. Relevance and
+    # suitability are different questions and a social feed needs both
+    # asked: 31.5% of Bluesky items clear the relevance bar and 7% of
+    # those are campaign advocacy, which a non-partisan platform must not
+    # carry even attributed.
+    has_advocacy: Mapped[bool] = mapped_column(Boolean, default=False)
 
     race: Mapped["Race"] = relationship(back_populates="coverage_items")
 

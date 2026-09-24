@@ -8,6 +8,7 @@ import logging
 import pathlib
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cached_json
@@ -477,34 +478,49 @@ def _race_full(
 STATE_COVERAGE_LIMIT = 20
 STATE_COVERAGE_QUERY_LIMIT = 100
 
-# Which coverage sources reach a reader at all.
+# Which coverage reaches a reader at all.
 #
-# The Bluesky side of this feed is an open keyword search of the whole
-# network for a candidate's name (pipeline/fetch/bluesky_search.py), and
-# a name-mention is not coverage. What that produced on Connecticut's
-# page, verbatim: a tabloid item about a diver's death, five separate
-# reposts of one YouTube video, a bill-notification bot, and a Spanish
-# health-tip post — 74 items, of which 5 were journalism.
+# The Bluesky half of this feed is an open keyword search of the whole
+# network for a candidate's name, and a name-mention is not coverage.
+# What that produced on Connecticut's page, verbatim: a tabloid item
+# about a diver's death, five reposts of one YouTube video, a
+# bill-notification bot and a Spanish health-tip post — 74 items, of
+# which 5 were journalism.
 #
-# Three cheaper filters were measured against the real corpus first and
-# all three failed, which is why this is a source restriction rather
-# than a smarter classifier:
-#   - electoral-vocabulary relevance (grounding._ELECTORAL_CONTEXT_RE)
-#     dropped a real Roll Call piece on the CT-1 primary while KEEPING
-#     three aggregator reposts of "Why baby boomer clout persists";
-#   - domain-verified handles (Bluesky only grants these after DNS
-#     verification) are 983 of 6,855 items and are mostly weather bots,
-#     a food blog, a pub and a dog-sports account;
-#   - the existing NEWS_OUTLET_HANDLES allowlist is three outlets, which
-#     would discard genuine local newsrooms like ctmirror.org.
+# A vetted news source passes on provenance alone. A social post has to
+# earn its place by answering BOTH questions, because they have
+# different answers and only asking one gets it wrong in a different
+# direction each time:
 #
-# No cheap signal separates race coverage from incidental name-mentions
-# in an open search, so the honest move is to show only the vetted news
-# pipeline. The cost is real and deliberate: this drops ~93% of feed
-# volume and leaves 8 states with no coverage at all. For a platform
-# whose claim is accuracy, an empty feed is a better failure than a
-# confident wrong one — and an empty feed is visible, so it gets fixed.
+#   relevance    — is this about the race? (analyze/race_relevance.py)
+#   has_advocacy — does it tell a reader how to vote?
+#
+# Measured over 1,500 real Bluesky items: 31.5% clear relevance, and 7%
+# of those are campaign advocacy — "Elect Jonathan Nez to Congress!"
+# scores 0.632, because campaign material is maximally on-topic for a
+# campaign. Gating on relevance alone would have concentrated the feed
+# toward exactly the content that caused the 2026-09-23 incident;
+# gating on source alone (the first fix here) threw away real local
+# newsrooms — @nebraskaexaminer, @ksntnews, @connecticutintel all clear
+# both bars.
+#
+# Unscored items (relevance IS NULL) are excluded: fail closed, and the
+# next ingest scores them.
 COVERAGE_SOURCE_TYPES = ("news",)
+
+
+def _coverage_is_displayable(db: Session):
+    """SQL predicate for the feed — see COVERAGE_SOURCE_TYPES above."""
+    from app.pipeline.analyze.race_relevance import threshold
+
+    return or_(
+        RaceCoverageItem.source_type.in_(COVERAGE_SOURCE_TYPES),
+        and_(
+            RaceCoverageItem.relevance.isnot(None),
+            RaceCoverageItem.relevance >= threshold(db),
+            RaceCoverageItem.has_advocacy.is_(False),
+        ),
+    )
 
 
 def _state_coverage(db: Session, races: list[Race]) -> list[dict]:
@@ -533,7 +549,7 @@ def _state_coverage(db: Session, races: list[Race]) -> list[dict]:
         db.query(RaceCoverageItem)
         .filter(
             RaceCoverageItem.race_id.in_(races_by_id.keys()),
-            RaceCoverageItem.source_type.in_(COVERAGE_SOURCE_TYPES),
+            _coverage_is_displayable(db),
         )
         .order_by(
             RaceCoverageItem.published_at.desc().nullslast(),
@@ -1179,7 +1195,7 @@ def race_detail(race_id: str, db: Session = Depends(get_db)):
         db.query(RaceCoverageItem)
         .filter(
             RaceCoverageItem.race_id == race_id,
-            RaceCoverageItem.source_type.in_(COVERAGE_SOURCE_TYPES),
+            _coverage_is_displayable(db),
         )
         .order_by(RaceCoverageItem.published_at.desc().nullslast(), RaceCoverageItem.fetched_at.desc())
         .limit(50)

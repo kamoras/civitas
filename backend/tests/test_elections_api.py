@@ -377,10 +377,10 @@ class TestCoverageFeedShowsOnlyVettedSources:
     half of this feed is an open keyword search for a candidate's name,
     and a name-mention is not coverage."""
 
-    def _item(self, db, race_id, source_type, title, url):
+    def _item(self, db, race_id, source_type, title, url, **kw):
         it = RaceCoverageItem(
             race_id=race_id, source_type=source_type, source_name="src",
-            title=title, url=url,
+            title=title, url=url, **kw,
         )
         db.add(it)
         return it
@@ -405,3 +405,45 @@ class TestCoverageFeedShowsOnlyVettedSources:
 
         data = _body(elections.state_ballot("CT", db_session))
         assert [c["title"] for c in data["coverage"]] == ["Real reporting"]
+
+    def test_a_relevant_non_advocacy_social_item_is_shown(self, db_session):
+        """Real local newsrooms post on Bluesky — @nebraskaexaminer,
+        @ksntnews and @connecticutintel all clear both bars, and the
+        first version of this filter threw them away on provenance."""
+        _race(db_session, "2026-SEN-NE", "NE")
+        self._item(db_session, "2026-SEN-NE", "bluesky",
+                   "Nebraska's U.S. Senate ballot will list Sen. Pete Ricketts",
+                   "b1", relevance=0.59, has_advocacy=False)
+        db_session.commit()
+        data = _body(elections.state_ballot("NE", db_session))
+        assert len(data["coverage"]) == 1
+
+    def test_a_relevant_ADVOCACY_social_item_is_not_shown(self, db_session):
+        """"Elect Jonathan Nez to Congress!" scores 0.632 — campaign
+        material is maximally on-topic for a campaign, so relevance alone
+        would admit exactly what a non-partisan platform must not carry."""
+        _race(db_session, "2026-HOUSE-AZ-2", "AZ", office="H", district=2)
+        self._item(db_session, "2026-HOUSE-AZ-2", "bluesky",
+                   "Elect Jonathan Nez to Congress!", "b2",
+                   relevance=0.632, has_advocacy=True)
+        db_session.commit()
+        data = _body(elections.state_ballot("AZ", db_session))
+        assert data["coverage"] == []
+
+    def test_an_irrelevant_social_item_is_not_shown(self, db_session):
+        _race(db_session, "2026-HOUSE-NJ-7", "NJ", office="H", district=7)
+        self._item(db_session, "2026-HOUSE-NJ-7", "bluesky",
+                   "Reservoir Dogs 4K (iTunes) C$4.99", "b3",
+                   relevance=0.111, has_advocacy=False)
+        db_session.commit()
+        data = _body(elections.state_ballot("NJ", db_session))
+        assert data["coverage"] == []
+
+    def test_an_unscored_social_item_is_not_shown(self, db_session):
+        """Fail closed: NULL relevance means never scored, and the next
+        ingest fills it in."""
+        _race(db_session, "2026-SEN-CT", "CT")
+        self._item(db_session, "2026-SEN-CT", "bluesky", "Unscored post", "b4")
+        db_session.commit()
+        data = _body(elections.state_ballot("CT", db_session))
+        assert data["coverage"] == []

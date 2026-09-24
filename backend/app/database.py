@@ -205,6 +205,13 @@ def _migrate_columns() -> None:
         # everyone means no document is eligible for the authority signal,
         # so the ranker falls back to relevance + freshness until the first
         # pipeline run fills these in.
+        # Ingest-time feed gates for race coverage (analyze/race_relevance.py).
+        # relevance has NO default on purpose: NULL means "never scored",
+        # which the feed treats as not-displayable, so a pre-existing row
+        # stays hidden until an ingest scores it rather than appearing
+        # unvetted.
+        ("race_coverage_items", "relevance", "REAL"),
+        ("race_coverage_items", "has_advocacy", "BOOLEAN DEFAULT 0"),
         ("explore_documents", "identifiers", "TEXT DEFAULT '[]'"),
         ("explore_documents", "authority", "REAL DEFAULT 0.0"),
         ("explore_documents", "cited_by_count", "INTEGER DEFAULT 0"),
