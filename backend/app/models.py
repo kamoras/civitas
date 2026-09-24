@@ -1590,10 +1590,12 @@ class BskySenatorSpotlight(Base):
 class SiteVisit(VisitsBase):
     """One row per unique visitor per day — never raw IP/PII.
 
-    `visitor_hash` is an HMAC of (IP, User-Agent, date) keyed by a secret
-    derived from ADMIN_TOKEN (see api/visits.py) — the same real visitor
-    produces a different hash every day, and the raw IP is never stored or
-    recoverable from the hash. The (date, visitor_hash) primary key means a
+    `visitor_hash` is an HMAC of the visitor's IP keyed by that UTC day's
+    random salt (VisitSalt; see api/visits.py). The salt exists only while
+    its day is current and is then deleted, so after the day ends nobody —
+    the operator included — can recompute a hash from an IP; with the IPv4
+    space small enough to enumerate, a permanent key would have made every
+    stored hash reversible. The (date, visitor_hash) primary key means a
     second request from the same visitor on the same day is a no-op insert,
     so this table grows by unique visitors, not by page views.
 
@@ -1609,11 +1611,32 @@ class SiteVisit(VisitsBase):
     # Coarse buckets parsed from User-Agent (see api/visits.py _parse_ua) —
     # never the raw UA string. A handful of low-cardinality categories
     # (~5 browsers x ~6 OSes x 3 device types) isn't personally identifying
-    # on its own, and reveals nothing the hash didn't already consume: the
-    # full UA string is already an input to visitor_hash above.
+    # on its own.
     browser: Mapped[str] = mapped_column(String(20), default="")
     os: Mapped[str] = mapped_column(String(20), default="")
     device_type: Mapped[str] = mapped_column(String(10), default="")
+
+
+class VisitSalt(VisitsBase):
+    """The random salt for the current UTC day's visitor hashes.
+
+    Lives in the visits database so both API workers hash a visitor
+    identically (a per-process salt would count one person twice). At most
+    one row exists: api/visits.py deletes every other day's salt when it
+    creates the current one, which is what makes older hashes unlinkable.
+    """
+    __tablename__ = "visit_salts"
+
+    date: Mapped[str] = mapped_column(String(10), primary_key=True)  # YYYY-MM-DD, UTC
+    salt: Mapped[str] = mapped_column(String(64), nullable=False)  # hex
+
+
+class VisitsMigration(VisitsBase):
+    """One-time data migrations applied to the visits database."""
+    __tablename__ = "visits_migrations"
+
+    name: Mapped[str] = mapped_column(String(100), primary_key=True)
+    applied_at: Mapped[datetime] = mapped_column(default=utcnow)
 
 
 class PageView(VisitsBase):

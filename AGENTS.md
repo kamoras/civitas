@@ -547,6 +547,12 @@ What this rules in and out:
   sends the identical request; nothing visitor-specific leaves the server.
   That distinction — our address, not theirs — is the whole line.
 
+The one thing counted about visitors — daily unique visits — uses an HMAC of
+the IP under a random salt that exists only for the current UTC day and is
+then deleted (`api/visits.py`, `VisitSalt`). A permanent key would not do:
+the IPv4 space is small enough to enumerate, so anyone holding the key could
+recover every stored IP. With the salt gone, nobody can.
+
 A feature that can only work by asking where the visitor lives is a feature
 this project doesn't ship. State the resulting limitation as content (see
 §7's `omits`) rather than closing the gap by collecting an address.

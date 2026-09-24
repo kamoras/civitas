@@ -803,6 +803,52 @@ def init_db() -> None:
         _init_db_locked()
 
 
+_REKEY_MIGRATION = "rekey_admin_token_visitor_hashes"
+
+
+def _rekey_legacy_visitor_hashes() -> None:
+    """One-time: make visitor hashes written under the old permanent key
+    unlinkable.
+
+    Until 2026-09 visitor_hash was HMAC(ip, date) under a key derived from
+    ADMIN_TOKEN (or the literal "civitas" when unset). That key never
+    rotated, and the IPv4 space is small enough to enumerate, so anyone
+    holding it could recover every stored IP. Each old hash is replaced by
+    an HMAC of itself under a random key that is generated here and never
+    stored: rows stay distinct (so per-day unique counts are unchanged),
+    but nothing can map them back to an IP any more. Covers the legacy copy
+    in the main database too, if the pre-split table still exists.
+    """
+    import hashlib
+    import hmac
+    import secrets
+
+    def rekey(conn) -> int:
+        key = secrets.token_bytes(32)
+        rows = conn.execute(text("SELECT date, visitor_hash FROM site_visits")).all()
+        for day, old in rows:
+            conn.execute(
+                text("UPDATE site_visits SET visitor_hash = :new WHERE date = :d AND visitor_hash = :old"),
+                {"new": hmac.new(key, old.encode(), hashlib.sha256).hexdigest()[:32], "d": day, "old": old},
+            )
+        return len(rows)
+
+    with visits_engine.begin() as conn:
+        if conn.execute(
+            text("SELECT 1 FROM visits_migrations WHERE name = :n"), {"n": _REKEY_MIGRATION},
+        ).first():
+            return
+        n = rekey(conn)
+        if inspect(engine).has_table("site_visits"):
+            with engine.begin() as main_conn:
+                n += rekey(main_conn)
+        conn.execute(
+            text("INSERT INTO visits_migrations (name, applied_at) VALUES (:n, CURRENT_TIMESTAMP)"),
+            {"n": _REKEY_MIGRATION},
+        )
+    logger.info("Re-keyed %d legacy visitor hashes under a discarded random key", n)
+
+
 def _init_db_locked() -> None:
     from app import models  # noqa: F401
 
@@ -815,6 +861,7 @@ def _init_db_locked() -> None:
     _warn_on_insert_blocking_drift()
     _ensure_indexes()
     _migrate_visits_data_to_own_db()
+    _rekey_legacy_visitor_hashes()
 
     # The FTS5 keyword index over explore_documents, plus the triggers that
     # keep it in step with ordinary ORM writes. Created here rather than in
