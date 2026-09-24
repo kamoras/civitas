@@ -330,3 +330,42 @@ class TestStateOfficeTableRebuild:
     def test_an_absent_table_is_not_an_error(self, patched_engine):
         """A fresh install has neither table; create_all builds both."""
         database._migrate_state_office_tables()
+
+
+class TestInsertBlockingDriftDetector:
+    """The Wahab/Blair failure could not be caught by any test, because a
+    fresh database is built from the models and has no drift. The
+    detector exists so the NEXT one is reported the first night instead
+    of surfacing months later as "431 success, 2 failed"."""
+
+    def test_reports_a_not_null_column_the_model_does_not_have(self, patched_engine, caplog):
+        eng = patched_engine
+        with eng.begin() as conn:
+            conn.execute(text(
+                "CREATE TABLE representatives ("
+                " id TEXT PRIMARY KEY, name TEXT,"
+                " retired_column TEXT NOT NULL)"
+            ))
+        with caplog.at_level("ERROR"):
+            database._warn_on_insert_blocking_drift()
+        assert "retired_column" in caplog.text
+        assert "representatives" in caplog.text
+
+    def test_stays_quiet_for_a_nullable_orphan(self, patched_engine, caplog):
+        """key_votes.key_vote_reasoning is a real orphan in production —
+        nullable, so it blocks nothing and must not be reported."""
+        eng = patched_engine
+        with eng.begin() as conn:
+            conn.execute(text(
+                "CREATE TABLE representatives ("
+                " id TEXT PRIMARY KEY, name TEXT, retired_column TEXT)"
+            ))
+        with caplog.at_level("ERROR"):
+            database._warn_on_insert_blocking_drift()
+        assert "retired_column" not in caplog.text
+
+    def test_a_table_matching_its_model_is_silent(self, patched_engine, caplog):
+        database.Base.metadata.create_all(bind=patched_engine)
+        with caplog.at_level("ERROR"):
+            database._warn_on_insert_blocking_drift()
+        assert "Schema drift" not in caplog.text
