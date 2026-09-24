@@ -379,7 +379,8 @@ class TestCoverageFeedShowsOnlyVettedSources:
 
     def _item(self, db, race_id, source_type, title, url, **kw):
         it = RaceCoverageItem(
-            race_id=race_id, source_type=source_type, source_name="src",
+            race_id=race_id, source_type=source_type,
+            source_name=kw.pop("source_name", "src"),
             title=title, url=url, **kw,
         )
         db.add(it)
@@ -447,3 +448,29 @@ class TestCoverageFeedShowsOnlyVettedSources:
         db_session.commit()
         data = _body(elections.state_ballot("CT", db_session))
         assert data["coverage"] == []
+
+    def test_a_default_bsky_handle_is_not_a_publisher(self, db_session):
+        """Measured over 1,200 real items: of 377 that cleared relevance
+        and the no-advocacy bar, the 316 on *.bsky.social were "Jon
+        Husted Is For Sale", "Awww poor Cindy :-(", a Celtic football
+        post — and the opponent's own campaign account attacking him."""
+        _race(db_session, "2026-SEN-OH", "OH")
+        self._item(db_session, "2026-SEN-OH", "bluesky",
+                   "Jon Husted doesn't give a damn about working people", "b5",
+                   relevance=0.55, has_advocacy=False,
+                   source_name="@sherrodbrownoh.bsky.social")
+        db_session.commit()
+        data = _body(elections.state_ballot("OH", db_session))
+        assert data["coverage"] == []
+
+    def test_a_domain_verified_newsroom_still_shows(self, db_session):
+        """@nebraskaexaminer.com, @journalstar.com and @nypost.com are
+        the reason a blanket source ban was wrong in the first place."""
+        _race(db_session, "2026-SEN-NE", "NE")
+        self._item(db_session, "2026-SEN-NE", "bluesky",
+                   "Nebraska's U.S. Senate ballot will list Sen. Pete Ricketts", "b6",
+                   relevance=0.59, has_advocacy=False,
+                   source_name="@nebraskaexaminer.com")
+        db_session.commit()
+        data = _body(elections.state_ballot("NE", db_session))
+        assert len(data["coverage"]) == 1

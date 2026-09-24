@@ -516,6 +516,28 @@ def _coverage_is_displayable(db: Session):
     return or_(
         RaceCoverageItem.source_type.in_(COVERAGE_SOURCE_TYPES),
         and_(
+            # Bluesky grants a domain handle only after DNS verification,
+            # so it is evidence of a publisher rather than a curated list
+            # that has to be maintained. A default *.bsky.social handle is
+            # self-service and costs nothing.
+            #
+            # Measured over 1,200 real social items: 377 cleared relevance
+            # and the no-advocacy bar, and the split is almost exactly
+            # professional versus not. The 61 domain handles are @nypost.com,
+            # @nebraskaexaminer.com, @journalstar.com, @follow-the-money.us
+            # (Super PAC spending), @senategop.govpeeps.us. The 316
+            # *.bsky.social are "Jon Husted Is For Sale", "has a Nazi
+            # problem", "Awww poor Cindy :-(", a Celtic football post, a
+            # wrestling post, and the OPPONENT'S OWN CAMPAIGN ACCOUNT
+            # attacking him — none of which is coverage, and none of which
+            # relevance or advocacy checking catches.
+            #
+            # Not perfect in either direction, and not claimed to be:
+            # @edgeoerin.com clears it with a joke about McConnell and
+            # cannabis strains, while a real campaign account on
+            # *.bsky.social is excluded. It is a strong heuristic standing
+            # in for a judgement no cheap signal makes exactly.
+            RaceCoverageItem.source_name.notlike("%.bsky.social"),
             RaceCoverageItem.relevance.isnot(None),
             RaceCoverageItem.relevance >= threshold(db),
             RaceCoverageItem.has_advocacy.is_(False),
