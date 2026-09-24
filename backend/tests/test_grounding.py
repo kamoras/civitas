@@ -937,7 +937,7 @@ class TestEveryPublishingPathIsChecked:
     # a correctness bug, not a hallucination reaching a reader.
     JUDGMENT_ONLY = {
         "_should_merge_monitors_llm", "_should_match_monitor_llm",
-        "_reclassify_monitor_llm", "_check_summary_roles",
+        "_reclassify_monitor_llm",
     }
 
     def _generators(self, relative_path):
