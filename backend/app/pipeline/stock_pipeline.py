@@ -57,10 +57,19 @@ STOCK_PIPELINE_STEPS = [
     ("president_ptr", "fetch", "Ingest presidential 278-T filings"),
 ]
 
-# How far back to search on a cold start (no existing trades in the DB).
-# Once trades exist, each chamber's search/index window starts from the
-# most recent disclosure_date already stored, so this only matters once.
+# How far back to search on a cold start (no existing Senate trades in the
+# DB). The House walks whole yearly filing indexes instead (_ingest_house).
 COLD_START_LOOKBACK_DAYS = 120
+
+# The Senate search re-covers this many days before the newest stored
+# disclosure, every run. Starting exactly at the newest stored date meant a
+# filing skipped on an earlier run — its filer not yet matched to a
+# senator (a newly seated member), a detail page that failed to load, an
+# empty parse — was never searched again once any later filing had been
+# stored. Filing-id dedup makes re-covering the window cheap (already-
+# ingested filings are skipped before any fetch; detail pages are cached
+# 30 days). 90 days is twice the STOCK Act's 45-day disclosure deadline.
+SENATE_REVISIT_DAYS = 90
 
 # In-memory tracker mirroring house_pipeline.py's pattern — lets the admin
 # dashboard detect a "stuck" run (DB row still says "running" but this
@@ -268,14 +277,23 @@ async def _ingest_house(db: Session, client: httpx.AsyncClient) -> int:
     return inserted
 
 
+def _senate_search_since(db: Session) -> str:
+    """Start date (YYYY-MM-DD) for this run's Senate PTR search — see
+    SENATE_REVISIT_DAYS."""
+    latest = db.query(StockTrade.disclosure_date).order_by(StockTrade.disclosure_date.desc()).first()
+    if latest and latest[0]:
+        try:
+            newest = datetime.strptime(latest[0][:10], "%Y-%m-%d").date()
+            return (newest - timedelta(days=SENATE_REVISIT_DAYS)).strftime("%Y-%m-%d")
+        except ValueError:
+            logger.warning("Unparseable stored disclosure_date %r — using the cold-start window", latest[0])
+    return (utcnow().date() - timedelta(days=COLD_START_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
+
+
 async def _ingest_senate(db: Session, client: httpx.AsyncClient) -> int:
     existing_filing_ids = {row[0] for row in db.query(StockTrade.filing_id).all()}
 
-    latest = db.query(StockTrade.disclosure_date).order_by(StockTrade.disclosure_date.desc()).first()
-    if latest and latest[0]:
-        since_date = latest[0]
-    else:
-        since_date = (utcnow().date() - timedelta(days=COLD_START_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
+    since_date = _senate_search_since(db)
 
     # Only fetch_senate_ptr (per-filing detail pages) needs this httpx
     # session — search_ptr_filings runs its own real browser session
