@@ -578,9 +578,9 @@ async def run_house_pipeline() -> dict:
 
             # This run's Legislative Effectiveness population reference, from
             # every rep's stage-classified sponsored bills (phase 4b) — before
-            # anyone is scored. See senate_pipeline._live_les_reference.
-            from app.pipeline.senate_pipeline import _live_les_reference
-            les_reference = _live_les_reference(
+            # anyone is scored. See live_references.live_les_reference.
+            from app.pipeline.live_references import live_les_reference
+            les_reference = live_les_reference(
                 "house",
                 [(r.get("sponsoredBills") or [], r.get("party")) for r in reps],
                 db,
@@ -768,14 +768,14 @@ async def run_house_pipeline() -> dict:
             # measured from the whole population BEFORE anyone is scored
             # (the Senate pipeline already works this way). The PAC-share
             # median needs every rep's funding, which the pass above fetches.
-            from app.pipeline.senate_pipeline import (
-                _live_constituent_reference,
-                _live_funding_reference,
+            from app.pipeline.live_references import (
+                live_constituent_reference,
+                live_funding_reference,
             )
-            funding_reference = _live_funding_reference(
+            funding_reference = live_funding_reference(
                 "house", [r.get("funding") or {} for r, _ in prepared_reps],
             )
-            constituent_reference = _live_constituent_reference(
+            constituent_reference = live_constituent_reference(
                 "house", [r for r, _ in prepared_reps],
             )
 

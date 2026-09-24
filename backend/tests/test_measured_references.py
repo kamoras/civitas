@@ -133,11 +133,11 @@ class TestPresidentReference:
 class TestPipelineKeepsUnmeasurableStats:
     def test_funding_stat_missing_this_run_keeps_its_last_value(self, db_session):
         from app.pipeline.analyze.population_reference import FUNDING_REFERENCE
-        from app.pipeline.senate_pipeline import _live_funding_reference
+        from app.pipeline.live_references import live_funding_reference
 
         FUNDING_REFERENCE.write("senate", {"pac_ratio_median": 0.1, "concentration_median": 0.33,
                                            "concentration_p10": 0.2, "concentration_p90": 0.4})
-        merged = _live_funding_reference("senate", [_funding(pac=200_000) for _ in range(40)])
+        merged = live_funding_reference("senate", [_funding(pac=200_000) for _ in range(40)])
         assert merged["senate"]["pac_ratio_median"] == 0.2  # measured this run
         assert merged["senate"]["concentration_median"] == 0.33  # kept
 

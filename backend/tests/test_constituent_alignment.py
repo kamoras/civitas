@@ -173,19 +173,19 @@ class TestMeasuredReference:
         assert constituent_reference_inputs(members) == [("D", 0.0, 0.2), ("D", 1.0, 0.1)]
 
     def test_pipeline_persists_this_runs_reference(self):
-        from app.pipeline.senate_pipeline import _live_constituent_reference
+        from app.pipeline.live_references import live_constituent_reference
 
         members = [{"state": "SW", "party": p, "votingRecord": record(10 + i % 5)}
                    for p in ("D", "R") for i in range(25)]
-        merged = _live_constituent_reference("house", members)
+        merged = live_constituent_reference("house", members)
         assert merged["house"]["n"] == 50
         assert CONSTITUENT_REFERENCE.load()["house"]["n"] == 50
         assert merged["senate"]["deviation_p90"] == 0.2  # untouched
 
     def test_too_few_members_keeps_the_last_reference(self):
-        from app.pipeline.senate_pipeline import _live_constituent_reference
+        from app.pipeline.live_references import live_constituent_reference
 
-        merged = _live_constituent_reference("senate", [{"state": "SW", "party": "D", "votingRecord": record(10)}])
+        merged = live_constituent_reference("senate", [{"state": "SW", "party": "D", "votingRecord": record(10)}])
         assert merged == CONSTITUENT_REFERENCE.load()
 
 

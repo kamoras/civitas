@@ -28,7 +28,7 @@ from app.pipeline.analyze.score_calculator import (
     load_les_reference,
     write_les_reference,
 )
-from app.pipeline.senate_pipeline import _live_les_reference, sitting_president_party
+from app.pipeline.live_references import live_les_reference, sitting_president_party
 
 
 def _bills(n, bill_type="s", congress=119, law=0):
@@ -175,14 +175,14 @@ class TestLiveReferenceInThePipeline:
         monkeypatch.setattr("app.pipeline.senate_pipeline.settings.CURRENT_CONGRESS", 120)
         self._president(db_session, "D")
         members = [(_bills(n, congress=120), "R" if n % 2 else "D") for n in range(10, 50)]
-        ref = _live_les_reference("senate", members, db_session)
+        ref = live_les_reference("senate", members, db_session)
         assert ref["senate"]["congress"] == 120
         assert ref["senate"]["majority"] == "D"  # 20-20 tie -> VP's party
         assert ref["house"] == pinned_les_reference["house"]
         assert load_les_reference()["senate"]["congress"] == 120
 
     def test_small_run_scores_against_the_last_persisted_reference(self, db_session):
-        assert _live_les_reference("senate", [(_bills(10), "D")], db_session) is None
+        assert live_les_reference("senate", [(_bills(10), "D")], db_session) is None
 
     def test_sitting_president_party(self, db_session):
         assert sitting_president_party(db_session) is None
