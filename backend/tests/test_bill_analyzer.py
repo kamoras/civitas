@@ -605,26 +605,26 @@ class TestIdeologyBlendInPartisanDepth:
         assert result["totalPositions"] == 0
 
     def test_ideology_adjusts_sparse_vote_lean(self):
-        """With few votes, ideology_score should pull the overall lean."""
-        from app.pipeline.analyze.party_platform import analyze_partisan_depth
-
-        votes = [
-            {"vote": "Yea", "policyArea": "DEFENSE", "partyLeaning": "R",
-             "policyAreas": []},
-            {"vote": "Yea", "policyArea": "DEFENSE", "partyLeaning": "R",
-             "policyAreas": []},
-        ]
-        record = {"keyVotes": votes, "recentVotes": []}
-
-        without = analyze_partisan_depth(
-            promises=[], senator_party="D",
-            voting_record=record, ideology_score=None,
+        """With few votes, the ideology prior pulls the overall lean — once
+        finalize_partisan_depth has the chamber to put it on the vote scale."""
+        from app.pipeline.analyze.party_platform import (
+            analyze_partisan_depth,
+            finalize_partisan_depth,
         )
-        with_d_ideology = analyze_partisan_depth(
-            promises=[], senator_party="D",
-            voting_record=record, ideology_score=0.1,
-        )
-        assert with_d_ideology["overallLean"] < without["overallLean"]
+
+        def member(n_votes, leaning, ideology):
+            votes = [{"vote": "Yea", "policyArea": "DEFENSE", "partyLeaning": leaning, "policyAreas": []}
+                     for _ in range(n_votes)]
+            return analyze_partisan_depth(
+                promises=[], senator_party="D" if leaning == "D" else "R",
+                voting_record={"keyVotes": votes, "recentVotes": []}, ideology_score=ideology,
+            )
+
+        chamber = [member(20, "D", 0.2) for _ in range(6)] + [member(20, "R", 0.8) for _ in range(6)]
+        sparse = member(2, "R", 0.1)
+        sparse["evalParty"] = "D"
+        finalize_partisan_depth([*chamber, sparse])
+        assert sparse["overallLean"] < sparse["voteLean"]
 
     def test_rich_votes_override_ideology(self):
         """With many votes (>=15), ideology_score has minimal effect."""

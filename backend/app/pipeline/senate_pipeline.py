@@ -764,6 +764,30 @@ def _live_funding_reference(chamber: str, fundings: list[dict]) -> dict:
     return FUNDING_REFERENCE.with_live(chamber, ref)
 
 
+def _finalize_stored_partisan_depth(db: Session) -> None:
+    """Relabel every current senator's stored partisan-depth profile against
+    the whole chamber (party_platform.finalize_partisan_depth). Reads from
+    the database, not this run's results, so a single-senator filtered run
+    is still compared with everyone. Never aborts the run: the per-senator
+    provisional labels stay if this fails."""
+    from app.pipeline.analyze.party_platform import finalize_partisan_depth
+
+    try:
+        rows = db.query(Senator).filter(Senator.is_current.is_(True), Senator.partisan_depth.isnot(None)).all()
+        profiles = []
+        for row in rows:
+            profile = json.loads(row.partisan_depth)
+            profile.setdefault("evalParty", row.party)
+            profiles.append((row, profile))
+        finalize_partisan_depth([p for _, p in profiles])
+        for row, profile in profiles:
+            row.partisan_depth = json.dumps(profile)
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.warning("Partisan-depth finalization failed — provisional labels kept", exc_info=True)
+
+
 def _live_constituent_reference(chamber: str, members: list[dict]) -> dict:
     """This run's Constituent Alignment expectation for `chamber` (per-party
     break rate by seat lean — see score_calculator.compute_constituent_
@@ -2123,6 +2147,7 @@ async def run_senate_pipeline(
         pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
         db.commit()
 
+        _finalize_stored_partisan_depth(db)
         _record_score_snapshots(db)
 
         run_calibration_check("senator")

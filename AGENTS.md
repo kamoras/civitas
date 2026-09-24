@@ -390,7 +390,11 @@ The prior weight decreases as the senator accumulates more vote data:
 `data_confidence = min(partisan_vote_count / 15, 1.0)`. With 15+ votes,
 the ideology prior has zero weight; with fewer votes, it regularizes the
 estimate toward the senator's revealed cosponsorship ideology (Efron &
-Morris 1975).
+Morris 1975). The prior is first mapped onto the vote-lean scale by a line
+fitted over the chamber's full-data members each run, and the depth label
+(deep / moderate / centrist) is the member's tercile within their own party
+— both in `finalize_partisan_depth`, which runs over the whole chamber after
+the per-member pass. No named senator anchors either.
 
 ### 4a. Vote matching for multi-word names
 

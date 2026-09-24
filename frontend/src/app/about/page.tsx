@@ -717,7 +717,13 @@ export default function AboutPage() {
                   positions and higher values to conservative positions, calibrated by checking the
                   mean score of each party. It serves as a Bayesian prior for the partisan depth
                   calculation: when a senator has few recorded votes, the ideology score regularizes
-                  the estimate; as vote data accumulates, the prior weight drops to zero.
+                  the estimate; as vote data accumulates, the prior weight drops to zero. The prior is
+                  first put on the same scale as the vote-based lean, using the relationship between
+                  the two across senators with full voting records. The resulting label (deep,
+                  moderate or centrist) says where a senator falls within their own party, the most
+                  partisan third, the middle third or the least partisan third, so a fixed cut-off
+                  can&apos;t label one party&apos;s members as more extreme than the other&apos;s just
+                  because the two parties&apos; leans sit on different ranges.
                   <Cite id="19">Efron &amp; Morris 1975</Cite>
                 </P>
               </div>

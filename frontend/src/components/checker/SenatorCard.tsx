@@ -281,7 +281,7 @@ export default function SenatorCard({
                             : "CTR"}
                     </div>
                     <div className="text-xs text-ink-min">
-                      <MetricTooltip text="How strongly this senator's votes align with their party. Derived from roll-call votes, not stated positions. DEEP = strong loyalist, MOD = moderate, CTR = centrist, XCUT = frequently crosses party lines.">
+                      <MetricTooltip text="How strongly this senator's votes lean toward their party, compared with the rest of their own party. Derived from roll-call votes, not stated positions. DEEP = the most partisan third of their party, MOD = the middle third, CTR = the least partisan third, XCUT = frequently crosses party lines.">
                         PARTISAN
                       </MetricTooltip>
                     </div>
@@ -290,7 +290,7 @@ export default function SenatorCard({
                   <>
                     <div className="text-sm sm:text-lg font-mono text-ink-min">&mdash;</div>
                     <div className="text-xs text-ink-min">
-                      <MetricTooltip text="How strongly this senator's votes align with their party. Derived from roll-call votes, not stated positions. DEEP = strong loyalist, MOD = moderate, CTR = centrist, XCUT = frequently crosses party lines.">
+                      <MetricTooltip text="How strongly this senator's votes lean toward their party, compared with the rest of their own party. Derived from roll-call votes, not stated positions. DEEP = the most partisan third of their party, MOD = the middle third, CTR = the least partisan third, XCUT = frequently crosses party lines.">
                         PARTISAN
                       </MetricTooltip>
                     </div>

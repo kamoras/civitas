@@ -519,12 +519,15 @@ def compute_bipartisanship_scores(
         (score_calculator), which must not cite HVW's finding while
         quietly measuring a blend they explicitly distinguish it from.
 
-    Scores are normalized to the cohort median (median -> 0.5, 2x the
-    median or better -> 1.0), which makes the measure symmetric across
-    parties and majority status without any fixed constant: the
-    normalization is recomputed from the observed cohort every run —
-    per direction, since "both" and "receive" rates have genuinely
-    different cohort distributions.
+    Scores are normalized to the pooled cohort median (median -> 0.5, 2x
+    the median or better -> 1.0), recomputed from the observed cohort every
+    run — per direction, since "both" and "receive" rates have genuinely
+    different cohort distributions. Whether one pooled median is fair to
+    both parties (and to majority vs minority members, who have different
+    reasons to seek cross-party cosponsors) has not been measured: no
+    cosponsorship data was reachable when this was reviewed (2026-09). Each
+    run logs the per-party medians so the question can be answered from the
+    pipeline's own data before the normalization is changed.
     Members of neither major party are assigned the side they cosponsor
     with most (caucus inference, consistent with normalize_votes);
     members with fewer than ``min_interactions`` observed interactions
@@ -617,6 +620,14 @@ def compute_bipartisanship_scores(
     # just above the real midpoint below the 0.5 Coalition-Breadth threshold
     # and handed them the below-median seat-safety discount they shouldn't get.
     median = statistics.median(raw_rates.values())
+    by_side: dict[str, list[float]] = {}
+    for bio, rate in raw_rates.items():
+        by_side.setdefault(_side(bio) or "?", []).append(rate)
+    logger.info(
+        "Cross-party cosponsorship (%s): pooled median %.3f; per party %s",
+        direction, median,
+        {s: round(statistics.median(v), 3) for s, v in sorted(by_side.items())},
+    )
     if median <= 0:
         # Degenerate cohort (no observed crossing anywhere): fall back to
         # an absolute scale where 30% cross-party interactions = 1.0.
