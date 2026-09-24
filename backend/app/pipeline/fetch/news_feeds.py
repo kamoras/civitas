@@ -560,3 +560,76 @@ def fetch_news_articles(
     unique.sort(key=lambda a: a.published or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
     logger.info("Total unique articles: %d from %d feeds", len(unique), len(feeds))
     return unique
+
+# Per-state political coverage, for attaching news to RACES — deliberately
+# NOT part of NEWS_FEEDS, which drives the national Action Center.
+#
+# The Action Center's eight feeds are all national (AP, NPR, PBS, BBC, The
+# Hill, Politico, Roll Call), which cannot cover 50 states' House and
+# Senate races. That gap is what the open Bluesky candidate-name search
+# was filling, and it filled it with 7,740 items of which Minnesota's
+# contribution included "Dave Hughes still a whiny cunt" and a post about
+# the Australian comedian of the same name. A name mention is not
+# coverage; the answer is to widen the SOURCES rather than to filter a
+# firehose harder, which four successive filters failed to do.
+#
+# Mostly the States Newsroom network — nonprofit, nonpartisan, one outlet
+# per state — plus VTDigger and Honolulu Civil Beat where it has none.
+# All 41 were fetched live on 2026-09-24 and every one returned
+# a populated feed; none is included on the strength of its URL looking
+# right. Kept out of NEWS_FEEDS on purpose: adding ~400 state articles to
+# the national clustering would change which national issues rank, which
+# is a separate decision from covering races.
+STATE_NEWS_FEEDS: list[dict[str, str]] = [
+    {"state": "AL", "name": "Alabama Reflector", "url": "https://alabamareflector.com/feed/"},
+    {"state": "AK", "name": "Alaska Beacon", "url": "https://alaskabeacon.com/feed/"},
+    {"state": "AZ", "name": "Arizona Mirror", "url": "https://azmirror.com/feed/"},
+    {"state": "AR", "name": "Arkansas Advocate", "url": "https://arkansasadvocate.com/feed/"},
+    {"state": "CO", "name": "Colorado Newsline", "url": "https://coloradonewsline.com/feed/"},
+    {"state": "FL", "name": "Florida Phoenix", "url": "https://floridaphoenix.com/feed/"},
+    {"state": "GA", "name": "Georgia Recorder", "url": "https://georgiarecorder.com/feed/"},
+    {"state": "HI", "name": "Honolulu Civil Beat", "url": "https://www.civilbeat.org/feed/"},
+    {"state": "ID", "name": "Idaho Capital Sun", "url": "https://idahocapitalsun.com/feed/"},
+    {"state": "IN", "name": "Indiana Capital Chronicle", "url": "https://indianacapitalchronicle.com/feed/"},
+    {"state": "IA", "name": "Iowa Capital Dispatch", "url": "https://iowacapitaldispatch.com/feed/"},
+    {"state": "KS", "name": "Kansas Reflector", "url": "https://kansasreflector.com/feed/"},
+    {"state": "KY", "name": "Kentucky Lantern", "url": "https://kentuckylantern.com/feed/"},
+    {"state": "LA", "name": "Louisiana Illuminator", "url": "https://lailluminator.com/feed/"},
+    {"state": "ME", "name": "Maine Morning Star", "url": "https://mainemorningstar.com/feed/"},
+    {"state": "MD", "name": "Maryland Matters", "url": "https://marylandmatters.org/feed/"},
+    {"state": "MI", "name": "Michigan Advance", "url": "https://michiganadvance.com/feed/"},
+    {"state": "MN", "name": "Minnesota Reformer", "url": "https://minnesotareformer.com/feed/"},
+    {"state": "MO", "name": "Missouri Independent", "url": "https://missouriindependent.com/feed/"},
+    {"state": "MT", "name": "Daily Montanan", "url": "https://dailymontanan.com/feed/"},
+    {"state": "NE", "name": "Nebraska Examiner", "url": "https://nebraskaexaminer.com/feed/"},
+    {"state": "NV", "name": "Nevada Current", "url": "https://nevadacurrent.com/feed/"},
+    {"state": "NH", "name": "New Hampshire Bulletin", "url": "https://newhampshirebulletin.com/feed/"},
+    {"state": "NJ", "name": "New Jersey Monitor", "url": "https://newjerseymonitor.com/feed/"},
+    {"state": "NM", "name": "Source New Mexico", "url": "https://sourcenm.com/feed/"},
+    {"state": "NC", "name": "NC Newsline", "url": "https://ncnewsline.com/feed/"},
+    {"state": "ND", "name": "North Dakota Monitor", "url": "https://northdakotamonitor.com/feed/"},
+    {"state": "OH", "name": "Ohio Capital Journal", "url": "https://ohiocapitaljournal.com/feed/"},
+    {"state": "OK", "name": "Oklahoma Voice", "url": "https://oklahomavoice.com/feed/"},
+    {"state": "OR", "name": "Oregon Capital Chronicle", "url": "https://oregoncapitalchronicle.com/feed/"},
+    {"state": "PA", "name": "Pennsylvania Capital-Star", "url": "https://penncapital-star.com/feed/"},
+    {"state": "RI", "name": "Rhode Island Current", "url": "https://rhodeislandcurrent.com/feed/"},
+    {"state": "SC", "name": "SC Daily Gazette", "url": "https://scdailygazette.com/feed/"},
+    {"state": "SD", "name": "South Dakota Searchlight", "url": "https://southdakotasearchlight.com/feed/"},
+    {"state": "TN", "name": "Tennessee Lookout", "url": "https://tennesseelookout.com/feed/"},
+    {"state": "UT", "name": "Utah News Dispatch", "url": "https://utahnewsdispatch.com/feed/"},
+    {"state": "VT", "name": "VTDigger", "url": "https://vtdigger.org/feed/"},
+    {"state": "VA", "name": "Virginia Mercury", "url": "https://virginiamercury.com/feed/"},
+    {"state": "WA", "name": "Washington State Standard", "url": "https://washingtonstatestandard.com/feed/"},
+    {"state": "WV", "name": "West Virginia Watch", "url": "https://westvirginiawatch.com/feed/"},
+    {"state": "WI", "name": "Wisconsin Examiner", "url": "https://wisconsinexaminer.com/feed/"},
+]
+
+
+def fetch_state_news_articles() -> list[NewsArticle]:
+    """Recent articles from the per-state political outlets.
+
+    Same fetch, parse, age cap and dedup as the national feeds — only the
+    list differs. MAX_ARTICLE_AGE_HOURS bounds the volume: a state outlet
+    publishes on the order of ten items in 48 hours, not a hundred.
+    """
+    return fetch_news_articles(feeds=STATE_NEWS_FEEDS)
