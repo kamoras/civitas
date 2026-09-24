@@ -100,7 +100,6 @@ def normalize_finance(
     aggregated_contributors: list[dict],
     ai_classifications: dict[str, dict] | None = None,
     db_session=None,
-    outside_spending: dict | None = None,
     committee_type_map: dict[str, str | None] | None = None,
 ) -> dict:
     """Normalize FEC financial data into the Senator funding shape.
@@ -112,8 +111,6 @@ def normalize_finance(
         pac_receipts: PAC/committee contribution receipts (Schedule A, is_individual=false).
         aggregated_contributors: Top contributors by total.
         ai_classifications: Optional AI classifications for donors (type + industry).
-        outside_spending: Optional outside spending dict with totalFor and count from
-            fetch_outside_spending (super PAC independent expenditures supporting the candidate).
         committee_type_map: Optional contributor_id -> FEC committee_type code,
             pre-resolved by the caller (see fec.fetch_committee_type). Passed
             through to build_top_donors for the PAC-utilization signal.
@@ -176,8 +173,6 @@ def normalize_finance(
     else:
         final_pac_total = min(computed_pac_total, contribution_base)
 
-    outside_spending_for = outside_spending.get("totalFor", 0) if outside_spending else 0
-
     return {
         "totalRaised": round(total_raised),
         "totalContributions": round(contribution_base),
@@ -185,7 +180,6 @@ def normalize_finance(
         "smallDonorPercentage": small_donor_percentage,
         "topDonors": top_donors,
         "industryBreakdown": industry_breakdown,
-        "outsideSpendingFor": outside_spending_for,
     }
 
 

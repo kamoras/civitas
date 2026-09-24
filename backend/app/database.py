@@ -179,8 +179,6 @@ def _migrate_columns() -> None:
         ("presidents", "gdp_growth_adjusted", "REAL"),
         ("presidents", "rulemaking_count", "INTEGER"),
         ("presidents", "rulemaking_finalized_pct", "REAL"),
-        ("senators", "outside_spending_for", "REAL"),
-        ("representatives", "outside_spending_for", "REAL"),
         ("senators", "total_contributions", "REAL"),
         ("representatives", "total_contributions", "REAL"),
         ("senators", "caucus_party", "TEXT"),

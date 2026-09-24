@@ -60,7 +60,6 @@ from app.pipeline.fetch.fec import (
     fetch_candidate_financials,
     fetch_committee_receipts,
     fetch_committee_type,
-    fetch_outside_spending,
     fetch_pac_receipts,
     find_candidate,
     reset_run_state as reset_fec_run_state,
@@ -231,7 +230,6 @@ def upsert_senator(db: Session, data: dict) -> None:
         "caucus_party": (data.get("votingRecord") or {}).get("effectiveParty"),
         "total_from_pacs": funding.get("totalFromPACs") or 0,
         "small_donor_percentage": funding.get("smallDonorPercentage") or 0,
-        "outside_spending_for": funding.get("outsideSpendingFor"),
         "website_url": data.get("officialWebsiteUrl") or "",
         "contact_form_url": data.get("contactFormUrl") or "",
         "office_phone": data.get("officePhone") or "",
@@ -1340,22 +1338,12 @@ async def run_senate_pipeline(
                         client, db, committee_id, cycles=recent_cycles
                     )
 
-                outside = await fetch_outside_spending(
-                    client, db, candidate_id, cycles=recent_cycles
-                )
-                logger.info(
-                    "Outside spending for %s: $%.0f",
-                    senator["name"],
-                    outside.get("totalFor", 0),
-                )
-
                 fec_data[senator["id"]] = {
                     "candidate": candidate,
                     "financials": financials,
                     "receipts": receipts,
                     "pacReceipts": pac_receipts_data,
                     "aggregated": aggregated,
-                    "outsideSpending": outside,
                 }
                 progress.update("fetch_fec", done=fec_idx + 1)
             logger.info(
@@ -1573,7 +1561,6 @@ async def run_senate_pipeline(
                         fec.get("aggregated") or [],
                         ai_classifications=ai_classifications,
                         db_session=db,
-                        outside_spending=fec.get("outsideSpending"),
                         committee_type_map=committee_type_map,
                     )
                 else:

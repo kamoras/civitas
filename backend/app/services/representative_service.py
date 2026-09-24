@@ -414,7 +414,6 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
     existing.caucus_party = (rep_data.get("votingRecord") or {}).get("effectiveParty")
     existing.total_from_pacs = funding.get("totalFromPACs", 0)
     existing.small_donor_percentage = funding.get("smallDonorPercentage", 0)
-    existing.outside_spending_for = funding.get("outsideSpendingFor")
     voting_record = rep_data.get("votingRecord", {})
     existing.website_url = rep_data.get("officialWebsiteUrl") or ""
     existing.contact_form_url = rep_data.get("contactFormUrl") or ""

@@ -34,6 +34,9 @@ from enum import StrEnum
 # "kept independently visible, excluded from the weighted sum" pattern as
 # promisePersistence below — it just no longer has its own SCORE_WEIGHTS
 # entry or top-level scorecard panel.
+# v6.13: source breadth left fundingIndependence again (a second copy of
+# the small-donor share, R^2 0.79-0.86 on FEC data — see
+# docs/research/funding-independence.md); industry concentration stays.
 #
 # promisePersistence removed entirely (2026-07, ALGORITHM_VERSION v6.0):
 # a live measurement across all 100 senators found 0 of 100 reached even

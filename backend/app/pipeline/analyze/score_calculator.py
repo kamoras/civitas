@@ -1073,6 +1073,15 @@ logger = logging.getLogger(__name__)
 # showed no penalty to discount for), and the party_ideology_bounds.json
 # file that only the discount read. The v6.6-v6.11 notes above describe
 # designs this replaces.
+#
+# Also v6.13 — Funding Independence counts each signal once (see
+# _calc_funding_independence and docs/research/funding-independence.md;
+# FEC bulk data, 2020-2024 incumbents): outside spending left the PAC share
+# (it tracked race competitiveness, Spearman with |PVI| -0.37/-0.39, and
+# ran opposite to PAC share), source breadth was removed (R^2 0.79-0.86
+# with the small-donor share), and the industry-concentration fallback is
+# a neutral 50 instead of a third copy of the small-donor share. The
+# remaining weights keep their proportions (20:10:10:13 over 53).
 ALGORITHM_VERSION = "v6.13"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
@@ -1697,117 +1706,79 @@ def _calc_funding_independence(
     """
     Funding Independence Score (0-100, higher = better).
 
-    Five components (the last two folded in from the former Funding
-    Diversity dimension, v6.5 — see this file's v6.4->v6.5 changelog note),
-    calibrated so the median senator scores ≈50 on each (empirical
-    distributions from the 2026-06 audit of FEC cycle totals):
+    Measured on the member's most recent completed election, with every
+    share taken over contributions (fetch/fec.select_recent_elections,
+    normalize_finance.summarize_election_totals). Four components; the
+    chamber references each is scored against are measured every run
+    (compute_funding_reference — AGENTS.md §3a):
 
-      1. PAC dependency (50%): PAC *share*, scaled by how close the
-         contributing PACs actually are to their legal per-election
-         maximum.  Share: fraction of funding from PACs (FEC cycle
-         totals, Schedule A) plus half-weighted outside spending
-         (Schedule E independent expenditures supporting the candidate).
-         Chamber-specific multiplier (2026-07 re-audit, see
-         scripts/audit_pac_ratio.py): House candidates rely on PAC money
-         far more heavily than Senate candidates — live medians are 37.1%
-         (House) vs. 15.7% (Senate), a real structural difference, not
-         noise — so a single shared multiplier (previously ×2.0,
-         calibrated against a stale, Senate-skewed ≈28% assumption)
-         miscalibrated both chambers. Each chamber's own median now
-         scores 50 (multiplier 0.5 / median, the median measured every
-         run by compute_funding_reference; the 2026-07 values ×1.35 House
-         and ×3.2 Senate were hand-typed until v6.13) — this is
-         this platform's own empirical calibration, not a figure
-         reproduced from any paper (see the Academic rationale note below
-         for why).  Utilization factor (2026-07): PAC checks are capped
-         by law while individual money isn't, so share alone has a
-         mechanical scale bias — a $100M campaign dilutes millions of
-         PAC dollars to a near-invisible share (2026-07 audit measured FI
-         vs log(total raised) at r=+0.68). Rather than penalize by
-         absolute PAC dollars raised (a blunt proxy for the same
-         concern), this measures the real thing directly: for each
-         contributing PAC with a resolved committee type, how much of
-         its legal per-election cap ($5,000 for a Qualified/multicandidate
-         PAC, $3,500 for a Nonqualified one — FEC 2025-2026 limits) did it
-         actually use. Dollar-weighted across all such PACs, since a PAC
-         maxing out signals a deeper commitment than ten PACs each
-         giving a token amount. Falls back to the old dollar-based
-         penalty when no contributing PAC has a resolved committee type
-         (e.g. all lookups failed) — missing data degrades gracefully
-         rather than silently skipping the correction.
+      1. PAC dependency (20/53): PAC share of contributions, scored so the
+         chamber's median member lands at 50 (House members rely on PAC
+         money far more than senators — a structural difference, not a
+         choice), then scaled by how close the contributing PACs ran to
+         their legal per-election caps ($5,000 multicandidate / $3,500
+         other, FEC 2025-26). Share alone has a scale bias: a $100M
+         campaign dilutes millions of PAC dollars to a small share
+         (2026-07 audit: FI vs log(total raised) r=+0.68), so the cap
+         utilization of each PAC with a known committee type measures
+         the depth of the commitment directly. Without committee-type
+         data, the absolute PAC dollars are scaled against twice the
+         chamber median instead.
+      2. Small-donor share (10/53): unitemized (<$200) contributions,
+         against what the state's size predicts for senators
+         (small_donor_baseline.json) and against the House median for
+         representatives (_small_donor_capacity_score).
+      3. Top-donor concentration (10/53): top-10 external donors as a share
+         of the itemized external donor pool (self-funding and affiliated
+         transfers excluded), scored against the chamber median with one
+         p10-p90 spread saturating.
+      4. Industry concentration (13/53): inverse HHI across classified
+         industries (_industry_concentration), shrunk toward a neutral 50
+         as less of the money is industry-classified.
 
-      2. Small-donor share (25%, Senate only — see
-         _small_donor_capacity_score): unitemized (<$200) contributions as
-         a share of total receipts, scored relative to what this state's
-         population predicts rather than a flat cap (2026-07 audit: small
-         states average 10.4% small-donor share vs 23.4% in large states —
-         a structural fact about donor-pool size and media exposure, not a
-         funding choice — while PAC dollar amounts were flat-to-higher in
-         small states, so only this component needed the fix). House
-         members keep the original flat-cap behavior: full credit at 40%
-         (audit p90 ≈43%); median ≈17% scores ≈43.
+    Removed in v6.13, each on measured evidence (FEC bulk data, 2020-2024
+    incumbents with >$100K raised: 415 House / 86 Senate with seat lean;
+    1,276 total; reproduce with scripts/audit_funding_components.py):
 
-      3. Relative top-donor concentration (25%): top-10 external donors as
-         a share of the full external donor pool (candidate-affiliated
-         transfers and self-funding excluded — they are the candidate's
-         own money, not donor influence).  The v3 metric divided top-10 by
-         *total raised*, which is structurally near-zero for $50M+
-         fundraisers (itemized employer-aggregated donations are always a
-         tiny share of a mega-campaign), so large fundraisers scored
-         90–100 regardless of how concentrated their donor base was.
-         The relative pool ratio discriminates at any scale. Recalibrated
-         2026-07-23 against the live population (n=453, both chambers —
-         the earlier "median 0.60" figure had drifted to roughly double
-         the real distribution, real median 0.28); current anchors (0.15
-         -> 100, 0.40 -> 0) land the real median at ≈49, p10 (0.21) at
-         ≈75, p90 (0.38) at ≈7 — see _funding_independence_core's own
-         comment on this component for the full derivation.
+      - Outside spending in the PAC share. Independent expenditures
+        supporting the member were added at half weight as "aligned-
+        industry investment". They are by law not coordinated with the
+        candidate (52 U.S.C. §30101(17)), 86% came from super PACs and
+        hybrid PACs rather than industry PACs, and they track race
+        competitiveness, not dependency: the term averaged 0.069 in House
+        seats within 3 points of even vs 0.010 beyond 8 (Spearman with
+        |PVI| -0.37 House, -0.39 Senate), and ran OPPOSITE to PAC share
+        (-0.28 / -0.32). It penalized swing-seat members for money they
+        cannot solicit or direct — about 28 points off the PAC component
+        for the average senator in a seat within 3 points of even (8 in
+        the House), against 8 and 1 in seats beyond 15. Super PACs
+        concentrating in competitive races is also documented directly
+        (Scala 2021, "Are Super PACs Super-Efficient?", State of the
+        Parties).
+      - Source breadth (13/66). It scored small-donor money at 1.0,
+        industry money 0.6-0.5 and "opaque" money (party, the candidate's
+        own) 0.2, so it was a second copy of the small-donor share: R^2
+        0.79-0.86 against it across plausible classification rates. Its
+        remaining signal penalized self-funding, the one money source no
+        donor can influence.
+      - The industry-concentration fallback toward "50 + 50 x small-donor
+        share" when little money is classified — a third copy of the
+        small-donor share. Unmeasurable concentration is now neutral 50,
+        like every other missing input in this file.
 
-      4. Source breadth (formerly Funding Diversity's 1st component): how
-         broad and distributed the funding base is — small-donor money
-         counts fullest, classified-industry money partially, UNCLASSIFIED
-         (unattributable, not evidence of concentration) neutrally, opaque
-         OTHER/POLITICAL money least. See _funding_diversity_core's own
-         docstring for the full derivation, reused unchanged here.
-
-      5. Industry concentration (formerly Funding Diversity's 2nd
-         component): inverse HHI across classified industry categories,
-         blended toward a grassroots-scaled neutral when too little
-         funding is industry-classified to measure HHI meaningfully. Same
-         reuse as above.
-
-    Internal weights for all five: a linear renormalization of each
-    component's PRIOR contribution to the overall score under the pre-v6.5
-    two-dimension split (see the score = clamp(...) line below for the
-    exact fractions) — not a fresh judgment call: the continuous math is
-    provably identical to the pre-merge weighted sum. clamp() rounds to an
-    int though, and this merge moves from two independent roundings (FI,
-    then FD) to one, so an individual senator's overall score can shift by
-    roughly half a point from that reorganization alone, not from a new
-    weighting decision.
+    The remaining weights keep their pre-v6.13 proportions (20:10:10:13),
+    renormalized over the four components — no new weighting judgment.
 
     Academic rationale
     ------------------
-    Neither Barber (2016, POQ 80(S1)) nor Bonica (2014, AJPS 58(2)) contains
-    a PAC-dependency or donor-concentration calibration figure — verified by
-    full-text search (2026-07 audit): Barber (2016) studies donor/partisan/
-    voter ideological congruence, not PAC funding shares, and Bonica (2014)
-    is a CFscore ideological-scaling methodology paper, not a donor-
-    concentration-by-rank study. Both are cited elsewhere in this file for
-    what they actually establish (donor-vote alignment framing, Constituent
-    Alignment); neither one calibrates the ×2.0 PAC multiplier or the
-    concentration curve below, which are this platform's own empirical
-    audit findings, not numbers reproduced from either paper's tables. The
-    28% PAC-ratio figure should be periodically re-verified against a fresh
-    audit (see scripts/audit_pac_ratio.py) the same way the concentration
-    component's 60% median already is. Stratmann (2005, Public Choice
-    124(1–2), 135–156) is a real, on-topic academic source: it finds a
-    linear PAC-contribution-to-vote relationship, which is genuine support
-    for using a linear (not step-function or logarithmic) PAC-dependency
-    curve — that citation stays. Source breadth and industry concentration
-    carry their own academic notes on _calc_funding_diversity, reused
-    unchanged (Bonica 2014/Malbin 2009 for the small-dollar grassroots
-    proxy; Parmigiani 2025/Rhoades 1993 for the HHI concentration metric).
+    Stratmann (2005, Public Choice 124(1-2), 135-156) finds a linear
+    PAC-contribution-to-vote relationship — support for a linear (not
+    step or logarithmic) PAC-dependency curve. Neither Barber (2016, POQ
+    80(S1)) nor Bonica (2014, AJPS 58(2)) calibrates a PAC or concentration
+    figure (verified by full-text search, 2026-07); every anchor here is
+    measured from the chamber itself. Industry concentration follows
+    Parmigiani (2025, J. Public Econ. 243), which computes the same HHI per
+    legislator.
     """
     return _funding_independence_core(funding, state, district, reference)["score"]
 
@@ -1908,17 +1879,10 @@ def _funding_independence_core(
     if not total_raised or total_raised == 0:
         return {"score": 50, "components": [], "note": "No funding data — neutral default."}
 
-    # Component 1: PAC dependency incl. outside spending (50% weight)
+    # Component 1: PAC dependency. Outside spending is deliberately not in
+    # it (removed v6.13 — see the docstring's measured account).
     pac_total = funding.get("totalFromPACs", 0)
     pac_ratio = pac_total / total_raised
-
-    # Outside spending is not controlled by the candidate but signals
-    # aligned-industry investment in the seat. Half-weight because it is
-    # less direct than a contribution.
-    outside_for = funding.get("outsideSpendingFor", 0) or 0
-    if outside_for > 0:
-        effective_outside = outside_for / (total_raised + outside_for) * 0.5
-        pac_ratio = min(pac_ratio + effective_outside, 1.0)
 
     # Chamber-relative: the chamber's MEDIAN PAC share scores 50
     # (multiplier = 0.5 / median). House candidates rely on PAC money far
@@ -2037,59 +2001,37 @@ def _funding_independence_core(
             "— too few to measure concentration, neutral 50"
         )
 
-    # Components 4-5: source breadth and industry concentration (folded in
-    # from the former Funding Diversity dimension, v6.5 — see this file's
-    # v6.4->v6.5 changelog note and config_definitions.SCORE_WEIGHTS's
-    # docstring for the r=0.72 rationale). Reuses _funding_diversity_core
-    # rather than reimplementing its formula — single source of truth,
-    # same reuse contract this file already follows elsewhere. Falls back
-    # to a neutral 50 with the same "missing data" phrasing the rest of
-    # this file uses when industryBreakdown isn't available; total_raised
-    # is already known nonzero at this point (checked above).
-    fd_components = {c["label"]: c for c in _funding_diversity_core(funding)["components"]}
-    breadth_score = fd_components.get("Source breadth", {}).get("score", 50.0)
-    breadth_detail = fd_components.get("Source breadth", {}).get(
-        "detail", "no industry breakdown available — neutral 50"
-    )
-    industry_concentration_score = fd_components.get("Industry concentration", {}).get("score", 50.0)
-    industry_concentration_detail = fd_components.get("Industry concentration", {}).get(
-        "detail", "no industry breakdown available — neutral 50"
+    # Component 4: industry concentration (folded in from the former
+    # Funding Diversity dimension, v6.5). Money too little of which is
+    # industry-classified is neutral 50 here — not Funding Diversity's
+    # grassroots-scaled fallback, which would count the small-donor share
+    # (component 2) a second time.
+    industry_concentration_score, industry_concentration_detail = _industry_concentration(
+        funding, total_raised, missing_score=50.0,
     )
 
-    # Internal weights: a linear renormalization of each component's PRIOR
-    # contribution to the OVERALL score, not a fresh judgment call — old FI
-    # weight 0.20 x its own 50/25/25 split, old FD weight 0.13 x its own
-    # 50/50 split, each divided by the merged dimension's new 0.33 weight.
-    # 20:10:10:13:13 out of 66 (= 0.10:0.05:0.05:0.065:0.065 / 0.33). This
-    # is why folding the two dimensions together doesn't change the
-    # underlying weighting logic — clamp()'s rounding (each dimension to
-    # an int) still applies once instead of twice, so an individual
-    # senator's overall score can shift by roughly half a point from that
-    # alone, not from any new judgment call about relative importance.
     score = clamp(
-        pac_score * (20 / 66)
-        + small_score * (10 / 66)
-        + concentration_score * (10 / 66)
-        + breadth_score * (13 / 66)
-        + industry_concentration_score * (13 / 66)
+        pac_score * (20 / 53)
+        + small_score * (10 / 53)
+        + concentration_score * (10 / 53)
+        + industry_concentration_score * (13 / 53)
     )
     return {
         "score": score,
         "components": [
             {
                 "label": "PAC dependency",
-                "weight": round(20 / 66, 4),
+                "weight": round(20 / 53, 4),
                 "score": round(pac_score, 1),
                 "detail": (
                     f"{pac_ratio:.0%} of ${total_raised:,.0f} in contributions came from PACs"
-                    + (" (incl. outside spending)" if outside_for > 0 else "")
-                    + f" → raw {ratio_score:.1f}, scaled ×{volume_factor:.2f} "
+                    f" → raw {ratio_score:.1f}, scaled ×{volume_factor:.2f} "
                     f"({volume_detail_suffix})"
                 ),
             },
             {
                 "label": "Small-donor share",
-                "weight": round(10 / 66, 4),
+                "weight": round(10 / 53, 4),
                 "score": round(small_score, 1),
                 "detail": (
                     f"{small_pct:.0f}% of contributions from small (<$200) donors"
@@ -2102,20 +2044,14 @@ def _funding_independence_core(
             },
             {
                 "label": "Top-donor concentration",
-                "weight": round(10 / 66, 4),
+                "weight": round(10 / 53, 4),
                 "score": round(concentration_score, 1),
                 "detail": concentration_detail,
             },
             {
-                "label": "Source breadth",
-                "weight": round(13 / 66, 4),
-                "score": breadth_score,
-                "detail": breadth_detail,
-            },
-            {
                 "label": "Industry concentration",
-                "weight": round(13 / 66, 4),
-                "score": industry_concentration_score,
+                "weight": round(13 / 53, 4),
+                "score": round(industry_concentration_score, 1),
                 "detail": industry_concentration_detail,
             },
         ],
@@ -2692,6 +2628,45 @@ def _calc_funding_diversity(funding: dict) -> int:
     return _funding_diversity_core(funding)["score"]
 
 
+def _industry_concentration(
+    funding: dict, total_raised: float, missing_score: float, missing_label: str = "neutral",
+) -> tuple[float, str]:
+    """(score, detail) for industry concentration: inverse HHI across
+    classified industries — a member whose PAC and itemized money all comes
+    from one industry is more captured than one whose money spans eight
+    (Parmigiani 2025 computes the same HHI per legislator). Small donors
+    and unclassified large individuals are excluded; they are not
+    industry-specific money.
+
+    When less than 5% of the money is industry-classified, HHI on that
+    slice is noise, so the score is `missing_score`; between 5% and 40% it
+    is shrunk toward `missing_score` in proportion to the classified
+    share. Funding Independence passes a neutral 50; Funding Diversity
+    passes its grassroots-scaled neutral (see _funding_diversity_core)."""
+    industries = [
+        ind for ind in funding.get("industryBreakdown") or []
+        if ind.get("industry") not in NON_INDUSTRY_CODES
+    ]
+    if not industries or not total_raised:
+        return missing_score, f"no industry breakdown available — {missing_label} {missing_score:.0f}"
+    total_known = sum(ind.get("total", 0) for ind in industries)
+    total_known_pct = total_known / total_raised * 100
+    if total_known_pct < 5 or total_known <= 0:
+        return missing_score, (
+            f"only {total_known_pct:.1f}% of funding is industry-classified — "
+            f"too little to measure HHI, {missing_label} {missing_score:.0f}"
+        )
+    hhi = sum((ind.get("total", 0) / total_known) ** 2 for ind in industries)
+    raw = (1 - max(0, min((hhi - 0.10) / 0.90, 1.0))) * 100
+    relevance = min(total_known_pct / 40, 1.0)
+    score = raw * relevance + missing_score * (1 - relevance)
+    return score, (
+        f"HHI={hhi:.3f} across {len(industries)} industries → raw {raw:.1f}, "
+        f"blended {relevance:.0%} with {missing_label} {missing_score:.0f} "
+        f"({total_known_pct:.0f}% of funding industry-classified)"
+    )
+
+
 def _funding_diversity_core(funding: dict) -> dict:
     """Same math as _calc_funding_diversity, returning every intermediate
     value alongside the final score. Single implementation, same reuse
@@ -2735,20 +2710,6 @@ def _funding_diversity_core(funding: dict) -> dict:
     )
     breadth_score = min(breadth, 1.0) * 100
 
-    # Signal 2: industry concentration (inverse HHI)
-    # Measures whether the non-grassroots money is spread across
-    # industries or concentrated in one. Small donors and large
-    # unclassified individuals are excluded — they're not industry-
-    # specific money and their concentration is already captured in
-    # Signal 1.  A senator with all PAC money from PHARMA is more
-    # captured than one whose PAC money spans 8 industries.
-    industries = [
-        ind for ind in industry_breakdown
-        if ind.get("industry") not in NON_INDUSTRY_CODES
-    ]
-    total_known = sum(ind.get("total", 0) for ind in industries) if industries else 0
-    total_known_pct = total_known / total_raised * 100
-
     # Fallback/blend target for when classified industry money is too
     # thin a slice to measure HHI on. Previously a flat step (65 if
     # small_frac > 0.3 else 50) regardless of how far past 0.3 small_frac
@@ -2766,38 +2727,10 @@ def _funding_diversity_core(funding: dict) -> dict:
     # at that point, not a discontinuous jump) lets that reward grow all
     # the way to 100 for a hypothetical fully-small-dollar campaign.
     grassroots_neutral = 50 + small_frac * 50
-
-    if total_known_pct < 5:
-        # Very little classified industry money — HHI is meaningless
-        # noise on a tiny slice. Default to the grassroots-scaled neutral.
-        concentration_score = grassroots_neutral
-        concentration_detail = (
-            f"only {total_known_pct:.1f}% of funding is industry-classified — "
-            f"too little to measure HHI, defaults to grassroots-scaled neutral "
-            f"({small_frac:.0%} small-donor share → {grassroots_neutral:.0f})"
-        )
-    else:
-        hhi = sum(
-            (ind.get("total", 0) / total_known) ** 2
-            for ind in industries
-        )
-        normalized = max(0, min((hhi - 0.10) / 0.90, 1.0))
-        raw_concentration = (1 - normalized) * 100
-
-        # When industry money is a small fraction of total funding,
-        # its concentration matters less. Blend toward neutral based
-        # on how much of total funding is industry-classified.
-        industry_relevance = min(total_known_pct / 40, 1.0)
-        concentration_score = (
-            raw_concentration * industry_relevance
-            + grassroots_neutral * (1 - industry_relevance)
-        )
-        concentration_detail = (
-            f"HHI={hhi:.3f} across {len(industries)} industries → raw "
-            f"{raw_concentration:.1f}, blended {industry_relevance:.0%} with "
-            f"grassroots-scaled neutral {grassroots_neutral:.0f} "
-            f"({total_known_pct:.0f}% of funding industry-classified)"
-        )
+    concentration_score, concentration_detail = _industry_concentration(
+        funding, total_raised, missing_score=grassroots_neutral,
+        missing_label=f"grassroots-scaled neutral ({small_frac:.0%} small-donor share)",
+    )
 
     score = clamp(breadth_score * 0.5 + concentration_score * 0.5)
     return {
@@ -2828,9 +2761,8 @@ def _funding_diversity_core(funding: dict) -> dict:
 # minority status makes achievable — Volden & Wiseman (2014) show minority
 # sponsors advance bills at a fraction of the majority rate, and scoring
 # against a single absolute threshold silently penalizes whichever party
-# is out of power. Baseline rates are measured from this platform's own
-# bill corpus (2026-07: senate 3.6% majority / 2.4% minority over 24,294
-# bills; house 6.4% / 2.4% over 13,510).
+# is out of power. The majority/minority advancement rates themselves are
+# measured each run from the chamber's own bills (_measure_advancement_rates).
 _SENATE_MAJORITY: dict[int, str] = {
     104: "R", 105: "R", 106: "R", 107: "D", 108: "R", 109: "R", 110: "D",
     111: "D", 112: "D", 113: "D", 114: "R", 115: "R", 116: "R", 117: "D",

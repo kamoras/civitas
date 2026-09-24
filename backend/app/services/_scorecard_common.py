@@ -41,7 +41,6 @@ def build_score_breakdown_entity(entity: Any, *, lobbying_donation_attr: str) ->
         "totalContributions": entity.total_contributions,
         "totalFromPACs": entity.total_from_pacs,
         "smallDonorPercentage": entity.small_donor_percentage,
-        "outsideSpendingFor": entity.outside_spending_for,
         "topDonors": [
             {"name": d.name, "total": d.total, "type": d.type, "committeeType": d.committee_type}
             for d in entity.donors

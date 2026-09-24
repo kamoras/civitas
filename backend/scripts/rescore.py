@@ -26,8 +26,7 @@ Limitations:
 - Promise alignments and House vote labels are recomputed only by real
   pipeline runs; this harness scores from stored data.
 - totalFromPACs is corrected from cached FEC financials when available
-  (mirroring normalize_finance v4); outsideSpendingFor uses the stored
-  senator value unless cached outside-spending data exists.
+  (mirroring normalize_finance v4).
 """
 
 import argparse
@@ -187,7 +186,6 @@ def build_payload(cur, s, search, fin):
             "smallDonorPercentage": small_donor_pct,
             "topDonors": top_donors[:100],
             "industryBreakdown": industry,
-            "outsideSpendingFor": 0,
         },
         "votingRecord": {"keyVotes": key_votes, "recentVotes": []},
         "lobbyingMatches": matches,

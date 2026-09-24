@@ -132,7 +132,7 @@ Pulls raw data from each government API and stores the complete response verbati
 | Source | What is fetched | Rate limit |
 |--------|-----------------|------------|
 | Congress.gov | Bills sponsored/cosponsored (last 2 years), roll-call votes | 1.2 RPS |
-| FEC API | Campaign finance transactions, committee receipts, outside spending | 0.25 RPS |
+| FEC API | Campaign finance transactions, committee receipts, PAC committee types | 0.25 RPS |
 | GovInfo API | Full bill text for key votes (PDF → text extraction) | 1.0 RPS |
 | Senate.gov | Floor speeches, press remarks (scraped; no public API) | polite crawl |
 | Oyez / SCOTUS | Justice voting records, case metadata | 0.5 RPS |
@@ -572,7 +572,7 @@ The weights live in `SCORE_WEIGHTS` (`backend/app/config_definitions.py`) and ar
 
 The exact formulas are actively iterated (v1 → v6.12 as of this writing, each change measured against real data) and are documented in full — every component's weight, calibration source, and academic citation — in the module docstring of `backend/app/pipeline/analyze/score_calculator.py`, which is the source of truth. Rather than duplicate formulas here that will drift out of sync as the algorithm evolves (as this section previously did), a summary:
 
-- **Funding Independence**: PAC dependency (share scaled by how close contributing PACs run to their legal caps, chamber-specific multiplier), state-relative small-donor share, relative top-donor concentration, plus the two signals folded in from the former Funding Diversity dimension (source breadth, inverse-HHI industry concentration).
+- **Funding Independence**: PAC dependency (share scaled by how close contributing PACs run to their legal caps, chamber-specific multiplier), state-relative small-donor share, relative top-donor concentration, and inverse-HHI industry concentration (folded in from the former Funding Diversity dimension). v6.13 removed outside spending and source breadth after testing both against FEC data: outside spending tracks race competitiveness, and breadth was the small-donor share counted again (see `docs/research/funding-independence.md`).
 - **Constituent Alignment** (stored/keyed as `independentVoting` for API compatibility — the dimension was rebuilt in v4.2): how a member's voting compares to what their *seat* elected them to do. Party-line voting in a safe seat that elected that platform scores as representation, not as a failure of independence — the delegate model of representation (Miller & Stokes 1963), not independence as an intrinsic virtue. The member's break rate is scored against the break rate same-party members show at the same seat lean, measured from the chamber every run (`compute_constituent_reference`); the member's Nokken-Poole roll-call position (Voteview) is scored against a seat-conditional per-party expectation (Canes-Wrone, Brady & Cogan 2002's district-relative extremity). Both are symmetric and apply the same way in safe and competitive seats — v6.13 decided each of those choices by testing them against House re-election results (see `docs/research/constituent-alignment.md`). Ideal points are ingested automatically every pipeline run (`app/pipeline/fetch/voteview.py`, ingestion-gated) — no manual step.
 - **Legislative Effectiveness**: significance-weighted, cumulative-stage bill credit (Volden & Wiseman 2014-based, benchmarked against the sponsor's chamber and majority/minority baseline, not an absolute threshold — the chamber's reference is re-measured from its current members every pipeline run), cosponsorship-network leadership (PageRank, tenure-confidence-scaled), and bipartisan coalition attraction (v6.11, moved from Constituent Alignment — the receive-only share of cross-party cosponsors a member attracts to their own bills, the construct Harbridge-Yong, Volden & Wiseman 2023 show predicts lawmaking success).
 
@@ -582,7 +582,7 @@ Each senator and House representative carries five sub-scores (0-100, higher = b
 
 | Metric | Weight | What It Measures | Key Reference |
 |--------|--------|------------------|---------------|
-| **Funding Independence** | 33% | PAC dependency + small-donor share + top-donor concentration + source breadth + industry concentration | Stratmann 2005; Parmigiani 2025 |
+| **Funding Independence** | 33% | PAC dependency + small-donor share + top-donor concentration + industry concentration | Stratmann 2005; Parmigiani 2025 |
 | **Constituent Alignment** | 33% | Break rate vs. same-party members in same-lean seats + roll-call position congruence (Nokken-Poole vs. seat-conditional norm) | Carson et al. 2010; Canes-Wrone, Brady & Cogan 2002; Nokken & Poole 2004 |
 | **Legislative Effectiveness** | 34% | Significance-weighted stage credit (majority-status-benchmarked) + cosponsorship leadership (PageRank) + bipartisan coalition attraction | Volden & Wiseman 2014; Harbridge-Yong, Volden & Wiseman 2023 |
 | Promise Persistence | unweighted (v6.0) | Campaign commitments kept vs. broken + vote participation | Naurin 2011; Martin 2011 |
@@ -722,7 +722,7 @@ Each score shown in the UI links to a "data basis" view that surfaces the raw da
 
 | Score | Data shown |
 |-------|------------|
-| Funding Independence | Top 10 donors by amount, PAC fraction, outside spending total |
+| Funding Independence | Top 10 donors by amount, PAC fraction |
 | Promise Persistence | Per-promise verdict (kept/broken/partial), supporting vote or speech |
 | Constituent Alignment | Key votes where member broke with party, bill title + vote |
 | Funding Diversity | Industry breakdown pie chart from `IndustryDonation` records |

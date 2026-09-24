@@ -123,7 +123,6 @@ checks = [
     ("Has campaign promises",  "EXISTS(SELECT 1 FROM campaign_promises cp WHERE cp.senator_id=s.id)"),
     ("Has lobbying matches",   "EXISTS(SELECT 1 FROM lobbying_matches lm WHERE lm.senator_id=s.id)"),
     ("Has industry breakdown", "EXISTS(SELECT 1 FROM industry_donations id2 WHERE id2.senator_id=s.id)"),
-    ("Has outside spending",   "total_raised > 0"),  # proxy — check actual field if column exists
 ]
 
 print(f"DATA COVERAGE ({total} senators total)")
@@ -460,7 +459,7 @@ After running the audit, use this framework to decide what to change:
 | stdev < 8 on any dimension | Formula too narrow, or defaults dominate | Recalibrate multipliers; check default values |
 | mean > 65 on any dimension | Missing data treated as positive | Change "no data" default from positive to neutral (50) |
 | PP×IV correlation > 0.4 | PP fallback using vote data | Remove voting fallback from PP; use 50 |
-| FI > 85 for high-fundraising senators | Outside spending not captured | Check outsideSpendingFor field; verify FEC Schedule E fetch |
+| FI > 85 for high-fundraising senators | PAC committee types unresolved, so the dollar fallback applied | Check donors.committee_type coverage; verify fetch_committee_type. (Outside spending is deliberately not scored since v6.13 — see docs/research/funding-independence.md) |
 | Derived consistency check ✗ | Vote/finance matching broken, or algorithm regression | The failure's rationale names the raw metric that decoupled; check key_votes/donor tables and the corresponding fetch |
 | >20% senators in data desert | API fetch failure | Check API cache, rate limits, name matching |
 | High score variance (>15 pts) on specific senator | Inconsistent vote/FEC matching | Add name normalization or use bioguide_id as primary key |

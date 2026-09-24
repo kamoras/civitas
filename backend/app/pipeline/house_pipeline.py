@@ -52,7 +52,6 @@ from app.pipeline.fetch.fec import (
     fetch_candidate_financials,
     fetch_committee_receipts,
     fetch_committee_type,
-    fetch_outside_spending,
     fetch_pac_receipts,
     find_candidate,
     reset_run_state as reset_fec_run_state,
@@ -699,15 +698,6 @@ async def run_house_pipeline() -> dict:
                                 raw_pac_receipts.extend(await fetch_pac_receipts(client, db, comm_id, cycles=recent_cycles))
                                 aggregated.extend(await fetch_aggregated_contributors(client, db, comm_id, cycles=recent_cycles))
 
-                        outside = await fetch_outside_spending(
-                            client, db, cand_id, cycles=recent_cycles
-                        )
-                        logger.info(
-                            "Outside spending for %s: $%.0f",
-                            rep_name,
-                            outside.get("totalFor", 0),
-                        )
-
                         # Resolve PAC committee types (multicandidate vs not) for
                         # the PAC-utilization signal in
                         # score_calculator._funding_independence_core.
@@ -728,7 +718,7 @@ async def run_house_pipeline() -> dict:
 
                         finance_data = normalize_finance(
                             fec_candidate, financials, raw_receipts, raw_pac_receipts,
-                            aggregated, db_session=db, outside_spending=outside,
+                            aggregated, db_session=db,
                             committee_type_map=committee_type_map,
                         )
                         rep["funding"] = finance_data

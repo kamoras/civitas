@@ -32,8 +32,8 @@ function getScoreGrade(score: number): string {
   return "F";
 }
 
-// v6.5: fundingDiversity folded into fundingIndependence as two of its
-// five components (source breadth, industry concentration) — no longer
+// v6.5: fundingDiversity folded into fundingIndependence (its industry
+// concentration is one of FI's components since v6.13) — no longer
 // its own scored dimension or card here. score_funding_diversity keeps
 // being computed/stored for other consumers (e.g. Bluesky spotlight
 // text), so it's deliberately NOT in this list, not an oversight.

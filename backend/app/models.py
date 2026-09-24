@@ -132,12 +132,6 @@ class Senator(Base):
     caucus_party: Mapped[str | None] = mapped_column(String(1), nullable=True)
     total_from_pacs: Mapped[float] = mapped_column(Float, default=0.0)
     small_donor_percentage: Mapped[float] = mapped_column(Float, default=0.0)
-    # Super PAC independent expenditures supporting the candidate (FEC
-    # Schedule E). Persisted so the on-demand score-breakdown endpoint can
-    # reproduce _funding_independence_core's exact PAC-ratio math — this
-    # was previously only held in the pipeline's local `funding` dict and
-    # discarded once folded into score_funding_independence.
-    outside_spending_for: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     partisan_depth: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -240,7 +234,7 @@ class LobbyingMatch(Base):
     senator_vote_aligned: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=None)
     # Whether the matched donor-related votes were consensus (near-unanimous)
     # votes. Persisted for the same on-demand breakdown-recompute reason as
-    # Senator.outside_spending_for above — previously only lived in
+    # Senator.total_contributions above — previously only lived in
     # policy_alignment.py's transient match dict.
     is_consensus_vote: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     description: Mapped[str] = mapped_column(Text, default="")
@@ -356,12 +350,6 @@ class Representative(Base):
     caucus_party: Mapped[str | None] = mapped_column(String(1), nullable=True)
     total_from_pacs: Mapped[float] = mapped_column(Float, default=0.0)
     small_donor_percentage: Mapped[float] = mapped_column(Float, default=0.0)
-    # Super PAC independent expenditures supporting the candidate (FEC
-    # Schedule E). Persisted so the on-demand score-breakdown endpoint can
-    # reproduce _funding_independence_core's exact PAC-ratio math — this
-    # was previously only held in the pipeline's local `funding` dict and
-    # discarded once folded into score_funding_independence.
-    outside_spending_for: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     partisan_depth: Mapped[str | None] = mapped_column(Text, nullable=True)
 

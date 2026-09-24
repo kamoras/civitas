@@ -227,7 +227,7 @@ export default function AboutPage() {
                   and grassroots the money, the higher this score — regardless of party or chamber.
                 </Gist>
                 <P>
-                  Measures five dimensions: (1) PAC dependency — a blend of the share of funding
+                  Measures four things: (1) PAC dependency — a blend of the share of funding
                   from PACs and how close contributing PACs are to their legal per-election cap,
                   measured against the chamber&apos;s own median member (re-measured every update),
                   since Senate and House candidates rely on PAC money at structurally different
@@ -242,14 +242,21 @@ export default function AboutPage() {
                   re-election campaign still in progress; (3) relative top-donor
                   concentration — what fraction of the itemized external donor pool comes from the
                   top 10 donors, with the member&apos;s own money and transfers from their own
-                  committees excluded; (4) source breadth — small-donor money counts fully,
-                  industry-classified money counts moderately, and opaque money counts least; and
-                  (5) industry concentration — the inverse Herfindahl-Hirschman Index (HHI) of
-                  industry donations, where funding concentrated in a single industry suggests
-                  potential regulatory capture. Components (4) and (5) were folded in from a
-                  separate Funding Diversity dimension in 2026-07 after finding the two dimensions
-                  correlated at r=0.72 across the Senate — the same underlying funding-profile
-                  signal under two labels, not two genuinely distinct ones. PAC dependency follows
+                  committees excluded; and (4) industry concentration — the inverse
+                  Herfindahl-Hirschman Index (HHI) of industry donations, where funding
+                  concentrated in a single industry suggests potential regulatory capture. When too
+                  little of the money can be assigned to an industry to measure that, it counts as
+                  neutral. Component (4) was folded in from a separate Funding Diversity dimension in
+                  2026-07 after finding the two dimensions correlated at r=0.72 across the Senate.
+                  Two inputs were removed in v6.13 after we checked them against FEC&apos;s own data
+                  for 2020–2024 incumbents. Outside spending (super PAC and other independent
+                  expenditures supporting a member) used to count toward PAC dependency, but it
+                  tracks how competitive the race is, not how dependent the member is: it was
+                  highest in swing seats and lower for members who take more PAC money, and by law
+                  the member cannot direct it. &quot;Source breadth&quot; was the small-donor share
+                  counted a second time (it explained 79–86% of breadth&apos;s variation), plus a
+                  penalty on self-funding. The study is in the project repository at
+                  docs/research/funding-independence.md. PAC dependency follows
                   Stratmann (2005),
                   <Cite id="5">Stratmann 2005</Cite>
                   who found that PAC contributions are more strongly correlated with roll-call

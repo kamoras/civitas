@@ -65,13 +65,14 @@ class TestSenatorCoreConsistency:
     }
 
     def test_funding_independence_core_matches_calc(self):
-        # v6.5: 5 components — the original 3 plus Funding Diversity's
-        # source breadth/industry concentration, folded in (see
-        # config_definitions.SCORE_WEIGHTS's r=0.72 rationale).
+        # v6.13: 4 components — PAC dependency, small-donor share, top-donor
+        # concentration, industry concentration (source breadth removed as
+        # a second copy of the small-donor share).
         breakdown = _funding_independence_core(self.FUNDING)
         assert breakdown["score"] == _calc_funding_independence(self.FUNDING)
-        assert len(breakdown["components"]) == 5
-        assert abs(sum(c["weight"] for c in breakdown["components"]) - 1.0) < 1e-6
+        assert len(breakdown["components"]) == 4
+        # Each displayed weight is rounded to 4 decimals (20/53 etc.).
+        assert abs(sum(c["weight"] for c in breakdown["components"]) - 1.0) < 4 * 5e-5 + 1e-9
 
     def test_constituent_alignment_core_matches_calc(self):
         # v6.5: Donor independence removed (see config_definitions.
@@ -225,7 +226,7 @@ class TestSenatorScoreBreakdownService:
         }
         fi = breakdown["fundingIndependence"]
         assert 0 <= fi["score"] <= 100
-        assert len(fi["components"]) == 5  # v6.5: Funding Diversity folded in
+        assert len(fi["components"]) == 4
 
 
 class TestRepresentativeScoreBreakdownService:
