@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
 from app.models import Candidate, Race, RaceCoverageItem
+from app.api.elections import _coverage_is_displayable
 from app.pipeline.analyze import election_coverage
 
 
@@ -455,86 +456,102 @@ class TestStateOutletSurnameMatchesMustEarnTheirPlace:
     so "the state name appears" corroborates nothing there and
     surname_context degenerates into the bare-surname match it exists to
     prevent. Measured live: state/surname_context items were 37% junk
-    against 14% for the same rule on national feeds."""
+    against 14% for the same rule on national feeds.
 
-    def _item(self, outlet, title, basis="surname_context", relevance=None):
-        return RaceCoverageItem(
+    These are HIDDEN, not deleted. Deleting them churned: the article is
+    still in the outlet's RSS feed, so removing the row is exactly what
+    stops _already_ingested from blocking it, and production logged "36
+    ingested" immediately followed by "Dropped 36", every 15 minutes.
+    """
+
+    def _item(self, db_session, outlet, title, basis="surname_context", relevance=None):
+        item = RaceCoverageItem(
             race_id="2026-SEN-GA", source_type="news", source_name=outlet,
             title=title, url=f"https://example.com/{abs(hash(title))}",
             summary="Georgia coverage mentioning Ossoff.",
             matched_candidate_id="S6GA001", match_basis=basis,
             relevance=relevance,
         )
+        db_session.add(item)
+        db_session.commit()
+        return item
+
+    def _visible(self, db_session):
+        return (db_session.query(RaceCoverageItem)
+                .filter(_coverage_is_displayable(db_session)).all())
 
     def _seed(self, db_session):
         _race(db_session, "2026-SEN-GA", "GA")
         _candidate(db_session, "S6GA001", "2026-SEN-GA", "OSSOFF, JON",
                    has_raised_funds=True)
 
-    def test_a_low_relevance_state_outlet_surname_match_is_dropped(self, db_session):
+    def test_a_low_relevance_state_outlet_surname_match_is_hidden(self, db_session):
         """The live OH-9 case in Georgia dress: a sports story matched
         because a candidate shares the surname and the outlet says the
         state's name as a matter of course."""
         self._seed(db_session)
-        db_session.add(self._item(
-            "Georgia Recorder", "Williams sisters reunite their doubles team",
-            relevance=0.01))
-        db_session.commit()
+        self._item(db_session, "Georgia Recorder",
+                   "Williams sisters reunite their doubles team", relevance=0.01)
 
-        election_coverage._drop_vacuously_corroborated(db_session)
+        assert self._visible(db_session) == []
+        # ...but the row survives, or the next ingest would re-add it.
+        assert db_session.query(RaceCoverageItem).count() == 1
 
-        assert db_session.query(RaceCoverageItem).count() == 0
-
-    def test_a_relevant_state_outlet_surname_match_survives(self, db_session):
+    def test_a_relevant_state_outlet_surname_match_is_shown(self, db_session):
         """Dropping the whole group was measured and costs too much —
         "Poll finds opposition to Maryland redistricting ballot question"
         scored 0.426 on exactly this basis."""
         self._seed(db_session)
-        db_session.add(self._item(
-            "Georgia Recorder",
-            "Ballot question in November would make Georgia's probate judges elected",
-            relevance=0.408))
-        db_session.commit()
+        self._item(db_session, "Georgia Recorder",
+                   "Ballot question would make Georgia's probate judges elected",
+                   relevance=0.408)
 
-        election_coverage._drop_vacuously_corroborated(db_session)
-
-        assert db_session.query(RaceCoverageItem).count() == 1
+        assert len(self._visible(db_session)) == 1
 
     def test_a_national_outlet_surname_match_is_not_gated(self, db_session):
         """The rule applies only where the corroboration is known
         vacuous. On a national feed the state name is real evidence, and
         gating the whole news feed on relevance emptied 64 of 174 races."""
         self._seed(db_session)
-        db_session.add(self._item(
-            "AP", "A Georgia story that mentions Ossoff in passing", relevance=0.01))
-        db_session.commit()
+        self._item(db_session, "AP", "A Georgia story mentioning Ossoff", relevance=0.01)
 
-        election_coverage._drop_vacuously_corroborated(db_session)
-
-        assert db_session.query(RaceCoverageItem).count() == 1
+        assert len(self._visible(db_session)) == 1
 
     def test_a_state_outlet_full_name_match_is_not_gated(self, db_session):
         """full_name is unaffected by which feed an item came from —
         measured at 0.301 national vs 0.295 state."""
         self._seed(db_session)
-        db_session.add(self._item(
-            "Georgia Recorder", "Jon Ossoff draws a challenger",
-            basis="full_name", relevance=0.01))
-        db_session.commit()
+        self._item(db_session, "Georgia Recorder", "Jon Ossoff draws a challenger",
+                   basis="full_name", relevance=0.01)
 
-        election_coverage._drop_vacuously_corroborated(db_session)
+        assert len(self._visible(db_session)) == 1
 
+    def test_an_unscored_item_is_hidden_but_kept(self, db_session):
+        """Fail closed on display, the same rule the feed already applies
+        to a NULL relevance — and unlike a delete it reverses itself once
+        the next pass scores the item."""
+        self._seed(db_session)
+        self._item(db_session, "Georgia Recorder", "Unscored story", relevance=None)
+
+        assert self._visible(db_session) == []
         assert db_session.query(RaceCoverageItem).count() == 1
 
-    def test_an_unscored_item_waits_rather_than_being_deleted(self, db_session):
-        """score_unscored_items is capped at 500 per pass, so a backlog
-        leaves real coverage unscored. A missing score is not a low
-        score — deleting on null would destroy items for being new."""
+    async def test_a_hidden_item_is_not_re_ingested(self, db_session):
+        """The churn regression, as a test. The row must stay so that
+        _already_ingested keeps blocking the same article."""
         self._seed(db_session)
-        db_session.add(self._item("Georgia Recorder", "Unscored story", relevance=None))
-        db_session.commit()
+        self._item(db_session, "Georgia Recorder",
+                   "Williams sisters reunite their doubles team", relevance=0.01)
 
-        election_coverage._drop_vacuously_corroborated(db_session)
+        article = NewsArticle(
+            title="Williams sisters reunite their doubles team",
+            url="https://georgiarecorder.com/williams",
+            source_name="Georgia Recorder",
+            summary="Georgia coverage mentioning Ossoff.",
+        )
+        with patch.object(election_coverage, "fetch_news_articles", return_value=[article]), \
+             patch.object(election_coverage, "search_posts", new=AsyncMock(return_value=[])):
+            await election_coverage.ingest_race_coverage(db_session, client=None)
 
         assert db_session.query(RaceCoverageItem).count() == 1
 
