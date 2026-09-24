@@ -23,6 +23,7 @@ from app.pipeline.analyze.policy_alignment import (
     detect_donor_vote_connections,
     get_related_policies,
 )
+from app.pipeline.transform.normalize_votes import dedupe_votes, vote_identity
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,10 @@ def select_key_votes(
       +3  voted against party line
       +2  policy area related to a top donor's industry (via embedding similarity)
       +1  non-procedural substantive vote
+
+    Returns roll-call identities (normalize_votes.vote_identity), not
+    billIds: several roll calls share one billId, and the caller splits
+    votes into key/recent by these ids.
     """
     external = [d for d in donors if d.get("type") not in ("CandidateAffiliated", "Self-Funded", "SKIP")]
     donor_policies: set[str] = set()
@@ -67,7 +72,7 @@ def select_key_votes(
         donor_policies.update(get_related_policies(ind))
 
     scored: list[tuple[float, str]] = []
-    for v in all_votes:
+    for v in dedupe_votes(all_votes):
         if v.get("vote") not in ("Yea", "Nay"):
             continue
         if v.get("policyArea", "PROCEDURAL") == "PROCEDURAL":
@@ -81,7 +86,7 @@ def select_key_votes(
         } or {v.get("policyArea", "")}
         if vote_areas & donor_policies:
             score += 2.0
-        scored.append((score, v["billId"]))
+        scored.append((score, vote_identity(v)))
 
     scored.sort(key=lambda x: x[0], reverse=True)
     return [bid for _, bid in scored[:max_keys]]

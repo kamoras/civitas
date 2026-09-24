@@ -80,11 +80,13 @@ from app.pipeline.transform.normalize_members import normalize_members
 from app.pipeline.transform.normalize_votes import (
     compute_party_split,
     compute_party_vote_split,
+    dedupe_votes,
     extract_senator_vote,
     find_senate_roll_call,
     normalize_recent_votes,
     normalize_votes,
     opposing_party_unity,
+    vote_identity,
 )
 
 # Analyze modules
@@ -670,8 +672,8 @@ def _build_analysis_input(prepared: dict, platform_texts: dict) -> dict:
     senator = prepared["senator"]
     funding = prepared["funding"]
     voting_record = prepared["votingRecord"]
-    all_votes = (voting_record.get("keyVotes") or []) + (
-        voting_record.get("recentVotes") or []
+    all_votes = dedupe_votes(
+        (voting_record.get("keyVotes") or []) + (voting_record.get("recentVotes") or [])
     )
     return {
         "senator": senator,
@@ -682,6 +684,65 @@ def _build_analysis_input(prepared: dict, platform_texts: dict) -> dict:
         "platformText": platform_texts.get(senator["id"], ""),
         "sponsoredBills": prepared.get("sponsoredBills", []),
     }
+
+
+def _recent_not_covered_by_key_bills(
+    classified_recent: list[dict], roll_call_data_map: dict[str, dict],
+) -> list[dict]:
+    """Recent roll calls that aren't already a key bill's roll call.
+
+    A key bill's passage vote is often also one of the session's recent
+    roll calls. Both paths used to feed the member's record, so that one
+    vote was counted twice. The key-bill entry wins — it carries the bill's
+    real name and content classification.
+    """
+    covered = {recent_roll_call_key(rc) for rc in roll_call_data_map.values()}
+    return [rc for rc in classified_recent if rc.get("rcKey") not in covered]
+
+
+def _key_bill_votes_only(
+    votes: list[dict], roll_call_data_map: dict[str, dict],
+) -> list[dict]:
+    """normalize_votes' output restricted to key-bill votes, each stamped
+    with its roll call's rcKey so vote_identity is unique for it too.
+
+    normalize_votes is also handed the recent roll calls (for its aggregate
+    counts); those come back carrying an rcKey and are dropped here because
+    normalize_recent_votes produces them as recentVotes.
+    """
+    out = []
+    for v in votes:
+        if v.get("rcKey"):
+            continue
+        rc = roll_call_data_map.get(v.get("billId", ""))
+        out.append({**v, "rcKey": recent_roll_call_key(rc) if rc else None})
+    return out
+
+
+def split_key_and_recent_votes(
+    key_bill_votes: list[dict],
+    recent_votes: list[dict],
+    key_vote_ids: set[str],
+    fallback_keys: int = 5,
+) -> tuple[list[dict], list[dict]]:
+    """Partition a member's votes into (key, recent), each roll call once.
+
+    key_vote_ids are vote_identity values from select_key_votes. When none
+    were selected, the first `fallback_keys` key-bill votes are shown as key
+    instead. Everything else is recent — the full record stays available to
+    scoring and partisan-depth analysis, which read keyVotes + recentVotes.
+    """
+    pool = dedupe_votes(key_bill_votes + recent_votes)
+    key = [v for v in pool if vote_identity(v) in key_vote_ids]
+    if not key:
+        key = dedupe_votes(key_bill_votes)[:fallback_keys]
+    key_ids = {vote_identity(v) for v in key}
+    recent = [v for v in pool if vote_identity(v) not in key_ids]
+    for v in key:
+        v["voteCategory"] = "key"
+    for v in recent:
+        v["voteCategory"] = "recent"
+    return key, recent
 
 
 async def run_senate_pipeline(
@@ -1334,9 +1395,9 @@ async def run_senate_pipeline(
         pipeline_run.bills_classified = len(classified_bills) + len(classified_recent)
         db.commit()
 
-        # Refine content-based party alignment for recent votes with vote data.
-        # Uses the same blended approach as key bills: content analysis is
-        # the primary signal, vote tallies validate or adjust.
+        # Refine party alignment for recent votes with vote data. Same rule as
+        # key bills (party_platform.refine_with_vote_data): the actual roll-call
+        # split wins whenever it exists; content analysis is only the fallback.
         for rc in classified_recent:
             rc_id = rc.get("rcKey") or rc.get("billId", "")
             roll_call_data = recent_rc_map.get(rc_id)
@@ -1434,6 +1495,9 @@ async def run_senate_pipeline(
                     )
 
                 senator_votes: dict[str, str] = {}
+                recent_only = _recent_not_covered_by_key_bills(
+                    classified_recent, roll_call_data_map,
+                )
                 for bill in classified_bills:
                     roll_call_data = roll_call_data_map.get(bill["billId"])
                     if roll_call_data:
@@ -1448,7 +1512,7 @@ async def run_senate_pipeline(
 
                 # Also extract recent roll call votes into the same map so they
                 # contribute to stance breakdown in normalize_votes
-                for rc in classified_recent:
+                for rc in recent_only:
                     rc_id = rc.get("rcKey") or rc.get("billId", "")
                     roll_call_data = recent_rc_map.get(rc_id)
                     if roll_call_data:
@@ -1463,7 +1527,8 @@ async def run_senate_pipeline(
 
                 # Pass both key bills and recent roll calls to normalize_votes
                 # so all tracked votes contribute to the policy breakdown
-                all_classified = classified_bills + classified_recent
+                # and loyalty counts — each roll call exactly once.
+                all_classified = classified_bills + recent_only
                 senator_cosponsor_profile = cosponsorship_profiles.get(
                     senator.get("bioguideId", ""),
                 )
@@ -1478,7 +1543,7 @@ async def run_senate_pipeline(
                 # Normalize recent votes for display in the UI
                 # Pass effective_party so Independents get correct party alignment
                 recent_senator_votes = normalize_recent_votes(
-                    classified_recent,
+                    recent_only,
                     recent_rc_map,
                     last_name,
                     senator["state"],
@@ -1486,6 +1551,11 @@ async def run_senate_pipeline(
                     effective_party=voting_record.get("effectiveParty"),
                 )
                 voting_record["recentVotes"] = recent_senator_votes
+                # normalize_votes saw the recent roll calls too (for the
+                # aggregate counts above); they belong in recentVotes only.
+                voting_record["keyVotes"] = _key_bill_votes_only(
+                    voting_record["keyVotes"], roll_call_data_map,
+                )
 
                 # Collect this senator's sponsored bills
                 bio_id = senator.get("bioguideId", "")
@@ -1726,40 +1796,13 @@ async def run_senate_pipeline(
                             analysis.get("campaignPromises", [])
                         ),
                     }
-                    all_key_votes = analysis.get("keyVotes") or voting_record["keyVotes"]
-                    key_vote_ids = set(analysis.get("keyVoteIds", []))
-
-                    final_key_votes = []
-                    final_recent_votes = []
-
-                    for v in all_key_votes:
-                        if v["billId"] in key_vote_ids:
-                            v["voteCategory"] = "key"
-                            final_key_votes.append(v)
-                        else:
-                            v["voteCategory"] = "recent"
-                            final_recent_votes.append(v)
-
-                    if not final_key_votes and all_key_votes:
-                        for v in all_key_votes[:min(5, len(all_key_votes))]:
-                            v["voteCategory"] = "key"
-                            final_key_votes.append(v)
-                        final_recent_votes = [
-                            v for v in final_recent_votes
-                            if v["billId"] not in {kv["billId"] for kv in final_key_votes}
-                        ]
-
+                    final_key_votes, final_recent_votes = split_key_and_recent_votes(
+                        voting_record.get("keyVotes") or [],
+                        voting_record.get("recentVotes") or [],
+                        set(analysis.get("keyVoteIds", [])),
+                    )
                     voting_record["keyVotes"] = final_key_votes
-                    # Preserve the actual recent roll call votes (from
-                    # normalize_recent_votes) alongside the key bill leftovers.
-                    # Without this, analyze_partisan_depth only sees the few
-                    # key bill votes and misses the bulk of the voting record.
-                    actual_recent = voting_record.get("recentVotes") or []
-                    leftover_ids = {v["billId"] for v in final_recent_votes}
-                    merged_recent = final_recent_votes + [
-                        v for v in actual_recent if v["billId"] not in leftover_ids
-                    ]
-                    voting_record["recentVotes"] = merged_recent
+                    voting_record["recentVotes"] = final_recent_votes
 
                     lobbying_matches = analysis.get("lobbyingMatches", [])
 

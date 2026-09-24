@@ -67,6 +67,8 @@ from app.pipeline.transform.normalize_votes import (
     compute_party_split,
     compute_party_vote_split,
     opposing_party_unity,
+    _determine_party_alignment,
+    house_roll_call_id,
 )
 from app.time_utils import utcnow
 
@@ -101,6 +103,21 @@ def house_pipeline_age() -> "timedelta | None":
     and block every hourly action-center refresh behind it.
     """
     return _tracker.age
+
+
+def recent_not_covered_by_key_bills(
+    classified_recent: list[dict], house_roll_calls: dict[str, dict],
+) -> list[dict]:
+    """Recent House roll calls that aren't already a key bill's roll call.
+
+    A key bill's floor vote is often also one of the 120 recent roll calls.
+    Counting it through both paths gave that vote double weight in the
+    member's record; the key-bill entry wins because it carries the bill's
+    real name and content classification. Senate twin:
+    senate_pipeline._recent_not_covered_by_key_bills.
+    """
+    covered = {house_roll_call_id(rc) for rc in house_roll_calls.values()}
+    return [b for b in classified_recent if b.get("billId", "") not in covered]
 
 
 async def run_house_pipeline() -> dict:
@@ -238,7 +255,7 @@ async def run_house_pipeline() -> dict:
             # Map recent roll calls by a synthetic billId
             recent_rc_map: dict[str, dict] = {}
             for rc in recent_rcs:
-                bill_id = f"HouseRC-{rc['year']}-{rc['rollNumber']}"
+                bill_id = house_roll_call_id(rc)
                 recent_rc_map[bill_id] = rc
 
             progress.complete(
@@ -569,6 +586,8 @@ async def run_house_pipeline() -> dict:
             success_count = 0
             fail_count = 0
 
+            recent_only = recent_not_covered_by_key_bills(classified_recent, house_roll_calls)
+
             for idx, rep in enumerate(reps):
                 try:
                     bio_id = rep.get("bioguideId", "")
@@ -596,7 +615,7 @@ async def run_house_pipeline() -> dict:
 
                     # Extract recent votes
                     recent_votes_list = []
-                    for bill in classified_recent:
+                    for bill in recent_only:
                         bill_id = bill.get("billId", "")
                         rc = recent_rc_map.get(bill_id)
                         if rc:
@@ -631,13 +650,11 @@ async def run_house_pipeline() -> dict:
                             normalized = "Nay"
 
                         party_leaning = rv.get("partyLeaning")
-                        voted_with_party = None
-                        if party_leaning and normalized in ("Yea", "Nay") and effective_party in ("D", "R"):
-                            is_yea = normalized == "Yea"
-                            if party_leaning == effective_party:
-                                voted_with_party = is_yea
-                            elif party_leaning in ("D", "R"):
-                                voted_with_party = not is_yea
+                        # Same rule as every other vote (normalize_votes); this
+                        # used to be an inline copy that could drift from it.
+                        voted_with_party = _determine_party_alignment(
+                            effective_party, normalized, party_leaning,
+                        )
 
                         voting_data["recentVotes"].append({
                             "billName": rv.get("billName", ""),
@@ -653,6 +670,7 @@ async def run_house_pipeline() -> dict:
                             "opposingPartyUnityPct": rv.get("opposingPartyUnityPct"),
                             "votedWithParty": voted_with_party,
                             "voteCategory": "recent",
+                            "rcKey": rv.get("billId", ""),
                         })
 
                     rep["votingRecord"] = voting_data

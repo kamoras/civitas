@@ -1001,7 +1001,19 @@ logger = logging.getLogger(__name__)
 # comments for the exact derivation); FEC PAC contribution caps themselves
 # ($5,000/$3,500 per election) are unchanged — those are legal limits, not
 # empirical calibration, and still current for the 2025-2026 cycle.
-ALGORITHM_VERSION = "v6.12"
+#
+# v6.12 -> v6.13 (2026-09): each roll call now counts once in a member's
+# record. The Senate pipeline fed every recent roll call into the record
+# twice and deduplicated the key/recent split by billId against only the
+# non-key leftovers, so a recent roll call picked as a key vote stayed in
+# both lists — and select_key_votes favours party breaks, so the duplicated
+# votes were mostly breaks (measured: 20 roll calls / 2 breaks scored as
+# 25 / 4, Constituent Alignment 54 -> 66 for a swing-state member). In
+# both chambers, a key bill whose floor vote was also a recent roll call
+# was counted through both paths. Votes are now identified by roll call
+# (normalize_votes.vote_identity), never billId. No formula changed; the
+# inputs were wrong.
+ALGORITHM_VERSION = "v6.13"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.

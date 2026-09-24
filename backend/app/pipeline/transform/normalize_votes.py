@@ -10,6 +10,43 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def vote_identity(vote: dict) -> str:
+    """The unique identity of the roll call a normalized vote records.
+
+    billId (a Senate documentName) is NOT unique — the chamber votes on the
+    same document repeatedly (motion to proceed, cloture, passage), so it
+    can't tell two different votes apart, and one roll call can also reach
+    a member's record through two paths (as a key bill's vote and again as
+    a recent roll call). rcKey (congress-session-roll for the Senate,
+    HouseRC-year-roll for the House) is the roll call itself. Every place
+    that dedupes votes or picks key votes must use this, never billId —
+    keying on billId is what let the same party break be counted twice in
+    Constituent Alignment.
+    """
+    return vote.get("rcKey") or vote.get("billId", "")
+
+
+def house_roll_call_id(rc: dict) -> str:
+    """Unique id for one House roll call — the House analog of
+    bill_analyzer.recent_roll_call_key, used as both billId and rcKey for
+    recent House votes."""
+    return f"HouseRC-{rc.get('year', '')}-{rc.get('rollNumber', '')}"
+
+
+def dedupe_votes(votes: list[dict]) -> list[dict]:
+    """Drop repeat entries for the same roll call (see vote_identity),
+    keeping the first occurrence."""
+    seen: set[str] = set()
+    out: list[dict] = []
+    for v in votes:
+        ident = vote_identity(v)
+        if ident in seen:
+            continue
+        seen.add(ident)
+        out.append(v)
+    return out
+
+
 def _determine_party_alignment(
     senator_party: str,
     vote: str,
@@ -278,6 +315,7 @@ def normalize_votes(
             "opposingPartyUnityPct": bill.get("opposingPartyUnityPct"),
             "votedWithParty": party_aligned,
             "voteCategory": "recent",
+            "rcKey": bill.get("rcKey"),
         })
 
     party_total = voted_with_party + voted_against_party
@@ -366,6 +404,7 @@ def normalize_recent_votes(
             "opposingPartyUnityPct": bill.get("opposingPartyUnityPct"),
             "votedWithParty": party_aligned,
             "voteCategory": "recent",
+            "rcKey": bill.get("rcKey"),
         })
 
     return votes

@@ -24,6 +24,17 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.13",
+    date: "2026-09-24",
+    title: "Each vote counts once",
+    tldr: "Some senators' votes were being counted twice, and the ones most often doubled were votes against their own party, which made those senators look more independent than they are. Each roll call now counts exactly once, in both chambers. Nothing about how votes are scored changed; the list of votes going into the score was wrong.",
+    changes: [
+      "Senate: the pipeline added each recent roll call to a senator's record twice, then removed duplicates by bill number against only part of the list. A recent vote chosen as a 'key vote' therefore stayed in the record twice. Key votes are chosen partly for being votes against the senator's party, so the doubled votes were mostly party breaks, and that pushed Constituent Alignment up. In a worked example with 20 roll calls and 2 party breaks, the score counted 25 votes and 4 breaks, and a swing-state senator's Constituent Alignment rose from 54 to 66.",
+      "Both chambers: when a key bill's floor vote was also one of the recent roll calls, it reached the record by both routes. It now counts once, as the key bill.",
+      "Votes are now matched by the roll call itself, never by bill number. The Senate often votes several times on one bill (to proceed, to end debate, to pass), so bill number can't tell those votes apart. The duplicates also showed up on public voting-record pages and in their counts; those are fixed too.",
+    ],
+  },
+  {
     version: "v6.12",
     date: "2026-07-23",
     title: "Funding Independence recalibration — two constants had drifted from live reality",
