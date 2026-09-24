@@ -1324,7 +1324,7 @@ function VisitorStats({ token }: { token: string }) {
           </div>
         )}
         <p className="text-ink-min text-xs font-mono mt-3">
-          Counted by a hash under a random salt that is deleted when its day ends — no IP addresses are stored, and past days' hashes can't be traced back to one. Browser/OS/device
+          Counted by a hash under a random salt that is deleted when its day ends — no IP addresses are stored, and past days&apos; hashes can&apos;t be traced back to one. Browser/OS/device
           are coarse categories only, never the raw User-Agent string. Page views are raw counts
           (not deduped by visitor) grouped by route, e.g. all politician profiles count under one
           row.
