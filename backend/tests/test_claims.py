@@ -139,6 +139,38 @@ class TestTheOldPromptsRulesAreNowStructural:
         assert self._claims(src, "The coverage", "emphasises personal connections") == []
 
 
+class TestOnTopicBarIsRelativeToSiblings:
+    """The first version compared a CLAIM to the least on-topic ARTICLE.
+
+    A claim is one sentence; an article is a title plus a summary. Short
+    text scores systematically lower against a long-text centroid, so
+    the two sides were never comparable. Measured on live clusters the
+    bar landed at 0.637 and discarded a good claim scoring 0.601 —
+    and with the substance gate needing two claims, whole issues
+    vanished. The Action Center published ZERO issues for an hour.
+
+    These use the REAL scores from that run.
+    """
+
+    def _kept(self, scores):
+        from app.pipeline.analyze.claims import OUTLIER_FRACTION
+        floor = max(scores) * OUTLIER_FRACTION
+        return [s for s in scores if s >= floor]
+
+    def test_the_claim_the_old_bar_wrongly_dropped_is_kept(self):
+        """rank 2 live: [0.736, 0.601, 0.641] against an article floor of
+        0.637. The 0.601 is a normal sibling, not an outlier."""
+        assert len(self._kept([0.736, 0.601, 0.641])) == 3
+
+    def test_a_real_outlier_is_still_dropped(self):
+        """rank 1 live: a farm-documentary claim at 0.146 beside an
+        AI-whistleblower claim at 0.564 — the Maricarmen shape."""
+        assert self._kept([0.146, 0.564]) == [0.564]
+
+    def test_a_lone_claim_is_never_its_own_outlier(self):
+        assert self._kept([0.09]) == [0.09]
+
+
 class TestOnTopic:
     """Extraction is faithful to its article, so it is only as good as
     the clustering. Measured live: the cluster titled "Does the UN have
