@@ -787,6 +787,36 @@ strings. That is a correct and common answer.
 Return JSON: {{"actor": "<exact span>", "predicate": "<exact span>"}}"""
 
 
+def locate_claim(
+    source_material: str,
+    *,
+    db,
+    today,
+    rank: int,
+) -> dict | None:
+    """Ask the model to point at one assertion in `source_material`.
+
+    Module-level rather than nested inside `_run_refresh` so a harness can
+    import the REAL extraction path. Every measurement of this redesign
+    had to re-implement it while it was a closure, and twice that
+    re-implementation silently diverged from what ships — once testing
+    unwritten code and reporting success. An unimportable function is not
+    a private one, it is one whose verification has to be guessed at.
+    """
+    located = call_llm(
+        prompt_version=ACTION_CENTER_PROMPT_VERSION,
+        system_prompt=_SYSTEM_PROMPT,
+        user_prompt=_CLAIM_PROMPT_TEMPLATE.format(source=source_material),
+        cache_key={"date": today, "rank": rank, "src": source_material[:200]},
+        db_session=db,
+        max_tokens=200,
+        num_ctx=2048,
+    )
+    if isinstance(located, str):
+        located = extract_json(located)
+    return located if isinstance(located, dict) else None
+
+
 
 
 def _build_actions_from_data(
@@ -4515,18 +4545,7 @@ def _run_refresh(db: Session) -> int:
         )
 
         def _locate(source_material: str, _rank: int = rank) -> dict | None:
-            located = call_llm(
-                prompt_version=ACTION_CENTER_PROMPT_VERSION,
-                system_prompt=_SYSTEM_PROMPT,
-                user_prompt=_CLAIM_PROMPT_TEMPLATE.format(source=source_material),
-                cache_key={"date": today, "rank": _rank, "src": source_material[:200]},
-                db_session=db,
-                max_tokens=200,
-                num_ctx=2048,
-            )
-            if isinstance(located, str):
-                located = extract_json(located)
-            return located if isinstance(located, dict) else None
+            return locate_claim(source_material, db=db, today=today, rank=_rank)
 
         # Extract from the WHOLE cluster, not the coherence-filtered
         # subset. SOURCE_SIM_FLOOR exists to keep a free-writing model on
