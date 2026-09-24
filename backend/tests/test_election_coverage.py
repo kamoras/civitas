@@ -14,8 +14,21 @@ from unittest.mock import AsyncMock, patch
 
 from app.models import Candidate, Race, RaceCoverageItem
 from app.pipeline.analyze import election_coverage
+
+
 from app.pipeline.analyze import election_coverage as ec
 from app.pipeline.fetch.news_feeds import NewsArticle
+
+
+@pytest.fixture(autouse=True)
+def _no_live_state_feeds():
+    """ingest_race_coverage reads 41 per-state RSS outlets. A unit test
+    must never depend on 41 third-party sites being up — without this the
+    suite went from 73s to 162s and eight tests failed on live network
+    conditions. A test that wants state articles patches this itself.
+    """
+    with patch.object(election_coverage, "fetch_state_news_articles", return_value=[]):
+        yield
 
 
 def _race(db, race_id, state, office="S"):

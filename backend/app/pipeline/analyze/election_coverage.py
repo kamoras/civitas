@@ -41,7 +41,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Candidate, Race, RaceCoverageItem
 from app.pipeline.fetch.bluesky_search import search_is_available, search_posts
-from app.pipeline.fetch.news_feeds import fetch_news_articles
+from app.pipeline.fetch.news_feeds import fetch_news_articles, fetch_state_news_articles
 from app.pipeline.run_tracker import PipelineRunTracker
 from app.time_utils import utcnow
 
@@ -436,10 +436,15 @@ async def ingest_race_coverage(db: Session, client: httpx.AsyncClient) -> int:
     # article and a Bluesky post can resolve to the same race+url.
     seen: set[tuple[str, str]] = set()
 
-    # ── News: re-classifies articles the Action Center already fetched
-    # (fetch_news_articles is cheap/idempotent — it hits the same RSS
-    # feeds news_feeds.py always has, no new source added here) ──
-    articles = fetch_news_articles()
+    # ── News: the national feeds the Action Center already fetched
+    # (cheap/idempotent), PLUS the per-state political outlets.
+    #
+    # The national eight cannot cover 50 states' House and Senate races,
+    # and that gap is what the open Bluesky name search was filling with
+    # 94% noise. Widening the SOURCES is the fix that filtering was
+    # standing in for. State outlets are read here and not by the Action
+    # Center, so national issue ranking is untouched.
+    articles = fetch_news_articles() + fetch_state_news_articles()
     for article in articles:
         haystack = f"{article.title} {article.summary}"
         resolved = resolve_item_race(matchers, haystack)
