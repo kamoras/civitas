@@ -588,6 +588,16 @@ async def run_house_pipeline() -> dict:
 
             recent_only = recent_not_covered_by_key_bills(classified_recent, house_roll_calls)
 
+            # This run's Legislative Effectiveness population reference, from
+            # every rep's stage-classified sponsored bills (phase 4b) — before
+            # anyone is scored. See senate_pipeline._live_les_reference.
+            from app.pipeline.senate_pipeline import _live_les_reference
+            les_reference = _live_les_reference(
+                "house",
+                [(r.get("sponsoredBills") or [], r.get("party")) for r in reps],
+                db,
+            )
+
             for idx, rep in enumerate(reps):
                 try:
                     bio_id = rep.get("bioguideId", "")
@@ -785,7 +795,7 @@ async def run_house_pipeline() -> dict:
                         )
 
                     # Calculate scores
-                    scores = calculate_scores(rep)
+                    scores = calculate_scores({**rep, "lesReference": les_reference})
                     scores["confidence"] = calculate_confidence(rep)
                     rep["representationScore"] = scores
 

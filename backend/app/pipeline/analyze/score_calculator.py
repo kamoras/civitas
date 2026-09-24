@@ -815,8 +815,11 @@ representation dimension.
 
 import logging
 import math
+import pathlib
+import statistics
 
 from app.models import PromiseAlignment
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -1013,6 +1016,16 @@ logger = logging.getLogger(__name__)
 # was counted through both paths. Votes are now identified by roll call
 # (normalize_votes.vote_identity), never billId. No formula changed; the
 # inputs were wrong.
+#
+# Also v6.13 — Legislative Effectiveness's population reference is measured
+# every run (compute_les_reference) instead of hand-copied constants, and
+# the current congress's majority comes from the live roster
+# (derive_chamber_majority): the hardcoded majority table ended at the
+# 119th Congress, and a median frozen mid-congress drifted as credit
+# accumulated. Saturation is now each chamber's own 1.5 stdev rather than a
+# pooled value. Senate sponsored bills are stage-classified before scoring;
+# they used to be classified after calculate_scores ran, so Senate LE was
+# scored on the latestAction keyword fallback while the House used stages.
 ALGORITHM_VERSION = "v6.13"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
@@ -1496,6 +1509,7 @@ def calculate_scores(senator: dict) -> dict:
             party=voting_record.get("effectiveParty") or senator.get("party", "I"),
             years_in_office=senator.get("yearsInOffice"),
             attracted_bipartisanship=senator.get("attractedBipartisanshipScore"),
+            les_reference=senator.get("lesReference"),
         ),
     }
 
@@ -1539,6 +1553,7 @@ def explain_scores(senator: dict) -> dict:
             party=voting_record.get("effectiveParty") or senator.get("party", "I"),
             years_in_office=senator.get("yearsInOffice"),
             attracted_bipartisanship=senator.get("attractedBipartisanshipScore"),
+            les_reference=senator.get("lesReference"),
         ),
     }
 
@@ -2979,6 +2994,12 @@ _HOUSE_MAJORITY: dict[int, str] = {
     111: "D", 112: "R", 113: "R", 114: "R", 115: "R", 116: "D", 117: "D",
     118: "R", 119: "R",
 }
+# The table above is historical record only. The CURRENT congress's
+# majority comes from the live roster each pipeline run (derive_chamber_
+# majority, carried on the LES reference) — a hand-maintained table has
+# no entry for a congress until someone adds one, and the moment a new
+# congress convened every member silently fell back to the flat
+# unknowable-status rate, dropping the majority/minority adjustment.
 
 
 # House bill types (substantive + commemorative) — used for chamber
@@ -2987,7 +3008,36 @@ _HOUSE_MAJORITY: dict[int, str] = {
 _LES_HOUSE_TYPES = {"hr", "hjres", "hres", "hconres"}
 
 
-def _advancement_baseline(bill_type: str, congress: int | None, party: str | None) -> float:
+def derive_chamber_majority(
+    parties: list[str | None], chamber: str, tie_breaker: str | None = None,
+) -> str | None:
+    """The majority party of a chamber from its current roster.
+
+    `parties` holds each member's caucus party (Independents already
+    resolved to the party they caucus with — pass effectiveParty, not the
+    raw "I"). Counted over D and R only; anything unresolved is ignored.
+    A Senate tie goes to `tie_breaker` (the sitting Vice President's party,
+    i.e. the president's — the 117th Congress's 50-50 Senate was a
+    Democratic majority this way). A House tie, or a Senate tie with no
+    tie_breaker, is unknowable and returns None.
+    """
+    d = sum(1 for p in parties if p == "D")
+    r = sum(1 for p in parties if p == "R")
+    if d > r:
+        return "D"
+    if r > d:
+        return "R"
+    if chamber == "senate" and tie_breaker in ("D", "R"):
+        return tie_breaker
+    return None
+
+
+def _advancement_baseline(
+    bill_type: str,
+    congress: int | None,
+    party: str | None,
+    current: tuple[int, str] | None = None,
+) -> float:
     """Expected bill advancement rate for a sponsor, by chamber/congress/
     party. Chamber detection must cover every House bill type (including
     commemorative hres/hconres), not just substantive ones — this is
@@ -2996,6 +3046,10 @@ def _advancement_baseline(bill_type: str, congress: int | None, party: str | Non
     advancement-rate formula filtered it."""
     is_house = bill_type in _LES_HOUSE_TYPES
     majority = (_HOUSE_MAJORITY if is_house else _SENATE_MAJORITY).get(congress or 0)
+    # `current` = (congress, majority) derived from the live roster; it
+    # wins for the congress it describes, the table covers the past.
+    if current is not None and congress == current[0]:
+        majority = current[1]
     if not majority or party not in ("D", "R"):
         return 0.030  # overall measured mean when status is unknowable
     if is_house:
@@ -3130,99 +3184,185 @@ def _les_cumulative_credit(bill: dict) -> float:
     return w * s
 
 
-# Population-MEDIAN significance-weighted cumulative-stage credit per
-# congress served, chamber-specific — the reference point a member's own
-# per-congress credit is scored against (raw credit == this value -> ~50).
+# ── LES population reference ────────────────────────────────────────────
 #
-# V&W's real LES normalizes to the chamber-term population MEAN (average
-# member = 1.0). This platform deliberately departs and centers on the
-# MEDIAN instead (v6.10, 2026-07-23): the per-congress credit distribution
-# is strongly right-skewed in both chambers — a minority of highly prolific
-# sponsors pull the mean well above where most members sit (2026-07 audit:
-# Senate mean 285.3 vs median 254; House mean 122.0 vs median 107) — so
-# scoring against the mean puts slightly more than half of EVERY chamber
-# below the neutral midpoint by construction, independent of real
-# effectiveness. Centering on the median makes the typical member score
-# ~50, the same "each chamber's own median lands at 50" convention every
-# other expected-vs-actual component in this file already follows (e.g.
-# Funding Independence's small-donor state baseline, Funding Diversity's
-# chamber-median multiplier). This is a symmetric right-skew correction
-# across both chambers, distinct from v6.9's cross-chamber pooling fix
-# (_LES_AVG_BASELINE_*, below) which addressed a genuine House/Senate bias.
+# A member's per-congress credit is scored against their chamber's
+# population: the MEDIAN member's credit is the neutral bar (v6.10 — the
+# distribution is right-skewed, so a mean bar puts >50% of every chamber
+# below neutral by construction), tilted by the member's own majority/
+# minority bill mix relative to the chamber-average baseline (v6.9), and
+# the gap saturates at 1.5 population standard deviations.
 #
-# Career-cumulative data (many congresses, not one fixed term) makes this a
-# periodically-recalibrated constant rather than a live computation — same
-# convention as every other self-calibrated constant in this file, e.g. the
-# FI small-donor state baseline. Calibrated via
-# scripts/calibrate_les_credit_scale.py against live production data, using
-# this module's own _les_cumulative_credit so the calibration and the
-# scoring formula can never silently drift apart.
+# COMPUTED EACH PIPELINE RUN from the chamber being scored (v6.13,
+# compute_les_reference), not hand-copied from a calibration script's
+# output. Two reasons it had to move:
+#   - Credit only accumulates as a congress goes on, and scoring is limited
+#     to the current congress. A median frozen on one date drifted: every
+#     member's score crept upward through the congress against a fixed bar,
+#     then collapsed at the next congress when everyone restarted near zero
+#     against a bar measured mid-congress.
+#   - AGENTS.md §3a: calibrated values are generated data, never Python
+#     literals pasted from a script's printout.
 #
-# Re-run 2026-07-23 (later same day as the v6.10 mean->median switch above):
-# that switch's own live audit (254/107) was measured before PR #227's
-# REFERRED-vs-IN_COMMITTEE split had been reclassified into any bill's
-# stored `stage` column by an actual pipeline run — bills sponsored/
-# cosponsored data only gets reclassified when the pipeline touches them,
-# not on deploy — so it was still scoring against the OLD stage-credit
-# distribution despite the new code already being live (see
-# project-les-calibration-followup memory). First full Senate+House run
-# after that reclassification actually took effect (run #99) put both
-# chambers' typical per-congress credit meaningfully higher: Senate
-# median 289/congress (mean 324.95, stdev 178.37, n=101), House median
-# 129/congress (mean 143.80, stdev 88.12, n=427).
-_LES_POPULATION_MEDIAN_SENATE = 289.0
-_LES_POPULATION_MEDIAN_HOUSE = 129.0
+# Saturation is now each chamber's OWN spread (v6.13). It used to be one
+# pooled constant (1.5 x the mean of the two chambers' stdevs), which over-
+# counted a House member's gap relative to House spread and under-counted a
+# Senate member's (live stdevs 88 vs 178) — the same cross-chamber mixing
+# v6.9 removed from the medians and baselines. Pooling would also mix
+# congresses at a rollover, when one chamber has run under the new congress
+# and the other hasn't yet.
+#
+# Where the numbers come from, in order:
+#   1. the reference the pipeline passes in for this run;
+#   2. /data/les_reference.json — the last run's reference, which is what
+#      the API's on-demand "show the math" breakdown and scripts/rescore.py
+#      read, so they reproduce the pipeline's own numbers;
+#   3. app/data/les_reference.json — the bundled pre-first-run fallback,
+#      regenerated by scripts/calibrate_les_credit_scale.py.
+_LES_SATURATION_STDEVS = 1.5
+_LES_REFERENCE_PATH = "/data/les_reference.json"
+_LES_REFERENCE_BUNDLED = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "les_reference.json"
+_les_reference_cache: tuple[tuple[float | None, float | None], dict] | None = None
 
-# Population-average _advancement_baseline rate, used to turn a member's
-# own majority/minority bill mix into a RATIO against the population
-# average (not an absolute add-on) — this is the majority/minority
-# benchmark adjustment, adapted from _advancement_baseline's real audited
-# rates without requiring the live per-term regression V&W's own
-# Benchmark Score uses (infrastructure this codebase doesn't have).
-# Same calibration script determines this.
-#
-# Chamber-specific as of 2026-07-21 (was a single pooled 0.0404 across both
-# chambers). Found during a political-science audit of the live population:
-# House's real per-member advancement_baseline (mean 0.0443, n=427) is
-# genuinely higher than the Senate's (mean 0.0305, n=101) — a real
-# structural difference in how _advancement_baseline's own audited,
-# bill-type-keyed pass rates work out per chamber, not noise. Comparing
-# every member's own baseline against ONE pooled cross-chamber average
-# systematically inflated House members' status_ratio (and therefore their
-# expected credit bar) while deflating the Senate's, on top of the
-# population reference constants above already being correctly chamber-
-# specific — the two are meant to work together and were silently fighting each
-# other. Measured effect on live scores: House Legislative Effectiveness
-# was 61% below-neutral / Senate only 38% below-neutral (means 44.6 vs
-# 60.5, n=431/101) despite both chambers' members performing comparably
-# once compared against their own chamber's real baseline — simulated
-# against the live population before shipping this fix, which brings both
-# chambers to a comparable, much less lopsided split (~53-58% below-neutral
-# each — the residual imbalance this v6.9 split left was the same
-# population-mean-vs-median right-skew every other "expected vs actual"
-# component in this file has, not a chamber-comparison bug; v6.10
-# (2026-07-23) then closed it by centering the reference point on each
-# chamber's MEDIAN instead of its mean — see _LES_POPULATION_MEDIAN_*
-# above). Re-run scripts/calibrate_les_credit_scale.py (now chamber-split)
-# after any pipeline run meaningfully shifts either chamber's
-# bill-type/advancement-rate mix.
-_LES_AVG_BASELINE_SENATE = 0.0305
-_LES_AVG_BASELINE_HOUSE = 0.0444
 
-# Saturation constant for the expected-vs-actual credit gap, same "never
-# zero, never a runaway score from one outlier bill" shape as every other
-# saturation constant in this file (e.g. Constituent Alignment's
-# surplus/0.25). Same calibration script: ~1.5x the mean chamber stdev of
-# real per-congress credit, checked against the population distribution
-# checks — LE has no raw-metric consistency check in ground_truth.py, so
-# the distribution gate is its only backstop.
-# Re-run 2026-07-23 alongside the medians above (post-
-# reclassification audit: Senate stdev 178.37, House stdev 88.12 -> 199.87).
-_LES_CREDIT_SATURATION = 199.87
+def _les_member_inputs(sponsored_bills: list[dict], party: str | None) -> dict | None:
+    """Per-member quantities the LES component and its population reference
+    share — one definition, so the reference is always measured with the
+    exact formula members are scored with. None when the member has no
+    substantive bills (not part of the credit distribution)."""
+    n_sub = sum(
+        1 for b in sponsored_bills
+        if (b.get("billType") or "").lower() in SUBSTANTIVE_BILL_TYPES
+    )
+    if n_sub == 0:
+        return None
+    congresses = {b.get("congress") for b in sponsored_bills if b.get("congress")}
+    house_n = sum(
+        1 for b in sponsored_bills
+        if (b.get("billType") or "").lower() in _LES_HOUSE_TYPES
+    )
+    return {
+        "n_sub": n_sub,
+        "raw_per_congress": sum(_les_cumulative_credit(b) for b in sponsored_bills) / max(len(congresses), 1),
+        "is_house": house_n > (len(sponsored_bills) - house_n),
+    }
+
+
+def _les_member_baseline(
+    sponsored_bills: list[dict], party: str | None, current: tuple[int, str] | None,
+) -> float:
+    return sum(
+        _advancement_baseline((b.get("billType") or "").lower(), b.get("congress"), party, current)
+        for b in sponsored_bills
+    ) / len(sponsored_bills)
+
+
+def compute_les_reference(
+    members: list[tuple[list[dict], str | None]],
+    congress: int,
+    majority: str | None,
+) -> dict | None:
+    """One chamber's LES population reference from this run's members.
+
+    `members` is (sponsored_bills, caucus party) per member of the chamber
+    being scored; `majority` is derive_chamber_majority's answer for
+    `congress`. Returns None when too few members have substantive bills
+    to describe a distribution — the caller then keeps the last good
+    reference rather than scoring against noise.
+    """
+    current = (congress, majority) if majority else None
+    credits: list[float] = []
+    baselines: list[float] = []
+    for bills, party in members:
+        inputs = _les_member_inputs(bills, party)
+        if inputs is None:
+            continue
+        credits.append(inputs["raw_per_congress"])
+        baselines.append(_les_member_baseline(bills, party, current))
+    if len(credits) < _MIN_LES_REFERENCE_MEMBERS:
+        return None
+    return {
+        "congress": congress,
+        "majority": majority,
+        "n": len(credits),
+        "median_credit": round(statistics.median(credits), 4),
+        "mean_credit": round(statistics.mean(credits), 4),
+        "stdev_credit": round(statistics.pstdev(credits), 4),
+        "avg_baseline": round(statistics.mean(baselines), 6),
+    }
+
+
+# Fewest members with substantive bills that still describe a chamber's
+# distribution. Early in a congress few members have introduced anything;
+# below this, the previous reference is kept (see compute_les_reference).
+_MIN_LES_REFERENCE_MEMBERS = 30
+
+
+def _read_json_mtime(path) -> tuple[float | None, dict]:
+    import json
+    try:
+        mtime = path.stat().st_mtime
+        return mtime, json.loads(path.read_text())
+    except Exception:
+        return None, {}
+
+
+def load_les_reference() -> dict:
+    """{"senate": {...}, "house": {...}} — the live /data reference layered
+    over the bundled fallback, per chamber. Re-read whenever either file
+    changes on disk (mtime), so the API worker that didn't run the
+    pipeline doesn't keep serving the previous run's numbers."""
+    global _les_reference_cache
+    live_path = pathlib.Path(_LES_REFERENCE_PATH)
+    live_mtime = live_path.stat().st_mtime if live_path.exists() else None
+    bundled_mtime = _LES_REFERENCE_BUNDLED.stat().st_mtime if _LES_REFERENCE_BUNDLED.exists() else None
+    key = (live_mtime, bundled_mtime)
+    if _les_reference_cache is not None and _les_reference_cache[0] == key:
+        return _les_reference_cache[1]
+    _, bundled = _read_json_mtime(_LES_REFERENCE_BUNDLED)
+    _, live = _read_json_mtime(live_path)
+    merged = {
+        ch: live.get(ch) or bundled.get(ch)
+        for ch in ("senate", "house")
+        if live.get(ch) or bundled.get(ch)
+    }
+    if not merged:
+        logger.error(
+            "No LES reference (neither %s nor the bundled %s) — Legislative "
+            "Effectiveness's bill component will score neutral for everyone",
+            _LES_REFERENCE_PATH, _LES_REFERENCE_BUNDLED,
+        )
+    _les_reference_cache = (key, merged)
+    return merged
+
+
+def write_les_reference(chamber: str, reference: dict) -> None:
+    """Persist this run's reference for one chamber (read-merge-write: each
+    chamber's pipeline owns its own key). Never raises — the pipeline has
+    already scored with the in-memory reference; this file is for readers
+    outside the run (API breakdowns, rescore.py). Same /data-not-app/data
+    rule as write_party_ideology_bounds."""
+    import json
+    global _les_reference_cache
+    path = pathlib.Path(_LES_REFERENCE_PATH)
+    try:
+        _, existing = _read_json_mtime(path)
+        existing[chamber] = {**reference, "computed_at": utcnow().isoformat(timespec="seconds")}
+        path.write_text(json.dumps(existing, indent=2, sort_keys=True) + "\n")
+        _les_reference_cache = None
+    except Exception:
+        logger.warning(
+            "Failed to write les_reference.json for %s — API score breakdowns "
+            "may show the previous run's LES reference until the next write.",
+            chamber, exc_info=True,
+        )
 
 
 def _les_component_score(
-    sponsored_bills: list[dict], party: str | None, years_in_office: float | None,
+    sponsored_bills: list[dict],
+    party: str | None,
+    years_in_office: float | None,
+    reference: dict | None = None,
 ) -> tuple[float, str]:
     """The V&W-based 70% component: significance-weighted, cumulative-
     stage credit per congress served, scored relative to what an average
@@ -3230,40 +3370,47 @@ def _les_component_score(
     not an absolute rate. Confirmed-zero-vs-no-data-yet distinction (see
     _zero_bill_component_score) carried forward unchanged from the
     2026-07 "inaction beats trying and failing" fix; this is the same
-    invariant, re-homed into the new formula."""
-    n_sub = sum(
-        1 for b in sponsored_bills
-        if (b.get("billType") or "").lower() in SUBSTANTIVE_BILL_TYPES
-    )
-    if n_sub == 0:
+    invariant, re-homed into the new formula.
+
+    `reference` is {"senate": {...}, "house": {...}} (compute_les_reference
+    per chamber); None reads load_les_reference(). See the LES population
+    reference comment above for where each number comes from."""
+    inputs = _les_member_inputs(sponsored_bills, party)
+    if inputs is None:
         return _zero_bill_component_score(years_in_office)
+    n_sub = inputs["n_sub"]
+    raw_per_congress = inputs["raw_per_congress"]
+    chamber = "house" if inputs["is_house"] else "senate"
 
-    congresses = {b.get("congress") for b in sponsored_bills if b.get("congress")}
-    n_congresses = max(len(congresses), 1)
-    raw_per_congress = sum(_les_cumulative_credit(b) for b in sponsored_bills) / n_congresses
+    ref = (reference or load_les_reference()).get(chamber)
+    if not ref:
+        return 50.0, "no population reference available for this chamber — neutral 50"
+    member_congress = max((b.get("congress") or 0 for b in sponsored_bills), default=0)
+    if member_congress and ref.get("congress") and member_congress != ref["congress"]:
+        # First days of a new congress, before enough members have
+        # introduced bills to measure its reference: comparing against the
+        # previous congress's full-term median would score everyone as if
+        # they'd done almost nothing.
+        return 50.0, (
+            f"no {chamber} reference measured for the {member_congress}th Congress yet "
+            "— neutral 50 until enough members have sponsored bills to measure one"
+        )
+    current = (ref["congress"], ref["majority"]) if ref.get("majority") else None
+    population_median = ref["median_credit"]
+    avg_baseline = ref["avg_baseline"]
+    saturation = _LES_SATURATION_STDEVS * ref["stdev_credit"]
 
-    house_n = sum(
-        1 for b in sponsored_bills
-        if (b.get("billType") or "").lower() in _LES_HOUSE_TYPES
-    )
-    is_house_member = house_n > (len(sponsored_bills) - house_n)
-    population_median = _LES_POPULATION_MEDIAN_HOUSE if is_house_member else _LES_POPULATION_MEDIAN_SENATE
-    avg_baseline = _LES_AVG_BASELINE_HOUSE if is_house_member else _LES_AVG_BASELINE_SENATE
-
-    member_baseline = sum(
-        _advancement_baseline((b.get("billType") or "").lower(), b.get("congress"), party)
-        for b in sponsored_bills
-    ) / len(sponsored_bills)
+    member_baseline = _les_member_baseline(sponsored_bills, party, current)
     status_ratio = member_baseline / avg_baseline if avg_baseline else 1.0
     # Reference point is the chamber MEDIAN (not V&W's mean) so the typical
     # member scores ~50 despite the right-skewed credit distribution — see
-    # _LES_POPULATION_MEDIAN_* above. status_ratio only tilts that bar up or
-    # down for a member's own majority/minority bill mix.
+    # the LES population reference comment above. status_ratio only tilts
+    # that bar up or down for a member's own majority/minority bill mix.
     expected_per_congress = population_median * status_ratio
 
     diff = raw_per_congress - expected_per_congress
     conf = min(n_sub / 10, 1.0)
-    normalized_diff = max(-1.0, min(diff / _LES_CREDIT_SATURATION, 1.0))
+    normalized_diff = max(-1.0, min(diff / saturation, 1.0)) if saturation else 0.0
     raw_score = 50.0 + 50.0 * normalized_diff
     score = raw_score * conf + 50.0 * (1 - conf)
 
@@ -3302,6 +3449,7 @@ def _calc_legislative_effectiveness(
     party: str | None = None,
     years_in_office: float | None = None,
     attracted_bipartisanship: float | None = None,
+    les_reference: dict | None = None,
 ) -> int:
     """
     Legislative Effectiveness Score (0-100, higher = better).
@@ -3359,7 +3507,7 @@ def _calc_legislative_effectiveness(
     """
     return _legislative_effectiveness_core(
         sponsored_bills, leadership_score, party, years_in_office,
-        attracted_bipartisanship,
+        attracted_bipartisanship, les_reference,
     )["score"]
 
 
@@ -3369,11 +3517,14 @@ def _legislative_effectiveness_core(
     party: str | None = None,
     years_in_office: float | None = None,
     attracted_bipartisanship: float | None = None,
+    les_reference: dict | None = None,
 ) -> dict:
     """Same math as _calc_legislative_effectiveness, returning every
     intermediate value alongside the final score. Single implementation,
     same reuse contract as _funding_independence_core above."""
-    les_score, les_detail = _les_component_score(sponsored_bills or [], party, years_in_office)
+    les_score, les_detail = _les_component_score(
+        sponsored_bills or [], party, years_in_office, les_reference,
+    )
 
     # Component: leadership score from cosponsorship PageRank
     #

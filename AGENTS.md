@@ -309,6 +309,16 @@ The correct pattern, established by `_district_pvi()` /
    same way). `scripts/fetch_district_pvi.py` still exists only to
    regenerate the bundled pre-first-ingest fallback.
 
+   Better still, when the population a value describes is the one the
+   pipeline is scoring, measure it in the run itself. Legislative
+   Effectiveness's reference (chamber median credit, average baseline,
+   spread, current majority party) is computed from the members each run
+   is about to score (`compute_les_reference`), persisted to
+   `/data/les_reference.json` for the API's breakdowns, with
+   `app/data/les_reference.json` (`scripts/calibrate_les_credit_scale.py`)
+   as the pre-first-run fallback. A value frozen on one date can't track a
+   quantity that accumulates over a congress.
+
 This also applies to constants that are themselves the *output* of a
 fitting script (regression coefficients, saturation points derived from
 a residual stdev, min/max clamp ranges) — if a script prints "paste this

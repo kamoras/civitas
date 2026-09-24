@@ -393,7 +393,11 @@ export default function AboutPage() {
                   real credit on its own, not just bills that go on to pass a chamber or become law.
                   Three components: bill significance &amp; advancement (60%) — this cumulative
                   stage-credit per congress served, compared against an expected credit for a
-                  sponsor of this chamber/majority-minority status; legislative leadership (25%) —
+                  sponsor of this chamber/majority-minority status. That expectation is measured
+                  fresh on every run from the chamber itself — the median member&apos;s credit this
+                  congress, the chamber&apos;s current majority party read from its roster — so a
+                  member&apos;s standing doesn&apos;t drift as bills accumulate over a congress, or
+                  reset when a new one begins; legislative leadership (25%) —
                   cosponsorship-network PageRank, see below; and bipartisan coalition attraction
                   (15%, v6.11 — moved here from Constituent Alignment): the share of cosponsors a
                   member attracts to their own bills from the other party,

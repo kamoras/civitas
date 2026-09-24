@@ -13,15 +13,12 @@ from app.pipeline.analyze.score_calculator import (
     _constituent_alignment_core,
     _funding_independence_core,
     _legislative_effectiveness_core,
-    _LES_AVG_BASELINE_HOUSE,
-    _LES_AVG_BASELINE_SENATE,
-    _LES_POPULATION_MEDIAN_HOUSE,
-    _LES_POPULATION_MEDIAN_SENATE,
     _les_bill_stage,
     _les_cumulative_credit,
     _les_significance_weight,
     calculate_scores,
     clamp,
+    compute_les_reference,
     compute_overall_score,
 )
 
@@ -1261,7 +1258,7 @@ class TestLegislativeEffectiveness:
         Lower bound trimmed from 45 to 40 (2026-07-21): party=None here
         maps to _advancement_baseline's flat unknowable-status rate
         (0.030), which sits almost exactly at the Senate's own real
-        average (_LES_AVG_BASELINE_SENATE=0.0305, since that fix) — so
+        average (the Senate reference's avg_baseline, 0.0305) — so
         this scenario is now correctly compared against close to the full
         Senate population-average bar rather than the old pooled
         cross-chamber constant's easier one."""
@@ -1459,7 +1456,7 @@ class TestLegislativeEffectiveness:
     def test_credit_increases_with_bill_count_until_saturation(self):
         """More bills (same stage/significance) means more cumulative
         credit, so the score should rise with bill count — but the
-        expected-vs-actual gap saturates at _LES_CREDIT_SATURATION (same
+        expected-vs-actual gap saturates at 1.5 population stdevs (same
         "never a runaway score from one outlier" shape as every other
         saturation constant in this file), so two counts that are BOTH
         already past saturation score identically, same as e.g.
@@ -1503,25 +1500,32 @@ class TestLegislativeEffectiveness:
         )
         assert house_score > senate_score
 
-    def test_advancement_baseline_is_chamber_specific(self):
-        """2026-07-21 fix: a single pooled _LES_AVG_BASELINE compared every
+    def test_advancement_baseline_is_chamber_specific(self, pinned_les_reference):
+        """2026-07-21 fix: a single pooled average baseline compared every
         member's own majority/minority advancement rate against ONE
         cross-chamber average, even though the two chambers' real rates
         genuinely differ (live audit: House mean ~0.044, Senate mean
-        ~0.031 — see the constants' own comment in score_calculator.py).
-        That silently inflated House members' expected-credit bar and
-        deflated the Senate's on top of the already-correct chamber split
-        for _LES_POPULATION_MEDIAN_* (then named _LES_POPULATION_AVG_*),
-        flipping the fairness the chamber split
-        was supposed to provide (live population: House went from 61%
-        scoring below neutral vs Senate's 38% to a much closer ~53-58%
-        split for both after this fix). This guards against a future
-        refactor silently re-collapsing the two constants back into one
-        shared value."""
-        assert _LES_AVG_BASELINE_HOUSE != _LES_AVG_BASELINE_SENATE
-        assert _LES_AVG_BASELINE_HOUSE > _LES_AVG_BASELINE_SENATE
+        ~0.031). That silently inflated House members' expected-credit bar
+        and deflated the Senate's (live population: House 61% below neutral
+        vs Senate 38% before the fix). Guards that a House member is
+        measured against the HOUSE reference only: changing the Senate
+        entry must not move a House member's score, and vice versa."""
+        import copy
 
-    def test_median_member_scores_near_neutral(self):
+        house_bills = [
+            {"title": f"B{i}", "isLaw": False, "latestAction": "Introduced",
+             "billType": "hr", "congress": 119}
+            for i in range(30)
+        ]
+        ref = copy.deepcopy(pinned_les_reference)
+        base = _calc_legislative_effectiveness(house_bills, None, les_reference=ref)
+        ref["senate"]["avg_baseline"] *= 2
+        ref["senate"]["median_credit"] *= 2
+        assert _calc_legislative_effectiveness(house_bills, None, les_reference=ref) == base
+        ref["house"]["median_credit"] *= 2
+        assert _calc_legislative_effectiveness(house_bills, None, les_reference=ref) < base
+
+    def test_median_member_scores_near_neutral(self, pinned_les_reference):
         """v6.10 (2026-07-23): the V&W component's reference point is each
         chamber's population MEDIAN, not its mean. The per-congress credit
         distribution is right-skewed (a minority of highly prolific sponsors
@@ -1539,7 +1543,7 @@ class TestLegislativeEffectiveness:
         # Introduced-only substantive "s" bills each earn weight(5)*stage(1)
         # = 5 cumulative credit; ~58 of them in one congress ≈ the Senate
         # median of 289 per-congress credit.
-        n = round(_LES_POPULATION_MEDIAN_SENATE / 5)
+        n = round(pinned_les_reference["senate"]["median_credit"] / 5)
         median_credit_bills = [
             {"title": f"B{i}", "isLaw": False, "latestAction": "Introduced",
              "billType": "s", "congress": 119}
@@ -1554,25 +1558,25 @@ class TestLegislativeEffectiveness:
         assert 46 <= score <= 56
 
     def test_population_reference_is_median_not_mean(self):
-        """Guard the mean->median switch itself (v6.10): the reference
-        constants must be each chamber's live-audit MEDIAN (Senate 289,
-        House 129 — re-run 2026-07-23 after PR #227's REFERRED-stage split
-        was actually reclassified into the `stage` column by a pipeline run,
-        see score_calculator.py's comment above these constants), which sits
-        strictly below the corresponding right-skewed MEAN (Senate 324.95,
-        House 143.80). A future recalibration that pasted the mean back in
-        would silently re-open the residual below-neutral imbalance this
-        version closed, and no behavioral test pins the exact constant.
-        House median stays well below the Senate's — 435 members split
-        similar institutional bandwidth — so the chamber split this rides on
-        top of is preserved too."""
-        assert _LES_POPULATION_MEDIAN_SENATE == 289.0
-        assert _LES_POPULATION_MEDIAN_HOUSE == 129.0
-        # Strictly below the (skewed) means they replaced.
-        assert _LES_POPULATION_MEDIAN_SENATE < 324.95
-        assert _LES_POPULATION_MEDIAN_HOUSE < 143.80
-        # Chamber split preserved: House norm far below the Senate's.
-        assert _LES_POPULATION_MEDIAN_HOUSE < _LES_POPULATION_MEDIAN_SENATE
+        """Guard the mean->median switch itself (v6.10): the reference point
+        is the chamber's MEDIAN per-congress credit, which for a right-skewed
+        population sits strictly below the mean. A reference computed from
+        the mean would silently re-open the below-neutral imbalance v6.10
+        closed. Since v6.13 the reference is measured every pipeline run
+        (compute_les_reference), so this pins the computation, not a
+        constant."""
+        def member(n_bills):
+            return ([
+                {"title": f"B{i}", "isLaw": False, "latestAction": "Introduced",
+                 "billType": "s", "congress": 119}
+                for i in range(n_bills)
+            ], "D")
+        # 40 typical members at 10 bills, 5 prolific ones at 200.
+        members = [member(10) for _ in range(40)] + [member(200) for _ in range(5)]
+        ref = compute_les_reference(members, congress=119, majority="R")
+        assert ref["median_credit"] == 50.0  # 10 bills x weight 5 x stage 1
+        assert ref["median_credit"] < ref["mean_credit"]
+        assert ref["n"] == 45
 
 
 class TestCalculateScoresIntegration:

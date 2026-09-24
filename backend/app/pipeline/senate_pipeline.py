@@ -686,6 +686,63 @@ def _build_analysis_input(prepared: dict, platform_texts: dict) -> dict:
     }
 
 
+async def _sponsored_bill_actions(client, db: Session, sp: dict) -> list[dict]:
+    """Congress.gov actions for one sponsored-bill entry ([] when its id is
+    incomplete). Cached upstream by fetch_bill_actions."""
+    bill_number = "".join(ch for ch in (sp.get("billId") or "").split(".")[-1] if ch.isdigit())
+    if not (sp.get("billType") and bill_number and sp.get("congress")):
+        return []
+    return await fetch_bill_actions(
+        client, db, sp["congress"], sp["billType"].lower(), int(bill_number),
+    ) or []
+
+
+def sitting_president_party(db: Session) -> str | None:
+    """Party of the sitting president — the Vice President's party, which
+    breaks a Senate tie (see score_calculator.derive_chamber_majority)."""
+    from app.models import President
+
+    row = db.query(President.party).filter(President.is_current == True).first()  # noqa: E712
+    return row[0] if row else None
+
+
+def _live_les_reference(
+    chamber: str, members: list[tuple[list[dict], str | None]], db: Session,
+) -> dict | None:
+    """This run's Legislative Effectiveness population reference for
+    `chamber`, persisted for the API and returned merged with the other
+    chamber's last reference for calculate_scores. None (score against the
+    last persisted reference) when this run has too few members to measure
+    one — a single-member filter run, or the first days of a congress.
+    Shared by the Senate and House pipelines."""
+    from app.pipeline.analyze.score_calculator import (
+        compute_les_reference,
+        derive_chamber_majority,
+        load_les_reference,
+        write_les_reference,
+    )
+
+    majority = derive_chamber_majority(
+        [party for _, party in members], chamber, sitting_president_party(db),
+    )
+    if majority is None:
+        logger.warning(
+            "%s majority party undeterminable from the roster — majority/minority "
+            "adjustment falls back to the historical table for this congress",
+            chamber,
+        )
+    ref = compute_les_reference(members, settings.CURRENT_CONGRESS, majority)
+    if ref is None:
+        logger.warning(
+            "Too few %s members with substantive bills to measure an LES reference "
+            "this run — scoring against the last persisted one", chamber,
+        )
+        return None
+    logger.info("LES reference (%s): %s", chamber, ref)
+    write_les_reference(chamber, ref)
+    return {**load_les_reference(), chamber: ref}
+
+
 def _recent_not_covered_by_key_bills(
     classified_recent: list[dict], roll_call_data_map: dict[str, dict],
 ) -> list[dict]:
@@ -1762,6 +1819,45 @@ async def run_senate_pipeline(
         # call fails and burns its retry backoff across the full sponsored-
         # bill set.
         async with make_async_client() as client:
+            # Every sponsored bill's stage BEFORE anyone is scored: Legislative
+            # Effectiveness credits bills by stage reached, and its population
+            # reference must be measured on the same inputs members are scored
+            # on. Stage used to be classified inside the loop below, after
+            # calculate_scores had already run, so Senate LE was scored on the
+            # latestAction keyword fallback — which misses a bill that passed
+            # the Senate once its latest action is a House referral — while the
+            # House (house_pipeline phase 4b) classified first.
+            from app.pipeline.analyze.bill_stage import classify_bill_stage_from_actions
+            stage_failures = 0
+            for prepared in senator_prepared:
+                for sp in prepared.get("sponsoredBills", []):
+                    try:
+                        sp["stage"] = classify_bill_stage_from_actions(
+                            await _sponsored_bill_actions(client, db, sp), sp.get("isLaw", False),
+                        )
+                    except Exception:
+                        # Leave stage unset: _les_bill_stage falls back to
+                        # isLaw/latestAction for this bill. One unreachable
+                        # bill must not abort every senator's scoring.
+                        stage_failures += 1
+            if stage_failures:
+                logger.warning(
+                    "Bill-stage classification failed for %d sponsored bills — "
+                    "those use the latestAction fallback", stage_failures,
+                )
+
+            les_reference = _live_les_reference(
+                "senate",
+                [
+                    (
+                        p.get("sponsoredBills", []),
+                        p["votingRecord"].get("effectiveParty") or p["senator"].get("party"),
+                    )
+                    for p in senator_prepared
+                ],
+                db,
+            )
+
             for senator_idx in range(len(senator_prepared)):
                 prepared = senator_prepared[senator_idx]
                 senator = prepared["senator"]
@@ -1827,6 +1923,7 @@ async def run_senate_pipeline(
                         "attractedBipartisanshipScore": attracted_bipartisanship_scores.get(bio_id_for_score),
                         "sponsoredBills": prepared.get("sponsoredBills", []),
                         "ideologyScore": ideology_scores.get(bio_id_for_score),
+                        "lesReference": les_reference,
                     }
                     corruption_score = calculate_scores(temp_senator)
                     corruption_score["confidence"] = calculate_confidence(temp_senator)
@@ -1864,7 +1961,6 @@ async def run_senate_pipeline(
                     # official title (from pre-fetched titles), CRS policy area,
                     # and the short display title.
                     from app.pipeline.analyze.bill_analyzer import classify_policy_areas_multi
-                    from app.pipeline.analyze.bill_stage import classify_bill_stage_from_actions
                     from app.pipeline.analyze.party_platform import classify_party_alignment_multi
                     raw_sponsored = prepared.get("sponsoredBills", [])
                     classified_sponsored: list[dict] = []
@@ -1872,15 +1968,7 @@ async def run_senate_pipeline(
                         title = sp.get("title", "")
                         api_policy = sp.get("policyArea", "")
                         bill_id = sp.get("billId", "")
-                        bill_number_str = "".join(ch for ch in bill_id.split(".")[-1] if ch.isdigit())
-                        bill_actions: list[dict] = []
-                        if sp.get("billType") and bill_number_str and sp.get("congress"):
-                            bill_actions = await fetch_bill_actions(
-                                client, db, sp["congress"], sp["billType"].lower(), int(bill_number_str),
-                            )
-                        sp["stage"] = classify_bill_stage_from_actions(
-                            bill_actions, sp.get("isLaw", False),
-                        )
+                        # sp["stage"] was set before scoring (top of this phase).
                         if api_policy:
                             sp["policyArea"] = api_policy.upper().replace(" ", "_")
                         parts = [title]

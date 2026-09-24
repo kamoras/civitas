@@ -240,8 +240,8 @@ PRESIDENT_ALGORITHM_VERSION = "v4"
 # magnitudes into one indistinguishable ceiling score. tanh still favors
 # the biggest landslides (Washington still scores highest) without
 # erasing the gap between "historically exceptional" and "merely very
-# good." Same "~1.5x stdev" shape as score_calculator.py's
-# _LES_CREDIT_SATURATION, now smoothed rather than hard-clamped.
+# good." Same "~1.5x stdev" shape as score_calculator.py's LES
+# saturation (_LES_SATURATION_STDEVS), now smoothed rather than hard-clamped.
 _ZSCORE_SATURATION_STDEV = 1.5
 
 

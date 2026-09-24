@@ -81,3 +81,38 @@ def fixed_ranking():
 
     with explore_ranking.override(TEST_RANKING_CALIBRATION):
         yield TEST_RANKING_CALIBRATION
+
+
+# Legislative Effectiveness scores each member against a population
+# reference the pipeline measures every run (/data/les_reference.json, with
+# a bundled fallback in app/data/). Tests must not inherit whichever of
+# those happens to be on disk — a dev machine's /data, or the next
+# regeneration of the bundled file, would silently change what they assert.
+# Pinned to the 2026-07-23 production audit values: test scaffolding, not a
+# proposal for production values.
+TEST_LES_REFERENCE = {
+    "senate": {
+        "congress": 119, "majority": "R", "n": 101, "median_credit": 289.0,
+        "mean_credit": 324.95, "stdev_credit": 178.37, "avg_baseline": 0.0305,
+    },
+    "house": {
+        "congress": 119, "majority": "R", "n": 427, "median_credit": 129.0,
+        "mean_credit": 143.8, "stdev_credit": 88.12, "avg_baseline": 0.0444,
+    },
+}
+
+
+@pytest.fixture(autouse=True)
+def pinned_les_reference(tmp_path, monkeypatch):
+    """Point both LES reference files at test-controlled paths: no live
+    /data file, and a bundled file holding TEST_LES_REFERENCE."""
+    import json
+
+    from app.pipeline.analyze import score_calculator
+
+    bundled = tmp_path / "les_reference_bundled.json"
+    bundled.write_text(json.dumps(TEST_LES_REFERENCE))
+    monkeypatch.setattr(score_calculator, "_LES_REFERENCE_PATH", str(tmp_path / "les_reference_live.json"))
+    monkeypatch.setattr(score_calculator, "_LES_REFERENCE_BUNDLED", bundled)
+    monkeypatch.setattr(score_calculator, "_les_reference_cache", None)
+    yield TEST_LES_REFERENCE

@@ -1,44 +1,37 @@
-"""Calibrate Legislative Effectiveness's V&W-based component constants:
-_LES_POPULATION_MEDIAN_SENATE, _LES_POPULATION_MEDIAN_HOUSE,
-_LES_AVG_BASELINE_SENATE, _LES_AVG_BASELINE_HOUSE, _LES_CREDIT_SATURATION
-(score_calculator.py).
+"""Regenerate app/data/les_reference.json — Legislative Effectiveness's
+bundled pre-first-run population reference.
 
-V&W's real LES normalizes to the chamber-term population MEAN (average
-member = 1.0). This platform deliberately centers on the chamber MEDIAN
-instead (v6.10): the per-congress credit distribution is right-skewed, so a
-mean reference puts >50% of every chamber below neutral by construction (see
-_LES_POPULATION_MEDIAN_*'s comment in score_calculator.py). This platform's
-sponsored-bill data is also career-cumulative (many congresses, not one
-fixed term), so the reference point is a periodically-recalibrated constant
-instead of a live computation — same convention as every other
-self-calibrated constant in this file (e.g. the FI small-donor state
-baseline). This script measures that median directly from live production
-data using the SAME _les_cumulative_credit/_les_bill_stage/
-_advancement_baseline functions the real formula uses, so calibration and
-scoring can never silently drift apart.
+The pipeline recomputes this reference for each chamber on every run
+(score_calculator.compute_les_reference) and writes /data/les_reference.json,
+which takes precedence. The bundled file only matters before a deployment's
+first pipeline run (or if /data is lost), so it just needs to be a real,
+recent measurement — this script takes one from the public API using the
+SAME compute_les_reference the pipeline uses, so the fallback and the live
+reference can never be computed differently.
+
+Per AGENTS.md §3a this writes the JSON file directly; nothing is pasted
+into source code.
 
 Run inside the backend container (imports the real scoring module):
     docker compose -f docker-compose.yml -f docker-compose.dev.yml \\
-        run --rm --no-deps -v "$(pwd)/backend/scripts:/app/scripts" \\
+        run --rm --no-deps -v "$(pwd)/backend:/app" \\
         -e PYTHONPATH=/app backend python scripts/calibrate_les_credit_scale.py
-
-After running, paste the reported constants into score_calculator.py
-with a comment citing this script and the date.
+Then commit the regenerated backend/app/data/les_reference.json.
 """
 
+import datetime
 import json
-import statistics
+import pathlib
 import urllib.request
 
 from app.pipeline.analyze.score_calculator import (
-    SUBSTANTIVE_BILL_TYPES,
-    _LES_HOUSE_TYPES,
-    _advancement_baseline,
-    _les_cumulative_credit,
+    compute_les_reference,
+    derive_chamber_majority,
 )
 
 API_BASE = "https://civitas-research.org/api"
 UA = {"User-Agent": "CivitasCivicPlatform/1.0 (LES calibration; contact: mack.ryanm@gmail.com)"}
+OUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "les_reference.json"
 
 
 def _fetch_json(url: str):
@@ -47,97 +40,57 @@ def _fetch_json(url: str):
         return json.load(resp)
 
 
-def _per_congress_credit(bills: list[dict]) -> float | None:
-    n_sub = sum(1 for b in bills if (b.get("billType") or "").lower() in SUBSTANTIVE_BILL_TYPES)
-    if n_sub == 0:
-        return None
-    congresses = {b.get("congress") for b in bills if b.get("congress")}
-    n_congresses = max(len(congresses), 1)
-    return sum(_les_cumulative_credit(b) for b in bills) / n_congresses
-
-
-def _member_baseline(bills: list[dict], party: str | None) -> float | None:
-    if not bills:
-        return None
-    return sum(
-        _advancement_baseline((b.get("billType") or "").lower(), b.get("congress"), party)
-        for b in bills
-    ) / len(bills)
+def _sitting_president_party() -> str | None:
+    # The directory's president branch lists only the sitting president.
+    listing = _fetch_json(f"{API_BASE}/politicians?branch=president")
+    return listing[0].get("party") if listing else None
 
 
 def main() -> None:
-    per_congress_by_chamber: dict[str, list[float]] = {"senate": [], "house": []}
-    # Chamber-specific as of 2026-07-21: a single pooled baseline compared
-    # every member against a cross-chamber average, systematically
-    # inflating House members' expected credit and deflating the Senate's
-    # since the two chambers' real _advancement_baseline rates genuinely
-    # differ (House mean ~0.044 vs Senate ~0.031) — see the constants'
-    # comment in score_calculator.py for the live-population impact this
-    # had before the fix (61% of House below neutral vs 38% of Senate).
-    member_baselines_by_chamber: dict[str, list[float]] = {"senate": [], "house": []}
-
-    for branch in ("senate", "house"):
-        listing = _fetch_json(f"{API_BASE}/politicians?branch={branch}")
-        ids = [d["id"] for d in listing if d.get("hasScorecard")]
-        for pid in ids:
-            detail = _fetch_json(f"{API_BASE}/politicians/{pid}")
-            sc = detail.get("scorecard") or {}
-            bills = sc.get("sponsoredBills") or []
-            party = sc.get("party")
-
-            per_congress = _per_congress_credit(bills)
-            if per_congress is not None:
-                # Chamber inference: same logic _les_component_score uses.
-                house_n = sum(1 for b in bills if (b.get("billType") or "").lower() in _LES_HOUSE_TYPES)
-                is_house = house_n > (len(bills) - house_n)
-                per_congress_by_chamber["house" if is_house else "senate"].append(per_congress)
-
-            mb = _member_baseline(bills, party)
-            if mb is not None:
-                member_baselines_by_chamber[branch].append(mb)
-
-    for chamber in ("senate", "house"):
-        values = per_congress_by_chamber[chamber]
-        if not values:
-            print(f"{chamber}: no data")
-            continue
-        mean = statistics.mean(values)
-        median = statistics.median(values)
-        stdev = statistics.pstdev(values)
-        p90 = statistics.quantiles(values, n=10)[8] if len(values) >= 10 else max(values)
-        print(
-            f"{chamber}: n={len(values)} mean={mean:.2f} median={median:.2f} "
-            f"stdev={stdev:.2f} p90={p90:.2f}"
-        )
-
-    avg_baseline_by_chamber = {
-        chamber: statistics.mean(values) if values else 0.0
-        for chamber, values in member_baselines_by_chamber.items()
+    out: dict = {
+        "_source": (
+            "Pre-first-run fallback only: the pipeline recomputes this per chamber every "
+            "run (score_calculator.compute_les_reference) and writes /data/les_reference.json, "
+            f"which takes precedence. Measured from {API_BASE} by "
+            "backend/scripts/calibrate_les_credit_scale.py."
+        ),
+        "_as_of": datetime.date.today().isoformat(),
     }
-    for chamber, avg in avg_baseline_by_chamber.items():
-        print(f"\n{chamber}-average _advancement_baseline: {avg:.4f}")
+    tie_breaker = _sitting_president_party()
 
-    print("\nSuggested constants:")
-    # Reference point is the MEDIAN, not the mean (v6.10): the per-congress
-    # credit distribution is right-skewed, so a mean reference puts >50% of
-    # every chamber below neutral by construction. The mean is still printed
-    # in the per-chamber summary above for context.
     for chamber in ("senate", "house"):
-        values = per_congress_by_chamber[chamber]
-        if values:
-            print(f"  _LES_POPULATION_MEDIAN_{chamber.upper()} = {statistics.median(values):.2f}")
-    for chamber in ("senate", "house"):
-        print(f"  _LES_AVG_BASELINE_{chamber.upper()} = {avg_baseline_by_chamber[chamber]:.4f}")
-    # Saturation: same "~1.5x the residual spread" reasoning used
-    # elsewhere in this file's calibration constants (e.g. the FI
-    # small-donor baseline script) — full credit/deficit at roughly one
-    # meaningful standard deviation of real per-congress spread past the
-    # population average, chamber-specific stdevs averaged since the
-    # saturation constant is currently shared across chambers.
-    stdevs = [statistics.pstdev(v) for v in per_congress_by_chamber.values() if v]
-    if stdevs:
-        suggested_saturation = round(1.5 * statistics.mean(stdevs), 2)
-        print(f"  _LES_CREDIT_SATURATION = {suggested_saturation}")
+        members: list[tuple[list[dict], str | None]] = []
+        congresses: set[int] = set()
+        for entry in _fetch_json(f"{API_BASE}/politicians?branch={chamber}"):
+            if not entry.get("hasScorecard"):
+                continue
+            sc = (_fetch_json(f"{API_BASE}/politicians/{entry['id']}").get("scorecard") or {})
+            # The public scorecard doesn't expose caucus inference, so an
+            # Independent counts toward neither side here (the pipeline
+            # itself uses effectiveParty). Fine for a fallback file; revisit
+            # if a chamber is ever within the Independents' margin.
+            party = sc.get("party")
+            bills = sc.get("sponsoredBills") or []
+            members.append((bills, party))
+            congresses.update(b["congress"] for b in bills if b.get("congress"))
+        if not congresses:
+            print(f"{chamber}: no sponsored-bill data; left unchanged")
+            continue
+        congress = max(congresses)
+        majority = derive_chamber_majority([p for _, p in members], chamber, tie_breaker)
+        ref = compute_les_reference(members, congress, majority)
+        if ref is None:
+            print(f"{chamber}: too few members with substantive bills; left unchanged")
+            continue
+        out[chamber] = ref
+        print(f"{chamber}: {ref}")
+
+    if "senate" not in out or "house" not in out:
+        existing = json.loads(OUT.read_text()) if OUT.exists() else {}
+        for chamber in ("senate", "house"):
+            out.setdefault(chamber, existing.get(chamber))
+    OUT.write_text(json.dumps(out, indent=1, sort_keys=True) + "\n")
+    print(f"wrote {OUT}")
 
 
 if __name__ == "__main__":
