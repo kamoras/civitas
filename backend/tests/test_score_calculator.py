@@ -2159,3 +2159,28 @@ class TestPartyIdeologyBoundsPersistence:
         score_calculator.write_party_ideology_bounds("senate", {"D": (0.2, 0.4)})
 
         assert score_calculator._party_ideology_bounds_cache == {"senate": {"D": (0.1, 0.9)}}
+
+
+class TestLeadershipZeroIsAScore:
+    """compute_leadership_scores rescales a chamber's PageRank to [0, 1], so
+    the chamber's lowest member gets exactly 0.0. That used to be read as
+    "no data" and scored a neutral 50, while the next member up scored ~0."""
+
+    def test_zero_scores_below_the_next_member_up(self):
+        lowest = _legislative_effectiveness_core([], 0.0, years_in_office=8)
+        next_up = _legislative_effectiveness_core([], 0.001, years_in_office=8)
+        lead = {c["label"]: c for c in lowest["components"]}["Legislative leadership"]
+        assert lead["score"] == 0.0
+        assert lowest["score"] <= next_up["score"]
+
+    def test_missing_is_still_neutral(self):
+        core = _legislative_effectiveness_core([], None, years_in_office=8)
+        lead = {c["label"]: c for c in core["components"]}["Legislative leadership"]
+        assert lead["score"] == 50.0
+        assert "no cosponsorship-network data" in lead["detail"]
+
+    def test_detail_does_not_call_it_a_percentile(self):
+        core = _legislative_effectiveness_core([], 0.3, years_in_office=8)
+        detail = {c["label"]: c for c in core["components"]}["Legislative leadership"]["detail"]
+        assert "percentile" not in detail
+        assert "within the chamber" in detail

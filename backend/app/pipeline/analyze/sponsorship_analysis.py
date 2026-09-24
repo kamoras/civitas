@@ -60,20 +60,37 @@ ADVANCED_EDGE_WEIGHT = 0.6
 STALLED_EDGE_WEIGHT = 0.3
 
 
-def _cosponsorship_edge_weight(bill: dict) -> float:
+def _cosponsorship_edge_weight(bill: dict) -> float | None:
     """How much a single cosponsorship of `bill` should count toward
-    Legislative Leadership's PageRank — see the weight tiers'
-    calibration note. Bills with no isLaw/latestAction data at all (an
-    older enrichment path that doesn't fetch outcome data) default to the
-    original flat weight rather than being penalized for a data gap."""
+    Legislative Leadership's PageRank — see the weight tiers' calibration
+    note. None when the bill carries no outcome data at all (an enrichment
+    path that doesn't fetch isLaw/latestAction); see _edge_weight_fn."""
     if bill.get("isLaw"):
         return ENACTED_EDGE_WEIGHT
     action = bill.get("latestAction")
     if action is None:
-        return ENACTED_EDGE_WEIGHT
+        return None
     if any(kw in action.lower() for kw in _ADVANCEMENT_ACTION_KEYWORDS):
         return ADVANCED_EDGE_WEIGHT
     return STALLED_EDGE_WEIGHT
+
+
+def _edge_weight_fn(bills_data: list[dict]):
+    """_cosponsorship_edge_weight with unknown outcomes filled by the mean
+    weight of this run's bills whose outcome IS known.
+
+    A bill with no outcome data used to get the ENACTED weight — the
+    maximum — so a sponsor whose bills came through the outcome-less path
+    looked like one whose bills all became law. Missing data should be
+    neutral: the typical known bill, not the best case (or the worst)."""
+    known = [w for w in (_cosponsorship_edge_weight(b) for b in bills_data) if w is not None]
+    default = sum(known) / len(known) if known else ENACTED_EDGE_WEIGHT
+
+    def weight(bill: dict) -> float:
+        w = _cosponsorship_edge_weight(bill)
+        return default if w is None else w
+
+    return weight
 
 
 def _build_cosponsorship_matrix(
@@ -93,7 +110,7 @@ def _build_cosponsorship_matrix(
             current cohort.
         weight_fn: optional bill dict -> float, applied per cosponsorship
             edge (defaults to a flat 1.0 for every edge). Leadership/
-            PageRank passes _cosponsorship_edge_weight; Ideology/SVD
+            PageRank passes _edge_weight_fn(bills_data); Ideology/SVD
             intentionally leaves this at the default — see module
             docstring for why.
 
@@ -189,7 +206,7 @@ def compute_leadership_scores(
 
     id_to_row, n, P = _build_cosponsorship_matrix(
         bills_data, cosponsors_map, senator_bioguide_ids,
-        weight_fn=_cosponsorship_edge_weight,
+        weight_fn=_edge_weight_fn(bills_data),
     )
     if n < 5:
         return {}

@@ -1036,6 +1036,11 @@ logger = logging.getLogger(__name__)
 # them (summarize_election_totals); (4) the PAC-share multipliers 3.2 / 1.35
 # (0.5 / a hand-typed chamber median) are replaced by the chamber median
 # measured every run (compute_funding_reference).
+#
+# Also v6.13 — Legislative leadership: a 0.0 PageRank score (the chamber's
+# lowest member, by construction of the [0, 1] rescale) is scored, not
+# treated as missing data; and a cosponsored bill with no outcome data gets
+# the mean known edge weight instead of the ENACTED maximum.
 ALGORITHM_VERSION = "v6.13"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
@@ -3544,24 +3549,32 @@ def _legislative_effectiveness_core(
     # used for the V&W-based component, scaled to a full 6-year Senate
     # term (long enough to plausibly build a real network; short enough
     # that a second-term member isn't still getting a pass).
-    if leadership_score is not None and leadership_score > 0:
-        # Raw score is 0-1 from PageRank (percentile-like). Scale to 0-100.
-        leadership_raw = min(leadership_score, 1.0) * 100
+    # 0.0 is a real score, not missing data: compute_leadership_scores
+    # rescales the chamber's PageRank to [0, 1], so exactly one member —
+    # the chamber's lowest — gets 0.0. Treating that as "no data" gave the
+    # bottom member a neutral 50 while the next one up scored ~0. Only None
+    # (no cosponsorship-network data) is missing.
+    if leadership_score is not None:
+        # Rescaled within the chamber (log scale, median ≈ 0.5) — a
+        # position in the chamber, not a percentile.
+        leadership_raw = min(max(leadership_score, 0.0), 1.0) * 100
+        leadership_head = f"PageRank leadership {leadership_raw:.0f}/100 within the chamber (median ≈ 50)"
     else:
         # No data yet — neutral prior, never a punitive below-50 default
         # (this repo's design principle: missing data is never "bad").
         leadership_raw = 50.0
+        leadership_head = "no cosponsorship-network data — neutral 50"
 
     leadership_conf = min((years_in_office or 0) / LEADERSHIP_TENURE_FULL_CREDIT_YEARS, 1.0)
     leadership_pct = leadership_raw * leadership_conf + 50 * (1 - leadership_conf)
     leadership_detail = (
-        f"PageRank percentile {leadership_raw:.0f}, tenure-confidence-scaled "
+        f"{leadership_head}, tenure-confidence-scaled "
         f"{leadership_conf:.0%} ({years_in_office or 0:.1f} of 6 years)"
     )
 
     if (
         not sponsored_bills
-        and not (leadership_score and leadership_score > 0)
+        and leadership_score is None
         and attracted_bipartisanship is None
         and les_score == 50.0
     ):
@@ -3569,7 +3582,7 @@ def _legislative_effectiveness_core(
 
     # Bipartisan coalition attraction (v6.11 — see the docstring above for
     # the HVW 2023 rationale and disclosed limits). Cohort-median-
-    # normalized like the leadership percentile: the chamber-median
+    # normalized like the leadership score: the chamber-median
     # attractor of cross-party cosponsors scores 50. Missing data skips
     # the component and reverts to the exact pre-v6.11 70/30 split —
     # never scored neutral, matching how this dimension's own

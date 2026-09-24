@@ -699,6 +699,11 @@ export default function AboutPage() {
                   The algorithm uses power iteration with a damping factor of 0.85 and converges in
                   ~50 iterations. Raw PageRank values are rescaled to [0, 1] using a logarithmic
                   transformation to compress the heavy-tailed distribution, then displayed as 0-100.
+                  That places each member within their own chamber (the median member sits near 50);
+                  it is not a percentile, and the chamber&apos;s lowest member scores 0, not a
+                  neutral default. Each cosponsorship is weighted by how far the bill got (became
+                  law, advanced, or stalled); a bill whose outcome isn&apos;t known counts as the
+                  typical bill whose outcome is, not as one that became law.
                 </P>
                 <P>
                   Network centrality structurally takes years to build — a freshman senator&apos;s
