@@ -1,6 +1,6 @@
 """Standing post-run check for v6.11's disclosed signal-overlap risks.
 
-score_calculator.py's v6.11 changelog names two component pairs that are
+docs/methodology/member-score/v6.11.md names two component pairs that are
 measured from related data and must be re-checked against the live
 population after every meaningful pipeline run — the same discipline that
 caught the v6.8 double-count (ideology_score extremity vs.

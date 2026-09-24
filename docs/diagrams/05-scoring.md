@@ -131,7 +131,8 @@ previously three independent copies that could silently drift.
 | Concern | Code |
 |---|---|
 | Weights | `backend/app/config_definitions.py` — `SCORE_WEIGHTS`, `PRESIDENT_SCORE_WEIGHTS`, `JUSTICE_SCORE_WEIGHTS` |
-| Member formulas + full changelog | `analyze/score_calculator.py` (module docstring is the source of truth) |
+| Member formulas | `analyze/score_calculator.py` (module docstring states the current rule) |
+| Why each version changed | `docs/methodology/` (one decision record per version) |
 | President formulas | `analyze/president_scorer.py` |
 | Justice formulas | `services/justice_service.py` |
 | Public weights endpoint | `GET /api/config` |

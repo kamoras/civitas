@@ -43,7 +43,7 @@ Three families of checks, all population-level:
 check_score_distribution guards the failure mode per-member checks
 can't see — the whole population collapsing toward one value (Promise
 Persistence did exactly this before being removed as a scored dimension,
-see score_calculator.py's v5→v6.0 changelog). The old fixed stdev floors
+see docs/methodology/member-score/v6.0.md). The old fixed stdev floors
 (8.0/6.5/5.5 — themselves hand-calibrated from live audits) are replaced
 by two derived tests: a point-mass check (a strict majority sharing one
 value is a collapse by definition) and a self-history check (today's
@@ -89,7 +89,7 @@ MIN_HISTORY_DATES = 5
 #
 # v6.11 (2026-07-23, same day as this module's rewrite): coalition breadth
 # moved to Legislative Effectiveness and position congruence added to this
-# dimension (score_calculator.py's changelog). No GROUND_TRUTH entries to
+# dimension (docs/methodology/member-score/). No GROUND_TRUTH entries to
 # re-verify here anymore — the derived checks above re-measure the current
 # population automatically every run, which is the entire point of this
 # rewrite; a scoring-formula change no longer requires hand-updating
