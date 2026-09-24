@@ -17,7 +17,7 @@ Consistency (Ideological Independence)
     An absolute differential of 1 → 0 (perfectly party-predictable in
       EITHER direction — a systematically counter-partisan justice is as
       predictable as a loyalist, and now scores accordingly rather than a
-      spurious 100). All three bloc-based scores are shrunk toward the
+      spurious 100). Both bloc-based scores are shrunk toward the
       neutral 50 when backed by few cases (count-confidence).
 
 Independence
@@ -38,38 +38,38 @@ Independence
     the old threshold — gone once the per-case credit is continuous instead
     of booleanized before averaging.
 
-Bipartisan Agreement
-    Average pairwise agreement rate with opposing-bloc justices across ALL
-    cases (including unanimous).  Unanimous decisions raise every justice's
-    baseline; split decisions differentiate them.
+Removed in v6.13 (docs/research/justice-scores.md; reproduce with
+scripts/research_justice_scores.py — the Rehnquist Court vote matrix,
+1994-2004, from Spaeth's Supreme Court Database via MCMCpack, run through
+this module, plus a simulation of a 6-3 Court):
 
-Judicial Restraint
-    Dissent behaviour scored against empirically documented historical norms.
-    Uses a continuous curve rather than binary threshold penalties:
+  Judicial Restraint — dissent frequency against a hand-set curve. It was
+    the dissent rate with the sign flipped (Spearman -1.00 across 99
+    justice-terms), and dissent rate is distance from the Court's median
+    justice (rho 0.83; the median justice dissented in 17.7% of split
+    cases vs 33.7% for the rest) — where a justice sits relative to the
+    Court's current composition, not restraint (which the literature
+    measures as deference to the elected branches). Under symmetric
+    partisanship on a 6-3 Court, it scored the 3-member bloc 21 points
+    lower than the 6-member bloc for being outvoted — on today's Court, a
+    structural penalty on one party's appointees. Its cited calibration
+    did not hold up: Haynie (1992) is about Chief Justices and the Court's
+    historical consensus norm and sets no "authored dissents above 8%"
+    threshold.
+  Bipartisan Agreement — pairwise agreement with opposing-bloc justices.
+    Spearman 0.86 with Independence (same construct) and it also averaged
+    in unanimous cases, which carry no information about partisanship
+    (Fisher weight 0). Its weight was folded into Independence.
 
-      - Optimal dissent range 8–15%: scores 100.  The lower bound follows
-        Caldeira & Zorn (1998) who argue some dissent validates the review
-        process; the upper bound equals the historical mean documented by
-        Epstein, Landes & Posner (2013).
-      - Below 2%: mild conformist penalty (score 80), per Caldeira & Zorn
-        (1998) who note near-zero dissent signals strategic conformism.
-      - 2–8%: rising linearly from 80 to 100.
-      - 15–25%: linear decline from 100 to 70 (within ≈1.3 SD of mean per
-        ELP 2013 historical SD ≈ 8%).
-      - Above 25%: steeper decline, floor 0.
-
-    An authored-dissent penalty activates above 8% authored dissents
-    (Haynie 1992), reflecting a distinction between joining dissents
-    (principled disagreement) and authoring them (vocal ideology
-    signaling).
+Both remaining bloc measures showed no bloc-size bias in the simulation
+(gaps within 2 points between a 6- and a 3-member bloc, with and without
+informative party), and they measure different things (Spearman 0.19).
 
 Academic references:
   • Segal & Cover (1989) — pre-confirmation ideology from editorials
   • Martin & Quinn (2002) — Bayesian ideal-point model from voting data
-  • Epstein, Landes & Posner (2013) — agreement rates, coalition analysis,
-    and historical dissent rate distribution (mean ≈15%, SD ≈8%)
-  • Caldeira & Zorn (1998) — consensual norms; some dissent validates review
-  • Haynie (1992) — authored dissent above ≈8% signals vocal ideology
+  • Martin, Quinn & Epstein (2005) — the median justice sits in the majority,
+    which is why dissent rate tracks distance from the Court's median
 """
 
 import logging
@@ -146,8 +146,8 @@ def analyze_justice_votes(
             justice; used to derive the comparison blocs from data.
 
     Returns:
-        Dict with score_consistency, score_independence, score_bipartisan_agreement,
-        score_judicial_restraint, and supporting statistics.
+        Dict with score_consistency, score_independence, and supporting
+        statistics.
     """
     if not votes:
         return _empty_result()
@@ -302,85 +302,6 @@ def analyze_justice_votes(
     else:
         independence = 50.0
 
-    # --- Score: Bipartisan Agreement ---
-    # Average pairwise agreement with opposing-bloc justices across ALL cases
-    # (unanimous + split).  Produces differentiated scores per justice.
-    # Case-weighted bipartisan rate: a justice who appeared in 200 cases with
-    # Kagan gets 200 votes, not equal weight with a 3-case pairing against Jackson.
-    bipartisan_total_cases = sum(agreement_totals.get(oid, 0) for oid in opp_bloc)
-    bipartisan_total_agree = sum(agreement_counts.get(oid, 0) for oid in opp_bloc)
-    if bipartisan_total_cases > 0:
-        raw_bipartisan = bipartisan_total_agree / bipartisan_total_cases * 100
-        # Shrink on the number of CASES the justice sat in (not pairings)
-        # so a justice with only a handful of shared cases isn't scored at
-        # full confidence off a tiny sample (2026-07).
-        bipartisan = _shrink_to_neutral(raw_bipartisan, total)
-    else:
-        bipartisan = 50.0
-
-    # --- Score: Judicial Restraint ---
-    #
-    # Scored against empirically documented historical norms rather than
-    # hard binary thresholds.  Sources:
-    #
-    #   Epstein, L., Landes, W.M., & Posner, R.A. (2013). The Behavior of
-    #     Federal Judges. Harvard UP.  — Historical dissent mean ≈15%, SD ≈8%.
-    #   Caldeira, G.A., & Zorn, C.J.W. (1998). Of Time and Consensual Norms
-    #     in the United States Supreme Court. AJPS 42(3), 874–902.
-    #     — Near-zero dissent signals strategic conformism, not restraint.
-    #   Haynie, S.L. (1992). Leadership and Consensus on the U.S. Supreme
-    #     Court. Journal of Politics 54(4), 1158–1169.
-    #     — Authored dissents above ≈8% of cases signal vocal disagreement.
-    #
-    # Constants derived from the above:
-    #   DISSENT_HIST_MEAN = 0.15   (ELP 2013 Table 4 historical mean)
-    #   DISSENT_MIN       = 0.02   (Caldeira & Zorn 1998: minimum healthy)
-    #   DISSENT_OPT_LOW   = 0.08   (lower bound of restrained range,
-    #                                midpoint between DISSENT_MIN and DISSENT_HIST_MEAN)
-    #   DISSENT_ELEV      = 0.25   (≈ mean + 1.25 SD per ELP 2013, "notably elevated")
-    #   AUTHORED_NORM     = 0.08   (Haynie 1992: authored dissents >8% = vocal)
-    #   AUTHORED_SCALE    = 150.0  (maps a 7-point excess above 8% to ≈10-pt penalty)
-    DISSENT_MIN     = 0.02
-    DISSENT_OPT_LOW = 0.08
-    DISSENT_OPT_HIGH = 0.15   # historical mean (ELP 2013)
-    DISSENT_ELEV    = 0.25
-    AUTHORED_NORM   = 0.08
-    AUTHORED_SCALE  = 150.0
-
-    dissent_rate = minority_count / total if total > 0 else 0.0
-    # Clamp authored dissent rate to actual dissent rate: opinion_type and vote
-    # fields can diverge in source data (e.g. partial dissents), so authored
-    # dissents can't meaningfully exceed cases where the justice voted minority.
-    authored_dissent_rate = min(authored_dissent / total, dissent_rate) if total > 0 else 0.0
-
-    if dissent_rate < DISSENT_MIN:
-        # Near-zero: slight conformist penalty per Caldeira & Zorn (1998)
-        dissent_score = 80.0
-    elif dissent_rate <= DISSENT_OPT_LOW:
-        # Rising 80→100 as dissent reaches lower bound of optimal range
-        dissent_score = 80.0 + (
-            (dissent_rate - DISSENT_MIN) / (DISSENT_OPT_LOW - DISSENT_MIN)
-        ) * 20.0
-    elif dissent_rate <= DISSENT_OPT_HIGH:
-        # Plateau at 100 within the historically restrained range
-        dissent_score = 100.0
-    elif dissent_rate <= DISSENT_ELEV:
-        # Linear decline 100→70 between historical mean and elevated threshold
-        dissent_score = 100.0 - (
-            (dissent_rate - DISSENT_OPT_HIGH) / (DISSENT_ELEV - DISSENT_OPT_HIGH)
-        ) * 30.0
-    else:
-        # Steeper decline beyond notably elevated threshold
-        dissent_score = max(0.0, 70.0 - (dissent_rate - DISSENT_ELEV) / 0.35 * 70.0)
-
-    # Authored-dissent penalty: activates above Haynie (1992) norm
-    authored_penalty = max(
-        0.0,
-        (authored_dissent_rate - AUTHORED_NORM) * AUTHORED_SCALE,
-    )
-
-    restraint = max(0.0, min(100.0, dissent_score - authored_penalty))
-
     # --- Agreement matrix ---
     agreement_matrix: dict[str, float] = {}
     for oid in all_active:
@@ -395,8 +316,6 @@ def analyze_justice_votes(
     return {
         "score_consistency": round(consistency, 1),
         "score_independence": round(independence, 1),
-        "score_bipartisan_agreement": round(bipartisan, 1),
-        "score_judicial_restraint": round(restraint, 1),
         "cases_decided": total,
         "majority_pct": round(majority_count / total * 100, 1) if total else 0.0,
         "dissent_pct": round(minority_count / total * 100, 1) if total else 0.0,
@@ -436,27 +355,6 @@ def analyze_justice_votes(
                     else "no split decisions with an opposing bloc seated — neutral 50"
                 ),
             },
-            "bipartisan_agreement": {
-                "total_agree": bipartisan_total_agree,
-                "total_cases": bipartisan_total_cases,
-                "detail": (
-                    f"agreed with opposing-bloc justices in {bipartisan_total_agree} of "
-                    f"{bipartisan_total_cases} case-pairings (case-weighted, all cases incl. unanimous)"
-                    if bipartisan_total_cases > 0
-                    else "no opposing-bloc case pairings available — neutral 50"
-                ),
-            },
-            "judicial_restraint": {
-                "dissent_rate": round(dissent_rate, 3),
-                "dissent_score": round(dissent_score, 1),
-                "authored_dissent_rate": round(authored_dissent_rate, 3),
-                "authored_penalty": round(authored_penalty, 1),
-                "detail": (
-                    f"dissent rate {dissent_rate:.1%} → curve score {dissent_score:.1f}, "
-                    f"authored-dissent rate {authored_dissent_rate:.1%} → "
-                    f"penalty -{authored_penalty:.1f}"
-                ),
-            },
         },
     }
 
@@ -465,8 +363,6 @@ def _empty_result() -> dict:
     return {
         "score_consistency": 50.0,
         "score_independence": 50.0,
-        "score_bipartisan_agreement": 50.0,
-        "score_judicial_restraint": 50.0,
         "cases_decided": 0,
         "majority_pct": 0.0,
         "dissent_pct": 0.0,
@@ -480,7 +376,5 @@ def _empty_result() -> dict:
         "breakdown": {
             "consistency": {"detail": "no vote data available — neutral 50"},
             "independence": {"detail": "no vote data available — neutral 50"},
-            "bipartisan_agreement": {"detail": "no vote data available — neutral 50"},
-            "judicial_restraint": {"detail": "no vote data available — neutral 50"},
         },
     }

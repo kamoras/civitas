@@ -44,16 +44,6 @@ const METRIC_LABELS: { key: keyof JusticeScore; label: string; desc: string }[] 
     label: "INDEPENDENCE",
     desc: "How often they break from their appointing-party's expected voting bloc in split decisions.",
   },
-  {
-    key: "bipartisanAgreement",
-    label: "BIPARTISAN AGREEMENT",
-    desc: "How often this justice sides with justices appointed by the opposing party, across the cases they hear together — reflects jurisprudential pragmatism.",
-  },
-  {
-    key: "judicialRestraint",
-    label: "JUDICIAL RESTRAINT",
-    desc: "Balanced dissent patterns — measured disagreement rather than ideological grandstanding.",
-  },
 ];
 
 function AgreementRow({ name, pct }: { name: string; pct: number }) {

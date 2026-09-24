@@ -936,6 +936,21 @@ export default function AboutPage() {
               is analogous to the independence metric used for senators but adapted to the judicial
               context where party loyalty is replaced by jurisprudential consistency.
             </P>
+            <P>
+              The score has two parts. Ideological consistency (44%) measures how differently a
+              justice agrees with the two sets of colleagues, those appointed by the same
+              party and those appointed by the other, weighting close decisions most because they
+              reveal the most. Independence (56%) measures how often, in split decisions, a justice
+              sides with the other party&apos;s appointees against their own. Until v6.13 there were
+              two more. &quot;Judicial restraint&quot; scored how often a justice dissents. Tested
+              on the Rehnquist Court&apos;s 1994–2004 votes, dissent frequency turned out to measure
+              distance from the Court&apos;s median justice, who is in nearly every majority. In a
+              simulated 6–3 Court it put the smaller bloc about 21 points behind just for being
+              outvoted, so it was removed. &quot;Bipartisan agreement&quot; measured the same thing
+              as independence (a 0.86 correlation), so its weight moved there. Each
+              justice&apos;s dissent rate is still shown as a plain statistic. The study is in the
+              project repository at docs/research/justice-scores.md.
+            </P>
           </Section>
 
           {/* ── State ballots ── */}

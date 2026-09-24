@@ -463,8 +463,6 @@ class PresidentLeaderboardEntry(CamelModel):
 class JusticeScoreSchema(CamelModel):
     consistency: float
     independence: float
-    bipartisan_agreement: float
-    judicial_restraint: float
     # Backend-computed overall (justice_service._build_score).
     overall: float = 0.0
 

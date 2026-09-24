@@ -626,8 +626,8 @@ function JusticeLeaderboard({
 
       <div className="mt-4 space-y-1 text-center">
         <p className="font-sans text-xs text-ink-lo">
-          Higher score = more impartial jurisprudence. Computed from: ideological consistency (35%)
-          + independence (30%) + judicial restraint (20%) + bipartisan agreement (15%). Click any
+          Higher score = more impartial jurisprudence. Computed from ideological consistency and
+          independence from the appointing party&apos;s bloc (weights on the About page). Click any
           row to view full profile.
         </p>
         <p className="font-sans text-xs text-ink-min">

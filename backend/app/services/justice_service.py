@@ -23,8 +23,6 @@ def _build_score(j: Justice) -> JusticeScoreSchema:
     overall = (
         j.score_consistency * JUSTICE_SCORE_WEIGHTS["consistency"]
         + j.score_independence * JUSTICE_SCORE_WEIGHTS["independence"]
-        + j.score_bipartisan_agreement * JUSTICE_SCORE_WEIGHTS["bipartisan_agreement"]
-        + j.score_judicial_restraint * JUSTICE_SCORE_WEIGHTS["judicial_restraint"]
     )
     # Round to match every other scorer's serializer (senators/reps/presidents
     # all round(...,2)); without this the raw float reaches the UI verbatim as
@@ -33,8 +31,6 @@ def _build_score(j: Justice) -> JusticeScoreSchema:
     return JusticeScoreSchema(
         consistency=j.score_consistency,
         independence=j.score_independence,
-        bipartisan_agreement=j.score_bipartisan_agreement,
-        judicial_restraint=j.score_judicial_restraint,
         overall=overall,
     )
 

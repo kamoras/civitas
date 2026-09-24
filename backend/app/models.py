@@ -832,8 +832,6 @@ class Justice(Base):
 
     score_consistency: Mapped[float] = mapped_column(Float, default=0.0)
     score_independence: Mapped[float] = mapped_column(Float, default=0.0)
-    score_bipartisan_agreement: Mapped[float] = mapped_column(Float, default=0.0)
-    score_judicial_restraint: Mapped[float] = mapped_column(Float, default=0.0)
 
     cases_decided: Mapped[int] = mapped_column(Integer, default=0)
     majority_pct: Mapped[float] = mapped_column(Float, default=0.0)

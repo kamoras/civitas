@@ -177,11 +177,15 @@ PRESIDENT_SCORE_WEIGHTS: dict[str, float] = {
 # the scorer (services/justice_service.py), the directory's overall-score calc
 # (api/politicians.py), and the public /justices/weights endpoint — previously
 # these were three independent copies that could silently drift.
+#
+# v6.13: Judicial Restraint (0.20) and Bipartisan Agreement (0.15) removed —
+# see justice_analyzer's module docstring. Bipartisan Agreement measured
+# Independence's construct (Spearman 0.86), so its weight joins
+# Independence's (0.30 + 0.15); the two remaining weights are then
+# renormalized over 0.80 — no new weighting judgment.
 JUSTICE_SCORE_WEIGHTS: dict[str, float] = {
-    "consistency": 0.35,
-    "independence": 0.30,
-    "bipartisan_agreement": 0.15,
-    "judicial_restraint": 0.20,
+    "consistency": 0.35 / 0.80,
+    "independence": 0.45 / 0.80,
 }
 
 INDUSTRIES: dict[str, dict] = {

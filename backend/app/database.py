@@ -276,6 +276,19 @@ def _migrate_columns() -> None:
         ("presidents", "summary"),
         ("presidents", "key_achievements"),
         ("presidents", "key_failures"),
+        # v6.13: Judicial Restraint and Bipartisan Agreement left the justice
+        # scorecard (justice_analyzer's module docstring has the evidence).
+        # NOT NULL in the live schema, so they must go before the next new
+        # justice can be inserted.
+        ("justices", "score_bipartisan_agreement"),
+        ("justices", "score_judicial_restraint"),
+        # v6.13: nullable, so not insert-blocking — dropped so the deployed
+        # schema matches the models (outside spending left Funding
+        # Independence; opposing-party unity lost its only reader).
+        ("senators", "outside_spending_for"),
+        ("representatives", "outside_spending_for"),
+        ("key_votes", "opposing_party_unity_pct"),
+        ("rep_key_votes", "opposing_party_unity_pct"),
     ]
 
     with engine.begin() as conn:

@@ -186,7 +186,7 @@ class TestJusticeBreakdownEnrichment:
         )
         assert "breakdown" in result
         assert result["breakdown"]["consistency"]["own_bloc_agreement_rate"] is not None
-        assert result["breakdown"]["judicial_restraint"]["dissent_rate"] is not None
+        assert set(result["breakdown"]) == {"consistency", "independence"}
 
 
 class TestSenatorScoreBreakdownService:

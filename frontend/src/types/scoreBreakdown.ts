@@ -42,8 +42,6 @@ export interface JusticeScoreBreakdown {
   breakdown: {
     consistency: JusticeDimensionBreakdown;
     independence: JusticeDimensionBreakdown;
-    bipartisanAgreement: JusticeDimensionBreakdown;
-    judicialRestraint: JusticeDimensionBreakdown;
   };
   [key: string]: unknown;
 }
