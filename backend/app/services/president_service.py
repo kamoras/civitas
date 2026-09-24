@@ -114,7 +114,7 @@ def get_president(db: Session, president_id: str) -> PresidentSchema | None:
 def get_president_score_breakdown(db: Session, president_id: str) -> dict | None:
     """Recompute a president's full score-derivation breakdown on-demand,
     directly from whatever live/historical data is currently stored
-    (gdp_growth_adjusted, rulemaking_count, election_margin, etc. —
+    (gdp_growth_avg, rulemaking_finalized_pct, election_margin, etc. —
     persisted by president_pipeline.py specifically so this recompute is
     possible without a live re-fetch).
 
@@ -152,12 +152,10 @@ def get_president_score_breakdown(db: Session, president_id: str) -> dict | None
             jobs_created_millions=p.jobs_created_millions,
             gdp_growth_avg=p.gdp_growth_avg,
             term_years=term_years,
-            gdp_growth_adjusted=p.gdp_growth_adjusted,
+            term_start_year=int(p.term_start[:4]) if p.term_start else None,
         ),
         "agencyAlignment": _agency_alignment_core(
-            rulemaking_count=p.rulemaking_count,
             rulemaking_finalized_pct=p.rulemaking_finalized_pct,
-            term_years=term_years,
         ),
         "historicalLegacy": _historical_legacy_core(
             historical_legacy_score=p.historical_legacy_score,

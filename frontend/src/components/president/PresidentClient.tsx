@@ -65,12 +65,12 @@ const METRIC_LABELS: {
   {
     key: "effectiveness",
     label: "EFFECTIVENESS",
-    desc: "GDP growth, job creation, and tangible outcomes for voters",
+    desc: "GDP growth and job creation over the term, compared with other presidents (GDP within its era, before or after 1947).",
   },
   {
     key: "agencyAlignment",
     label: "AGENCY ALIGNMENT",
-    desc: "How effectively federal agencies execute the president's agenda through rulemaking. N/A before Federal Register data begins in 1936.",
+    desc: "How far federal agencies carry through the rulemaking they start (share finalized), compared with other administrations. N/A before 1994, where machine-readable Federal Register data begins.",
   },
   {
     key: "historicalLegacy",

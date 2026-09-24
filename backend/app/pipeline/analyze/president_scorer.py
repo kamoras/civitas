@@ -264,11 +264,37 @@ def _population_zscore_component(
     }
 
 
+# GDP growth is compared within its data regime. Pre-1947 real-GDP
+# estimates overstate business-cycle volatility by construction (Romer 1989,
+# "The Prewar Business Cycle Reconsidered", JPE 97(1)), and measured term
+# growth bears that out: presidencies before 1947 vary 2.5x as much as those
+# after (SD 2.87 vs 1.13 points, Maddison Project data — docs/research/
+# president-scores.md). One scale for both let the prewar spread pin 12% of
+# those presidents at 0 or 100 while no postwar president reached either.
+_GDP_REGIME_SPLIT_YEAR = 1947
+
+
+def _gdp_reference_key(term_start_year: int | None) -> str:
+    if term_start_year is not None and term_start_year < _GDP_REGIME_SPLIT_YEAR:
+        return "gdp_growth_prewar"
+    return "gdp_growth_postwar"
+
+
+def jobs_per_attributed_year(jobs_created_millions: float, term_years: float) -> float:
+    """Jobs per year over the window the jobs figure covers: from January of
+    the term's second year (Blinder & Watson year-1 exclusion — see
+    economic_data.calculate_jobs_created), so the divisor is the term minus
+    one year, floored so a young in-progress term doesn't divide by ~zero.
+    One definition for the score and the population it is compared with."""
+    return jobs_created_millions / max(term_years - 1.0, 0.5)
+
+
 def calc_effectiveness(
     jobs_created_millions: float | None,
     gdp_growth_avg: float | None,
     term_years: float,
-    gdp_growth_adjusted: float | None = None,
+    term_start_year: int | None = None,
+    reference: dict | None = None,
 ) -> int | None:
     """Calculate effectiveness score from economic data only.
 
@@ -276,7 +302,7 @@ def calc_effectiveness(
     thin wrapper kept for existing callers/tests that expect a bare int.
     """
     return _effectiveness_core(
-        jobs_created_millions, gdp_growth_avg, term_years, gdp_growth_adjusted,
+        jobs_created_millions, gdp_growth_avg, term_years, term_start_year, reference,
     )["score"]
 
 
@@ -284,163 +310,102 @@ def _effectiveness_core(
     jobs_created_millions: float | None,
     gdp_growth_avg: float | None,
     term_years: float,
-    gdp_growth_adjusted: float | None = None,
+    term_start_year: int | None = None,
+    reference: dict | None = None,
 ) -> dict:
     """Same math as calc_effectiveness, returning every intermediate value
     alongside the final score.
 
-    Components (weighted):
-      - GDP growth (60%): Compared to post-WWII average of ~3.2%. Real for
-        every president back to 1790 (gdp_growth_avg is populated from
-        BEA/FRED for Truman-33 onward, and from MeasuringWorth's
-        historical annual real-GDP series — app.pipeline.fetch.
-        historical_gdp — for every president before that; both are the
-        same "average annual growth over the term" figure regardless of
-        which live source computed it).
-      - Jobs created (40%): Normalized per year of term. Only available
-        from BLS payroll data (1939 onward, per economic_data.py) — no
-        equivalent historical employment series exists for earlier
-        presidents, so this component is genuinely absent (not
-        defaulted) for anyone before that, and Effectiveness for those
-        presidents is 100% GDP growth via _blend_live_components'
-        renormalization.
+    Components, each scored against the presidential population measured
+    every run (compute_president_reference), like Public Mandate:
+      - GDP growth (60%): average annual real growth over the term, first
+        year excluded (Blinder & Watson 2016; Romer & Romer 2010 on the
+        policy lag) and peak-relative after a contraction
+        (historical_gdp.compute_term_gdp_growth). Compared with presidents
+        in the same data regime, split at 1947 (see _GDP_REGIME_SPLIT_YEAR).
+      - Jobs created (40%): payroll jobs per attributed year, BLS 1939
+        onward only. Absolute jobs rather than percent growth: across
+        presidencies since 1945 the absolute rate shows no trend with era
+        (Spearman 0.01) while the percent rate falls with the labor force's
+        own slowing growth (-0.52), so percent would penalize recent
+        presidents for demographics.
 
-    GDP adjustment — first-year exclusion
-    ----------------------------------------
-    When per-year GDP data is available, uses gdp_growth_adjusted which
-    excludes the first calendar year of the term.  The first year's GDP
-    primarily reflects the preceding administration's fiscal policy,
-    legislation, and macroeconomic inheritance.  Romer & Romer (2010,
-    AER 100(3), 763–801) document a 6–18 month transmission lag for
-    fiscal policy changes.  Blinder & Watson (2016, AER 106(4), 1015–1045)
-    and Bartels (2008, 'Unequal Democracy,' Princeton UP, Table 2.1)
-    both start measuring presidential economic performance from the second
-    year of the term on this basis.
+    Replaced in president v5: hand-set curves (GDP 25 + g/5 x 55 around a
+    "post-WWII 3.2%"; jobs 30 + rate/3M x 50) — AGENTS.md §3a.
 
-    When gdp_growth_adjusted is None, falls back to gdp_growth_avg
-    (full-term average — used for historical presidents, where a
-    year-1-exclusion adjustment hasn't been computed).
-
-    References:
-      Blinder, A.S., & Watson, M.W. (2016). AER 106(4), 1015–1045.
-      Bartels, L.M. (2008). Unequal Democracy. Princeton UP.
-      Romer, C.D., & Romer, D.H. (2010). AER 100(3), 763–801.
+    What this does not do, disclosed: most of a modern president's term
+    growth is shared with other advanced economies over the same years (60%
+    of the variance since 1946 — docs/research/president-scores.md), so
+    this dimension largely measures economic conditions a president
+    presided over, not caused. Growth relative to peer economies would
+    remove that shared component, but needs a peer-GDP source the pipeline
+    does not fetch yet.
     """
     components: list[dict] = []
 
-    effective_gdp = gdp_growth_adjusted if gdp_growth_adjusted is not None else gdp_growth_avg
+    gdp_key = _gdp_reference_key(term_start_year)
+    gdp_stat = _president_stat(reference, gdp_key)
+    if gdp_growth_avg is not None and gdp_stat:
+        era = "before" if gdp_key == "gdp_growth_prewar" else "since"
+        components.append(_population_zscore_component(
+            "GDP growth", 0.60, gdp_growth_avg, gdp_stat[0], gdp_stat[1],
+            f"{gdp_growth_avg:.1f}% average annual real growth (first year excluded) vs. "
+            f"{gdp_stat[0]:.1f}% for presidencies {era} {_GDP_REGIME_SPLIT_YEAR}",
+        ))
 
-    if effective_gdp is not None:
-        # Scale: post-WWII average 3.2% → ~55 (slightly above mid-point).
-        # 5% → ~80; 0% → ~25; negative values score below 25.
-        gdp_score = 25 + (effective_gdp / 5.0) * 55
-        gdp_score = max(0.0, min(100.0, gdp_score))
-        components.append({
-            "label": "GDP growth", "weight": 0.60, "score": round(gdp_score, 1),
-            "detail": (
-                f"{effective_gdp:.1f}% average annual growth "
-                f"({'year-1-excluded' if gdp_growth_adjusted is not None else 'full-term average'}) "
-                "vs. post-WWII average 3.2%"
-            ),
-        })
-
-    if jobs_created_millions is not None and term_years > 0:
-        # The jobs figure is measured from January of the term's SECOND
-        # year (Blinder & Watson year-1 exclusion — see economic_data.
-        # calculate_jobs_created, 2026-07 fix), so the per-year rate
-        # divides by that attributed window, not the full term — dividing
-        # a 7-year jobs change by 8 term years would understate every
-        # completed term's rate, short terms worst. Floor keeps a young
-        # in-progress term from dividing by ~zero.
-        jobs_window_years = max(term_years - 1.0, 0.5)
-        jobs_per_year = jobs_created_millions / jobs_window_years
-        # 2.5M/year = strong (75), negative = very low
-        if jobs_per_year >= 0:
-            job_score = min(30 + jobs_per_year / 3.0 * 50, 95)
-        else:
-            job_score = max(30 + jobs_per_year * 15, 5)
-        components.append({
-            "label": "Jobs created", "weight": 0.40, "score": round(job_score, 1),
-            "detail": (
-                f"{jobs_created_millions:.1f}M jobs over the {jobs_window_years:.1f} "
-                "attributed years (term minus the Blinder-Watson year-1 lag) "
-                f"= {jobs_per_year:.2f}M/year"
-            ),
-        })
+    jobs_stat = _president_stat(reference, "jobs_per_year")
+    if jobs_created_millions is not None and term_years > 0 and jobs_stat:
+        rate = jobs_per_attributed_year(jobs_created_millions, term_years)
+        components.append(_population_zscore_component(
+            "Jobs created", 0.40, rate, jobs_stat[0], jobs_stat[1],
+            f"{jobs_created_millions:.1f}M jobs = {rate:.2f}M per attributed year "
+            f"(term minus the year-1 lag) vs. {jobs_stat[0]:.2f}M for presidencies since 1939",
+        ))
 
     return _blend_live_components(components)
 
 
 def calc_agency_alignment(
-    rulemaking_count: int | None,
-    rulemaking_finalized_pct: float | None,
-    term_years: float,
+    rulemaking_finalized_pct: float | None, reference: dict | None = None,
 ) -> int | None:
     """Calculate agency alignment score from Federal Register rulemaking data.
 
     See _agency_alignment_core for the full component breakdown — this is a
     thin wrapper kept for existing callers/tests that expect a bare int.
     """
-    return _agency_alignment_core(
-        rulemaking_count, rulemaking_finalized_pct, term_years,
-    )["score"]
+    return _agency_alignment_core(rulemaking_finalized_pct, reference)["score"]
 
 
 def _agency_alignment_core(
-    rulemaking_count: int | None,
-    rulemaking_finalized_pct: float | None,
-    term_years: float,
+    rulemaking_finalized_pct: float | None, reference: dict | None = None,
 ) -> dict:
     """Same math as calc_agency_alignment, returning every intermediate
     value alongside the final score.
 
-    Components (weighted):
-      - Rulemaking activity rate (50%): Agencies actively producing rules
-        aligned with the agenda. Moderate-to-high rate scores well.
-      - Finalization rate (50%): Ratio of final rules to total rulemaking
-        (proposed + final). Higher = agencies follow through effectively.
+    Finalization rate: final rules as a share of rulemaking documents
+    (proposed + final) — how far agencies carry what they start — scored
+    against the administrations measured every run.
 
-    No historical proxy exists for this dimension before Clinton-42
-    (2026-07: checked both real candidate sources rather than assumed —
-    federalregister.gov's API returns zero results for any pre-1994
-    president, e.g. Reagan; govinfo.gov's own structured/bulk Federal
-    Register data starts at year 2000, not earlier). This is a
-    digitization wall, not the conceptual absence this docstring used to
-    claim ("before the Federal Register Act of 1936") — notice-and-comment
-    rulemaking was a real, functioning practice well before 1994, this
-    platform just has no machine-readable record of it that far back.
-    Federal Register issues before ~2000 exist only as scanned PDF page
-    images with no structured document-type/agency tagging; reconstructing
-    rulemaking counts from that would mean OCR'ing and classifying decades
-    of raw scanned text, the same category of fragile, unreliable pipeline
-    already rejected for Follow-Through and Competence's court-success-rate
-    (see PRESIDENT_SCORE_WEIGHTS's comment in config_definitions.py) — not
-    attempted here for the same reason. Agency Alignment is fully excluded
-    (not defaulted) for every president outside this real coverage window,
-    via compute_president_overall_score's per-president renormalization.
+    Removed in president v5: the rulemaking ACTIVITY rate (rules per year,
+    scored higher the more rules). Rule volume tracks an administration's
+    regulatory philosophy, not its effectiveness: the Federal Register's
+    final-rule count hit its record low in 2019 (2,964) and its page count a
+    record high in 2024 (CEI "Ten Thousand Commandments" 2025; GWU
+    Regulatory Studies Center RegStats). Scoring volume as better scored a
+    policy preference.
+
+    Coverage: federalregister.gov's structured data starts in 1994, so this
+    dimension exists from Clinton onward and is excluded (not defaulted)
+    for earlier presidents via compute_president_overall_score.
     """
     components: list[dict] = []
-
-    if rulemaking_count and term_years > 0:
-        rules_per_year = rulemaking_count / term_years
-        # 500-2000 rules/year is typical modern rate; scale accordingly
-        if rules_per_year <= 1500:
-            activity_score = min(25 + rules_per_year / 1500 * 55, 80)
-        else:
-            activity_score = min(80 + (rules_per_year - 1500) / 2000 * 15, 95)
-        components.append({
-            "label": "Rulemaking activity rate", "weight": 0.50, "score": round(activity_score, 1),
-            "detail": f"{rulemaking_count} rulemakings over {term_years:.1f} years = {rules_per_year:.0f}/year",
-        })
-
-    if rulemaking_finalized_pct is not None:
-        # Higher finalization = agencies completing the rulemaking process
-        final_score = min(20 + rulemaking_finalized_pct * 0.7, 95)
-        components.append({
-            "label": "Finalization rate", "weight": 0.50, "score": round(final_score, 1),
-            "detail": f"{rulemaking_finalized_pct:.0f}% of rulemakings reached a final rule",
-        })
-
+    stat = _president_stat(reference, "rulemaking_finalized_pct")
+    if rulemaking_finalized_pct is not None and stat:
+        components.append(_population_zscore_component(
+            "Finalization rate", 1.0, rulemaking_finalized_pct, stat[0], stat[1],
+            f"{rulemaking_finalized_pct:.0f}% of rulemakings reached a final rule vs. "
+            f"{stat[0]:.0f}% across administrations since 1994",
+        ))
     return _blend_live_components(components)
 
 
@@ -467,12 +432,15 @@ def _agency_alignment_core(
 # Mandate is excluded for them (see compute_president_overall_score).
 
 # Fewest presidents with a value before its population mean/stdev is
-# trusted; below it the last persisted value is kept for that stat.
+# trusted; below it the last persisted value is kept for that stat. The
+# finalization rate's whole population is the administrations since 1994
+# (six in 2026), so it is measured from five.
 _MIN_PRESIDENT_REFERENCE_N = 10
+_MIN_REFERENCE_N_OVERRIDES = {"rulemaking_finalized_pct": 5}
 
 
-def _mean_stdev(values: list[float]) -> dict | None:
-    if len(values) < _MIN_PRESIDENT_REFERENCE_N:
+def _mean_stdev(values: list[float], min_n: int = _MIN_PRESIDENT_REFERENCE_N) -> dict | None:
+    if len(values) < min_n:
         return None
     return {
         "mean": round(statistics.mean(values), 4),
@@ -484,7 +452,9 @@ def _mean_stdev(values: list[float]) -> dict | None:
 def compute_president_reference(presidents: list[dict]) -> dict:
     """Population mean/stdev for each z-scored presidential input, from
     stored per-president values: dicts with id, name, avg_approval,
-    approval_trend, election_margin, historical_legacy_score.
+    approval_trend, election_margin, historical_legacy_score, and (for
+    Effectiveness / Agency Alignment) gdp_growth_avg, term_start_year,
+    jobs_created_millions, term_years, rulemaking_finalized_pct.
 
     Approval, trend and margin are counted per presidency (split terms have
     their own polling and elections). The C-SPAN score is counted once per
@@ -499,11 +469,24 @@ def compute_president_reference(presidents: list[dict]) -> dict:
     def values(field: str) -> list[float]:
         return [float(p[field]) for p in presidents if p.get(field) is not None]
 
+    gdp = {"gdp_growth_prewar": [], "gdp_growth_postwar": []}
+    jobs: list[float] = []
+    for p in presidents:
+        if p.get("gdp_growth_avg") is not None:
+            gdp[_gdp_reference_key(p.get("term_start_year"))].append(float(p["gdp_growth_avg"]))
+        if p.get("jobs_created_millions") is not None and (p.get("term_years") or 0) > 0:
+            jobs.append(jobs_per_attributed_year(float(p["jobs_created_millions"]), float(p["term_years"])))
+
     stats = {
         "avg_approval": _mean_stdev(values("avg_approval")),
         "approval_trend": _mean_stdev(values("approval_trend")),
         "election_margin": _mean_stdev(values("election_margin")),
         "historical_legacy": _mean_stdev(list(legacy_by_person.values())),
+        **{key: _mean_stdev(vals) for key, vals in gdp.items()},
+        "jobs_per_year": _mean_stdev(jobs),
+        "rulemaking_finalized_pct": _mean_stdev(
+            values("rulemaking_finalized_pct"), _MIN_REFERENCE_N_OVERRIDES["rulemaking_finalized_pct"],
+        ),
     }
     return {k: v for k, v in stats.items() if v is not None}
 
@@ -615,7 +598,7 @@ def _historical_legacy_core(
     Covers what none of this platform's other three president dimensions
     can: crisis leadership, moral authority, vision, and similar
     historical-consequence judgments that don't reduce to GDP growth,
-    approval polling, or rulemaking volume (added 2026-07 after review
+    approval polling, or rulemaking (added 2026-07 after review
     found presidents like Lincoln landing in the
     bottom half of the overall ranking — every individual number was
     defensible on its own terms, but nothing in the formula could credit
@@ -664,7 +647,7 @@ def recalculate_president_scores(
     Args:
         president_id: e.g. "obama-44"
         live_data: Dict with keys jobs_created_millions, gdp_growth_avg,
-            gdp_growth_adjusted, rulemaking_count, rulemaking_finalized_pct,
+            term_start_year, rulemaking_finalized_pct,
             avg_approval, approval_trend, election_margin,
             historical_legacy_score — any subset may be present; each
             calc_* function handles its own missing inputs.
@@ -686,12 +669,12 @@ def recalculate_president_scores(
             jobs_created_millions=live_data.get("jobs_created_millions"),
             gdp_growth_avg=live_data.get("gdp_growth_avg"),
             term_years=term_years,
-            gdp_growth_adjusted=live_data.get("gdp_growth_adjusted"),
+            term_start_year=live_data.get("term_start_year"),
+            reference=reference,
         ),
         "score_agency_alignment": calc_agency_alignment(
-            rulemaking_count=live_data.get("rulemaking_count"),
             rulemaking_finalized_pct=live_data.get("rulemaking_finalized_pct"),
-            term_years=term_years,
+            reference=reference,
         ),
         "score_historical_legacy": calc_historical_legacy(
             historical_legacy_score=live_data.get("historical_legacy_score"),

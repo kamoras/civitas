@@ -128,6 +128,12 @@ TEST_PRESIDENT_REFERENCE = {
         "approval_trend": {"mean": -13.72, "stdev": 14.65, "n": 15},
         "election_margin": {"mean": 8.39, "stdev": 7.51, "n": 42},
         "historical_legacy": {"mean": 549.14, "stdev": 157.61, "n": 44},
+        # president v5 (research_president_scores.py fallback values; the
+        # finalization rate has no fallback, so tests pin a round one).
+        "gdp_growth_prewar": {"mean": 3.317, "stdev": 2.8748, "n": 25},
+        "gdp_growth_postwar": {"mean": 2.8371, "stdev": 1.1273, "n": 9},
+        "jobs_per_year": {"mean": 1.2351, "stdev": 0.978, "n": 12},
+        "rulemaking_finalized_pct": {"mean": 60.0, "stdev": 10.0, "n": 6},
     },
 }
 

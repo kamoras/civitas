@@ -176,7 +176,6 @@ def _migrate_columns() -> None:
         ("representatives", "committees", "TEXT DEFAULT '[]'"),
         ("sponsored_bills", "stage", "TEXT DEFAULT ''"),
         ("rep_sponsored_bills", "stage", "TEXT DEFAULT ''"),
-        ("presidents", "gdp_growth_adjusted", "REAL"),
         ("presidents", "rulemaking_count", "INTEGER"),
         ("presidents", "rulemaking_finalized_pct", "REAL"),
         ("senators", "total_contributions", "REAL"),
@@ -289,6 +288,11 @@ def _migrate_columns() -> None:
         ("representatives", "outside_spending_for"),
         ("key_votes", "opposing_party_unity_pct"),
         ("rep_key_votes", "opposing_party_unity_pct"),
+        # president v5: never written since GDP growth moved to
+        # compute_term_gdp_growth (which already excludes year 1), yet the
+        # score breakdown still preferred it — so "show the math" could use
+        # a stale figure different from the one scored.
+        ("presidents", "gdp_growth_adjusted"),
     ]
 
     with engine.begin() as conn:

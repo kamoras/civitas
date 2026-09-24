@@ -235,7 +235,7 @@ async def run_president_pipeline(db: Session) -> dict:
             term_start_year = int(president.term_start[:4])
             term_end_year = int(president.term_end[:4]) if president.term_end else utcnow().year
 
-            live: dict = {}
+            live: dict = {"term_start_year": term_start_year}
 
             # eo_count is informational only (2026-07) — Competence, the
             # dimension it used to feed, was removed entirely (see
@@ -258,8 +258,7 @@ async def run_president_pipeline(db: Session) -> dict:
             if president.id in rulemaking_data:
                 president.rulemaking_count = rulemaking_data[president.id]["rulemaking_count"]
                 president.rulemaking_finalized_pct = rulemaking_data[president.id]["rulemaking_finalized_pct"]
-            if president.rulemaking_count is not None:
-                live["rulemaking_count"] = president.rulemaking_count
+            if president.rulemaking_finalized_pct is not None:
                 live["rulemaking_finalized_pct"] = president.rulemaking_finalized_pct
 
             gdp_growth = compute_term_gdp_growth(gdp_by_year, term_start_year, term_end_year)
@@ -314,12 +313,18 @@ async def run_president_pipeline(db: Session) -> dict:
     # election_margin column only holds the pre-polling-era ones that are
     # scored on it. A stat this run couldn't measure (a source down) keeps
     # its last persisted value rather than disappearing from the reference.
+    scored_inputs = {p.id: (live, term_years) for p, live, term_years in to_score}
     measured = compute_president_reference([
         {
             "id": p.id, "name": p.name, "avg_approval": p.avg_approval,
             "approval_trend": p.approval_trend,
             "election_margin": election_margin_data.get(p.id),
             "historical_legacy_score": p.historical_legacy_score,
+            "gdp_growth_avg": p.gdp_growth_avg,
+            "term_start_year": int(p.term_start[:4]) if p.term_start else None,
+            "jobs_created_millions": p.jobs_created_millions,
+            "term_years": scored_inputs.get(p.id, ({}, 0.0))[1],
+            "rulemaking_finalized_pct": p.rulemaking_finalized_pct,
         }
         for p in presidents
     ])

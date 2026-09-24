@@ -853,25 +853,36 @@ export default function AboutPage() {
               <div>
                 <Label>Effectiveness (21.67%)</Label>
                 <P>
-                  Measures tangible economic outcomes: GDP growth (60%) and job creation (40%). GDP
-                  growth is computed for the full presidency — BEA/FRED for the modern era,
-                  MeasuringWorth&apos;s real-GDP series (1790-present) for earlier presidents, both
-                  producing the same &ldquo;average annual growth over the term&rdquo; figure, with
-                  the term&apos;s first calendar year excluded when per-year data allows it (that
-                  year mostly reflects the outgoing administration&apos;s policy). Job creation
-                  comes from BLS nonfarm payroll data, which only exists from 1939 onward —
-                  presidents before that are scored on GDP growth alone, renormalized to 100% of the
-                  formula&apos;s weight, not defaulted on the missing component.
+                  Measures economic outcomes: GDP growth (60%) and job creation (40%). GDP growth is
+                  computed for the full presidency from real-GDP series back to 1790, as the average
+                  annual growth over the term with the first calendar year excluded (that year mostly
+                  reflects the outgoing administration&apos;s policy). Job creation comes from BLS
+                  payroll data, which only exists from 1939 onward — presidents before that are
+                  scored on GDP growth alone, not defaulted on the missing component. Both are
+                  compared with the other presidents&apos; actual figures, measured on every update,
+                  rather than with fixed cut-offs. GDP growth is compared within its era, before and
+                  after 1947: estimates from before the war exaggerate booms and busts (Romer 1989),
+                  and term growth varied two and a half times as much then, so one scale for both
+                  pinned one in eight earlier presidents at 0 or 100. Jobs stay in absolute numbers,
+                  since the percentage rate falls over time with the workforce&apos;s own slower
+                  growth. A limit worth knowing: since 1946, 60% of the variation in a
+                  president&apos;s term growth is shared with 13 other advanced economies over the
+                  same years, so this dimension mostly measures the economy a president presided
+                  over, not one they created. The study is in the project repository at
+                  docs/research/president-scores.md.
                 </P>
               </div>
 
               <div>
                 <Label>Agency Alignment (21.67%)</Label>
                 <P>
-                  Measures how well executive agency actions align with stated presidential
-                  priorities, via Federal Register rulemaking data — the count of final and proposed
-                  rules published during the term, and what fraction were finalized rather than left
-                  pending. This is a digitization wall, not a conceptual one: notice-and-comment
+                  Measures how far executive agencies carry through the rulemaking they start: the
+                  share of Federal Register rulemaking documents during the term that were final
+                  rules rather than proposals, compared with the other administrations since 1994.
+                  It used to also reward the number of rules issued. That was removed: rule volume
+                  follows an administration&apos;s view of regulation, with the record low in 2019 and
+                  the record high in 2024, so scoring more rules as better scored a policy
+                  preference. Coverage starts with Clinton. This is a digitization wall, not a conceptual one: notice-and-comment
                   rulemaking was a real, functioning practice well before the 1990s, but no
                   machine-readable record of it exists that far back — checked directly (2026-07)
                   rather than assumed: federalregister.gov&apos;s API returns zero results for any
@@ -891,7 +902,7 @@ export default function AboutPage() {
                 <P>
                   Covers what none of the other three dimensions can: crisis leadership, moral
                   authority, vision, and similar historical-consequence judgments that don&apos;t
-                  reduce to GDP growth, approval polling, or rulemaking volume. Sourced from
+                  reduce to GDP growth, approval polling, or rulemaking. Sourced from
                   C-SPAN&apos;s Presidential Historians Survey — ~142 professional historians in the
                   2021 cycle (the most recent; the 2025 cycle was explicitly postponed by C-SPAN,
                   citing the risk of turning &ldquo;historical analysis&rdquo; into

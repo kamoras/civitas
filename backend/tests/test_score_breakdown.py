@@ -139,12 +139,12 @@ class TestSenatorCoreConsistency:
 
 class TestPresidentCoreConsistency:
     def test_effectiveness_core_matches_calc(self):
-        args = (5.0, 3.5, 4.0)
+        args = (5.0, 3.5, 4.0, 2010)
         breakdown = _effectiveness_core(*args)
         assert breakdown["score"] == calc_effectiveness(*args)
 
     def test_agency_alignment_core_matches_calc(self):
-        args = (1200, 65.0, 4.0)
+        args = (65.0,)
         breakdown = _agency_alignment_core(*args)
         assert breakdown["score"] == calc_agency_alignment(*args)
 
@@ -263,7 +263,7 @@ class TestPresidentScoreBreakdownService:
             id="obama-44", name="Barack Obama", party="D", number=44,
             term_start="2009-01-20", term_end="2017-01-20",
             eo_count=276, gdp_growth_avg=2.1, jobs_created_millions=11.6,
-            gdp_growth_adjusted=2.3, rulemaking_count=1800, rulemaking_finalized_pct=68.0,
+            rulemaking_count=1800, rulemaking_finalized_pct=68.0,
         )
         db_session.add(p)
         db_session.commit()

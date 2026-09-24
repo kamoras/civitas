@@ -571,21 +571,19 @@ class President(Base):
     # shown on a president's profile as a raw stat.
     eo_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Persisted so the on-demand score-breakdown endpoint can recompute
-    # calc_effectiveness/calc_agency_alignment's exact inputs without a
-    # live re-fetch from FRED/Federal Register — these were previously
-    # only held in president_pipeline.py's local `live` dict and discarded
-    # once folded into score_effectiveness/score_agency_alignment.
-    gdp_growth_adjusted: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # calc_agency_alignment's exact input without a live re-fetch from the
+    # Federal Register. rulemaking_count is informational since president
+    # v5 (volume is no longer scored — see _agency_alignment_core).
     rulemaking_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     rulemaking_finalized_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Last-quartile-minus-first-quartile average approval across the term
     # (see calc_public_mandate) — persisted for the same on-demand
-    # score-breakdown-recompute reason as gdp_growth_adjusted above.
+    # score-breakdown-recompute reason as rulemaking_finalized_pct above.
     approval_trend: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Raw C-SPAN 2021 Presidential Historians Survey point total (e.g.
     # Lincoln=897) — persisted alongside the normalized score_
     # historical_legacy for the same on-demand-recompute reason as
-    # gdp_growth_adjusted/rulemaking_count above.
+    # rulemaking_finalized_pct above.
     historical_legacy_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Same figure as avg_approval, but averaged only over the last 90 days
