@@ -633,3 +633,10 @@ def fetch_state_news_articles() -> list[NewsArticle]:
     publishes on the order of ten items in 48 hours, not a hundred.
     """
     return fetch_news_articles(feeds=STATE_NEWS_FEEDS)
+
+
+# The outlets above, by the source_name they are stored under. A state's
+# own newsroom names that state in nearly every article, which makes
+# "the state name appears" worthless as corroboration for a surname
+# match — see election_coverage._corroboration_is_vacuous.
+STATE_OUTLET_NAMES: frozenset[str] = frozenset(f["name"] for f in STATE_NEWS_FEEDS)

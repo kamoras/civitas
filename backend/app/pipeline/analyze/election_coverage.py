@@ -15,7 +15,11 @@ the same text:
                       (word-boundary, case-insensitive), or
   "surname_context" — the candidate's state name appears (full name, e.g.
                       "Georgia" — the 2-letter code is far too ambiguous
-                      in prose).
+                      in prose). This corroborates nothing when the
+                      OUTLET is that state's own newsroom, which names
+                      the state in nearly every article it runs; those
+                      matches must additionally clear the relevance bar
+                      (_corroboration_is_vacuous).
 
 If, after corroboration, an item still matches candidates in MORE THAN
 ONE race, it is dropped entirely rather than guessed or fanned out — the
@@ -36,12 +40,17 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 import httpx
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.models import Candidate, Race, RaceCoverageItem
+from app.pipeline.analyze import race_relevance
 from app.pipeline.fetch.bluesky_search import search_is_available, search_posts
-from app.pipeline.fetch.news_feeds import fetch_news_articles, fetch_state_news_articles
+from app.pipeline.fetch.news_feeds import (
+    STATE_OUTLET_NAMES,
+    fetch_news_articles,
+    fetch_state_news_articles,
+)
 from app.pipeline.run_tracker import PipelineRunTracker
 from app.time_utils import utcnow
 
@@ -308,6 +317,78 @@ def _already_ingested(db: Session, race_id: str, url: str) -> bool:
     )
 
 
+def _title_key(title: str | None) -> str:
+    """The identity of a story, independent of who republished it."""
+    return re.sub(r"\s+", " ", (title or "")).strip().lower()
+
+
+def _same_story_already_on_race(db: Session, race_id: str, title: str | None) -> bool:
+    """True when this race already carries this story under another URL.
+
+    The URL check above cannot see syndication. States Newsroom
+    distributes one piece to its whole network, so "Flock surveillance
+    cameras raise constitutional questions" arrived from Oklahoma Voice,
+    Ohio Capital Journal, Kentucky Lantern, Florida Phoenix, Nevada
+    Current and seventeen more — every one a distinct, legitimate URL
+    from a distinct, legitimate outlet. Measured on the live database:
+    MO-6 carried 25 items that were 4 stories, and one race held 22
+    copies of that single headline.
+
+    Deduping on the headline keeps the first outlet to run it and drops
+    the reprints. Across the whole corpus this removes 75 rows and
+    leaves every race that had coverage still having coverage — no race
+    is emptied, because a reprint never carries information the original
+    did not.
+    """
+    key = _title_key(title)
+    if not key:
+        return False
+    return (
+        db.query(RaceCoverageItem.id)
+        .filter(
+            RaceCoverageItem.race_id == race_id,
+            func.lower(func.trim(RaceCoverageItem.title)) == key,
+        )
+        .first()
+        is not None
+    )
+
+
+def _drop_syndicated_reprints(db: Session) -> int:
+    """Retroactively collapse stories a race already carries twice.
+
+    Same reasoning as _drop_items_the_matcher_would_now_reject: nothing
+    ever deletes a RaceCoverageItem, so a rule added today has to reach
+    backwards or the stored data and the rules drift apart permanently.
+    The oldest row wins — it is the outlet that ran the story first.
+    """
+    doomed: list[int] = []
+    kept: set[tuple[str, str]] = set()
+    rows = (
+        db.query(RaceCoverageItem.id, RaceCoverageItem.race_id, RaceCoverageItem.title)
+        .order_by(RaceCoverageItem.id)
+        .all()
+    )
+    for item_id, race_id, title in rows:
+        key = _title_key(title)
+        if not key:
+            continue
+        if (race_id, key) in kept:
+            doomed.append(item_id)
+        else:
+            kept.add((race_id, key))
+
+    if not doomed:
+        return 0
+    for i in range(0, len(doomed), 500):
+        (db.query(RaceCoverageItem)
+           .filter(RaceCoverageItem.id.in_(doomed[i:i + 500]))
+           .delete(synchronize_session=False))
+    db.commit()
+    logger.info("Dropped %d syndicated reprints already covered on their race", len(doomed))
+    return len(doomed)
+
+
 def _drop_items_the_matcher_would_now_reject(
     db: Session, matchers: list[CandidateMatcher],
 ) -> int:
@@ -354,6 +435,96 @@ def _drop_items_the_matcher_would_now_reject(
     return len(doomed)
 
 
+def _corroboration_is_vacuous(source_name: str | None, match_basis: str | None) -> bool:
+    """True where "surname_context" corroborated nothing.
+
+    A bare surname is not identifying — this module's docstring explains
+    why — so a surname match needs corroboration, and "the candidate's
+    state name appears in the same text" was a sound one while every
+    feed was national. Adding 41 per-state outlets broke that
+    assumption: the Kentucky Lantern says "Kentucky" in virtually every
+    article it publishes, so the corroboration fires on all of them and
+    surname_context silently degenerates into exactly the bare-surname
+    match it exists to prevent.
+
+    Measured over the live corpus, the interaction is unambiguous —
+    full_name is unaffected by which feed an item came from, while
+    surname_context degrades 2.6x:
+
+        national / full_name        n=351  mean 0.301   6% below 0.1
+        national / surname_context  n=112  mean 0.258  14% below 0.1
+        state    / full_name        n= 30  mean 0.295   3% below 0.1
+        state    / surname_context  n=128  mean 0.166  37% below 0.1
+
+    That 37% is "Williams sisters, at 44 and 46, reunite their iconic
+    doubles team" on OH-9, a Minnesota salmonella outbreak on SEN-MN,
+    and "A Kentucky man with a meat allergy was craving a burger" on
+    KY-1 — each one a different person who happens to share a surname
+    with a candidate, in an article whose outlet names the state by
+    definition.
+
+    A filter's correct case and its blind spot look identical in code;
+    what separated them here was measuring the same rule against the
+    two populations it now spans.
+    """
+    return bool(source_name) and source_name in STATE_OUTLET_NAMES and match_basis == "surname_context"
+
+
+def _drop_vacuously_corroborated(db: Session) -> int:
+    """Hold items whose corroboration was vacuous to the relevance bar.
+
+    Dropping them outright was measured first and costs too much: 128
+    items and 12 emptied races, including "Poll finds opposition to
+    Maryland redistricting ballot question" (0.426) and "WA voters of
+    color more likely to have ballots challenged" (0.427). Those are
+    real coverage that merely lacked a first name. 37% of the group is
+    junk, not all of it.
+
+    So the weaker match is not rejected, it is made to earn its place
+    semantically — and on the threshold race_relevance already derives
+    by Otsu from the corpus, not a number typed here. Applied to the
+    live corpus this keeps 504 of 621 items across 165 of 174 races,
+    removes every one of the 47 items scoring below 0.1, and retains
+    the Maryland, Washington, West Virginia and Georgia ballot stories
+    above.
+
+    An UNSCORED item is left alone rather than dropped. score_unscored_items
+    is capped at 500 per pass, so a backlog leaves real coverage with a
+    null relevance, and treating null as "scored badly" would delete it
+    for being new. A missing score is not a low score; those items wait
+    for the next pass and are judged once they have one.
+
+    Note this deliberately does NOT gate the whole news feed on
+    relevance. Doing so was measured and rejected: at the same derived
+    threshold it emptied 64 of 174 races, discarding "Massie says he
+    hid Hegseth impeachment resolution from GOP leaders" along with the
+    tennis. Otsu splits horserace coverage from other political
+    coverage, which is not the same cut as real from junk — deriving a
+    number is not a reason to adopt it. The gate applies only where the
+    corroboration is independently known to be vacuous.
+    """
+    bar = race_relevance.threshold(db)
+    doomed = [
+        item.id
+        for item in db.query(RaceCoverageItem).filter(
+            RaceCoverageItem.match_basis == "surname_context").all()
+        if _corroboration_is_vacuous(item.source_name, item.match_basis)
+        and item.relevance is not None
+        and item.relevance < bar
+    ]
+    if not doomed:
+        return 0
+    for i in range(0, len(doomed), 500):
+        (db.query(RaceCoverageItem)
+           .filter(RaceCoverageItem.id.in_(doomed[i:i + 500]))
+           .delete(synchronize_session=False))
+    db.commit()
+    logger.info(
+        "Dropped %d state-outlet surname matches below the relevance bar %.4f",
+        len(doomed), bar)
+    return len(doomed)
+
+
 def _store_if_new(
     db: Session, race_id: str, seen: set[tuple[str, str]], **fields,
 ) -> bool:
@@ -374,10 +545,16 @@ def _store_if_new(
     calls fine ("the attachment target is the race"). It stayed hidden
     only because Bluesky search had been returning nothing at all.
     """
-    key = (race_id, fields["url"])
-    if key in seen or _already_ingested(db, race_id, fields["url"]):
+    url_key = ("url", race_id, fields["url"])
+    if url_key in seen or _already_ingested(db, race_id, fields["url"]):
         return False
-    seen.add(key)
+    # Same story, different outlet — see _same_story_already_on_race.
+    title_key = ("title", race_id, _title_key(fields.get("title")))
+    if title_key[2]:
+        if title_key in seen or _same_story_already_on_race(db, race_id, fields.get("title")):
+            return False
+        seen.add(title_key)
+    seen.add(url_key)
     db.add(RaceCoverageItem(race_id=race_id, **fields))
     return True
 
@@ -429,12 +606,13 @@ async def ingest_race_coverage(db: Session, client: httpx.AsyncClient) -> int:
     # Before ingesting, reconcile what is already stored with the rules
     # as they stand now. A no-op once the corpus is clean.
     _drop_items_the_matcher_would_now_reject(db, matchers)
+    _drop_syndicated_reprints(db)
 
     ingested = 0
     # Rows added in THIS pass, invisible to _already_ingested because
     # SessionLocal sets autoflush=False. Shared by both loops: a news
     # article and a Bluesky post can resolve to the same race+url.
-    seen: set[tuple[str, str]] = set()
+    seen: set[tuple[str, str, str]] = set()
 
     # ── News: the national feeds the Action Center already fetched
     # (cheap/idempotent), PLUS the per-state political outlets.
@@ -531,6 +709,7 @@ async def ingest_race_coverage(db: Session, client: httpx.AsyncClient) -> int:
 
     db.commit()
     score_unscored_items(db)
+    _drop_vacuously_corroborated(db)
     return ingested
 
 

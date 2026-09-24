@@ -450,6 +450,169 @@ class TestStoredItemsAreRevalidated:
         assert db_session.query(RaceCoverageItem).count() == 1
 
 
+class TestStateOutletSurnameMatchesMustEarnTheirPlace:
+    """A state's own newsroom names that state in nearly every article,
+    so "the state name appears" corroborates nothing there and
+    surname_context degenerates into the bare-surname match it exists to
+    prevent. Measured live: state/surname_context items were 37% junk
+    against 14% for the same rule on national feeds."""
+
+    def _item(self, outlet, title, basis="surname_context", relevance=None):
+        return RaceCoverageItem(
+            race_id="2026-SEN-GA", source_type="news", source_name=outlet,
+            title=title, url=f"https://example.com/{abs(hash(title))}",
+            summary="Georgia coverage mentioning Ossoff.",
+            matched_candidate_id="S6GA001", match_basis=basis,
+            relevance=relevance,
+        )
+
+    def _seed(self, db_session):
+        _race(db_session, "2026-SEN-GA", "GA")
+        _candidate(db_session, "S6GA001", "2026-SEN-GA", "OSSOFF, JON",
+                   has_raised_funds=True)
+
+    def test_a_low_relevance_state_outlet_surname_match_is_dropped(self, db_session):
+        """The live OH-9 case in Georgia dress: a sports story matched
+        because a candidate shares the surname and the outlet says the
+        state's name as a matter of course."""
+        self._seed(db_session)
+        db_session.add(self._item(
+            "Georgia Recorder", "Williams sisters reunite their doubles team",
+            relevance=0.01))
+        db_session.commit()
+
+        election_coverage._drop_vacuously_corroborated(db_session)
+
+        assert db_session.query(RaceCoverageItem).count() == 0
+
+    def test_a_relevant_state_outlet_surname_match_survives(self, db_session):
+        """Dropping the whole group was measured and costs too much —
+        "Poll finds opposition to Maryland redistricting ballot question"
+        scored 0.426 on exactly this basis."""
+        self._seed(db_session)
+        db_session.add(self._item(
+            "Georgia Recorder",
+            "Ballot question in November would make Georgia's probate judges elected",
+            relevance=0.408))
+        db_session.commit()
+
+        election_coverage._drop_vacuously_corroborated(db_session)
+
+        assert db_session.query(RaceCoverageItem).count() == 1
+
+    def test_a_national_outlet_surname_match_is_not_gated(self, db_session):
+        """The rule applies only where the corroboration is known
+        vacuous. On a national feed the state name is real evidence, and
+        gating the whole news feed on relevance emptied 64 of 174 races."""
+        self._seed(db_session)
+        db_session.add(self._item(
+            "AP", "A Georgia story that mentions Ossoff in passing", relevance=0.01))
+        db_session.commit()
+
+        election_coverage._drop_vacuously_corroborated(db_session)
+
+        assert db_session.query(RaceCoverageItem).count() == 1
+
+    def test_a_state_outlet_full_name_match_is_not_gated(self, db_session):
+        """full_name is unaffected by which feed an item came from —
+        measured at 0.301 national vs 0.295 state."""
+        self._seed(db_session)
+        db_session.add(self._item(
+            "Georgia Recorder", "Jon Ossoff draws a challenger",
+            basis="full_name", relevance=0.01))
+        db_session.commit()
+
+        election_coverage._drop_vacuously_corroborated(db_session)
+
+        assert db_session.query(RaceCoverageItem).count() == 1
+
+    def test_an_unscored_item_waits_rather_than_being_deleted(self, db_session):
+        """score_unscored_items is capped at 500 per pass, so a backlog
+        leaves real coverage unscored. A missing score is not a low
+        score — deleting on null would destroy items for being new."""
+        self._seed(db_session)
+        db_session.add(self._item("Georgia Recorder", "Unscored story", relevance=None))
+        db_session.commit()
+
+        election_coverage._drop_vacuously_corroborated(db_session)
+
+        assert db_session.query(RaceCoverageItem).count() == 1
+
+
+class TestSyndicatedReprintsAreCollapsed:
+    """States Newsroom distributes one piece to its whole network, so a
+    single story arrives from twenty-odd outlets at twenty-odd
+    legitimate URLs. Measured live: MO-6 carried 25 items that were 4
+    stories, and one race held 22 copies of one headline."""
+
+    async def _run(self, db_session):
+        with patch.object(election_coverage, "fetch_news_articles", return_value=[]), \
+             patch.object(election_coverage, "search_posts", new=AsyncMock(return_value=[])):
+            return await election_coverage.ingest_race_coverage(db_session, client=None)
+
+    def _reprint(self, outlet, url, title="Flock surveillance cameras raise questions"):
+        return RaceCoverageItem(
+            race_id="2026-SEN-GA", source_type="news", source_name=outlet,
+            title=title, url=url,
+            summary="Ossoff and other lawmakers pressed the company in Georgia.",
+            matched_candidate_id="S6GA001", match_basis="full_name",
+        )
+
+    async def test_the_first_outlet_to_run_a_story_keeps_it(self, db_session):
+        _race(db_session, "2026-SEN-GA", "GA")
+        _candidate(db_session, "S6GA001", "2026-SEN-GA", "OSSOFF, JON",
+                   has_raised_funds=True)
+        db_session.add(self._reprint("Georgia Recorder", "https://ga.example/flock"))
+        db_session.add(self._reprint("Ohio Capital Journal", "https://oh.example/flock"))
+        db_session.add(self._reprint("Florida Phoenix", "https://fl.example/flock"))
+        db_session.commit()
+
+        await self._run(db_session)
+
+        kept = db_session.query(RaceCoverageItem).all()
+        assert len(kept) == 1
+        # Oldest row wins: it is the outlet that ran the story first.
+        assert kept[0].source_name == "Georgia Recorder"
+
+    async def test_distinct_stories_on_one_race_all_survive(self, db_session):
+        """The sweep must collapse REPRINTS, not a busy race's feed."""
+        _race(db_session, "2026-SEN-GA", "GA")
+        _candidate(db_session, "S6GA001", "2026-SEN-GA", "OSSOFF, JON",
+                   has_raised_funds=True)
+        db_session.add(self._reprint("Georgia Recorder", "https://ga.example/1",
+                                     title="Ossoff holds narrow lead in Georgia"))
+        db_session.add(self._reprint("AP", "https://ap.example/2",
+                                     title="Ossoff draws a primary challenger in Georgia"))
+        db_session.commit()
+
+        await self._run(db_session)
+
+        assert db_session.query(RaceCoverageItem).count() == 2
+
+    async def test_the_same_story_on_two_races_is_not_collapsed(self, db_session):
+        """Dedupe is per-race — one story can legitimately cover two."""
+        for rid, state, cid, name in (
+            ("2026-SEN-GA", "GA", "S6GA001", "OSSOFF, JON"),
+            ("2026-SEN-MI", "MI", "S6MI001", "ROGERS, MIKE"),
+        ):
+            _race(db_session, rid, state)
+            _candidate(db_session, cid, rid, name, has_raised_funds=True)
+        for rid, cid, url in (("2026-SEN-GA", "S6GA001", "https://a.example/x"),
+                              ("2026-SEN-MI", "S6MI001", "https://b.example/x")):
+            db_session.add(RaceCoverageItem(
+                race_id=rid, source_type="news", source_name="AP",
+                title="Senate map tightens in Georgia and Michigan",
+                url=url,
+                summary="Jon Ossoff in Georgia and Mike Rogers in Michigan both.",
+                matched_candidate_id=cid, match_basis="full_name",
+            ))
+        db_session.commit()
+
+        await self._run(db_session)
+
+        assert db_session.query(RaceCoverageItem).count() == 2
+
+
 class TestFullNameMustAppearTogether:
     """Alaska's at-large race has a real candidate — $1.3M raised — named
     BILL HILL. The old rule asked only that the surname appear
