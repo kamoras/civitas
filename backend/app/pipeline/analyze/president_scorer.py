@@ -43,6 +43,9 @@ Metrics that can be dynamically computed:
 
 import logging
 import math
+import statistics
+
+from app.pipeline.analyze.population_reference import PRESIDENT_REFERENCE
 
 logger = logging.getLogger(__name__)
 
@@ -225,8 +228,11 @@ def dimensions_available(entity) -> int:
 # for both); v4 = two-tier renormalization holds Historical Legacy at its
 # configured 35% instead of letting it silently float up to ~45%/~62% for
 # presidents missing mechanical data (see compute_president_overall_score's
-# docstring).
-PRESIDENT_ALGORITHM_VERSION = "v4"
+# docstring); v5 = the z-score population statistics (approval, trend,
+# election margin, C-SPAN) and the electoral->popular margin rescale are
+# measured each run instead of hand-typed (compute_president_reference,
+# presidential_elections._fit_scales).
+PRESIDENT_ALGORITHM_VERSION = "v5"
 
 
 # Full credit/deficit approached asymptotically at this many population
@@ -438,51 +444,82 @@ def _agency_alignment_core(
     return _blend_live_components(components)
 
 
-# Population statistics for the term-average-approval and approval-trend
-# components below, computed 2026-07 from real UCSB American Presidency
-# Project data across all 15 presidents with a live approval-poll page
-# (Truman-33 through the current term) via
-# app.pipeline.fetch.presidential_approval.fetch_president_approval_history
-# — same "fit against real fetched data before shipping" discipline as
-# every other calibration constant in this file (see e.g. score_calculator
-# .py's _LES_POPULATION_MEDIAN_SENATE/_HOUSE).
+# Population statistics for the term-average-approval, approval-trend, and
+# election-margin components below, and for Historical Legacy.
 #
-# Trend is last-quartile-minus-first-quartile average approval across a
-# term. The population trend mean is sharply negative (-13.7, i.e. the
-# typical president's approval drops ~14 points from term-start to
-# term-end) — a well-documented "honeymoon fades" pattern in the
-# presidential-approval literature, not this platform's own finding, so
-# trend must be scored against that population average, not against zero:
-# comparing to zero would count normal, universal decline as a failure for
-# nearly every president in the dataset (only Reagan/Clinton/Trump-45 had
-# a flat-or-positive raw trend).
-_PUBLIC_MANDATE_AVG_APPROVAL_MEAN = 50.93
-_PUBLIC_MANDATE_AVG_APPROVAL_STDEV = 9.06
-_PUBLIC_MANDATE_TREND_MEAN = -13.72
-_PUBLIC_MANDATE_TREND_STDEV = 14.65
+# MEASURED EACH PIPELINE RUN from the stored presidential population
+# (compute_president_reference, president_pipeline.py) and persisted to
+# /data/president_reference.json for the API's breakdowns, with the bundled
+# app/data/president_reference.json as the pre-first-run fallback. They used
+# to be hand-typed literals (approval 50.93/9.06, trend -13.72/14.65,
+# election margin 8.39/7.51, C-SPAN 549.14/157.61) — AGENTS.md §3a.
+#
+# Why trend is scored against the population average rather than zero: the
+# typical president's approval drops over a term (the "honeymoon fades"
+# pattern in the approval literature), so comparing to zero would count
+# normal, universal decline as a failure for nearly every president.
+#
+# Election margin is the pre-polling-era proxy: the average margin of victory
+# across a president's own election win(s), with electoral margins and
+# pre-1824 electoral shares rescaled onto the popular-margin scale (see
+# presidential_elections.py). Presidents who never won a presidential
+# election in their own right have neither approval nor margin data; Public
+# Mandate is excluded for them (see compute_president_overall_score).
 
-# Pre-polling-era (pre-Truman) proxy: average margin of victory (%) across
-# a president's own election win(s) — see
-# app.pipeline.fetch.presidential_elections. Population stats refit
-# 2026-07-22 through the real fetch path after the S3 scale-consistency
-# fix (electoral margins and pre-1824 electoral shares are now RESCALED
-# onto the popular-margin scale instead of mixed in raw — see that
-# module's calibration constants): n=42, mean=8.39, stdev=7.51. The
-# previous constants (9.44/10.46) were fit on the old mixed-scale data
-# and are invalid against the rescaled inputs. The five presidents who
-# never won a presidential election in their own right (succeeded via a
-# predecessor's death, or — Ford — appointed VP under the 25th Amendment
-# and never elected to anything nationally) have neither this nor
-# approval data; Public Mandate is fully excluded for them (see
-# compute_president_overall_score's renormalization), not defaulted.
-_PUBLIC_MANDATE_ELECTION_MARGIN_MEAN = 8.39
-_PUBLIC_MANDATE_ELECTION_MARGIN_STDEV = 7.51
+# Fewest presidents with a value before its population mean/stdev is
+# trusted; below it the last persisted value is kept for that stat.
+_MIN_PRESIDENT_REFERENCE_N = 10
+
+
+def _mean_stdev(values: list[float]) -> dict | None:
+    if len(values) < _MIN_PRESIDENT_REFERENCE_N:
+        return None
+    return {
+        "mean": round(statistics.mean(values), 4),
+        "stdev": round(statistics.stdev(values), 4),
+        "n": len(values),
+    }
+
+
+def compute_president_reference(presidents: list[dict]) -> dict:
+    """Population mean/stdev for each z-scored presidential input, from
+    stored per-president values: dicts with id, name, avg_approval,
+    approval_trend, election_margin, historical_legacy_score.
+
+    Approval, trend and margin are counted per presidency (split terms have
+    their own polling and elections). The C-SPAN score is counted once per
+    PERSON — the survey rates Grover Cleveland once, and the cleveland-22 /
+    cleveland-24 split would otherwise count his score twice. Stats with too
+    few values are omitted; the caller keeps the last persisted ones."""
+    legacy_by_person: dict[str, float] = {}
+    for p in presidents:
+        if p.get("historical_legacy_score") is not None:
+            legacy_by_person[p.get("name") or p["id"]] = float(p["historical_legacy_score"])
+
+    def values(field: str) -> list[float]:
+        return [float(p[field]) for p in presidents if p.get(field) is not None]
+
+    stats = {
+        "avg_approval": _mean_stdev(values("avg_approval")),
+        "approval_trend": _mean_stdev(values("approval_trend")),
+        "election_margin": _mean_stdev(values("election_margin")),
+        "historical_legacy": _mean_stdev(list(legacy_by_person.values())),
+    }
+    return {k: v for k, v in stats.items() if v is not None}
+
+
+def _president_stat(reference: dict | None, key: str) -> tuple[float, float] | None:
+    """(mean, stdev) for one input: this run's reference first, then the
+    persisted/bundled one (population_reference.PRESIDENT_REFERENCE)."""
+    stat = (reference or {}).get(key) or (PRESIDENT_REFERENCE.load().get("presidents") or {}).get(key)
+    return (stat["mean"], stat["stdev"]) if stat else None
 
 
 def calc_public_mandate(
     avg_approval: float | None,
     approval_trend: float | None,
     election_margin: float | None,
+    reference: dict | None = None,
 ) -> int | None:
     """Calculate Public Mandate score from real data only — approval
     polling where it exists, election margin as the pre-polling-era
@@ -493,13 +530,14 @@ def calc_public_mandate(
     thin wrapper kept for the same reuse contract as calc_effectiveness/
     calc_agency_alignment.
     """
-    return _public_mandate_core(avg_approval, approval_trend, election_margin)["score"]
+    return _public_mandate_core(avg_approval, approval_trend, election_margin, reference)["score"]
 
 
 def _public_mandate_core(
     avg_approval: float | None,
     approval_trend: float | None,
     election_margin: float | None,
+    reference: dict | None = None,
 ) -> dict:
     """Same math as calc_public_mandate, returning every intermediate
     value alongside the final score.
@@ -521,28 +559,28 @@ def _public_mandate_core(
         apply to them, full stop, not "we don't know so it's neutral."
     """
     components: list[dict] = []
+    approval = _president_stat(reference, "avg_approval")
+    trend = _president_stat(reference, "approval_trend")
+    margin = _president_stat(reference, "election_margin")
 
-    if avg_approval is not None:
+    if avg_approval is not None and approval:
         components.append(_population_zscore_component(
-            "Average approval", 0.70, avg_approval,
-            _PUBLIC_MANDATE_AVG_APPROVAL_MEAN, _PUBLIC_MANDATE_AVG_APPROVAL_STDEV,
+            "Average approval", 0.70, avg_approval, approval[0], approval[1],
             f"{avg_approval:.1f}% average approval over the term vs. "
-            f"population mean {_PUBLIC_MANDATE_AVG_APPROVAL_MEAN:.1f}%",
+            f"population mean {approval[0]:.1f}%",
         ))
-        if approval_trend is not None:
+        if approval_trend is not None and trend:
             components.append(_population_zscore_component(
-                "Approval trend", 0.30, approval_trend,
-                _PUBLIC_MANDATE_TREND_MEAN, _PUBLIC_MANDATE_TREND_STDEV,
+                "Approval trend", 0.30, approval_trend, trend[0], trend[1],
                 f"{approval_trend:+.1f}pt change from term-start to term-end vs. "
-                f"population average {_PUBLIC_MANDATE_TREND_MEAN:+.1f}pt "
+                f"population average {trend[0]:+.1f}pt "
                 "(most presidents' approval declines over a term)",
             ))
-    elif election_margin is not None:
+    elif avg_approval is None and election_margin is not None and margin:
         components.append(_population_zscore_component(
-            "Election margin (pre-polling-era proxy)", 1.0, election_margin,
-            _PUBLIC_MANDATE_ELECTION_MARGIN_MEAN, _PUBLIC_MANDATE_ELECTION_MARGIN_STDEV,
+            "Election margin (pre-polling-era proxy)", 1.0, election_margin, margin[0], margin[1],
             f"{election_margin:+.1f}pt average margin of victory across this president's "
-            f"election win(s) vs. population mean {_PUBLIC_MANDATE_ELECTION_MARGIN_MEAN:+.1f}pt "
+            f"election win(s) vs. population mean {margin[0]:+.1f}pt "
             "— no approval-polling era data exists for this president, so this is the "
             "historical proxy used instead",
         ))
@@ -550,16 +588,14 @@ def _public_mandate_core(
     return _blend_live_components(components)
 
 
-# Population stats for C-SPAN's 2021 Presidential Historians Survey point
-# totals, computed 2026-07 from the real fetched data across all 44 rated
-# presidents (Grover Cleveland's single real score counted once, not
-# double-counted across this platform's cleveland-22/cleveland-24 id
-# split) via app.pipeline.fetch.cspan_historians_survey.
-_HISTORICAL_LEGACY_MEAN = 549.14
-_HISTORICAL_LEGACY_STDEV = 157.61
+# Historical Legacy's population mean/stdev over C-SPAN point totals comes
+# from the same measured reference (compute_president_reference, counted
+# once per person) as Public Mandate's.
 
 
-def calc_historical_legacy(historical_legacy_score: int | None) -> int | None:
+def calc_historical_legacy(
+    historical_legacy_score: int | None, reference: dict | None = None,
+) -> int | None:
     """Calculate Historical Legacy score from C-SPAN's Presidential
     Historians Survey only.
 
@@ -567,10 +603,12 @@ def calc_historical_legacy(historical_legacy_score: int | None) -> int | None:
     is a thin wrapper kept for the same reuse contract as
     calc_effectiveness/calc_agency_alignment/calc_public_mandate.
     """
-    return _historical_legacy_core(historical_legacy_score)["score"]
+    return _historical_legacy_core(historical_legacy_score, reference)["score"]
 
 
-def _historical_legacy_core(historical_legacy_score: int | None) -> dict:
+def _historical_legacy_core(
+    historical_legacy_score: int | None, reference: dict | None = None,
+) -> dict:
     """Same math as calc_historical_legacy, returning every intermediate
     value alongside the final score.
 
@@ -599,18 +637,18 @@ def _historical_legacy_core(historical_legacy_score: int | None) -> dict:
     the survey's own cadence, not a fetch gap this pipeline could close.
     """
     components: list[dict] = []
-    if historical_legacy_score is not None:
+    legacy = _president_stat(reference, "historical_legacy")
+    if historical_legacy_score is not None and legacy:
         components.append(_population_zscore_component(
-            "Historians' assessment", 1.0, historical_legacy_score,
-            _HISTORICAL_LEGACY_MEAN, _HISTORICAL_LEGACY_STDEV,
+            "Historians' assessment", 1.0, historical_legacy_score, legacy[0], legacy[1],
             f"{historical_legacy_score} points in C-SPAN's 2021 Presidential Historians Survey "
-            f"vs. population mean {_HISTORICAL_LEGACY_MEAN:.0f}",
+            f"vs. population mean {legacy[0]:.0f}",
         ))
     return _blend_live_components(components)
 
 
 def recalculate_president_scores(
-    president_id: str, live_data: dict, term_years: float,
+    president_id: str, live_data: dict, term_years: float, reference: dict | None = None,
 ) -> dict:
     """Recalculate every dimension from live data only, for one president.
 
@@ -642,6 +680,7 @@ def recalculate_president_scores(
             avg_approval=live_data.get("avg_approval"),
             approval_trend=live_data.get("approval_trend"),
             election_margin=live_data.get("election_margin"),
+            reference=reference,
         ),
         "score_effectiveness": calc_effectiveness(
             jobs_created_millions=live_data.get("jobs_created_millions"),
@@ -656,5 +695,6 @@ def recalculate_president_scores(
         ),
         "score_historical_legacy": calc_historical_legacy(
             historical_legacy_score=live_data.get("historical_legacy_score"),
+            reference=reference,
         ),
     }

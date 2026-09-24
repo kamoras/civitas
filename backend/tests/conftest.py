@@ -94,10 +94,12 @@ TEST_LES_REFERENCE = {
     "senate": {
         "congress": 119, "majority": "R", "n": 101, "median_credit": 289.0,
         "mean_credit": 324.95, "stdev_credit": 178.37, "avg_baseline": 0.0305,
+        "advancement_rates": {"majority": 0.036, "minority": 0.024, "pooled": 0.030},
     },
     "house": {
         "congress": 119, "majority": "R", "n": 427, "median_credit": 129.0,
         "mean_credit": 143.8, "stdev_credit": 88.12, "avg_baseline": 0.0444,
+        "advancement_rates": {"majority": 0.064, "minority": 0.024, "pooled": 0.030},
     },
 }
 
@@ -105,8 +107,28 @@ TEST_LES_REFERENCE = {
 # Funding Independence's PAC-share reference, pinned the same way: the
 # 2026-07 audit medians that were hand-typed as the multipliers 3.2 / 1.35.
 TEST_FUNDING_REFERENCE = {
-    "senate": {"n": 100, "pac_ratio_median": 0.157},
-    "house": {"n": 435, "pac_ratio_median": 0.371},
+    "senate": {
+        "n": 100, "pac_ratio_median": 0.157, "pac_dollars_median": 662750.0,
+        "concentration_p10": 0.212, "concentration_median": 0.305, "concentration_p90": 0.383,
+        "small_donor_p10": 8.0, "small_donor_median": 18.62, "small_donor_p90": 29.2,
+    },
+    "house": {
+        "n": 435, "pac_ratio_median": 0.371, "pac_dollars_median": 662750.0,
+        "concentration_p10": 0.212, "concentration_median": 0.275, "concentration_p90": 0.383,
+        "small_donor_p10": 8.0, "small_donor_median": 18.62, "small_donor_p90": 29.2,
+    },
+}
+
+
+# Presidential z-score population stats, pinned to the 2026-07 values that
+# were hand-typed in president_scorer.py.
+TEST_PRESIDENT_REFERENCE = {
+    "presidents": {
+        "avg_approval": {"mean": 50.93, "stdev": 9.06, "n": 15},
+        "approval_trend": {"mean": -13.72, "stdev": 14.65, "n": 15},
+        "election_margin": {"mean": 8.39, "stdev": 7.51, "n": 42},
+        "historical_legacy": {"mean": 549.14, "stdev": 157.61, "n": 44},
+    },
 }
 
 
@@ -121,6 +143,7 @@ def pinned_population_references(tmp_path, monkeypatch):
     for ref, values in (
         (population_reference.LES_REFERENCE, TEST_LES_REFERENCE),
         (population_reference.FUNDING_REFERENCE, TEST_FUNDING_REFERENCE),
+        (population_reference.PRESIDENT_REFERENCE, TEST_PRESIDENT_REFERENCE),
     ):
         bundled = tmp_path / f"{ref.name}_bundled.json"
         bundled.write_text(json.dumps(values))

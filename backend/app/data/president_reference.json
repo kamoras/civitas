@@ -1,0 +1,10 @@
+{
+ "_as_of": "2026-07",
+ "_source": "Pre-first-run fallback only: the president pipeline recomputes these from the stored presidential population every run (president_scorer.compute_president_reference) and writes /data/president_reference.json, which takes precedence. Values are the 2026-07 measurements previously hand-typed into president_scorer.py: approval and trend over the 15 presidents with UCSB approval pages (Truman onward), election margin over 42 elected presidencies (UCSB, rescaled onto the popular-margin scale), C-SPAN 2021 Historians Survey totals over 44 rated presidents (Cleveland once).",
+ "presidents": {
+  "approval_trend": {"mean": -13.72, "n": 15, "stdev": 14.65},
+  "avg_approval": {"mean": 50.93, "n": 15, "stdev": 9.06},
+  "election_margin": {"mean": 8.39, "n": 42, "stdev": 7.51},
+  "historical_legacy": {"mean": 549.14, "n": 44, "stdev": 157.61}
+ }
+}

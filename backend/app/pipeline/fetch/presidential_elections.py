@@ -109,13 +109,14 @@ _RATE_LIMITER = RateLimiter(rps=1.0)
 _CACHE_TIER = "historical-elections"
 _CACHE_MAX_AGE_HOURS = 24 * 30  # historical results never change
 
-# Scale-consistency constants (2026-07, #218 review S3), fit on the 50
-# elections in the mandates table where both figures exist — see the two
-# call sites for the regression details. Refit alongside president_scorer's
-# _PUBLIC_MANDATE_ELECTION_MARGIN_MEAN/STDEV if UCSB's table changes.
-_ELECTORAL_TO_POPULAR_MARGIN_SLOPE = 0.211
-_ELECTORAL_SHARE_TO_POPULAR_SLOPE = 0.3925
-_ELECTORAL_SHARE_TO_POPULAR_INTERCEPT = -18.67
+# Scale-consistency fits (2026-07, #218 review S3): the electoral college
+# exaggerates margins, so electoral-only figures are rescaled onto the
+# popular-margin scale. The fits are re-estimated on every fetch from the
+# elections in the mandates table where BOTH figures exist (_fit_scales) —
+# they were hand-typed (0.211; 0.3925 x share - 18.67) from a one-off fit
+# of those same ~50 rows (AGENTS.md §3a). Fewer usable rows than this means
+# the table's shape changed; rescaling is skipped rather than guessed.
+_MIN_FIT_ROWS = 20
 
 
 def _normalize_name(text: str) -> str:
@@ -138,15 +139,14 @@ def _to_float(text: str) -> float | None:
         return None
 
 
-def _parse_mandates_table(html: str) -> dict[str, list[float]]:
-    """Returns president_id -> list of margin percentages (one per
-    election that president won), preferring popular-vote margin,
-    falling back to electoral-vote margin when popular vote is "nd"."""
+def _mandates_rows(html: str) -> list[tuple[str, float | None, float | None, float | None]]:
+    """(president_id, popular_margin, electoral_pct, electoral_margin) per
+    election row of UCSB's mandates table."""
     doc = lxml_html.fromstring(html)
     tables = doc.cssselect("table")
     if not tables:
-        return {}
-    result: dict[str, list[float]] = {}
+        return []
+    rows = []
     current_id: str | None = None
     for row in tables[0].cssselect("tbody tr"):
         cells = row.cssselect("td")
@@ -160,31 +160,66 @@ def _parse_mandates_table(html: str) -> dict[str, list[float]]:
         # Column order (verified against a live fetch, 2026-07): President,
         # Election, Popular%, Popular Margin, Electoral%, Electoral Margin,
         # Electoral%-Popular%. Margin (not the raw %) is what indicates how
-        # decisively a president won — cells[3]/cells[5], not cells[2]/[4].
-        popular_margin = _to_float(cells[3].text_content())
-        electoral_margin = _to_float(cells[5].text_content())
-        # When popular vote is "nd" (the earliest elections in this
-        # table, before it was uniformly tabulated), rescale the
-        # electoral-vote margin onto the popular-margin scale instead of
-        # mixing the raw value in (2026-07 fix, #218 review S3: the
-        # electoral college exaggerates margins ~5x — tens of points vs.
-        # single digits — so the raw fallback structurally inflated the
-        # earliest presidents' Public Mandate). Rescale fit on the 50
-        # elections in this same table where BOTH margins exist:
-        # popular ≈ 0.211 x electoral (through-origin least squares,
-        # R²=0.56; origin-anchored because a 0-margin election is a
-        # 0-margin election on either scale).
-        margin = (
-            popular_margin
-            if popular_margin is not None
-            else (
-                electoral_margin * _ELECTORAL_TO_POPULAR_MARGIN_SLOPE
-                if electoral_margin is not None else None
-            )
-        )
-        if margin is not None:
-            result.setdefault(current_id, []).append(margin)
-    return result
+        # decisively a president won.
+        rows.append((
+            current_id,
+            _to_float(cells[3].text_content()),
+            _to_float(cells[4].text_content()),
+            _to_float(cells[5].text_content()),
+        ))
+    return rows
+
+
+def _fit_scales(rows) -> dict | None:
+    """Least-squares maps from electoral figures onto the popular-margin
+    scale, fit on rows where both exist:
+
+    - margin_slope: popular_margin ≈ slope x electoral_margin, through the
+      origin (a 0-margin election is a 0-margin election on either scale);
+    - share_slope / share_intercept: popular_margin ≈ a + b x electoral
+      share, for pre-1824 pages that report only the winner's share.
+
+    None when fewer than _MIN_FIT_ROWS rows have both."""
+    pairs = [(pm, ep, em) for _, pm, ep, em in rows if pm is not None and ep is not None and em is not None]
+    if len(pairs) < _MIN_FIT_ROWS:
+        return None
+    sxx = sum(em * em for _, _, em in pairs)
+    margin_slope = sum(pm * em for pm, _, em in pairs) / sxx if sxx else 0.0
+    n = len(pairs)
+    mx = sum(ep for _, ep, _ in pairs) / n
+    my = sum(pm for pm, _, _ in pairs) / n
+    vx = sum((ep - mx) ** 2 for _, ep, _ in pairs)
+    share_slope = sum((ep - mx) * (pm - my) for pm, ep, _ in pairs) / vx if vx else 0.0
+    return {
+        "margin_slope": margin_slope,
+        "share_slope": share_slope,
+        "share_intercept": my - share_slope * mx,
+        "n": n,
+    }
+
+
+def _parse_mandates_table(html: str) -> tuple[dict[str, list[float]], dict | None]:
+    """Returns (president_id -> list of margin percentages, one per election
+    that president won, and the scale fits). Popular-vote margin is used
+    where it exists; where it's "nd" (the earliest elections in the table)
+    the electoral-vote margin is rescaled onto the popular scale instead of
+    mixed in raw — the electoral college exaggerates margins ~5x, which
+    structurally inflated the earliest presidents' Public Mandate (#218
+    review S3). With no usable fit, those elections are left out."""
+    rows = _mandates_rows(html)
+    fits = _fit_scales(rows)
+    if fits is None:
+        logger.warning("Too few mandates rows with both popular and electoral figures to fit a rescale")
+    result: dict[str, list[float]] = {}
+    for pid, popular_margin, _, electoral_margin in rows:
+        if popular_margin is not None:
+            margin = popular_margin
+        elif electoral_margin is not None and fits is not None:
+            margin = electoral_margin * fits["margin_slope"]
+        else:
+            continue
+        result.setdefault(pid, []).append(margin)
+    return result, fits
 
 
 def _parse_election_year_page(html: str) -> float | None:
@@ -231,6 +266,7 @@ async def fetch_election_margins(db: Session) -> dict[str, float]:
         return cached["data"]
 
     margins_by_id: dict[str, list[float]] = {}
+    fits: dict | None = None
     mandates_table_ok = False
 
     resp = await fetch_with_retry_requests(
@@ -238,14 +274,18 @@ async def fetch_election_margins(db: Session) -> dict[str, float]:
     )
     if resp is not None and resp.status_code == 200:
         try:
-            margins_by_id = _parse_mandates_table(resp.text)
-            mandates_table_ok = True
+            margins_by_id, fits = _parse_mandates_table(resp.text)
+            mandates_table_ok = fits is not None
         except Exception:
             logger.exception("Failed to parse UCSB election-mandates table")
     else:
         logger.warning("Failed to fetch UCSB election-mandates table (%s)", MANDATES_URL)
 
     for year, pid in _PRE_1824_ELECTIONS.items():
+        if fits is None:
+            # The share->margin map is fit from the mandates table; without
+            # it these pages can't be put on the same scale.
+            break
         url = ELECTION_YEAR_URL.format(year=year)
         resp = await fetch_with_retry_requests(
             _RATE_LIMITER, "GET", url, log_label=f"UCSB election {year}",
@@ -261,18 +301,13 @@ async def fetch_election_margins(db: Session) -> dict[str, float]:
         if pct is not None:
             # Pre-1824 pages report the winner's raw electoral vote SHARE,
             # not a margin vs. the runner-up. Map share onto the popular-
-            # margin scale via the relationship fit on the 50 mandates-
-            # table elections where both electoral share and popular
-            # margin exist: popular ≈ 0.3925 x share − 18.67 (least
-            # squares, R²=0.52). Replaces the previous ad-hoc `pct − 55.0`
-            # heuristic (2026-07, #218 review S3), which had no empirical
-            # basis and produced values on yet a third scale — e.g.
-            # Monroe's 98.3% share mapped to +43.3 under the heuristic
-            # (double any real popular margin ever recorded) vs. +19.9
-            # under the fitted line.
+            # margin scale via the line fit on the mandates-table elections
+            # where both exist (_fit_scales; 2026-07 fit: 0.3925 x share −
+            # 18.67, R²=0.52). Replaced an ad-hoc `pct − 55.0` heuristic
+            # (#218 review S3) that mapped Monroe's 98.3% share to +43.3 —
+            # double any real popular margin ever recorded — vs. +19.9.
             margins_by_id.setdefault(pid, []).append(
-                _ELECTORAL_SHARE_TO_POPULAR_SLOPE * pct
-                + _ELECTORAL_SHARE_TO_POPULAR_INTERCEPT
+                fits["share_slope"] * pct + fits["share_intercept"]
             )
 
     if not margins_by_id:

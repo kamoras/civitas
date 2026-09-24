@@ -47,10 +47,13 @@ def _mtime(path: pathlib.Path) -> float | None:
 
 
 class ChamberReference:
-    """One named reference: {"senate": {...}, "house": {...}}."""
+    """One named reference, one entry per population key — by default
+    {"senate": {...}, "house": {...}}; the presidential reference has the
+    single key "presidents"."""
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, keys: tuple[str, ...] = CHAMBERS):
         self.name = name
+        self.keys = keys
         self.live_path = _LIVE_DIR / f"{name}.json"
         self.bundled_path = _BUNDLED_DIR / f"{name}.json"
         self._cache: tuple[tuple[float | None, float | None], dict] | None = None
@@ -64,7 +67,7 @@ class ChamberReference:
         if self._cache is not None and self._cache[0] == key:
             return self._cache[1]
         bundled, live = _read_json(self.bundled_path), _read_json(self.live_path)
-        merged = {ch: live.get(ch) or bundled.get(ch) for ch in CHAMBERS if live.get(ch) or bundled.get(ch)}
+        merged = {k: live.get(k) or bundled.get(k) for k in self.keys if live.get(k) or bundled.get(k)}
         if not merged:
             logger.error(
                 "No %s reference (neither %s nor the bundled %s)",
@@ -102,3 +105,4 @@ class ChamberReference:
 
 LES_REFERENCE = ChamberReference("les_reference")
 FUNDING_REFERENCE = ChamberReference("funding_reference")
+PRESIDENT_REFERENCE = ChamberReference("president_reference", keys=("presidents",))

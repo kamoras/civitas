@@ -425,10 +425,12 @@ export default function AboutPage() {
                   bills can score well even before any of them advance further — this is Volden
                   &amp; Wiseman&apos;s real design, not a bug: their published methodology counts a
                   bill&apos;s contribution at every stage it reaches, and most sponsored bills never
-                  advance at all (our own corpus measures Senate majority sponsors advancing bills
-                  at 3.6% vs. 2.4% for minority sponsors; House 6.4% vs. 2.4%). The expected-credit
-                  baseline accounts for that majority/minority gap, so scoring everyone against one
-                  absolute threshold doesn&apos;t silently penalize whichever party is out of power.
+                  advance at all (a July 2026 measurement of our corpus found Senate majority
+                  sponsors advancing bills at 3.6% vs. 2.4% for minority sponsors; House 6.4% vs.
+                  2.4%). The expected-credit baseline accounts for that majority/minority gap, so
+                  scoring everyone against one absolute threshold doesn&apos;t silently penalize
+                  whichever party is out of power; the gap itself is re-measured on every update
+                  from the chamber&apos;s own bills.
                   The score explanation on each profile breaks the substantive-bill count into
                   introduced-only / advanced-further / became-law so the volume-vs-advancement split
                   is visible as real numbers.

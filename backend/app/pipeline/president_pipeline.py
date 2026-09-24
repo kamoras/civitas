@@ -42,6 +42,7 @@ from app.models import President, ScoreSnapshot
 from app.pipeline.analyze.president_scorer import (
     PRESIDENT_ALGORITHM_VERSION,
     compute_president_overall_score,
+    compute_president_reference,
     recalculate_president_scores,
 )
 from app.pipeline.fetch.cspan_historians_survey import fetch_cspan_historians_survey
@@ -57,6 +58,8 @@ from app.pipeline.fetch.presidential_approval import (
 from app.pipeline.fetch.presidential_elections import fetch_election_margins
 from app.pipeline.fetch.presidential_roster import fetch_presidential_roster
 from app.time_utils import utcnow
+
+from app.pipeline.analyze.population_reference import PRESIDENT_REFERENCE
 
 logger = logging.getLogger(__name__)
 
@@ -221,6 +224,11 @@ async def run_president_pipeline(db: Session) -> dict:
 
     updated = 0
     failed = 0
+    # Two passes: store every president's inputs first, then measure the
+    # population statistics the z-scored dimensions compare against
+    # (compute_president_reference), then score. Scoring inside the fetch
+    # loop is what forced those statistics to be hand-typed constants.
+    to_score: list[tuple] = []
     for president in presidents:
         try:
             term_years = _term_years(president.term_start, president.term_end)
@@ -293,7 +301,35 @@ async def run_president_pipeline(db: Session) -> dict:
             if president.historical_legacy_score is not None:
                 live["historical_legacy_score"] = president.historical_legacy_score
 
-            new_scores = recalculate_president_scores(president.id, live, term_years)
+            db.commit()
+            to_score.append((president, live, term_years))
+        except Exception:
+            # Per-president isolation, same rationale as the scoring pass.
+            logger.exception("President pipeline failed to update %s's inputs", president.id)
+            db.rollback()
+            failed += 1
+
+    # Margins come from this run's fetch for EVERY elected presidency (the
+    # population the 2026-07 constants were measured over) — the stored
+    # election_margin column only holds the pre-polling-era ones that are
+    # scored on it. A stat this run couldn't measure (a source down) keeps
+    # its last persisted value rather than disappearing from the reference.
+    measured = compute_president_reference([
+        {
+            "id": p.id, "name": p.name, "avg_approval": p.avg_approval,
+            "approval_trend": p.approval_trend,
+            "election_margin": election_margin_data.get(p.id),
+            "historical_legacy_score": p.historical_legacy_score,
+        }
+        for p in presidents
+    ])
+    previous = PRESIDENT_REFERENCE.load().get("presidents") or {}
+    reference = PRESIDENT_REFERENCE.with_live("presidents", {**previous, **measured}).get("presidents")
+    logger.info("President reference: %s", reference)
+
+    for president, live, term_years in to_score:
+        try:
+            new_scores = recalculate_president_scores(president.id, live, term_years, reference)
             president.score_public_mandate = new_scores["score_public_mandate"]
             president.score_effectiveness = new_scores["score_effectiveness"]
             president.score_agency_alignment = new_scores["score_agency_alignment"]

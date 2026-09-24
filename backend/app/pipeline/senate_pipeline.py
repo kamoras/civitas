@@ -731,7 +731,10 @@ def _live_les_reference(
             "adjustment falls back to the historical table for this congress",
             chamber,
         )
-    ref = compute_les_reference(members, settings.CURRENT_CONGRESS, majority)
+    previous = LES_REFERENCE.load().get(chamber) or {}
+    ref = compute_les_reference(
+        members, settings.CURRENT_CONGRESS, majority, previous.get("advancement_rates"),
+    )
     if ref is None:
         logger.warning(
             "Too few %s members with substantive bills to measure an LES reference "
@@ -756,8 +759,11 @@ def _live_funding_reference(chamber: str, fundings: list[dict]) -> dict:
             "Too few %s members with funding to measure a PAC-share reference "
             "this run — scoring against the last persisted one", chamber,
         )
-    else:
-        logger.info("Funding reference (%s): %s", chamber, ref)
+        return FUNDING_REFERENCE.load()
+    # A stat this run couldn't measure (e.g. too few measurable donor pools
+    # for concentration) keeps its last persisted value.
+    ref = {**(FUNDING_REFERENCE.load().get(chamber) or {}), **ref}
+    logger.info("Funding reference (%s): %s", chamber, ref)
     return FUNDING_REFERENCE.with_live(chamber, ref)
 
 

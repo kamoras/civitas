@@ -1041,6 +1041,13 @@ logger = logging.getLogger(__name__)
 # lowest member, by construction of the [0, 1] rescale) is scored, not
 # treated as missing data; and a cosponsored bill with no outcome data gets
 # the mean known edge weight instead of the ENACTED maximum.
+#
+# Also v6.13 — the remaining hand-typed calibrations are measured each run
+# (AGENTS.md §3a): the fallback PAC-dollar scale (2 x chamber median PAC
+# dollars), top-donor concentration (chamber median = 50, one p10-p90
+# spread saturates — replaces fixed 0.15/0.40 anchors), House small-donor
+# share (House median = 50 — replaces a flat 40% cap), and the majority/
+# minority advancement rates. The duplicate small-donor-fit literal is gone.
 ALGORITHM_VERSION = "v6.13"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
@@ -1668,10 +1675,11 @@ def _small_donor_baseline_fit() -> dict[str, float]:
     national_mean_pct, min_expected_pct, max_expected_pct, saturation_pt}.
 
     Ingested from app/data/small_donor_baseline.json (written by
-    scripts/fetch_state_small_donor_baseline.py); falls back to the
-    2026-07 fit (101 live senators) if the file is unavailable — missing
-    data degrades to a fixed prior rather than crashing scoring, same
-    convention as _district_pvi()/_state_population().
+    scripts/fetch_state_small_donor_baseline.py). The file ships in the
+    image; if it is ever unreadable the fit is empty and the small-donor
+    component scores neutral (_small_donor_capacity_score) rather than
+    falling back to a second hand-typed copy of the same numbers, which is
+    what used to live here (AGENTS.md §3a, point 3).
     """
     global _small_donor_baseline_fit_cache
     if _small_donor_baseline_fit_cache is None:
@@ -1689,11 +1697,11 @@ def _small_donor_baseline_fit() -> dict[str, float]:
                 "saturation_pt": float(data["saturation_pt"]),
             }
         except Exception:
-            logger.warning("small_donor_baseline.json unavailable — using the 2026-07 fit as a fallback")
-            _small_donor_baseline_fit_cache = {
-                "A": 12.26, "B": 4.53, "national_mean_pct": 18.62,
-                "min_expected_pct": 7.9, "max_expected_pct": 30.9, "saturation_pt": 21.2,
-            }
+            logger.error(
+                "small_donor_baseline.json unreadable — the small-donor component "
+                "scores neutral until it is restored (scripts/fetch_state_small_donor_baseline.py)"
+            )
+            _small_donor_baseline_fit_cache = {}
     return _small_donor_baseline_fit_cache
 
 
@@ -1702,6 +1710,8 @@ def _state_small_donor_baseline(state: str) -> float:
     (unknown code, DC, territories) fall back to the national mean so an
     unresolvable state is never itself a penalty or a windfall."""
     fit = _small_donor_baseline_fit()
+    if not fit:
+        return 0.0
     pop = _state_population().get(state)
     if not pop:
         return fit["national_mean_pct"]
@@ -1710,25 +1720,35 @@ def _state_small_donor_baseline(state: str) -> float:
 
 
 def _small_donor_capacity_score(
-    small_pct: float, state: str, district: int | None
+    small_pct: float, state: str, district: int | None, chamber_ref: dict | None = None,
 ) -> tuple[float, float]:
-    """Small-donor credit relative to what this state's population
-    predicts, not a flat absolute cap. Returns (score, expected_pct).
+    """Small-donor credit relative to what's expected for the seat, not a
+    flat absolute cap. Returns (score, expected_pct).
 
-    Senate-only: House districts are apportioned to ~700-800k population
-    each by design, so the state-population bias this fixes for the
-    Senate (0.6M-39.5M range, a 65x spread) shouldn't exist at anywhere
-    near the same magnitude for House seats. `district is not None`
-    bypasses the adjustment entirely (falls back to the original flat
-    40%-cap behavior) until a real district-population audit — mirroring
-    _signed_state_alignment's existing district-vs-state branch — shows
-    it's needed there too.
+    Senate: expected from the state's population (the regression in
+    small_donor_baseline.json — bigger states have bigger natural donor
+    pools), saturating at the fit's saturation point.
+
+    House: districts are apportioned to ~760k people each, so population
+    doesn't differentiate them; expected is the House's own median
+    small-donor share, saturating at one p10-p90 spread — both measured
+    each run (compute_funding_reference). This replaced a flat 40% cap
+    (v6.13) that was hand-set and put the typical House member near 45
+    rather than 50, unlike every other chamber-relative component.
     """
     if district is not None:
-        return min(small_pct / 40.0, 1.0) * 100, _small_donor_baseline_fit()["national_mean_pct"]
+        ref = chamber_ref or {}
+        median = ref.get("small_donor_median")
+        spread = (ref.get("small_donor_p90") or 0) - (ref.get("small_donor_p10") or 0)
+        if median is None or spread <= 0:
+            return 50.0, median or 0.0
+        return max(0.0, min(100.0, 50.0 + 50.0 * (small_pct - median) / spread)), median
 
+    fit = _small_donor_baseline_fit()
+    if not fit:
+        return 50.0, 0.0
     expected = _state_small_donor_baseline(state)
-    saturation = _small_donor_baseline_fit()["saturation_pt"]
+    saturation = fit["saturation_pt"]
     if small_pct >= expected:
         surplus = small_pct - expected
         score = 50.0 + 50.0 * min(surplus / saturation, 1.0)
@@ -1872,24 +1892,76 @@ def funding_share_base(funding: dict) -> float:
 _MIN_FUNDING_REFERENCE_MEMBERS = 30
 
 
+# A donor pool is large enough to measure top-10 concentration from.
+_CONCENTRATION_MIN_DONORS = 20
+_CONCENTRATION_MIN_POOL = 250_000
+
+
+def _top_donor_concentration(funding: dict) -> tuple[float | None, int, float]:
+    """(top-10 share of the itemized external donor pool, #external donors,
+    pool $) — the concentration is None when the pool is too small to
+    measure. Shared by the score and its population reference."""
+    external = sorted(
+        (
+            d for d in funding.get("topDonors", [])
+            if d.get("type") not in ("CandidateAffiliated", "Self-Funded")
+        ),
+        key=lambda d: d.get("total", 0),
+        reverse=True,
+    )
+    pool = sum(d.get("total", 0) for d in external)
+    if len(external) >= _CONCENTRATION_MIN_DONORS and pool >= _CONCENTRATION_MIN_POOL:
+        return sum(d.get("total", 0) for d in external[:10]) / pool, len(external), pool
+    return None, len(external), pool
+
+
 def compute_funding_reference(fundings: list[dict]) -> dict | None:
     """One chamber's Funding Independence reference from this run's
-    members' funding dicts: the median PAC share of contributions (the
-    raw ratio, before the outside-spending adjustment — the same quantity
-    scripts/audit_pac_ratio.py measured when the multipliers were typed in
-    by hand). None when too few members have funding to measure it."""
-    ratios = []
+    members' funding dicts:
+
+    - pac_ratio_median: median PAC share of contributions (the raw ratio,
+      before the outside-spending adjustment — what scripts/audit_pac_ratio.py
+      measured when the multipliers were hand-typed);
+    - pac_dollars_median: median PAC dollars, the fallback volume scale for
+      members whose PACs have no known committee type;
+    - concentration_p10 / _median / _p90: top-10 donor concentration among
+      members with a measurable pool.
+
+    None when too few members have funding to measure the PAC share; the
+    concentration stats are omitted (keep the last persisted ones) when too
+    few members have a measurable pool."""
+    ratios, dollars, concentrations, small = [], [], [], []
     for f in fundings:
-        base = funding_share_base(f or {})
+        f = f or {}
+        base = funding_share_base(f)
         if base > 0:
-            ratios.append(min((f.get("totalFromPACs") or 0) / base, 1.0))
+            pac = f.get("totalFromPACs") or 0
+            ratios.append(min(pac / base, 1.0))
+            dollars.append(pac)
+            small.append(f.get("smallDonorPercentage") or 0)
+        c, _, _ = _top_donor_concentration(f)
+        if c is not None:
+            concentrations.append(c)
     if len(ratios) < _MIN_FUNDING_REFERENCE_MEMBERS:
         return None
-    return {
+    ref = {
         "n": len(ratios),
         "pac_ratio_median": round(statistics.median(ratios), 6),
         "pac_ratio_mean": round(statistics.mean(ratios), 6),
+        "pac_dollars_median": round(statistics.median(dollars), 2),
+        "small_donor_p10": round(statistics.quantiles(small, n=10)[0], 4),
+        "small_donor_median": round(statistics.median(small), 4),
+        "small_donor_p90": round(statistics.quantiles(small, n=10)[8], 4),
     }
+    if len(concentrations) >= _MIN_FUNDING_REFERENCE_MEMBERS:
+        deciles = statistics.quantiles(concentrations, n=10)
+        ref.update({
+            "concentration_n": len(concentrations),
+            "concentration_p10": round(deciles[0], 6),
+            "concentration_median": round(statistics.median(concentrations), 6),
+            "concentration_p90": round(deciles[8], 6),
+        })
+    return ref
 
 
 def _funding_independence_core(
@@ -1924,7 +1996,10 @@ def _funding_independence_core(
     # from the members being scored (compute_funding_reference), which also
     # keeps it on the same denominator as the ratio itself.
     chamber = "house" if district is not None else "senate"
-    ref = (reference or FUNDING_REFERENCE.load()).get(chamber) or {}
+    ref = {
+        **(FUNDING_REFERENCE.load().get(chamber) or {}),
+        **((reference or {}).get(chamber) or {}),
+    }
     pac_median = ref.get("pac_ratio_median")
     if pac_median:
         ratio_score = max(0.0, (1.0 - pac_ratio * (0.5 / pac_median))) * 100
@@ -1981,21 +2056,19 @@ def _funding_independence_core(
         # "COM" rows, or all resolved to a non-PAC committee type (party
         # committee, JFC, hybrid/Carey committee) — degrade to the
         # original dollar-based penalty rather than silently skipping the
-        # correction. Recalibrated 2026-07-23 (n=532, both chambers):
-        # the 2026-06 calibration (median $2.0M, p90 $4.4M) had drifted to
-        # roughly 3x the live distribution — median $662,750, p90
-        # $1,915,242 — most likely the election-cycle window shifting
-        # into a quieter off-year fundraising period since that audit,
-        # the same instability this fallback's single dollar-denominated
-        # threshold is inherently exposed to (a hard-coded cap that was
-        # right at one point in the cycle drifts as fundraising volume
-        # changes with it). FALLBACK_PAC_CAP set so the CURRENT median
-        # lands at x0.75 (2 * $662,750); everything at or above it floors
-        # at x0.5, which now starts below the current p90 rather than at
-        # it — the single-parameter formula can only anchor one point, and
-        # the median is the one this fallback has always prioritized.
-        FALLBACK_PAC_CAP = 1_325_000
-        volume_factor = 0.5 + 0.5 * max(0.0, 1.0 - pac_total / FALLBACK_PAC_CAP)
+        # correction. The volume scale is twice the chamber's median PAC
+        # dollars (measured each run — compute_funding_reference), so the
+        # median member lands at x0.75 and anything at or above twice it
+        # floors at x0.5. It used to be a hand-typed $1,325,000 (2 x a
+        # 2026-07 median of $662,750, itself refit after an earlier $2.0M
+        # value had drifted 3x as the election cycle moved) — exactly the
+        # drift a measured value doesn't suffer.
+        pac_dollars_median = ref.get("pac_dollars_median")
+        if pac_dollars_median:
+            fallback_cap = 2 * pac_dollars_median
+            volume_factor = 0.5 + 0.5 * max(0.0, 1.0 - pac_total / fallback_cap)
+        else:
+            volume_factor = 0.75
         volume_detail_suffix = f"no PAC committee-type data — fallback scaling for ${pac_total:,.0f} in absolute PAC dollars"
 
     pac_score = ratio_score * volume_factor
@@ -2003,45 +2076,31 @@ def _funding_independence_core(
     # Component 2: small-donor share (25% weight), state-relative for
     # senators — see _small_donor_capacity_score.
     small_pct = funding.get("smallDonorPercentage", 0) or 0
-    small_score, small_expected_pct = _small_donor_capacity_score(small_pct, state, district)
+    small_score, small_expected_pct = _small_donor_capacity_score(small_pct, state, district, ref)
 
     # Component 3: relative top-donor concentration (25% weight)
-    external = sorted(
-        (
-            d for d in funding.get("topDonors", [])
-            if d.get("type") not in ("CandidateAffiliated", "Self-Funded")
-        ),
-        key=lambda d: d.get("total", 0),
-        reverse=True,
-    )
-    pool = sum(d.get("total", 0) for d in external)
-    if len(external) >= 20 and pool >= 250_000:
-        concentration = sum(d.get("total", 0) for d in external[:10]) / pool
-        # Recalibrated 2026-07-23 (n=453 with a measurable pool, both
-        # chambers): the prior anchors (0.20 -> 100, 1.00 -> 0, "median
-        # 0.60 -> 50") had drifted hard from the live population — real
-        # median 27.8%, p10 21.2%, p90 38.3% (confirmed independently per
-        # chamber: Senate median 30.5%, House 27.5% — not a mixing
-        # artifact). Under the old anchors the typical member scored
-        # ~90/100 on this component regardless of real concentration,
-        # since actual concentration rarely approaches the assumed 60%
-        # midpoint — the sub-score carried almost no signal for the bulk
-        # of the population. New anchors (0.15 -> 100, 0.40 -> 0) bracket
-        # the live p10/p90 with headroom instead of the population's
-        # extreme tail, landing the real median at ~49 (p10 -> ~75, p90
-        # -> ~7) — the same "fixed conceptual endpoints, population
-        # falls naturally between them" shape as before, refit to what
-        # this population's donor pools actually look like now.
-        concentration_score = max(0.0, min(1.0, (0.40 - concentration) / 0.25)) * 100
+    concentration, n_external, pool = _top_donor_concentration(funding)
+    c_median = ref.get("concentration_median")
+    c_spread = (ref.get("concentration_p90") or 0) - (ref.get("concentration_p10") or 0)
+    if concentration is not None and c_median is not None and c_spread > 0:
+        # Chamber-relative: the median member's concentration scores 50,
+        # and one p10-p90 spread above/below saturates at 0/100 — measured
+        # each run (compute_funding_reference). The previous fixed anchors
+        # (0.15 -> 100, 0.40 -> 0) were fitted by hand around a 2026-07
+        # snapshot of both chambers pooled (median 27.8%); a still-earlier
+        # set had drifted until the typical member scored ~90 regardless of
+        # real concentration.
+        concentration_score = max(0.0, min(100.0, 50.0 - 50.0 * (concentration - c_median) / c_spread))
         concentration_detail = (
-            f"top 10 of {len(external)} external donors = {concentration:.0%} "
-            f"of the ${pool:,.0f} itemized external donor pool"
+            f"top 10 of {n_external} external donors = {concentration:.0%} "
+            f"of the ${pool:,.0f} itemized external donor pool "
+            f"(chamber median {c_median:.0%})"
         )
     else:
         # Too few itemized external donors to measure concentration.
         concentration_score = 50.0
         concentration_detail = (
-            f"only {len(external)} itemized external donors (${pool:,.0f} pool) "
+            f"only {n_external} itemized external donors (${pool:,.0f} pool) "
             "— too few to measure concentration, neutral 50"
         )
 
@@ -2100,11 +2159,11 @@ def _funding_independence_core(
                 "weight": round(10 / 66, 4),
                 "score": round(small_score, 1),
                 "detail": (
-                    f"{small_pct:.0f}% of funding from small (<$200) donors"
+                    f"{small_pct:.0f}% of contributions from small (<$200) donors"
                     + (
                         f" vs. an expected ~{small_expected_pct:.0f}% for a state this size"
                         if district is None
-                        else ""
+                        else f" vs. the House median of {small_expected_pct:.0f}%"
                     )
                 ),
             },
@@ -3093,29 +3152,42 @@ def derive_chamber_majority(
     return None
 
 
+def _bill_majority(bill_type: str, congress: int | None, current: tuple[int, str] | None) -> str | None:
+    """The majority party of the chamber a bill was introduced in, for its
+    congress. `current` = (congress, majority) derived from the live roster;
+    it wins for the congress it describes, the table covers the past."""
+    is_house = bill_type in _LES_HOUSE_TYPES
+    if current is not None and congress == current[0]:
+        return current[1]
+    return (_HOUSE_MAJORITY if is_house else _SENATE_MAJORITY).get(congress or 0)
+
+
 def _advancement_baseline(
     bill_type: str,
     congress: int | None,
     party: str | None,
     current: tuple[int, str] | None = None,
+    rates: dict | None = None,
 ) -> float:
     """Expected bill advancement rate for a sponsor, by chamber/congress/
     party. Chamber detection must cover every House bill type (including
     commemorative hres/hconres), not just substantive ones — this is
     averaged over a member's full sponsored-bill list (_les_component_
     score), not pre-filtered to substantive bills the way the old
-    advancement-rate formula filtered it."""
-    is_house = bill_type in _LES_HOUSE_TYPES
-    majority = (_HOUSE_MAJORITY if is_house else _SENATE_MAJORITY).get(congress or 0)
-    # `current` = (congress, majority) derived from the live roster; it
-    # wins for the congress it describes, the table covers the past.
-    if current is not None and congress == current[0]:
-        majority = current[1]
-    if not majority or party not in ("D", "R"):
-        return 0.030  # overall measured mean when status is unknowable
-    if is_house:
-        return 0.064 if party == majority else 0.024
-    return 0.036 if party == majority else 0.024
+    advancement-rate formula filtered it.
+
+    `rates` = {"majority", "minority", "pooled"} for the bill's chamber,
+    measured each run (_measure_advancement_rates); None reads the persisted
+    reference. Only their RATIO affects a score — member baselines are
+    divided by the chamber average — so these used to be the hand-typed
+    2026-07 corpus rates (Senate 3.6% / 2.4%, House 6.4% / 2.4%)."""
+    if rates is None:
+        chamber = "house" if bill_type in _LES_HOUSE_TYPES else "senate"
+        rates = (LES_REFERENCE.load().get(chamber) or {}).get("advancement_rates") or {}
+    majority = _bill_majority(bill_type, congress, current)
+    if not majority or party not in ("D", "R") or not rates:
+        return rates.get("pooled", 1.0)  # status unknowable: no tilt either way
+    return rates["majority"] if party == majority else rates["minority"]
 
 
 # A member with zero substantive bills after a real term in office is a
@@ -3308,18 +3380,59 @@ def _les_member_inputs(sponsored_bills: list[dict], party: str | None) -> dict |
 
 
 def _les_member_baseline(
-    sponsored_bills: list[dict], party: str | None, current: tuple[int, str] | None,
+    sponsored_bills: list[dict],
+    party: str | None,
+    current: tuple[int, str] | None,
+    rates: dict | None = None,
 ) -> float:
     return sum(
-        _advancement_baseline((b.get("billType") or "").lower(), b.get("congress"), party, current)
+        _advancement_baseline((b.get("billType") or "").lower(), b.get("congress"), party, current, rates)
         for b in sponsored_bills
     ) / len(sponsored_bills)
+
+
+# Fewest advanced bills in EACH of the majority and minority groups before
+# their rates are trusted; early in a congress there are few, and the
+# previous rates are kept instead.
+_MIN_ADVANCED_BILLS_PER_STATUS = 20
+
+
+def _measure_advancement_rates(
+    members: list[tuple[list[dict], str | None]], current: tuple[int, str] | None,
+) -> dict | None:
+    """Share of sponsored bills that advanced past referral (stage >= 2:
+    committee action or further) for majority- vs minority-party sponsors
+    in this chamber, plus the pooled rate. None when either group has too
+    few advanced bills to measure."""
+    counts = {"majority": [0, 0], "minority": [0, 0]}  # [advanced, total]
+    for bills, party in members:
+        if party not in ("D", "R"):
+            continue
+        for b in bills:
+            majority = _bill_majority((b.get("billType") or "").lower(), b.get("congress"), current)
+            if not majority:
+                continue
+            c = counts["majority" if party == majority else "minority"]
+            c[1] += 1
+            if _les_bill_stage(b) >= 2:
+                c[0] += 1
+    if any(adv < _MIN_ADVANCED_BILLS_PER_STATUS for adv, _ in counts.values()):
+        return None
+    adv = sum(a for a, _ in counts.values())
+    total = sum(t for _, t in counts.values())
+    return {
+        "majority": round(counts["majority"][0] / counts["majority"][1], 6),
+        "minority": round(counts["minority"][0] / counts["minority"][1], 6),
+        "pooled": round(adv / total, 6),
+        "n_bills": total,
+    }
 
 
 def compute_les_reference(
     members: list[tuple[list[dict], str | None]],
     congress: int,
     majority: str | None,
+    previous_rates: dict | None = None,
 ) -> dict | None:
     """One chamber's LES population reference from this run's members.
 
@@ -3330,6 +3443,7 @@ def compute_les_reference(
     reference rather than scoring against noise.
     """
     current = (congress, majority) if majority else None
+    rates = _measure_advancement_rates(members, current) or previous_rates
     credits: list[float] = []
     baselines: list[float] = []
     for bills, party in members:
@@ -3337,7 +3451,7 @@ def compute_les_reference(
         if inputs is None:
             continue
         credits.append(inputs["raw_per_congress"])
-        baselines.append(_les_member_baseline(bills, party, current))
+        baselines.append(_les_member_baseline(bills, party, current, rates))
     if len(credits) < _MIN_LES_REFERENCE_MEMBERS:
         return None
     return {
@@ -3348,6 +3462,7 @@ def compute_les_reference(
         "mean_credit": round(statistics.mean(credits), 4),
         "stdev_credit": round(statistics.pstdev(credits), 4),
         "avg_baseline": round(statistics.mean(baselines), 6),
+        "advancement_rates": rates,
     }
 
 
@@ -3408,8 +3523,14 @@ def _les_component_score(
     avg_baseline = ref["avg_baseline"]
     saturation = _LES_SATURATION_STDEVS * ref["stdev_credit"]
 
-    member_baseline = _les_member_baseline(sponsored_bills, party, current)
-    status_ratio = member_baseline / avg_baseline if avg_baseline else 1.0
+    rates = ref.get("advancement_rates")
+    if rates and avg_baseline:
+        member_baseline = _les_member_baseline(sponsored_bills, party, current, rates)
+        status_ratio = member_baseline / avg_baseline
+    else:
+        # No measured rates yet: no majority/minority tilt, rather than a
+        # member baseline on a different scale from the chamber average.
+        status_ratio = 1.0
     # Reference point is the chamber MEDIAN (not V&W's mean) so the typical
     # member scores ~50 despite the right-skewed credit distribution — see
     # the LES population reference comment above. status_ratio only tilts

@@ -259,47 +259,42 @@ class TestFundingIndependence:
         detail = breakdown["components"][0]["detail"]
         assert "no PAC committee-type data" in detail
 
-    def test_concentration_2026_07_23_recalibration_anchors(self):
-        """New anchors (0.15 -> 100, 0.40 -> 0), refit 2026-07-23 against a
-        live audit that found the prior anchors (0.20 -> 100, 1.00 -> 0,
-        "median 0.60") had drifted to roughly double the real population
-        (real median 28%) — pins the exact new anchor values and the
-        real-world median so a future recalibration can't silently drift
-        again without a test noticing."""
-        def _concentration_score(top10_total: int, pool_total: int) -> float:
-            # 100 "other" donors, deliberately small enough per-donor that
-            # they never outrank the intended top-10 group once the
-            # function sorts by amount descending (a flat split would
-            # otherwise let the "long tail" outrank the "top 10").
-            other_total = pool_total - top10_total
+    def test_concentration_is_scored_against_the_chamber_median(self, pinned_funding_reference):
+        """v6.13: the anchors used to be hand-typed (0.15 -> 100, 0.40 -> 0,
+        fitted to a 2026-07 snapshot; an earlier set had drifted until the
+        typical member scored ~90 regardless of real concentration). Now the
+        chamber's measured median scores 50 and one p10-p90 spread above or
+        below saturates at 0 / 100 (compute_funding_reference)."""
+        ref = pinned_funding_reference["senate"]
+        median = ref["concentration_median"]
+        spread = ref["concentration_p90"] - ref["concentration_p10"]
+
+        def _concentration_score(share: float) -> float:
+            pool_total = 1_000_000
+            top10_total = round(share * pool_total)
             n_others = 100
             funding = {
                 "totalRaised": pool_total,
                 "totalFromPACs": 0,
                 "topDonors": (
                     [{"total": top10_total // 10} for _ in range(10)]
-                    + [{"total": max(1, other_total // n_others)} for _ in range(n_others)]
+                    + [{"total": max(1, (pool_total - top10_total) // n_others)} for _ in range(n_others)]
                 ),
             }
             return _funding_independence_core(funding)["components"][2]["score"]
 
-        # 15% concentration -> full score (the new ceiling anchor).
-        assert _concentration_score(150_000, 1_000_000) == 100.0
-        # 40% concentration -> zero (the new floor anchor).
-        assert _concentration_score(400_000, 1_000_000) == 0.0
-        # Beyond the floor anchor stays at zero, doesn't go negative.
-        assert _concentration_score(900_000, 1_000_000) == 0.0
-        # The live 2026-07-23 audit's real median (28%) should land near
-        # the intended ~50 center, not the ~90 the old anchors produced.
-        score_at_real_median = _concentration_score(280_000, 1_000_000)
-        assert 45 <= score_at_real_median <= 55
+        assert abs(_concentration_score(median) - 50.0) < 0.5
+        assert _concentration_score(median + spread) == 0.0
+        assert _concentration_score(median - spread) == 100.0
+        assert _concentration_score(0.95) == 0.0  # never negative
+        assert _concentration_score(median - 0.05) > _concentration_score(median + 0.05)
 
-    def test_pac_fallback_2026_07_23_recalibration_anchors(self):
-        """New fallback cap ($1,325,000, i.e. 2x the live median), refit
-        2026-07-23 against a live audit that found the prior $4,000,000
-        cap had drifted to roughly 3x the real median ($662,750) —
-        without a resolved PAC committee type, dependency should still be
-        judged relative to what members actually raise via PACs today."""
+    def test_pac_fallback_scales_to_twice_the_chamber_median(self):
+        """Without a resolved PAC committee type, PAC volume is judged
+        against twice the chamber's median PAC dollars — measured each run
+        since v6.13 (pinned here to the 2026-07 median, $662,750). It used
+        to be a hand-typed cap, one version of which had drifted to ~3x the
+        real median."""
         def _pac_score_at(pac_total: int) -> float:
             # totalRaised scales with pac_total so pac_ratio (and thus the
             # ratio-score half of this component) stays constant at 10% —
@@ -356,12 +351,13 @@ class TestFundingIndependence:
         unknown_state = _funding_independence_core(funding, state="XX")
         assert no_state["components"][1]["score"] == unknown_state["components"][1]["score"]
 
-    def test_district_bypasses_state_population_adjustment(self):
-        """House members (district is not None) keep the original flat
-        40%-cap behavior — the state-population fix is Senate-only until a
-        real district-population audit justifies extending it. A ND House
-        seat must score identically to the same raw % from any other
-        state once district is given."""
+    def test_district_bypasses_state_population_adjustment(self, pinned_funding_reference):
+        """House members aren't scored against their state's population
+        (districts are apportioned to equal population) — a ND House seat
+        scores identically to the same raw % from any other state. Since
+        v6.13 they're scored against the House's own median small-donor
+        share (median member = 50) instead of a flat 40% cap."""
+        house = pinned_funding_reference["house"]
         funding = {
             "totalRaised": 2_000_000,
             "totalFromPACs": 400_000,
@@ -370,7 +366,9 @@ class TestFundingIndependence:
         }
         nd_house = _funding_independence_core(funding, state="ND", district=1)
         ca_house = _funding_independence_core(funding, state="CA", district=12)
-        assert nd_house["components"][1]["score"] == ca_house["components"][1]["score"] == 37.5
+        assert nd_house["components"][1]["score"] == ca_house["components"][1]["score"]
+        at_median = {**funding, "smallDonorPercentage": house["small_donor_median"]}
+        assert _funding_independence_core(at_median, state="ND", district=1)["components"][1]["score"] == 50.0
 
     def test_at_state_baseline_scores_neutral(self):
         """A senator whose raw % exactly matches their state's expected

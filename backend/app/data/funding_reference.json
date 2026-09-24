@@ -1,12 +1,26 @@
 {
  "_as_of": "2026-07",
- "_source": "Pre-first-run fallback only: the pipeline recomputes this per chamber every run (score_calculator.compute_funding_reference) and writes /data/funding_reference.json, which takes precedence. Values are the 2026-07 audit (scripts/audit_pac_ratio.py) medians previously hand-typed into score_calculator.py as the PAC multipliers 3.2 (Senate) and 1.35 (House) = 0.5 / median. Measured as PAC share of total receipts, before the switch to contributions as the denominator; the first pipeline run replaces them. Regenerate with backend/scripts/audit_pac_ratio.py.",
+ "_source": "Pre-first-run fallback only: the pipeline recomputes this per chamber every run (score_calculator.compute_funding_reference) and writes /data/funding_reference.json, which takes precedence. Values are the 2026-07 audits previously hand-typed into score_calculator.py: PAC-share medians (scripts/audit_pac_ratio.py; the multipliers 3.2 Senate / 1.35 House were 0.5 / median, measured over receipts before v6.13 moved to contributions), the fallback PAC-dollar median ($662,750, n=532, both chambers pooled) and top-donor concentration p10/median/p90 (21.2%/27.8%/38.3%, n=453, pooled; per-chamber medians 30.5% Senate / 27.5% House). The first pipeline run replaces them with per-chamber measurements. Regenerate with backend/scripts/audit_pac_ratio.py. small_donor_p10/median/p90 are placeholders centred on small_donor_baseline.json's national mean (18.62%) with its saturation spread (21.2 pts) \u2014 no per-chamber small-donor distribution was ever measured before v6.13; the first pipeline run replaces them.",
  "house": {
+  "concentration_median": 0.275,
+  "concentration_p10": 0.212,
+  "concentration_p90": 0.383,
   "n": null,
-  "pac_ratio_median": 0.371
+  "pac_dollars_median": 662750.0,
+  "pac_ratio_median": 0.371,
+  "small_donor_median": 18.62,
+  "small_donor_p10": 8.0,
+  "small_donor_p90": 29.2
  },
  "senate": {
+  "concentration_median": 0.305,
+  "concentration_p10": 0.212,
+  "concentration_p90": 0.383,
   "n": null,
-  "pac_ratio_median": 0.157
+  "pac_dollars_median": 662750.0,
+  "pac_ratio_median": 0.157,
+  "small_donor_median": 18.62,
+  "small_donor_p10": 8.0,
+  "small_donor_p90": 29.2
  }
 }
