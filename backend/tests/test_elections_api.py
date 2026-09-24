@@ -407,17 +407,6 @@ class TestCoverageFeedShowsOnlyVettedSources:
         data = _body(elections.state_ballot("CT", db_session))
         assert [c["title"] for c in data["coverage"]] == ["Real reporting"]
 
-    def test_a_relevant_non_advocacy_social_item_is_shown(self, db_session):
-        """Real local newsrooms post on Bluesky — @nebraskaexaminer,
-        @ksntnews and @connecticutintel all clear both bars, and the
-        first version of this filter threw them away on provenance."""
-        _race(db_session, "2026-SEN-NE", "NE")
-        self._item(db_session, "2026-SEN-NE", "bluesky",
-                   "Nebraska's U.S. Senate ballot will list Sen. Pete Ricketts",
-                   "b1", relevance=0.59, has_advocacy=False)
-        db_session.commit()
-        data = _body(elections.state_ballot("NE", db_session))
-        assert len(data["coverage"]) == 1
 
     def test_a_relevant_ADVOCACY_social_item_is_not_shown(self, db_session):
         """"Elect Jonathan Nez to Congress!" scores 0.632 — campaign
@@ -449,6 +438,19 @@ class TestCoverageFeedShowsOnlyVettedSources:
         data = _body(elections.state_ballot("CT", db_session))
         assert data["coverage"] == []
 
+    def test_no_social_item_is_shown_however_clean_it_looks(self, db_session):
+        """A DNS-verified domain handle is not enough: @crowbar.wtf is a
+        domain, and it published "Dave Hughes still a whiny cunt" onto
+        Minnesota's page. Relevance and no-advocacy both passed it —
+        it IS about the race and it never says "vote for"."""
+        _race(db_session, "2026-HOUSE-MN-7", "MN", office="H", district=7)
+        self._item(db_session, "2026-HOUSE-MN-7", "bluesky",
+                   "Dave Hughes still a whiny cunt.", "b7",
+                   relevance=0.62, has_advocacy=False, source_name="@crowbar.wtf")
+        db_session.commit()
+        data = _body(elections.state_ballot("MN", db_session))
+        assert data["coverage"] == []
+
     def test_a_default_bsky_handle_is_not_a_publisher(self, db_session):
         """Measured over 1,200 real items: of 377 that cleared relevance
         and the no-advocacy bar, the 316 on *.bsky.social were "Jon
@@ -463,14 +465,3 @@ class TestCoverageFeedShowsOnlyVettedSources:
         data = _body(elections.state_ballot("OH", db_session))
         assert data["coverage"] == []
 
-    def test_a_domain_verified_newsroom_still_shows(self, db_session):
-        """@nebraskaexaminer.com, @journalstar.com and @nypost.com are
-        the reason a blanket source ban was wrong in the first place."""
-        _race(db_session, "2026-SEN-NE", "NE")
-        self._item(db_session, "2026-SEN-NE", "bluesky",
-                   "Nebraska's U.S. Senate ballot will list Sen. Pete Ricketts", "b6",
-                   relevance=0.59, has_advocacy=False,
-                   source_name="@nebraskaexaminer.com")
-        db_session.commit()
-        data = _body(elections.state_ballot("NE", db_session))
-        assert len(data["coverage"]) == 1

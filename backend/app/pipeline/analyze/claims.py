@@ -42,6 +42,14 @@ logger = logging.getLogger(__name__)
 # unchanged — only how the text is obtained.
 MAX_FACTS = 5
 
+# A claim scoring below this fraction of the BEST claim's topic score is
+# an outlier among its siblings, not a supporting fact. Relative rather
+# than absolute so it needs no recalibration, and generous on purpose:
+# the cost of keeping a marginal claim is one weaker fact, while the
+# cost of dropping a good one is — measured — an entire issue not
+# published.
+OUTLIER_FRACTION = 0.5
+
 
 @dataclass(frozen=True)
 class Claim:
@@ -131,12 +139,24 @@ def on_topic(claims: list[Claim], articles: list) -> list[Claim]:
     which recently bought it." A true sentence, correctly attributed,
     and nothing to do with the issue.
 
-    The bar is derived from the cluster rather than typed: a claim must
-    be at least as close to the cluster's centroid as the LEAST
-    on-topic article the clusterer already accepted. If the clustering
-    was tight the bar is high; if it was loose the bar is low and this
-    filter correctly does little. No constant to drift, and it needs no
-    recalibration when the embedding model changes.
+    The bar is relative to the OTHER CLAIMS, not to the articles.
+
+    The first version compared each claim against the least on-topic
+    ARTICLE, which sounded principled and was measurably wrong: a claim
+    is one sentence and an article is a title plus a summary, so short
+    text scores systematically lower against a long-text centroid. The
+    two sides were never comparable. Measured on live clusters, that bar
+    landed at 0.637 and discarded a perfectly good claim scoring 0.601 —
+    and with the substance gate needing two claims, whole issues
+    vanished. The Action Center published ZERO issues for an hour
+    because of it.
+
+    Comparing claims to claims keeps the property that mattered — no
+    typed constant, nothing to recalibrate when the embedding model
+    changes — while comparing like with like. A claim is dropped when it
+    is a clear outlier among its siblings, which is what the
+    "Maricarmen was unable to pay the rent" case actually was: 0.146
+    against a sibling at 0.564.
     """
     texts = [f"{getattr(a, 'title', '')} {getattr(a, 'summary', '') or ''}".strip() for a in articles]
     texts = [t for t in texts if t]
@@ -152,9 +172,13 @@ def on_topic(claims: list[Claim], articles: list) -> list[Claim]:
         centroid = article_vecs.mean(axis=0)
         norm = np.linalg.norm(centroid) or 1.0
         centroid = centroid / norm
-        floor = float((article_vecs @ centroid).min())
         claim_vecs = encode_normalized(model, [c.text for c in claims])
         scores = claim_vecs @ centroid
+        # Half the best claim's score. Relative, so it scales with
+        # however tightly this particular cluster embeds, and it can
+        # only ever drop a claim that is far worse than one we are
+        # already publishing. A lone claim is never its own outlier.
+        floor = float(max(scores)) * OUTLIER_FRACTION
     except Exception:
         logger.exception("Claim topic check failed — keeping every claim")
         return claims
