@@ -40,7 +40,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 import httpx
-from sqlalchemy import func, or_
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models import Candidate, Race, RaceCoverageItem
@@ -322,48 +322,34 @@ def _title_key(title: str | None) -> str:
     return re.sub(r"\s+", " ", (title or "")).strip().lower()
 
 
-def _same_story_already_on_race(db: Session, race_id: str, title: str | None) -> bool:
-    """True when this race already carries this story under another URL.
+def _drop_syndicated_reprints(db: Session) -> set[tuple[str, str, str]]:
+    """Collapse stories a race already carries, and return the seen-set.
 
-    The URL check above cannot see syndication. States Newsroom
-    distributes one piece to its whole network, so "Flock surveillance
-    cameras raise constitutional questions" arrived from Oklahoma Voice,
-    Ohio Capital Journal, Kentucky Lantern, Florida Phoenix, Nevada
-    Current and seventeen more — every one a distinct, legitimate URL
-    from a distinct, legitimate outlet. Measured on the live database:
-    MO-6 carried 25 items that were 4 stories, and one race held 22
-    copies of that single headline.
+    The URL key cannot see syndication. States Newsroom distributes one
+    piece to its whole network, so "Flock surveillance cameras raise
+    constitutional questions" arrived from Oklahoma Voice, Ohio Capital
+    Journal, Kentucky Lantern, Florida Phoenix, Nevada Current and
+    seventeen more — every one a distinct, legitimate URL from a
+    distinct, legitimate outlet. Measured on the live database: MO-6
+    carried 25 items that were 4 stories, and one race held 22 copies of
+    that single headline.
 
-    Deduping on the headline keeps the first outlet to run it and drops
-    the reprints. Across the whole corpus this removes 75 rows and
-    leaves every race that had coverage still having coverage — no race
-    is emptied, because a reprint never carries information the original
-    did not.
-    """
-    key = _title_key(title)
-    if not key:
-        return False
-    return (
-        db.query(RaceCoverageItem.id)
-        .filter(
-            RaceCoverageItem.race_id == race_id,
-            func.lower(func.trim(RaceCoverageItem.title)) == key,
-        )
-        .first()
-        is not None
-    )
+    Same retroactive reasoning as _drop_items_the_matcher_would_now_reject:
+    nothing ever deletes a RaceCoverageItem, so a rule added today has to
+    reach backwards or the stored data and the rules drift apart
+    permanently. The oldest row wins — it ran the story first.
 
-
-def _drop_syndicated_reprints(db: Session) -> int:
-    """Retroactively collapse stories a race already carries twice.
-
-    Same reasoning as _drop_items_the_matcher_would_now_reject: nothing
-    ever deletes a RaceCoverageItem, so a rule added today has to reach
-    backwards or the stored data and the rules drift apart permanently.
-    The oldest row wins — it is the outlet that ran the story first.
+    Returns the surviving (race, title) keys so the ingest that follows
+    can test membership in memory. The first version instead ran one
+    `lower(trim(title)) = ?` query PER ARTICLE, which no index can
+    serve — a full scan of every stored item, hundreds of times, inside
+    the write transaction. In production that held SQLite's single
+    writer past its 30-second busy timeout and the whole coverage
+    refresh died with "database is locked". One scan, reused, is both
+    the correct and the cheap shape.
     """
     doomed: list[int] = []
-    kept: set[tuple[str, str]] = set()
+    seen: set[tuple[str, str, str]] = set()
     rows = (
         db.query(RaceCoverageItem.id, RaceCoverageItem.race_id, RaceCoverageItem.title)
         .order_by(RaceCoverageItem.id)
@@ -373,20 +359,20 @@ def _drop_syndicated_reprints(db: Session) -> int:
         key = _title_key(title)
         if not key:
             continue
-        if (race_id, key) in kept:
+        if ("title", race_id, key) in seen:
             doomed.append(item_id)
         else:
-            kept.add((race_id, key))
+            seen.add(("title", race_id, key))
 
-    if not doomed:
-        return 0
-    for i in range(0, len(doomed), 500):
-        (db.query(RaceCoverageItem)
-           .filter(RaceCoverageItem.id.in_(doomed[i:i + 500]))
-           .delete(synchronize_session=False))
-    db.commit()
-    logger.info("Dropped %d syndicated reprints already covered on their race", len(doomed))
-    return len(doomed)
+    if doomed:
+        for i in range(0, len(doomed), 500):
+            (db.query(RaceCoverageItem)
+               .filter(RaceCoverageItem.id.in_(doomed[i:i + 500]))
+               .delete(synchronize_session=False))
+        db.commit()
+        logger.info(
+            "Dropped %d syndicated reprints already covered on their race", len(doomed))
+    return seen
 
 
 def _drop_items_the_matcher_would_now_reject(
@@ -548,10 +534,12 @@ def _store_if_new(
     url_key = ("url", race_id, fields["url"])
     if url_key in seen or _already_ingested(db, race_id, fields["url"]):
         return False
-    # Same story, different outlet — see _same_story_already_on_race.
+    # Same story, different outlet — see _drop_syndicated_reprints. `seen`
+    # is primed with every stored (race, title) before the pass starts,
+    # so this needs no query of its own.
     title_key = ("title", race_id, _title_key(fields.get("title")))
     if title_key[2]:
-        if title_key in seen or _same_story_already_on_race(db, race_id, fields.get("title")):
+        if title_key in seen:
             return False
         seen.add(title_key)
     seen.add(url_key)
@@ -606,13 +594,16 @@ async def ingest_race_coverage(db: Session, client: httpx.AsyncClient) -> int:
     # Before ingesting, reconcile what is already stored with the rules
     # as they stand now. A no-op once the corpus is clean.
     _drop_items_the_matcher_would_now_reject(db, matchers)
-    _drop_syndicated_reprints(db)
 
     ingested = 0
     # Rows added in THIS pass, invisible to _already_ingested because
     # SessionLocal sets autoflush=False. Shared by both loops: a news
     # article and a Bluesky post can resolve to the same race+url.
-    seen: set[tuple[str, str, str]] = set()
+    #
+    # Primed with every stored (race, title) by the reprint sweep, which
+    # has just scanned the table anyway, so the per-article syndication
+    # check costs no query of its own.
+    seen: set[tuple[str, str, str]] = _drop_syndicated_reprints(db)
 
     # ── News: the national feeds the Action Center already fetched
     # (cheap/idempotent), PLUS the per-state political outlets.

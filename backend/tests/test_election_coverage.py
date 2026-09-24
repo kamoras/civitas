@@ -574,6 +574,35 @@ class TestSyndicatedReprintsAreCollapsed:
         # Oldest row wins: it is the outlet that ran the story first.
         assert kept[0].source_name == "Georgia Recorder"
 
+    async def test_a_reprint_arriving_now_is_not_stored(self, db_session):
+        """The ingest-time half of the rule. `seen` is primed from the
+        sweep's own scan rather than queried per article — the first
+        version ran an unindexable lower(trim(title)) lookup for every
+        article inside the write transaction, which held SQLite's single
+        writer past its busy timeout and killed the refresh in
+        production with "database is locked"."""
+        _race(db_session, "2026-SEN-GA", "GA")
+        _candidate(db_session, "S6GA001", "2026-SEN-GA", "OSSOFF, JON",
+                   has_raised_funds=True)
+        db_session.add(self._reprint("Georgia Recorder", "https://ga.example/flock",
+                                     title="Ossoff presses Flock on surveillance in Georgia"))
+        db_session.commit()
+
+        # Same headline, a different outlet's URL — a syndicated reprint.
+        article = NewsArticle(
+            title="Ossoff presses Flock on surveillance in Georgia",
+            url="https://ohiocapitaljournal.com/flock",
+            source_name="Ohio Capital Journal",
+            summary="Jon Ossoff pressed the company in Georgia.",
+        )
+        with patch.object(election_coverage, "fetch_news_articles", return_value=[article]), \
+             patch.object(election_coverage, "search_posts", new=AsyncMock(return_value=[])):
+            await election_coverage.ingest_race_coverage(db_session, client=None)
+
+        kept = db_session.query(RaceCoverageItem).all()
+        assert len(kept) == 1
+        assert kept[0].source_name == "Georgia Recorder"
+
     async def test_distinct_stories_on_one_race_all_survive(self, db_session):
         """The sweep must collapse REPRINTS, not a busy race's feed."""
         _race(db_session, "2026-SEN-GA", "GA")
