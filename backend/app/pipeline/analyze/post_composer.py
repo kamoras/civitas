@@ -137,8 +137,16 @@ def _looks_like_an_actor(span: str) -> bool:
     words = (span or "").split()
     if not words:
         return False
+    # A leading determiner is only a problem when what follows is a
+    # common noun — "The coverage", "The race". "The Senate", "The
+    # Pentagon" and "The White House" are named parties and among the
+    # most common actors in civic reporting; an earlier version of this
+    # rule rejected every one of them, which a test written for a
+    # different purpose surfaced.
     if words[0].lower() in _NON_ACTOR_OPENERS:
-        return False
+        rest = words[1:]
+        if not rest or not rest[0][:1].isupper():
+            return False
     # At least one capitalised token: a named party, not a common noun.
     return any(w[:1].isupper() for w in words)
 
