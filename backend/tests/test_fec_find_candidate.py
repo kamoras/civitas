@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.pipeline.cache import api_cache_get
-from app.pipeline.fetch.fec import _candidate_exists, find_candidate
+from app.pipeline.fetch.fec import _candidate_latest_election, find_candidate
 
 
 def _candidate(name: str, candidate_id: str, district: str) -> dict:
@@ -310,22 +310,22 @@ async def test_both_searches_empty_returns_none(db_session):
         assert mock_fetch.call_count == 2  # district attempt, then fallback
 
 
-class TestCandidateExistsCaching:
-    """Only a confirmed-real result is cached — a False result can't be
-    told apart from _fetch_with_retry exhausting its own retries on a
-    transient FEC outage, and caching that negatively would permanently
-    blacklist a genuinely valid id over a one-time network blip."""
+class TestCandidateProfileCaching:
+    """Only a resolved id is cached — a miss can't be told apart from
+    _fetch_with_retry exhausting its own retries on a transient FEC outage,
+    and caching that would blacklist a genuinely valid id over a one-time
+    network blip."""
 
     @pytest.mark.asyncio
-    async def test_a_real_candidate_is_cached(self, db_session):
+    async def test_a_real_candidate_is_cached_with_its_latest_election(self, db_session):
         with patch(
             "app.pipeline.fetch.fec._fetch_with_retry", new_callable=AsyncMock,
-            return_value={"results": [{"candidate_id": "S4LA00107"}]},
+            return_value={"results": [{"candidate_id": "S4LA00107", "election_years": [2014, 2020, 2026]}]},
         ) as mock_fetch:
-            assert await _candidate_exists(None, db_session, "S4LA00107") is True
-            assert await _candidate_exists(None, db_session, "S4LA00107") is True
+            assert await _candidate_latest_election(None, db_session, "S4LA00107") == 2026
+            assert await _candidate_latest_election(None, db_session, "S4LA00107") == 2026
         mock_fetch.assert_called_once()  # second call served from cache
-        assert api_cache_get(db_session, "fec", "candidate-exists-S4LA00107") == {"exists": True}
+        assert api_cache_get(db_session, "fec", "candidate-profile-S4LA00107") == {"latest_election": 2026}
 
     @pytest.mark.asyncio
     async def test_a_nonexistent_candidate_is_not_cached(self, db_session):
@@ -333,7 +333,28 @@ class TestCandidateExistsCaching:
             "app.pipeline.fetch.fec._fetch_with_retry", new_callable=AsyncMock,
             return_value={"results": []},
         ) as mock_fetch:
-            assert await _candidate_exists(None, db_session, "H4NY04158") is False
-            assert await _candidate_exists(None, db_session, "H4NY04158") is False
+            assert await _candidate_latest_election(None, db_session, "H4NY04158") is None
+            assert await _candidate_latest_election(None, db_session, "H4NY04158") is None
         assert mock_fetch.call_count == 2  # re-checked both times, nothing cached
-        assert api_cache_get(db_session, "fec", "candidate-exists-H4NY04158") is None
+        assert api_cache_get(db_session, "fec", "candidate-profile-H4NY04158") is None
+
+
+@pytest.mark.asyncio
+async def test_the_current_campaigns_id_wins_over_an_older_valid_one(db_session):
+    """John McGuire (VA-5): the crosswalk lists his 2022 VA-7 id first; both
+    resolve on FEC. The 2024/2026 id is the seat he holds."""
+    async def fake_fetch(client, url, *a, **kw):
+        if "H2VA07196" in url:
+            return {"results": [{"candidate_id": "H2VA07196", "election_years": [2022]}]}
+        if "H0VA07133" in url:
+            return {"results": [{"candidate_id": "H0VA07133", "election_years": [2024, 2026]}]}
+        raise AssertionError(f"unexpected FEC lookup: {url}")
+
+    with patch(
+        "app.pipeline.fetch.fec.fetch_bioguide_to_fec_ids",
+        new=AsyncMock(return_value={"M001239": ["H2VA07196", "H0VA07133"]}),
+    ), patch("app.pipeline.fetch.fec._fetch_with_retry", side_effect=fake_fetch):
+        result = await find_candidate(
+            None, db_session, "John McGuire", "VA", office="H", district="05", bioguide_id="M001239",
+        )
+    assert result == {"candidate_id": "H0VA07133"}

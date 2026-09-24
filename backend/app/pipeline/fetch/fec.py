@@ -65,30 +65,35 @@ async def _fetch_with_retry(
     return resp.json() if resp is not None else None
 
 
-async def _candidate_exists(client: httpx.AsyncClient, db: Session, candidate_id: str) -> bool:
-    """Whether `candidate_id` resolves to a real FEC candidate at all.
+async def _candidate_latest_election(
+    client: httpx.AsyncClient, db: Session, candidate_id: str,
+) -> int | None:
+    """The latest election year on an FEC candidate id's profile (0 when the
+    profile lists none), or None when the id doesn't resolve at all.
 
     Checks the bare /candidate/{id}/ profile endpoint, not /totals/ — a
     real but financially inactive candidate can have zero totals rows,
-    which would make /totals/ a false "doesn't exist" for someone who
-    does. Only a confirmed-real result is cached (permanently — a
-    candidate id's existence doesn't change once assigned): a False
-    result here can't be told apart from _fetch_with_retry exhausting
-    its own retries on a transient FEC outage, and caching THAT
-    negatively would permanently blacklist a genuinely valid id over a
-    one-time network blip. An uncached False just means the next run
-    checks again.
+    which would make /totals/ a false "doesn't exist". Only a resolved id is
+    cached: a miss can't be told apart from _fetch_with_retry exhausting its
+    retries on a transient FEC outage, and caching that would blacklist a
+    valid id over a one-time network blip. The resolved result uses the
+    normal cache TTL, not forever — an id's election years grow when the
+    member files for a new cycle.
     """
-    cache_key = f"candidate-exists-{candidate_id}"
+    cache_key = f"candidate-profile-{candidate_id}"
     cached = api_cache_get(db, "fec", cache_key)
     if cached is not None:
-        return bool(cached.get("exists"))
+        return int(cached.get("latest_election") or 0)
 
     data = await _fetch_with_retry(client, f"{FEC_API_BASE}/candidate/{candidate_id}/")
-    exists = bool((data or {}).get("results"))
-    if exists:
-        api_cache_set(db, "fec", cache_key, {"exists": True})
-    return exists
+    results = (data or {}).get("results") or []
+    if not results:
+        return None
+    profile = results[0]
+    years = [int(y) for y in (profile.get("election_years") or profile.get("cycles") or []) if y]
+    latest = max(years) if years else 0
+    api_cache_set(db, "fec", cache_key, {"latest_election": latest})
+    return latest
 
 
 def _fec_first_name(c_name: str) -> str:
@@ -142,16 +147,27 @@ async def find_candidate(
     if bioguide_id:
         crosswalk = await fetch_bioguide_to_fec_ids(client, db)
         fec_ids = crosswalk.get(bioguide_id)
+        # A member can hold several valid ids for the same chamber — one per
+        # campaign registration — and the crosswalk's order is not recency.
+        # John McGuire (VA-5) has H2VA07196 for a 2022 VA-7 run he lost and
+        # H0VA07133 for the 2024 win and his 2026 race (FEC bulk cn22/cn26,
+        # checked 2026-09); taking the first id that resolves scored him on
+        # the 2022 committee. Among ids that resolve, the one with the latest
+        # election is the current campaign; ties keep crosswalk order.
+        resolved: list[tuple[int, str]] = []
         for fec_id in select_all_fec_ids_for_office(fec_ids, office) if fec_ids else []:
-            if await _candidate_exists(client, db, fec_id):
-                match = {"candidate_id": fec_id}
-                api_cache_set(db, "fec", cache_key, match)
-                return match
-            logger.warning(
-                "Bioguide->FEC crosswalk id %s for %s (%s) does not resolve "
-                "on FEC — trying the next candidate for this office, if any",
-                fec_id, bioguide_id, office,
-            )
+            latest = await _candidate_latest_election(client, db, fec_id)
+            if latest is None:
+                logger.warning(
+                    "Bioguide->FEC crosswalk id %s for %s (%s) does not resolve on FEC",
+                    fec_id, bioguide_id, office,
+                )
+                continue
+            resolved.append((latest, fec_id))
+        if resolved:
+            match = {"candidate_id": max(resolved, key=lambda r: r[0])[1]}
+            api_cache_set(db, "fec", cache_key, match)
+            return match
 
     name_parts = name.split()
     last_name = name_parts[-1] if name_parts else name
