@@ -189,3 +189,31 @@ class TestTheLedeIsNotRepeatedAsAFact:
         claims = [_claim("Only one thing happened.")]
         assert build_lede(claims)
         assert build_facts(claims[1:]) == ([], [])
+
+
+class TestExtractionUsesTheWholeCluster:
+    """The first production run of the redesign published ZERO issues.
+
+    Its counters showed the pre-existing coherence filter had cut both
+    top clusters to 5 articles between them, and at the measured ~39%
+    per-article yield that is about one claim per cluster against a
+    two-claim substance gate. Two filters, each defensible alone,
+    multiplying into nothing.
+
+    Extraction now reads the whole cluster; on_topic() checks each CLAIM
+    against the coherent core, which is the right granularity for the
+    question and was what the article-level filter was standing in for.
+    """
+
+    def test_more_articles_means_more_chances(self):
+        arts = [_Article(f"t{i}", f"Person{i} announced a policy change on Tuesday.")
+                for i in range(6)]
+
+        def locate(src):
+            who = src.split()[1] if len(src.split()) > 1 else ""
+            return {"actor": who, "predicate": "announced a policy change on Tuesday"}
+
+        # the whole cluster yields a claim per article...
+        assert len(extract_claims(arts, locate)) == 6
+        # ...where a coherence-filtered subset of two yields two.
+        assert len(extract_claims(arts[:2], locate)) == 2
