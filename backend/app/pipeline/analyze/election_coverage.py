@@ -19,7 +19,7 @@ the same text:
                       OUTLET is that state's own newsroom, which names
                       the state in nearly every article it runs; those
                       matches must additionally clear the relevance bar
-                      (_corroboration_is_vacuous).
+                      (vacuous_corroboration_clause).
 
 If, after corroboration, an item still matches candidates in MORE THAN
 ONE race, it is dropped entirely rather than guessed or fanned out — the
@@ -40,7 +40,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 import httpx
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.models import Candidate, Race, RaceCoverageItem
@@ -421,8 +421,8 @@ def _drop_items_the_matcher_would_now_reject(
     return len(doomed)
 
 
-def _corroboration_is_vacuous(source_name: str | None, match_basis: str | None) -> bool:
-    """True where "surname_context" corroborated nothing.
+def vacuous_corroboration_clause(db: Session):
+    """SQL for "surname_context corroborated nothing" — hide, never delete.
 
     A bare surname is not identifying — this module's docstring explains
     why — so a surname match needs corroboration, and "the candidate's
@@ -452,63 +452,34 @@ def _corroboration_is_vacuous(source_name: str | None, match_basis: str | None) 
     A filter's correct case and its blind spot look identical in code;
     what separated them here was measuring the same rule against the
     two populations it now spans.
+
+    Returned as a SQL clause rather than a per-item predicate because
+    this is a DISPLAY filter, not a delete. Deleting these rows was
+    tried and churned: the article is still in the outlet's RSS feed, so
+    removing the row is exactly what stops _already_ingested from
+    blocking it, and the next pass re-ingested, re-embedded and
+    re-deleted the same items every 15 minutes — observed live as "36
+    ingested" immediately followed by "Dropped 36". The row must STAY
+    for the ingest-time check to keep working; what must not happen is
+    showing it to a reader.
+
+    (The syndication sweep can delete safely because it KEEPS the first
+    outlet's copy, and that surviving row is what makes every later
+    reprint a duplicate at ingest.)
+
+    An unscored item matches this clause and is therefore hidden, which
+    is the same fail-closed rule the feed already applies to a NULL
+    relevance — and unlike a delete it reverses itself as soon as the
+    next pass scores the item.
     """
-    return bool(source_name) and source_name in STATE_OUTLET_NAMES and match_basis == "surname_context"
-
-
-def _drop_vacuously_corroborated(db: Session) -> int:
-    """Hold items whose corroboration was vacuous to the relevance bar.
-
-    Dropping them outright was measured first and costs too much: 128
-    items and 12 emptied races, including "Poll finds opposition to
-    Maryland redistricting ballot question" (0.426) and "WA voters of
-    color more likely to have ballots challenged" (0.427). Those are
-    real coverage that merely lacked a first name. 37% of the group is
-    junk, not all of it.
-
-    So the weaker match is not rejected, it is made to earn its place
-    semantically — and on the threshold race_relevance already derives
-    by Otsu from the corpus, not a number typed here. Applied to the
-    live corpus this keeps 504 of 621 items across 165 of 174 races,
-    removes every one of the 47 items scoring below 0.1, and retains
-    the Maryland, Washington, West Virginia and Georgia ballot stories
-    above.
-
-    An UNSCORED item is left alone rather than dropped. score_unscored_items
-    is capped at 500 per pass, so a backlog leaves real coverage with a
-    null relevance, and treating null as "scored badly" would delete it
-    for being new. A missing score is not a low score; those items wait
-    for the next pass and are judged once they have one.
-
-    Note this deliberately does NOT gate the whole news feed on
-    relevance. Doing so was measured and rejected: at the same derived
-    threshold it emptied 64 of 174 races, discarding "Massie says he
-    hid Hegseth impeachment resolution from GOP leaders" along with the
-    tennis. Otsu splits horserace coverage from other political
-    coverage, which is not the same cut as real from junk — deriving a
-    number is not a reason to adopt it. The gate applies only where the
-    corroboration is independently known to be vacuous.
-    """
-    bar = race_relevance.threshold(db)
-    doomed = [
-        item.id
-        for item in db.query(RaceCoverageItem).filter(
-            RaceCoverageItem.match_basis == "surname_context").all()
-        if _corroboration_is_vacuous(item.source_name, item.match_basis)
-        and item.relevance is not None
-        and item.relevance < bar
-    ]
-    if not doomed:
-        return 0
-    for i in range(0, len(doomed), 500):
-        (db.query(RaceCoverageItem)
-           .filter(RaceCoverageItem.id.in_(doomed[i:i + 500]))
-           .delete(synchronize_session=False))
-    db.commit()
-    logger.info(
-        "Dropped %d state-outlet surname matches below the relevance bar %.4f",
-        len(doomed), bar)
-    return len(doomed)
+    return and_(
+        RaceCoverageItem.match_basis == "surname_context",
+        RaceCoverageItem.source_name.in_(STATE_OUTLET_NAMES),
+        or_(
+            RaceCoverageItem.relevance.is_(None),
+            RaceCoverageItem.relevance < race_relevance.threshold(db),
+        ),
+    )
 
 
 def _store_if_new(
@@ -700,7 +671,6 @@ async def ingest_race_coverage(db: Session, client: httpx.AsyncClient) -> int:
 
     db.commit()
     score_unscored_items(db)
-    _drop_vacuously_corroborated(db)
     return ingested
 
 

@@ -8,6 +8,7 @@ import logging
 import pathlib
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import and_, not_
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cached_json
@@ -44,6 +45,7 @@ from app.pipeline.candidate_dedup import dedupe_candidates, normalized_surname
 from app.pipeline.election_pipeline import current_election_cycle
 from app.pipeline.fetch import ballot_pdf
 from app.pipeline.fetch.ballot_lookup import lookup_for_state
+from app.pipeline.analyze.election_coverage import vacuous_corroboration_clause
 from app.pipeline.fetch.ballot_pdf_sources import source_for_town as ballot_pdf_source_for_town
 from app.pipeline.fetch.ballot_pdf_sources import town_names_for_state as ballot_pdf_town_names_for_state
 from app.pipeline.fetch.civic_info import fetch_town_ballot
@@ -526,8 +528,30 @@ def _coverage_is_displayable(db: Session):
     abuse and mistaken identity, which no phrasing test sees.
 
     A name mention is not coverage. Four filters could not make it one.
+
+    The second clause hides — rather than deletes — a surname match from
+    a state's own newsroom that cannot clear the relevance bar. That
+    corroboration is vacuous (election_coverage._corroboration_is_vacuous:
+    the Kentucky Lantern says "Kentucky" in every article, so surname +
+    state name identifies nobody).
+
+    It is a DISPLAY filter and not a delete on purpose. Deleting those
+    rows was tried and churned: the article is still in the outlet's RSS
+    feed, so removing the row is exactly what stops _already_ingested
+    from blocking it, and the next pass re-ingested, re-embedded and
+    re-deleted the same items every 15 minutes — observed live as "36
+    ingested" immediately followed by "Dropped 36". The row has to STAY
+    for the ingest-time check to keep working; what must not happen is
+    showing it to a reader.
+
+    The syndication sweep can delete safely because it KEEPS the first
+    outlet's copy, and that surviving row is what makes every later
+    reprint a duplicate at ingest.
     """
-    return RaceCoverageItem.source_type.in_(COVERAGE_SOURCE_TYPES)
+    return and_(
+        RaceCoverageItem.source_type.in_(COVERAGE_SOURCE_TYPES),
+        not_(vacuous_corroboration_clause(db)),
+    )
 
 
 def _state_coverage(db: Session, races: list[Race]) -> list[dict]:
