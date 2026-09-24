@@ -448,6 +448,24 @@ conn.close()
 EOF
 ```
 
+Then check the scores against records Civitas does not score from — Voteview
+roll calls and Nokken-Poole positions for Constituent Alignment, and (if you
+have the Center for Effective Lawmaking's file) their LES for Legislative
+Effectiveness:
+
+```bash
+docker exec "$(docker ps -q -f name=civitas_backend)" \
+  python3 scripts/benchmark_validation.py --chamber both [--les-csv /data/cel_les.csv]
+```
+
+It exits non-zero when a benchmark correlates in the wrong direction. v6.13
+has no recorded baseline yet; write the first run's correlations into the
+script's docstring and investigate any later drop of more than ~0.15.
+
+The research scripts under `backend/scripts/research_*.py` and
+`audit_funding_components.py` re-run the evidence behind v6.13's design
+decisions from public data (`docs/research/`).
+
 ---
 
 ## Iteration Decision Framework

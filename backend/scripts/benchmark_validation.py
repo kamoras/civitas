@@ -1,33 +1,33 @@
-"""External benchmark validation: Civitas scores vs Voteview.
+"""External benchmark validation: Civitas scores vs independent records.
 
-Downloads Voteview's Senate data for the current congress and checks our
-Independent Voting scores against the academic gold standard:
+Checks the stored scores against measures computed from data Civitas does not
+score from, using the same constructs the scores claim to measure (v6.13):
 
-  1. Party-unity break rate — per-senator rate of voting against their
-     own party's majority on party-unity votes (D majority vs R majority),
-     computed from Voteview's complete roll-call record. Our IV should
-     correlate strongly and positively.
-  2. |DW-NOMINATE dim1| (ideological extremity) — should correlate
-     negatively with IV (extremists break less).
+  Constituent Alignment (both chambers, Voteview):
+    1. Seat-relative break deviation — each member's break rate on
+       Voteview party-unity votes (majority of one party against the other)
+       minus the break rate same-party members show at the same seat lean,
+       with the expectation measured from Voteview's own votes by the same
+       compute_constituent_reference the pipeline uses. CA should correlate
+       positively (it is the 70% vote component's construct on an
+       independent vote record).
+    2. Nokken-Poole seat-relative extremity — the member's congress-specific
+       position minus the per-party fit on seat lean (build_chamber_ideal_
+       points, as the pipeline). CA should correlate negatively.
+  Legislative Effectiveness (optional, --les-csv):
+    3. The Center for Effective Lawmaking's Legislative Effectiveness Score
+       (thelawmakers.org) — the benchmark our LE adapts. Supply their file as
+       CSV; --les-id-col / --les-col name its bioguide/ICPSR and score
+       columns (their layout has not been verified from here).
 
-Run quarterly (or after algorithm changes) inside the backend container:
+Run after algorithm changes, inside the backend container:
 
-    docker exec mp-backend-<slot> python3 scripts/benchmark_validation.py
+    docker exec <backend> python3 scripts/benchmark_validation.py --chamber both
 
-Baseline (2026-07-02, algorithm v4.1, Senate 119, 97 matched senators):
-    IV vs party-unity break rate:  r = +0.70
-    IV vs |DW-NOMINATE| extremity: r = -0.48
-
-v4.2 note (2026-07-04): the dimension is now Constituent Alignment —
-scored against a seat-specific expected break rate (Cook PVI), not raw
-defection — so a LOWER raw-rate correlation is by design:
-    CA vs party-unity break rate (shadow-scored):        r = +0.45
-    CA vs seat-relative surplus (rate − expected):       r = +0.60
-Investigate if the raw-rate correlation falls below ~+0.30 (sign/ordering
-regressions) or the surplus correlation falls below ~+0.50.
-
-Future work: correlate Legislative Effectiveness against Volden &
-Wiseman's LES (thelawmakers.org) once a stable download URL is wired in.
+Baselines: the v4.1/v4.2 figures this script used to print compared the
+pre-v6.13 design (raw break rate; DW-NOMINATE). v6.13 has no baseline yet —
+record the first production run's correlations here, then investigate any
+later run where a correlation drops by more than ~0.15 or changes sign.
 """
 
 import argparse
@@ -44,6 +44,7 @@ VOTEVIEW = "https://voteview.com/static/data/out"
 
 YEA = {"1", "2", "3"}
 NAY = {"4", "5", "6"}
+CHAMBERS = {"senate": ("S", "Senate", "senators"), "house": ("H", "House", "representatives")}
 
 
 def fetch_csv(url):
@@ -62,12 +63,12 @@ def corr(xs, ys):
 
 
 def party_unity_breaks(members, vote_rows, min_party_votes=10):
-    """Per-icpsr break counts on party-unity votes (majority vs majority)."""
+    """Per-icpsr [against, total] on party-unity votes (majority vs majority)."""
     votes = defaultdict(dict)
     for r in vote_rows:
         votes[r["rollnumber"]][r["icpsr"]] = r["cast_code"]
 
-    breaks = defaultdict(lambda: [0, 0])  # icpsr -> [against, total]
+    breaks = defaultdict(lambda: [0, 0])
     n_unity = 0
     for _, member_votes in votes.items():
         tallies = {"D": [0, 0], "R": [0, 0]}
@@ -105,83 +106,153 @@ def party_unity_breaks(members, vote_rows, min_party_votes=10):
     return breaks, n_unity
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--congress", type=int, default=119)
-    args = ap.parse_args()
+def seat_relative_deviation(rows: list[dict]) -> dict[str, float]:
+    """bioguide -> break rate minus the same-party expectation at that seat
+    lean, measured from these rows by the pipeline's own
+    compute_constituent_reference. rows: {bioguide, party, state, district,
+    break_rate}."""
+    from app.pipeline.analyze.score_calculator import (
+        _expected_break_rate,
+        _signed_state_alignment,
+        compute_constituent_reference,
+    )
 
-    c = args.congress
-    print(f"Fetching Voteview Senate {c} data...")
-    member_rows = fetch_csv(f"{VOTEVIEW}/members/S{c}_members.csv")
-    vote_rows = fetch_csv(f"{VOTEVIEW}/votes/S{c}_votes.csv")
-
-    members = {}
-    for r in member_rows:
-        if r["chamber"] != "Senate":
+    inputs, keyed = [], []
+    for r in rows:
+        if r["party"] not in ("D", "R"):
             continue
-        members[r["icpsr"]] = {
-            "name": r["bioname"],
-            "bioguide": r["bioguide_id"],
-            "party": {"100": "D", "200": "R", "328": "I"}.get(r["party_code"], "?"),
-            "nom1": float(r["nominate_dim1"]) if r["nominate_dim1"] else None,
-        }
+        alignment = _signed_state_alignment(r["state"], r["party"], district=r.get("district"))
+        inputs.append((r["party"], alignment, r["break_rate"]))
+        keyed.append((r["bioguide"], r["party"], alignment, r["break_rate"]))
+    ref = compute_constituent_reference(inputs)
+    if ref is None:
+        return {}
+    return {
+        bio: rate - _expected_break_rate(ref["expected"][party], alignment)
+        for bio, party, alignment, rate in keyed
+    }
 
+
+def seat_relative_extremity(member_rows: list[dict], chamber: str) -> dict[str, float]:
+    """bioguide -> Nokken-Poole (or DW-NOMINATE) position minus the per-party
+    fit on seat lean, signed toward the party flank — the pipeline's own
+    build_chamber_ideal_points."""
+    from app.pipeline.analyze.score_calculator import _district_pvi, _seat_pvi, _state_pvi
+    from app.pipeline.fetch.voteview import PARTY_CODES, build_chamber_ideal_points
+
+    data, _ = build_chamber_ideal_points(member_rows, chamber, _state_pvi(), _district_pvi())
+    out = {}
+    for row in member_rows:
+        bio = (row.get("bioguide_id") or "").strip()
+        party = PARTY_CODES.get(int(row.get("party_code") or 0))
+        fit = data["fit"].get(party or "")
+        if bio not in data["members"] or not fit:
+            continue
+        district = None
+        if chamber == "house":
+            try:
+                district = int(float(row.get("district_code") or 0)) or None
+            except ValueError:
+                district = None
+        expected = fit["a"] + fit["b"] * _seat_pvi(row.get("state_abbrev", ""), district)
+        residual = data["members"][bio] - expected
+        out[bio] = -residual if party == "D" else residual
+    return out
+
+
+def load_les(path: str, id_col: str, score_col: str) -> dict[str, float]:
+    with open(path, newline="", encoding="utf-8-sig") as f:
+        rows = list(csv.DictReader(f))
+    if not rows:
+        return {}
+    cols = {c.lower(): c for c in rows[0]}
+    idc, sc = cols.get(id_col.lower()), cols.get(score_col.lower())
+    if idc is None or sc is None:
+        raise SystemExit(f"--les-csv has no {id_col!r}/{score_col!r} columns; it has {list(rows[0])}")
+    out = {}
+    for r in rows:
+        try:
+            out[str(r[idc]).strip()] = float(r[sc])
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def run_chamber(chamber: str, congress: int, les: dict[str, float] | None, les_key: str) -> list[str]:
+    letter, voteview_chamber, table = CHAMBERS[chamber]
+    print(f"\n=== {voteview_chamber} {congress} ===")
+    member_rows = [r for r in fetch_csv(f"{VOTEVIEW}/members/{letter}{congress}_members.csv")
+                   if r["chamber"] == voteview_chamber]
+    vote_rows = fetch_csv(f"{VOTEVIEW}/votes/{letter}{congress}_votes.csv")
+    members = {
+        r["icpsr"]: {"bioguide": r["bioguide_id"], "icpsr": r["icpsr"], "state": r["state_abbrev"],
+                     "district": (int(float(r["district_code"] or 0)) or None) if chamber == "house" else None,
+                     "party": {"100": "D", "200": "R", "328": "I"}.get(r["party_code"], "?")}
+        for r in member_rows
+    }
     breaks, n_unity = party_unity_breaks(members, vote_rows)
-    print(f"Party-unity votes: {n_unity}")
+    print(f"party-unity roll calls: {n_unity}")
+    rows = [
+        {**m, "break_rate": breaks[icpsr][0] / breaks[icpsr][1]}
+        for icpsr, m in members.items() if breaks.get(icpsr) and breaks[icpsr][1] >= 20
+    ]
+    deviation = seat_relative_deviation(rows)
+    extremity = seat_relative_extremity(member_rows, chamber)
 
     conn = sqlite3.connect(DB, uri=True)
     conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
-    cur.execute("SELECT name, bioguide_id, score_independent_voting iv FROM senators")
-    ours = {r["bioguide_id"]: dict(r) for r in cur.fetchall() if r["bioguide_id"]}
+    ours = {
+        r["bioguide_id"]: dict(r) for r in conn.execute(
+            f"SELECT name, bioguide_id, score_independent_voting ca, "
+            f"score_legislative_effectiveness le FROM {table} WHERE is_current = 1"
+        ) if r["bioguide_id"]
+    }
     conn.close()
 
-    pairs = []
-    for icpsr, m in members.items():
-        b = breaks.get(icpsr)
-        if not b or b[1] < 20:
-            continue
-        mine = ours.get(m["bioguide"])
-        if not mine or mine["iv"] is None:
-            continue
-        pairs.append({
-            "name": mine["name"],
-            "break_rate": b[0] / b[1],
-            "iv": mine["iv"],
-            "extremity": abs(m["nom1"]) if m["nom1"] is not None else None,
-        })
+    problems: list[str] = []
 
-    print(f"Matched senators: {len(pairs)}")
-    if len(pairs) < 50:
-        print("ERROR: too few matches — bioguide join problem?")
+    def report(label, bench: dict[str, float], field: str, expect_sign: int):
+        pairs = [(bench[b], ours[b][field]) for b in bench if b in ours and ours[b][field] is not None]
+        if len(pairs) < (40 if chamber == "senate" else 150):
+            problems.append(f"{chamber}: only {len(pairs)} matches for {label} — join problem?")
+            print(f"{label}: too few matches ({len(pairs)})")
+            return
+        r = corr([p[0] for p in pairs], [p[1] for p in pairs])
+        ok = r * expect_sign > 0
+        print(f"{label}: r = {r:+.3f} (n={len(pairs)}, expected {'+' if expect_sign > 0 else '-'}){'' if ok else '  <-- WRONG SIGN'}")
+        if not ok:
+            problems.append(f"{chamber}: {label} r={r:+.3f}, expected the opposite sign")
+
+    report("CA vs seat-relative break deviation", deviation, "ca", +1)
+    report("CA vs Nokken-Poole seat-relative extremity", extremity, "ca", -1)
+    if les is not None:
+        key_of = {m["bioguide"]: m["icpsr"] for m in members.values()}
+        les_by_bio = {b: les[key_of[b] if les_key == "icpsr" else b] for b in key_of
+                      if (key_of[b] if les_key == "icpsr" else b) in les}
+        report("LE vs CEL Legislative Effectiveness Score", les_by_bio, "le", +1)
+    return problems
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--congress", type=int, default=None, help="default: settings.CURRENT_CONGRESS")
+    ap.add_argument("--chamber", choices=["senate", "house", "both"], default="both")
+    ap.add_argument("--les-csv", help="CEL LES file exported as CSV")
+    ap.add_argument("--les-id-col", default="icpsr", help="member id column (icpsr or bioguide)")
+    ap.add_argument("--les-col", default="les", help="score column")
+    args = ap.parse_args()
+
+    from app.config import settings
+    congress = args.congress or settings.CURRENT_CONGRESS
+    les = load_les(args.les_csv, args.les_id_col, args.les_col) if args.les_csv else None
+    les_key = "icpsr" if args.les_id_col.lower() == "icpsr" else "bioguide"
+    problems = []
+    for chamber in (["senate", "house"] if args.chamber == "both" else [args.chamber]):
+        problems += run_chamber(chamber, congress, les, les_key)
+    if problems:
+        print("\nPROBLEMS:\n  " + "\n  ".join(problems))
         return 1
-
-    r_unity = corr([p["break_rate"] for p in pairs], [p["iv"] for p in pairs])
-    ext_pairs = [p for p in pairs if p["extremity"] is not None]
-    r_ext = corr([p["extremity"] for p in ext_pairs], [p["iv"] for p in ext_pairs])
-
-    print(f"\nIV vs Voteview party-unity break rate: r = {r_unity:+.3f}  (baseline +0.70)")
-    print(f"IV vs |DW-NOMINATE dim1| extremity:    r = {r_ext:+.3f}  (baseline -0.48)")
-
-    # Largest disagreements are the most informative cases to inspect.
-    ranked = sorted(pairs, key=lambda p: p["break_rate"])
-    n = len(ranked)
-    print("\nLargest IV-vs-benchmark disagreements:")
-    scored = sorted(
-        pairs,
-        key=lambda p: abs(
-            (sorted(pairs, key=lambda q: q["break_rate"]).index(p) / n)
-            - (sorted(pairs, key=lambda q: q["iv"]).index(p) / n)
-        ),
-        reverse=True,
-    )
-    for p in scored[:5]:
-        print(f"  {p['name']:<26} break_rate={p['break_rate']*100:5.1f}%  IV={p['iv']:.0f}")
-
-    if r_unity < 0.5:
-        print("\nWARNING: party-unity correlation below 0.5 — IV pipeline may have regressed")
-        return 1
-    print("\nOK: IV tracks the external benchmark")
+    print("\nOK: every benchmark correlates in the expected direction")
     return 0
 
 
