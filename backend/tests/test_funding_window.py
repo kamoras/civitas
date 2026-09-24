@@ -98,6 +98,13 @@ class TestACompletedElectionMustBeTheOneThatSeatedThem:
             got = select_recent_elections(rows, office="S")
             assert got[0]["candidate_election_year"] == 2020
 
+    def test_donor_detail_window_is_bounded_the_same_way(self):
+        # compute_recent_election_cycles picks the cycles whose itemized
+        # donors are fetched; unbounded, Fuller's detail would come from
+        # the 2020 race while his totals come from 2026.
+        with _at(2026, 9, 24):
+            assert compute_recent_election_cycles(self.FULLER, "H") == [2026]
+
     def test_the_ordinary_house_member_is_unaffected(self):
         rows = [
             {"candidate_election_year": 2026, "receipts": 1_100_000},

@@ -89,7 +89,7 @@ def corrected_funding(search, fin, name, state):
     rows = fin.get(f"candidate-financials-{cid}")
     if not rows:
         return None
-    totals = summarize_election_totals(select_recent_elections(rows))
+    totals = summarize_election_totals(select_recent_elections(rows, office="S"))
     base = totals["total_contributions"]
     return {
         "totalRaised": round(totals["total_raised"]),

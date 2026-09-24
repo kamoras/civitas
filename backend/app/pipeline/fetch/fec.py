@@ -494,10 +494,13 @@ def compute_recent_election_cycles(financials: list[dict], office: str) -> list[
     totals). The previous fixed two-cycle window was wrong both ways: it
     dropped the first two years of a six-year Senate period, and pulled the
     House member's PREVIOUS election into the detail. Shared by
-    senate_pipeline.py ("S") and house_pipeline.py ("H").
+    senate_pipeline.py ("S") and house_pipeline.py ("H"). Passes `office` on
+    so the detail window is bounded exactly like the totals
+    (normalize_finance) — otherwise an old losing run would supply the
+    donor detail for a member whose totals come from the current campaign.
     """
     cycles: list[int] = []
-    for c in select_recent_elections(financials):
+    for c in select_recent_elections(financials, office=office):
         election_year = financials_election_year(c)
         if election_year:
             cycles.extend(election_period_cycles(int(election_year), office))
