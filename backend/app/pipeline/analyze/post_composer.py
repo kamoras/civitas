@@ -80,6 +80,59 @@ def _is_verbatim(span: str, source: str) -> bool:
     return bool(span) and _normalise(span) in _normalise(source)
 
 
+# How many words may sit between the actor and its predicate in the
+# source and still count as the same assertion. Covers the reporting
+# verb a lede normally puts there ("A jury FOUND Donald Trump liable")
+# without reaching across a clause boundary into a different subject.
+_MAX_GAP_WORDS = 3
+
+
+def _asserted_together(actor: str, predicate: str, source: str) -> bool:
+    """True only where the source says the PREDICATE of the ACTOR.
+
+    Checking each span verbatim but separately is not enough, and this
+    is the exact hole that produced issue #376. Given
+
+        "A jury found Donald Trump liable for sexual abuse and
+         defamation in the case brought by E. Jean Carroll."
+
+    both "E. Jean Carroll" and "liable for sexual abuse and defamation"
+    are genuine verbatim spans, so a separate-span check happily
+    composes "E. Jean Carroll liable for sexual abuse and defamation" —
+    naming the plaintiff as the party found liable. Two true fragments,
+    one false sentence.
+
+    Requiring the predicate to FOLLOW the actor inside the same
+    sentence, within a few words, is what makes the composition inherit
+    the source's own direction instead of inventing one. It is also what
+    stops a relationship being assembled out of unrelated halves, the
+    class `ungrounded_relationship_claims` demonstrably misses (a
+    published story called Donald Trump Jr. Hunter Biden's son).
+    """
+    haystack = _normalise(source)
+    needle_actor = _normalise(actor)
+    needle_predicate = _normalise(predicate)
+    for match in re.finditer(re.escape(needle_actor), haystack):
+        tail = haystack[match.end():match.end() + 400]
+        found = tail.find(needle_predicate)
+        if found == -1:
+            continue
+        # Only the GAP between them is constrained. The predicate itself
+        # may legitimately contain a period — "takes a selfie with
+        # Maryland Sens. Chris Van Hollen" is one assertion, and an
+        # earlier version of this check truncated the clause at the "."
+        # in "Sens." and rejected it.
+        gap = tail[:found]
+        if len(gap.split()) > _MAX_GAP_WORDS:
+            continue
+        # A period inside the gap means the predicate belongs to the
+        # NEXT sentence, whose subject is somebody else.
+        if "." in gap:
+            continue
+        return True
+    return False
+
+
 def _looks_like_an_actor(span: str) -> bool:
     words = (span or "").split()
     if not words:
@@ -117,6 +170,11 @@ def compose(actor: str, predicate: str, source: str) -> str | None:
     if not _looks_like_an_actor(actor):
         return None
     if not _is_verbatim(actor, source) or not _is_verbatim(predicate, source):
+        return None
+    # Both spans real is not enough — the source has to assert one OF the
+    # other. See _asserted_together for the two-true-fragments-one-false-
+    # sentence case this closes.
+    if not _asserted_together(actor, predicate, source):
         return None
     # A predicate that restates its own actor is malformed, not a fact:
     # "Veronica Fernandez" + "VOTE VERONICA FERNANDEZ" are both verbatim

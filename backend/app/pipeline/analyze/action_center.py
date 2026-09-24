@@ -56,12 +56,7 @@ from app.pipeline.analyze.grounding import (
     log_intensifier_usage,
     proposal_stated_as_fact,
     repeated_sentences,
-    ungrounded_electoral_claims,
     ungrounded_former_official_claims,
-    ungrounded_party_claims,
-    ungrounded_relationship_claims,
-    ungrounded_statistics,
-    ungrounded_titled_names,
     validate_facts,
 )
 from app.pipeline.analyze.ollama_client import call_llm, extract_json
@@ -2979,8 +2974,27 @@ def _generate_period_summary(label: str, entries: list, cache_key: dict, db: "Se
         result = extract_json(result)
     if not isinstance(result, dict):
         return {"summary": "", "topAreas": []}
+
+    summary = str(result.get("summary", ""))
+    # This is published as a WeekSummary/MonthSummary and ran NO
+    # mechanical check at all — the third such gap found in the
+    # 2026-09-23 audit, after justice_pipeline and monitor metadata. The
+    # entries block it was generated from is its source material. An
+    # empty summary is a normal outcome the caller already handles, so
+    # failing closed costs a period review, not a crash.
+    if summary:
+        reasons = grounding_violations(summary, entries_text)
+        reasons += hedge_and_editorializing_violations(summary)
+        if reasons:
+            logger.warning(
+                "Period summary for %s failed grounding (%s) — publishing no summary",
+                label, "; ".join(reasons)[:200],
+            )
+            action_metrics.increment("period_summary_ungrounded")
+            summary = ""
+
     return {
-        "summary": str(result.get("summary", "")),
+        "summary": summary,
         "topAreas": [str(a) for a in result.get("topAreas", [])[:5]],
     }
 
@@ -3308,32 +3322,21 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
         # agenda" — no Schumer mention anywhere in the source material, and
         # this generator had no check for fabricated names at all until
         # then, unlike the Bluesky poster which already ran this check.)
-        novel = ungrounded_statistics(story, source_material)
-        names = ungrounded_titled_names(story, source_material)
+        # The SHARED combinator, not a hand-picked subset. This block
+        # used to name seven checks individually, and therefore silently
+        # did not inherit electioneering_language when that was added to
+        # grounding_violations — the longest generated text on the site
+        # was the least protected. Two modules had independently grown
+        # the same hand-rolled list (bluesky_spotlight was the other),
+        # and each missed whatever was added to the combinator after it
+        # was written. Anything genuinely specific to long-form prose
+        # stays below; everything shared comes from one place.
+        shared = grounding_violations(story, source_material)
+        shared += hedge_and_editorializing_violations(story)
+        # Not in the combinator: only long-form generation loops on
+        # itself when it runs out of source material to paraphrase.
         dupes = repeated_sentences(story)
-        # hedge_and_editorializing_violations also covers literal unfilled
-        # placeholder tokens ("[date]") since the 2026-07 audit.
-        hedge_editorial = hedge_and_editorializing_violations(story)
-        # Same fabricated-relationship class as the electoral guard, family
-        # edition (2026-07 audit: "her brother" published ungrounded).
-        relationships = ungrounded_relationship_claims(story, source_material)
-        # Same relational-fabrication guard the Bluesky poster runs: a full
-        # story that invents a race/campaign between two officials who both
-        # appear in the facts for an unrelated reason (2026-07: a Graham story
-        # claiming he "was facing competition from Susan Collins for his senate
-        # race") slips past the number and name checks — both surnames are
-        # grounded and no figure is fabricated.
-        electoral = ungrounded_electoral_claims(story, source_material)
-        # Stale-training-data status claims — the model demoting a sitting
-        # official to "former" from its outdated world knowledge (2026-07:
-        # "former President Donald Trump" published to Bluesky while the
-        # source material said "President Trump").
-        former = ungrounded_former_official_claims(story, source_material)
-        # Stale-training-data party-label claims — same failure mode as
-        # "former," a party attached from the model's own memory rather
-        # than the source (2026-07 audit addition).
-        party = ungrounded_party_claims(story, source_material)
-        if not novel and not names and not dupes and not hedge_editorial and not electoral and not relationships and not former and not party:
+        if not shared and not dupes:
             logger.info(
                 "Generated full story for issue %s (%d chars): %s",
                 issue.id, len(story), issue.title[:60],
@@ -3341,72 +3344,17 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
             log_intensifier_usage("full_story", story, source_material)
             return story
 
-        problems = []
-        if novel:
-            problems.append(
-                f"figures not present in the key facts ({', '.join(novel)})"
-            )
-            logger.warning(
-                "Full story failed statistic grounding for issue %s (attempt %d): %s",
-                issue.id, attempt + 1, ", ".join(novel),
-            )
-        if names:
-            problems.append(
-                f"officials not present in the key facts ({', '.join(names)})"
-            )
-            logger.warning(
-                "Full story failed named-official grounding for issue %s (attempt %d): %s",
-                issue.id, attempt + 1, ", ".join(names),
-            )
+        # One list, from one place — the combinator already returns
+        # human-readable reasons, so the retry note no longer needs a
+        # bespoke sentence per check.
+        problems = list(shared)
         if dupes:
-            problems.append(
-                "sentences repeated verbatim later in the article "
-                f"({'; '.join(s[:80] for s in dupes)})"
-            )
-            logger.warning(
-                "Full story repeated itself for issue %s (attempt %d): %s",
-                issue.id, attempt + 1, "; ".join(dupes),
-            )
-        if hedge_editorial:
-            problems.extend(hedge_editorial)
-            logger.warning(
-                "Full story failed hedge/editorializing check for issue %s (attempt %d): %s",
-                issue.id, attempt + 1, "; ".join(hedge_editorial),
-            )
-        if electoral:
-            problems.append(
-                f"an election or campaign not present in the key facts ({', '.join(electoral)})"
-            )
-            logger.warning(
-                "Full story invented an electoral contest for issue %s (attempt %d): %s",
-                issue.id, attempt + 1, ", ".join(electoral),
-            )
-        if relationships:
-            problems.append(
-                f"a family relationship not present in the key facts ({', '.join(relationships)})"
-            )
-            logger.warning(
-                "Full story asserted an ungrounded family relationship for issue %s (attempt %d): %s",
-                issue.id, attempt + 1, ", ".join(relationships),
-            )
-        if former:
-            problems.append(
-                "'former' office-holder status not present in the key facts "
-                f"({', '.join(former)})"
-            )
-            logger.warning(
-                "Full story called an official 'former' without source basis for issue %s (attempt %d): %s",
-                issue.id, attempt + 1, ", ".join(former),
-            )
-        if party:
-            problems.append(
-                "a party affiliation not present in the key facts "
-                f"({', '.join(party)})"
-            )
-            logger.warning(
-                "Full story asserted a party affiliation without source basis for issue %s (attempt %d): %s",
-                issue.id, attempt + 1, ", ".join(party),
-            )
+            problems.append(f"repeated sentences: {'; '.join(dupes[:2])}")
+        logger.warning(
+            "Full story for issue %s failed checks (attempt %d): %s",
+            issue.id, attempt + 1, "; ".join(problems)[:300],
+        )
+
         retry_note = (
             "\n\nYour previous attempt was rejected because it contained "
             f"{' and '.join(problems)}. Stop writing once the facts are "

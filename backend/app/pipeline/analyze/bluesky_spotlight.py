@@ -27,7 +27,6 @@ from app.pipeline.analyze.bluesky_utils import (
 from app.pipeline.analyze.grounding import (
     grounding_violations,
     hedge_and_editorializing_violations,
-    ungrounded_former_official_claims,
     ungrounded_numbers,
 )
 from app.pipeline.analyze.ollama_client import call_llm
@@ -271,18 +270,14 @@ Return JSON: {{"post": "<your post text>"}}"""
                 "state the number, never whether it's high or low"
             )
 
-        # Same mechanical backstop as the issue poster and full-story
-        # generator — prompt-only instructions aren't reliably followed.
+        # The SHARED combinator, not a hand-picked subset. This block
+        # named ungrounded_numbers and ungrounded_former_official_claims
+        # individually and therefore never inherited titled-name,
+        # electoral, relationship, party or electioneering checking —
+        # the same drift that left the full-story generator unprotected.
+        # One place to add a check, every publishing path gets it.
+        problems += grounding_violations(text, user_prompt)
         problems += hedge_and_editorializing_violations(text)
-
-        # Stale-training-data status claims ("former Senator X") the
-        # supplied scorecard never made — spotlighted senators are sitting
-        # members by construction.
-        former = ungrounded_former_official_claims(text, user_prompt)
-        if former:
-            problems.append(
-                f"'former' status not in the data provided ({', '.join(former)})"
-            )
 
         if not problems:
             return text

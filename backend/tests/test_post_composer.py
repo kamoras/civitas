@@ -100,3 +100,56 @@ class TestWellFormedness:
     def test_whitespace_and_smart_quotes_do_not_break_a_real_span(self):
         src = "Decision Desk HQ shifted the Florida governor’s race\n   to a toss-up."
         assert compose("Decision Desk HQ", "shifted the Florida governor's race to a toss-up", src)
+
+
+class TestBothSpansMustBeAssertedTogether:
+    """Two true fragments can make one false sentence.
+
+    Verbatim-ness alone does NOT preserve who-did-what, which the first
+    version of this module got wrong: both "E. Jean Carroll" and "liable
+    for sexual abuse and defamation" are genuine spans of the source
+    below, so checking them separately composed the plaintiff as the
+    party found liable — reproducing issue #376 exactly, in the module
+    written to make that class impossible.
+    """
+
+    CARROLL = (
+        "A jury found Donald Trump liable for sexual abuse and defamation in the "
+        "case brought by E. Jean Carroll. Carroll sued Trump in 2022."
+    )
+    BIDEN = (
+        "Hunter Biden confirmed he would sit next to Donald Trump Jr. for testimony "
+        "before Congress. Trump Jr. is the son of the president."
+    )
+
+    def test_the_party_the_source_actually_names_composes(self):
+        assert compose(
+            "Donald Trump", "liable for sexual abuse and defamation", self.CARROLL
+        ) == "Donald Trump liable for sexual abuse and defamation."
+
+    def test_the_reversed_party_is_refused(self):
+        assert compose(
+            "E. Jean Carroll", "liable for sexual abuse and defamation", self.CARROLL
+        ) is None
+
+    def test_a_relationship_spliced_from_two_sentences_is_refused(self):
+        """The real issue-748 failure: a published story called Donald
+        Trump Jr. Hunter Biden's son. Both halves are verbatim and in the
+        same article; they are not asserted of each other."""
+        assert compose("Hunter Biden", "is the son of the president", self.BIDEN) is None
+
+    def test_the_assertion_the_source_does_make_still_composes(self):
+        assert compose(
+            "Hunter Biden", "confirmed he would sit next to Donald Trump Jr.", self.BIDEN
+        ) is not None
+
+    def test_an_abbreviation_period_inside_the_predicate_is_not_a_boundary(self):
+        """"Sens." must not read as the end of the sentence — an earlier
+        version truncated there and rejected a valid composition."""
+        src = ("From left, New Jersey Sen. Cory Booker takes a selfie with Maryland "
+               "Sens. Chris Van Hollen and Angela Alsobrooks.")
+        assert compose(
+            "New Jersey Sen. Cory Booker",
+            "takes a selfie with Maryland Sens. Chris Van Hollen and Angela Alsobrooks",
+            src,
+        ) is not None
