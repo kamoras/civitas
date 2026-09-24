@@ -100,3 +100,50 @@ def test_young_history_falls_back_to_nearest_older_snapshot(db_session):
 
     result = compute_score_trend_map(db_session, "senator")
     assert result["S001"] == {"direction": "up", "change": 6.0, "previousScore": 60.0}
+
+
+def _versioned(entity_id, date, score, version):
+    return ScoreSnapshot(entity_type="senator", entity_id=entity_id, date=date,
+                         overall_score=score, algorithm_version=version)
+
+
+def test_a_methodology_change_is_not_reported_as_movement(db_session):
+    # A new algorithm version moves every score at once; the week-over-week
+    # arrow used to report it as the member rising or falling.
+    db_session.add_all([
+        _versioned("S001", "2026-09-10", 60.0, "v6.12"),
+        _versioned("S001", "2026-09-17", 70.0, "v6.13"),
+    ])
+    db_session.commit()
+    assert compute_score_trend_map(db_session, "senator")["S001"]["direction"] == "reset"
+
+
+def test_the_last_snapshot_on_the_same_version_is_used(db_session):
+    db_session.add_all([
+        _versioned("S001", "2026-09-01", 50.0, "v6.13"),
+        _versioned("S001", "2026-09-05", 60.0, "v6.12"),
+        _versioned("S001", "2026-09-17", 53.0, "v6.13"),
+    ])
+    db_session.commit()
+    assert compute_score_trend_map(db_session, "senator")["S001"] == {
+        "direction": "up", "change": 3.0, "previousScore": 50.0,
+    }
+
+
+def test_a_new_congress_resets_the_trend(db_session):
+    # The current-term window restarts on January 3 of odd years.
+    db_session.add_all([
+        _versioned("S001", "2026-12-30", 60.0, "v6.13"),
+        _versioned("S001", "2027-01-06", 50.0, "v6.13"),
+    ])
+    db_session.commit()
+    assert compute_score_trend_map(db_session, "senator")["S001"]["direction"] == "reset"
+
+
+def test_jan_1_and_2_still_belong_to_the_old_congress(db_session):
+    db_session.add_all([
+        _versioned("S001", "2026-12-26", 60.0, "v6.13"),
+        _versioned("S001", "2027-01-02", 55.0, "v6.13"),
+    ])
+    db_session.commit()
+    assert compute_score_trend_map(db_session, "senator")["S001"]["direction"] == "down"

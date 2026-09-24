@@ -171,6 +171,20 @@ function LeadershipIndicator({ score }: { score: number | null }) {
 
 function TrendIndicator({ trend }: { trend?: ScoreTrend }) {
   if (!trend || trend.direction === "new") return null;
+  if (trend.direction === "reset") {
+    // A methodology update or a new Congress moves every score at once;
+    // showing that as a member's rise or fall would misattribute it.
+    return (
+      <span
+        className="inline-flex items-center text-xs text-ink-min"
+        title="No comparable earlier score: the scoring method or the Congress changed since the last one"
+        role="img"
+        aria-label="No comparable earlier score"
+      >
+        –
+      </span>
+    );
+  }
 
   const abs = Math.abs(trend.change);
   // Two decimals below 1 so a real-but-small move still reads as a number.

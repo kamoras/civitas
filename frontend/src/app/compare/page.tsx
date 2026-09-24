@@ -259,8 +259,9 @@ function ComparisonTable({
       </div>
 
       {/* Cross-chamber comparability caveat: score calibration is
-          deliberately chamber-specific (PAC multiplier x3.2 Senate vs
-          x1.35 House; chamber-split LES baselines), so a 70 in one
+          deliberately chamber-specific (each chamber's own measured
+          references — PAC-share median, LES median and spread, break-rate
+          expectation — see population_reference.py), so a 70 in one
           chamber is not the same measurement as a 70 in the other —
           head-to-head "better score" markers across chambers would imply
           a like-for-like comparison the methodology doesn't support. */}

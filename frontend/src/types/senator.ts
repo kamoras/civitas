@@ -190,7 +190,9 @@ export interface CampaignPromise {
 }
 
 export interface ScoreTrend {
-  direction: "up" | "down" | "stable" | "new";
+  /** "reset": the member has history, but none on the current scoring
+   *  method and Congress — so there is no like-for-like change to show. */
+  direction: "up" | "down" | "stable" | "new" | "reset";
   change: number;
   previousScore: number | null;
 }

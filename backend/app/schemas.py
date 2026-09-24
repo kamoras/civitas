@@ -316,7 +316,7 @@ class PaginatedRepresentativesSchema(CamelModel):
 
 
 class ScoreTrendSchema(CamelModel):
-    direction: Literal["up", "down", "stable", "new"] = "new"
+    direction: Literal["up", "down", "stable", "new", "reset"] = "new"
     change: float = 0.0
     previous_score: float | None = None
 
