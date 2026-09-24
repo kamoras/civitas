@@ -92,6 +92,7 @@ civitas/
 │   │   ├── config_definitions.py # Enums, weights, industry codes (single source of truth)
 │   │   └── main.py              # FastAPI app with lifespan hooks
 │   ├── tests/                   # pytest test suite (see `pytest tests/` for current count)
+│   ├── migrations/              # Alembic revisions for the main database (see its README)
 │   ├── requirements.txt
 │   ├── pytest.ini
 │   └── Dockerfile
@@ -785,6 +786,13 @@ SQLAlchemy ORM models are in `backend/app/models.py`. Key tables: `senators`,
 `campaign_promises`, `lobbying_matches`, `learned_classifications`,
 `explore_documents`, `action_issues`, `national_monitors`, `monitor_updates`,
 `timeline_entries`, `pipeline_runs`.
+
+**Schema changes are Alembic revisions** (`backend/migrations/`, applied by
+`init_db` on start). Change the model, autogenerate a revision, drop removed
+columns in it, and run `tests/test_alembic_migrations.py`, which fails when
+the models and the revision history disagree — see
+`backend/migrations/README.md`. Do not add to `_migrate_columns`: it is the
+frozen bridge for databases that predate Alembic.
 
 ## Key Modules — Where to Find Things
 

@@ -110,7 +110,7 @@ jobs:
           # two dead local variables (F841). Test code that lies about what
           # it exercises is worse than unlinted app code, not better — a
           # stale name there fails silently as a passing test.
-          ruff check app/ scripts/ tests/
+          ruff check app/ scripts/ tests/ migrations/
 
       # Two-part coverage gate:
       #   1. TOTAL floor (--cov-fail-under=46): a regression backstop only
