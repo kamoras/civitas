@@ -790,6 +790,10 @@ class RaceCoverageItem(Base):
     # "surname_context" (surname + state-name corroboration). Only
     # full_name-matched items are eligible for the Bluesky posting path
     # (election_bluesky.py) — the weaker basis is display-only.
+    # The state-name corroboration is worthless when the OUTLET is that
+    # state's own newsroom, which names the state in nearly every
+    # article; those matches must also clear the relevance bar
+    # (election_coverage._corroboration_is_vacuous).
     matched_candidate_id: Mapped[str | None] = mapped_column(String, nullable=True)
     match_basis: Mapped[str | None] = mapped_column(String(20), nullable=True)
     # NULL = not yet considered for a Civitas Bluesky post about this race
