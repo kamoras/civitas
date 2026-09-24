@@ -787,6 +787,36 @@ strings. That is a correct and common answer.
 Return JSON: {{"actor": "<exact span>", "predicate": "<exact span>"}}"""
 
 
+def locate_claim(
+    source_material: str,
+    *,
+    db,
+    today,
+    rank: int,
+) -> dict | None:
+    """Ask the model to point at one assertion in `source_material`.
+
+    Module-level rather than nested inside `_run_refresh` so a harness can
+    import the REAL extraction path. Every measurement of this redesign
+    had to re-implement it while it was a closure, and twice that
+    re-implementation silently diverged from what ships — once testing
+    unwritten code and reporting success. An unimportable function is not
+    a private one, it is one whose verification has to be guessed at.
+    """
+    located = call_llm(
+        prompt_version=ACTION_CENTER_PROMPT_VERSION,
+        system_prompt=_SYSTEM_PROMPT,
+        user_prompt=_CLAIM_PROMPT_TEMPLATE.format(source=source_material),
+        cache_key={"date": today, "rank": rank, "src": source_material[:200]},
+        db_session=db,
+        max_tokens=200,
+        num_ctx=2048,
+    )
+    if isinstance(located, str):
+        located = extract_json(located)
+    return located if isinstance(located, dict) else None
+
+
 
 
 def _build_actions_from_data(
@@ -4022,54 +4052,6 @@ or
 {{"accurate": false, "reason": "<one sentence naming what was reversed>"}}"""
 
 
-def _check_summary_roles(summary: str, articles_text: str, db: Session) -> tuple[bool, str]:
-    """Second-pass check for subject/object role reversal in a generated
-    summary (confirmed live, 2026-07: issue #376 stated E. Jean Carroll "was
-    found guilty of sexual assault and defamation" when Trump was the party
-    a jury found liable — Carroll was the plaintiff).
-
-    Mechanical grounding checks (grounding.py) can't catch this class of
-    error: both parties' names genuinely appear in the source near the
-    relevant legal language, so keyword/proximity matching can't tell which
-    direction is correct — that needs actual reading comprehension. This
-    runs a second, independently-prompted LLM pass focused only on role
-    correctness, since the same generation pass that made the error is
-    unlikely to catch its own mistake.
-
-    Fails open (returns accurate=True) on any error or unparseable response
-    — a broken verification call should not block issue creation, only a
-    confirmed reversal should trigger a retry. That's the opposite posture
-    from every other gate in this file, and until the 2026-08 AI/ML audit
-    it was also invisible: nothing distinguished "verified accurate" from
-    "the check itself broke, published anyway." Both fail-open branches
-    below now increment role_check_inconclusive_published (same counter
-    pattern as every other validator, see action_metrics.py) so that rate
-    is queryable instead of silent.
-    """
-
-    try:
-        result = call_llm(
-            prompt_version=ACTION_CENTER_PROMPT_VERSION + "-role-check",
-            system_prompt=_ROLE_CHECK_SYSTEM,
-            user_prompt=_ROLE_CHECK_TEMPLATE.format(articles=articles_text[:3000], summary=summary),
-            cache_key=None,  # always re-check a freshly (re)generated summary
-            db_session=db,
-            max_tokens=150,
-            num_ctx=4096,
-        )
-    except Exception:
-        logger.exception("Summary role-check LLM call failed")
-        action_metrics.increment("role_check_inconclusive_published")
-        return True, ""
-
-    if isinstance(result, str):
-        result = extract_json(result)
-    if not isinstance(result, dict):
-        action_metrics.increment("role_check_inconclusive_published")
-        return True, ""
-    if result.get("accurate", True):
-        return True, ""
-    return False, str(result.get("reason", "role reversal suspected"))[:200]
 
 
 # How long a held refresh lock is honored before being treated as
@@ -4551,23 +4533,19 @@ def _run_refresh(db: Session) -> int:
         # failures that made free-form generation untenable, and for
         # what this shape makes impossible rather than merely
         # detectable.
+        # The SAME articles extraction reads. These diverged when
+        # extraction moved to the full cluster and this did not: a claim
+        # taken from an article outside the coherent subset was then
+        # checked against a source text that excluded its own article,
+        # and the backstop rejected real issues with "numbers not in
+        # source: 1, 11". Any grounding check is only as correct as its
+        # definition of "the source".
         issue_source_text = " ".join(
-            f"{a.title} {a.summary}" for a in filtered_cluster
+            f"{a.title} {a.summary}" for a in cluster
         )
 
         def _locate(source_material: str, _rank: int = rank) -> dict | None:
-            located = call_llm(
-                prompt_version=ACTION_CENTER_PROMPT_VERSION,
-                system_prompt=_SYSTEM_PROMPT,
-                user_prompt=_CLAIM_PROMPT_TEMPLATE.format(source=source_material),
-                cache_key={"date": today, "rank": _rank, "src": source_material[:200]},
-                db_session=db,
-                max_tokens=200,
-                num_ctx=2048,
-            )
-            if isinstance(located, str):
-                located = extract_json(located)
-            return located if isinstance(located, dict) else None
+            return locate_claim(source_material, db=db, today=today, rank=_rank)
 
         # Extract from the WHOLE cluster, not the coherence-filtered
         # subset. SOURCE_SIM_FLOOR exists to keep a free-writing model on
@@ -4633,32 +4611,29 @@ def _run_refresh(db: Session) -> int:
             action_metrics.increment("issues_skipped_grounding")
             continue
 
+        # _check_summary_roles is GONE from this path.
+        #
+        # It existed because a free-written summary could invert who did
+        # what to whom — issue #376 said "E. Jean Carroll was found
+        # guilty" when she was the plaintiff. The summary is now a
+        # verbatim span the source asserts OF its actor, adjacency
+        # checked (see post_composer._asserted_together), so that
+        # inversion is unreachable rather than merely unlikely.
+        #
+        # Keeping it was costing real issues. It is a 1.2B model judging
+        # another model's work, and on "Senate Republican seeks to
+        # fast-track AI whistleblower bill" — a verbatim headline — it
+        # objected that the summary "attributes the billing and legal
+        # consequences to entities not mentioned". It was fail-open by
+        # design for exactly that unreliability; I had made it fail
+        # closed, which turned one bad judgement into a deleted issue.
+        #
+        # A check that cannot catch anything the shape already prevents,
+        # and does reject correct content, is not defence in depth.
 
-        # Second-pass check for who-did-what-to-whom role reversal (see
-        # _check_summary_roles). One retry with a corrective note; if the
-        # retry still fails, skip this cluster entirely for today rather
-        # than publish a summary we have specific reason to believe
-        # misattributes an action or legal outcome to the wrong person —
-        # same fail-closed posture as _generate_full_story's grounding retry.
-        source_text_for_check = " ".join(f"{a.title} {a.summary}" for a in filtered_cluster)
-        accurate, reason = _check_summary_roles(summary, source_text_for_check, db)
-        if not accurate:
-            # No regeneration. The summary is a verbatim span the
-            # source asserts of its own actor, so a role-check failure
-            # here is a signal that something upstream is wrong, not an
-            # invitation to rewrite it as free prose — rewriting is what
-            # this redesign removed. Skip the issue instead.
-            logger.error(
-                "Summary role-check failed for rank %d ('%s') — skipping "
-                "rather than regenerating: %s",
-                rank, reason, summary[:200],
-            )
-            action_metrics.increment("issues_skipped_role_check")
-            continue
-
-        _log_summary_source_consistency(summary, source_text_for_check)
+        _log_summary_source_consistency(summary, issue_source_text)
         log_intensifier_usage(
-            "action_center_issue", summary + " " + " ".join(facts), source_text_for_check,
+            "action_center_issue", summary + " " + " ".join(facts), issue_source_text,
         )
 
         # Minimum-substance gate (2026-07 audit): an issue resting on a

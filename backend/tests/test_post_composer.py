@@ -153,3 +153,39 @@ class TestBothSpansMustBeAssertedTogether:
             "takes a selfie with Maryland Sens. Chris Van Hollen and Angela Alsobrooks",
             src,
         ) is not None
+
+
+class TestASpanMustRunToTheEndOfItsClause:
+    """_DANGLING_TAIL catches a span cut before a preposition. It cannot
+    catch one cut after a transitive verb — and that shipped. The Action
+    Center published the fact "White House repeatedly violated." from a
+    BBC headline reading "White House 'repeatedly violated' court order
+    to restore press access". Verbatim, correctly attributed, and not a
+    sentence: violated WHAT.
+    """
+
+    BBC = "White House 'repeatedly violated' court order to restore press access"
+
+    def test_the_fragment_that_was_published_is_refused(self):
+        assert compose("White House", "repeatedly violated", self.BBC) is None
+
+    def test_the_full_assertion_from_the_same_headline_composes(self):
+        assert compose(
+            "White House", "repeatedly violated' court order to restore press access", self.BBC
+        ) is not None
+
+    @pytest.mark.parametrize("actor,predicate,source", [
+        ("Chinese President Xi Jinping", "arrived in Washington",
+         "Chinese President Xi Jinping arrived in Washington."),
+        ("Judge", "orders White House to restore access to CNN, MS NOW and Politico",
+         "Judge orders White House to restore access to CNN, MS NOW and Politico."),
+        ("The Pentagon", "announced the plan",
+         "The Pentagon announced the plan, which drew criticism from lawmakers."),
+        ("Donald Trump", "liable for sexual abuse and defamation",
+         "A jury found Donald Trump liable for sexual abuse and defamation in the case "
+         "brought by E. Jean Carroll."),
+    ])
+    def test_real_spans_still_compose(self, actor, predicate, source):
+        """Including one ending at a comma — a clause boundary is a
+        boundary, not only a full stop."""
+        assert compose(actor, predicate, source) is not None
