@@ -49,6 +49,11 @@ export interface ActionIssue {
   title: string;
   summary: string;
   facts: string[];
+  /** Source name per fact, aligned with `facts` by index. Facts are
+   * verbatim spans of real reporting, so this is what lets a reader
+   * check one against the outlet that made it. Empty for issues that
+   * predate the claim layer. */
+  factSources: string[];
   /** Subset of `facts` not present as of this issue's last genuine content
    *  change — empty for an issue that's never been updated. */
   newFacts: string[];

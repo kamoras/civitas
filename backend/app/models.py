@@ -968,6 +968,11 @@ class ActionIssue(Base):
     related_explore_ids: Mapped[str] = mapped_column(Text, default="[]")
     related_senators: Mapped[str] = mapped_column(Text, default="[]")
     related_officials: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    # Source name per fact, aligned with `facts` by index. JSON "[]"
+    # when an issue predates the claim layer, so the API can render
+    # attribution where it exists without a migration backfilling
+    # guesses.
+    fact_sources: Mapped[str] = mapped_column(Text, default="[]")
     related_monitor_slugs: Mapped[str] = mapped_column(Text, default="[]")
     concerned_count: Mapped[int] = mapped_column(Integer, default=0)
     not_priority_count: Mapped[int] = mapped_column(Integer, default=0)

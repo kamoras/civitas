@@ -280,6 +280,7 @@ def _build_issue_response(
         title=issue.title,
         summary=issue.summary,
         facts=current_facts,
+        fact_sources=_parse_json_field(getattr(issue, "fact_sources", "[]")),
         new_facts=new_facts,
         actions=action_items,
         source_urls=_parse_json_field(issue.source_urls),

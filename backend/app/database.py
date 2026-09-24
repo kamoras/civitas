@@ -210,6 +210,7 @@ def _migrate_columns() -> None:
         # which the feed treats as not-displayable, so a pre-existing row
         # stays hidden until an ingest scores it rather than appearing
         # unvetted.
+        ("action_issues", "fact_sources", "TEXT DEFAULT '[]'"),
         ("race_coverage_items", "relevance", "REAL"),
         ("race_coverage_items", "has_advocacy", "BOOLEAN DEFAULT 0"),
         ("explore_documents", "identifiers", "TEXT DEFAULT '[]'"),

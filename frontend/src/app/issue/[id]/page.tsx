@@ -192,6 +192,11 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
                     <span className="text-ink-min shrink-0 mt-0.5">▸</span>
                     <span>
                       {fact}
+                      {issue.factSources?.[i] && (
+                        <span className="ml-2 font-mono text-xs text-ink-min">
+                          {issue.factSources[i]}
+                        </span>
+                      )}
                       {isNewFact(issue.newFacts, fact) && <NewFactTag />}
                     </span>
                   </li>

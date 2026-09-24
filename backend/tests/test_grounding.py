@@ -921,11 +921,17 @@ class TestEveryPublishingPathIsChecked:
 
     # Functions whose LLM output reaches a reader as prose.
     PUBLISHES_PROSE = {
-        "_retry_until_grounded", "_generate_period_summary", "_generate_full_story",
+        "_generate_period_summary", "_generate_full_story",
         "_generate_monitor_metadata", "_run_refresh", "_generate_new_post",
         "_generate_spotlight_post", "_generate_weekly_post", "_draft_developing_issue",
         "_draft_developing_rule_issue", "_generate_post_text", "_generate_summary",
     }
+    # Functions whose LLM output is a located SPAN, verified verbatim by
+    # post_composer.compose() rather than by the prose combinator. This
+    # is the redesign's shape: the model points at text it did not
+    # write, so "is this grounded" is answered by construction and the
+    # combinator runs only as a backstop on the composed result.
+    SPAN_VERIFIED = {"_locate"}
     # Functions whose LLM output is a DECISION, never published text.
     # A wrong answer here merges two monitors or mislabels a category —
     # a correctness bug, not a hallucination reaching a reader.
@@ -954,11 +960,12 @@ class TestEveryPublishingPathIsChecked:
 
     @pytest.mark.parametrize("relative_path", MODULES)
     def test_every_generation_point_is_classified(self, relative_path):
-        known = self.PUBLISHES_PROSE | self.JUDGMENT_ONLY
+        known = self.PUBLISHES_PROSE | self.JUDGMENT_ONLY | self.SPAN_VERIFIED
         unclassified = set(self._generators(relative_path)) - known
         assert not unclassified, (
             f"{relative_path} has unclassified call_llm sites: {sorted(unclassified)}. "
-            "Add each to PUBLISHES_PROSE or JUDGMENT_ONLY — deciding which is the review."
+            "Add each to PUBLISHES_PROSE, SPAN_VERIFIED or JUDGMENT_ONLY — "
+            "deciding which is the review."
         )
 
     @pytest.mark.parametrize("relative_path", MODULES)

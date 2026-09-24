@@ -13,6 +13,7 @@ function issue(overrides: Partial<ActionIssue> = {}): ActionIssue {
     title: "A story",
     summary: "A summary.",
     facts: [],
+    factSources: [],
     newFacts: [],
     actions: [],
     sourceUrls: [],
