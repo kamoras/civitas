@@ -6,12 +6,25 @@ interest rather than just editorial coverage breadth.
 
 Sources:
   - Google Trends (daily trending searches RSS)
-  - Reddit (top posts from policy-relevant subreddits via public JSON)
   - Bluesky (getTrendingTopics via AT Protocol, requires BSKY credentials)
+
+Reddit was a third source until 2026-09-24, reading the public
+/r/<sub>/hot.json endpoints. Reddit now requires OAuth for datacenter
+traffic and returns 403 to everything else: verified from the production
+host, with and without a custom User-Agent, on every configured
+subreddit. It had been contributing 0 of 30 topics while looking exactly
+like a working source. Removed rather than left to fail, because the
+platform has no Reddit credentials and an endpoint that always 403s is
+not a source.
+
+A source that FAILS must never look like a source with nothing to say —
+that is what made the Reddit outage invisible for as long as it was. Each
+fetcher therefore returns None for "I could not fetch" and [] for "I
+fetched, there was nothing", and fetch_trending_topics reports the
+difference.
 """
 
 import logging
-import time
 from dataclasses import dataclass
 
 from defusedxml import ElementTree as SafeET
@@ -34,20 +47,11 @@ _GOOGLE_TRENDS_RSS = (
     "https://trends.google.com/trending/rss?geo=US"
 )
 
-_REDDIT_SUBREDDITS = [
-    "politics",
-    "news",
-    "neutralpolitics",
-    "uspolitics",
-]
+def _fetch_google_trends() -> list[TrendingTopic] | None:
+    """Parse Google Trends daily trending searches RSS.
 
-_REDDIT_HEADERS = {
-    "User-Agent": "Civitas/1.0 (civic engagement platform; educational use)",
-}
-
-
-def _fetch_google_trends() -> list[TrendingTopic]:
-    """Parse Google Trends daily trending searches RSS."""
+    None means the fetch failed; [] means it succeeded and had nothing.
+    """
     topics: list[TrendingTopic] = []
     try:
         resp = httpx.get(
@@ -60,7 +64,7 @@ def _fetch_google_trends() -> list[TrendingTopic]:
         root = SafeET.fromstring(resp.content)
     except Exception as e:
         logger.warning("Google Trends fetch failed: %s", e)
-        return []
+        return None
 
     ns = {"ht": "https://trends.google.com/trending/rss"}
 
@@ -89,65 +93,20 @@ def _fetch_google_trends() -> list[TrendingTopic]:
     return topics
 
 
-def _fetch_reddit_trending() -> list[TrendingTopic]:
-    """Fetch top post titles from policy-relevant subreddits."""
-    topics: list[TrendingTopic] = []
-    seen_titles: set[str] = set()
-
-    for sub in _REDDIT_SUBREDDITS:
-        url = f"https://www.reddit.com/r/{sub}/hot.json?limit=15"
-        try:
-            resp = httpx.get(
-                url,
-                timeout=FETCH_TIMEOUT,
-                follow_redirects=True,
-                headers=_REDDIT_HEADERS,
-            )
-            if resp.status_code == 429:
-                logger.warning("Reddit rate-limited on r/%s, skipping", sub)
-                continue
-            resp.raise_for_status()
-            data = resp.json()
-        except Exception as e:
-            logger.warning("Reddit r/%s fetch failed: %s", sub, e)
-            continue
-
-        posts = data.get("data", {}).get("children", [])
-        for post in posts:
-            pd = post.get("data", {})
-            title = pd.get("title", "").strip()
-            if not title or title.lower() in seen_titles:
-                continue
-            if pd.get("stickied", False):
-                continue
-
-            score = float(pd.get("score", 0))
-            seen_titles.add(title.lower())
-            topics.append(TrendingTopic(
-                title=title,
-                source=f"reddit_r/{sub}",
-                traffic_score=score,
-            ))
-
-        time.sleep(0.5)
-
-    logger.info("Reddit: fetched %d trending topics across %d subreddits",
-                len(topics), len(_REDDIT_SUBREDDITS))
-    return topics
-
-
-def _fetch_bluesky_trending() -> list[TrendingTopic]:
+def _fetch_bluesky_trending() -> list[TrendingTopic] | None:
     """Fetch trending topics from Bluesky via the AT Protocol.
 
-    Uses the same credentials as the Bluesky poster. Returns empty list
-    if credentials aren't configured or the call fails.
+    Uses the same credentials as the Bluesky poster. None when the call
+    fails or credentials are absent — an unconfigured source is not a
+    source that found nothing; [] when it fetched and had nothing.
     """
     try:
         from app.config import settings
         handle = getattr(settings, "BSKY_HANDLE", "")
         app_password = getattr(settings, "BSKY_APP_PASSWORD", "")
         if not handle or not app_password:
-            return []
+            logger.warning("Bluesky trending skipped — no BSKY credentials configured")
+            return None
 
         from atproto import Client
         client = Client()
@@ -156,7 +115,7 @@ def _fetch_bluesky_trending() -> list[TrendingTopic]:
         topics_raw = getattr(resp, "topics", []) or []
     except Exception as e:
         logger.warning("Bluesky trending fetch failed: %s", e)
-        return []
+        return None
 
     topics: list[TrendingTopic] = []
     for t in topics_raw:
@@ -164,7 +123,7 @@ def _fetch_bluesky_trending() -> list[TrendingTopic]:
         if not display:
             continue
         # Bluesky doesn't expose a numeric traffic score; use 1.0 as a uniform
-        # signal weight so these topics influence ranking alongside Reddit/Trends.
+        # signal weight so these topics influence ranking alongside Google Trends.
         topics.append(TrendingTopic(
             title=display,
             source="bluesky",
@@ -176,16 +135,40 @@ def _fetch_bluesky_trending() -> list[TrendingTopic]:
 
 
 def fetch_trending_topics() -> list[TrendingTopic]:
-    """Fetch trending topics from all social media sources.
+    """Fetch trending topics from every configured source.
 
-    Returns combined list sorted by traffic score descending.
+    Returns the combined list sorted by traffic score descending, and
+    reports any source that FAILED rather than letting it read as a
+    source with nothing to say. Reddit 403'd on every run for an unknown
+    stretch while this function logged only a cheerful total, which is
+    exactly the failure this reporting exists to prevent.
+
+    A dead source is logged at ERROR and counted on action_metrics, so it
+    shows up in the same run counters the Action Center already reports
+    instead of needing someone to read the logs.
     """
-    all_topics: list[TrendingTopic] = []
+    from app.pipeline.analyze import action_metrics
 
-    all_topics.extend(_fetch_google_trends())
-    all_topics.extend(_fetch_reddit_trending())
-    all_topics.extend(_fetch_bluesky_trending())
+    all_topics: list[TrendingTopic] = []
+    failed: list[str] = []
+    for name, fetch in (("google_trends", _fetch_google_trends),
+                        ("bluesky", _fetch_bluesky_trending)):
+        topics = fetch()
+        if topics is None:
+            failed.append(name)
+            action_metrics.increment(f"trending_source_failed_{name}")
+            continue
+        action_metrics.increment(f"trending_topics_{name}", len(topics))
+        all_topics.extend(topics)
+
+    if failed:
+        logger.error(
+            "Trending sources FAILED (not empty — no data was retrieved): %s. "
+            "Ranking is running on %d of %d sources.",
+            ", ".join(failed), 2 - len(failed), 2,
+        )
 
     all_topics.sort(key=lambda t: t.traffic_score, reverse=True)
-    logger.info("Total trending topics: %d", len(all_topics))
+    logger.info("Total trending topics: %d (from %d of %d sources)",
+                len(all_topics), 2 - len(failed), 2)
     return all_topics
