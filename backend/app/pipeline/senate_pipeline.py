@@ -228,6 +228,7 @@ def upsert_senator(db: Session, data: dict) -> None:
         "score_funding_diversity": corruption.get("fundingDiversity", 50),
         "score_legislative_effectiveness": corruption.get("legislativeEffectiveness", 50),
         "total_raised": funding.get("totalRaised") or 0,
+        "total_contributions": funding.get("totalContributions"),
         "total_from_pacs": funding.get("totalFromPACs") or 0,
         "small_donor_percentage": funding.get("smallDonorPercentage") or 0,
         "outside_spending_for": funding.get("outsideSpendingFor"),
@@ -715,11 +716,10 @@ def _live_les_reference(
     last persisted reference) when this run has too few members to measure
     one — a single-member filter run, or the first days of a congress.
     Shared by the Senate and House pipelines."""
+    from app.pipeline.analyze.population_reference import LES_REFERENCE
     from app.pipeline.analyze.score_calculator import (
         compute_les_reference,
         derive_chamber_majority,
-        load_les_reference,
-        write_les_reference,
     )
 
     majority = derive_chamber_majority(
@@ -739,8 +739,26 @@ def _live_les_reference(
         )
         return None
     logger.info("LES reference (%s): %s", chamber, ref)
-    write_les_reference(chamber, ref)
-    return {**load_les_reference(), chamber: ref}
+    return LES_REFERENCE.with_live(chamber, ref)
+
+
+def _live_funding_reference(chamber: str, fundings: list[dict]) -> dict:
+    """This run's Funding Independence reference for `chamber` (median PAC
+    share of contributions — see score_calculator.compute_funding_reference),
+    persisted and merged the same way as _live_les_reference. Falls back to
+    the last persisted reference when too few members have funding."""
+    from app.pipeline.analyze.population_reference import FUNDING_REFERENCE
+    from app.pipeline.analyze.score_calculator import compute_funding_reference
+
+    ref = compute_funding_reference(fundings)
+    if ref is None:
+        logger.warning(
+            "Too few %s members with funding to measure a PAC-share reference "
+            "this run — scoring against the last persisted one", chamber,
+        )
+    else:
+        logger.info("Funding reference (%s): %s", chamber, ref)
+    return FUNDING_REFERENCE.with_live(chamber, ref)
 
 
 def _recent_not_covered_by_key_bills(
@@ -1276,7 +1294,7 @@ async def run_senate_pipeline(
                 # Match the receipt-detail and outside-spending windows to
                 # the receipt-totals window (normalize_finance sums only the
                 # most recent election, one deduped totals row).
-                recent_cycles = compute_recent_election_cycles(financials)
+                recent_cycles = compute_recent_election_cycles(financials, "S")
 
                 receipts: list = []
                 pac_receipts_data: list = []
@@ -1846,6 +1864,9 @@ async def run_senate_pipeline(
                     "those use the latestAction fallback", stage_failures,
                 )
 
+            funding_reference = _live_funding_reference(
+                "senate", [p.get("funding") or {} for p in senator_prepared],
+            )
             les_reference = _live_les_reference(
                 "senate",
                 [
@@ -1924,6 +1945,7 @@ async def run_senate_pipeline(
                         "sponsoredBills": prepared.get("sponsoredBills", []),
                         "ideologyScore": ideology_scores.get(bio_id_for_score),
                         "lesReference": les_reference,
+                        "fundingReference": funding_reference,
                     }
                     corruption_score = calculate_scores(temp_senator)
                     corruption_score["confidence"] = calculate_confidence(temp_senator)

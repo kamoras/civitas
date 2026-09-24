@@ -18,7 +18,9 @@ def build_highlights(entity: dict) -> list[str]:
     name = entity["name"]
     hints: list[tuple[int, str]] = []  # (priority, text)
 
-    total = funding["totalRaised"]
+    # Shares are over contributions (see normalize_finance.
+    # summarize_election_totals); fall back to receipts for older records.
+    total = funding.get("totalContributions") or funding["totalRaised"]
     small_pct = funding.get("smallDonorPercentage") or 0
     pac_total = funding.get("totalFromPACs") or 0
     pac_pct_raw = pac_total / total * 100 if total > 0 else 0.0
@@ -28,20 +30,20 @@ def build_highlights(entity: dict) -> list[str]:
     if small_pct >= 50:
         hints.append((10, (
             f"Grassroots funded: {small_pct:.0f}% of {name}'s "
-            f"${total / 1e6:.1f}M raised comes from small donors (under $200), "
+            f"${total / 1e6:.1f}M in contributions came from small donors (under $200), "
             f"suggesting broad constituent support."
         )))
     elif small_pct < 15 and total > 0:
         small_str = "<1" if 0 < small_pct < 1 else f"{small_pct:.0f}"
         hints.append((10, (
             f"Only {small_str}% of {name}'s "
-            f"${total / 1e6:.1f}M came from small donors — "
+            f"${total / 1e6:.1f}M in contributions came from small donors — "
             f"the vast majority flows from large donors and organizations."
         )))
 
     if pac_pct_raw > 40:
         hints.append((9, (
-            f"PAC-heavy: {pac_pct_str}% of funding (${pac_total:,.0f}) "
+            f"PAC-heavy: {pac_pct_str}% of contributions (${pac_total:,.0f}) "
             f"comes from political action committees."
         )))
     elif pac_pct_raw < 5 and total > 500_000:

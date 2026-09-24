@@ -122,6 +122,10 @@ class Senator(Base):
     score_confidence: Mapped[str] = mapped_column(Text, default="{}")
 
     total_raised: Mapped[float] = mapped_column(Float, default=0.0)
+    # Contributions + candidate self-loans: the denominator funding shares
+    # are taken over (normalize_finance.summarize_election_totals). NULL on
+    # rows scored before it existed — readers fall back to total_raised.
+    total_contributions: Mapped[float | None] = mapped_column(Float, nullable=True)
     total_from_pacs: Mapped[float] = mapped_column(Float, default=0.0)
     small_donor_percentage: Mapped[float] = mapped_column(Float, default=0.0)
     # Super PAC independent expenditures supporting the candidate (FEC
@@ -346,6 +350,10 @@ class Representative(Base):
     score_confidence: Mapped[str] = mapped_column(Text, default="{}")
 
     total_raised: Mapped[float] = mapped_column(Float, default=0.0)
+    # Contributions + candidate self-loans: the denominator funding shares
+    # are taken over (normalize_finance.summarize_election_totals). NULL on
+    # rows scored before it existed — readers fall back to total_raised.
+    total_contributions: Mapped[float | None] = mapped_column(Float, nullable=True)
     total_from_pacs: Mapped[float] = mapped_column(Float, default=0.0)
     small_donor_percentage: Mapped[float] = mapped_column(Float, default=0.0)
     # Super PAC independent expenditures supporting the candidate (FEC

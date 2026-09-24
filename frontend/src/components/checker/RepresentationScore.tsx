@@ -1,5 +1,6 @@
 "use client";
 
+import { fundingShareBase, pacSharePct } from "@/lib/funding";
 import { Senator, VotingRecord, SponsoredBill } from "@/types/senator";
 import { getScoreLabel, getScoreColor, getScoreBgColor, asciiScoreBar } from "@/lib/representation";
 import MetricTooltip from "./MetricTooltip";
@@ -152,10 +153,10 @@ export default function RepresentationScore({
   // Surface the FI sub-components so the score is an auditable claim,
   // not a black-box number (matches the methodology on /about).
   const fundingIndependenceBasis: string | undefined = (() => {
-    if (!funding || funding.totalRaised === 0) {
+    if (!funding || fundingShareBase(funding) === 0) {
       return "no funding data · defaults to 50";
     }
-    const pacPct = Math.round(((funding.totalFromPACs ?? 0) / funding.totalRaised) * 100);
+    const pacPct = Math.round(pacSharePct(funding.totalFromPACs, funding));
     const smallPct = Math.round(funding.smallDonorPercentage ?? 0);
     const external = (funding.topDonors ?? []).filter(
       (d) => d.type !== "CandidateAffiliated" && d.type !== "Self-Funded"

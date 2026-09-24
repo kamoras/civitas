@@ -1,5 +1,6 @@
 """Fetch modules for the FEC (Federal Election Commission) API."""
 
+from datetime import date, timedelta
 import logging
 import re
 from urllib.parse import quote
@@ -365,8 +366,25 @@ def _sort_financials_recent_first(results: list[dict]) -> list[dict]:
     )
 
 
+def general_election_day(year: int) -> date:
+    """The federal general election date for `year`: the Tuesday after the
+    first Monday in November (2 U.S.C. §7) — a statutory fact, not a
+    calibration."""
+    nov1 = date(year, 11, 1)
+    first_monday = nov1 + timedelta(days=(0 - nov1.weekday()) % 7)
+    return first_monday + timedelta(days=1)
+
+
+def _is_completed_election(row: dict, today: date) -> bool:
+    """True once the row's general election has actually been held."""
+    year = financials_election_year(row)
+    if year is None:
+        return False
+    return year < today.year or (year == today.year and today > general_election_day(year))
+
+
 def select_recent_elections(financials: list[dict], n: int = 1) -> list[dict]:
-    """One totals row per election, most recent ``n`` elections first.
+    """One totals row per election, most recent ``n`` COMPLETED elections first.
 
     Funding dimensions are windowed to the candidate's most recent election
     (their current mandate's campaign) rather than "current congress only"
@@ -385,19 +403,31 @@ def select_recent_elections(financials: list[dict], n: int = 1) -> list[dict]:
     largest-receipts row per election year: the election-full aggregate
     supersedes its own partial cycle rows.
 
-    Only rows with a confirmed past/current election year are eligible —
-    see financials_election_year for why an off-cycle dormant row must
-    not outrank the real most recent election.
+    Only elections that have been HELD count (general election day has
+    passed — _is_completed_election). The campaign that won a member their
+    current seat is the one they're serving under; a re-election campaign
+    still in progress is their NEXT mandate's, and scoring it mixed
+    members on complete races with members on half-finished ones —
+    through most of an election year every House member and a third of the
+    Senate were scored on an in-progress cycle whose money arrives on a
+    different schedule (late small-dollar surges) from a finished one.
+    A candidate with no completed election yet (an appointed senator
+    before their first race) falls back to the in-progress one — it's the
+    only campaign they have. See financials_election_year for why an
+    off-cycle dormant row must not outrank a real election.
     """
-    current_year = utcnow().year
-    by_year: dict[int, dict] = {}
+    today = utcnow().date()
+    completed: dict[int, dict] = {}
+    in_progress: dict[int, dict] = {}
     for row in financials:
-        if not _is_confirmed_past_or_current_election(row, current_year):
-            continue
         year = financials_election_year(row)
-        best = by_year.get(year)
+        if year is None or year > today.year:
+            continue
+        bucket = completed if _is_completed_election(row, today) else in_progress
+        best = bucket.get(year)
         if best is None or (row.get("receipts") or 0) > (best.get("receipts") or 0):
-            by_year[year] = row
+            bucket[year] = row
+    by_year = completed or in_progress
     if not by_year:
         # No row carries a confirmed election year (not seen in real FEC
         # data) — fall back to the caller's ordering rather than dropping
@@ -406,22 +436,36 @@ def select_recent_elections(financials: list[dict], n: int = 1) -> list[dict]:
     return [by_year[y] for y in sorted(by_year, reverse=True)[:n]]
 
 
-def compute_recent_election_cycles(financials: list[dict]) -> list[int]:
+# Two-year filing periods in one full election period, by office. FEC's
+# election-full totals (what select_recent_elections picks) cover the whole
+# period — six years for the Senate, two for the House — so the itemized
+# receipt detail compared against them must cover the same span.
+_ELECTION_PERIOD_CYCLES = {"S": 3, "H": 1}
+
+
+def election_period_cycles(election_year: int, office: str) -> list[int]:
+    """The two-year transaction periods making up one election period for
+    `office` ("S"/"H", FEC's own office codes), newest first."""
+    n = _ELECTION_PERIOD_CYCLES.get(office, 1)
+    return [election_year - 2 * i for i in range(n)]
+
+
+def compute_recent_election_cycles(financials: list[dict], office: str) -> list[int]:
     """The receipt-query cycle window for a candidate's most recent election.
 
-    Includes the preceding 2-year cycle since both independent expenditures
-    and a campaign's own receipts accrue across the full election period,
-    not just the election year. Without this, top-donor/industry-breakdown
-    detail was drawn from the committee's entire career while the totals it's
-    compared against were windowed to the recent election (2026-07 audit
-    finding). Shared by senate_pipeline.py and house_pipeline.py's funding
-    fetch phases — both window committee-receipt queries to this same range.
+    Covers the election's full period so top-donor/industry-breakdown
+    detail matches the totals it's compared against (a 2026-07 audit found
+    detail drawn from the committee's whole career against windowed
+    totals). The previous fixed two-cycle window was wrong both ways: it
+    dropped the first two years of a six-year Senate period, and pulled the
+    House member's PREVIOUS election into the detail. Shared by
+    senate_pipeline.py ("S") and house_pipeline.py ("H").
     """
     cycles: list[int] = []
     for c in select_recent_elections(financials):
         election_year = financials_election_year(c)
         if election_year:
-            cycles.extend([int(election_year), int(election_year) - 2])
+            cycles.extend(election_period_cycles(int(election_year), office))
     return cycles
 
 

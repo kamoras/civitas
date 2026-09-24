@@ -18,7 +18,7 @@ import os
 import time
 
 from app.models import President
-from app.pipeline.analyze import score_calculator
+from app.pipeline.analyze.population_reference import LES_REFERENCE
 from app.pipeline.analyze.score_calculator import (
     _advancement_baseline,
     _calc_legislative_effectiveness,
@@ -141,7 +141,7 @@ class TestReferenceFiles:
     def test_writes_merge_rather_than_clobber(self, pinned_les_reference):
         write_les_reference("senate", pinned_les_reference["senate"])
         write_les_reference("house", {**pinned_les_reference["house"], "n": 1})
-        on_disk = json.loads(open(score_calculator._LES_REFERENCE_PATH).read())
+        on_disk = json.loads(open(LES_REFERENCE.live_path).read())
         assert set(on_disk) == {"senate", "house"}
         assert "computed_at" in on_disk["senate"]
 
@@ -150,7 +150,7 @@ class TestReferenceFiles:
         # the previous run's reference from its cache.
         write_les_reference("senate", pinned_les_reference["senate"])
         assert load_les_reference()["senate"]["median_credit"] == 289.0
-        path = score_calculator._LES_REFERENCE_PATH
+        path = LES_REFERENCE.live_path
         data = json.loads(open(path).read())
         data["senate"]["median_credit"] = 7.0
         open(path, "w").write(json.dumps(data))

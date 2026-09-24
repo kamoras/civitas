@@ -1,0 +1,12 @@
+{
+ "_as_of": "2026-07",
+ "_source": "Pre-first-run fallback only: the pipeline recomputes this per chamber every run (score_calculator.compute_funding_reference) and writes /data/funding_reference.json, which takes precedence. Values are the 2026-07 audit (scripts/audit_pac_ratio.py) medians previously hand-typed into score_calculator.py as the PAC multipliers 3.2 (Senate) and 1.35 (House) = 0.5 / median. Measured as PAC share of total receipts, before the switch to contributions as the denominator; the first pipeline run replaces them. Regenerate with backend/scripts/audit_pac_ratio.py.",
+ "house": {
+  "n": null,
+  "pac_ratio_median": 0.371
+ },
+ "senate": {
+  "n": null,
+  "pac_ratio_median": 0.157
+ }
+}

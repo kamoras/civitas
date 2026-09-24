@@ -1,3 +1,4 @@
+import { fundingShareBase, pacSharePct } from "@/lib/funding";
 import { Senator } from "@/types/senator";
 import { formatCurrency } from "@/lib/formatting";
 
@@ -7,15 +8,16 @@ export function generateCommentary(senator: Senator): string[] {
   const { funding, votingRecord, lobbyingMatches } = senator;
 
   // Funding concentration
-  if (funding.totalFromPACs > 0 && funding.totalRaised > 0) {
-    const pacPct = Math.round((funding.totalFromPACs / funding.totalRaised) * 100);
+  const contributions = fundingShareBase(funding);
+  if (funding.totalFromPACs > 0 && contributions > 0) {
+    const pacPct = Math.round(pacSharePct(funding.totalFromPACs, funding));
     if (pacPct >= 50) {
       comments.push(
-        `${pacPct}% of ${senator.name}'s ${formatCurrency(funding.totalRaised)} in campaign fundraising came from PACs — more than half from political organizations rather than individual donors.`
+        `${pacPct}% of the ${formatCurrency(contributions)} in contributions to ${senator.name}'s campaign came from PACs — more than half from political organizations rather than individual donors.`
       );
     } else if (pacPct >= 25) {
       comments.push(
-        `PACs account for ${pacPct}% of ${senator.name}'s total fundraising (${formatCurrency(funding.totalFromPACs)} out of ${formatCurrency(funding.totalRaised)}).`
+        `PACs account for ${pacPct}% of contributions to ${senator.name}'s campaign (${formatCurrency(funding.totalFromPACs)} out of ${formatCurrency(contributions)}).`
       );
     }
   }

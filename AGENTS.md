@@ -316,8 +316,11 @@ The correct pattern, established by `_district_pvi()` /
    is about to score (`compute_les_reference`), persisted to
    `/data/les_reference.json` for the API's breakdowns, with
    `app/data/les_reference.json` (`scripts/calibrate_les_credit_scale.py`)
-   as the pre-first-run fallback. A value frozen on one date can't track a
-   quantity that accumulates over a congress.
+   as the pre-first-run fallback. Funding Independence's median PAC share
+   works the same way (`compute_funding_reference`,
+   `funding_reference.json`, `scripts/audit_pac_ratio.py`); both go through
+   `pipeline/analyze/population_reference.py`. A value frozen on one date
+   can't track a quantity that accumulates over a congress.
 
 This also applies to constants that are themselves the *output* of a
 fitting script (regression coefficients, saturation points derived from
@@ -423,9 +426,13 @@ congress" sidesteps that fragility entirely and is *stricter* than a literal
 resting on laurels" goal, not softer.
 
 **Funding is the one exception**: Funding Independence and Funding Diversity
-window to the member's **most recent election only**
-(`select_recent_elections` in `fetch/fec.py`, `n=1`), not the current
-congress. Senators legitimately raise little money in the 4 non-election
+window to the member's **most recent completed election only**
+(`select_recent_elections` in `fetch/fec.py`, `n=1`: general election day
+has passed — a re-election campaign still in progress is the *next*
+mandate's, not the current one), not the current congress. Itemized donor
+detail covers that election's full period (six years Senate, two House —
+`election_period_cycles`), and every funding share is taken over
+contributions, not receipts (`normalize_finance.summarize_election_totals`). Senators legitimately raise little money in the 4 non-election
 years of a 6-year term — a strict 2-year funding window would go near-empty
 most of the time for reasons that have nothing to do with coasting. Tying it
 to their current mandate's campaign instead fixes the same staleness problem

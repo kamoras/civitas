@@ -33,6 +33,8 @@ export interface Senator {
   };
   funding: {
     totalRaised: number;
+    /** Denominator for PAC / small-donor shares — see lib/funding.ts. */
+    totalContributions?: number | null;
     totalFromPACs: number;
     smallDonorPercentage: number;
     topDonors: Donor[];
@@ -203,6 +205,7 @@ export interface LeaderboardEntry {
   initials: string;
   representationScore: Senator["representationScore"];
   totalRaised: number;
+  totalContributions?: number | null;
   totalFromPacs: number;
   smallDonorPercentage: number;
   topIndustry: string | null;

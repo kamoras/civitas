@@ -1,3 +1,4 @@
+import { pacSharePct } from "@/lib/funding";
 import { Senator } from "@/types/senator";
 import { formatCurrency } from "@/lib/formatting";
 import { safeHref } from "@/lib/formatting";
@@ -137,12 +138,9 @@ export default function SenatorCard({
   leadershipTitle,
   titleAs: Title = "h2",
 }: SenatorCardProps) {
-  // Guard against zero fundraising (0/0 = NaN) — matches the compare and
-  // leaderboard views, which both gate on totalRaised > 0.
-  const pacPercentRaw =
-    senator.funding.totalRaised > 0
-      ? (senator.funding.totalFromPACs / senator.funding.totalRaised) * 100
-      : 0;
+  // Share of contributions, same base as the small-donor % beside it —
+  // see lib/funding.ts. pacSharePct guards the zero-fundraising case.
+  const pacPercentRaw = pacSharePct(senator.funding.totalFromPACs, senator.funding);
   const pacPercent =
     pacPercentRaw > 0 && pacPercentRaw < 1 ? "<1" : Math.round(pacPercentRaw).toString();
 

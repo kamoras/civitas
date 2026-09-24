@@ -102,17 +102,39 @@ TEST_LES_REFERENCE = {
 }
 
 
+# Funding Independence's PAC-share reference, pinned the same way: the
+# 2026-07 audit medians that were hand-typed as the multipliers 3.2 / 1.35.
+TEST_FUNDING_REFERENCE = {
+    "senate": {"n": 100, "pac_ratio_median": 0.157},
+    "house": {"n": 435, "pac_ratio_median": 0.371},
+}
+
+
 @pytest.fixture(autouse=True)
-def pinned_les_reference(tmp_path, monkeypatch):
-    """Point both LES reference files at test-controlled paths: no live
-    /data file, and a bundled file holding TEST_LES_REFERENCE."""
+def pinned_population_references(tmp_path, monkeypatch):
+    """Point every per-chamber reference at test-controlled files: no live
+    /data file, and a bundled file holding the pinned values above."""
     import json
 
-    from app.pipeline.analyze import score_calculator
+    from app.pipeline.analyze import population_reference
 
-    bundled = tmp_path / "les_reference_bundled.json"
-    bundled.write_text(json.dumps(TEST_LES_REFERENCE))
-    monkeypatch.setattr(score_calculator, "_LES_REFERENCE_PATH", str(tmp_path / "les_reference_live.json"))
-    monkeypatch.setattr(score_calculator, "_LES_REFERENCE_BUNDLED", bundled)
-    monkeypatch.setattr(score_calculator, "_les_reference_cache", None)
-    yield TEST_LES_REFERENCE
+    for ref, values in (
+        (population_reference.LES_REFERENCE, TEST_LES_REFERENCE),
+        (population_reference.FUNDING_REFERENCE, TEST_FUNDING_REFERENCE),
+    ):
+        bundled = tmp_path / f"{ref.name}_bundled.json"
+        bundled.write_text(json.dumps(values))
+        monkeypatch.setattr(ref, "bundled_path", bundled)
+        monkeypatch.setattr(ref, "live_path", tmp_path / f"{ref.name}_live.json")
+        monkeypatch.setattr(ref, "_cache", None)
+    yield
+
+
+@pytest.fixture()
+def pinned_les_reference(pinned_population_references):
+    return TEST_LES_REFERENCE
+
+
+@pytest.fixture()
+def pinned_funding_reference(pinned_population_references):
+    return TEST_FUNDING_REFERENCE

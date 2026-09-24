@@ -1,5 +1,6 @@
 "use client";
 
+import { pacSharePct } from "@/lib/funding";
 import { Suspense, useEffect, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
@@ -194,14 +195,8 @@ function ComparisonTable({
   const rightOverall = right.representationScore.overall;
   const leftColorClass = getScoreColor(leftOverall);
   const rightColorClass = getScoreColor(rightOverall);
-  const leftPacPct =
-    left.funding.totalRaised > 0
-      ? Math.round((left.funding.totalFromPACs / left.funding.totalRaised) * 100)
-      : 0;
-  const rightPacPct =
-    right.funding.totalRaised > 0
-      ? Math.round((right.funding.totalFromPACs / right.funding.totalRaised) * 100)
-      : 0;
+  const leftPacPct = Math.round(pacSharePct(left.funding.totalFromPACs, left.funding));
+  const rightPacPct = Math.round(pacSharePct(right.funding.totalFromPACs, right.funding));
 
   function winner(a: number, b: number, higherIsBetter = true) {
     // No winner markers across chambers: calibration is chamber-specific,

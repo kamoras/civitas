@@ -39,8 +39,9 @@ ratio or top-N-donor-concentration table). The specific calibration
 targets below are this platform's own live empirical audits, not
 numbers reproduced from either paper — see _calc_funding_independence's
 own "Academic rationale" note for the fuller account, including why the
-PAC multiplier is now chamber-specific (Senate ×3.2, House ×1.35;
-scripts/audit_pac_ratio.py) rather than one shared value. Top-donor
+PAC multiplier is chamber-specific (0.5 / that chamber's median PAC
+share, measured every run — compute_funding_reference) rather than one
+shared value. Top-donor
 concentration is calibrated so a 15%-of-pool share scores 100 and a
 40%-of-pool share scores 0 (2026-07-23 recalibration — the earlier
 20%/100%-median-60% anchors had drifted to roughly double the live
@@ -815,11 +816,10 @@ representation dimension.
 
 import logging
 import math
-import pathlib
 import statistics
 
 from app.models import PromiseAlignment
-from app.time_utils import utcnow
+from app.pipeline.analyze.population_reference import FUNDING_REFERENCE, LES_REFERENCE
 
 logger = logging.getLogger(__name__)
 
@@ -1026,6 +1026,16 @@ logger = logging.getLogger(__name__)
 # pooled value. Senate sponsored bills are stage-classified before scoring;
 # they used to be classified after calculate_scores ran, so Senate LE was
 # scored on the latestAction keyword fallback while the House used stages.
+#
+# Also v6.13 — funding: (1) scored on the most recent COMPLETED election,
+# not a re-election campaign still in progress (select_recent_elections);
+# (2) itemized detail covers the election's full period, six years Senate /
+# two House (election_period_cycles); (3) shares are taken over
+# contributions + candidate self-loans, not receipts, which include JFC
+# transfers and understated PAC reliance for members who fundraise through
+# them (summarize_election_totals); (4) the PAC-share multipliers 3.2 / 1.35
+# (0.5 / a hand-typed chamber median) are replaced by the chamber median
+# measured every run (compute_funding_reference).
 ALGORITHM_VERSION = "v6.13"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
@@ -1483,6 +1493,7 @@ def calculate_scores(senator: dict) -> dict:
     return {
         "fundingIndependence": _calc_funding_independence(
             funding, senator.get("state", ""), senator.get("district"),
+            senator.get("fundingReference"),
         ),
         "promisePersistence": _calc_promise_persistence(
             voting_record,
@@ -1535,6 +1546,7 @@ def explain_scores(senator: dict) -> dict:
     return {
         "fundingIndependence": _funding_independence_core(
             funding, senator.get("state", ""), senator.get("district"),
+            senator.get("fundingReference"),
         ),
         "independentVoting": _constituent_alignment_core(
             voting_record,
@@ -1581,7 +1593,7 @@ def calculate_confidence(senator: dict) -> dict[str, str]:
             return "medium"
         return "low"
 
-    has_funding = (funding.get("totalRaised", 0) or 0) > 0
+    has_funding = funding_share_base(funding) > 0
     n_donors = len(funding.get("topDonors") or [])
     n_industries = len(funding.get("industryBreakdown") or [])
     all_votes = (voting_record.get("keyVotes") or []) + (
@@ -1721,7 +1733,9 @@ def _small_donor_capacity_score(
     return score, expected
 
 
-def _calc_funding_independence(funding: dict, state: str = "", district: int | None = None) -> int:
+def _calc_funding_independence(
+    funding: dict, state: str = "", district: int | None = None, reference: dict | None = None,
+) -> int:
     """
     Funding Independence Score (0-100, higher = better).
 
@@ -1741,8 +1755,10 @@ def _calc_funding_independence(funding: dict, state: str = "", district: int | N
          (House) vs. 15.7% (Senate), a real structural difference, not
          noise — so a single shared multiplier (previously ×2.0,
          calibrated against a stale, Senate-skewed ≈28% assumption)
-         miscalibrated both chambers. Now ×1.35 for House, ×3.2 for
-         Senate, each putting that chamber's own median near 50 — this is
+         miscalibrated both chambers. Each chamber's own median now
+         scores 50 (multiplier 0.5 / median, the median measured every
+         run by compute_funding_reference; the 2026-07 values ×1.35 House
+         and ×3.2 Senate were hand-typed until v6.13) — this is
          this platform's own empirical calibration, not a figure
          reproduced from any paper (see the Academic rationale note below
          for why).  Utilization factor (2026-07): PAC checks are capped
@@ -1835,15 +1851,50 @@ def _calc_funding_independence(funding: dict, state: str = "", district: int | N
     unchanged (Bonica 2014/Malbin 2009 for the small-dollar grassroots
     proxy; Parmigiani 2025/Rhoades 1993 for the HHI concentration metric).
     """
-    return _funding_independence_core(funding, state, district)["score"]
+    return _funding_independence_core(funding, state, district, reference)["score"]
 
 
-def _funding_independence_core(funding: dict, state: str = "", district: int | None = None) -> dict:
+def funding_share_base(funding: dict) -> float:
+    """The denominator every funding share is taken over: contributions
+    (from contributors or the candidate), falling back to total receipts
+    for records that predate the field. See normalize_finance.
+    summarize_election_totals for why receipts overstate it."""
+    return funding.get("totalContributions") or funding.get("totalRaised", 0) or 0
+
+
+# Fewest funded members that still describe a chamber's PAC-share
+# distribution; below it the last persisted reference is kept.
+_MIN_FUNDING_REFERENCE_MEMBERS = 30
+
+
+def compute_funding_reference(fundings: list[dict]) -> dict | None:
+    """One chamber's Funding Independence reference from this run's
+    members' funding dicts: the median PAC share of contributions (the
+    raw ratio, before the outside-spending adjustment — the same quantity
+    scripts/audit_pac_ratio.py measured when the multipliers were typed in
+    by hand). None when too few members have funding to measure it."""
+    ratios = []
+    for f in fundings:
+        base = funding_share_base(f or {})
+        if base > 0:
+            ratios.append(min((f.get("totalFromPACs") or 0) / base, 1.0))
+    if len(ratios) < _MIN_FUNDING_REFERENCE_MEMBERS:
+        return None
+    return {
+        "n": len(ratios),
+        "pac_ratio_median": round(statistics.median(ratios), 6),
+        "pac_ratio_mean": round(statistics.mean(ratios), 6),
+    }
+
+
+def _funding_independence_core(
+    funding: dict, state: str = "", district: int | None = None, reference: dict | None = None,
+) -> dict:
     """Same math as _calc_funding_independence, returning every intermediate
     value alongside the final score. Single implementation — _calc_funding_
     independence and the on-demand explain_scores() breakdown both call this;
     neither reimplements the formula separately."""
-    total_raised = funding.get("totalRaised", 0)
+    total_raised = funding_share_base(funding)
     if not total_raised or total_raised == 0:
         return {"score": 50, "components": [], "note": "No funding data — neutral default."}
 
@@ -1859,16 +1910,21 @@ def _funding_independence_core(funding: dict, state: str = "", district: int | N
         effective_outside = outside_for / (total_raised + outside_for) * 0.5
         pac_ratio = min(pac_ratio + effective_outside, 1.0)
 
-    # Chamber-specific multiplier, calibrated so each chamber's OWN median
-    # PAC ratio lands near 50 (scripts/audit_pac_ratio.py, 2026-07 live
-    # audit: Senate median 15.7%, House median 37.1% — House candidates
-    # rely on PAC money far more heavily than Senate candidates do, a real
-    # structural difference the old shared ×2.0 multiplier (calibrated
-    # against a stale/Senate-skewed 28% assumption) didn't capture for
-    # either chamber). Same district-signals-House pattern already used
-    # by the small-donor component below.
-    pac_ratio_multiplier = 1.35 if district is not None else 3.2
-    ratio_score = max(0.0, (1.0 - pac_ratio * pac_ratio_multiplier)) * 100
+    # Chamber-relative: the chamber's MEDIAN PAC share scores 50
+    # (multiplier = 0.5 / median). House candidates rely on PAC money far
+    # more than Senate candidates — a real structural difference (2026-07
+    # audit: House median 37.1%, Senate 15.7% of receipts), so each chamber
+    # is measured against its own. The median used to be hand-typed as the
+    # multipliers 1.35 / 3.2 (AGENTS.md §3a); it is now measured every run
+    # from the members being scored (compute_funding_reference), which also
+    # keeps it on the same denominator as the ratio itself.
+    chamber = "house" if district is not None else "senate"
+    ref = (reference or FUNDING_REFERENCE.load()).get(chamber) or {}
+    pac_median = ref.get("pac_ratio_median")
+    if pac_median:
+        ratio_score = max(0.0, (1.0 - pac_ratio * (0.5 / pac_median))) * 100
+    else:
+        ratio_score = 50.0
 
     # Scale the share-based score by how close contributing PACs are to
     # their legal per-election maximum — see the docstring above for why
@@ -2028,7 +2084,7 @@ def _funding_independence_core(funding: dict, state: str = "", district: int | N
                 "weight": round(20 / 66, 4),
                 "score": round(pac_score, 1),
                 "detail": (
-                    f"{pac_ratio:.0%} of ${total_raised:,.0f} raised came from PACs"
+                    f"{pac_ratio:.0%} of ${total_raised:,.0f} in contributions came from PACs"
                     + (" (incl. outside spending)" if outside_for > 0 else "")
                     + f" → raw {ratio_score:.1f}, scaled ×{volume_factor:.2f} "
                     f"({volume_detail_suffix})"
@@ -2851,7 +2907,7 @@ def _funding_diversity_core(funding: dict) -> dict:
     contract as _funding_independence_core above."""
     industry_breakdown = funding.get("industryBreakdown", [])
     small_donor_pct = funding.get("smallDonorPercentage", 0)
-    total_raised = funding.get("totalRaised", 0)
+    total_raised = funding_share_base(funding)
 
     if not industry_breakdown or not total_raised:
         return {"score": 50, "components": [], "note": "No funding data — neutral default."}
@@ -3219,10 +3275,8 @@ def _les_cumulative_credit(bill: dict) -> float:
 #      read, so they reproduce the pipeline's own numbers;
 #   3. app/data/les_reference.json — the bundled pre-first-run fallback,
 #      regenerated by scripts/calibrate_les_credit_scale.py.
+# (File handling: population_reference.LES_REFERENCE.)
 _LES_SATURATION_STDEVS = 1.5
-_LES_REFERENCE_PATH = "/data/les_reference.json"
-_LES_REFERENCE_BUNDLED = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "les_reference.json"
-_les_reference_cache: tuple[tuple[float | None, float | None], dict] | None = None
 
 
 def _les_member_inputs(sponsored_bills: list[dict], party: str | None) -> dict | None:
@@ -3298,64 +3352,13 @@ def compute_les_reference(
 _MIN_LES_REFERENCE_MEMBERS = 30
 
 
-def _read_json_mtime(path) -> tuple[float | None, dict]:
-    import json
-    try:
-        mtime = path.stat().st_mtime
-        return mtime, json.loads(path.read_text())
-    except Exception:
-        return None, {}
-
-
 def load_les_reference() -> dict:
-    """{"senate": {...}, "house": {...}} — the live /data reference layered
-    over the bundled fallback, per chamber. Re-read whenever either file
-    changes on disk (mtime), so the API worker that didn't run the
-    pipeline doesn't keep serving the previous run's numbers."""
-    global _les_reference_cache
-    live_path = pathlib.Path(_LES_REFERENCE_PATH)
-    live_mtime = live_path.stat().st_mtime if live_path.exists() else None
-    bundled_mtime = _LES_REFERENCE_BUNDLED.stat().st_mtime if _LES_REFERENCE_BUNDLED.exists() else None
-    key = (live_mtime, bundled_mtime)
-    if _les_reference_cache is not None and _les_reference_cache[0] == key:
-        return _les_reference_cache[1]
-    _, bundled = _read_json_mtime(_LES_REFERENCE_BUNDLED)
-    _, live = _read_json_mtime(live_path)
-    merged = {
-        ch: live.get(ch) or bundled.get(ch)
-        for ch in ("senate", "house")
-        if live.get(ch) or bundled.get(ch)
-    }
-    if not merged:
-        logger.error(
-            "No LES reference (neither %s nor the bundled %s) — Legislative "
-            "Effectiveness's bill component will score neutral for everyone",
-            _LES_REFERENCE_PATH, _LES_REFERENCE_BUNDLED,
-        )
-    _les_reference_cache = (key, merged)
-    return merged
+    """{"senate": {...}, "house": {...}} — see population_reference."""
+    return LES_REFERENCE.load()
 
 
 def write_les_reference(chamber: str, reference: dict) -> None:
-    """Persist this run's reference for one chamber (read-merge-write: each
-    chamber's pipeline owns its own key). Never raises — the pipeline has
-    already scored with the in-memory reference; this file is for readers
-    outside the run (API breakdowns, rescore.py). Same /data-not-app/data
-    rule as write_party_ideology_bounds."""
-    import json
-    global _les_reference_cache
-    path = pathlib.Path(_LES_REFERENCE_PATH)
-    try:
-        _, existing = _read_json_mtime(path)
-        existing[chamber] = {**reference, "computed_at": utcnow().isoformat(timespec="seconds")}
-        path.write_text(json.dumps(existing, indent=2, sort_keys=True) + "\n")
-        _les_reference_cache = None
-    except Exception:
-        logger.warning(
-            "Failed to write les_reference.json for %s — API score breakdowns "
-            "may show the previous run's LES reference until the next write.",
-            chamber, exc_info=True,
-        )
+    LES_REFERENCE.write(chamber, reference)
 
 
 def _les_component_score(

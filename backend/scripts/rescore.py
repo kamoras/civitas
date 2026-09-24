@@ -48,6 +48,7 @@ from app.pipeline.analyze.ground_truth import (  # noqa: E402
 )
 from app.pipeline.analyze.score_calculator import calculate_scores  # noqa: E402
 from app.pipeline.fetch.fec import select_recent_elections  # noqa: E402
+from app.pipeline.transform.normalize_finance import summarize_election_totals  # noqa: E402
 from app.pipeline.transform.candidate_names import is_candidate_self_donor  # noqa: E402
 
 DB = "file:/data/civitas.db?mode=ro"
@@ -80,28 +81,23 @@ def load_fec_caches(cur):
 
 
 def corrected_funding(search, fin, name, state):
-    """Rebuild receipt-window totals from cached FEC financials.
-
-    Mirrors normalize_finance: one deduped totals row per election, two
-    most recent elections (select_recent_elections — raw [:2] counted the
-    same election twice for 184/521 cached candidates).
-    """
+    """Rebuild receipt-window totals from cached FEC financials, through the
+    SAME select_recent_elections + summarize_election_totals the pipeline
+    uses (this script used to re-implement the arithmetic, and drifted)."""
     cid = search.get(f"candidate-search-{name}-{state}-S")
     if not cid:
         return None
     rows = fin.get(f"candidate-financials-{cid}")
     if not rows:
         return None
-    window = select_recent_elections(rows)
-    total_raised = sum(c.get("receipts", 0) or 0 for c in window)
-    small = sum(c.get("individual_unitemized_contributions", 0) or 0 for c in window)
+    totals = summarize_election_totals(select_recent_elections(rows))
+    base = totals["total_contributions"]
     return {
-        "totalRaised": round(total_raised),
-        "totalFromPACs": round(sum(
-            c.get("other_political_committee_contributions", 0) or 0 for c in window
-        )),
+        "totalRaised": round(totals["total_raised"]),
+        "totalContributions": round(base),
+        "totalFromPACs": round(min(totals["total_from_pacs"], base)),
         "smallDonorPercentage": (
-            round(small / total_raised * 100) if total_raised > 0 else 0
+            round(totals["small_individual"] / base * 100) if base > 0 else 0
         ),
     }
 
@@ -135,10 +131,12 @@ def build_payload(cur, s, search, fin):
     fec_totals = corrected_funding(search, fin, s["name"], s["state"])
     if fec_totals and fec_totals["totalRaised"] > 0:
         total_raised = fec_totals["totalRaised"]
+        total_contributions = fec_totals["totalContributions"]
         total_from_pacs = fec_totals["totalFromPACs"]
         small_donor_pct = fec_totals["smallDonorPercentage"]
     else:
         total_raised = s["total_raised"] or 0
+        total_contributions = s.get("total_contributions") or total_raised
         total_from_pacs = s["total_from_pacs"] or 0
         small_donor_pct = s["small_donor_percentage"] or 0
 
@@ -173,7 +171,10 @@ def build_payload(cur, s, search, fin):
     bills = [
         {"title": r["title"], "isLaw": bool(r["is_law"]),
          "latestAction": r["latest_action"], "billType": r["bill_type"],
-         "congress": r["congress"]}
+         "congress": r["congress"],
+         # The stored stage classification — without it, LE fell back to
+         # latestAction keywords and diverged from the pipeline's score.
+         "stage": r["stage"] or None}
         for r in cur.fetchall()
     ]
 
@@ -181,7 +182,8 @@ def build_payload(cur, s, search, fin):
         "id": sid, "party": s["party"], "state": s["state"],
         "funding": {
             "totalRaised": total_raised,
-            "totalFromPACs": min(total_from_pacs, total_raised),
+            "totalContributions": total_contributions,
+            "totalFromPACs": min(total_from_pacs, total_contributions),
             "smallDonorPercentage": small_donor_pct,
             "topDonors": top_donors[:100],
             "industryBreakdown": industry,
@@ -215,14 +217,15 @@ def main() -> int:
         new = calculate_scores(payload)
         funding = payload["funding"]
         raised = funding["totalRaised"] or 0
+        base = funding["totalContributions"] or raised
         labeled = [
             v["votedWithParty"]
             for v in payload["votingRecord"]["keyVotes"]
             if v["votedWithParty"] is not None
         ]
         metrics = {
-            "pac_ratio": funding["totalFromPACs"] / raised if raised > 0 else None,
-            "small_donor_pct": funding["smallDonorPercentage"] if raised > 0 else None,
+            "pac_ratio": funding["totalFromPACs"] / base if base > 0 else None,
+            "small_donor_pct": funding["smallDonorPercentage"] if base > 0 else None,
             "party_break_rate": (
                 labeled.count(False) / len(labeled)
                 if len(labeled) >= MIN_LABELED_VOTES else None

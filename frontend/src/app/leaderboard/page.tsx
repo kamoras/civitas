@@ -1,5 +1,6 @@
 "use client";
 
+import { pacSharePct } from "@/lib/funding";
 import { useCallback, useMemo, useState, type KeyboardEvent } from "react";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import Link from "next/link";
@@ -751,8 +752,8 @@ function LeaderboardContent() {
       if (sortKey === "pac_dollars")
         return flip * ((b.totalFromPacs ?? 0) - (a.totalFromPacs ?? 0));
       if (sortKey === "pac_pct") {
-        const pctA = (a.totalRaised ?? 0) > 0 ? (a.totalFromPacs ?? 0) / a.totalRaised : 0;
-        const pctB = (b.totalRaised ?? 0) > 0 ? (b.totalFromPacs ?? 0) / b.totalRaised : 0;
+        const pctA = pacSharePct(a.totalFromPacs, a);
+        const pctB = pacSharePct(b.totalFromPacs, b);
         return flip * (pctB - pctA);
       }
       if (sortKey === "ideology") {
@@ -989,10 +990,7 @@ function LeaderboardContent() {
                           const rankOffset = branch === "house" ? (housePage - 1) * 50 : 0;
                           const rank = rankOffset + idx + 1;
                           const score = entry.representationScore.overall;
-                          const pacPct =
-                            (entry.totalRaised ?? 0) > 0
-                              ? Math.round(((entry.totalFromPacs ?? 0) / entry.totalRaised) * 100)
-                              : 0;
+                          const pacPct = Math.round(pacSharePct(entry.totalFromPacs, entry));
                           const isTopTen = rank <= 10;
 
                           return (
@@ -1073,10 +1071,7 @@ function LeaderboardContent() {
                       const mobileRankOffset = branch === "house" ? (housePage - 1) * 50 : 0;
                       const rank = mobileRankOffset + idx + 1;
                       const score = entry.representationScore.overall;
-                      const pacPct =
-                        (entry.totalRaised ?? 0) > 0
-                          ? Math.round(((entry.totalFromPacs ?? 0) / entry.totalRaised) * 100)
-                          : 0;
+                      const pacPct = Math.round(pacSharePct(entry.totalFromPacs, entry));
                       return (
                         <Link
                           key={entry.id}

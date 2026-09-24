@@ -181,6 +181,8 @@ def _migrate_columns() -> None:
         ("presidents", "rulemaking_finalized_pct", "REAL"),
         ("senators", "outside_spending_for", "REAL"),
         ("representatives", "outside_spending_for", "REAL"),
+        ("senators", "total_contributions", "REAL"),
+        ("representatives", "total_contributions", "REAL"),
         ("lobbying_matches", "is_consensus_vote", "BOOLEAN"),
         ("rep_lobbying_matches", "is_consensus_vote", "BOOLEAN"),
         ("donors", "committee_type", "TEXT"),

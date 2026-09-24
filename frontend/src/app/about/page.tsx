@@ -229,9 +229,17 @@ export default function AboutPage() {
                 <P>
                   Measures five dimensions: (1) PAC dependency — a blend of the share of funding
                   from PACs and how close contributing PACs are to their legal per-election cap,
-                  chamber-specific since Senate and House candidates rely on PAC money at
-                  structurally different rates; (2) the share of funding from small (&lt;$200,
-                  unitemized) donors — the broadest possible funding base; (3) relative top-donor
+                  measured against the chamber&apos;s own median member (re-measured every update),
+                  since Senate and House candidates rely on PAC money at structurally different
+                  rates; (2) the share of funding from small (&lt;$200,
+                  unitemized) donors — the broadest possible funding base. Both shares are of
+                  contributions (money given by individuals, PACs, party committees, or the
+                  candidate), not total receipts: receipts also count transfers in from joint
+                  fundraising committees, whose PAC and individual content isn&apos;t broken out,
+                  so dividing by receipts understated PAC reliance for exactly the members who
+                  fundraise most through them. Funding is measured on the member&apos;s most
+                  recent completed election — the campaign that won them their current seat, not a
+                  re-election campaign still in progress; (3) relative top-donor
                   concentration — what fraction of the itemized external donor pool comes from the
                   top 10 donors, with the member&apos;s own money and transfers from their own
                   committees excluded; (4) source breadth — small-donor money counts fully,
@@ -465,9 +473,10 @@ export default function AboutPage() {
               <em className="text-ink">
                 Scores correlate with funding style, and funding style correlates with party.
               </em>{" "}
-              In current data, Democratic senators take roughly half the PAC share of Republican
-              senators (median ~10% vs ~17%) and raise about twice the small-donor share (~24% vs
-              ~12%). Because Funding Independence measures those behaviors directly, average scores
+              In the July 2026 data (measured as shares of total receipts, before shares moved to
+              contributions in v6.13), Democratic senators took roughly half the PAC share of
+              Republican senators (median ~10% vs ~17%) and raised about twice the small-donor
+              share (~24% vs ~12%). Because Funding Independence measures those behaviors directly, average scores
               differ by party. The formulas are identical for everyone and contain no party term;
               the gap reflects measured funding behavior, not editorial judgment.
             </P>

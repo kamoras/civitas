@@ -598,6 +598,7 @@ async def run_house_pipeline() -> dict:
                 db,
             )
 
+            prepared_reps: list[tuple[dict, str]] = []
             for idx, rep in enumerate(reps):
                 try:
                     bio_id = rep.get("bioguideId", "")
@@ -697,7 +698,7 @@ async def run_house_pipeline() -> dict:
                         financials = await fetch_candidate_financials(client, db, cand_id)
                         committees = await fetch_candidate_committees(client, db, cand_id)
 
-                        recent_cycles = compute_recent_election_cycles(financials)
+                        recent_cycles = compute_recent_election_cycles(financials, "H")
 
                         raw_receipts = []
                         raw_pac_receipts = []
@@ -777,7 +778,25 @@ async def run_house_pipeline() -> dict:
                         lobbying_matches, db, utcnow().year - 1,
                     )
                     rep["lobbyingMatches"] = lobbying_matches
+                    prepared_reps.append((rep, bio_id))
 
+                except Exception as e:
+                    # Same rollback rationale as the scoring pass below.
+                    db.rollback()
+                    logger.error("Failed to prepare rep %s: %s", rep.get("name", "?"), e)
+                    fail_count += 1
+
+            # Scoring is a second pass so each chamber-relative reference is
+            # measured from the whole population BEFORE anyone is scored
+            # (the Senate pipeline already works this way). The PAC-share
+            # median needs every rep's funding, which the pass above fetches.
+            from app.pipeline.senate_pipeline import _live_funding_reference
+            funding_reference = _live_funding_reference(
+                "house", [r.get("funding") or {} for r, _ in prepared_reps],
+            )
+
+            for rep, bio_id in prepared_reps:
+                try:
                     # Set leadership/ideology from sponsorship analysis
                     l_score = leadership_scores.get(bio_id)
                     i_score = ideology_scores.get(bio_id)
@@ -795,7 +814,9 @@ async def run_house_pipeline() -> dict:
                         )
 
                     # Calculate scores
-                    scores = calculate_scores({**rep, "lesReference": les_reference})
+                    scores = calculate_scores({
+                        **rep, "lesReference": les_reference, "fundingReference": funding_reference,
+                    })
                     scores["confidence"] = calculate_confidence(rep)
                     rep["representationScore"] = scores
 

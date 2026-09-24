@@ -264,6 +264,7 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
         ),
         funding=FundingSchema(
             total_raised=senator.total_raised,
+            total_contributions=senator.total_contributions,
             total_from_pacs=senator.total_from_pacs,
             small_donor_percentage=senator.small_donor_percentage,
             top_donors=[
@@ -466,6 +467,7 @@ def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
                 overall=compute_overall_score(s),
             ),
             total_raised=s.total_raised,
+            total_contributions=s.total_contributions,
             total_from_pacs=s.total_from_pacs,
             small_donor_percentage=s.small_donor_percentage,
             top_industry=top_industry_map.get(s.id),

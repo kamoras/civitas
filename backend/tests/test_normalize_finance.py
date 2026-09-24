@@ -1,5 +1,7 @@
 """Tests for the FEC financial data normalization."""
 
+from datetime import datetime
+from unittest.mock import patch
 import pytest
 
 from app.pipeline.transform.normalize_finance import (
@@ -207,14 +209,14 @@ class TestNormalizeFinance:
         assert result["totalFromPACs"] == 120_000
         assert result["smallDonorPercentage"] == round(400_000 / 1_200_000 * 100)
 
-    def test_negative_receipts_on_most_recent_election_floors_at_zero_not_masked_by_prior(self):
+    def test_in_progress_negative_committee_does_not_replace_the_completed_election(self):
         # A just-opened next-cycle committee can have genuinely negative
         # FEC receipts (more refunds/adjustments than new money so far) —
-        # real upstream data, not a fetch bug (2026-07 audit: a sitting
-        # representative's still-forming committee was -$1.6M). With
-        # funding windowed to only the most recent election, a strongly
-        # positive prior election must NOT dilute/mask that negative value —
-        # it's excluded entirely, and the negative floors at zero on its own.
+        # real upstream data (2026-07 audit: a sitting representative's
+        # still-forming committee was -$1.6M). Before v6.13 that in-progress
+        # 2026 row WAS the "most recent election", so this member was
+        # scored on $0 raised. Funding now windows to the most recent
+        # COMPLETED election — the 2024 race that won the current seat.
         financials = [
             {"candidate_election_year": 2026, "receipts": -1_618_913.64,
              "other_political_committee_contributions": 57_000,
@@ -225,14 +227,15 @@ class TestNormalizeFinance:
              "individual_unitemized_contributions": 44_352.18,
              "individual_itemized_contributions": 100_000},
         ]
-        result = normalize_finance(
-            candidate=None,
-            financials=financials,
-            individual_receipts=[],
-            pac_receipts=[],
-            aggregated_contributors=[],
-        )
-        assert result["totalRaised"] == 0
+        with patch("app.pipeline.fetch.fec.utcnow", lambda: datetime(2026, 9, 24)):
+            result = normalize_finance(
+                candidate=None,
+                financials=financials,
+                individual_receipts=[],
+                pac_receipts=[],
+                aggregated_contributors=[],
+            )
+        assert result["totalRaised"] == 9_660_670
 
     def test_all_negative_receipts_floored_at_zero(self):
         # A candidate whose only cached election has net-negative receipts

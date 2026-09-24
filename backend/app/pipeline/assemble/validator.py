@@ -121,6 +121,9 @@ def validate_senator(senator: dict) -> dict:
     }
     senator["funding"] = {
         "totalRaised": max(0, round(f.get("totalRaised", 0))),
+        "totalContributions": (
+            max(0, round(f["totalContributions"])) if f.get("totalContributions") is not None else None
+        ),
         "totalFromPACs": max(0, round(f.get("totalFromPACs", 0))),
         "smallDonorPercentage": clamp(f.get("smallDonorPercentage", 0)),
         "topDonors": [

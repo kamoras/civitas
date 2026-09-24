@@ -359,14 +359,19 @@ def _member_records(db, model) -> list[dict]:
     records = []
     for m in db.query(model).filter(model.is_current.is_(True)).all():
         raised = m.total_raised or 0
+        # The same denominator Funding Independence scores on (contributions,
+        # falling back to receipts for rows scored before it existed) — a
+        # direction-of-effect check against a different ratio than the one
+        # scored would weaken for reasons unrelated to the scores.
+        base = getattr(m, "total_contributions", None) or raised
         breaks, labeled = counts[m.id]
         records.append({
             "id": m.id,
             "name": m.name,
             "scores": {dim: getattr(m, dim, None) for dim in _DIM_LABEL},
             "metrics": {
-                "pac_ratio": (m.total_from_pacs or 0) / raised if raised > 0 else None,
-                "small_donor_pct": m.small_donor_percentage if raised > 0 else None,
+                "pac_ratio": (m.total_from_pacs or 0) / base if base > 0 else None,
+                "small_donor_pct": m.small_donor_percentage if base > 0 else None,
                 "party_break_rate": (
                     breaks / labeled if labeled >= MIN_LABELED_VOTES else None
                 ),

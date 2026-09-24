@@ -109,6 +109,7 @@ def build_rep_response(rep: Representative, _db: Session = None) -> Representati
         },
         funding={
             "totalRaised": rep.total_raised,
+            "totalContributions": rep.total_contributions,
             "totalFromPACs": rep.total_from_pacs,
             "smallDonorPercentage": rep.small_donor_percentage,
             "topDonors": [
@@ -346,6 +347,7 @@ def get_rep_leaderboard(
                 "overall": compute_overall_score(r),
             },
             "totalRaised": r.total_raised,
+            "totalContributions": r.total_contributions,
             "totalFromPacs": r.total_from_pacs,
             "smallDonorPercentage": r.small_donor_percentage,
             "topIndustry": top_industry_map.get(r.id),
@@ -408,6 +410,7 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
     existing.score_confidence = json.dumps(cs.get("confidence") or {})
 
     existing.total_raised = funding.get("totalRaised", 0)
+    existing.total_contributions = funding.get("totalContributions")
     existing.total_from_pacs = funding.get("totalFromPACs", 0)
     existing.small_donor_percentage = funding.get("smallDonorPercentage", 0)
     existing.outside_spending_for = funding.get("outsideSpendingFor")

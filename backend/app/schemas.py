@@ -81,6 +81,10 @@ class KeyVoteSchema(CamelModel):
 
 class FundingSchema(CamelModel):
     total_raised: float
+    # Denominator for PAC / small-donor shares (contributions + candidate
+    # self-loans; see normalize_finance.summarize_election_totals). None on
+    # records scored before it existed — clients fall back to total_raised.
+    total_contributions: float | None = None
     total_from_pacs: float = Field(alias="totalFromPACs", serialization_alias="totalFromPACs")
     small_donor_percentage: float
     top_donors: list[DonorSchema]
@@ -326,6 +330,7 @@ class LeaderboardEntrySchema(CamelModel):
     initials: str
     representation_score: RepresentationScoreSchema
     total_raised: float
+    total_contributions: float | None = None
     total_from_pacs: float
     small_donor_percentage: float
     top_industry: str | None = None
