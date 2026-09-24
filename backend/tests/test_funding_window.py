@@ -27,6 +27,7 @@ from app.pipeline.analyze.score_calculator import (
 from app.pipeline.assemble.validator import validate_senator
 from app.pipeline.fetch.fec import (
     compute_recent_election_cycles,
+    seat_winning_floor,
     election_period_cycles,
     general_election_day,
     select_recent_elections,
@@ -53,6 +54,57 @@ ROWS = [
     {"candidate_election_year": 2026, "receipts": 900_000},
     {"candidate_election_year": 2024, "receipts": 5_000_000},
 ]
+
+
+class TestACompletedElectionMustBeTheOneThatSeatedThem:
+    """"Most recent completed" is not enough on its own: a member can
+    carry an OLD LOSING RUN on their FEC record, and unbounded it wins
+    over the campaign they actually hold the seat from.
+
+    Found against live FEC data for 25 current House members: Clay Fuller
+    (GA-14, seated by a 2026 special, years_in_office=0) has rows for
+    2026 ($1.8M, in progress) and 2020 ($0.4M). Unbounded, he is scored
+    on the 2020 race — a campaign that won him nothing, at a fifth of the
+    money.
+    """
+
+    FULLER = [
+        {"candidate_election_year": 2026, "receipts": 1_800_000},
+        {"candidate_election_year": 2020, "receipts": 400_000},
+    ]
+
+    def test_floor_is_one_term_back_per_chamber(self):
+        with _at(2026, 9, 24):
+            assert seat_winning_floor("H", date(2026, 9, 24)) == 2024
+            assert seat_winning_floor("S", date(2026, 9, 24)) == 2020
+            # An odd year still measures from the upcoming cycle.
+            assert seat_winning_floor("H", date(2025, 3, 1)) == 2024
+
+    def test_an_old_losing_run_does_not_outrank_the_current_campaign(self):
+        with _at(2026, 9, 24):
+            got = select_recent_elections(self.FULLER, office="H")
+            assert got[0]["candidate_election_year"] == 2026
+
+    def test_without_office_the_bound_does_not_apply(self):
+        """A caller that cannot say which chamber must not silently lose
+        data — it keeps the unbounded behaviour."""
+        with _at(2026, 9, 24):
+            got = select_recent_elections(self.FULLER)
+            assert got[0]["candidate_election_year"] == 2020
+
+    def test_a_senator_elected_six_years_ago_is_still_in_bounds(self):
+        rows = [{"candidate_election_year": 2020, "receipts": 20_000_000}]
+        with _at(2026, 9, 24):
+            got = select_recent_elections(rows, office="S")
+            assert got[0]["candidate_election_year"] == 2020
+
+    def test_the_ordinary_house_member_is_unaffected(self):
+        rows = [
+            {"candidate_election_year": 2026, "receipts": 1_100_000},
+            {"candidate_election_year": 2024, "receipts": 2_300_000},
+        ]
+        with _at(2026, 9, 24):
+            assert select_recent_elections(rows, office="H")[0]["candidate_election_year"] == 2024
 
 
 class TestMostRecentCompletedElection:

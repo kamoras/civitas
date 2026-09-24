@@ -121,7 +121,10 @@ def normalize_finance(
     # Sum across the candidate's most recent election only (their current
     # mandate's campaign) — see select_recent_elections for rationale and
     # why raw [:2] double-counted.
-    recent_cycles = select_recent_elections(financials)
+    # office bounds how stale a "completed election" may be — see
+    # select_recent_elections. The FEC candidate record carries it.
+    recent_cycles = select_recent_elections(
+        financials, office=(candidate or {}).get("office"))
     totals = summarize_election_totals(recent_cycles)
     total_raised = totals["total_raised"]
     contribution_base = totals["total_contributions"]

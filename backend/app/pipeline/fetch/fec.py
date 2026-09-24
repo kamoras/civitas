@@ -383,7 +383,29 @@ def _is_completed_election(row: dict, today: date) -> bool:
     return year < today.year or (year == today.year and today > general_election_day(year))
 
 
-def select_recent_elections(financials: list[dict], n: int = 1) -> list[dict]:
+# Years a member of each chamber serves per election won. Used to reject a
+# completed election too old to be the one that seated them.
+_TERM_YEARS = {"S": 6, "H": 2}
+
+
+def seat_winning_floor(office: str | None, today: date) -> int | None:
+    """Earliest election year that could have won the seat held right now.
+
+    A House member serving today was elected at most one 2-year term ago;
+    a senator at most one 6-year term ago. An older completed election is
+    a DIFFERENT campaign — usually one they lost before winning the seat
+    they now hold.
+    """
+    term = _TERM_YEARS.get(office or "")
+    if term is None:
+        return None
+    newest_cycle = today.year if today.year % 2 == 0 else today.year + 1
+    return newest_cycle - term
+
+
+def select_recent_elections(
+    financials: list[dict], n: int = 1, office: str | None = None,
+) -> list[dict]:
     """One totals row per election, most recent ``n`` COMPLETED elections first.
 
     Funding dimensions are windowed to the candidate's most recent election
@@ -415,6 +437,16 @@ def select_recent_elections(financials: list[dict], n: int = 1) -> list[dict]:
     before their first race) falls back to the in-progress one — it's the
     only campaign they have. See financials_election_year for why an
     off-cycle dormant row must not outrank a real election.
+
+    `office` ("S"/"H") bounds how far back a completed election may be and
+    still be the one that seated them. Without it, "most recent completed"
+    silently reaches back to an OLD LOSING RUN: measured against live FEC
+    data for 25 current House members, Clay Fuller (GA-14, seated by a
+    2026 special, years_in_office=0) has rows for 2026 ($1.8M, in
+    progress) and 2020 ($0.4M) — and would have been scored on the 2020
+    campaign, which did not win him anything. Omitting `office` keeps the
+    unbounded behaviour, so a caller that cannot say which chamber never
+    loses data over this.
     """
     today = utcnow().date()
     completed: dict[int, dict] = {}
@@ -427,6 +459,9 @@ def select_recent_elections(financials: list[dict], n: int = 1) -> list[dict]:
         best = bucket.get(year)
         if best is None or (row.get("receipts") or 0) > (best.get("receipts") or 0):
             bucket[year] = row
+    floor = seat_winning_floor(office, today)
+    if floor is not None:
+        completed = {y: r for y, r in completed.items() if y >= floor}
     by_year = completed or in_progress
     if not by_year:
         # No row carries a confirmed election year (not seen in real FEC
