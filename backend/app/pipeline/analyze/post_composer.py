@@ -163,6 +163,49 @@ _DANGLING_TAIL = frozenset({
 })
 
 
+# Words that can begin a trailing modifier the span is allowed to omit.
+_TRAILING_MODIFIER_OPENERS = frozenset({
+    "in", "on", "at", "for", "by", "with", "from", "after", "before",
+    "during", "of", "over", "under", "since", "while", "as", "and",
+    "but", "which", "who", "that", "amid", "despite", "including",
+})
+
+
+def _ends_at_clause_boundary(predicate: str, source: str) -> bool:
+    """True when the predicate runs to a natural break in the source.
+
+    _DANGLING_TAIL catches a span cut before a preposition ("takes a
+    selfie with"). It cannot catch one cut after a transitive verb, and
+    that shipped: the Action Center published the fact "White House
+    repeatedly violated." from a BBC headline reading "White House
+    'repeatedly violated' court order to restore press access". Verbatim,
+    correctly attributed, and not a sentence — violated WHAT.
+
+    The general rule behind both cases is the same and does not need a
+    word list: a well-formed span ends where the source's own clause
+    ends. Anything still running when the span stops means the model cut
+    it short.
+    """
+    haystack = _normalise(source)
+    needle = _normalise(predicate)
+    for match in re.finditer(re.escape(needle), haystack):
+        rest = haystack[match.end():].lstrip(" '\"’”)")
+        if not rest or rest[0] in ".,;:!?":
+            return True
+        # A span may legitimately stop before a trailing modifier: the
+        # source may run on "...liable for sexual abuse and defamation
+        # IN THE CASE brought by E. Jean Carroll", and the shorter span
+        # is a complete assertion. Requiring punctuation alone rejected
+        # that — a real claim — so what follows is allowed to be a
+        # preposition or conjunction starting a new phrase. It may not
+        # be the object the predicate was still reaching for, which is
+        # what "repeatedly violated" + "court order" is.
+        nxt = rest.split(" ", 1)[0].strip(".,;:!?")
+        if nxt in _TRAILING_MODIFIER_OPENERS:
+            return True
+    return False
+
+
 def compose(actor: str, predicate: str, source: str) -> str | None:
     """A sentence built from two verbatim source spans, or None.
 
@@ -202,6 +245,8 @@ def compose(actor: str, predicate: str, source: str) -> str | None:
     # only a LEADING -ing word is rejected.
     head = re.sub(r"[^\w]", "", predicate.split()[0]).lower()
     if head.endswith("ing"):
+        return None
+    if not _ends_at_clause_boundary(predicate, source):
         return None
 
     sentence = f"{actor} {predicate}"
