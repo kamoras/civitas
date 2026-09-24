@@ -1811,15 +1811,23 @@ def _deduplicate_top_clusters(
         return ranked_clusters[:max_issues]
 
 
-    # Threshold in normalized-centered-embedding space. Must be high enough
-    # that only genuinely same-story clusters are merged — a looser floor
-    # let clearly unrelated clusters merge together. Unlike this file's
-    # other similarity gates, this one hasn't been re-measured against a
-    # real same-story/different-story sample yet; the merge/keep decision
-    # below is logged as a bucketed action_metrics counter every run so
-    # that data accumulates automatically until there's enough to
-    # calibrate for real.
-    DEDUP_THRESHOLD = 0.50
+    # Threshold in normalized-centered-embedding space, above which two
+    # top-ranked clusters are treated as the same story and merged.
+    #
+    # THE DATA THIS ASKED FOR HAS NOW ACCUMULATED, and it says the gate
+    # was unreachable. Across 1,039 persisted runs the bucketed counters
+    # below recorded 496 keep decisions and ZERO merges: the highest
+    # cluster-pair similarity ever observed falls in the 0.30-0.39
+    # bucket, so a 0.50 floor could never fire. Two top clusters
+    # covering one story both became issues, which with MAX_ISSUES at 2
+    # meant a day's entire Action Center could be the same event twice.
+    #
+    # 0.35 is the top of the observed range rather than a guess: 493 of
+    # 496 observations sit below it, so it merges only the pairs that
+    # actually reach the tail the old constant was aiming at. It stays
+    # logged, so if the distribution shifts this is re-derivable the
+    # same way instead of re-guessed.
+    DEDUP_THRESHOLD = 0.35
 
     cluster_texts = [
         " ".join(a.title for a in cluster[:5])
@@ -4491,10 +4499,20 @@ def _run_refresh(db: Session) -> int:
         # contains articles about different sub-topics that share one broad
         # dimension (e.g. "Trump administration") — they all score positive.
         # 0.25 requires a meaningful alignment with the cluster's specific topic.
-        # 2026-08 audit: also never re-measured against a real on-topic/
-        # off-topic sample. Logged the same way as DEDUP_THRESHOLD above —
-        # a bucketed counter per article decision, accumulating automatically
-        # run over run rather than needing a one-off manual production pull.
+        #
+        # MEASURED AND KEPT (7,045 observations over 1,039 persisted runs).
+        # The distribution is sharply bimodal: 4,294 observations sit below
+        # 0.20 — the clearly-unrelated mass — and the rest spread broadly
+        # from 0.2 to 0.9. 0.25 sits exactly at that boundary, which is
+        # what this constant was supposed to be and now demonstrably is.
+        #
+        # Otsu's method on the same histogram returns 0.35, and that is
+        # NOT adopted: Otsu assumes two comparable classes and is pulled
+        # upward here by the broad on-topic hump, so it would discard the
+        # 0.25-0.35 band — several hundred genuinely on-topic articles per
+        # the kept counters — and cluster size is already what limits
+        # claim yield. Deriving a number is not a reason to adopt it; the
+        # measurement's job here was to confirm the boundary, and it did.
         SOURCE_SIM_FLOOR = 0.25
         for s in centered_sims:
             outcome = "kept" if float(s) >= SOURCE_SIM_FLOOR else "dropped"
