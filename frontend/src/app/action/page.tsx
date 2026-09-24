@@ -226,6 +226,11 @@ function HeroIssue({
                 </span>
                 <span className="font-display text-[15px] leading-relaxed text-ink">
                   {fact}
+                  {issue.factSources?.[i] && (
+                    <span className="ml-2 font-mono text-xs text-ink-min">
+                      {issue.factSources[i]}
+                    </span>
+                  )}
                   {isNewFact(issue.newFacts, fact) && <NewFactTag />}
                 </span>
               </li>

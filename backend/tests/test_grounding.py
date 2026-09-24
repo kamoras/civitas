@@ -2,6 +2,7 @@
 
 import pytest
 
+from app.pipeline.analyze import grounding
 from app.pipeline.analyze.grounding import (
     editorializing_language,
     grounding_violations,
@@ -789,3 +790,191 @@ class TestVaguePersonReferences:
             "A political figure from Wayne County, Michigan, voiced concerns."
         )
         assert any("vague anaphoric reference to a person" in r for r in reasons)
+
+
+class TestElectioneeringLanguage:
+    """2026-09-23 incident. This platform posted "VOTE VERONICA FERNANDEZ!
+    ... She's better for Jersey than Booker!" about the NJ Senate race.
+    Every existing guard passed it CORRECTLY: the source was a member of
+    the public's campaign post, so the endorsement was perfectly grounded,
+    and ungrounded_electoral_claims is silent by design whenever the
+    source carries real electoral vocabulary. Grounding asks "is this
+    faithful to the source"; nothing asked "may we say this at all"."""
+
+    def test_the_post_that_caused_this(self):
+        assert grounding.electioneering_language(
+            "VOTE VERONICA FERNANDEZ! I didn't know a thing about her until I saw "
+            "her on the ballot. She's better for Jersey than Booker!"
+        )
+
+    def test_a_perfectly_grounded_endorsement_is_still_refused(self):
+        """The whole point: source support is not a defence here."""
+        source = "VOTE VERONICA FERNANDEZ! She's better for Jersey than Booker!"
+        post = "Vote for Veronica Fernandez."
+        assert grounding.ungrounded_electoral_claims(post, source) == []
+        assert grounding.grounding_violations(post, source)
+
+    @pytest.mark.parametrize("text", [
+        "Vote for Veronica Fernandez in November.",
+        "Don't vote for Booker.",
+        "Re-elect Susan Collins to the Senate.",
+        "Elect Jane Smith this November.",
+        "Cast your ballot for Smith.",
+        "She is the better choice for New Jersey.",
+        "Jones deserves your vote.",
+    ])
+    def test_flags_voter_directives(self, text):
+        assert grounding.electioneering_language(text)
+
+    @pytest.mark.parametrize("text", [
+        # The legislative floor-vote sense dominates this domain and must survive.
+        "The Senate will vote for the third time on the funding bill.",
+        "Collins said she would vote against the nomination.",
+        "The committee voted 12-9 to advance the bill.",
+        "The House will vote for passage on Thursday.",
+        "Republicans hope to elect a new speaker this week.",
+        # Reporting on someone else's endorsement is not endorsing.
+        "Smith endorsed Jones in the Senate race.",
+        "Booker leads Fernandez by six points in a new poll.",
+        # A real headline in this database — "Vote" mid-title, not imperative.
+        "Twice the House Came One Vote From Telling Trump to End the Iran War",
+        "FEC filings list CHRIS COONS as a candidate in the DE Senate race.",
+    ])
+    def test_leaves_ordinary_reporting_alone(self, text):
+        assert grounding.electioneering_language(text) == []
+
+
+class TestProposalStatedAsFact:
+    """2026-09-23. The Action Center published "Iran War Ends Quickly to
+    Lower Prices" above its own accurate summary — officials had CALLED
+    FOR an end; the war had not ended. Titles were never run through this
+    module, so nothing looked at the part a reader believes first."""
+
+    IRAN = (
+        "Recent statements emphasize the need for an immediate conclusion to the "
+        "Iran conflict to alleviate rising energy costs. Officials from Michigan "
+        "and Iowa have called for measures such as temporary export restrictions "
+        "and emergency fuel relief programs."
+    )
+
+    def test_the_headline_that_caused_this(self):
+        assert grounding.proposal_stated_as_fact(
+            "Iran War Ends Quickly to Lower Prices", self.IRAN) == ["Ends"]
+
+    def test_reporting_the_advocacy_correctly_is_fine(self):
+        """The right sentence about the same source must not flag."""
+        assert grounding.proposal_stated_as_fact(
+            "Lawmakers call for an end to the Iran war to lower prices", self.IRAN) == []
+        assert grounding.proposal_stated_as_fact(
+            "Officials urge an end to the conflict", self.IRAN) == []
+
+    def test_an_event_the_source_actually_reports_is_fine(self):
+        assert grounding.proposal_stated_as_fact(
+            "Iran war ends after ceasefire",
+            "The Iran war ended Tuesday when both sides signed a ceasefire.") == []
+
+    def test_a_source_reporting_it_in_a_later_sentence_silences_the_check(self):
+        """Sentence-bounded lookback: a flat character window read the
+        factual second sentence as governed by the first's advocacy."""
+        assert grounding.proposal_stated_as_fact(
+            "Senate passes the bill",
+            "Advocates urged the Senate to pass it. The Senate passed it Thursday.") == []
+
+    def test_still_flags_when_every_mention_is_advocacy(self):
+        assert grounding.proposal_stated_as_fact(
+            "Senate passes the bill",
+            "Senators should pass the bill, advocates said. The push to pass it continues.")
+
+    def test_a_source_with_no_advocacy_at_all_is_never_flagged(self):
+        assert grounding.proposal_stated_as_fact(
+            "Governor resigns amid probe",
+            "The governor faced questions about the contract.") == []
+
+class TestEveryPublishingPathIsChecked:
+    """Every LLM generation point is classified, and every one that
+    publishes prose runs the SHARED combinator.
+
+    The first version of this test asserted the FILE contained
+    `grounding_violations(`. action_center.py does — in the issue path —
+    so it passed while two other generators in the same file bypassed
+    the combinator entirely. Checking per-function instead immediately
+    found a third: bluesky_spotlight's _generate_spotlight_post named
+    ungrounded_numbers and ungrounded_former_official_claims by hand and
+    so never inherited titled-name, electoral, relationship, party or
+    electioneering checking.
+
+    That is the failure mode this guards: a module grows its own
+    hand-picked subset, and silently misses whatever is added to
+    grounding_violations afterwards. A new call_llm site fails this test
+    until someone classifies it, which is the point — the classification
+    is the review.
+    """
+
+    MODULES = [
+        "app/pipeline/analyze/action_center.py",
+        "app/pipeline/analyze/bluesky_poster.py",
+        "app/pipeline/analyze/bluesky_spotlight.py",
+        "app/pipeline/analyze/early_signal.py",
+        "app/pipeline/analyze/election_bluesky.py",
+        "app/pipeline/justice_pipeline.py",
+    ]
+
+    # Functions whose LLM output reaches a reader as prose.
+    PUBLISHES_PROSE = {
+        "_generate_period_summary", "_generate_full_story",
+        "_generate_monitor_metadata", "_run_refresh", "_generate_new_post",
+        "_generate_spotlight_post", "_generate_weekly_post", "_draft_developing_issue",
+        "_draft_developing_rule_issue", "_generate_post_text", "_generate_summary",
+    }
+    # Functions whose LLM output is a located SPAN, verified verbatim by
+    # post_composer.compose() rather than by the prose combinator. This
+    # is the redesign's shape: the model points at text it did not
+    # write, so "is this grounded" is answered by construction and the
+    # combinator runs only as a backstop on the composed result.
+    SPAN_VERIFIED = {"_locate"}
+    # Functions whose LLM output is a DECISION, never published text.
+    # A wrong answer here merges two monitors or mislabels a category —
+    # a correctness bug, not a hallucination reaching a reader.
+    JUDGMENT_ONLY = {
+        "_should_merge_monitors_llm", "_should_match_monitor_llm",
+        "_reclassify_monitor_llm", "_check_summary_roles",
+    }
+
+    def _generators(self, relative_path):
+        import ast
+        import pathlib as _p
+
+        root = _p.Path(__file__).resolve().parent.parent
+        tree = ast.parse((root / relative_path).read_text())
+        out = {}
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            called = {
+                c.func.id for c in ast.walk(node)
+                if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)
+            }
+            if "call_llm" in called:
+                out[node.name] = called
+        return out
+
+    @pytest.mark.parametrize("relative_path", MODULES)
+    def test_every_generation_point_is_classified(self, relative_path):
+        known = self.PUBLISHES_PROSE | self.JUDGMENT_ONLY | self.SPAN_VERIFIED
+        unclassified = set(self._generators(relative_path)) - known
+        assert not unclassified, (
+            f"{relative_path} has unclassified call_llm sites: {sorted(unclassified)}. "
+            "Add each to PUBLISHES_PROSE, SPAN_VERIFIED or JUDGMENT_ONLY — "
+            "deciding which is the review."
+        )
+
+    @pytest.mark.parametrize("relative_path", MODULES)
+    def test_prose_generators_run_the_shared_combinator(self, relative_path):
+        for name, called in self._generators(relative_path).items():
+            if name not in self.PUBLISHES_PROSE:
+                continue
+            assert "grounding_violations" in called, (
+                f"{relative_path}::{name} publishes prose but does not call "
+                "grounding_violations. Hand-picking individual checks is how "
+                "electioneering_language was missed by three separate modules."
+            )

@@ -39,7 +39,7 @@ import httpx
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.models import Candidate, RaceCoverageItem
+from app.models import Candidate, Race, RaceCoverageItem
 from app.pipeline.fetch.bluesky_search import search_is_available, search_posts
 from app.pipeline.fetch.news_feeds import fetch_news_articles
 from app.pipeline.run_tracker import PipelineRunTracker
@@ -123,6 +123,43 @@ def _word_pattern(word: str) -> "re.Pattern[str]":
     return re.compile(r"\b" + re.escape(word) + r"\b", re.IGNORECASE)
 
 
+def _full_name_pattern(first: str, surname: str) -> "re.Pattern[str]":
+    """The two names TOGETHER — "Bill Hill" or "Hill, Bill" — not merely
+    both present somewhere in the text.
+
+    The old rule asked only that the surname appear capitalised and the
+    first name appear anywhere at all, in any position, any case. That is
+    how Alaska's at-large race — which has a real, $1.3M-raised candidate
+    named BILL HILL — collected "The Hill" plus "I'm just a bill, sittin
+    here on Capitol Hill" as full-name coverage, and then posted about it
+    nine times. Measured across all 7,471 stored full_name matches, 25.1%
+    were incidental in exactly this way: "Cameron Hamilton to lead FEMA"
+    for Daniel Cameron, "Adam Driver will play Mister Sinister" for Adam
+    Delgado, "Warner Bros. bid" for William Todd Warner.
+
+    Up to two intervening tokens carry real middle names and initials
+    ("Robert F. Kennedy"). Compiled case-INSENSITIVELY, with
+    capitalisation verified on the matched text by the caller, for the
+    same reason _matches_as_a_name documents: building "Mcconnell" to
+    compare case-sensitively rejects every real "McConnell".
+    """
+    f, ln = re.escape(first), re.escape(surname)
+    return re.compile(
+        rf"\b{f}\b(?:\s+[A-Za-z][\w.'’-]*){{0,2}}\s+\b{ln}\b"
+        rf"|\b{ln}\b,?\s+\b{f}\b",
+        re.IGNORECASE,
+    )
+
+
+def _matches_full_name(pattern: "re.Pattern[str]", text: str) -> bool:
+    """True where first and last name occur together, both capitalised."""
+    for m in pattern.finditer(text):
+        tokens = [t for t in re.split(r"[\s,]+", m.group(0)) if t]
+        if len(tokens) >= 2 and tokens[0][:1].isupper() and tokens[-1][:1].isupper():
+            return True
+    return False
+
+
 def _matches_as_a_name(pattern: "re.Pattern[str]", text: str) -> bool:
     """True only where the word occurs CAPITALISED — i.e. as a name.
 
@@ -180,14 +217,14 @@ class CandidateMatcher:
     race_id: str
     state: str
     surname_re: "re.Pattern[str]"
-    first_re: "re.Pattern[str] | None"
+    full_name_re: "re.Pattern[str] | None"
     state_re: "re.Pattern[str]"
 
     def match_basis(self, text: str) -> str | None:
         """"full_name" / "surname_context" / None — see module docstring."""
         if not _matches_as_a_name(self.surname_re, text):
             return None
-        if self.first_re is not None and self.first_re.search(text):
+        if self.full_name_re is not None and _matches_full_name(self.full_name_re, text):
             return "full_name"
         if self.state_re.search(text):
             return "surname_context"
@@ -214,7 +251,7 @@ def _build_matchers(db: Session) -> list[CandidateMatcher]:
             race_id=race_id,
             state=parts[2],
             surname_re=_word_pattern(surname),
-            first_re=_word_pattern(first) if first else None,
+            full_name_re=_full_name_pattern(first, surname) if first else None,
             state_re=_state_name_pattern(state_name),
         ))
     return matchers
@@ -472,4 +509,56 @@ async def ingest_race_coverage(db: Session, client: httpx.AsyncClient) -> int:
                 ingested += 1
 
     db.commit()
+    score_unscored_items(db)
     return ingested
+
+
+def score_unscored_items(db: Session, batch: int = 500) -> int:
+    """Fill in relevance/has_advocacy for items that have never been scored.
+
+    Done at INGEST rather than per request because the feed cannot embed
+    itself on every page load, and in one batched pass because encoding
+    500 texts together costs far less than 500 separate calls.
+
+    Two different questions get asked, because they have different
+    answers: relevance is "is this about the race" (semantic, embedding)
+    and has_advocacy is "does this tell a reader how to vote"
+    (structural, and absolute regardless of relevance). Measured over
+    1,500 real Bluesky items: 31.5% clear relevance and 7% of those are
+    campaign advocacy — a feed gated on relevance alone would carry
+    "Elect Jonathan Nez to Congress!" as race coverage.
+    """
+    from app.pipeline.analyze.grounding import electioneering_language
+    from app.pipeline.analyze.race_relevance import (
+        item_text, race_descriptor, score_pairs,
+    )
+
+    rows = (
+        db.query(RaceCoverageItem)
+        .filter(RaceCoverageItem.relevance.is_(None))
+        .limit(batch)
+        .all()
+    )
+    if not rows:
+        return 0
+    races = {r.id: r for r in db.query(Race).filter(
+        Race.id.in_({r.race_id for r in rows})).all()}
+    pairs = [(it, races[it.race_id]) for it in rows if it.race_id in races and item_text(it)]
+    if not pairs:
+        return 0
+
+    try:
+        scores = score_pairs(
+            [item_text(it) for it, _ in pairs],
+            [race_descriptor(r) for _, r in pairs],
+        )
+    except Exception:
+        logger.exception("Coverage relevance scoring failed — items stay unscored")
+        return 0
+
+    for (item, _), score in zip(pairs, scores):
+        item.relevance = float(score)
+        item.has_advocacy = bool(electioneering_language(item_text(item)))
+    db.commit()
+    logger.info("Scored %d coverage items for relevance", len(pairs))
+    return len(pairs)

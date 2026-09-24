@@ -205,6 +205,14 @@ def _migrate_columns() -> None:
         # everyone means no document is eligible for the authority signal,
         # so the ranker falls back to relevance + freshness until the first
         # pipeline run fills these in.
+        # Ingest-time feed gates for race coverage (analyze/race_relevance.py).
+        # relevance has NO default on purpose: NULL means "never scored",
+        # which the feed treats as not-displayable, so a pre-existing row
+        # stays hidden until an ingest scores it rather than appearing
+        # unvetted.
+        ("action_issues", "fact_sources", "TEXT DEFAULT '[]'"),
+        ("race_coverage_items", "relevance", "REAL"),
+        ("race_coverage_items", "has_advocacy", "BOOLEAN DEFAULT 0"),
         ("explore_documents", "identifiers", "TEXT DEFAULT '[]'"),
         ("explore_documents", "authority", "REAL DEFAULT 0.0"),
         ("explore_documents", "cited_by_count", "INTEGER DEFAULT 0"),
@@ -668,6 +676,49 @@ def _migrate_visits_data_to_own_db() -> None:
     logger.info("Migrated SiteVisit/PageView data to their own database file")
 
 
+def _warn_on_insert_blocking_drift() -> None:
+    """Log any DB-only column that would make an INSERT impossible.
+
+    A column dropped from a model but left NOT NULL with no default in a
+    DEPLOYED database silently breaks every insert into that table, while
+    updates to existing rows keep working — so the failure is invisible
+    until something new needs a row, and CI can never see it because a
+    fresh database is built from the models and has no drift at all.
+
+    That is not hypothetical. representatives and senators carried
+    voting_summary and platform_summary in exactly this state, so NO new
+    member of Congress could be inserted in production; it surfaced only
+    as "431 success, 2 failed" in a nightly run, months after the model
+    change, and would have dropped the entire freshman class in November.
+    _migrate_columns' `drops` list fixes the instances we know about —
+    this reports the ones nobody has noticed yet.
+
+    Warn-only, and deliberately so: refusing to start over a schema
+    mismatch would take the site down for a condition that is usually
+    harmless, and the whole point is that the dangerous subset (NOT NULL,
+    no default, absent from the model) is narrow enough to name exactly.
+    """
+    inspector = inspect(engine)
+    for table_name, table in Base.metadata.tables.items():
+        if not inspector.has_table(table_name):
+            continue
+        model_columns = {c.name for c in table.columns}
+        blocking = [
+            col["name"]
+            for col in inspector.get_columns(table_name)
+            if col["name"] not in model_columns
+            and not col.get("nullable", True)
+            and col.get("default") is None
+        ]
+        if blocking:
+            logger.error(
+                "Schema drift blocks INSERTs into %s: %s are NOT NULL with no "
+                "default but absent from the model. Add them to _migrate_columns' "
+                "drops list.",
+                table_name, ", ".join(sorted(blocking)),
+            )
+
+
 def _init_lock_path() -> str | None:
     """Path of the cross-process lock file guarding init_db, or None.
 
@@ -759,6 +810,7 @@ def _init_db_locked() -> None:
     Base.metadata.create_all(bind=engine)
     VisitsBase.metadata.create_all(bind=visits_engine)
     _migrate_columns()
+    _warn_on_insert_blocking_drift()
     _ensure_indexes()
     _migrate_visits_data_to_own_db()
 

@@ -569,6 +569,11 @@ class ActionIssueSchema(CamelModel):
     title: str
     summary: str
     facts: list[str] = []
+    # Source name per fact, aligned with `facts` by index. Facts are
+    # verbatim spans of real reporting (see pipeline/analyze/claims.py),
+    # so this is what lets a reader check any one of them against the
+    # outlet that made it. Empty for issues that predate the claim layer.
+    fact_sources: list[str] = []
     # Subset of `facts` (by exact text) not present as of this issue's last
     # genuine content change — empty for an issue that's never been updated,
     # not "every fact", since that would just mean the issue is new, not

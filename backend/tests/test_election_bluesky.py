@@ -14,7 +14,15 @@ from sqlalchemy.orm import sessionmaker
 
 from app.models import Candidate, Race, RaceCoverageItem
 from app.pipeline.analyze import election_bluesky
+from app.pipeline.analyze import election_bluesky as eb
 from app.time_utils import utcnow
+
+
+def _stub_relevance(monkeypatch, relevant=True):
+    """The relevance gate loads an embedding model; unit tests stub it and
+    race_relevance has its own tests."""
+    from app.pipeline.analyze import race_relevance
+    monkeypatch.setattr(race_relevance, "is_relevant", lambda *a, **k: relevant)
 
 
 def _creds(monkeypatch):
@@ -65,6 +73,7 @@ class TestPostRaceCoverageUpdates:
 
     def test_successful_post_marks_item_and_increments(self, db_session, monkeypatch):
         _creds(monkeypatch)
+        _stub_relevance(monkeypatch)
         _race(db_session)
         _candidate(db_session)
         item = _item(db_session)
@@ -81,6 +90,7 @@ class TestPostRaceCoverageUpdates:
 
     def test_grounding_failure_marks_considered_but_not_posted(self, db_session, monkeypatch):
         _creds(monkeypatch)
+        _stub_relevance(monkeypatch)
         _race(db_session)
         _candidate(db_session)
         item = _item(db_session)
@@ -95,6 +105,7 @@ class TestPostRaceCoverageUpdates:
 
     def test_missing_race_is_skipped_gracefully(self, db_session, monkeypatch):
         _creds(monkeypatch)
+        _stub_relevance(monkeypatch)
         # No Race row at all for this race_id — a real-world edge case if a
         # race got deleted between coverage ingestion and posting.
         item = _item(db_session, race_id="2026-SEN-NOWHERE", matched_candidate_id=None)
@@ -109,6 +120,7 @@ class TestPostRaceCoverageUpdates:
         framing would be an ungrounded claim, so the item is considered but
         never published."""
         _creds(monkeypatch)
+        _stub_relevance(monkeypatch)
         _race(db_session)
         item = _item(db_session, matched_candidate_id="S6GA-GONE")
         db_session.commit()
@@ -126,6 +138,7 @@ class TestPostRaceCoverageUpdates:
         which requires the full_name basis. The item is still marked
         considered eventually (by the stale drain), just never published."""
         _creds(monkeypatch)
+        _stub_relevance(monkeypatch)
         _race(db_session)
         _candidate(db_session)
         item = _item(
@@ -146,6 +159,7 @@ class TestPostRaceCoverageUpdates:
 
     def test_respects_max_posts_per_run_cap(self, db_session, monkeypatch):
         _creds(monkeypatch)
+        _stub_relevance(monkeypatch)
         monkeypatch.setattr(election_bluesky, "MAX_POSTS_PER_RUN", 2)
         # Distinct races — the per-race cooldown would otherwise stop a
         # second post to the same race within one run.
@@ -173,6 +187,7 @@ class TestPostRaceCoverageUpdates:
         per-run cap alone multiplied to 480/day at the 15-minute
         election-season cadence (2026-07 review M4)."""
         _creds(monkeypatch)
+        _stub_relevance(monkeypatch)
         _race(db_session)
         _candidate(db_session)
         for i in range(election_bluesky.MAX_POSTS_PER_DAY):
@@ -196,11 +211,18 @@ class TestPostRaceCoverageUpdates:
 
     def test_daily_budget_ignores_posts_older_than_24h(self, db_session, monkeypatch):
         _creds(monkeypatch)
+        _stub_relevance(monkeypatch)
         _race(db_session)
         _candidate(db_session)
+        # Budget-exhausting posts go on OTHER races: at 25h they are
+        # outside the 24h budget window but inside the 48h per-race
+        # cooldown, so keeping them on this race would test the cooldown
+        # instead of the budget.
         for i in range(election_bluesky.MAX_POSTS_PER_DAY):
+            _race(db_session, race_id=f"2026-SEN-Z{i}", state="GA")
             _item(
-                db_session, url=f"https://apnews.com/posted{i}",
+                db_session, race_id=f"2026-SEN-Z{i}",
+                url=f"https://apnews.com/posted{i}",
                 bsky_posted=True, bsky_posted_at=utcnow() - timedelta(hours=25),
             )
         _item(db_session, url="https://apnews.com/fresh")
@@ -214,6 +236,7 @@ class TestPostRaceCoverageUpdates:
 
     def test_race_cooldown_skips_second_post_within_window(self, db_session, monkeypatch):
         _creds(monkeypatch)
+        _stub_relevance(monkeypatch)
         _race(db_session)
         _candidate(db_session)
         # Actually-published item for this race 1h ago — inside the 6h window.
@@ -236,6 +259,7 @@ class TestPostRaceCoverageUpdates:
     def test_race_cooldown_applies_within_a_single_run(self, db_session, monkeypatch):
         # Two fresh items about one busy race — only the first posts.
         _creds(monkeypatch)
+        _stub_relevance(monkeypatch)
         _race(db_session)
         _candidate(db_session)
         _item(db_session, url="https://apnews.com/a1")
@@ -254,6 +278,7 @@ class TestPostRaceCoverageUpdates:
         durable BEFORE the publish attempt, so a failed/crashed publish can
         never lead to a duplicate post on the next run."""
         _creds(monkeypatch)
+        _stub_relevance(monkeypatch)
         _race(db_session)
         _candidate(db_session)
         item = _item(db_session)
@@ -288,6 +313,7 @@ class TestPostRaceCoverageUpdates:
 
     def test_already_considered_items_skipped(self, db_session, monkeypatch):
         _creds(monkeypatch)
+        _stub_relevance(monkeypatch)
         _race(db_session)
         _candidate(db_session)
         _item(db_session, bsky_posted_at=utcnow() - timedelta(hours=1))
@@ -385,3 +411,51 @@ class TestPublishUrl:
 
         url = mock_publish.call_args.args[1]
         assert url == "https://civitas-research.org/elections/states/GA#race-2026-HOUSE-GA-6"
+
+
+class TestOnlyVettedSourcesArePosted:
+    """The 2026-09-23 endorsement came from one member of the public's
+    Bluesky post, ingested as coverage because it named a candidate on
+    that race's FEC roster. Civitas restating a stranger's campaign post
+    in its own voice is what made it an endorsement, so the fix is at the
+    source, not in the wording."""
+
+    def test_an_arbitrary_social_post_is_never_eligible(self, db_session, monkeypatch):
+        monkeypatch.setattr(eb.settings, "BSKY_HANDLE", "h")
+        monkeypatch.setattr(eb.settings, "BSKY_APP_PASSWORD", "p")
+        _stub_relevance(monkeypatch)
+        published = []
+        monkeypatch.setattr(eb, "_publish", lambda text, race: published.append(text) or True)
+        monkeypatch.setattr(eb, "_generate_post_text", lambda *a, **k: "some sentence.")
+        monkeypatch.setattr(eb, "_roster_fact", lambda *a, **k: "FEC filings list X.")
+
+        db_session.add(Race(id="2026-SEN-NJ", cycle_year=2026, office="S", state="NJ"))
+        db_session.add(RaceCoverageItem(
+            race_id="2026-SEN-NJ", source_type="bluesky", source_name="@kaseylz.bsky.social",
+            title="VOTE VERONICA FERNANDEZ!", url="u1",
+            match_basis="full_name", fetched_at=utcnow(),
+        ))
+        db_session.commit()
+
+        assert eb.post_race_coverage_updates(db_session) == 0
+        assert published == []
+
+    def test_a_news_item_still_posts(self, db_session, monkeypatch):
+        monkeypatch.setattr(eb.settings, "BSKY_HANDLE", "h")
+        monkeypatch.setattr(eb.settings, "BSKY_APP_PASSWORD", "p")
+        _stub_relevance(monkeypatch)
+        published = []
+        monkeypatch.setattr(eb, "_publish", lambda text, race: published.append(text) or True)
+        monkeypatch.setattr(eb, "_generate_post_text", lambda *a, **k: "some sentence.")
+        monkeypatch.setattr(eb, "_roster_fact", lambda *a, **k: "FEC filings list X.")
+
+        db_session.add(Race(id="2026-SEN-NJ", cycle_year=2026, office="S", state="NJ"))
+        db_session.add(RaceCoverageItem(
+            race_id="2026-SEN-NJ", source_type="news", source_name="Roll Call",
+            title="A real article about the race", url="u2",
+            match_basis="full_name", fetched_at=utcnow(),
+        ))
+        db_session.commit()
+
+        assert eb.post_race_coverage_updates(db_session) == 1
+        assert published == ["some sentence."]

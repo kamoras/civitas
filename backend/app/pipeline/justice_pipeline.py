@@ -7,6 +7,10 @@ from sqlalchemy.orm import Session
 
 from app.http_client import make_async_client
 from app.pipeline.analyze.justice_analyzer import analyze_justice_votes
+from app.pipeline.analyze.grounding import (
+    grounding_violations,
+    hedge_and_editorializing_violations,
+)
 from app.pipeline.analyze.ollama_client import call_llm
 from app.pipeline.fetch.justice_votes import fetch_case_votes, fetch_current_justices
 from app.services.justice_service import group_votes_by_case_and_justice, upsert_justice
@@ -174,13 +178,32 @@ def _generate_summary(
         num_ctx=2048,
     )
 
+    text = ""
     if result and isinstance(result, dict):
         text = str(result.get("summary") or result.get("text") or "")
-        if len(text) > 20:
-            return text[:600]
+    elif result and isinstance(result, str):
+        text = result
 
-    if result and isinstance(result, str) and len(result) > 20:
-        return result[:600]
+    if len(text) > 20:
+        # This publishes prose about a NAMED Supreme Court justice, and
+        # until 2026-09-23 it was the one generation path in the codebase
+        # running no mechanical check at all — the prompt says "never
+        # invent numbers", which is exactly the situation grounding.py
+        # exists for ("the prompts instruct the model to use only
+        # information from its source material, but nothing enforced
+        # that"). The prompt's own statistics block is the source: every
+        # figure in the summary must come from it, and every titled name
+        # must appear in it.
+        reasons = grounding_violations(text, prompt)
+        reasons += hedge_and_editorializing_violations(text)
+        if reasons:
+            logger.warning(
+                "Justice summary for %s failed grounding (%s) — using the "
+                "computed-template fallback instead",
+                name, "; ".join(reasons),
+            )
+        else:
+            return text[:600]
 
     logger.info("LLM summary unavailable for %s, using template fallback", name)
     return _fallback_summary(justice, analysis)

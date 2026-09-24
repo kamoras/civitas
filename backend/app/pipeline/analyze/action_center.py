@@ -54,15 +54,11 @@ from app.pipeline.analyze.grounding import (
     grounding_violations,
     hedge_and_editorializing_violations,
     log_intensifier_usage,
+    proposal_stated_as_fact,
     repeated_sentences,
-    ungrounded_electoral_claims,
-    ungrounded_former_official_claims,
-    ungrounded_party_claims,
-    ungrounded_relationship_claims,
-    ungrounded_statistics,
-    ungrounded_titled_names,
     validate_facts,
 )
+from app.pipeline.analyze import claims as claim_layer
 from app.pipeline.analyze.ollama_client import call_llm, extract_json
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.pipeline.fetch.news_feeds import (
@@ -418,112 +414,6 @@ def _record_generation_sample(
         logger.exception("Failed to record LLM generation sample (task=%s, rank=%d)", task, rank)
 
 
-def _retry_until_grounded(
-    user_prompt: str, reasons: list[str], rank: int, db: "Session",
-    issue_source_text: str, title: str,
-) -> tuple[str, str, list[str]] | None:
-    """Re-generates issue text up to twice after it failed the mechanical
-    hedge/editorializing/former-status check, returning (title, summary,
-    facts) once grounded or None if every attempt still failed.
-
-    Extracted from _run_refresh (2026-08) for direct testability, matching
-    _apply_matched_issue_update's precedent — _run_refresh as a whole calls
-    a real LLM and can't reasonably be driven end-to-end in a unit test,
-    but the retry LOOP itself (does a second attempt with a strengthened
-    prompt actually get used, does a fixed reason stop being reported)
-    can be, with call_llm mocked.
-
-    One retry cleared close to none of these live (2026-08 audit via
-    admin_action_metrics: 67 of 192 clusters considered over 48h were
-    rejected here, 39 of 48 hourly runs produced zero new topics — the
-    Action Center's whole supply of new stories was starved by this gate
-    more than by a quiet news cycle). Two attempts, the second adding a
-    concrete before/after example rather than only the abstract rule: the
-    local model doesn't reliably turn "don't hedge" into a fix on its own,
-    but a worked example gives it a pattern to copy.
-    """
-
-    for attempt in range(1, 3):
-        logger.warning(
-            "Issue text failed grounding for rank %d (attempt %d): %s — retrying",
-            rank, attempt, "; ".join(reasons),
-        )
-        # The correction text below must name every category reasons can
-        # contain (hedging, former-status, vague-office, and the full
-        # grounding_violations() set — ungrounded numbers, titled names,
-        # electoral claims, family relationships, party affiliation) — a
-        # rejection reason the correction never mentions gives the retry no
-        # signal on what to actually change, wasting the one extra attempt
-        # this loop exists to spend productively.
-        correction = (
-            f"\n\nYour previous response was rejected because it contained "
-            f"{'; '.join(reasons)}. Use ONLY information stated in the "
-            "articles: report events directly instead of through phrases "
-            "like 'reports say' or 'coverage indicates,' do not state any "
-            "number (vote count, dollar amount, date, statistic) not in "
-            "the articles, do not name any titled official the articles "
-            "don't name, do not describe any election, race, or campaign "
-            "unless the articles do, do not state a family relationship "
-            "between people unless the articles do, do not call any "
-            "official 'former' unless the articles do, do not attach a "
-            "party label (Republican/Democrat/GOP/(R-)/(D-)) to anyone "
-            "unless the articles state their party, do not evaluate "
-            "whether any action was warranted or justified, and name the "
-            "specific office-holder instead of a vague indefinite phrase "
-            "like 'a president' or 'a Speaker' — there is only one at a "
-            "time."
-        )
-        if attempt > 1:
-            correction += (
-                "\n\nExample fix: rewrite \"Recent reports highlight the "
-                "administration's plans to expand the program\" as \"The "
-                "administration plans to expand the program.\" State WHO "
-                "did WHAT — never who is talking about it."
-            )
-        retry_result = call_llm(
-            prompt_version=ACTION_CENTER_PROMPT_VERSION,
-            system_prompt=_SYSTEM_PROMPT,
-            user_prompt=user_prompt + correction,
-            cache_key=None,
-            db_session=db,
-            max_tokens=1024,
-            num_ctx=4096,
-        )
-        if isinstance(retry_result, str):
-            retry_result = extract_json(retry_result)
-        if isinstance(retry_result, dict):
-            retry_summary = _fix_impossible_senate_vote_counts(retry_result.get("summary", ""))
-            retry_facts = _validate_facts(retry_result.get("facts", []), source_text=issue_source_text)
-            retry_facts = [_fix_impossible_senate_vote_counts(f) for f in retry_facts]
-            retry_combined = retry_summary + " " + " ".join(retry_facts)
-            # Same full grounding_violations() check as the first attempt,
-            # not hedge/former-status alone — a retry that fixes its
-            # hedging could still sail through with an ungrounded number,
-            # name, electoral claim, relationship, or party label untouched.
-            retry_all_reasons = (
-                hedge_and_editorializing_violations(retry_combined)
-                + grounding_violations(retry_combined, issue_source_text)
-            )
-            _record_generation_sample(
-                db, "action_center_issue", rank, attempt + 1, user_prompt + correction,
-                {"title": title, "summary": retry_summary, "facts": retry_facts},
-                passed=not retry_all_reasons, violations=retry_all_reasons or None,
-            )
-            if retry_summary and not retry_all_reasons:
-                fixed_title, fixed_summary, fixed_facts = _validate_politician_roles(
-                    title, retry_summary, retry_facts, db,
-                )
-                return fixed_title, fixed_summary, fixed_facts
-            # Feed the NEXT attempt the reasons THIS attempt actually failed
-            # for, not the original ones — a fixed hedge phrase replaced by a
-            # different one needs a correction prompt naming the new problem.
-            reasons = retry_all_reasons
-    logger.error(
-        "Issue text still had hedging/editorializing language for rank %d "
-        "after 2 attempts — skipping: %s",
-        rank, "; ".join(reasons),
-    )
-    return None
 
 
 # Attributes copied from a fresh cluster pass onto a matched existing
@@ -861,72 +751,42 @@ state or imply that an action was warranted, justified, or reasonable, and \
 never repeat an actor's stated rationale for an action as though it were \
 established fact."""
 
-_ISSUE_PROMPT_TEMPLATE = """\
-Below are recent news articles about the same U.S. policy issue. \
-Analyze ONLY the topic covered in these specific articles. \
-Do NOT reference bills, policies, or events not mentioned in the articles. \
-Produce a JSON object with these fields:
+# Locate one assertion; do not write anything.
+#
+# This replaces a 4,361-character instruction blob carrying 16 separate
+# "never / do not" clauses, nearly every one a fossilised bug ("never
+# write 'reports say'", "double-check the direction of every action",
+# "never state 'found guilty' unless THAT SPECIFIC PERSON", "never write
+# X surpasses X"). Those rules are not gone — they are now properties of
+# the shape rather than things a 1.2B model is asked to remember, which
+# this module's own comment concedes it does not reliably do. Each has a
+# test in tests/test_claims.py instead of a clause here.
+_CLAIM_PROMPT_TEMPLATE = """\
+Copy the single most newsworthy fact out of this article. Do NOT \
+summarise it in your own words — locate it and copy it.
 
-- "title": A concise, neutral headline for this issue (max 15 words). \
-Name the actual countries or entities involved. Do NOT add "U.S." or \
-"America" to the title unless the United States is a direct actor in \
-these specific articles.
-- "summary": A factual 2-4 sentence summary of what is happening and why \
-it matters. No opinion — do not state or imply that an action was \
-warranted, justified, or reasonable, even if a source article frames it \
-that way; report what was done and said, not whether it was right. Report \
-directly — never write "reports say," "coverage indicates," or similar. \
-Use the SPECIFIC names, quotes, and numbers from the articles rather than \
-vaguer paraphrases — if an article names a person or gives a figure, use it \
-instead of a vaguer substitute like "a commentator" or "officials." Do not \
-write about "the coverage" or "the reporting" as the subject of a sentence \
-(e.g., "the coverage emphasizes personal connections") — report what \
-actually happened or was said, not a description of what the source \
-article chose to discuss. \
-Be precise about WHO did WHAT to WHOM — double-check \
-the direction of every action and legal outcome before writing it. In legal \
-or disputed matters, do not confuse the accuser/plaintiff/victim with the \
-accused/defendant, and never state that someone was "found guilty" or \
-"found liable" unless the articles say THAT SPECIFIC PERSON was the one \
-found guilty or liable, not the person who brought the case against them. \
-The first sentence must state the concrete outcome or decision itself — \
-a vote tally, a ruling, a dollar figure, an action taken — not the \
-process or deliberation that led to it; save characterization ("bipartisan," \
-"controversial") for after the concrete fact, never in place of it. Never \
-substitute a vague intensifier ("significant," "sweeping," "dramatic") for \
-a specific number the articles already give you.
-- "facts": An array of 3-5 key factual bullet points citizens should know. \
-Each fact must cite specific numbers, dates, or names when available. \
-CRITICAL fact rules: (1) Every fact must be directly stated in the articles — \
-never infer or extrapolate. (2) Comparisons must name TWO DISTINCT entities — \
-never write "X surpasses X" or compare a thing to itself. (3) If an article \
-says something was dropped, dismissed, or ended, the fact must reflect that \
-outcome — do not write that it is ongoing. (4) Extract only concrete, \
-checkable actions and events — never extract an article's opinion, spin, or \
-argument about whether an action was warranted or justified, even when the \
-article states it as fact. (5) A fact must describe something that happened \
-or was said in the world — never a description of the coverage itself \
-(e.g., "the coverage emphasizes X" or "the article focuses on Y" are NOT \
-facts; extract what X or Y actually is instead). (6) Every fact must be \
-about the single topic named in your title. If an article in the list \
-covers a different event — a different country's politics, a different \
-agency, an unrelated person — do NOT extract facts from it, even though \
-it appears above. (7) If an article gives a number alongside a comparison \
-that makes its size legible (a prior figure, a total it's part of, a time \
-span), keep both in the same fact — a bare number is weaker than a number \
-with scale. Never invent a comparison the articles don't state.
-- "bills": An array of any specific bills or acts mentioned in the articles. \
-For each bill, provide an object with "name" (the bill's common name or \
-acronym EXACTLY AS WRITTEN in the articles above — never a bill name from \
-these instructions or from your own knowledge) and "id": ALWAYS null. Never \
-invent or guess a bill number — leave "id" null even if you think you know \
-it. The bill number will be looked up separately. Only include bills \
-actually named in the articles. This will usually be empty — if NO bill or \
-act is named in the articles, return an empty array [].
-Articles:
-{articles}
+EXAMPLE
+Source: "DDHQ shifts Florida governor race to toss-up. Decision Desk HQ \
+(DDHQ) shifted the Florida governor's race to a toss-up on Tuesday."
+Answer: {{"actor": "Decision Desk HQ (DDHQ)", "predicate": "shifted the \
+Florida governor's race to a toss-up on Tuesday"}}
 
-Respond with ONLY the JSON object."""
+NOW DO THIS ONE
+Source:
+{source}
+
+Rules:
+- Both spans COPIED EXACTLY from the Source, character for character.
+- "actor" is who did or said it: a named person, body or organisation.
+- "predicate" starts with the verb and runs to the END of the phrase, \
+including its object.
+- The Source must say that predicate OF that actor, IN THE SAME SENTENCE.
+- If the Source names no one doing anything, answer with two empty \
+strings. That is a correct and common answer.
+
+Return JSON: {{"actor": "<exact span>", "predicate": "<exact span>"}}"""
+
+
 
 
 def _build_actions_from_data(
@@ -1951,15 +1811,23 @@ def _deduplicate_top_clusters(
         return ranked_clusters[:max_issues]
 
 
-    # Threshold in normalized-centered-embedding space. Must be high enough
-    # that only genuinely same-story clusters are merged — a looser floor
-    # let clearly unrelated clusters merge together. Unlike this file's
-    # other similarity gates, this one hasn't been re-measured against a
-    # real same-story/different-story sample yet; the merge/keep decision
-    # below is logged as a bucketed action_metrics counter every run so
-    # that data accumulates automatically until there's enough to
-    # calibrate for real.
-    DEDUP_THRESHOLD = 0.50
+    # Threshold in normalized-centered-embedding space, above which two
+    # top-ranked clusters are treated as the same story and merged.
+    #
+    # THE DATA THIS ASKED FOR HAS NOW ACCUMULATED, and it says the gate
+    # was unreachable. Across 1,039 persisted runs the bucketed counters
+    # below recorded 496 keep decisions and ZERO merges: the highest
+    # cluster-pair similarity ever observed falls in the 0.30-0.39
+    # bucket, so a 0.50 floor could never fire. Two top clusters
+    # covering one story both became issues, which with MAX_ISSUES at 2
+    # meant a day's entire Action Center could be the same event twice.
+    #
+    # 0.35 is the top of the observed range rather than a guess: 493 of
+    # 496 observations sit below it, so it merges only the pairs that
+    # actually reach the tail the old constant was aiming at. It stays
+    # logged, so if the distribution shifts this is re-derivable the
+    # same way instead of re-guessed.
+    DEDUP_THRESHOLD = 0.35
 
     cluster_texts = [
         " ".join(a.title for a in cluster[:5])
@@ -2055,50 +1923,6 @@ def _name_in_table(extracted: str, known_names: list[str]) -> bool:
     return False
 
 
-def _validate_politician_roles(
-    title: str,
-    summary: str,
-    facts: list[str],
-    db: "Session",
-) -> tuple[str, str, list[str]]:
-    """Strip hallucinated legislative titles from LLM-generated content.
-
-    The LLM occasionally labels politicians with the wrong role
-    (e.g. calling a Cabinet Secretary a "Senator"). For each "Senator X" or
-    "Representative X" pattern found in the generated text, the name is
-    verified against the senators / representatives tables. If no match is
-    found the role prefix is removed, leaving just the name.
-    """
-    from app.models import Senator, Representative
-
-    senator_names = [s.name for s in db.query(Senator).all()]
-    rep_names = [r.name for r in db.query(Representative).all()]
-
-    def _fix(text: str) -> str:
-        for pattern, role in _ROLE_PATTERNS:
-            for m in pattern.finditer(text):
-                extracted = m.group(1)
-                known = senator_names if role == "Senator" else rep_names
-                if not _name_in_table(extracted, known):
-                    # "Former Senator X" / "Ex-Rep. X" is a historical claim,
-                    # not a hallucinated current role — we can only verify
-                    # CURRENT membership, and stripping just the role word
-                    # produced garbled text ("Former Mitt Romney").
-                    preceding = text[max(0, m.start() - 8):m.start()].lower()
-                    if preceding.rstrip().endswith(("former", "ex-", "ex")):
-                        continue
-                    # Remove the role prefix — keep just the name
-                    logger.warning(
-                        "Role hallucination corrected: '%s' is not a %s — stripping role label",
-                        extracted, role,
-                    )
-                    text = text.replace(m.group(0), extracted, 1)
-        return text
-
-    title = _fix(title)
-    summary = _fix(summary)
-    facts = [_fix(f) for f in facts]
-    return title, summary, facts
 
 
 # Both prompts this feeds run at a default num_ctx=4096. An 8-article
@@ -2127,8 +1951,6 @@ def _format_articles_block(cluster: list[NewsArticle]) -> str:
     return "\n\n".join(parts)
 
 
-def _build_llm_prompt(cluster: list[NewsArticle]) -> str:
-    return _ISSUE_PROMPT_TEMPLATE.format(articles=_format_articles_block(cluster))
 
 
 
@@ -2978,8 +2800,27 @@ def _generate_period_summary(label: str, entries: list, cache_key: dict, db: "Se
         result = extract_json(result)
     if not isinstance(result, dict):
         return {"summary": "", "topAreas": []}
+
+    summary = str(result.get("summary", ""))
+    # This is published as a WeekSummary/MonthSummary and ran NO
+    # mechanical check at all — the third such gap found in the
+    # 2026-09-23 audit, after justice_pipeline and monitor metadata. The
+    # entries block it was generated from is its source material. An
+    # empty summary is a normal outcome the caller already handles, so
+    # failing closed costs a period review, not a crash.
+    if summary:
+        reasons = grounding_violations(summary, entries_text)
+        reasons += hedge_and_editorializing_violations(summary)
+        if reasons:
+            logger.warning(
+                "Period summary for %s failed grounding (%s) — publishing no summary",
+                label, "; ".join(reasons)[:200],
+            )
+            action_metrics.increment("period_summary_ungrounded")
+            summary = ""
+
     return {
-        "summary": str(result.get("summary", "")),
+        "summary": summary,
         "topAreas": [str(a) for a in result.get("topAreas", [])[:5]],
     }
 
@@ -3307,32 +3148,21 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
         # agenda" — no Schumer mention anywhere in the source material, and
         # this generator had no check for fabricated names at all until
         # then, unlike the Bluesky poster which already ran this check.)
-        novel = ungrounded_statistics(story, source_material)
-        names = ungrounded_titled_names(story, source_material)
+        # The SHARED combinator, not a hand-picked subset. This block
+        # used to name seven checks individually, and therefore silently
+        # did not inherit electioneering_language when that was added to
+        # grounding_violations — the longest generated text on the site
+        # was the least protected. Two modules had independently grown
+        # the same hand-rolled list (bluesky_spotlight was the other),
+        # and each missed whatever was added to the combinator after it
+        # was written. Anything genuinely specific to long-form prose
+        # stays below; everything shared comes from one place.
+        shared = grounding_violations(story, source_material)
+        shared += hedge_and_editorializing_violations(story)
+        # Not in the combinator: only long-form generation loops on
+        # itself when it runs out of source material to paraphrase.
         dupes = repeated_sentences(story)
-        # hedge_and_editorializing_violations also covers literal unfilled
-        # placeholder tokens ("[date]") since the 2026-07 audit.
-        hedge_editorial = hedge_and_editorializing_violations(story)
-        # Same fabricated-relationship class as the electoral guard, family
-        # edition (2026-07 audit: "her brother" published ungrounded).
-        relationships = ungrounded_relationship_claims(story, source_material)
-        # Same relational-fabrication guard the Bluesky poster runs: a full
-        # story that invents a race/campaign between two officials who both
-        # appear in the facts for an unrelated reason (2026-07: a Graham story
-        # claiming he "was facing competition from Susan Collins for his senate
-        # race") slips past the number and name checks — both surnames are
-        # grounded and no figure is fabricated.
-        electoral = ungrounded_electoral_claims(story, source_material)
-        # Stale-training-data status claims — the model demoting a sitting
-        # official to "former" from its outdated world knowledge (2026-07:
-        # "former President Donald Trump" published to Bluesky while the
-        # source material said "President Trump").
-        former = ungrounded_former_official_claims(story, source_material)
-        # Stale-training-data party-label claims — same failure mode as
-        # "former," a party attached from the model's own memory rather
-        # than the source (2026-07 audit addition).
-        party = ungrounded_party_claims(story, source_material)
-        if not novel and not names and not dupes and not hedge_editorial and not electoral and not relationships and not former and not party:
+        if not shared and not dupes:
             logger.info(
                 "Generated full story for issue %s (%d chars): %s",
                 issue.id, len(story), issue.title[:60],
@@ -3340,72 +3170,17 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
             log_intensifier_usage("full_story", story, source_material)
             return story
 
-        problems = []
-        if novel:
-            problems.append(
-                f"figures not present in the key facts ({', '.join(novel)})"
-            )
-            logger.warning(
-                "Full story failed statistic grounding for issue %s (attempt %d): %s",
-                issue.id, attempt + 1, ", ".join(novel),
-            )
-        if names:
-            problems.append(
-                f"officials not present in the key facts ({', '.join(names)})"
-            )
-            logger.warning(
-                "Full story failed named-official grounding for issue %s (attempt %d): %s",
-                issue.id, attempt + 1, ", ".join(names),
-            )
+        # One list, from one place — the combinator already returns
+        # human-readable reasons, so the retry note no longer needs a
+        # bespoke sentence per check.
+        problems = list(shared)
         if dupes:
-            problems.append(
-                "sentences repeated verbatim later in the article "
-                f"({'; '.join(s[:80] for s in dupes)})"
-            )
-            logger.warning(
-                "Full story repeated itself for issue %s (attempt %d): %s",
-                issue.id, attempt + 1, "; ".join(dupes),
-            )
-        if hedge_editorial:
-            problems.extend(hedge_editorial)
-            logger.warning(
-                "Full story failed hedge/editorializing check for issue %s (attempt %d): %s",
-                issue.id, attempt + 1, "; ".join(hedge_editorial),
-            )
-        if electoral:
-            problems.append(
-                f"an election or campaign not present in the key facts ({', '.join(electoral)})"
-            )
-            logger.warning(
-                "Full story invented an electoral contest for issue %s (attempt %d): %s",
-                issue.id, attempt + 1, ", ".join(electoral),
-            )
-        if relationships:
-            problems.append(
-                f"a family relationship not present in the key facts ({', '.join(relationships)})"
-            )
-            logger.warning(
-                "Full story asserted an ungrounded family relationship for issue %s (attempt %d): %s",
-                issue.id, attempt + 1, ", ".join(relationships),
-            )
-        if former:
-            problems.append(
-                "'former' office-holder status not present in the key facts "
-                f"({', '.join(former)})"
-            )
-            logger.warning(
-                "Full story called an official 'former' without source basis for issue %s (attempt %d): %s",
-                issue.id, attempt + 1, ", ".join(former),
-            )
-        if party:
-            problems.append(
-                "a party affiliation not present in the key facts "
-                f"({', '.join(party)})"
-            )
-            logger.warning(
-                "Full story asserted a party affiliation without source basis for issue %s (attempt %d): %s",
-                issue.id, attempt + 1, ", ".join(party),
-            )
+            problems.append(f"repeated sentences: {'; '.join(dupes[:2])}")
+        logger.warning(
+            "Full story for issue %s failed checks (attempt %d): %s",
+            issue.id, attempt + 1, "; ".join(problems)[:300],
+        )
+
         retry_note = (
             "\n\nYour previous attempt was rejected because it contained "
             f"{' and '.join(problems)}. Stop writing once the facts are "
@@ -3821,9 +3596,35 @@ def _generate_monitor_metadata(
     if category not in POLICY_AREAS:
         category = "FOREIGN_POLICY"
     
+    title = str(result.get("title", issue.title))[:500]
+    description = str(result.get("description", issue.summary))[:1000]
+
+    # A National Monitor's title and description are published prose and
+    # were, until 2026-09-23, generated with no mechanical check at all —
+    # the same gap that let "Iran War Ends Quickly to Lower Prices" onto
+    # the site from the issue path next door. The articles assembled
+    # above are this generation's source material, so they are what it
+    # gets checked against; falling back to the originating issue's own
+    # already-checked title and summary keeps the monitor rather than
+    # dropping it.
+    source_material = "\n\n".join(articles)
+    reasons = grounding_violations(f"{title} {description}", source_material)
+    reasons += hedge_and_editorializing_violations(f"{title} {description}")
+    reasons += [
+        f"title states as done what the source only calls for: {', '.join(inverted)}"
+        for inverted in [proposal_stated_as_fact(title, source_material)] if inverted
+    ]
+    if reasons:
+        logger.warning(
+            "Monitor metadata failed grounding (%s) — falling back to the issue's own text",
+            "; ".join(reasons),
+        )
+        action_metrics.increment("monitor_metadata_ungrounded")
+        title, description = issue.title, issue.summary or ""
+
     return {
-        "title": str(result.get("title", issue.title))[:500],
-        "description": str(result.get("description", issue.summary))[:1000],
+        "title": title[:500],
+        "description": description[:1000],
         "category": category.lower(),
     }
 
@@ -4135,33 +3936,6 @@ _US_REFS_RE = re.compile(
 )
 
 
-def _validate_geographic_consistency(title: str, source_titles: list[str]) -> str:
-    """Remove hallucinated U.S. references from the generated title.
-
-    Catches the pattern where the LLM inserts 'U.S.' into a title about
-    a story where the US is not a direct actor — e.g. China-Japan export
-    controls becoming 'U.S. and Japan: Tensions Rise...'. Checks the title
-    against actual source article titles; if no source mentions the US,
-    the reference is stripped.
-    """
-    if not _US_REFS_RE.search(title):
-        return title
-    combined_sources = " ".join(source_titles)
-    if _US_REFS_RE.search(combined_sources):
-        return title
-    logger.warning(
-        "Removing hallucinated U.S. reference from title (absent from source articles): '%s'",
-        title[:80],
-    )
-    # Strip "U.S. and X: ..." or "U.S.: ..." lead patterns
-    fixed = re.sub(
-        r'^(U\.S\.?|United States|American?)\s+(and\s+[A-Z][^:]*:\s*|:\s*)',
-        '', title, flags=re.IGNORECASE,
-    )
-    # Strip "U.S. and " mid-title
-    fixed = re.sub(r'\b(U\.S\.?|United States|American?)\s+and\s+', '', fixed, flags=re.IGNORECASE)
-    fixed = fixed.strip().strip(':').strip()
-    return fixed if len(fixed) >= 10 else title
 
 
 # The Senate has 100 members, so any reported vote tally whose yeas+nays
@@ -4725,10 +4499,20 @@ def _run_refresh(db: Session) -> int:
         # contains articles about different sub-topics that share one broad
         # dimension (e.g. "Trump administration") — they all score positive.
         # 0.25 requires a meaningful alignment with the cluster's specific topic.
-        # 2026-08 audit: also never re-measured against a real on-topic/
-        # off-topic sample. Logged the same way as DEDUP_THRESHOLD above —
-        # a bucketed counter per article decision, accumulating automatically
-        # run over run rather than needing a one-off manual production pull.
+        #
+        # MEASURED AND KEPT (7,045 observations over 1,039 persisted runs).
+        # The distribution is sharply bimodal: 4,294 observations sit below
+        # 0.20 — the clearly-unrelated mass — and the rest spread broadly
+        # from 0.2 to 0.9. 0.25 sits exactly at that boundary, which is
+        # what this constant was supposed to be and now demonstrably is.
+        #
+        # Otsu's method on the same histogram returns 0.35, and that is
+        # NOT adopted: Otsu assumes two comparable classes and is pulled
+        # upward here by the broad on-topic hump, so it would discard the
+        # 0.25-0.35 band — several hundred genuinely on-topic articles per
+        # the kept counters — and cluster size is already what limits
+        # claim yield. Deriving a number is not a reason to adopt it; the
+        # measurement's job here was to confirm the boundary, and it did.
         SOURCE_SIM_FLOOR = 0.25
         for s in centered_sims:
             outcome = "kept" if float(s) >= SOURCE_SIM_FLOOR else "dropped"
@@ -4743,10 +4527,6 @@ def _run_refresh(db: Session) -> int:
             rank, len(filtered_cluster), len(cluster),
             ", ".join("%.2f" % s for _, s in sorted([(a, float(s)) for a, s in zip(cluster, centered_sims)], key=lambda x: -x[1])[:6]),
         )
-
-        # Build the LLM prompt from only the on-topic articles so the generated
-        # title, summary, and facts reflect the cluster's actual topic.
-        user_prompt = _build_llm_prompt(filtered_cluster)
 
         seen_sources: dict[str, str] = {}
         for a, _ in on_topic:
@@ -4764,100 +4544,80 @@ def _run_refresh(db: Session) -> int:
         image_alt = image_article.image_alt if image_article else ""
         image_credit = image_article.image_credit if image_article else ""
 
-        # Cache key uses the FILTERED titles so that when coherence filtering
-        # changes which articles the LLM sees, the cache is invalidated and
-        # a fresh generation reflects the cleaner cluster.
-        llm_result = call_llm(
-            prompt_version=ACTION_CENTER_PROMPT_VERSION,
-            system_prompt=_SYSTEM_PROMPT,
-            user_prompt=user_prompt,
-            cache_key={"date": today, "rank": rank, "titles": [a.title for a in filtered_cluster[:5]]},
-            db_session=db,
-            max_tokens=1024,
-            num_ctx=4096,
-        )
-
-        if not llm_result:
-            logger.warning("LLM returned empty for cluster rank %d", rank)
-            continue
-
-        if isinstance(llm_result, str):
-            llm_result = extract_json(llm_result)
-        if not isinstance(llm_result, dict):
-            logger.warning("LLM result not a dict for rank %d: %s", rank, type(llm_result))
-            continue
-
+        # --- Claims, not prose -------------------------------------
+        # The model locates assertions; claims.py verifies each is
+        # verbatim AND asserted of its actor, then renders it. See
+        # claims.py and post_composer.py for the three published
+        # failures that made free-form generation untenable, and for
+        # what this shape makes impossible rather than merely
+        # detectable.
         issue_source_text = " ".join(
             f"{a.title} {a.summary}" for a in filtered_cluster
         )
 
-        title = llm_result.get("title", cluster[0].title)
-        summary = _fix_impossible_senate_vote_counts(llm_result.get("summary", ""))
-        facts = _validate_facts(
-            llm_result.get("facts", []),
-            source_text=issue_source_text,
-        )
-        facts = [_fix_impossible_senate_vote_counts(f) for f in facts]
-
-        title = _validate_geographic_consistency(title, [a.title for a in filtered_cluster])
-
-        # A title that demotes a sitting official to "former" without any
-        # source basis (2026-07: "former President Donald Trump" — the
-        # model's stale training data, not the articles) is replaced with
-        # the top article's real headline: the retry below regenerates only
-        # summary/facts, so a bad title has a deterministic fallback instead
-        # of a retry, same as the geographic-consistency correction above.
-        title_former = ungrounded_former_official_claims(title, issue_source_text)
-        if title_former:
-            logger.warning(
-                "Title asserted ungrounded 'former' status (%s) — falling back to "
-                "article headline: '%s'",
-                ", ".join(title_former), title[:80],
+        def _locate(source_material: str, _rank: int = rank) -> dict | None:
+            located = call_llm(
+                prompt_version=ACTION_CENTER_PROMPT_VERSION,
+                system_prompt=_SYSTEM_PROMPT,
+                user_prompt=_CLAIM_PROMPT_TEMPLATE.format(source=source_material),
+                cache_key={"date": today, "rank": _rank, "src": source_material[:200]},
+                db_session=db,
+                max_tokens=200,
+                num_ctx=2048,
             )
-            action_metrics.increment("titles_replaced_former_status")
-            title = filtered_cluster[0].title
+            if isinstance(located, str):
+                located = extract_json(located)
+            return located if isinstance(located, dict) else None
 
-        # Politician role validator: strip hallucinated "Senator X" / "Rep. X" labels
-        # that don't match anyone in the database.
-        title, summary, facts = _validate_politician_roles(title, summary, facts, db)
+        cluster_claims = claim_layer.extract_claims(filtered_cluster, _locate)
+        cluster_claims = claim_layer.on_topic(cluster_claims, filtered_cluster)
+        if not cluster_claims:
+            # A cluster with no attributable fact produces NO ISSUE.
+            # Measured on a live run, roughly one top cluster in four is
+            # like this, so MAX_ISSUES is a ceiling rather than a quota.
+            # Publishing anyway is what produced "This coverage tracks
+            # the race and related developments."
+            logger.info("No verifiable claim in cluster rank %d — no issue", rank)
+            action_metrics.increment("clusters_without_claims")
+            continue
 
-        # Mechanical check for hedging attribution ("sources show," "reports
-        # indicate") and editorializing ("was warranted") — same backstop as
-        # the Bluesky poster and _generate_full_story. The prompt already
-        # forbids both (see _SYSTEM_PROMPT / _ISSUE_PROMPT_TEMPLATE) but the
-        # local model doesn't reliably follow prompt-only instructions, and
-        # unlike the full-story path this summary/facts generation had no
-        # mechanical backstop at all until this fix.
-        #
-        # 2026-08 quality audit: this was the ONLY generated text in the
-        # whole pipeline checked with hedge/editorializing plus a single
-        # hand-picked grounding rule (former-official status), while the
-        # Bluesky post generated FROM this same summary (bluesky_poster.py)
-        # already ran the full grounding_violations() combinator —
-        # ungrounded numbers, titled names, electoral claims, family
-        # relationships, party affiliation, in addition to former-status.
-        # A hallucination in any of those five categories could reach the
-        # published issue itself while only getting caught downstream (or
-        # not at all, since the Bluesky post is optional/best-effort and
-        # near-duplicate posts get suppressed before ever re-checking this
-        # text). Reusing the same battle-tested combinator here closes that
-        # gap — no new check invented, just applied where it was missing.
-        combined_text = summary + " " + " ".join(facts)
-        reasons = hedge_and_editorializing_violations(combined_text)
-        reasons += grounding_violations(combined_text, issue_source_text)
+        # The headline of the top-ranked real article. A real outlet's
+        # own headline cannot hallucinate, and this was already the
+        # proven-safe fallback whenever a generated title failed — it is
+        # now the only path.
+        title = filtered_cluster[0].title
+        summary = claim_layer.build_lede(cluster_claims)
+        # Facts are the SUPPORTING claims — the lede already states the
+        # headline one. Passing the whole list made the summary a
+        # verbatim duplicate of fact 1, which the first end-to-end run
+        # against live articles showed immediately (Trump/Xi: the
+        # summary and the first key fact were the same sentence).
+        facts, fact_sources = claim_layer.build_facts(cluster_claims[1:])
+
+        # Backstop, not the primary defence. Every word here is either a
+        # verbatim span or a real outlet's headline, so this should
+        # always pass — which is exactly why it is worth running: it is
+        # what would catch a regression in compose() itself, and it keeps
+        # this path inside the one shared validation surface every other
+        # generator uses. Same posture as election_bluesky's composed
+        # post. Fail closed: a cluster that somehow produces ungrounded
+        # text publishes nothing rather than being retried into shape.
+        composed_text = f"{title} {summary} " + " ".join(facts)
+        reasons = grounding_violations(composed_text, issue_source_text)
+        reasons += hedge_and_editorializing_violations(composed_text)
         _record_generation_sample(
-            db, "action_center_issue", rank, 1, user_prompt,
+            db, "action_center_issue", rank, 1, _CLAIM_PROMPT_TEMPLATE,
             {"title": title, "summary": summary, "facts": facts},
             passed=not reasons, violations=reasons or None,
         )
         if reasons:
-            retried = _retry_until_grounded(
-                user_prompt, reasons, rank, db, issue_source_text, title,
+            logger.warning(
+                "Composed issue for rank %d failed the backstop (%s) — no issue",
+                rank, "; ".join(reasons)[:200],
             )
-            if retried is None:
-                action_metrics.increment("issues_skipped_grounding")
-                continue
-            title, summary, facts = retried
+            action_metrics.increment("issues_skipped_grounding")
+            continue
+
 
         # Second-pass check for who-did-what-to-whom role reversal (see
         # _check_summary_roles). One retry with a corrective note; if the
@@ -4868,60 +4628,38 @@ def _run_refresh(db: Session) -> int:
         source_text_for_check = " ".join(f"{a.title} {a.summary}" for a in filtered_cluster)
         accurate, reason = _check_summary_roles(summary, source_text_for_check, db)
         if not accurate:
-            logger.warning(
-                "Summary role-check failed for rank %d ('%s'): retrying with correction",
-                rank, reason,
+            # No regeneration. The summary is a verbatim span the
+            # source asserts of its own actor, so a role-check failure
+            # here is a signal that something upstream is wrong, not an
+            # invitation to rewrite it as free prose — rewriting is what
+            # this redesign removed. Skip the issue instead.
+            logger.error(
+                "Summary role-check failed for rank %d ('%s') — skipping "
+                "rather than regenerating: %s",
+                rank, reason, summary[:200],
             )
-            retry_result = call_llm(
-                prompt_version=ACTION_CENTER_PROMPT_VERSION,
-                system_prompt=_SYSTEM_PROMPT,
-                user_prompt=user_prompt + (
-                    f"\n\nYour previous summary had a factual error: {reason}. "
-                    "Rewrite the summary making sure every action, accusation, "
-                    "and legal outcome is attributed to the correct person."
-                ),
-                cache_key=None,
-                db_session=db,
-                max_tokens=1024,
-                num_ctx=4096,
-            )
-            if isinstance(retry_result, str):
-                retry_result = extract_json(retry_result)
-            retry_summary = retry_result.get("summary") if isinstance(retry_result, dict) else None
-            if retry_summary:
-                accurate, reason = _check_summary_roles(str(retry_summary), source_text_for_check, db)
-                if accurate:
-                    summary = str(retry_summary)
-
-            _record_generation_sample(
-                db, "action_center_role_check", rank, 2, user_prompt,
-                {"summary": retry_summary}, passed=accurate,
-                violations=[reason] if not accurate else None,
-            )
-            if not accurate:
-                logger.error(
-                    "Summary role-check failed twice for rank %d ('%s') — "
-                    "skipping this issue rather than publish it: %s",
-                    rank, reason, summary[:200],
-                )
-                action_metrics.increment("issues_skipped_role_check")
-                continue
+            action_metrics.increment("issues_skipped_role_check")
+            continue
 
         _log_summary_source_consistency(summary, source_text_for_check)
         log_intensifier_usage(
             "action_center_issue", summary + " " + " ".join(facts), source_text_for_check,
         )
 
-        # Minimum-substance gate (2026-07 audit): fewer than 2 facts
-        # surviving validation means there isn't a publishable issue here —
-        # observed live as issues consisting entirely of vacuous filler
-        # ("Congressional scheduling adjustments": no name, no number, no
-        # bill anywhere in its facts). Fail closed, same posture as the
-        # grounding retries above.
-        if len(facts) < 2:
+        # Minimum-substance gate (2026-07 audit): an issue resting on a
+        # single piece of evidence isn't a publishable issue — observed
+        # live as issues of pure filler ("Congressional scheduling
+        # adjustments": no name, no number, no bill anywhere).
+        #
+        # Counted in CLAIMS rather than facts since the redesign: the
+        # lede is itself a claim, so two claims means a headline fact
+        # plus one corroborating fact — the same "at least two pieces of
+        # evidence" bar the original gate set, now that `facts` holds
+        # only the supporting ones.
+        if len(cluster_claims) < 2:
             logger.info(
-                "Skipping rank %d — only %d fact(s) survived validation: '%s'",
-                rank, len(facts), title[:60],
+                "Skipping rank %d — only %d claim(s) survived: '%s'",
+                rank, len(cluster_claims), title[:60],
             )
             action_metrics.increment("issues_skipped_too_few_facts")
             continue
@@ -4947,10 +4685,13 @@ def _run_refresh(db: Session) -> int:
             facts = []
         policy_areas = _classify_issue_policy_areas(title, summary)
 
-        # 7. Resolve bill references to Congress.gov URLs
-        raw_bills = llm_result.get("bills", [])
-        if not isinstance(raw_bills, list):
-            raw_bills = []
+        # 7. Resolve bill references to Congress.gov URLs.
+        # No LLM-suggested names any more: _resolve_bills already scans
+        # the article text itself with a regex for "H.R. 22" / "S. 1234",
+        # and its own docstring notes LLM ids were never trusted ("always
+        # search by name, never trust LLM IDs"). The mechanical path is
+        # unchanged; only the model's guesses are gone.
+        raw_bills: list = []
         article_texts = [f"{a.title} {a.summary}" for a in cluster]
         resolved_bills = _resolve_bills(raw_bills, article_texts)
         if resolved_bills:
@@ -5030,6 +4771,11 @@ def _run_refresh(db: Session) -> int:
             "summary": summary,
             "facts": json.dumps(facts),
             "actions": json.dumps(actions),
+            # Aligned with `facts` by index. Verbatim quoting without
+            # attribution reads as plagiarism; with it, it reads as
+            # evidence — and a reader can check any fact against the
+            # outlet that made it.
+            "fact_sources": json.dumps(fact_sources),
             "source_urls": json.dumps(source_urls),
             "source_names": json.dumps(source_names),
             "policy_areas": json.dumps(policy_areas),
