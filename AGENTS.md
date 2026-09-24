@@ -750,10 +750,10 @@ docker compose run --rm --no-deps backend python -m pytest tests/ -v -m "not slo
 
 Test configuration is in `backend/pytest.ini`. Async tests use
 `asyncio_mode = auto`. **Mark any test that loads a sentence-transformer
-model `@pytest.mark.slow`** (~10s startup). CI runs both halves (`-m "not
-slow"`, then `-m slow`), so a slow mark moves a test to the second step
-rather than dropping it. The fast half must pass with no network access and
-no model.
+model `@pytest.mark.slow`** (~10s startup). The fast job runs `-m "not
+slow"` on every PR and must pass with no network access and no model; the
+Embedding Tests job runs `-m slow` on pushes to `main` and on any PR that
+touches `backend/requirements.txt` or `backend/app/pipeline/`.
 
 ### Environment variables
 
