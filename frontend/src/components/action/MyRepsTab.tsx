@@ -170,7 +170,7 @@ function RepresentativeCard({ person, district }: { person: MyRepSenator; distri
           label={SCORE_TERMS["fundingIndependence"].shortLabel}
           value={s.fundingIndependence}
         />
-        <ScoreBar label={SCORE_TERMS["independentVoting"].shortLabel} value={s.independentVoting} />
+        <ScoreBar label={SCORE_TERMS["constituentAlignment"].shortLabel} value={s.constituentAlignment} />
         <ScoreBar
           label={SCORE_TERMS["legislativeEffectiveness"].shortLabel}
           value={s.legislativeEffectiveness}

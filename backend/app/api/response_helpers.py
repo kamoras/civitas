@@ -42,7 +42,7 @@ def cached_json(data, max_age: int = CACHE_TTL_LIST_S) -> JSONResponse:
 SENATOR_DIMENSION_LABELS = {
     "score_1": "fundingIndependence",
     "score_2": "promisePersistence",
-    "score_3": "independentVoting",
+    "score_3": "constituentAlignment",
     "score_4": "fundingDiversity",
     "score_5": "legislativeEffectiveness",
 }

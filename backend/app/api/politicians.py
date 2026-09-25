@@ -60,7 +60,7 @@ def _senator_overall(s) -> float | None:
     scores = [
         s.score_funding_independence,
         s.score_promise_persistence,
-        s.score_independent_voting,
+        s.score_constituent_alignment,
         s.score_funding_diversity,
         s.score_legislative_effectiveness,
     ]

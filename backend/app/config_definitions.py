@@ -16,7 +16,7 @@ from enum import StrEnum
 # docs/methodology/weights.md.
 SCORE_WEIGHTS: dict[str, float] = {
     "fundingIndependence": 0.33,
-    "independentVoting": 0.33,
+    "constituentAlignment": 0.33,
     "legislativeEffectiveness": 0.34,
 }
 

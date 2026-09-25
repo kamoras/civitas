@@ -35,7 +35,7 @@ def _make_senator(**overrides):
         "representationScore": {
             "fundingIndependence": 60,
             "promisePersistence": 55,
-            "independentVoting": 70,
+            "constituentAlignment": 70,
             "fundingDiversity": 65,
             "legislativeEffectiveness": 50,
         },
@@ -93,7 +93,7 @@ class TestValidateSenator:
         senator = _make_senator(representationScore={
             "fundingIndependence": 150,
             "promisePersistence": -20,
-            "independentVoting": 50,
+            "constituentAlignment": 50,
             "fundingDiversity": 200,
             "legislativeEffectiveness": 110,
         })
@@ -101,7 +101,7 @@ class TestValidateSenator:
         scores = result["representationScore"]
         assert scores["fundingIndependence"] == 100
         assert scores["promisePersistence"] == 0
-        assert scores["independentVoting"] == 50
+        assert scores["constituentAlignment"] == 50
         assert scores["fundingDiversity"] == 100
         assert scores["legislativeEffectiveness"] == 100
 
@@ -147,14 +147,14 @@ class TestValidateSenator:
         confidence = {
             "fundingIndependence": "high",
             "promisePersistence": "low",
-            "independentVoting": "medium",
+            "constituentAlignment": "medium",
             "fundingDiversity": "high",
             "legislativeEffectiveness": "low",
         }
         senator = _make_senator(representationScore={
             "fundingIndependence": 60,
             "promisePersistence": 55,
-            "independentVoting": 70,
+            "constituentAlignment": 70,
             "fundingDiversity": 65,
             "legislativeEffectiveness": 50,
             "confidence": confidence,

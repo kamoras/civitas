@@ -203,7 +203,7 @@ def run_chamber(chamber: str, congress: int, les: dict[str, float] | None, les_k
     conn.row_factory = sqlite3.Row
     ours = {
         r["bioguide_id"]: dict(r) for r in conn.execute(
-            f"SELECT name, bioguide_id, score_independent_voting ca, "
+            f"SELECT name, bioguide_id, score_constituent_alignment ca, "
             f"score_legislative_effectiveness le FROM {table} WHERE is_current = 1"
         ) if r["bioguide_id"]
     }

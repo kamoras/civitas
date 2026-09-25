@@ -13,8 +13,7 @@ the weighted sum below:
                                   concentration, industry concentration (v6.13;
                                   v6.5 folded in the former Funding Diversity)
   2. Constituent Alignment      — voting behavior vs what the seat's electorate
-                                  expects (PVI-relative; stored/keyed as
-                                  independentVoting for compatibility)
+                                  expects (PVI-relative)
   3. Legislative Effectiveness  — bill passage, cosponsorship leadership, volume
 
 North star (owner, 2026-07): scores measure how well members REPRESENT
@@ -183,7 +182,7 @@ ALGORITHM_VERSION = "v6.13"
 _SCORE_FIELD_MAP: dict[str, str] = {
     "fundingIndependence": "score_funding_independence",
     "promisePersistence": "score_promise_persistence",
-    "independentVoting": "score_independent_voting",
+    "constituentAlignment": "score_constituent_alignment",
     "fundingDiversity": "score_funding_diversity",
     "legislativeEffectiveness": "score_legislative_effectiveness",
 }
@@ -550,10 +549,7 @@ def calculate_scores(senator: dict) -> dict:
             senator.get("party", "I"),
             senator.get("campaignPromises", []),
         ),
-        # Key kept as "independentVoting" for storage/API compatibility;
-        # since v4.2 this dimension is Constituent Alignment (see
-        # _calc_constituent_alignment).
-        "independentVoting": _calc_constituent_alignment(
+        "constituentAlignment": _calc_constituent_alignment(
             voting_record,
             lobbying_matches,
             funding,
@@ -598,7 +594,7 @@ def explain_scores(senator: dict) -> dict:
             funding, senator.get("state", ""), senator.get("district"),
             senator.get("fundingReference"),
         ),
-        "independentVoting": _constituent_alignment_core(
+        "constituentAlignment": _constituent_alignment_core(
             voting_record,
             lobbying_matches,
             funding,
@@ -658,7 +654,7 @@ def calculate_confidence(senator: dict) -> dict[str, str]:
         if isinstance(p, dict) and p.get("alignment") in (PromiseAlignment.KEPT, PromiseAlignment.PARTIAL, PromiseAlignment.BROKEN)
     )
 
-    # independentVoting/legislativeEffectiveness thresholds are halved from
+    # constituentAlignment/legislativeEffectiveness thresholds are halved from
     # their original 10/40 and 3/10: both dimensions' underlying windows
     # were cut from ~2-3 congresses to the current congress only (see
     # AGENTS.md "current term"), so the old volume thresholds would grade
@@ -669,7 +665,7 @@ def calculate_confidence(senator: dict) -> dict[str, str]:
     return {
         "fundingIndependence": grade(n_donors, 3, 10) if has_funding else "low",
         "promisePersistence": grade(n_evaluable, 3, 8),
-        "independentVoting": grade(n_party_votes, 5, 20),
+        "constituentAlignment": grade(n_party_votes, 5, 20),
         "fundingDiversity": grade(n_industries, 3, 6) if has_funding else "low",
         "legislativeEffectiveness": grade(len(bills), 2, 5),
     }
@@ -1502,8 +1498,9 @@ def _calc_constituent_alignment(
     reference: dict | None = None,
 ) -> int:
     """
-    Constituent Alignment Score (0-100, higher = better). Stored under the
-    legacy key "independentVoting".
+    Constituent Alignment Score (0-100, higher = better). Keyed
+    "constituentAlignment" (it was "independentVoting" until 2026-09; the
+    public API still emits that name too, for existing consumers).
 
     How far a member's voting sits from what members of their party in
     comparably-leaning seats do, in the direction their seat leans. v6.13

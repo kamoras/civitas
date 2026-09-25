@@ -23,7 +23,7 @@ def _add_senator(db, id_, *, fi=50.0, iv=50.0, fd=50.0, le=50.0,
         state="NY",
         party="D",
         score_funding_independence=fi,
-        score_independent_voting=iv,
+        score_constituent_alignment=iv,
         score_funding_diversity=fd,
         score_legislative_effectiveness=le,
         total_raised=total_raised,
@@ -44,7 +44,7 @@ def _add_representative(db, id_, *, fi=50.0, iv=50.0, fd=50.0, le=50.0,
         district=1,
         party="D",
         score_funding_independence=fi,
-        score_independent_voting=iv,
+        score_constituent_alignment=iv,
         score_funding_diversity=fd,
         score_legislative_effectiveness=le,
         total_raised=total_raised,
@@ -183,7 +183,7 @@ class TestDerivedConsistency:
             s = Senator(
                 id=f"new{i}", name=f"Freshman {i}", state="OH", party="R",
                 score_funding_independence=95 - 1.5 * i,
-                score_independent_voting=25 + 1.5 * i,
+                score_constituent_alignment=25 + 1.5 * i,
                 total_raised=2_000_000,
                 total_from_pacs=2_000_000 * i / 50,
                 small_donor_percentage=40 - 0.8 * i,
@@ -275,7 +275,7 @@ class TestTieExtendedExtreme:
         for i in range(16):
             members.append({
                 "name": f"tied{i}",
-                "scores": {"score_independent_voting": 50.0},
+                "scores": {"score_constituent_alignment": 50.0},
                 "metrics": {"party_break_rate": 0.0, "pac_ratio": 0.3, "small_donor_pct": 20.0},
                 "raw": {"total_raised": 1_000_000, "total_from_pacs": 100_000,
                         "labeled_votes": 50},
@@ -283,7 +283,7 @@ class TestTieExtendedExtreme:
         for i in range(84):
             members.append({
                 "name": f"m{i}",
-                "scores": {"score_independent_voting": 10.0 + i * (80.0 / 83)},
+                "scores": {"score_constituent_alignment": 10.0 + i * (80.0 / 83)},
                 "metrics": {"party_break_rate": float(i + 1), "pac_ratio": 0.3, "small_donor_pct": 20.0},
                 "raw": {"total_raised": 1_000_000, "total_from_pacs": 100_000,
                         "labeled_votes": 50},
@@ -391,7 +391,7 @@ class TestCheckScoreDistribution:
             _add_senator(db_session, f"s{i}", fi=v, iv=v, fd=v, le=v)
         s = Senator(id="new", name="New Senator", state="CA", party="I")
         s.score_funding_independence = None
-        s.score_independent_voting = None
+        s.score_constituent_alignment = None
         s.score_funding_diversity = None
         s.score_legislative_effectiveness = None
         db_session.add(s)

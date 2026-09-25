@@ -44,7 +44,7 @@ erDiagram
         int years_in_office
         bool is_current "false = left office; row deleted 180 days later"
         float score_funding_independence
-        float score_independent_voting "Constituent Alignment"
+        float score_constituent_alignment "Constituent Alignment"
         float score_legislative_effectiveness
         float score_promise_persistence "unweighted since v6.0"
         float score_funding_diversity "unweighted since v6.5"
@@ -66,7 +66,7 @@ erDiagram
         string party
         bool is_current "false = left office; row deleted 180 days later"
         float score_funding_independence
-        float score_independent_voting "Constituent Alignment"
+        float score_constituent_alignment "Constituent Alignment"
         float score_legislative_effectiveness
         float score_promise_persistence "unweighted since v6.0"
         float score_funding_diversity "unweighted since v6.5"

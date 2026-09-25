@@ -34,7 +34,7 @@ def _make_senator(**overrides) -> dict:
         representation_score=RepresentationScoreSchema(
             funding_independence=60,
             promise_persistence=55,
-            independent_voting=70,
+            constituent_alignment=70,
             funding_diversity=65,
         ),
         funding=FundingSchema(
@@ -210,7 +210,7 @@ class TestOverallScoreHighlights:
             representation_score=RepresentationScoreSchema(
                 funding_independence=90,
                 promise_persistence=85,
-                independent_voting=80,
+                constituent_alignment=80,
                 funding_diversity=85,
                 legislative_effectiveness=85,
             )
@@ -224,7 +224,7 @@ class TestOverallScoreHighlights:
             representation_score=RepresentationScoreSchema(
                 funding_independence=20,
                 promise_persistence=25,
-                independent_voting=30,
+                constituent_alignment=30,
                 funding_diversity=20,
                 legislative_effectiveness=15,
             )
@@ -273,7 +273,7 @@ class TestRepresentativeHighlights:
             "representationScore": {
                 "fundingIndependence": 60,
                 "promisePersistence": 55,
-                "independentVoting": 70,
+                "constituentAlignment": 70,
                 "fundingDiversity": 65,
                 "legislativeEffectiveness": 50,
             },

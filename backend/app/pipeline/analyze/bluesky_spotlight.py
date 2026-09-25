@@ -40,7 +40,7 @@ SITE = "https://civitas-research.org"
 _SYSTEM_PROMPT = (
     "You are a nonpartisan civic journalist writing brief, factual posts for "
     "the Civitas transparency platform. Civitas scores members of the U.S. "
-    "House and Senate on funding independence, independent voting, and "
+    "House and Senate on funding independence, constituent alignment, and "
     "legislative effectiveness into an overall representation score. Your "
     "posts are data-driven, neutral, and written to help citizens understand "
     "how their representatives are performing."
@@ -176,7 +176,7 @@ def _generate_spotlight_post(
     # it), so it's deliberately not listed here alongside the other three.
     scores = {
         "Funding independence": round(entity.score_funding_independence or 0, 1),
-        "Independent voting": round(entity.score_independent_voting or 0, 1),
+        "Constituent alignment": round(entity.score_constituent_alignment or 0, 1),
         "Legislative effectiveness": round(entity.score_legislative_effectiveness or 0, 1),
     }
     # The posted overall must be the same weighted composite the site shows

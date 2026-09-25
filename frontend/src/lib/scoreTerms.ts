@@ -5,7 +5,7 @@ export interface ScoreTerm {
 }
 
 export type ScoreKey =
-  "fundingIndependence" | "independentVoting" | "fundingDiversity" | "legislativeEffectiveness";
+  "fundingIndependence" | "constituentAlignment" | "fundingDiversity" | "legislativeEffectiveness";
 
 export const SCORE_TERMS: Record<ScoreKey, ScoreTerm> = {
   fundingIndependence: {
@@ -14,7 +14,7 @@ export const SCORE_TERMS: Record<ScoreKey, ScoreTerm> = {
     description:
       "How free is this member from PAC and mega-donor influence? Blends PAC dependency (scaled by how close contributing PACs run to their legal caps), state-relative small-donor share, top-donor concentration, and industry concentration. Outside spending by super PACs is not counted: the member can't direct it, and it tracks how competitive the race is rather than how dependent the member is.",
   },
-  independentVoting: {
+  constituentAlignment: {
     label: "Constituent Alignment",
     shortLabel: "ALIGNMENT",
     description:

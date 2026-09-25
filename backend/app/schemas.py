@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 
 def to_camel(string: str) -> str:
@@ -47,9 +47,16 @@ class IndustryDonationSchema(CamelModel):
 class RepresentationScoreSchema(CamelModel):
     funding_independence: float
     promise_persistence: float
-    independent_voting: float
+    constituent_alignment: float
     funding_diversity: float
     legislative_effectiveness: float = 0.0
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def independent_voting(self) -> float:
+        """Deprecated alias of constituent_alignment (the key's name until
+        2026-09), kept in the JSON for clients built against it."""
+        return self.constituent_alignment
     # Backend-computed overall (score_calculator.compute_overall_score) — the
     # frontend must never recompute this from the sub-scores itself (see
     # lib/representation.ts's removed weightedScore).

@@ -214,7 +214,7 @@ class TestContributionsDenominator:
             "funding": {"totalRaised": 50_000_000, "totalContributions": 20_000_000,
                         "totalFromPACs": 10_000_000, "smallDonorPercentage": 10,
                         "topDonors": [], "industryBreakdown": []},
-            "representationScore": {"fundingIndependence": 50, "independentVoting": 50,
+            "representationScore": {"fundingIndependence": 50, "constituentAlignment": 50,
                                     "legislativeEffectiveness": 50},
             "votingRecord": {"totalVotes": 0}, "campaignPromises": [], "lobbyingMatches": [],
         }

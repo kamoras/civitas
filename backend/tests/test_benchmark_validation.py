@@ -54,7 +54,7 @@ def senate(tmp_path, monkeypatch):
             votes.append({"rollnumber": str(roll), "icpsr": str(i), "cast_code": "1" if yea else "6"})
     db = tmp_path / "civitas.db"
     conn = sqlite3.connect(db)
-    conn.execute("CREATE TABLE senators (bioguide_id TEXT, name TEXT, score_independent_voting REAL, "
+    conn.execute("CREATE TABLE senators (bioguide_id TEXT, name TEXT, score_constituent_alignment REAL, "
                  "score_legislative_effectiveness REAL, is_current INTEGER)")
     conn.executemany("INSERT INTO senators VALUES (?, ?, ?, ?, 1)", db_rows)
     conn.commit()

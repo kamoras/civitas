@@ -28,7 +28,7 @@ Three families of checks, all population-level:
 2. Direction-of-effect — Spearman rank correlation between each score
    and an upstream raw metric it must track: Funding Independence must
    fall as the PAC share of receipts rises and rise with small-donor
-   share; Independent Voting must rise with the observed party-break
+   share; Constituent Alignment must rise with the observed party-break
    rate. "The most PAC-free members must score high on FI" is exactly
    what the old Sanders/Warren rows asserted, computed fresh each run
    for whoever currently holds that profile.
@@ -96,7 +96,7 @@ MIN_HISTORY_DATES = 5
 # reference ranges the way the old hardcoded table did.
 
 _DIM_LABEL = {
-    "score_independent_voting": "IV",
+    "score_constituent_alignment": "IV",
     "score_funding_independence": "FI",
     "score_funding_diversity": "FD",
     "score_legislative_effectiveness": "LE",
@@ -109,7 +109,7 @@ _CONSISTENCY_CHECKS: list[tuple[str, str, int, str]] = [
      "PAC share of receipts (FEC)"),
     ("small_donor_pct", "score_funding_independence", +1,
      "small-donor share of receipts (FEC unitemized)"),
-    ("party_break_rate", "score_independent_voting", +1,
+    ("party_break_rate", "score_constituent_alignment", +1,
      "observed party-break rate on labeled roll-call votes"),
 ]
 
@@ -423,7 +423,7 @@ def check_ground_truth(db, model=None) -> dict:
 # score_calibration.DIMENSIONS (score_2 is retired Promise Persistence).
 _SNAPSHOT_COLUMN = {
     "score_funding_independence": "score_1",
-    "score_independent_voting": "score_3",
+    "score_constituent_alignment": "score_3",
     "score_funding_diversity": "score_4",
     "score_legislative_effectiveness": "score_5",
 }

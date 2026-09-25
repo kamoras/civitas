@@ -132,7 +132,7 @@ class TestSenatorCoreConsistency:
         }
         breakdown = explain_scores(senator)
         assert set(breakdown.keys()) == {
-            "fundingIndependence", "independentVoting", "fundingDiversity", "legislativeEffectiveness",
+            "fundingIndependence", "constituentAlignment", "fundingDiversity", "legislativeEffectiveness",
         }
         assert "promisePersistence" not in breakdown  # removed dimension, no bar to explain
 
@@ -222,7 +222,7 @@ class TestSenatorScoreBreakdownService:
         breakdown = get_senator_score_breakdown(db_session, "test-senator")
         assert breakdown is not None
         assert set(breakdown.keys()) == {
-            "fundingIndependence", "independentVoting", "fundingDiversity", "legislativeEffectiveness",
+            "fundingIndependence", "constituentAlignment", "fundingDiversity", "legislativeEffectiveness",
         }
         fi = breakdown["fundingIndependence"]
         assert 0 <= fi["score"] <= 100

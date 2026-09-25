@@ -96,7 +96,7 @@ export interface MyRepSenator {
   scores: {
     fundingIndependence: number;
     promisePersistence: number;
-    independentVoting: number;
+    constituentAlignment: number;
     fundingDiversity: number;
     legislativeEffectiveness: number;
     overall: number;
@@ -120,7 +120,7 @@ export interface MyRepRep {
   scores: {
     fundingIndependence: number;
     promisePersistence: number;
-    independentVoting: number;
+    constituentAlignment: number;
     fundingDiversity: number;
     legislativeEffectiveness: number;
     overall: number;

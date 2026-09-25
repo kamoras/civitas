@@ -28,7 +28,7 @@ type Chamber = "senate" | "house";
 // own scored dimension (see RepresentationScore.tsx's matching comment).
 const SCORE_KEYS = [
   "fundingIndependence",
-  "independentVoting",
+  "constituentAlignment",
   "legislativeEffectiveness",
 ] as const;
 
@@ -36,7 +36,7 @@ type ScoreKey = (typeof SCORE_KEYS)[number];
 
 const SCORE_LABELS: Record<ScoreKey, string> = {
   fundingIndependence: "FUNDING INDEP",
-  independentVoting: "ALIGNMENT",
+  constituentAlignment: "ALIGNMENT",
   legislativeEffectiveness: "LEGIS EFFECT",
 };
 

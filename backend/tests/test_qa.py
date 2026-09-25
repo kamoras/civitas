@@ -23,14 +23,14 @@ def seeded(db_session):
         id="S1", name="Jane Doe", state="CA", party="D",
         total_raised=2_400_000.0,
         score_funding_independence=82.0, score_promise_persistence=71.0,
-        score_independent_voting=64.0, score_funding_diversity=55.0,
+        score_constituent_alignment=64.0, score_funding_diversity=55.0,
         score_legislative_effectiveness=48.0,
     ))
     db_session.add(Senator(
         id="S2", name="John Roe", state="NY", party="R",
         total_raised=900_000.0,
         score_funding_independence=31.0, score_promise_persistence=22.0,
-        score_independent_voting=18.0, score_funding_diversity=25.0,
+        score_constituent_alignment=18.0, score_funding_diversity=25.0,
         score_legislative_effectiveness=20.0,
     ))
     db_session.add(Representative(id="R1", name="Sam Poe", state="TX", party="R"))

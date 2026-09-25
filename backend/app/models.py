@@ -114,7 +114,7 @@ class Senator(Base):
     # perfect 100 or 0") unknown must not read as a fully-captured 0.
     score_funding_independence: Mapped[float] = mapped_column(Float, default=50.0)
     score_promise_persistence: Mapped[float] = mapped_column(Float, default=50.0)
-    score_independent_voting: Mapped[float] = mapped_column(Float, default=50.0)
+    score_constituent_alignment: Mapped[float] = mapped_column(Float, default=50.0)
     score_funding_diversity: Mapped[float] = mapped_column(Float, default=50.0)
     score_legislative_effectiveness: Mapped[float] = mapped_column(Float, default=50.0)
     # Per-dimension data-sufficiency ("high"/"medium"/"low") as JSON —
@@ -332,7 +332,7 @@ class Representative(Base):
     # perfect 100 or 0") unknown must not read as a fully-captured 0.
     score_funding_independence: Mapped[float] = mapped_column(Float, default=50.0)
     score_promise_persistence: Mapped[float] = mapped_column(Float, default=50.0)
-    score_independent_voting: Mapped[float] = mapped_column(Float, default=50.0)
+    score_constituent_alignment: Mapped[float] = mapped_column(Float, default=50.0)
     score_funding_diversity: Mapped[float] = mapped_column(Float, default=50.0)
     score_legislative_effectiveness: Mapped[float] = mapped_column(Float, default=50.0)
     # Per-dimension data-sufficiency ("high"/"medium"/"low") as JSON —

@@ -937,7 +937,7 @@ def _record_rep_snapshots(db: Session) -> None:
             existing.overall_score = overall
             existing.score_1 = r.score_funding_independence
             existing.score_2 = r.score_promise_persistence
-            existing.score_3 = r.score_independent_voting
+            existing.score_3 = r.score_constituent_alignment
             existing.score_4 = r.score_funding_diversity
             existing.score_5 = r.score_legislative_effectiveness
             # Same-day re-run after a code deploy: keep the version label
@@ -952,7 +952,7 @@ def _record_rep_snapshots(db: Session) -> None:
                 overall_score=overall,
                 score_1=r.score_funding_independence,
                 score_2=r.score_promise_persistence,
-                score_3=r.score_independent_voting,
+                score_3=r.score_constituent_alignment,
                 score_4=r.score_funding_diversity,
                 score_5=r.score_legislative_effectiveness,
                 algorithm_version=ALGORITHM_VERSION,

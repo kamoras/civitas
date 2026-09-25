@@ -94,7 +94,7 @@ def validate_senator(senator: dict) -> dict:
     validated_score = {
         "fundingIndependence": clamp(cs.get("fundingIndependence", NEUTRAL_SCORE)),
         "promisePersistence": clamp(cs.get("promisePersistence", NEUTRAL_SCORE)),
-        "independentVoting": clamp(cs.get("independentVoting", NEUTRAL_SCORE)),
+        "constituentAlignment": clamp(cs.get("constituentAlignment", NEUTRAL_SCORE)),
         "fundingDiversity": clamp(cs.get("fundingDiversity", NEUTRAL_SCORE)),
         "legislativeEffectiveness": clamp(cs.get("legislativeEffectiveness", NEUTRAL_SCORE)),
     }

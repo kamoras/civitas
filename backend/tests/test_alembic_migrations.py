@@ -72,7 +72,11 @@ def test_a_pre_alembic_database_is_bridged_then_stamped(patched_engine):
     # A deployed database from before Alembic: built by create_all long ago,
     # so it lacks a newer column, still carries a removed NOT NULL one (the
     # #611 shape), and is missing a table added since.
-    Base.metadata.create_all(bind=eng)
+    # Built at the baseline's shape (what a deployed pre-Alembic database
+    # has), not from today's models, which later revisions have moved on.
+    baseline = database._baseline_metadata()
+    baseline.remove(baseline.tables["alembic_version"])
+    baseline.create_all(bind=eng)
     with eng.begin() as conn:
         conn.execute(text("ALTER TABLE senators DROP COLUMN caucus_party"))
         conn.execute(text("ALTER TABLE senators DROP COLUMN committees"))
@@ -86,6 +90,8 @@ def test_a_pre_alembic_database_is_bridged_then_stamped(patched_engine):
     reps = {c["name"] for c in inspect(eng).get_columns("representatives")}
     assert {"caucus_party", "committees"} <= senators
     assert "voting_summary" not in reps
+    # ...and the revisions after the baseline applied on top of the bridge.
+    assert "score_constituent_alignment" in senators and "score_independent_voting" not in senators
     assert inspect(eng).has_table("ballot_measures")
     assert _revision(eng) == _head()
 

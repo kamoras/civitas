@@ -8,7 +8,7 @@ pipeline run. The admin endpoint exposes the latest report for observability.
 Score dimensions map to ScoreSnapshot columns:
   funding_independence      → score_1
   promise_persistence       → score_2
-  independent_voting        → score_3
+  constituent_alignment        → score_3
   funding_diversity         → score_4
   legislative_effectiveness → score_5
   overall_score             → overall_score
@@ -36,7 +36,7 @@ MIN_COUNT_FOR_STATS = 5
 DIMENSIONS: list[tuple[str, str]] = [
     ("funding_independence",      "score_1"),
     ("promise_persistence",       "score_2"),
-    ("independent_voting",        "score_3"),
+    ("constituent_alignment",        "score_3"),
     ("funding_diversity",         "score_4"),
     ("legislative_effectiveness", "score_5"),
     ("overall_score",             "overall_score"),

@@ -101,7 +101,7 @@ def build_rep_response(rep: Representative, _db: Session = None) -> Representati
         representation_score={
             "fundingIndependence": rep.score_funding_independence,
             "promisePersistence": rep.score_promise_persistence,
-            "independentVoting": rep.score_independent_voting,
+            "constituentAlignment": rep.score_constituent_alignment,
             "fundingDiversity": rep.score_funding_diversity,
             "legislativeEffectiveness": rep.score_legislative_effectiveness,
             "overall": compute_overall_score(rep),
@@ -341,7 +341,7 @@ def get_rep_leaderboard(
             "representationScore": {
                 "fundingIndependence": r.score_funding_independence,
                 "promisePersistence": r.score_promise_persistence,
-                "independentVoting": r.score_independent_voting,
+                "constituentAlignment": r.score_constituent_alignment,
                 "fundingDiversity": r.score_funding_diversity,
                 "legislativeEffectiveness": r.score_legislative_effectiveness,
                 "overall": compute_overall_score(r),
@@ -404,7 +404,7 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
     # neutral 50, never a perfect 100 or 0").
     existing.score_funding_independence = cs.get("fundingIndependence", 50)
     existing.score_promise_persistence = cs.get("promisePersistence", 50)
-    existing.score_independent_voting = cs.get("independentVoting", 50)
+    existing.score_constituent_alignment = cs.get("constituentAlignment", 50)
     existing.score_funding_diversity = cs.get("fundingDiversity", 50)
     existing.score_legislative_effectiveness = cs.get("legislativeEffectiveness", 50)
     existing.score_confidence = json.dumps(cs.get("confidence") or {})

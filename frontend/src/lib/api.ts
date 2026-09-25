@@ -1352,7 +1352,7 @@ export interface ScoreSnapshot {
   /** Scoring algorithm version that produced this snapshot (null for pre-v4.1 rows). */
   algorithmVersion?: string | null;
   /** Dimension name -> score. Keys differ by entity type (senator/rep:
-   * fundingIndependence/promisePersistence/independentVoting/
+   * fundingIndependence/promisePersistence/constituentAlignment/
    * fundingDiversity/legislativeEffectiveness; president: publicMandate/
    * effectiveness/agencyAlignment/historicalLegacy) — untyped here since
    * ScoreTrend (the only consumer) only ever reads date/overallScore. */

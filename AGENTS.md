@@ -264,7 +264,7 @@ Key mathematical properties:
   population's variance, so do not call it Bayesian or empirical Bayes
 - **Count confidence**: `min(n / threshold, 1.0)` ensures minimum sample
   sizes before trusting extreme scores
-- **State-adjusted baselines**: Independent voting scores account for Cook
+- **State-adjusted baselines**: Constituent Alignment scores account for Cook
   PVI (partisan lean of the state) so voting with party in a deep-red/blue
   state is not penalized the same as in a swing state
 - **Shannon entropy**: Funding diversity uses information-theoretic entropy

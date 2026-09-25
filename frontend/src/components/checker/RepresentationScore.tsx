@@ -39,14 +39,14 @@ function getScoreGrade(score: number): string {
 // text), so it's deliberately NOT in this list, not an oversight.
 const SCORE_KEYS: ScoreKey[] = [
   "fundingIndependence",
-  "independentVoting",
+  "constituentAlignment",
   "legislativeEffectiveness",
 ];
 
 const METRIC_BLURBS: Record<ScoreKey, string> = {
   fundingIndependence:
     "How little of their campaign comes from PACs, and how diversified their donor base is",
-  independentVoting: "Does their voting match what their state elected them to do?",
+  constituentAlignment: "Does their voting match what their state elected them to do?",
   fundingDiversity: "How many different industries fund them",
   legislativeEffectiveness: "How well they advance bills they sponsor",
 };
@@ -179,7 +179,7 @@ export default function RepresentationScore({
         : `${nBills} bills sponsored`;
 
   const scoreBasis: Partial<Record<ScoreKey, string | undefined>> = {
-    independentVoting: votingBasis,
+    constituentAlignment: votingBasis,
     fundingIndependence: fundingIndependenceBasis,
     legislativeEffectiveness: effectivenessBasis,
   };

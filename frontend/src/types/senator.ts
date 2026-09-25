@@ -23,7 +23,7 @@ export interface Senator {
   representationScore: {
     fundingIndependence: number;
     promisePersistence: number;
-    independentVoting: number;
+    constituentAlignment: number;
     fundingDiversity: number;
     legislativeEffectiveness: number;
     /** Backend-computed weighted overall — never recompute this client-side. */

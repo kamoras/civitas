@@ -227,7 +227,7 @@ def upsert_senator(db: Session, data: dict) -> None:
         # preserved rather than being conflated with missing data.
         "score_funding_independence": corruption.get("fundingIndependence", 50),
         "score_promise_persistence": corruption.get("promisePersistence", 50),
-        "score_independent_voting": corruption.get("independentVoting", 50),
+        "score_constituent_alignment": corruption.get("constituentAlignment", 50),
         "score_funding_diversity": corruption.get("fundingDiversity", 50),
         "score_legislative_effectiveness": corruption.get("legislativeEffectiveness", 50),
         "total_raised": funding.get("totalRaised") or 0,
@@ -429,7 +429,7 @@ def _record_score_snapshots(db: Session) -> None:
             overall_score=compute_overall_score(s),
             score_1=s.score_funding_independence,
             score_2=s.score_promise_persistence,
-            score_3=s.score_independent_voting,
+            score_3=s.score_constituent_alignment,
             score_4=s.score_funding_diversity,
             score_5=s.score_legislative_effectiveness,
             algorithm_version=ALGORITHM_VERSION,
@@ -1733,7 +1733,7 @@ async def run_senate_pipeline(
         # `.get(bio_id)`, so a withheld run silently overwrote every
         # senator's real score with None instead of leaving it as "couldn't
         # compute this run" — collapsing many senators' Constituent
-        # Alignment (independentVoting) score toward the same shared
+        # Alignment (constituentAlignment) score toward the same shared
         # neutral default. Same "keep what we had" principle
         # president_pipeline.py already applies to its own live-fetch
         # failures — backfilling here, once, means every consumer below

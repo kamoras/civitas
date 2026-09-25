@@ -241,12 +241,12 @@ def main() -> int:
             "raised": payload["funding"]["totalRaised"] or 0,
             "old": {
                 "fi": s["score_funding_independence"], "pp": s["score_promise_persistence"],
-                "iv": s["score_independent_voting"], "fd": s["score_funding_diversity"],
+                "iv": s["score_constituent_alignment"], "fd": s["score_funding_diversity"],
                 "le": s["score_legislative_effectiveness"],
             },
             "new": {
                 "fi": new["fundingIndependence"], "pp": new["promisePersistence"],
-                "iv": new["independentVoting"], "fd": new["fundingDiversity"],
+                "iv": new["constituentAlignment"], "fd": new["fundingDiversity"],
                 "le": new["legislativeEffectiveness"],
             },
         })
@@ -275,7 +275,7 @@ def main() -> int:
             "name": r["name"],
             "scores": {
                 "score_funding_independence": r["new"]["fi"],
-                "score_independent_voting": r["new"]["iv"],
+                "score_constituent_alignment": r["new"]["iv"],
                 "score_funding_diversity": r["new"]["fd"],
                 "score_legislative_effectiveness": r["new"]["le"],
             },

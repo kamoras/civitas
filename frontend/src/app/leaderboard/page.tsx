@@ -1186,7 +1186,7 @@ function LeaderboardContent() {
                 <div className="mt-4 space-y-1 text-center">
                   <p className="font-sans text-xs text-ink-lo">
                     Higher score = better constituent representation. Computed from: funding
-                    independence (33%) + independent voting (33%) + legislative effectiveness (34%).
+                    independence (33%) + constituent alignment (33%) + legislative effectiveness (34%).
                     Click any row to view full profile.
                   </p>
                   <p className="font-sans text-xs text-ink-min">

@@ -20,7 +20,7 @@ def test_all_zero_scores_means_not_yet_scored():
     s = Senator(
         id="S001", name="New Senator", state="CA", party="D",
         score_funding_independence=0.0, score_promise_persistence=0.0,
-        score_independent_voting=0.0, score_funding_diversity=0.0,
+        score_constituent_alignment=0.0, score_funding_diversity=0.0,
         score_legislative_effectiveness=0.0,
     )
     assert _senator_overall(s) is None
@@ -30,7 +30,7 @@ def test_matches_compute_overall_score_rounded_to_one_decimal():
     s = Senator(
         id="S001", name="Test Senator", state="CA", party="D",
         score_funding_independence=61, score_promise_persistence=72,
-        score_independent_voting=48, score_funding_diversity=55,
+        score_constituent_alignment=48, score_funding_diversity=55,
         score_legislative_effectiveness=80,
     )
     assert _senator_overall(s) == round(compute_overall_score(s), 1)
@@ -40,7 +40,7 @@ def test_works_for_representatives_too_via_duck_typing():
     r = Representative(
         id="R001", name="Test Rep", state="CA", district=1, party="D",
         score_funding_independence=61, score_promise_persistence=72,
-        score_independent_voting=48, score_funding_diversity=55,
+        score_constituent_alignment=48, score_funding_diversity=55,
         score_legislative_effectiveness=80,
     )
     assert _senator_overall(r) == round(compute_overall_score(r), 1)

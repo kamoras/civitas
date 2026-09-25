@@ -1099,7 +1099,7 @@ class TestCalculateScoresIntegration:
 
         assert "fundingIndependence" in scores
         assert "promisePersistence" in scores
-        assert "independentVoting" in scores
+        assert "constituentAlignment" in scores
         assert "fundingDiversity" in scores
         assert "legislativeEffectiveness" in scores
         assert "transparency" not in scores
@@ -1167,7 +1167,7 @@ class TestCalculateConfidence:
                 "recentVotes": [],
             },
         }
-        assert calculate_confidence(senator)["independentVoting"] == "low"
+        assert calculate_confidence(senator)["constituentAlignment"] == "low"
 
     def test_unclear_promises_do_not_count(self):
         from app.pipeline.analyze.score_calculator import calculate_confidence
@@ -1311,7 +1311,7 @@ class TestComputeOverallScoreOnPartialColumnRows:
         db_session.add(Senator(
             id="S001", name="Test", state="CA", party="D",
             score_funding_independence=60, score_promise_persistence=999,
-            score_independent_voting=70, score_funding_diversity=65,
+            score_constituent_alignment=70, score_funding_diversity=65,
             score_legislative_effectiveness=82,
         ))
         db_session.commit()
@@ -1319,7 +1319,7 @@ class TestComputeOverallScoreOnPartialColumnRows:
         row = db_session.query(
             Senator.id, Senator.name, Senator.state, Senator.party,
             Senator.score_funding_independence, Senator.score_promise_persistence,
-            Senator.score_independent_voting, Senator.score_funding_diversity,
+            Senator.score_constituent_alignment, Senator.score_funding_diversity,
             Senator.score_legislative_effectiveness,
         ).first()
 
@@ -1338,7 +1338,7 @@ class TestComputeOverallScoreOnDict:
         db_session.add(Senator(
             id="S002", name="Test2", state="TX", party="R",
             score_funding_independence=60, score_promise_persistence=999,
-            score_independent_voting=70, score_funding_diversity=65,
+            score_constituent_alignment=70, score_funding_diversity=65,
             score_legislative_effectiveness=82,
         ))
         db_session.commit()
@@ -1347,7 +1347,7 @@ class TestComputeOverallScoreOnDict:
         as_dict = {
             "fundingIndependence": 60,
             "promisePersistence": 999,
-            "independentVoting": 70,
+            "constituentAlignment": 70,
             "fundingDiversity": 65,
             "legislativeEffectiveness": 82,
         }
