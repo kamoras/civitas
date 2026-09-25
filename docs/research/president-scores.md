@@ -82,7 +82,7 @@ machine-readable data.
 The score breakdown preferred a stored `gdp_growth_adjusted` column that
 nothing had written since GDP growth moved to `compute_term_gdp_growth`
 (which already excludes year 1). "Show the math" could therefore use a
-stale figure different from the one scored. The column is dropped.
+stale figure different from the one scored. The model no longer reads or writes it; the column itself is dropped in the release after this one, because the previous image still reads it (backend/migrations/README.md).
 
 ## Limits
 

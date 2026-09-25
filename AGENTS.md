@@ -794,7 +794,11 @@ SQLAlchemy ORM models are in `backend/app/models.py`. Key tables: `senators`,
 columns in it, and run `tests/test_alembic_migrations.py`, which fails when
 the models and the revision history disagree — see
 `backend/migrations/README.md`. Do not add to `_migrate_columns`: it is the
-frozen bridge for databases that predate Alembic.
+frozen bridge for databases that predate Alembic. **Expand, then contract:**
+Swarm's start-first update and automatic rollback run the previous image
+against the migrated schema, so a release may add columns and stop using
+old ones, but only a *later* release drops or renames them (the README keeps
+the pending list).
 
 ## Key Modules — Where to Find Things
 

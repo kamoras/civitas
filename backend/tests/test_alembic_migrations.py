@@ -90,8 +90,11 @@ def test_a_pre_alembic_database_is_bridged_then_stamped(patched_engine):
     reps = {c["name"] for c in inspect(eng).get_columns("representatives")}
     assert {"caucus_party", "committees"} <= senators
     assert "voting_summary" not in reps
-    # ...and the revisions after the baseline applied on top of the bridge.
-    assert "score_constituent_alignment" in senators and "score_independent_voting" not in senators
+    # Additive only: a column the previous image still reads is never
+    # dropped or renamed in the release that stops using it (Swarm's
+    # start-first update and automatic rollback run that image against this
+    # schema). See migrations/README.md, "Expand, then contract".
+    assert "score_independent_voting" in senators
     assert inspect(eng).has_table("ballot_measures")
     assert _revision(eng) == _head()
 

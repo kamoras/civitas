@@ -114,7 +114,11 @@ class Senator(Base):
     # perfect 100 or 0") unknown must not read as a fully-captured 0.
     score_funding_independence: Mapped[float] = mapped_column(Float, default=50.0)
     score_promise_persistence: Mapped[float] = mapped_column(Float, default=50.0)
-    score_constituent_alignment: Mapped[float] = mapped_column(Float, default=50.0)
+    # Still stored in the score_independent_voting column. Renaming the column
+    # is the contract step of a two-release migration (migrations/README.md):
+    # the previous image reads the old name, and Swarm's start-first update
+    # plus automatic rollback can run it against this schema.
+    score_constituent_alignment: Mapped[float] = mapped_column("score_independent_voting", Float, default=50.0)
     score_funding_diversity: Mapped[float] = mapped_column(Float, default=50.0)
     score_legislative_effectiveness: Mapped[float] = mapped_column(Float, default=50.0)
     # Per-dimension data-sufficiency ("high"/"medium"/"low") as JSON —
@@ -332,7 +336,11 @@ class Representative(Base):
     # perfect 100 or 0") unknown must not read as a fully-captured 0.
     score_funding_independence: Mapped[float] = mapped_column(Float, default=50.0)
     score_promise_persistence: Mapped[float] = mapped_column(Float, default=50.0)
-    score_constituent_alignment: Mapped[float] = mapped_column(Float, default=50.0)
+    # Still stored in the score_independent_voting column. Renaming the column
+    # is the contract step of a two-release migration (migrations/README.md):
+    # the previous image reads the old name, and Swarm's start-first update
+    # plus automatic rollback can run it against this schema.
+    score_constituent_alignment: Mapped[float] = mapped_column("score_independent_voting", Float, default=50.0)
     score_funding_diversity: Mapped[float] = mapped_column(Float, default=50.0)
     score_legislative_effectiveness: Mapped[float] = mapped_column(Float, default=50.0)
     # Per-dimension data-sufficiency ("high"/"medium"/"low") as JSON —
@@ -830,6 +838,11 @@ class Justice(Base):
 
     score_consistency: Mapped[float] = mapped_column(Float, default=0.0)
     score_independence: Mapped[float] = mapped_column(Float, default=0.0)
+    # Unscored since v6.13 (justice_analyzer's module docstring) but still
+    # NOT NULL columns the previous image reads, so kept until the contract
+    # release drops them (migrations/README.md). Never read.
+    score_bipartisan_agreement: Mapped[float] = mapped_column(Float, default=0.0)
+    score_judicial_restraint: Mapped[float] = mapped_column(Float, default=0.0)
 
     cases_decided: Mapped[int] = mapped_column(Integer, default=0)
     majority_pct: Mapped[float] = mapped_column(Float, default=0.0)

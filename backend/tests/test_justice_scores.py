@@ -8,11 +8,9 @@ justice_analyzer's module docstring and docs/research/justice-scores.md.
 
 import numpy as np
 import pytest
-from sqlalchemy import create_engine, inspect, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.pool import StaticPool
 
-import app.database as database
 from app.config_definitions import JUSTICE_SCORE_WEIGHTS
 from app.pipeline.analyze.justice_analyzer import analyze_justice_votes
 
@@ -73,23 +71,21 @@ def test_dissent_is_still_reported_as_a_statistic():
     assert set(a["breakdown"]) == {"consistency", "independence"}
 
 
-def test_migration_drops_the_not_null_columns_so_a_new_justice_can_be_inserted(monkeypatch):
+def test_a_new_justice_inserts_while_the_retired_columns_remain():
+    # Expand, then contract (migrations/README.md): the two unscored columns
+    # stay NOT NULL in this release because the previous image reads them,
+    # so the model must keep supplying them or no new justice could be
+    # inserted.
+    from sqlalchemy.orm import Session
+
+    from app.database import Base
+    from app.models import Justice
+
     eng = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-    monkeypatch.setattr(database, "engine", eng)
-    with eng.begin() as conn:
-        conn.execute(text(
-            "CREATE TABLE justices (id TEXT PRIMARY KEY, name TEXT,"
-            " score_bipartisan_agreement FLOAT NOT NULL, score_judicial_restraint FLOAT NOT NULL)"
-        ))
-        conn.execute(text("INSERT INTO justices VALUES ('sitting', 'Sitting', 50, 50)"))
-    with pytest.raises(IntegrityError):
-        with eng.begin() as conn:
-            conn.execute(text("INSERT INTO justices (id, name) VALUES ('new', 'New Justice')"))
-
-    database._migrate_columns()
-
-    cols = {c["name"] for c in inspect(eng).get_columns("justices")}
-    assert not cols & {"score_bipartisan_agreement", "score_judicial_restraint"}
-    with eng.begin() as conn:
-        conn.execute(text("INSERT INTO justices (id, name) VALUES ('new', 'New Justice')"))
-        assert conn.execute(text("SELECT COUNT(*) FROM justices")).scalar() == 2
+    Base.metadata.create_all(bind=eng)
+    cols = {c["name"]: c for c in inspect(eng).get_columns("justices")}
+    assert {"score_bipartisan_agreement", "score_judicial_restraint"} <= set(cols)
+    with Session(eng) as s:
+        s.add(Justice(id="new", name="New Justice", last_name="Justice", appointing_president="X", appointing_party="D"))
+        s.commit()
+        assert s.query(Justice).count() == 1

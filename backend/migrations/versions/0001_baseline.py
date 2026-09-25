@@ -226,6 +226,8 @@ def upgrade() -> None:
         sa.Column('thumbnail_url', sa.String(), nullable=True),
         sa.Column('score_consistency', sa.Float(), nullable=False),
         sa.Column('score_independence', sa.Float(), nullable=False),
+        sa.Column('score_bipartisan_agreement', sa.Float(), nullable=False),
+        sa.Column('score_judicial_restraint', sa.Float(), nullable=False),
         sa.Column('cases_decided', sa.Integer(), nullable=False),
         sa.Column('majority_pct', sa.Float(), nullable=False),
         sa.Column('dissent_pct', sa.Float(), nullable=False),

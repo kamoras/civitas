@@ -48,3 +48,38 @@ apply as usual. The bridge is frozen. Nothing new goes in it.
   themselves on a layout change.
 - **Partial unique indexes** in `_ensure_indexes`, such as the one-running-row
   locks: idempotent `CREATE ... IF NOT EXISTS`, applied after the upgrade.
+
+## Expand, then contract
+
+Production deploys with Swarm's `start-first` update and `FailureAction:
+rollback`. Two consequences follow:
+
+- The previous image keeps serving while the new one migrates the shared
+  database.
+- If the new image fails its health check, Swarm runs the previous image
+  against the *migrated* schema.
+
+So every release must leave a schema the image before it can still read:
+
+- **Expand** (any release): add tables, add nullable or defaulted columns, add
+  indexes. Stop *using* a column in the model, but leave it in the database.
+  A NOT NULL column the old image reads stays in the model with a default, so
+  inserts still work.
+- **Contract** (a later release, once no running image references the column):
+  drop it or rename it in a revision.
+
+Found against production on PR #615. v6.13 first dropped and renamed columns
+that `main`'s models still read, and `main`'s code then failed with `no such
+column: presidents.gdp_growth_adjusted` on the migrated copy.
+
+### Pending contract (the release after v6.13)
+
+Write these as revision `0002` once v6.13 is the running image:
+
+| Change | Why it waits |
+|---|---|
+| Drop `justices.score_bipartisan_agreement`, `justices.score_judicial_restraint` | Unscored since v6.13; still NOT NULL and read by the v6.12 image. Drop them from the model in the same change. |
+| Drop `senators.outside_spending_for`, `representatives.outside_spending_for` | No longer in the model (outside spending left Funding Independence); v6.12 reads them. |
+| Drop `key_votes.opposing_party_unity_pct`, `rep_key_votes.opposing_party_unity_pct` | No longer in the model; v6.12 reads them. |
+| Drop `presidents.gdp_growth_adjusted` | No longer in the model; v6.12 reads it. |
+| Rename `score_independent_voting` → `score_constituent_alignment` on `senators` and `representatives` | The model maps `score_constituent_alignment` onto the old column name until then. Rename in place, which keeps stored scores. |

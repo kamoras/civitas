@@ -46,7 +46,20 @@ from app.pipeline.analyze.ground_truth import (  # noqa: E402
     MIN_LABELED_VOTES,
     evaluate_derived_checks,
 )
-from app.pipeline.analyze.score_calculator import calculate_scores  # noqa: E402
+from app.config import settings  # noqa: E402
+from app.pipeline.analyze.population_reference import (  # noqa: E402
+    CONSTITUENT_REFERENCE,
+    FUNDING_REFERENCE,
+    LES_REFERENCE,
+)
+from app.pipeline.analyze.score_calculator import (  # noqa: E402
+    calculate_scores,
+    compute_constituent_reference,
+    compute_funding_reference,
+    compute_les_reference,
+    constituent_reference_inputs,
+    derive_chamber_majority,
+)
 from app.pipeline.fetch.fec import select_recent_elections  # noqa: E402
 from app.pipeline.transform.normalize_finance import summarize_election_totals  # noqa: E402
 from app.pipeline.transform.candidate_names import is_candidate_self_donor  # noqa: E402
@@ -188,7 +201,10 @@ def build_payload(cur, s, search, fin):
             "topDonors": top_donors[:100],
             "industryBreakdown": industry,
         },
-        "votingRecord": {"keyVotes": key_votes, "recentVotes": []},
+        "votingRecord": {
+            "keyVotes": key_votes, "recentVotes": [],
+            "effectiveParty": (s["caucus_party"] if "caucus_party" in s.keys() else None) or s["party"],
+        },
         "lobbyingMatches": matches,
         "campaignPromises": promises,
         "sponsoredBills": bills,
@@ -197,6 +213,45 @@ def build_payload(cur, s, search, fin):
             s["bipartisanship_score"] if "bipartisanship_score" in s.keys() else None
         ),
     }
+
+
+def attach_live_references(cur, senators, payloads) -> None:
+    """Measure this population's references the way the pipeline does
+    (live_references), in memory: nothing is written to /data. Without
+    this, calculate_scores falls back to the last persisted references,
+    which can predate the current method (e.g. an LES reference with no
+    status_median), and the preview diverges from what a run would score."""
+    current = [p for s, p in zip(senators, payloads) if s.get("is_current", 1)]
+    parties = [p["votingRecord"]["effectiveParty"] for p in current]
+    cur.execute("SELECT party FROM presidents WHERE is_current = 1")
+    row = cur.fetchone()
+    majority = derive_chamber_majority(parties, "senate", row["party"] if row else None)
+
+    persisted_les = LES_REFERENCE.load()
+    les = compute_les_reference(
+        [(p["sponsoredBills"], p["votingRecord"]["effectiveParty"]) for p in current],
+        settings.CURRENT_CONGRESS, majority,
+        (persisted_les.get("senate") or {}).get("advancement_rates"),
+    )
+    persisted_funding = FUNDING_REFERENCE.load()
+    funding = compute_funding_reference([p["funding"] for p in current])
+    persisted_ca = CONSTITUENT_REFERENCE.load()
+    ca = compute_constituent_reference(constituent_reference_inputs(current))
+
+    les_ref = {**persisted_les, "senate": les} if les else persisted_les
+    funding_ref = (
+        {**persisted_funding, "senate": {**(persisted_funding.get("senate") or {}), **funding}}
+        if funding else persisted_funding
+    )
+    ca_ref = {**persisted_ca, "senate": ca} if ca else persisted_ca
+    print(f"live references: LES {'measured' if les else 'persisted'}"
+          f"{' (status medians ' + str(les.get('status_median')) + ')' if les else ''}, "
+          f"funding {'measured' if funding else 'persisted'}, "
+          f"constituent {'measured' if ca else 'persisted'}; majority={majority}")
+    for p in payloads:
+        p["lesReference"] = les_ref
+        p["fundingReference"] = funding_ref
+        p["constituentReference"] = ca_ref
 
 
 def main() -> int:
@@ -210,9 +265,11 @@ def main() -> int:
     cur.execute("SELECT * FROM senators")
     senators = [dict(r) for r in cur.fetchall()]
 
+    payloads = [build_payload(cur, s, search, fin) for s in senators]
+    attach_live_references(cur, senators, payloads)
+
     results = []
-    for s in senators:
-        payload = build_payload(cur, s, search, fin)
+    for s, payload in zip(senators, payloads):
         new = calculate_scores(payload)
         funding = payload["funding"]
         raised = funding["totalRaised"] or 0
