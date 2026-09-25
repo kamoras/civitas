@@ -196,3 +196,40 @@ class TestNewCongressBeforeAReferenceExists:
         score, detail = _les_component_score(_bills(3, congress=120), "D", 6.0, pinned_les_reference)
         assert score == 50.0
         assert "120th Congress" in detail
+
+
+class TestSameStatusBenchmark:
+    """A sponsor is compared with members of the same majority/minority
+    status (Volden & Wiseman's benchmark), not with the chamber median
+    scaled by an advancement-rate ratio, which over-corrected."""
+
+    @staticmethod
+    def _members(n_each=40):
+        import random
+        rng = random.Random(3)
+        out = []
+        for party, p in (("R", 0.064), ("D", 0.024)):
+            for _ in range(n_each):
+                bills = [{"billType": "hr", "congress": 119,
+                          "stage": "INTRODUCED" if rng.random() > p else "PASSED_CHAMBER"}
+                         for _ in range(rng.randint(8, 25))]
+                out.append((bills, party))
+        return out
+
+    def test_status_medians_are_measured_and_center_each_status(self):
+        import statistics
+        from app.pipeline.analyze.score_calculator import _les_component_score, compute_les_reference
+
+        members = self._members()
+        ref = compute_les_reference(members, 119, "R")
+        assert set(ref["status_median"]) == {"majority", "minority"}
+        for party in ("R", "D"):
+            scores = [_les_component_score(b, p, 4.0, {"house": ref})[0] for b, p in members if p == party]
+            assert abs(statistics.median(scores) - 50) <= 2
+
+    def test_too_few_of_one_status_falls_back_to_the_tilt(self):
+        from app.pipeline.analyze.score_calculator import compute_les_reference
+
+        members = self._members(40)
+        few_d = [m for m in members if m[1] == "R"] + [m for m in members if m[1] == "D"][:5]
+        assert "status_median" not in compute_les_reference(few_d, 119, "R")

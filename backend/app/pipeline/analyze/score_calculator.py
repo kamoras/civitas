@@ -2198,15 +2198,19 @@ def compute_les_reference(
     rates = _measure_advancement_rates(members, current) or previous_rates
     credits: list[float] = []
     baselines: list[float] = []
+    by_status: dict[str, list[float]] = {"majority": [], "minority": []}
     for bills, party in members:
         inputs = _les_member_inputs(bills, party)
         if inputs is None:
             continue
         credits.append(inputs["raw_per_congress"])
         baselines.append(_les_member_baseline(bills, party, current, rates))
+        status = _les_status(party, majority)
+        if status:
+            by_status[status].append(inputs["raw_per_congress"])
     if len(credits) < _MIN_LES_REFERENCE_MEMBERS:
         return None
-    return {
+    ref = {
         "congress": congress,
         "majority": majority,
         "n": len(credits),
@@ -2216,6 +2220,22 @@ def compute_les_reference(
         "avg_baseline": round(statistics.mean(baselines), 6),
         "advancement_rates": rates,
     }
+    if all(len(v) >= _MIN_LES_STATUS_MEMBERS for v in by_status.values()):
+        ref["status_median"] = {k: round(statistics.median(v), 4) for k, v in by_status.items()}
+    return ref
+
+
+def _les_status(party: str | None, majority: str | None) -> str | None:
+    """'majority' / 'minority' for a D/R sponsor in a chamber whose majority
+    is known; None otherwise (no status benchmark applies)."""
+    if not majority or party not in ("D", "R"):
+        return None
+    return "majority" if party == majority else "minority"
+
+
+# Fewest members of EACH status needed to measure that status's median
+# credit. Below it the advancement-rate tilt (status_ratio) stands in.
+_MIN_LES_STATUS_MEMBERS = 15
 
 
 # Fewest members with substantive bills that still describe a chamber's
@@ -2275,19 +2295,33 @@ def _les_component_score(
     avg_baseline = ref["avg_baseline"]
     saturation = _LES_SATURATION_STDEVS * ref["stdev_credit"]
 
-    rates = ref.get("advancement_rates")
-    if rates and avg_baseline:
-        member_baseline = _les_member_baseline(sponsored_bills, party, current, rates)
-        status_ratio = member_baseline / avg_baseline
+    status = _les_status(party, ref.get("majority"))
+    status_median = (ref.get("status_median") or {}).get(status) if status else None
+    if status_median is not None:
+        # Volden & Wiseman's benchmark: a member is compared with members of
+        # the same majority/minority status — here that status's median
+        # credit, measured this run. The advancement-rate ratio below used
+        # to set this bar, but it scaled ALL credit (introduction included,
+        # which status doesn't affect) by an advancement-rate ratio, which
+        # over-corrected: sponsors performing exactly at their status's
+        # rate scored a median 7.5 (majority) vs 97 (minority) in
+        # scripts/research_les_status_benchmark.py, and the House's
+        # measured D-R gap on production data was 18.5 points.
+        expected_per_congress = status_median
     else:
-        # No measured rates yet: no majority/minority tilt, rather than a
-        # member baseline on a different scale from the chamber average.
-        status_ratio = 1.0
-    # Reference point is the chamber MEDIAN (not V&W's mean) so the typical
-    # member scores ~50 despite the right-skewed credit distribution — see
-    # the LES population reference comment above. status_ratio only tilts
-    # that bar up or down for a member's own majority/minority bill mix.
-    expected_per_congress = population_median * status_ratio
+        rates = ref.get("advancement_rates")
+        if rates and avg_baseline:
+            member_baseline = _les_member_baseline(sponsored_bills, party, current, rates)
+            status_ratio = member_baseline / avg_baseline
+        else:
+            # No measured rates yet: no majority/minority tilt, rather than a
+            # member baseline on a different scale from the chamber average.
+            status_ratio = 1.0
+        # Fallback when a status group is too small to measure (or the
+        # sponsor's status is unknown): the chamber MEDIAN, tilted by the
+        # member's bill mix. Median, not V&W's mean, so the typical member
+        # scores ~50 despite the right-skewed credit distribution.
+        expected_per_congress = population_median * status_ratio
 
     diff = raw_per_congress - expected_per_congress
     conf = min(n_sub / 10, 1.0)
@@ -2312,9 +2346,10 @@ def _les_component_score(
     )
     enacted = sum(1 for b in substantive_bills if _les_bill_stage(b) >= _LES_MAX_STAGE)
 
+    bar = f"median {status}-party sponsor" if status_median is not None else "for this sponsor's status"
     detail = (
         f"{raw_per_congress:.1f} significance-weighted stage-credit/congress vs. "
-        f"{expected_per_congress:.1f} expected for this sponsor's status — "
+        f"{expected_per_congress:.1f} expected ({bar}) — "
         f"{n_sub} substantive bills: {introduced_only} introduced only (still "
         f"counts under Volden & Wiseman's real methodology), "
         f"{advanced_short_of_law} advanced further, {enacted} became law"

@@ -301,6 +301,15 @@ export default function AboutPage() {
                   out-of-pattern tenth of members reach the ends).
                 </P>
                 <P>
+                  What the ends mean: a 0 or 100 is a relative position, not a verdict. A 0 means
+                  the member breaks with their party far less often than members of their own party
+                  in seats that lean the same way; a 100 means far more often. Because the
+                  expectation is fitted separately for each party, a member is only ever compared
+                  with their own party&apos;s members, and both parties&apos; average scores sit
+                  near 50. Which members reach an end in a given update depends on the chamber that
+                  year, and a handful can by chance come mostly from one party.
+                </P>
+                <P>
                   Why symmetric, and why no special treatment for safe seats: through v6.12 a member
                   more loyal than expected was held at neutral, on the argument that loyalty is
                   &quot;unreadable&quot;, and credit for breaking or for a centrist position shrank
@@ -385,9 +394,10 @@ export default function AboutPage() {
                   real credit on its own, not just bills that go on to pass a chamber or become law.
                   Three components: bill significance &amp; advancement (60%) — this cumulative
                   stage-credit per congress served, compared against an expected credit for a
-                  sponsor of this chamber/majority-minority status. That expectation is measured
-                  fresh on every run from the chamber itself — the median member&apos;s credit this
-                  congress, the chamber&apos;s current majority party read from its roster — so a
+                  sponsor of the same status in the same chamber. That expectation is measured
+                  fresh on every run from the chamber itself — the median credit this congress
+                  among members of the same status (majority or minority), with the chamber&apos;s
+                  current majority party read from its roster — so a
                   member&apos;s standing doesn&apos;t drift as bills accumulate over a congress, or
                   reset when a new one begins; legislative leadership (25%) —
                   cosponsorship-network PageRank, see below; and bipartisan coalition attraction
@@ -411,10 +421,17 @@ export default function AboutPage() {
                   bill&apos;s contribution at every stage it reaches, and most sponsored bills never
                   advance at all (a July 2026 measurement of our corpus found Senate majority
                   sponsors advancing bills at 3.6% vs. 2.4% for minority sponsors; House 6.4% vs.
-                  2.4%). The expected-credit baseline accounts for that majority/minority gap, so
-                  scoring everyone against one absolute threshold doesn&apos;t silently penalize
-                  whichever party is out of power; the gap itself is re-measured on every update
-                  from the chamber&apos;s own bills.
+                  2.4%). Each member is therefore compared with the typical member of the same
+                  status — majority or minority — in their chamber, as in Volden &amp;
+                  Wiseman&apos;s own benchmarks, so whichever party is out of power isn&apos;t
+                  judged against the majority&apos;s record. Until September 2026 the expectation
+                  was instead the chamber median scaled by the ratio of the two advancement rates.
+                  Most credit comes from introducing bills, which majority status doesn&apos;t
+                  change, so that ratio over-corrected: it put minority members well above neutral
+                  and majority members well below (the House&apos;s gap between the parties reached
+                  18 points on production data). This part of the score now centers each status on
+                  its own typical member; differences between the parties&apos; averages that
+                  remain come from the leadership and coalition parts.
                   The score explanation on each profile breaks the substantive-bill count into
                   introduced-only / advanced-further / became-law so the volume-vs-advancement split
                   is visible as real numbers.
