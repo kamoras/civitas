@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 
 def to_camel(string: str) -> str:
@@ -47,9 +47,16 @@ class IndustryDonationSchema(CamelModel):
 class RepresentationScoreSchema(CamelModel):
     funding_independence: float
     promise_persistence: float
-    independent_voting: float
+    constituent_alignment: float
     funding_diversity: float
     legislative_effectiveness: float = 0.0
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def independent_voting(self) -> float:
+        """Deprecated alias of constituent_alignment (the key's name until
+        2026-09), kept in the JSON for clients built against it."""
+        return self.constituent_alignment
     # Backend-computed overall (score_calculator.compute_overall_score) — the
     # frontend must never recompute this from the sub-scores itself (see
     # lib/representation.ts's removed weightedScore).
@@ -81,6 +88,10 @@ class KeyVoteSchema(CamelModel):
 
 class FundingSchema(CamelModel):
     total_raised: float
+    # Denominator for PAC / small-donor shares (contributions + candidate
+    # self-loans; see normalize_finance.summarize_election_totals). None on
+    # records scored before it existed — clients fall back to total_raised.
+    total_contributions: float | None = None
     total_from_pacs: float = Field(alias="totalFromPACs", serialization_alias="totalFromPACs")
     small_donor_percentage: float
     top_donors: list[DonorSchema]
@@ -312,7 +323,7 @@ class PaginatedRepresentativesSchema(CamelModel):
 
 
 class ScoreTrendSchema(CamelModel):
-    direction: Literal["up", "down", "stable", "new"] = "new"
+    direction: Literal["up", "down", "stable", "new", "reset"] = "new"
     change: float = 0.0
     previous_score: float | None = None
 
@@ -326,6 +337,7 @@ class LeaderboardEntrySchema(CamelModel):
     initials: str
     representation_score: RepresentationScoreSchema
     total_raised: float
+    total_contributions: float | None = None
     total_from_pacs: float
     small_donor_percentage: float
     top_industry: str | None = None
@@ -458,8 +470,6 @@ class PresidentLeaderboardEntry(CamelModel):
 class JusticeScoreSchema(CamelModel):
     consistency: float
     independence: float
-    bipartisan_agreement: float
-    judicial_restraint: float
     # Backend-computed overall (justice_service._build_score).
     overall: float = 0.0
 

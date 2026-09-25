@@ -17,17 +17,16 @@ differ.
 ```mermaid
 flowchart LR
     subgraph FI["Funding Independence — 33%"]
-        FI1["PAC dependency<br/>share × closeness to legal cap<br/>chamber-specific multiplier"]
-        FI2["Small-donor share<br/>&lt;$200 unitemized, state-relative"]
-        FI3["Top-donor concentration<br/>top 10 of external pool<br/>v6.12: anchors 0.15→100, 0.40→0"]
-        FI4["Source breadth<br/>folded in from Funding Diversity, v6.5"]
-        FI5["Industry concentration<br/>inverse HHI, folded in v6.5"]
+        FI1["PAC dependency — 20/53<br/>share vs chamber median<br/>× closeness to legal cap"]
+        FI2["Small-donor share — 10/53<br/>&lt;$200 unitemized, state-relative"]
+        FI3["Top-donor concentration — 10/53<br/>top 10 of external pool<br/>vs chamber median"]
+        FI5["Industry concentration — 13/53<br/>inverse HHI"]
     end
 
     subgraph CA["Constituent Alignment — 33%"]
-        CA1["Seat-relative vote alignment — 70%<br/>break rate vs Cook PVI expectation<br/>below-expected loyalty floors at neutral (v6.6)"]
-        CA2["Position congruence — 30%, v6.11<br/>DW-NOMINATE vs seat-conditional<br/>per-party expectation"]
-        CA3["Fallback when no ideal points:<br/>100% vote alignment<br/>+ v6.7 cosponsorship discount"]
+        CA1["Seat-relative vote alignment — 70%<br/>break rate minus the same-party<br/>expectation at that seat lean, both ways<br/>(measured each run, v6.13)"]
+        CA2["Position congruence — 30%<br/>Nokken-Poole vs seat-conditional<br/>per-party expectation"]
+        CA3["Fallback when no ideal points:<br/>100% vote alignment"]
     end
 
     subgraph LE["Legislative Effectiveness — 34%"]
@@ -67,7 +66,7 @@ sum changed.
 |---|---|---|
 | Legislative Leadership | PageRank on the cosponsorship graph | **Not** purely informational — this is the same score feeding LE at 25% |
 | Ideology Score | SVD on the cosponsorship matrix (2nd singular vector) | Purely informational |
-| Partisan Depth | Content-based voting analysis, SVD ideology as Bayesian prior | Purely informational |
+| Partisan Depth | Content-based voting analysis, SVD ideology as a prior (linear blend) | Purely informational |
 
 ## Presidents
 
@@ -116,11 +115,12 @@ historian rating for a top-10 placement.
 
 ```mermaid
 flowchart LR
-    JC["Consistency — 35%"] --> JOVR["<b>Justice score</b>"]
-    JI["Independence — 30%"] --> JOVR
-    JR["Judicial restraint — 20%"] --> JOVR
-    JB["Bipartisan agreement — 15%"] --> JOVR
+    JC["Consistency — 0.35/0.80"] --> JOVR["<b>Justice score</b>"]
+    JI["Independence — 0.45/0.80"] --> JOVR
 ```
+
+Judicial Restraint and Bipartisan Agreement were removed in v6.13; see
+`docs/research/justice-scores.md`.
 
 Single source of truth in `JUSTICE_SCORE_WEIGHTS` — shared by the scorer, the
 directory's overall calculation, and the public weights endpoint. These were
@@ -131,7 +131,8 @@ previously three independent copies that could silently drift.
 | Concern | Code |
 |---|---|
 | Weights | `backend/app/config_definitions.py` — `SCORE_WEIGHTS`, `PRESIDENT_SCORE_WEIGHTS`, `JUSTICE_SCORE_WEIGHTS` |
-| Member formulas + full changelog | `analyze/score_calculator.py` (module docstring is the source of truth) |
+| Member formulas | `analyze/score_calculator.py` (module docstring states the current rule) |
+| Why each version changed | `docs/methodology/` (one decision record per version) |
 | President formulas | `analyze/president_scorer.py` |
 | Justice formulas | `services/justice_service.py` |
 | Public weights endpoint | `GET /api/config` |

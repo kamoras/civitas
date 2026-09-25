@@ -1,5 +1,6 @@
 "use client";
 
+import { pacSharePct } from "@/lib/funding";
 import { useCallback, useMemo, useState, type KeyboardEvent } from "react";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import Link from "next/link";
@@ -170,6 +171,20 @@ function LeadershipIndicator({ score }: { score: number | null }) {
 
 function TrendIndicator({ trend }: { trend?: ScoreTrend }) {
   if (!trend || trend.direction === "new") return null;
+  if (trend.direction === "reset") {
+    // A methodology update or a new Congress moves every score at once;
+    // showing that as a member's rise or fall would misattribute it.
+    return (
+      <span
+        className="inline-flex items-center text-xs text-ink-min"
+        title="No comparable earlier score: the scoring method or the Congress changed since the last one"
+        role="img"
+        aria-label="No comparable earlier score"
+      >
+        –
+      </span>
+    );
+  }
 
   const abs = Math.abs(trend.change);
   // Two decimals below 1 so a real-but-small move still reads as a number.
@@ -625,8 +640,8 @@ function JusticeLeaderboard({
 
       <div className="mt-4 space-y-1 text-center">
         <p className="font-sans text-xs text-ink-lo">
-          Higher score = more impartial jurisprudence. Computed from: ideological consistency (35%)
-          + independence (30%) + judicial restraint (20%) + bipartisan agreement (15%). Click any
+          Higher score = more impartial jurisprudence. Computed from ideological consistency and
+          independence from the appointing party&apos;s bloc (weights on the About page). Click any
           row to view full profile.
         </p>
         <p className="font-sans text-xs text-ink-min">
@@ -751,8 +766,8 @@ function LeaderboardContent() {
       if (sortKey === "pac_dollars")
         return flip * ((b.totalFromPacs ?? 0) - (a.totalFromPacs ?? 0));
       if (sortKey === "pac_pct") {
-        const pctA = (a.totalRaised ?? 0) > 0 ? (a.totalFromPacs ?? 0) / a.totalRaised : 0;
-        const pctB = (b.totalRaised ?? 0) > 0 ? (b.totalFromPacs ?? 0) / b.totalRaised : 0;
+        const pctA = pacSharePct(a.totalFromPacs, a);
+        const pctB = pacSharePct(b.totalFromPacs, b);
         return flip * (pctB - pctA);
       }
       if (sortKey === "ideology") {
@@ -989,10 +1004,7 @@ function LeaderboardContent() {
                           const rankOffset = branch === "house" ? (housePage - 1) * 50 : 0;
                           const rank = rankOffset + idx + 1;
                           const score = entry.representationScore.overall;
-                          const pacPct =
-                            (entry.totalRaised ?? 0) > 0
-                              ? Math.round(((entry.totalFromPacs ?? 0) / entry.totalRaised) * 100)
-                              : 0;
+                          const pacPct = Math.round(pacSharePct(entry.totalFromPacs, entry));
                           const isTopTen = rank <= 10;
 
                           return (
@@ -1073,10 +1085,7 @@ function LeaderboardContent() {
                       const mobileRankOffset = branch === "house" ? (housePage - 1) * 50 : 0;
                       const rank = mobileRankOffset + idx + 1;
                       const score = entry.representationScore.overall;
-                      const pacPct =
-                        (entry.totalRaised ?? 0) > 0
-                          ? Math.round(((entry.totalFromPacs ?? 0) / entry.totalRaised) * 100)
-                          : 0;
+                      const pacPct = Math.round(pacSharePct(entry.totalFromPacs, entry));
                       return (
                         <Link
                           key={entry.id}
@@ -1177,11 +1186,11 @@ function LeaderboardContent() {
                 <div className="mt-4 space-y-1 text-center">
                   <p className="font-sans text-xs text-ink-lo">
                     Higher score = better constituent representation. Computed from: funding
-                    independence (33%) + independent voting (33%) + legislative effectiveness (34%).
+                    independence (33%) + constituent alignment (33%) + legislative effectiveness (34%).
                     Click any row to view full profile.
                   </p>
                   <p className="font-sans text-xs text-ink-min">
-                    Scores use Bayesian shrinkage — members with limited public data are pulled
+                    Scores are shrunk toward 50 when data is thin — members with limited public data are pulled
                     toward 50, not penalized or rewarded
                   </p>
                 </div>

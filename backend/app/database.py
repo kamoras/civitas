@@ -110,10 +110,10 @@ class VisitsBase(DeclarativeBase):
 
 
 def _migrate_columns() -> None:
-    """Align existing tables with current ORM models.
-
-    SQLAlchemy's create_all does not ALTER existing tables, so we handle
-    lightweight column additions and legacy column drops here.
+    """Pre-Alembic bridge step (frozen): align a pre-Alembic database's
+    existing tables with the baseline. Runs only from
+    _bridge_pre_alembic_schema. Do not add entries: a schema change is an
+    Alembic revision (backend/migrations/README.md).
     """
     inspector = inspect(engine)
     additions: list[tuple[str, str, str]] = [
@@ -176,11 +176,12 @@ def _migrate_columns() -> None:
         ("representatives", "committees", "TEXT DEFAULT '[]'"),
         ("sponsored_bills", "stage", "TEXT DEFAULT ''"),
         ("rep_sponsored_bills", "stage", "TEXT DEFAULT ''"),
-        ("presidents", "gdp_growth_adjusted", "REAL"),
         ("presidents", "rulemaking_count", "INTEGER"),
         ("presidents", "rulemaking_finalized_pct", "REAL"),
-        ("senators", "outside_spending_for", "REAL"),
-        ("representatives", "outside_spending_for", "REAL"),
+        ("senators", "total_contributions", "REAL"),
+        ("representatives", "total_contributions", "REAL"),
+        ("senators", "caucus_party", "TEXT"),
+        ("representatives", "caucus_party", "TEXT"),
         ("lobbying_matches", "is_consensus_vote", "BOOLEAN"),
         ("rep_lobbying_matches", "is_consensus_vote", "BOOLEAN"),
         ("donors", "committee_type", "TEXT"),
@@ -189,8 +190,6 @@ def _migrate_columns() -> None:
         ("supplementary_pipeline_runs", "progress_detail", "TEXT"),
         ("stock_trades_pipeline_runs", "progress_detail", "TEXT"),
         ("stock_trades_pipeline_runs", "president_trades_ingested", "INTEGER DEFAULT 0"),
-        ("key_votes", "opposing_party_unity_pct", "REAL"),
-        ("rep_key_votes", "opposing_party_unity_pct", "REAL"),
         ("presidents", "election_margin", "REAL"),
         ("presidents", "approval_trend", "REAL"),
         ("presidents", "recent_avg_approval", "REAL"),
@@ -690,8 +689,8 @@ def _warn_on_insert_blocking_drift() -> None:
     member of Congress could be inserted in production; it surfaced only
     as "431 success, 2 failed" in a nightly run, months after the model
     change, and would have dropped the entire freshman class in November.
-    _migrate_columns' `drops` list fixes the instances we know about —
-    this reports the ones nobody has noticed yet.
+    Alembic (from the 0001 baseline) prevents new instances; this reports
+    any the pre-Alembic history left behind.
 
     Warn-only, and deliberately so: refusing to start over a schema
     mismatch would take the site down for a condition that is usually
@@ -713,10 +712,93 @@ def _warn_on_insert_blocking_drift() -> None:
         if blocking:
             logger.error(
                 "Schema drift blocks INSERTs into %s: %s are NOT NULL with no "
-                "default but absent from the model. Add them to _migrate_columns' "
-                "drops list.",
+                "default but absent from the model. Drop them in an Alembic revision "
+                "(backend/migrations/README.md).",
                 table_name, ", ".join(sorted(blocking)),
             )
+
+
+BASELINE_REVISION = "0001"
+
+
+def _alembic_config():
+    from pathlib import Path
+
+    from alembic.config import Config
+
+    cfg = Config()
+    cfg.set_main_option("script_location", str(Path(__file__).resolve().parent.parent / "migrations"))
+    return cfg
+
+
+def _run_migrations(revision: str = "head", bind=None) -> None:
+    """Upgrade the main database through backend/migrations/ (Alembic).
+
+    Schema changes are Alembic revisions from the baseline on. Before it,
+    they were hand-written here and could not be checked before deploy: a
+    fresh database is built from the models and has no drift, so the
+    failures only existed in production (#220, #592, #611 — a removed
+    column left NOT NULL, a table create_all could not alter). A revision
+    history lets CI rebuild the deployed schema and diff it against the
+    models (tests/test_alembic_migrations.py).
+    """
+    from alembic import command
+
+    cfg = _alembic_config()
+    with (bind or engine).begin() as conn:
+        cfg.attributes["connection"] = conn
+        command.upgrade(cfg, revision)
+
+
+def _baseline_metadata():
+    """The baseline revision's schema, reflected from a scratch in-memory
+    database. The bridge below targets THIS shape, not the current models:
+    a column a later revision adds must be left for that revision."""
+    from sqlalchemy import MetaData
+
+    scratch = create_engine("sqlite://")
+    _run_migrations(BASELINE_REVISION, bind=scratch)
+    meta = MetaData()
+    meta.reflect(bind=scratch)
+    scratch.dispose()
+    return meta
+
+
+def _add_missing_baseline_columns() -> None:
+    """Add any baseline column an existing table lacks that SQLite can add
+    in place (nullable). A NOT NULL column with no default cannot be added
+    with ALTER TABLE; those are logged, since the stamp would otherwise
+    claim a column the table does not have."""
+    inspector = inspect(engine)
+    with engine.begin() as conn:
+        for name, table in _baseline_metadata().tables.items():
+            if not inspector.has_table(name):
+                continue
+            have = {c["name"] for c in inspector.get_columns(name)}
+            for col in table.columns:
+                if col.name in have:
+                    continue
+                if not col.nullable:
+                    logger.error("Pre-Alembic table %s lacks NOT NULL column %s; add it by hand", name, col.name)
+                    continue
+                logger.info("Adding column %s.%s (pre-Alembic bridge)", name, col.name)
+                conn.execute(text(
+                    f"ALTER TABLE {name} ADD COLUMN {col.name} {col.type.compile(dialect=engine.dialect)}"
+                ))
+
+
+def _bridge_pre_alembic_schema() -> None:
+    """One time, for a database created before Alembic: bring its existing
+    tables to the baseline's shape so the baseline can be applied (it only
+    creates tables that are absent). These are the hand-written migrations
+    that used to run on every start. They are frozen: nothing new goes
+    here — a schema change is an Alembic revision."""
+    logger.warning("Database predates Alembic — reconciling to the baseline before upgrading")
+    _migrate_president_ids()
+    _migrate_presidents_schema_rebuild()
+    _migrate_state_office_tables()
+    _migrate_columns()
+    _add_missing_baseline_columns()
 
 
 def _init_lock_path() -> str | None:
@@ -791,7 +873,9 @@ def _init_lock():
 
 
 def init_db() -> None:
-    """Create all tables defined in models and apply lightweight migrations.
+    """Bring the database to the current schema: Alembic revisions for the
+    main database (after a one-time bridge for a pre-Alembic one), then the
+    visits database, indexes and the keyword index.
 
     Serialised across worker processes — see `_init_lock`. Every step below
     is idempotent, so the process that waits for the lock still runs them
@@ -801,18 +885,64 @@ def init_db() -> None:
         _init_db_locked()
 
 
+_REKEY_MIGRATION = "rekey_admin_token_visitor_hashes"
+
+
+def _rekey_legacy_visitor_hashes() -> None:
+    """One-time: make visitor hashes written under the old permanent key
+    unlinkable.
+
+    Until 2026-09 visitor_hash was HMAC(ip, date) under a key derived from
+    ADMIN_TOKEN (or the literal "civitas" when unset). That key never
+    rotated, and the IPv4 space is small enough to enumerate, so anyone
+    holding it could recover every stored IP. Each old hash is replaced by
+    an HMAC of itself under a random key that is generated here and never
+    stored: rows stay distinct (so per-day unique counts are unchanged),
+    but nothing can map them back to an IP any more. Covers the legacy copy
+    in the main database too, if the pre-split table still exists.
+    """
+    import hashlib
+    import hmac
+    import secrets
+
+    def rekey(conn) -> int:
+        key = secrets.token_bytes(32)
+        rows = conn.execute(text("SELECT date, visitor_hash FROM site_visits")).all()
+        for day, old in rows:
+            conn.execute(
+                text("UPDATE site_visits SET visitor_hash = :new WHERE date = :d AND visitor_hash = :old"),
+                {"new": hmac.new(key, old.encode(), hashlib.sha256).hexdigest()[:32], "d": day, "old": old},
+            )
+        return len(rows)
+
+    with visits_engine.begin() as conn:
+        if conn.execute(
+            text("SELECT 1 FROM visits_migrations WHERE name = :n"), {"n": _REKEY_MIGRATION},
+        ).first():
+            return
+        n = rekey(conn)
+        if inspect(engine).has_table("site_visits"):
+            with engine.begin() as main_conn:
+                n += rekey(main_conn)
+        conn.execute(
+            text("INSERT INTO visits_migrations (name, applied_at) VALUES (:n, CURRENT_TIMESTAMP)"),
+            {"n": _REKEY_MIGRATION},
+        )
+    logger.info("Re-keyed %d legacy visitor hashes under a discarded random key", n)
+
+
 def _init_db_locked() -> None:
     from app import models  # noqa: F401
 
-    _migrate_president_ids()
-    _migrate_presidents_schema_rebuild()
-    _migrate_state_office_tables()
-    Base.metadata.create_all(bind=engine)
+    inspector = inspect(engine)
+    if inspector.get_table_names() and not inspector.has_table("alembic_version"):
+        _bridge_pre_alembic_schema()
+    _run_migrations()
     VisitsBase.metadata.create_all(bind=visits_engine)
-    _migrate_columns()
     _warn_on_insert_blocking_drift()
     _ensure_indexes()
     _migrate_visits_data_to_own_db()
+    _rekey_legacy_visitor_hashes()
 
     # The FTS5 keyword index over explore_documents, plus the triggers that
     # keep it in step with ordinary ORM writes. Created here rather than in

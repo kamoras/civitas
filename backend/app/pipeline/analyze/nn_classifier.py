@@ -55,6 +55,10 @@ _category_norm_cache: dict[str, str] = {}
 # real-production numbers behind this value (5.0).
 _MAX_INV_FREQ_WEIGHT = 5.0
 
+# LearnedClassification.source value for labels this module's classify_batch_nn
+# produced. Writers tag kNN results with it; _load_references excludes it.
+KNN_SOURCE = "nn"
+
 # Canonical donor type names — kNN and learning store may use mixed case
 DONOR_TYPE_CANONICAL: dict[str, str] = {
     "PAC": "PAC",
@@ -176,6 +180,15 @@ def _load_references(
     """
     skip_values = {"OTHER", "UNKNOWN", "SKIP", ""}
 
+    # kNN's own earlier outputs (source "nn", the lowest-confidence tier)
+    # are not reference examples. Voting with them lets one run's guess
+    # become the next run's evidence: a misclassified name pulls its
+    # neighbors toward the same wrong label, and those then pull theirs.
+    # Only labels an upstream tier produced (FEC metadata, rules,
+    # prototype-similarity) seed the vote. This matters more now that the
+    # learning store survives comment-only code edits (see senate_pipeline.
+    # _normalized_source) — kNN labels would otherwise compound across many
+    # more runs than before.
     rows = (
         db_session.query(
             LearnedClassification.entity_name,
@@ -183,6 +196,7 @@ def _load_references(
         )
         .filter(
             LearnedClassification.entity_type == entity_type,
+            LearnedClassification.source != KNN_SOURCE,
         )
         .all()
     )

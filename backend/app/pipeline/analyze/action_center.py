@@ -2066,7 +2066,7 @@ def _find_related_senators(
     senators = db.query(
         Senator.id, Senator.name, Senator.state, Senator.party,
         Senator.score_funding_independence, Senator.score_promise_persistence,
-        Senator.score_independent_voting, Senator.score_funding_diversity,
+        Senator.score_constituent_alignment, Senator.score_funding_diversity,
         Senator.score_legislative_effectiveness,
         Senator.leadership_score, Senator.contact_form_url, Senator.website_url,
     ).all()
@@ -2074,7 +2074,7 @@ def _find_related_senators(
     representatives = db.query(
         Representative.id, Representative.name, Representative.state, Representative.party,
         Representative.score_funding_independence, Representative.score_promise_persistence,
-        Representative.score_independent_voting, Representative.score_funding_diversity,
+        Representative.score_constituent_alignment, Representative.score_funding_diversity,
         Representative.score_legislative_effectiveness,
         Representative.leadership_score, Representative.contact_form_url, Representative.website_url,
     ).all()

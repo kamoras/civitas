@@ -114,7 +114,11 @@ class Senator(Base):
     # perfect 100 or 0") unknown must not read as a fully-captured 0.
     score_funding_independence: Mapped[float] = mapped_column(Float, default=50.0)
     score_promise_persistence: Mapped[float] = mapped_column(Float, default=50.0)
-    score_independent_voting: Mapped[float] = mapped_column(Float, default=50.0)
+    # Still stored in the score_independent_voting column. Renaming the column
+    # is the contract step of a two-release migration (migrations/README.md):
+    # the previous image reads the old name, and Swarm's start-first update
+    # plus automatic rollback can run it against this schema.
+    score_constituent_alignment: Mapped[float] = mapped_column("score_independent_voting", Float, default=50.0)
     score_funding_diversity: Mapped[float] = mapped_column(Float, default=50.0)
     score_legislative_effectiveness: Mapped[float] = mapped_column(Float, default=50.0)
     # Per-dimension data-sufficiency ("high"/"medium"/"low") as JSON —
@@ -122,14 +126,16 @@ class Senator(Base):
     score_confidence: Mapped[str] = mapped_column(Text, default="{}")
 
     total_raised: Mapped[float] = mapped_column(Float, default=0.0)
+    # Contributions + candidate self-loans: the denominator funding shares
+    # are taken over (normalize_finance.summarize_election_totals). NULL on
+    # rows scored before it existed — readers fall back to total_raised.
+    total_contributions: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Party the member's votes are scored against: their own, or for an
+    # Independent the party they caucus with (normalize_votes). Read back by
+    # the score-breakdown API so it scores Independents as the pipeline did.
+    caucus_party: Mapped[str | None] = mapped_column(String(1), nullable=True)
     total_from_pacs: Mapped[float] = mapped_column(Float, default=0.0)
     small_donor_percentage: Mapped[float] = mapped_column(Float, default=0.0)
-    # Super PAC independent expenditures supporting the candidate (FEC
-    # Schedule E). Persisted so the on-demand score-breakdown endpoint can
-    # reproduce _funding_independence_core's exact PAC-ratio math — this
-    # was previously only held in the pipeline's local `funding` dict and
-    # discarded once folded into score_funding_independence.
-    outside_spending_for: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     partisan_depth: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -213,14 +219,6 @@ class KeyVote(Base):
     stance: Mapped[str] = mapped_column(String, default="neutral")
     description: Mapped[str] = mapped_column(Text, default="")
     party_leaning: Mapped[str | None] = mapped_column(String, nullable=True)  # "R", "D", "bipartisan"
-    # For R/D-labeled crossing votes only: how unified the OPPOSING party
-    # was on its own side (0.65-1.0 by construction of the 65/35 labeling
-    # threshold — see normalize_votes.opposing_party_unity). None when the
-    # vote is "bipartisan"-labeled or lacks enough roll-call data. Used by
-    # Constituent Alignment to distinguish a crossing that reads as
-    # consensus-building from one that reads as adopting the opposition's
-    # own party line.
-    opposing_party_unity_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     voted_with_party: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     vote_category: Mapped[str] = mapped_column(String, default="key")  # "recent" or "key"
 
@@ -240,7 +238,7 @@ class LobbyingMatch(Base):
     senator_vote_aligned: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=None)
     # Whether the matched donor-related votes were consensus (near-unanimous)
     # votes. Persisted for the same on-demand breakdown-recompute reason as
-    # Senator.outside_spending_for above — previously only lived in
+    # Senator.total_contributions above — previously only lived in
     # policy_alignment.py's transient match dict.
     is_consensus_vote: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     description: Mapped[str] = mapped_column(Text, default="")
@@ -338,7 +336,11 @@ class Representative(Base):
     # perfect 100 or 0") unknown must not read as a fully-captured 0.
     score_funding_independence: Mapped[float] = mapped_column(Float, default=50.0)
     score_promise_persistence: Mapped[float] = mapped_column(Float, default=50.0)
-    score_independent_voting: Mapped[float] = mapped_column(Float, default=50.0)
+    # Still stored in the score_independent_voting column. Renaming the column
+    # is the contract step of a two-release migration (migrations/README.md):
+    # the previous image reads the old name, and Swarm's start-first update
+    # plus automatic rollback can run it against this schema.
+    score_constituent_alignment: Mapped[float] = mapped_column("score_independent_voting", Float, default=50.0)
     score_funding_diversity: Mapped[float] = mapped_column(Float, default=50.0)
     score_legislative_effectiveness: Mapped[float] = mapped_column(Float, default=50.0)
     # Per-dimension data-sufficiency ("high"/"medium"/"low") as JSON —
@@ -346,14 +348,16 @@ class Representative(Base):
     score_confidence: Mapped[str] = mapped_column(Text, default="{}")
 
     total_raised: Mapped[float] = mapped_column(Float, default=0.0)
+    # Contributions + candidate self-loans: the denominator funding shares
+    # are taken over (normalize_finance.summarize_election_totals). NULL on
+    # rows scored before it existed — readers fall back to total_raised.
+    total_contributions: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Party the member's votes are scored against: their own, or for an
+    # Independent the party they caucus with (normalize_votes). Read back by
+    # the score-breakdown API so it scores Independents as the pipeline did.
+    caucus_party: Mapped[str | None] = mapped_column(String(1), nullable=True)
     total_from_pacs: Mapped[float] = mapped_column(Float, default=0.0)
     small_donor_percentage: Mapped[float] = mapped_column(Float, default=0.0)
-    # Super PAC independent expenditures supporting the candidate (FEC
-    # Schedule E). Persisted so the on-demand score-breakdown endpoint can
-    # reproduce _funding_independence_core's exact PAC-ratio math — this
-    # was previously only held in the pipeline's local `funding` dict and
-    # discarded once folded into score_funding_independence.
-    outside_spending_for: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     partisan_depth: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -441,8 +445,6 @@ class RepKeyVote(Base):
     stance: Mapped[str] = mapped_column(String, default="neutral")
     description: Mapped[str] = mapped_column(Text, default="")
     party_leaning: Mapped[str | None] = mapped_column(String, nullable=True)
-    # See KeyVote.opposing_party_unity_pct — same field, House side.
-    opposing_party_unity_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     voted_with_party: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     vote_category: Mapped[str] = mapped_column(String, default="key")
 
@@ -577,21 +579,19 @@ class President(Base):
     # shown on a president's profile as a raw stat.
     eo_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Persisted so the on-demand score-breakdown endpoint can recompute
-    # calc_effectiveness/calc_agency_alignment's exact inputs without a
-    # live re-fetch from FRED/Federal Register — these were previously
-    # only held in president_pipeline.py's local `live` dict and discarded
-    # once folded into score_effectiveness/score_agency_alignment.
-    gdp_growth_adjusted: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # calc_agency_alignment's exact input without a live re-fetch from the
+    # Federal Register. rulemaking_count is informational since president
+    # v5 (volume is no longer scored — see _agency_alignment_core).
     rulemaking_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     rulemaking_finalized_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Last-quartile-minus-first-quartile average approval across the term
     # (see calc_public_mandate) — persisted for the same on-demand
-    # score-breakdown-recompute reason as gdp_growth_adjusted above.
+    # score-breakdown-recompute reason as rulemaking_finalized_pct above.
     approval_trend: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Raw C-SPAN 2021 Presidential Historians Survey point total (e.g.
     # Lincoln=897) — persisted alongside the normalized score_
     # historical_legacy for the same on-demand-recompute reason as
-    # gdp_growth_adjusted/rulemaking_count above.
+    # rulemaking_finalized_pct above.
     historical_legacy_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Same figure as avg_approval, but averaged only over the last 90 days
@@ -838,6 +838,9 @@ class Justice(Base):
 
     score_consistency: Mapped[float] = mapped_column(Float, default=0.0)
     score_independence: Mapped[float] = mapped_column(Float, default=0.0)
+    # Unscored since v6.13 (justice_analyzer's module docstring) but still
+    # NOT NULL columns the previous image reads, so kept until the contract
+    # release drops them (migrations/README.md). Never read.
     score_bipartisan_agreement: Mapped[float] = mapped_column(Float, default=0.0)
     score_judicial_restraint: Mapped[float] = mapped_column(Float, default=0.0)
 
@@ -1586,10 +1589,12 @@ class BskySenatorSpotlight(Base):
 class SiteVisit(VisitsBase):
     """One row per unique visitor per day — never raw IP/PII.
 
-    `visitor_hash` is an HMAC of (IP, User-Agent, date) keyed by a secret
-    derived from ADMIN_TOKEN (see api/visits.py) — the same real visitor
-    produces a different hash every day, and the raw IP is never stored or
-    recoverable from the hash. The (date, visitor_hash) primary key means a
+    `visitor_hash` is an HMAC of the visitor's IP keyed by that UTC day's
+    random salt (VisitSalt; see api/visits.py). The salt exists only while
+    its day is current and is then deleted, so after the day ends nobody —
+    the operator included — can recompute a hash from an IP; with the IPv4
+    space small enough to enumerate, a permanent key would have made every
+    stored hash reversible. The (date, visitor_hash) primary key means a
     second request from the same visitor on the same day is a no-op insert,
     so this table grows by unique visitors, not by page views.
 
@@ -1605,11 +1610,32 @@ class SiteVisit(VisitsBase):
     # Coarse buckets parsed from User-Agent (see api/visits.py _parse_ua) —
     # never the raw UA string. A handful of low-cardinality categories
     # (~5 browsers x ~6 OSes x 3 device types) isn't personally identifying
-    # on its own, and reveals nothing the hash didn't already consume: the
-    # full UA string is already an input to visitor_hash above.
+    # on its own.
     browser: Mapped[str] = mapped_column(String(20), default="")
     os: Mapped[str] = mapped_column(String(20), default="")
     device_type: Mapped[str] = mapped_column(String(10), default="")
+
+
+class VisitSalt(VisitsBase):
+    """The random salt for the current UTC day's visitor hashes.
+
+    Lives in the visits database so both API workers hash a visitor
+    identically (a per-process salt would count one person twice). At most
+    one row exists: api/visits.py deletes every other day's salt when it
+    creates the current one, which is what makes older hashes unlinkable.
+    """
+    __tablename__ = "visit_salts"
+
+    date: Mapped[str] = mapped_column(String(10), primary_key=True)  # YYYY-MM-DD, UTC
+    salt: Mapped[str] = mapped_column(String(64), nullable=False)  # hex
+
+
+class VisitsMigration(VisitsBase):
+    """One-time data migrations applied to the visits database."""
+    __tablename__ = "visits_migrations"
+
+    name: Mapped[str] = mapped_column(String(100), primary_key=True)
+    applied_at: Mapped[datetime] = mapped_column(default=utcnow)
 
 
 class PageView(VisitsBase):

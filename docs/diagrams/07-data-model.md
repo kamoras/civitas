@@ -44,7 +44,7 @@ erDiagram
         int years_in_office
         bool is_current "false = left office; row deleted 180 days later"
         float score_funding_independence
-        float score_independent_voting "Constituent Alignment"
+        float score_constituent_alignment "Constituent Alignment"
         float score_legislative_effectiveness
         float score_promise_persistence "unweighted since v6.0"
         float score_funding_diversity "unweighted since v6.5"
@@ -66,7 +66,7 @@ erDiagram
         string party
         bool is_current "false = left office; row deleted 180 days later"
         float score_funding_independence
-        float score_independent_voting "Constituent Alignment"
+        float score_constituent_alignment "Constituent Alignment"
         float score_legislative_effectiveness
         float score_promise_persistence "unweighted since v6.0"
         float score_funding_diversity "unweighted since v6.5"
@@ -114,10 +114,8 @@ erDiagram
         int id PK
         string name
         string appointing_president
-        float score_consistency "35%"
-        float score_independence "30%"
-        float score_judicial_restraint "20%"
-        float score_bipartisan_agreement "15%"
+        float score_consistency "0.35/0.80"
+        float score_independence "0.45/0.80"
         int cases_decided
         json agreement_matrix
     }

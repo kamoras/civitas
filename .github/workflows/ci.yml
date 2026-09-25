@@ -110,7 +110,7 @@ jobs:
           # two dead local variables (F841). Test code that lies about what
           # it exercises is worse than unlinted app code, not better — a
           # stale name there fails silently as a passing test.
-          ruff check app/ scripts/ tests/
+          ruff check app/ scripts/ tests/ migrations/
 
       # Two-part coverage gate:
       #   1. TOTAL floor (--cov-fail-under=46): a regression backstop only
@@ -253,8 +253,14 @@ jobs:
           elif git diff --name-only "$base...HEAD" | grep -qx 'backend/requirements.txt'; then
             echo "requirements.txt changed — running embedding tests."
             echo "needed=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "$base...HEAD" | grep -q '^backend/app/pipeline/'; then
+            # The slow tests are the classifiers' tests (bill policy/stance/
+            # party alignment, donor type, industry, lobbying matches). A PR
+            # changing that code must run them before merge, not after.
+            echo "pipeline code changed — running embedding tests."
+            echo "needed=true" >> "$GITHUB_OUTPUT"
           else
-            echo "requirements.txt untouched — skipping embedding tests."
+            echo "requirements.txt and pipeline code untouched — skipping embedding tests."
             echo "needed=false" >> "$GITHUB_OUTPUT"
           fi
 

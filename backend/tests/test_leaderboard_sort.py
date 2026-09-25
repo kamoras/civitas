@@ -12,7 +12,7 @@ def _senator(id, name, funding_independence):
     return Senator(
         id=id, name=name, state="CA", party="D",
         score_funding_independence=funding_independence,
-        score_promise_persistence=50, score_independent_voting=50,
+        score_promise_persistence=50, score_constituent_alignment=50,
         score_funding_diversity=50, score_legislative_effectiveness=50,
     )
 
@@ -21,7 +21,7 @@ def _rep(id, name, funding_independence):
     return Representative(
         id=id, name=name, state="CA", district=1, party="D",
         score_funding_independence=funding_independence,
-        score_promise_persistence=50, score_independent_voting=50,
+        score_promise_persistence=50, score_constituent_alignment=50,
         score_funding_diversity=50, score_legislative_effectiveness=50,
     )
 

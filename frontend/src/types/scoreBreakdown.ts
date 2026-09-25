@@ -18,7 +18,7 @@ export interface ScoreBreakdownDimension {
   note?: string;
 }
 
-/** Senator/representative: fundingIndependence, independentVoting, fundingDiversity, legislativeEffectiveness. */
+/** Senator/representative: fundingIndependence, constituentAlignment, fundingDiversity, legislativeEffectiveness. */
 export type RepresentationScoreBreakdown = Record<string, ScoreBreakdownDimension>;
 
 /** President dimensions that are pure editorial estimates, not a live formula. */
@@ -42,8 +42,6 @@ export interface JusticeScoreBreakdown {
   breakdown: {
     consistency: JusticeDimensionBreakdown;
     independence: JusticeDimensionBreakdown;
-    bipartisanAgreement: JusticeDimensionBreakdown;
-    judicialRestraint: JusticeDimensionBreakdown;
   };
   [key: string]: unknown;
 }

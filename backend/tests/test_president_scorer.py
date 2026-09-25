@@ -50,9 +50,7 @@ class TestCalcEffectiveness:
 
 class TestCalcAgencyAlignment:
     def test_no_data_returns_none(self):
-        score = calc_agency_alignment(
-            rulemaking_count=None, rulemaking_finalized_pct=None, term_years=4.0,
-        )
+        score = calc_agency_alignment(rulemaking_finalized_pct=None)
         assert score is None
 
 

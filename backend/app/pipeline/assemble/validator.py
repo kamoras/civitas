@@ -94,7 +94,7 @@ def validate_senator(senator: dict) -> dict:
     validated_score = {
         "fundingIndependence": clamp(cs.get("fundingIndependence", NEUTRAL_SCORE)),
         "promisePersistence": clamp(cs.get("promisePersistence", NEUTRAL_SCORE)),
-        "independentVoting": clamp(cs.get("independentVoting", NEUTRAL_SCORE)),
+        "constituentAlignment": clamp(cs.get("constituentAlignment", NEUTRAL_SCORE)),
         "fundingDiversity": clamp(cs.get("fundingDiversity", NEUTRAL_SCORE)),
         "legislativeEffectiveness": clamp(cs.get("legislativeEffectiveness", NEUTRAL_SCORE)),
     }
@@ -121,6 +121,9 @@ def validate_senator(senator: dict) -> dict:
     }
     senator["funding"] = {
         "totalRaised": max(0, round(f.get("totalRaised", 0))),
+        "totalContributions": (
+            max(0, round(f["totalContributions"])) if f.get("totalContributions") is not None else None
+        ),
         "totalFromPACs": max(0, round(f.get("totalFromPACs", 0))),
         "smallDonorPercentage": clamp(f.get("smallDonorPercentage", 0)),
         "topDonors": [
@@ -173,6 +176,9 @@ def validate_senator(senator: dict) -> dict:
         "votedWithPartyCount": max(0, vr.get("votedWithPartyCount", 0)),
         "votedAgainstPartyCount": max(0, vr.get("votedAgainstPartyCount", 0)),
         "partyLoyaltyPct": max(0.0, vr.get("partyLoyaltyPct", 0.0)),
+        # The party an Independent caucuses with (normalize_votes); kept so
+        # it is persisted and the score breakdown scores them the same way.
+        "effectiveParty": vr.get("effectiveParty") if vr.get("effectiveParty") in ("D", "R") else None,
         "recentVotes": [
             _validate_vote(v, "recent")
             for v in (vr.get("recentVotes") or [])

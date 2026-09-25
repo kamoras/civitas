@@ -1,9 +1,10 @@
 """Privacy-respecting unique-visitor tracking.
 
 No raw IP or User-Agent is ever stored. `POST /api/track-visit` is fired by
-the frontend's middleware on real page views and records only a salted,
-daily-rotating hash — see SiteVisit in models.py for why the same visitor
-is unrecoverable across days and why this table can't grow per-request.
+the frontend's middleware on real page views and records only an HMAC of
+the IP under a random salt that exists for the current UTC day and is then
+deleted — see SiteVisit in models.py for why that makes past hashes
+unrecoverable and why this table can't grow per-request.
 """
 
 import asyncio
@@ -11,6 +12,7 @@ import hashlib
 import hmac
 import logging
 import re
+import secrets
 from dataclasses import dataclass
 from datetime import datetime, UTC
 
@@ -19,10 +21,9 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import OperationalError, TimeoutError as SATimeoutError
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.database import VisitsSessionLocal
 from app.issue_ids import from_public_id
-from app.models import IssueView, PageView, SiteVisit
+from app.models import IssueView, PageView, SiteVisit, VisitSalt
 
 logger = logging.getLogger(__name__)
 
@@ -198,25 +199,59 @@ def _parse_device(ua: str) -> str:
     return "desktop"
 
 
-def _hash_key() -> bytes:
-    # Derived from ADMIN_TOKEN rather than a separate secret so there's
-    # nothing new to configure — same bar as admin-panel access already
-    # requires, and unique per self-hosted deployment.
-    token = settings.ADMIN_TOKEN or settings.PIPELINE_TRIGGER_TOKEN or "civitas"
-    return hashlib.sha256(f"{token}:visitor-salt".encode()).digest()
+# (date, salt) for the current UTC day, per process. The salt itself lives
+# in the visits database (VisitSalt) so both workers share it.
+_salt_cache: tuple[str, bytes] | None = None
 
 
-def _visitor_hash(ip: str, date: str) -> str:
-    # Keyed on IP + date only (2026-07): the User-Agent used to be in this
-    # key, which meant one client rotating the User-Agent header produced
+def _load_or_create_salt(date: str) -> bytes:
+    """The shared salt for `date`, creating it if this is the first visit
+    of the day. Every other day's salt is deleted in the same transaction —
+    once a day's salt is gone, that day's hashes can't be recomputed from
+    an IP by anyone."""
+    db = VisitsSessionLocal()
+    try:
+        db.execute(
+            sqlite_insert(VisitSalt)
+            .values(date=date, salt=secrets.token_hex(32))
+            .on_conflict_do_nothing(index_elements=["date"])
+        )
+        db.query(VisitSalt).filter(VisitSalt.date != date).delete()
+        db.commit()
+        return bytes.fromhex(db.query(VisitSalt.salt).filter(VisitSalt.date == date).scalar())
+    finally:
+        db.close()
+
+
+async def _daily_salt(date: str) -> bytes:
+    global _salt_cache
+    if _salt_cache is not None and _salt_cache[0] == date:
+        return _salt_cache[1]
+    try:
+        salt = await asyncio.to_thread(_load_or_create_salt, date)
+    except Exception:
+        # Degrade to a process-local salt: this worker's count of today's
+        # uniques may overlap the other worker's, but nothing reversible is
+        # ever stored. Retried on the next visit (not cached).
+        logger.warning("Visit salt unavailable — using a process-local salt for this visit", exc_info=True)
+        return secrets.token_bytes(32)
+    _salt_cache = (date, salt)
+    return salt
+
+
+def _visitor_hash(ip: str, salt: bytes) -> str:
+    # Keyed on IP only (2026-07): the User-Agent used to be in this key,
+    # which meant one client rotating the User-Agent header produced
     # unlimited distinct hashes — a new SiteVisit row per request, i.e. a
     # disk-fill vector on an unauthenticated endpoint. Dropping it bounds
-    # daily rows to distinct source IPs (the natural unique-visitor unit),
-    # which is what the daily-uniques metric wants anyway. Browser/OS/
-    # device breakdowns still come from the raw User-Agent below; only the
-    # dedup identity no longer depends on it.
-    msg = f"{ip}:{date}".encode()
-    return hmac.new(_hash_key(), msg, hashlib.sha256).hexdigest()[:32]
+    # daily rows to distinct source IPs (the natural unique-visitor unit).
+    # The day is carried by the salt, which rotates daily.
+    #
+    # The salt replaces a key derived from ADMIN_TOKEN (falling back to the
+    # literal "civitas" when no token was set). That key never changed, and
+    # the IPv4 space is small enough to enumerate, so anyone holding the key
+    # could turn every stored hash back into an IP.
+    return hmac.new(salt, ip.encode(), hashlib.sha256).hexdigest()[:32]
 
 
 _KNOWN_STATIC_PATHS = {
@@ -306,7 +341,7 @@ async def track_visit(request: Request, path: str = Query("/")) -> None:
 
     event = _VisitEvent(
         date=date,
-        visitor_hash=_visitor_hash(ip, date),
+        visitor_hash=_visitor_hash(ip, await _daily_salt(date)),
         browser=_parse_browser(user_agent),
         os=_parse_os(user_agent),
         device_type=_parse_device(user_agent),

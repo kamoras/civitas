@@ -26,7 +26,7 @@ NEUTRAL_SCORE = 50
 _NEUTRAL_REPRESENTATION_SCORE = {
     "fundingIndependence": NEUTRAL_SCORE,
     "promisePersistence": NEUTRAL_SCORE,
-    "independentVoting": NEUTRAL_SCORE,
+    "constituentAlignment": NEUTRAL_SCORE,
     "fundingDiversity": NEUTRAL_SCORE,
     "legislativeEffectiveness": NEUTRAL_SCORE,
 }

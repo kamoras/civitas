@@ -6,7 +6,7 @@ analysis code changes.**
 
 ```mermaid
 flowchart TB
-    RUN(["Pipeline start"]) --> FP{"SHA-256 over<br/>pipeline/analyze/*.py<br/>== hash on last PipelineRun?"}
+    RUN(["Pipeline start"]) --> FP{"SHA-256 over docstring-stripped ASTs<br/>of pipeline/ (minus fetch/) + config_definitions<br/>== hash on last PipelineRun?"}
 
     FP -->|"unchanged"| KEEP["Keep everything —<br/>warm rerun, self-training preserved"]
     FP -->|"changed"| PURGE["Clear derived artifacts"]

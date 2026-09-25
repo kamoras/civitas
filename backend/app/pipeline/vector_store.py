@@ -127,7 +127,9 @@ def get_similarity_model() -> SentenceTransformer:
     action-metrics history the same way past thresholds elsewhere in this
     pipeline were calibrated and set real thresholds from it.
     The classification subsystem (donor/kNN/bills) stays on the primary
-    model until their own measurement + recalibration pass.
+    model until their own measurement + recalibration pass — the harness's
+    donor_type / bill_policy tasks are that measurement, and
+    docs/research/embedding-models.md states the decision rule it feeds.
     """
     global _similarity_model
     if _similarity_model is None:

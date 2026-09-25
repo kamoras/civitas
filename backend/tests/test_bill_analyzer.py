@@ -35,6 +35,7 @@ class TestProceduralDetection:
             "Authorizing the use of the rotunda of the Capitol",
         ],
     )
+    @pytest.mark.slow
     def test_procedural_texts_detected(self, text):
         area, confidence = classify_policy_area(text)
         assert area == "PROCEDURAL"
@@ -49,6 +50,7 @@ class TestProceduralDetection:
         assert area == "PROCEDURAL"
         assert confidence == 0.0
 
+    @pytest.mark.slow
     def test_seed_matched_procedural_confidence_is_the_real_score_not_1(self):
         """O3: _is_procedural_seed_match used to hardcode confidence 1.0 for
         any match; a marginal 0.75 and a comfortable 0.85 aren't equally
@@ -173,6 +175,7 @@ class TestClassifyRecentVotesProceduralGate:
         assert result[0]["policyArea"] == "PROCEDURAL"
         assert result[0]["stance"] == "procedural"
 
+    @pytest.mark.slow
     @pytest.mark.asyncio
     async def test_low_confidence_procedural_falls_through_to_full_analysis(self):
         from app.pipeline.analyze.bill_analyzer import classify_recent_votes
@@ -242,6 +245,7 @@ class TestReferenceCorpusOverrideGate:
 
     TEXT = "Hospital and medical insurance reform healthcare system regulation"
 
+    @pytest.mark.slow
     def test_confident_knn_deferred_when_alternative_is_corpus_rare(self):
         from unittest.mock import patch
         with patch(
@@ -254,6 +258,7 @@ class TestReferenceCorpusOverrideGate:
             area, _ = classify_policy_area(self.TEXT)
         assert area == "HEALTHCARE"
 
+    @pytest.mark.slow
     def test_confident_knn_trusted_when_alternative_is_well_represented(self):
         from unittest.mock import patch
         with patch(
@@ -267,6 +272,7 @@ class TestReferenceCorpusOverrideGate:
         assert area == "TAXES"
         assert conf == 0.9
 
+    @pytest.mark.slow
     def test_knn_and_seed_agreement_always_trusted(self):
         from unittest.mock import patch
         with patch(
@@ -330,18 +336,21 @@ class TestMultiAreaClassification:
     discriminating secondary-area signal replaces this later.
     """
 
+    @pytest.mark.slow
     def test_returns_list_of_dicts(self):
         result = classify_policy_areas_multi("Healthcare reform and Medicare expansion")
         assert isinstance(result, list)
         assert len(result) >= 1
         assert all("area" in a and "confidence" in a for a in result)
 
+    @pytest.mark.slow
     def test_primary_area_matches_single_classify(self):
         text = "National Defense Authorization Act military spending"
         single_area, _ = classify_policy_area(text)
         multi_areas = classify_policy_areas_multi(text)
         assert multi_areas[0]["area"] == single_area
 
+    @pytest.mark.slow
     def test_complex_bill_returns_single_area(self):
         """Secondary-area detection is disabled (see class docstring) —
         even text spanning several genuine domains should return exactly
@@ -358,11 +367,13 @@ class TestMultiAreaClassification:
         result = classify_policy_areas_multi("")
         assert result == [{"area": "PROCEDURAL", "confidence": 0.0}]
 
+    @pytest.mark.slow
     def test_confidences_are_bounded(self):
         result = classify_policy_areas_multi("Gun control background check legislation")
         for a in result:
             assert 0.0 <= a["confidence"] <= 1.0
 
+    @pytest.mark.slow
     def test_areas_ordered_by_confidence(self):
         result = classify_policy_areas_multi(
             "Renewable energy tax credits and environmental protection funding"
@@ -437,6 +448,7 @@ class TestNominationDetection:
 class TestMultiAreaPartyAlignment:
     """Tests for per-area party alignment with weighted aggregation."""
 
+    @pytest.mark.slow
     def test_returns_expected_shape(self):
         from app.pipeline.analyze.party_platform import classify_party_alignment_multi
 
@@ -453,6 +465,7 @@ class TestMultiAreaPartyAlignment:
         assert result["overall"] in ("R", "D", "bipartisan")
         assert 0.0 <= result["weight"] <= 1.0
 
+    @pytest.mark.slow
     def test_procedural_only_returns_bipartisan(self):
         from app.pipeline.analyze.party_platform import classify_party_alignment_multi
 
@@ -461,6 +474,7 @@ class TestMultiAreaPartyAlignment:
         assert result["overall"] == "bipartisan"
         assert result["weight"] == 0.0
 
+    @pytest.mark.slow
     def test_per_area_alignment_populated(self):
         from app.pipeline.analyze.party_platform import classify_party_alignment_multi
 
@@ -605,26 +619,26 @@ class TestIdeologyBlendInPartisanDepth:
         assert result["totalPositions"] == 0
 
     def test_ideology_adjusts_sparse_vote_lean(self):
-        """With few votes, ideology_score should pull the overall lean."""
-        from app.pipeline.analyze.party_platform import analyze_partisan_depth
-
-        votes = [
-            {"vote": "Yea", "policyArea": "DEFENSE", "partyLeaning": "R",
-             "policyAreas": []},
-            {"vote": "Yea", "policyArea": "DEFENSE", "partyLeaning": "R",
-             "policyAreas": []},
-        ]
-        record = {"keyVotes": votes, "recentVotes": []}
-
-        without = analyze_partisan_depth(
-            promises=[], senator_party="D",
-            voting_record=record, ideology_score=None,
+        """With few votes, the ideology prior pulls the overall lean — once
+        finalize_partisan_depth has the chamber to put it on the vote scale."""
+        from app.pipeline.analyze.party_platform import (
+            analyze_partisan_depth,
+            finalize_partisan_depth,
         )
-        with_d_ideology = analyze_partisan_depth(
-            promises=[], senator_party="D",
-            voting_record=record, ideology_score=0.1,
-        )
-        assert with_d_ideology["overallLean"] < without["overallLean"]
+
+        def member(n_votes, leaning, ideology):
+            votes = [{"vote": "Yea", "policyArea": "DEFENSE", "partyLeaning": leaning, "policyAreas": []}
+                     for _ in range(n_votes)]
+            return analyze_partisan_depth(
+                promises=[], senator_party="D" if leaning == "D" else "R",
+                voting_record={"keyVotes": votes, "recentVotes": []}, ideology_score=ideology,
+            )
+
+        chamber = [member(20, "D", 0.2) for _ in range(6)] + [member(20, "R", 0.8) for _ in range(6)]
+        sparse = member(2, "R", 0.1)
+        sparse["evalParty"] = "D"
+        finalize_partisan_depth([*chamber, sparse])
+        assert sparse["overallLean"] < sparse["voteLean"]
 
     def test_rich_votes_override_ideology(self):
         """With many votes (>=15), ideology_score has minimal effect."""
@@ -676,6 +690,7 @@ class TestGunControlBillPartyAlignment:
             ("A bill to regulate ammunition sales and transfers", "anti"),
         ],
     )
+    @pytest.mark.slow
     def test_gun_control_bills_align_democrat(self, bill_text, stance):
         from app.pipeline.analyze.party_platform import classify_party_alignment
 
@@ -692,6 +707,7 @@ class TestGunControlBillPartyAlignment:
             ("A bill to protect second amendment rights and deregulate firearms", "pro"),
         ],
     )
+    @pytest.mark.slow
     def test_pro_gun_bills_align_republican(self, bill_text, stance):
         from app.pipeline.analyze.party_platform import classify_party_alignment
 
@@ -701,6 +717,7 @@ class TestGunControlBillPartyAlignment:
             f"expected 'R' or 'bipartisan'"
         )
 
+    @pytest.mark.slow
     def test_multi_area_gun_control_bill(self):
         from app.pipeline.analyze.party_platform import classify_party_alignment_multi
 

@@ -11,7 +11,7 @@ flowchart TB
     LOCK -->|no| FP
     MARK --> FP
 
-    FP{"SHA-256 of analyze/*.py<br/>== last run's hash?"}
+    FP{"SHA-256 of pipeline/ ASTs (minus fetch/)<br/>+ config_definitions<br/>== last run's hash?"}
     FP -->|changed| CLEAR["Clear AnalysisCache<br/>+ LearnedClassification<br/>ApiCache untouched"]
     FP -->|same| P1
     CLEAR --> P1
@@ -23,11 +23,11 @@ flowchart TB
 
     subgraph P3["3. ANALYZE — fully deterministic, no LLM call, per member"]
         direction LR
-        LIB["<b>Embedding + scoring</b><br/>batches of 64<br/><br/>bill titles → policy areas<br/>employers → industries<br/>donor↔bill cosine conflicts<br/>key-vote selection<br/>platform topic extraction<br/>speech → party alignment<br/>compute + persist scorecard"]
+        LIB["<b>Embedding + scoring</b><br/>batches of 64<br/><br/>bill titles → policy areas<br/>employers → industries<br/>donor↔bill cosine conflicts<br/>key-vote selection<br/>speech → party alignment<br/>compute + persist scorecard"]
     end
 
     P3 --> P4["<b>4. EXPLORE</b><br/>embed speeches, presidential actions,<br/>SCOTUS opinions, FR rulemaking<br/>→ sqlite-vec upsert"]
-    P3 --> P5["<b>5. JUSTICES</b><br/>Oyez votes → consistency,<br/>independence, restraint"]
+    P3 --> P5["<b>5. JUSTICES</b><br/>Oyez votes → consistency,<br/>independence"]
     P3 --> P6["<b>6. PRESIDENTS</b><br/>BLS · BEA/FRED · MeasuringWorth<br/>UCSB approval · C-SPAN survey"]
 
     P4 --> P7
@@ -41,16 +41,12 @@ flowchart TB
     STOCK --> DONE(["PipelineRun status = completed"])
 ```
 
-## Why the Librarian runs one member ahead
+## Why ANALYZE runs one member at a time
 
-The Analyst blocks on LLM HTTP for 15–30s per member. In that window the
-Librarian computes the *next* member's embedding work (2–4s). Across 100
-senators that recovers 200–400s of wall clock — a 10–15% reduction — at zero
-extra peak memory, because the lookahead is exactly one member rather than a
-full queue.
-
-Peak memory during this phase, with embedding and LLM work overlapped, reaches
-about 3 GB.
+It used to overlap work: a "Librarian" thread computed the next member's
+embeddings while the "Analyst" waited 15–30s on an LLM call. ANALYZE makes no
+LLM call now, so there is nothing to overlap with. Each member's embedding
+work (`precompute_senator_analysis`) runs, then its scoring, in order.
 
 ## Why a truncated roster can't retire a chamber
 

@@ -561,7 +561,7 @@ class TestIncumbentRecordLink:
         _candidate(db_session, "S1", "2026-SEN-GA", "OSSOFF, JON", incumbent_challenge="I")
         senator = _senator(
             db_session, "SEN-OSSOFF", "Jon Ossoff", "GA",
-            score_funding_independence=65.0, score_independent_voting=40.0,
+            score_funding_independence=65.0, score_constituent_alignment=40.0,
         )
         db_session.commit()
 

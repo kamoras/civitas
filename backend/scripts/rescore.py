@@ -5,13 +5,14 @@ the *currently installed* scoring code over it — without touching stored
 scores. Use it to preview the population-level impact of an algorithm
 change before deploying it:
 
-    docker exec mp-backend-<slot> python3 scripts/rescore.py
+    docker exec "$(docker ps -q -f name=civitas_backend)" python3 scripts/rescore.py
 
 or, to test uncommitted code, copy the tree into the container and put it
 first on PYTHONPATH:
 
-    docker cp backend/app <container>:/tmp/newcode/app
-    docker exec -e PYTHONPATH=/tmp/newcode <container> python3 scripts/rescore.py
+    C="$(docker ps -q -f name=civitas_backend)"
+    docker cp backend/app "$C":/tmp/newcode/app
+    docker exec -e PYTHONPATH=/tmp/newcode "$C" python3 scripts/rescore.py
 
 Outputs per-senator old→new comparisons, distribution statistics,
 dimension correlations, party means, the FI-vs-fundraising-scale
@@ -26,8 +27,7 @@ Limitations:
 - Promise alignments and House vote labels are recomputed only by real
   pipeline runs; this harness scores from stored data.
 - totalFromPACs is corrected from cached FEC financials when available
-  (mirroring normalize_finance v4); outsideSpendingFor uses the stored
-  senator value unless cached outside-spending data exists.
+  (mirroring normalize_finance v4).
 """
 
 import argparse
@@ -46,8 +46,22 @@ from app.pipeline.analyze.ground_truth import (  # noqa: E402
     MIN_LABELED_VOTES,
     evaluate_derived_checks,
 )
-from app.pipeline.analyze.score_calculator import calculate_scores  # noqa: E402
+from app.config import settings  # noqa: E402
+from app.pipeline.analyze.population_reference import (  # noqa: E402
+    CONSTITUENT_REFERENCE,
+    FUNDING_REFERENCE,
+    LES_REFERENCE,
+)
+from app.pipeline.analyze.score_calculator import (  # noqa: E402
+    calculate_scores,
+    compute_constituent_reference,
+    compute_funding_reference,
+    compute_les_reference,
+    constituent_reference_inputs,
+    derive_chamber_majority,
+)
 from app.pipeline.fetch.fec import select_recent_elections  # noqa: E402
+from app.pipeline.transform.normalize_finance import summarize_election_totals  # noqa: E402
 from app.pipeline.transform.candidate_names import is_candidate_self_donor  # noqa: E402
 
 DB = "file:/data/civitas.db?mode=ro"
@@ -80,28 +94,23 @@ def load_fec_caches(cur):
 
 
 def corrected_funding(search, fin, name, state):
-    """Rebuild receipt-window totals from cached FEC financials.
-
-    Mirrors normalize_finance: one deduped totals row per election, two
-    most recent elections (select_recent_elections — raw [:2] counted the
-    same election twice for 184/521 cached candidates).
-    """
+    """Rebuild receipt-window totals from cached FEC financials, through the
+    SAME select_recent_elections + summarize_election_totals the pipeline
+    uses (this script used to re-implement the arithmetic, and drifted)."""
     cid = search.get(f"candidate-search-{name}-{state}-S")
     if not cid:
         return None
     rows = fin.get(f"candidate-financials-{cid}")
     if not rows:
         return None
-    window = select_recent_elections(rows)
-    total_raised = sum(c.get("receipts", 0) or 0 for c in window)
-    small = sum(c.get("individual_unitemized_contributions", 0) or 0 for c in window)
+    totals = summarize_election_totals(select_recent_elections(rows, office="S"))
+    base = totals["total_contributions"]
     return {
-        "totalRaised": round(total_raised),
-        "totalFromPACs": round(sum(
-            c.get("other_political_committee_contributions", 0) or 0 for c in window
-        )),
+        "totalRaised": round(totals["total_raised"]),
+        "totalContributions": round(base),
+        "totalFromPACs": round(min(totals["total_from_pacs"], base)),
         "smallDonorPercentage": (
-            round(small / total_raised * 100) if total_raised > 0 else 0
+            round(totals["small_individual"] / base * 100) if base > 0 else 0
         ),
     }
 
@@ -135,10 +144,12 @@ def build_payload(cur, s, search, fin):
     fec_totals = corrected_funding(search, fin, s["name"], s["state"])
     if fec_totals and fec_totals["totalRaised"] > 0:
         total_raised = fec_totals["totalRaised"]
+        total_contributions = fec_totals["totalContributions"]
         total_from_pacs = fec_totals["totalFromPACs"]
         small_donor_pct = fec_totals["smallDonorPercentage"]
     else:
         total_raised = s["total_raised"] or 0
+        total_contributions = s.get("total_contributions") or total_raised
         total_from_pacs = s["total_from_pacs"] or 0
         small_donor_pct = s["small_donor_percentage"] or 0
 
@@ -173,7 +184,10 @@ def build_payload(cur, s, search, fin):
     bills = [
         {"title": r["title"], "isLaw": bool(r["is_law"]),
          "latestAction": r["latest_action"], "billType": r["bill_type"],
-         "congress": r["congress"]}
+         "congress": r["congress"],
+         # The stored stage classification — without it, LE fell back to
+         # latestAction keywords and diverged from the pipeline's score.
+         "stage": r["stage"] or None}
         for r in cur.fetchall()
     ]
 
@@ -181,13 +195,16 @@ def build_payload(cur, s, search, fin):
         "id": sid, "party": s["party"], "state": s["state"],
         "funding": {
             "totalRaised": total_raised,
-            "totalFromPACs": min(total_from_pacs, total_raised),
+            "totalContributions": total_contributions,
+            "totalFromPACs": min(total_from_pacs, total_contributions),
             "smallDonorPercentage": small_donor_pct,
             "topDonors": top_donors[:100],
             "industryBreakdown": industry,
-            "outsideSpendingFor": 0,
         },
-        "votingRecord": {"keyVotes": key_votes, "recentVotes": []},
+        "votingRecord": {
+            "keyVotes": key_votes, "recentVotes": [],
+            "effectiveParty": (s["caucus_party"] if "caucus_party" in s.keys() else None) or s["party"],
+        },
         "lobbyingMatches": matches,
         "campaignPromises": promises,
         "sponsoredBills": bills,
@@ -196,6 +213,45 @@ def build_payload(cur, s, search, fin):
             s["bipartisanship_score"] if "bipartisanship_score" in s.keys() else None
         ),
     }
+
+
+def attach_live_references(cur, senators, payloads) -> None:
+    """Measure this population's references the way the pipeline does
+    (live_references), in memory: nothing is written to /data. Without
+    this, calculate_scores falls back to the last persisted references,
+    which can predate the current method (e.g. an LES reference with no
+    status_median), and the preview diverges from what a run would score."""
+    current = [p for s, p in zip(senators, payloads) if s.get("is_current", 1)]
+    parties = [p["votingRecord"]["effectiveParty"] for p in current]
+    cur.execute("SELECT party FROM presidents WHERE is_current = 1")
+    row = cur.fetchone()
+    majority = derive_chamber_majority(parties, "senate", row["party"] if row else None)
+
+    persisted_les = LES_REFERENCE.load()
+    les = compute_les_reference(
+        [(p["sponsoredBills"], p["votingRecord"]["effectiveParty"]) for p in current],
+        settings.CURRENT_CONGRESS, majority,
+        (persisted_les.get("senate") or {}).get("advancement_rates"),
+    )
+    persisted_funding = FUNDING_REFERENCE.load()
+    funding = compute_funding_reference([p["funding"] for p in current])
+    persisted_ca = CONSTITUENT_REFERENCE.load()
+    ca = compute_constituent_reference(constituent_reference_inputs(current))
+
+    les_ref = {**persisted_les, "senate": les} if les else persisted_les
+    funding_ref = (
+        {**persisted_funding, "senate": {**(persisted_funding.get("senate") or {}), **funding}}
+        if funding else persisted_funding
+    )
+    ca_ref = {**persisted_ca, "senate": ca} if ca else persisted_ca
+    print(f"live references: LES {'measured' if les else 'persisted'}"
+          f"{' (status medians ' + str(les.get('status_median')) + ')' if les else ''}, "
+          f"funding {'measured' if funding else 'persisted'}, "
+          f"constituent {'measured' if ca else 'persisted'}; majority={majority}")
+    for p in payloads:
+        p["lesReference"] = les_ref
+        p["fundingReference"] = funding_ref
+        p["constituentReference"] = ca_ref
 
 
 def main() -> int:
@@ -209,20 +265,23 @@ def main() -> int:
     cur.execute("SELECT * FROM senators")
     senators = [dict(r) for r in cur.fetchall()]
 
+    payloads = [build_payload(cur, s, search, fin) for s in senators]
+    attach_live_references(cur, senators, payloads)
+
     results = []
-    for s in senators:
-        payload = build_payload(cur, s, search, fin)
+    for s, payload in zip(senators, payloads):
         new = calculate_scores(payload)
         funding = payload["funding"]
         raised = funding["totalRaised"] or 0
+        base = funding["totalContributions"] or raised
         labeled = [
             v["votedWithParty"]
             for v in payload["votingRecord"]["keyVotes"]
             if v["votedWithParty"] is not None
         ]
         metrics = {
-            "pac_ratio": funding["totalFromPACs"] / raised if raised > 0 else None,
-            "small_donor_pct": funding["smallDonorPercentage"] if raised > 0 else None,
+            "pac_ratio": funding["totalFromPACs"] / base if base > 0 else None,
+            "small_donor_pct": funding["smallDonorPercentage"] if base > 0 else None,
             "party_break_rate": (
                 labeled.count(False) / len(labeled)
                 if len(labeled) >= MIN_LABELED_VOTES else None
@@ -239,12 +298,12 @@ def main() -> int:
             "raised": payload["funding"]["totalRaised"] or 0,
             "old": {
                 "fi": s["score_funding_independence"], "pp": s["score_promise_persistence"],
-                "iv": s["score_independent_voting"], "fd": s["score_funding_diversity"],
+                "iv": s["score_constituent_alignment"], "fd": s["score_funding_diversity"],
                 "le": s["score_legislative_effectiveness"],
             },
             "new": {
                 "fi": new["fundingIndependence"], "pp": new["promisePersistence"],
-                "iv": new["independentVoting"], "fd": new["fundingDiversity"],
+                "iv": new["constituentAlignment"], "fd": new["fundingDiversity"],
                 "le": new["legislativeEffectiveness"],
             },
         })
@@ -273,7 +332,7 @@ def main() -> int:
             "name": r["name"],
             "scores": {
                 "score_funding_independence": r["new"]["fi"],
-                "score_independent_voting": r["new"]["iv"],
+                "score_constituent_alignment": r["new"]["iv"],
                 "score_funding_diversity": r["new"]["fd"],
                 "score_legislative_effectiveness": r["new"]["le"],
             },

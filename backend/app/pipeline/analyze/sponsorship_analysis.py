@@ -60,20 +60,37 @@ ADVANCED_EDGE_WEIGHT = 0.6
 STALLED_EDGE_WEIGHT = 0.3
 
 
-def _cosponsorship_edge_weight(bill: dict) -> float:
+def _cosponsorship_edge_weight(bill: dict) -> float | None:
     """How much a single cosponsorship of `bill` should count toward
-    Legislative Leadership's PageRank — see the weight tiers'
-    calibration note. Bills with no isLaw/latestAction data at all (an
-    older enrichment path that doesn't fetch outcome data) default to the
-    original flat weight rather than being penalized for a data gap."""
+    Legislative Leadership's PageRank — see the weight tiers' calibration
+    note. None when the bill carries no outcome data at all (an enrichment
+    path that doesn't fetch isLaw/latestAction); see _edge_weight_fn."""
     if bill.get("isLaw"):
         return ENACTED_EDGE_WEIGHT
     action = bill.get("latestAction")
     if action is None:
-        return ENACTED_EDGE_WEIGHT
+        return None
     if any(kw in action.lower() for kw in _ADVANCEMENT_ACTION_KEYWORDS):
         return ADVANCED_EDGE_WEIGHT
     return STALLED_EDGE_WEIGHT
+
+
+def _edge_weight_fn(bills_data: list[dict]):
+    """_cosponsorship_edge_weight with unknown outcomes filled by the mean
+    weight of this run's bills whose outcome IS known.
+
+    A bill with no outcome data used to get the ENACTED weight — the
+    maximum — so a sponsor whose bills came through the outcome-less path
+    looked like one whose bills all became law. Missing data should be
+    neutral: the typical known bill, not the best case (or the worst)."""
+    known = [w for w in (_cosponsorship_edge_weight(b) for b in bills_data) if w is not None]
+    default = sum(known) / len(known) if known else ENACTED_EDGE_WEIGHT
+
+    def weight(bill: dict) -> float:
+        w = _cosponsorship_edge_weight(bill)
+        return default if w is None else w
+
+    return weight
 
 
 def _build_cosponsorship_matrix(
@@ -93,7 +110,7 @@ def _build_cosponsorship_matrix(
             current cohort.
         weight_fn: optional bill dict -> float, applied per cosponsorship
             edge (defaults to a flat 1.0 for every edge). Leadership/
-            PageRank passes _cosponsorship_edge_weight; Ideology/SVD
+            PageRank passes _edge_weight_fn(bills_data); Ideology/SVD
             intentionally leaves this at the default — see module
             docstring for why.
 
@@ -189,7 +206,7 @@ def compute_leadership_scores(
 
     id_to_row, n, P = _build_cosponsorship_matrix(
         bills_data, cosponsors_map, senator_bioguide_ids,
-        weight_fn=_cosponsorship_edge_weight,
+        weight_fn=_edge_weight_fn(bills_data),
     )
     if n < 5:
         return {}
@@ -264,8 +281,8 @@ def compute_ideology_scores(
     # projection), fall back to a deterministic anchor — the first
     # bioguide-sorted member with a non-negligible coordinate — so the axis
     # orientation is reproducible across environments instead of flipping
-    # with SVD's implementation-defined sign (which would flip the v6.7
-    # position-mismatch discount that reads party_ideology_bounds.json).
+    # with SVD's implementation-defined sign (which would swap the
+    # progressive/conservative ideology labels built from these scores).
     sign = 0.0
     if r_scores:
         r_mean = sum(r_scores) / len(r_scores)
@@ -295,7 +312,7 @@ def compute_ideology_scores(
     # to compare against (this codebase has never actually produced a
     # bad axis to measure) — below it, the safer failure is publishing
     # nothing this run rather than a confidently-oriented coin flip that
-    # feeds the v6.7 position-mismatch discount and partisan-depth priors.
+    # feeds the ideology labels and partisan-depth priors.
     _MIN_PARTY_MEAN_SEPARATION = 0.15
     if r_idx and d_idx:
         r_mean_final = sum(scores[i] for i in r_idx) / len(r_idx)
@@ -502,12 +519,15 @@ def compute_bipartisanship_scores(
         (score_calculator), which must not cite HVW's finding while
         quietly measuring a blend they explicitly distinguish it from.
 
-    Scores are normalized to the cohort median (median -> 0.5, 2x the
-    median or better -> 1.0), which makes the measure symmetric across
-    parties and majority status without any fixed constant: the
-    normalization is recomputed from the observed cohort every run —
-    per direction, since "both" and "receive" rates have genuinely
-    different cohort distributions.
+    Scores are normalized to the pooled cohort median (median -> 0.5, 2x
+    the median or better -> 1.0), recomputed from the observed cohort every
+    run — per direction, since "both" and "receive" rates have genuinely
+    different cohort distributions. Whether one pooled median is fair to
+    both parties (and to majority vs minority members, who have different
+    reasons to seek cross-party cosponsors) has not been measured: no
+    cosponsorship data was reachable when this was reviewed (2026-09). Each
+    run logs the per-party medians so the question can be answered from the
+    pipeline's own data before the normalization is changed.
     Members of neither major party are assigned the side they cosponsor
     with most (caucus inference, consistent with normalize_votes);
     members with fewer than ``min_interactions`` observed interactions
@@ -600,6 +620,14 @@ def compute_bipartisanship_scores(
     # just above the real midpoint below the 0.5 Coalition-Breadth threshold
     # and handed them the below-median seat-safety discount they shouldn't get.
     median = statistics.median(raw_rates.values())
+    by_side: dict[str, list[float]] = {}
+    for bio, rate in raw_rates.items():
+        by_side.setdefault(_side(bio) or "?", []).append(rate)
+    logger.info(
+        "Cross-party cosponsorship (%s): pooled median %.3f; per party %s",
+        direction, median,
+        {s: round(statistics.median(v), 3) for s, v in sorted(by_side.items())},
+    )
     if median <= 0:
         # Degenerate cohort (no observed crossing anywhere): fall back to
         # an absolute scale where 30% cross-party interactions = 1.0.

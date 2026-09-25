@@ -1,9 +1,8 @@
-"""Tests for economic_data.calculate_jobs_created's Blinder-Watson
-attribution window (2026-07, platform-review O9).
+"""Tests for economic_data.calculate_jobs_created's attribution window
+(2026-07, platform-review O9).
 
 The GDP component of Effectiveness excludes a term's first calendar year
-(Blinder & Watson 2016 — year-1 outcomes primarily reflect the
-predecessor); jobs used to be counted from inauguration January, so the
+(an annual stand-in for Blinder & Watson 2016's attribution lag); jobs used to be counted from inauguration January, so the
 two components of one score used opposite attribution rules, and a
 sitting president (no term-end January yet) silently got no jobs
 component at all — scored on a different basis than every completed term
@@ -27,7 +26,7 @@ class TestJobsAttributionWindow:
     def test_baseline_is_second_year_january_not_inauguration(self):
         # Jobs boom in year 1 (predecessor-attributed), flat afterward:
         # under the old inauguration-January baseline this term claims
-        # +2.0M; under Blinder-Watson attribution it claims 0.
+        # +2.0M; under year-1 exclusion it claims 0.
         data = _series({
             (2021, 1): 140_000,   # inauguration January
             (2022, 1): 142_000,   # second-year January (baseline)

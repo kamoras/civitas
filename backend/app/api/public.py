@@ -222,7 +222,7 @@ def list_senators(
     """US Senators ranked by overall representation score.
 
     Scores are the weighted sum defined by ``config_definitions.SCORE_WEIGHTS``:
-    funding independence (33%), independent voting (33%), and legislative
+    funding independence (33%), constituent alignment (33%), and legislative
     effectiveness (34%).
     """
     from app.services.senator_service import get_leaderboard
@@ -279,6 +279,8 @@ def get_senator_history(
                     "scores": {
                         "fundingIndependence": round(s.score_1, 1),
                         "promisePersistence": round(s.score_2, 1),
+                        "constituentAlignment": round(s.score_3, 1),
+                        # Deprecated alias (the key's name until 2026-09).
                         "independentVoting": round(s.score_3, 1),
                         "fundingDiversity": round(s.score_4, 1),
                         "legislativeEffectiveness": round(s.score_5, 1),
@@ -372,6 +374,8 @@ def get_representative_history(
                     "scores": {
                         "fundingIndependence": round(s.score_1, 1),
                         "promisePersistence": round(s.score_2, 1),
+                        "constituentAlignment": round(s.score_3, 1),
+                        # Deprecated alias (the key's name until 2026-09).
                         "independentVoting": round(s.score_3, 1),
                         "fundingDiversity": round(s.score_4, 1),
                         "legislativeEffectiveness": round(s.score_5, 1),

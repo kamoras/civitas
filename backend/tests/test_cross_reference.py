@@ -5,6 +5,7 @@ Covers the embedding-based (non-LLM) components:
   - Lobbying match detection via donor↔vote embedding similarity
 """
 
+import pytest
 from app.pipeline.analyze.cross_reference import (
     select_key_votes,
     detect_lobbying_matches,
@@ -21,24 +22,29 @@ from app.pipeline.analyze.policy_alignment import (
 class TestIndustryPolicySimilarity:
     """Embedding-based replacement for hardcoded _INDUSTRY_POLICY_MAP."""
 
+    @pytest.mark.slow
     def test_pharma_healthcare_related(self):
         score = industry_policy_similarity("PHARMA", "HEALTHCARE")
         assert score > 0.3
 
+    @pytest.mark.slow
     def test_pharma_defense_unrelated(self):
         score = industry_policy_similarity("PHARMA", "DEFENSE")
         pharma_health = industry_policy_similarity("PHARMA", "HEALTHCARE")
         assert score < pharma_health
 
+    @pytest.mark.slow
     def test_defense_defense_related(self):
         score = industry_policy_similarity("DEFENSE", "DEFENSE")
         assert score > 0.4
 
+    @pytest.mark.slow
     def test_get_related_policies_returns_set(self):
         related = get_related_policies("PHARMA")
         assert isinstance(related, set)
         assert "HEALTHCARE" in related
 
+    @pytest.mark.slow
     def test_unknown_industry_returns_zero(self):
         score = industry_policy_similarity("NONEXISTENT", "HEALTHCARE")
         assert score == 0.0
@@ -127,6 +133,7 @@ class TestDetectLobbyingMatches:
         matches = detect_lobbying_matches(donors, self._healthcare_votes())
         assert matches == []
 
+    @pytest.mark.slow
     def test_below_threshold_industry_share_excluded(self):
         """A donor whose industry is a small slice of classifiable funding
         must not surface as a 'connection' — this is the exact bug report:
@@ -139,6 +146,7 @@ class TestDetectLobbyingMatches:
         matches = detect_lobbying_matches(donors, self._healthcare_votes(), industry_breakdown)
         assert matches == []
 
+    @pytest.mark.slow
     def test_substantial_industry_share_with_related_vote_matched(self):
         donors = [{"name": "Pfizer Inc", "industry": "PHARMA", "type": "PAC", "total": 50000}]
         industry_breakdown = [
@@ -151,6 +159,7 @@ class TestDetectLobbyingMatches:
         assert matches[0]["industry"] == "PHARMA"
         assert matches[0]["donationToSenator"] == 50000
 
+    @pytest.mark.slow
     def test_substantial_share_but_unrelated_votes_not_matched(self):
         """Substantial funding alone isn't enough — the votes available
         must actually be in that industry's policy domain."""
@@ -162,6 +171,7 @@ class TestDetectLobbyingMatches:
         matches = detect_lobbying_matches(donors, self._healthcare_votes(), industry_breakdown)
         assert matches == []
 
+    @pytest.mark.slow
     def test_non_industry_codes_excluded_from_denominator(self):
         """SMALL_DONORS/LARGE_INDIVIDUAL/UNCLASSIFIED/OTHER/POLITICAL are
         structurally not 'an industry' (unitemized small donors, no-

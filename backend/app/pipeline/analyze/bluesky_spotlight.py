@@ -40,7 +40,7 @@ SITE = "https://civitas-research.org"
 _SYSTEM_PROMPT = (
     "You are a nonpartisan civic journalist writing brief, factual posts for "
     "the Civitas transparency platform. Civitas scores members of the U.S. "
-    "House and Senate on funding independence, independent voting, and "
+    "House and Senate on funding independence, constituent alignment, and "
     "legislative effectiveness into an overall representation score. Your "
     "posts are data-driven, neutral, and written to help citizens understand "
     "how their representatives are performing."
@@ -113,7 +113,7 @@ def _pick_politician(
 
 # Deviation from the neutral midpoint (50) required before a dimension is
 # worth singling out by name at all. Below this band a score is unremarkable
-# no matter which of the five dimensions happens to be furthest from 50: with
+# no matter which dimension happens to be furthest from 50: with
 # Promise Persistence's shrinkage prior compressing most senators into the
 # low-to-mid 50s (2026-07 audit), the *least-bad* of five middling scores
 # was still being singled out ("Her highest score is Promise Persistence at
@@ -176,11 +176,11 @@ def _generate_spotlight_post(
     # it), so it's deliberately not listed here alongside the other three.
     scores = {
         "Funding independence": round(entity.score_funding_independence or 0, 1),
-        "Independent voting": round(entity.score_independent_voting or 0, 1),
+        "Constituent alignment": round(entity.score_constituent_alignment or 0, 1),
         "Legislative effectiveness": round(entity.score_legislative_effectiveness or 0, 1),
     }
     # The posted overall must be the same weighted composite the site shows
-    # (SCORE_WEIGHTS) — a plain mean of the five dimensions published a
+    # (SCORE_WEIGHTS) — a plain mean of the dimensions published a
     # different number than the leaderboard for every senator.
     overall = round(compute_overall_score(entity), 1)
     score_lines = "\n".join(f"- {k}: {v}/100" for k, v in scores.items())

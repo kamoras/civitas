@@ -92,6 +92,7 @@ civitas/
 │   │   ├── config_definitions.py # Enums, weights, industry codes (single source of truth)
 │   │   └── main.py              # FastAPI app with lifespan hooks
 │   ├── tests/                   # pytest test suite (see `pytest tests/` for current count)
+│   ├── migrations/              # Alembic revisions for the main database (see its README)
 │   ├── requirements.txt
 │   ├── pytest.ini
 │   └── Dockerfile
@@ -145,7 +146,7 @@ of these approaches:
   semantically and the runner-up classification preferred
 - **Self-training** via the learning store (Yarowsky 1995): high-confidence
   classifications become labeled examples for future runs
-- **Statistical formulas** with Bayesian shrinkage for scoring metrics
+- **Statistical formulas** with shrinkage toward neutral for scoring metrics
 - **LLM inference** for tasks that require natural language synthesis from
   unstructured input: Action Center issue generation and justice profile
   summaries. (Per-senator/rep narrative generation and promise evaluation
@@ -220,7 +221,10 @@ improving accuracy over time without manual intervention.
 when analysis code changes. At pipeline start, `_compute_analysis_code_hash()`
 computes a SHA-256 fingerprint of all analysis-relevant source files
 (everything in `app/pipeline/` except `fetch/`, plus `config_definitions.py`).
-This fingerprint is compared to the stored hash from the last pipeline run:
+Each file is hashed as its docstring-stripped AST (`_normalized_source`), so
+editing a comment or docstring does not count as a code change — only code,
+string constants (prototypes, prompts) and thresholds do. This fingerprint is
+compared to the stored hash from the last pipeline run:
 
 - **Same hash** → all learning data is preserved (learning store, analysis
   cache, sqlite-vec reference corpus). The self-training system accumulates
@@ -234,6 +238,11 @@ guards), ensuring the current run's classifications take precedence. Within
 a single pipeline run, this is harmless because learning store lookups
 short-circuit re-classification of already-seen entities.
 
+kNN's own outputs (`source == KNN_SOURCE`) are stored for lookup but are
+**never used as kNN reference examples** — only labels from an upstream tier
+(FEC metadata, rules, prototype similarity) vote. Otherwise one run's guess
+becomes the next run's evidence and errors compound across runs.
+
 The `normalize_learning_store()` function runs at the start of the kNN phase
 to fix case inconsistencies. Stale or hallucinated category labels (e.g.,
 "LEGAL", "SPORTS") are mapped to valid industries via embedding cosine
@@ -242,17 +251,20 @@ alias table. This prevents label fragmentation from diluting kNN vote weights.
 
 ### 3. Deterministic, auditable scoring
 
-The five representation sub-scores (Funding Independence, Promise Persistence,
-Constituent Alignment, Funding Diversity, Legislative Effectiveness) use
+The representation sub-scores — Funding Independence, Constituent Alignment
+and Legislative Effectiveness (weighted, `SCORE_WEIGHTS`), plus the
+informational Promise Persistence and Funding Diversity — use
 transparent statistical formulas with no LLM input. All formulas include
 inline academic citations.
 
 Key mathematical properties:
-- **Bayesian shrinkage**: Scores regress toward 50 when data is sparse (e.g.,
-  a senator with 1 campaign promise gets a score near 50, not 0 or 100)
+- **Linear shrinkage**: Scores regress toward 50 when data is sparse (e.g.,
+  a senator with 1 campaign promise gets a score near 50, not 0 or 100).
+  The rate is the count confidence below — fixed, not estimated from the
+  population's variance, so do not call it Bayesian or empirical Bayes
 - **Count confidence**: `min(n / threshold, 1.0)` ensures minimum sample
   sizes before trusting extreme scores
-- **State-adjusted baselines**: Independent voting scores account for Cook
+- **State-adjusted baselines**: Constituent Alignment scores account for Cook
   PVI (partisan lean of the state) so voting with party in a deep-red/blue
   state is not penalized the same as in a swing state
 - **Shannon entropy**: Funding diversity uses information-theoretic entropy
@@ -301,6 +313,22 @@ The correct pattern, established by `_district_pvi()` /
    same way). `scripts/fetch_district_pvi.py` still exists only to
    regenerate the bundled pre-first-ingest fallback.
 
+   Better still, when the population a value describes is the one the
+   pipeline is scoring, measure it in the run itself. Legislative
+   Effectiveness's reference (chamber median credit, average baseline,
+   spread, current majority party) is computed from the members each run
+   is about to score (`compute_les_reference`), persisted to
+   `/data/les_reference.json` for the API's breakdowns, with
+   `app/data/les_reference.json` (`scripts/calibrate_les_credit_scale.py`)
+   as the pre-first-run fallback. Funding Independence's median PAC share
+   works the same way (`compute_funding_reference`,
+   `funding_reference.json`, `scripts/audit_pac_ratio.py`), and so does
+   Constituent Alignment's per-party expected break rate by seat lean
+   (`compute_constituent_reference`, `constituent_reference.json`,
+   `scripts/calibrate_constituent_reference.py`); all go through
+   `pipeline/analyze/population_reference.py`. A value frozen on one date
+   can't track a quantity that accumulates over a congress.
+
 This also applies to constants that are themselves the *output* of a
 fitting script (regression coefficients, saturation points derived from
 a residual stdev, min/max clamp ranges) — if a script prints "paste this
@@ -347,11 +375,16 @@ silently demotes every document that had no way to earn it.
 
 ### 4. Content-based party alignment
 
-Party alignment for bills is determined by what the bill does (embedding
-similarity to party platform positions), not how senators voted on it. Vote
-tallies refine but do not override the content-based signal, because senators
-trade votes, face whip pressure, and make tactical compromises that don't
-reflect the bill's actual ideological alignment.
+A bill's party alignment comes from **how the parties actually voted on it**
+whenever a roll call exists, and from its content (embedding similarity to
+party platform positions) only when none does (`refine_with_vote_data`). The
+consumer is the voted-with-party computation, and "did this member break with
+their party" is defined by the parties' real split: a bill whose content
+reads partisan but passed with both party majorities must not count as a
+party-line vote. (Content used to win over a bipartisan split; a 2026-06
+audit found that pinned every House member's score near 87–89.) Content
+alignment still drives bills with no roll call and the per-area partisan
+depth breakdown.
 
 Partisan depth (how strongly a senator leans D or R) is computed primarily
 from the senator's actual voting record: for each policy area, the ratio of
@@ -361,12 +394,17 @@ Poole & Rosenthal (1985) in using roll-call data as the primary indicator of
 ideological position.
 
 When available, the SVD-derived ideology score (from tier 2b sponsorship
-analysis) serves as a Bayesian prior for the partisan depth calculation.
-The prior weight decreases as the senator accumulates more vote data:
+analysis) serves as a prior for the partisan depth calculation, in a
+linear blend whose weight decreases as the senator accumulates vote data:
 `data_confidence = min(partisan_vote_count / 15, 1.0)`. With 15+ votes,
 the ideology prior has zero weight; with fewer votes, it regularizes the
-estimate toward the senator's revealed cosponsorship ideology (Efron &
-Morris 1975).
+estimate toward the senator's revealed cosponsorship ideology. (Shrinkage in
+the Efron & Morris 1975 sense, but at a fixed rate rather than an estimated
+one.) The prior is first mapped onto the vote-lean scale by a line
+fitted over the chamber's full-data members each run, and the depth label
+(deep / moderate / centrist) is the member's tercile within their own party
+— both in `finalize_partisan_depth`, which runs over the whole chamber after
+the per-member pass. No named senator anchors either.
 
 ### 4a. Vote matching for multi-word names
 
@@ -405,9 +443,13 @@ congress" sidesteps that fragility entirely and is *stricter* than a literal
 resting on laurels" goal, not softer.
 
 **Funding is the one exception**: Funding Independence and Funding Diversity
-window to the member's **most recent election only**
-(`select_recent_elections` in `fetch/fec.py`, `n=1`), not the current
-congress. Senators legitimately raise little money in the 4 non-election
+window to the member's **most recent completed election only**
+(`select_recent_elections` in `fetch/fec.py`, `n=1`: general election day
+has passed — a re-election campaign still in progress is the *next*
+mandate's, not the current one), not the current congress. Itemized donor
+detail covers that election's full period (six years Senate, two House —
+`election_period_cycles`), and every funding share is taken over
+contributions, not receipts (`normalize_finance.summarize_election_totals`). Senators legitimately raise little money in the 4 non-election
 years of a 6-year term — a strict 2-year funding window would go near-empty
 most of the time for reasons that have nothing to do with coasting. Tying it
 to their current mandate's campaign instead fixes the same staleness problem
@@ -521,6 +563,12 @@ What this rules in and out:
   district a *known* place sits in. Every visitor who picks the same town
   sends the identical request; nothing visitor-specific leaves the server.
   That distinction — our address, not theirs — is the whole line.
+
+The one thing counted about visitors — daily unique visits — uses an HMAC of
+the IP under a random salt that exists only for the current UTC day and is
+then deleted (`api/visits.py`, `VisitSalt`). A permanent key would not do:
+the IPv4 space is small enough to enumerate, so anyone holding the key could
+recover every stored IP. With the salt gone, nobody can.
 
 A feature that can only work by asking where the visitor lives is a feature
 this project doesn't ship. State the resulting limitation as content (see
@@ -658,15 +706,12 @@ together.
 Each senator is processed independently. The pipeline uses `PipelineRun`
 records to track progress and supports resumption.
 
-The ANALYZE phase uses a **producer-consumer pattern** to overlap embedding
-work with LLM inference. A background "Librarian" thread
-(`_embedding_producer` in `senate_pipeline.py`) pre-computes all embedding-based
-analyses for the next senator via `precompute_senator_analysis()` in
-`cross_reference.py`, while the main "Analyst" thread waits for the LLM HTTP
-response. Results flow through a bounded `queue.Queue(maxsize=3)`. On a Pi 5,
-this overlaps ~2-4s of embedding work with ~15-30s LLM calls. LLM prompts use
-**context compression**: platform text is distilled into concise policy topic
-bullets via `_extract_platform_topics()` rather than feeding raw scraped text.
+The ANALYZE phase runs members one at a time: `precompute_senator_analysis()`
+(`cross_reference.py`) does the member's embedding work, then
+`analyze_senator_batch()` consumes it and scoring follows. There is no
+background thread. The old "Librarian" producer thread existed to overlap
+embedding work with per-senator LLM calls; ANALYZE makes no LLM call now, and
+the thread is gone.
 
 ## Development
 
@@ -699,14 +744,16 @@ cd backend && .venv/bin/python -m pytest tests/ -v
 # Via Docker
 docker compose run --rm --no-deps backend python -m pytest tests/ -v
 
-# Fast tests only (skip embedding model loading)
-docker compose run --rm --no-deps backend python -m pytest tests/ -v \
-  -k "not Embedding and not PolicyArea"
+# Fast tests only (no embedding model; runs offline)
+docker compose run --rm --no-deps backend python -m pytest tests/ -v -m "not slow"
 ```
 
 Test configuration is in `backend/pytest.ini`. Async tests use
-`asyncio_mode = auto`. Tests marked `@pytest.mark.slow` load the
-sentence-transformer model (~10s startup).
+`asyncio_mode = auto`. **Mark any test that loads a sentence-transformer
+model `@pytest.mark.slow`** (~10s startup). The fast job runs `-m "not
+slow"` on every PR and must pass with no network access and no model; the
+Embedding Tests job runs `-m slow` on pushes to `main` and on any PR that
+touches `backend/requirements.txt` or `backend/app/pipeline/`.
 
 ### Environment variables
 
@@ -741,6 +788,17 @@ SQLAlchemy ORM models are in `backend/app/models.py`. Key tables: `senators`,
 `campaign_promises`, `lobbying_matches`, `learned_classifications`,
 `explore_documents`, `action_issues`, `national_monitors`, `monitor_updates`,
 `timeline_entries`, `pipeline_runs`.
+
+**Schema changes are Alembic revisions** (`backend/migrations/`, applied by
+`init_db` on start). Change the model, autogenerate a revision, drop removed
+columns in it, and run `tests/test_alembic_migrations.py`, which fails when
+the models and the revision history disagree — see
+`backend/migrations/README.md`. Do not add to `_migrate_columns`: it is the
+frozen bridge for databases that predate Alembic. **Expand, then contract:**
+Swarm's start-first update and automatic rollback run the previous image
+against the migrated schema, so a release may add columns and stop using
+old ones, but only a *later* release drops or renames them (the README keeps
+the pending list).
 
 ## Key Modules — Where to Find Things
 

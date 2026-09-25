@@ -5,10 +5,37 @@ from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
 from app.models import ScoreSnapshot
+from app.pipeline.fetch.congress import congress_for_year
 from app.time_utils import utcnow
 
 TREND_LOOKBACK_DAYS = 7
 TREND_THRESHOLD = 0.5
+
+
+def _congress_of(date_str: str) -> int | None:
+    """The Congress in session on a YYYY-MM-DD date. A new Congress convenes
+    on January 3 of each odd year (20th Amendment), so Jan 1-2 of an odd
+    year still belong to the previous one."""
+    try:
+        d = date.fromisoformat(date_str)
+    except ValueError:
+        return None
+    congress = congress_for_year(d.year)
+    if d.year % 2 == 1 and (d.month, d.day) < (1, 3):
+        congress -= 1
+    return congress
+
+
+def _comparable(older: ScoreSnapshot, latest: ScoreSnapshot) -> bool:
+    """Whether a score change between two snapshots can be read as the
+    member's own: same algorithm version (where both recorded one) and
+    same Congress. A methodology change moves everyone's score at once, and
+    a new Congress resets the current-term window (AGENTS.md principle 6)
+    — the trend chart already marks both as boundaries; the leaderboard's
+    week-over-week arrow ignored them and reported the jump as movement."""
+    if older.algorithm_version and latest.algorithm_version and older.algorithm_version != latest.algorithm_version:
+        return False
+    return _congress_of(older.date) == _congress_of(latest.date)
 
 
 def compute_score_trend_map(db: Session, entity_type: str) -> dict[str, dict]:
@@ -22,7 +49,9 @@ def compute_score_trend_map(db: Session, entity_type: str) -> dict[str, dict]:
     yesterday)`` always chose the 7-day target, so 1-6-day-old priors were
     never used). Prefers a snapshot from ~TREND_LOOKBACK_DAYS before the
     latest; falls back to the newest snapshot at least 1 day older than the
-    latest. Returns {entity_id: {"direction", "change", "previousScore"}}.
+    latest. Only snapshots on the same algorithm version and Congress count
+    (see _comparable); a member whose history is all on another one reads
+    "reset". Returns {entity_id: {"direction", "change", "previousScore"}}.
     Was copy-pasted (down to the same lookback/threshold constants) between
     senator_service.py and representative_service.py's leaderboards.
     """
@@ -54,40 +83,41 @@ def compute_score_trend_map(db: Session, entity_type: str) -> dict[str, dict]:
     target_date = (latest_date - timedelta(days=TREND_LOOKBACK_DAYS)).isoformat()
     day_before_latest = (latest_date - timedelta(days=1)).isoformat()
 
-    # Preferred: the newest snapshot at or before the 7-day target.
+    # Every earlier snapshot, newest first. Per member: the newest COMPARABLE
+    # one at or before the 7-day target (preferred), else the newest
+    # comparable one at least a day older than the latest (young histories).
     older_snapshots = (
         db.query(ScoreSnapshot)
         .filter(
             ScoreSnapshot.entity_type == entity_type,
-            ScoreSnapshot.date <= target_date,
+            ScoreSnapshot.date <= day_before_latest,
         )
         .order_by(ScoreSnapshot.date.desc())
         .all()
     )
-    # Fallback for young snapshot histories: any snapshot at least 1 day
-    # older than the latest (the behavior the old docstring promised but
-    # never delivered), so members stop reading as "new" for their first
-    # week of history.
-    if not older_snapshots:
-        older_snapshots = (
-            db.query(ScoreSnapshot)
-            .filter(
-                ScoreSnapshot.entity_type == entity_type,
-                ScoreSnapshot.date <= day_before_latest,
-            )
-            .order_by(ScoreSnapshot.date.desc())
-            .all()
-        )
-    older_map: dict[str, float] = {}
+    latest_by_entity = {snap.entity_id: snap for snap in latest_snapshots}
+    preferred: dict[str, float] = {}
+    fallback: dict[str, float] = {}
+    had_history: set[str] = set()
     for snap in older_snapshots:
-        if snap.entity_id not in older_map:
-            older_map[snap.entity_id] = snap.overall_score
+        latest = latest_by_entity.get(snap.entity_id)
+        if latest is None:
+            continue
+        had_history.add(snap.entity_id)
+        if not _comparable(snap, latest):
+            continue
+        fallback.setdefault(snap.entity_id, snap.overall_score)
+        if snap.date <= target_date:
+            preferred.setdefault(snap.entity_id, snap.overall_score)
 
     result: dict[str, dict] = {}
     for snap in latest_snapshots:
-        prev = older_map.get(snap.entity_id)
+        prev = preferred.get(snap.entity_id, fallback.get(snap.entity_id))
         if prev is None:
-            result[snap.entity_id] = {"direction": "new", "change": 0.0, "previousScore": None}
+            # "reset": there is history, but none on the same methodology and
+            # congress, so any difference is not the member's doing.
+            direction = "reset" if snap.entity_id in had_history else "new"
+            result[snap.entity_id] = {"direction": direction, "change": 0.0, "previousScore": None}
         else:
             change = round(snap.overall_score - prev, 2)
             if change > TREND_THRESHOLD:

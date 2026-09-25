@@ -37,7 +37,7 @@ def test_score_history_json_filters_by_entity_type_and_id(db_session):
     assert snap["scores"] == {
         "fundingIndependence": 60.0,
         "promisePersistence": 70.0,
-        "independentVoting": 80.0,
+        "constituentAlignment": 80.0,
         "fundingDiversity": 65.0,
         "legislativeEffectiveness": 75.0,
     }

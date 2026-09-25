@@ -5,26 +5,26 @@ export interface ScoreTerm {
 }
 
 export type ScoreKey =
-  "fundingIndependence" | "independentVoting" | "fundingDiversity" | "legislativeEffectiveness";
+  "fundingIndependence" | "constituentAlignment" | "fundingDiversity" | "legislativeEffectiveness";
 
 export const SCORE_TERMS: Record<ScoreKey, ScoreTerm> = {
   fundingIndependence: {
     label: "Funding Independence",
     shortLabel: "FUNDING",
     description:
-      "How free is this member from PAC and mega-donor influence? Blends PAC dependency (scaled by how close contributing PACs run to their legal caps), state-relative small-donor share, top-donor concentration, and — folded in from Funding Diversity in v6.5 — source breadth and industry concentration.",
+      "How free is this member from PAC and mega-donor influence? Blends PAC dependency (scaled by how close contributing PACs run to their legal caps), state-relative small-donor share, top-donor concentration, and industry concentration. Outside spending by super PACs is not counted: the member can't direct it, and it tracks how competitive the race is rather than how dependent the member is.",
   },
-  independentVoting: {
+  constituentAlignment: {
     label: "Constituent Alignment",
     shortLabel: "ALIGNMENT",
     description:
-      "Does their voting match what their state elected them to do? Each member's party-line break rate is compared to what their seat's partisan lean predicts, and their overall voting position (DW-NOMINATE, the standard roll-call measure) is compared to what a same-party member of a similarly-leaning seat typically holds. Party loyalty is not itself a penalty — voting the party line is how you represent the coalition that elected you, so below-expected defection sits at neutral, not below it — but a member positioned toward their party's flank relative to their seat's norm scores below neutral, and one positioned toward their seat's center scores above it. Crossing party lines earns extra credit only where it plausibly moves toward the state's political center. Neither defection nor bipartisanship is a virtue by itself — cross-party coalition-building is scored under Legislative Effectiveness, where the research supports it.",
+      "Does their voting match what their state elected them to do? Each member's rate of breaking with their party is compared with how often members of the same party break in seats with the same partisan lean, measured from the chamber itself on every update. Breaking more often than that scores above neutral, and breaking less often scores below. Their voting position (the congress-specific Nokken-Poole roll-call measure) is compared with what a same-party member of a similarly-leaning seat typically holds: toward the party's flank scores below neutral, toward the seat's center above. The same rules apply in safe and competitive seats, because tests against House re-election results found voters in both respond alike. Cross-party coalition-building is scored under Legislative Effectiveness, where the research supports it.",
   },
   fundingDiversity: {
     label: "Funding Diversity",
     shortLabel: "DIVERSITY",
     description:
-      "Is their funding spread across many industries, or dominated by a few? Blends source breadth (small-donor money counts most, opaque money least) with an inverse Herfindahl-Hirschman Index of industry concentration. Higher = more diverse funding sources. Folded into Funding Independence in v6.5 and no longer weighted into the overall score on its own; still computed and shown.",
+      "Is their funding spread across many industries, or dominated by a few? Blends source breadth (small-donor money counts most, opaque money least) with an inverse Herfindahl-Hirschman Index of industry concentration. Higher = more diverse funding sources. Not weighted into the overall score on its own; its industry-concentration part is one of Funding Independence's components.",
   },
   legislativeEffectiveness: {
     label: "Legislative Effectiveness",

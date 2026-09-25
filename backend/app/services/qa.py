@@ -95,7 +95,7 @@ INTENT_PROTOTYPES: dict[str, str] = {
 SCORE_FIELDS = {
     "score_funding_independence": "Funding Independence",
     "score_promise_persistence": "Promise Persistence",
-    "score_independent_voting": "Constituent Alignment",
+    "score_constituent_alignment": "Constituent Alignment",
     "score_funding_diversity": "Funding Diversity",
     "score_legislative_effectiveness": "Legislative Effectiveness",
 }

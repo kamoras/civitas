@@ -69,8 +69,6 @@ async def run_justice_pipeline(db: Session) -> dict:
             "thumbnail_url": j.get("thumbnail_url", ""),
             "score_consistency": analysis["score_consistency"],
             "score_independence": analysis["score_independence"],
-            "score_bipartisan_agreement": analysis["score_bipartisan_agreement"],
-            "score_judicial_restraint": analysis["score_judicial_restraint"],
             "cases_decided": analysis["cases_decided"],
             "majority_pct": analysis["majority_pct"],
             "dissent_pct": analysis["dissent_pct"],
@@ -140,9 +138,7 @@ def _generate_summary(
         f"{analysis['authored_dissent']} dissent, {analysis['authored_concurrence']} concurrence\n\n"
         f"SCORES (pre-computed, do NOT recalculate):\n"
         f"- Ideological Consistency: {analysis['score_consistency']:.1f}/100\n"
-        f"- Independence: {analysis['score_independence']:.1f}/100\n"
-        f"- Bipartisan Agreement: {analysis['score_bipartisan_agreement']:.1f}/100\n"
-        f"- Judicial Restraint: {analysis['score_judicial_restraint']:.1f}/100\n\n"
+        f"- Independence: {analysis['score_independence']:.1f}/100\n\n"
         f"HIGHEST AGREEMENT: {agree_lines}\n"
         f"LOWEST AGREEMENT: {disagree_lines}\n\n"
         f"NOTABLE CASES:\n{case_lines}\n\n"

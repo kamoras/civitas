@@ -177,10 +177,12 @@ export default function AboutPage() {
             <P>
               When data is missing or insufficient, scores default to a neutral 50 out of 100. No
               politician is penalized for something we cannot measure, and no politician receives a
-              perfect score without evidence. This implements Bayesian shrinkage toward a neutral
-              prior — a standard statistical technique for preventing extreme estimates from small
-              samples.
-              <Cite id="19">Efron &amp; Morris 1975</Cite>
+              perfect score without evidence. Scores backed by little data are pulled toward that
+              neutral 50 in proportion to how little data there is. This borrows the idea of
+              shrinkage estimation, which keeps small samples from producing extreme estimates
+              <Cite id="19">Efron &amp; Morris 1975</Cite>, but it is a simpler version: the pull
+              is set by a fixed count of observations, not estimated from the data the way their
+              estimator is.
             </P>
             <P>
               The Action Center extends this mission to daily civic engagement. It automatically
@@ -227,21 +229,36 @@ export default function AboutPage() {
                   and grassroots the money, the higher this score — regardless of party or chamber.
                 </Gist>
                 <P>
-                  Measures five dimensions: (1) PAC dependency — a blend of the share of funding
+                  Measures four things: (1) PAC dependency — a blend of the share of funding
                   from PACs and how close contributing PACs are to their legal per-election cap,
-                  chamber-specific since Senate and House candidates rely on PAC money at
-                  structurally different rates; (2) the share of funding from small (&lt;$200,
-                  unitemized) donors — the broadest possible funding base; (3) relative top-donor
+                  measured against the chamber&apos;s own median member (re-measured every update),
+                  since Senate and House candidates rely on PAC money at structurally different
+                  rates; (2) the share of funding from small (&lt;$200,
+                  unitemized) donors — the broadest possible funding base. Both shares are of
+                  contributions (money given by individuals, PACs, party committees, or the
+                  candidate), not total receipts: receipts also count transfers in from joint
+                  fundraising committees, whose PAC and individual content isn&apos;t broken out,
+                  so dividing by receipts understated PAC reliance for exactly the members who
+                  fundraise most through them. Funding is measured on the member&apos;s most
+                  recent completed election — the campaign that won them their current seat, not a
+                  re-election campaign still in progress; (3) relative top-donor
                   concentration — what fraction of the itemized external donor pool comes from the
                   top 10 donors, with the member&apos;s own money and transfers from their own
-                  committees excluded; (4) source breadth — small-donor money counts fully,
-                  industry-classified money counts moderately, and opaque money counts least; and
-                  (5) industry concentration — the inverse Herfindahl-Hirschman Index (HHI) of
-                  industry donations, where funding concentrated in a single industry suggests
-                  potential regulatory capture. Components (4) and (5) were folded in from a
-                  separate Funding Diversity dimension in 2026-07 after finding the two dimensions
-                  correlated at r=0.72 across the Senate — the same underlying funding-profile
-                  signal under two labels, not two genuinely distinct ones. PAC dependency follows
+                  committees excluded; and (4) industry concentration — the inverse
+                  Herfindahl-Hirschman Index (HHI) of industry donations, where funding
+                  concentrated in a single industry suggests potential regulatory capture. When too
+                  little of the money can be assigned to an industry to measure that, it counts as
+                  neutral. Component (4) was folded in from a separate Funding Diversity dimension in
+                  2026-07 after finding the two dimensions correlated at r=0.72 across the Senate.
+                  Two inputs were removed in v6.13 after we checked them against FEC&apos;s own data
+                  for 2020–2024 incumbents. Outside spending (super PAC and other independent
+                  expenditures supporting a member) used to count toward PAC dependency, but it
+                  tracks how competitive the race is, not how dependent the member is: it was
+                  highest in swing seats and lower for members who take more PAC money, and by law
+                  the member cannot direct it. &quot;Source breadth&quot; was the small-donor share
+                  counted a second time (it explained 79–86% of breadth&apos;s variation), plus a
+                  penalty on self-funding. The study is in the project repository at
+                  docs/research/funding-independence.md. PAC dependency follows
                   Stratmann (2005),
                   <Cite id="5">Stratmann 2005</Cite>
                   who found that PAC contributions are more strongly correlated with roll-call
@@ -264,75 +281,56 @@ export default function AboutPage() {
               <div>
                 <Label>Constituent Alignment (33%)</Label>
                 <Gist>
-                  checks whether a member&apos;s voting actually matches what their state or
-                  district elected them to do. Voting with your party is <em>not</em> penalized on
-                  its own — for a safe-seat member, that often IS representing your constituents.
-                  The score moves below neutral only for a clear, readable sign of a mismatch — a
-                  voting position toward the party&apos;s flank for a seat that isn&apos;t safe for
-                  that flank — and moves above neutral for the mirror case: a voting position
-                  genuinely in step with the seat.
+                  checks whether a member&apos;s voting matches what their state or district elected
+                  them to do, compared with what members of their own party in similarly-leaning
+                  seats actually do. Voting with your party is the norm in a safe seat, so it only
+                  counts against a member when they are more loyal than their own party&apos;s
+                  members in comparable seats — and breaking more often than them counts in their
+                  favor. Every part of this design was tested against how voters actually respond.
                 </Gist>
                 <P>
-                  Measures how a member&apos;s voting compares to what their state elected them to
-                  do — not raw defection from party. Each member&apos;s contested-vote break rate is
-                  scored against a seat-specific expectation derived from state partisan lean (Cook
-                  PVI<Cite id="4">Carson et al. 2010</Cite>): an aligned safe seat expects
-                  near-base-rate dissent (~3%), a swing seat ~8%, and a seat whose electorate leans
-                  toward the opposing party up to ~20%. Matching the expectation scores ~50 — a
-                  typical partisan for that seat. The score is deliberately asymmetric around that
-                  expectation (v6.6), under one governing principle: it moves off neutral only for{" "}
-                  <em>readable</em> evidence a member is representing their constituents, and treats
-                  behavior whose meaning can&apos;t be read as neutral. Below-expected loyalty is{" "}
-                  <em>not</em> penalized: it floors at neutral, never below. A low defection rate is
-                  unreadable — it may be faithful representation of the coalition that elected the
-                  member (not the geographic median voter), it is the structural norm for both
-                  parties in the modern Senate, and being &quot;out of step&quot; is a matter of
-                  ideological position, not a loyalty rate — so we decline to score the rate itself
-                  rather than penalize it. This loyalty floor was the only behavioral change in
-                  v6.6, and it is deterministic: a below-expected loyalist with no other signal
-                  available scores exactly 50 on this component. v6.7 adds one legible exception: if
-                  a member&apos;s cosponsorship-derived ideology score places them in their own
-                  party&apos;s most extreme third, and their seat isn&apos;t safely aligned for that
-                  extremity, they are discounted below neutral (scaled by how unsafe the seat is —
-                  not penalized at all in a genuinely safe seat, where that extremity is the
-                  structural norm for both parties). This targets ideological POSITION, not the
-                  loyalty rate itself, so it doesn&apos;t reopen the rate-is-unreadable problem
-                  above — a member can be maximally loyal and still be flagged if their position is
-                  a clear outlier for their seat. This discount&apos;s maximum strength was reduced
-                  in v6.8 after a fairness audit found it overlapped with coalition breadth (below)
-                  more than intended — see the{" "}
-                  <a href="/changelog" className="underline underline-offset-2 hover:text-phos">
-                    {" "}
-                    scoring changelog
-                  </a>{" "}
-                  and the Known Limitations note below. Above-expected crossing is the readable
-                  side: it earns credit only where it plausibly moves toward the seat&apos;s
-                  political center, discounted by seat lean (full credit in opposed and swing seats,
-                  near-neutral in deep aligned seats, since there the center sits with the party). A
-                  further discount for members positioned on their party&apos;s ideological flank —
-                  whose crossings more likely point <em>away</em> from the center (Kirkland &amp;
-                  Slapin 2017) — was designed but is <em>not</em> shipped, and checking it against
-                  live data found a deeper problem than a missing calibration number: the members
-                  who actually cross party lines most often all read as ideologically centrist on
-                  this platform&apos;s own cosponsorship-based ideology measure, not flank-extreme —
-                  the opposite of what the discount assumes. Crossing behavior and this measure of
-                  ideology turn out to be linked rather than independent, so this specific fix is
-                  shelved, not just uncalibrated. This is a deliberately humble use of the delegate
-                  model, with partisan lean standing in for issue-level constituent opinion — a
-                  measurable, disclosed simplification (see
-                  <a
-                    href="#known-limitations"
-                    className="underline underline-offset-2 hover:text-phos"
-                  >
-                    {" "}
-                    Known Limitations
-                  </a>{" "}
-                  below, including why this measures the rate and direction of a member&apos;s
-                  deviation rather than the distance between their position and their
-                  constituency&apos;s, so it cannot yet positively credit representation achieved
-                  through congruent loyalty). Note on composition: confirmation votes on nominations
-                  make up a large share of recent Senate roll calls and count at full weight — they
-                  are genuine, whipped party-line tests.
+                  Measures how far a member&apos;s voting sits from what their seat asks of it — not
+                  raw defection from party. Each member&apos;s break rate on party-labeled votes is
+                  compared with the break rate that members of the same party and chamber show in
+                  seats with the same partisan lean (Cook PVI). That expectation is measured from
+                  the chamber itself every time the pipeline runs, not set by hand: a separate line
+                  per party, allowed to bend at a swing seat, so a Republican in a Biden-won seat is
+                  compared with how Republicans in seats like that really vote. Matching the
+                  expectation scores 50. Breaking more often scores above, breaking less often
+                  scores below, and the scale is set by how widely the chamber varies (the most
+                  out-of-pattern tenth of members reach the ends).
+                </P>
+                <P>
+                  What the ends mean: a 0 or 100 is a relative position, not a verdict. A 0 means
+                  the member breaks with their party far less often than members of their own party
+                  in seats that lean the same way; a 100 means far more often. Because the
+                  expectation is fitted separately for each party, a member is only ever compared
+                  with their own party&apos;s members, and both parties&apos; average scores sit
+                  near 50. Which members reach an end in a given update depends on the chamber that
+                  year, and a handful can by chance come mostly from one party.
+                </P>
+                <P>
+                  Why symmetric, and why no special treatment for safe seats: through v6.12 a member
+                  more loyal than expected was held at neutral, on the argument that loyalty is
+                  &quot;unreadable&quot;, and credit for breaking or for a centrist position shrank
+                  in safe seats. We tested both choices against 2,545 U.S. House re-election results
+                  (1994–2010), using the approach of the studies that established this construct:
+                  does the measure predict how the incumbent does with their own voters once the
+                  district&apos;s partisanship, the national tide and seniority are accounted for
+                  <Cite id="4">Carson et al. 2010</Cite>
+                  <Cite id="35">Canes-Wrone et al. 2002</Cite>? It does, and it contradicted both
+                  choices. Loyalty beyond what the seat predicts carried the strongest association
+                  of all (about 2 points of vote share per standard deviation in 2004), so the
+                  neutral floor was throwing away real signal. And the association was the same in
+                  safe seats as in competitive ones, for voting and for position alike, so neither
+                  gets a safe-seat discount now. Members who break from the flank side of their
+                  party (Kirkland &amp; Slapin 2017) did not fare worse for it, so their breaks are
+                  not discounted either. The full study, including where the evidence is weak (the
+                  association fades in the 2008 and 2010 elections as House races nationalized, and
+                  the Senate sample is too small to confirm or reject it), is in the project
+                  repository at docs/research/constituent-alignment.md. Confirmation votes on
+                  nominations make up a large share of recent Senate roll calls and count at full
+                  weight — they are genuine, whipped party-line tests.
                 </P>
                 <P>
                   Before v4.2 this dimension was called Independent Voting and rewarded raw
@@ -343,19 +341,22 @@ export default function AboutPage() {
                 </P>
                 <P>
                   The score blends seat-relative vote alignment (70%, or 100% when roll-call
-                  ideal-point data is unavailable) with position congruence (30%, when available —
-                  v6.11): the member&apos;s DW-NOMINATE first-dimension position (Voteview; the
-                  standard roll-call-based position measure in political science) compared against a
-                  seat-conditional expectation — what a same-party member of a similarly-leaning
-                  seat typically holds, fit per chamber and per party from real data. Per-party fits
-                  deliberately avoid the swing-seat artifact a single pooled fit would create
-                  (Bafumi &amp; Herron 2010). A position toward the party&apos;s flank relative to
-                  that norm scores below neutral (scaled by how unsafe the seat is — flank positions
-                  in genuinely safe seats are the structural norm and are not penalized); a position
-                  toward the seat&apos;s center scores above neutral (with the same seat-direction
-                  credit shape as surplus crossing). When active, this component supersedes the v6.7
-                  cosponsorship-based discount above — same construct, better signal, and measuring
-                  it twice would repeat the exact double-count v6.8 fixed. Coalition breadth (20%
+                  ideal-point data is unavailable) with position congruence (30%, when available):
+                  the member&apos;s first-dimension roll-call position from Voteview, compared with
+                  what a same-party member of a similarly-leaning seat typically holds, fit per
+                  chamber and per party from the current data. Per-party fits avoid the swing-seat
+                  artifact a single pooled fit would create (Bafumi &amp; Herron 2010), and
+                  predicted re-election results slightly better than the alternatives in our test.
+                  The position used is the congress-specific Nokken-Poole estimate
+                  <Cite id="36">Nokken &amp; Poole 2004</Cite>, not career-long DW-NOMINATE, which
+                  only lets a member drift along a straight line over their whole career. Scores
+                  cover the current term, not the career, and the congress-specific position also
+                  predicted results better. A position toward the party&apos;s flank scores below
+                  neutral and a position toward the seat&apos;s center scores above, by the same
+                  amount either way — our test found the two directions matter equally. The 70/30
+                  split is a design choice, not a fitted one: the vote component showed the larger
+                  association in the one election where both could be tested, so it keeps the
+                  larger share. Coalition breadth (20%
                   here from v5 through v6.10) has moved to Legislative Effectiveness: bipartisan
                   coalition-building is a legislative-effectiveness signal, not a
                   constituent-alignment one — demand for bipartisanship varies with the seat&apos;s
@@ -393,7 +394,12 @@ export default function AboutPage() {
                   real credit on its own, not just bills that go on to pass a chamber or become law.
                   Three components: bill significance &amp; advancement (60%) — this cumulative
                   stage-credit per congress served, compared against an expected credit for a
-                  sponsor of this chamber/majority-minority status; legislative leadership (25%) —
+                  sponsor of the same status in the same chamber. That expectation is measured
+                  fresh on every run from the chamber itself — the median credit this congress
+                  among members of the same status (majority or minority), with the chamber&apos;s
+                  current majority party read from its roster — so a
+                  member&apos;s standing doesn&apos;t drift as bills accumulate over a congress, or
+                  reset when a new one begins; legislative leadership (25%) —
                   cosponsorship-network PageRank, see below; and bipartisan coalition attraction
                   (15%, v6.11 — moved here from Constituent Alignment): the share of cosponsors a
                   member attracts to their own bills from the other party,
@@ -413,10 +419,19 @@ export default function AboutPage() {
                   bills can score well even before any of them advance further — this is Volden
                   &amp; Wiseman&apos;s real design, not a bug: their published methodology counts a
                   bill&apos;s contribution at every stage it reaches, and most sponsored bills never
-                  advance at all (our own corpus measures Senate majority sponsors advancing bills
-                  at 3.6% vs. 2.4% for minority sponsors; House 6.4% vs. 2.4%). The expected-credit
-                  baseline accounts for that majority/minority gap, so scoring everyone against one
-                  absolute threshold doesn&apos;t silently penalize whichever party is out of power.
+                  advance at all (a July 2026 measurement of our corpus found Senate majority
+                  sponsors advancing bills at 3.6% vs. 2.4% for minority sponsors; House 6.4% vs.
+                  2.4%). Each member is therefore compared with the typical member of the same
+                  status — majority or minority — in their chamber, as in Volden &amp;
+                  Wiseman&apos;s own benchmarks, so whichever party is out of power isn&apos;t
+                  judged against the majority&apos;s record. Until September 2026 the expectation
+                  was instead the chamber median scaled by the ratio of the two advancement rates.
+                  Most credit comes from introducing bills, which majority status doesn&apos;t
+                  change, so that ratio over-corrected: it put minority members well above neutral
+                  and majority members well below (the House&apos;s gap between the parties reached
+                  18 points on production data). This part of the score now centers each status on
+                  its own typical member; differences between the parties&apos; averages that
+                  remain come from the leadership and coalition parts.
                   The score explanation on each profile breaks the substantive-bill count into
                   introduced-only / advanced-further / became-law so the volume-vs-advancement split
                   is visible as real numbers.
@@ -461,9 +476,10 @@ export default function AboutPage() {
               <em className="text-ink">
                 Scores correlate with funding style, and funding style correlates with party.
               </em>{" "}
-              In current data, Democratic senators take roughly half the PAC share of Republican
-              senators (median ~10% vs ~17%) and raise about twice the small-donor share (~24% vs
-              ~12%). Because Funding Independence measures those behaviors directly, average scores
+              In the July 2026 data (measured as shares of total receipts, before shares moved to
+              contributions in v6.13), Democratic senators took roughly half the PAC share of
+              Republican senators (median ~10% vs ~17%) and raised about twice the small-donor
+              share (~24% vs ~12%). Because Funding Independence measures those behaviors directly, average scores
               differ by party. The formulas are identical for everyone and contain no party term;
               the gap reflects measured funding behavior, not editorial judgment.
             </P>
@@ -543,8 +559,8 @@ export default function AboutPage() {
               <em className="text-ink">
                 Presidential-vote PVI doesn&apos;t capture issue-specific constituent opinion.
               </em>{" "}
-              A senator&apos;s expected break rate (see Constituent Alignment above) is calibrated
-              to how their state votes for president, not to opinion on the specific issue a given
+              A senator&apos;s expected break rate (see Constituent Alignment above) is measured
+              against seats that vote like theirs for president, not to opinion on the specific issue a given
               vote concerns — a state&apos;s presidential lean says little about, say, local opinion
               on public land use in Utah or water rights in Arizona. We looked for a real, freely
               available substitute: the best candidate found (Tausanovitch &amp; Warshaw&apos;s
@@ -558,35 +574,26 @@ export default function AboutPage() {
               platform&apos;s auditability for a partial, hard-to-explain fix.
             </P>
             <Gist>
-              the score can now give extra credit to a senator who is genuinely in step with their
-              state — the long-disclosed gap where a well-matched loyalist could never score above
-              neutral is closed as of v6.11 — but the fix measures &quot;in step with the seat&quot;
-              against the seat&apos;s overall partisan lean, which is not the same thing as the
-              voters who actually elected the member. That residual simplification is still
-              disclosed below.
+              the score gives credit to a member who is genuinely in step with their seat, but
+              &quot;in step&quot; is measured against how the seat votes for president, which is
+              not the same thing as the voters who actually elected the member.
             </Gist>
             <P>
               <em className="text-ink">
-                Constituent Alignment&apos;s positive-credit gap is closed (v6.11), with a disclosed
-                residual.
+                Constituent Alignment measures congruence with the seat&apos;s partisan lean, not
+                with the member&apos;s own voters.
               </em>{" "}
-              Through v6.10 the dimension could flag a loyalist whose position was a clear outlier
-              for their seat, but had no way to reward the mirror case — a member whose positions
-              genuinely match their seat scored the same neutral ~50 as an unreadable loyalist. The
-              blocker named here in earlier versions was the yardstick: every member sits more
-              extreme than their state&apos;s raw median (Bafumi &amp; Herron 2010), so the median
-              itself was the wrong target, and authoring one by hand would violate the
-              no-hardcoded-conclusions rule. The v6.11 position-congruence component resolves that
-              with a party-relative, data-derived target — what a same-party member of a
-              similarly-leaning seat typically holds, fit from the live chamber — exactly the party-
-              or coalition-relative benchmark this disclosure said was needed (Canes-Wrone, Brady
-              &amp; Cogan 2002). What remains, and stays disclosed: the target is derived from seat
-              partisan lean, a one-dimensional electoral proxy — members systematically track their{" "}
-              <em>reelection</em> constituency (primary voters and copartisans) rather than the
-              geographic median (Fenno 1978; Clinton 2006), which is why congruence credit is
-              seat-direction-scaled rather than taken at face value, and why issue-level opinion
-              data (e.g. MRP estimates or CES roll-call-matched items) remains the named next step
-              for this dimension.
+              The target is party-relative and measured from the live chamber — what a same-party
+              member of a similarly-leaning seat typically does (Canes-Wrone, Brady &amp; Cogan
+              2002) — which avoids the mistake of expecting members to sit at their seat&apos;s raw
+              median, where no member of either party sits (Bafumi &amp; Herron 2010). It is still
+              one-dimensional, and members track their <em>reelection</em> constituency (primary
+              voters and copartisans) as well as the geographic one (Fenno 1978; Clinton 2006).
+              Through v6.12 that was the stated reason for shrinking credit and penalties in safe
+              seats. Tested against House re-election results, safe-seat voters responded to both
+              just as much as competitive-seat voters did, so v6.13 removed the scaling. Issue-level
+              opinion data (e.g. MRP estimates or CES roll-call-matched items) remains the named
+              next step for this dimension.
             </P>
             <Gist>
               two of the checks that used to lower Constituent Alignment were computed from the same
@@ -604,11 +611,10 @@ export default function AboutPage() {
               projections of the same cosponsorship network. v6.8 reduced the double-count; v6.11
               removes its structural basis: coalition breadth has left Constituent Alignment
               entirely (it now scores legislative effectiveness, where the evidence supports it),
-              and the position signal is measured from roll-call ideal points (DW-NOMINATE via
-              Voteview, ingested automatically every pipeline run behind ingestion gates) — the
-              genuinely independent second signal this disclosure previously said wasn&apos;t
-              available — with the cosponsorship-SVD discount surviving only as a fallback for
-              members the ideal-point data doesn&apos;t yet cover. The residual: within Legislative
+              and the position signal is measured from roll-call ideal points (Voteview, ingested
+              automatically every pipeline run behind ingestion gates) — the genuinely independent
+              second signal this disclosure previously said wasn&apos;t available. The
+              cosponsorship-based discount it replaced was removed entirely in v6.13. The residual: within Legislative
               Effectiveness, the leadership component (cosponsorship PageRank) and the new
               bipartisan-coalition-attraction component are both computed from the cosponsorship
               network (network centrality vs. cross-party share — related data, different measures).
@@ -686,6 +692,11 @@ export default function AboutPage() {
                   The algorithm uses power iteration with a damping factor of 0.85 and converges in
                   ~50 iterations. Raw PageRank values are rescaled to [0, 1] using a logarithmic
                   transformation to compress the heavy-tailed distribution, then displayed as 0-100.
+                  That places each member within their own chamber (the median member sits near 50);
+                  it is not a percentile, and the chamber&apos;s lowest member scores 0, not a
+                  neutral default. Each cosponsorship is weighted by how far the bill got (became
+                  law, advanced, or stalled); a bill whose outcome isn&apos;t known counts as the
+                  typical bill whose outcome is, not as one that became law.
                 </P>
                 <P>
                   Network centrality structurally takes years to build — a freshman senator&apos;s
@@ -723,9 +734,15 @@ export default function AboutPage() {
                 <P>
                   The ideology score is oriented so that lower values correspond to progressive
                   positions and higher values to conservative positions, calibrated by checking the
-                  mean score of each party. It serves as a Bayesian prior for the partisan depth
+                  mean score of each party. It serves as a prior for the partisan depth
                   calculation: when a senator has few recorded votes, the ideology score regularizes
-                  the estimate; as vote data accumulates, the prior weight drops to zero.
+                  the estimate; as vote data accumulates, the prior weight drops to zero. The prior is
+                  first put on the same scale as the vote-based lean, using the relationship between
+                  the two across senators with full voting records. The resulting label (deep,
+                  moderate or centrist) says where a senator falls within their own party, the most
+                  partisan third, the middle third or the least partisan third, so a fixed cut-off
+                  can&apos;t label one party&apos;s members as more extreme than the other&apos;s just
+                  because the two parties&apos; leans sit on different ranges.
                   <Cite id="19">Efron &amp; Morris 1975</Cite>
                 </P>
               </div>
@@ -861,25 +878,36 @@ export default function AboutPage() {
               <div>
                 <Label>Effectiveness (21.67%)</Label>
                 <P>
-                  Measures tangible economic outcomes: GDP growth (60%) and job creation (40%). GDP
-                  growth is computed for the full presidency — BEA/FRED for the modern era,
-                  MeasuringWorth&apos;s real-GDP series (1790-present) for earlier presidents, both
-                  producing the same &ldquo;average annual growth over the term&rdquo; figure, with
-                  the term&apos;s first calendar year excluded when per-year data allows it (that
-                  year mostly reflects the outgoing administration&apos;s policy). Job creation
-                  comes from BLS nonfarm payroll data, which only exists from 1939 onward —
-                  presidents before that are scored on GDP growth alone, renormalized to 100% of the
-                  formula&apos;s weight, not defaulted on the missing component.
+                  Measures economic outcomes: GDP growth (60%) and job creation (40%). GDP growth is
+                  computed for the full presidency from real-GDP series back to 1790, as the average
+                  annual growth over the term with the first calendar year excluded (that year mostly
+                  reflects the outgoing administration&apos;s policy). Job creation comes from BLS
+                  payroll data, which only exists from 1939 onward — presidents before that are
+                  scored on GDP growth alone, not defaulted on the missing component. Both are
+                  compared with the other presidents&apos; actual figures, measured on every update,
+                  rather than with fixed cut-offs. GDP growth is compared within its era, before and
+                  after 1947: estimates from before the war exaggerate booms and busts (Romer 1989),
+                  and term growth varied two and a half times as much then, so one scale for both
+                  pinned one in eight earlier presidents at 0 or 100. Jobs stay in absolute numbers,
+                  since the percentage rate falls over time with the workforce&apos;s own slower
+                  growth. A limit worth knowing: since 1946, 60% of the variation in a
+                  president&apos;s term growth is shared with 13 other advanced economies over the
+                  same years, so this dimension mostly measures the economy a president presided
+                  over, not one they created. The study is in the project repository at
+                  docs/research/president-scores.md.
                 </P>
               </div>
 
               <div>
                 <Label>Agency Alignment (21.67%)</Label>
                 <P>
-                  Measures how well executive agency actions align with stated presidential
-                  priorities, via Federal Register rulemaking data — the count of final and proposed
-                  rules published during the term, and what fraction were finalized rather than left
-                  pending. This is a digitization wall, not a conceptual one: notice-and-comment
+                  Measures how far executive agencies carry through the rulemaking they start: the
+                  share of Federal Register rulemaking documents during the term that were final
+                  rules rather than proposals, compared with the other administrations since 1994.
+                  It used to also reward the number of rules issued. That was removed: rule volume
+                  follows an administration&apos;s view of regulation, with the record low in 2019 and
+                  the record high in 2024, so scoring more rules as better scored a policy
+                  preference. Coverage starts with Clinton. This is a digitization wall, not a conceptual one: notice-and-comment
                   rulemaking was a real, functioning practice well before the 1990s, but no
                   machine-readable record of it exists that far back — checked directly (2026-07)
                   rather than assumed: federalregister.gov&apos;s API returns zero results for any
@@ -899,7 +927,7 @@ export default function AboutPage() {
                 <P>
                   Covers what none of the other three dimensions can: crisis leadership, moral
                   authority, vision, and similar historical-consequence judgments that don&apos;t
-                  reduce to GDP growth, approval polling, or rulemaking volume. Sourced from
+                  reduce to GDP growth, approval polling, or rulemaking. Sourced from
                   C-SPAN&apos;s Presidential Historians Survey — ~142 professional historians in the
                   2021 cycle (the most recent; the 2025 cycle was explicitly postponed by C-SPAN,
                   citing the risk of turning &ldquo;historical analysis&rdquo; into
@@ -943,6 +971,21 @@ export default function AboutPage() {
               cases or shifts positions based on the political valence of the parties involved. This
               is analogous to the independence metric used for senators but adapted to the judicial
               context where party loyalty is replaced by jurisprudential consistency.
+            </P>
+            <P>
+              The score has two parts. Ideological consistency (44%) measures how differently a
+              justice agrees with the two sets of colleagues, those appointed by the same
+              party and those appointed by the other, weighting close decisions most because they
+              reveal the most. Independence (56%) measures how often, in split decisions, a justice
+              sides with the other party&apos;s appointees against their own. Until v6.13 there were
+              two more. &quot;Judicial restraint&quot; scored how often a justice dissents. Tested
+              on the Rehnquist Court&apos;s 1994–2004 votes, dissent frequency turned out to measure
+              distance from the Court&apos;s median justice, who is in nearly every majority. In a
+              simulated 6–3 Court it put the smaller bloc about 21 points behind just for being
+              outvoted, so it was removed. &quot;Bipartisan agreement&quot; measured the same thing
+              as independence (a 0.86 correlation), so its weight moved there. Each
+              justice&apos;s dissent rate is still shown as a plain statistic. The study is in the
+              project repository at docs/research/justice-scores.md.
             </P>
           </Section>
 
@@ -1426,13 +1469,15 @@ export default function AboutPage() {
                   The learning store also feeds into the self-training loop
                   <Cite id="25">Yarowsky 1995</Cite> — high-confidence classifications from prior
                   runs become labeled examples for kNN and reference corpus retrieval in future
-                  runs. The system literally gets better each time the pipeline runs.
+                  runs. kNN&apos;s own guesses are stored but never reused as examples, so an
+                  early mistake can&apos;t teach later runs to repeat it.
                 </P>
                 <P>
                   To prevent stale data from persisting when analysis algorithms are updated, the
                   pipeline implements{" "}
                   <em className="text-ink">version-aware artifact management</em>. At the start of
-                  each run, a SHA-256 fingerprint of all analysis source files is compared to the
+                  each run, a SHA-256 fingerprint of all analysis source files (ignoring comments
+                  and documentation) is compared to the
                   stored hash from the previous run. If the code is unchanged, all learning data is
                   preserved to promote self-training. If the code has changed, stale artifacts (LLM
                   results, learned classifications, kNN reference corpus) are automatically cleared
@@ -2194,6 +2239,16 @@ export default function AboutPage() {
                   Legislative Effectiveness in the United States Congress: The Lawmakers
                 </em>
                 . Cambridge University Press.
+              </Ref>
+              <Ref id="35">
+                Canes-Wrone, B., Brady, D. W., &amp; Cogan, J. F. (2002). Out of Step, Out of
+                Office: Electoral Accountability and House Members&apos; Voting.{" "}
+                <em className="text-ink-lo">American Political Science Review</em>, 96(1), 127-140.
+              </Ref>
+              <Ref id="36">
+                Nokken, T. P., &amp; Poole, K. T. (2004). Congressional Party Defection in American
+                History. <em className="text-ink-lo">Legislative Studies Quarterly</em>, 29(4),
+                545-568.
               </Ref>
             </ol>
           </Section>

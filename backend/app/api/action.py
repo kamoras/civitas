@@ -776,7 +776,7 @@ async def get_my_reps(
         db.query(
             Senator.id, Senator.name, Senator.state, Senator.party,
             Senator.score_funding_independence, Senator.score_promise_persistence,
-            Senator.score_independent_voting, Senator.score_funding_diversity,
+            Senator.score_constituent_alignment, Senator.score_funding_diversity,
             Senator.score_legislative_effectiveness,
             Senator.leadership_score, Senator.ideology_score,
             Senator.years_in_office, Senator.initials,
@@ -791,7 +791,7 @@ async def get_my_reps(
             Representative.id, Representative.name, Representative.state, Representative.party,
             Representative.district,
             Representative.score_funding_independence, Representative.score_promise_persistence,
-            Representative.score_independent_voting, Representative.score_funding_diversity,
+            Representative.score_constituent_alignment, Representative.score_funding_diversity,
             Representative.score_legislative_effectiveness,
             Representative.leadership_score, Representative.ideology_score,
             Representative.years_in_office, Representative.initials,
@@ -831,7 +831,7 @@ async def get_my_reps(
             "scores": {
                 "fundingIndependence": round(s.score_funding_independence, 1),
                 "promisePersistence": round(s.score_promise_persistence, 1),
-                "independentVoting": round(s.score_independent_voting, 1),
+                "constituentAlignment": round(s.score_constituent_alignment, 1),
                 "fundingDiversity": round(s.score_funding_diversity, 1),
                 "legislativeEffectiveness": round(s.score_legislative_effectiveness, 1),
                 "overall": overall,
@@ -862,7 +862,7 @@ async def get_my_reps(
             "scores": {
                 "fundingIndependence": round(r.score_funding_independence, 1),
                 "promisePersistence": round(r.score_promise_persistence, 1),
-                "independentVoting": round(r.score_independent_voting, 1),
+                "constituentAlignment": round(r.score_constituent_alignment, 1),
                 "fundingDiversity": round(r.score_funding_diversity, 1),
                 "legislativeEffectiveness": round(r.score_legislative_effectiveness, 1),
                 "overall": overall,
@@ -976,7 +976,7 @@ async def get_election_info(response: Response, db: Session = Depends(get_db)):
     senators = (
         db.query(Senator.id, Senator.name, Senator.state, Senator.party,
                  Senator.score_funding_independence, Senator.score_promise_persistence,
-                 Senator.score_independent_voting, Senator.score_funding_diversity,
+                 Senator.score_constituent_alignment, Senator.score_funding_diversity,
                  Senator.score_legislative_effectiveness,
                  Senator.leadership_score, Senator.years_in_office)
         .all()

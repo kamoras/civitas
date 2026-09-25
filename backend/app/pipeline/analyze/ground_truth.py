@@ -28,7 +28,7 @@ Three families of checks, all population-level:
 2. Direction-of-effect — Spearman rank correlation between each score
    and an upstream raw metric it must track: Funding Independence must
    fall as the PAC share of receipts rises and rise with small-donor
-   share; Independent Voting must rise with the observed party-break
+   share; Constituent Alignment must rise with the observed party-break
    rate. "The most PAC-free members must score high on FI" is exactly
    what the old Sanders/Warren rows asserted, computed fresh each run
    for whoever currently holds that profile.
@@ -43,7 +43,7 @@ Three families of checks, all population-level:
 check_score_distribution guards the failure mode per-member checks
 can't see — the whole population collapsing toward one value (Promise
 Persistence did exactly this before being removed as a scored dimension,
-see score_calculator.py's v5→v6.0 changelog). The old fixed stdev floors
+see docs/methodology/member-score/v6.0.md). The old fixed stdev floors
 (8.0/6.5/5.5 — themselves hand-calibrated from live audits) are replaced
 by two derived tests: a point-mass check (a strict majority sharing one
 value is a collapse by definition) and a self-history check (today's
@@ -89,14 +89,14 @@ MIN_HISTORY_DATES = 5
 #
 # v6.11 (2026-07-23, same day as this module's rewrite): coalition breadth
 # moved to Legislative Effectiveness and position congruence added to this
-# dimension (score_calculator.py's changelog). No GROUND_TRUTH entries to
+# dimension (docs/methodology/member-score/). No GROUND_TRUTH entries to
 # re-verify here anymore — the derived checks above re-measure the current
 # population automatically every run, which is the entire point of this
 # rewrite; a scoring-formula change no longer requires hand-updating
 # reference ranges the way the old hardcoded table did.
 
 _DIM_LABEL = {
-    "score_independent_voting": "IV",
+    "score_constituent_alignment": "IV",
     "score_funding_independence": "FI",
     "score_funding_diversity": "FD",
     "score_legislative_effectiveness": "LE",
@@ -109,7 +109,7 @@ _CONSISTENCY_CHECKS: list[tuple[str, str, int, str]] = [
      "PAC share of receipts (FEC)"),
     ("small_donor_pct", "score_funding_independence", +1,
      "small-donor share of receipts (FEC unitemized)"),
-    ("party_break_rate", "score_independent_voting", +1,
+    ("party_break_rate", "score_constituent_alignment", +1,
      "observed party-break rate on labeled roll-call votes"),
 ]
 
@@ -359,14 +359,19 @@ def _member_records(db, model) -> list[dict]:
     records = []
     for m in db.query(model).filter(model.is_current.is_(True)).all():
         raised = m.total_raised or 0
+        # The same denominator Funding Independence scores on (contributions,
+        # falling back to receipts for rows scored before it existed) — a
+        # direction-of-effect check against a different ratio than the one
+        # scored would weaken for reasons unrelated to the scores.
+        base = getattr(m, "total_contributions", None) or raised
         breaks, labeled = counts[m.id]
         records.append({
             "id": m.id,
             "name": m.name,
             "scores": {dim: getattr(m, dim, None) for dim in _DIM_LABEL},
             "metrics": {
-                "pac_ratio": (m.total_from_pacs or 0) / raised if raised > 0 else None,
-                "small_donor_pct": m.small_donor_percentage if raised > 0 else None,
+                "pac_ratio": (m.total_from_pacs or 0) / base if base > 0 else None,
+                "small_donor_pct": m.small_donor_percentage if base > 0 else None,
                 "party_break_rate": (
                     breaks / labeled if labeled >= MIN_LABELED_VOTES else None
                 ),
@@ -418,7 +423,7 @@ def check_ground_truth(db, model=None) -> dict:
 # score_calibration.DIMENSIONS (score_2 is retired Promise Persistence).
 _SNAPSHOT_COLUMN = {
     "score_funding_independence": "score_1",
-    "score_independent_voting": "score_3",
+    "score_constituent_alignment": "score_3",
     "score_funding_diversity": "score_4",
     "score_legislative_effectiveness": "score_5",
 }

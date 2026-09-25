@@ -101,7 +101,7 @@ def build_rep_response(rep: Representative, _db: Session = None) -> Representati
         representation_score={
             "fundingIndependence": rep.score_funding_independence,
             "promisePersistence": rep.score_promise_persistence,
-            "independentVoting": rep.score_independent_voting,
+            "constituentAlignment": rep.score_constituent_alignment,
             "fundingDiversity": rep.score_funding_diversity,
             "legislativeEffectiveness": rep.score_legislative_effectiveness,
             "overall": compute_overall_score(rep),
@@ -109,6 +109,7 @@ def build_rep_response(rep: Representative, _db: Session = None) -> Representati
         },
         funding={
             "totalRaised": rep.total_raised,
+            "totalContributions": rep.total_contributions,
             "totalFromPACs": rep.total_from_pacs,
             "smallDonorPercentage": rep.small_donor_percentage,
             "topDonors": [
@@ -340,12 +341,13 @@ def get_rep_leaderboard(
             "representationScore": {
                 "fundingIndependence": r.score_funding_independence,
                 "promisePersistence": r.score_promise_persistence,
-                "independentVoting": r.score_independent_voting,
+                "constituentAlignment": r.score_constituent_alignment,
                 "fundingDiversity": r.score_funding_diversity,
                 "legislativeEffectiveness": r.score_legislative_effectiveness,
                 "overall": compute_overall_score(r),
             },
             "totalRaised": r.total_raised,
+            "totalContributions": r.total_contributions,
             "totalFromPacs": r.total_from_pacs,
             "smallDonorPercentage": r.small_donor_percentage,
             "topIndustry": top_industry_map.get(r.id),
@@ -402,15 +404,16 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
     # neutral 50, never a perfect 100 or 0").
     existing.score_funding_independence = cs.get("fundingIndependence", 50)
     existing.score_promise_persistence = cs.get("promisePersistence", 50)
-    existing.score_independent_voting = cs.get("independentVoting", 50)
+    existing.score_constituent_alignment = cs.get("constituentAlignment", 50)
     existing.score_funding_diversity = cs.get("fundingDiversity", 50)
     existing.score_legislative_effectiveness = cs.get("legislativeEffectiveness", 50)
     existing.score_confidence = json.dumps(cs.get("confidence") or {})
 
     existing.total_raised = funding.get("totalRaised", 0)
+    existing.total_contributions = funding.get("totalContributions")
+    existing.caucus_party = (rep_data.get("votingRecord") or {}).get("effectiveParty")
     existing.total_from_pacs = funding.get("totalFromPACs", 0)
     existing.small_donor_percentage = funding.get("smallDonorPercentage", 0)
-    existing.outside_spending_for = funding.get("outsideSpendingFor")
     voting_record = rep_data.get("votingRecord", {})
     existing.website_url = rep_data.get("officialWebsiteUrl") or ""
     existing.contact_form_url = rep_data.get("contactFormUrl") or ""
@@ -464,7 +467,6 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
             stance=v.get("stance", "neutral"),
             description=v.get("description", ""),
             party_leaning=v.get("partyLeaning"),
-            opposing_party_unity_pct=v.get("opposingPartyUnityPct"),
             voted_with_party=v.get("votedWithParty"),
             vote_category=category,
         ))

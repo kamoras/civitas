@@ -10,18 +10,14 @@ from app.pipeline.analyze.score_calculator import (
     _calc_funding_independence,
     _calc_legislative_effectiveness,
     _calc_promise_persistence,
-    _constituent_alignment_core,
     _funding_independence_core,
     _legislative_effectiveness_core,
-    _LES_AVG_BASELINE_HOUSE,
-    _LES_AVG_BASELINE_SENATE,
-    _LES_POPULATION_MEDIAN_HOUSE,
-    _LES_POPULATION_MEDIAN_SENATE,
     _les_bill_stage,
     _les_cumulative_credit,
     _les_significance_weight,
     calculate_scores,
     clamp,
+    compute_les_reference,
     compute_overall_score,
 )
 
@@ -262,47 +258,42 @@ class TestFundingIndependence:
         detail = breakdown["components"][0]["detail"]
         assert "no PAC committee-type data" in detail
 
-    def test_concentration_2026_07_23_recalibration_anchors(self):
-        """New anchors (0.15 -> 100, 0.40 -> 0), refit 2026-07-23 against a
-        live audit that found the prior anchors (0.20 -> 100, 1.00 -> 0,
-        "median 0.60") had drifted to roughly double the real population
-        (real median 28%) — pins the exact new anchor values and the
-        real-world median so a future recalibration can't silently drift
-        again without a test noticing."""
-        def _concentration_score(top10_total: int, pool_total: int) -> float:
-            # 100 "other" donors, deliberately small enough per-donor that
-            # they never outrank the intended top-10 group once the
-            # function sorts by amount descending (a flat split would
-            # otherwise let the "long tail" outrank the "top 10").
-            other_total = pool_total - top10_total
+    def test_concentration_is_scored_against_the_chamber_median(self, pinned_funding_reference):
+        """v6.13: the anchors used to be hand-typed (0.15 -> 100, 0.40 -> 0,
+        fitted to a 2026-07 snapshot; an earlier set had drifted until the
+        typical member scored ~90 regardless of real concentration). Now the
+        chamber's measured median scores 50 and one p10-p90 spread above or
+        below saturates at 0 / 100 (compute_funding_reference)."""
+        ref = pinned_funding_reference["senate"]
+        median = ref["concentration_median"]
+        spread = ref["concentration_p90"] - ref["concentration_p10"]
+
+        def _concentration_score(share: float) -> float:
+            pool_total = 1_000_000
+            top10_total = round(share * pool_total)
             n_others = 100
             funding = {
                 "totalRaised": pool_total,
                 "totalFromPACs": 0,
                 "topDonors": (
                     [{"total": top10_total // 10} for _ in range(10)]
-                    + [{"total": max(1, other_total // n_others)} for _ in range(n_others)]
+                    + [{"total": max(1, (pool_total - top10_total) // n_others)} for _ in range(n_others)]
                 ),
             }
             return _funding_independence_core(funding)["components"][2]["score"]
 
-        # 15% concentration -> full score (the new ceiling anchor).
-        assert _concentration_score(150_000, 1_000_000) == 100.0
-        # 40% concentration -> zero (the new floor anchor).
-        assert _concentration_score(400_000, 1_000_000) == 0.0
-        # Beyond the floor anchor stays at zero, doesn't go negative.
-        assert _concentration_score(900_000, 1_000_000) == 0.0
-        # The live 2026-07-23 audit's real median (28%) should land near
-        # the intended ~50 center, not the ~90 the old anchors produced.
-        score_at_real_median = _concentration_score(280_000, 1_000_000)
-        assert 45 <= score_at_real_median <= 55
+        assert abs(_concentration_score(median) - 50.0) < 0.5
+        assert _concentration_score(median + spread) == 0.0
+        assert _concentration_score(median - spread) == 100.0
+        assert _concentration_score(0.95) == 0.0  # never negative
+        assert _concentration_score(median - 0.05) > _concentration_score(median + 0.05)
 
-    def test_pac_fallback_2026_07_23_recalibration_anchors(self):
-        """New fallback cap ($1,325,000, i.e. 2x the live median), refit
-        2026-07-23 against a live audit that found the prior $4,000,000
-        cap had drifted to roughly 3x the real median ($662,750) —
-        without a resolved PAC committee type, dependency should still be
-        judged relative to what members actually raise via PACs today."""
+    def test_pac_fallback_scales_to_twice_the_chamber_median(self):
+        """Without a resolved PAC committee type, PAC volume is judged
+        against twice the chamber's median PAC dollars — measured each run
+        since v6.13 (pinned here to the 2026-07 median, $662,750). It used
+        to be a hand-typed cap, one version of which had drifted to ~3x the
+        real median."""
         def _pac_score_at(pac_total: int) -> float:
             # totalRaised scales with pac_total so pac_ratio (and thus the
             # ratio-score half of this component) stays constant at 10% —
@@ -359,12 +350,13 @@ class TestFundingIndependence:
         unknown_state = _funding_independence_core(funding, state="XX")
         assert no_state["components"][1]["score"] == unknown_state["components"][1]["score"]
 
-    def test_district_bypasses_state_population_adjustment(self):
-        """House members (district is not None) keep the original flat
-        40%-cap behavior — the state-population fix is Senate-only until a
-        real district-population audit justifies extending it. A ND House
-        seat must score identically to the same raw % from any other
-        state once district is given."""
+    def test_district_bypasses_state_population_adjustment(self, pinned_funding_reference):
+        """House members aren't scored against their state's population
+        (districts are apportioned to equal population) — a ND House seat
+        scores identically to the same raw % from any other state. Since
+        v6.13 they're scored against the House's own median small-donor
+        share (median member = 50) instead of a flat 40% cap."""
+        house = pinned_funding_reference["house"]
         funding = {
             "totalRaised": 2_000_000,
             "totalFromPACs": 400_000,
@@ -373,7 +365,9 @@ class TestFundingIndependence:
         }
         nd_house = _funding_independence_core(funding, state="ND", district=1)
         ca_house = _funding_independence_core(funding, state="CA", district=12)
-        assert nd_house["components"][1]["score"] == ca_house["components"][1]["score"] == 37.5
+        assert nd_house["components"][1]["score"] == ca_house["components"][1]["score"]
+        at_median = {**funding, "smallDonorPercentage": house["small_donor_median"]}
+        assert _funding_independence_core(at_median, state="ND", district=1)["components"][1]["score"] == 50.0
 
     def test_at_state_baseline_scores_neutral(self):
         """A senator whose raw % exactly matches their state's expected
@@ -389,527 +383,6 @@ class TestFundingIndependence:
         small_score = breakdown["components"][1]["score"]
         assert 45 <= small_score <= 55
 
-
-class TestConstituentAlignment:
-    """Score is relative to what the seat's electorate expects.
-
-    Matching the seat's expected break rate ≈ neutral 50. v6.6 made the
-    component asymmetric: below-expected loyalty is NOT penalized (floors
-    at neutral — a low defection rate is not misrepresentation), while
-    above-expected crossing earns credit only where it plausibly moves
-    toward the state median (discounted by seat lean). A member-level flank
-    direction discount was designed but not shipped in v6.6 (uncalibratable
-    without the live scored ideology distribution — see score_calculator.py),
-    so the crossing side here is seat-direction only.
-    """
-
-    def _make_votes(self, with_party=0, against_party=0, policy="JUSTICE", crossing_unity=None):
-        votes = []
-        for _ in range(with_party):
-            votes.append({"votedWithParty": True, "policyArea": policy, "vote": "Yea"})
-        for _ in range(against_party):
-            vote = {"votedWithParty": False, "policyArea": policy, "vote": "Yea"}
-            if crossing_unity is not None:
-                vote["opposingPartyUnityPct"] = crossing_unity
-            votes.append(vote)
-        return votes
-
-    def test_no_data_returns_neutral(self):
-        record = {"keyVotes": [], "recentVotes": []}
-        score = _calc_constituent_alignment(record, [], {})
-        assert 40 <= score <= 60
-
-    def test_frequent_crosser_scores_high(self):
-        record = {
-            "keyVotes": self._make_votes(with_party=70, against_party=30),
-            "recentVotes": [],
-        }
-        score = _calc_constituent_alignment(
-            record, [], {"totalRaised": 1_000_000, "totalFromPACs": 0}
-        )
-        assert score >= 70
-
-    def test_weighted_votes_below_count_threshold_are_still_scored(self):
-        """Data-sufficiency gate is on the RAW vote count, not the
-        confidence-weighted sum. Five genuine crossing votes each carrying a
-        low multi-area weight (~0.55) sum to ~2.75 < 3.0; the old gate
-        treated that as "fewer than 3 votes" and pinned the member to a flat
-        neutral 50, even though they have five real votes and a 60% crossing
-        rate. They must now be scored on that record instead."""
-        votes = []
-        for _ in range(2):
-            votes.append({
-                "votedWithParty": True, "policyArea": "JUSTICE",
-                "vote": "Yea", "partyAlignmentWeight": 0.55,
-            })
-        for _ in range(3):
-            votes.append({
-                "votedWithParty": False, "policyArea": "JUSTICE",
-                "vote": "Yea", "partyAlignmentWeight": 0.55,
-            })
-        record = {"keyVotes": votes, "recentVotes": []}
-        funding = {"totalRaised": 1_000_000, "totalFromPACs": 0}
-        score = _calc_constituent_alignment(record, [], funding)
-        # 3/5 = 60% crossing is far above any seat's expected break rate, so
-        # the party component pushes the score above the neutral 50 it was
-        # previously (wrongly) pinned to.
-        assert score > 55
-
-    def test_low_unity_crossings_score_at_least_as_high_as_high_unity(self):
-        """2026-07 crossing-quality fix: at the same crossing rate, a
-        member whose crossings landed on barely-partisan votes (opposing
-        party's own majority near the 65% labeling floor — reads as
-        consensus-building) must score at least as high as a member whose
-        crossings landed on votes where the opposing party voted in near
-        lockstep (reads as adopting the opposition's own party line, not
-        building consensus)."""
-        funding = {"totalRaised": 1_000_000, "totalFromPACs": 0}
-        record_consensus = {
-            "keyVotes": self._make_votes(with_party=70, against_party=30, crossing_unity=0.65),
-            "recentVotes": [],
-        }
-        record_lockstep = {
-            "keyVotes": self._make_votes(with_party=70, against_party=30, crossing_unity=1.0),
-            "recentVotes": [],
-        }
-        score_consensus = _calc_constituent_alignment(record_consensus, [], funding)
-        score_lockstep = _calc_constituent_alignment(record_lockstep, [], funding)
-        assert score_consensus >= score_lockstep
-
-    def test_crossing_quality_discount_mechanism_at_a_nonzero_value(self, monkeypatch):
-        """CROSSING_QUALITY_DISCOUNT ships at 0.0 (see its docstring — no
-        historical opposing_party_unity_pct data exists yet), which makes
-        the test above pass trivially (both sides land on an identical
-        score, since a 0.0 discount is a no-op regardless of unity).
-        Patch in a real discount so the actual mechanism — not just its
-        inert default — gets exercised before it's ever turned on in
-        production."""
-        monkeypatch.setattr(score_calculator, "CROSSING_QUALITY_DISCOUNT", 0.5)
-        funding = {"totalRaised": 1_000_000, "totalFromPACs": 0}
-        record_consensus = {
-            "keyVotes": self._make_votes(with_party=70, against_party=30, crossing_unity=0.65),
-            "recentVotes": [],
-        }
-        record_lockstep = {
-            "keyVotes": self._make_votes(with_party=70, against_party=30, crossing_unity=1.0),
-            "recentVotes": [],
-        }
-        score_consensus = _calc_constituent_alignment(record_consensus, [], funding)
-        score_lockstep = _calc_constituent_alignment(record_lockstep, [], funding)
-        assert score_consensus > score_lockstep
-
-    def test_missing_crossing_unity_signal_unchanged_from_no_discount(self):
-        """A crossing vote with no opposingPartyUnityPct at all (older
-        data, or insufficient roll-call member data) must never be
-        penalized for the missing signal — same score as a crossing at
-        the minimum (no-discount) unity value."""
-        funding = {"totalRaised": 1_000_000, "totalFromPACs": 0}
-        record_no_signal = {
-            "keyVotes": self._make_votes(with_party=70, against_party=30),
-            "recentVotes": [],
-        }
-        record_min_unity = {
-            "keyVotes": self._make_votes(with_party=70, against_party=30, crossing_unity=0.65),
-            "recentVotes": [],
-        }
-        score_no_signal = _calc_constituent_alignment(record_no_signal, [], funding)
-        score_min_unity = _calc_constituent_alignment(record_min_unity, [], funding)
-        assert score_no_signal == score_min_unity
-
-    def test_pure_party_line_voter_not_penalized_in_swing_seat(self):
-        """v6.6: a below-expected defection rate is not scored as
-        misrepresentation. A perfectly loyal voter in a swing seat floors
-        at neutral (50), never below — party-line voting is not evidence of
-        failing to represent the coalition that elected the member (Fenno
-        1978; Levendusky 2009; Krehbiel 2000). Pre-v6.6 this scored ~30."""
-        record = {
-            "keyVotes": self._make_votes(with_party=100, against_party=0),
-            "recentVotes": [],
-        }
-        # party="I" / no state → swing-equivalent (alignment 0, expected 8%).
-        score = _calc_constituent_alignment(
-            record, [], {"totalRaised": 1_000_000, "totalFromPACs": 500_000}
-        )
-        assert score == 50
-
-    def test_safe_seat_loyalist_scores_near_neutral(self):
-        """THE v4.2 regression test: a member of a deep-safe seat voting
-        the way the seat elected them to is typical representation
-        (≈50), not a failure grade. v4.1 pinned 73/100 senators at a
-        floor of ~26-38 for exactly this behavior."""
-        record = {
-            "keyVotes": self._make_votes(with_party=97, against_party=3),
-            "recentVotes": [],
-        }
-        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
-        score = _calc_constituent_alignment(
-            record, [], funding, state="ID", party="R"
-        )
-        assert 45 <= score <= 62
-
-    def test_district_lean_overrides_state_lean_for_house(self):
-        """The per-district lean, not the state lean, sets the seat
-        expectation for a House member. AL-7 is D+13 while Alabama is R+15,
-        so a Democrat there sits in a SAFE seat, not an 'opposed seat.'
-
-        A 10% crosser makes the override observable: under the correct D+13
-        district lean, 10% is ABOVE the seat's low expectation and earns
-        credit; under the wrong R+15 state-only lean, the same member looks
-        like an opposed-seat UNDER-crosser and floors at neutral. District
-        data therefore produces a different (here higher) score — proving
-        the per-district lean is what sets the seat expectation."""
-        record = {
-            "keyVotes": self._make_votes(with_party=90, against_party=10),
-            "recentVotes": [],
-        }
-        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
-        with_state_only = _calc_constituent_alignment(
-            record, [], funding, state="AL", party="D"
-        )
-        with_district = _calc_constituent_alignment(
-            record, [], funding, state="AL", party="D", district=7
-        )
-        assert with_district > with_state_only
-
-    def test_loyalist_not_penalized_regardless_of_district_or_state_lean(self):
-        """v6.6 corollary: because loyalty is never penalized, a loyalist
-        Democrat floors at neutral under BOTH the safe-district and the
-        (wrongly) opposed state-only lean. The district override still
-        matters for crossers (test above) — it just no longer rescues a
-        loyalist from a penalty that no longer exists."""
-        record = {
-            "keyVotes": self._make_votes(with_party=97, against_party=3),
-            "recentVotes": [],
-        }
-        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
-        with_state_only = _calc_constituent_alignment(
-            record, [], funding, state="AL", party="D"
-        )
-        with_district = _calc_constituent_alignment(
-            record, [], funding, state="AL", party="D", district=7
-        )
-        assert with_state_only == with_district == 50
-
-    def test_unknown_district_falls_back_to_state(self):
-        record = {
-            "keyVotes": self._make_votes(with_party=97, against_party=3),
-            "recentVotes": [],
-        }
-        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
-        assert _calc_constituent_alignment(
-            record, [], funding, state="ID", party="R", district=99
-        ) == _calc_constituent_alignment(
-            record, [], funding, state="ID", party="R"
-        )
-
-    def test_lobbying_matches_no_longer_affect_score(self):
-        """v6.5: Donor independence removed from Constituent Alignment
-        (folded into/duplicative of Funding Independence — see
-        config_definitions.SCORE_WEIGHTS's r=0.72 rationale). lobbying_matches
-        is still accepted for call-site compatibility but no longer changes
-        the score."""
-        record = {
-            "keyVotes": self._make_votes(with_party=90, against_party=10),
-            "recentVotes": [],
-        }
-        matches = [
-            {"donationToSenator": 200_000, "isConsensusVote": False},
-            {"donationToSenator": 150_000, "isConsensusVote": False},
-            {"donationToSenator": 100_000, "isConsensusVote": False},
-        ]
-        score_with = _calc_constituent_alignment(
-            record, matches,
-            {"totalRaised": 1_000_000, "totalFromPACs": 500_000},
-        )
-        score_without = _calc_constituent_alignment(
-            record, [],
-            {"totalRaised": 1_000_000, "totalFromPACs": 500_000},
-        )
-        assert score_with == score_without
-
-    def test_donor_industry_votes_no_longer_exempt(self):
-        """v4.1 exempted party-line votes on policy areas related to the
-        member's top DONOR industries — backwards under the representation
-        north star (it shielded the votes most suspect for capture).
-        Those votes now count like any other party-line vote."""
-        funding = {
-            "totalRaised": 1_000_000,
-            "totalFromPACs": 200_000,
-            "industryBreakdown": [{"industry": "OIL_GAS", "percentage": 40}],
-        }
-        energy_votes = self._make_votes(with_party=20, against_party=0, policy="ENERGY")
-        other_votes = self._make_votes(with_party=8, against_party=2, policy="JUSTICE")
-
-        record_with_energy = {
-            "keyVotes": energy_votes + other_votes,
-            "recentVotes": [],
-        }
-        record_just_other = {
-            "keyVotes": other_votes,
-            "recentVotes": [],
-        }
-        score_with_energy = _calc_constituent_alignment(record_with_energy, [], funding)
-        score_just_other = _calc_constituent_alignment(record_just_other, [], funding)
-        # 20 extra party-line votes dilute the break rate → lower score
-        assert score_with_energy < score_just_other
-
-    def test_swing_seat_loyalty_not_penalized_below_safe_seat_loyalty(self):
-        """v6.6: a loyal record is not penalized for being in a swing seat.
-        Pre-v6.6 the same 95% party-line record scored materially lower in a
-        swing state than a safe one (loyalty read as diverging from the
-        swing-state median). Now a below-expected defection rate floors at
-        neutral in either seat, so swing-seat loyalty is never driven below
-        safe-seat loyalty."""
-        record = {
-            "keyVotes": self._make_votes(with_party=98, against_party=2),
-            "recentVotes": [],
-        }
-        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
-
-        score_deep_red = _calc_constituent_alignment(
-            record, [], funding, state="WY", party="R"
-        )
-        score_swing = _calc_constituent_alignment(
-            record, [], funding, state="NV", party="R"
-        )
-        # Both are below-expected loyalists → both floor at neutral.
-        assert score_deep_red == score_swing == 50
-
-    def _patch_bounds(self, monkeypatch, bounds=None):
-        # Fixed D/R terciles so these tests don't drift with the live
-        # party_ideology_bounds.json data file (regenerated every pipeline
-        # run — see score_calculator.write_party_ideology_bounds). Patches
-        # the cache dict directly (not the file) and pytest's monkeypatch
-        # auto-reverts it after the test, so this can't leak into other
-        # tests in the module.
-        if bounds is None:
-            bounds = {"D": (0.3, 0.7), "R": (0.3, 0.7)}
-        monkeypatch.setattr(
-            score_calculator, "_party_ideology_bounds_cache",
-            {"senate": bounds, "house": bounds},
-        )
-
-    def test_position_mismatch_discounts_extreme_loyalist_in_unsafe_seat(self, monkeypatch):
-        """v6.7: loyalty rate is still unreadable, but ideology_score is a
-        second, independent, legible signal — a below-expected loyalist
-        whose ideology sits in their own party's extreme tercile, in a seat
-        that isn't safely aligned for that extremity, IS the "blatantly
-        progressive senator in a moderate state" case the rate-only v6.6
-        design couldn't see. NV (alignment 0.0, a swing seat) makes this a
-        maximally-unsafe seat so the discount hits full strength."""
-        self._patch_bounds(monkeypatch)
-        record = {
-            "keyVotes": self._make_votes(with_party=98, against_party=2),
-            "recentVotes": [],
-        }
-        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
-        score = _calc_constituent_alignment(
-            record, [], funding, state="NV", party="D", ideology_score=0.05,
-        )
-        assert score < 50
-
-    def test_position_mismatch_zero_in_deep_safe_seat_despite_extreme_ideology(self, monkeypatch):
-        """The discount scales with how UNSAFE the seat is (mirrors the
-        surplus-crossing seat-direction discount): extremity in a deep safe
-        seat is the structural norm (Bafumi & Herron 2010), not
-        misrepresentation, so it stays at neutral there."""
-        self._patch_bounds(monkeypatch)
-        record = {
-            "keyVotes": self._make_votes(with_party=98, against_party=2),
-            "recentVotes": [],
-        }
-        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
-        # VT is D+15, pinning alignment to exactly 1.0 (the ±15 PVI
-        # normalization cap) — a maximally safe seat.
-        score = _calc_constituent_alignment(
-            record, [], funding, state="VT", party="D", ideology_score=0.05,
-        )
-        assert score == 50
-
-    def test_position_mismatch_never_triggers_for_a_moderate_position(self, monkeypatch):
-        """A loyalist whose ideology sits WITHIN their party's middle third
-        (not extreme) is not flagged, regardless of seat safety — only
-        district-relative ideological EXTREMITY is the misrepresentation
-        signal (Canes-Wrone/Brady/Cogan 2002), not mere party membership."""
-        self._patch_bounds(monkeypatch)
-        record = {
-            "keyVotes": self._make_votes(with_party=98, against_party=2),
-            "recentVotes": [],
-        }
-        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
-        score = _calc_constituent_alignment(
-            record, [], funding, state="NV", party="D", ideology_score=0.5,
-        )
-        assert score == 50
-
-    def test_position_mismatch_never_triggers_without_ideology_data(self, monkeypatch):
-        """Missing ideology_score (senator has no SVD-scored cosponsorship
-        signal, or the caller doesn't pass it) never triggers a discount —
-        missing data is never punitive, same convention as every other
-        component in this file."""
-        self._patch_bounds(monkeypatch)
-        record = {
-            "keyVotes": self._make_votes(with_party=98, against_party=2),
-            "recentVotes": [],
-        }
-        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
-        score = _calc_constituent_alignment(
-            record, [], funding, state="NV", party="D", ideology_score=None,
-        )
-        assert score == 50
-
-    def test_position_mismatch_never_triggers_without_bounds_data(self, monkeypatch):
-        """A party too small for a stable tercile distribution (bounds
-        missing from party_ideology_bounds.json) never triggers a
-        discount — same missing-data posture as the ideology_score check."""
-        self._patch_bounds(monkeypatch, bounds={})
-        record = {
-            "keyVotes": self._make_votes(with_party=98, against_party=2),
-            "recentVotes": [],
-        }
-        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
-        score = _calc_constituent_alignment(
-            record, [], funding, state="NV", party="D", ideology_score=0.05,
-        )
-        assert score == 50
-
-    def test_position_mismatch_magnitude_capped_at_10_in_v6_8(self, monkeypatch):
-        """v6.8: POSITION_MISMATCH_MAX_PENALTY was cut from 25.0 to 10.0
-        after finding this discount and Coalition Breadth double-count the
-        same cosponsorship-derived signal (r=-0.76). Full-severity discount
-        (maximally unsafe seat, alignment 0.0) should land at exactly
-        50 - 10 = 40, not the pre-v6.8 25."""
-        self._patch_bounds(monkeypatch)
-        record = {
-            "keyVotes": self._make_votes(with_party=98, against_party=2),
-            "recentVotes": [],
-        }
-        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
-        score = _calc_constituent_alignment(
-            record, [], funding, state="NV", party="D", ideology_score=0.05,
-        )
-        assert score == 40
-
-    def test_extreme_loyalist_no_longer_lands_in_harsh_30s_band(self, monkeypatch):
-        """Fairness regression (v6.8): before this fix, a below-expected
-        loyalist with an extreme-tercile ideology_score AND a below-median
-        cross-party coalition breadth, in a safe seat — the actual
-        Duckworth/Murphy/Booker shape found in the 2026-07-21 fairness audit
-        (all three sit in comfortably safe D states) — scored 32-36 from the
-        two components double-penalizing the same cosponsorship-derived
-        signal. CT is Murphy's actual state. Same inputs should no longer
-        fall below 40. (v6.11: coalition breadth left this dimension
-        entirely — see TestBipartisanCoalitionAttraction — so the
-        double-count is now structurally impossible here; this test keeps
-        guarding the remaining discount channel.)"""
-        self._patch_bounds(monkeypatch)
-        record = {
-            "keyVotes": self._make_votes(with_party=98, against_party=2),
-            "recentVotes": [],
-        }
-        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
-        score = _calc_constituent_alignment(
-            record, [], funding, state="CT", party="D",
-            ideology_score=0.05,
-        )
-        assert score >= 40
-
-    def test_opposed_seat_still_expects_more_crossing_for_crossers(self):
-        """The seat-relative EXPECTED break rate still differs by lean — it
-        just only affects CROSSERS now, not loyalists. A member who crosses
-        20% gets more credit where the seat opposes their party (crossing
-        toward the state median) than where the seat aligns with it. A loyal
-        record, by contrast, floors at neutral in both seats (v6.6 — loyalty
-        is not penalized even where the seat 'expects' more crossing)."""
-        crosser = {
-            "keyVotes": self._make_votes(with_party=65, against_party=35),
-            "recentVotes": [],
-        }
-        loyalist = {
-            "keyVotes": self._make_votes(with_party=98, against_party=2),
-            "recentVotes": [],
-        }
-        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
-        # Crosser: opposed seat rewards crossing more than aligned seat.
-        assert _calc_constituent_alignment(
-            crosser, [], funding, state="MA", party="R"
-        ) > _calc_constituent_alignment(
-            crosser, [], funding, state="ID", party="R"
-        )
-        # Loyalist: floored at neutral regardless of seat lean.
-        assert _calc_constituent_alignment(
-            loyalist, [], funding, state="MA", party="R"
-        ) == _calc_constituent_alignment(
-            loyalist, [], funding, state="ID", party="R"
-        ) == 50
-
-    def test_crossing_not_rewarded_for_its_own_sake(self):
-        """Owner principle (2026-07-04): the goal is carrying out the
-        will of constituents, not defection. The same 25% break rate
-        earns much more in a swing seat (crossing toward the median
-        voter) than in a deep aligned seat (crossing away from it).
-        Safe-seat surplus crossing sits near neutral — not virtue, not
-        defiance — because break direction relative to state opinion is
-        unobservable. This is also the guardrail that kept a 9%-break
-        party leader from scoring as an independent (2026-06 audit)."""
-        record = {
-            "keyVotes": self._make_votes(with_party=75, against_party=25),
-            "recentVotes": [],
-        }
-        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
-        score_safe = _calc_constituent_alignment(
-            record, [], funding, state="WY", party="R"
-        )
-        score_swing = _calc_constituent_alignment(
-            record, [], funding, state="NV", party="R"
-        )
-        # Swing-seat crossing = toward the median voter = clearly better.
-        assert score_swing - score_safe >= 10
-        # Safe-seat surplus crossing hovers near neutral, never failure.
-        assert 50 <= score_safe <= 70
-        assert score_swing > 70
-
-    def test_nomination_votes_weighted_like_legislation(self):
-        """Nominations are whipped party-line tests; they count at full weight.
-
-        (A ×0.5 down-weighting experiment inflated the score for members
-        whose loyalty concentrates on nominations — see the note in
-        _calc_constituent_alignment.)
-        """
-        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
-        legis = {
-            "keyVotes": [
-                {"votedWithParty": i >= 10, "policyArea": "JUSTICE",
-                 "vote": "Yea", "stance": "neutral"}
-                for i in range(100)
-            ],
-            "recentVotes": [],
-        }
-        noms = {
-            "keyVotes": [
-                {"votedWithParty": i >= 10, "policyArea": "JUSTICE",
-                 "vote": "Yea", "stance": "nomination"}
-                for i in range(100)
-            ],
-            "recentVotes": [],
-        }
-        assert _calc_constituent_alignment(legis, [], funding) == \
-            _calc_constituent_alignment(noms, [], funding)
-
-    def test_break_rate_monotonic_with_spread(self):
-        """More crossing (relative to the same seat) never lowers the
-        score, and the range is meaningful."""
-        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
-        scores = []
-        for against in [0, 5, 10, 20, 40]:
-            record = {
-                "keyVotes": self._make_votes(with_party=100 - against, against_party=against),
-                "recentVotes": [],
-            }
-            scores.append(_calc_constituent_alignment(record, [], funding))
-        for i in range(1, len(scores)):
-            assert scores[i] >= scores[i - 1]
-        assert scores[-1] - scores[0] >= 25
 
 class TestFundingDiversity:
     """Higher score = broader, more distributed funding base."""
@@ -1261,7 +734,7 @@ class TestLegislativeEffectiveness:
         Lower bound trimmed from 45 to 40 (2026-07-21): party=None here
         maps to _advancement_baseline's flat unknowable-status rate
         (0.030), which sits almost exactly at the Senate's own real
-        average (_LES_AVG_BASELINE_SENATE=0.0305, since that fix) — so
+        average (the Senate reference's avg_baseline, 0.0305) — so
         this scenario is now correctly compared against close to the full
         Senate population-average bar rather than the old pooled
         cross-chamber constant's easier one."""
@@ -1459,7 +932,7 @@ class TestLegislativeEffectiveness:
     def test_credit_increases_with_bill_count_until_saturation(self):
         """More bills (same stage/significance) means more cumulative
         credit, so the score should rise with bill count — but the
-        expected-vs-actual gap saturates at _LES_CREDIT_SATURATION (same
+        expected-vs-actual gap saturates at 1.5 population stdevs (same
         "never a runaway score from one outlier" shape as every other
         saturation constant in this file), so two counts that are BOTH
         already past saturation score identically, same as e.g.
@@ -1503,25 +976,32 @@ class TestLegislativeEffectiveness:
         )
         assert house_score > senate_score
 
-    def test_advancement_baseline_is_chamber_specific(self):
-        """2026-07-21 fix: a single pooled _LES_AVG_BASELINE compared every
+    def test_advancement_baseline_is_chamber_specific(self, pinned_les_reference):
+        """2026-07-21 fix: a single pooled average baseline compared every
         member's own majority/minority advancement rate against ONE
         cross-chamber average, even though the two chambers' real rates
         genuinely differ (live audit: House mean ~0.044, Senate mean
-        ~0.031 — see the constants' own comment in score_calculator.py).
-        That silently inflated House members' expected-credit bar and
-        deflated the Senate's on top of the already-correct chamber split
-        for _LES_POPULATION_MEDIAN_* (then named _LES_POPULATION_AVG_*),
-        flipping the fairness the chamber split
-        was supposed to provide (live population: House went from 61%
-        scoring below neutral vs Senate's 38% to a much closer ~53-58%
-        split for both after this fix). This guards against a future
-        refactor silently re-collapsing the two constants back into one
-        shared value."""
-        assert _LES_AVG_BASELINE_HOUSE != _LES_AVG_BASELINE_SENATE
-        assert _LES_AVG_BASELINE_HOUSE > _LES_AVG_BASELINE_SENATE
+        ~0.031). That silently inflated House members' expected-credit bar
+        and deflated the Senate's (live population: House 61% below neutral
+        vs Senate 38% before the fix). Guards that a House member is
+        measured against the HOUSE reference only: changing the Senate
+        entry must not move a House member's score, and vice versa."""
+        import copy
 
-    def test_median_member_scores_near_neutral(self):
+        house_bills = [
+            {"title": f"B{i}", "isLaw": False, "latestAction": "Introduced",
+             "billType": "hr", "congress": 119}
+            for i in range(30)
+        ]
+        ref = copy.deepcopy(pinned_les_reference)
+        base = _calc_legislative_effectiveness(house_bills, None, les_reference=ref)
+        ref["senate"]["avg_baseline"] *= 2
+        ref["senate"]["median_credit"] *= 2
+        assert _calc_legislative_effectiveness(house_bills, None, les_reference=ref) == base
+        ref["house"]["median_credit"] *= 2
+        assert _calc_legislative_effectiveness(house_bills, None, les_reference=ref) < base
+
+    def test_median_member_scores_near_neutral(self, pinned_les_reference):
         """v6.10 (2026-07-23): the V&W component's reference point is each
         chamber's population MEDIAN, not its mean. The per-congress credit
         distribution is right-skewed (a minority of highly prolific sponsors
@@ -1539,7 +1019,7 @@ class TestLegislativeEffectiveness:
         # Introduced-only substantive "s" bills each earn weight(5)*stage(1)
         # = 5 cumulative credit; ~58 of them in one congress ≈ the Senate
         # median of 289 per-congress credit.
-        n = round(_LES_POPULATION_MEDIAN_SENATE / 5)
+        n = round(pinned_les_reference["senate"]["median_credit"] / 5)
         median_credit_bills = [
             {"title": f"B{i}", "isLaw": False, "latestAction": "Introduced",
              "billType": "s", "congress": 119}
@@ -1554,25 +1034,25 @@ class TestLegislativeEffectiveness:
         assert 46 <= score <= 56
 
     def test_population_reference_is_median_not_mean(self):
-        """Guard the mean->median switch itself (v6.10): the reference
-        constants must be each chamber's live-audit MEDIAN (Senate 289,
-        House 129 — re-run 2026-07-23 after PR #227's REFERRED-stage split
-        was actually reclassified into the `stage` column by a pipeline run,
-        see score_calculator.py's comment above these constants), which sits
-        strictly below the corresponding right-skewed MEAN (Senate 324.95,
-        House 143.80). A future recalibration that pasted the mean back in
-        would silently re-open the residual below-neutral imbalance this
-        version closed, and no behavioral test pins the exact constant.
-        House median stays well below the Senate's — 435 members split
-        similar institutional bandwidth — so the chamber split this rides on
-        top of is preserved too."""
-        assert _LES_POPULATION_MEDIAN_SENATE == 289.0
-        assert _LES_POPULATION_MEDIAN_HOUSE == 129.0
-        # Strictly below the (skewed) means they replaced.
-        assert _LES_POPULATION_MEDIAN_SENATE < 324.95
-        assert _LES_POPULATION_MEDIAN_HOUSE < 143.80
-        # Chamber split preserved: House norm far below the Senate's.
-        assert _LES_POPULATION_MEDIAN_HOUSE < _LES_POPULATION_MEDIAN_SENATE
+        """Guard the mean->median switch itself (v6.10): the reference point
+        is the chamber's MEDIAN per-congress credit, which for a right-skewed
+        population sits strictly below the mean. A reference computed from
+        the mean would silently re-open the below-neutral imbalance v6.10
+        closed. Since v6.13 the reference is measured every pipeline run
+        (compute_les_reference), so this pins the computation, not a
+        constant."""
+        def member(n_bills):
+            return ([
+                {"title": f"B{i}", "isLaw": False, "latestAction": "Introduced",
+                 "billType": "s", "congress": 119}
+                for i in range(n_bills)
+            ], "D")
+        # 40 typical members at 10 bills, 5 prolific ones at 200.
+        members = [member(10) for _ in range(40)] + [member(200) for _ in range(5)]
+        ref = compute_les_reference(members, congress=119, majority="R")
+        assert ref["median_credit"] == 50.0  # 10 bills x weight 5 x stage 1
+        assert ref["median_credit"] < ref["mean_credit"]
+        assert ref["n"] == 45
 
 
 class TestCalculateScoresIntegration:
@@ -1619,7 +1099,7 @@ class TestCalculateScoresIntegration:
 
         assert "fundingIndependence" in scores
         assert "promisePersistence" in scores
-        assert "independentVoting" in scores
+        assert "constituentAlignment" in scores
         assert "fundingDiversity" in scores
         assert "legislativeEffectiveness" in scores
         assert "transparency" not in scores
@@ -1687,7 +1167,7 @@ class TestCalculateConfidence:
                 "recentVotes": [],
             },
         }
-        assert calculate_confidence(senator)["independentVoting"] == "low"
+        assert calculate_confidence(senator)["constituentAlignment"] == "low"
 
     def test_unclear_promises_do_not_count(self):
         from app.pipeline.analyze.score_calculator import calculate_confidence
@@ -1818,164 +1298,6 @@ class TestBipartisanCoalitionAttraction:
             _calc_constituent_alignment(**base, bipartisanship=0.5)
 
 
-class TestPositionCongruence:
-    """v6.11: Constituent Alignment's position-congruence component —
-    DW-NOMINATE dim1 vs. a seat-conditional per-party expectation
-    (Canes-Wrone/Brady/Cogan 2002 district-relative extremity), fed
-    entirely from generated member_ideal_points.json data. These tests
-    inject synthetic data via the loader cache (same pattern as
-    _patch_bounds); the component's deterministic branch logic is what's
-    under test — magnitudes come from the generated file in production.
-
-    Synthetic D fit: expected_dim1 = -0.35 + 0.006*seat_pvi, saturation
-    p90 = 0.2. NV is a swing seat (alignment 0.0); VT is D+15 (alignment
-    pinned to 1.0, maximally safe for a D).
-
-    The seat PVIs are pinned via _state_pvi_cache, not read from the live
-    state_pvi.json: these expectations are exact arithmetic over the
-    docstring's stated leans, and a data regeneration that nudges NV off 0
-    (as the 2020+2024-window regeneration did, NV 0 -> +1) must not
-    silently shift this class's fixtures."""
-
-    def _patch_ideal_points(self, monkeypatch, members=None):
-        monkeypatch.setattr(
-            score_calculator, "_state_pvi_cache", {"NV": 0, "VT": -15},
-        )
-        monkeypatch.setattr(
-            score_calculator, "_member_ideal_points_cache",
-            {
-                "senate": {
-                    "members": members or {},
-                    "fit": {
-                        "D": {"a": -0.35, "b": 0.006},
-                        "R": {"a": 0.35, "b": 0.006},
-                    },
-                    "extremity_p90": 0.2,
-                },
-            },
-        )
-
-    def _loyal_record(self):
-        return {
-            "keyVotes": [
-                {"votedWithParty": True, "partyAlignmentWeight": 1.0}
-                for _ in range(98)
-            ] + [
-                {"votedWithParty": False, "partyAlignmentWeight": 1.0}
-                for _ in range(2)
-            ],
-            "recentVotes": [],
-        }
-
-    def test_flank_ward_position_scores_below_neutral_in_swing_seat(self, monkeypatch):
-        """dim1 -0.55 vs. -0.35 expected for a D in a PVI-0 seat: 0.2
-        flank-ward extremity = full saturation, full severity in a swing
-        seat -> congruence component 0, total 50*0.7 + 0*0.3 = 35."""
-        self._patch_ideal_points(monkeypatch, members={"X000001": -0.55})
-        score = _calc_constituent_alignment(
-            self._loyal_record(), [], {}, state="NV", party="D",
-            bioguide_id="X000001",
-        )
-        assert score == 35
-
-    def test_flank_ward_position_not_penalized_in_deep_safe_seat(self, monkeypatch):
-        """Same member in VT (alignment 1.0): severity scales to zero —
-        extremity in a deep safe aligned seat is the structural norm
-        (Bafumi & Herron 2010), same posture as the v6.7 discount."""
-        self._patch_ideal_points(monkeypatch, members={"X000001": -0.55})
-        score = _calc_constituent_alignment(
-            self._loyal_record(), [], {}, state="VT", party="D",
-            bioguide_id="X000001",
-        )
-        assert score == 50
-
-    def test_center_ward_position_earns_credit_in_swing_seat(self, monkeypatch):
-        """dim1 -0.15 vs. -0.35 expected: 0.2 center-ward = full
-        saturation, full credit in a swing seat -> congruence 100, total
-        50*0.7 + 100*0.3 = 65. A genuinely congruent member can now score
-        ABOVE 50 — the 'positive half' no rate-based signal could produce
-        (v6.6's disclosed limitation)."""
-        self._patch_ideal_points(monkeypatch, members={"X000001": -0.15})
-        score = _calc_constituent_alignment(
-            self._loyal_record(), [], {}, state="NV", party="D",
-            bioguide_id="X000001",
-        )
-        assert score == 65
-
-    def test_center_ward_credit_shrunk_in_deep_safe_seat(self, monkeypatch):
-        """Center-ward credit is seat-direction-discounted exactly like
-        surplus crossing (floor 0.25): in a deep safe seat the median
-        voter sits with the party, so moving toward the chamber center is
-        not clearly moving toward the seat."""
-        self._patch_ideal_points(monkeypatch, members={"X000001": -0.15})
-        swing = _calc_constituent_alignment(
-            self._loyal_record(), [], {}, state="NV", party="D",
-            bioguide_id="X000001",
-        )
-        safe = _calc_constituent_alignment(
-            self._loyal_record(), [], {}, state="VT", party="D",
-            bioguide_id="X000001",
-        )
-        assert 50 < safe < swing
-
-    def test_supersedes_position_mismatch_discount(self, monkeypatch):
-        """When NOMINATE congruence is active, the v6.7 SVD-based
-        position-mismatch discount must NOT also fire — measuring the
-        same construct twice is the v6.8 double-count. A member exactly
-        at the seat-conditional norm (residual 0 -> congruence 50) with
-        an extreme-tercile ideology_score in a swing seat scores 50, not
-        the discounted 40."""
-        monkeypatch.setattr(
-            score_calculator, "_party_ideology_bounds_cache",
-            {"senate": {"D": (0.3, 0.7), "R": (0.3, 0.7)}, "house": {}},
-        )
-        self._patch_ideal_points(monkeypatch, members={"X000001": -0.35})
-        score = _calc_constituent_alignment(
-            self._loyal_record(), [], {}, state="NV", party="D",
-            ideology_score=0.05, bioguide_id="X000001",
-        )
-        assert score == 50
-
-    def test_discount_still_fires_when_member_not_covered(self, monkeypatch):
-        """A member absent from the generated file falls back to the v6.7
-        discount path unchanged (full-severity swing-seat case = 40)."""
-        monkeypatch.setattr(
-            score_calculator, "_party_ideology_bounds_cache",
-            {"senate": {"D": (0.3, 0.7), "R": (0.3, 0.7)}, "house": {}},
-        )
-        self._patch_ideal_points(monkeypatch, members={})
-        score = _calc_constituent_alignment(
-            self._loyal_record(), [], {}, state="NV", party="D",
-            ideology_score=0.05, bioguide_id="X000001",
-        )
-        assert score == 40
-
-    def test_missing_data_file_component_skipped_entirely(self, monkeypatch):
-        """No generated file (loader cache empty) -> component skipped,
-        weight renormalized to the vote component — identical score with
-        or without a bioguide_id. Missing data is never punitive."""
-        monkeypatch.setattr(score_calculator, "_member_ideal_points_cache", {})
-        base = dict(state="NV", party="D")
-        with_bio = _calc_constituent_alignment(
-            self._loyal_record(), [], {}, **base, bioguide_id="X000001",
-        )
-        without_bio = _calc_constituent_alignment(
-            self._loyal_record(), [], {}, **base,
-        )
-        assert with_bio == without_bio == 50
-
-    def test_breakdown_component_present_and_weighted(self, monkeypatch):
-        self._patch_ideal_points(monkeypatch, members={"X000001": -0.15})
-        core = _constituent_alignment_core(
-            self._loyal_record(), [], {}, state="NV", party="D",
-            bioguide_id="X000001",
-        )
-        by_label = {c["label"]: c for c in core["components"]}
-        assert by_label["Seat-relative vote alignment"]["weight"] == 0.7
-        assert by_label["Position congruence"]["weight"] == 0.3
-        assert by_label["Position congruence"]["score"] == 100.0
-
-
 class TestComputeOverallScoreOnPartialColumnRows:
     """compute_overall_score is called against two different SQLAlchemy
     shapes in production: full ORM objects (e.g. senate_pipeline.py's
@@ -1989,7 +1311,7 @@ class TestComputeOverallScoreOnPartialColumnRows:
         db_session.add(Senator(
             id="S001", name="Test", state="CA", party="D",
             score_funding_independence=60, score_promise_persistence=999,
-            score_independent_voting=70, score_funding_diversity=65,
+            score_constituent_alignment=70, score_funding_diversity=65,
             score_legislative_effectiveness=82,
         ))
         db_session.commit()
@@ -1997,7 +1319,7 @@ class TestComputeOverallScoreOnPartialColumnRows:
         row = db_session.query(
             Senator.id, Senator.name, Senator.state, Senator.party,
             Senator.score_funding_independence, Senator.score_promise_persistence,
-            Senator.score_independent_voting, Senator.score_funding_diversity,
+            Senator.score_constituent_alignment, Senator.score_funding_diversity,
             Senator.score_legislative_effectiveness,
         ).first()
 
@@ -2016,7 +1338,7 @@ class TestComputeOverallScoreOnDict:
         db_session.add(Senator(
             id="S002", name="Test2", state="TX", party="R",
             score_funding_independence=60, score_promise_persistence=999,
-            score_independent_voting=70, score_funding_diversity=65,
+            score_constituent_alignment=70, score_funding_diversity=65,
             score_legislative_effectiveness=82,
         ))
         db_session.commit()
@@ -2025,7 +1347,7 @@ class TestComputeOverallScoreOnDict:
         as_dict = {
             "fundingIndependence": 60,
             "promisePersistence": 999,
-            "independentVoting": 70,
+            "constituentAlignment": 70,
             "fundingDiversity": 65,
             "legislativeEffectiveness": 82,
         }
@@ -2105,53 +1427,26 @@ class TestStatePviData:
         assert out["YY"] == 10  # positive = R lean
 
 
-class TestPartyIdeologyBoundsPersistence:
-    """write_party_ideology_bounds crashed a live ~90-minute production
-    pipeline run (2026-07-21): it wrote to app/data/party_ideology_bounds.json,
-    a path baked into the Docker image at build time (COPY'd from the repo)
-    and not writable at runtime — unlike state_pvi.json, which lives at that
-    same kind of path but is only ever written by an offline script and
-    committed to git, this file is generated by the running app itself every
-    pipeline run, so it needs the app's actual writable volume (/data, same
-    one civitas.db and Chroma live on) instead. Fixed by moving the path and
-    making the write resilient — a failure here must never abort an
-    otherwise-successful pipeline run, since this is a best-effort side
-    artifact (missing/stale bounds just mean the position-mismatch discount
-    doesn't trigger — see _party_ideology_bounds's own missing-data
-    fallback), not core pipeline output."""
+class TestLeadershipZeroIsAScore:
+    """compute_leadership_scores rescales a chamber's PageRank to [0, 1], so
+    the chamber's lowest member gets exactly 0.0. That used to be read as
+    "no data" and scored a neutral 50, while the next member up scored ~0."""
 
-    def test_write_uses_the_writable_data_volume_not_the_baked_in_image_path(self):
-        assert score_calculator._PARTY_IDEOLOGY_BOUNDS_PATH == "/data/party_ideology_bounds.json"
-        assert "/app/data/" not in score_calculator._PARTY_IDEOLOGY_BOUNDS_PATH
+    def test_zero_scores_below_the_next_member_up(self):
+        lowest = _legislative_effectiveness_core([], 0.0, years_in_office=8)
+        next_up = _legislative_effectiveness_core([], 0.001, years_in_office=8)
+        lead = {c["label"]: c for c in lowest["components"]}["Legislative leadership"]
+        assert lead["score"] == 0.0
+        assert lowest["score"] <= next_up["score"]
 
-    def test_write_failure_does_not_raise(self, monkeypatch):
-        """The exact live failure: PermissionError writing the file. Must
-        be caught, logged, and swallowed — not propagated up to abort the
-        pipeline run that's calling this as a minor side effect."""
-        import pathlib
+    def test_missing_is_still_neutral(self):
+        core = _legislative_effectiveness_core([], None, years_in_office=8)
+        lead = {c["label"]: c for c in core["components"]}["Legislative leadership"]
+        assert lead["score"] == 50.0
+        assert "no cosponsorship-network data" in lead["detail"]
 
-        def raise_permission_error(self, *a, **kw):
-            raise PermissionError("[Errno 13] Permission denied (simulated)")
-
-        monkeypatch.setattr(pathlib.Path, "write_text", raise_permission_error)
-        # Must not raise.
-        score_calculator.write_party_ideology_bounds("senate", {"D": (0.2, 0.4)})
-
-    def test_write_failure_does_not_corrupt_the_read_cache(self, monkeypatch):
-        """A failed write must not force-invalidate an existing valid cache
-        — _party_ideology_bounds_cache = None (forcing a reload) only
-        happens after a successful write in the real function."""
-        import pathlib
-
-        monkeypatch.setattr(
-            score_calculator, "_party_ideology_bounds_cache",
-            {"senate": {"D": (0.1, 0.9)}},
-        )
-
-        def raise_permission_error(self, *a, **kw):
-            raise PermissionError("simulated")
-
-        monkeypatch.setattr(pathlib.Path, "write_text", raise_permission_error)
-        score_calculator.write_party_ideology_bounds("senate", {"D": (0.2, 0.4)})
-
-        assert score_calculator._party_ideology_bounds_cache == {"senate": {"D": (0.1, 0.9)}}
+    def test_detail_does_not_call_it_a_percentile(self):
+        core = _legislative_effectiveness_core([], 0.3, years_in_office=8)
+        detail = {c["label"]: c for c in core["components"]}["Legislative leadership"]["detail"]
+        assert "percentile" not in detail
+        assert "within the chamber" in detail

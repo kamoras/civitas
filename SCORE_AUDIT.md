@@ -29,10 +29,10 @@ cur.execute("""
 SELECT name, state, party,
   round(score_funding_independence,1) fi,
   round(score_promise_persistence,1) pp,
-  round(score_independent_voting,1) iv,
+  round(score_constituent_alignment,1) ca,
   round(score_funding_diversity,1) fd,
   round(score_legislative_effectiveness,1) le,
-  round((score_funding_independence*0.33 + score_independent_voting*0.33
+  round((score_funding_independence*0.33 + score_constituent_alignment*0.33
        + score_legislative_effectiveness*0.34), 1) overall,  -- SCORE_WEIGHTS (config_definitions.py, v6.5+: PP/FD unweighted) — verify these match before trusting
   round(total_from_pacs/nullif(total_raised,0)*100, 2) pac_pct,
   round(total_raised/1e6, 2) raised_m
@@ -40,12 +40,12 @@ FROM senators ORDER BY overall DESC
 """)
 rows = cur.fetchall()
 
-print(f"{'Name':<28} {'ST':>2} {'P':>1}  {'FI':>4} {'PP':>4} {'IV':>4} {'FD':>4} {'LE':>4}  {'OVR':>4}  {'PAC%':>5} {'$M':>6}")
+print(f"{'Name':<28} {'ST':>2} {'P':>1}  {'FI':>4} {'PP':>4} {'CA':>4} {'FD':>4} {'LE':>4}  {'OVR':>4}  {'PAC%':>5} {'$M':>6}")
 print("-" * 90)
 for r in rows:
-    print(f"{r['name']:<28} {r['state']:>2} {r['party']:>1}  {r['fi'] or 0:>4} {r['pp'] or 0:>4} {r['iv'] or 0:>4} {r['fd'] or 0:>4} {r['le'] or 0:>4}  {r['overall'] or 0:>4}  {r['pac_pct'] or 0:>5} {r['raised_m'] or 0:>6}")
+    print(f"{r['name']:<28} {r['state']:>2} {r['party']:>1}  {r['fi'] or 0:>4} {r['pp'] or 0:>4} {r['ca'] or 0:>4} {r['fd'] or 0:>4} {r['le'] or 0:>4}  {r['overall'] or 0:>4}  {r['pac_pct'] or 0:>5} {r['raised_m'] or 0:>6}")
 
-for dim in ['fi','pp','iv','fd','le','overall']:
+for dim in ['fi','pp','ca','fd','le','overall']:
     vals = [r[dim] or 0 for r in rows]
     print(f"\n{dim.upper()}: min={min(vals)} max={max(vals)} mean={round(statistics.mean(vals),1)} stdev={round(statistics.stdev(vals),1)} median={statistics.median(vals)}")
 
@@ -123,7 +123,6 @@ checks = [
     ("Has campaign promises",  "EXISTS(SELECT 1 FROM campaign_promises cp WHERE cp.senator_id=s.id)"),
     ("Has lobbying matches",   "EXISTS(SELECT 1 FROM lobbying_matches lm WHERE lm.senator_id=s.id)"),
     ("Has industry breakdown", "EXISTS(SELECT 1 FROM industry_donations id2 WHERE id2.senator_id=s.id)"),
-    ("Has outside spending",   "total_raised > 0"),  # proxy — check actual field if column exists
 ]
 
 print(f"DATA COVERAGE ({total} senators total)")
@@ -142,17 +141,17 @@ for label, condition in checks:
 cur.execute("""
 SELECT name, state,
   score_funding_independence fi, score_promise_persistence pp,
-  score_independent_voting iv, score_funding_diversity fd
+  score_constituent_alignment ca, score_funding_diversity fd
 FROM senators
 WHERE abs(score_funding_independence - 50) < 2
   AND abs(score_promise_persistence - 50) < 2
-  AND abs(score_independent_voting - 50) < 2
+  AND abs(score_constituent_alignment - 50) < 2
 """)
 deserts = cur.fetchall()
 if deserts:
     print(f"\n⚠ DATA DESERTS (3+ dimensions defaulting near 50): {len(deserts)}")
     for r in deserts:
-        print(f"  {r['name']} ({r['state']}): FI={r['fi']} PP={r['pp']} IV={r['iv']} FD={r['fd']}")
+        print(f"  {r['name']} ({r['state']}): FI={r['fi']} PP={r['pp']} CA={r['ca']} FD={r['fd']}")
 else:
     print("\n✓ No data deserts found")
 
@@ -168,7 +167,7 @@ RIGHT JOIN senators s ON t.senator_id = s.id
 """)
 vd = dict(cur.fetchone())
 print(f"\nVOTE DATA DISTRIBUTION")
-print(f"  No votes:    {vd.get('no_votes',0):>3} senators (IV defaults to 50)")
+print(f"  No votes:    {vd.get('no_votes',0):>3} senators (CA defaults to 50)")
 print(f"  1-50 votes:  {vd.get('low',0):>3} senators (sparse)")
 print(f"  51-200:      {vd.get('mid',0):>3} senators (adequate)")
 print(f"  200+ votes:  {vd.get('high',0):>3} senators (good)")
@@ -212,13 +211,13 @@ cur = conn.cursor()
 
 cur.execute("""
 SELECT score_funding_independence fi, score_promise_persistence pp,
-       score_independent_voting iv, score_funding_diversity fd,
+       score_constituent_alignment ca, score_funding_diversity fd,
        score_legislative_effectiveness le
 FROM senators WHERE total_raised > 0
 """)
 rows = [dict(r) for r in cur.fetchall()]
 
-dims = ['fi', 'pp', 'iv', 'fd', 'le']
+dims = ['fi', 'pp', 'ca', 'fd', 'le']
 def corr(xs, ys):
     n = len(xs)
     mx, my = sum(xs)/n, sum(ys)/n
@@ -247,9 +246,9 @@ EOF
 
 **What to look for:**
 - Any off-diagonal correlation above 0.40 (absolute value) is a design problem.
-- PP×IV correlation above 0.4 means the PP fallback is still using voting data (check score_calculator.py).
+- PP×CA correlation above 0.4 means the PP fallback is still using voting data (check score_calculator.py).
 - FI×FD correlation above 0.5 is expected (both measure funding quality) but shouldn't be above 0.7.
-- IV×FI correlation above 0.4 suggests the donor independence component is driving both.
+- CA×FI correlation above 0.4 suggests the donor independence component is driving both.
 
 ---
 
@@ -273,7 +272,7 @@ if not s:
     print("Not found"); exit()
 
 print(f"=== {s['name']} ({s['state']}-{s['party']}) ===")
-print(f"FI={s['score_funding_independence']} PP={s['score_promise_persistence']} IV={s['score_independent_voting']} FD={s['score_funding_diversity']} LE={s['score_legislative_effectiveness']}")
+print(f"FI={s['score_funding_independence']} PP={s['score_promise_persistence']} CA={s['score_constituent_alignment']} FD={s['score_funding_diversity']} LE={s['score_legislative_effectiveness']}")
 print(f"Total raised: \${s['total_raised']:,.0f} | PAC total: \${s['total_from_pacs']:,.0f} ({round(s['total_from_pacs']/max(s['total_raised'],1)*100,1)}%)")
 
 # Vote breakdown
@@ -330,13 +329,13 @@ print(f"  Donor records:  {donors}")
 if total > 0:
     cur.execute("""
     SELECT state, count(*) n,
-      round(avg(score_independent_voting),1) avg_iv,
+      round(avg(score_constituent_alignment),1) avg_ca,
       round(avg(score_funding_independence),1) avg_fi
     FROM representatives GROUP BY state ORDER BY n DESC LIMIT 10
     """)
     print("\nTop states by rep count:")
     for r in cur.fetchall():
-        print(f"  {r['state']}: {r['n']} reps, avg IV={r['avg_iv']} FI={r['avg_fi']}")
+        print(f"  {r['state']}: {r['n']} reps, avg CA={r['avg_ca']} FI={r['avg_fi']}")
 
 conn.close()
 EOF
@@ -408,7 +407,7 @@ SELECT
   entity_id,
   date,
   overall_score,
-  score_1 fi, score_2 pp, score_3 iv, score_4 fd, score_5 le
+  score_1 fi, score_2 pp, score_3 ca, score_4 fd, score_5 le
 FROM score_snapshots
 WHERE entity_type = 'senator'
 ORDER BY entity_id, date
@@ -449,6 +448,24 @@ conn.close()
 EOF
 ```
 
+Then check the scores against records Civitas does not score from — Voteview
+roll calls and Nokken-Poole positions for Constituent Alignment, and (if you
+have the Center for Effective Lawmaking's file) their LES for Legislative
+Effectiveness:
+
+```bash
+docker exec "$(docker ps -q -f name=civitas_backend)" \
+  python3 scripts/benchmark_validation.py --chamber both [--les-csv /data/cel_les.csv]
+```
+
+It exits non-zero when a benchmark correlates in the wrong direction. v6.13
+has no recorded baseline yet; write the first run's correlations into the
+script's docstring and investigate any later drop of more than ~0.15.
+
+The research scripts under `backend/scripts/research_*.py` and
+`audit_funding_components.py` re-run the evidence behind v6.13's design
+decisions from public data (`docs/research/`).
+
 ---
 
 ## Iteration Decision Framework
@@ -459,8 +476,8 @@ After running the audit, use this framework to decide what to change:
 |---|---|---|
 | stdev < 8 on any dimension | Formula too narrow, or defaults dominate | Recalibrate multipliers; check default values |
 | mean > 65 on any dimension | Missing data treated as positive | Change "no data" default from positive to neutral (50) |
-| PP×IV correlation > 0.4 | PP fallback using vote data | Remove voting fallback from PP; use 50 |
-| FI > 85 for high-fundraising senators | Outside spending not captured | Check outsideSpendingFor field; verify FEC Schedule E fetch |
+| PP×CA correlation > 0.4 | PP fallback using vote data | Remove voting fallback from PP; use 50 |
+| FI > 85 for high-fundraising senators | PAC committee types unresolved, so the dollar fallback applied | Check donors.committee_type coverage; verify fetch_committee_type. (Outside spending is deliberately not scored since v6.13 — see docs/research/funding-independence.md) |
 | Derived consistency check ✗ | Vote/finance matching broken, or algorithm regression | The failure's rationale names the raw metric that decoupled; check key_votes/donor tables and the corresponding fetch |
 | >20% senators in data desert | API fetch failure | Check API cache, rate limits, name matching |
 | High score variance (>15 pts) on specific senator | Inconsistent vote/FEC matching | Add name normalization or use bioguide_id as primary key |

@@ -23,7 +23,7 @@ export interface Senator {
   representationScore: {
     fundingIndependence: number;
     promisePersistence: number;
-    independentVoting: number;
+    constituentAlignment: number;
     fundingDiversity: number;
     legislativeEffectiveness: number;
     /** Backend-computed weighted overall — never recompute this client-side. */
@@ -33,6 +33,8 @@ export interface Senator {
   };
   funding: {
     totalRaised: number;
+    /** Denominator for PAC / small-donor shares — see lib/funding.ts. */
+    totalContributions?: number | null;
     totalFromPACs: number;
     smallDonorPercentage: number;
     topDonors: Donor[];
@@ -188,7 +190,9 @@ export interface CampaignPromise {
 }
 
 export interface ScoreTrend {
-  direction: "up" | "down" | "stable" | "new";
+  /** "reset": the member has history, but none on the current scoring
+   *  method and Congress — so there is no like-for-like change to show. */
+  direction: "up" | "down" | "stable" | "new" | "reset";
   change: number;
   previousScore: number | null;
 }
@@ -203,6 +207,7 @@ export interface LeaderboardEntry {
   initials: string;
   representationScore: Senator["representationScore"];
   totalRaised: number;
+  totalContributions?: number | null;
   totalFromPacs: number;
   smallDonorPercentage: number;
   topIndustry: string | null;

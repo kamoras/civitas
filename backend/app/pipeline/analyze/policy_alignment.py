@@ -374,7 +374,7 @@ def detect_donor_vote_connections(
             # authored industry->stance mapping would be exactly the
             # kind of authored political conclusion this platform's
             # scores are designed never to contain (2026-07 audit;
-            # see score_calculator.py's Independent Voting note).
+            # see score_calculator.py's Constituent Alignment note).
             "senatorVoteAligned": None,
             "isConsensusVote": all_consensus,
             "similarity": round(best_sim, 3),

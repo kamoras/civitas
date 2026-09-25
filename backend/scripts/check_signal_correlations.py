@@ -1,6 +1,6 @@
 """Standing post-run check for v6.11's disclosed signal-overlap risks.
 
-score_calculator.py's v6.11 changelog names two component pairs that are
+docs/methodology/member-score/v6.11.md names two component pairs that are
 measured from related data and must be re-checked against the live
 population after every meaningful pipeline run — the same discipline that
 caught the v6.8 double-count (ideology_score extremity vs.
@@ -87,9 +87,9 @@ def collect_pairs(entries: list[dict]) -> dict:
     le_pairs: list[tuple[float, float]] = []
     iv_scores: list[float] = []
     for b in entries:
-        ca = component_scores(b, "independentVoting")
+        ca = component_scores(b, "constituentAlignment")
         le = component_scores(b, "legislativeEffectiveness")
-        iv = (b.get("independentVoting") or {}).get("score")
+        iv = (b.get("constituentAlignment") or {}).get("score")
         if iv is not None:
             iv_scores.append(float(iv))
         if "Seat-relative vote alignment" in ca and "Position congruence" in ca:
@@ -136,12 +136,12 @@ def main() -> int:
             try:  # single source of truth when run from the repo; plain report otherwise
                 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent.parent))
                 from app.pipeline.analyze.ground_truth import MIN_STDEV
-                floor = MIN_STDEV.get("score_independent_voting")
+                floor = MIN_STDEV.get("score_constituent_alignment")
                 if floor is not None:
                     floor_note = f" vs floor {floor} [{'ok' if stdev >= floor else 'ACTION'}]"
                     any_action |= stdev < floor
             except Exception:
-                floor_note = " (compare against ground_truth.MIN_STDEV['score_independent_voting'])"
+                floor_note = " (compare against ground_truth.MIN_STDEV['score_constituent_alignment'])"
             print(f"  CA population stdev: {stdev:.2f}{floor_note}")
         for r, n in ((r_ca, len(got["ca_pairs"])), (r_le, len(got["le_pairs"]))):
             if r is not None and abs(r) >= ACTION_R:

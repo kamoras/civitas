@@ -1,5 +1,6 @@
 """Fetch modules for the FEC (Federal Election Commission) API."""
 
+from datetime import date, timedelta
 import logging
 import re
 from urllib.parse import quote
@@ -64,30 +65,35 @@ async def _fetch_with_retry(
     return resp.json() if resp is not None else None
 
 
-async def _candidate_exists(client: httpx.AsyncClient, db: Session, candidate_id: str) -> bool:
-    """Whether `candidate_id` resolves to a real FEC candidate at all.
+async def _candidate_latest_election(
+    client: httpx.AsyncClient, db: Session, candidate_id: str,
+) -> int | None:
+    """The latest election year on an FEC candidate id's profile (0 when the
+    profile lists none), or None when the id doesn't resolve at all.
 
     Checks the bare /candidate/{id}/ profile endpoint, not /totals/ — a
     real but financially inactive candidate can have zero totals rows,
-    which would make /totals/ a false "doesn't exist" for someone who
-    does. Only a confirmed-real result is cached (permanently — a
-    candidate id's existence doesn't change once assigned): a False
-    result here can't be told apart from _fetch_with_retry exhausting
-    its own retries on a transient FEC outage, and caching THAT
-    negatively would permanently blacklist a genuinely valid id over a
-    one-time network blip. An uncached False just means the next run
-    checks again.
+    which would make /totals/ a false "doesn't exist". Only a resolved id is
+    cached: a miss can't be told apart from _fetch_with_retry exhausting its
+    retries on a transient FEC outage, and caching that would blacklist a
+    valid id over a one-time network blip. The resolved result uses the
+    normal cache TTL, not forever — an id's election years grow when the
+    member files for a new cycle.
     """
-    cache_key = f"candidate-exists-{candidate_id}"
+    cache_key = f"candidate-profile-{candidate_id}"
     cached = api_cache_get(db, "fec", cache_key)
     if cached is not None:
-        return bool(cached.get("exists"))
+        return int(cached.get("latest_election") or 0)
 
     data = await _fetch_with_retry(client, f"{FEC_API_BASE}/candidate/{candidate_id}/")
-    exists = bool((data or {}).get("results"))
-    if exists:
-        api_cache_set(db, "fec", cache_key, {"exists": True})
-    return exists
+    results = (data or {}).get("results") or []
+    if not results:
+        return None
+    profile = results[0]
+    years = [int(y) for y in (profile.get("election_years") or profile.get("cycles") or []) if y]
+    latest = max(years) if years else 0
+    api_cache_set(db, "fec", cache_key, {"latest_election": latest})
+    return latest
 
 
 def _fec_first_name(c_name: str) -> str:
@@ -141,16 +147,27 @@ async def find_candidate(
     if bioguide_id:
         crosswalk = await fetch_bioguide_to_fec_ids(client, db)
         fec_ids = crosswalk.get(bioguide_id)
+        # A member can hold several valid ids for the same chamber — one per
+        # campaign registration — and the crosswalk's order is not recency.
+        # John McGuire (VA-5) has H2VA07196 for a 2022 VA-7 run he lost and
+        # H0VA07133 for the 2024 win and his 2026 race (FEC bulk cn22/cn26,
+        # checked 2026-09); taking the first id that resolves scored him on
+        # the 2022 committee. Among ids that resolve, the one with the latest
+        # election is the current campaign; ties keep crosswalk order.
+        resolved: list[tuple[int, str]] = []
         for fec_id in select_all_fec_ids_for_office(fec_ids, office) if fec_ids else []:
-            if await _candidate_exists(client, db, fec_id):
-                match = {"candidate_id": fec_id}
-                api_cache_set(db, "fec", cache_key, match)
-                return match
-            logger.warning(
-                "Bioguide->FEC crosswalk id %s for %s (%s) does not resolve "
-                "on FEC — trying the next candidate for this office, if any",
-                fec_id, bioguide_id, office,
-            )
+            latest = await _candidate_latest_election(client, db, fec_id)
+            if latest is None:
+                logger.warning(
+                    "Bioguide->FEC crosswalk id %s for %s (%s) does not resolve on FEC",
+                    fec_id, bioguide_id, office,
+                )
+                continue
+            resolved.append((latest, fec_id))
+        if resolved:
+            match = {"candidate_id": max(resolved, key=lambda r: r[0])[1]}
+            api_cache_set(db, "fec", cache_key, match)
+            return match
 
     name_parts = name.split()
     last_name = name_parts[-1] if name_parts else name
@@ -365,8 +382,47 @@ def _sort_financials_recent_first(results: list[dict]) -> list[dict]:
     )
 
 
-def select_recent_elections(financials: list[dict], n: int = 1) -> list[dict]:
-    """One totals row per election, most recent ``n`` elections first.
+def general_election_day(year: int) -> date:
+    """The federal general election date for `year`: the Tuesday after the
+    first Monday in November (2 U.S.C. §7) — a statutory fact, not a
+    calibration."""
+    nov1 = date(year, 11, 1)
+    first_monday = nov1 + timedelta(days=(0 - nov1.weekday()) % 7)
+    return first_monday + timedelta(days=1)
+
+
+def _is_completed_election(row: dict, today: date) -> bool:
+    """True once the row's general election has actually been held."""
+    year = financials_election_year(row)
+    if year is None:
+        return False
+    return year < today.year or (year == today.year and today > general_election_day(year))
+
+
+# Years a member of each chamber serves per election won. Used to reject a
+# completed election too old to be the one that seated them.
+_TERM_YEARS = {"S": 6, "H": 2}
+
+
+def seat_winning_floor(office: str | None, today: date) -> int | None:
+    """Earliest election year that could have won the seat held right now.
+
+    A House member serving today was elected at most one 2-year term ago;
+    a senator at most one 6-year term ago. An older completed election is
+    a DIFFERENT campaign — usually one they lost before winning the seat
+    they now hold.
+    """
+    term = _TERM_YEARS.get(office or "")
+    if term is None:
+        return None
+    newest_cycle = today.year if today.year % 2 == 0 else today.year + 1
+    return newest_cycle - term
+
+
+def select_recent_elections(
+    financials: list[dict], n: int = 1, office: str | None = None,
+) -> list[dict]:
+    """One totals row per election, most recent ``n`` COMPLETED elections first.
 
     Funding dimensions are windowed to the candidate's most recent election
     (their current mandate's campaign) rather than "current congress only"
@@ -385,19 +441,44 @@ def select_recent_elections(financials: list[dict], n: int = 1) -> list[dict]:
     largest-receipts row per election year: the election-full aggregate
     supersedes its own partial cycle rows.
 
-    Only rows with a confirmed past/current election year are eligible —
-    see financials_election_year for why an off-cycle dormant row must
-    not outrank the real most recent election.
+    Only elections that have been HELD count (general election day has
+    passed — _is_completed_election). The campaign that won a member their
+    current seat is the one they're serving under; a re-election campaign
+    still in progress is their NEXT mandate's, and scoring it mixed
+    members on complete races with members on half-finished ones —
+    through most of an election year every House member and a third of the
+    Senate were scored on an in-progress cycle whose money arrives on a
+    different schedule (late small-dollar surges) from a finished one.
+    A candidate with no completed election yet (an appointed senator
+    before their first race) falls back to the in-progress one — it's the
+    only campaign they have. See financials_election_year for why an
+    off-cycle dormant row must not outrank a real election.
+
+    `office` ("S"/"H") bounds how far back a completed election may be and
+    still be the one that seated them. Without it, "most recent completed"
+    silently reaches back to an OLD LOSING RUN: measured against live FEC
+    data for 25 current House members, Clay Fuller (GA-14, seated by a
+    2026 special, years_in_office=0) has rows for 2026 ($1.8M, in
+    progress) and 2020 ($0.4M) — and would have been scored on the 2020
+    campaign, which did not win him anything. Omitting `office` keeps the
+    unbounded behaviour, so a caller that cannot say which chamber never
+    loses data over this.
     """
-    current_year = utcnow().year
-    by_year: dict[int, dict] = {}
+    today = utcnow().date()
+    completed: dict[int, dict] = {}
+    in_progress: dict[int, dict] = {}
     for row in financials:
-        if not _is_confirmed_past_or_current_election(row, current_year):
-            continue
         year = financials_election_year(row)
-        best = by_year.get(year)
+        if year is None or year > today.year:
+            continue
+        bucket = completed if _is_completed_election(row, today) else in_progress
+        best = bucket.get(year)
         if best is None or (row.get("receipts") or 0) > (best.get("receipts") or 0):
-            by_year[year] = row
+            bucket[year] = row
+    floor = seat_winning_floor(office, today)
+    if floor is not None:
+        completed = {y: r for y, r in completed.items() if y >= floor}
+    by_year = completed or in_progress
     if not by_year:
         # No row carries a confirmed election year (not seen in real FEC
         # data) — fall back to the caller's ordering rather than dropping
@@ -406,22 +487,39 @@ def select_recent_elections(financials: list[dict], n: int = 1) -> list[dict]:
     return [by_year[y] for y in sorted(by_year, reverse=True)[:n]]
 
 
-def compute_recent_election_cycles(financials: list[dict]) -> list[int]:
+# Two-year filing periods in one full election period, by office. FEC's
+# election-full totals (what select_recent_elections picks) cover the whole
+# period — six years for the Senate, two for the House — so the itemized
+# receipt detail compared against them must cover the same span.
+_ELECTION_PERIOD_CYCLES = {"S": 3, "H": 1}
+
+
+def election_period_cycles(election_year: int, office: str) -> list[int]:
+    """The two-year transaction periods making up one election period for
+    `office` ("S"/"H", FEC's own office codes), newest first."""
+    n = _ELECTION_PERIOD_CYCLES.get(office, 1)
+    return [election_year - 2 * i for i in range(n)]
+
+
+def compute_recent_election_cycles(financials: list[dict], office: str) -> list[int]:
     """The receipt-query cycle window for a candidate's most recent election.
 
-    Includes the preceding 2-year cycle since both independent expenditures
-    and a campaign's own receipts accrue across the full election period,
-    not just the election year. Without this, top-donor/industry-breakdown
-    detail was drawn from the committee's entire career while the totals it's
-    compared against were windowed to the recent election (2026-07 audit
-    finding). Shared by senate_pipeline.py and house_pipeline.py's funding
-    fetch phases — both window committee-receipt queries to this same range.
+    Covers the election's full period so top-donor/industry-breakdown
+    detail matches the totals it's compared against (a 2026-07 audit found
+    detail drawn from the committee's whole career against windowed
+    totals). The previous fixed two-cycle window was wrong both ways: it
+    dropped the first two years of a six-year Senate period, and pulled the
+    House member's PREVIOUS election into the detail. Shared by
+    senate_pipeline.py ("S") and house_pipeline.py ("H"). Passes `office` on
+    so the detail window is bounded exactly like the totals
+    (normalize_finance) — otherwise an old losing run would supply the
+    donor detail for a member whose totals come from the current campaign.
     """
     cycles: list[int] = []
-    for c in select_recent_elections(financials):
+    for c in select_recent_elections(financials, office=office):
         election_year = financials_election_year(c)
         if election_year:
-            cycles.extend([int(election_year), int(election_year) - 2])
+            cycles.extend(election_period_cycles(int(election_year), office))
     return cycles
 
 
@@ -619,54 +717,3 @@ async def fetch_aggregated_contributors(
     results = (data or {}).get("results", [])
     api_cache_set(db, "fec", cache_key, results)
     return results
-
-
-async def fetch_outside_spending(
-    client: httpx.AsyncClient, db: Session, candidate_id: str,
-    cycles: list[int] | None = None,
-) -> dict:
-    """Fetch independent expenditures (super PAC outside spending) supporting a candidate.
-
-    Returns totals for expenditures supporting the candidate (not opposing).
-    These are not controlled by the candidate but signal industry alignment
-    and are a key signal for senior legislators who rely on outside support.
-
-    Uses the aggregate endpoint /schedules/schedule_e/totals/by_candidate/,
-    which returns complete per-cycle totals in one call. The raw
-    /schedules/schedule_e/ list is paginated and summing a single page
-    truncates the total at the 50 largest expenditures.
-
-    Args:
-        cycles: Election cycles to include. When given, should match the
-            cycles used for receipt totals so outside spending covers the
-            same window. When omitted, the two most recent cycles with
-            supporting expenditures are used.
-    """
-    cycle_tag = "-".join(str(c) for c in sorted(cycles)) if cycles else "recent"
-    cache_key = f"outside-spending-v2-{candidate_id}-{cycle_tag}"
-    cached = api_cache_get(db, "fec", cache_key)
-    if cached is not None:
-        return cached
-
-    data = await _fetch_with_retry(
-        client,
-        f"{FEC_API_BASE}/schedules/schedule_e/totals/by_candidate/"
-        f"?candidate_id={candidate_id}&per_page=100",
-    )
-
-    results = (data or {}).get("results", [])
-    support = [r for r in results if r.get("support_oppose_indicator") == "S"]
-    if cycles:
-        wanted = {c for c in cycles if c}
-        support = [r for r in support if r.get("cycle") in wanted]
-    else:
-        recent = sorted(
-            {r.get("cycle") for r in support if r.get("cycle")}, reverse=True
-        )[:2]
-        support = [r for r in support if r.get("cycle") in set(recent)]
-
-    total_for = sum(r.get("total", 0) or 0 for r in support)
-
-    result = {"totalFor": round(total_for, 2), "count": len(support)}
-    api_cache_set(db, "fec", cache_key, result)
-    return result

@@ -53,6 +53,45 @@ def _is_candidate_line(receipt: dict) -> bool:
     return str(receipt.get("line_number") or "") == "11D"
 
 
+def summarize_election_totals(recent_cycles: list[dict]) -> dict:
+    """Dollar totals for one election window (select_recent_elections'
+    rows), shared by the pipeline and scripts/rescore.py so the two can't
+    compute funding differently.
+
+    `total_raised` is FEC's `receipts` — the headline figure, shown as
+    "raised". It also contains money that isn't a contribution to this
+    candidate: transfers in from joint fundraising committees and other
+    authorized committees, bank loans, refunds and offsets. Shares (PAC %,
+    small-donor %) are computed over `total_contributions` instead: FEC's
+    `contributions` (individuals + PACs + party committees + the
+    candidate's own contributions) plus loans the candidate made to their
+    own campaign — money from contributors or from the candidate. Using
+    receipts understated PAC dependency for exactly the members who raise
+    most heavily through joint fundraising committees (typically party
+    leaders): the transfer dollars sat in the denominator while their PAC
+    content was invisible. JFC transfers are excluded from both sides —
+    FEC totals don't break them down by source, so the shares describe
+    money the campaign received directly. Falls back to receipts when a
+    cached row predates the `contributions` field.
+
+    Every sum floors at 0: FEC's per-cycle totals can be genuinely negative
+    (a just-opened next-cycle committee with more refunds than receipts —
+    2026-07 audit), and "negative dollars raised" is never meaningful.
+    """
+    def total(field: str) -> float:
+        return max(0.0, sum(c.get(field, 0) or 0 for c in recent_cycles))
+
+    total_raised = total("receipts")
+    contributions = total("contributions") + total("loans_made_by_candidate")
+    return {
+        "total_raised": total_raised,
+        "total_contributions": contributions if contributions > 0 else total_raised,
+        "total_from_pacs": total("other_political_committee_contributions"),
+        "small_individual": total("individual_unitemized_contributions"),
+        "large_individual": total("individual_itemized_contributions"),
+    }
+
+
 def normalize_finance(
     candidate: dict | None,
     financials: list[dict],
@@ -61,7 +100,6 @@ def normalize_finance(
     aggregated_contributors: list[dict],
     ai_classifications: dict[str, dict] | None = None,
     db_session=None,
-    outside_spending: dict | None = None,
     committee_type_map: dict[str, str | None] | None = None,
 ) -> dict:
     """Normalize FEC financial data into the Senator funding shape.
@@ -73,8 +111,6 @@ def normalize_finance(
         pac_receipts: PAC/committee contribution receipts (Schedule A, is_individual=false).
         aggregated_contributors: Top contributors by total.
         ai_classifications: Optional AI classifications for donors (type + industry).
-        outside_spending: Optional outside spending dict with totalFor and count from
-            fetch_outside_spending (super PAC independent expenditures supporting the candidate).
         committee_type_map: Optional contributor_id -> FEC committee_type code,
             pre-resolved by the caller (see fec.fetch_committee_type). Passed
             through to build_top_donors for the PAC-utilization signal.
@@ -85,34 +121,18 @@ def normalize_finance(
     # Sum across the candidate's most recent election only (their current
     # mandate's campaign) — see select_recent_elections for rationale and
     # why raw [:2] double-counted.
-    recent_cycles = select_recent_elections(financials)
-
-    # FEC's per-cycle `receipts` (and the sub-totals below) can be
-    # genuinely negative in the raw API response — a committee with more
-    # refunds/adjustments than new money in a reporting period, most
-    # often for a just-opened next-cycle committee (2026-07 audit found
-    # a sitting representative's committee at receipts=-$1.6M for its
-    # still-forming next election, which is real upstream FEC data, not
-    # a fetch bug). Averaged against a real prior election this usually
-    # nets positive, but nothing enforced that. Floor every summed total
-    # at 0 — "negative dollars raised" is never a meaningful value to
-    # show, regardless of why the underlying FEC row was negative.
-    total_raised = max(0.0, sum(c.get("receipts", 0) or 0 for c in recent_cycles))
-    total_from_pacs = max(0.0, sum(
-        c.get("other_political_committee_contributions", 0) or 0
-        for c in recent_cycles
-    ))
-    small_individual = max(0.0, sum(
-        c.get("individual_unitemized_contributions", 0) or 0
-        for c in recent_cycles
-    ))
-    large_individual = max(0.0, sum(
-        c.get("individual_itemized_contributions", 0) or 0
-        for c in recent_cycles
-    ))
-
+    # office bounds how stale a "completed election" may be — see
+    # select_recent_elections. The FEC candidate record carries it.
+    recent_cycles = select_recent_elections(
+        financials, office=(candidate or {}).get("office"))
+    totals = summarize_election_totals(recent_cycles)
+    total_raised = totals["total_raised"]
+    contribution_base = totals["total_contributions"]
+    total_from_pacs = totals["total_from_pacs"]
+    small_individual = totals["small_individual"]
+    large_individual = totals["large_individual"]
     small_donor_percentage = (
-        round((small_individual / total_raised) * 100) if total_raised > 0 else 0
+        round((small_individual / contribution_base) * 100) if contribution_base > 0 else 0
     )
 
     # Build top donors: PACs first, then employer-grouped individuals
@@ -134,7 +154,7 @@ def normalize_finance(
         aggregated_contributors=aggregated_contributors,
         small_individual_total=small_individual,
         large_individual_total=large_individual,
-        total_raised=total_raised,
+        contribution_base=contribution_base,
         ai_classifications=ai_classifications,
         db_session=db_session,
         candidate_name=candidate_name,
@@ -152,19 +172,17 @@ def normalize_finance(
     # actual for senior senators, which then scored as funding independence.
     # Use the classifier sum only when the FEC total is missing.
     if total_from_pacs > 0:
-        final_pac_total = min(total_from_pacs, total_raised)
+        final_pac_total = min(total_from_pacs, contribution_base)
     else:
-        final_pac_total = min(computed_pac_total, total_raised)
-
-    outside_spending_for = outside_spending.get("totalFor", 0) if outside_spending else 0
+        final_pac_total = min(computed_pac_total, contribution_base)
 
     return {
         "totalRaised": round(total_raised),
+        "totalContributions": round(contribution_base),
         "totalFromPACs": round(final_pac_total),
         "smallDonorPercentage": small_donor_percentage,
         "topDonors": top_donors,
         "industryBreakdown": industry_breakdown,
-        "outsideSpendingFor": outside_spending_for,
     }
 
 
@@ -367,7 +385,7 @@ def _build_industry_breakdown(
     aggregated_contributors: list[dict],
     small_individual_total: float,
     large_individual_total: float,
-    total_raised: float,
+    contribution_base: float,
     ai_classifications: dict[str, dict] | None = None,
     db_session=None,
     candidate_name: str = "",
@@ -485,13 +503,13 @@ def _build_industry_breakdown(
 
     # Add an UNCLASSIFIED bucket for money not captured by any classification
     raw_total = sum(ind["total"] for ind in industry_totals.values())
-    unclassified = total_raised - raw_total
-    if unclassified > total_raised * 0.01:
+    unclassified = contribution_base - raw_total
+    if unclassified > contribution_base * 0.01:
         industry_totals["UNCLASSIFIED"] = {
             "industry": "UNCLASSIFIED", "name": "UNCLASSIFIED",
             "total": unclassified,
         }
-        raw_total = total_raised
+        raw_total = contribution_base
 
     denom = raw_total if raw_total > 0 else 1
     breakdown = []

@@ -10,6 +10,7 @@ from app.pipeline.analyze.sponsorship_analysis import (
     STALLED_EDGE_WEIGHT,
     _build_cosponsorship_matrix,
     _cosponsorship_edge_weight,
+    _edge_weight_fn,
     _rescale,
     compute_bipartisanship_scores,
     compute_ideology_scores,
@@ -56,14 +57,32 @@ class TestCosponsorshipEdgeWeight:
             pytest.param(False, "Ordered to be reported by voice vote.", ADVANCED_EDGE_WEIGHT, id="ordered_reported"),
             pytest.param(False, "Referred to the Committee on Finance.", STALLED_EDGE_WEIGHT, id="stalled_in_committee"),
             pytest.param(False, "", STALLED_EDGE_WEIGHT, id="empty_action_treated_as_stalled"),
-            # No outcome data at all (older enrichment path) — don't
-            # penalize a data gap, fall back to the pre-fix flat weight.
-            pytest.param(False, None, ENACTED_EDGE_WEIGHT, id="missing_data_defaults_to_original_flat_weight"),
+            # No outcome data at all (older enrichment path): unknown, not
+            # enacted — _edge_weight_fn fills it with the typical known bill.
+            pytest.param(False, None, None, id="missing_data_is_unknown"),
         ],
     )
     def test_edge_weight(self, is_law, latest_action, expected):
         bill = {"isLaw": is_law, "latestAction": latest_action}
         assert _cosponsorship_edge_weight(bill) == expected
+
+    def test_unknown_outcome_gets_the_mean_known_weight_not_the_maximum(self):
+        """A bill with no outcome data used to count as ENACTED — the
+        maximum — so outcome-less sponsors looked like every bill became
+        law. It now gets the mean weight of this run's known bills."""
+        bills = [
+            {"isLaw": True, "latestAction": "Became Public Law"},
+            {"isLaw": False, "latestAction": "Referred to the Committee on Finance."},
+            {"isLaw": False, "latestAction": None},
+        ]
+        weight = _edge_weight_fn(bills)
+        assert weight(bills[2]) == pytest.approx((ENACTED_EDGE_WEIGHT + STALLED_EDGE_WEIGHT) / 2)
+        assert weight(bills[0]) == ENACTED_EDGE_WEIGHT
+        assert weight(bills[1]) == STALLED_EDGE_WEIGHT
+
+    def test_all_unknown_is_a_uniform_weight(self):
+        weight = _edge_weight_fn([{"latestAction": None}, {"latestAction": None}])
+        assert weight({"latestAction": None}) == ENACTED_EDGE_WEIGHT
 
     def test_known_accepted_false_positive_pattern(self):
         """O7 disclosed exception: real production measurement (1366

@@ -1,5 +1,6 @@
 "use client";
 
+import { fundingShareBase, pacSharePct } from "@/lib/funding";
 import { Senator, VotingRecord, SponsoredBill } from "@/types/senator";
 import { getScoreLabel, getScoreColor, getScoreBgColor, asciiScoreBar } from "@/lib/representation";
 import MetricTooltip from "./MetricTooltip";
@@ -31,21 +32,21 @@ function getScoreGrade(score: number): string {
   return "F";
 }
 
-// v6.5: fundingDiversity folded into fundingIndependence as two of its
-// five components (source breadth, industry concentration) — no longer
+// v6.5: fundingDiversity folded into fundingIndependence (its industry
+// concentration is one of FI's components since v6.13) — no longer
 // its own scored dimension or card here. score_funding_diversity keeps
 // being computed/stored for other consumers (e.g. Bluesky spotlight
 // text), so it's deliberately NOT in this list, not an oversight.
 const SCORE_KEYS: ScoreKey[] = [
   "fundingIndependence",
-  "independentVoting",
+  "constituentAlignment",
   "legislativeEffectiveness",
 ];
 
 const METRIC_BLURBS: Record<ScoreKey, string> = {
   fundingIndependence:
     "How little of their campaign comes from PACs, and how diversified their donor base is",
-  independentVoting: "Does their voting match what their state elected them to do?",
+  constituentAlignment: "Does their voting match what their state elected them to do?",
   fundingDiversity: "How many different industries fund them",
   legislativeEffectiveness: "How well they advance bills they sponsor",
 };
@@ -152,10 +153,10 @@ export default function RepresentationScore({
   // Surface the FI sub-components so the score is an auditable claim,
   // not a black-box number (matches the methodology on /about).
   const fundingIndependenceBasis: string | undefined = (() => {
-    if (!funding || funding.totalRaised === 0) {
+    if (!funding || fundingShareBase(funding) === 0) {
       return "no funding data · defaults to 50";
     }
-    const pacPct = Math.round(((funding.totalFromPACs ?? 0) / funding.totalRaised) * 100);
+    const pacPct = Math.round(pacSharePct(funding.totalFromPACs, funding));
     const smallPct = Math.round(funding.smallDonorPercentage ?? 0);
     const external = (funding.topDonors ?? []).filter(
       (d) => d.type !== "CandidateAffiliated" && d.type !== "Self-Funded"
@@ -178,7 +179,7 @@ export default function RepresentationScore({
         : `${nBills} bills sponsored`;
 
   const scoreBasis: Partial<Record<ScoreKey, string | undefined>> = {
-    independentVoting: votingBasis,
+    constituentAlignment: votingBasis,
     fundingIndependence: fundingIndependenceBasis,
     legislativeEffectiveness: effectivenessBasis,
   };

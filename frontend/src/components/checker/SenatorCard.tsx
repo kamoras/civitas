@@ -1,3 +1,4 @@
+import { pacSharePct } from "@/lib/funding";
 import { Senator } from "@/types/senator";
 import { formatCurrency } from "@/lib/formatting";
 import { safeHref } from "@/lib/formatting";
@@ -137,12 +138,9 @@ export default function SenatorCard({
   leadershipTitle,
   titleAs: Title = "h2",
 }: SenatorCardProps) {
-  // Guard against zero fundraising (0/0 = NaN) — matches the compare and
-  // leaderboard views, which both gate on totalRaised > 0.
-  const pacPercentRaw =
-    senator.funding.totalRaised > 0
-      ? (senator.funding.totalFromPACs / senator.funding.totalRaised) * 100
-      : 0;
+  // Share of contributions, same base as the small-donor % beside it —
+  // see lib/funding.ts. pacSharePct guards the zero-fundraising case.
+  const pacPercentRaw = pacSharePct(senator.funding.totalFromPACs, senator.funding);
   const pacPercent =
     pacPercentRaw > 0 && pacPercentRaw < 1 ? "<1" : Math.round(pacPercentRaw).toString();
 
@@ -283,7 +281,7 @@ export default function SenatorCard({
                             : "CTR"}
                     </div>
                     <div className="text-xs text-ink-min">
-                      <MetricTooltip text="How strongly this senator's votes align with their party. Derived from roll-call votes, not stated positions. DEEP = strong loyalist, MOD = moderate, CTR = centrist, XCUT = frequently crosses party lines.">
+                      <MetricTooltip text="How strongly this senator's votes lean toward their party, compared with the rest of their own party. Derived from roll-call votes, not stated positions. DEEP = the most partisan third of their party, MOD = the middle third, CTR = the least partisan third, XCUT = frequently crosses party lines.">
                         PARTISAN
                       </MetricTooltip>
                     </div>
@@ -292,7 +290,7 @@ export default function SenatorCard({
                   <>
                     <div className="text-sm sm:text-lg font-mono text-ink-min">&mdash;</div>
                     <div className="text-xs text-ink-min">
-                      <MetricTooltip text="How strongly this senator's votes align with their party. Derived from roll-call votes, not stated positions. DEEP = strong loyalist, MOD = moderate, CTR = centrist, XCUT = frequently crosses party lines.">
+                      <MetricTooltip text="How strongly this senator's votes lean toward their party, compared with the rest of their own party. Derived from roll-call votes, not stated positions. DEEP = the most partisan third of their party, MOD = the middle third, CTR = the least partisan third, XCUT = frequently crosses party lines.">
                         PARTISAN
                       </MetricTooltip>
                     </div>

@@ -60,7 +60,7 @@ def _senator_overall(s) -> float | None:
     scores = [
         s.score_funding_independence,
         s.score_promise_persistence,
-        s.score_independent_voting,
+        s.score_constituent_alignment,
         s.score_funding_diversity,
         s.score_legislative_effectiveness,
     ]
@@ -90,14 +90,11 @@ def _president_overall(p: President) -> float | None:
 
 
 def _justice_overall(j: Justice) -> float | None:
-    scores = [j.score_consistency, j.score_independence, j.score_bipartisan_agreement, j.score_judicial_restraint]
-    if all(v == 0.0 for v in scores):
+    if j.score_consistency == 0.0 and j.score_independence == 0.0:
         return None
     return round(
         j.score_consistency * JUSTICE_SCORE_WEIGHTS["consistency"]
-        + j.score_independence * JUSTICE_SCORE_WEIGHTS["independence"]
-        + j.score_bipartisan_agreement * JUSTICE_SCORE_WEIGHTS["bipartisan_agreement"]
-        + j.score_judicial_restraint * JUSTICE_SCORE_WEIGHTS["judicial_restraint"],
+        + j.score_independence * JUSTICE_SCORE_WEIGHTS["independence"],
         1,
     )
 

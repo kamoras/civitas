@@ -20,7 +20,12 @@ const HAIRLINE = "#2A2F2B";
 
 function congressForDate(dateStr: string): number {
   const year = parseInt(dateStr.slice(0, 4), 10);
-  return Math.floor((year - 1789) / 2) + 1;
+  const congress = Math.floor((year - 1789) / 2) + 1;
+  // A new Congress convenes on January 3 of odd years (20th Amendment), so
+  // Jan 1-2 still belong to the previous one — same rule as the backend's
+  // score_trends._congress_of.
+  const monthDay = dateStr.slice(5, 10);
+  return year % 2 === 1 && monthDay < "01-03" ? congress - 1 : congress;
 }
 
 function ordinal(n: number): string {

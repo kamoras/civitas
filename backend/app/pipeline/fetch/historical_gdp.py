@@ -137,11 +137,14 @@ def compute_term_gdp_growth(
     rather than crediting the rebound's own arithmetic.
 
     Standard average (the normal case): excludes the term's first
-    calendar year, which largely reflects the preceding administration's
-    fiscal policy and economic conditions rather than the sitting
-    president's own (Blinder & Watson 2016, AER 106(4), 1015-1045; the
-    policy transmission lag is ~6-18 months per Romer & Romer 2010, AER
-    100(3), 763-801) — where enough years are available; a term shorter
+    calendar year. Blinder & Watson (2016, AER 106(4), 1015-1045) attribute
+    a term's first quarter to the predecessor and report similar results
+    for lags of zero to four quarters; an annual series cannot express one
+    quarter, so this takes the four-quarter end of their tested range.
+    (Policy effects are slow in both directions — Romer & Romer 2010, AER
+    100(3), 763-801, find tax changes' output effects build for about ten
+    quarters — so no cut-off is exact.) Applied where enough years are
+    available; a term shorter
     than 3 calendar years (e.g. a partial/ongoing term) just uses the years it
     has rather than excluding down to nothing.
     """
@@ -171,8 +174,8 @@ def compute_term_gdp_growth(
     # never computed, since the first `y` iterated is years[1]/term_start
     # +1). 2026-07 fix (#218 review S2): this used to ALSO trim `years`
     # itself down to years[1:] before this loop, excluding a second year
-    # (year-2's growth, the president's own first full year under
-    # Blinder-Watson) that should have counted — a 4-year term produced
+    # (year-2's growth, the president's own first attributed year here)
+    # that should have counted — a 4-year term produced
     # only 2 growth observations instead of the correct 3, attributing
     # year-1-to-2 growth to nobody.
     for y in years[1:]:

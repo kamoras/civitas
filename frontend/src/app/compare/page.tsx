@@ -1,5 +1,6 @@
 "use client";
 
+import { pacSharePct } from "@/lib/funding";
 import { Suspense, useEffect, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
@@ -27,7 +28,7 @@ type Chamber = "senate" | "house";
 // own scored dimension (see RepresentationScore.tsx's matching comment).
 const SCORE_KEYS = [
   "fundingIndependence",
-  "independentVoting",
+  "constituentAlignment",
   "legislativeEffectiveness",
 ] as const;
 
@@ -35,7 +36,7 @@ type ScoreKey = (typeof SCORE_KEYS)[number];
 
 const SCORE_LABELS: Record<ScoreKey, string> = {
   fundingIndependence: "FUNDING INDEP",
-  independentVoting: "ALIGNMENT",
+  constituentAlignment: "ALIGNMENT",
   legislativeEffectiveness: "LEGIS EFFECT",
 };
 
@@ -194,14 +195,8 @@ function ComparisonTable({
   const rightOverall = right.representationScore.overall;
   const leftColorClass = getScoreColor(leftOverall);
   const rightColorClass = getScoreColor(rightOverall);
-  const leftPacPct =
-    left.funding.totalRaised > 0
-      ? Math.round((left.funding.totalFromPACs / left.funding.totalRaised) * 100)
-      : 0;
-  const rightPacPct =
-    right.funding.totalRaised > 0
-      ? Math.round((right.funding.totalFromPACs / right.funding.totalRaised) * 100)
-      : 0;
+  const leftPacPct = Math.round(pacSharePct(left.funding.totalFromPACs, left.funding));
+  const rightPacPct = Math.round(pacSharePct(right.funding.totalFromPACs, right.funding));
 
   function winner(a: number, b: number, higherIsBetter = true) {
     // No winner markers across chambers: calibration is chamber-specific,
@@ -264,8 +259,9 @@ function ComparisonTable({
       </div>
 
       {/* Cross-chamber comparability caveat: score calibration is
-          deliberately chamber-specific (PAC multiplier x3.2 Senate vs
-          x1.35 House; chamber-split LES baselines), so a 70 in one
+          deliberately chamber-specific (each chamber's own measured
+          references — PAC-share median, LES median and spread, break-rate
+          expectation — see population_reference.py), so a 70 in one
           chamber is not the same measurement as a 70 in the other —
           head-to-head "better score" markers across chambers would imply
           a like-for-like comparison the methodology doesn't support. */}

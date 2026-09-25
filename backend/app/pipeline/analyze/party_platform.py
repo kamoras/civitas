@@ -21,7 +21,7 @@ Bayesian MAP estimation:
 The posterior centroid is:
     centroid = (seed · w_prior + data · n_bills) / (w_prior + n_bills)
 
-With ``_PRIOR_WEIGHT=3``, four real bills halve the seed influence.
+With ``_PRIOR_WEIGHT=3``, three real bills halve the seed influence.
 As the corpus grows, centroids converge to pure data.  On cold start
 (no bill history), pure seeds are used.
 
@@ -304,7 +304,7 @@ D_PLATFORM_POSITIONS: dict[str, str] = {
 
 # Bayesian prior weight: the seed descriptions count as this many
 # "virtual bills."  As real bill data accumulates, the data centroid
-# dominates.  A value of 3 means ~4 real bills halve the seed influence.
+# dominates.  A value of 3 means 3 real bills halve the seed influence.
 _PRIOR_WEIGHT = 3.0
 
 # Below this R/D score margin, a bill is classified "bipartisan" rather
@@ -655,11 +655,13 @@ def classify_party_alignment_multi(
 
     Per-area alignment uses the same nearest-centroid classifier as
     classify_party_alignment, with stance-conditioned query construction
-    and directional platform descriptions.  The aggregate uses
-    confidence-weighted voting: each area's alignment vote is weighted
-    by its embedding confidence, following the weighted-expert framework
-    in Clemen (1989, "Combining Forecasts: A Review and Annotated
-    Bibliography," Intl J Forecasting 5:4).
+    and directional platform descriptions.  The aggregate is a
+    confidence-weighted vote: each area's alignment vote is weighted by its
+    embedding confidence. That is a design choice, not a result — the
+    forecast-combination literature finds equal weights hard to beat
+    (Clemen 1989, "Combining Forecasts: A Review and Annotated
+    Bibliography," Intl J Forecasting 5(4)), and these weights have not
+    been measured against equal ones.
 
     Returns:
         {
@@ -839,8 +841,9 @@ def analyze_partisan_depth(
 
     Tertiary signal: SVD-derived ideology score from cosponsorship patterns
     (Tauberer 2012, adapted from Poole & Rosenthal 1985).  This serves as
-    a Bayesian prior — with sparse vote data it has more influence, with
-    rich vote data the observations dominate.
+    a prior in a linear blend, weight 1 - min(votes/15, 1) — with sparse
+    vote data it has more influence, with 15+ votes none. (A fixed-rate
+    blend, not a posterior: no variance is estimated.)
 
     Args:
         promises: List of dicts with at least 'promiseText' and 'category'.
@@ -851,9 +854,13 @@ def analyze_partisan_depth(
 
     Returns:
         Dict with:
-          overallLean: float from -1.0 (deep D) to +1.0 (deep R)
+          overallLean: float, negative = D, positive = R (final value set
+            by finalize_partisan_depth, which needs the whole chamber)
           overallParty: "R" | "D" | "centrist"
-          depth: "deep" | "moderate" | "centrist" | "cross-cutting"
+          depth: "deep" | "moderate" | "centrist" | "cross-cutting" —
+            relative to the member's own party, set by finalize_partisan_depth
+          voteLean, partisanVoteCount, ideologyLean, evalParty, crossRatio:
+            the inputs finalize_partisan_depth works from
           crossPartyCount: int (positions aligning with opposite party)
           totalPositions: int
           policyBreakdown: list of per-area alignment dicts
@@ -890,25 +897,12 @@ def analyze_partisan_depth(
     leans = [a["lean"] for a in area_alignments]
     vote_lean = sum(leans) / len(leans)
 
-    # Bayesian blend: SVD cosponsorship ideology as prior, vote/promise
-    # observations as likelihood.  Prior weight decreases as data grows,
-    # following the shrinkage pattern used elsewhere in the scoring
-    # pipeline (count confidence = min(n/threshold, 1.0)).
-    # We count partisan votes (not policy areas) to measure data richness,
-    # because 10 votes in one area is strong evidence.
-    if ideology_score is not None:
-        ideology_lean = (ideology_score - 0.5) * 2.0  # map [0,1] → [-1,+1]
-        vr = voting_record or {}
-        all_v = (vr.get("keyVotes") or []) + (vr.get("recentVotes") or [])
-        partisan_vote_count = sum(
-            1 for v in all_v
-            if isinstance(v, dict) and v.get("vote") in ("Yea", "Nay")
-        )
-        data_confidence = min(partisan_vote_count / 15.0, 1.0)
-        prior_weight = 1.0 - data_confidence
-        overall_lean = data_confidence * vote_lean + prior_weight * ideology_lean
-    else:
-        overall_lean = vote_lean
+    vr = voting_record or {}
+    all_v = (vr.get("keyVotes") or []) + (vr.get("recentVotes") or [])
+    partisan_vote_count = sum(
+        1 for v in all_v if isinstance(v, dict) and v.get("vote") in ("Yea", "Nay")
+    )
+    ideology_lean = (ideology_score - 0.5) * 2.0 if ideology_score is not None else None
 
     eval_party = senator_party
     if senator_party == "I":
@@ -920,66 +914,127 @@ def analyze_partisan_depth(
             eval_party = "R"
 
     cross_party = 0
+    cross_ratio = 0.0
     if eval_party in ("R", "D"):
         opposite = "D" if eval_party == "R" else "R"
-        cross_party = sum(
-            1 for a in area_alignments
-            if a["alignment"] == opposite
-        )
-
-    if abs(overall_lean) < 0.02:
-        overall_party = "centrist"
-    elif overall_lean > 0:
-        overall_party = "R"
-    else:
-        overall_party = "D"
-
-    abs_lean = abs(overall_lean)
-
-    # Strength-weighted cross-party ratio: a weak opposite-party signal
-    # (e.g. strength 0.19) contributes less than a strong one (0.8+).
-    # This prevents reliably partisan senators from being labeled
-    # "cross-cutting" due to several barely-opposite positions.
-    if area_alignments and eval_party in ("R", "D"):
-        opposite = "D" if eval_party == "R" else "R"
-        cross_weight = sum(
-            a["strength"] for a in area_alignments if a["alignment"] == opposite
-        )
+        cross_party = sum(1 for a in area_alignments if a["alignment"] == opposite)
+        # Strength-weighted: a weak opposite-party signal (strength 0.19)
+        # counts less than a strong one (0.8+), so a reliably partisan
+        # member isn't labeled cross-cutting over several barely-opposite
+        # positions.
         total_weight = sum(a["strength"] for a in area_alignments)
+        cross_weight = sum(a["strength"] for a in area_alignments if a["alignment"] == opposite)
         cross_ratio = cross_weight / total_weight if total_weight > 0 else 0.0
-    else:
-        cross_ratio = 0.0
-
-    # Depth thresholds calibrated against the observed lean distribution
-    # (D: -0.30 to -0.05, R: +0.10 to +0.43) so that known moderates
-    # (Collins ~0.10, Murkowski ~0.14) land in "moderate" while clearly
-    # partisan senators (0.20+) land in "deep."
-    if cross_ratio > 0.3:
-        depth = "cross-cutting"
-    elif abs_lean > 0.20:
-        depth = "deep"
-    elif abs_lean > 0.10:
-        depth = "moderate"
-    else:
-        depth = "centrist"
 
     breakdown = sorted(area_alignments, key=lambda a: abs(a["lean"]), reverse=True)
-
-    return {
-        "overallLean": round(overall_lean, 4),
-        "overallParty": overall_party,
-        "depth": depth,
+    profile = {
+        "voteLean": round(vote_lean, 4),
+        "partisanVoteCount": partisan_vote_count,
+        "ideologyLean": round(ideology_lean, 4) if ideology_lean is not None else None,
+        "evalParty": eval_party,
+        "crossRatio": round(cross_ratio, 4),
         "crossPartyCount": cross_party,
         "totalPositions": len(area_alignments),
         "policyBreakdown": [
-            {
-                "area": a["area"],
-                "alignment": a["alignment"],
-                "strength": a["strength"],
-            }
+            {"area": a["area"], "alignment": a["alignment"], "strength": a["strength"]}
             for a in breakdown
         ],
     }
+    # overallLean / depth need the chamber: finalize_partisan_depth sets
+    # them over every member. On its own (a single profile) the lean is
+    # the vote signal and the depth is provisional.
+    return _label(profile, profile["voteLean"], None)
+
+
+# A member needs this many Yea/Nay votes before their own record carries
+# full weight over the cosponsorship-ideology prior (count confidence,
+# min(n / threshold, 1)), and the prior's mapping onto the vote-lean scale
+# is fitted only from members at or above it.
+_FULL_CONFIDENCE_VOTES = 15
+# More than this strength-weighted share of positions with the other party
+# is "cross-cutting" whatever the overall lean — a definition, not a
+# calibration.
+_CROSS_CUTTING_RATIO = 0.3
+# Fewest members of a party before its terciles are measured.
+_MIN_PARTY_MEMBERS_FOR_TERCILES = 6
+
+
+def _label(profile: dict, lean: float, party_cuts: tuple[float, float] | None) -> dict:
+    """Fill overallLean / overallParty / depth. `party_cuts` is the member's
+    own party's (33rd, 67th) percentile of lean toward that party."""
+    profile["overallLean"] = round(lean, 4)
+    profile["overallParty"] = "centrist" if abs(lean) < 0.02 else ("R" if lean > 0 else "D")
+    party = profile.get("evalParty")
+    if profile.get("crossRatio", 0.0) > _CROSS_CUTTING_RATIO:
+        depth = "cross-cutting"
+    elif party in ("D", "R") and party_cuts is not None:
+        toward_party = lean if party == "R" else -lean
+        low, high = party_cuts
+        depth = "deep" if toward_party >= high else ("moderate" if toward_party >= low else "centrist")
+    else:
+        depth = profile.get("depth") or "moderate"
+    profile["depth"] = depth
+    return profile
+
+
+def finalize_partisan_depth(profiles: list[dict]) -> list[dict]:
+    """Set overallLean and depth for every member of a chamber, in place.
+
+    Two things need the whole chamber, so they happen here rather than in
+    analyze_partisan_depth:
+
+    1. The cosponsorship-ideology prior is put on the vote-lean scale before
+       blending. The SVD ideology spans [-1, 1] across the cohort, while
+       vote leans are compressed (observed 2026-07: -0.30 to +0.43), so a
+       member with few votes used to get a prior-dominated lean of up to +/-1
+       and land at the extreme. The mapping is a least-squares line of
+       vote lean on ideology over members with full vote data, measured from
+       this chamber every run.
+    2. Depth is relative to the member's own party: deep = the most partisan
+       third of their party by lean toward it, moderate = the middle third,
+       centrist = the least partisan third (cross-cutting stays a
+       definition, see _CROSS_CUTTING_RATIO). The previous fixed cut-offs
+       (|lean| > 0.20 deep, > 0.10 moderate) were tuned so named senators
+       landed in chosen bands, and one threshold for both parties is
+       asymmetric when the parties' lean ranges differ (-0.30..-0.05 vs
+       +0.10..+0.43) — the same reason the ideology labels are party-relative
+       (sponsorship_analysis.party_ideology_bounds).
+    """
+    import numpy as np
+
+    full = [p for p in profiles
+            if p.get("ideologyLean") is not None and "voteLean" in p
+            and p.get("partisanVoteCount", 0) >= _FULL_CONFIDENCE_VOTES]
+    fit = None
+    if len(full) >= 10:
+        x = np.array([p["ideologyLean"] for p in full])
+        y = np.array([p["voteLean"] for p in full])
+        if np.ptp(x) > 0:
+            b, a = np.polyfit(x, y, 1)
+            fit = (float(a), float(b))
+
+    leans: list[float] = []
+    for p in profiles:
+        if "voteLean" not in p:  # stored before this change: keep its lean
+            leans.append(float(p.get("overallLean", 0.0)))
+            continue
+        lean = p["voteLean"]
+        if fit is not None and p.get("ideologyLean") is not None:
+            conf = min(p.get("partisanVoteCount", 0) / _FULL_CONFIDENCE_VOTES, 1.0)
+            prior = fit[0] + fit[1] * p["ideologyLean"]
+            lean = conf * lean + (1 - conf) * prior
+        leans.append(lean)
+
+    cuts: dict[str, tuple[float, float]] = {}
+    for party in ("D", "R"):
+        toward = [(ln if party == "R" else -ln) for p, ln in zip(profiles, leans)
+                  if p.get("evalParty") == party and p.get("totalPositions", 0) > 0]
+        if len(toward) >= _MIN_PARTY_MEMBERS_FOR_TERCILES:
+            cuts[party] = (float(np.percentile(toward, 100 / 3)), float(np.percentile(toward, 200 / 3)))
+
+    for p, lean in zip(profiles, leans):
+        _label(p, lean, cuts.get(p.get("evalParty")))
+    return profiles
 
 
 def _alignments_from_votes(voting_record: dict) -> list[dict]:
