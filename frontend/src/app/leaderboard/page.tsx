@@ -10,6 +10,7 @@ import PageMasthead from "@/components/layout/PageMasthead";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import BranchSelector, { type Branch } from "@/components/BranchSelector";
 import Footer from "@/components/layout/Footer";
+import PageFallback from "@/components/layout/PageFallback";
 import BackToTop from "@/components/BackToTop";
 import {
   fetchLeaderboard,
@@ -1213,7 +1214,7 @@ const EMPTY_JUSTICES: JusticeLeaderboardEntry[] = [];
 
 export default function LeaderboardPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<PageFallback eyebrow={"Leaderboard · ranked by representation score"} title={"Leaderboard"} rows={6} />}>
       <LeaderboardContent />
     </Suspense>
   );

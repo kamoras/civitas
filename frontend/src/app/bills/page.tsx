@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import Footer from "@/components/layout/Footer";
+import PageFallback from "@/components/layout/PageFallback";
 import PageMasthead from "@/components/layout/PageMasthead";
 import BackToTop from "@/components/BackToTop";
 import BillStageFlow, { ALL_STAGE_CODES } from "@/components/bills/BillStageFlow";
@@ -204,7 +205,7 @@ function BillsPageContent() {
 
 export default function BillsPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<PageFallback eyebrow={"Bills · legislative pipeline"} title={"Bills in motion"} rows={5} />}>
       <BillsPageContent />
     </Suspense>
   );
