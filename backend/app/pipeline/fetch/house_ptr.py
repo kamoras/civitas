@@ -132,7 +132,9 @@ async def download_pdf(client: httpx.AsyncClient, url: str, headers: dict | None
         client, _rate_limiter, url, "House Clerk",
         headers=headers, rate_limit_backoff_multiplier=2.0, retry_on_4xx=False,
     )
-    if body is not None and not body.startswith(b"%PDF"):
+    # The PDF header may follow up to 1 KB of leading bytes (the spec allows
+    # it, and pdfplumber reads such files), so it's looked for there.
+    if body is not None and b"%PDF" not in body[:1024]:
         logger.warning("House Clerk served something other than a PDF for %s", url)
         return None
     return body

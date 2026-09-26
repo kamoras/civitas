@@ -265,9 +265,9 @@ def stock_trades_overrun_budget() -> timedelta:
     """How long a stock-trades run may take before it counts as hung: 2h
     for the trade phases (normal runs finish in under 90 minutes), plus the
     most the annual-holdings phases it also runs can take — each is capped
-    at holdings_pipeline.PHASE_CEILING, which is derived from their own
+    at holdings_schedule.PHASE_CEILING, which is derived from their own
     budgets rather than restated here."""
-    from app.pipeline.holdings_pipeline import HOLDINGS_STEPS, PHASE_CEILING
+    from app.holdings_schedule import HOLDINGS_STEPS, PHASE_CEILING
 
     return timedelta(hours=2) + len(HOLDINGS_STEPS) * PHASE_CEILING
 

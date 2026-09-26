@@ -549,3 +549,12 @@ class TestHousePtrDownloadIsAPdf:
              patch.object(house_ptr, "parse_pdf_bytes") as parse:
             assert await house_ptr.fetch_and_parse_ptr(None, db_session, filing) == []
         parse.assert_not_called()
+
+    async def test_leading_bytes_before_the_pdf_header_are_allowed(self):
+        from unittest.mock import AsyncMock, patch
+
+        from app.pipeline.fetch import house_ptr
+
+        body = b"\xef\xbb\xbf\r\n%PDF-1.4 rest"
+        with patch.object(house_ptr, "fetch_bytes_with_retry", new_callable=AsyncMock, return_value=body):
+            assert await house_ptr.download_pdf(None, "https://clerk.example/x.pdf") == body

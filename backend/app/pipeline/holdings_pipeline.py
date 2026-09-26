@@ -60,6 +60,7 @@ from app.pipeline.filer_matching import (
     match_representative,
     match_senator,
 )
+from app.holdings_schedule import FETCH_BUDGET, HOLDINGS_STEPS, PREP_BUDGET, PROBE_BUDGET
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -70,28 +71,6 @@ T = TypeVar("T")
 # extensions into August — so a member's newest report is for last year, or
 # (before they file) the year before.
 _YEARS_BACK = 2
-
-# Wall-clock budgets for each holdings phase, in its three steps:
-#
-# - PREP_BUDGET: the House index download, or the Senate terms and search.
-#   A step that outlasts it fails the phase.
-# - FETCH_BUDGET: report fetching, from when it starts. Checked before
-#   every fetch, and a download still in flight at the deadline is cut
-#   off; a parse already running finishes (a CPU-bound thread can't be
-#   stopped, and its work is kept). Measured 2026-09: a first House run
-#   reads ~430 reports (~9 min in a dev container, network-bound at the
-#   Clerk's 1 req/s; slower on the Pi's CPU), the Senate ~100 (~1 min after
-#   a ~3 min browser search). Past the budget the remaining members wait for
-#   the next run, so a first run or a PARSER_VERSION bump spreads over a few
-#   nights.
-# - PROBE_BUDGET: the outage probes at the end (_SourceHealth). One retried
-#   request against a hanging host alone takes ~3 minutes.
-PREP_BUDGET = timedelta(minutes=6)
-FETCH_BUDGET = timedelta(minutes=8)
-PROBE_BUDGET = timedelta(minutes=2)
-# Longest a phase can run, give or take one parse — what the stock-trades
-# run's overrun alarm allows for (ops_alerts.stock_trades_overrun_budget).
-PHASE_CEILING = PREP_BUDGET + FETCH_BUDGET + PROBE_BUDGET
 
 # Members tried with nothing coming back live before _SourceHealth looks
 # further — asking the source about a stored report, or (when reports load
@@ -110,12 +89,11 @@ class _Stored:
     filed_date: str | None
     parsed: bool
     holding_count: int
-    rank_year: int | None
     amended: bool
 
     @property
     def rank(self) -> Rank:
-        return (self.rank_year or 0, self.filed_date or "", self.amended)
+        return (self.report_year or 0, self.filed_date or "", self.amended)
 
 
 def _stored_reports(db: Session, column) -> dict[str, _Stored]:
@@ -128,7 +106,7 @@ def _stored_reports(db: Session, column) -> dict[str, _Stored]:
         db.query(
             column, FinancialDisclosure.filing_id, FinancialDisclosure.parser_version,
             FinancialDisclosure.report_year, FinancialDisclosure.filed_date, FinancialDisclosure.parsed,
-            func.coalesce(counts.c.n, 0), FinancialDisclosure.rank_year, FinancialDisclosure.amended,
+            func.coalesce(counts.c.n, 0), FinancialDisclosure.amended,
         )
         .outerjoin(counts, counts.c.disclosure_id == FinancialDisclosure.id)
         .filter(column.isnot(None))
@@ -170,14 +148,12 @@ def _keeps_earlier_read(prior: int | None, report: AnnualReport) -> bool:
     return True
 
 
-def _is_older(stored: _Stored | None, filing_id: str, rank: Rank) -> bool:
-    """The candidate ranks below what's stored. The stored report's own
-    rank was kept with it, so this holds even when a partial index or
-    search no longer returns the stored filing — what it superseded can't
-    come back. The stored filing itself is never older than itself, however
-    this run happens to rank it (a paper report's rank depends on which
-    other filings the search returned)."""
-    return stored is not None and filing_id != stored.filing_id and rank < stored.rank
+def _is_older(stored: _Stored | None, rank: Rank) -> bool:
+    """The candidate ranks below what's stored. The stored report's rank is
+    kept with it (year, filing date, amended), so this holds even when a
+    partial index or search no longer returns the stored filing — what it
+    superseded can't come back."""
+    return stored is not None and rank < stored.rank
 
 
 def _members_in_order(per_member: dict[str, list[dict]], stored: dict[str, _Stored]) -> list[str]:
@@ -211,7 +187,6 @@ def _replace_disclosure(
         report_year=report_year,
         report_label=report_label,
         filed_date=filed_date,
-        rank_year=rank[0] or None,
         amended=rank[2],
         source_url=source_url,
         parsed=report.holdings is not None,
@@ -422,7 +397,7 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
             filing_id = chamber.filing_id(filing)
             if _is_current(mine, filing_id, chamber.parser_version):
                 break  # already have the newest report, as this parser reads it
-            if _is_older(mine, filing_id, ranks[filing_id]):
+            if _is_older(mine, ranks[filing_id]):
                 # Only older reports than the stored one turned up — a year's
                 # index or a page of search results failed to load, or the
                 # best left is a paper amendment of unknowable year. Keep
@@ -558,41 +533,37 @@ _DATE_RE = re.compile(r"\b(\d{2})/(\d{2})/(\d{4})\b")
 
 def _senate_ranks(filings: list[dict]) -> dict[str, Rank]:
     """One senator's filings, keyed by report URL, to the Rank they sort
-    and compare by: year, filing date, then an amendment over an original.
+    and compare by: the year the title states, the filing date, then an
+    amendment over an original.
 
-    A filing whose year isn't stated (a paper filing) ranks below every
-    dated one — with one exception. A paper *original* annual report filed
-    in year F, after the latest dated original (for year Y), covers a year
-    after Y (originals are filed once a year, in order) and no later than
-    F-1 (a year's report can't be filed before that year is over). When
-    F-1 > Y it ranks at F-1, the year it almost always covers: a late
-    original for an earlier year ranks too high only against reports for
-    year F-1, all of which are filed after it and still win on filing date.
-    That year orders it and nothing else: it is never shown
-    (_senate_report_year stays None). A paper amendment can amend any
-    earlier report, so it gets no such rank.
+    A paper filing states no year — not in its link, and not on its page,
+    which is page images (checked 2026-09-26) — so it ranks below every
+    dated report and is used only when a senator has nothing dated. A
+    paper filing made after the report shown is named beside it instead
+    (_note_later_paper): "filed later" is a fact; "newer" would be a guess.
     """
-    def is_annual_original(f: dict) -> bool:
-        title = f.get("title") or ""
-        return is_annual_title(title) and not is_new_filer_title(title) and not is_amendment_title(title)
-
-    dated_originals = [
-        (year, f.get("filed_date") or "")
+    return {
+        f["report_url"]: (_senate_report_year(f) or 0, f.get("filed_date") or "", is_amendment_title(f.get("title") or ""))
         for f in filings
-        if (year := _senate_report_year(f)) is not None and is_annual_original(f)
-    ]
-    latest = max(dated_originals, default=None)
-    ranks: dict[str, Rank] = {}
-    for f in filings:
-        filed = f.get("filed_date") or ""
-        year = _senate_report_year(f)
-        if (
-            year is None and latest is not None and is_annual_original(f)
-            and filed > latest[1] and filed[:4].isdigit() and int(filed[:4]) - 1 > latest[0]
-        ):
-            year = int(filed[:4]) - 1
-        ranks[f["report_url"]] = (year or 0, filed, is_amendment_title(f.get("title") or ""))
-    return ranks
+    }
+
+
+def _note_later_paper(db: Session, per_senator: dict[str, list[dict]]) -> None:
+    """Name, beside each senator's stored report, the newest paper filing
+    they made after it (see _senate_ranks), or clear the note when there is
+    none. Only for senators this search returned filings for: a senator it
+    missed keeps whatever note they had."""
+    for disclosure in db.query(FinancialDisclosure).filter(FinancialDisclosure.senator_id.in_(list(per_senator))):
+        later = [
+            f for f in per_senator[disclosure.senator_id]
+            if f.get("is_paper")
+            and senate_filing_id(f["report_url"]) != disclosure.filing_id
+            and (f.get("filed_date") or "") > (disclosure.filed_date or "")
+        ]
+        newest = max(later, key=lambda f: f.get("filed_date") or "", default=None)
+        disclosure.later_paper_label = _senate_report_label(newest) if newest else None
+        disclosure.later_paper_url = newest["report_url"] if newest else None
+    db.commit()
 
 
 def _senate_report_year(filing: dict) -> int | None:
@@ -725,15 +696,9 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
         },
         still_loads=lambda url: _senate_probe(client, url),
     )
-    return await _ingest_members(db, chamber, per_senator)
-
-
-# Progress-tracker steps for the two phases, appended to the stock-trades
-# run's own (stock_pipeline.STOCK_PIPELINE_STEPS).
-HOLDINGS_STEPS = [
-    ("house_holdings",  "fetch", "Ingest House annual disclosures (holdings)"),
-    ("senate_holdings", "fetch", "Ingest Senate annual disclosures (holdings)"),
-]
+    inserted = await _ingest_members(db, chamber, per_senator)
+    _note_later_paper(db, per_senator)
+    return inserted
 
 
 async def run_holdings_phases(

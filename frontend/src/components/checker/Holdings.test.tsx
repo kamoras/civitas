@@ -36,6 +36,8 @@ function holdings(overrides: Partial<HoldingsData> = {}): HoldingsData {
     sourceUrl: "https://example.com/report",
     parsed: true,
     unreadableReason: null,
+    laterPaperLabel: null,
+    laterPaperUrl: null,
     holdingsCount: 2,
     unvaluedCount: 0,
     totalLow: 16002,
@@ -129,6 +131,16 @@ describe("Holdings", () => {
     expect(screen.queryByText(/paper/)).not.toBeInTheDocument();
     // Nothing to list, so no toggle.
     expect(screen.queryByRole("button", { name: /INVESTMENTS & ASSETS/ })).not.toBeInTheDocument();
+  });
+
+  it("names a paper filing made after the charted report instead of implying this one is the latest", async () => {
+    fetchSenatorHoldings.mockResolvedValue(holdings({
+      laterPaperLabel: "annual report filed 2026-08-12", laterPaperUrl: "https://efd.example/paper/x/",
+    }));
+    render(<Holdings memberId="S1" />);
+    expect(await screen.findByText(/Also filed after this report, on paper: the annual report filed 2026-08-12/))
+      .toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /VIEW PAPER FILING/ })).toHaveAttribute("href", "https://efd.example/paper/x/");
   });
 });
 

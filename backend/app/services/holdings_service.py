@@ -180,6 +180,8 @@ def _build(db: Session, disclosure: FinancialDisclosure, page: int, per_page: in
         source_url=disclosure.source_url,
         parsed=disclosure.parsed,
         unreadable_reason=disclosure.unreadable_reason if not disclosure.parsed else None,
+        later_paper_label=disclosure.later_paper_label if disclosure.later_paper_url else None,
+        later_paper_url=disclosure.later_paper_url,
         holdings_count=breakdown.holdings_count,
         unvalued_count=breakdown.unvalued_count,
         total_low=breakdown.total_low,
