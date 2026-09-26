@@ -84,7 +84,11 @@ Out of Office," APSR 96:1). This is the delegate model of representation
 with seat partisan lean standing in for issue-level constituent opinion.
 Both studies validate their measures by the incumbent's vote share; v6.13
 used that same test to choose this dimension's design
-(docs/research/constituent-alignment.md). Donor independence via lobbying
+(docs/research/constituent-alignment.md). Because the member was elected
+under a party label as well as by a seat (Fenno 1978's concentric
+constituencies), breaking far past what the seat calls for scores lower
+again (v6.14): own-party primary voters measurably punish it, and the
+whole seat stops rewarding it. Donor independence via lobbying
 matches follows Stratmann (2005) with the methodological caution from
 Ansolabehere, de Figueiredo & Snyder (2003, "Why Is There So Little
 Money in U.S. Politics?" JEP 17:1) that donation-vote correlations are
@@ -175,7 +179,7 @@ logger = logging.getLogger(__name__)
 # public changelog) in sync, and add a decision record for the new version
 # under docs/methodology/member-score/ — that is where the reasons go, not
 # here.
-ALGORITHM_VERSION = "v6.13"
+ALGORITHM_VERSION = "v6.14"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -1477,6 +1481,51 @@ def _constituent_reference(chamber: str, reference: dict | None) -> dict:
     return (reference or {}).get(chamber) or CONSTITUENT_REFERENCE.load().get(chamber) or {}
 
 
+# How fast the seat-relative vote score falls once a member's break rate
+# passes the chamber's 90th-percentile deviation, as a multiple of the rate
+# it rose at below it. 1.0 mirrors the rise: 100 at saturation, back to 50
+# at twice the saturation deviation, 0 at three times. A design weight, not
+# a fitted one, chosen because the two measured slopes are of similar size
+# with opposite signs — the whole seat rewards crossing up to saturation
+# (Senate 1990-2024, +2.3 pts of vote share per SD) and the member's own
+# party's primary voters take share away past it (House 1990-2010, -3.0 per
+# SD), while the general electorate is flat past it. Research note section 8.
+OVER_BREAK_DECLINE = 1.0
+
+
+def _seat_relative_vote_score(deviation: float, scale: float) -> float:
+    """50 at the seat's expected break rate, falling to 0 for loyalty a
+    full saturation deviation below it, rising to 100 at the saturation
+    deviation above it, then declining (OVER_BREAK_DECLINE) past it."""
+    scaled = deviation / scale
+    if scaled <= 1.0:
+        return 50.0 + 50.0 * max(scaled, -1.0)
+    return max(0.0, 100.0 - 50.0 * OVER_BREAK_DECLINE * (scaled - 1.0))
+
+
+def break_rate_past_saturation(
+    break_rate: float,
+    state: str,
+    party: str,
+    effective_party: str | None = None,
+    district: int | None = None,
+    reference: dict | None = None,
+) -> bool:
+    """True when a member breaks with their party by more than the chamber's
+    saturation deviation above their seat's expectation — the range where
+    the seat-relative vote score declines as the break rate rises. Used by
+    the ground-truth gate to keep that range out of its rises-with-break-rate
+    rank check."""
+    chamber = "house" if district is not None else "senate"
+    ref = _constituent_reference(chamber, reference)
+    fit = (ref.get("expected") or {}).get(effective_party or party)
+    scale = ref.get("deviation_p90")
+    if fit is None or not scale:
+        return False
+    alignment = _signed_state_alignment(state, party, effective_party=effective_party, district=district)
+    return break_rate - _expected_break_rate(fit, alignment) > float(scale)
+
+
 # Weight of position congruence when a roll-call ideal point exists; the
 # seat-relative vote component carries the rest. A design weight, not a
 # calibrated one — see the research note: the one election where both
@@ -1518,9 +1567,9 @@ def _calc_constituent_alignment(
          data): the member's break rate on party-labeled votes minus the
          break rate their chamber's same-party members show at the same seat
          lean — both measured each run (compute_constituent_reference).
-         Symmetric: 50 at expectation, above for breaking more, below for
-         breaking less, saturating at the chamber's 90th-percentile
-         deviation.
+         50 at expectation, below for breaking less, above for breaking
+         more up to the chamber's 90th-percentile deviation (100), then
+         declining for breaking further (OVER_BREAK_DECLINE).
            - Loyalty below expectation is scored, not held neutral. In the
              2004 House test the below-expectation side carried the
              strongest association with vote share (2.3 pts per SD, t=3.4),
@@ -1532,12 +1581,13 @@ def _calc_constituent_alignment(
              concern): members breaking from the flank did not fare worse
              for it — if anything better (difference +2.2, t=1.9), the
              wrong sign for a discount.
-           - Breaking far above expectation is capped, not penalized. That
-             is the general electorate's view (Senate 1990-2024, N=461: past
-             saturation 0.19, t=0.2), not the member's own party's: in House
-             primaries, challenged incumbents lose share past saturation
-             (-3.0 pts/SD, t=-2.0). Whose view to score is an open design
-             question, not a settled one — research note section 8.
+           - Breaking far past expectation declines (v6.14). The whole
+             seat stops rewarding it at saturation (Senate 1990-2024,
+             N=461: slope past it 0.19, t=0.2) and the member's own party's
+             primary voters take share away past it (House primaries,
+             -3.0 pts/SD, t=-2.0) — research note section 8. The score
+             represents both: the seat that elected the member and the
+             party label it elected them under.
       2. Position congruence (30%, when Voteview ideal points exist): the
          member's congress-specific Nokken-Poole first-dimension position
          minus what a same-party member of a seat with this lean holds
@@ -1619,12 +1669,17 @@ def _constituent_alignment_core(
     else:
         expected = _expected_break_rate(vote_fit, alignment)
         deviation = break_rate - expected
-        party_score = 50.0 + 50.0 * max(-1.0, min(deviation / float(deviation_scale), 1.0))
+        party_score = _seat_relative_vote_score(deviation, float(deviation_scale))
         party_alignment_detail = (
             f"broke with party on {break_rate:.1%} of {n_party} party-labeled votes; "
             f"{eval_party} members of this chamber in seats with this lean "
             f"(signal {alignment:+.2f}) break on {expected:.1%}"
         )
+        if deviation > float(deviation_scale):
+            party_alignment_detail += (
+                f" — more than {float(deviation_scale):.1%} above that is past the "
+                "chamber's 90th-percentile gap, where breaking further lowers the score"
+            )
 
     congruence_weight = POSITION_CONGRUENCE_WEIGHT if congruence_score is not None else 0.0
     party_weight = 1.0 - congruence_weight

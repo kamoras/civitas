@@ -117,7 +117,9 @@ class TestDerivedConsistency:
     def test_top_crossers_scored_low_flagged(self, db_session):
         # The old gate's core purpose, derived: whoever currently crosses
         # party most must not land at the bottom of IV. Scores track break
-        # rate for everyone except the five most frequent crossers.
+        # rate for everyone except the five most frequent crossers. Break
+        # rates stay under 20%, below the saturation deviation, where the
+        # score should still be rising.
         for i in range(40):
             s = _add_senator(
                 db_session, f"s{i}",
@@ -127,7 +129,7 @@ class TestDerivedConsistency:
                 total_from_pacs=1_000_000 * i / 50,
                 small_donor_pct=40 - 0.8 * i,
             )
-            _add_votes(db_session, s.id, breaks=i, total=50)
+            _add_votes(db_session, s.id, breaks=i, total=200)
         db_session.commit()
 
         failures = check_ground_truth(db_session)["failures"]
@@ -135,6 +137,26 @@ class TestDerivedConsistency:
             f["dimension"] == "IV" and "most-independent decile" in f["senator"]
             for f in failures
         )
+
+    def test_crossers_past_saturation_scored_lower_are_not_flagged(self, db_session):
+        # v6.14: past the saturation deviation the score falls as the break
+        # rate rises, by design. Members there are left out of the
+        # rises-with-break-rate check, so the gate stays quiet. Break rates
+        # run 0-78% against a ~7% expectation and 20-point saturation.
+        for i in range(40):
+            rate = i / 50
+            s = _add_senator(
+                db_session, f"s{i}",
+                iv=25 + 1.5 * i if rate <= 0.25 else 10,
+                fi=95 - 1.5 * i,
+                total_raised=1_000_000,
+                total_from_pacs=1_000_000 * i / 50,
+                small_donor_pct=40 - 0.8 * i,
+            )
+            _add_votes(db_session, s.id, breaks=i, total=50)
+        db_session.commit()
+
+        assert not any(f["dimension"] == "IV" for f in check_ground_truth(db_session)["failures"])
 
     def test_pac_totals_all_zero_flagged(self, db_session):
         # The historical silent-fetch regression: everyone funded, nobody

@@ -64,6 +64,8 @@ from collections import Counter, defaultdict
 
 from scipy import stats as scipy_stats
 
+from app.pipeline.analyze.score_calculator import break_rate_past_saturation
+
 logger = logging.getLogger(__name__)
 
 # ── Statistical conventions and sample-size guards ──────────────────────────
@@ -109,8 +111,11 @@ _CONSISTENCY_CHECKS: list[tuple[str, str, int, str]] = [
      "PAC share of receipts (FEC)"),
     ("small_donor_pct", "score_funding_independence", +1,
      "small-donor share of receipts (FEC unitemized)"),
+    # Members past the saturation deviation are left out of this one
+    # (party_break_rate None): there the score declines by design as the
+    # break rate rises (score_calculator.OVER_BREAK_DECLINE).
     ("party_break_rate", "score_constituent_alignment", +1,
-     "observed party-break rate on labeled roll-call votes"),
+     "observed party-break rate on labeled roll-call votes, below saturation"),
 ]
 
 
@@ -365,6 +370,13 @@ def _member_records(db, model) -> list[dict]:
         # scored would weaken for reasons unrelated to the scores.
         base = getattr(m, "total_contributions", None) or raised
         breaks, labeled = counts[m.id]
+        break_rate = breaks / labeled if labeled >= MIN_LABELED_VOTES else None
+        if break_rate is not None and break_rate_past_saturation(
+            break_rate, m.state or "", m.party or "I",
+            effective_party=getattr(m, "caucus_party", None),
+            district=getattr(m, "district", None),
+        ):
+            break_rate = None
         records.append({
             "id": m.id,
             "name": m.name,
@@ -372,9 +384,7 @@ def _member_records(db, model) -> list[dict]:
             "metrics": {
                 "pac_ratio": (m.total_from_pacs or 0) / base if base > 0 else None,
                 "small_donor_pct": m.small_donor_percentage if base > 0 else None,
-                "party_break_rate": (
-                    breaks / labeled if labeled >= MIN_LABELED_VOTES else None
-                ),
+                "party_break_rate": break_rate,
             },
             "raw": {
                 "total_raised": raised,

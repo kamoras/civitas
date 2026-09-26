@@ -1,4 +1,4 @@
-"""Constituent Alignment (v6.13): measured, symmetric, no safe-seat scaling.
+"""Constituent Alignment (v6.14): measured, no safe-seat scaling, peaked.
 
 Each design choice here was decided by testing it against U.S. House
 re-election results (docs/research/constituent-alignment.md):
@@ -8,6 +8,8 @@ re-election results (docs/research/constituent-alignment.md):
 - Below-expected loyalty scores below neutral (it was held at 50).
 - Neither component is scaled by seat safety (both were).
 - Position is congress-specific Nokken-Poole, not career DW-NOMINATE.
+- Breaking past the saturation deviation lowers the score again (v6.14):
+  own-party primary voters punish it and the whole seat stops rewarding it.
 
 conftest pins the reference: expected break rate 10% in a swing seat, 5% in
 a maximally safe one, 30% in a maximally opposed one; saturation at a
@@ -66,8 +68,21 @@ class TestSeatRelativeVotes:
     def test_symmetric_around_the_expectation(self):
         assert score(record(20)) - 50 == 50 - score(record(0))
 
-    def test_saturates_at_the_chambers_p90_deviation(self):
-        assert score(record(30)) == 100 and score(record(60)) == 100
+    def test_peaks_at_the_chambers_p90_deviation(self):
+        assert score(record(30)) == 100
+        assert score(record(29)) < 100 and score(record(31)) < 100
+
+    def test_breaking_past_saturation_declines_at_the_rate_it_rose(self):
+        # 10% expected, 20-point saturation: 100 at 30%, back to 50 at 50%
+        # (twice the saturation deviation), 0 at 70% and beyond.
+        assert score(record(40)) == 75 == score(record(20))
+        assert score(record(50)) == 50
+        assert score(record(70)) == 0 and score(record(90)) == 0
+
+    def test_loyal_floor_unchanged(self):
+        # An R in a D+15 state is expected to break 30%; never breaking is a
+        # full saturation below, the floor.
+        assert score(record(0), state="DS", party="R") == 0
 
     def test_no_safe_seat_discount_on_either_side(self):
         # The same deviation from the seat's expectation scores the same in
@@ -126,9 +141,16 @@ class TestSeatRelativeVotes:
         assert _calc_constituent_alignment(record(20), lobbying, {}, state="SW", party="D") == \
             score(record(20))
 
-    def test_monotonic_in_break_rate(self):
-        scores = [score(record(b)) for b in (0, 5, 10, 20, 40)]
-        assert scores == sorted(scores) and scores[-1] - scores[0] == 75
+    def test_rises_to_saturation_then_falls(self):
+        rising = [score(record(b)) for b in (0, 5, 10, 20, 30)]
+        falling = [score(record(b)) for b in (30, 40, 50, 60)]
+        assert rising == sorted(rising) and falling == sorted(falling, reverse=True)
+
+    def test_breakdown_says_when_past_saturation(self):
+        past = _constituent_alignment_core(record(45), [], {}, state="SW", party="D")["components"][0]["detail"]
+        within = _constituent_alignment_core(record(25), [], {}, state="SW", party="D")["components"][0]["detail"]
+        assert "breaking further lowers the score" in past
+        assert "breaking further" not in within
 
     def test_breakdown_names_the_comparison(self):
         detail = _constituent_alignment_core(record(20), [], {}, state="SW", party="D")["components"][0]["detail"]

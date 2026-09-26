@@ -253,9 +253,17 @@ until 2008. From the member's own party's side, heavy defection has a
 measured cost past saturation, and nothing in the literature supports
 treating more defection as better representation beyond the seat's
 expectation. Where "too much" begins has no published estimate. The only
-measured turning point is this section's saturation point. Choosing whose
-view the score takes is a design decision, recorded here. Scoring is
-unchanged pending it.
+measured turning point is this section's saturation point.
+
+**Changed (v6.14):** the score represents both audiences: the seat that
+elected the member and the party label it elected them under. The
+seat-relative vote score still peaks at the saturation deviation, which the
+chamber measures every run. Past it, the score falls at the same rate it rose
+(`OVER_BREAK_DECLINE = 1.0`), reaching 50 at twice the saturation deviation
+and 0 at three times. The decline rate is a design weight, not a fitted one.
+Mirroring the rise was chosen because the measured slopes are of similar size
+with opposite signs (+2.28 per SD rising in the Senate, −3.02 falling in House
+primaries), so the data gives no basis for an asymmetric shape.
 
 ## What the evidence does not settle
 

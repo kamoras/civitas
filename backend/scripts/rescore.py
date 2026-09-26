@@ -53,6 +53,7 @@ from app.pipeline.analyze.population_reference import (  # noqa: E402
     LES_REFERENCE,
 )
 from app.pipeline.analyze.score_calculator import (  # noqa: E402
+    break_rate_past_saturation,
     calculate_scores,
     compute_constituent_reference,
     compute_funding_reference,
@@ -287,6 +288,12 @@ def main() -> int:
                 if len(labeled) >= MIN_LABELED_VOTES else None
             ),
         }
+        if metrics["party_break_rate"] is not None and break_rate_past_saturation(
+            metrics["party_break_rate"], s["state"], s["party"],
+            effective_party=payload["votingRecord"].get("effectiveParty"),
+            reference=payload.get("constituentReference"),
+        ):
+            metrics["party_break_rate"] = None  # the score declines there by design
         results.append({
             "metrics": metrics,
             "raw": {
