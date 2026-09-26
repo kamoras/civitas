@@ -63,6 +63,7 @@ from app.pipeline.analyze.score_calculator import (  # noqa: E402
 )
 from app.pipeline.fetch.fec import select_recent_elections  # noqa: E402
 from app.pipeline.transform.normalize_finance import summarize_election_totals  # noqa: E402
+from app.pipeline.transform.normalize_votes import stored_vote_identity  # noqa: E402
 from app.pipeline.transform.candidate_names import is_candidate_self_donor  # noqa: E402
 
 DB = "file:/data/civitas.db?mode=ro"
@@ -162,12 +163,8 @@ def build_payload(cur, s, search, fin):
         except Exception:
             areas = []
         key_votes.append({
-            # Storage holds each roll call once, but bill_id is not unique
-            # per roll call (a Senate key bill's documentName), so the row
-            # is the identity dedupe_votes must see; billId alone would
-            # merge a bill's cloture and passage votes.
-            "rcKey": f"row-{r['id']}",
-            "billId": r["bill_id"], "vote": r["vote"],
+            **stored_vote_identity(r["id"], r["bill_id"]),
+            "vote": r["vote"],
             "policyArea": r["policy_area"] or "PROCEDURAL",
             "policyAreas": areas,
             "partyAlignmentWeight": r["party_alignment_weight"] or 0.0,

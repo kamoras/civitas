@@ -702,7 +702,12 @@ export function TownSection({ state, pageElectionDate }: { state: string; pageEl
         </p>
         <select
           value={selected}
-          onChange={(e) => setPick({ state, town: e.target.value })}
+          onChange={(e) => {
+            // A pick always fetches afresh: an earlier result for the same
+            // town (a failure included) isn't shown while its retry runs.
+            setPick({ state, town: e.target.value });
+            setResult(null);
+          }}
           className="bg-surface-base border border-white/15 text-ink-hi font-mono text-xs px-3 py-2 mb-4"
           aria-label="Select your town for local races (optional, approximate)"
         >

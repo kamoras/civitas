@@ -67,7 +67,9 @@ from collections import Counter, defaultdict
 from scipy import stats as scipy_stats
 
 from app.pipeline.analyze.population_reference import CONSTITUENT_REFERENCE
+from app.pipeline.transform.normalize_votes import stored_vote_identity
 from app.pipeline.analyze.score_calculator import (
+    ALGORITHM_VERSION,
     CONSTITUENT_FULL_CONFIDENCE_VOTES,
     SATURATION_QUANTILE,
     party_break_rate,
@@ -452,10 +454,9 @@ def _member_records(db, model, constituent_reference: dict | None = None) -> lis
     ``constituent_reference`` is the reference this run scored with; the
     persisted one when not given."""
     vote_model, fk_col = _vote_query_for(model)
-    # Each member's party-labeled votes, as the dicts party_break_rate reads,
-    # so the gate judges members on the score's own statistic (its dedupe,
-    # its minimum count). Storage holds each roll call once but bill_id is
-    # not unique per roll call, so the row id is the identity.
+    # Each member's party-labeled votes, as the dicts party_break_rate reads
+    # (identity from stored_vote_identity), so the gate judges members on
+    # the score's own statistic: its dedupe, its minimum count.
     current = db.query(model).filter(model.is_current.is_(True)).all()
     votes: dict[str, list[dict]] = defaultdict(list)
     for row_id, member_id, bill_id, with_party in (
@@ -465,7 +466,7 @@ def _member_records(db, model, constituent_reference: dict | None = None) -> lis
         .all()
     ):
         votes[member_id].append({
-            "rcKey": f"row-{row_id}", "billId": bill_id, "votedWithParty": with_party,
+            **stored_vote_identity(row_id, bill_id), "votedWithParty": with_party,
         })
     if constituent_reference is None:
         constituent_reference = CONSTITUENT_REFERENCE.load()
@@ -586,7 +587,6 @@ def check_score_distribution(db, model=None) -> list[dict]:
     callers can merge the two lists.
     """
     from app.models import ScoreSnapshot
-    from app.pipeline.analyze.score_calculator import ALGORITHM_VERSION
     from app.pipeline.fetch.congress import congress_of_date
     from app.time_utils import utcnow
 

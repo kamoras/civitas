@@ -1635,7 +1635,7 @@ def _calc_constituent_alignment(
              wrong sign for a discount.
            - Breaking far past expectation declines (v6.14). The whole
              seat stops rewarding it at saturation (Senate 1990-2024,
-             N=461: slope past it 0.19, t=0.2) and the member's own party's
+             N=461: slope past it 0.22, t=0.2) and the member's own party's
              primary voters take share away past it (House primaries,
              -3.0 pts/SD, t=-2.0) — research note section 8. The score
              represents both: the seat that elected the member and the

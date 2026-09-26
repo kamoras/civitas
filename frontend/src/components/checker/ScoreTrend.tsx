@@ -23,7 +23,7 @@ function congressForDate(dateStr: string): number {
   const congress = Math.floor((year - 1789) / 2) + 1;
   // A new Congress convenes on January 3 of odd years (20th Amendment), so
   // Jan 1-2 still belong to the previous one — same rule as the backend's
-  // score_trends._congress_of.
+  // app/pipeline/fetch/congress.congress_of_date.
   const monthDay = dateStr.slice(5, 10);
   return year % 2 === 1 && monthDay < "01-03" ? congress - 1 : congress;
 }

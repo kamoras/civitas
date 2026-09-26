@@ -168,24 +168,25 @@ from the 101st to the 118th Congress (Voteview) is joined to MIT Election
 Lab's 1976–2024 Senate returns. That gives 461 contested incumbents across 18
 elections, replacing the underpowered 47-member replication above. The
 expectation is fit per party and per congress, exactly as
-`compute_constituent_reference` does it. Controls are a quadratic in the
+`compute_constituent_reference` does it (fit and saturation point on members
+with at least 20 party-labeled votes). Controls are a quadratic in the
 own-party presidential vote plus year × party effects. Standard errors are
 clustered by senator.
 
 | Measure (per SD of deviation) | Coefficient | t |
 |---|---|---|
-| Signed deviation (shipped direction) | 0.77 | 1.9 |
-| Folded \|deviation\| | 1.12 | 2.2 |
-| Squared term | 0.13 | 0.7 |
-| Crossing side, up to saturation | 2.28 | 1.9 |
-| Crossing side, past saturation (n=30) | 0.19 | 0.2 |
+| Signed deviation (shipped direction) | 0.75 | 1.8 |
+| Folded \|deviation\| | 1.15 | 2.3 |
+| Squared term | 0.14 | 0.7 |
+| Crossing side, up to saturation | 2.30 | 1.9 |
+| Crossing side, past saturation (n=30) | 0.22 | 0.2 |
 
 The general electorate does not penalize heavy breaking. The slope past
 saturation is flat, and the folded term's positive sign comes from a loyal
-side that is not rewarded (−0.50, t=−0.5). The House 2004 test agrees:
-folded 0.26 (t=0.6), past saturation −0.31 (t=−0.3). Split by period, the
-whole association fades after 2008: signed deviation 1.03 (t=1.9) for
-1990–2008 and 0.38 (t=0.6) for 2010–2024. That fits the nationalization of
+side that is not rewarded (−0.59, t=−0.5). The House 2004 test agrees:
+folded 0.26 (t=0.6), past saturation −0.33 (t=−0.3, n=19). Split by period,
+the whole association fades after 2008: signed deviation 1.01 (t=1.9) for
+1990–2008 and 0.38 (t=0.7) for 2010–2024. That fits the nationalization of
 Senate elections (Bonica & Cox 2018; Utych 2020).
 
 **The member's own party: House primaries 1990–2010.** House roll calls from
@@ -263,8 +264,14 @@ chamber measures every run. Past it, the score falls at the same rate it rose
 (`OVER_BREAK_DECLINE = 1.0`), reaching 50 at twice the saturation deviation
 and 0 at three times. The decline rate is a design weight, not a fitted one.
 Mirroring the rise was chosen because the measured slopes are of similar size
-with opposite signs (+2.28 per SD rising in the Senate, −3.02 falling in House
+with opposite signs (+2.30 per SD rising in the Senate, −3.02 falling in House
 primaries), so the data gives no basis for an asymmetric shape.
+
+The shipped shape does not lose the electoral signal the symmetric v6.13 score
+had. In the 2004 test above, the v6.14 score predicts incumbent vote share at
+0.064 points per score point (t=4.9, ΔR² 0.0354). The symmetric score's figure
+is 0.059 (t=4.9, ΔR² 0.0367). Only the handful of members past saturation
+score differently.
 
 ## What the evidence does not settle
 
@@ -282,8 +289,8 @@ primaries), so the data gives no basis for an asymmetric shape.
   only), and in Senate general elections the slope past saturation is flat,
   not negative. Senators are scored on the same shape by extension.
 - **The Senate loyal side does not replicate.** With every Senate election
-  from 1990 to 2024 (N=461, section 8), the crossing side holds (2.28 up to
-  saturation, t=1.9) but the loyal side does not (−0.50, t=−0.5), and the
+  from 1990 to 2024 (N=461, section 8), the crossing side holds (2.30 up to
+  saturation, t=1.9) but the loyal side does not (−0.59, t=−0.5), and the
   whole association is weak after 2008. The Senate's loyal-side scoring rests
   on the House result, not Senate evidence.
 - **The 70/30 weighting is not fitted.** In 2004 the vote component had the

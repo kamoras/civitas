@@ -621,6 +621,25 @@ describe("TownSection", () => {
     expect(screen.queryByText(/Albany Mayor/)).not.toBeInTheDocument();
   });
 
+  it("picking a town again shows loading, not its earlier failure, while it retries", async () => {
+    const retry = deferred<TownBallot>();
+    vi.mocked(fetchTownBallot)
+      .mockRejectedValueOnce(new Error("down"))
+      .mockImplementationOnce(() => retry.promise);
+    render(<TownSection state="NY" pageElectionDate="2026-11-03" />);
+
+    await userEvent.selectOptions(await screen.findByRole("combobox"), "Albany");
+    expect(await screen.findByText(/Could not load Albany/)).toBeInTheDocument();
+
+    await userEvent.selectOptions(picker(), "");
+    await userEvent.selectOptions(picker(), "Albany");
+    expect(screen.getByText(/Loading Albany/)).toBeInTheDocument();
+    expect(screen.queryByText(/Could not load Albany/)).not.toBeInTheDocument();
+
+    retry.resolve(covered("Albany Mayor"));
+    expect(await screen.findByText(/Albany Mayor/)).toBeInTheDocument();
+  });
+
   it("a failed lookup says so rather than showing nothing", async () => {
     vi.mocked(fetchTownBallot).mockRejectedValue(new Error("down"));
     render(<TownSection state="NY" pageElectionDate="2026-11-03" />);

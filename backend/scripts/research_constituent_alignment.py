@@ -329,18 +329,25 @@ def loyalty_tests(m, p):
     print(f"flank-side defectors (Kirkland & Slapin): extra slope {r.params['pos:flank']:.2f} "
           f"(t={r.tvalues['pos:flank']:.1f}); n={int(((S.flank == 1) & (S.pos > 0)).sum())}")
 
-    # Is there such a thing as breaking too much? A peaked score (best at the
-    # expectation, falling off both ways) against the shipped monotone one,
-    # and the crossing-side slope past the saturation point.
+    # Is there such a thing as breaking too much? A score peaked at the
+    # expectation (falling off both ways), the shipped v6.14 shape (rising
+    # to the saturation point, falling past it), and the crossing-side slope
+    # past saturation. Saturation is the whole chamber's 90th-percentile
+    # deviation, as compute_constituent_reference measures it (every 108th
+    # House member has far more than 20 party-unity votes).
+    p90 = (M.brk - M.exp_party).abs().quantile(.9)
+    x = dev / p90
     S["absdev"] = S.dev_party.abs()
-    S["peaked"] = 100 - 100 * (dev.abs() / dev.abs().quantile(.9)).clip(0, 1)
+    S["peaked"] = 100 - 100 * (dev.abs() / p90).clip(0, 1)
+    S["v614"] = np.where(x <= 1, 50 + 50 * x.clip(lower=-1), (100 - 50 * (x - 1)).clip(lower=0))
     print("breaking far above expectation:")
-    for k, label in (("absdev", "folded |deviation| (per SD)"), ("peaked", "peaked score (per point)")):
+    for k, label in (("absdev", "folded |deviation| (per SD)"), ("peaked", "peaked score (per point)"),
+                     ("v614", "v6.14 score (per point)")):
         r = smf.ols(f"{base} + {k}", S).fit(cov_type="HC1")
         print(f"  {label:30s} {r.params[k]:7.3f} (t={r.tvalues[k]:.1f}) dR2={r.rsquared - b0.rsquared:.4f}")
     r = smf.ols(f"{base} + dev_party + I(dev_party**2)", S).fit(cov_type="HC1")
     print(f"  quadratic term {r.params['I(dev_party ** 2)']:.2f} (t={r.tvalues['I(dev_party ** 2)']:.1f})")
-    knot = dev.abs().quantile(.9) / dev.std()
+    knot = p90 / dev.std()
     S["pos1"], S["pos2"] = S.dev_party.clip(0, knot), (S.dev_party - knot).clip(lower=0)
     r = smf.ols(f"{base} + neg + pos1 + pos2", S).fit(cov_type="HC1")
     print(f"  crossing slope up to saturation {r.params['pos1']:.2f} (t={r.tvalues['pos1']:.1f}); "
@@ -445,22 +452,29 @@ def voteview_breaks(p, chamber_prefix, c):
     pmaj = V.rollnumber.map(unity[100] > .5).where(V.party_code == 100, V.rollnumber.map(unity[200] > .5))
     V["against"] = V.yea != pmaj.astype(bool)
     M["brk"] = M.icpsr.map(V.groupby("icpsr").against.mean())
+    M["n"] = M.icpsr.map(V.groupby("icpsr").size())
     M["party"] = M.party_code.map({100: "D", 200: "R"})
     M["last"] = ascii_upper(M.bioname).str.split(",").str[0].str.replace(r"[^A-Z ]", "", regex=True).str.strip().str.split().str[-1]
     return M[M.brk.notna()]
 
 
 def shipped_expectation(M):
-    """The shipped reference (compute_constituent_reference): per party,
-    brk = a + b*al (+ c*min(al, 0) when >= 5 opposed seats); deviation and
-    its chamber p90."""
+    """The shipped reference (compute_constituent_reference over
+    constituent_reference_inputs): per party, brk = a + b*al (+ c*min(al, 0)
+    when >= 5 opposed seats), fit on members with at least 20 party-labeled
+    votes (CONSTITUENT_FULL_CONFIDENCE_VOTES), then applied to everyone;
+    the saturation point is those members' 90th-percentile |deviation|."""
+    full = M.n >= 20
     for _, g in M.groupby("party"):
-        cols = [np.ones(len(g)), g.alignment] + ([np.minimum(g.alignment, 0)] if (g.alignment < 0).sum() >= 5 else [])
-        X = np.column_stack(cols)
-        coef, *_ = np.linalg.lstsq(X, g.brk, rcond=None)
-        M.loc[g.index, "exp"] = np.clip(X @ coef, 0, 1)
+        f = g[full.loc[g.index]]
+
+        def design(d):
+            return np.column_stack([np.ones(len(d)), d.alignment]
+                                   + ([np.minimum(d.alignment, 0)] if (f.alignment < 0).sum() >= 5 else []))
+        coef, *_ = np.linalg.lstsq(design(f), f.brk, rcond=None)
+        M.loc[g.index, "exp"] = np.clip(design(g) @ coef, 0, 1)
     M["dev"] = M.brk - M.exp
-    M["p90"] = M.dev.abs().quantile(.9)
+    M["p90"] = M.dev[full].abs().quantile(.9)
     return M
 
 
