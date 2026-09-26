@@ -1275,7 +1275,7 @@ _SUPPRESSION_COUNTERS = (
     "bsky_post_grounding_rejections",
 )
 
-_INTAKE_COUNTERS = ("articles_fetched", "articles_policy_relevant", "clusters_considered")
+_INTAKE_COUNTERS = ("articles_fetched", "articles_policy_relevant", "clusters_considered", "clusters_attempted")
 
 _OUTPUT_COUNTERS = ("issues_new_topic", "issues_matched_existing", "bsky_reposts_allowed")
 

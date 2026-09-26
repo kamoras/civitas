@@ -1258,6 +1258,13 @@ export default function AboutPage() {
                   so the whole class of error is structurally unavailable rather than filtered.
                 </P>
                 <P>
+                  The cost is that some stories yield no checkable sentence and publish nothing.
+                  At most two issues publish per hourly run, taken in rank order; when a top story
+                  fails the checks, the next-ranked story is tried rather than the run ending
+                  empty. Before that change, two failing top stories could leave the Action Center
+                  silent for a day while the news carried on.
+                </P>
+                <P>
                   The cost is silence. A cluster with no attributable assertion produces no issue at
                   all, and some days carry fewer issues than others. Recommended actions remain
                   procedural — contacting representatives, attending public hearings, reading
