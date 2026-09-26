@@ -137,9 +137,10 @@ def ensure_lexical_index(engine) -> bool:
             needs_backfill = False
             if existing is None:
                 logger.info("Creating explore FTS5 index")
-                # IF NOT EXISTS because the backend runs --workers 2 in
-                # production and each worker process runs its own lifespan,
-                # so two of them reach this DDL at once. Without it the
+                # IF NOT EXISTS because two backend processes can start
+                # together (Swarm's start-first rollout overlaps the old and
+                # new task on one database), each running its own lifespan,
+                # so two of them can reach this DDL at once. Without it the
                 # loser raises "table already exists", the whole
                 # initialisation is caught as a failure, and a worker logs a
                 # traceback for a table that is in fact perfectly fine.

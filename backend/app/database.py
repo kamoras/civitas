@@ -821,8 +821,9 @@ def _init_lock_path() -> str | None:
 def _init_lock():
     """Serialise init_db across worker processes.
 
-    The backend runs `--workers 2` in production and each worker process
-    runs its own FastAPI lifespan, so two of them call init_db at the same
+    Two backend processes can start together — Swarm's start-first
+    rollout overlaps the old and new task on one database — and each runs
+    its own FastAPI lifespan, so two of them can call init_db at the same
     moment. Every step inside is check-then-act — `create_all` inspects
     `sqlite_master` before issuing CREATE TABLE, `_migrate_columns`
     inspects columns before ALTER, `_ensure_indexes` inspects indexes

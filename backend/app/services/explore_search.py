@@ -47,7 +47,6 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
-from datetime import date as date_type
 
 from sqlalchemy import text
 
@@ -60,6 +59,7 @@ from app.pipeline.explore_ranking import (
 )
 from app.pipeline.lexical_index import search_lexical
 from app.pipeline.vector_store import search_explore_documents
+from app.time_utils import comment_period_today
 
 logger = logging.getLogger(__name__)
 
@@ -250,7 +250,7 @@ def hybrid_search(
     """
     default_pool, max_pool = candidate_pool()
     pool = min(max(limit * 8, default_pool), max_pool)
-    today = date_type.today().isoformat()
+    today = comment_period_today()
     commentable_after = today if commentable else None
 
     # `commentable` documents are Federal Register rulemaking and nothing

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  commentDaysLeft,
+  commentPeriodToday,
   describeDaysLeft,
+  isCommentPeriodOpen,
   formatCurrency,
   formatUtcDate,
   formatWeekRange,
@@ -216,5 +219,37 @@ describe("describeDaysLeft", () => {
 
   it("returns empty string for an unparseable date rather than 'NaN days left'", () => {
     expect(describeDaysLeft("not a date", asOf)).toBe("");
+  });
+});
+
+describe("comment deadlines are Eastern calendar dates", () => {
+  // 2026-08-18 21:30 EDT is 2026-08-19 01:30 UTC: the UTC date has already
+  // rolled over, but regulations.gov accepts comments until 11:59 PM ET.
+  const lastEvening = Date.UTC(2026, 7, 19, 1, 30, 0);
+
+  it("reads today's date in Eastern time, not UTC", () => {
+    expect(commentPeriodToday(lastEvening)).toBe("2026-08-18");
+  });
+
+  it("keeps a period open through its final Eastern evening", () => {
+    expect(isCommentPeriodOpen("2026-08-18", lastEvening)).toBe(true);
+    expect(commentDaysLeft("2026-08-18", lastEvening)).toBe(0);
+    expect(describeDaysLeft("2026-08-18", lastEvening)).toBe("closes today");
+  });
+
+  it("closes at Eastern midnight, whatever the reader's zone", () => {
+    // 00:30 EDT on the 19th — 21:30 the previous evening in Los Angeles.
+    const justAfter = Date.UTC(2026, 7, 19, 4, 30, 0);
+    expect(isCommentPeriodOpen("2026-08-18", justAfter)).toBe(false);
+  });
+
+  it("counts calendar days, not 24-hour spans", () => {
+    expect(commentDaysLeft("2026-08-19", lastEvening)).toBe(1);
+    expect(commentDaysLeft("2026-08-25", lastEvening)).toBe(7);
+  });
+
+  it("treats a missing deadline as closed", () => {
+    expect(isCommentPeriodOpen(null, lastEvening)).toBe(false);
+    expect(isCommentPeriodOpen("", lastEvening)).toBe(false);
   });
 });

@@ -5,7 +5,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
-import { safeHref, localDateStr, formatUtcDate } from "@/lib/formatting";
+import { commentDaysLeft, formatUtcDate, isCommentPeriodOpen, safeHref } from "@/lib/formatting";
 import { chamberColor, chamberBorder, chamberLabel } from "@/lib/chamber";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import { useAsyncData } from "@/hooks/useAsyncData";
@@ -49,14 +49,7 @@ function scorecardHref(doc: ExploreDocumentDetail): string | null {
 }
 
 function isCommentOpen(doc: ExploreDocumentDetail): boolean {
-  if (!doc.commentUrl || !doc.commentsCloseOn) return false;
-  return doc.commentsCloseOn >= localDateStr();
-}
-
-function daysUntilClose(closeDate: string): number {
-  const close = new Date(closeDate + "T23:59:59");
-  const now = new Date();
-  return Math.max(0, Math.ceil((close.getTime() - now.getTime()) / 86_400_000));
+  return !!doc.commentUrl && isCommentPeriodOpen(doc.commentsCloseOn);
 }
 
 function formatCommentDate(dateStr: string): string {
@@ -376,7 +369,9 @@ function CommentsSection({
 
               <div className="flex items-center justify-between">
                 <p className="text-xs text-ink-min">
-                  {remaining} day{remaining !== 1 ? "s" : ""} remaining to comment
+                  {remaining === 0
+                    ? "Last day to comment"
+                    : `${remaining} day${remaining !== 1 ? "s" : ""} remaining to comment`}
                 </p>
                 <button
                   onClick={handleSubmit}
@@ -602,7 +597,7 @@ export default function ExploreDetailPage() {
             ? "Federal Register"
             : doc.source;
   const commentOpen = isCommentOpen(doc);
-  const remaining = commentOpen ? daysUntilClose(doc.commentsCloseOn) : 0;
+  const remaining = commentOpen ? commentDaysLeft(doc.commentsCloseOn) : 0;
 
   return (
     <>
