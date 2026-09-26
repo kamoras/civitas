@@ -570,6 +570,13 @@ then deleted (`api/visits.py`, `VisitSalt`). A permanent key would not do:
 the IPv4 space is small enough to enumerate, so anyone holding the key could
 recover every stored IP. With the salt gone, nobody can.
 
+Page-load timings (`POST /api/track-timing`, `PageLoadTiming`) are counted too,
+and deliberately carry even less: the browser reports one cold load's Navigation
+Timing, and the server keeps only a counter per (day, route template, metric,
+bucket) — no hash, no User-Agent, no exact duration. The endpoint reads nothing
+about the caller at all. Keep it that way: a timing row that could be joined to
+a `SiteVisit` would turn a performance histogram into a per-visitor log.
+
 A feature that can only work by asking where the visitor lives is a feature
 this project doesn't ship. State the resulting limitation as content (see
 §7's `omits`) rather than closing the gap by collecting an address.
@@ -842,6 +849,8 @@ the pending list).
 | API routes | `backend/app/api/` (senators, representatives, presidents, justices, admin, explore, action, health) |
 | Frontend pages | `frontend/src/app/` (action [issues/monitors/timeline/elections/branches/globe], elections [state index, states/[ST] ballot, [raceId] detail], scorecard, leaderboard, explore, about, admin) |
 | Frontend API client (incl. paginated vote fetching) | `frontend/src/lib/api.ts` |
+| Admin dashboard (tabbed sub-dashboards, SVG line charts, chart palette) | `frontend/src/app/admin/page.tsx` (shell + tabs), `frontend/src/components/admin/` |
+| Page-load timing beacon + histogram | `frontend/src/components/LoadTimingBeacon.tsx`, `backend/app/api/visits.py` (`track_timing`), `GET /api/admin/load-times` |
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
 | Frontend types | `frontend/src/types/` |
 | Metric explanations (tooltips on all scorecard metrics) | `frontend/src/components/checker/MetricTooltip.tsx` |

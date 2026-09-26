@@ -964,13 +964,36 @@ export async function submitDocumentComment(
   const detail = data?.detail;
   return {
     success: false,
-    message:
-      typeof detail === "string" ? detail : "Submission failed. Please try again.",
+    message: typeof detail === "string" ? detail : "Submission failed. Please try again.",
   };
 }
 
 export async function fetchExploreStats(): Promise<ExploreStats> {
   return requestJson(`${API_BASE}/explore/stats`, "Explore stats failed");
+}
+
+// --- Page-load timing beacon ---
+
+/**
+ * Report one hard page load's Navigation Timing (ms) to the backend, which
+ * keeps only a per-route, per-day histogram of it — no identifier of any kind
+ * (see PageLoadTiming in backend/app/models.py). sendBeacon, so the request
+ * survives the reader navigating away and never competes with the page.
+ */
+export function sendLoadTiming(t: {
+  path: string;
+  ttfb: number;
+  fcp: number | null;
+  load: number;
+}) {
+  if (typeof navigator === "undefined" || typeof navigator.sendBeacon !== "function") return;
+  const params = new URLSearchParams({
+    path: t.path,
+    ttfb: String(Math.round(t.ttfb)),
+    load: String(Math.round(t.load)),
+  });
+  if (t.fcp != null) params.set("fcp", String(Math.round(t.fcp)));
+  navigator.sendBeacon(`${API_BASE}/track-timing?${params}`);
 }
 
 // --- Admin API ---
@@ -1148,6 +1171,14 @@ export async function clearStuckStockTradesPipeline(
   });
 }
 
+export async function clearStuckElectionPipeline(
+  token: string
+): Promise<{ cleared: number; message: string }> {
+  return requestJson(`${API_BASE}/admin/pipeline/clear-stuck-election`, "Clear failed", {
+    init: { method: "POST", headers: adminHeaders(token) },
+  });
+}
+
 export async function fetchAdminPipelineHistory(token: string): Promise<PipelineHistoryRun[]> {
   const url = `${API_BASE}/admin/pipeline/history?limit=20`;
   return asList(
@@ -1167,6 +1198,7 @@ export async function fetchAdminSystemStats(token: string): Promise<HostStats> {
 export interface VisitorStatsDay {
   date: string;
   uniqueVisitors: number;
+  pageViews: number;
 }
 
 export async function fetchAdminVisitorStats(
@@ -1208,6 +1240,77 @@ export async function fetchAdminTopPages(token: string, days: number = 7): Promi
       init: { headers: adminHeaders(token) },
     }),
     url
+  );
+}
+
+export interface LoadTimeSummary {
+  samples: number;
+  /** Null when nothing was measured — distinct from a fast page. */
+  p50: number | null;
+  p75: number | null;
+  p95: number | null;
+}
+
+export type LoadTimeMetric = "ttfb" | "fcp" | "load";
+
+export interface LoadTimes {
+  metrics: LoadTimeMetric[];
+  days: ({ date: string } & Record<LoadTimeMetric, LoadTimeSummary>)[];
+  byPath: ({ path: string } & LoadTimeSummary)[];
+}
+
+export async function fetchAdminLoadTimes(token: string, days: number = 30): Promise<LoadTimes> {
+  return requestJson(`${API_BASE}/admin/load-times?days=${days}`, "Load times failed", {
+    init: { headers: adminHeaders(token) },
+  });
+}
+
+export interface PipelineTrendRun {
+  id: number;
+  pipelineType: string;
+  startedAt: string | null;
+  status: string;
+  elapsedSeconds: number | null;
+}
+
+export async function fetchAdminPipelineTrend(
+  token: string,
+  days: number = 30
+): Promise<{ days: number; runs: PipelineTrendRun[] }> {
+  return requestJson(`${API_BASE}/admin/pipeline/trend?days=${days}`, "Pipeline trend failed", {
+    init: { headers: adminHeaders(token) },
+  });
+}
+
+export interface ActionMetricsRun {
+  run: string;
+  recordedAt: string | null;
+  counts: Record<string, number>;
+  issuesPublished: number;
+  suppressed: number;
+}
+
+export interface ActionMetrics {
+  runs: ActionMetricsRun[];
+  totals: {
+    intake: Record<string, number>;
+    output: Record<string, number>;
+    suppressed: Record<string, number>;
+    suppressedTotal: number;
+    other: Record<string, number>;
+  };
+  runsReturned: number;
+}
+
+/** Action Center run counters for the last `hours` hours (see admin_action_metrics). */
+export async function fetchAdminActionMetrics(
+  token: string,
+  hours: number = 72
+): Promise<ActionMetrics> {
+  return requestJson(
+    `${API_BASE}/admin/action-metrics?limit=500&since_hours=${hours}`,
+    "Action metrics failed",
+    { init: { headers: adminHeaders(token) } }
   );
 }
 
@@ -1499,7 +1602,6 @@ export async function fetchPviMap(): Promise<PviMap> {
   } as unknown as PviMap;
 }
 
-
 /** The curated town list for a state — empty when the town-lookup feature
  * isn't configured or no town has been added for this state yet. Empty
  * is a normal, expected response, not an error; the UI hides the town
@@ -1507,7 +1609,7 @@ export async function fetchPviMap(): Promise<PviMap> {
 export async function fetchTownsForState(state: string): Promise<TownEntry[]> {
   const data = await cachedFetch<{ towns: TownEntry[] }>(
     `${API_BASE}/elections/states/${encodeURIComponent(state)}/towns`,
-    TTL.LONG,
+    TTL.LONG
   );
   return data.towns;
 }
@@ -1520,7 +1622,7 @@ export async function fetchTownsForState(state: string): Promise<TownEntry[]> {
 export async function fetchTownBallot(state: string, town: string): Promise<TownBallot> {
   return cachedFetch(
     `${API_BASE}/elections/states/${encodeURIComponent(state)}/towns/${encodeURIComponent(town)}/ballot`,
-    TTL.SHORT,
+    TTL.SHORT
   );
 }
 

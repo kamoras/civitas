@@ -6,6 +6,7 @@ import logging
 import os
 import secrets
 from datetime import datetime
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import func
@@ -301,21 +302,129 @@ async def admin_system_stats():
     return _read_system_stats()
 
 
-@router.get("/visitor-stats", dependencies=[Depends(require_admin)])
-def admin_visitor_stats(days: int = 30, db: Session = Depends(get_visits_db)) -> list[dict]:
-    """Daily unique-visitor counts for the last N days, oldest first.
+def _window_dates(days: int) -> list[str]:
+    """The last `days` UTC calendar dates, oldest first, ending today."""
+    from datetime import timedelta, UTC as _UTC
 
-    Counts rows in SiteVisit (one per unique visitor per day, keyed by a
-    salted daily-rotating hash — see models.py) — never raw IPs.
+    today = datetime.now(_UTC).date()
+    return [(today - timedelta(days=offset)).isoformat() for offset in range(days - 1, -1, -1)]
+
+
+@router.get("/visitor-stats", dependencies=[Depends(require_admin)])
+def admin_visitor_stats(
+    days: int = Query(30, ge=1, le=366), db: Session = Depends(get_visits_db),
+) -> list[dict]:
+    """Daily unique visitors and page views for the last N calendar days, oldest first.
+
+    Unique visitors count SiteVisit rows (one per visitor per day, keyed by a
+    salted daily-rotating hash — see models.py), never raw IPs; page views sum
+    PageView's raw hit counter. Every day in the window is present, zero-filled:
+    the dashboard draws this as a line, and a day with no rows skipped rather
+    than reported as 0 would draw a straight segment across an outage instead
+    of the dip that shows it.
     """
-    rows = (
+    dates = _window_dates(days)
+    visitors = dict(
         db.query(SiteVisit.date, func.count(SiteVisit.visitor_hash))
+        .filter(SiteVisit.date >= dates[0])
         .group_by(SiteVisit.date)
-        .order_by(SiteVisit.date.desc())
-        .limit(days)
         .all()
     )
-    return [{"date": d, "uniqueVisitors": n} for d, n in reversed(rows)]
+    views = dict(
+        db.query(PageView.date, func.sum(PageView.count))
+        .filter(PageView.date >= dates[0])
+        .group_by(PageView.date)
+        .all()
+    )
+    return [
+        {"date": d, "uniqueVisitors": int(visitors.get(d, 0)), "pageViews": int(views.get(d) or 0)}
+        for d in dates
+    ]
+
+
+def _histogram_percentile(buckets: list[tuple[int, int]], q: float) -> float | None:
+    """The q-quantile (0-1) of a PageLoadTiming histogram, interpolated linearly
+    inside the bucket it falls in. `buckets` is [(upper_bound_ms, count)].
+
+    The lower edge of each bucket is the previous bound in the fixed ladder
+    (LOAD_TIMING_BUCKETS_MS), not the previous *populated* bucket — a sparse
+    day must not stretch one bucket across the empty ones below it.
+    """
+    from app.api.visits import LOAD_TIMING_BUCKETS_MS
+
+    total = sum(n for _, n in buckets)
+    if total == 0:
+        return None
+    counts = dict(buckets)
+    target = q * total
+    seen = 0
+    lower = 0
+    for bound in LOAD_TIMING_BUCKETS_MS:
+        n = counts.get(bound, 0)
+        if n and seen + n >= target:
+            return round(lower + (bound - lower) * (target - seen) / n, 1)
+        seen += n
+        lower = bound
+    return float(LOAD_TIMING_BUCKETS_MS[-1])
+
+
+@router.get("/load-times", dependencies=[Depends(require_admin)])
+def admin_load_times(
+    days: int = Query(30, ge=1, le=366), db: Session = Depends(get_visits_db),
+) -> dict:
+    """Page-load percentiles per day, and per route over the whole window.
+
+    ``days`` has one entry per calendar day (zero-filled like visitor-stats),
+    each carrying p50/p75/p95 and the sample count for every metric —
+    ``ttfb`` (server response, the part this host controls), ``fcp`` (first
+    contentful paint) and ``load`` (the load event). A day with no samples
+    has null percentiles, not 0: nothing was measured, which is different
+    from a page that loaded instantly. ``byPath`` ranks routes by p95 of the
+    load event over the window, slowest first.
+    """
+    from app.api.visits import LOAD_TIMING_METRICS
+    from app.models import PageLoadTiming
+
+    dates = _window_dates(days)
+    rows = (
+        db.query(PageLoadTiming.date, PageLoadTiming.path, PageLoadTiming.metric,
+                 PageLoadTiming.bucket_ms, PageLoadTiming.count)
+        .filter(PageLoadTiming.date >= dates[0])
+        .all()
+    )
+
+    per_day: dict[tuple[str, str], dict[int, int]] = {}
+    per_path: dict[tuple[str, str], dict[int, int]] = {}
+    for date, path, metric, bucket, count in rows:
+        day_hist = per_day.setdefault((date, metric), {})
+        day_hist[bucket] = day_hist.get(bucket, 0) + count
+        path_hist = per_path.setdefault((path, metric), {})
+        path_hist[bucket] = path_hist.get(bucket, 0) + count
+
+    def _summary(hist: dict[int, int] | None) -> dict:
+        items = sorted((hist or {}).items())
+        return {
+            "samples": sum(n for _, n in items),
+            "p50": _histogram_percentile(items, 0.50),
+            "p75": _histogram_percentile(items, 0.75),
+            "p95": _histogram_percentile(items, 0.95),
+        }
+
+    by_path = [
+        {"path": path, **_summary(hist)}
+        for (path, metric), hist in per_path.items()
+        if metric == "load"
+    ]
+    by_path.sort(key=lambda e: e["p95"] or 0, reverse=True)
+
+    return {
+        "metrics": list(LOAD_TIMING_METRICS),
+        "days": [
+            {"date": d, **{m: _summary(per_day.get((d, m))) for m in LOAD_TIMING_METRICS}}
+            for d in dates
+        ],
+        "byPath": by_path,
+    }
 
 
 @router.get("/visitor-breakdown", dependencies=[Depends(require_admin)])
@@ -878,6 +987,54 @@ async def admin_pipeline_history(
     )
 
 
+@router.get("/pipeline/trend", dependencies=[Depends(require_admin)])
+async def admin_pipeline_trend(
+    days: int = Query(30, ge=1, le=366),
+    db: Session = Depends(get_db),
+):
+    """Every run of every pipeline started in the last `days` UTC calendar days
+    (today included), oldest first.
+
+    The slim sibling of /pipeline/history for charting: one row per run with
+    only type, start, status and duration, bounded by a date window rather
+    than a per-type count. History's count cap is right for a table and wrong
+    for a chart — 20 daily Senate runs and 20 weekly Stock Trades runs cover
+    different spans, so a shared x-axis would show one pipeline's failures
+    stopping three weeks before another's.
+    """
+    from app.models import (
+        ElectionPipelineRun, HousePipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun,
+    )
+
+    # From 00:00 UTC of the first calendar day, not "now minus N x 24h": the
+    # dashboard buckets these by UTC date, and a rolling cutoff would count
+    # runs from the afternoon of day -N in its totals that no day of the
+    # chart shows.
+    cutoff = datetime.strptime(_window_dates(days)[0], "%Y-%m-%d")
+    runs = []
+    for model, pipeline_type in (
+        (PipelineRun, "senate"),
+        (HousePipelineRun, "house"),
+        (SupplementaryPipelineRun, "supplementary"),
+        (StockTradesPipelineRun, "stock_trades"),
+        (ElectionPipelineRun, "election"),
+    ):
+        for r in (
+            db.query(model.id, model.started_at, model.status, model.elapsed_seconds)
+            .filter(model.started_at >= cutoff)
+            .all()
+        ):
+            runs.append({
+                "id": r.id,
+                "pipelineType": pipeline_type,
+                "startedAt": r.started_at.isoformat() if r.started_at else None,
+                "status": r.status,
+                "elapsedSeconds": r.elapsed_seconds,
+            })
+    runs.sort(key=lambda x: x["startedAt"] or "")
+    return {"days": days, "runs": runs}
+
+
 # Run-model __tablename__ -> the pipelineType label already used by
 # /pipeline/history, so both endpoints name the same pipeline the same way.
 PHASE_TIMING_KINDS = {
@@ -1301,6 +1458,9 @@ def _coerce_counts(raw) -> dict[str, int] | None:
 @router.get("/action-metrics", dependencies=[Depends(require_admin)])
 async def admin_action_metrics(
     limit: int = Query(48, ge=1, le=500),
+    # Annotated, so a direct call (tests, other modules) gets a real None
+    # rather than the Query() marker as its default.
+    since_hours: Annotated[int | None, Query(ge=1, le=24 * 60)] = None,
     db: Session = Depends(get_db),
 ) -> dict:
     """Per-run Action Center validator counters, newest run first.
@@ -1326,14 +1486,15 @@ async def admin_action_metrics(
 
     Runs are hourly, so gaps in ``runs`` are themselves a signal: a
     refresh that crashed or was still holding the lock leaves no row.
+    ``since_hours`` bounds the window by time instead of by row count, so
+    ``totals`` describe exactly the hours a caller charts — with ``limit``
+    alone, a window with gaps reaches further back to fill its quota.
     """
-    rows = (
-        db.query(ApiCache)
-        .filter(ApiCache.tier == "action-metrics")
-        .order_by(ApiCache.cached_at.desc())
-        .limit(limit)
-        .all()
-    )
+    query = db.query(ApiCache).filter(ApiCache.tier == "action-metrics")
+    if since_hours is not None:
+        from datetime import timedelta
+        query = query.filter(ApiCache.cached_at >= utcnow() - timedelta(hours=since_hours))
+    rows = query.order_by(ApiCache.cached_at.desc()).limit(limit).all()
 
     runs = []
     for row in rows:
@@ -1350,6 +1511,15 @@ async def admin_action_metrics(
             "run": row.cache_key,
             "recordedAt": row.cached_at.isoformat() if row.cached_at else None,
             "counts": counts,
+            # Per-run rollups the dashboard charts run over run, so it needs
+            # no copy of which counter belongs to which group. Intake stays
+            # as its raw counters (fetched -> relevant -> clusters is a
+            # funnel; summing its stages would count one article three
+            # times), and so does output's Bluesky counter, which counts
+            # posts, not issues.
+            "issuesPublished": counts.get("issues_new_topic", 0)
+            + counts.get("issues_matched_existing", 0),
+            "suppressed": sum(counts.get(k, 0) for k in _SUPPRESSION_COUNTERS),
         })
 
     def _sum(keys) -> dict:
