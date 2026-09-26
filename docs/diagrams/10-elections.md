@@ -28,7 +28,7 @@ blanks a page.
 
 ```mermaid
 flowchart TB
-    ROSTER["<b>1. Roster</b><br/>bulk FEC candidate fetch, H and S<br/>→ Race + Candidate rows"]
+    ROSTER["<b>1. Roster</b><br/>bulk FEC candidate fetch, H and S<br/>→ Race + Candidate rows<br/>Senate only where the FEC calendar<br/>lists a Senate election"]
     ROSTER --> FIN["<b>2. Financials</b><br/>FEC totals, 0.25 req/s<br/>FINANCIALS_BATCH_SIZE = 500 per night,<br/>incumbents first, watermarked"]
     FIN --> CONF
     subgraph CONF["<b>3. Confirmed candidates</b> (state_candidates.py)"]
@@ -44,6 +44,13 @@ flowchart TB
     COVI --> POST["<b>6. Bluesky posting</b>"]
     POST --> SNAP["<b>7. Snapshot</b><br/>daily fundraising per candidate"]
 ```
+
+A Senate race is created only where the FEC election-dates calendar lists a
+Senate general for the state (`state_election_dates.senate_election_known`).
+Filers anywhere else are skipped and races already on file are removed —
+New York and Hawaii had phantom "special elections" in 2026 built from
+serial filers. Until the calendar has been read once, the class rotation
+decides.
 
 ## Where "confirmed" comes from
 

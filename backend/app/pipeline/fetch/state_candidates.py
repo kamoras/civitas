@@ -960,8 +960,11 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
     # to the weekly pass would leave that state dark until the next
     # Sunday — and dark on a fresh deploy. Three calls.
     try:
-        for state, dates in (await election_dates.fetch_fec_calendar(client, cycle)).items():
+        calendar = await election_dates.fetch_fec_calendar(client, cycle)
+        for state, dates in calendar.items():
             election_dates.save(state, cycle, dates)
+        if calendar:
+            election_dates.mark_calendar_read(cycle, utcnow().date().isoformat())
     except Exception:
         logger.exception("FEC election-date calendar read failed")
 

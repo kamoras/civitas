@@ -1086,6 +1086,13 @@ export default function AboutPage() {
                   that requires logging in. We do not work around either; where the same
                   office publishes a plain file on an open path, we use that instead.
                 </P>
+                <P>
+                  A Senate race only appears where the FEC&apos;s election calendar lists
+                  one. Before that check, a handful of people who file paperwork for
+                  offices in many states at once were enough to invent a Senate
+                  &ldquo;special election&rdquo; in New York and Hawaii, neither of which
+                  votes for a senator in 2026.
+                </P>
               </div>
 
               <div>
