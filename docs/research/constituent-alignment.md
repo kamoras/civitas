@@ -296,7 +296,9 @@ primaries), so the data gives no basis for an asymmetric shape.
   and members also answer to their reelection constituency (Fenno 1978;
   Clinton 2006).
 - **The live statistic differs from this test's.** The pipeline measures
-  break rates on Civitas's own key and recent roll calls, weighted by party
-  alignment, not on CQ party-unity votes. The expectation is measured on that
-  same statistic every run, so scores stay internally consistent, but the
-  magnitudes above do not carry over one-for-one.
+  break rates on Civitas's own key and recent roll calls, not on CQ
+  party-unity votes. Since v6.14 it counts each party-labeled roll call once,
+  unweighted, as this test does. It used to weight votes by the bill's
+  content lean. The expectation is measured on that same statistic every
+  run, so scores stay internally consistent, but the magnitudes above do not
+  carry over one-for-one.

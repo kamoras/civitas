@@ -90,22 +90,7 @@ class TestSeatRelativeVotes:
 
     def test_breakdown_says_when_few_votes_shrink_it(self):
         detail = _constituent_alignment_core(record(7, total=10), [], {}, state="SW", party="D")["components"][0]["detail"]
-        assert "weight of about 10 full party-line votes" in detail
-
-    def test_a_record_of_mostly_low_weight_votes_counts_as_thin_evidence(self):
-        # 20 votes, but 18 near-bipartisan (weight 0.05) and 2 decisive: the
-        # rate (69% against 10% expected, far past saturation) rests on
-        # (2.9)^2 / 2.045 = 4.1 votes' worth of evidence (Kish), so it is
-        # shrunk like a four-vote record: ~40, not the ~2 full scale gives.
-        votes = [{"billId": f"b{i}", "votedWithParty": i >= 2,
-                  "partyAlignmentWeight": 1.0 if i < 2 else 0.05} for i in range(20)]
-        rec = {"keyVotes": votes, "recentVotes": []}
-        assert score_calculator.party_vote_evidence(rec) == pytest.approx(4.11, abs=0.01)
-        assert score(rec) == 40
-        assert score_calculator.calculate_confidence({"votingRecord": rec})["constituentAlignment"] == "low"
-
-    def test_equal_weights_evidence_is_the_vote_count(self):
-        assert score_calculator.party_vote_evidence(record(10, total=37)) == pytest.approx(37)
+        assert "only 10 votes" in detail
 
     def test_loyal_floor_unchanged(self):
         # An R in a D+15 state is expected to break 30%; never breaking is a
@@ -148,13 +133,16 @@ class TestSeatRelativeVotes:
         assert core["score"] == 50
         assert "no measured expectation" in core["components"][0]["detail"]
 
-    def test_vote_weights_are_used(self):
+    def test_each_party_labeled_roll_call_counts_once_unweighted(self):
+        # v6.14: partyAlignmentWeight is the bill's content lean, not how
+        # the roll call split; weighting by it made a content-bipartisan
+        # bill (0.0, read as 1.0) outweigh a 0.01-lean one a hundredfold.
         rec = {"keyVotes": [
             {"billId": "a", "votedWithParty": False, "partyAlignmentWeight": 1.0},
-            {"billId": "b", "votedWithParty": True, "partyAlignmentWeight": 0.5},
-            {"billId": "c", "votedWithParty": True, "partyAlignmentWeight": 0.5},
+            {"billId": "b", "votedWithParty": True, "partyAlignmentWeight": 0.0},
+            {"billId": "c", "votedWithParty": True, "partyAlignmentWeight": 0.01},
         ], "recentVotes": []}
-        assert party_break_rate(rec) == (0.5, 3)
+        assert party_break_rate(rec) == (pytest.approx(1 / 3), 3)
 
     def test_malformed_vote_entries_are_skipped(self):
         # A None left by a partial normalize must not crash the break rate

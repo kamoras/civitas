@@ -71,7 +71,6 @@ from app.pipeline.analyze.score_calculator import (
     CONSTITUENT_FULL_CONFIDENCE_VOTES,
     SATURATION_QUANTILE,
     party_break_rate,
-    party_vote_evidence,
     past_saturation,
     seat_break_deviation,
     seat_relative_vote_score,
@@ -172,7 +171,6 @@ def _tie_extended_extreme(
 def constituent_metrics(
     break_rate: float | None,
     labeled_votes: int,
-    evidence: float,
     state: str,
     party: str,
     effective_party: str | None = None,
@@ -182,12 +180,11 @@ def constituent_metrics(
     """The Constituent Alignment inputs a member record carries:
     seat_relative_vote (the vote component recomputed from the raw votes by
     the scorer's own seat_relative_vote_score; None below MIN_LABELED_VOTES
-    or without a measured expectation) and past_saturation (None unless
-    the record has full-confidence evidence — the same members the
-    reference's saturation point is measured on). ``break_rate`` and
-    ``labeled_votes`` are party_break_rate's, ``evidence`` is
-    party_vote_evidence's. Shared by the pipeline gate and
-    scripts/rescore.py so both judge members one way.
+    or without a measured expectation) and past_saturation (None below
+    CONSTITUENT_FULL_CONFIDENCE_VOTES — the reference's saturation point is
+    measured only on full-confidence records). ``break_rate`` and
+    ``labeled_votes`` are party_break_rate's. Shared by the pipeline gate
+    and scripts/rescore.py so both judge members one way.
 
     The rank check against it asks whether stored scores still follow the
     stored votes — a plumbing and data check. The shape itself (the peak,
@@ -202,8 +199,8 @@ def constituent_metrics(
         district=district, reference=reference,
     )
     if dev is not None:
-        out["seat_relative_vote"] = seat_relative_vote_score(*dev, evidence)
-        if evidence >= CONSTITUENT_FULL_CONFIDENCE_VOTES:
+        out["seat_relative_vote"] = seat_relative_vote_score(*dev, labeled_votes)
+        if labeled_votes >= CONSTITUENT_FULL_CONFIDENCE_VOTES:
             out["past_saturation"] = past_saturation(*dev)
     return out
 
@@ -298,19 +295,20 @@ def evaluate_derived_checks(
             "no {label} has any party-labeled vote — vote fetch or "
             "party-labeling is producing nothing",
         ),
-        (
-            # Only meaningful when the reference was measured from this
-            # population; a fallback reference from another run makes no
-            # promise about these members' spread.
-            reference_measured and _past_saturation_share(members) > _PAST_SATURATION_TOLERANCE,
+    ]
+    # Only meaningful, and only counted as a check, when the reference was
+    # measured from this population; a fallback reference from another run
+    # makes no promise about these members' spread.
+    if reference_measured:
+        integrity_probes.append((
+            _past_saturation_share(members) > _PAST_SATURATION_TOLERANCE,
             "IV", "at most the chamber's out-of-pattern tail past saturation",
             "more {label}s sit past Constituent Alignment's saturation "
             "deviation than its definition allows (it is the chamber's "
             f"{SATURATION_QUANTILE:.0%} quantile, so about "
             f"{1 - SATURATION_QUANTILE:.0%} of members at most) — the "
             "constituent reference and the votes disagree",
-        ),
-    ]
+        ))
     for failed, dim_label, expectation, rationale in integrity_probes:
         checked += 1
         if failed:
@@ -455,23 +453,19 @@ def _member_records(db, model, constituent_reference: dict | None = None) -> lis
     persisted one when not given."""
     vote_model, fk_col = _vote_query_for(model)
     # Each member's party-labeled votes, as the dicts party_break_rate reads,
-    # so the gate judges members on the score's own statistic (its weights,
+    # so the gate judges members on the score's own statistic (its dedupe,
     # its minimum count). Storage holds each roll call once but bill_id is
     # not unique per roll call, so the row id is the identity.
     current = db.query(model).filter(model.is_current.is_(True)).all()
     votes: dict[str, list[dict]] = defaultdict(list)
-    for row_id, member_id, bill_id, with_party, weight in (
-        db.query(
-            vote_model.id, fk_col, vote_model.bill_id,
-            vote_model.voted_with_party, vote_model.party_alignment_weight,
-        )
+    for row_id, member_id, bill_id, with_party in (
+        db.query(vote_model.id, fk_col, vote_model.bill_id, vote_model.voted_with_party)
         .filter(vote_model.voted_with_party.isnot(None))
         .filter(fk_col.in_([m.id for m in current]))
         .all()
     ):
         votes[member_id].append({
-            "rcKey": f"row-{row_id}", "billId": bill_id,
-            "votedWithParty": with_party, "partyAlignmentWeight": weight,
+            "rcKey": f"row-{row_id}", "billId": bill_id, "votedWithParty": with_party,
         })
     if constituent_reference is None:
         constituent_reference = CONSTITUENT_REFERENCE.load()
@@ -484,10 +478,9 @@ def _member_records(db, model, constituent_reference: dict | None = None) -> lis
         # direction-of-effect check against a different ratio than the one
         # scored would weaken for reasons unrelated to the scores.
         base = getattr(m, "total_contributions", None) or raised
-        record = {"keyVotes": votes[m.id]}
-        rate, labeled = party_break_rate(record)
+        rate, labeled = party_break_rate({"keyVotes": votes[m.id]})
         constituent = constituent_metrics(
-            rate, labeled, party_vote_evidence(record), m.state or "", m.party or "I",
+            rate, labeled, m.state or "", m.party or "I",
             effective_party=getattr(m, "caucus_party", None),
             district=getattr(m, "district", None),
             reference=constituent_reference,
@@ -521,7 +514,7 @@ def check_ground_truth(
             are chamber-agnostic, unlike the named reference table they
             replaced (which is why the House previously had no gate).
         constituent_reference: the Constituent Alignment reference this
-            run scored with (live_constituent_reference). Defaults to the
+            run scored with (live_constituent_reference_measured). Defaults to the
             persisted one, which differs only if persisting it failed.
         reference_measured: whether that reference was measured from this
             run's members (live_constituent_reference_measured); gates the

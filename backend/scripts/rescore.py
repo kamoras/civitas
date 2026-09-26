@@ -60,7 +60,6 @@ from app.pipeline.analyze.score_calculator import (  # noqa: E402
     constituent_reference_inputs,
     derive_chamber_majority,
     party_break_rate,
-    party_vote_evidence,
 )
 from app.pipeline.fetch.fec import select_recent_elections  # noqa: E402
 from app.pipeline.transform.normalize_finance import summarize_election_totals  # noqa: E402
@@ -289,8 +288,7 @@ def main() -> int:
             "pac_ratio": funding["totalFromPACs"] / base if base > 0 else None,
             "small_donor_pct": funding["smallDonorPercentage"] if base > 0 else None,
             **constituent_metrics(
-                scored_rate, n_scored, party_vote_evidence(payload["votingRecord"]),
-                s["state"], s["party"],
+                scored_rate, n_scored, s["state"], s["party"],
                 effective_party=payload["votingRecord"].get("effectiveParty"),
                 reference=payload.get("constituentReference"),
             ),

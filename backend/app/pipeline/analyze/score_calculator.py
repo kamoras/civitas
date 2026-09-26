@@ -652,9 +652,9 @@ def calculate_confidence(senator: dict) -> dict[str, str]:
     has_funding = funding_share_base(funding) > 0
     n_donors = len(funding.get("topDonors") or [])
     n_industries = len(funding.get("industryBreakdown") or [])
-    # The same effective count the score's shrinkage reads, so the
-    # confidence grade and the breakdown's shrinkage note can't disagree.
-    n_party_votes = party_vote_evidence(voting_record)
+    # The same deduplicated count the score's shrinkage reads, so the
+    # confidence grade and the breakdown's "only n votes" can't disagree.
+    _, n_party_votes = party_break_rate(voting_record)
     n_evaluable = sum(
         1 for p in promises
         if isinstance(p, dict) and p.get("alignment") in (PromiseAlignment.KEPT, PromiseAlignment.PARTIAL, PromiseAlignment.BROKEN)
@@ -1375,51 +1375,31 @@ _MIN_OPPOSED_SEATS_FOR_KINK = 5
 SATURATION_QUANTILE = 0.9
 
 
-def _labeled_party_votes(voting_record: dict) -> list[tuple[bool, float]]:
-    """(voted with party, weight) for each party-labeled roll call in the
-    record, each roll call once (dedupe_votes). A vote's weight is its
-    partyAlignmentWeight, or 1 when none was measured."""
+def party_break_rate(voting_record: dict) -> tuple[float | None, int]:
+    """(share of party-labeled votes cast against the member's party, count
+    of those votes). None when fewer than 3 are usable. The one definition
+    both the per-run reference and the member's score read, so the
+    expectation is measured on exactly the statistic it is compared with.
+    Each roll call counts once (dedupe_votes), matching what the scorecard
+    shows.
+
+    Unweighted since v6.14: a vote is party-labeled by how the parties
+    actually split on it (refine_with_vote_data), and each such roll call
+    is one observation of whether the member broke — the statistic the
+    research note validated (party-unity votes, unweighted). It used to be
+    weighted by partyAlignmentWeight, the bill's CONTENT lean, with 0.0
+    read as 1.0; a content-bipartisan bill that split on party lines then
+    counted a hundred times more than one with a 0.01 lean."""
     from app.pipeline.transform.normalize_votes import dedupe_votes
 
     votes = dedupe_votes([
         v for v in (voting_record.get("keyVotes") or []) + (voting_record.get("recentVotes") or [])
         if isinstance(v, dict)
     ])
-    out = []
-    for v in votes:
-        wp = v.get("votedWithParty")
-        if wp is None:
-            continue
-        weight = v.get("partyAlignmentWeight") or 0.0
-        out.append((wp is True, weight if weight > 0.0 else 1.0))
-    return out
-
-
-def party_break_rate(voting_record: dict) -> tuple[float | None, int]:
-    """(weighted share of party-labeled votes cast against the member's
-    party, count of those votes). None when fewer than 3 are usable. The
-    one definition both the per-run reference and the member's score read,
-    so the expectation is measured on exactly the statistic it is compared
-    with. Each roll call counts once (dedupe_votes), matching what the
-    scorecard shows."""
-    votes = _labeled_party_votes(voting_record)
-    with_party = sum(w for wp, w in votes if wp)
-    against = sum(w for wp, w in votes if not wp)
-    if len(votes) < 3 or with_party + against <= 0:
-        return None, len(votes)
-    return against / (with_party + against), len(votes)
-
-
-def party_vote_evidence(voting_record: dict) -> float:
-    """How many votes' worth of evidence the weighted break rate rests on:
-    Kish's (1965) effective sample size, (sum w)^2 / sum w^2, over the same
-    votes and weights party_break_rate uses. Equal to the vote count when
-    every vote weighs the same, lower when a few heavy votes dominate the
-    rate — so a record of mostly low-weight votes doesn't earn the full
-    confidence its raw count would suggest."""
-    weights = [w for _, w in _labeled_party_votes(voting_record)]
-    squares = sum(w * w for w in weights)
-    return sum(weights) ** 2 / squares if squares else 0.0
+    labeled = [v["votedWithParty"] for v in votes if v.get("votedWithParty") is not None]
+    if len(labeled) < 3:
+        return None, len(labeled)
+    return sum(1 for wp in labeled if wp is not True) / len(labeled), len(labeled)
 
 def _expected_break_rate(fit: dict, alignment: float) -> float:
     rate = (
@@ -1486,7 +1466,7 @@ def compute_constituent_reference(members: list[tuple[str, float, float]]) -> di
 def constituent_reference_inputs(members: list[dict]) -> list[tuple[str, float, float]]:
     """(party, seat alignment, break rate) for each member dict (the shape
     calculate_scores consumes: state, party, district, votingRecord) whose
-    break rate rests on full-confidence evidence — exactly the values
+    break rate rests on a full-confidence count of votes — exactly the values
     _constituent_alignment_core compares, so the reference and the scores
     can't disagree. Thinner records are left out: the score itself pulls
     them toward 50 as too noisy to read at full scale, and their 0/33/67%
@@ -1496,10 +1476,8 @@ def constituent_reference_inputs(members: list[dict]) -> list[tuple[str, float, 
     for m in members:
         record = m.get("votingRecord") or {}
         party = record.get("effectiveParty") or m.get("party")
-        rate, _ = party_break_rate(record)
-        if party not in ("D", "R") or rate is None:
-            continue
-        if party_vote_evidence(record) < CONSTITUENT_FULL_CONFIDENCE_VOTES:
+        rate, n = party_break_rate(record)
+        if party not in ("D", "R") or rate is None or n < CONSTITUENT_FULL_CONFIDENCE_VOTES:
             continue
         alignment = _signed_state_alignment(
             m.get("state", ""), m.get("party", "I"),
@@ -1543,15 +1521,14 @@ def past_saturation(deviation: float, scale: float) -> bool:
     return deviation > scale
 
 
-def seat_relative_vote_score(deviation: float, scale: float, evidence: float) -> float:
+def seat_relative_vote_score(deviation: float, scale: float, n_votes: int) -> float:
     """Constituent Alignment's seat-relative vote component: the peaked
     shape (_seat_relative_vote_score), shrunk linearly toward 50 until the
-    break rate rests on CONSTITUENT_FULL_CONFIDENCE_VOTES votes of evidence
-    (party_vote_evidence; AGENTS.md principle 3) — with a handful of votes
-    one break moves the rate far enough to reach either end, or past
-    saturation the floor. The one implementation the score and the
-    ground-truth gate both call."""
-    confidence = min(evidence / CONSTITUENT_FULL_CONFIDENCE_VOTES, 1.0)
+    member has CONSTITUENT_FULL_CONFIDENCE_VOTES party-labeled votes
+    (AGENTS.md principle 3) — with a handful of votes one break moves the
+    rate far enough to reach either end, or past saturation the floor. The
+    one implementation the score and the ground-truth gate both call."""
+    confidence = min(n_votes / CONSTITUENT_FULL_CONFIDENCE_VOTES, 1.0)
     return 50.0 + (_seat_relative_vote_score(deviation, scale) - 50.0) * confidence
 
 
@@ -1739,8 +1716,7 @@ def _constituent_alignment_core(
         )
     else:
         deviation = break_rate - expected
-        evidence = party_vote_evidence(voting_record)
-        party_score = seat_relative_vote_score(deviation, deviation_scale, evidence)
+        party_score = seat_relative_vote_score(deviation, deviation_scale, n_party)
         party_alignment_detail = (
             f"broke with party on {break_rate:.1%} of {n_party} party-labeled votes; "
             f"{eval_party} members of this chamber in seats with this lean "
@@ -1752,11 +1728,10 @@ def _constituent_alignment_core(
                 f"chamber's {round(SATURATION_QUANTILE * 100)}th-percentile gap, "
                 "where breaking further lowers the score"
             )
-        if evidence < CONSTITUENT_FULL_CONFIDENCE_VOTES:
+        if n_party < CONSTITUENT_FULL_CONFIDENCE_VOTES:
             party_alignment_detail += (
-                f"; those votes carry the weight of about {evidence:.0f} full party-line "
-                f"votes, so the score is pulled toward 50 until "
-                f"{CONSTITUENT_FULL_CONFIDENCE_VOTES}"
+                f"; only {n_party} votes, so the score is pulled toward 50 "
+                f"until {CONSTITUENT_FULL_CONFIDENCE_VOTES}"
             )
 
     congruence_weight = POSITION_CONGRUENCE_WEIGHT if congruence_score is not None else 0.0

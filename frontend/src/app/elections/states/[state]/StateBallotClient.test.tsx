@@ -614,6 +614,11 @@ describe("TownSection", () => {
     expect(screen.queryByText(/Loading/)).not.toBeInTheDocument();
     expect(await screen.findByRole("combobox")).toHaveValue("");
     expect(fetchTownBallot).not.toHaveBeenCalledWith("CA", "Albany");
+
+    // Coming back doesn't bring the old pick back either.
+    rerender(<TownSection state="NY" pageElectionDate="2026-11-03" />);
+    expect(await screen.findByRole("combobox")).toHaveValue("");
+    expect(screen.queryByText(/Albany Mayor/)).not.toBeInTheDocument();
   });
 
   it("a failed lookup says so rather than showing nothing", async () => {
