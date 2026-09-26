@@ -28,8 +28,9 @@ external API calls to cloud AI services.
 │   members)       finance)   histories)   remarks)    cases)  GDP)            │
 │                                                                              │
 │  AP / NPR / PBS / BBC / The Hill / Politico / Roll Call (RSS)                │
-│  Google Trends     Reddit r/politics     Vote Smart (statewide ballot        │
-│                                           measures — optional, keyed)        │
+│  + 41 per-state newsrooms (election coverage)                                │
+│  Google Trends     Bluesky            Vote Smart (statewide ballot           │
+│                    (trending)          measures — optional, keyed)           │
 └──────────────────────────┬───────────────────────────────────────────────────┘
                            │  rate-limited HTTP
                            │  (Congress 1.2 RPS, FEC 0.25 RPS, GovInfo 1.0 RPS)
@@ -107,6 +108,17 @@ external API calls to cloud AI services.
 > composition, the schema, and the deploy sequence — with more detail than ASCII
 > fits. They render as pictures on GitHub. The diagrams here stay ASCII so the
 > README reads the same in a terminal.
+
+**Server rendering:** `/action`, `/leaderboard`, `/bills`, `/explore` and
+`/compare` keep their view state in the address bar, and `useSearchParams()` has
+no value during SSR — so React suspends and the server renders the nearest
+`<Suspense>` fallback. Each of those pages supplies a real one
+(`components/layout/PageFallback.tsx`: navbar, masthead, content skeleton), so
+the frame arrives in the first paint. They previously wrapped the *entire* page
+in `<Suspense fallback={null}>`, which made the server send a ~12KB body with no
+chrome and nothing visible until ~653KB of JavaScript had parsed and hydrated.
+The data itself still arrives after hydration: these routes are prerendered and
+the content is per-request.
 
 **Hardware:** Raspberry Pi 5 (16 GB RAM), NVMe SSD. All models, databases, and services run on-device. No cloud GPU, no third-party AI APIs, no data leaves the device.
 
@@ -373,9 +385,14 @@ Every hour at :15
        │
        ▼
   1. FETCH ───── RSS (AP, NPR, PBS, BBC, The Hill, Politico, Roll Call —
-       │         8 feeds across 7 newsrooms; NPR's two desks count as one)
-       │         + Google Trends + Reddit
+       │         9 feeds across 7 newsrooms; NPR's two desks count as one)
+       │         + Google Trends + Bluesky trending
        │         48-hour article window; direct URLs only (no redirect wrappers)
+       │         Reddit was a third trending source until 2026-09: it now
+       │         requires OAuth for datacenter traffic and 403s everything
+       │         else, so it was retired rather than left silently empty.
+       │         A source that FAILS is reported as failed, never merged in
+       │         as a source that simply had nothing to say.
        ▼
   2. FILTER ──── Embed each article against 24 policy prototypes (19 US, 5 intl.)
        │         Discard cosine_sim < 0.22 (off-topic articles)
@@ -390,10 +407,22 @@ Every hour at :15
        │                 + 0.25 × (trending score)
        │         Actionability leads: officials mentioned + similarity to the
        │         ingested civic-document corpus, not hand-authored keywords
-       │         Select top 4 clusters (MAX_ISSUES)
+       │         Select the top clusters (MAX_ISSUES = 2)
        ▼
-  5. LLM ─────── Per cluster: neutral summary + key facts + citizen actions
-       │         Post-generation title deduplication (cosine_sim > 0.92)
+  5. EXTRACT ─── The model LOCATES an assertion in one article; it never
+       │         writes the sentence. post_composer.py checks both spans
+       │         appear verbatim, that the source asserts one OF the other
+       │         (adjacency — two true fragments can otherwise be assembled
+       │         into one false sentence), that the span runs to the end of
+       │         its clause, and only then renders "actor predicate."
+       │         Title = the top article's real headline. Summary = the
+       │         single best claim. Facts = the supporting claims, each
+       │         carrying the outlet it came from.
+       │         A cluster with no attributable assertion produces NO issue:
+       │         MAX_ISSUES is a ceiling, not a quota. Publishing anyway is
+       │         what produced "This coverage tracks the race and related
+       │         developments."
+       │         Post-composition title deduplication (cosine_sim > 0.92)
        ▼
   6. PERSIST ─── Topic-keyed matching: each unique story maps to one permanent
        │         DB row regardless of rank changes or brief displacement.
@@ -420,13 +449,13 @@ Every hour at :15
        │         Repost + like outlet posts that match active issues.
 ```
 
-**Why cluster before ranking?** Articles about the same event arrive from multiple outlets within minutes. Without clustering, all 4 "top issues" would be the same story from AP, NPR, BBC, and PBS. Clustering first, then ranking by source breadth, surfaces the 4 most distinct newsworthy topics.
+**Why cluster before ranking?** Articles about the same event arrive from multiple outlets within minutes. Without clustering, every "top issue" would be the same story from AP, NPR, BBC, and PBS. Clustering first, then ranking by source breadth, surfaces the most distinct newsworthy topics.
 
-**Why filter at 0.22 cosine similarity?** The policy prototype filter is deliberately permissive. False negatives (dropping a real policy story) are worse than false positives. The LLM step handles borderline cases through its non-partisan framing constraint.
+**Why filter at 0.22 cosine similarity?** The policy prototype filter is deliberately permissive. False negatives (dropping a real policy story) are worse than false positives. Borderline cases are handled downstream by extraction rather than by asking a model to be neutral: a cluster that yields no verbatim, adjacently-asserted claim simply produces no issue.
 
 **Why a 5-day monitor threshold?** A topic appearing in the top issues on 5+ distinct days within two weeks is structurally different from a one-day news spike — it indicates a developing situation citizens may need to track. Shorter thresholds created too many ephemeral monitors.
 
-**Why topic-keyed matching instead of rank-slot matching?** The original design keyed issues by `(date, rank)`. When the same story briefly fell off the top 4 and returned, a new row was created with `bsky_posted_at=None`, triggering a duplicate Bluesky post. Topic-keyed matching (2-day lookback by cosine similarity) ensures the same story always maps to the same row. New articles advance `primary_article_date`; more outlets covering the same event do not.
+**Why topic-keyed matching instead of rank-slot matching?** The original design keyed issues by `(date, rank)`. When the same story briefly fell off the top slots and returned, a new row was created with `bsky_posted_at=None`, triggering a duplicate Bluesky post. Topic-keyed matching (2-day lookback by cosine similarity) ensures the same story always maps to the same row. New articles advance `primary_article_date`; more outlets covering the same event do not.
 
 **What makes a repost?** A newer article date is necessary but not sufficient — recap coverage rewords the same story under a fresher timestamp, which used to repost with nothing new to say. The new facts must also introduce either a named entity/figure or a story development (a veto, a court blocking an order, a failed override) that the facts *as of the last post* lacked. The baseline is `bsky_posted_facts`, not the live `facts` column: `facts` is rewritten on every hourly refresh whether or not anything was posted, so baselining on it let a development that surfaced between posts be absorbed and never read as new again. Rows that predate the column are backfilled from `facts` at startup — the poster is the only writer of `bsky_posted_facts` and it only ever sees issues the repost gate has already released, so a NULL baseline on an already-posted row could never resolve itself. The backfill is unconditional rather than fired once on the migration: the poster writes `bsky_posted_at` and `bsky_posted_facts` in the same commit, so a row with the first set and the second NULL can only predate the column, and a seeded row stops matching.
 
@@ -444,8 +473,10 @@ An independent pipeline (`app/pipeline/election_pipeline.py`) with no data depen
    REFRESH            midterm cycle has ~6,900 candidates — the roster rotates over runs)
 3. BALLOT ───────── statewide ballot measures per state (Vote Smart), + a liveness
    MEASURES           check on the official-ballot links the site hands users
-4. COVERAGE ─────── RSS + Bluesky matched to races by candidate name with mandatory
-   INGESTION          corroboration; tighter cadence in election season
+4. COVERAGE ─────── RSS matched to races by candidate name with mandatory
+   INGESTION          corroboration; 9 national feeds + 41 per-state newsrooms;
+                      tighter cadence in election season. The open Bluesky
+                      name search is DISABLED — see below.
 5. BLUESKY ──────── one grounded, source-backed sentence per notable coverage item
 6. SNAPSHOT ─────── changed-only fundraising snapshots for trend charts
 ```
@@ -465,6 +496,61 @@ Three rules do most of the work, all for the same reason — a wrong name here c
 - **Certification is a signal, not a promise.** Where a vendor publishes an official/certified flag it is honoured, but `settle_days` sits underneath as a failsafe, because that flag is not reliably flipped (Utah's stayed false a month after its own signed canvass was published on the same portal).
 
 What a visitor sees follows directly: a state with confirmed nominees renders a flat, confirmed list; a state without them falls back to FEC filers ranked by money raised, and the page says so rather than implying the ranking means anything about who will win.
+
+### Race coverage: what counts as coverage
+
+A story is attached to a race by candidate name, and a bare surname is never
+treated as identifying — with thousands of FEC candidates the roster's surname
+set covers a large fraction of common English surnames. A match therefore needs
+the surname **plus** corroboration in the same text:
+
+- `full_name` — the candidate's first name appears with it, as a name (up to two
+  intervening tokens, so "Robert F. Kennedy" matches), and
+- `surname_context` — the candidate's state name appears.
+
+Only `full_name` items are eligible for the Bluesky posting path; the weaker
+basis is display-only.
+
+**The state-name corroboration goes vacuous on a state's own newsroom.** Adding
+41 per-state outlets broke an assumption the rule had always relied on: the
+Kentucky Lantern says "Kentucky" in virtually every article it publishes, so the
+check fires on all of them and `surname_context` silently degenerates into the
+bare-surname match it exists to prevent. Measured over the live corpus:
+
+| | n | mean relevance | below 0.1 |
+|---|---|---|---|
+| national / `full_name` | 351 | 0.301 | 6% |
+| national / `surname_context` | 112 | 0.258 | 14% |
+| state / `full_name` | 30 | 0.295 | 3% |
+| **state / `surname_context`** | **128** | **0.166** | **37%** |
+
+`full_name` is indifferent to which feed an item came from; the weaker rule
+degrades 2.6x. That 37% was the Williams sisters' doubles comeback on OH-9, a
+Minnesota salmonella outbreak on SEN-MN, and a Kentucky man with a meat allergy
+on KY-1. Those matches now have to clear the relevance bar `race_relevance`
+derives by Otsu from the corpus — and only where the corroboration is
+independently known to be vacuous. Gating the *whole* news feed on relevance was
+measured too and rejected: it emptied 64 of 174 races.
+
+They are **hidden, not deleted**. The article is still in the outlet's RSS feed,
+so removing the row is exactly what stops `_already_ingested` from blocking it:
+deleting them churned, re-ingesting and re-deleting the same items every 15
+minutes.
+
+**Syndication defeats a URL-keyed dedupe.** States Newsroom distributes one piece
+to its whole network, so it arrives from twenty-odd outlets at twenty-odd
+legitimate URLs. One race held 22 copies of a single headline. Deduping on the
+headline keeps the outlet that ran it first.
+
+**The open Bluesky name search is disabled.** Searching the whole network for a
+candidate's name produced 7,740 of 8,239 stored coverage items — 94% — and the
+content was not coverage. Four successive filters were built against it and each
+failed in a different direction: source-type discarded real local newsrooms;
+relevance admitted campaign material (maximally on-topic for a campaign);
+no-advocacy still admitted mockery and a football post; and a DNS-verified
+domain-handle rule does not catch a shitposter who owns a domain. A name mention
+is not coverage, and four filters could not make it one. Widening the *sources*
+(the 41 state newsrooms) is the fix that filtering was standing in for.
 
 ### Ballot measures
 
@@ -543,7 +629,7 @@ The Civitas Bluesky account (`@civitas-research.org`) is updated automatically b
 
 | Post type | Trigger | Content |
 |-----------|---------|---------|
-| **Issue post** | New topic enters action center, or existing topic gets articles with a newer date | LLM-written 1–3 sentence summary. If event predates today, post opens with "Yesterday: …" or "On [date]: …" |
+| **Issue post** | New topic enters action center, or existing topic gets articles with a newer date | Verbatim claims extracted from the sources and rendered by `post_composer` — the model locates spans, it does not write the sentence. If the event predates today, the post opens with "Yesterday: …" or "On [date]: …" |
 | **Senator spotlight** | Once per day (random pick from those not yet spotlighted, cycling through all before repeating) | LLM-written score highlight with data from Civitas scorecard |
 | **Weekly summary** | Once per week (6-day cooldown) | LLM-written condensed week-in-review from the timeline pipeline |
 | **Repost + like** | Outlet post matches an active issue (cosine sim ≥ 0.78) | Reposts + likes posts from AP News, NPR, and PBS NewsHour (`NEWS_OUTLET_HANDLES` — a narrower list than the RSS feed set, since it needs a Bluesky presence); posts under 24h old; max 3 per hourly run |

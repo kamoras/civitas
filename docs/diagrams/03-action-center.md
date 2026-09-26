@@ -7,7 +7,7 @@ different timescale and different data.
 flowchart TB
     TICK(["Hourly at :15"]) --> FETCH
 
-    FETCH["<b>1. FETCH</b><br/>8 RSS feeds across 7 newsrooms<br/>+ Google Trends + Reddit<br/>48h article window · direct URLs only"]
+    FETCH["<b>1. FETCH</b><br/>9 RSS feeds across 7 newsrooms<br/>+ Google Trends + Bluesky trending<br/>48h article window · direct URLs only"]
     FETCH --> FILTER
 
     FILTER["<b>2. FILTER</b><br/>embed each article against<br/>24 policy prototypes (19 US, 5 international)"]
@@ -20,10 +20,10 @@ flowchart TB
 
     RANK["<b>4. RANK</b><br/>0.40 × civic actionability<br/>0.35 × source breadth<br/>0.25 × trending relevance"]
     RANK --> TOP["Select top 2 (MAX_ISSUES)"]
-    TOP --> LLM
+    TOP --> EXTRACT
 
-    LLM["<b>5. LLM</b><br/>per cluster: neutral summary,<br/>key facts, citizen actions"]
-    LLM --> DEDUP{"title cosine > 0.92<br/>vs another generated title?"}
+    EXTRACT["<b>5. EXTRACT</b><br/>model LOCATES spans; post_composer<br/>verifies verbatim + adjacency + clause end,<br/>then renders. no claim → no issue"]
+    EXTRACT --> DEDUP{"title cosine > 0.92<br/>vs another issue title?"}
     DEDUP -->|yes| MERGE["Drop as near-duplicate"]
     DEDUP -->|no| MATCH
 
@@ -65,13 +65,14 @@ missing from the feed, the refresh is not completing.
 ## Why the thresholds are what they are
 
 **Cluster before ranking.** Articles about one event arrive from several outlets
-within minutes. Rank first and all four "top issues" are the same story from AP,
+within minutes. Rank first and every "top issue" is the same story from AP,
 NPR, BBC and PBS. Clustering first, then ranking by source breadth, surfaces
-four *distinct* stories.
+*distinct* stories.
 
 **0.22 relevance filter is deliberately permissive.** A false negative drops a
-real policy story; a false positive gets caught downstream by the LLM's
-non-partisan framing constraint. The asymmetry favours recall.
+real policy story; a false positive is caught downstream by extraction — a
+cluster that yields no verbatim, adjacently-asserted claim produces no issue at
+all. The asymmetry favours recall.
 
 **Self-calibrating cluster merge.** A fixed similarity threshold either
 fragments one story across many clusters or collapses everything into one
@@ -83,7 +84,7 @@ within a fortnight is structurally different from a one-day spike — it's a
 developing situation. Shorter thresholds produced too many ephemeral monitors.
 
 **Topic-keyed persistence, not rank-slot.** The original design keyed issues by
-`(date, rank)`. When a story briefly fell out of the top 4 and returned, it got
+`(date, rank)`. When a story briefly fell out of the top slots and returned, it got
 a new row with `bsky_posted_at = null` — and was posted to Bluesky a second
 time. Keying by topic similarity over a 2-day lookback means one story maps to
 one permanent row and one permalink, regardless of rank churn. More outlets

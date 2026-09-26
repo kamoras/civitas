@@ -317,9 +317,24 @@ Three things worth knowing about that table:
 
 ## Migrations
 
-Lightweight and hand-rolled in `backend/app/database.py` — additive column
-checks at startup rather than Alembic. Suits a single-node deployment with one
-writer; see `tests/test_db_migrations.py` for the cases covered.
+**Alembic revisions** in `backend/migrations/`, applied by `init_db()` inside
+its cross-process lock on every start. Adopted in v6.13 after four production
+schema failures in three months: with `create_all` plus hand-written migrations
+a fresh database is built from the models, so CI can never see a model change
+that has no migration — the failures existed only in production (#220, #592,
+#611: a column removed from a model left NOT NULL in the deployed table, and no
+new member of Congress could be inserted).
+
+A database that predates Alembic is reconciled once by a frozen bridge, then
+stamped and upgraded. **Expand, then contract:** a release adds columns and
+leaves the old ones, so the image immediately before it can still read the
+database — which matters because Swarm is configured `start-first` with
+`FailureAction: rollback`, and an automatic rollback must not land on code that
+cannot read the schema.
+
+`tests/test_alembic_migrations.py` rebuilds the schema from the revisions and
+diffs it against the models (with a check that the diff is not vacuous), plus
+the bridge, idempotence, and a single head.
 
 ## Source map
 

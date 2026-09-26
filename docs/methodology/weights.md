@@ -52,7 +52,7 @@ underlying promise extraction/alignment pipeline and its "kept/broken/
 partial" display keep running unchanged — only the scoring weight is
 gone. Its 25% redistributed proportionally (each remaining weight ×4/3)
 across the three dimensions confirmed empirically distinct in the audit
-above (pairwise |r| < 0.31): independentVoting and legislativeEffectiveness
+above (pairwise |r| < 0.31): constituentAlignment and legislativeEffectiveness
 absorb the largest shares, fundingIndependence a smaller share consistent
 with its correlated-pair status.
 ```

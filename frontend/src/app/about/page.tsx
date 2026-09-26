@@ -1163,21 +1163,39 @@ export default function AboutPage() {
                   the public is actively discussing. Actionability leads because it is what makes an
                   issue something a citizen can act on; trending is weighted least because it is the
                   most volatile of the three signals. Trending signals are drawn from Google Trends
-                  and policy-relevant Reddit communities, cross-referenced with the news clusters
-                  via embedding similarity.
+                  and Bluesky, cross-referenced with the news clusters via embedding similarity.
+                  Reddit was a third source until September 2026, when it began requiring
+                  authentication that this platform does not have; it was retired rather than left
+                  returning nothing, because a dead source that looks like a quiet one is worse
+                  than no source at all.
                 </P>
               </div>
 
               <div>
                 <h3 className="text-xs text-ink-lo tracking-widest mb-2">
-                  NON-PARTISAN SUMMARIZATION
+                  THE MODEL DOES NOT WRITE THE SENTENCE
                 </h3>
                 <P>
-                  The top-ranked issues are summarized by the LLM with explicit instructions to
-                  present objective facts, avoid opinion or editorial framing, and recommend actions
-                  that do not assume which side of an issue the reader supports. Recommended actions
-                  include contacting representatives, attending public hearings, and reviewing
-                  primary source documents — not advocating for or against any policy position.
+                  Issue text is not generated. A model is asked only to LOCATE an assertion in one
+                  article — who did something, and what they did — and the platform then checks that
+                  both spans appear in the source word for word, that the source asserts one OF the
+                  other rather than merely containing both, and that the span runs to the end of its
+                  clause. Only then is the sentence rendered. The headline is the top article&apos;s
+                  real headline; each fact carries the outlet it came from.
+                </P>
+                <P>
+                  This replaced asking a model to write neutrally and then checking whether it had.
+                  That approach failed in ways instructions cannot fix: it published an endorsement,
+                  and it turned officials calling for an end to a war into a report that the war had
+                  ended. Neither was a lapse in phrasing — a paraphrase can be faithful to its
+                  source and still unfit to repeat. Copying cannot invent a word that is not there,
+                  so the whole class of error is structurally unavailable rather than filtered.
+                </P>
+                <P>
+                  The cost is silence. A cluster with no attributable assertion produces no issue at
+                  all, and some days carry fewer issues than others. Recommended actions remain
+                  procedural — contacting representatives, attending public hearings, reading
+                  primary sources — never advocacy for or against a position.
                 </P>
               </div>
 
@@ -2009,7 +2027,7 @@ export default function AboutPage() {
               />
               <Row
                 label="Trending Integration"
-                value="Google Trends RSS + Reddit policy subreddits, cross-referenced via embedding similarity"
+                value="Google Trends RSS + Bluesky trending, cross-referenced via embedding similarity"
               />
               <Row
                 label="Globe Visualization"

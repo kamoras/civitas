@@ -17,8 +17,8 @@ flowchart TB
         UCSB["UCSB American Presidency Project<br/>roster · approval · margins"]
         PTR["House Clerk · Senate eFD · OGE · SEC<br/>STOCK Act disclosures"]
         VOTEVIEW["Voteview<br/>DW-NOMINATE ideal points"]
-        RSS["RSS — AP · NPR · PBS · BBC<br/>The Hill · Politico · Roll Call<br/>8 feeds, 7 newsrooms"]
-        SOCIAL["Google Trends · Reddit"]
+        RSS["RSS — AP · NPR · PBS · BBC<br/>The Hill · Politico · Roll Call<br/>9 feeds, 7 newsrooms<br/>+ 41 per-state newsrooms (elections)"]
+        SOCIAL["Google Trends · Bluesky"]
         VSMART["Vote Smart<br/>statewide ballot measures<br/>optional, keyed"]
         GCIVIC["Google Civic Info<br/>town-level local races<br/>optional, keyed, fixed address only"]
     end
