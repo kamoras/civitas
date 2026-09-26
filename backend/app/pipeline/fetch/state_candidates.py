@@ -76,6 +76,7 @@ from app.pipeline.fetch.state_candidates_common import (
     BALLOT_BASIS_TIER,
     PARTY_CODE_MAP,
     ballot_basis_key,
+    clean_display_name,
     JUDICIAL_COURT_LABELS,
     JUDICIAL_MARKER_TIER,
     JUDICIAL_MARKER_TTL_HOURS,
@@ -444,6 +445,7 @@ def _apply_ballot(
         if not match.confirmed_general:
             match.confirmed_general = True
             db.commit()
+        _note_ballot_name(db, match, record)
         listed[race.id].add(match.id)
         confirmed += 1
     if keep_unlisted:
@@ -734,6 +736,26 @@ async def _forget_if_broken(client: httpx.AsyncClient, cycle: int, state: str) -
     )
     save_discovered(state, None)
     return "forgotten"
+
+
+# A comma after these is part of the name ("Olszewski, Jr."), not a
+# "Last, First" printing.
+_SUFFIX_AFTER_COMMA_RE = re.compile(r",\s*(?:Jr|Sr|II|III|IV|V)\.?$", re.IGNORECASE)
+
+
+def _note_ballot_name(db: Session, cand: Candidate, record: dict) -> None:
+    """Keep the name the state prints for a candidate it matched. A
+    "Last, First" printing is left out rather than reordered: a comma does
+    not reliably mark where the surname ends, and the FEC name already
+    reads that way."""
+    printed = clean_display_name(record.get("display_name") or "")
+    if len(printed.split()) < 2:
+        return
+    if "," in printed and not _SUFFIX_AFTER_COMMA_RE.search(printed):
+        return
+    if cand.ballot_name != printed:
+        cand.ballot_name = printed
+        db.commit()
 
 
 def _confirmed_match(db: Session, cycle: int, state: str, record: dict):
@@ -1179,6 +1201,7 @@ async def sync_ballot_filings(db: Session, client: httpx.AsyncClient, cycle: int
             if not match.on_primary_ballot:
                 match.on_primary_ballot = True
                 db.commit()
+            _note_ballot_name(db, match, record)
             counts["primary"] += 1
         applied = {"ballotOnly": 0, "unconfirmed": 0}
         if found["general"]:

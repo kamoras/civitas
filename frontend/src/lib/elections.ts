@@ -119,7 +119,7 @@ export function matchesDistrictQuery(
      * legislative one is a string, because "10A" and "10B" are real. */
     district: number | string | null;
     areas: string[] | null;
-    candidates: { name: string }[];
+    candidates: { name: string; ballotName?: string | null }[];
   },
   query: string
 ): boolean {
@@ -138,8 +138,16 @@ export function matchesDistrictQuery(
     districtLabel === q ||
     (districtNumber !== "" && districtNumber !== districtLabel && districtNumber === q) ||
     (race.areas ?? []).some((a) => a.toLowerCase().includes(q)) ||
-    race.candidates.some((c) => c.name.toLowerCase().includes(q))
+    race.candidates.some(
+      (c) => c.name.toLowerCase().includes(q) || (c.ballotName ?? "").toLowerCase().includes(q),
+    )
   );
+}
+
+/** A candidate's name as the state prints it on its ballot, else the
+ * FEC's. The one place a page picks between them. */
+export function candidateName(c: { name: string; ballotName?: string | null }): string {
+  return c.ballotName || c.name;
 }
 
 /** Canonical href for a state's ballot page.

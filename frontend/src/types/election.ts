@@ -13,6 +13,11 @@ export interface CandidateSummary {
    * (backend: _unopposed_nominees). candidateSource is per-race and
    * can't express that, which is why this is per-candidate. */
   confirmed: boolean;
+  /** The name as the state prints it on its ballot ("Roy Cooper"), once a
+   * state source has named this candidate; `name` is the FEC's ("COOPER,
+   * ROY"). Show it through candidateName(). Optional: an older backend
+   * omits it. */
+  ballotName?: string | null;
   /** False for someone the state's certified ballot lists who never filed
    * with the FEC — no FEC page, and no totals will ever arrive. Optional
    * because a backend deployed before this field omits it (= filed). */

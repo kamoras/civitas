@@ -597,3 +597,54 @@ describe("ballot measures", () => {
     expect(drawer.getByText("not")).toBeInTheDocument(); // "This does not mean there are none"
   });
 });
+
+describe("state offices not loaded", () => {
+  it("fills the State column with a placeholder rather than leaving it empty", async () => {
+    render(<StateBallotClient ballot={ballot()} />);
+    const box = screen.getByTestId("ballot-columns");
+    expect(within(box).getByText("State offices")).toBeInTheDocument();
+    const drawer = await openContest(/State offices/);
+    expect(drawer.getByText(/does not have OH's own offices yet/)).toBeInTheDocument();
+    expect(drawer.getByText("not")).toBeInTheDocument(); // "This does not mean there are none"
+  });
+
+  it("shows no placeholder once any state office is on file", () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          statewideRaces: [],
+          statewideCoverage: { status: "confirmed_none", sourceName: "Ohio Secretary of State", checkedAt: null },
+        })}
+      />,
+    );
+    expect(screen.queryByText("State offices")).not.toBeInTheDocument();
+  });
+});
+
+describe("term lengths", () => {
+  it("gives the term a vote is for: two years in the House, six in the Senate", () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          senateRaces: [houseRace({ id: "2026-SEN-OH", office: "S", district: null, counties: null })],
+        })}
+      />,
+    );
+    const box = screen.getByTestId("ballot-columns");
+    expect(within(box).getByText(/you vote in one · 2-year term|One statewide seat · 2-year term/)).toBeInTheDocument();
+    expect(within(box).getByText(/6-year term/)).toBeInTheDocument();
+  });
+
+  it("says a special Senate election fills only the rest of the term", () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          senateRaces: [houseRace({ id: "2026-SEN-OH-S", office: "S", district: null, counties: null, isSpecial: true })],
+        })}
+      />,
+    );
+    const box = screen.getByTestId("ballot-columns");
+    expect(within(box).getByText(/Special election · .* · fills the rest of the term/)).toBeInTheDocument();
+    expect(within(box).queryByText(/6-year term/)).not.toBeInTheDocument();
+  });
+});

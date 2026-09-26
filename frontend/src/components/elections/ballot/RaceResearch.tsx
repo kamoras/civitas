@@ -5,7 +5,7 @@ import Link from "next/link";
 import RaceFullDetail from "@/components/elections/RaceFullDetail";
 import CoverageFeed from "@/components/elections/CoverageFeed";
 import { getPartyMeta } from "@/components/elections/CandidateCard";
-import { isActiveCandidate } from "@/lib/elections";
+import { candidateName, isActiveCandidate } from "@/lib/elections";
 import { getScoreColor } from "@/lib/representation";
 import type { RaceCoverageItem, RaceWithCandidates } from "@/types/election";
 
@@ -28,7 +28,7 @@ function RecordPanel({ race }: { race: RaceWithCandidates }) {
         {active.map((c) => (
           <li key={c.id} className="flex items-baseline justify-between gap-3 border-b border-white/[0.09] py-2.5">
             <span className="flex min-w-0 flex-col">
-              <span className="text-[15px] font-bold text-ink-hi">{c.name}</span>
+              <span className="text-[15px] font-bold text-ink-hi">{candidateName(c)}</span>
               <span className={`font-mono text-[11px] tracking-[0.08em] ${getPartyMeta(c.party).color}`}>
                 {getPartyMeta(c.party).label}
               </span>

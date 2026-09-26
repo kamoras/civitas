@@ -539,6 +539,8 @@ async def test_a_certified_general_list_decides_federal_races_over_primary_resul
 
     flags = {c.id: c.confirmed_general for c in db_session.query(Candidate)}
     assert flags == {"S6ME1": False, "S6ME2": True}
+    # The page shows the name as the state printed it.
+    assert db_session.get(Candidate, "S6ME2").ballot_name == "Troy D. Jackson"
     assert elections_api._race_complete(elections_api._ballot_marker(db_session, "ME", 2026), "ME", "2026-SEN-ME") is True
 
 
@@ -864,3 +866,19 @@ async def test_a_partial_certified_list_decides_only_the_races_it_covers(db_sess
     assert marker["complete"] is False and marker["races"] == ["2026-SEN-ME"]
     assert elections_api._race_complete(marker, "ME", "2026-SEN-ME") is True
     assert elections_api._race_complete(marker, "ME", "2026-HOUSE-ME-2") is False
+
+
+def test_the_states_printed_name_is_kept_but_never_a_last_first_one(db_session):
+    _race(db_session, "2026-HOUSE-MD-2", "MD", office="H", district=2)
+    _db_cand(db_session, "H4MD02", "2026-HOUSE-MD-2", "OLSZEWSKI, JOHN ANTHONY JR.", "DEM")
+    _db_cand(db_session, "H4MD99", "2026-HOUSE-MD-2", "WALLACE, DAVID DRAIN II", "REP")
+    db_session.commit()
+    olszewski, wallace = (db_session.get(Candidate, cid) for cid in ("H4MD02", "H4MD99"))
+
+    sc._note_ballot_name(db_session, olszewski, {"display_name": 'John "Johnny O" Olszewski, Jr.'})
+    sc._note_ballot_name(db_session, wallace, {"display_name": "WALLACE, DAVE"})
+
+    # A comma before a suffix is part of the name; before a given name it
+    # marks a "Last, First" printing, which is left to the FEC name.
+    assert olszewski.ballot_name == 'John "Johnny O" Olszewski, Jr.'
+    assert wallace.ballot_name is None

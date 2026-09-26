@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { BallotCandidate } from "@/types/election";
-import { DEM_AFFILIATE_PARTIES } from "@/lib/elections";
+import { DEM_AFFILIATE_PARTIES, candidateName } from "@/lib/elections";
 import { cashOnHandDisplay, formatCurrency } from "@/lib/formatting";
 import { getScoreColor } from "@/lib/representation";
 
@@ -69,7 +69,7 @@ export default function CandidateCard({
         <div>
           <h3 className="font-display text-lg font-semibold leading-tight text-ink-hi">
             {candidate.fecFiled === false ? (
-              candidate.name
+              candidateName(candidate)
             ) : (
               <a
                 href={`https://www.fec.gov/data/candidate/${encodeURIComponent(candidate.id)}/`}
@@ -77,7 +77,7 @@ export default function CandidateCard({
                 rel="noopener noreferrer"
                 className="transition-colors hover:text-phos"
               >
-                {candidate.name}{" "}
+                {candidateName(candidate)}{" "}
                 <span aria-hidden="true" className="font-mono text-xs text-phos-mid">
                   ↗
                 </span>

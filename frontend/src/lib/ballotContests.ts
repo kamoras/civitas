@@ -1,5 +1,5 @@
 import type { RaceCoverageItem, RaceWithCandidates, StateBallot } from "@/types/election";
-import { isActiveCandidate } from "@/lib/elections";
+import { candidateName, isActiveCandidate } from "@/lib/elections";
 
 /** One contest as the ballot page lays it out: a box in one of three
  * printed-ballot columns on desktop, a row in the index on a phone, and
@@ -17,6 +17,7 @@ export type ContestKind =
   | "statewide"
   | "stateleg"
   | "judicial"
+  | "stateNone"
   | "measures"
   | "local"
   | "news";
@@ -48,12 +49,18 @@ function storiesFor(coverage: RaceCoverageItem[], raceId: string): number {
   return coverage.filter((c) => c.race?.id === raceId).length;
 }
 
+// Federal terms are fixed by the Constitution (art. I, §2 and §3); a
+// special Senate election fills only what is left of the vacated term.
+const HOUSE_TERM = "2-year term";
+const SENATE_TERM = "6-year term";
+const SPECIAL_TERM = "fills the rest of the term";
+
 /** "Open seat" / "Incumbent running" — read from the FEC's own incumbency
  * code on the race's candidates, never inferred from names. */
 function seatLine(race: RaceWithCandidates): string {
   const incumbent = race.candidates.find((c) => c.incumbentChallenge === "I");
-  const seat = incumbent ? `${incumbent.name} running again` : "Open seat";
-  return race.isSpecial ? `Special election · ${seat}` : `${seat} · 6-year term`;
+  const seat = incumbent ? `${candidateName(incumbent)} running again` : "Open seat";
+  return race.isSpecial ? `Special election · ${seat} · ${SPECIAL_TERM}` : `${seat} · ${SENATE_TERM}`;
 }
 
 export function buildBallotContests(ballot: StateBallot, hasTowns: boolean): BallotContest[] {
@@ -80,7 +87,7 @@ export function buildBallotContests(ballot: StateBallot, hasTowns: boolean): Bal
       kind: "house",
       column: "federal",
       title: "U.S. Representative",
-      subtitle: n === 1 ? "One statewide seat" : `${n} districts · you vote in one`,
+      subtitle: n === 1 ? `One statewide seat · ${HOUSE_TERM}` : `${n} districts · you vote in one · ${HOUSE_TERM}`,
       instruction: "Vote for one",
       summary: n === 1 ? plural(ballot.houseRaces[0].candidates.filter(isActiveCandidate).length, "candidate") : `${n} districts · pick yours`,
     });
@@ -124,6 +131,21 @@ export function buildBallotContests(ballot: StateBallot, hasTowns: boolean): Bal
       subtitle: courts === 0 ? "None on this ballot" : plural(courts, "court"),
       instruction: null,
       summary: courts === 0 ? "None on this ballot" : plural(courts, "court"),
+    });
+  }
+
+  // No state office of any kind on file: say so in the column rather than
+  // leave it empty, the same "not loaded is not none" rule the measures
+  // box follows. An empty column reads as a state that elects nobody.
+  if (!contests.some((c) => c.column === "state")) {
+    contests.push({
+      key: "state-offices",
+      kind: "stateNone",
+      column: "state",
+      title: "State offices",
+      subtitle: "Not loaded yet — check the official lookup",
+      instruction: null,
+      summary: "Not loaded yet",
     });
   }
 

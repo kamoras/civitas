@@ -211,10 +211,22 @@ everything below reads it.
   across the ballot's sections: a voter needs every contest, but within one
   contest those are supplemental views of the same candidates.
 - A section the API says nobody has checked is not a contest at all; the
-  page's "Not on this page" list (the API's `omits`) names it instead.
+  page's "Not on this page" list (the API's `omits`) names it instead. If
+  that leaves the State column empty, a "State offices — not loaded yet"
+  contest stands in, so the column never reads as a state electing nobody.
+- Federal contests carry their term: 2-year (House), 6-year (Senate), or
+  "fills the rest of the term" (special Senate). State terms are not shown
+  until the API carries them.
 - Deep links: `#race-{id}` opens that race (a House id opens the House contest
   on that district), `#ballot-{key}` any other contest. Opening a contest
   rewrites the hash, so what a reader sees can be linked.
+
+Names: `Candidate.name` is the FEC's ("COOPER, ROY") and stays what the roster
+sync keys on; `ballot_name` is the state's printing ("Roy Cooper"), kept by
+`_note_ballot_name` whenever a state record matches — confirmed or primary
+ballot — and served as `ballotName`. The page shows it through
+`candidateName()` and falls back to the FEC name. A "Last, First" printing is
+skipped unless the comma precedes a suffix ("Olszewski, Jr.").
 
 A candidate the state has confirmed is on the ballot counts as active
 whatever their FEC record says (`isActiveCandidate`): North Carolina's
