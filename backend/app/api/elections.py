@@ -219,36 +219,38 @@ def _candidate_summary(cand: Candidate, stale_incumbent_ids: frozenset[str] = fr
 _PRIMARY_NOMINATING_PARTIES = frozenset({"DEM", "REP"})
 
 
-def _ballot_basis_markers(db: Session, cycle: int) -> dict[str, bool]:
-    """{state: whether its last successful source was the complete certified
-    ballot} for `cycle`, in one query — see BALLOT_BASIS_TIER."""
+def _ballot_basis_markers(db: Session, cycle: int) -> dict[str, dict]:
+    """{state: its ballot-basis marker} for `cycle`, in one query — see
+    BALLOT_BASIS_TIER."""
     suffix = f"-{cycle}"
-    out: dict[str, bool] = {}
+    out: dict[str, dict] = {}
     for row in db.query(ApiCache).filter(ApiCache.tier == BALLOT_BASIS_TIER).all():
         if row.cache_key.endswith(suffix):
             try:
-                out[row.cache_key[: -len(suffix)]] = bool(json.loads(row.data_json).get("complete"))
+                out[row.cache_key[: -len(suffix)]] = json.loads(row.data_json)
             except ValueError:
                 continue
     return out
 
 
-def _complete_from(markers: dict[str, bool], state: str) -> bool:
-    """A state the pipeline has not recorded yet (the first night after a
-    deploy) falls back to what its configured source claims."""
-    if state in markers:
-        return markers[state]
+def _race_complete(marker: dict | None, state: str, race_id: str) -> bool:
+    """Whether a race's list is its state's complete certified ballot:
+    every race is when the certified source covered the whole state, and
+    otherwise only the races it named (a national source that knows just
+    the districts it has a verified address for). A state the pipeline has
+    not recorded yet (the first night after a deploy) falls back to what
+    its configured source claims."""
+    if marker is not None:
+        return bool(marker.get("complete")) or race_id in (marker.get("races") or ())
     source = source_for_state(state) or {}
     return bool(source.get("general_ballot_complete") or source.get("general_list"))
 
 
-def _ballot_complete(db: Session, state: str, cycle: int) -> bool:
-    marker = api_cache_get(
+def _ballot_marker(db: Session, state: str, cycle: int) -> dict | None:
+    return api_cache_get(
         db, BALLOT_BASIS_TIER, ballot_basis_key(state, cycle), max_age_hours=STATEWIDE_MARKER_TTL_HOURS,
     )
-    if marker is not None:
-        return bool(marker.get("complete"))
-    return _complete_from({}, state)
+
 
 
 def _unopposed_nominees(
@@ -998,8 +1000,11 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         r.district: r for r in db.query(Representative).filter(Representative.state == state).all()
     }
     senators = db.query(Senator).filter(Senator.state == state, Senator.is_current).all()
-    complete = _ballot_complete(db, state, cycle)
-    full = [_race_full(r, state_pvi, district_pvi, reps_by_district, senators, complete) for r in races]
+    marker = _ballot_marker(db, state, cycle)
+    full = [
+        _race_full(r, state_pvi, district_pvi, reps_by_district, senators, _race_complete(marker, state, r.id))
+        for r in races
+    ]
     senate_races = [r for r in full if r["office"] == "S"]
     house_races = sorted(
         (r for r in full if r["office"] == "H"),
@@ -1125,7 +1130,7 @@ def list_races(db: Session = Depends(get_db)):
     district_pvi = get_district_pvi_map()
     markers = _ballot_basis_markers(db, current_election_cycle())
     data = [
-        _race_summary(r, state_pvi, district_pvi, _complete_from(markers, r.state))
+        _race_summary(r, state_pvi, district_pvi, _race_complete(markers.get(r.state), r.state, r.id))
         for r in races
     ]
     return cached_json(data, max_age=CACHE_TTL_LIST_S)
@@ -1334,7 +1339,7 @@ def race_detail(race_id: str, db: Session = Depends(get_db)):
 
     state_pvi = get_state_pvi_map()
     district_pvi = get_district_pvi_map()
-    complete = _ballot_complete(db, race.state, race.cycle_year)
+    complete = _race_complete(_ballot_marker(db, race.state, race.cycle_year), race.state, race.id)
     candidates = sorted(_confirmed_or_all(race.candidates, race.state, complete), key=lambda c: (c.cash_on_hand or 0.0), reverse=True)
     stale_incumbent_ids = _stale_incumbent_ids(race.candidates)
     coverage = (

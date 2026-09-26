@@ -96,12 +96,17 @@ same office often publishes plain files on an open path — Wisconsin's
 official canvass PDF is one — and that is the way in.
 
 **A certified list beside primary results.** A state's `general_list` runs
-first; when it answers it alone decides the federal races (authoritative),
-while the main source still supplies statewide, legislative and judicial
-nominees, and federal nominees before the list is posted. The sync records
-which source answered (`_record_ballot_basis`, tier `ballot-basis`), and the
-API labels races "confirmed" only when that source was the complete ballot —
-never from config alone. `fallback` is different: a whole second source run
+first; when it answers it alone decides every federal race it covers
+(authoritative), while the main source still supplies statewide, legislative
+and judicial nominees, federal nominees before the list is posted, and — non-
+authoritatively — federal nominees for any race the list does not cover (a
+national source like Google Civic knows only the districts it has a verified
+address for; AL, AR, CT and UT use it this way). Each pass prunes ballot-only
+rows only in its own races. The sync records which source answered
+(`_record_ballot_basis`, tier `ballot-basis`): `complete` when the list
+covered every federal race in the state, otherwise the `races` it did cover,
+and the API asks per race (`_race_complete`) — "confirmed" only for a race
+the certified source actually decided, never from config alone. `fallback` is different: a whole second source run
 only when the main one returns nothing (WI's canvass → Google Civic).
 
 `certified_table` reads a PDF as a table (IA, NE): the row holding every
