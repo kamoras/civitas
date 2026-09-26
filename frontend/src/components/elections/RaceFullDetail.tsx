@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { isActiveCandidate, raceBadgeLabel, tierCandidates } from "@/lib/elections";
+import { candidateName, isActiveCandidate, tierCandidates } from "@/lib/elections";
 import { cashOnHandDisplay } from "@/lib/formatting";
 import CandidateCard, { getPartyMeta } from "./CandidateCard";
 import RaceMoneyBars from "./RaceMoneyBars";
@@ -44,7 +44,7 @@ function TailRow({ candidate }: { candidate: BallotCandidate }) {
         className={`h-2 w-2 shrink-0 ${getPartyMeta(candidate.party).rule}`}
         aria-hidden="true"
       />
-      <span className="flex-1 truncate text-ink-lo">{candidate.name}</span>
+      <span className="flex-1 truncate text-ink-lo">{candidateName(candidate)}</span>
       <span className="shrink-0 font-mono text-xs text-ink-min">
         {cash == null ? "—" : cash.label === "Debt" ? `debt ${cash.amount}` : cash.amount}
       </span>
@@ -57,14 +57,9 @@ function TailRow({ candidate }: { candidate: BallotCandidate }) {
  * detail" (2026-08 revamp: that used to live one click away at
  * /elections/[raceId], which was one nested page too many).
  *
- * Coverage is NOT repeated here: it used to render its own per-race
- * CoverageFeed, which meant every Senate race's articles (that section
- * always rendered) and the selected House race's articles appeared
- * twice on the page — once here, once in the page-level feed (2026-08
- * report: "the same articles show up twice on the state page"). The
- * single top-level feed already tags each item with its race badge
- * (CoverageFeed.tsx), so one list serves both "browse everything" and
- * "what's about this race" without duplicating a single article.
+ * Coverage is not rendered here: the ballot page's research drawer shows
+ * it on its own News tab (RaceResearch), beside this one as the Money tab,
+ * so no article appears twice.
  *
  * Only an unconfirmed race ("filers"/"primary") gets tiered into
  * leaders + a collapsible tail (see lib/elections.ts's tierCandidates) —
@@ -178,13 +173,6 @@ export default function RaceFullDetail({
         </div>
       )}
 
-      <p className="mt-4 font-mono text-xs text-ink-min">
-        News coverage of this race is tagged{" "}
-        <span className="border border-white/15 px-1.5 py-0.5 tracking-[0.1em] text-ink-lo">
-          {raceBadgeLabel(race)}
-        </span>{" "}
-        in the News Coverage section above.
-      </p>
     </div>
   );
 }

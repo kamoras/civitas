@@ -1000,10 +1000,14 @@ export default function AboutPage() {
           {/* ── State ballots ── */}
           <Section title="STATE BALLOTS &amp; BALLOT MEASURES" id="state-ballots">
             <P>
-              Each state has a ballot page at <span className="text-signal-cyan">/elections/states/&lt;ST&gt;</span> showing
-              the federal contests on that state&apos;s ballot and its statewide ballot
-              measures. Every candidate race links through to full candidate detail —
-              FEC fundraising totals, filing status, and live news coverage.
+              Each state has a ballot page at <span className="text-signal-cyan">/elections/states/&lt;ST&gt;</span>, laid
+              out as a research tool rather than a mock ballot. On a computer it shows the
+              ballot in three columns — federal offices, state offices, then measures and
+              local contests — each contest set the way a printed ballot sets it, and any
+              contest&apos;s research opens beside it: money raised, a sitting member&apos;s
+              voting record, and news coverage. On a phone it lists every contest and opens
+              one per screen, with next and previous. It never marks a choice. Candidates appear
+              under the name their state prints on its ballot once a state source names them.
             </P>
 
             <div className="space-y-4 mt-4">
@@ -1020,12 +1024,14 @@ export default function AboutPage() {
                   statewide ballot measures, and statewide offices.
                 </P>
                 <P>
-                  So these pages cover the statewide slice and say so plainly, at the top
-                  of the page rather than in a footnote. Your U.S. House district, state
-                  legislative districts, county and city offices, judicial questions, and
-                  local measures are not shown, and each page links you to your own
-                  election office for the rest. We could show a true personal ballot only
-                  by asking for your home address and sending it to a third-party service —
+                  So these pages cover what can be shown statewide and say plainly what
+                  they leave out. Where a contest depends on where you live — your U.S.
+                  House district, and your state legislative seats where covered — you
+                  find yours on a map, by county or by town, never by typing an address.
+                  County and city offices, retention questions and local measures are
+                  listed as not shown, and each page links you to your own election
+                  office for the rest. We could show a true personal ballot only by
+                  asking for your home address and sending it to a third-party service —
                   which is exactly what this platform is built not to do.
                 </P>
               </div>
@@ -1090,7 +1096,7 @@ export default function AboutPage() {
                   Everyone on a certified ballot is shown, including candidates who never
                   filed with the FEC — they appear with &ldquo;no FEC filing&rdquo; instead
                   of fundraising figures. Colorado, Virginia, Tennessee, Florida, New Jersey, Maryland,
-                  Iowa, Nebraska, New Mexico, Wyoming and Hawaii now read their certified candidate lists too (Tennessee&apos;s
+                  Iowa, Nebraska, New Mexico, Wyoming, Hawaii, Delaware, Kentucky, Alaska and Montana now read their certified candidate lists too (Tennessee&apos;s
                   federal races alone list 36 independents; Florida&apos;s filled five districts its
                   results file never mentioned; Iowa&apos;s replaced a retiring senator the page still
                   showed), and Wisconsin its official primary canvass, a plain
@@ -1098,7 +1104,9 @@ export default function AboutPage() {
                   primary results stand in, and the page says &ldquo;nominees&rdquo; rather
                   than claiming the whole ballot. Utah and Alabama publish their certified lists
                   only as scanned images, which we do not read: one misread name would take a
-                  real nominee off the page. The remaining five states sit behind bot
+                  real nominee off the page. For the races those states, Arkansas and Connecticut
+                  leave unseen — districts whose primary was uncontested — Google&apos;s election
+                  index fills in once it publishes the general election, and only for those races. The remaining five states sit behind bot
                   challenges on their election sites, or in Oklahoma&apos;s case an API that
                   requires logging in. We do not work around either.
                 </P>
@@ -2106,7 +2114,10 @@ export default function AboutPage() {
                 label="Containers"
                 value="Docker Swarm (single node) — zero-downtime start-first rolling updates behind an in-stack nginx reverse proxy, with automatic rollback on a failed health check"
               />
-              <Row label="Pipeline Schedule" value="Nightly at 3:00 AM via APScheduler" />
+              <Row
+                label="Pipeline Schedule"
+                value="Nightly at 3:00 AM via APScheduler; in the 60 days before an election, ballot lists every 6 hours and race coverage every 15 minutes"
+              />
               <Row label="Data Caching" value="72-hour TTL with persistent SQLite cache" />
               <Row
                 label="Learning Store"

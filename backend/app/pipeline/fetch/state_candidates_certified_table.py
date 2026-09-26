@@ -57,6 +57,21 @@ Optional, each because a live state needed it:
                                      page's form is posted back with that
                                      button, exactly as a visitor's click does
   format.name_last_first             names are printed "BERNING, Nathan M."
+  format.html_headings               an HTML page holds one table per office
+                                     under a heading (Alaska's <h4>UNITED
+                                     STATES SENATOR</h4>); each row carries the
+                                     headings above it as heading_1..heading_6,
+                                     so office_column can name one
+  format.party_regex                 the party is inside a longer cell; the
+                                     regex's first group is the label (Alaska
+                                     prints it after the name)
+  format.exclude_regex               {column: regex} rows to drop — Alaska
+                                     prefixes a write-in's name "Certified
+                                     Write-In"
+  discovery.every_link               read EVERY page the link regex matches,
+                                     at least one (Kentucky links one page
+                                     per office, and a year with no Senate
+                                     race has no Senate page)
 
 An HTML page is read from its table whose header row carries every
 configured heading (New Mexico). A PDF is read as a table too (Iowa, Nebraska): the row whose cells include
@@ -76,13 +91,19 @@ import csv
 import io
 import logging
 import re
+from urllib.parse import urljoin
 
 import httpx
 import pdfplumber
 from lxml import html as lxml_html
 
 from app.pipeline.fetch.ballot_measure_pdf_geometry import rows as _clustered_rows
-from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_bytes_with_retry, fetch_with_retry
+from app.pipeline.fetch.http_utils import (
+    BROWSER_HEADERS,
+    fetch_bytes_with_retry,
+    fetch_text_with_retry,
+    fetch_with_retry,
+)
 from app.pipeline.fetch.state_candidates_common import (
     clean_display_name,
     discover_certification_link,
@@ -90,13 +111,15 @@ from app.pipeline.fetch.state_candidates_common import (
     parse_office,
     surname,
 )
-from app.pipeline.fetch.state_candidates_tabular import _xlsx_rows
+from app.pipeline.fetch.state_candidates_tabular import _html_rows, _xlsx_rows
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 
 _rate_limiter = RateLimiter(rps=1.0)
 
+
+_SUFFIX_RE = re.compile(r"\s+((?:Jr|Sr)\.?|II|III|IV)$")
 
 # Points. A space between two words of one cell measures 1.6-1.8 in both
 # Iowa's and Nebraska's lists; the narrowest gap between two cells is 5.3
@@ -185,6 +208,8 @@ def _headings(fmt: dict) -> list[str]:
 
 def _rows(payload: bytes, url: str, fmt: dict) -> list[dict] | None:
     if payload.lstrip()[:1] == b"<":
+        if fmt.get("html_headings"):
+            return _html_rows(payload, {})
         return html_table_rows(payload, _headings(fmt))
     if payload[:5] == b"%PDF-":
         headings = _headings(fmt)
@@ -210,6 +235,7 @@ def parse_certified_rows(rows: list[dict], fmt: dict) -> list[dict]:
     by_label = bool(fmt.get("office_parse"))
     statuses = {str(v).strip().upper() for v in fmt.get("status_values") or []}
     exclude = {col: str(val).strip().upper() for col, val in (fmt.get("exclude") or {}).items()}
+    exclude_re = {col: re.compile(rx) for col, rx in (fmt.get("exclude_regex") or {}).items()}
     fill_down = bool(fmt.get("office_fill_down"))
     carried = ""
     records: dict[tuple, dict] = {}
@@ -218,13 +244,21 @@ def parse_certified_rows(rows: list[dict], fmt: dict) -> list[dict]:
             continue
         if any(str(row.get(col) or "").strip().upper() == val for col, val in exclude.items()):
             continue
+        if any(rx.search(str(row.get(col) or "")) for col, rx in exclude_re.items()):
+            continue
         label = " ".join(str(row.get(fmt["office_column"]) or "").split())
         party_label = str(row.get(fmt["party_column"]) or "").strip()
+        if fmt.get("party_regex"):
+            found = re.search(fmt["party_regex"], party_label)
+            party_label = found.group(1).strip() if found else ""
         printed = " ".join(str(row.get(col) or "").strip() for col in fmt["name_columns"]).strip()
         printed_last = ""
         if fmt.get("name_last_first") and "," in printed:
             printed_last, _, given = printed.partition(",")
-            printed = f"{given.strip()} {printed_last.strip()}"
+            # "Sullivan, Daniel J. Jr." reads "Daniel J. Sullivan Jr."
+            given, suffix = _SUFFIX_RE.subn("", clean_display_name(given))
+            tail = _SUFFIX_RE.search(clean_display_name(printed.partition(",")[2]))
+            printed = f"{given.strip()} {printed_last.strip()}" + (f" {tail.group(1)}" if suffix else "")
         display = clean_display_name(printed)
         if fill_down:
             # Only a candidate row sets the office carried to the rows below
@@ -303,13 +337,28 @@ async def fetch_confirmed_candidates(
         )
         if page_url is None:
             return None
+    urls: list[str] = []
+    if discovery.get("every_link"):
+        page_url = page_url.replace("{year}", str(year))
+        page = await fetch_text_with_retry(client, _rate_limiter, page_url, f"{state} candidate list index")
+        if page is None:
+            return None
+        for link_regex in link_regexes:
+            urls += sorted({urljoin(page_url, m.group(1))
+                            for m in re.finditer(link_regex.replace("{year}", str(year)), page)})
+        if not urls:
+            logger.info("%s candidate list index links no list for %d", state, year)
+            return None
+    else:
+        for link_regex in link_regexes:
+            url = await discover_certification_link(client, _rate_limiter, page_url, link_regex, year, state)
+            if url is None:
+                return None
+            urls.append(url)
     rows: list[dict] = []
-    for link_regex in link_regexes:
+    for url in urls:
         # Every file is required: a Senate list without its House list is
         # half a ballot, and half a ballot would unconfirm real nominees.
-        url = await discover_certification_link(client, _rate_limiter, page_url, link_regex, year, state)
-        if url is None:
-            return None
         payload = await _download(client, url, discovery, year, state)
         if payload is None:
             return None

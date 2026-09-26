@@ -332,3 +332,18 @@ class TestExpectedStatuses:
         )
         assert resp is None
         assert client.request.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_a_moved_page_is_followed_not_read_as_an_empty_success():
+    # Alaska's /candidates/ answers 301 to /election-candidates/ with an
+    # empty body; returning that 301 as success read as a page listing
+    # nothing.
+    def handler(request):
+        if request.url.path == "/candidates/":
+            return httpx.Response(301, headers={"location": "/election-candidates/"})
+        return httpx.Response(200, text="the list")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        resp = await fetch_with_retry(client, RateLimiter(rps=1000), "GET", "https://sos.test/candidates/")
+    assert resp is not None and resp.text == "the list"

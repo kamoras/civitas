@@ -1,3 +1,4 @@
+import { candidateName } from "@/lib/elections";
 import { formatCurrency } from "@/lib/formatting";
 import type { CandidateSummary } from "@/types/election";
 
@@ -39,7 +40,7 @@ export default function RaceFinancials({ candidates }: { candidates: CandidateSu
           .map((c) => (
             <li key={c.id}>
               <div className="mb-1 flex items-baseline justify-between gap-4">
-                <span className="font-display text-[15px] text-ink">{c.name}</span>
+                <span className="font-display text-[15px] text-ink">{candidateName(c)}</span>
                 <span className="font-mono text-base tabular-nums text-ink-hi">
                   {formatCurrency(c.cashOnHand as number)}
                 </span>

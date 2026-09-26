@@ -14,11 +14,15 @@ uses), `backend/app/api/elections.py` (what a page is allowed to show).
 flowchart LR
     NIGHTLY(["Nightly chain<br/>(scheduler.py)"]) --> SEN[Senate] --> SUP[Supplementary] --> HOUSE[House] --> STOCK[Stock trades] --> ELEC["<b>Election pipeline</b>"]
     QUARTER(["Every 15 min,<br/>election season only"]) --> COV["Coverage + posting phases only<br/>(_election_coverage_refresh)"]
+    SIX(["Every 6 h at :50 UTC,<br/>election season only"]) --> BAL["Ballot step only<br/>(_election_ballot_sync → run_ballot_sync)"]
 ```
 
 The election pipeline is last in the nightly chain, so an earlier pipeline
 that aborts the chain also skips it — check `election_pipeline_runs` after
-any nightly interruption.
+any nightly interruption. In the 60-day election season the ballot step
+(certified lists / primary results, then filing lists) also runs on its own
+every 6 hours, so an upstream abort can't hold ballots back; it and the
+nightly ballot phase each step aside while the other is running.
 
 ## The run
 
@@ -60,7 +64,7 @@ because that decides what the page can honestly claim.
 
 | Source kind | What it can see | States (2026-09-26) |
 |---|---|---|
-| **Certified general ballot** | Everyone on the November ballot, third parties, independents and post-primary replacements included | TX (`tx_civix`), NC (`tabular` + filing list), SD (`sd_vip`), LA (`voterportal`), SC (`vrems`), MO (`certified_pdf`); and as a `general_list` beside a primary-results source: ME, CO, VA, TN, MD, IA, NE, NM, WY, HI (`certified_table`: spreadsheets, PDF tables, an HTML table, a page's own CSV export), FL (`dos_canlist`), NJ (`nj_certification` official lists) |
+| **Certified general ballot** | Everyone on the November ballot, third parties, independents and post-primary replacements included | TX (`tx_civix`), NC (`tabular` + filing list), SD (`sd_vip`), LA (`voterportal`), SC (`vrems`), MO (`certified_pdf`); and as a `general_list` beside a primary-results source: ME, CO, VA, TN, MD, IA, NE, NM, WY, HI, DE, KY, AK, MT (`certified_table`: spreadsheets, PDF tables, an HTML table, a page's own CSV export), FL (`dos_canlist`), NJ (`nj_certification` official lists) |
 | **Primary results** | Each party's nominee. Cannot see a Libertarian, Green or independent who never ran in a primary, or a nominee replaced after the primary | the other 33 configured states — `tabular` (14), `clarity` (2), `tally_enr` (2), `totalvote_enr` (2) and 13 single-state strategies (WI's `canvass_summary_pdf` among them) |
 | **National fallback** | Nothing until Google publishes general-election contests, close to the election | MI, NV, NY, OH, OK (`google_civic`) |
 
@@ -92,12 +96,17 @@ same office often publishes plain files on an open path — Wisconsin's
 official canvass PDF is one — and that is the way in.
 
 **A certified list beside primary results.** A state's `general_list` runs
-first; when it answers it alone decides the federal races (authoritative),
-while the main source still supplies statewide, legislative and judicial
-nominees, and federal nominees before the list is posted. The sync records
-which source answered (`_record_ballot_basis`, tier `ballot-basis`), and the
-API labels races "confirmed" only when that source was the complete ballot —
-never from config alone. `fallback` is different: a whole second source run
+first; when it answers it alone decides every federal race it covers
+(authoritative), while the main source still supplies statewide, legislative
+and judicial nominees, federal nominees before the list is posted, and — non-
+authoritatively — federal nominees for any race the list does not cover (a
+national source like Google Civic knows only the districts it has a verified
+address for; AL, AR, CT and UT use it this way). Each pass prunes ballot-only
+rows only in its own races. The sync records which source answered
+(`_record_ballot_basis`, tier `ballot-basis`): `complete` when the list
+covered every federal race in the state, otherwise the `races` it did cover,
+and the API asks per race (`_race_complete`) — "confirmed" only for a race
+the certified source actually decided, never from config alone. `fallback` is different: a whole second source run
 only when the main one returns nothing (WI's canvass → Google Civic).
 
 `certified_table` reads a PDF as a table (IA, NE): the row holding every
@@ -110,8 +119,13 @@ inherits a congressional district. An HTML page is read from the table whose
 header row names every configured heading (NM); a fixed `discovery.url` that
 always shows the current election must match `year_regex` first. With
 `form_button` the page's own export button is the list (HI): its form is
-posted back with that button once the year matches. Format is decided from
-the bytes (zip, PDF, HTML, else CSV), not the address. Scanned certifications (UT's OCR text,
+posted back with that button once the year matches (MT uses the same grid). Format is decided from
+the bytes (zip, PDF, HTML, else CSV), not the address. `every_link` reads
+every page a link regex matches (KY: one page per office) instead of
+requiring exactly one. `html_headings` reads one table per office under a
+heading (AK), `party_regex` pulls the party out of a longer cell, and
+`exclude_regex` drops rows such as "Certified Write-In". A link regex may use
+`{yy}` for a two-digit year ("26genr"). Scanned certifications (UT's OCR text,
 AL's images) are not read: one misread name would unconfirm a real nominee.
 
 ### Rules every strategy follows
@@ -179,9 +193,51 @@ whether its primary has passed. The state page leads with it
 (`BallotBasisNotice`): filers after a primary get the loudest notice on the
 page ("these are not ballot positions"); a certified ballot gets none.
 
+## The page
+
+`StateBallotClient.tsx` lays the ballot out as a research tool, not a mock
+ballot: every contest is a box styled after a printed ballot (shaded header,
+the ballot's own "Vote for one"), and the order of the list is the ballot's
+order. `lib/ballotContests.ts` builds that list once from the API response;
+everything below reads it.
+
+- **Desktop**: three columns, Federal | State | Measures · local, fitting
+  about one screen. A contest's research opens in a drawer beside the ballot
+  (`ContestDrawer.tsx`), with Previous/Next through the whole list.
+- **Phone**: an index of every contest, one line each; a contest opens on its
+  own screen (the same drawer, full screen) with Previous/Next — the
+  voting-machine pattern, one contest per screen.
+- **Tabs only inside a race** (`RaceResearch.tsx`: Money / Record / News), never
+  across the ballot's sections: a voter needs every contest, but within one
+  contest those are supplemental views of the same candidates.
+- A section the API says nobody has checked is not a contest at all; the
+  page's "Not on this page" list (the API's `omits`) names it instead. If
+  that leaves the State column empty, a "State offices — not loaded yet"
+  contest stands in, so the column never reads as a state electing nobody.
+- Federal contests carry their term: 2-year (House), 6-year (Senate), or
+  "fills the rest of the term" (special Senate). State terms are not shown
+  until the API carries them.
+- Deep links: `#race-{id}` opens that race (a House id opens the House contest
+  on that district), `#ballot-{key}` any other contest. Opening a contest
+  rewrites the hash, so what a reader sees can be linked.
+
+Names: `Candidate.name` is the FEC's ("COOPER, ROY") and stays what the roster
+sync keys on; `ballot_name` is the state's printing ("Roy Cooper"), kept by
+`_note_ballot_name` whenever a state record matches — confirmed or primary
+ballot — and served as `ballotName`. The page shows it through
+`candidateName()` and falls back to the FEC name. A "Last, First" printing is
+skipped unless the comma precedes a suffix ("Olszewski, Jr.").
+
+A candidate the state has confirmed is on the ballot counts as active
+whatever their FEC record says (`isActiveCandidate`): North Carolina's
+certified Libertarian for Senate raised nothing, is not an FEC statutory
+candidate, and had been filed away under "other filers" on a ballot she is
+printed on.
+
 ## Finding your district
 
-Civitas never asks for an address. The House section offers three ways in,
+Civitas never asks for an address. The U.S. Representative contest offers a
+district grid on the ballot itself, and in its drawer three more ways in,
 none of which sends anything anywhere:
 
 - **District map** (`DistrictMap.tsx`) — the state's districts from the

@@ -577,7 +577,9 @@ def _xlsx_rows(payload: bytes, skip: int = 0) -> list[dict] | None:
     row.
 
     Values come from the shared-string table when the cell says so
-    (t="s"), otherwise inline. Anything else (formulas, rich text beyond
+    (t="s"), from the cell's own text runs for an inline string
+    (t="inlineStr" — Delaware's candidate list uses nothing else, and has
+    no shared-string table at all), otherwise the cell's value. Anything else (formulas, rich text beyond
     its text runs) yields an empty cell rather than raising, on the same
     principle as _text elsewhere: a shape change should cost a field, not
     the whole download.
@@ -598,13 +600,15 @@ def _xlsx_rows(payload: bytes, skip: int = 0) -> list[dict] | None:
         shared = [
             "".join(t.text or "" for t in si.iter(f"{_XL_NS}t"))
             for si in ET.fromstring(archive.read("xl/sharedStrings.xml"))
-        ]
+        ] if "xl/sharedStrings.xml" in archive.namelist() else []
         sheet = ET.fromstring(archive.read("xl/worksheets/sheet1.xml"))
     except (zipfile.BadZipFile, KeyError, ET.ParseError):
         logger.warning("Results download was not a readable xlsx workbook")
         return None
 
     def cell(c) -> str:
+        if c.get("t") == "inlineStr":
+            return "".join(t.text or "" for t in c.iter(f"{_XL_NS}t"))
         v = c.find(f"{_XL_NS}v")
         if v is None or v.text is None:
             return ""

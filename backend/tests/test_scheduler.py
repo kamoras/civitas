@@ -13,6 +13,9 @@ from datetime import timedelta
 from app.time_utils import utcnow
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from app import scheduler as scheduler_module
+from app.pipeline.election_pipeline import is_ballot_sync_running
+
 
 class _SyncThread:
     """Drop-in for threading.Thread that runs the target immediately."""
@@ -353,3 +356,54 @@ class TestElectionCoverageRefreshExceptionHandling:
             scheduler._election_coverage_refresh()  # must not raise
 
         mock_logger.exception.assert_called_once()
+
+
+class TestElectionBallotSync:
+    """The election-season ballot sync: every state's ballot list on its own
+    6-hour clock, so a failure earlier in the nightly chain can't hold
+    ballots back. A no-op outside the season; never overlaps the nightly
+    election run or itself."""
+
+    def _run(self, in_season=True, pipeline_running=False, pipeline_age=None,
+             sync_running=False, sync_age=None, result=None, error=None):
+        sync = AsyncMock(return_value=result or {
+            "status": "ok", "confirmed": 5, "statesOk": ["AK"], "statesFailed": [], "filings": {},
+        }, side_effect=error)
+        with patch("app.scheduler.threading.Thread", _SyncThread), \
+             patch("app.api.action.is_election_season", return_value=in_season), \
+             patch("app.scheduler.is_election_pipeline_running", return_value=pipeline_running), \
+             patch("app.scheduler.election_pipeline_age", return_value=pipeline_age), \
+             patch("app.scheduler.is_ballot_sync_running", return_value=sync_running), \
+             patch("app.scheduler.ballot_sync_age", return_value=sync_age), \
+             patch("app.scheduler.run_ballot_sync", sync), \
+             patch("app.scheduler.logger") as mock_logger:
+            scheduler_module._election_ballot_sync()
+        return sync, mock_logger
+
+    def test_noop_outside_election_season(self):
+        sync, _ = self._run(in_season=False)
+        sync.assert_not_called()
+
+    def test_runs_in_season(self):
+        sync, _ = self._run()
+        sync.assert_called_once()
+
+    def test_steps_aside_for_the_nightly_election_run(self):
+        sync, _ = self._run(pipeline_running=True, pipeline_age=timedelta(minutes=30))
+        sync.assert_not_called()
+
+    def test_proceeds_past_a_hung_nightly_run(self):
+        sync, _ = self._run(pipeline_running=True, pipeline_age=timedelta(hours=7))
+        sync.assert_called_once()
+
+    def test_never_overlaps_itself(self):
+        sync, _ = self._run(sync_running=True, sync_age=timedelta(minutes=10))
+        sync.assert_not_called()
+
+    def test_a_failure_is_logged_not_raised(self):
+        _, mock_logger = self._run(error=RuntimeError("boom"))
+        mock_logger.exception.assert_called_once()
+
+    def test_the_tracker_is_released_after_a_run(self):
+        self._run(error=RuntimeError("boom"))
+        assert is_ballot_sync_running() is False
