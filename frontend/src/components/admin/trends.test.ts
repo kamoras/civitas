@@ -231,7 +231,8 @@ describe("slotStates", () => {
       pipelineType: "house",
       startedAt: "2026-09-26T03:00:00",
       status: "running",
-      elapsedSeconds: null,
+      // Real running rows carry the last progress flush, not null.
+      elapsedSeconds: 600,
     });
     const ctx = { ...idle, processStartedAt: Date.parse("2026-09-26T04:30:00Z") };
     expect(slotStates(slots, [orphan], now, ctx).slice(0, 3)).toEqual([

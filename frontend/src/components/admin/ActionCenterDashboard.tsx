@@ -185,6 +185,7 @@ export function ActionCenterDashboard({
   // Senate/House runs over the same window: the scheduler skips a refresh
   // while one is running, and those slots are not failures. Null when the
   // lookup failed, in which case empty slots can't be classified.
+  const lastRefreshCompletedAt = ac?.lastCompletedAt ?? null;
   const [pipelineRuns, setPipelineRuns] = useState<PipelineTrendRun[] | null>(null);
 
   useEffect(() => {
@@ -215,7 +216,11 @@ export function ActionCenterDashboard({
       cancelled = true;
       clearInterval(id);
     };
-  }, [token, limit]);
+    // lastCompletedAt changes the moment a refresh finishes (the status poll
+    // sees it within seconds), so its new row is fetched then rather than up
+    // to five minutes later — until it lands, a refresh that ran past its
+    // slot would read as a missed hour.
+  }, [token, limit, lastRefreshCompletedAt]);
 
   const stale = loadedLimit !== limit;
   const hours = loadedLimit ?? limit;

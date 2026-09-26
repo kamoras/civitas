@@ -244,9 +244,10 @@ export function slotStates(
     if (!blocker || !r.startedAt) continue;
     const start = parseUTC(r.startedAt).getTime();
     let end: number;
-    if (r.elapsedSeconds != null) {
-      end = start + r.elapsedSeconds * 1000;
-    } else if (r.status === "running") {
+    if (r.status === "running") {
+      // Checked before elapsedSeconds on purpose: the progress tracker
+      // writes elapsed_seconds on every flush, so a running row carries the
+      // time of its last flush, not its end.
       end = now;
       if (blocker.inMemoryFlag && !ctx.runningNow[r.pipelineType]) {
         // The row says running but the process doesn't: it was orphaned by
@@ -257,7 +258,7 @@ export function slotStates(
             : start;
       }
     } else {
-      end = start;
+      end = start + (r.elapsedSeconds ?? 0) * 1000;
     }
     busy.push([start, Math.min(end, start + blocker.staleAfterMs)]);
   }
