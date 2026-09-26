@@ -703,6 +703,20 @@ those as `$X+`. All three filer groups serialize through that one schema, so a
 field added there reaches senators, representatives, and the president
 together.
 
+The same run then ingests each member's latest **annual financial disclosure**
+(`holdings_pipeline.py`) — the asset list behind the scorecard's holdings pie:
+House Schedule A parsed from word positions (`fetch/house_fd.py`; pdfplumber's
+table extraction drops most rows on this form), Senate Part 3 from the eFD HTML
+(`fetch/senate_fd.py`). One report per member, the newest, replacing the last.
+Asset categories come only from the asset type the *filer* declared (the
+House's two-letter codes, the Senate's type/subtype), mapped in
+`fd_common.py` — a form-vocabulary translation, never a guess from the asset's
+name. Values stay brackets (`low == high` is the same open-ended sentinel); the
+pie is drawn by bracket midpoints and says so, and no net-worth figure is
+produced. Scanned paper reports are stored `parsed=False` and linked, not
+OCR'd. Presidents are not covered yet: the OGE 278e is an ~850-page hybrid
+scan with no asset-type column.
+
 Each senator is processed independently. The pipeline uses `PipelineRun`
 records to track progress and supports resumption.
 
@@ -807,6 +821,7 @@ the pending list).
 | Pipeline orchestration | `backend/app/scheduler.py` (entrypoint), `backend/app/pipeline/senate_pipeline.py` / `house_pipeline.py` |
 | Departed-member detection + removal | `backend/app/pipeline/member_lifecycle.py` |
 | Stock trade disclosures | `backend/app/pipeline/stock_pipeline.py` |
+| Annual-report holdings (scorecard pie) | `backend/app/pipeline/holdings_pipeline.py`, `fetch/house_fd.py`, `fetch/senate_fd.py`, `fetch/fd_common.py`, `services/holdings_service.py`, `frontend/src/components/checker/Holdings.tsx` |
 | Scoring formulas | `backend/app/pipeline/analyze/score_calculator.py` |
 | Industry classification (embeddings + PAC decontextualization) | `backend/app/pipeline/transform/industry_classifier.py` |
 | Donor type classification (tiered + batch skip detection) | `backend/app/pipeline/analyze/donor_classifier_ai.py` |

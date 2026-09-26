@@ -170,6 +170,80 @@ class PaginatedStockTradesSchema(CamelModel):
     late_count: int
 
 
+class HoldingSchema(CamelModel):
+    """One asset from a member's latest annual financial disclosure. The
+    value is the disclosed bracket, never an exact figure: value_low/high
+    are None when the filing states no bracket ("Undetermined"), 0/0 when
+    the asset was held at no value at year end, and equal when the filing
+    used an open-ended top bracket — see value_open_ended."""
+    asset_name: str
+    account: str | None = None
+    ticker: str | None = None
+    asset_type: str
+    category: str
+    category_label: str
+    owner: Literal["self", "spouse", "joint", "dependent"] = "self"
+    value_text: str
+    value_low: float | None = None
+    value_high: float | None = None
+    # Same encoding and rendering rule as StockTradeSchema.amount_open_ended.
+    value_open_ended: bool = False
+
+    @model_validator(mode="after")
+    def _compute_open_ended(self) -> "HoldingSchema":
+        self.value_open_ended = (
+            self.value_low is not None and self.value_low > 0 and self.value_high == self.value_low
+        )
+        return self
+
+
+class HoldingCategorySchema(CamelModel):
+    """One slice of the holdings breakdown.
+
+    `weight` is what the slice is sized by: the sum of each valued holding's
+    bracket midpoint (the floor, for an open-ended top bracket). The forms
+    disclose ranges, not values, so the midpoint is a stated convention for
+    drawing proportions — value_low/value_high are the disclosed sums a
+    reader should quote."""
+    category: str
+    label: str
+    color: str
+    count: int
+    value_low: float
+    value_high: float
+    open_ended: bool
+    weight: float
+    share: float
+
+
+class HoldingsSchema(CamelModel):
+    # False when no annual report for this member has been ingested yet
+    # (a newly seated member, or before the first ingest run) — every other
+    # field is then at its default.
+    available: bool = True
+    report_year: int | None = None
+    filed_date: str | None = None
+    source_url: str = ""
+    # False: the report exists but couldn't be read (a scanned paper
+    # filing). The scorecard links to it rather than showing an empty
+    # breakdown that would read as "holds nothing".
+    parsed: bool = False
+    holdings_count: int = 0
+    # Holdings the form gave no bracket for ("Undetermined") — listed, but
+    # in no slice.
+    unvalued_count: int = 0
+    total_low: float = 0.0
+    total_high: float = 0.0
+    total_open_ended: bool = False
+    categories: list[HoldingCategorySchema] = Field(default_factory=list)
+    category_filter: str | None = None
+    holdings: list[HoldingSchema] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    per_page: int = 15
+    total_pages: int = 1
+
+
 class CommitteeSchema(CamelModel):
     committee_name: str
     chamber: str

@@ -45,7 +45,20 @@ async def fetch_ptr_filing_index(
     The index itself never carries transaction-level data — see module
     docstring.
     """
-    cache_key = f"ptr-index-{year}"
+    return await fetch_filing_index(
+        client, db, year, filing_types={"P"}, pdf_dir="ptr-pdfs", cache_key=f"ptr-index-{year}",
+    )
+
+
+async def fetch_filing_index(
+    client: httpx.AsyncClient, db: Session, year: int, *,
+    filing_types: set[str], pdf_dir: str, cache_key: str,
+) -> list[dict]:
+    """The yearly index filtered to `filing_types`, with each filing's PDF
+    link built under `pdf_dir`. Shared by the PTR ingest ("P" filings under
+    ptr-pdfs/) and the annual holdings ingest (house_fd.py: annual reports
+    and their amendments under financial-pdfs/).
+    """
     cached = api_cache_get(db, "house_ptr", cache_key)
     if cached is not None:
         return cached
@@ -77,7 +90,7 @@ async def fetch_ptr_filing_index(
 
     for member in root.findall("Member"):
         filing_type = (member.findtext("FilingType") or "").strip()
-        if filing_type != "P":
+        if filing_type not in filing_types:
             continue
         doc_id = (member.findtext("DocID") or "").strip()
         if not doc_id:
@@ -87,9 +100,11 @@ async def fetch_ptr_filing_index(
             "last": (member.findtext("Last") or "").strip(),
             "first": (member.findtext("First") or "").strip(),
             "state_district": (member.findtext("StateDst") or "").strip(),
+            "filing_type": filing_type,
+            "year": year,
             "filing_date": filing_date,
             "doc_id": doc_id,
-            "pdf_url": f"{CLERK_BASE}/ptr-pdfs/{year}/{doc_id}.pdf",
+            "pdf_url": f"{CLERK_BASE}/{pdf_dir}/{year}/{doc_id}.pdf",
         })
 
     api_cache_set(db, "house_ptr", cache_key, filings)

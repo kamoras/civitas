@@ -166,6 +166,7 @@ class Senator(Base):
     campaign_promises: Mapped[list["CampaignPromise"]] = relationship(back_populates="senator", cascade="all, delete-orphan")
     sponsored_bills: Mapped[list["SponsoredBill"]] = relationship(back_populates="senator", cascade="all, delete-orphan")
     stock_trades: Mapped[list["StockTrade"]] = relationship(back_populates="senator", cascade="all, delete-orphan")
+    financial_disclosures: Mapped[list["FinancialDisclosure"]] = relationship(back_populates="senator", cascade="all, delete-orphan")
 
 
 class Donor(Base):
@@ -392,6 +393,7 @@ class Representative(Base):
     campaign_promises: Mapped[list["RepCampaignPromise"]] = relationship(back_populates="representative", cascade="all, delete-orphan")
     sponsored_bills: Mapped[list["RepSponsoredBill"]] = relationship(back_populates="representative", cascade="all, delete-orphan")
     stock_trades: Mapped[list["RepStockTrade"]] = relationship(back_populates="representative", cascade="all, delete-orphan")
+    financial_disclosures: Mapped[list["FinancialDisclosure"]] = relationship(back_populates="representative", cascade="all, delete-orphan")
 
 
 class RepDonor(Base):
@@ -528,6 +530,58 @@ class RepStockTrade(Base):
     parse_confidence: Mapped[str] = mapped_column(String, default="text")
 
     representative: Mapped["Representative"] = relationship(back_populates="stock_trades")
+
+
+class FinancialDisclosure(Base):
+    """A member's most recent annual financial disclosure report — the one
+    whose asset list (House Schedule A / Senate Part 3) backs the holdings
+    breakdown on their scorecard. Informational only, not scored.
+
+    Exactly one of senator_id / representative_id is set. Only the latest
+    report per member is kept: a report describes holdings at one year end,
+    so an older one is superseded rather than accumulated.
+
+    `parsed` is False for a report that exists but couldn't be read (a
+    scanned paper filing): the scorecard then links to it instead of
+    showing an empty breakdown that would read as "holds nothing".
+    """
+    __tablename__ = "financial_disclosures"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    senator_id: Mapped[str | None] = mapped_column(String, ForeignKey("senators.id", ondelete="CASCADE"), nullable=True, index=True)
+    representative_id: Mapped[str | None] = mapped_column(String, ForeignKey("representatives.id", ondelete="CASCADE"), nullable=True, index=True)
+    filing_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    report_year: Mapped[int | None] = mapped_column(Integer, nullable=True)  # calendar year the holdings describe
+    filed_date: Mapped[str | None] = mapped_column(String, nullable=True)
+    source_url: Mapped[str] = mapped_column(String, default="")
+    parsed: Mapped[bool] = mapped_column(Boolean, default=True)
+    ingested_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+    senator: Mapped["Senator"] = relationship(back_populates="financial_disclosures")
+    representative: Mapped["Representative"] = relationship(back_populates="financial_disclosures")
+    holdings: Mapped[list["FinancialHolding"]] = relationship(back_populates="disclosure", cascade="all, delete-orphan")
+
+
+class FinancialHolding(Base):
+    """One asset from a FinancialDisclosure. Values are the disclosed
+    *bracket*, never an exact figure — see fetch/fd_common.HoldingRow for
+    the encoding (NULL = no bracket stated; low == high = open-ended top
+    bracket)."""
+    __tablename__ = "financial_holdings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    disclosure_id: Mapped[int] = mapped_column(Integer, ForeignKey("financial_disclosures.id", ondelete="CASCADE"), nullable=False, index=True)
+    asset_name: Mapped[str] = mapped_column(String, nullable=False)
+    account: Mapped[str | None] = mapped_column(String, nullable=True)
+    ticker: Mapped[str | None] = mapped_column(String, nullable=True)
+    asset_type: Mapped[str] = mapped_column(String, default="")  # as filed: House code or Senate label
+    category: Mapped[str] = mapped_column(String, default="OTHER", index=True)  # fd_common.HOLDING_CATEGORIES
+    owner: Mapped[str] = mapped_column(String, default="self")  # self | spouse | joint | dependent
+    value_text: Mapped[str] = mapped_column(String, default="")
+    value_low: Mapped[float | None] = mapped_column(Float, nullable=True)
+    value_high: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    disclosure: Mapped["FinancialDisclosure"] = relationship(back_populates="holdings")
 
 
 class President(Base):

@@ -11,6 +11,7 @@ from app.api.response_helpers import (
     score_history_json,
 )
 from app.database import get_db
+from app.services.holdings_service import HOLDING_CATEGORY_PATTERN, get_rep_holdings
 from app.services.representative_service import (
     get_rep_leaderboard,
     get_rep_states_with_counts,
@@ -92,6 +93,23 @@ def get_rep_stock_trades_route(
 ) -> JSONResponse:
     """Return paginated STOCK Act trade disclosures for a representative."""
     result = get_rep_stock_trades(db, rep_id, page, per_page)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Representative not found")
+    return _cached_json(result.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)
+
+
+@router.get("/representatives/{rep_id}/holdings")
+def get_rep_holdings_route(
+    rep_id: str,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(15, ge=1, le=100),
+    category: str | None = Query(None, pattern=HOLDING_CATEGORY_PATTERN),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Return the asset holdings from the latest annual financial disclosure:
+    a by-category breakdown plus a page of holdings, largest first
+    (optionally one category's)."""
+    result = get_rep_holdings(db, rep_id, page, per_page, category)
     if result is None:
         raise HTTPException(status_code=404, detail="Representative not found")
     return _cached_json(result.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)

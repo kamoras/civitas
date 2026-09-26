@@ -28,14 +28,20 @@ def _reset_running_flag():
     stock_pipeline._stock_pipeline_started_at = None
 
 
-def _run(db_session, house_result=None, senate_result=None, president_result=None):
+def _run(
+    db_session, house_result=None, senate_result=None, president_result=None,
+    house_holdings_result=None, senate_holdings_result=None,
+):
     with patch("app.pipeline.stock_pipeline.SessionLocal", return_value=db_session), \
          patch("app.pipeline.stock_pipeline._other_pipeline_running", return_value=False), \
          patch("app.pipeline.stock_pipeline._ingest_house", new_callable=AsyncMock) as mock_house, \
          patch("app.pipeline.stock_pipeline._ingest_senate", new_callable=AsyncMock) as mock_senate, \
-         patch("app.pipeline.stock_pipeline._ingest_president", new_callable=AsyncMock) as mock_president:
+         patch("app.pipeline.stock_pipeline._ingest_president", new_callable=AsyncMock) as mock_president, \
+         patch("app.pipeline.stock_pipeline.ingest_house_holdings", new_callable=AsyncMock) as mock_house_h, \
+         patch("app.pipeline.stock_pipeline.ingest_senate_holdings", new_callable=AsyncMock) as mock_senate_h:
         for mock, result in (
             (mock_house, house_result), (mock_senate, senate_result), (mock_president, president_result),
+            (mock_house_h, house_holdings_result), (mock_senate_h, senate_holdings_result),
         ):
             if isinstance(result, Exception):
                 mock.side_effect = result
@@ -87,6 +93,8 @@ class TestStockTradesPipelineRunTracking:
             house_result=RuntimeError("House PTR site down"),
             senate_result=RuntimeError("Senate session expired"),
             president_result=RuntimeError("OGE index unreachable"),
+            house_holdings_result=RuntimeError("House Clerk down"),
+            senate_holdings_result=RuntimeError("Senate session expired"),
         )
 
         assert result["status"] == "failed"
@@ -96,6 +104,20 @@ class TestStockTradesPipelineRunTracking:
         assert "House" in run.error_message
         assert "Senate" in run.error_message
         assert "President" in run.error_message
+        assert "holdings" in run.error_message
+
+    def test_holdings_failing_alone_leaves_the_trades_run_completed(self, db_session):
+        result = _run(
+            db_session, house_result=2, senate_result=1,
+            house_holdings_result=RuntimeError("House Clerk down"), senate_holdings_result=40,
+        )
+
+        assert result["status"] == "completed"
+        assert result["house_trades"] == 2
+        assert result["house_holdings"] == 0
+        assert result["senate_holdings"] == 40
+        run = db_session.query(StockTradesPipelineRun).one()
+        assert "House holdings" in (run.error_message or "")
 
     def test_president_failing_alone_leaves_the_run_completed(self, db_session):
         """Same best-effort-per-phase rule the chambers get: the president's

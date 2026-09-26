@@ -31,6 +31,10 @@ interface CollapsibleSectionProps {
   defaultOpen?: boolean;
   /** Source attribution text */
   source?: string;
+  /** Controlled mode: pass both to let the caller open the section (e.g. a
+   * chart filter that reveals the list it filters). */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   children: ReactNode;
 }
 
@@ -41,9 +45,13 @@ export default function CollapsibleSection({
   alwaysVisible,
   defaultOpen = false,
   source,
+  open: controlledOpen,
+  onOpenChange,
   children,
 }: CollapsibleSectionProps) {
-  const [open, setOpen] = useState(defaultOpen);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
+  const open = controlledOpen ?? uncontrolledOpen;
+  const setOpen = onOpenChange ?? setUncontrolledOpen;
   const contentId = useId();
   const Heading = useContext(SectionHeadingLevel);
 
