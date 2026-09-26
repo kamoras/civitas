@@ -15,6 +15,7 @@ from app.api.public import router as public_router
 from app.api.qa import router as qa_router
 from app.api.representatives import router as representatives_router
 from app.api.senators import router as senators_router
+from app.api.sitemap import router as sitemap_router
 from app.api.visits import router as visits_router
 
 api_router = APIRouter(prefix="/api")
@@ -35,3 +36,4 @@ api_router.include_router(pipeline_router, tags=["pipeline"])
 api_router.include_router(admin_router, tags=["admin"])
 api_router.include_router(public_router, prefix="/public/v1", tags=["public"])
 api_router.include_router(visits_router, tags=["visits"])
+api_router.include_router(sitemap_router, tags=["sitemap"])

@@ -842,6 +842,7 @@ the pending list).
 | API routes | `backend/app/api/` (senators, representatives, presidents, justices, admin, explore, action, health) |
 | Frontend pages | `frontend/src/app/` (action [issues/monitors/timeline/elections/branches/globe], elections [state index, states/[ST] ballot, [raceId] detail], scorecard, leaderboard, explore, about, admin) |
 | Frontend API client (incl. paginated vote fetching) | `frontend/src/lib/api.ts` |
+| SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
 | Frontend types | `frontend/src/types/` |
 | Metric explanations (tooltips on all scorecard metrics) | `frontend/src/components/checker/MetricTooltip.tsx` |
 | Interactive globe component | `frontend/src/components/action/GlobeTab.tsx` |
@@ -872,7 +873,12 @@ the pending list).
     `await asyncio.to_thread()` to keep the event loop non-blocking
   - Set `Cache-Control` headers on relatively static endpoints (config,
     leaderboards, action issues) to enable browser and nginx proxy caching
-  - Backend runs with `--workers 2` in production to use multiple CPU cores
+  - Backend runs **one** uvicorn worker (`backend/Dockerfile`'s `CMD`); it
+    always has. The write rate limiter, the pulse dedup and the summary
+    cooldown are in-process state that assumes this. Two backend
+    *processes* still meet during a Swarm start-first rollout, when the
+    old and new tasks overlap on the same database, which is what the
+    `init_db` lock and the `IF NOT EXISTS` DDL guard against
   - Nginx applies rate limiting (`limit_req_zone`) and proxy caching for
     Action Center endpoints
 
@@ -896,6 +902,30 @@ the pending list).
   Arrow/Home/End handler lives on the `role="tablist"` container, so moving
   focus into the panel strands the keyboard user and kills every arrow press
   after the first. The panel keeps `tabIndex=0` so Tab still reaches content.
+
+#### Search metadata (2026-09)
+
+- **Every route sets its metadata through `pageMetadata()`** (`src/lib/site.ts`)
+  — title, description, canonical, Open Graph, Twitter, in one call. Next
+  merges metadata *shallowly*: a route that sets `openGraph` at all drops its
+  parent's og:site_name, og:url and — verified under `next build` — the root
+  `opengraph-image` too, which is why the helper always supplies an image.
+- **Canonicals are per route, never on the root layout** (it would be
+  inherited by every page and declare the whole site a duplicate of the
+  homepage). A section layout's canonical is inherited the same way, so a
+  dynamic child (`/politicians/[id]`, `/explore/[id]`…) must set its own,
+  taken from the record, not the request's spelling.
+- Titles lead with what people type into a search box (member name +
+  party-state, bill number, full state name); the root template appends
+  " — Civitas". Search-facing wording lives in `src/lib/seo.ts`, not in
+  `page.tsx` (Next rejects extra exports there).
+- A missing record is a real 404 via `notFound()` plus `noindex`, never a
+  200 page that says "not found".
+- `sitemap.xml` is rendered per request from `GET /api/sitemap` — never
+  prerendered, since `next build` can't reach the backend. Add a new
+  detail-page type there, or search engines have no way to find it.
+- `robots.txt` must not disallow `/api/`: Googlebot's renderer honours it for
+  the XHRs the client-rendered pages make, and would index them empty.
 
 #### Client-side URL state on statically prerendered routes (2026-07)
 

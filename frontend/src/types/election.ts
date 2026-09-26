@@ -290,6 +290,9 @@ export interface BallotBasis {
 
 export interface StateBallot {
   state: string;
+  /** Full name ("California"). Optional only because a newer frontend can
+   * briefly run against an older backend mid-rollout — fall back to `state`. */
+  stateName?: string;
   cycleYear: number;
   electionDate: string;
   electionType: string;

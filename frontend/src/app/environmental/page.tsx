@@ -1,18 +1,14 @@
-import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/site";
 import Navbar from "@/components/layout/Navbar";
 import PageMasthead from "@/components/layout/PageMasthead";
 import Footer from "@/components/layout/Footer";
 
-export const metadata: Metadata = {
-  title: "Environmental Impact — Civitas",
+export const metadata = pageMetadata({
+  title: "Environmental Impact",
   description:
     "Civitas runs on a Raspberry Pi 5 drawing ~7W. Here is an honest accounting of our energy use, carbon footprint, and why local AI infrastructure matters.",
-  openGraph: {
-    title: "Environmental Impact — Civitas",
-    description:
-      "Civitas runs on ~61 kWh per year — less energy than ChatGPT uses in 11 seconds. An honest look at our infrastructure footprint.",
-  },
-};
+  path: "/environmental",
+});
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (

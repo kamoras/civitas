@@ -1,14 +1,15 @@
-import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/site";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import PageMasthead from "@/components/layout/PageMasthead";
 import Footer from "@/components/layout/Footer";
 
-export const metadata: Metadata = {
-  title: "Accessibility Statement — Civitas",
+export const metadata = pageMetadata({
+  title: "Accessibility Statement",
   description:
     "Civitas accessibility conformance statement: WCAG 2.1 Level AA conformance, testing approach, and how to report barriers.",
-};
+  path: "/accessibility",
+});
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (

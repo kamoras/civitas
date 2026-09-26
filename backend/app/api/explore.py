@@ -6,8 +6,9 @@ import logging
 import secrets
 import time
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, Header, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.public import RateLimit
@@ -16,6 +17,7 @@ from app.config import settings
 from app.database import get_db
 from app.models import ExploreDocument
 from app.services.explore_search import hybrid_search
+from app.time_utils import comment_period_today
 
 logger = logging.getLogger(__name__)
 
@@ -150,8 +152,7 @@ async def explore_stats(db: Session = Depends(get_db)):
 
     open_for_comment = 0
     if total > 0:
-        from datetime import date as date_type
-        today_str = date_type.today().isoformat()
+        today_str = comment_period_today()
         open_for_comment = (
             db.query(ExploreDocument)
             .filter(
@@ -229,20 +230,48 @@ async def get_document_comments(
     return JSONResponse(content=result)
 
 
+class CommentSubmission(BaseModel):
+    comment: str = Field(..., min_length=10, max_length=5000, description="Comment text")
+    name: str = Field("Anonymous", max_length=100, description="Your name")
+    organization: str = Field("", max_length=200, description="Organization (optional)")
+    dry_run: bool = Field(False, description="Validate without submitting")
+
+
 @router.post("/{doc_id}/comments")
 async def post_document_comment(
     doc_id: int,
     _rl: WriteRateLimit,
+    submission: CommentSubmission | None = Body(None),
     db: Session = Depends(get_db),
-    comment: str = Query(..., min_length=10, max_length=5000, description="Comment text"),
-    name: str = Query("Anonymous", max_length=100, description="Your name"),
-    organization: str = Query("", max_length=200, description="Organization (optional)"),
-    dry_run: bool = Query(False, description="Validate without submitting"),
+    # Legacy transport, kept for exactly one release so a frontend task that
+    # has not rolled yet (Swarm updates the two services independently, and
+    # a rollback reverts only one) can still submit. The body is the real
+    # interface: a query string lands in nginx's and uvicorn's access logs,
+    # which put every commenter's name and full comment text in the
+    # container logs — and a 5,000-character comment, percent-encoded, can
+    # outgrow nginx's 8k request-line buffer and fail with a 414. Remove
+    # these four parameters in the release after this one.
+    comment: str | None = Query(None, min_length=10, max_length=5000, include_in_schema=False),
+    name: str = Query("Anonymous", max_length=100, include_in_schema=False),
+    organization: str = Query("", max_length=200, include_in_schema=False),
+    dry_run: bool = Query(False, include_in_schema=False),
 ):
     """Submit a public comment on a regulatory document via regulations.gov.
 
-    Pass dry_run=true to validate everything without actually submitting.
+    Send the comment as a JSON body. Set ``dry_run`` to validate everything
+    without actually submitting.
     """
+    if submission is None:
+        if comment is None:
+            raise HTTPException(status_code=422, detail="Comment text is required")
+        submission = CommentSubmission(
+            comment=comment, name=name, organization=organization, dry_run=dry_run,
+        )
+    comment = submission.comment
+    name = submission.name
+    organization = submission.organization
+    dry_run = submission.dry_run
+
     doc = db.query(ExploreDocument).filter(ExploreDocument.id == doc_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -251,8 +280,7 @@ async def post_document_comment(
         raise HTTPException(status_code=400, detail="This document does not accept public comments")
 
     if doc.comments_close_on:
-        from datetime import date as date_type
-        if doc.comments_close_on < date_type.today().isoformat():
+        if doc.comments_close_on < comment_period_today():
             raise HTTPException(status_code=400, detail="The comment period for this document has closed")
 
     from app.pipeline.fetch.regulations_gov import submit_comment, _extract_document_object_id

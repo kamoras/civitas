@@ -802,7 +802,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
             <TerminalTitlebar title={`${ballot.state.toLowerCase()}-ballot`} />
             <div className="p-6">
               <h1 className="font-display font-semibold text-lg sm:text-2xl text-ink-hi mb-1">
-                {ballot.state} — {ballot.cycleYear} GENERAL ELECTION
+                {(ballot.stateName ?? ballot.state).toUpperCase()} — {ballot.cycleYear} GENERAL ELECTION
               </h1>
               <p className="font-mono text-xs text-ink-lo">{ballot.electionDate}</p>
               {/* The primary is read from this state's own election feed,

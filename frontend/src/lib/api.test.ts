@@ -21,6 +21,7 @@ import {
   fetchTimeline,
   parseExploreSummaryText,
   splitHighlights,
+  submitDocumentComment,
 } from "./api";
 
 describe("parseExploreSummaryText", () => {
@@ -317,5 +318,49 @@ describe("shape corrections are reported, not swallowed", () => {
     vi.stubGlobal("fetch", mockJson([]));
     await fetchLeaderboard();
     expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+describe("submitDocumentComment", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function respond(status: number, body: unknown) {
+    const fetchMock = vi.fn(async () => ({
+      ok: status < 400,
+      status,
+      json: async () => {
+        if (body === undefined) throw new SyntaxError("not JSON");
+        return body;
+      },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("sends the comment in a JSON body, never the URL", async () => {
+    const fetchMock = respond(201, { success: true, message: "ok" });
+    await submitDocumentComment(7, "A comment long enough.", "Pat", "");
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/explore/7/comments");
+    expect(JSON.parse(init.body as string)).toEqual({
+      comment: "A comment long enough.",
+      name: "Pat",
+      organization: "",
+    });
+  });
+
+  it("surfaces the rate limiter's detail instead of a blank failure", async () => {
+    respond(429, { detail: "Too many requests. Try again in a minute." });
+    await expect(submitDocumentComment(7, "A comment long enough.")).resolves.toEqual({
+      success: false,
+      message: "Too many requests. Try again in a minute.",
+    });
+  });
+
+  it("falls back to a generic message for a non-JSON error page", async () => {
+    respond(503, undefined);
+    const result = await submitDocumentComment(7, "A comment long enough.");
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/Submission failed/);
   });
 });

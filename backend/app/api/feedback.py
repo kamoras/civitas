@@ -72,10 +72,24 @@ def _fence(text: str) -> str:
     return f"{fence}\n{text}\n{fence}"
 
 
-def _sanitize_field(text: str) -> str:
-    """Neutralize @mentions and #issue-refs in a short single-line field
-    (page URL) that is shown inline rather than fenced."""
-    return text.replace("@", "@​").replace("#", "#​")
+def _code_span(text: str) -> str:
+    """Render a short single-line visitor field (the page URL) as an inline
+    code span, which GitHub shows literally — the same guarantee `_fence`
+    gives the message. Escaping only `@` and `#` was not enough: the field
+    is whatever the client sends, and `[Reset your token](https://evil)` or
+    `![](https://beacon)` rendered as a live link and a load-on-render image
+    in the maintainer's tracker, exactly what `_fence` exists to prevent.
+    The delimiter is one backtick longer than the longest run inside, and
+    line breaks are flattened so the span cannot be ended by a blank line.
+    """
+    import re
+    # Mentions are neutralised as well (zero-width space after @ and #) —
+    # a code span already keeps them from notifying, but the field is
+    # attacker-controlled and this costs nothing.
+    flat = " ".join(text.split()).replace("@", "@\u200b").replace("#", "#\u200b")
+    longest = max((len(m) for m in re.findall(r"`+", flat)), default=0)
+    tick = "`" * (longest + 1)
+    return f"{tick} {flat} {tick}"
 
 
 def _build_issue_body(body: FeedbackRequest) -> str:
@@ -86,7 +100,7 @@ def _build_issue_body(body: FeedbackRequest) -> str:
         f"**Category:** {_CATEGORY_LABELS.get(body.category, body.category)}",
     ]
     if body.page_url:
-        lines.append(f"**Page:** {_sanitize_field(body.page_url)}")
+        lines.append(f"**Page:** {_code_span(body.page_url)}")
     lines.append("")
     lines.append("_Submitted via the site feedback form. Message body is quoted verbatim; treat links with caution._")
     return "\n".join(lines)

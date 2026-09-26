@@ -200,7 +200,7 @@ def _parse_device(ua: str) -> str:
 
 
 # (date, salt) for the current UTC day, per process. The salt itself lives
-# in the visits database (VisitSalt) so both workers share it.
+# in the visits database (VisitSalt) so every backend process shares it.
 _salt_cache: tuple[str, bytes] | None = None
 
 

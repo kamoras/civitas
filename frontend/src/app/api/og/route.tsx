@@ -250,7 +250,16 @@ export function formatStanding(identity: OgPoliticianIdentity | undefined): stri
   return "";
 }
 
+// "Representation" is what the congressional score measures (how well a
+// member represents constituents). Presidents and justices are scored on
+// other dimensions, so their cards take the neutral name the score line
+// already uses.
+export function scoreFooterLabel(branch: string | undefined): string {
+  return branch === "senate" || branch === "house" ? "REPRESENTATION SCORE" : "CIVITAS SCORE";
+}
+
 async function politicianImage(profile: {
+  branch?: string;
   identity?: OgPoliticianIdentity;
   overallScore?: number | null;
 } | null) {
@@ -263,7 +272,7 @@ async function politicianImage(profile: {
   const overall = overallScore != null ? overallScore.toFixed(1) : null;
   const scoreLine = overall ? `Civitas score: ${overall}/100` : "";
   const section = identity?.role?.toUpperCase() ?? "PUBLIC RECORD";
-  const footerLabel = "REPRESENTATION SCORE";
+  const footerLabel = scoreFooterLabel(profile?.branch);
 
   const photoDataUri = identity?.thumbnailUrl
     ? await fetchPhotoAsDataUri(identity.thumbnailUrl)
@@ -534,13 +543,17 @@ export function parseStateCode(rawState: string | null): string | null {
   return STATE_CODES.includes(code) ? code : null;
 }
 
+// Politician ids are slugs, validated here rather than passed unvalidated
+// into the outgoing fetch URL. Members' are "last-first" ("grassley-chuck"),
+// presidents' "name-number" ("bush-41"), and justices' are Oyez identifiers
+// ("ketanji_brown_jackson") — the underscore was missing from this pattern,
+// so every justice's share card fell back to the generic image.
+export function parsePoliticianId(rawId: string | null): string | null {
+  return rawId && /^[a-z0-9_-]+$/.test(rawId) ? rawId : null;
+}
+
 export async function GET(req: NextRequest) {
-  const rawPoliticianId = req.nextUrl.searchParams.get("politician");
-  // Politician ids are slugs (e.g. "chuck-grassley"), unlike the issue
-  // route's id format — validated here rather than passed unvalidated
-  // into the outgoing fetch URL.
-  const politicianId =
-    rawPoliticianId && /^[a-z0-9-]+$/.test(rawPoliticianId) ? rawPoliticianId : null;
+  const politicianId = parsePoliticianId(req.nextUrl.searchParams.get("politician"));
   if (politicianId) {
     const profile = await fetchPolitician(politicianId);
     return politicianImage(profile);
