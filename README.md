@@ -486,6 +486,8 @@ An independent pipeline (`app/pipeline/election_pipeline.py`) with no data depen
 6. SNAPSHOT ─────── changed-only fundraising snapshots for trend charts
 ```
 
+**Ballots refresh every 6 hours in election season.** The election pipeline runs last in the nightly chain, so a skip or crash in the Senate, House or stock-trade run ends the chain and leaves ballots a day stale for reasons unrelated to elections. In the 60 days before an election (`is_election_season`, the same window as the 15-minute coverage refresh), the ballot step alone (`run_ballot_sync`: every state's certified list or primary results, then its filing list) also runs on its own every 6 hours, at :50 UTC. It reads only state election offices' published lists, a few requests per state at one per second, so the cadence is cheap; the roster and FEC financial refresh stay nightly. It steps aside while the nightly election run is active, and the nightly ballot phase steps aside while a sync is in flight, so two passes never write the same candidates at once. Outside the season, the nightly run is enough: filings and primaries move on the scale of days.
+
 ### Confirmed candidates (who is actually on the ballot)
 
 The FEC roster in phase 1 lists everyone who *filed* — including candidates who already lost their primary months ago. Showing all of them on a ballot page is not a cosmetic problem: it presents losers as options. A second, independent layer answers "who is really on the November ballot" from each state's own election authority.

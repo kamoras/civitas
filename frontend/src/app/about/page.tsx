@@ -2106,7 +2106,10 @@ export default function AboutPage() {
                 label="Containers"
                 value="Docker Swarm (single node) — zero-downtime start-first rolling updates behind an in-stack nginx reverse proxy, with automatic rollback on a failed health check"
               />
-              <Row label="Pipeline Schedule" value="Nightly at 3:00 AM via APScheduler" />
+              <Row
+                label="Pipeline Schedule"
+                value="Nightly at 3:00 AM via APScheduler; in the 60 days before an election, ballot lists every 6 hours and race coverage every 15 minutes"
+              />
               <Row label="Data Caching" value="72-hour TTL with persistent SQLite cache" />
               <Row
                 label="Learning Store"
