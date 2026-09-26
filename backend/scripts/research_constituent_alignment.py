@@ -473,14 +473,26 @@ def ascii_upper(s: pd.Series) -> pd.Series:
 
 def voteview_breaks(p, chamber_prefix, c):
     """Per-member share of party-unity votes cast against their party's
-    majority, from Voteview's per-congress CSVs, plus the D/R members."""
+    majority, from Voteview's per-congress CSVs, plus the members. An
+    Independent is scored as the party they caucus with, as the pipeline
+    does (normalize_votes._infer_caucus_party): here, the party whose
+    majority they vote with more often on party-unity roll calls."""
     V = pd.read_csv(p[f"{chamber_prefix}{c}_votes.csv"])
     M = pd.read_csv(p[f"{chamber_prefix}{c}_members.csv"])
     M = M[M.chamber != "President"]
-    M = M[~M.icpsr.duplicated(keep=False) & M.party_code.isin([100, 200])].copy()  # drops party switchers
+    M = M[~M.icpsr.duplicated(keep=False) & M.party_code.isin([100, 200, 328])].copy()  # drops party switchers
     V = V.merge(M[["icpsr", "party_code"]], on="icpsr")
     V["yea"], V["nay"] = V.cast_code.isin(YEA), V.cast_code.isin(NAY)
     V = V[V.yea | V.nay]
+    share = V[V.party_code != 328].groupby(["rollnumber", "party_code"]).yea.mean().unstack()
+    split = share[((share[100] > .5) & (share[200] < .5)) | ((share[100] < .5) & (share[200] > .5))]
+    ind = V[(V.party_code == 328) & V.rollnumber.isin(split.index)]
+    with_d = (ind.yea == ind.rollnumber.map(split[100] > .5)).groupby(ind.icpsr).mean()
+    caucus = {i: (100 if d > .5 else 200) for i, d in with_d.items()}
+    M["party_code"] = [caucus.get(i, pc) if pc == 328 else pc for i, pc in zip(M.icpsr, M.party_code)]
+    M = M[M.party_code.isin([100, 200])]
+    V["party_code"] = [caucus.get(i, pc) if pc == 328 else pc for i, pc in zip(V.icpsr, V.party_code)]
+    V = V[V.party_code.isin([100, 200])]
     share = V.groupby(["rollnumber", "party_code"]).yea.mean().unstack()
     unity = share[((share[100] > .5) & (share[200] < .5)) | ((share[100] < .5) & (share[200] > .5))]
     V = V[V.rollnumber.isin(unity.index)]

@@ -156,6 +156,13 @@ class TestSeatRelativeVotes:
         finally:
             CONSTITUENT_REFERENCE.statistic = stamp
 
+    def test_a_malformed_stored_entry_falls_back_instead_of_crashing(self):
+        import json
+
+        CONSTITUENT_REFERENCE.live_path.write_text(json.dumps({"senate": "x", "house": [1, 2]}))
+        CONSTITUENT_REFERENCE._cache = None
+        assert score(record(20)) == 75  # the bundled prior
+
     def test_no_usable_reference_scores_neutral(self):
         import json
 

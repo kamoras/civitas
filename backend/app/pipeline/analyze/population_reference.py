@@ -77,7 +77,10 @@ class ChamberReference:
 
     def usable(self, entry: dict | None) -> bool:
         """Whether one chamber's entry can be scored against."""
-        return bool(entry) and (self.statistic is None or entry.get("statistic") == self.statistic)
+        return (
+            isinstance(entry, dict) and bool(entry)
+            and (self.statistic is None or entry.get("statistic") == self.statistic)
+        )
 
     def load(self) -> dict:
         """The live file layered over the bundled fallback, per chamber.
@@ -94,7 +97,7 @@ class ChamberReference:
                 if self.usable(entry):
                     merged[k] = entry
                     break
-                warn_key = (source, k, (entry or {}).get("statistic"))
+                warn_key = (source, k, entry.get("statistic") if isinstance(entry, dict) else repr(entry)[:40])
                 if entry and warn_key not in self._warned:
                     # Once per stale entry per process: a chamber write
                     # re-reads the file, and the other chamber's stale entry
@@ -102,7 +105,7 @@ class ChamberReference:
                     self._warned.add(warn_key)
                     logger.warning(
                         "Skipping the %s %s entry for %s: measured on %r, not %r",
-                        source, self.name, k, entry.get("statistic"), self.statistic,
+                        source, self.name, k, warn_key[2], self.statistic,
                     )
         if not merged:
             logger.error(

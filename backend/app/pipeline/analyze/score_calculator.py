@@ -1496,9 +1496,12 @@ def constituent_reference_inputs(members: list[dict]) -> list[tuple[str, float, 
 # reference compute_constituent_reference produces and checked by
 # CONSTITUENT_REFERENCE when it reads the persisted and bundled files, so a
 # reference measured under another rule — v6.13's content-weighted rate
-# over 3+-vote records, or a different threshold — is not scored against.
-# Built from the constant it depends on so changing that invalidates it.
-CONSTITUENT_REFERENCE_STATISTIC = f"unweighted-break-rate/n>={CONSTITUENT_FULL_CONFIDENCE_VOTES}"
+# over 3+-vote records, a different threshold or saturation quantile — is
+# not scored against. Built from the constants it depends on so changing
+# either invalidates it.
+CONSTITUENT_REFERENCE_STATISTIC = (
+    f"unweighted-break-rate/n>={CONSTITUENT_FULL_CONFIDENCE_VOTES}/p{round(SATURATION_QUANTILE * 100)}"
+)
 CONSTITUENT_REFERENCE.statistic = CONSTITUENT_REFERENCE_STATISTIC
 
 
@@ -1551,7 +1554,8 @@ def _peaked_vote_shape(deviation: float, scale: float, loyal_scale: float | None
     (OVER_BREAK_DECLINE) past it."""
     scaled = deviation / scale
     if scaled < 0:
-        return 50.0 + 50.0 * max(scaled / (loyal_scale or LOYAL_SIDE_SCALE), -1.0)
+        loyal = LOYAL_SIDE_SCALE if loyal_scale is None else loyal_scale
+        return 50.0 + 50.0 * max(scaled / loyal, -1.0)
     if not past_saturation(deviation, scale):
         return 50.0 + 50.0 * scaled
     return max(0.0, 100.0 - 50.0 * OVER_BREAK_DECLINE * (scaled - 1.0))
@@ -1685,7 +1689,7 @@ def _calc_constituent_alignment(
              wrong sign for a discount.
            - Breaking far past expectation declines (v6.14). The whole
              seat stops rewarding it at saturation (Senate 1990-2024,
-             N=461: slope past it 0.22, t=0.2) and the member's own party's
+             N=461: slope past it 0.21, t=0.2) and the member's own party's
              primary voters take share away past it (House primaries,
              -3.0 pts/SD, t=-2.0) — research note section 8. The score
              represents both: the seat that elected the member and the

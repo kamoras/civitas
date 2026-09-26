@@ -22,7 +22,7 @@
    }
   },
   "n": null,
-  "statistic": "unweighted-break-rate/n>=20"
+  "statistic": "unweighted-break-rate/n>=20/p90"
  },
  "senate": {
   "deviation_p90": 0.25,
@@ -41,6 +41,6 @@
    }
   },
   "n": null,
-  "statistic": "unweighted-break-rate/n>=20"
+  "statistic": "unweighted-break-rate/n>=20/p90"
  }
 }

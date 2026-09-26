@@ -170,42 +170,44 @@ Lab's 1976–2024 Senate returns. That gives 461 contested incumbents across 18
 elections, replacing the underpowered 47-member replication above. The
 expectation is fit per party and per congress, exactly as
 `compute_constituent_reference` does it (fit and saturation point on members
-with at least 20 party-labeled votes). Controls are a quadratic in the
+with at least 20 party-labeled votes). Independents are scored with the party
+they vote with on party-unity roll calls, as the pipeline scores them with
+their caucus. Controls are a quadratic in the
 own-party presidential vote plus year × party effects. Standard errors are
 clustered by senator.
 
 | Measure (per SD of deviation) | Coefficient | t |
 |---|---|---|
-| Signed deviation (shipped direction) | 0.75 | 1.8 |
-| Folded \|deviation\| | 1.15 | 2.3 |
+| Signed deviation (shipped direction) | 0.76 | 1.8 |
+| Folded \|deviation\| | 1.15 | 2.2 |
 | Squared term | 0.14 | 0.7 |
-| Crossing side, up to saturation | 2.30 | 1.9 |
-| Crossing side, past saturation (n=30) | 0.22 | 0.2 |
+| Crossing side, up to saturation | 2.34 | 1.9 |
+| Crossing side, past saturation (n=31) | 0.21 | 0.2 |
 
 The general electorate does not penalize heavy breaking. The slope past
 saturation is flat, and the folded term's positive sign comes from a loyal
 side that is not rewarded (−0.59, t=−0.5). The House 2004 test agrees:
 folded 0.26 (t=0.6), past saturation −0.33 (t=−0.3, n=19). Split by period,
-the whole association fades after 2008: signed deviation 1.01 (t=1.9) for
-1990–2008 and 0.38 (t=0.7) for 2010–2024. That fits the nationalization of
+the whole association fades after 2008: signed deviation 1.02 (t=1.9) for
+1990–2008 and 0.37 (t=0.6) for 2010–2024. That fits the nationalization of
 Senate elections (Bonica & Cox 2018; Utych 2020).
 
 **The member's own party: House primaries 1990–2010.** House roll calls from
 the 101st to the 111th Congress are joined to Pettigrew, Owen & Wanless's
-House primary returns. That gives 3,867 incumbents: 27% faced a primary
-challenger and 37 lost.
+House primary returns. That gives 3,869 incumbents: 27% faced a primary
+challenger and 38 lost.
 
 | Outcome | Folded \|deviation\| | Squared term | Past saturation |
 |---|---|---|---|
-| Drew a challenger | 0.02 (t=1.7) | 0.00 (t=1.3) | −0.00 (t=−0.1) |
-| Lost the primary | 0.00 (t=1.2) | 0.00 (t=1.3) | 0.01 (t=1.3) |
-| **Primary vote share, contested (N=1,043)** | **−1.95 (t=−2.4)** | **−0.36 (t=−2.3)** | **−3.02 (t=−2.0, n=79)** |
+| Drew a challenger | 0.02 (t=1.7) | 0.00 (t=1.4) | −0.00 (t=−0.1) |
+| Lost the primary | 0.01 (t=1.3) | 0.00 (t=1.3) | 0.01 (t=1.3) |
+| **Primary vote share, contested (N=1,044)** | **−1.99 (t=−2.4)** | **−0.37 (t=−2.4)** | **−3.02 (t=−2.0, n=79)** |
 
 Among incumbents who were challenged, primary vote share falls with distance
 from the expectation. The fall is concentrated past saturation: members more
-than 2 SD above expectation averaged 70.9% of the primary vote, against
-77.4% just below it. Being more loyal than expected costs nothing here (0.34,
-t=0.3). So a member's own party's voters do take something away for heavy
+than 2 SD above expectation averaged 70.5% of the primary vote, against
+77.4% just below it. Being more loyal than expected costs nothing here (0.53,
+t=0.4). So a member's own party's voters do take something away for heavy
 defection, which is the pattern this section's question predicted. The
 effect is modest, and it rarely decides a nomination: challenges and losses
 barely move.
@@ -265,7 +267,7 @@ chamber measures every run. Past it, the score falls at the same rate it rose
 (`OVER_BREAK_DECLINE = 1.0`), reaching 50 at twice the saturation deviation
 and 0 at three times. The decline rate is a design weight, not a fitted one.
 Mirroring the rise was chosen because the measured slopes are of similar size
-with opposite signs (+2.30 per SD rising in the Senate, −3.02 falling in House
+with opposite signs (+2.34 per SD rising in the Senate, −3.02 falling in House
 primaries), so the data gives no basis for an asymmetric shape.
 
 The decline alone costs almost none of the electoral signal the symmetric
@@ -295,7 +297,7 @@ disloyalty. Two gaps more loyal gave 0, while two gaps more disloyal gave 50.
   the strongest effect in the study (section 4).
 - **General electorate, Senate 1990–2024:** no effect (−0.59, t=−0.5), and
   none at all since 2010.
-- **Own party's primary voters, House 1990–2010:** no effect (0.34, t=0.3).
+- **Own party's primary voters, House 1990–2010:** no effect (0.53, t=0.4).
   These voters punish excess *disloyalty* past the peak instead (section 8).
 - **Literature:** primary voters reward loyalty (Pyeatt 2015; Anderson,
   Butler & Harbridge-Yong 2020). General electorates reward independence
@@ -307,7 +309,7 @@ the score reaches 0, with the rest of the v6.14 shape fixed:
 | Loyal side reaches 0 at | House 2004 ΔR² (t) | Senate 1990–2024 ΔR² (t) |
 |---|---|---|
 | 1× (v6.13) | 0.0354 (4.9) | 0.0031 (1.2) |
-| 2× | 0.0326 (4.8) | 0.0035 (1.2) |
+| 2× | 0.0326 (4.8) | 0.0036 (1.2) |
 | **4× (shipped)** | **0.0285 (4.4)** | **0.0036 (1.2)** |
 | 8× | 0.0254 (4.2) | 0.0036 (1.2) |
 | held at 50 | 0.0215 (3.9) | — |
@@ -325,11 +327,11 @@ more loyal scores 25; two gaps more disloyal scores 50 and three gaps scores
 **Party balance.** The gentler loyal side and the over-break decline make
 the shape lopsided, so each party's average no longer sits at exactly 50.
 Across every Senate from the 101st to the 119th, the parties' average vote
-scores differed by 1.9 points on average under v6.14, against 2.3 under
+scores differed by 1.8 points on average under v6.14, against 2.2 under
 v6.13. The sign changed from one Congress to the next, so the shape shows no
 systematic lean toward either party. Averages now sit around 52–55.
 
-The 119th Senate has the widest gap in the series: 6.0 points, D higher.
+The 119th Senate has the widest gap in the series: 5.3 points, D higher.
 Its heaviest breakers past the peak (Murkowski, Collins, Paul) are mostly
 Republicans. In a given Congress, the gap follows who breaks far past the
 norm.
@@ -354,7 +356,7 @@ the score still carries a clear signal there (t=4.4).
   only), and in Senate general elections the slope past saturation is flat,
   not negative. Senators are scored on the same shape by extension.
 - **The Senate loyal side does not replicate.** With every Senate election
-  from 1990 to 2024 (N=461, section 8), the crossing side holds (2.30 up to
+  from 1990 to 2024 (N=461, section 8), the crossing side holds (2.34 up to
   saturation, t=1.9) but the loyal side does not (−0.59, t=−0.5), and the
   whole association is weak after 2008. That is one reason v6.14 flattened
   the loyal side (section 9).

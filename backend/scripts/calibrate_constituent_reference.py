@@ -84,8 +84,9 @@ def main() -> None:
         measured_now = True
         print(f"{chamber}: {ref}")
     if not measured_now:
-        # Nothing was measured: don't restamp the file as freshly calibrated.
+        # Nothing was measured: keep the file's own date and description.
         out["_as_of"] = existing.get("_as_of", out["_as_of"])
+        out["_source"] = existing.get("_source", out["_source"])
     OUT.write_text(json.dumps(out, indent=1, sort_keys=True) + "\n")
     print(f"wrote {OUT}")
 

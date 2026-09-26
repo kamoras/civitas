@@ -153,7 +153,7 @@ export default function RepresentationScore({
       ? "no voting record · defaults to 50"
       : breakdown.confidence?.constituentAlignment &&
           breakdown.confidence.constituentAlignment !== "high"
-        ? `${votingRecord.totalVotes} votes tracked · few party-line votes, score shrunk toward 50`
+        ? `${votingRecord.totalVotes} votes tracked · few party-line votes, vote part pulled toward 50`
         : `${votingRecord.totalVotes} votes tracked`;
 
   // Surface the FI sub-components so the score is an auditable claim,
