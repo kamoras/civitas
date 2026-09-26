@@ -398,6 +398,9 @@ async def run_house_pipeline() -> dict:
                     if not bio_id:
                         continue
                     sponsored = await fetch_member_sponsored(client, db, bio_id)
+                    # None: the request failed with nothing cached — scored
+                    # neutral on Legislative Effectiveness, not as zero bills.
+                    r["sponsoredBillsUnavailable"] = sponsored is None
                     sp_list = []
                     for sp in (sponsored or []):
                         if sp.get("congress", 0) >= min_congress:
@@ -556,6 +559,17 @@ async def run_house_pipeline() -> dict:
                     phase4b_err,
                 )
                 progress.fail("sponsorship", detail="failed — continuing with empty scores")
+
+            # A withheld or failed analysis leaves members out of these
+            # dicts; score them with last run's values, as the Senate does.
+            from app.models import Representative
+            from app.pipeline.sponsorship_backfill import backfill_withheld_sponsorship_scores
+
+            backfill_withheld_sponsorship_scores(
+                db, Representative, {r["bioguideId"] for r in reps if r.get("bioguideId")},
+                leadership_scores, ideology_scores,
+                bipartisanship_scores, attracted_bipartisanship_scores,
+            )
 
             # ── PHASE 5: FEC DATA + SCORING ──
             logger.info("--- House Phase 5: FEC DATA + SCORING ---")
@@ -732,9 +746,11 @@ async def run_house_pipeline() -> dict:
                         }
 
                     # Sponsored bills are already populated in Phase 4b.
-                    # If not (e.g., bioguideId was missing), provide empty list.
+                    # If not (no bioguideId, or Phase 4b failed before this
+                    # member), nothing is known about them — not zero bills.
                     if "sponsoredBills" not in rep:
                         rep["sponsoredBills"] = []
+                        rep["sponsoredBillsUnavailable"] = True
 
                     vr = rep.get("votingRecord") or {}
                     all_votes = (vr.get("keyVotes") or []) + (vr.get("recentVotes") or [])

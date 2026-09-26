@@ -24,6 +24,19 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.14",
+    date: "2026-09-27",
+    title: "Legislative Effectiveness counts bills that move, not just bills introduced",
+    tldr: "Legislative Effectiveness was meant to follow the Volden & Wiseman effectiveness score used by political scientists, but it left out the step that makes a passed bill count for much more than an introduced one. It had effectively become a count of bills introduced. It now follows their method, and ranks members the way their published scores do.",
+    changes: [
+      "Volden & Wiseman's score divides a member's bills at each stage (introduced, committee action, passed the chamber, became law) by the chamber's total at that stage. Few bills get far, so a bill that becomes law counts for about 47 introductions in the House and 67 in the Senate. Civitas skipped that division, so a law counted for four introductions.",
+      "Checked against Volden & Wiseman's own published scores for the 110th to 118th Congresses, the old score ranked members at a rank correlation of 0.71 (House) and 0.76 (Senate) — mostly tracking how many bills a member introduced. The new one ranks them at 0.90 and 0.96. Majority and minority members' typical scores stay level, as before.",
+      "Members with few bills are no longer pulled toward 50. A member's record here is every bill they sponsored, all of it observed, so there is nothing uncertain to shrink; pulling two bills with one law toward the middle ranked that member below colleagues with twenty bills that went nowhere. The confidence grade still shows how many bills stand behind the number.",
+      "A member with no substantive bills after at least half a year in office scores as a record of zero on the same scale, so doing nothing never outscores trying. When a member's bill list could not be downloaded, the score stays neutral instead of treating the failed download as zero bills — it used to do the latter.",
+      "Still different from Volden & Wiseman: significance comes from the type of measure (bills 5x, simple resolutions 1x) rather than from reading each bill, so a post-office renaming counts as a full bill; and committee action is one stage, not two. Both are measured and disclosed in the methodology.",
+    ],
+  },
+  {
     version: "v6.13",
     date: "2026-09-24",
     title: "Each vote counts once; alignment rebuilt on election evidence; references measured from the current population",

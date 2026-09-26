@@ -175,7 +175,7 @@ logger = logging.getLogger(__name__)
 # public changelog) in sync, and add a decision record for the new version
 # under docs/methodology/member-score/ — that is where the reasons go, not
 # here.
-ALGORITHM_VERSION = "v6.13"
+ALGORITHM_VERSION = "v6.14"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -567,6 +567,8 @@ def calculate_scores(senator: dict) -> dict:
             years_in_office=senator.get("yearsInOffice"),
             attracted_bipartisanship=senator.get("attractedBipartisanshipScore"),
             les_reference=senator.get("lesReference"),
+            chamber="house" if senator.get("district") is not None else "senate",
+            bills_known=not senator.get("sponsoredBillsUnavailable"),
         ),
     }
 
@@ -612,6 +614,8 @@ def explain_scores(senator: dict) -> dict:
             years_in_office=senator.get("yearsInOffice"),
             attracted_bipartisanship=senator.get("attractedBipartisanshipScore"),
             les_reference=senator.get("lesReference"),
+            chamber="house" if senator.get("district") is not None else "senate",
+            bills_known=not senator.get("sponsoredBillsUnavailable"),
         ),
     }
 
@@ -1942,70 +1946,50 @@ def _advancement_baseline(
     return rates["majority"] if party == majority else rates["minority"]
 
 
-# A member with zero substantive bills after a real term in office is a
-# genuine, if weak, negative data point — not the same as a freshman who
-# simply hasn't had a chance yet. Below this tenure the two are
-# indistinguishable and stay neutral; at/above it, "zero substantive
-# bills" gets the same confidence-shrinkage treatment a genuine low-n
-# attempt already gets, rather than being treated as missing data.
-# Roughly one legislative session.
+# Below this tenure, zero substantive bills is indistinguishable from a
+# member who has not had a chance to sponsor any yet, and scores neutral.
+# At or above it, zero is a record: a credit of 0 on the same scale as
+# everyone else (see _les_component_score). Roughly one legislative session.
 _MIN_TENURE_FOR_ZERO_SIGNAL_YEARS = 0.5
 
-# Confidence assigned to a confirmed-zero record — set just above what a
-# genuine single-bill, zero-success record gets (min(1/10, 1.0) = 0.10),
-# so a confirmed zero isn't treated as a *noisier* sample than an actual
-# attempt that also produced nothing. Without this, a flat 50 for
-# confirmed inaction always beat a genuine low-n attempt that failed
-# once that attempt's own shrinkage-toward-50 was correctly applied —
-# see the 2026-07 "inaction beats trying and failing" fix.
-_ZERO_BILLS_CONFIDENCE = 0.15
 
-
-def _zero_bill_component_score(years_in_office: float | None) -> tuple[float, str]:
-    """Shared "no substantive bills" treatment, used whether the member
-    sponsored nothing at all or only ceremonial resolutions — neither
-    carries a substantive record, so both get the same verdict."""
-    if (years_in_office or 0) >= _MIN_TENURE_FOR_ZERO_SIGNAL_YEARS:
-        score = 50.0 * (1 - _ZERO_BILLS_CONFIDENCE)
-        detail = (
-            f"0 substantive bills over {years_in_office:.1f} years in office "
-            "— confirmed inactivity, not a data gap"
-        )
-        return score, detail
-    return 50.0, "no substantive bills on record — neutral 50"
-
-
-# Legislative Effectiveness: significance-weighted, cumulative-stage
-# scoring — follows Volden & Wiseman (2014, "Legislative Effectiveness in
-# the United States Congress," Cambridge UP; methodology also documented
-# at thelawmakers.org, the Center for Effective Lawmaking). Their real
-# LES weights each sponsored bill by significance and credits that weight
-# CUMULATIVELY across every stage it reaches — a bill that becomes law
-# contributes to the introduced/committee/passed-chamber/law totals all
-# at once, not just its final stage. Two deliberate, disclosed departures
-# from their real methodology, both confirmed by a 2026-07 deep-research
-# audit of their actual published approach (not assumed from the name):
-#   - Only 2 of their 3 significance tiers are implemented: commemorative
-#     resolutions = 1x, substantive bills = 5x (the existing
-#     SUBSTANTIVE_BILL_TYPES split). Their 3rd tier ("substantive AND
-#     significant," 10x) was assigned from hand-curated expert/media
-#     "major legislation of the year" lists this platform has no access
-#     to and no reliable proxy for — not implemented, rather than
-#     approximated with an un-validated stand-in.
-#   - Their real score normalizes to the chamber-term population mean
-#     (an average member scores exactly 1.0); this platform's
-#     sponsored-bill data is career-cumulative (many congresses, not one
-#     fixed 2-year term V&W's design assumes), so credit is computed
-#     per-congress-served and compared against an EXPECTED credit
-#     (majority/minority-adjusted, reusing _advancement_baseline's real
-#     audited rates) rather than a literal population-mean ratio — this
-#     is the same "expected-vs-actual, credit the difference" pattern
-#     already used successfully elsewhere in this file (Constituent
-#     Alignment's seat-relative break rate).
+# Legislative Effectiveness: Volden & Wiseman's (2014, "Legislative
+# Effectiveness in the United States Congress," Cambridge UP; data and
+# methodology at thelawmakers.org) Legislative Effectiveness Score. Each
+# sponsored bill counts, by significance weight, at every stage it reaches
+# (a law counts at all four); at each stage the member's weighted count is
+# divided by the chamber's weighted total there, and the stage shares are
+# summed and scaled so the chamber averages 1.0 (_les_normalized_credit).
+# The per-stage division is the heart of the measure: few bills reach the
+# later stages, so advancing one earns far more than introducing one.
+#
+# v6.14 restored it. v6.4-v6.13 credited weight x stages reached with no
+# division, which made a law worth four introductions and turned the score
+# into a count of bills introduced: against V&W's published LES for the
+# 110th-118th Congresses it ranked members at Spearman 0.76 (House) and
+# 0.79 (Senate), against 0.93 and 0.97 with the division
+# (scripts/research_les_stage_weighting.py, docs/research/
+# les-stage-weighting.md).
+#
+# Disclosed departures from V&W, each measured by that script:
+#   - Four stages, not five: Congress.gov's action codes give committee
+#     action and reporting as one stage here (IN_COMMITTEE), where V&W
+#     separate "action in committee" from "action beyond committee".
+#   - Significance comes from bill TYPE: simple and concurrent resolutions
+#     1x, bills and joint resolutions 5x. V&W code it from CONTENT
+#     (commemorative 1x, substantive 5x, substantive and significant 10x),
+#     so a post-office naming bill is 5x here and 1x there. Content-based
+#     commemorative detection would raise agreement with V&W further (House
+#     0.93 -> 0.98 in the same test); it needs an embedding classifier
+#     calibrated on real bill titles. The 10x tier comes from CQ Almanac
+#     coverage, which has no source here.
+#   - The score compares each member with the median of their own
+#     majority/minority status in the chamber, measured each run, rather
+#     than reporting the raw ratio to the chamber mean.
 # Legislative leadership (PageRank cosponsorship centrality, Brin & Page
 # 1998) has no basis in Volden & Wiseman's work — it is kept as an
-# explicitly separate 30%-weighted component, not blended into the
-# V&W-based 70%.
+# explicitly separate component (25%, or 30% without cosponsorship data),
+# not blended into the V&W-based one (60%, or 70%).
 
 _LES_STAGE_ORDER: dict[str, int] = {
     "INTRODUCED": 1,
@@ -2060,13 +2044,36 @@ def _les_significance_weight(bill_type: str) -> float:
     return 5.0 if bill_type in SUBSTANTIVE_BILL_TYPES else 1.0
 
 
-def _les_cumulative_credit(bill: dict) -> float:
-    """weight x stages-reached — V&W's real cumulative design: a bill
-    credited into stage 4 contributes 4x its significance weight total
-    (1 unit at each of stages 1-4), not just 1x at its final stage."""
-    w = _les_significance_weight((bill.get("billType") or "").lower())
-    s = _les_bill_stage(bill)
-    return w * s
+def _les_stage_counts(sponsored_bills: list[dict]) -> list[float]:
+    """Significance-weighted count of these bills reaching each stage;
+    index 0 is stage 1 (introduced). Cumulative, as in V&W: a bill that
+    became law counts at all four stages."""
+    counts = [0.0] * _LES_MAX_STAGE
+    for b in sponsored_bills:
+        w = _les_significance_weight((b.get("billType") or "").lower())
+        for k in range(_les_bill_stage(b)):
+            counts[k] += w
+    return counts
+
+
+def _les_normalized_credit(
+    stage_counts: list[float], stage_totals: list[float], n_members: int,
+) -> float:
+    """Volden & Wiseman's LES arithmetic: at each stage, the member's
+    weighted count over the chamber's weighted total at that stage, summed
+    over stages and scaled by N/stages so the chamber averages 1.0.
+
+    Dividing by each stage's total is what makes advancement count: a
+    stage few bills reach has a small total, so one bill there is a large
+    share of it. Crediting weight x stages-reached instead (v6.4-v6.13)
+    made an enacted bill worth four introductions where V&W's arithmetic
+    makes it worth ~47 (House) to ~67 (Senate), and ranked members by bill
+    volume (Spearman 0.95-0.98 with introductions, 0.76-0.79 with V&W's
+    published LES) — scripts/research_les_stage_weighting.py,
+    docs/research/les-stage-weighting.md.
+    """
+    total = sum(c / t for c, t in zip(stage_counts, stage_totals) if t > 0)
+    return total * n_members / len(stage_totals)
 
 
 # ── LES population reference ────────────────────────────────────────────
@@ -2108,11 +2115,19 @@ def _les_cumulative_credit(bill: dict) -> float:
 _LES_SATURATION_STDEVS = 1.5
 
 
-def _les_member_inputs(sponsored_bills: list[dict], party: str | None) -> dict | None:
+def _les_member_inputs(
+    sponsored_bills: list[dict],
+    party: str | None,
+    stage_totals: list[float] | None = None,
+    n_members: int | None = None,
+) -> dict | None:
     """Per-member quantities the LES component and its population reference
     share — one definition, so the reference is always measured with the
     exact formula members are scored with. None when the member has no
-    substantive bills (not part of the credit distribution)."""
+    substantive bills (not part of the credit distribution).
+
+    `raw_per_congress` needs the chamber's stage totals (compute_les_
+    reference measures them); without them it is None."""
     n_sub = sum(
         1 for b in sponsored_bills
         if (b.get("billType") or "").lower() in SUBSTANTIVE_BILL_TYPES
@@ -2124,9 +2139,14 @@ def _les_member_inputs(sponsored_bills: list[dict], party: str | None) -> dict |
         1 for b in sponsored_bills
         if (b.get("billType") or "").lower() in _LES_HOUSE_TYPES
     )
+    raw = None
+    if stage_totals and n_members:
+        raw = _les_normalized_credit(
+            _les_stage_counts(sponsored_bills), stage_totals, n_members,
+        ) / max(len(congresses), 1)
     return {
         "n_sub": n_sub,
-        "raw_per_congress": sum(_les_cumulative_credit(b) for b in sponsored_bills) / max(len(congresses), 1),
+        "raw_per_congress": raw,
         "is_house": house_n > (len(sponsored_bills) - house_n),
     }
 
@@ -2196,12 +2216,20 @@ def compute_les_reference(
     """
     current = (congress, majority) if majority else None
     rates = _measure_advancement_rates(members, current) or previous_rates
+    # The chamber's weighted total at each stage, over every member's bills
+    # (V&W's denominators). N is the whole chamber, not only members with
+    # substantive bills, so the chamber — not its sponsors — averages 1.0.
+    stage_totals = [0.0] * _LES_MAX_STAGE
+    for bills, _ in members:
+        for k, c in enumerate(_les_stage_counts(bills)):
+            stage_totals[k] += c
+    n_members = len(members)
     credits: list[float] = []
     baselines: list[float] = []
     by_status: dict[str, list[float]] = {"majority": [], "minority": []}
     for bills, party in members:
-        inputs = _les_member_inputs(bills, party)
-        if inputs is None:
+        inputs = _les_member_inputs(bills, party, stage_totals, n_members)
+        if inputs is None or inputs["raw_per_congress"] is None:
             continue
         credits.append(inputs["raw_per_congress"])
         baselines.append(_les_member_baseline(bills, party, current, rates))
@@ -2219,6 +2247,8 @@ def compute_les_reference(
         "stdev_credit": round(statistics.pstdev(credits), 4),
         "avg_baseline": round(statistics.mean(baselines), 6),
         "advancement_rates": rates,
+        "stage_totals": [round(t, 4) for t in stage_totals],
+        "n_members": n_members,
     }
     if all(len(v) >= _MIN_LES_STATUS_MEMBERS for v in by_status.values()):
         ref["status_median"] = {k: round(statistics.median(v), 4) for k, v in by_status.items()}
@@ -2258,28 +2288,59 @@ def _les_component_score(
     party: str | None,
     years_in_office: float | None,
     reference: dict | None = None,
+    chamber: str | None = None,
+    bills_known: bool = True,
 ) -> tuple[float, str]:
-    """The V&W-based 70% component: significance-weighted, cumulative-
-    stage credit per congress served, scored relative to what an average
-    sponsor of this party/status/chamber would be expected to achieve —
-    not an absolute rate. Confirmed-zero-vs-no-data-yet distinction (see
-    _zero_bill_component_score) carried forward unchanged from the
-    2026-07 "inaction beats trying and failing" fix; this is the same
-    invariant, re-homed into the new formula.
+    """The V&W-based component: stage-normalized credit per congress
+    served (_les_normalized_credit), scored against the median member of
+    the same majority/minority status in the chamber.
+
+    No substantive bills scores neutral below _MIN_TENURE_FOR_ZERO_SIGNAL_
+    YEARS or when the chamber is unknown, and otherwise as a credit of 0 —
+    so inaction never beats an attempt. `bills_known=False` (the fetch
+    failed) is neutral: an empty list there is not a record.
 
     `reference` is {"senate": {...}, "house": {...}} (compute_les_reference
     per chamber); None reads load_les_reference(). See the LES population
     reference comment above for where each number comes from."""
+    if not bills_known:
+        # The member's sponsored legislation could not be fetched this run.
+        # An empty list here is a failed request, not a record of zero bills.
+        return 50.0, "sponsored legislation could not be fetched this run — neutral 50"
     inputs = _les_member_inputs(sponsored_bills, party)
     if inputs is None:
-        return _zero_bill_component_score(years_in_office)
-    n_sub = inputs["n_sub"]
-    raw_per_congress = inputs["raw_per_congress"]
-    chamber = "house" if inputs["is_house"] else "senate"
+        if (years_in_office or 0) < _MIN_TENURE_FOR_ZERO_SIGNAL_YEARS:
+            return 50.0, "no substantive bills on record yet — neutral 50"
+        if chamber is None:
+            return 50.0, "no substantive bills and no chamber to compare against — neutral 50"
+        n_sub = 0
+    else:
+        n_sub = inputs["n_sub"]
+        chamber = "house" if inputs["is_house"] else "senate"
 
     ref = (reference or load_les_reference()).get(chamber)
     if not ref:
         return 50.0, "no population reference available for this chamber — neutral 50"
+    if not ref.get("stage_totals") or not ref.get("n_members"):
+        # A reference measured before v6.14 is on the old weight x stages
+        # scale; comparing a stage-normalized credit with it would be
+        # meaningless. The next pipeline run replaces it.
+        return 50.0, (
+            f"the stored {chamber} reference predates stage-normalized credit "
+            "— neutral 50 until the next pipeline run measures a new one"
+        )
+    if inputs is None:
+        # No substantive bills after real tenure: a credit of 0, compared
+        # on the same scale as everyone else — V&W's LES is 0 for a member
+        # who sponsored nothing. That keeps "inaction never beats an
+        # attempt" true by construction (credit is monotone in bills),
+        # which the fixed near-neutral score it replaces could only keep by
+        # shrinking every low-volume sponsor toward 50.
+        raw_per_congress = 0.0
+    else:
+        raw_per_congress = _les_member_inputs(
+            sponsored_bills, party, ref["stage_totals"], ref["n_members"],
+        )["raw_per_congress"]
     member_congress = max((b.get("congress") or 0 for b in sponsored_bills), default=0)
     if member_congress and ref.get("congress") and member_congress != ref["congress"]:
         # First days of a new congress, before enough members have
@@ -2310,7 +2371,7 @@ def _les_component_score(
         expected_per_congress = status_median
     else:
         rates = ref.get("advancement_rates")
-        if rates and avg_baseline:
+        if rates and avg_baseline and sponsored_bills:
             member_baseline = _les_member_baseline(sponsored_bills, party, current, rates)
             status_ratio = member_baseline / avg_baseline
         else:
@@ -2324,10 +2385,16 @@ def _les_component_score(
         expected_per_congress = population_median * status_ratio
 
     diff = raw_per_congress - expected_per_congress
-    conf = min(n_sub / 10, 1.0)
     normalized_diff = max(-1.0, min(diff / saturation, 1.0)) if saturation else 0.0
-    raw_score = 50.0 + 50.0 * normalized_diff
-    score = raw_score * conf + 50.0 * (1 - conf)
+    # No shrinkage toward 50 by bill count (v6.14). Credit is a total over
+    # every bill the member sponsored — all of them observed, nothing
+    # estimated — and already grows with volume, so shrinking a low-volume
+    # sponsor toward the middle penalised volume a second time: it pulled a
+    # member with two bills, one enacted, down toward members with dozens
+    # introduced. Against V&W's published LES it cost 0.06 of rank agreement
+    # in the House (scripts/research_les_stage_weighting.py). The published
+    # confidence grade still says how many bills stand behind the number.
+    score = 50.0 + 50.0 * normalized_diff
 
     # Stage-count breakdown (2026-07, per user request): the raw credit
     # figure above is one opaque number that a bill-mill sponsor (many
@@ -2347,15 +2414,17 @@ def _les_component_score(
     enacted = sum(1 for b in substantive_bills if _les_bill_stage(b) >= _LES_MAX_STAGE)
 
     bar = f"median {status}-party sponsor" if status_median is not None else "for this sponsor's status"
+    if inputs is None:
+        return score, (
+            f"0 substantive bills over {years_in_office:.1f} years in office — "
+            f"a credit of 0 vs. {expected_per_congress:.2f} expected ({bar})"
+        )
     detail = (
-        f"{raw_per_congress:.1f} significance-weighted stage-credit/congress vs. "
-        f"{expected_per_congress:.1f} expected ({bar}) — "
-        f"{n_sub} substantive bills: {introduced_only} introduced only (still "
-        f"counts under Volden & Wiseman's real methodology), "
+        f"stage-normalized credit {raw_per_congress:.2f}/congress (chamber average 1.00) vs. "
+        f"{expected_per_congress:.2f} expected ({bar}) — "
+        f"{n_sub} substantive bills: {introduced_only} introduced only, "
         f"{advanced_short_of_law} advanced further, {enacted} became law"
     )
-    if conf < 1.0:
-        detail += f", confidence-scaled {conf:.0%} ({n_sub} of 10 bills)"
     return score, detail
 
 
@@ -2366,6 +2435,8 @@ def _calc_legislative_effectiveness(
     years_in_office: float | None = None,
     attracted_bipartisanship: float | None = None,
     les_reference: dict | None = None,
+    chamber: str | None = None,
+    bills_known: bool = True,
 ) -> int:
     """
     Legislative Effectiveness Score (0-100, higher = better).
@@ -2373,11 +2444,9 @@ def _calc_legislative_effectiveness(
     Three components (two when bipartisan-attraction data is missing —
     weights then revert to exactly the pre-v6.11 70/30 split):
 
-      1. Bill significance & advancement (60%): Volden & Wiseman
-         (2014)-based — see the module comment above _LES_STAGE_ORDER for
-         the full methodology and the two disclosed departures from their
-         real approach (2-tier significance, expected-vs-actual credit
-         instead of population-mean-ratio normalization).
+      1. Bill significance & advancement (60%): Volden & Wiseman's (2014)
+         Legislative Effectiveness Score — see the module comment above
+         _LES_STAGE_ORDER for the method and its disclosed departures.
 
       2. Legislative leadership (25%): PageRank score from the
          cosponsorship network (Brin & Page 1998, computed in
@@ -2415,15 +2484,15 @@ def _calc_legislative_effectiveness(
          live correlation after the first full run, same standing check
          as the v6.8 r=-0.76 finding.
 
-    Components apply linear count-confidence shrinkage toward 50 when data is
-    sparse, preventing extreme scores from thin evidence — including a
-    confirmed-zero-bills record after real tenure, which is a weak but
-    real negative signal, not the same as a freshman with no data yet
-    (see _zero_bill_component_score).
+    The leadership component is shrunk toward 50 for short tenure. The
+    V&W-based component is not shrunk by bill count (v6.14, see
+    _les_component_score); a member with no substantive bills after real
+    tenure scores a credit of 0 on the same scale when `chamber` is known,
+    and neutral when their bills could not be fetched (`bills_known`).
     """
     return _legislative_effectiveness_core(
         sponsored_bills, leadership_score, party, years_in_office,
-        attracted_bipartisanship, les_reference,
+        attracted_bipartisanship, les_reference, chamber, bills_known,
     )["score"]
 
 
@@ -2434,12 +2503,15 @@ def _legislative_effectiveness_core(
     years_in_office: float | None = None,
     attracted_bipartisanship: float | None = None,
     les_reference: dict | None = None,
+    chamber: str | None = None,
+    bills_known: bool = True,
 ) -> dict:
     """Same math as _calc_legislative_effectiveness, returning every
     intermediate value alongside the final score. Single implementation,
     same reuse contract as _funding_independence_core above."""
     les_score, les_detail = _les_component_score(
         sponsored_bills or [], party, years_in_office, les_reference,
+        chamber=chamber, bills_known=bills_known,
     )
 
     # Component: leadership score from cosponsorship PageRank
