@@ -28,10 +28,18 @@ mixed-case on their own candidate row but printed ALL-CAPS on their
 county-repeat rows too, so casing alone doesn't reliably distinguish
 a real row from a repeat — x0 position does, unambiguously.
 
-Independent/slogan candidates (no recognized party) are correctly
-skipped rather than guessed at — normalize_party returns None for a
-free-text slogan, and this module never treats "ran under a slogan" as
-a party.
+Independent/slogan candidates (no recognized party) are skipped when
+reading the certification of PARTY nominees — normalize_party returns
+None for a free-text slogan. Read as a certified BALLOT list
+(`ballot_list: true`), the same row is an ordinary independent entry and
+is kept, with the printed party/slogan as its label.
+
+`discovery` (page_url + link_regexes) reads the Division's "Official
+General Election Candidates" lists instead of the July certification.
+Those are the ballot as it stands: the Division posts amended
+certifications after the primary (NJ-7, NJ-9, NJ-10 and the Senate in
+2026) and the House list is re-dated when they land ("-0904"), so the
+file is found on the election page rather than pinned.
 """
 
 import io
@@ -43,7 +51,11 @@ import pdfplumber
 
 from app.pipeline.fetch.ballot_measure_pdf_geometry import rows as _clustered_rows
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
-from app.pipeline.fetch.state_candidates_common import federal_record, normalize_party
+from app.pipeline.fetch.state_candidates_common import (
+    discover_certification_link,
+    federal_record,
+    normalize_party,
+)
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -71,6 +83,14 @@ _NAME_COL_MAX_X = 130.0
 _PARTY_COL_MIN_X = 260.0
 _PARTY_COL_MAX_X = 320.0
 
+# The Address column (x0≈135) sits between Name and Party. A candidate's
+# own row always has an address; a page header, a county-repeat row and a
+# wrapped slogan line never do — the one signal that separates a real
+# independent from slogan text once slogans are no longer skipped. It is
+# only ever tested for presence: the address itself is never read.
+_ADDRESS_COL_MIN_X = 132.0
+_DATE_RE = re.compile(r"^\d{1,2}/\d{1,2}/\d{4}$")
+
 _SENATE_HEADER_RE = re.compile(r"Candidates\s+for\s+US\s+Senate", re.IGNORECASE)
 _HOUSE_HEADER_RE = re.compile(r"Candidates\s+for\s+House\s+of\s+Representatives", re.IGNORECASE)
 _DISTRICT_RE = re.compile(
@@ -89,7 +109,9 @@ def _rows_by_top(words: list[dict]) -> list[list[dict]]:
     return [clustered[row_id] for row_id in sorted(clustered)]
 
 
-def _parse_page(words: list[dict], office: str | None, district: int | None) -> tuple[list[dict], str | None, int | None]:
+def _parse_page(
+    words: list[dict], office: str | None, district: int | None, ballot_list: bool = False,
+) -> tuple[list[dict], str | None, int | None]:
     """(results, office, district) — office/district carry across pages
     (a district's candidates can spill onto the next page), so the
     caller threads them through every page in document order."""
@@ -119,12 +141,28 @@ def _parse_page(words: list[dict], office: str | None, district: int | None) -> 
         if office == "H" and district is None:
             continue
 
+        if ballot_list:
+            has_address = any(_ADDRESS_COL_MIN_X <= w["x0"] < _PARTY_COL_MIN_X for w in row)
+            person = [w["text"] for w in name_words if w["text"] != "*"]
+            if not has_address or len(person) < 2 or _DATE_RE.match(person[0]):
+                continue
+            # The page subtitle ("For GENERAL ELECTION 11/03/2026 ...") and a
+            # slogan wrapped onto a row whose "party" is a page number.
+            if person[0] == "For" or any(w.endswith(",") for w in person):
+                continue
+            if all(w["text"].isdigit() for w in party_words):
+                continue
         name = " ".join(w["text"] for w in name_words if w["text"] != "*")
-        party = normalize_party(" ".join(w["text"] for w in party_words))
+        party_text = " ".join(w["text"] for w in party_words)
+        party = normalize_party(party_text, ballot_list=ballot_list)
         if party is None:
-            continue  # independent/slogan candidate — never guessed at
+            if not ballot_list:
+                continue  # a party-nominee certification: a slogan is not a party
+            party = "I"   # on a ballot list, a slogan candidate is an independent
         record = federal_record(office, district, party, name)
         if record:
+            if ballot_list:
+                record["party_label"] = party_text
             results.append(record)
 
     return results, office, district
@@ -136,28 +174,41 @@ async def fetch_confirmed_candidates(
     """Every confirmed general-election federal nominee NJ has certified
     for `year`, or None on a fetch/parse failure. Each item: {"office",
     "district", "party", "last_name"}."""
-    url = URL_PATTERN.format(year=year)
-    resp = await fetch_with_retry(
-        client, _rate_limiter, "GET", url, timeout=60.0,
-        log_label=f"NJ certification of general nominees {year}", headers=BROWSER_HEADERS,
-    )
-    if resp is None:
-        return None
+    discovery = source.get("discovery") or {}
+    ballot_list = bool(source.get("ballot_list"))
+    if discovery:
+        urls = []
+        for link_regex in discovery.get("link_regexes") or []:
+            found = await discover_certification_link(
+                client, _rate_limiter, discovery["page_url"], link_regex, year, state,
+            )
+            if found is None:
+                return None  # every list is required: half a ballot unconfirms real nominees
+            urls.append(found)
+    else:
+        urls = [URL_PATTERN.format(year=year)]
 
-    try:
-        with pdfplumber.open(io.BytesIO(resp.content)) as pdf:
-            office: str | None = None
-            district: int | None = None
-            results: list[dict] = []
-            for page in pdf.pages:
-                words = page.extract_words()
-                if not words:
-                    continue
-                page_results, office, district = _parse_page(words, office, district)
-                results.extend(page_results)
-    except Exception:
-        logger.exception("NJ certification PDF for %d failed to parse", year)
-        return None
+    results: list[dict] = []
+    for url in urls:
+        resp = await fetch_with_retry(
+            client, _rate_limiter, "GET", url, timeout=60.0,
+            log_label=f"NJ candidate list {year}", headers=BROWSER_HEADERS,
+        )
+        if resp is None:
+            return None
+        try:
+            with pdfplumber.open(io.BytesIO(resp.content)) as pdf:
+                office: str | None = None
+                district: int | None = None
+                for page in pdf.pages:
+                    words = page.extract_words()
+                    if not words:
+                        continue
+                    page_results, office, district = _parse_page(words, office, district, ballot_list)
+                    results.extend(page_results)
+        except Exception:
+            logger.exception("NJ PDF %s failed to parse", url)
+            return None
 
     if not results:
         # The PDF fetched and opened fine but not one row matched the
