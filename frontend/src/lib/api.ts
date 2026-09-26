@@ -1029,6 +1029,9 @@ export interface HostStats {
   uptimeSeconds: number | null;
   netRxBytes?: number;
   netTxBytes?: number;
+  /** Cumulative CPU ticks since boot (/proc/stat); utilisation is the delta. */
+  cpuBusyTicks?: number | null;
+  cpuTotalTicks?: number | null;
 }
 
 export interface VectorCollectionStats {

@@ -139,9 +139,47 @@ async def admin_auth(authorization: str | None = Header(default=None)):
     return {"status": "authenticated"}
 
 
+def _parse_proc_stat_cpu(text: str) -> tuple[int, int] | None:
+    """(busy, total) cumulative CPU ticks from /proc/stat's aggregate line.
+
+    Fields: user nice system idle iowait irq softirq steal [guest guest_nice].
+    Idle time is idle + iowait (a CPU waiting on disk is not busy). guest and
+    guest_nice are already counted inside user/nice, so they are left out of
+    the total. The caller turns two readings into a utilisation percentage —
+    ticks since boot say nothing about "now" on their own.
+    """
+    for line in text.splitlines():
+        parts = line.split()
+        if not parts or parts[0] != "cpu":
+            continue
+        try:
+            values = [int(v) for v in parts[1:9]]
+        except ValueError:
+            return None
+        if len(values) < 4:
+            return None
+        values += [0] * (8 - len(values))
+        total = sum(values)
+        idle = values[3] + values[4]
+        return total - idle, total
+    return None
+
+
 def _read_system_stats() -> dict:
     """Read host-level system stats from /proc and /sys (works in Docker)."""
     stats: dict = {}
+
+    # Cumulative CPU ticks (/proc/stat is host-wide inside a container).
+    # Utilisation is the change between two polls; the load average below is
+    # a different quantity — runnable tasks, smoothed over a minute — and
+    # reads as ~0% on a mostly idle multi-core host even when work is running.
+    try:
+        with open("/proc/stat") as f:
+            ticks = _parse_proc_stat_cpu(f.read())
+        stats["cpuBusyTicks"], stats["cpuTotalTicks"] = ticks if ticks else (None, None)
+    except OSError:
+        stats["cpuBusyTicks"] = None
+        stats["cpuTotalTicks"] = None
 
     try:
         with open("/proc/loadavg") as f:
