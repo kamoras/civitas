@@ -45,8 +45,15 @@ Optional, each because a live state needed it:
                                      01" in a column of its own)
   format.office_fill_down            the office is printed once per group and
                                      left blank on the rows below it (Iowa)
+  discovery.url + year_regex         the list lives at one fixed address that
+                                     always shows the CURRENT election (New
+                                     Mexico's candidate portal), so the page
+                                     must name this year's election before a
+                                     row is read — last cycle's list would
+                                     confirm last cycle's people
 
-A PDF is read as a table too (Iowa, Nebraska): the row whose cells include
+An HTML page is read from its table whose header row carries every
+configured heading (New Mexico). A PDF is read as a table too (Iowa, Nebraska): the row whose cells include
 every configured column heading is the header, and each later cell on the
 page belongs to the column it starts in (_column_starts). Cells are split
 where the gap between two words is wider than a space — see _CELL_GAP.
@@ -62,9 +69,11 @@ are deduplicated.
 import csv
 import io
 import logging
+import re
 
 import httpx
 import pdfplumber
+from lxml import html as lxml_html
 
 from app.pipeline.fetch.ballot_measure_pdf_geometry import rows as _clustered_rows
 from app.pipeline.fetch.http_utils import fetch_bytes_with_retry
@@ -143,11 +152,36 @@ def pdf_table_rows(pages: list[list[dict]], headings: list[str]) -> list[dict]:
     return rows
 
 
+def html_table_rows(page: bytes, headings: list[str]) -> list[dict]:
+    """Rows of the page's table whose header row names every heading. A
+    repeated heading keeps its last column (New Mexico prints "Contest"
+    twice; both hold the office)."""
+    tree = lxml_html.fromstring(page)
+    for table in tree.iter("table"):
+        trs = table.xpath("./tr|./thead/tr|./tbody/tr")
+        if not trs:
+            continue
+        header = [" ".join(c.text_content().split()) for c in trs[0].xpath("./th|./td")]
+        if set(headings) <= set(header):
+            return [
+                dict(zip(header, (" ".join(c.text_content().split()) for c in tr.xpath("./td"))))
+                for tr in trs[1:]
+            ]
+    return []
+
+
+def _headings(fmt: dict) -> list[str]:
+    headings = [fmt["office_column"], fmt["party_column"], *fmt["name_columns"]]
+    if fmt.get("district_column"):
+        headings.append(fmt["district_column"])
+    return headings
+
+
 def _rows(payload: bytes, url: str, fmt: dict) -> list[dict] | None:
+    if payload.lstrip()[:1] == b"<":
+        return html_table_rows(payload, _headings(fmt))
     if payload[:5] == b"%PDF-":
-        headings = [fmt["office_column"], fmt["party_column"], *fmt["name_columns"]]
-        if fmt.get("district_column"):
-            headings.append(fmt["district_column"])
+        headings = _headings(fmt)
         try:
             with pdfplumber.open(io.BytesIO(payload)) as pdf:
                 return pdf_table_rows([page.extract_words() for page in pdf.pages], headings)
@@ -229,7 +263,10 @@ async def fetch_confirmed_candidates(
     discovery = source.get("discovery") or {}
     fmt = source.get("format") or {}
     link_regexes = discovery.get("link_regexes") or ([discovery["link_regex"]] if discovery.get("link_regex") else [])
-    if not (discovery.get("page_url") or discovery.get("index_url")) or not link_regexes:
+    if discovery.get("url") and not discovery.get("year_regex"):
+        logger.warning("%s certified_table discovery.url needs year_regex", state)
+        return None
+    if not discovery.get("url") and (not (discovery.get("page_url") or discovery.get("index_url")) or not link_regexes):
         logger.warning("%s certified_table source needs discovery.page_url and link_regex", state)
         return None
     needed = ("office_column", "party_column", "name_columns") + (
@@ -239,6 +276,16 @@ async def fetch_confirmed_candidates(
     if missing:
         logger.warning("%s certified_table format is missing %s", state, missing)
         return None
+
+    if discovery.get("url"):
+        payload = await fetch_bytes_with_retry(client, _rate_limiter, discovery["url"], f"{state} certified list {year}")
+        if payload is None:
+            return None
+        if not re.search(discovery["year_regex"].replace("{year}", str(year)), payload.decode("utf-8", "replace")):
+            logger.info("%s candidate list does not show the %d election yet", state, year)
+            return None
+        rows = _rows(payload, discovery["url"], fmt)
+        return _records(state, rows or [], fmt)
 
     page_url = discovery.get("page_url")
     if discovery.get("index_url") and discovery.get("index_regex"):
@@ -262,6 +309,10 @@ async def fetch_confirmed_candidates(
             logger.warning("%s certified list %s did not parse", state, url)
             return None
         rows += part
+    return _records(state, rows, fmt)
+
+
+def _records(state: str, rows: list[dict], fmt: dict) -> list[dict] | None:
     records = parse_certified_rows(rows, fmt)
     if not records:
         logger.warning("%s certified list has no federal candidate — columns or codes changed?", state)

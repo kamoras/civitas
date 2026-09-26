@@ -60,7 +60,7 @@ because that decides what the page can honestly claim.
 
 | Source kind | What it can see | States (2026-09-26) |
 |---|---|---|
-| **Certified general ballot** | Everyone on the November ballot, third parties, independents and post-primary replacements included | TX (`tx_civix`), NC (`tabular` + filing list), SD (`sd_vip`), LA (`voterportal`), SC (`vrems`), MO (`certified_pdf`); and as a `general_list` beside a primary-results source: ME, CO, VA, TN, MD, IA, NE (`certified_table`, spreadsheets and PDF tables), FL (`dos_canlist`), NJ (`nj_certification` official lists) |
+| **Certified general ballot** | Everyone on the November ballot, third parties, independents and post-primary replacements included | TX (`tx_civix`), NC (`tabular` + filing list), SD (`sd_vip`), LA (`voterportal`), SC (`vrems`), MO (`certified_pdf`); and as a `general_list` beside a primary-results source: ME, CO, VA, TN, MD, IA, NE, NM, WY (`certified_table`: spreadsheets, PDF tables, an HTML table), FL (`dos_canlist`), NJ (`nj_certification` official lists) |
 | **Primary results** | Each party's nominee. Cannot see a Libertarian, Green or independent who never ran in a primary, or a nominee replaced after the primary | the other 33 configured states — `tabular` (14), `clarity` (2), `tally_enr` (2), `totalvote_enr` (2) and 13 single-state strategies (WI's `canvass_summary_pdf` among them) |
 | **National fallback** | Nothing until Google publishes general-election contests, close to the election | MI, NV, NY, OH, OK (`google_civic`) |
 
@@ -106,7 +106,9 @@ configured heading is the header, cells split at gaps wider than a space
 learned from cells under exactly one heading, since data sits left-aligned
 under centred headings. `office_fill_down` carries a once-per-group office
 down, set only by candidate rows so a footer or a governor's group never
-inherits a congressional district. Scanned certifications (UT's OCR text,
+inherits a congressional district. An HTML page is read from the table whose
+header row names every configured heading (NM); a fixed `discovery.url` that
+always shows the current election must match `year_regex` first. Scanned certifications (UT's OCR text,
 AL's images) are not read: one misread name would unconfirm a real nominee.
 
 ### Rules every strategy follows

@@ -632,3 +632,60 @@ def test_match_reads_a_two_word_ballot_surname_filed_as_one_word():
     delaney = _cand("DELANEY, APRIL MCCLAIN", "DEM", "H4MD06")
     assert _match_candidate([delaney, _cand("FICKER, ROBIN", "REP", "H0MD06")], "McClain Delaney", "D",
                             "April McClain Delaney") is delaney
+
+
+_NM_PAGE = """<html><body><h1>{year} General Election Contest/Candidate List</h1>
+<table><tr><td><table><tr><td>search form</td></tr></table></td></tr></table>
+<table>
+<tr><th>Contest</th><th>Contest</th><th>District</th><th>First Name</th><th>Last Name</th>
+    <th>Party</th><th>Status</th></tr>
+<tr><td>United States Senator</td><td>United States Senator</td><td></td><td>BEN</td><td>LUJAN</td>
+    <td>DEM</td><td>Qualified</td></tr>
+<tr><td>United States Senator</td><td>United States Senator</td><td></td><td>MIRA</td><td>OCONNELL</td>
+    <td>DTS</td><td>Disqualified</td></tr>
+<tr><td>United States RepresentativeDISTRICT 3</td><td>United States Representative</td><td>DISTRICT 3</td>
+    <td>MARTIN</td><td>ZAMORA</td><td>REP</td><td>Qualified</td></tr>
+</table></body></html>"""
+
+_NM_SOURCE = {
+    "discovery": {"url": "https://portal.test/CandidateList.aspx?cty=99",
+                  "year_regex": "{year} General Election Contest/Candidate List"},
+    "format": {"office_column": "Contest", "office_parse": True, "district_column": "District",
+               "party_column": "Party", "surname_column": "Last Name",
+               "name_columns": ["First Name", "Last Name"],
+               "status_column": "Status", "status_values": ["Qualified"]},
+}
+
+
+@pytest.mark.asyncio
+async def test_html_list_is_read_only_when_it_names_this_years_election():
+    # New Mexico's portal has one address that always shows the CURRENT
+    # election; last cycle's list must never confirm anyone this cycle.
+    def handler(request):
+        return httpx.Response(200, text=_NM_PAGE.replace("{year}", "2026"))
+
+    async with _client(handler) as client:
+        got = await fetch_certified_table(client, 2026, "NM", _NM_SOURCE)
+        assert {(r["office"], r["district"], r["display_name"], r["party"]) for r in got} == {
+            ("S", None, "BEN LUJAN", "D"), ("H", 3, "MARTIN ZAMORA", "R"),
+        }
+        assert await fetch_certified_table(client, 2028, "NM", _NM_SOURCE) is None
+
+
+def test_a_row_with_a_withdrawal_date_is_off_the_ballot():
+    # Wyoming's roster keeps a withdrawn candidate with a Date Withdrawn;
+    # only rows with that column empty are on the ballot. Its party codes
+    # are its own: LBR is Libertarian, CT Constitution.
+    rows = [
+        {"Office Sought": "UNITED STATES REPRESENTATIVE", "Party Affiliation": "LBR",
+         "Candidate Last Name": "JOHNSON", "Ballot Name": "Shawn Johnson", "Date Withdrawn": ""},
+        {"Office Sought": "UNITED STATES REPRESENTATIVE", "Party Affiliation": "CT",
+         "Candidate Last Name": "HAGGIT", "Ballot Name": "Jeffrey Haggit", "Date Withdrawn": ""},
+        {"Office Sought": "UNITED STATES REPRESENTATIVE", "Party Affiliation": "REP",
+         "Candidate Last Name": "DOE", "Ballot Name": "Jane Doe", "Date Withdrawn": "08/01/2026"},
+    ]
+    fmt = {"office_column": "Office Sought", "office_parse": True, "party_column": "Party Affiliation",
+           "surname_column": "Candidate Last Name", "name_columns": ["Ballot Name"],
+           "status_column": "Date Withdrawn", "status_values": [""]}
+    got = {(r["district"], r["display_name"], r["party"]) for r in parse_certified_rows(rows, fmt)}
+    assert got == {(None, "Shawn Johnson", "L"), (None, "Jeffrey Haggit", "C")}

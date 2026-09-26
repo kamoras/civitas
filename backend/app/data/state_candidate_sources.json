@@ -502,7 +502,33 @@
         "party_column": "PartyCode",
         "votes_column": "CandidateVotes"
       },
-      "description": "Statewide CSV export off the SOS's own ASP.NET results portal (electionresults.sos.nm.gov), reached with no login, no session and no bot-detection friction \u2014 verified both via a real browser session and a plain unauthenticated server-side fetch on 2026-09-03. The URL carries no election id or date: it always serves whichever election is currently featured, which is exactly what makes it safe to leave unhardcoded across cycles. type=FED already scopes the export to the state's 4 federal contests (Senate + 3 House districts), so nothing else needs filtering out. RaceName alone doesn't carry the House district ('United States Representative', no number) \u2014 AreaNum does ('DISTRICT 1') \u2014 nor does either column carry the party on its own, so the contest key joins all three; without PartyCode a district's Democratic and Republican primaries would tally as ONE race and only the higher-turnout party's candidate would ever be picked (New Mexico's real 2026 primary had 574k Democratic ballots against 444k Republican, so every Republican nominee would have been silently dropped). Joining AreaNum in is also what lets parse_office's own District-number matching resolve the seat with no house_from_columns spec needed. The file carries no date or certification flag of its own, so held comes from the national FEC calendar (date_from_calendar) and require_official/settle_days gate on that: New Mexico is a runoff-free plurality state (NM Const. art. VII \u00a7 5; primary runoffs are constitutionally barred) and certified this cycle's primary in exactly 21 days (held 2026-06-02, State Canvass Board certification 2026-06-23), so settle_days matches the state's own real turnaround. Verified live against the certified 2026-06-02 primary: Ben Ray Lujan's Senate renomination, and Melanie Stansbury (NM-01), Gabe Vasquez (NM-02) and Teresa Leger Fernandez (NM-03) each renominated on the Democratic side, plus a Republican Senate write-in nominee (surname parsing strips the '(write in)' annotation the same way Georgia's incumbency markers are stripped)."
+      "description": "Statewide CSV export off the SOS's own ASP.NET results portal (electionresults.sos.nm.gov), reached with no login, no session and no bot-detection friction \u2014 verified both via a real browser session and a plain unauthenticated server-side fetch on 2026-09-03. The URL carries no election id or date: it always serves whichever election is currently featured, which is exactly what makes it safe to leave unhardcoded across cycles. type=FED already scopes the export to the state's 4 federal contests (Senate + 3 House districts), so nothing else needs filtering out. RaceName alone doesn't carry the House district ('United States Representative', no number) \u2014 AreaNum does ('DISTRICT 1') \u2014 nor does either column carry the party on its own, so the contest key joins all three; without PartyCode a district's Democratic and Republican primaries would tally as ONE race and only the higher-turnout party's candidate would ever be picked (New Mexico's real 2026 primary had 574k Democratic ballots against 444k Republican, so every Republican nominee would have been silently dropped). Joining AreaNum in is also what lets parse_office's own District-number matching resolve the seat with no house_from_columns spec needed. The file carries no date or certification flag of its own, so held comes from the national FEC calendar (date_from_calendar) and require_official/settle_days gate on that: New Mexico is a runoff-free plurality state (NM Const. art. VII \u00a7 5; primary runoffs are constitutionally barred) and certified this cycle's primary in exactly 21 days (held 2026-06-02, State Canvass Board certification 2026-06-23), so settle_days matches the state's own real turnaround. Verified live against the certified 2026-06-02 primary: Ben Ray Lujan's Senate renomination, and Melanie Stansbury (NM-01), Gabe Vasquez (NM-02) and Teresa Leger Fernandez (NM-03) each renominated on the Democratic side, plus a Republican Senate write-in nominee (surname parsing strips the '(write in)' annotation the same way Georgia's incumbency markers are stripped).",
+      "general_list": {
+        "source_name": "New Mexico Secretary of State (general election contest/candidate list)",
+        "strategy": "certified_table",
+        "runoff_threshold_pct": null,
+        "discovery": {
+          "url": "https://candidateportal.servis.sos.state.nm.us/CandidateList.aspx?cty=99",
+          "year_regex": "{year} General Election Contest/Candidate List"
+        },
+        "format": {
+          "office_column": "Contest",
+          "office_parse": true,
+          "district_column": "District",
+          "party_column": "Party",
+          "surname_column": "Last Name",
+          "name_columns": [
+            "First Name",
+            "Middle Name",
+            "Last Name"
+          ],
+          "status_column": "Status",
+          "status_values": [
+            "Qualified"
+          ]
+        },
+        "description": "Added 2026-09-26. The Secretary of State's candidate portal lists every contest filed with the state (filing county 99, \"State\") with a status per candidate; \"Qualified\" is on the ballot, \"Disqualified\" is not (two Senate and four gubernatorial minor-party and Declined-to-Select filers in 2026). The page is an HTML table at a fixed address that always shows the current election, so `year_regex` must find this year's general election in the page before any row is read. Only contest, district, name, party and status are read; the table also carries addresses, phones and emails."
+      }
     },
     "NC": {
       "source_name": "North Carolina State Board of Elections (public results export)",
@@ -727,7 +753,30 @@
       "strategy": "wy_canvass_xlsx",
       "runoff_threshold_pct": null,
       "settle_days": 8,
-      "description": "sos.wyo.gov's own results page links a zip (Docs/{year}/Results/Primary/{year}_Wyoming_Primary_Results.zip) holding three State-Canvassing-Board-CERTIFIED Excel workbooks -- this is not a live ENR vendor, so unlike TotalVote/Clarity there is no separate unofficial/preliminary state to guard against; the zip's mere existence at this URL for the requested year IS the certification signal (its own page names the Canvassing Board and its certification minutes right next to the download). settle_days is still a defensive floor -- set to 8, the directly observed gap between the real 2026 primary (August 18) and the workbook's own internal modified date (August 26), not a cited statutory deadline. The 'Statewide Candidates' sheet (found by NAME via the workbook's own xl/workbook.xml, never a hardcoded sheet number -- it's the workbook's SECOND sheet by id but FOURTH in display order, with two hidden sheets between) is a WIDE cross-tab unlike every other tabular state registered so far: race and party each appear ONCE per candidate group, in that group's first column only, across two header rows, with a third header row naming every candidate/Write-Ins/Overvotes/Undervotes column and one row per COUNTY below plus a final 'Total' row this module reads directly (cross-checked live against a hand-sum of all 23 counties' own rows for the Senate race -- matched exactly). Wyoming's real 2026 field also carried a '* Withdrawn Candidate' column (2,162 votes still counted after the real candidate withdrew) that state_candidates_wy.py excludes by name-text match, same as Write-Ins/Overvotes/Undervotes. Wyoming nominates on a PLURALITY -- no evidence of a federal-primary runoff was found in this research pass -- so runoff_threshold_pct is null. Verified live 2026-09-08 against the real, certified 2026 primary: Harriet Hageman (Senate R, real plurality winner of a 5-way field, 83,807 votes -- WY's sitting at-large US Representative moving up to run for Senate), James Byrd (Senate D, real plurality winner of a 2-way field, 9,591 over 2,499), Chuck Gray (House R, real plurality winner of a crowded 9-way field opened by Hageman's Senate run, 31,224 over runner-up Steve Friess's 25,059), Lisa Kinney (House D, real plurality winner of a 2-way field, 9,344 over 2,660)."
+      "description": "sos.wyo.gov's own results page links a zip (Docs/{year}/Results/Primary/{year}_Wyoming_Primary_Results.zip) holding three State-Canvassing-Board-CERTIFIED Excel workbooks -- this is not a live ENR vendor, so unlike TotalVote/Clarity there is no separate unofficial/preliminary state to guard against; the zip's mere existence at this URL for the requested year IS the certification signal (its own page names the Canvassing Board and its certification minutes right next to the download). settle_days is still a defensive floor -- set to 8, the directly observed gap between the real 2026 primary (August 18) and the workbook's own internal modified date (August 26), not a cited statutory deadline. The 'Statewide Candidates' sheet (found by NAME via the workbook's own xl/workbook.xml, never a hardcoded sheet number -- it's the workbook's SECOND sheet by id but FOURTH in display order, with two hidden sheets between) is a WIDE cross-tab unlike every other tabular state registered so far: race and party each appear ONCE per candidate group, in that group's first column only, across two header rows, with a third header row naming every candidate/Write-Ins/Overvotes/Undervotes column and one row per COUNTY below plus a final 'Total' row this module reads directly (cross-checked live against a hand-sum of all 23 counties' own rows for the Senate race -- matched exactly). Wyoming's real 2026 field also carried a '* Withdrawn Candidate' column (2,162 votes still counted after the real candidate withdrew) that state_candidates_wy.py excludes by name-text match, same as Write-Ins/Overvotes/Undervotes. Wyoming nominates on a PLURALITY -- no evidence of a federal-primary runoff was found in this research pass -- so runoff_threshold_pct is null. Verified live 2026-09-08 against the real, certified 2026 primary: Harriet Hageman (Senate R, real plurality winner of a 5-way field, 83,807 votes -- WY's sitting at-large US Representative moving up to run for Senate), James Byrd (Senate D, real plurality winner of a 2-way field, 9,591 over 2,499), Chuck Gray (House R, real plurality winner of a crowded 9-way field opened by Hageman's Senate run, 31,224 over runner-up Steve Friess's 25,059), Lisa Kinney (House D, real plurality winner of a 2-way field, 9,344 over 2,660).",
+      "general_list": {
+        "source_name": "Wyoming Secretary of State (general election candidate roster)",
+        "strategy": "certified_table",
+        "runoff_threshold_pct": null,
+        "discovery": {
+          "page_url": "https://sos.wyo.gov/Elections/Default.aspx",
+          "link_regex": "href='(/Elections/Docs/{year}/{year}_WY_General_Election_Candidates\\.csv)'"
+        },
+        "format": {
+          "office_column": "Office Sought",
+          "office_parse": true,
+          "party_column": "Party Affiliation",
+          "surname_column": "Candidate Last Name",
+          "name_columns": [
+            "Ballot Name"
+          ],
+          "status_column": "Date Withdrawn",
+          "status_values": [
+            ""
+          ]
+        },
+        "description": "Added 2026-09-26. The Elections Division's General Election Candidates Roster, posted beside its PDF as a CSV. It carries the Libertarian (Shawn Johnson) and Constitution (Jeffrey Haggit) candidates for the at-large House seat that the canvass of the August primary cannot show. A row with a Date Withdrawn is off the ballot, so only rows with that column empty are read (`status_values: [\"\"]`). The name is the printed Ballot Name; the file also carries addresses, phones and emails, which are not read. Party codes are Wyoming's own: LBR is Libertarian and CT is Constitution."
+      }
     },
     "OR": {
       "source_name": "Oregon Secretary of State (Official Abstract of Votes PDF)",

@@ -96,14 +96,17 @@ _PARTY_PATTERNS = [
     # FEC files their candidates as DEM.
     (re.compile(r"\b(?:democratic|democrat|dem|dfl|d-npl|dnl|npl)\b", re.IGNORECASE), "D"),
     (re.compile(r"\b(?:republican|rep|gop)\b", re.IGNORECASE), "R"),
-    # Arizona's own 3-letter codes ("LBT", "GRN") don't share a root with
-    # "lib"/"gre" — verified live off its canvass export.
-    (re.compile(r"\b(?:libertarian|lib|lbt)\b", re.IGNORECASE), "L"),
+    # Arizona's own 3-letter codes ("LBT", "GRN") and Wyoming's "LBR" don't
+    # share a root with "lib"/"gre" — verified live off each state's export.
+    (re.compile(r"\b(?:libertarian|lib|lbt|lbr)\b", re.IGNORECASE), "L"),
     (re.compile(r"\b(?:green|gre|grn)\b", re.IGNORECASE), "G"),
     (re.compile(r"\b(?:constitution|con|cst)\b", re.IGNORECASE), "C"),
 ]
 
-_SINGLE_LETTER_PARTIES = {"D", "R", "L", "G", "C"}
+# Codes read only as a party column's WHOLE value (see normalize_party).
+# Wyoming writes Constitution as "CT", which inside a longer label would be
+# Connecticut.
+_WHOLE_VALUE_PARTIES = {"D": "D", "R": "R", "L": "L", "G": "G", "C": "C", "CT": "C"}
 
 # Generational suffixes must not be mistaken for a surname.
 _NAME_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
@@ -813,8 +816,9 @@ def office_from_columns(row: dict, spec: dict | None) -> tuple[str, int | None] 
 # contest name must not become a Republican.
 # NOPTY is Louisiana's "No Party"; PETITION is South Carolina's label for
 # a candidate who reached the ballot by petition rather than a party, and
-# Nebraska writes the same thing out as "By Petition".
-_INDEPENDENT_ABBR = frozenset({"IND", "INDEPENDENT", "UNA", "NPA", "NOP", "NP", "NOPTY", "PETITION"})
+# Nebraska writes the same thing out as "By Petition". DTS is New Mexico's
+# "Declined to Select".
+_INDEPENDENT_ABBR = frozenset({"IND", "INDEPENDENT", "UNA", "NPA", "NOP", "NP", "NOPTY", "PETITION", "DTS"})
 _INDEPENDENT_RE = re.compile(
     r"\b(independent|unaffiliated|no\s+party(\s+affiliation)?|non[\s-]?partisan|by\s+petition)\b",
     re.IGNORECASE,
@@ -848,8 +852,8 @@ def normalize_party(text: str, ballot_list: bool = False) -> str | None:
     # ("R", "D" — Minnesota's results file). That is only safe to read
     # when the WHOLE value is the code: a contest label containing a
     # stray "R" must never become a Republican.
-    if value.upper() in _SINGLE_LETTER_PARTIES:
-        return value.upper()
+    if value.upper() in _WHOLE_VALUE_PARTIES:
+        return _WHOLE_VALUE_PARTIES[value.upper()]
     for pattern, code in _PARTY_PATTERNS:
         if pattern.search(value):
             return code
