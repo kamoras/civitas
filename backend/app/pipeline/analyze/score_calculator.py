@@ -1532,6 +1532,11 @@ def _calc_constituent_alignment(
              concern): members breaking from the flank did not fare worse
              for it — if anything better (difference +2.2, t=1.9), the
              wrong sign for a discount.
+           - Breaking far above expectation is capped, not penalized. Vote
+             share cannot tell a peaked score from this one (folded
+             |deviation| t=0.6; slope past saturation -0.31, t=-0.3), and it
+             is a weak instrument for that question — see the research
+             note's section 8. Open design question, not a settled one.
       2. Position congruence (30%, when Voteview ideal points exist): the
          member's congress-specific Nokken-Poole first-dimension position
          minus what a same-party member of a seat with this lean holds

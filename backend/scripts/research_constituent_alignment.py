@@ -308,6 +308,23 @@ def loyalty_tests(m, p):
     r = smf.ols(f"{base} + neg + pos + pos:flank + flank", S).fit(cov_type="HC1")
     print(f"flank-side defectors (Kirkland & Slapin): extra slope {r.params['pos:flank']:.2f} "
           f"(t={r.tvalues['pos:flank']:.1f}); n={int(((S.flank == 1) & (S.pos > 0)).sum())}")
+
+    # Is there such a thing as breaking too much? A peaked score (best at the
+    # expectation, falling off both ways) against the shipped monotone one,
+    # and the crossing-side slope past the saturation point.
+    S["absdev"] = S.dev_party.abs()
+    S["peaked"] = 100 - 100 * (dev.abs() / dev.abs().quantile(.9)).clip(0, 1)
+    print("breaking far above expectation:")
+    for k, label in (("absdev", "folded |deviation| (per SD)"), ("peaked", "peaked score (per point)")):
+        r = smf.ols(f"{base} + {k}", S).fit(cov_type="HC1")
+        print(f"  {label:30s} {r.params[k]:7.3f} (t={r.tvalues[k]:.1f}) dR2={r.rsquared - b0.rsquared:.4f}")
+    r = smf.ols(f"{base} + dev_party + I(dev_party**2)", S).fit(cov_type="HC1")
+    print(f"  quadratic term {r.params['I(dev_party ** 2)']:.2f} (t={r.tvalues['I(dev_party ** 2)']:.1f})")
+    knot = dev.abs().quantile(.9) / dev.std()
+    S["pos1"], S["pos2"] = S.dev_party.clip(0, knot), (S.dev_party - knot).clip(lower=0)
+    r = smf.ols(f"{base} + neg + pos1 + pos2", S).fit(cov_type="HC1")
+    print(f"  crossing slope up to saturation {r.params['pos1']:.2f} (t={r.tvalues['pos1']:.1f}); "
+          f"beyond it {r.params['pos2']:.2f} (t={r.tvalues['pos2']:.1f}, n={int((S.pos2 > 0).sum())})")
     return hr
 
 
@@ -377,6 +394,9 @@ def senate_test(p):
     print(f"deviation from measured expectation: {r.params['dev']:.2f} (t={r.tvalues['dev']:.1f}); "
           f"loyal side {rr.params['neg']:.2f} (t={rr.tvalues['neg']:.1f}), "
           f"crossing side {rr.params['pos']:.2f} (t={rr.tvalues['pos']:.1f})")
+    J["absdev"] = J.dev.abs()
+    r = smf.ols("own ~ x + C(yr)*C(party) + absdev", J).fit(cov_type="HC1")
+    print(f"folded |deviation|: {r.params['absdev']:.2f} (t={r.tvalues['absdev']:.1f})")
 
 
 def main():

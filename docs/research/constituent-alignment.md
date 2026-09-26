@@ -147,6 +147,35 @@ deviation is in the model (−0.12, t=−0.3; the two correlate at −0.58). The
 discount was **removed**, along with `party_ideology_bounds.json`, which only
 it read.
 
+### 8. Breaking far above expectation: what vote share can and cannot say
+
+The question: a member who breaks with their party far more than the seat
+calls for may be as far from what their voters sent them to do as a member who
+never breaks. If so, the score should peak at the expectation and fall off on
+both sides rather than keep rising.
+
+What the 2004 vote-share test shows:
+
+| Measure | Coefficient | t | ΔR² |
+|---|---|---|---|
+| Signed deviation (shipped, per SD) | 1.46 | 4.7 | 0.0338 |
+| Folded \|deviation\|, best at the expectation (per SD) | 0.26 | 0.6 | 0.0005 |
+| Peaked score, 100 at the expectation (per point) | −0.001 | −0.1 | 0.0000 |
+
+The quadratic term is −0.26 (t=−1.6). Past the saturation point (the
+90th-percentile deviation, n=20) the crossing slope is −0.31 (t=−0.3), flat
+against 1.58 (t=2.1) before it. In the Senate (N=47) the folded measure is
+−0.51 (t=−0.3).
+
+**This does not settle the question.** General-election vote share rewards
+moderation almost by construction, so it is a weak instrument for whether
+heavy defection departs from the mandate voters gave. That is a question about
+what "what they were voted in for" means (the party label the seat chose, or
+the seat's own issue positions), not one this test can answer. A direct
+answer needs constituency opinion on the specific roll calls, such as the
+Cooperative Election Study's roll-call questions (Ansolabehere & Jones 2010).
+Scoring is unchanged pending that decision.
+
 ## What the evidence does not settle
 
 - **The association fades over time.** Per election, the position coefficient
