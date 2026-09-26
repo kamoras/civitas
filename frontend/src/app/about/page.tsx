@@ -1069,17 +1069,22 @@ export default function AboutPage() {
                   South Carolina&apos;s candidate-tracking system and Missouri&apos;s
                   certification of candidates to its counties. All three are now read
                   as the ballot itself, third-party and independent candidates included.
-                  It mattered most in South Carolina, where the June primary winner for
-                  Senate was later replaced as nominee through a special primary — reading
-                  June&apos;s results would have named the wrong person.
                 </P>
                 <P>
-                  The remaining six sit behind bot challenges on their election sites, or
-                  in Oklahoma&apos;s case an API that requires logging in. We do not work
-                  around either; where the same office publishes a plain file on an open
-                  path, we use that instead. One limit applies everywhere: a candidate on a
-                  certified ballot who never filed with the FEC cannot yet appear, because
-                  race lists are built from FEC records.
+                  Reading the ballot rather than primary results also catches a nominee
+                  who is replaced after the primary. In Maine, Graham Platner won the
+                  Democratic Senate primary, withdrew in July, and the party nominated
+                  Troy Jackson; in South Carolina a special primary replaced the June
+                  winner for Senate. Where a state&apos;s source is its certified ballot, it
+                  is treated as the final word: anyone not on it is taken off the page.
+                </P>
+                <P>
+                  Everyone on a certified ballot is shown, including candidates who never
+                  filed with the FEC — they appear with &ldquo;no FEC filing&rdquo; instead
+                  of fundraising figures. The remaining six states sit behind bot
+                  challenges on their election sites, or in Oklahoma&apos;s case an API
+                  that requires logging in. We do not work around either; where the same
+                  office publishes a plain file on an open path, we use that instead.
                 </P>
               </div>
 

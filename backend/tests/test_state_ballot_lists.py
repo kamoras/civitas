@@ -61,7 +61,7 @@ async def test_voterportal_reads_the_staged_general_ballot():
                             'Walter "Rocky" Beach', "Lisa Ballay", "Solo Person"}
     assert by_name['"Jamie" Davis'] == {
         "office": "S", "district": None, "party": "D", "last_name": "Davis",
-        "display_name": '"Jamie" Davis',
+        "display_name": '"Jamie" Davis', "party_label": "DEM",
     }
     assert by_name["Troy A. Carter, Sr."]["last_name"] == "Carter"
     # No-party is an ordinary independent on a certified ballot.
@@ -213,3 +213,156 @@ def test_match_still_refuses_two_different_people():
     a = _cand("SULLIVAN, DAN", "REP", "a")
     b = _cand("SULLIVAN, JOE", "REP", "b")
     assert _match_candidate([a, b], "Sullivan", "R") is None
+
+
+# --- The sync: ballot-only rows, and a certified ballot being authoritative ---
+
+from unittest.mock import AsyncMock  # noqa: E402
+
+from app.models import Candidate, Race  # noqa: E402
+from app.pipeline.fetch import state_candidates as sc  # noqa: E402
+
+
+def _race(db, race_id, state, office="S", district=None):
+    db.add(Race(id=race_id, cycle_year=2026, office=office, state=state, district=district, is_special=False))
+
+
+def _db_cand(db, cid, race_id, name, party, **kw):
+    db.add(Candidate(id=cid, race_id=race_id, name=name, party=party, **kw))
+
+
+@pytest.fixture()
+def only(monkeypatch):
+    async def no_calendar(client, cycle):
+        return {}
+    monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+
+    def scope(state, records):
+        monkeypatch.setattr(sc, "configured_states", lambda: {state})
+        strategy = sc.source_for_state(state)["strategy"]
+        monkeypatch.setitem(sc.STRATEGIES, strategy, AsyncMock(return_value=records))
+    return scope
+
+
+def _rec(office, district, party, last, display):
+    return {"office": office, "district": district, "party": party,
+            "last_name": last, "display_name": display}
+
+
+@pytest.mark.asyncio
+async def test_a_certified_ballot_unconfirms_a_nominee_who_withdrew(db_session, only):
+    # Maine 2026: Platner won the primary, withdrew, Jackson replaced him.
+    # The sticky flag used to keep Platner on the page beside Jackson.
+    _race(db_session, "2026-SEN-LA", "LA")
+    _db_cand(db_session, "S6ME00001", "2026-SEN-LA", "PLATNER, GRAHAM", "DEM", confirmed_general=True)
+    _db_cand(db_session, "S6ME00002", "2026-SEN-LA", "JACKSON, TROY", "DEM")
+    _db_cand(db_session, "S6ME00003", "2026-SEN-LA", "COLLINS, SUSAN M.", "REP", confirmed_general=True)
+    db_session.commit()
+    only("LA", [_rec("S", None, "D", "Jackson", "Troy D. Jackson"),
+                _rec("S", None, "R", "Collins", "Susan M. Collins")])
+
+    results = await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+    flags = {c.id: c.confirmed_general for c in db_session.query(Candidate)}
+    assert flags == {"S6ME00001": False, "S6ME00002": True, "S6ME00003": True}
+    assert results["LA"]["unconfirmed"] == 1
+
+
+@pytest.mark.asyncio
+async def test_a_ballot_candidate_with_no_fec_filing_is_shown(db_session, only):
+    _race(db_session, "2026-HOUSE-LA-2", "LA", office="H", district=2)
+    _db_cand(db_session, "H6LA02001", "2026-HOUSE-LA-2", "CARTER, TROY A. SR.", "DEM")
+    db_session.commit()
+    only("LA", [_rec("H", 2, "D", "Carter", "Troy A. Carter, Sr."),
+                _rec("H", 2, "I", "Beach", 'Walter "Rocky" Beach')])
+
+    results = await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+    beach = db_session.query(Candidate).filter(Candidate.id.startswith("ballot:")).one()
+    assert beach.name == 'BEACH, WALTER "ROCKY"'
+    assert beach.party == "IND"
+    assert beach.confirmed_general is True
+    assert beach.fec_filed is False
+    assert results["LA"]["ballotOnly"] == 1
+    assert results["LA"]["unmatched"] == 0
+
+
+@pytest.mark.asyncio
+async def test_a_ballot_only_row_gives_way_once_the_candidate_files(db_session, only):
+    _race(db_session, "2026-HOUSE-LA-2", "LA", office="H", district=2)
+    db_session.commit()
+    only("LA", [_rec("H", 2, "I", "Beach", 'Walter "Rocky" Beach')])
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+    assert db_session.query(Candidate).filter(Candidate.id.startswith("ballot:")).count() == 1
+
+    # He files with the FEC; the next run matches the real record, and the
+    # placeholder must not survive beside it (or win the match).
+    _db_cand(db_session, "H6LA02099", "2026-HOUSE-LA-2", "BEACH, WALTER", "IND")
+    db_session.commit()
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+    rows = {c.id: c.confirmed_general for c in db_session.query(Candidate)}
+    assert rows == {"H6LA02099": True}
+
+
+@pytest.mark.asyncio
+async def test_a_failed_fetch_leaves_ballot_only_rows_alone(db_session, only):
+    _race(db_session, "2026-HOUSE-LA-2", "LA", office="H", district=2)
+    db_session.commit()
+    only("LA", [_rec("H", 2, "I", "Beach", 'Walter "Rocky" Beach')])
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+    only("LA", None)  # the source is down: that says nothing about the ballot
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+    assert db_session.query(Candidate).filter(Candidate.id.startswith("ballot:")).count() == 1
+
+
+@pytest.mark.asyncio
+async def test_a_non_candidate_row_never_becomes_a_person(db_session, only):
+    _race(db_session, "2026-HOUSE-LA-2", "LA", office="H", district=2)
+    db_session.commit()
+    only("LA", [_rec("H", 2, None, "Scattering", "Write-In Scattering"),
+                _rec("H", 2, "R", "Smith", "Smith")])  # a surname alone is not a ballot entry
+
+    results = await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+    assert db_session.query(Candidate).count() == 0
+    assert results["LA"]["unmatched"] == 2
+
+
+@pytest.mark.asyncio
+async def test_primary_results_never_unconfirm_anyone(db_session, only):
+    # Colorado reads primary results: a later fetch that doesn't list a
+    # nominee is not evidence they left the ballot.
+    _race(db_session, "2026-SEN-CO", "CO")
+    _db_cand(db_session, "S6CO00001", "2026-SEN-CO", "HICKENLOOPER, JOHN", "DEM", confirmed_general=True)
+    db_session.commit()
+    only("CO", [_rec("S", None, "R", "Other", "Some Other")])
+
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+    assert db_session.query(Candidate).filter(Candidate.id == "S6CO00001").one().confirmed_general is True
+
+
+def test_match_folds_accents_and_reads_married_names():
+    sanchez = _c("SANCHEZ, LINDA", "DEM", "a")
+    assert _match_candidate([sanchez, _c("LEE, AL", "REP", "b")], "Sánchez", "D") is sanchez
+    hinson = _c("ARENHOLZ, ASHLEY HINSON", "REP", "c")
+    assert _match_candidate([hinson, _c("TUREK, JOSHUA", "DEM", "d")], "Hinson", "R") is hinson
+
+
+def test_match_uses_the_given_name_between_two_same_party_namesakes():
+    eric, mayra = _c("FLORES, ERIC", "REP", "e"), _c("FLORES, MAYRA NOHEMI", "REP", "m")
+    assert _match_candidate([eric, mayra], "FLORES", "R", "Mayra Flores") is mayra
+    assert _match_candidate([eric, mayra], "FLORES", "R") is None
+
+
+def test_match_tolerates_one_transposed_letter_only_with_the_given_name():
+    fec = _c("DAUGHTERY, BRANDON", "LIB", "x")
+    assert _match_candidate([fec], "Daugherty", "L", "Brandon Coulter Daugherty") is fec
+    assert _match_candidate([fec], "Daugherty", "L") is None
+    assert _match_candidate([fec], "Daugherty", "L", "Kevin Daugherty") is None
+
+
+def _c(name, party, cid):
+    return SimpleNamespace(name=name, party=party, id=cid, has_raised_funds=False, contributions=0)

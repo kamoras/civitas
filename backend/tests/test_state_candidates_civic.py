@@ -19,6 +19,7 @@ import httpx
 import pytest
 
 from app.pipeline.fetch import state_candidates_civic as civic
+from app.pipeline.fetch.state_candidates_common import surname
 
 _ELECTIONS_INDEX = {
     "elections": [
@@ -130,7 +131,7 @@ class TestParseContests:
             for cand in contest.get("candidates") or []:
                 results.append({
                     "party": civic.normalize_party(cand.get("party") or ""),
-                    "last_name": civic.surname(cand.get("name") or ""),
+                    "last_name": surname(cand.get("name") or ""),
                 })
         assert {"party": "D", "last_name": "El-Sayed"} in results
         assert {"party": "R", "last_name": "Rogers"} in results
@@ -215,7 +216,7 @@ class TestFetchConfirmedCandidates:
         result = await civic.fetch_confirmed_candidates(None, 2026, "MI", {"address": "x"})
         assert result is not None
         by_name = {r["last_name"]: r for r in result}
-        assert by_name["El-Sayed"] == {"office": "S", "district": None, "party": "D", "last_name": "El-Sayed"}
+        assert by_name["El-Sayed"] == {"office": "S", "district": None, "party": "D", "last_name": "El-Sayed", "display_name": "Abdul El-Sayed"}
         assert by_name["Rogers"]["party"] == "R"
         assert by_name["Else"]["party"] is None  # independent, kept anyway
         assert "Candidate" not in by_name  # the House contest's own candidate never appears

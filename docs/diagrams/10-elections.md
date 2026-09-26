@@ -53,8 +53,8 @@ because that decides what the page can honestly claim.
 
 | Source kind | What it can see | States (2026-09-26) |
 |---|---|---|
-| **Certified general ballot** | Everyone on the November ballot, third parties and independents included | TX (`tx_civix`), NC (`tabular` + filing list), SD (`sd_vip`), LA (`voterportal`), SC (`vrems`), MO (`certified_pdf`) |
-| **Primary results** | Each party's nominee. Cannot see a Libertarian, Green or independent who never ran in a primary | the other 38 configured states — `tabular` (14), `clarity` (3), `tally_enr` (2), `totalvote_enr` (2) and 17 single-state strategies |
+| **Certified general ballot** | Everyone on the November ballot, third parties, independents and post-primary replacements included | TX (`tx_civix`), NC (`tabular` + filing list), SD (`sd_vip`), LA (`voterportal`), SC (`vrems`), MO (`certified_pdf`), ME (`certified_table`) |
+| **Primary results** | Each party's nominee. Cannot see a Libertarian, Green or independent who never ran in a primary, or a nominee replaced after the primary | the other 37 configured states — `tabular` (14), `clarity` (3), `tally_enr` (2), `totalvote_enr` (2) and 16 single-state strategies |
 | **National fallback** | Nothing until Google publishes general-election contests, close to the election | MI, NV, NY, OH, OK, WI (`google_civic`) |
 
 The first row is the states flagged `general_ballot_complete`. Transcribed
@@ -62,10 +62,19 @@ from the JSON on the date shown; the JSON is authoritative.
 
 **Prefer the ballot over results wherever a state publishes it.** Results
 have to be *interpreted* — runoff thresholds, top-two, certification flags —
-and can still be wrong: South Carolina's June primary winner for Senate was
-later replaced as nominee through a special primary and runoff, so a
-results reader stopping at June publishes the wrong person. A certified
-ballot needs no interpretation.
+and can still be wrong. Maine's Democratic Senate primary winner (Graham
+Platner) withdrew in July and the party nominated Troy Jackson by
+convention; South Carolina's June Senate winner was replaced through a
+special primary and runoff. A results reader publishes the wrong person in
+both. A certified ballot needs no interpretation.
+
+**A certified ballot is authoritative.** `confirmed_general` is never
+cleared for a primary-results state. For a `general_ballot_complete` state,
+`_unconfirm_off_ballot` clears it for anyone in a race the list covers who
+is not on the list — only after a successful fetch, and only for races the
+list covers. For North Carolina the authoritative list is its filing list's
+general rows, so this runs in `sync_ballot_filings` rather than after the
+primary-results pass.
 
 **Why the six are on the fallback.** Their election sites answer server
 requests with a bot challenge (Cloudflare: NY, MI, WI; Incapsula: NV;
@@ -92,19 +101,31 @@ official canvass PDF is one — and that is the way in.
 
 ### Matching a record to an FEC candidate
 
-`_match_candidate` works inside one race's candidate list, by surname:
+`_match_candidate` works inside one race's FEC rows (never a ballot-only
+row), comparing surnames with accents folded and generational suffixes
+stripped on both sides:
 
-1. Surname via `candidate_dedup.normalized_surname`, which strips a
-   generational suffix FEC sometimes files on the surname (`CLEAVER II, EMANUEL`).
-2. Multi-word FEC surnames fall back to their last token (`WASSERMAN SCHULTZ`).
-3. Several matches → the one whose party matches.
-4. Identical name **and** party → one person filed under two FEC ids;
+1. Exact surname.
+2. Otherwise, in order, each only if the one before found nobody: the FEC
+   surname's last token (`WASSERMAN SCHULTZ`); a surname filed as the last
+   given name (`ARENHOLZ, ASHLEY HINSON`); one spelling slip with the given
+   name agreeing (`DAUGHTERY` / Daugherty).
+3. Several matches → the one whose party matches, then the one whose given
+   name matches (TX-34's Eric and Mayra Flores).
+4. Same surname, given name and party → one person under two FEC ids;
    confirm the record that raised money.
-5. Still ambiguous → the given name decides, or nothing is confirmed.
+5. Still ambiguous → nothing is confirmed.
 
-A ballot candidate with **no FEC filing** matches nothing and cannot be
-shown, because race lists are built from FEC rows. Known gap: 7 of
-Louisiana's 41 federal ballot candidates on 2026-09-26.
+Every strategy returns the printed name (`display_name`) beside the
+surname, via `federal_record` in `state_candidates_common.py`.
+
+**A ballot candidate with no FEC filing is still shown.** An unmatched
+record with a real printed name (two or more words, not a results file's
+"Write-in"/"Scattering" row) becomes a ballot-only `Candidate`: id
+`ballot:` + race + name, `fec_filed` False, confirmed. The financial
+refresh skips it, and the page shows "no FEC filing" with no FEC link. It
+is removed when the state stops listing it, or when the person files and
+matches a real FEC row.
 
 ## What a race shows
 
@@ -140,3 +161,8 @@ none of which sends anything anywhere:
 - **County picker** (`DistrictFinder.tsx`) — built from the counties each
   race already lists; a county split between districts offers them.
 - **Text filter** — counties or the sitting representative's name.
+
+On the national map (`RaceMap.tsx`), the eight states too small to tap —
+Rhode Island draws at 4×5 pixels on a phone — also get a labelled box off
+the coast joined to the state by a leader line, placed from the map's own
+path generator.

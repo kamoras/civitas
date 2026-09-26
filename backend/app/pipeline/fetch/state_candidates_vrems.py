@@ -169,6 +169,7 @@ async def fetch_confirmed_candidates(
                 "party": normalize_party(row.get("Party") or "", ballot_list=True),
                 "last_name": last,
                 "display_name": display,
+                "party_label": (row.get("Party") or "").strip(),
             })
 
     if not records:

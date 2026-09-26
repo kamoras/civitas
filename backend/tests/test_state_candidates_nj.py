@@ -29,21 +29,21 @@ class TestParsePage:
         results1, office, district = nj._parse_page(FIXTURE["senate_page1"], None, None)
         assert office == "S"
         assert district is None
-        assert results1 == [{"office": "S", "district": None, "party": "D", "last_name": "BOOKER"}]
+        assert results1 == [{"office": "S", "district": None, "party": "D", "last_name": "BOOKER", "display_name": "CORY BOOKER"}]
 
         # Office/district must carry into the next page even though it's
         # still the Senate section (its own "Candidates for US Senate"
         # header repeats, but there's no district heading to re-set).
         results2, office2, district2 = nj._parse_page(FIXTURE["senate_page2"], office, district)
         assert office2 == "S"
-        assert results2 == [{"office": "S", "district": None, "party": "R", "last_name": "MURPHY"}]
+        assert results2 == [{"office": "S", "district": None, "party": "R", "last_name": "MURPHY", "display_name": "JUSTIN MURPHY"}]
 
     def test_district_1_two_candidates(self):
         results, office, district = nj._parse_page(FIXTURE["district1"], None, None)
         assert office == "H"
         assert district == 1
-        assert {"office": "H", "district": 1, "party": "D", "last_name": "NORCROSS"} in results
-        assert {"office": "H", "district": 1, "party": "R", "last_name": "GALDO"} in results
+        assert {"office": "H", "district": 1, "party": "D", "last_name": "NORCROSS", "display_name": "DONALD NORCROSS"} in results
+        assert {"office": "H", "district": 1, "party": "R", "last_name": "GALDO", "display_name": "DAMON GALDO"} in results
         assert len(results) == 2
 
     def test_district_3_includes_a_real_minor_party_candidate(self):
@@ -62,7 +62,7 @@ class TestParsePage:
         # fabricate a party for a real person.
         results, office, district = nj._parse_page(FIXTURE["district8"], None, None)
         assert district == 8
-        assert results == [{"office": "H", "district": 8, "party": "D", "last_name": "MENENDEZ"}]
+        assert results == [{"office": "H", "district": 8, "party": "D", "last_name": "MENENDEZ", "display_name": "ROB MENENDEZ"}]
 
     def test_office_and_district_carry_forward_across_pages(self):
         # A district's candidate list can spill onto the next page (the

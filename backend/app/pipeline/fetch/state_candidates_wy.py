@@ -81,7 +81,7 @@ from datetime import datetime
 import httpx
 
 from app.pipeline.fetch.http_utils import fetch_bytes_with_retry
-from app.pipeline.fetch.state_candidates_common import normalize_party, parse_office, pick_nominee, surname
+from app.pipeline.fetch.state_candidates_common import federal_record, normalize_party, parse_office, pick_nominee, surname
 from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _settled
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -252,12 +252,11 @@ def _federal_totals(rows: list[list[str]]) -> list[tuple[str, int | None, str, s
         raw_name = name_row[i] if i < len(name_row) else ""
         if not raw_name or _NON_CANDIDATE_RE.search(raw_name):
             continue
-        name = surname(raw_name)
         votes_text = (total_row[i] if i < len(total_row) else "").strip()
-        if not name or not votes_text.isdigit():
+        if not surname(raw_name) or not votes_text.isdigit():
             continue
         office, district = office_district
-        results.append((office, district, party, name, int(votes_text)))
+        results.append((office, district, party, raw_name, int(votes_text)))
     return results
 
 
@@ -307,5 +306,7 @@ async def fetch_confirmed_candidates(
     for (office, district, party), choices in by_group.items():
         won = pick_nominee(choices, runoff_threshold_pct=runoff_threshold_pct)
         if won:
-            results.append({"office": office, "district": district, "party": party, "last_name": won[0]})
+            record = federal_record(office, district, party, won[0])
+            if record:
+                results.append(record)
     return results

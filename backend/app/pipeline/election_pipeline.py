@@ -42,7 +42,7 @@ from app.election_calendar import (
     seats_up_for_year,
 )
 from app.http_client import make_async_client
-from app.models import Candidate, ElectionPipelineRun, PipelineStatus, Race, RaceCoverageItem, ScoreSnapshot
+from app.models import BALLOT_ONLY_ID_PREFIX, Candidate, ElectionPipelineRun, PipelineStatus, Race, RaceCoverageItem, ScoreSnapshot
 from app.pipeline.analyze.score_calculator import get_district_pvi_map
 from app.pipeline.fetch.fec import fetch_all_candidates, fetch_candidate_financials
 from app.pipeline.progress_tracker import ProgressTracker
@@ -247,6 +247,8 @@ def _prioritize_for_financial_refresh(db: Session, limit: int) -> list[Candidate
             Candidate.last_financials_sync.is_(None),
             Candidate.last_financials_sync < stale_before,
         ))
+        # A ballot-only candidate has no FEC id to ask about.
+        .filter(~Candidate.id.startswith(BALLOT_ONLY_ID_PREFIX))
         .order_by(
             Candidate.last_financials_sync.is_(None).desc(),
             priority,

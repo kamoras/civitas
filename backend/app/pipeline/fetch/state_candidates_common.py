@@ -18,8 +18,14 @@ invented:
   NCSBE/NC    "US SENATE (DEM)"
 """
 
+import logging
 import re
 from collections.abc import Callable
+from urllib.parse import urljoin
+
+from app.pipeline.fetch.http_utils import fetch_text_with_retry
+
+logger = logging.getLogger(__name__)
 
 # Chamber wording varies ("United States Congress", "US HOUSE OF
 # REPRESENTATIVES", "U.S. Representative", Arkansas's real "U.S. Congress
@@ -837,6 +843,53 @@ def normalize_party(text: str, ballot_list: bool = False) -> str | None:
     return None
 
 
+async def discover_certification_link(
+    client, rate_limiter, page_url: str, link_regex: str, year: int, label: str,
+) -> str | None:
+    """The one link on `page_url` matching `link_regex` (with `{year}`
+    filled in), resolved against the page, or None.
+
+    For the certified-ballot strategies: a state posts the certification
+    on a landing page that stays put while the file name changes every
+    cycle, so the link is found, never pinned. None for both "not posted
+    yet" and "more than one match" — guessing which of two
+    certifications is current would be the one wrong answer."""
+    page = await fetch_text_with_retry(client, rate_limiter, page_url, f"{label} certification page")
+    if page is None:
+        return None
+    links = {m.group(1) for m in re.finditer(link_regex.replace("{year}", str(year)), page)}
+    if len(links) != 1:
+        logger.info("%s certification page links %d %d certifications", label, len(links), year)
+        return None
+    return urljoin(page_url, links.pop())
+
+
+def federal_record(
+    office: str, district: int | None, party: str | None, name: str,
+    *, last_first: bool = False,
+) -> dict | None:
+    """The record every strategy returns for a federal candidate, built
+    from the name as the state printed it, or None when that name yields
+    no surname.
+
+    `last_name` is what the matcher compares with FEC's surname.
+    `display_name` is the printed name, kept for the two things a surname
+    cannot do: tell apart two same-party candidates who share a surname
+    (TX-34's Eric and Mayra Flores), and show a candidate who is on the
+    ballot but never filed with the FEC, who has no FEC row to show
+    instead. A strategy that reduces names to surnames before picking a
+    winner loses the second one silently, which is why this takes the
+    full name and does the reduction itself.
+    """
+    last = surname(name, last_first=last_first)
+    if not last:
+        return None
+    return {
+        "office": office, "district": district, "party": party,
+        "last_name": last, "display_name": clean_display_name(name),
+    }
+
+
 def clean_display_name(display_name: str) -> str:
     """A ballot name with its annotations removed, kept otherwise
     verbatim — "Aaron C. Guckian*" -> "Aaron C. Guckian".
@@ -1065,6 +1118,10 @@ def resolve_confirmed_nominees(
                 "office": office, "district": district,
                 "party": party, "last_name": name,
             }
+            if name_transform and office in ("S", "H"):
+                # The whole printed name, kept beside the surname the
+                # matcher reads — see federal_record.
+                record["display_name"] = clean_display_name(won[0])
             # Present only where a district really has more than one
             # seat. A federal or single-member record carries no seat
             # concept at all, so it carries no key either.

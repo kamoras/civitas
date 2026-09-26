@@ -29,14 +29,14 @@ next cycle's certification is picked up without an edit.
 import logging
 import re
 from io import BytesIO
-from urllib.parse import urljoin
 
 import httpx
 import pdfplumber
 
-from app.pipeline.fetch.http_utils import fetch_bytes_with_retry, fetch_text_with_retry
+from app.pipeline.fetch.http_utils import fetch_bytes_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     clean_display_name,
+    discover_certification_link,
     normalize_party,
     parse_office,
     surname,
@@ -116,16 +116,9 @@ async def fetch_confirmed_candidates(
         logger.warning("%s certified_pdf source needs page_url and link_regex", state)
         return None
 
-    page = await fetch_text_with_retry(client, _rate_limiter, page_url, f"{state} certification page")
-    if page is None:
+    pdf_url = await discover_certification_link(client, _rate_limiter, page_url, link_regex, year, state)
+    if pdf_url is None:
         return None
-    links = {m.group(1) for m in re.finditer(link_regex.replace("{year}", str(year)), page)}
-    if len(links) != 1:
-        # Not certified yet (none), or more than one candidate document —
-        # either way nothing to confirm from without guessing.
-        logger.info("%s certification page links %d %d certifications", state, len(links), year)
-        return None
-    pdf_url = urljoin(page_url, links.pop())
 
     pdf_bytes = await fetch_bytes_with_retry(client, _rate_limiter, pdf_url, f"{state} certification {year}")
     if pdf_bytes is None:

@@ -103,6 +103,7 @@ async def fetch_confirmed_candidates(
                 "party": normalize_party(m.group("party"), ballot_list=True),
                 "last_name": last,
                 "display_name": display,
+                "party_label": m.group("party").strip(),
             })
 
     if not records:
