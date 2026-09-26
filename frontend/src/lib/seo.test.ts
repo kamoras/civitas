@@ -31,7 +31,11 @@ describe("describeProfile", () => {
   });
 
   it("marks former members", () => {
-    expect(describeProfile(profile("senate", { state: "OH", isCurrent: false })).title).toMatch(/^Former Sen\. /);
+    const { title, description } = describeProfile(
+      profile("senate", { state: "OH", stateName: "Ohio", isCurrent: false }),
+    );
+    expect(title).toMatch(/^Former Sen\. /);
+    expect(description).toContain("Jane Doe, former Democratic senator for Ohio");
   });
 
   it("never tags a justice with the appointing president's party", () => {

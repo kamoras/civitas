@@ -9,7 +9,7 @@ import pytest
 from app.api.sitemap import _iso_date, sitemap_entries
 from app.config import settings
 from app.issue_ids import to_public_id
-from app.models import ActionIssue, Justice, President, Representative, Senator, SponsoredBill
+from app.models import ActionIssue, ActionIssueStatus, Justice, President, Representative, Senator, SponsoredBill
 from app.services.bill_service import clear_bill_collection_cache
 
 
@@ -48,6 +48,18 @@ def test_issues_use_public_ids_not_row_ids(db_session):
     assert _body(db_session)["issues"] == [
         {"id": to_public_id(issue.id), "lastmod": "2026-09-20"}
     ]
+
+
+def test_unconfirmed_developing_issues_are_left_out(db_session):
+    confirmed = ActionIssue(date="2026-09-20", rank=1, title="Confirmed", is_current=True)
+    developing = ActionIssue(date="2026-09-21", rank=2, title="Developing", is_current=True,
+                             status=ActionIssueStatus.DEVELOPING)
+    expired = ActionIssue(date="2026-09-19", rank=3, title="Expired unconfirmed", is_current=False,
+                          status=ActionIssueStatus.DEVELOPING)
+    db_session.add_all([confirmed, developing, expired])
+    db_session.commit()
+
+    assert [i["id"] for i in _body(db_session)["issues"]] == [to_public_id(confirmed.id)]
 
 
 def test_bills_match_the_bills_feed_and_are_deduped(db_session):

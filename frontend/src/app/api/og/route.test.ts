@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatStanding, parseIssueId, parseStateCode } from "./route";
+import { formatStanding, parseIssueId, parsePoliticianId, parseStateCode, scoreFooterLabel } from "./route";
 
 describe("formatStanding", () => {
   it("formats a senator as party-state, no district", () => {
@@ -88,5 +88,32 @@ describe("parseStateCode", () => {
   it("rejects garbage and empty input", () => {
     expect(parseStateCode("")).toBeNull();
     expect(parseStateCode(null)).toBeNull();
+  });
+});
+
+describe("parsePoliticianId", () => {
+  it("accepts every id shape the backend issues", () => {
+    expect(parsePoliticianId("grassley-chuck")).toBe("grassley-chuck");
+    expect(parsePoliticianId("bush-41")).toBe("bush-41");
+    // Oyez identifiers — rejected before, so every justice got the generic card.
+    expect(parsePoliticianId("ketanji_brown_jackson")).toBe("ketanji_brown_jackson");
+  });
+
+  it("rejects anything that could change the outgoing fetch path", () => {
+    expect(parsePoliticianId(null)).toBeNull();
+    expect(parsePoliticianId("")).toBeNull();
+    expect(parsePoliticianId("../admin")).toBeNull();
+    expect(parsePoliticianId("a/b")).toBeNull();
+    expect(parsePoliticianId("a?b=c")).toBeNull();
+  });
+});
+
+describe("scoreFooterLabel", () => {
+  it("calls only the congressional score a representation score", () => {
+    expect(scoreFooterLabel("senate")).toBe("REPRESENTATION SCORE");
+    expect(scoreFooterLabel("house")).toBe("REPRESENTATION SCORE");
+    expect(scoreFooterLabel("scotus")).toBe("CIVITAS SCORE");
+    expect(scoreFooterLabel("president")).toBe("CIVITAS SCORE");
+    expect(scoreFooterLabel(undefined)).toBe("CIVITAS SCORE");
   });
 });

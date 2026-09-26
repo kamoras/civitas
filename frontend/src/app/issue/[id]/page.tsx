@@ -18,7 +18,7 @@ const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
 async function fetchIssue(id: string): Promise<ActionIssue | null> {
   try {
-    const res = await fetch(`${BACKEND}/api/action/issues/${id}`, {
+    const res = await fetch(`${BACKEND}/api/action/issues/${encodeURIComponent(id)}`, {
       next: { revalidate: 300 },
     });
     if (!res.ok) return null;
@@ -56,6 +56,10 @@ export async function generateMetadata({
     path,
     type: "article",
     images: [{ url: ogImage, width: 1200, height: 630, alt: issue.title }],
+    // A developing issue is drafted from a primary source before any press
+    // coverage confirms it, and may expire unconfirmed. It stays readable
+    // here, but isn't offered to search engines as a finished story.
+    noindex: issue.status === "developing",
   });
 }
 
@@ -77,7 +81,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
 
   return (
     <>
-      <JsonLd data={articleJsonLd(issue)} />
+      {issue.status !== "developing" && <JsonLd data={articleJsonLd(issue)} />}
       <Navbar />
       <main
         id="main-content"

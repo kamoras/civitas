@@ -45,7 +45,7 @@ export function describeProfile(profile: PoliticianProfile): { title: string; de
     const partyWord = PARTY_ADJECTIVES[party] ?? party;
     return {
       title: `${prefix} ${name} (${party}-${state}): Voting Record, Donors & Scorecard`,
-      description: `${name}, ${partyWord} ${former ? "former " : ""}${role.toLowerCase()} for ${seat}: voting record, top donors and PAC money, sponsored bills, and representation score.`,
+      description: `${name}, ${former ? "former " : ""}${partyWord} ${role.toLowerCase()} for ${seat}: voting record, top donors and PAC money, sponsored bills, and representation score.`,
     };
   }
   if (branch === "president") {

@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.api.response_helpers import CACHE_TTL_REFERENCE_S, cached_json
 from app.database import get_db
 from app.issue_ids import to_public_id
-from app.models import ActionIssue, Justice, President, Representative, Senator
+from app.models import ActionIssue, ActionIssueStatus, Justice, President, Representative, Senator
 from app.services.bill_service import _collect_bills
 
 router = APIRouter()
@@ -55,8 +55,11 @@ def sitemap_entries(db: Session = Depends(get_db)) -> JSONResponse:
     congress's bills from sitting members), so the sitemap never advertises
     a bill page the site itself doesn't link to.
 
-    Issues: every issue, current or retired — the issue archive is a
-    permanent record, and each has its own stable public id.
+    Issues: every CONFIRMED issue, current or retired — the issue archive
+    is a permanent record, and each has its own stable public id. DEVELOPING
+    issues are left out, including ones that expired unconfirmed: they are
+    drafted from a primary source before any press coverage exists, and
+    their pages are noindex for the same reason (see issue/[id]/page.tsx).
     """
     politicians: list[dict] = []
     for model in (Senator, Representative, President, Justice):
@@ -75,6 +78,7 @@ def sitemap_entries(db: Session = Depends(get_db)) -> JSONResponse:
     issues = [
         {"id": to_public_id(iid), "lastmod": _iso_date(date)}
         for iid, date in db.query(ActionIssue.id, ActionIssue.date)
+        .filter(ActionIssue.status != ActionIssueStatus.DEVELOPING)
         .order_by(ActionIssue.date.desc())
         .all()
     ]
