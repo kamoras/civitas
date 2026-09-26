@@ -12,12 +12,13 @@ turned up a member's older report leaves the newer stored one alone.
 Nothing is derived from the value brackets here; the read path
 (holdings_service) reports them as disclosed.
 
-Each phase is time-boxed (PHASE_BUDGET). A normal run fetches only the
+Each phase is time-boxed (PHASE_CEILING). A normal run fetches only the
 handful of reports filed since the last one and finishes in a minute or
 two; the first run, or a PARSER_VERSION bump, has every member's report to
 read, and the budget spreads that over a few nightly runs instead of
 holding the stock-trades run — and the hourly action-center refresh that
-waits on it — past its 2h overrun alarm. Members with nothing stored go
+waits on it — for longer (ops_alerts.stock_trades_overrun_budget allows
+for PHASE_CEILING). Members with nothing stored go
 first, so coverage fills before re-reads.
 """
 
@@ -26,9 +27,9 @@ import logging
 import re
 import time
 from collections.abc import Awaitable, Callable
-from typing import TypeVar
 from dataclasses import dataclass
 from datetime import timedelta
+from typing import TypeVar
 
 import httpx
 from sqlalchemy import func
@@ -44,7 +45,9 @@ from app.pipeline.fetch.senate_fd import PARSER_VERSION as SENATE_PARSER_VERSION
 from app.pipeline.fetch.senate_fd import (
     SessionLapsed,
     fetch_and_parse_annual as fetch_senate_annual,
+    is_amendment_title,
     is_annual_title,
+    is_new_filer_title,
     is_senator_filing,
     search_annual_filings,
 )
@@ -68,22 +71,27 @@ T = TypeVar("T")
 # (before they file) the year before.
 _YEARS_BACK = 2
 
-# Wall-clock budget for each holdings phase. The deadline is set when the
-# phase starts, so the index download and the Senate search count against
-# it; it is checked before every report fetch, and a fetch still in flight
-# at the deadline is cut off (_bounded_fetch). Measured 2026-09: a first
-# House run reads ~430 reports (~9 min in a dev container, network-bound at
-# the Clerk's 1 req/s; slower on the Pi's CPU), the Senate ~100 (~4 min,
-# most of it the browser search). Past the budget the remaining members
-# wait for the next run, so a first run spreads over two nights.
-PHASE_BUDGET = timedelta(minutes=8)
-
-# Wall-clock cap on the outage probes at the end of a phase (_SourceHealth),
-# which run after PHASE_BUDGET: one retried request against a hanging host
-# alone takes ~3 minutes. A phase therefore takes at most PHASE_BUDGET +
-# PROBE_BUDGET, 10 minutes, bar a Senate search that outlasts the budget
-# on its own (it is bounded by its page timeouts, not by this).
+# Wall-clock budgets for each holdings phase, in its three steps:
+#
+# - PREP_BUDGET: the House index download, or the Senate terms and search.
+#   A step that outlasts it fails the phase.
+# - FETCH_BUDGET: report fetching, from when it starts. Checked before
+#   every fetch, and a download still in flight at the deadline is cut
+#   off; a parse already running finishes (a CPU-bound thread can't be
+#   stopped, and its work is kept). Measured 2026-09: a first House run
+#   reads ~430 reports (~9 min in a dev container, network-bound at the
+#   Clerk's 1 req/s; slower on the Pi's CPU), the Senate ~100 (~1 min after
+#   a ~3 min browser search). Past the budget the remaining members wait for
+#   the next run, so a first run or a PARSER_VERSION bump spreads over a few
+#   nights.
+# - PROBE_BUDGET: the outage probes at the end (_SourceHealth). One retried
+#   request against a hanging host alone takes ~3 minutes.
+PREP_BUDGET = timedelta(minutes=6)
+FETCH_BUDGET = timedelta(minutes=8)
 PROBE_BUDGET = timedelta(minutes=2)
+# Longest a phase can run, give or take one parse — what the stock-trades
+# run's overrun alarm allows for (ops_alerts.stock_trades_overrun_budget).
+PHASE_CEILING = PREP_BUDGET + FETCH_BUDGET + PROBE_BUDGET
 
 # Members tried with nothing coming back live before _SourceHealth looks
 # further — asking the source about a stored report, or (when reports load
@@ -153,10 +161,22 @@ def _keeps_earlier_read(prior: int | None, report: AnnualReport) -> bool:
     return True
 
 
-def _is_older(stored: _Stored | None, report_year: int | None, filed_date: str | None) -> bool:
-    """The candidate describes an earlier date than what's stored."""
+def _is_older(
+    stored: _Stored | None, stored_rank: tuple[int, str] | None, report_year: int | None, filed_date: str | None,
+) -> bool:
+    """The candidate describes an earlier date than what's stored, as
+    (year, filed date). The stored report is compared at its rank among
+    this run's filings when it is one of them (a paper filing ranks by
+    _senate_ranks' rules, which need the other filings to apply). When a
+    partial search or index missed it, a stored report with no known year
+    — a paper filing — is compared by filing date: a dated report filed
+    before it may be what it superseded, and must not come back."""
     if stored is None:
         return False
+    if stored_rank is not None:
+        return (report_year or 0, filed_date or "") < stored_rank
+    if stored.report_year is None and report_year:
+        return (filed_date or "") < (stored.filed_date or "")
     return (report_year or 0, filed_date or "") < (stored.report_year or 0, stored.filed_date or "")
 
 
@@ -259,29 +279,31 @@ class _SourceHealth:
     processed first, so a few genuinely broken filings bunched at the front
     would otherwise stop the phase before it reached anyone else.
 
-    - Parser, counted per read (`parsed`): only unambiguous failures are
-      misses — a crash, an unrecognized report, or "scanned" where an
-      earlier parser read the same filing's text. Rows read are successes.
-      Empty reads and changed row counts are neither: a genuine report can
-      list nothing, and a parser fix changes counts too; the parser tests'
-      real-filing fixtures are what guard those. At least
-      MIN_ATTEMPTS_FOR_OUTAGE misses outnumbering successes fails the phase,
-      and nothing about the source can excuse it. A kept earlier read
-      (_keeps_earlier_read) is re-read every run, so a regression keeps
-      failing the phase for as long as it lasts.
+    - Parser, counted per read (`parsed`, `contradicted`): only unambiguous
+      failures are misses — a crash, an unrecognized report, "scanned"
+      where an earlier parser read the same filing's text, or a Status line
+      read as a candidate's on a filing the index marks as a sitting
+      member's. Rows read are successes. Empty reads and changed row counts
+      are neither: a genuine report can list nothing, and a parser fix
+      changes counts too; the parser tests' real-filing fixtures are what
+      guard those. At least MIN_ATTEMPTS_FOR_OUTAGE misses outnumbering
+      successes fails the phase, and nothing about the source can excuse
+      it. A kept earlier read (_keeps_earlier_read) is re-read every run, so
+      a regression keeps failing the phase for as long as it lasts.
     - Source, counted per member (`record`): no report fetched from at
-      least MIN_ATTEMPTS_FOR_OUTAGE members tried — or the time budget ran
-      out with nothing fetched and at least half of it spent in requests
-      that failed, which is what a host that hangs rather than refuses
-      looks like after two or three members. That is an outage, or a night
-      on which the only filings left to fetch are ones that won't load (a
-      PDF the index lists but the Clerk 404s). Counts alone can't tell those
+      least MIN_ATTEMPTS_FOR_OUTAGE members tried — or FETCH_BUDGET ran out
+      with nothing fetched and at least half of it spent in requests that
+      failed, which is what a host that hangs rather than refuses looks
+      like after two or three members. That is an outage, or a night on
+      which the only filings left to fetch are ones that won't load (a PDF
+      the index lists but the Clerk 404s). Counts alone can't tell those
       apart, and neither can a memory of past failures — anything that
-      learns to stop counting a filing also learns to stop seeing an outage.
-      So the phase asks the source directly: it re-requests reports it
-      already stored, live and past any cache, within PROBE_BUDGET. If one
-      loads, the failures are those filings'; if none does — or nothing is
-      stored to ask about — the phase fails, every night the outage lasts.
+      learns to stop counting a filing also learns to stop seeing an
+      outage. So the phase asks the source directly: it re-requests reports
+      it already stored, live and past any cache, within PROBE_BUDGET. If
+      one loads, the failures are those filings'; if none does — or nothing
+      is stored to ask about — the phase fails, every night the outage
+      lasts.
     """
 
     def __init__(self, source: str) -> None:
@@ -299,15 +321,18 @@ class _SourceHealth:
     def parsed(self, report: AnnualReport, prior: int | None) -> None:
         if report.holdings:
             self.parsed_ok += 1
-        elif report.holdings is None and (report.unreadable_reason != UNREADABLE_SCANNED or prior):
+        elif report.holdings is None and (report.unreadable_reason != UNREADABLE_SCANNED or prior is not None):
             self.parser_miss += 1
+
+    def contradicted(self) -> None:
+        self.parser_miss += 1
 
     def _looks_down(self) -> bool:
         if self.fetched or not self.attempted:
             return False
         if self.attempted >= MIN_ATTEMPTS_FOR_OUTAGE:
             return True
-        return self.out_of_time and self.failed_seconds >= PHASE_BUDGET.total_seconds() / 2
+        return self.out_of_time and self.failed_seconds >= FETCH_BUDGET.total_seconds() / 2
 
     async def check(
         self, stored_urls: Callable[[], list[str]], still_loads: Callable[[str], Awaitable[bool]],
@@ -337,19 +362,6 @@ class _SourceHealth:
         raise RuntimeError(f"{self.source}: {self.attempted} members tried, no report fetched")
 
 
-async def _bounded_fetch(fetch: Awaitable[AnnualReport | None], deadline: float) -> tuple[AnnualReport | None, float]:
-    """Run one report fetch, cut off at the phase deadline: a request in
-    flight when the budget runs out would otherwise run on for its whole
-    retry policy (~3 minutes against a hanging host). Returns the report
-    (None if cut off) and how long it took."""
-    started = time.monotonic()
-    try:
-        report = await asyncio.wait_for(fetch, max(deadline - started, 0.001))
-    except TimeoutError:
-        report = None
-    return report, time.monotonic() - started
-
-
 # How many stored reports to ask about before calling the source down: one
 # could itself have been withdrawn since it was stored.
 _PROBES = 3
@@ -367,13 +379,136 @@ def _stored_urls(db: Session, owner_column) -> list[str]:
     return [url for (url,) in rows]
 
 
-async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
-    """Store each representative's newest annual report. Returns holdings stored."""
-    deadline = time.monotonic() + PHASE_BUDGET.total_seconds()
+async def _within(step: Awaitable[T], budget: timedelta, what: str) -> T:
+    """A phase's preparation step, failed if it outlasts PREP_BUDGET."""
+    try:
+        return await asyncio.wait_for(step, budget.total_seconds())
+    except TimeoutError:
+        raise RuntimeError(f"{what} took longer than {budget}") from None
+
+
+class _SkipFiling(Exception):
+    """This filing can't be tried this run, for a reason that isn't the
+    filing's (a session that lapsed again right after re-accepting)."""
+
+
+# What a chamber's reader says about whose report it just read.
+_MEMBERS, _NOT_MEMBERS, _CONTRADICTS_INDEX = "member", "not member", "contradicts index"
+
+
+@dataclass
+class _Chamber:
+    """What differs between the two phases; _ingest_members does the rest."""
+
+    source: str
+    owner_key: str  # FinancialDisclosure column naming the member
+    parser_version: int
+    filing_id: Callable[[dict], str]
+    # One member's filings, keyed by filing id, to the (year, filed date)
+    # they rank newest-first and compare to the stored report by.
+    ranks: Callable[[list[dict]], dict[str, tuple[int, str]]]
+    fetch: Callable[[dict, float], Awaitable[AnnualReport | None]]  # (filing, deadline)
+    owner: Callable[[dict, AnnualReport], str]
+    fields: Callable[[dict], dict]  # report_year, report_label, filed_date, source_url
+    still_loads: Callable[[str], Awaitable[bool]]
+
+
+async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, list[dict]]) -> int:
+    """Store each member's newest report from their candidate filings.
+    Returns holdings stored."""
+    owner_column = getattr(FinancialDisclosure, chamber.owner_key)
+    stored = _stored_reports(db, owner_column)
+    health = _SourceHealth(chamber.source)
+    deadline = time.monotonic() + FETCH_BUDGET.total_seconds()
+    inserted = 0
+    order = _members_in_order(per_member, stored)
+    for position, member_id in enumerate(order):
+        mine = stored.get(member_id)
+        outcome = _Outcome()
+        out_of_time = False
+        ranks = chamber.ranks(per_member[member_id])
+        for filing in sorted(per_member[member_id], key=lambda f: ranks[chamber.filing_id(f)], reverse=True):
+            filing_id = chamber.filing_id(filing)
+            if _is_current(mine, filing_id, chamber.parser_version):
+                break  # already have the newest report, as this parser reads it
+            if _is_older(mine, ranks.get(mine.filing_id) if mine else None, *ranks[filing_id]):
+                # Only older reports than the stored one turned up — a year's
+                # index or a page of search results failed to load, or the
+                # best left is a paper amendment of unknowable year. Keep
+                # the newer stored report.
+                break
+            if time.monotonic() > deadline:
+                out_of_time = True
+                break
+            started = time.monotonic()
+            try:
+                report = await chamber.fetch(filing, deadline)
+            except _SkipFiling:
+                outcome.lapsed()
+                continue
+            outcome.fetch(report, time.monotonic() - started)
+            if report is None:
+                # Not fetched this run. Try the member's next filing (the
+                # failed one may not even be theirs — a same-surname
+                # candidate's amendment can rank first); _is_older keeps that
+                # from ever displacing a newer stored report.
+                continue
+            prior = _prior_count(mine, filing_id)
+            if not report.final:
+                # The parser crashed, which may be transient: stored nowhere,
+                # since "can't be read" would be a claim about the report this
+                # run can't back. A crash is the parser's, whoever filed it.
+                health.parsed(report, prior)
+                continue
+            owner = chamber.owner(filing, report)
+            if owner == _CONTRADICTS_INDEX:
+                health.contradicted()
+            if owner != _MEMBERS:
+                continue
+            health.parsed(report, prior)
+            if _keeps_earlier_read(prior, report):
+                break
+            inserted += _replace_disclosure(
+                db,
+                owner_filter={chamber.owner_key: member_id},
+                filing_id=filing_id,
+                **chamber.fields(filing),
+                report=report,
+                parser_version=chamber.parser_version,
+            )
+            break
+        db.commit()  # per member, so a budget stop or a later failure keeps what's done
+        health.record(outcome)
+        if out_of_time:
+            health.out_of_time = True
+            logger.info("%s: time budget spent — %d members wait for the next run", chamber.source, len(order) - position)
+            break
+    await health.check(lambda: _stored_urls(db, owner_column), chamber.still_loads)
+    return inserted
+
+
+def _house_owner(filing: dict, report: AnnualReport) -> str:
+    """Whose report a House filing is. The Status line on its cover page
+    says, when the report has text: a candidate for the seat can share the
+    member's surname and district. A scanned report has no readable Status
+    line; then the Clerk's own structured index fields decide — an original
+    annual report ("O") is only ever a member's, and an amendment is a
+    member's only with the "Hon." every sitting member's filing carries (a
+    candidate's has none: 2025, 82 of 105 amendments). Neither is inferred
+    from any name. A Status line naming a candidate on a filing the index
+    marks "Hon." contradicts the index: the Status line was misread."""
+    status = (report.filer_status or "").lower()
+    if status == "member":
+        return _MEMBERS
+    if status:
+        return _CONTRADICTS_INDEX if _is_member_prefix(filing.get("prefix")) else _NOT_MEMBERS
+    if filing.get("filing_type") == "O" or _is_member_prefix(filing.get("prefix")):
+        return _MEMBERS
+    return _NOT_MEMBERS
+
+
+async def _house_candidates(db: Session, client: httpx.AsyncClient) -> dict[str, list[dict]]:
     current_year = utcnow().year
-    # Candidate filings per representative, most preferred first: the
-    # newest calendar year, then the latest filed within it (an amendment
-    # supersedes the original it amends).
     per_rep: dict[str, list[dict]] = {}
     matched: dict[tuple[str, str, str], str | None] = {}  # one lookup per filer, not per filing
     roster = current_representatives(db)
@@ -381,7 +516,6 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
     for year in range(current_year - 1, current_year - 1 - _YEARS_BACK, -1):
         filings = await fetch_annual_filing_index(client, db, year)
         indexed += len(filings)
-        filings = sorted(filings, key=lambda f: f.get("filing_date") or "", reverse=True)
         for filing in filings:
             filer = (filing["last"], filing["first"], filing["state_district"])
             if filer not in matched:
@@ -394,78 +528,31 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
         # is a failed or changed index, not a quiet year — fail the phase so
         # the run records it, instead of leaving every stored report to age.
         raise RuntimeError("House annual-report index returned no filings for either year")
+    return per_rep
 
-    stored = _stored_reports(db, FinancialDisclosure.representative_id)
-    inserted = 0
-    health = _SourceHealth("House Clerk")
-    order = _members_in_order(per_rep, stored)
-    for position, rep_id in enumerate(order):
-        mine = stored.get(rep_id)
-        outcome = _Outcome()
-        out_of_time = False
-        for filing in per_rep[rep_id]:
-            if _is_current(mine, filing["doc_id"], HOUSE_PARSER_VERSION):
-                break  # already have the newest report, as this parser reads it
-            if _is_older(mine, filing.get("year"), filing.get("filing_date")):
-                # Only older reports than the stored one turned up (a year's
-                # index failed to load): keep the newer stored report.
-                break
-            if time.monotonic() > deadline:
-                out_of_time = True
-                break
-            report, seconds = await _bounded_fetch(fetch_house_annual(client, db, filing), deadline)
-            prior = _prior_count(mine, filing["doc_id"])
-            outcome.fetch(report, seconds)
-            if report is not None and not report.final:
-                health.parsed(report, prior)  # a crash: the parser's, whoever filed the report
-            if report is None or not report.final:
-                # Nothing usable this run: not fetched, or a read that may be
-                # transient (the parser crashed) — which is stored nowhere,
-                # since "can't be read" would be a claim about the report
-                # that this run can't back. Try the member's next filing (the
-                # failed one may not even be theirs — a same-surname
-                # candidate's amendment can rank first); _is_older keeps that
-                # from ever displacing a newer stored report.
-                continue
-            status = (report.filer_status or "").lower()
-            if status and status != "member":
-                # A candidate for the seat who shares the member's surname
-                # and district — not this member's report.
-                continue
-            if not status and filing.get("filing_type") != "O" and not _is_member_prefix(filing.get("prefix")):
-                # A scanned filing has no readable Status line. An original
-                # annual report ("O") is only ever a member's, but an
-                # amendment can be a candidate's — and in the index those
-                # carry no "Hon." (2025: 82 of 105 amendments), which every
-                # sitting member's filing does. Both are the Clerk's own
-                # structured index fields, not inferred from any name.
-                continue
-            health.parsed(report, prior)
-            if _keeps_earlier_read(prior, report):
-                break
-            inserted += _replace_disclosure(
-                db,
-                owner_filter={"representative_id": rep_id},
-                filing_id=filing["doc_id"],
-                report_year=filing.get("year"),
-                report_label=_house_report_label(filing),
-                filed_date=filing.get("filing_date"),
-                source_url=filing["pdf_url"],
-                report=report,
-                parser_version=HOUSE_PARSER_VERSION,
-            )
-            break
-        db.commit()  # per member, so a budget stop or a later failure keeps what's done
-        health.record(outcome)
-        if out_of_time:
-            health.out_of_time = True
-            logger.info("House holdings: time budget spent — %d members wait for the next run", len(order) - position)
-            break
-    await health.check(
-        lambda: _stored_urls(db, FinancialDisclosure.representative_id),
-        lambda url: house_report_still_loads(client, url),
+
+async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
+    """Store each representative's newest annual report — the newest
+    calendar year, then the latest filed within it (an amendment supersedes
+    the original it amends). Returns holdings stored."""
+    per_rep = await _within(_house_candidates(db, client), PREP_BUDGET, "House annual-report index download")
+    chamber = _Chamber(
+        source="House Clerk",
+        owner_key="representative_id",
+        parser_version=HOUSE_PARSER_VERSION,
+        filing_id=lambda f: f["doc_id"],
+        ranks=lambda filings: {f["doc_id"]: (f.get("year") or 0, f.get("filing_date") or "") for f in filings},
+        fetch=lambda f, deadline: fetch_house_annual(client, db, f, deadline=deadline),
+        owner=_house_owner,
+        fields=lambda f: {
+            "report_year": f.get("year"),
+            "report_label": _house_report_label(f),
+            "filed_date": f.get("filing_date"),
+            "source_url": f["pdf_url"],
+        },
+        still_loads=lambda url: house_report_still_loads(client, url),
     )
-    return inserted
+    return await _ingest_members(db, chamber, per_rep)
 
 
 _CY_RE = re.compile(r"\bCY\s*(\d{4})\b", re.I)
@@ -488,8 +575,8 @@ def _senate_ranks(filings: list[dict]) -> dict[str, tuple[int, str]]:
     any earlier report, so it gets no such rank.
     """
     def is_annual_original(f: dict) -> bool:
-        title = (f.get("title") or "").lower()
-        return "annual report" in title and "amendment" not in title
+        title = f.get("title") or ""
+        return is_annual_title(title) and not is_new_filer_title(title) and not is_amendment_title(title)
 
     dated_originals = [
         (year, f.get("filed_date") or "")
@@ -535,27 +622,24 @@ def _senate_report_label(filing: dict) -> str:
     """What the report is, in the words the page shows. A new-filer report
     is a snapshot at its date, not a year-end annual report; an undated
     (paper) filing is named by kind and filing date, never a guessed year."""
-    title = (filing.get("title") or "").lower()
-    amended = "amendment" in title
-    if "new filer" in title and (m := _DATE_RE.search(filing.get("title") or "")):
+    title = filing.get("title") or ""
+    amended = is_amendment_title(title)
+    new_filer = is_new_filer_title(title)
+    if new_filer and (m := _DATE_RE.search(title)):
         return f"new-filer report as of {m.group(3)}-{m.group(1)}-{m.group(2)}" + (" (amended)" if amended else "")
     year = _senate_report_year(filing)
     if year is not None:
         return f"{year} annual report" + (" (amended)" if amended else "")
-    kind = "new-filer report" if "new filer" in title else "annual report"
+    kind = "new-filer report" if new_filer else "annual report"
     kind += " amendment" if amended else ""
     filed = filing.get("filed_date")
     return f"{kind} filed {filed}" if filed else kind
 
 
-async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
-    """Store each senator's newest annual report. Returns holdings stored."""
-    deadline = time.monotonic() + PHASE_BUDGET.total_seconds()
+async def _senate_candidates(db: Session, client: httpx.AsyncClient) -> dict[str, list[dict]]:
     if await senate_accept_terms(client) is None:
         raise RuntimeError("Could not establish a Senate eFD session")
-
-    current_year = utcnow().year
-    filings = await search_annual_filings(f"{current_year - _YEARS_BACK}-01-01")
+    filings = await search_annual_filings(f"{utcnow().year - _YEARS_BACK}-01-01")
     if not any(is_senator_filing(f) and is_annual_title(f.get("title") or "") for f in filings):
         # Every senator files one every year; none across two years means
         # the search broke (search_filings returns [] on any failure).
@@ -572,76 +656,7 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
             matched[filer] = senator.id if senator is not None else None
         if matched[filer] is not None:
             per_senator.setdefault(matched[filer], []).append(filing)
-
-    stored = _stored_reports(db, FinancialDisclosure.senator_id)
-    inserted = 0
-    health = _SourceHealth("Senate eFD")
-    order = _members_in_order(per_senator, stored)
-    for position, senator_id in enumerate(order):
-        mine = stored.get(senator_id)
-        outcome = _Outcome()
-        out_of_time = False
-        ranks = _senate_ranks(per_senator[senator_id])
-        for filing in sorted(per_senator[senator_id], key=lambda f: ranks[f["report_url"]], reverse=True):
-            filing_id = senate_filing_id(filing["report_url"])
-            if _is_current(mine, filing_id, SENATE_PARSER_VERSION):
-                break
-            if _is_older(mine, *ranks[filing["report_url"]]):
-                # The search came back without the stored (newer) report — a
-                # page of results failed to load — or the best candidate left
-                # is a paper amendment of unknowable year. Keep what's stored.
-                break
-            if time.monotonic() > deadline:
-                out_of_time = True
-                break
-            try:
-                report, seconds = await _bounded_fetch(
-                    _retry_after_lapse(client, lambda: fetch_senate_annual(client, db, filing)), deadline,
-                )
-            except _TermsRefused:
-                # Every remaining fetch would lapse the same way. Stop, and
-                # fail the phase.
-                db.commit()
-                raise RuntimeError("Senate eFD session lapsed and the terms could not be re-accepted") from None
-            except SessionLapsed:
-                # Lapsed again straight after re-accepting: a session
-                # problem, not this filing's. Try the next.
-                outcome.lapsed()
-                continue
-            prior = _prior_count(mine, filing_id)
-            outcome.fetch(report, seconds)
-            if report is not None:
-                health.parsed(report, prior)
-            if report is None or not report.final:
-                # Nothing usable this run: the filing won't load, or its read
-                # may be transient (a parser crash). Stored nowhere: "can't
-                # be read" would be a claim about the report this run can't
-                # back. Fall through to the senator's next-best filing.
-                continue
-            if _keeps_earlier_read(prior, report):
-                break
-            inserted += _replace_disclosure(
-                db,
-                owner_filter={"senator_id": senator_id},
-                filing_id=filing_id,
-                report_year=_senate_report_year(filing),
-                report_label=_senate_report_label(filing),
-                filed_date=filing.get("filed_date"),
-                source_url=filing["report_url"],
-                report=report,
-                parser_version=SENATE_PARSER_VERSION,
-            )
-            break
-        db.commit()
-        health.record(outcome)
-        if out_of_time:
-            health.out_of_time = True
-            logger.info("Senate holdings: time budget spent — %d members wait for the next run", len(order) - position)
-            break
-    await health.check(
-        lambda: _stored_urls(db, FinancialDisclosure.senator_id), lambda url: _senate_probe(client, url),
-    )
-    return inserted
+    return per_senator
 
 
 class _TermsRefused(Exception):
@@ -662,6 +677,25 @@ async def _retry_after_lapse(client: httpx.AsyncClient, call: Callable[[], Await
     return await call()
 
 
+async def _fetch_senate(client: httpx.AsyncClient, db: Session, filing: dict, deadline: float) -> AnnualReport | None:
+    """One report, through the lapse handling, cut off at the deadline
+    (the parse is synchronous, so cancelling only ever interrupts a
+    request)."""
+    try:
+        return await asyncio.wait_for(
+            _retry_after_lapse(client, lambda: fetch_senate_annual(client, db, filing)),
+            max(deadline - time.monotonic(), 0.001),
+        )
+    except TimeoutError:
+        return None
+    except _TermsRefused:
+        # Every remaining fetch would lapse the same way. Stop, and fail
+        # the phase.
+        raise RuntimeError("Senate eFD session lapsed and the terms could not be re-accepted") from None
+    except SessionLapsed:
+        raise _SkipFiling from None
+
+
 async def _senate_probe(client: httpx.AsyncClient, url: str) -> bool:
     """senate_report_still_loads through the same lapse handling as the
     fetches — a lapse says nothing about whether eFD is up."""
@@ -669,6 +703,31 @@ async def _senate_probe(client: httpx.AsyncClient, url: str) -> bool:
         return await _retry_after_lapse(client, lambda: senate_report_still_loads(client, url))
     except (SessionLapsed, _TermsRefused):
         return False
+
+
+async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
+    """Store each senator's newest annual report (see _senate_ranks).
+    Returns holdings stored."""
+    per_senator = await _within(_senate_candidates(db, client), PREP_BUDGET, "Senate eFD terms and search")
+    chamber = _Chamber(
+        source="Senate eFD",
+        owner_key="senator_id",
+        parser_version=SENATE_PARSER_VERSION,
+        filing_id=lambda f: senate_filing_id(f["report_url"]),
+        ranks=lambda filings: {
+            senate_filing_id(url): rank for url, rank in _senate_ranks(filings).items()
+        },
+        fetch=lambda f, deadline: _fetch_senate(client, db, f, deadline),
+        owner=lambda f, report: _MEMBERS,  # the search is filtered to senators' own filings
+        fields=lambda f: {
+            "report_year": _senate_report_year(f),
+            "report_label": _senate_report_label(f),
+            "filed_date": f.get("filed_date"),
+            "source_url": f["report_url"],
+        },
+        still_loads=lambda url: _senate_probe(client, url),
+    )
+    return await _ingest_members(db, chamber, per_senator)
 
 
 # Progress-tracker steps for the two phases, appended to the stock-trades

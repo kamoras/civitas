@@ -730,10 +730,12 @@ be read are stored `parsed=False` with a reason (`scanned` paper filing,
 `unrecognized` layout) and linked, not OCR'd. Each fetch module's
 `PARSER_VERSION` keys its parse cache and is stored per report — bump it when a
 parser's output changes, and already-ingested reports are re-read (a re-read
-that comes back empty keeps the earlier holdings). Both
-phases are time-boxed (`holdings_pipeline.PHASE_BUDGET`), so a first run or a
-version bump spreads over a few nights instead of stretching the stock run
-past its 2h overrun alarm. The holdings phases never decide the stock run's
+that can't read the report at all keeps the earlier holdings; one that reads
+rows, or none, replaces them). Both phases are time-boxed
+(`holdings_pipeline.PHASE_CEILING`: index or search, report fetching, outage
+probes, each with its own budget), so a first run or a version bump spreads
+over a few nights, and the stock run's overrun alarm
+(`ops_alerts.stock_trades_overrun_budget`) allows for that ceiling. The holdings phases never decide the stock run's
 status (that stays "every trade phase failed"); each phase that fails sends
 its own ops alert instead. A phase fails on a parser regression — reads that
 cannot be read at all (a crash, an unrecognized report, "scanned" where an

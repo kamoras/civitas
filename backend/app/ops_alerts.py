@@ -261,6 +261,17 @@ def check_state_pvi_staleness() -> None:
         )
 
 
+def stock_trades_overrun_budget() -> timedelta:
+    """How long a stock-trades run may take before it counts as hung: 2h
+    for the trade phases (normal runs finish in under 90 minutes), plus the
+    most the annual-holdings phases it also runs can take — each is capped
+    at holdings_pipeline.PHASE_CEILING, which is derived from their own
+    budgets rather than restated here."""
+    from app.pipeline.holdings_pipeline import HOLDINGS_STEPS, PHASE_CEILING
+
+    return timedelta(hours=2) + len(HOLDINGS_STEPS) * PHASE_CEILING
+
+
 def check_pipeline_overrun() -> None:
     """Watchdog: alert once per run when a pipeline exceeds the budget.
 
@@ -273,7 +284,7 @@ def check_pipeline_overrun() -> None:
     nothing telling an operator to look. Per-pipeline budgets mirror the
     ones scheduler.py's _hourly_action_refresh already uses for the same
     four checks (Supplementary gets Senate/House's 8h, not Stock's
-    tighter 2h — its weekly SCOTUS-refresh day includes an uncached
+    tighter stock_trades_overrun_budget() — its weekly SCOTUS-refresh day includes an uncached
     Oyez crawl that took 5h+ in run 69).
     """
     from app.database import SessionLocal
@@ -289,7 +300,7 @@ def check_pipeline_overrun() -> None:
             ("Senate", db.query(PipelineRun).filter(PipelineRun.status == PipelineStatus.RUNNING).first(), default_budget),
             ("House", db.query(HousePipelineRun).filter(HousePipelineRun.status == PipelineStatus.RUNNING).first(), default_budget),
             ("Supplementary", db.query(SupplementaryPipelineRun).filter(SupplementaryPipelineRun.status == PipelineStatus.RUNNING).first(), default_budget),
-            ("Stock trades", db.query(StockTradesPipelineRun).filter(StockTradesPipelineRun.status == PipelineStatus.RUNNING).first(), timedelta(hours=2)),
+            ("Stock trades", db.query(StockTradesPipelineRun).filter(StockTradesPipelineRun.status == PipelineStatus.RUNNING).first(), stock_trades_overrun_budget()),
         ]
     finally:
         db.close()

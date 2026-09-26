@@ -84,6 +84,15 @@ def is_annual_title(title: str) -> bool:
     return any(marker in (title or "").lower() for marker in _ANNUAL_TITLE_MARKERS)
 
 
+def is_amendment_title(title: str) -> bool:
+    """"Annual Report for CY 2025 (Amendment 1)", "Annual Report (Amendment)"."""
+    return "amendment" in (title or "").lower()
+
+
+def is_new_filer_title(title: str) -> bool:
+    return "new filer" in (title or "").lower()
+
+
 async def search_annual_filings(since_date: str) -> list[dict]:
     """Sitting senators' annual reports filed since since_date. Filtered to
     the Senator filer type on the form itself: unfiltered, the search pages

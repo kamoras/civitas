@@ -244,15 +244,13 @@ def _hourly_action_refresh() -> None:
                 stock_age = stock_pipeline_age()
                 # Shorter overrun threshold than House's 8h: stock trades is
                 # PDF/OCR parsing over a bounded PTR filing set, not a
-                # 431-member scoring pass — normal runs finish in under
-                # 90 minutes, so 2h already gives ample headroom. The
-                # annual-holdings phases it also runs are capped at 10
-                # minutes each (holdings_pipeline.PHASE_BUDGET +
-                # PROBE_BUDGET, fetches cut off at the deadline, which
-                # counts the index download and Senate search too) — bar a
-                # Senate search that alone outlasts the budget, bounded
-                # only by its page timeouts.
-                if _is_stale(stock_age, timedelta(hours=2)):
+                # 431-member scoring pass. The budget (2h for the trade
+                # phases, which normally finish in under 90 minutes, plus
+                # the annual-holdings phases' own ceiling) is shared with
+                # ops_alerts.check_pipeline_overrun.
+                from app.ops_alerts import stock_trades_overrun_budget
+
+                if _is_stale(stock_age, stock_trades_overrun_budget()):
                     from app.ops_alerts import send_ops_alert
                     logger.warning(
                         "Stock trades pipeline has been running for %s — "

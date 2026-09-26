@@ -297,9 +297,13 @@ async def report_still_loads(client: httpx.AsyncClient, pdf_url: str) -> bool:
 
 
 async def fetch_and_parse_annual(
-    client: httpx.AsyncClient, db: Session, filing: dict,
+    client: httpx.AsyncClient, db: Session, filing: dict, deadline: float | None = None,
 ) -> AnnualReport | None:
     """Download and parse one annual report.
+
+    `deadline` (time.monotonic) cuts off the download, not the parse: a
+    CPU-bound parse in a worker thread can't be stopped, so cancelling it
+    would only discard its work while the thread ran on.
 
     None only when the PDF couldn't be fetched this run. Otherwise an
     AnnualReport whose holdings are None when Schedule A couldn't be read
@@ -311,7 +315,13 @@ async def fetch_and_parse_annual(
     if cached is not None:
         return cached
 
-    pdf_bytes = await download_pdf(client, filing["pdf_url"])
+    download = download_pdf(client, filing["pdf_url"])
+    if deadline is not None:
+        download = asyncio.wait_for(download, max(deadline - time.monotonic(), 0.001))
+    try:
+        pdf_bytes = await download
+    except TimeoutError:
+        return None
     if pdf_bytes is None:
         return None
 

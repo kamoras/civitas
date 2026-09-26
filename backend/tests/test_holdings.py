@@ -79,7 +79,7 @@ async def _ingest_house(db_session, index_by_year, reports, on_fetch=None, on_in
             on_index(year)
         return index_by_year.get(year, [])
 
-    async def fetch(_client, _db, filing):
+    async def fetch(_client, _db, filing, deadline=None):
         if on_fetch is not None:
             on_fetch(filing)
         return reports.get(filing["doc_id"])
@@ -1208,7 +1208,7 @@ class TestHangingSource:
         clock = _Clock()
 
         def hangs(_filing):
-            clock.now += holdings_pipeline.PHASE_BUDGET.total_seconds() / 2 + 1
+            clock.now += holdings_pipeline.FETCH_BUDGET.total_seconds() / 2 + 1
 
         with patch.object(holdings_pipeline.time, "monotonic", clock):
             with pytest.raises(RuntimeError, match="no report fetched"):
@@ -1219,7 +1219,7 @@ class TestHangingSource:
         index = self._members(db_session, 3)
         clock = _Clock()
 
-        budget = holdings_pipeline.PHASE_BUDGET.total_seconds()
+        budget = holdings_pipeline.FETCH_BUDGET.total_seconds()
 
         def slow_index(_year):
             clock.now = budget - 1
@@ -1230,18 +1230,32 @@ class TestHangingSource:
         with patch.object(holdings_pipeline.time, "monotonic", clock):
             count, mock_fetch = await _ingest_house(db_session, index, {}, on_fetch=quick_failure,
                                                     on_index=slow_index)  # must not raise
-        assert mock_fetch.call_count == 1
+        # The fetch budget starts when fetching does: a slow index leaves it whole.
+        assert mock_fetch.call_count == 3
 
-    async def test_a_fetch_in_flight_is_cut_off_at_the_deadline(self, db_session, rep):
+    async def test_a_download_in_flight_is_cut_off_at_the_deadline(self, db_session, rep):
         import asyncio
 
-        async def hangs(_client, _db, _filing):
+        from app.pipeline.fetch import house_fd
+
+        async def hangs(_client, _url, headers=None):
             await asyncio.sleep(3600)
 
-        with patch.object(holdings_pipeline, "PHASE_BUDGET", holdings_pipeline.timedelta(milliseconds=50)), \
+        with patch.object(holdings_pipeline, "FETCH_BUDGET", holdings_pipeline.timedelta(milliseconds=50)), \
              patch.object(holdings_pipeline, "fetch_annual_filing_index", AsyncMock(return_value=[_house_filing("A")])), \
-             patch.object(holdings_pipeline, "fetch_house_annual", side_effect=hangs):
+             patch.object(house_fd, "download_pdf", side_effect=hangs):
             with pytest.raises(RuntimeError, match="no report fetched"):  # nothing stored to ask about
+                await holdings_pipeline.ingest_house_holdings(db_session, None)
+
+    async def test_a_slow_preparation_step_fails_the_phase(self, db_session, rep):
+        import asyncio
+
+        async def slow_index(*_args):
+            await asyncio.sleep(3600)
+
+        with patch.object(holdings_pipeline, "PREP_BUDGET", holdings_pipeline.timedelta(milliseconds=50)), \
+             patch.object(holdings_pipeline, "fetch_annual_filing_index", side_effect=slow_index):
+            with pytest.raises(RuntimeError, match="took longer than"):
                 await holdings_pipeline.ingest_house_holdings(db_session, None)
 
     async def test_probes_stop_at_their_budget(self):
@@ -1256,3 +1270,43 @@ class TestHangingSource:
         with patch.object(holdings_pipeline, "PROBE_BUDGET", holdings_pipeline.timedelta(milliseconds=50)):
             with pytest.raises(RuntimeError, match="no report fetched"):
                 await health.check(lambda: ["u1", "u2", "u3"], hangs)
+
+
+class TestStatusContradictsIndex:
+    async def test_candidate_status_on_hon_filings_is_a_parser_regression(self, db_session):
+        """A Status line misread as a candidate's would otherwise skip every
+        member's report silently."""
+        n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
+        index = {2025: []}
+        for i in range(n):
+            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
+                                          party="R", is_current=True))
+            index[2025].append({**_house_filing(f"D{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}"),
+                                "prefix": "Hon."})
+        db_session.commit()
+        reports = {f"D{i}": AnnualReport("Congressional Candidate", [_row()]) for i in range(n)}
+        with pytest.raises(RuntimeError, match="parser regression"):
+            await _ingest_house(db_session, index, reports)
+        assert db_session.query(FinancialDisclosure).count() == 0
+
+    def test_a_candidates_own_filing_is_not_a_contradiction(self):
+        cand = {**_house_filing("C"), "filing_type": "A", "prefix": "Mr."}
+        assert holdings_pipeline._house_owner(cand, AnnualReport("Congressional Candidate", [])) == "not member"
+
+
+class TestStoredPaperSurvivesAPartialSearch:
+    async def test_a_dated_report_it_superseded_does_not_come_back(self, db_session, senator):
+        e2024 = _senate_filing("e2024", title="Annual Report for CY 2024", filed="2025-05-11")
+        paper = _senate_filing("p", title="Annual Report", filed="2026-05-14", office="Senator", paper=True)
+        await _ingest_senate(db_session, [e2024, paper], {"e2024": [_row()]})
+        assert db_session.query(FinancialDisclosure).one().filing_id == "p"
+        await _ingest_senate(db_session, [e2024], {"e2024": [_row()]})  # a results page failed: no paper row
+        assert db_session.query(FinancialDisclosure).one().filing_id == "p"
+
+
+def test_the_stock_runs_overrun_budget_allows_for_the_holdings_phases():
+    from app.ops_alerts import stock_trades_overrun_budget
+
+    assert stock_trades_overrun_budget() == (
+        holdings_pipeline.timedelta(hours=2) + len(holdings_pipeline.HOLDINGS_STEPS) * holdings_pipeline.PHASE_CEILING
+    )
