@@ -86,34 +86,51 @@ export function actionRunsOldestFirst(runs: ActionMetricsRun[]): ActionMetricsRu
 }
 
 export interface HourSlot {
-  /** Start of the hour, ms since epoch (UTC). */
-  hour: number;
-  run: ActionMetricsRun | null;
+  /** Start of the slot, ms since epoch: HH:15 UTC-aligned (the refresh grid). */
+  start: number;
+  /** Runs recorded in this slot — normally one, two after a manual refresh. */
+  runs: ActionMetricsRun[];
 }
 
+/** Minutes past the hour the scheduler starts a refresh (scheduler.py). */
+export const REFRESH_MINUTE = 15;
+
 /**
- * The last `hours` whole UTC hours ending with the current one, each holding
- * the Action Center run recorded in it, or null when none was.
+ * The last `hours` refresh slots ending with the current one, each holding
+ * the Action Center runs recorded in it.
  *
- * Runs are hourly, so plotting them by position would close up a missing
- * hour as if nothing happened; slotting them by clock hour turns a refresh
- * that crashed or never started into a visible gap. A second run in the same
- * hour (a manual refresh) keeps the later one.
+ * A slot runs from HH:15 to the next HH:15 — the scheduler's own grid —
+ * because a run's row is stamped when it ENDS: bucketing by clock hour put a
+ * 10:15 refresh that finished at 11:05 into the 11:00 slot, showing a gap at
+ * 10:00 where a run happened and hiding the skipped 11:15. On the refresh
+ * grid a run lands in the slot it started in whenever it takes under an
+ * hour. Runs are plotted by slot, not by position, so a slot with no run is
+ * a visible gap rather than two neighbours drawn side by side.
  */
 export function hourlySlots(runs: ActionMetricsRun[], hours: number, now: number): HourSlot[] {
   const HOUR = 3_600_000;
-  const current = Math.floor(now / HOUR) * HOUR;
+  const offset = REFRESH_MINUTE * 60_000;
+  const current = Math.floor((now - offset) / HOUR) * HOUR + offset;
   const first = current - (hours - 1) * HOUR;
   const slots: HourSlot[] = Array.from({ length: hours }, (_, i) => ({
-    hour: first + i * HOUR,
-    run: null,
+    start: first + i * HOUR,
+    runs: [],
   }));
   for (const run of actionRunsOldestFirst(runs)) {
     if (!run.recordedAt) continue;
     const i = Math.floor((parseUTC(run.recordedAt).getTime() - first) / HOUR);
-    if (i >= 0 && i < hours) slots[i].run = run;
+    if (i >= 0 && i < hours) slots[i].runs.push(run);
   }
   return slots;
+}
+
+/**
+ * Sum `pick` over a slot's runs; null for an empty slot (a gap, not a zero).
+ * A slot with two runs (a manual refresh) counts both — dropping one would
+ * make the chart and the totals disagree.
+ */
+export function slotSum(slot: HourSlot, pick: (r: ActionMetricsRun) => number): number | null {
+  return slot.runs.length ? slot.runs.reduce((sum, r) => sum + pick(r), 0) : null;
 }
 
 /**

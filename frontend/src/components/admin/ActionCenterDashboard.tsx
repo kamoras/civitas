@@ -2,12 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { useNow } from "@/hooks/useNow";
-import { fetchAdminActionMetrics, type ActionMetrics, type ActionRefreshState } from "@/lib/api";
+import {
+  fetchAdminActionMetrics,
+  type ActionMetrics,
+  type ActionMetricsRun,
+  type ActionRefreshState,
+} from "@/lib/api";
 import LineChart from "./charts/LineChart";
 import { SERIES } from "./charts/palette";
 import { formatCompact } from "./charts/scale";
 import { formatDuration, formatTime, parseUTC } from "./format";
-import { hourlySlots } from "./trends";
+import { hourlySlots, slotSum } from "./trends";
 import { Panel, RankBars, Segmented, StatTile } from "./widgets";
 
 // --- Action Center Status Panel ---
@@ -159,26 +164,31 @@ export function ActionCenterDashboard({
   const [limit, setLimit] = useState(72); // hours
   const [metrics, setMetrics] = useState<ActionMetrics | null>(null);
   const [loadedLimit, setLoadedLimit] = useState<number | null>(null);
-  // The hour slots are anchored to when the data was fetched, not a live
-  // clock: the window and the rows it is filled from always describe the
-  // same moment, and nothing re-renders every second for a value that only
+  // The slots are anchored to when the data was fetched, not a live clock:
+  // the window and the rows it is filled from always describe the same
+  // moment, and nothing re-renders every second for a value that only
   // changes hourly. Refetched every few minutes so a new hour's run lands.
   const [fetchedAt, setFetchedAt] = useState(0);
+  // Set when the latest refetch failed. The last good data stays up: a
+  // transient error (a backend mid-rollout) must not redraw three healthy
+  // days as "no refresh runs", which reads as the Action Center being dead.
+  const [refetchFailed, setRefetchFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     const load = () =>
-      fetchAdminActionMetrics(token, limit)
+      // Two hours of slack: the backend's window is rolling, the chart's is
+      // slot-aligned, so fetch a superset and let the slots decide.
+      fetchAdminActionMetrics(token, limit + 2)
         .then((m) => {
-          if (!cancelled) setMetrics(m);
-        })
-        .catch(() => {
-          if (!cancelled) setMetrics(null);
-        })
-        .finally(() => {
           if (cancelled) return;
+          setMetrics(m);
           setLoadedLimit(limit);
           setFetchedAt(Date.now());
+          setRefetchFailed(false);
+        })
+        .catch(() => {
+          if (!cancelled) setRefetchFailed(true);
         });
     load();
     const id = setInterval(load, 5 * 60_000);
@@ -189,25 +199,41 @@ export function ActionCenterDashboard({
   }, [token, limit]);
 
   const stale = loadedLimit !== limit;
-  // One slot per clock hour, so a refresh that crashed or never started is a
-  // gap in the lines rather than two neighbouring runs drawn side by side.
   const hours = loadedLimit ?? limit;
   const slots = fetchedAt ? hourlySlots(metrics?.runs ?? [], hours, fetchedAt) : [];
-  const ran = slots.filter((s) => s.run != null).length;
-  const labels = slots.map((s) => hourLabel(s.hour));
+  // Every figure on this tab is computed from these slots — the tiles, the
+  // lines and the per-gate bars — so they all describe the same set of runs.
+  const ran = slots.filter((s) => s.runs.length > 0).length;
+  const labels = slots.map((s) => hourLabel(s.start));
   const tickLabel = (i: number) => labels[i].replace(",", "");
-  const count = (k: string) => slots.map((s) => (s.run ? (s.run.counts[k] ?? 0) : null));
-  const published = slots.reduce((sum, s) => sum + (s.run?.issuesPublished ?? 0), 0);
-  const suppressed = metrics?.totals.suppressedTotal ?? 0;
-  const fetched = metrics?.totals.intake.articles_fetched ?? 0;
-  const suppressedEntries = Object.entries(metrics?.totals.suppressed ?? {})
-    .map(([name, n]) => ({ name: counterLabel(name), count: n }))
+  const count = (k: string) => slots.map((s) => slotSum(s, (r) => r.counts[k] ?? 0));
+  const total = (pick: (r: ActionMetricsRun) => number) =>
+    slots.reduce((sum, s) => sum + (slotSum(s, pick) ?? 0), 0);
+  const published = total((r) => r.issuesPublished);
+  const suppressed = total((r) => r.suppressed);
+  const fetched = total((r) => r.counts.articles_fetched ?? 0);
+  // Which counters are suppression gates is the backend's grouping; the
+  // counts are re-summed over the charted slots only.
+  const suppressedEntries = Object.keys(metrics?.totals.suppressed ?? {})
+    .map((name) => ({ name: counterLabel(name), count: total((r) => r.counts[name] ?? 0) }))
+    .filter((e) => e.count > 0)
     .sort((a, b) => b.count - a.count);
-  const emptyMessage = metrics ? "No refresh runs recorded in this window." : "Loading…";
+  const emptyMessage = metrics
+    ? "No refresh runs recorded in this window."
+    : refetchFailed
+      ? "Couldn't load Action Center metrics."
+      : "Loading…";
 
   return (
     <div className="space-y-6">
-      <Segmented label="WINDOW" options={WINDOW_OPTIONS} value={limit} onChange={setLimit} />
+      <div className="flex flex-wrap items-center gap-4">
+        <Segmented label="WINDOW" options={WINDOW_OPTIONS} value={limit} onChange={setLimit} />
+        {refetchFailed && (
+          <span role="status" className="text-xs font-mono text-signal-amber">
+            Couldn&apos;t refresh — showing data from {fetchedAt ? hourLabel(fetchedAt) : "—"}
+          </span>
+        )}
+      </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile
@@ -283,13 +309,13 @@ export function ActionCenterDashboard({
                 key: "published",
                 label: "Issues published",
                 color: SERIES[0],
-                values: slots.map((s) => s.run?.issuesPublished ?? null),
+                values: slots.map((s) => slotSum(s, (r) => r.issuesPublished)),
               },
               {
                 key: "suppressed",
                 label: "Suppressed by a gate",
                 color: SERIES[3],
-                values: slots.map((s) => s.run?.suppressed ?? null),
+                values: slots.map((s) => slotSum(s, (r) => r.suppressed)),
               },
             ]}
             formatValue={(v) => v.toLocaleString()}
@@ -299,7 +325,7 @@ export function ActionCenterDashboard({
           <div>
             {suppressedEntries.length > 0 ? (
               <RankBars
-                title="SUPPRESSED, BY GATE — WHOLE WINDOW"
+                title="SUPPRESSED, BY GATE — THIS WINDOW"
                 entries={suppressedEntries}
                 unit="suppressed"
                 labelWidth="w-48"

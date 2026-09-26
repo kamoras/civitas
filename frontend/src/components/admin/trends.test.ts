@@ -8,6 +8,7 @@ import {
   historyPreview,
   hourlySlots,
   runsPerDay,
+  slotSum,
 } from "./trends";
 
 const run = (over: Partial<PipelineTrendRun>): PipelineTrendRun => ({
@@ -95,7 +96,7 @@ describe("actionRunsOldestFirst", () => {
 });
 
 describe("hourlySlots", () => {
-  const now = Date.parse("2026-09-26T10:30:00Z");
+  const now = Date.parse("2026-09-26T12:30:00Z");
   const r = (at: string, n = 0) => ({
     run: at,
     recordedAt: at,
@@ -104,27 +105,31 @@ describe("hourlySlots", () => {
     suppressed: 0,
   });
 
-  it("leaves a missing hour empty instead of closing the gap", () => {
+  it("slots on the :15 refresh grid, so a slow run stays in the slot it started in", () => {
+    // 09:15 ends 09:50; 10:15 is slow and ends 11:05; 11:15 is skipped
+    // (10:15's still running); 12:15 ends 12:20.
     const slots = hourlySlots(
-      [r("2026-09-26T10:05:00"), r("2026-09-26T08:05:00")], // 09:00 missing
-      3,
+      [r("2026-09-26T09:50:00"), r("2026-09-26T11:05:00"), r("2026-09-26T12:20:00")],
+      4,
       now
     );
-    expect(slots.map((s) => s.run?.run ?? null)).toEqual([
-      "2026-09-26T08:05:00",
-      null,
-      "2026-09-26T10:05:00",
+    expect(slots.map((s) => new Date(s.start).toISOString().slice(11, 16))).toEqual([
+      "09:15",
+      "10:15",
+      "11:15",
+      "12:15",
     ]);
+    expect(slots.map((s) => s.runs.length)).toEqual([1, 1, 0, 1]);
   });
 
-  it("drops runs outside the window and keeps the later of two in one hour", () => {
+  it("drops runs outside the window and keeps both runs of a doubled slot", () => {
     const slots = hourlySlots(
-      [r("2026-09-26T10:50:00", 2), r("2026-09-26T10:05:00", 1), r("2026-09-25T01:00:00")],
+      [r("2026-09-26T12:20:00", 2), r("2026-09-26T12:25:00", 1), r("2026-09-25T01:00:00")],
       2,
       now
     );
-    expect(slots[0].run).toBeNull();
-    expect(slots[1].run?.issuesPublished).toBe(2);
+    expect(slotSum(slots[0], (x) => x.issuesPublished)).toBeNull();
+    expect(slotSum(slots[1], (x) => x.issuesPublished)).toBe(3);
   });
 });
 
