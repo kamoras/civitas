@@ -736,9 +736,11 @@ version bump spreads over a few nights instead of stretching the stock run
 past its 2h overrun alarm. The holdings phases never decide the stock run's
 status (that stays "every trade phase failed"); each phase that fails sends
 its own ops alert instead. A phase fails on a parser regression — reads that
-come back unreadable, or empty where no earlier parser agreed, outnumbering
-good ones, counted every night the regression lasts — or when members were
-tried (or the budget ran out) and none loaded *and* none of the reports
+cannot be read at all (a crash, an unrecognized report, "scanned" where an
+earlier parser read the text) outnumbering good ones, counted every night the
+regression lasts; empty reads and changed row counts are the parser tests'
+job, since a fix looks the same — or when members were tried (or the budget
+went on requests that failed) and none loaded *and* none of the reports
 already stored still loads either. That live probe, not a
 memory of failing filings, is what tells an outage from a few dead links
 (`_SourceHealth`). Presidents are not covered yet: the OGE 278e is an

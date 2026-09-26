@@ -71,8 +71,8 @@ class AnnualReport:
     # Why holdings is None: "scanned" (paper filing, no text to read) or
     # "unrecognized" (electronic, but not in a layout the parser knows).
     unreadable_reason: str | None = None
-    # False when the read may be transient — the parser crashed, or the
-    # page was neither a report nor anything recognizable. Such a read is
+    # False when the read may be transient — the parser crashed on it (a
+    # second crash on the same report is final). Such a read is
     # neither cached nor stored (holdings_pipeline treats it as nothing
     # fetched), so the next run tries again: caching a transient failure
     # strands a filing for the cache's whole 30-day life

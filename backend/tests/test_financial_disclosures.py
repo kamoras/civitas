@@ -389,10 +389,11 @@ class TestFetchCaching:
             mock_set.assert_not_called()
 
 
-    async def test_senate_unfamiliar_page_is_unrecognized_but_retried_not_a_lapse(self, db_session):
+    async def test_senate_page_that_is_not_a_report_is_a_failed_fetch_not_a_lapse(self, db_session):
         """A 200 page that is neither the terms page nor a report is not a
-        lapsed session (no re-accept) — it's linked as unrecognized, and
-        not cached, since it may be a transient error page."""
+        lapsed session (no re-accept) and not a report the parser can't read
+        — an error or block page in the report's place: a failed fetch, and
+        nothing cached."""
         from types import SimpleNamespace
         from unittest.mock import AsyncMock, patch
 
@@ -403,7 +404,7 @@ class TestFetchCaching:
         with patch.object(senate_fd, "_request_with_retry", new_callable=AsyncMock, return_value=odd), \
              patch.object(senate_fd, "api_cache_set") as mock_set:
             report = await senate_fd.fetch_and_parse_annual(None, db_session, filing)
-        assert (report.holdings, report.unreadable_reason, report.final) == (None, "unrecognized", False)
+        assert report is None
         mock_set.assert_not_called()
 
 

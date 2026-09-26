@@ -63,11 +63,25 @@ def senator(db_session):
     return s
 
 
-async def _ingest_house(db_session, index_by_year, reports):
+class _Clock:
+    """time.monotonic for the holdings phases, advanced by the fetches."""
+
+    def __init__(self):
+        self.now = 0.0
+
+    def __call__(self):
+        return self.now
+
+
+async def _ingest_house(db_session, index_by_year, reports, on_fetch=None, on_index=None):
     async def index(_client, _db, year):
+        if on_index is not None:
+            on_index(year)
         return index_by_year.get(year, [])
 
     async def fetch(_client, _db, filing):
+        if on_fetch is not None:
+            on_fetch(filing)
         return reports.get(filing["doc_id"])
 
     with patch.object(holdings_pipeline, "fetch_annual_filing_index", side_effect=index), \
@@ -469,9 +483,13 @@ class TestTimeBudget:
         ]}
         reports = {"R1NEW": AnnualReport("Member", [_row()]), "R2NEW": AnnualReport("Member", [_row()])}
 
-        clock = iter([0.0, 0.0, 10_000.0, 10_000.0])  # deadline, then: R2 in time, R1 past it
-        with patch.object(holdings_pipeline.time, "monotonic", side_effect=lambda: next(clock)):
-            await _ingest_house(db_session, index, reports)
+        clock = _Clock()
+
+        def past_the_deadline(_filing):  # R2's fetch uses up the budget; R1 waits
+            clock.now = 10_000.0
+
+        with patch.object(holdings_pipeline.time, "monotonic", clock):
+            await _ingest_house(db_session, index, reports, on_fetch=past_the_deadline)
 
         by_rep = {d.representative_id: d.filing_id for d in db_session.query(FinancialDisclosure).all()}
         assert by_rep == {"R2": "R2NEW", "R1": "OLD"}
@@ -556,7 +574,25 @@ class TestSenateRankingByStatedYear:
         # A paper amendment of an older report, filed later: its year (2024)
         # is only inferred from the filing date.
         paper = _senate_filing("p", title="Annual Report", filed="2025-12-01", paper=True)
-        assert max([paper, electronic], key=holdings_pipeline._senate_rank) is electronic
+        ranks = holdings_pipeline._senate_ranks([paper, electronic])
+        assert max([paper, electronic], key=lambda f: ranks[f["report_url"]]) is electronic
+
+    async def test_a_paper_original_for_a_later_year_replaces_the_stored_one(self, db_session, senator):
+        """Filed in 2026 after the CY2024 original: it covers a year after
+        2024 (it can't be 2024's — that original is filed — and 2025 is the
+        latest year over), so it is the newest report, whatever its year."""
+        await _ingest_senate(db_session, [_senate_filing("e2024", title="Annual Report for CY 2024",
+                                                         filed="2025-05-11")], {"e2024": [_row()]})
+        filings = [
+            _senate_filing("e2024", title="Annual Report for CY 2024", filed="2025-05-11"),
+            _senate_filing("p", title="Annual Report", filed="2026-05-14", office="Senator", paper=True),
+        ]
+        await _ingest_senate(db_session, filings, {"e2024": [_row()]})
+        stored = db_session.query(FinancialDisclosure).one()
+        assert (stored.filing_id, stored.report_year, stored.unreadable_reason) == ("p", None, "scanned")
+        # And it stays: the dated CY2024 report never displaces it again.
+        await _ingest_senate(db_session, filings, {"e2024": [_row()]})
+        assert db_session.query(FinancialDisclosure).one().filing_id == "p"
 
     async def test_an_inferred_year_paper_report_never_displaces_that_years_stored_report(self, db_session, senator):
         db_session.add(FinancialDisclosure(
@@ -720,13 +756,16 @@ class TestFallThroughAndMatching:
             {**_house_filing("CAND", filing_date="2026-08-01"), "filing_type": "A"},
             _house_filing("MEMBER", filing_date="2026-05-01"),
         ]}
-        # deadline set at 0; the first fetch is in time, the second is not.
-        clock = iter([0.0, 0.0] + [10_000.0] * 20)
-        with patch.object(holdings_pipeline.time, "monotonic", side_effect=lambda: next(clock)):
-            # A whole budget spent with nothing fetched is itself suspicious.
-            with pytest.raises(RuntimeError, match="no report fetched"):
-                await _ingest_house(db_session, index, {"CAND": None})
-        assert db_session.query(FinancialDisclosure).count() == 0
+        # The first fetch is in time, and uses up the budget; the second isn't made.
+        clock = _Clock()
+
+        def past_the_deadline(_filing):
+            clock.now = 10_000.0
+
+        candidates = {"CAND": AnnualReport("Congressional Candidate", [_row()])}
+        with patch.object(holdings_pipeline.time, "monotonic", clock):
+            count, mock_fetch = await _ingest_house(db_session, index, candidates, on_fetch=past_the_deadline)
+        assert (mock_fetch.call_count, count) == (1, 0)
 
     def test_member_prefix_tolerates_punctuation_and_case(self):
         assert holdings_pipeline._is_member_prefix("Hon.")
@@ -965,7 +1004,7 @@ class TestParserFailuresAreNotExcused:
 
     @pytest.mark.parametrize("re_read", [
         AnnualReport(None, None, "unrecognized"),  # can't find the schedule
-        AnnualReport("Member", []),  # finds it, reads no rows
+        AnnualReport(None, None, "scanned"),  # no text — in a report an earlier parser read text from
     ])
     async def test_a_re_read_that_comes_back_empty_keeps_the_earlier_parsers_holdings(self, db_session, rep, re_read):
         index = {2025: [_house_filing("SAME")]}
@@ -979,6 +1018,16 @@ class TestParserFailuresAreNotExcused:
             assert disclosure.parser_version == 1
             _, mock_fetch = await _ingest_house(db_session, index, {"SAME": re_read})
         assert mock_fetch.call_count == 1
+
+    async def test_an_empty_re_read_replaces_the_earlier_one(self, db_session, rep):
+        """A parser fix that stops reading another schedule's rows as assets
+        reads exactly this."""
+        index = {2025: [_house_filing("SAME")]}
+        await _ingest_house(db_session, index, {"SAME": AnnualReport("Member", [_row(), _row()])})
+        with patch.object(holdings_pipeline, "HOUSE_PARSER_VERSION", 99):
+            await _ingest_house(db_session, index, {"SAME": AnnualReport("Member", [])})
+        disclosure = db_session.query(FinancialDisclosure).one()
+        assert (disclosure.parsed, disclosure.parser_version, db_session.query(FinancialHolding).count()) == (True, 99, 0)
 
     async def test_a_re_read_with_rows_replaces_the_earlier_one(self, db_session, rep):
         index = {2025: [_house_filing("SAME")]}
@@ -1064,17 +1113,12 @@ class TestParserRegressionSignal:
         with pytest.raises(RuntimeError, match="parser regression"):
             await _ingest_house(db_session, index, reports)
 
-    async def test_empty_reads_across_the_board_are_a_regression(self, db_session):
+    async def test_empty_reads_are_not_counted_either_way(self, db_session):
+        """A genuine report can list nothing; zero-row regressions are the
+        parser tests' to catch."""
         n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
         index = self._members(db_session, n)
-        with pytest.raises(RuntimeError, match="parser regression"):
-            await _ingest_house(db_session, index, {f"D{i}": AnnualReport("Member", []) for i in range(n)})
-
-    async def test_a_few_empty_reports_among_good_reads_are_not(self, db_session):
-        n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
-        index = self._members(db_session, 2 * n + 1)
-        reports = {f"D{i}": AnnualReport("Member", [] if i < n else [_row()]) for i in range(2 * n + 1)}
-        await _ingest_house(db_session, index, reports)  # must not raise
+        await _ingest_house(db_session, index, {f"D{i}": AnnualReport("Member", []) for i in range(n)})
 
     async def test_a_re_read_with_fewer_rows_is_not_an_alarm(self, db_session):
         """A parser fix that drops spurious rows looks exactly like this."""
@@ -1084,15 +1128,6 @@ class TestParserRegressionSignal:
         with patch.object(holdings_pipeline, "HOUSE_PARSER_VERSION", 99):
             await _ingest_house(db_session, index, {f"D{i}": AnnualReport("Member", [_row()]) for i in range(n)})
         assert db_session.query(FinancialHolding).count() == n
-
-    async def test_empty_where_the_earlier_parser_also_read_nothing_is_consistent(self, db_session):
-        n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
-        index = self._members(db_session, n)
-        empty = {f"D{i}": AnnualReport("Member", []) for i in range(n)}
-        with pytest.raises(RuntimeError, match="parser regression"):
-            await _ingest_house(db_session, index, empty)  # no earlier read to agree with
-        with patch.object(holdings_pipeline, "HOUSE_PARSER_VERSION", 99):
-            await _ingest_house(db_session, index, empty)  # agrees with v1: must not raise
 
     async def test_scanned_where_an_earlier_parser_read_text_is_a_miss(self, db_session):
         """"Scanned" is the parser's own verdict (no words on page one): a
@@ -1158,19 +1193,56 @@ class TestProbesSeveralStoredReports:
 
 
 class TestHangingSource:
-    async def test_running_out_of_time_with_nothing_fetched_asks_the_source(self, db_session):
-        """A host that hangs costs minutes per request, so the budget runs
-        out after a couple of members — far short of the attempt threshold."""
-        for i in range(3):
+    def _members(self, db_session, n):
+        for i in range(n):
             db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
                                           party="R", is_current=True))
         db_session.commit()
-        index = {2025: [_house_filing(f"D{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}")
-                        for i in range(3)]}
-        clock = iter([0.0, 0.0, 0.0, 10_000.0] + [10_000.0] * 20)
-        with patch.object(holdings_pipeline.time, "monotonic", side_effect=lambda: next(clock)):
+        return {2025: [_house_filing(f"D{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}")
+                       for i in range(n)]}
+
+    async def test_a_budget_spent_on_failing_requests_asks_the_source(self, db_session):
+        """A host that hangs costs minutes per request, so the budget runs
+        out after a couple of members — far short of the attempt threshold."""
+        index = self._members(db_session, 3)
+        clock = _Clock()
+
+        def hangs(_filing):
+            clock.now += holdings_pipeline.PHASE_BUDGET.total_seconds() / 2 + 1
+
+        with patch.object(holdings_pipeline.time, "monotonic", clock):
             with pytest.raises(RuntimeError, match="no report fetched"):
-                await _ingest_house(db_session, index, {})
+                await _ingest_house(db_session, index, {}, on_fetch=hangs)
+
+    async def test_a_budget_spent_elsewhere_is_not_an_outage(self, db_session):
+        """A long index download or search, then one quick failure."""
+        index = self._members(db_session, 3)
+        clock = _Clock()
+
+        budget = holdings_pipeline.PHASE_BUDGET.total_seconds()
+
+        def slow_index(_year):
+            clock.now = budget - 1
+
+        def quick_failure(_filing):
+            clock.now += 2
+
+        with patch.object(holdings_pipeline.time, "monotonic", clock):
+            count, mock_fetch = await _ingest_house(db_session, index, {}, on_fetch=quick_failure,
+                                                    on_index=slow_index)  # must not raise
+        assert mock_fetch.call_count == 1
+
+    async def test_a_fetch_in_flight_is_cut_off_at_the_deadline(self, db_session, rep):
+        import asyncio
+
+        async def hangs(_client, _db, _filing):
+            await asyncio.sleep(3600)
+
+        with patch.object(holdings_pipeline, "PHASE_BUDGET", holdings_pipeline.timedelta(milliseconds=50)), \
+             patch.object(holdings_pipeline, "fetch_annual_filing_index", AsyncMock(return_value=[_house_filing("A")])), \
+             patch.object(holdings_pipeline, "fetch_house_annual", side_effect=hangs):
+            with pytest.raises(RuntimeError, match="no report fetched"):  # nothing stored to ask about
+                await holdings_pipeline.ingest_house_holdings(db_session, None)
 
     async def test_probes_stop_at_their_budget(self):
         import asyncio

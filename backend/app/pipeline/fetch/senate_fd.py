@@ -264,7 +264,8 @@ async def fetch_and_parse_annual(
     """Fetch one annual report page and parse its assets.
 
     Raises SessionLapsed when eFD answers with its terms page instead of
-    the report. None only when the page couldn't be fetched. Otherwise an
+    the report. None when the page couldn't be fetched or isn't a report
+    (a block or error page in its place). Otherwise an
     AnnualReport whose holdings are None when the report can't be read — a
     paper filing (never fetched: it is scanned page images) or a page
     without a recognizable assets table — and an empty list when it was
@@ -281,8 +282,8 @@ async def fetch_and_parse_annual(
     # Redirects are not followed (fetch_with_retry follows them by default):
     # a lapsed session answers with a redirect to the terms page, and a
     # withdrawn report with some other redirect. Followed, both would land on
-    # a 200 page that is neither a report nor the terms form, and read as a
-    # report the parser can't recognize.
+    # a 200 page that is neither a report nor the terms form, and neither
+    # would be recognizable for what it is.
     resp = await _request_with_retry(client, "GET", filing["report_url"], follow_redirects=False)
     if resp is None:
         return None
@@ -300,13 +301,15 @@ async def fetch_and_parse_annual(
         logger.warning("Senate eFD answered HTTP %s for %s", resp.status_code, filing["report_url"])
         return None
     if not is_report_page(doc):
-        # A 200 page that is neither the terms page nor a report in the
-        # layout this parser knows. It may be a changed layout or a
-        # transient error page, and nothing here can tell which: linked as
-        # unrecognized, but not cached and not marked read, so every run
-        # looks again (see AnnualReport.final).
-        logger.warning("Senate eFD page for %s is not in a recognized report layout", filing["report_url"])
-        return AnnualReport(None, None, UNREADABLE_UNRECOGNIZED, final=False)
+        # A 200 page that is neither the terms page nor a report (no
+        # numbered Parts): a block, maintenance or error page served in the
+        # report's place — the source failing, as a non-PDF body is at the
+        # House, not a report the parser can't read. A changed layout looks
+        # the same and is caught the same way: every report fails to load,
+        # and the stored-report probe (which asks is_report_page too) fails
+        # the phase.
+        logger.warning("Senate eFD answered %s with a page that is not a report", filing["report_url"])
+        return None
     try:
         holdings = parse_assets_table(doc)
     except Exception:

@@ -26,6 +26,7 @@ import logging
 import re
 import time
 from collections.abc import Awaitable, Callable
+from typing import TypeVar
 from dataclasses import dataclass
 from datetime import timedelta
 
@@ -60,6 +61,8 @@ from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
+T = TypeVar("T")
+
 # Annual reports cover the previous calendar year and are due in May, with
 # extensions into August — so a member's newest report is for last year, or
 # (before they file) the year before.
@@ -67,17 +70,20 @@ _YEARS_BACK = 2
 
 # Wall-clock budget for each holdings phase. The deadline is set when the
 # phase starts, so the index download and the Senate search count against
-# it; it is checked before every report fetch, so only a fetch already in
-# flight can run past it. Measured 2026-09: a first House run reads ~430
-# reports (~9 min in a dev container, network-bound at the Clerk's 1 req/s;
-# slower on the Pi's CPU), the Senate ~100 (~4 min, most of it the browser
-# search). Past the budget the remaining members wait for the next run.
-PHASE_BUDGET = timedelta(minutes=10)
+# it; it is checked before every report fetch, and a fetch still in flight
+# at the deadline is cut off (_bounded_fetch). Measured 2026-09: a first
+# House run reads ~430 reports (~9 min in a dev container, network-bound at
+# the Clerk's 1 req/s; slower on the Pi's CPU), the Senate ~100 (~4 min,
+# most of it the browser search). Past the budget the remaining members
+# wait for the next run, so a first run spreads over two nights.
+PHASE_BUDGET = timedelta(minutes=8)
 
 # Wall-clock cap on the outage probes at the end of a phase (_SourceHealth),
-# which run past PHASE_BUDGET: one retried request against a hanging host
-# alone takes ~3 minutes.
-PROBE_BUDGET = timedelta(minutes=3)
+# which run after PHASE_BUDGET: one retried request against a hanging host
+# alone takes ~3 minutes. A phase therefore takes at most PHASE_BUDGET +
+# PROBE_BUDGET, 10 minutes, bar a Senate search that outlasts the budget
+# on its own (it is bounded by its page timeouts, not by this).
+PROBE_BUDGET = timedelta(minutes=2)
 
 # Members tried with nothing coming back live before _SourceHealth looks
 # further — asking the source about a stored report, or (when reports load
@@ -129,23 +135,22 @@ def _prior_count(mine: _Stored | None, filing_id: str) -> int | None:
 
 
 def _keeps_earlier_read(prior: int | None, report: AnnualReport) -> bool:
-    """A re-read of the very report already stored that came back with
-    nothing: unreadable, or no rows where the earlier parser found some. A
-    filed report never changes, so that is the new parser's miss, not the
-    report's; the earlier holdings stay, and a parser regression never turns
-    a scorecard's pie into "not machine-readable" or "lists no assets".
+    """A re-read of the very report already stored — after a PARSER_VERSION
+    bump — that couldn't read it at all (unrecognized, or "scanned" though
+    an earlier parser read its text). A filed report never changes, so that
+    is the new parser's failure, not the report's: the earlier read stays,
+    and a parser regression never turns a scorecard's pie into "not
+    machine-readable". A re-read that reads rows — fewer, more, or none —
+    replaces it: a parser fix looks exactly like that.
 
     The stored row keeps its old parser_version, so the report is re-read
-    (from the parse cache — no request) every run: each re-read counts as a
-    parser miss in _SourceHealth, which keeps failing the phase for as long
-    as the regression affects enough members. Stamping it as tried would
-    silence the alarm after one night."""
-    if prior is None:
+    (from the parse cache — no request) every run, and each re-read counts
+    as a parser miss in _SourceHealth for as long as the regression lasts.
+    Stamping it as tried would silence the alarm after one night."""
+    if prior is None or report.holdings is not None:
         return False
-    if report.holdings is None or (not report.holdings and prior):
-        logger.warning("Parser read nothing from a report an earlier parser read %d holdings from — keeping those", prior)
-        return True
-    return False
+    logger.warning("Parser could not read a report an earlier parser read %d holdings from — keeping those", prior)
+    return True
 
 
 def _is_older(stored: _Stored | None, report_year: int | None, filed_date: str | None) -> bool:
@@ -220,44 +225,26 @@ def _is_member_prefix(prefix: str | None) -> bool:
 
 
 class _Outcome:
-    """What one member's reads showed this run, about the source and about
-    the parser — two separate questions.
+    """What one member's fetches showed about the source this run.
 
-    Source (`fetched`; live requests only — a parse-cache hit or a paper
-    filing that is never fetched proves nothing about it, AnnualReport.live):
-    `attempted`, a live request was made; `fetched`, one returned a report
-    (final: a crash or an unrecognizable page may be a block page).
-
-    Parser (`parsed`; every read of a report that is the member's, cached or
-    live, since a cached read under the current PARSER_VERSION is this
-    parser's output): `parsed_ok`, it yielded rows; `parser_miss`, it could
-    not be read, or came back empty or "scanned" where an earlier parser
-    read rows from the very same filing (a filed report never changes), or
-    empty with no earlier read to agree with it. Empty where an earlier
-    parser also read nothing is consistent, and a scanned report nobody has
-    read text from never reached the parser — neither counts. A re-read that
-    finds fewer rows than before counts neither way: a parser fix that
-    drops spurious rows looks exactly like that, so it is the parser tests'
-    call, not a runtime alarm's.
+    Only live requests count — a parse-cache hit or a paper filing that is
+    never fetched proves nothing about the source (AnnualReport.live).
+    `attempted`: a live request was made. `fetched`: one returned a report.
+    `failed_seconds`: time spent in requests that failed, which is how a
+    host that hangs, rather than refuses, shows itself.
     """
 
     def __init__(self) -> None:
-        self.attempted = self.fetched = self.parsed_ok = self.parser_miss = False
+        self.attempted = self.fetched = False
+        self.failed_seconds = 0.0
 
-    def fetch(self, report: AnnualReport | None) -> None:
+    def fetch(self, report: AnnualReport | None, seconds: float) -> None:
         if report is None or report.live:
             self.attempted = True
-        if report is not None and report.live and report.final:
+        if report is None:
+            self.failed_seconds += seconds
+        elif report.live and report.final:
             self.fetched = True
-
-    def parsed(self, report: AnnualReport, prior: int | None) -> None:
-        holdings = report.holdings
-        if holdings:
-            self.parsed_ok = True
-        elif report.unreadable_reason == UNREADABLE_SCANNED:
-            self.parser_miss = self.parser_miss or bool(prior)
-        elif holdings is None or prior != 0:
-            self.parser_miss = True
 
     def lapsed(self) -> None:
         """A request answered with eFD's terms page even after re-accepting."""
@@ -272,48 +259,65 @@ class _SourceHealth:
     processed first, so a few genuinely broken filings bunched at the front
     would otherwise stop the phase before it reached anyone else.
 
-    - Parser: at least MIN_ATTEMPTS_FOR_OUTAGE members' reads missed, and
-      misses outnumber good reads. A regression shows up as exactly that;
-      the odd genuinely empty or unusual report does not. Nothing about
-      the source can excuse it. A kept earlier read (_keeps_earlier_read)
-      is re-read every run, so a regression keeps failing the phase for as
-      long as it lasts.
-    - Source: no report fetched, from at least MIN_ATTEMPTS_FOR_OUTAGE
-      members tried — or from any tried at all when the time budget ran out
-      first, which a source that hangs rather than refuses makes happen
-      after two or three members. That is an outage, or a night on which
-      the only filings left to fetch are ones that won't load (a PDF the
-      index lists but the Clerk 404s). Counts alone can't tell those apart,
-      and neither can a memory of past failures — anything that learns to
-      stop counting a filing also learns to stop seeing an outage. So the
-      phase asks the source directly: it re-requests reports it already
-      stored, live and past any cache, within PROBE_BUDGET. If one loads,
-      the failures are those filings'; if none does — or nothing is stored
-      to ask about — the phase fails, every night the outage lasts.
+    - Parser, counted per read (`parsed`): only unambiguous failures are
+      misses — a crash, an unrecognized report, or "scanned" where an
+      earlier parser read the same filing's text. Rows read are successes.
+      Empty reads and changed row counts are neither: a genuine report can
+      list nothing, and a parser fix changes counts too; the parser tests'
+      real-filing fixtures are what guard those. At least
+      MIN_ATTEMPTS_FOR_OUTAGE misses outnumbering successes fails the phase,
+      and nothing about the source can excuse it. A kept earlier read
+      (_keeps_earlier_read) is re-read every run, so a regression keeps
+      failing the phase for as long as it lasts.
+    - Source, counted per member (`record`): no report fetched from at
+      least MIN_ATTEMPTS_FOR_OUTAGE members tried — or the time budget ran
+      out with nothing fetched and at least half of it spent in requests
+      that failed, which is what a host that hangs rather than refuses
+      looks like after two or three members. That is an outage, or a night
+      on which the only filings left to fetch are ones that won't load (a
+      PDF the index lists but the Clerk 404s). Counts alone can't tell those
+      apart, and neither can a memory of past failures — anything that
+      learns to stop counting a filing also learns to stop seeing an outage.
+      So the phase asks the source directly: it re-requests reports it
+      already stored, live and past any cache, within PROBE_BUDGET. If one
+      loads, the failures are those filings'; if none does — or nothing is
+      stored to ask about — the phase fails, every night the outage lasts.
     """
 
     def __init__(self, source: str) -> None:
         self.source = source
-        self.attempted = self.fetched = self.parsed_ok = self.parser_miss = 0
+        self.attempted = self.fetched = 0
+        self.failed_seconds = 0.0
         self.out_of_time = False
+        self.parsed_ok = self.parser_miss = 0
 
     def record(self, outcome: _Outcome) -> None:
         self.attempted += outcome.attempted
         self.fetched += outcome.fetched
-        self.parsed_ok += outcome.parsed_ok
-        self.parser_miss += outcome.parser_miss and not outcome.parsed_ok
+        self.failed_seconds += outcome.failed_seconds
+
+    def parsed(self, report: AnnualReport, prior: int | None) -> None:
+        if report.holdings:
+            self.parsed_ok += 1
+        elif report.holdings is None and (report.unreadable_reason != UNREADABLE_SCANNED or prior):
+            self.parser_miss += 1
+
+    def _looks_down(self) -> bool:
+        if self.fetched or not self.attempted:
+            return False
+        if self.attempted >= MIN_ATTEMPTS_FOR_OUTAGE:
+            return True
+        return self.out_of_time and self.failed_seconds >= PHASE_BUDGET.total_seconds() / 2
 
     async def check(
         self, stored_urls: Callable[[], list[str]], still_loads: Callable[[str], Awaitable[bool]],
     ) -> None:
         if self.parser_miss >= MIN_ATTEMPTS_FOR_OUTAGE and self.parser_miss > self.parsed_ok:
             raise RuntimeError(
-                f"{self.source}: {self.parser_miss} members' reports read as unreadable or empty, "
-                f"{self.parsed_ok} read — a parser regression, or pages served in reports' place"
+                f"{self.source}: {self.parser_miss} reports could not be read, {self.parsed_ok} were — "
+                "a parser regression"
             )
-        if self.fetched or not self.attempted:
-            return
-        if self.attempted < MIN_ATTEMPTS_FOR_OUTAGE and not self.out_of_time:
+        if not self._looks_down():
             return
         deadline = time.monotonic() + PROBE_BUDGET.total_seconds()
         for url in stored_urls():
@@ -331,6 +335,19 @@ class _SourceHealth:
                 )
                 return
         raise RuntimeError(f"{self.source}: {self.attempted} members tried, no report fetched")
+
+
+async def _bounded_fetch(fetch: Awaitable[AnnualReport | None], deadline: float) -> tuple[AnnualReport | None, float]:
+    """Run one report fetch, cut off at the phase deadline: a request in
+    flight when the budget runs out would otherwise run on for its whole
+    retry policy (~3 minutes against a hanging host). Returns the report
+    (None if cut off) and how long it took."""
+    started = time.monotonic()
+    try:
+        report = await asyncio.wait_for(fetch, max(deadline - started, 0.001))
+    except TimeoutError:
+        report = None
+    return report, time.monotonic() - started
 
 
 # How many stored reports to ask about before calling the source down: one
@@ -396,12 +413,12 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
             if time.monotonic() > deadline:
                 out_of_time = True
                 break
-            report = await fetch_house_annual(client, db, filing)
+            report, seconds = await _bounded_fetch(fetch_house_annual(client, db, filing), deadline)
             prior = _prior_count(mine, filing["doc_id"])
-            outcome.fetch(report)
+            outcome.fetch(report, seconds)
+            if report is not None and not report.final:
+                health.parsed(report, prior)  # a crash: the parser's, whoever filed the report
             if report is None or not report.final:
-                if report is not None:
-                    outcome.parsed(report, prior)  # a crash: the parser's, whoever filed it
                 # Nothing usable this run: not fetched, or a read that may be
                 # transient (the parser crashed) — which is stored nowhere,
                 # since "can't be read" would be a claim about the report
@@ -423,7 +440,7 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
                 # sitting member's filing does. Both are the Clerk's own
                 # structured index fields, not inferred from any name.
                 continue
-            outcome.parsed(report, prior)
+            health.parsed(report, prior)
             if _keeps_earlier_read(prior, report):
                 break
             inserted += _replace_disclosure(
@@ -455,12 +472,42 @@ _CY_RE = re.compile(r"\bCY\s*(\d{4})\b", re.I)
 _DATE_RE = re.compile(r"\b(\d{2})/(\d{2})/(\d{4})\b")
 
 
-def _senate_rank(filing: dict) -> tuple[int, str]:
-    """Newest first: by the year the report states, then by filing date. A
-    report whose year isn't stated (a paper filing) ranks below every one
-    that states one, so it's used only when a senator has nothing dated.
-    The same order _is_older compares stored reports in."""
-    return (_senate_report_year(filing) or 0, filing.get("filed_date") or "")
+def _senate_ranks(filings: list[dict]) -> dict[str, tuple[int, str]]:
+    """One senator's filings, keyed by report URL, to the (year, filed date)
+    they rank and compare by — newest first, the order _is_older compares
+    stored reports in.
+
+    A filing whose year isn't stated (a paper filing) ranks below every
+    dated one — with one exception. A paper *original* annual report filed
+    after the latest dated original (for year Y), in a year that has
+    already seen Y+1 end, covers a later year than Y: originals are filed
+    once a year, in order, and a calendar year's report can't be filed
+    before that year is over. Whichever year it is, it is newer, so it
+    ranks at Y+1. That year orders it and nothing else: it is never stored
+    or shown (_senate_report_year stays None). A paper amendment can amend
+    any earlier report, so it gets no such rank.
+    """
+    def is_annual_original(f: dict) -> bool:
+        title = (f.get("title") or "").lower()
+        return "annual report" in title and "amendment" not in title
+
+    dated_originals = [
+        (year, f.get("filed_date") or "")
+        for f in filings
+        if (year := _senate_report_year(f)) is not None and is_annual_original(f)
+    ]
+    latest = max(dated_originals, default=None)
+    ranks: dict[str, tuple[int, str]] = {}
+    for f in filings:
+        filed = f.get("filed_date") or ""
+        year = _senate_report_year(f)
+        if (
+            year is None and latest is not None and is_annual_original(f)
+            and filed > latest[1] and filed[:4].isdigit() and int(filed[:4]) - 1 > latest[0]
+        ):
+            year = latest[0] + 1
+        ranks[f["report_url"]] = (year or 0, filed)
+    return ranks
 
 
 def _senate_report_year(filing: dict) -> int | None:
@@ -534,11 +581,12 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
         mine = stored.get(senator_id)
         outcome = _Outcome()
         out_of_time = False
-        for filing in sorted(per_senator[senator_id], key=_senate_rank, reverse=True):
+        ranks = _senate_ranks(per_senator[senator_id])
+        for filing in sorted(per_senator[senator_id], key=lambda f: ranks[f["report_url"]], reverse=True):
             filing_id = senate_filing_id(filing["report_url"])
             if _is_current(mine, filing_id, SENATE_PARSER_VERSION):
                 break
-            if _is_older(mine, _senate_report_year(filing), filing.get("filed_date")):
+            if _is_older(mine, *ranks[filing["report_url"]]):
                 # The search came back without the stored (newer) report — a
                 # page of results failed to load — or the best candidate left
                 # is a paper amendment of unknowable year. Keep what's stored.
@@ -547,36 +595,28 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
                 out_of_time = True
                 break
             try:
-                report = await fetch_senate_annual(client, db, filing)
+                report, seconds = await _bounded_fetch(
+                    _retry_after_lapse(client, lambda: fetch_senate_annual(client, db, filing)), deadline,
+                )
+            except _TermsRefused:
+                # Every remaining fetch would lapse the same way. Stop, and
+                # fail the phase.
+                db.commit()
+                raise RuntimeError("Senate eFD session lapsed and the terms could not be re-accepted") from None
             except SessionLapsed:
-                # The session lapsed partway through the phase: accept the
-                # terms again and retry this report once. Only on an actual
-                # lapse — a filing that simply won't load costs no extra
-                # round trips.
-                logger.info("Senate eFD session lapsed — re-accepting terms")
-                if await senate_accept_terms(client) is None:
-                    # Re-accepting failed too: every remaining fetch would
-                    # lapse the same way. Stop, and fail the phase.
-                    db.commit()
-                    raise RuntimeError("Senate eFD session lapsed and the terms could not be re-accepted")
-                try:
-                    report = await fetch_senate_annual(client, db, filing)
-                except SessionLapsed:
-                    # Lapsed again straight after re-accepting: a session
-                    # problem, not this filing's. Try the next.
-                    outcome.lapsed()
-                    continue
+                # Lapsed again straight after re-accepting: a session
+                # problem, not this filing's. Try the next.
+                outcome.lapsed()
+                continue
             prior = _prior_count(mine, filing_id)
-            outcome.fetch(report)
+            outcome.fetch(report, seconds)
             if report is not None:
-                outcome.parsed(report, prior)
+                health.parsed(report, prior)
             if report is None or not report.final:
                 # Nothing usable this run: the filing won't load, or its read
-                # may be transient (a parser crash, or a page that is neither
-                # a report nor the terms page — an error or block page looks
-                # just like that). Stored nowhere: "can't be read" would be a
-                # claim about the report this run can't back. Fall through to
-                # the senator's next-best filing.
+                # may be transient (a parser crash). Stored nowhere: "can't
+                # be read" would be a claim about the report this run can't
+                # back. Fall through to the senator's next-best filing.
                 continue
             if _keeps_earlier_read(prior, report):
                 break
@@ -604,18 +644,30 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
     return inserted
 
 
-async def _senate_probe(client: httpx.AsyncClient, url: str) -> bool:
-    """senate_report_still_loads, re-accepting the terms once if the session
-    has lapsed — a lapse says nothing about whether eFD is up."""
+class _TermsRefused(Exception):
+    """eFD's terms could not be re-accepted after a lapse."""
+
+
+async def _retry_after_lapse(client: httpx.AsyncClient, call: Callable[[], Awaitable[T]]) -> T:
+    """call(), and if eFD's session has lapsed, accept the terms again and
+    call() once more — only on an actual lapse, so a filing that simply
+    won't load costs no extra round trips. A second lapse raises
+    SessionLapsed; terms that can't be re-accepted raise _TermsRefused."""
     try:
-        return await senate_report_still_loads(client, url)
+        return await call()
     except SessionLapsed:
-        pass
+        logger.info("Senate eFD session lapsed — re-accepting terms")
     if await senate_accept_terms(client) is None:
-        return False
+        raise _TermsRefused
+    return await call()
+
+
+async def _senate_probe(client: httpx.AsyncClient, url: str) -> bool:
+    """senate_report_still_loads through the same lapse handling as the
+    fetches — a lapse says nothing about whether eFD is up."""
     try:
-        return await senate_report_still_loads(client, url)
-    except SessionLapsed:
+        return await _retry_after_lapse(client, lambda: senate_report_still_loads(client, url))
+    except (SessionLapsed, _TermsRefused):
         return False
 
 
