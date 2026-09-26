@@ -60,8 +60,8 @@ because that decides what the page can honestly claim.
 
 | Source kind | What it can see | States (2026-09-26) |
 |---|---|---|
-| **Certified general ballot** | Everyone on the November ballot, third parties, independents and post-primary replacements included | TX (`tx_civix`), NC (`tabular` + filing list), SD (`sd_vip`), LA (`voterportal`), SC (`vrems`), MO (`certified_pdf`), ME, CO, VA (`certified_table`) |
-| **Primary results** | Each party's nominee. Cannot see a Libertarian, Green or independent who never ran in a primary, or a nominee replaced after the primary | the other 36 configured states — `tabular` (13), `clarity` (2), `tally_enr` (2), `totalvote_enr` (2) and 17 single-state strategies (WI's `canvass_summary_pdf` among them) |
+| **Certified general ballot** | Everyone on the November ballot, third parties, independents and post-primary replacements included | TX (`tx_civix`), NC (`tabular` + filing list), SD (`sd_vip`), LA (`voterportal`), SC (`vrems`), MO (`certified_pdf`), ME, CO, VA, TN (`certified_table`) |
+| **Primary results** | Each party's nominee. Cannot see a Libertarian, Green or independent who never ran in a primary, or a nominee replaced after the primary | the other 35 configured states — `tabular` (13), `clarity` (2), `tally_enr` (2), `totalvote_enr` (2) and 16 single-state strategies (WI's `canvass_summary_pdf` among them) |
 | **National fallback** | Nothing until Google publishes general-election contests, close to the election | MI, NV, NY, OH, OK (`google_civic`) |
 
 The first row is the states flagged `general_ballot_complete`. Transcribed
@@ -91,7 +91,7 @@ does not defeat bot protection or use credentials not issued to it. The
 same office often publishes plain files on an open path — Wisconsin's
 official canvass PDF is one — and that is the way in.
 
-**A certified list before it exists.** Certified-list states (CO, VA) keep
+**A certified list before it exists.** Certified-list states (CO, VA, TN) keep
 their previous primary-results entry as `fallback`, run when the list is not
 posted yet. The sync records which source answered (`_record_ballot_basis`,
 tier `ballot-basis`), and the API labels races "confirmed" only when that

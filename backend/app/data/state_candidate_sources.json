@@ -537,10 +537,32 @@
       "description": "Indiana's own election-night-reporting site, found by driving it in a browser and reading its own network calls: data/settings.json carries a Certified flag (gates everything, same role as require_official elsewhere) and a short VersionType cache-busting tag every other file's name is suffixed with; data/statewideElectionsC_{version}.json is the FULL office manifest grouped by heading, read fresh every run to find the Federal category's OFFICECATEGORYID (never hardcoded \u2014 verified live 2026-09-03 that Indiana's real 2026 manifest lists exactly one Federal category, 'US Representative', and no Senate category, meaning Indiana has no Senate seat up this cycle; a future cycle needing one adds no code, since a second Federal manifest entry is picked up automatically). Each race's district is read from its own SubSortOrder numeric code ('...(1) District'), not OFFICE_TITLE's spelled-out ordinal word, for the same evergreen-over-wording reason PA matches by code. Each candidate carries both Indiana's own isWinner flag AND a raw vote total; isWinner is NOT trusted directly (it showed no visible tie-handling of its own during review) \u2014 the vote totals are run through the same shared, tie-safe pick_nominee every vote-count-based strategy uses, and its answer matched isWinner exactly on the real, certified 2026 primary (WriteTime 2026-08-20): all 9 US House districts resolved, including a real 11-candidate District 4 field where only the 2 genuine winners (one per party) were kept. runoff_threshold_pct is null: Indiana nominates on a plain plurality."
     },
     "TN": {
-      "source_name": "Tennessee Secretary of State (statewide precinct-level results workbook)",
-      "strategy": "tn_precinct",
-      "runoff_threshold_pct": 50.0,
-      "description": "sos.tn.gov itself sits behind Cloudflare and answers a bot challenge to a bare request, but the SAME browser-header approach that already unblocked OH/MO/TN/NY/GA/MN (see http_utils.BROWSER_HEADERS) answers it fine, and the actual FILE host (sos-prod.tnsosgovfiles.com) was never protected at all. A genuinely different SHAPE from every other tabular state, hence its own module rather than a tabular config entry: Tennessee publishes one row per PRECINCT per office per party (roughly 40,000 rows for the whole state), with up to 5 candidates packed sideways into repeated column groups (RNAME1/PARTY1/PVTALLY1 .. RNAME5/PARTY5/PVTALLY5) rather than one row per candidate \u2014 a statewide total means summing the same candidate's tally across every precinct row, which the tabular format's column-mapping has no way to express. Discovery reuses tabular's own landing_page mode unchanged (state_candidates_tabular._discover_urls): the results page lists every past election's files, each dated in its own filename ('20260806AllbyPrecinct.xlsx'), the same shape Florida's discovery already handles. runoff_threshold_pct is 50, and it is a REAL, load-bearing state law, not a tuning knob: Tenn. Code Ann. 2-8-113 sends any federal primary that fails to clear a majority to a runoff on the last Thursday in August, and pick_nominee's own withholding is what keeps a runoff-bound plurality leader from being mislabeled the nominee \u2014 verified live against the real 2026 primary, where 6 of 18 federal party fields (real 3+-way splits) came in under 50% and are correctly left unconfirmed. Tennessee publishes no certification flag anywhere in this file (same as Florida), so require_official is set purely to switch discovery's settle_days gate on, which is the only thing judging freshness here."
+      "source_name": "Tennessee Secretary of State (certified November candidate lists, U.S. Senate and U.S. House)",
+      "strategy": "certified_table",
+      "runoff_threshold_pct": null,
+      "general_ballot_complete": true,
+      "discovery": {
+        "page_url": "https://sos.tn.gov/elections/{year}-candidate-lists",
+        "link_regexes": [
+          "href=\"([^\"]*USSenate_Nov{year}\\.xlsx)\"",
+          "href=\"([^\"]*USHouse_Nov{year}\\.xlsx)\""
+        ]
+      },
+      "format": {
+        "office_column": "Office",
+        "office_parse": true,
+        "party_column": "Party Name",
+        "name_columns": [
+          "Candidate"
+        ]
+      },
+      "fallback": {
+        "source_name": "Tennessee Secretary of State (statewide precinct-level results workbook)",
+        "strategy": "tn_precinct",
+        "runoff_threshold_pct": 50.0,
+        "description": "sos.tn.gov itself sits behind Cloudflare and answers a bot challenge to a bare request, but the SAME browser-header approach that already unblocked OH/MO/TN/NY/GA/MN (see http_utils.BROWSER_HEADERS) answers it fine, and the actual FILE host (sos-prod.tnsosgovfiles.com) was never protected at all. A genuinely different SHAPE from every other tabular state, hence its own module rather than a tabular config entry: Tennessee publishes one row per PRECINCT per office per party (roughly 40,000 rows for the whole state), with up to 5 candidates packed sideways into repeated column groups (RNAME1/PARTY1/PVTALLY1 .. RNAME5/PARTY5/PVTALLY5) rather than one row per candidate \u2014 a statewide total means summing the same candidate's tally across every precinct row, which the tabular format's column-mapping has no way to express. Discovery reuses tabular's own landing_page mode unchanged (state_candidates_tabular._discover_urls): the results page lists every past election's files, each dated in its own filename ('20260806AllbyPrecinct.xlsx'), the same shape Florida's discovery already handles. runoff_threshold_pct is 50, and it is a REAL, load-bearing state law, not a tuning knob: Tenn. Code Ann. 2-8-113 sends any federal primary that fails to clear a majority to a runoff on the last Thursday in August, and pick_nominee's own withholding is what keeps a runoff-bound plurality leader from being mislabeled the nominee \u2014 verified live against the real 2026 primary, where 6 of 18 federal party fields (real 3+-way splits) came in under 50% and are correctly left unconfirmed. Tennessee publishes no certification flag anywhere in this file (same as Florida), so require_official is set purely to switch discovery's settle_days gate on, which is the only thing judging freshness here."
+      },
+      "description": "Certified general lists since 2026-09-26: the Secretary of State posts the November ballot per office, U.S. Senate and U.S. House as separate files, both required. Tennessee's Senate race carries eight independents who qualified by petition and appear in no primary, so the precinct-results reader (kept as `fallback` for the pre-certification window) showed a two-person race. Office text includes the district and is read by parse_office; only office, name and party are read (the file also lists each candidate's city)."
     },
     "WV": {
       "source_name": "West Virginia Secretary of State (Clarity Election Night Reporting)",

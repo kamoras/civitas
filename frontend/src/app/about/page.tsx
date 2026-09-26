@@ -1089,8 +1089,9 @@ export default function AboutPage() {
                 <P>
                   Everyone on a certified ballot is shown, including candidates who never
                   filed with the FEC — they appear with &ldquo;no FEC filing&rdquo; instead
-                  of fundraising figures. Colorado and Virginia now read their certified
-                  candidate lists too, and Wisconsin its official primary canvass, a plain
+                  of fundraising figures. Colorado, Virginia and Tennessee now read their
+                  certified candidate lists too (Tennessee&apos;s federal races alone list 36
+                  independents), and Wisconsin its official primary canvass, a plain
                   file on an otherwise blocked site. Until a state certifies its list, its
                   primary results stand in, and the page says &ldquo;nominees&rdquo; rather
                   than claiming the whole ballot. The remaining five states sit behind bot

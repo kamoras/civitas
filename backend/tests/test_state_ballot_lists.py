@@ -470,3 +470,49 @@ async def test_a_fallback_answer_is_labelled_nominees_not_confirmed(db_session, 
     # CO's entry claims a complete ballot, but tonight its fallback (primary
     # results) answered, so the page must say "nominees".
     assert elections_api._ballot_complete(db_session, "CO", 2026) is False
+
+
+# --- certified_table options Tennessee needed ---
+
+from app.pipeline.fetch.state_candidates_certified_table import (  # noqa: E402
+    fetch_confirmed_candidates as fetch_certified_table,
+    parse_certified_rows,
+)
+from app.pipeline.fetch.state_candidates_common import parse_office  # noqa: E402
+
+
+def test_united_states_house_is_a_federal_label():
+    assert parse_office("United States House of Representatives District 1") == ("H", 1)
+    # A bare "House of Representatives" is still a state chamber's name.
+    assert parse_office("House of Representatives District 4") is None
+
+
+def test_certified_rows_by_office_label_and_deduplicated():
+    rows = [
+        {"Office": "United States Senate", "Candidate": "Bill Hagerty", "Party Name": "Republican"},
+        {"Office": "United States Senate", "Candidate": "Tharon Chandler", "Party Name": "Independent"},
+        {"Office": "United States House of Representatives District 1", "Candidate": "Diana Harshbarger", "Party Name": "Republican"},
+        {"Office": "United States House of Representatives District 1", "Candidate": "Diana Harshbarger", "Party Name": "Republican"},
+        {"Office": "Governor", "Candidate": "Not Federal", "Party Name": "Democratic"},
+    ]
+    fmt = {"office_column": "Office", "office_parse": True, "party_column": "Party Name", "name_columns": ["Candidate"]}
+    got = {(r["office"], r["district"], r["display_name"], r["party"]) for r in parse_certified_rows(rows, fmt)}
+    assert got == {("S", None, "Bill Hagerty", "R"), ("S", None, "Tharon Chandler", "I"), ("H", 1, "Diana Harshbarger", "R")}
+
+
+@pytest.mark.asyncio
+async def test_every_listed_file_is_required():
+    # A Senate list without its House list is half a ballot, and half a
+    # ballot would unconfirm real nominees.
+    page = '<a href="/s/USSenate_Nov2026.xlsx">x</a>'  # the House file is missing
+
+    def handler(request):
+        return httpx.Response(200, text=page)
+
+    source = {"discovery": {"page_url": "https://sos.test/{year}-lists",
+                            "link_regexes": ['href="([^"]*USSenate_Nov{year}\\.xlsx)"',
+                                             'href="([^"]*USHouse_Nov{year}\\.xlsx)"']},
+              "format": {"office_column": "Office", "office_parse": True,
+                         "party_column": "Party", "name_columns": ["Candidate"]}}
+    async with _client(handler) as client:
+        assert await fetch_certified_table(client, 2026, "TN", source) is None

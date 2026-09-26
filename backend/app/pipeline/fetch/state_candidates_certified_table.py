@@ -35,6 +35,11 @@ Optional, each because a live state needed it:
   format.exclude                     {column: value} rows to drop — Colorado
                                      lists declared write-ins, who are not
                                      printed on the ballot
+  discovery.link_regexes             several files, all required (Tennessee
+                                     posts the Senate and House separately)
+  format.office_parse                read the office column with parse_office
+                                     ("United States House of Representatives
+                                     District 1") instead of an exact code map
 
 Only the columns named here are read. Virginia's list carries every
 candidate's campaign email, phone and street address beside the ballot
@@ -55,6 +60,7 @@ from app.pipeline.fetch.state_candidates_common import (
     clean_display_name,
     discover_certification_link,
     normalize_party,
+    parse_office,
     surname,
 )
 from app.pipeline.fetch.state_candidates_tabular import _xlsx_rows
@@ -77,6 +83,7 @@ def _rows(payload: bytes, url: str) -> list[dict] | None:
 def parse_certified_rows(rows: list[dict], fmt: dict) -> list[dict]:
     """Federal candidate records from the list's rows."""
     codes = {" ".join(str(k).split()).upper(): v for k, v in (fmt.get("office_codes") or {}).items()}
+    by_label = bool(fmt.get("office_parse"))
     statuses = {str(v).strip().upper() for v in fmt.get("status_values") or []}
     exclude = {col: str(val).strip().upper() for col, val in (fmt.get("exclude") or {}).items()}
     records: dict[tuple, dict] = {}
@@ -85,13 +92,20 @@ def parse_certified_rows(rows: list[dict], fmt: dict) -> list[dict]:
             continue
         if any(str(row.get(col) or "").strip().upper() == val for col, val in exclude.items()):
             continue
-        office = codes.get(" ".join(str(row.get(fmt["office_column"]) or "").split()).upper())
-        if office not in ("S", "H"):
-            continue
-        district = None
-        if office == "H":
-            digits = "".join(ch for ch in str(row.get(fmt["district_column"]) or "") if ch.isdigit())
-            district = int(digits) if digits else 0
+        label = " ".join(str(row.get(fmt["office_column"]) or "").split())
+        if by_label:
+            parsed = parse_office(label)
+            if parsed is None:
+                continue
+            office, district = parsed
+        else:
+            office = codes.get(label.upper())
+            if office not in ("S", "H"):
+                continue
+            district = None
+            if office == "H":
+                digits = "".join(ch for ch in str(row.get(fmt["district_column"]) or "") if ch.isdigit())
+                district = int(digits) if digits else 0
         display = clean_display_name(
             " ".join(str(row.get(col) or "").strip() for col in fmt["name_columns"])
         )
@@ -119,11 +133,14 @@ async def fetch_confirmed_candidates(
 ) -> list[dict] | None:
     discovery = source.get("discovery") or {}
     fmt = source.get("format") or {}
-    if not (discovery.get("page_url") or discovery.get("index_url")) or not discovery.get("link_regex"):
+    link_regexes = discovery.get("link_regexes") or ([discovery["link_regex"]] if discovery.get("link_regex") else [])
+    if not (discovery.get("page_url") or discovery.get("index_url")) or not link_regexes:
         logger.warning("%s certified_table source needs discovery.page_url and link_regex", state)
         return None
-    missing = [k for k in ("office_column", "office_codes", "district_column", "party_column",
-                           "name_columns") if not fmt.get(k)]
+    needed = ("office_column", "party_column", "name_columns") + (
+        () if fmt.get("office_parse") else ("office_codes", "district_column")
+    )
+    missing = [k for k in needed if not fmt.get(k)]
     if missing:
         logger.warning("%s certified_table format is missing %s", state, missing)
         return None
@@ -135,21 +152,24 @@ async def fetch_confirmed_candidates(
         )
         if page_url is None:
             return None
-    url = await discover_certification_link(
-        client, _rate_limiter, page_url, discovery["link_regex"], year, state,
-    )
-    if url is None:
-        return None
-    payload = await fetch_bytes_with_retry(client, _rate_limiter, url, f"{state} certified list {year}")
-    if payload is None:
-        return None
-    rows = _rows(payload, url)
-    if not rows:
-        logger.warning("%s certified list %s did not parse", state, url)
-        return None
+    rows: list[dict] = []
+    for link_regex in link_regexes:
+        # Every file is required: a Senate list without its House list is
+        # half a ballot, and half a ballot would unconfirm real nominees.
+        url = await discover_certification_link(client, _rate_limiter, page_url, link_regex, year, state)
+        if url is None:
+            return None
+        payload = await fetch_bytes_with_retry(client, _rate_limiter, url, f"{state} certified list {year}")
+        if payload is None:
+            return None
+        part = _rows(payload, url)
+        if not part:
+            logger.warning("%s certified list %s did not parse", state, url)
+            return None
+        rows += part
     records = parse_certified_rows(rows, fmt)
     if not records:
-        logger.warning("%s certified list %s has no federal candidate — columns or codes changed?", state, url)
+        logger.warning("%s certified list has no federal candidate — columns or codes changed?", state)
         return None
     logger.info("%s certified list: %d federal candidates", state, len(records))
     return records
