@@ -36,6 +36,21 @@ class Model:
 '''
 
 
+def _referenced_names(source: str) -> set[str]:
+    """Names a module reads or imports (not strings or comments mentioning them)."""
+    import ast
+
+    names: set[str] = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Name):
+            names.add(node.id)
+        elif isinstance(node, ast.alias):
+            names.add(node.name)
+        elif isinstance(node, ast.Attribute):
+            names.add(node.attr)
+    return names
+
+
 class TestNormalizedSource:
     def test_comment_edit_does_not_change_fingerprint(self):
         edited = BASE.replace("# explain the rule", "# a completely rewritten explanation")
@@ -73,6 +88,31 @@ class TestNormalizedSource:
 
     def test_live_tree_fingerprint_is_stable(self):
         assert _compute_analysis_code_hash() == _compute_analysis_code_hash()
+
+    def test_display_only_constant_is_exempt_but_its_neighbours_are_not(self):
+        src = 'COLORS = {"A": "#111"}\nTHRESHOLD = 0.5\n'
+        exempt = {"COLORS"}
+        assert _normalized_source(src.replace("#111", "#222"), exempt) == _normalized_source(src, exempt)
+        assert _normalized_source(src.replace("0.5", "0.6"), exempt) != _normalized_source(src, exempt)
+        # Without the exemption the same recolor does count.
+        assert _normalized_source(src.replace("#111", "#222")) != _normalized_source(src)
+
+    def test_exemptions_name_real_things_and_nothing_reads_them_in_the_pipeline(self):
+        """A stale exemption silently stops protecting anything; an
+        exempted name that pipeline code read would hide a real change."""
+        import pathlib
+
+        from app.pipeline import senate_pipeline
+
+        app_dir = pathlib.Path(senate_pipeline.__file__).resolve().parent.parent
+        for rel in senate_pipeline._NOT_ANALYSIS_PATHS:
+            assert (app_dir / rel).exists(), rel
+        for rel, names in senate_pipeline._DISPLAY_ONLY_NAMES.items():
+            source = (app_dir / rel).read_text()
+            for name in names:
+                assert f"{name}:" in source or f"{name} =" in source, (rel, name)
+                for py in (app_dir / "pipeline").rglob("*.py"):
+                    assert name not in _referenced_names(py.read_text()), (py, name)
 
 
 class TestKnnReferencesExcludeOwnOutputs:

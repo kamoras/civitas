@@ -45,20 +45,33 @@ async def fetch_ptr_filing_index(
     The index itself never carries transaction-level data — see module
     docstring.
     """
-    return await fetch_filing_index(
-        client, db, year, filing_types={"P"}, pdf_dir="ptr-pdfs", cache_key=f"ptr-index-{year}",
-    )
+    return await fetch_filing_index(client, db, year, filing_types={"P"}, pdf_dir="ptr-pdfs")
 
 
 async def fetch_filing_index(
     client: httpx.AsyncClient, db: Session, year: int, *,
-    filing_types: set[str], pdf_dir: str, cache_key: str,
+    filing_types: set[str], pdf_dir: str,
 ) -> list[dict]:
     """The yearly index filtered to `filing_types`, with each filing's PDF
     link built under `pdf_dir`. Shared by the PTR ingest ("P" filings under
     ptr-pdfs/) and the annual holdings ingest (house_fd.py: annual reports
     and their amendments under financial-pdfs/).
+
+    The whole index is cached once per year and filtered on read, so the
+    two ingests — which both want last year's — share one download of the
+    multi-megabyte ZIP instead of each fetching it through the Clerk's
+    1 req/s limit.
     """
+    return [
+        {**entry, "pdf_url": f"{CLERK_BASE}/{pdf_dir}/{year}/{entry['doc_id']}.pdf"}
+        for entry in await _fetch_index_entries(client, db, year)
+        if entry["filing_type"] in filing_types
+    ]
+
+
+async def _fetch_index_entries(client: httpx.AsyncClient, db: Session, year: int) -> list[dict]:
+    """Every filing in the yearly index, whatever its type."""
+    cache_key = f"fd-index-{year}"
     cached = api_cache_get(db, "house_ptr", cache_key)
     if cached is not None:
         return cached
@@ -74,7 +87,7 @@ async def fetch_filing_index(
     if zip_bytes is None:
         return []
 
-    filings: list[dict] = []
+    entries: list[dict] = []
     try:
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
             xml_name = next((n for n in zf.namelist() if n.lower().endswith(".xml")), None)
@@ -89,26 +102,24 @@ async def fetch_filing_index(
         return []
 
     for member in root.findall("Member"):
-        filing_type = (member.findtext("FilingType") or "").strip()
-        if filing_type not in filing_types:
-            continue
         doc_id = (member.findtext("DocID") or "").strip()
         if not doc_id:
             continue
-        filing_date = normalize_date(member.findtext("FilingDate") or "")
-        filings.append({
+        entries.append({
             "last": (member.findtext("Last") or "").strip(),
             "first": (member.findtext("First") or "").strip(),
+            # "Hon." for a sitting member; candidates file with "Mr."/"Dr."
+            # or nothing (see holdings_pipeline's use of it).
+            "prefix": (member.findtext("Prefix") or "").strip(),
             "state_district": (member.findtext("StateDst") or "").strip(),
-            "filing_type": filing_type,
+            "filing_type": (member.findtext("FilingType") or "").strip(),
             "year": year,
-            "filing_date": filing_date,
+            "filing_date": normalize_date(member.findtext("FilingDate") or ""),
             "doc_id": doc_id,
-            "pdf_url": f"{CLERK_BASE}/{pdf_dir}/{year}/{doc_id}.pdf",
         })
 
-    api_cache_set(db, "house_ptr", cache_key, filings)
-    return filings
+    api_cache_set(db, "house_ptr", cache_key, entries)
+    return entries
 
 
 async def fetch_and_parse_ptr(

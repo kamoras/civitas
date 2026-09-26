@@ -457,7 +457,25 @@ def _acquire_pipeline_lock(db: Session) -> PipelineRun | None:
     return acquire_pipeline_lock(db, PipelineRun, timedelta(seconds=STALE_PIPELINE_TIMEOUT_S))
 
 
-def _normalized_source(source: str) -> bytes:
+# Hashed paths that cannot change how anything is classified or scored, so
+# editing them must not wipe learned data. The holdings ingest reads
+# filer-declared asset types (mapped in fetch/, already unhashed) and
+# classifies nothing; filer matching only decides whose filing a filing is.
+_NOT_ANALYSIS_PATHS = {
+    "pipeline/holdings_pipeline.py",
+    "pipeline/filer_matching.py",
+}
+
+# Top-level names, per hashed file, that are display settings rather than
+# analysis inputs — dropped from that file's fingerprint (see
+# _normalized_source's `exempt`), so recoloring a chart slice doesn't reset
+# self-training. Only add a name that no pipeline code reads.
+_DISPLAY_ONLY_NAMES = {
+    "config_definitions.py": {"HOLDING_CATEGORIES"},
+}
+
+
+def _normalized_source(source: str, exempt: set[str] | frozenset[str] = frozenset()) -> bytes:
     """A module's source reduced to what can change its behavior: the AST
     with every docstring removed. Comments never reach the AST at all.
 
@@ -473,6 +491,14 @@ def _normalized_source(source: str) -> bytes:
     import ast
 
     tree = ast.parse(source)
+    if exempt:
+        def assigns_exempt(stmt: ast.stmt) -> bool:
+            targets = stmt.targets if isinstance(stmt, ast.Assign) else (
+                [stmt.target] if isinstance(stmt, ast.AnnAssign) else []
+            )
+            return any(isinstance(t, ast.Name) and t.id in exempt for t in targets)
+
+        tree.body = [stmt for stmt in tree.body if not assigns_exempt(stmt)] or [ast.Pass()]
     for node in ast.walk(tree):
         if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
             body = node.body
@@ -493,7 +519,9 @@ def _compute_analysis_code_hash() -> str:
     Covers pipeline modules (analyze, transform, assemble, orchestrator,
     vector_store, cache) and config_definitions.py (weights, prototypes,
     industry codes).  Excludes fetch modules — raw data retrieval does not
-    affect how that data is classified or scored.
+    affect how that data is classified or scored — and the few other paths
+    and display-only constants listed in _NOT_ANALYSIS_PATHS and
+    _DISPLAY_ONLY_NAMES.
 
     Hashes each file's docstring-stripped AST (see _normalized_source), not
     its raw bytes, so comment and docstring edits don't wipe learned data.
@@ -514,7 +542,7 @@ def _compute_analysis_code_hash() -> str:
     app_dir = pathlib.Path(__file__).resolve().parent.parent  # app/
     paths: list[pathlib.Path] = []
     for p in sorted((app_dir / "pipeline").rglob("*.py")):
-        if "/fetch/" not in str(p):
+        if "/fetch/" not in str(p) and p.relative_to(app_dir).as_posix() not in _NOT_ANALYSIS_PATHS:
             paths.append(p)
     cfg = app_dir / "config_definitions.py"
     if cfg.exists():
@@ -524,7 +552,8 @@ def _compute_analysis_code_hash() -> str:
     for p in sorted(paths):
         h.update(str(p.relative_to(app_dir)).encode())
         h.update(b"\x00")
-        h.update(_normalized_source(p.read_text()))
+        rel = p.relative_to(app_dir).as_posix()
+        h.update(_normalized_source(p.read_text(), _DISPLAY_ONLY_NAMES.get(rel, frozenset())))
         h.update(b"\x00")
     h.update(b"\x00llm:")
     h.update((settings.LLM_BACKEND or "").encode())

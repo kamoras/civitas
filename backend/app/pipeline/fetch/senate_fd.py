@@ -210,6 +210,17 @@ async def fetch_and_parse_annual(
     resp = await _request_with_retry(client, "GET", filing["report_url"])
     if resp is None:
         return None
+    if resp.status_code != 200 or not is_report_page(resp.text):
+        # Not the report — a lapsed session answers with a redirect to the
+        # terms page (the client doesn't follow redirects, so the body is
+        # empty) or the terms page itself. That says nothing about the
+        # report: a failed fetch, retried, never an unreadable report cached
+        # for a month.
+        logger.warning(
+            "Senate eFD returned a non-report response (HTTP %s) for %s — session may have lapsed",
+            resp.status_code, filing["report_url"],
+        )
+        return None
     try:
         holdings = parse_assets_table(resp.text)
     except Exception:
@@ -217,13 +228,6 @@ async def fetch_and_parse_annual(
         # Linked as unreadable for now, and retried next run (see
         # AnnualReport.final) rather than cached.
         return AnnualReport(None, None, UNREADABLE_UNRECOGNIZED, final=False)
-    if holdings is None and not is_report_page(resp.text):
-        # Not a report at all — the session lapsed and eFD served its terms
-        # page (or an error page) in the report's place. That says nothing
-        # about the report, so it is a failed fetch, retried next run, not
-        # an unreadable report cached for a month.
-        logger.warning("Senate eFD returned a non-report page for %s — session may have lapsed", filing["report_url"])
-        return None
     report = AnnualReport(None, holdings, None if holdings is not None else UNREADABLE_UNRECOGNIZED)
 
     # Unreadable results are cached too: a filed report never changes, and

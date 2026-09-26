@@ -81,6 +81,7 @@ def _build(disclosure: FinancialDisclosure, page: int, per_page: int, category: 
             weight=weight,
             share=weight / total_weight if total_weight else 0.0,
         ))
+    # Largest first; HOLDING_CATEGORIES' own order breaks ties (a stable sort).
     categories.sort(key=lambda c: c.weight, reverse=True)
 
     listed = by_category.get(category, []) if category else holdings

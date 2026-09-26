@@ -471,16 +471,12 @@ export interface AppConfig {
   platformCategories: Record<string, string>;
   policyAreas: string[];
   billStages: Record<string, BillStageInfo>;
-  /** Asset-holding categories (scorecard holdings breakdown). The holdings
-   * endpoint also returns each category's label and color with its data. */
-  holdingCategories: Record<string, { label: string; color: string }>;
 }
 
 const DEFAULT_CONFIG: AppConfig = {
   industries: {},
   platformCategories: {},
   policyAreas: [],
-  holdingCategories: {},
   billStages: {
     INTRODUCED: { name: "Introduced", color: "#6b7280", order: 1 },
     REFERRED: { name: "Referred to Committee", color: "#60a5fa", order: 2 },

@@ -83,6 +83,8 @@ function HoldingsDonut({
   // Only categories with a stated value draw a slice; the legend lists all.
   const slices = categories.filter((c) => c.weight > 0);
   const focus = slices.find((c) => c.category === (active ?? selected)) ?? null;
+  // Dim the rest only when the highlighted category is one of the drawn
+  // slices; a legend row with no stated value has no slice to stand out.
   const label = slices.map((c) => `${c.label} ${formatShare(c.share)}`).join(", ");
 
   let cursor = 0;
@@ -112,7 +114,7 @@ function HoldingsDonut({
           slices.map((c) => {
             const start = cursor;
             cursor += c.share;
-            const dimmed = (active ?? selected) !== null && (active ?? selected) !== c.category;
+            const dimmed = focus !== null && focus.category !== c.category;
             return (
               <path
                 key={c.category}

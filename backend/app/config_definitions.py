@@ -118,9 +118,11 @@ VALID_INDUSTRIES = set(INDUSTRIES.keys())
 
 # Asset-holding categories for the scorecard's holdings breakdown (annual
 # financial disclosures). Each chamber's own asset-type vocabulary is mapped
-# onto these in pipeline/fetch/fd_common.py. Display order is the order
-# here; the frontend receives labels and colors from the API (GET
-# /api/config, and on each holdings response) rather than hardcoding them. Colors are a fixed categorical order validated for
+# onto these in pipeline/fetch/fd_common.py. The frontend never hardcodes
+# them: every holdings response carries each category's label and color.
+# The breakdown lists categories largest first; this order is the tie-break
+# and the order the colors were validated in. Display-only — exempt from the
+# analysis-code fingerprint (senate_pipeline._DISPLAY_ONLY_NAMES). Colors are a fixed categorical order validated for
 # colorblind separation and >= 3:1 contrast against the site's dark surface;
 # OTHER is deliberately a neutral gray, not a ninth hue. Color follows the
 # category, so a member without some category never repaints the rest.

@@ -262,10 +262,7 @@ async def fetch_annual_filing_index(
     client: httpx.AsyncClient, db: Session, year: int,
 ) -> list[dict]:
     """Annual reports (and amendments) for calendar year `year`."""
-    return await fetch_filing_index(
-        client, db, year, filing_types=ANNUAL_FILING_TYPES, pdf_dir="financial-pdfs",
-        cache_key=f"annual-index-{year}",
-    )
+    return await fetch_filing_index(client, db, year, filing_types=ANNUAL_FILING_TYPES, pdf_dir="financial-pdfs")
 
 
 async def fetch_and_parse_annual(

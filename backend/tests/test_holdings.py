@@ -1,7 +1,6 @@
 """Tests for holdings_pipeline (which report is kept per member) and the
 holdings read path (holdings_service + the two API routes)."""
 
-import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -476,9 +475,99 @@ class TestReportLabels:
         assert get_senator_holdings(db_session, "S1").report_label == "new-filer report as of 2026-03-24"
 
 
-def test_config_exposes_holding_categories():
-    from app.api.senators import get_config
+class TestSourceFailures:
+    async def test_house_run_of_fetch_failures_fails_the_phase_keeping_progress(self, db_session):
+        n = holdings_pipeline.MAX_CONSECUTIVE_FETCH_FAILURES + 1
+        index = {2025: []}
+        for i in range(n):
+            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
+                                          party="R", is_current=True))
+            index[2025].append(_house_filing(f"D{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}"))
+        db_session.commit()
+        # The first report loads; every one after it fails.
+        with pytest.raises(RuntimeError):
+            await _ingest_house(db_session, index, {"D0": AnnualReport("Member", [_row()])})
+        stored = {d.filing_id for d in db_session.query(FinancialDisclosure).all()}
+        assert stored <= {"D0"}
 
-    body = json.loads(get_config().body)
-    assert body["holdingCategories"]["STOCKS"] == {"label": "Stocks", "color": "#3987e5"}
-    assert list(body["holdingCategories"])[-1] == "OTHER"
+    async def test_senate_lapsed_session_is_re_accepted_and_the_report_retried(self, db_session, senator):
+        attempts = []
+
+        async def fetch(_client, _db, filing):
+            attempts.append(filing["report_url"])
+            return None if len(attempts) == 1 else AnnualReport(None, [_row()])
+
+        accept = AsyncMock(return_value="tok")
+        with patch.object(holdings_pipeline, "senate_accept_terms", accept), \
+             patch.object(holdings_pipeline, "search_annual_filings", new_callable=AsyncMock,
+                          return_value=[_senate_filing("cy2025")]), \
+             patch.object(holdings_pipeline, "fetch_senate_annual", side_effect=fetch):
+            assert await holdings_pipeline.ingest_senate_holdings(db_session, None) == 1
+        assert len(attempts) == 2
+        assert accept.await_count == 2  # once at the start, once after the failure
+
+
+class TestSenateRanking:
+    def test_a_stated_year_outranks_an_inferred_one(self):
+        electronic = _senate_filing("e", title="Annual Report for CY 2024", filed="2025-05-11")
+        # A paper amendment of an older report, filed later: its year (2024)
+        # is only inferred from the filing date.
+        paper = _senate_filing("p", title="Annual Report", filed="2025-12-01", paper=True)
+        assert max([paper, electronic], key=holdings_pipeline._senate_rank) is electronic
+
+    async def test_an_inferred_year_paper_report_never_displaces_that_years_stored_report(self, db_session, senator):
+        db_session.add(FinancialDisclosure(
+            senator_id="S1", filing_id="e2024", report_year=2024, filed_date="2025-05-11",
+            source_url="x", parser_version=holdings_pipeline.SENATE_PARSER_VERSION,
+        ))
+        db_session.commit()
+        await _ingest_senate(
+            db_session, [_senate_filing("p", title="Annual Report", filed="2025-12-01", office="Senator", paper=True)], {},
+        )
+        assert db_session.query(FinancialDisclosure).one().filing_id == "e2024"
+
+
+class TestUnreadableStatus:
+    async def test_scanned_amendment_without_member_prefix_is_not_the_members(self, db_session, rep):
+        cand = {**_house_filing("CANDAMEND", filing_date="2026-08-01"), "filing_type": "A", "prefix": ""}
+        member = {**_house_filing("MEMBER", filing_date="2026-05-01"), "prefix": "Hon."}
+        reports = {
+            "CANDAMEND": AnnualReport(None, None, "scanned"),  # no text: no Status line
+            "MEMBER": AnnualReport("Member", [_row()]),
+        }
+        await _ingest_house(db_session, {2025: [cand, member]}, reports)
+        assert db_session.query(FinancialDisclosure).one().filing_id == "MEMBER"
+
+    async def test_scanned_original_annual_report_is_the_members(self, db_session, rep):
+        await _ingest_house(
+            db_session, {2025: [{**_house_filing("SCAN"), "prefix": ""}]}, {"SCAN": AnnualReport(None, None, "scanned")},
+        )
+        assert db_session.query(FinancialDisclosure).one().filing_id == "SCAN"
+
+
+async def test_trade_and_holdings_ingests_share_one_index_download(db_session):
+    import io
+    import zipfile
+
+    from app.pipeline.fetch import house_ptr
+    from app.pipeline.fetch.house_fd import fetch_annual_filing_index
+
+    xml = b"""<Members>
+      <Member><Prefix>Hon.</Prefix><Last>Doe</Last><First>J</First><FilingType>P</FilingType>
+        <StateDst>TX01</StateDst><FilingDate>2/1/2025</FilingDate><DocID>1</DocID></Member>
+      <Member><Prefix>Hon.</Prefix><Last>Doe</Last><First>J</First><FilingType>O</FilingType>
+        <StateDst>TX01</StateDst><FilingDate>5/1/2026</FilingDate><DocID>2</DocID></Member>
+    </Members>"""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("2025FD.xml", xml)
+
+    with patch.object(house_ptr, "fetch_bytes_with_retry", new_callable=AsyncMock, return_value=buf.getvalue()) as get:
+        ptrs = await house_ptr.fetch_ptr_filing_index(None, db_session, 2025)
+        annuals = await fetch_annual_filing_index(None, db_session, 2025)
+
+    assert get.await_count == 1
+    assert [f["pdf_url"].rsplit("/", 2)[-2:] for f in ptrs] == [["2025", "1.pdf"]]
+    assert "/ptr-pdfs/" in ptrs[0]["pdf_url"]
+    assert [(f["doc_id"], f["prefix"]) for f in annuals] == [("2", "Hon.")]
+    assert "/financial-pdfs/2025/2.pdf" in annuals[0]["pdf_url"]

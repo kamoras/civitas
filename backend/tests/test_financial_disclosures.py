@@ -351,7 +351,9 @@ class TestFetchCaching:
 
         filing = {"report_url": "https://efdsearch.senate.gov/search/view/annual/abc/", "is_paper": False}
         # A report (it has its numbered Parts) whose assets part is missing.
-        page = SimpleNamespace(text="<section><h3>Part 1. Honoraria Payments</h3><p>None disclosed.</p></section>")
+        page = SimpleNamespace(
+            status_code=200, text="<section><h3>Part 1. Honoraria Payments</h3><p>None disclosed.</p></section>",
+        )
         with patch.object(senate_fd, "_request_with_retry", new_callable=AsyncMock, return_value=page) as mock_get:
             first = await senate_fd.fetch_and_parse_annual(None, db_session, filing)
             second = await senate_fd.fetch_and_parse_annual(None, db_session, filing)
@@ -370,9 +372,15 @@ class TestFetchCaching:
 
         from app.pipeline.fetch import senate_fd
 
-        terms = SimpleNamespace(text='<form id="agreement_form"><input id="agree_statement" type="checkbox"></form>')
+        terms = SimpleNamespace(
+            status_code=200, text='<form id="agreement_form"><input id="agree_statement" type="checkbox"></form>',
+        )
+        # What the pipeline's client actually gets: redirects aren't
+        # followed, so the lapse arrives as a 302 with an empty body.
+        redirect = SimpleNamespace(status_code=302, text="")
         filing = {"report_url": "https://efdsearch.senate.gov/search/view/annual/abc/", "is_paper": False}
-        with patch.object(senate_fd, "_request_with_retry", new_callable=AsyncMock, return_value=terms), \
-             patch.object(senate_fd, "api_cache_set") as mock_set:
-            assert await senate_fd.fetch_and_parse_annual(None, db_session, filing) is None
-        mock_set.assert_not_called()
+        for response in (terms, redirect):
+            with patch.object(senate_fd, "_request_with_retry", new_callable=AsyncMock, return_value=response), \
+                 patch.object(senate_fd, "api_cache_set") as mock_set:
+                assert await senate_fd.fetch_and_parse_annual(None, db_session, filing) is None
+            mock_set.assert_not_called()
