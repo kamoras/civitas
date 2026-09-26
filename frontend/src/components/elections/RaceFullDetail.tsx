@@ -2,6 +2,7 @@ import { useState } from "react";
 import { isActiveCandidate, raceBadgeLabel, tierCandidates } from "@/lib/elections";
 import { cashOnHandDisplay } from "@/lib/formatting";
 import CandidateCard, { getPartyMeta } from "./CandidateCard";
+import RaceMoneyBars from "./RaceMoneyBars";
 import RaceFinancials from "./RaceFinancials";
 import type { BallotCandidate, RaceWithCandidates } from "@/types/election";
 
@@ -19,6 +20,15 @@ const SOURCE_NOTE: Record<RaceWithCandidates["candidateSource"], string> = {
   primary: "Ranked by money raised — the nominee isn't decided until this state's primary.",
   filers: "Ranked by money raised — this state's nominees aren't confirmed yet, so this is every FEC filer.",
 };
+
+/** The `filers` note above says nominees "aren't confirmed YET", which is
+ * true only while the primary is still ahead. For a state whose primary
+ * has already been held it is the wrong claim in the most damaging
+ * direction: the contest is settled and the reader is being told it is
+ * open. Eleven states were in exactly that position on 2026-09-26, Ohio
+ * 144 days past its primary. */
+const SUPERSEDED_NOTE =
+  "Ranked by money raised. This state's primary has already been held, so its ballot is decided — these are FEC filers, and some of them lost.";
 
 /** A leader gets the fuller CandidateCard; anyone in the tail gets one
  * compact line — same party-colour dot the leader cards carry on their
@@ -63,7 +73,14 @@ function TailRow({ candidate }: { candidate: BallotCandidate }) {
  * complexity with nothing to say (2026-09 fix: TX-quality races showed
  * one flat list of full cards before this and still do; only the noisy
  * races changed shape). */
-export default function RaceFullDetail({ race }: { race: RaceWithCandidates }) {
+export default function RaceFullDetail({
+  race,
+  supersededByPrimary = false,
+}: {
+  race: RaceWithCandidates;
+  /** From the API's ballotBasis — never re-derived here. */
+  supersededByPrimary?: boolean;
+}) {
   const [tailOpen, setTailOpen] = useState(false);
   // FEC candidate files include paper filers and prior-cycle records —
   // collapse those under "Other FEC filers" so the page stays honest
@@ -85,7 +102,9 @@ export default function RaceFullDetail({ race }: { race: RaceWithCandidates }) {
         <>
           <div className="mb-2 flex items-center gap-2">
             <p className="font-mono text-xs text-ink-min">
-              {SOURCE_NOTE[race.candidateSource]}
+              {supersededByPrimary && race.candidateSource === "filers"
+                ? SUPERSEDED_NOTE
+                : SOURCE_NOTE[race.candidateSource]}
               {hasUnconfirmed && " Candidates marked UNCONFIRMED drew no primary opponent, so this state held no primary for them and its results file doesn't list them — they're shown from their FEC filing."}
             </p>
             {tiered && (
@@ -94,11 +113,13 @@ export default function RaceFullDetail({ race }: { race: RaceWithCandidates }) {
               </span>
             )}
           </div>
-          <div className="space-y-3">
-            {leaders.map((c) => (
-              <CandidateCard key={c.id} candidate={c} showUnconfirmed={!tiered} />
-            ))}
-          </div>
+          {/* Comparison, not a stack of cards. Money raised is the most
+              decision-relevant published fact here, and as separate
+              cards it had to be read and divided — Georgia's House races
+              run 10:1 to 15:1 and that gap is the story. Bars also make
+              the page materially shorter, which is the other half of
+              what was wrong with it. */}
+          <RaceMoneyBars candidates={leaders} showUnconfirmed={!tiered} />
 
           {tail.length > 0 && (
             <>

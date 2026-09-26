@@ -274,6 +274,16 @@ export interface OfficialLookup {
 
 /** Every federal race on one state's ballot this cycle, plus its
  * statewide ballot measures — GET /elections/states/{state}. */
+export interface BallotBasis {
+  /** The WEAKEST basis among this state's races — a page is only as
+   * certain as its least certain contest. */
+  basis: "confirmed" | "nominees" | "primary" | "filers" | null;
+  /** Null when the state publishes no primary date to judge against. */
+  primaryPassed: boolean | null;
+  daysSincePrimary: number | null;
+  supersededByPrimary: boolean;
+}
+
 export interface StateBallot {
   state: string;
   cycleYear: number;
@@ -283,6 +293,15 @@ export interface StateBallot {
    * Null when that state publishes nothing this can be read from — an
    * unknown date is shown as unknown, never guessed. */
   primaryDate: string | null;
+  /** What this state's candidate lists actually ARE, and whether the
+   * calendar has overtaken them. Computed by the API (_ballot_basis) —
+   * never re-derived here from primaryDate.
+   *
+   * `supersededByPrimary` is the one the page branches on: the list is
+   * FEC filers for contests whose primary has already been decided, so
+   * the real ballot is settled and this platform does not have it. On
+   * 2026-09-26 that was true of eleven states, Ohio by 144 days. */
+  ballotBasis?: BallotBasis;
   /** Statewide PVI — null only if the underlying PVI map lacks this
    * state, never a fabricated 0. */
   statePvi: number | null;

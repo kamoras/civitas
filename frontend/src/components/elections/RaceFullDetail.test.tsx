@@ -14,6 +14,27 @@ vi.mock("./CandidateCard", () => ({
   }) => <div data-show-unconfirmed={String(!!showUnconfirmed)}>{candidate.name}</div>,
   getPartyMeta: () => ({ label: "", color: "", rule: "bg-ink-min" }),
 }));
+// Leaders render through RaceMoneyBars (a comparison, not a stack of
+// cards) as of 2026-09. What this file asserts is unchanged — that the
+// RACE decides whether unconfirmed entries are badged — so the mock
+// follows the collaborator rather than the assertion changing.
+vi.mock("./RaceMoneyBars", () => ({
+  default: ({
+    candidates,
+    showUnconfirmed,
+  }: {
+    candidates: { id: string; name: string }[];
+    showUnconfirmed?: boolean;
+  }) => (
+    <div>
+      {candidates.map((c) => (
+        <div key={c.id} data-show-unconfirmed={String(!!showUnconfirmed)}>
+          {c.name}
+        </div>
+      ))}
+    </div>
+  ),
+}));
 vi.mock("./RaceFinancials", () => ({
   default: ({ candidates }: { candidates: { id: string }[] }) => (
     <div data-testid="financials">{candidates.map((c) => c.id).join(",")}</div>

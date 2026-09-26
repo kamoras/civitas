@@ -10,6 +10,8 @@ import RaceFullDetail from "@/components/elections/RaceFullDetail";
 import CoverageFeed, { useMounted } from "@/components/elections/CoverageFeed";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import BallotMeasureCard from "@/components/elections/BallotMeasureCard";
+import BallotBasisNotice from "@/components/elections/BallotBasisNotice";
+import DistrictFinder from "@/components/elections/DistrictFinder";
 import TownContestCard from "@/components/elections/TownContestCard";
 import { districtAreaLabel, formatPvi, majorPartyOf, matchesDistrictQuery, pviColor, tierCandidates } from "@/lib/elections";
 import { safeHref } from "@/lib/formatting";
@@ -33,10 +35,12 @@ function HouseDistrictRow({
   race,
   open,
   onToggle,
+  superseded = false,
 }: {
   race: StateBallot["houseRaces"][number];
   open: boolean;
   onToggle: () => void;
+  superseded?: boolean;
 }) {
   const { leaders } = tierCandidates(race.candidates);
   const dem = leaders.find((c) => majorPartyOf(c.party) === "DEM");
@@ -97,14 +101,20 @@ function HouseDistrictRow({
           {race.counties && race.counties.length > 0 && (
             <p className="mb-3 font-mono text-xs text-ink-min">Covers: {race.counties.join(", ")}</p>
           )}
-          <RaceFullDetail race={race} />
+          <RaceFullDetail race={race} supersededByPrimary={superseded} />
         </div>
       )}
     </div>
   );
 }
 
-function HouseSection({ houseRaces }: { houseRaces: StateBallot["houseRaces"] }) {
+function HouseSection({
+  houseRaces,
+  superseded,
+}: {
+  houseRaces: StateBallot["houseRaces"];
+  superseded: boolean;
+}) {
   // Civitas never asks a visitor for their address. Finding "your"
   // district is therefore a navigation problem, solved with the signals
   // each row already carries — its counties and its sitting
@@ -113,8 +123,12 @@ function HouseSection({ houseRaces }: { houseRaces: StateBallot["houseRaces"] })
   // resolve-only and never stored, but collecting the address at all was
   // the wrong shape for this project).
   const [filter, setFilter] = useState("");
-  const shown = houseRaces.filter(
-    (r) => matchesDistrictQuery({ ...r, areas: r.counties }, filter)
+  // A county picked in DistrictFinder narrows to that one district.
+  // Separate from `filter` so the two don't fight: picking a county
+  // clears the text box, and typing clears the pick.
+  const [pickedId, setPickedId] = useState<string | null>(null);
+  const shown = houseRaces.filter((r) =>
+    pickedId ? r.id === pickedId : matchesDistrictQuery({ ...r, areas: r.counties }, filter),
   );
 
   // undefined = "no explicit choice yet" (defer to the hash), distinct
@@ -161,6 +175,23 @@ function HouseSection({ houseRaces }: { houseRaces: StateBallot["houseRaces"] })
           .
         </p>
 
+        {/* Pointing beats typing. The text filter below still exists for
+            anyone who prefers it, but it should not be the only way in:
+            you have to know what to type, and typing is the step people
+            skip. Counties are pickable because a person knows theirs
+            without looking it up — almost nobody knows their district
+            number. */}
+        {houseRaces.length > 3 && (
+          <DistrictFinder
+            races={houseRaces}
+            picked={pickedId}
+            onPick={(id) => {
+              setPickedId(id);
+              if (id) setFilter("");
+            }}
+          />
+        )}
+
         {/* Only worth the row of chrome once the list is long enough to
             be a scroll; a 1-2 district state is already fully visible. */}
         {houseRaces.length > 3 && (
@@ -168,7 +199,10 @@ function HouseSection({ houseRaces }: { houseRaces: StateBallot["houseRaces"] })
             <input
               type="search"
               value={filter}
-              onChange={(e) => setFilter(e.target.value)}
+              onChange={(e) => {
+                setFilter(e.target.value);
+                if (e.target.value) setPickedId(null);
+              }}
               placeholder="Filter by county, representative, or district number"
               aria-label="Filter districts by county, representative, or district number"
               className="w-full min-w-0 border border-white/15 bg-surface-base px-3 py-2 font-mono text-xs text-ink-hi placeholder:text-ink-min"
@@ -194,6 +228,7 @@ function HouseSection({ houseRaces }: { houseRaces: StateBallot["houseRaces"] })
             <HouseDistrictRow
               key={r.id}
               race={r}
+              superseded={superseded}
               open={r.id === openRaceId}
               onToggle={() => setOpenId(r.id === openRaceId ? null : r.id)}
             />
@@ -201,7 +236,7 @@ function HouseSection({ houseRaces }: { houseRaces: StateBallot["houseRaces"] })
           {shown.length === 0 && (
             <p className="border border-white/[0.09] p-4 text-xs text-ink-min">
               No district matches “{filter}”. Try a county name, your representative&apos;s
-              surname, or a district number.
+              surname, or a district number — or pick a county above.
             </p>
           )}
         </div>
@@ -781,6 +816,13 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
             </div>
           </div>
 
+          {/* What the candidate lists on this page actually ARE. Above
+              the content, not under it: for the eleven states still on
+              FEC filers after their primary, everything below is a list
+              of people some of whom are not on any ballot, and a reader
+              who scrolls past a footnote has already been misled. */}
+          <BallotBasisNotice basis={ballot.ballotBasis} />
+
           {/* Front and center, not one click away on a per-race page —
               a voter's first question is usually "what's being said
               about my ballot", not just "who's on it" (2026-08 review). */}
@@ -896,7 +938,10 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
           )}
 
           {ballot.houseRaces.length > 0 && (
-            <HouseSection houseRaces={ballot.houseRaces} />
+            <HouseSection
+              houseRaces={ballot.houseRaces}
+              superseded={ballot.ballotBasis?.supersededByPrimary ?? false}
+            />
           )}
 
           {/* A real ballot runs federal offices first, then the state's
