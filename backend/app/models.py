@@ -556,8 +556,13 @@ class FinancialDisclosure(Base):
     # "2025 annual report (amended)", "new-filer report as of 2026-03-24".
     report_label: Mapped[str] = mapped_column(String, default="")
     filed_date: Mapped[str | None] = mapped_column(String, nullable=True)
-    # An amendment outranks an original of the same year and filing date
-    # (holdings_pipeline.Rank).
+    # The date the holdings describe (YYYY-MM-DD): the year end for an
+    # annual report, the stated date for a Senate new-filer report, NULL
+    # for a Senate paper filing (it states none). With `amended` and
+    # filed_date, it is the report's rank among the member's filings
+    # (holdings_pipeline._rank), kept so a later run can compare against it
+    # even when the stored filing is missing from that run's index.
+    as_of_date: Mapped[str | None] = mapped_column(String, nullable=True)
     amended: Mapped[bool] = mapped_column(Boolean, default=False)
     # The newest Senate paper filing filed after this report, if any. A
     # paper filing states no year anywhere eFD shows it (its page is page

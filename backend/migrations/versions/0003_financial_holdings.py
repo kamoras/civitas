@@ -23,6 +23,7 @@ def upgrade() -> None:
     sa.Column('report_year', sa.Integer(), nullable=True),
     sa.Column('report_label', sa.String(), nullable=False),
     sa.Column('filed_date', sa.String(), nullable=True),
+    sa.Column('as_of_date', sa.String(), nullable=True),
     sa.Column('amended', sa.Boolean(), nullable=False),
     sa.Column('later_paper_label', sa.String(), nullable=True),
     sa.Column('later_paper_url', sa.String(), nullable=True),

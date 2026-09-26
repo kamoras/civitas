@@ -25,7 +25,6 @@ before re-reads.
 import asyncio
 import logging
 import re
-import sys
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -80,25 +79,28 @@ _YEARS_BACK = 2
 MIN_ATTEMPTS_FOR_OUTAGE = 5
 
 
-# (year, precedence, filed date) — newest first when sorted descending.
-Rank = tuple[int, int, str]
+# (as-of date, precedence, filed date) — newest first when sorted descending.
+Rank = tuple[str, int, str]
 
 
-def _rank(year: int | None, amended: bool, filed_date: str | None) -> Rank:
-    """Where a report ranks among a member's filings. The year it covers
-    decides first. Within a year, an amendment supersedes the original —
-    always filed after it, so this holds even when a filing date didn't
-    parse — and the filing date orders amendments among themselves.
+def _rank(as_of: str | None, amended: bool, filed_date: str | None) -> Rank:
+    """Where a report ranks among a member's filings. The date its holdings
+    describe decides first — a year end, or a new-filer report's stated
+    date, so an annual report outranks a same-year new-filer snapshot
+    however either was amended. For the same date, an amendment supersedes
+    the original — always filed after it, so this holds even when a filing
+    date didn't parse — and the filing date orders amendments among
+    themselves.
 
-    A report with no known year (a Senate paper filing) ranks below every
-    dated one, and among those an original goes before an amendment: an
-    original's place in the once-a-year sequence is at least known, while
-    an undated amendment can amend any earlier report."""
-    if year:
+    A report whose date isn't known (a Senate paper filing) ranks below
+    every dated one, and among those an original goes before an amendment:
+    an original's place in the once-a-year sequence is at least known,
+    while an undated amendment can amend any earlier report."""
+    if as_of:
         precedence = 1 if amended else 0
     else:
         precedence = 0 if amended else 1
-    return (year or 0, precedence, filed_date or "")
+    return (as_of or "", precedence, filed_date or "")
 
 
 @dataclass
@@ -111,10 +113,18 @@ class _Stored:
     holding_count: int
     amended: bool
     report_label: str
+    as_of_date: str | None
 
     @property
     def rank(self) -> Rank:
-        return _rank(self.report_year, self.amended, self.filed_date)
+        return _rank(self.as_of_date, self.amended, self.filed_date)
+
+    def rank_fields(self) -> dict:
+        """What the stored row knows that decides its rank and its label."""
+        return {
+            "report_year": self.report_year, "report_label": self.report_label, "filed_date": self.filed_date,
+            "as_of_date": self.as_of_date, "amended": self.amended,
+        }
 
 
 def _stored_reports(db: Session, column) -> dict[str, _Stored]:
@@ -123,6 +133,7 @@ def _stored_reports(db: Session, column) -> dict[str, _Stored]:
             column, FinancialDisclosure.filing_id, FinancialDisclosure.parser_version,
             FinancialDisclosure.report_year, FinancialDisclosure.filed_date, FinancialDisclosure.parsed,
             func.count(FinancialHolding.id), FinancialDisclosure.amended, FinancialDisclosure.report_label,
+            FinancialDisclosure.as_of_date,
         )
         .outerjoin(FinancialHolding, FinancialHolding.disclosure_id == FinancialDisclosure.id)
         .filter(column.isnot(None))
@@ -181,7 +192,8 @@ def _members_in_order(per_member: dict[str, list[dict]], stored: dict[str, _Stor
 
 def _replace_disclosure(
     db: Session, *, owner_filter: dict, filing_id: str, report_year: int | None, report_label: str,
-    filed_date: str | None, source_url: str, report: AnnualReport, parser_version: int, amended: bool,
+    filed_date: str | None, source_url: str, report: AnnualReport, parser_version: int, as_of_date: str | None,
+    amended: bool,
 ) -> int:
     """Swap a member's stored report for this one. Returns holdings stored."""
     # Bulk deletes, not the ORM cascade, which would load every stored
@@ -204,6 +216,7 @@ def _replace_disclosure(
         report_year=report_year,
         report_label=report_label,
         filed_date=filed_date,
+        as_of_date=as_of_date,
         amended=amended,
         source_url=source_url,
         parsed=report.holdings is not None,
@@ -387,13 +400,12 @@ class _Chamber:
     owner_key: str  # FinancialDisclosure column naming the member
     parser_version: int
     filing_id: Callable[[dict], str]
-    # One member's filings, keyed by filing id, to the Rank they sort
-    # newest-first and compare to the stored report by.
-    ranks: Callable[[list[dict]], dict[str, Rank]]
     fetch: Callable[[dict, float], Awaitable[AnnualReport | None]]  # (filing, deadline)
     owner: Callable[[dict, AnnualReport], str]
-    fields: Callable[[dict], dict]  # report_year, report_label, filed_date, source_url
-    amended: Callable[[dict], bool]
+    # What gets stored for a filing: report_year, report_label, filed_date,
+    # source_url, as_of_date, amended. Its rank is computed from these same
+    # values (_rank), so the rank and the stored row can't disagree.
+    fields: Callable[[dict], dict]
     still_loads: Callable[[str], Awaitable[bool]]
 
 
@@ -410,22 +422,28 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
         mine = stored.get(member_id)
         outcome = _Outcome()
         out_of_time = False
-        ranks = chamber.ranks(per_member[member_id])
-        # This run's row for the stored filing can say less than what was
-        # stored (a date or title that failed to parse). Then the stored
-        # rank and fields stand: otherwise the filing would sort — and be
-        # re-written — below the reports it superseded.
-        stored_says_more = mine is not None and mine.filing_id in ranks and mine.rank > ranks[mine.filing_id]
-        if stored_says_more:
+        fields = {chamber.filing_id(f): chamber.fields(f) for f in per_member[member_id]}
+        ranks = {fid: _rank(v["as_of_date"], v["amended"], v["filed_date"]) for fid, v in fields.items()}
+        if mine is not None and mine.filing_id in ranks and mine.rank > ranks[mine.filing_id]:
+            # This run's row for the stored filing says less than what was
+            # stored (a date or title that failed to parse). The stored
+            # values stand, for sorting and for a re-read: otherwise the
+            # filing would sort — and be re-written — below the reports it
+            # superseded.
             ranks[mine.filing_id] = mine.rank
+            fields[mine.filing_id].update(mine.rank_fields())
         for filing in sorted(per_member[member_id], key=lambda f: ranks[chamber.filing_id(f)], reverse=True):
             filing_id = chamber.filing_id(filing)
             if _is_current(mine, filing_id, chamber.parser_version):
-                if not mine.filed_date and (filed := chamber.fields(filing)["filed_date"]):
-                    # Stored while its row's date didn't parse; tonight's does.
+                if not mine.filed_date and fields[filing_id]["filed_date"]:
+                    # Stored while its row's date didn't parse; tonight's does
+                    # (and a paper filing's label names that date).
                     db.query(FinancialDisclosure).filter_by(
                         **{chamber.owner_key: member_id}, filing_id=filing_id,
-                    ).update({"filed_date": filed}, synchronize_session=False)
+                    ).update(
+                        {k: fields[filing_id][k] for k in ("filed_date", "report_label")},
+                        synchronize_session=False,
+                    )
                     db.commit()
                 break  # already have the newest report, as this parser reads it
             if _is_older(mine, ranks[filing_id]):
@@ -467,17 +485,13 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
             health.parsed(report, prior)
             if _keeps_earlier_read(prior, report):
                 break
-            fields = chamber.fields(filing)
-            if stored_says_more and filing_id == mine.filing_id:
-                fields.update(report_year=mine.report_year, report_label=mine.report_label, filed_date=mine.filed_date)
             inserted += _replace_disclosure(
                 db,
                 owner_filter={chamber.owner_key: member_id},
                 filing_id=filing_id,
-                **fields,
+                **fields[filing_id],
                 report=report,
                 parser_version=chamber.parser_version,
-                amended=chamber.amended(filing),
             )
             # Per member, so a budget stop or a later failure keeps what's done.
             db.commit()
@@ -545,7 +559,6 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
         owner_key="representative_id",
         parser_version=HOUSE_PARSER_VERSION,
         filing_id=lambda f: f["doc_id"],
-        ranks=lambda filings: {f["doc_id"]: _rank(f.get("year"), f.get("filing_type") == "A", f.get("filing_date")) for f in filings},
         fetch=lambda f, deadline: fetch_house_annual(client, db, f, deadline=deadline),
         owner=_house_owner,
         fields=lambda f: {
@@ -553,8 +566,9 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
             "report_label": _house_report_label(f),
             "filed_date": f.get("filing_date") or None,
             "source_url": f["pdf_url"],
+            "as_of_date": f"{f['year']}-12-31" if f.get("year") else None,
+            "amended": f.get("filing_type") == "A",
         },
-        amended=lambda f: f.get("filing_type") == "A",
         still_loads=lambda url: house_report_still_loads(client, url),
     )
     return await _ingest_members(db, chamber, per_rep)
@@ -564,21 +578,24 @@ _CY_RE = re.compile(r"\bCY\s*(\d{4})\b", re.I)
 _DATE_RE = re.compile(r"\b\d{1,2}/\d{1,2}/\d{4}\b")
 
 
-def _senate_ranks(filings: list[dict]) -> dict[str, Rank]:
-    """One senator's filings, keyed by report URL, to the Rank (_rank) they
-    sort and compare by, from the year the title states.
+def _senate_as_of(filing: dict) -> str | None:
+    """The date a Senate report's holdings describe: the year end of the
+    calendar year an annual report's title states, or a new-filer report's
+    stated date.
 
-    A paper filing states no year — not in its link, and not on its page,
-    which is page images (checked 2026-09-26) — so it ranks below every
-    dated report, this run's or the one stored: a senator's newest dated
-    report stays, and a paper one is stored only for a senator with none.
-    A paper filing made after the report shown is named beside it instead
-    (_note_later_paper): "filed later" is a fact; "newer" would be a guess.
-    """
-    return {
-        f["report_url"]: _rank(_senate_report_year(f), is_amendment_title(f.get("title") or ""), f.get("filed_date"))
-        for f in filings
-    }
+    A paper filing states neither — not in its link, and not on its page,
+    which is page images (checked 2026-09-26) — so it has no date and ranks
+    below every dated report, this run's or the one stored (_rank): a
+    senator's newest dated report stays, and a paper one is stored only for
+    a senator with none. A paper filing made after the report shown is
+    named beside it instead (_note_later_paper): "filed later" is a fact;
+    "newer" would be a guess."""
+    title = filing.get("title") or ""
+    if m := _CY_RE.search(title):
+        return f"{m.group(1)}-12-31"
+    if (m := _DATE_RE.search(title)) and (iso := normalize_date(m.group(0))):
+        return iso
+    return None
 
 
 def _write_notes(db: Session, per_senator: dict[str, list[dict]]) -> None:
@@ -594,7 +611,7 @@ def _write_notes(db: Session, per_senator: dict[str, list[dict]]) -> None:
 
 def _note_later_paper(db: Session, per_senator: dict[str, list[dict]]) -> None:
     """Name, beside each senator's stored report, the newest paper filing
-    they made after it (see _senate_ranks), or clear the note when there is
+    they made after it (see _senate_as_of), or clear the note when there is
     none. Only for senators this search returned filings for: a senator it
     missed keeps whatever note they had."""
     for disclosure in db.query(FinancialDisclosure).filter(FinancialDisclosure.senator_id.in_(list(per_senator))):
@@ -721,7 +738,7 @@ async def _senate_probe(client: httpx.AsyncClient, url: str) -> bool:
 
 
 async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
-    """Store each senator's newest annual report (see _senate_ranks).
+    """Store each senator's newest annual report (see _senate_as_of).
     Returns holdings stored."""
     per_senator = await _within(_senate_candidates(db, client), PREP_BUDGET, "Senate eFD terms and search")
     chamber = _Chamber(
@@ -729,9 +746,6 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
         owner_key="senator_id",
         parser_version=SENATE_PARSER_VERSION,
         filing_id=lambda f: senate_filing_id(f["report_url"]),
-        ranks=lambda filings: {
-            senate_filing_id(url): rank for url, rank in _senate_ranks(filings).items()
-        },
         fetch=lambda f, deadline: _fetch_senate(client, db, f, deadline),
         owner=lambda f, report: _MEMBERS,  # the search is filtered to senators' own filings
         fields=lambda f: {
@@ -739,22 +753,25 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
             "report_label": _senate_report_label(f),
             "filed_date": f.get("filed_date") or None,
             "source_url": f["report_url"],
+            "as_of_date": _senate_as_of(f),
+            "amended": is_amendment_title(f.get("title") or ""),
         },
-        amended=lambda f: is_amendment_title(f.get("title") or ""),
         still_loads=lambda url: _senate_probe(client, url),
     )
     try:
-        return await _ingest_members(db, chamber, per_senator)
+        inserted = await _ingest_members(db, chamber, per_senator)
     except Exception:
-        # Whatever the failure left half-done is rolled back, not committed
-        # with the notes below.
+        # Reports replaced and committed before the failure still get their
+        # note — after whatever the failure left half-done is rolled back,
+        # so the notes' commit can't carry it.
         db.rollback()
+        _write_notes(db, per_senator)
         raise
-    finally:
-        # Also after a failure: reports replaced and committed before it
-        # still get their note. (Not on cancellation — that unwinds as is.)
-        if not isinstance(sys.exc_info()[1], asyncio.CancelledError):
-            _write_notes(db, per_senator)
+    except BaseException:
+        db.rollback()  # cancellation or shutdown: unwind, committing nothing half-done
+        raise
+    _write_notes(db, per_senator)
+    return inserted
 
 
 async def run_holdings_phases(
