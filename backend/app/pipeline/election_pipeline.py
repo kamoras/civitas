@@ -42,9 +42,10 @@ from app.election_calendar import (
     seats_up_for_year,
 )
 from app.http_client import make_async_client
-from app.models import Candidate, ElectionPipelineRun, PipelineStatus, Race, RaceCoverageItem, ScoreSnapshot
+from app.models import BALLOT_ONLY_ID_PREFIX, Candidate, ElectionPipelineRun, PipelineStatus, Race, RaceCoverageItem, ScoreSnapshot
 from app.pipeline.analyze.score_calculator import get_district_pvi_map
 from app.pipeline.fetch.fec import fetch_all_candidates, fetch_candidate_financials
+from app.pipeline.fetch.state_election_dates import senate_election_known
 from app.pipeline.progress_tracker import ProgressTracker
 from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
 from app.time_utils import utcnow
@@ -165,6 +166,7 @@ def _sync_roster(db: Session, cycle: int, candidates_raw: list[dict]) -> int:
     skipped_off_ballot = 0
     skipped_non_state = 0
     skipped_bad_district = 0
+    skipped_no_senate_race = 0
     regular_senate_states = seats_up_for_year(cycle)
     real_districts = set(get_district_pvi_map())
     for raw in candidates_raw:
@@ -183,6 +185,12 @@ def _sync_roster(db: Session, cycle: int, candidates_raw: list[dict]) -> int:
             district = raw.get("district_number") if office == "H" else None
             if office == "H" and f"{state}-{district}" not in real_districts:
                 skipped_bad_district += 1
+                continue
+            # A Senate filer only has a race to be in if the FEC calendar
+            # lists a Senate election here this cycle. Unknown calendar
+            # (never read) falls back to the class rotation alone.
+            if office == "S" and senate_election_known(state, cycle) is False:
+                skipped_no_senate_race += 1
                 continue
             is_special = office == "S" and state not in regular_senate_states
             race_id = _race_id(cycle, office, state, district, is_special)
@@ -212,6 +220,13 @@ def _sync_roster(db: Session, cycle: int, candidates_raw: list[dict]) -> int:
             logger.exception(
                 "Failed to sync candidate %s — skipping", raw.get("candidate_id"),
             )
+    removed = _remove_senate_races_nobody_holds(db, cycle)
+    if skipped_no_senate_race or removed:
+        logger.info(
+            "Roster: skipped %d Senate filing(s) in states with no %d Senate election; "
+            "removed %d such race(s) already on file",
+            skipped_no_senate_race, cycle, removed,
+        )
     if skipped_off_ballot or skipped_non_state or skipped_bad_district:
         logger.info(
             "Roster sync skipped %d records without a confirmed %d election, "
@@ -220,6 +235,21 @@ def _sync_roster(db: Session, cycle: int, candidates_raw: list[dict]) -> int:
             skipped_off_ballot, cycle, skipped_non_state, skipped_bad_district,
         )
     return synced
+
+
+def _remove_senate_races_nobody_holds(db: Session, cycle: int) -> int:
+    """Delete Senate races the FEC calendar says are not being held — the
+    "special elections" earlier rosters minted in NY and HI from serial
+    filers. Only once the calendar has actually been read; its candidates
+    and coverage go with it (ORM cascade)."""
+    removed = 0
+    for race in db.query(Race).filter(Race.cycle_year == cycle, Race.office == "S").all():
+        if senate_election_known(race.state, cycle) is False:
+            db.delete(race)
+            removed += 1
+    if removed:
+        db.commit()
+    return removed
 
 
 def _prioritize_for_financial_refresh(db: Session, limit: int) -> list[Candidate]:
@@ -247,6 +277,8 @@ def _prioritize_for_financial_refresh(db: Session, limit: int) -> list[Candidate
             Candidate.last_financials_sync.is_(None),
             Candidate.last_financials_sync < stale_before,
         ))
+        # A ballot-only candidate has no FEC id to ask about.
+        .filter(~Candidate.id.startswith(BALLOT_ONLY_ID_PREFIX))
         .order_by(
             Candidate.last_financials_sync.is_(None).desc(),
             priority,

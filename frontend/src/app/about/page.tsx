@@ -1071,6 +1071,36 @@ export default function AboutPage() {
                   who is on the November ballot instead, which also shows an independent
                   candidate that primary results can never reveal.
                 </P>
+                <P>
+                  A second look at the nine found that three of them publish their
+                  November ballot directly after all: Louisiana&apos;s results portal,
+                  South Carolina&apos;s candidate-tracking system and Missouri&apos;s
+                  certification of candidates to its counties. All three are now read
+                  as the ballot itself, third-party and independent candidates included.
+                </P>
+                <P>
+                  Reading the ballot rather than primary results also catches a nominee
+                  who is replaced after the primary. In Maine, Graham Platner won the
+                  Democratic Senate primary, withdrew in July, and the party nominated
+                  Troy Jackson; in South Carolina a special primary replaced the June
+                  winner for Senate. Where a state&apos;s source is its certified ballot, it
+                  is treated as the final word: anyone not on it is taken off the page.
+                </P>
+                <P>
+                  Everyone on a certified ballot is shown, including candidates who never
+                  filed with the FEC — they appear with &ldquo;no FEC filing&rdquo; instead
+                  of fundraising figures. The remaining six states sit behind bot
+                  challenges on their election sites, or in Oklahoma&apos;s case an API
+                  that requires logging in. We do not work around either; where the same
+                  office publishes a plain file on an open path, we use that instead.
+                </P>
+                <P>
+                  A Senate race only appears where the FEC&apos;s election calendar lists
+                  one. Before that check, a handful of people who file paperwork for
+                  offices in many states at once were enough to invent a Senate
+                  &ldquo;special election&rdquo; in New York and Hawaii, neither of which
+                  votes for a senator in 2026.
+                </P>
               </div>
 
               <div>

@@ -63,7 +63,7 @@ class TestParseTotalsPdf:
         # Hamilton's real plurality (34.63%) survives.
         results = ks._parse_totals_pdf(_PRIMARY_PDF)
         senate_d = [r for r in results if r["office"] == "S" and r["party"] == "D"]
-        assert senate_d == [{"office": "S", "district": None, "party": "D", "last_name": "Hamilton"}]
+        assert senate_d == [{"office": "S", "district": None, "party": "D", "last_name": "Hamilton", "display_name": "Adam Hamilton"}]
 
     def test_non_federal_races_after_the_federal_section_are_excluded(self):
         # The real document prints ~140 state house/senate races AFTER
@@ -171,7 +171,7 @@ class TestFetchConfirmedCandidates:
         self._patched(monkeypatch)
         result = await ks.fetch_confirmed_candidates(None, 2026, "KS", {})
         assert len(result) == 10
-        assert {"office": "S", "district": None, "party": "R", "last_name": "Marshall"} in result
+        assert {"office": "S", "district": None, "party": "R", "last_name": "Marshall", "display_name": "Roger Marshall"} in result
 
     async def test_not_yet_published_this_cycle_is_a_healthy_empty_list(self, monkeypatch):
         async def fake(client, rl, method, url, **kw):

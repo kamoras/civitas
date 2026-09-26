@@ -43,7 +43,7 @@ import pdfplumber
 
 from app.pipeline.fetch.ballot_measure_pdf_geometry import rows as _clustered_rows
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
-from app.pipeline.fetch.state_candidates_common import normalize_party, surname
+from app.pipeline.fetch.state_candidates_common import federal_record, normalize_party
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -123,10 +123,9 @@ def _parse_page(words: list[dict], office: str | None, district: int | None) -> 
         party = normalize_party(" ".join(w["text"] for w in party_words))
         if party is None:
             continue  # independent/slogan candidate — never guessed at
-        last_name = surname(name)
-        if not last_name:
-            continue
-        results.append({"office": office, "district": district, "party": party, "last_name": last_name})
+        record = federal_record(office, district, party, name)
+        if record:
+            results.append(record)
 
     return results, office, district
 
