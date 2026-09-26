@@ -358,13 +358,13 @@ class TestUnopposedNomineesAreNotTreatedAsLosers:
         """A mixed list must not present the recovered candidate as a
         state-confirmed nominee — candidateSource is per-race and cannot
         carry this."""
-        _race(db_session, "2026-HOUSE-FL-21", "FL", office="H", district=21)
-        _candidate(db_session, "DNOM", "2026-HOUSE-FL-21", "MARTIN, JAMES",
+        _race(db_session, "2026-HOUSE-GA-11", "GA", office="H", district=11)
+        _candidate(db_session, "DNOM", "2026-HOUSE-GA-11", "MARTIN, JAMES",
                    party="DEM", confirmed_general=True)
-        _candidate(db_session, "MAST", "2026-HOUSE-FL-21", "MAST, BRIAN", party="REP")
+        _candidate(db_session, "MAST", "2026-HOUSE-GA-11", "MAST, BRIAN", party="REP")
         db_session.commit()
 
-        data = _body(elections.race_detail("2026-HOUSE-FL-21", db_session))
+        data = _body(elections.race_detail("2026-HOUSE-GA-11", db_session))
         by_id = {c["id"]: c for c in data["candidates"]}
         assert by_id["DNOM"]["confirmed"] is True
         assert by_id["MAST"]["confirmed"] is False

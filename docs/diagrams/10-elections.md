@@ -60,8 +60,8 @@ because that decides what the page can honestly claim.
 
 | Source kind | What it can see | States (2026-09-26) |
 |---|---|---|
-| **Certified general ballot** | Everyone on the November ballot, third parties, independents and post-primary replacements included | TX (`tx_civix`), NC (`tabular` + filing list), SD (`sd_vip`), LA (`voterportal`), SC (`vrems`), MO (`certified_pdf`), ME, CO, VA, TN (`certified_table`) |
-| **Primary results** | Each party's nominee. Cannot see a Libertarian, Green or independent who never ran in a primary, or a nominee replaced after the primary | the other 35 configured states — `tabular` (13), `clarity` (2), `tally_enr` (2), `totalvote_enr` (2) and 16 single-state strategies (WI's `canvass_summary_pdf` among them) |
+| **Certified general ballot** | Everyone on the November ballot, third parties, independents and post-primary replacements included | TX (`tx_civix`), NC (`tabular` + filing list), SD (`sd_vip`), LA (`voterportal`), SC (`vrems`), MO (`certified_pdf`); and as a `general_list` beside a primary-results source: ME, CO, VA, TN (`certified_table`), FL (`dos_canlist`), NJ (`nj_certification` official lists) |
+| **Primary results** | Each party's nominee. Cannot see a Libertarian, Green or independent who never ran in a primary, or a nominee replaced after the primary | the other 33 configured states — `tabular` (14), `clarity` (2), `tally_enr` (2), `totalvote_enr` (2) and 13 single-state strategies (WI's `canvass_summary_pdf` among them) |
 | **National fallback** | Nothing until Google publishes general-election contests, close to the election | MI, NV, NY, OH, OK (`google_civic`) |
 
 The first row is the states flagged `general_ballot_complete`. Transcribed
@@ -91,11 +91,14 @@ does not defeat bot protection or use credentials not issued to it. The
 same office often publishes plain files on an open path — Wisconsin's
 official canvass PDF is one — and that is the way in.
 
-**A certified list before it exists.** Certified-list states (CO, VA, TN) keep
-their previous primary-results entry as `fallback`, run when the list is not
-posted yet. The sync records which source answered (`_record_ballot_basis`,
-tier `ballot-basis`), and the API labels races "confirmed" only when that
-source was the complete ballot — never from config alone.
+**A certified list beside primary results.** A state's `general_list` runs
+first; when it answers it alone decides the federal races (authoritative),
+while the main source still supplies statewide, legislative and judicial
+nominees, and federal nominees before the list is posted. The sync records
+which source answered (`_record_ballot_basis`, tier `ballot-basis`), and the
+API labels races "confirmed" only when that source was the complete ballot —
+never from config alone. `fallback` is different: a whole second source run
+only when the main one returns nothing (WI's canvass → Google Civic).
 
 ### Rules every strategy follows
 
