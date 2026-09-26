@@ -470,8 +470,13 @@ class TestReportStillLoads:
         from app.pipeline.fetch import house_fd
 
         for body, expected in ((b"%PDF-1.7 ...", True), (b"<html>Not found</html>", False), (None, False)):
-            with patch.object(house_fd, "fetch_bytes_with_retry", new_callable=AsyncMock, return_value=body):
+            with patch.object(house_fd, "fetch_bytes_with_retry", new_callable=AsyncMock, return_value=body) as get:
                 assert await house_fd.report_still_loads(None, "https://clerk.example/x.pdf") is expected
+        # Past any edge cache, and only the magic bytes.
+        url = get.await_args.args[2]
+        headers = get.await_args.kwargs["headers"]
+        assert url.startswith("https://clerk.example/x.pdf?probe=")
+        assert (headers["Range"], headers["Cache-Control"]) == ("bytes=0-1023", "no-cache")
 
     async def test_senate_probe_wants_a_report_page(self):
         from types import SimpleNamespace
@@ -482,10 +487,17 @@ class TestReportStillLoads:
         report = "<section><h3>Part 1. Honoraria Payments</h3></section>"
         cases = (
             (SimpleNamespace(status_code=200, text=report), True),
-            (SimpleNamespace(status_code=200, text="<form id='agreement_form'></form>"), False),
-            (SimpleNamespace(status_code=302, text=""), False),
+            (SimpleNamespace(status_code=404, text=""), False),
             (None, False),
         )
         for resp, expected in cases:
             with patch.object(senate_fd, "_request_with_retry", new_callable=AsyncMock, return_value=resp):
                 assert await senate_fd.report_still_loads(None, "https://efd.example/r/") is expected
+        lapsed = (
+            SimpleNamespace(status_code=200, text="<form id='agreement_form'></form>"),
+            SimpleNamespace(status_code=302, text="", headers={"location": "/search/home/"}),
+        )
+        for resp in lapsed:
+            with patch.object(senate_fd, "_request_with_retry", new_callable=AsyncMock, return_value=resp):
+                with pytest.raises(senate_fd.SessionLapsed):
+                    await senate_fd.report_still_loads(None, "https://efd.example/r/")

@@ -40,7 +40,7 @@ from app.pipeline.fetch.president_ptr import (
 from app.pipeline.fetch.ptr_common import TradeRow
 from app.pipeline.fetch.sec_tickers import resolve_tickers
 from app.pipeline.holdings_pipeline import HOLDINGS_STEPS, run_holdings_phases
-from app.pipeline.filer_matching import Member, current_representatives, current_senators
+from app.pipeline.filer_matching import current_representatives, current_senators
 from app.pipeline.filer_matching import match_representative as _match_representative
 from app.pipeline.filer_matching import match_senator as _match_senator
 from app.pipeline.fetch.senate_fd import is_senator_filing
@@ -200,7 +200,7 @@ async def _ingest_house(db: Session, client: httpx.AsyncClient) -> int:
     current_year = utcnow().year
     inserted = 0
     matched: dict[tuple, str | None] = {}
-    roster: list[Member] | None = None
+    roster = current_representatives(db)
     for year in (current_year - 1, current_year):
         filings = await fetch_ptr_filing_index(client, db, year)
         for filing in filings:
@@ -208,9 +208,7 @@ async def _ingest_house(db: Session, client: httpx.AsyncClient) -> int:
                 continue
             filer = (filing["last"], filing["first"], filing["state_district"])
             if filer not in matched:  # one lookup per filer, not per filing
-                if roster is None:
-                    roster = current_representatives(db)
-                found = _match_representative(db, *filer, roster=roster)
+                found = _match_representative(roster, *filer)
                 matched[filer] = found.id if found is not None else None
             if matched[filer] is None:
                 continue
@@ -273,7 +271,7 @@ async def _ingest_senate(db: Session, client: httpx.AsyncClient) -> int:
     filings = await search_ptr_filings(since_date)
     inserted = 0
     matched: dict[tuple, str | None] = {}  # one lookup per filer, not per filing
-    roster = None  # loaded on the first filer that needs matching
+    roster = current_senators(db)
     for filing in filings:
         filing_id = senate_filing_id(filing["report_url"])
         if filing_id in existing_filing_ids:
@@ -284,9 +282,7 @@ async def _ingest_senate(db: Session, client: httpx.AsyncClient) -> int:
             continue
         filer = (filing["last"], filing["first"], filing.get("office"))
         if filer not in matched:
-            if roster is None:
-                roster = current_senators(db)
-            found = _match_senator(db, *filer, roster=roster)
+            found = _match_senator(roster, *filer)
             matched[filer] = found.id if found is not None else None
         if matched[filer] is None:
             continue

@@ -72,8 +72,9 @@ _YEARS_BACK = 2
 # search). Past the budget the remaining members wait for the next run.
 PHASE_BUDGET = timedelta(minutes=10)
 
-# Members attempted with nothing fetched, and none fetched at all, before a
-# phase counts its source as down (see _SourceHealth).
+# Members tried with nothing coming back live before _SourceHealth looks
+# further — asking the source about a stored report, or (when reports load
+# but none can be read) failing the phase outright.
 MIN_ATTEMPTS_FOR_OUTAGE = 5
 
 
@@ -83,12 +84,13 @@ class _Stored:
     parser_version: int | None
     report_year: int | None
     filed_date: str | None
+    parsed: bool
 
 
 def _stored_reports(db: Session, column) -> dict[str, _Stored]:
     rows = db.query(
         column, FinancialDisclosure.filing_id, FinancialDisclosure.parser_version,
-        FinancialDisclosure.report_year, FinancialDisclosure.filed_date,
+        FinancialDisclosure.report_year, FinancialDisclosure.filed_date, FinancialDisclosure.parsed,
     ).filter(column.isnot(None))
     return {owner_id: _Stored(*rest) for owner_id, *rest in rows.all()}
 
@@ -98,6 +100,13 @@ def _is_current(stored: _Stored | None, filing_id: str, parser_version: int) -> 
     read by an older parser is re-read, so a parser fix reaches every member
     instead of only those who file something new."""
     return stored is not None and (stored.filing_id, stored.parser_version) == (filing_id, parser_version)
+
+
+def _keeps_earlier_read(mine: _Stored | None, filing_id: str, report: AnnualReport) -> bool:
+    """A re-read of the very report already stored — after a parser upgrade
+    — that couldn't read it. The earlier parser's holdings stay: a parser
+    regression must never turn a scorecard's pie into "not machine-readable"."""
+    return mine is not None and mine.filing_id == filing_id and mine.parsed and report.holdings is None
 
 
 def _is_older(stored: _Stored | None, report_year: int | None, filed_date: str | None) -> bool:
@@ -178,33 +187,41 @@ class _SourceHealth:
     processed first, so a few genuinely broken filings bunched at the front
     would otherwise stop the phase before it reached anyone else.
 
-    A night on which at least MIN_ATTEMPTS_FOR_OUTAGE members were tried
-    and not one report came back live is either an outage or a night on
-    which the only filings left to fetch are ones that won't load (a PDF the
-    index lists but the Clerk 404s). Counts alone can't tell those apart,
-    and neither can a memory of past failures — anything that learns to
-    stop counting a filing also learns to stop seeing an outage. So the
-    phase asks the source directly: it re-requests a report it already
-    stored, live. If that loads, the source is up and the failures belong
-    to those filings; if it doesn't — or nothing is stored to ask about —
-    the phase fails, every night the outage lasts.
+    Per member, three things are recorded: whether a live request was made
+    (attempted), whether the source answered with the report (served), and
+    whether a report was read (read). Only live requests count: a report
+    answered from the parse cache, or a paper filing that is never fetched,
+    proves nothing about the source (AnnualReport.live).
 
-    Only live requests count either way: a report answered from the parse
-    cache, or a paper filing that is never fetched, proves nothing about
-    the source (AnnualReport.live).
+    Nothing served, from at least MIN_ATTEMPTS_FOR_OUTAGE members, is either
+    an outage or a night on which the only filings left to fetch are ones
+    that won't load (a PDF the index lists but the Clerk 404s). Counts alone
+    can't tell those apart, and neither can a memory of past failures —
+    anything that learns to stop counting a filing also learns to stop
+    seeing an outage. So the phase asks the source directly: it re-requests
+    a report it already stored, live and past any cache. If that loads, the
+    failures are those filings'; if not — or nothing is stored to ask
+    about — the phase fails, every night the outage lasts.
+
+    Reports served but none read is a different failure — the parser, or a
+    block page served in a report's place — and no probe can excuse it.
     """
 
     def __init__(self, source: str) -> None:
         self.source = source
         self.attempted = 0
-        self.fetched = 0
+        self.served = 0
+        self.read = 0
 
-    def record(self, attempted: bool, fetched: bool) -> None:
+    def record(self, attempted: bool, served: bool, read: bool) -> None:
         self.attempted += attempted
-        self.fetched += fetched
+        self.served += served
+        self.read += read
 
     async def check(self, stored_url: str | None, still_loads: Callable[[str], Awaitable[bool]]) -> None:
-        if self.attempted < MIN_ATTEMPTS_FOR_OUTAGE or self.fetched:
+        if self.served >= MIN_ATTEMPTS_FOR_OUTAGE and not self.read:
+            raise RuntimeError(f"{self.source}: {self.served} reports loaded and none could be read")
+        if self.attempted < MIN_ATTEMPTS_FOR_OUTAGE or self.served:
             return
         if stored_url and await still_loads(stored_url):
             logger.warning(
@@ -245,7 +262,7 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
         for filing in filings:
             filer = (filing["last"], filing["first"], filing["state_district"])
             if filer not in matched:
-                rep = match_representative(db, *filer, roster=roster)
+                rep = match_representative(roster, *filer)
                 matched[filer] = rep.id if rep is not None else None
             if matched[filer] is not None:
                 per_rep.setdefault(matched[filer], []).append(filing)
@@ -261,7 +278,7 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
     order = _members_in_order(per_rep, stored)
     for position, rep_id in enumerate(order):
         mine = stored.get(rep_id)
-        attempted = fetched = False
+        attempted = served = read = False
         out_of_time = False
         for filing in per_rep[rep_id]:
             if _is_current(mine, filing["doc_id"], HOUSE_PARSER_VERSION):
@@ -276,6 +293,7 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
             report = await fetch_house_annual(client, db, filing)
             live = report is None or report.live  # None: a request was made and failed
             attempted = attempted or live
+            served = served or (report is not None and report.live)
             if report is None or not report.final:
                 # Nothing usable this run: not fetched, or a read that may be
                 # transient (the parser crashed) — which is stored nowhere,
@@ -285,7 +303,7 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
                 # candidate's amendment can rank first); _is_older keeps that
                 # from ever displacing a newer stored report.
                 continue
-            fetched = fetched or report.live
+            read = read or report.live
             status = (report.filer_status or "").lower()
             if status and status != "member":
                 # A candidate for the seat who shares the member's surname
@@ -299,6 +317,8 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
                 # sitting member's filing does. Both are the Clerk's own
                 # structured index fields, not inferred from any name.
                 continue
+            if _keeps_earlier_read(mine, filing["doc_id"], report):
+                break
             inserted += _replace_disclosure(
                 db,
                 owner_filter={"representative_id": rep_id},
@@ -312,7 +332,7 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
             )
             break
         db.commit()  # per member, so a budget stop or a later failure keeps what's done
-        health.record(attempted, fetched)
+        health.record(attempted, served, read)
         if out_of_time:
             logger.info("House holdings: time budget spent — %d members wait for the next run", len(order) - position)
             break
@@ -392,7 +412,7 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
             continue
         filer = (filing["last"], filing["first"], filing.get("office"))
         if filer not in matched:
-            senator = match_senator(db, *filer, roster=roster)
+            senator = match_senator(roster, *filer)
             matched[filer] = senator.id if senator is not None else None
         if matched[filer] is not None:
             per_senator.setdefault(matched[filer], []).append(filing)
@@ -403,7 +423,7 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
     order = _members_in_order(per_senator, stored)
     for position, senator_id in enumerate(order):
         mine = stored.get(senator_id)
-        attempted = fetched = False
+        attempted = served = read = False
         out_of_time = False
         for filing in sorted(per_senator[senator_id], key=_senate_rank, reverse=True):
             filing_id = senate_filing_id(filing["report_url"])
@@ -439,6 +459,7 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
                     continue
             live = report is None or report.live  # None: a request was made and failed
             attempted = attempted or live
+            served = served or (report is not None and report.live)
             if report is None or not report.final:
                 # Nothing usable this run: the filing won't load, or its read
                 # may be transient (a parser crash, or a page that is neither
@@ -447,7 +468,9 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
                 # claim about the report this run can't back. Fall through to
                 # the senator's next-best filing.
                 continue
-            fetched = fetched or report.live
+            read = read or report.live
+            if _keeps_earlier_read(mine, filing_id, report):
+                break
             inserted += _replace_disclosure(
                 db,
                 owner_filter={"senator_id": senator_id},
@@ -461,14 +484,26 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
             )
             break
         db.commit()
-        health.record(attempted, fetched)
+        health.record(attempted, served, read)
         if out_of_time:
             logger.info("Senate holdings: time budget spent — %d members wait for the next run", len(order) - position)
             break
     await health.check(
-        _known_good_url(db, FinancialDisclosure.senator_id), lambda url: senate_report_still_loads(client, url),
+        _known_good_url(db, FinancialDisclosure.senator_id), lambda url: _senate_probe(client, url),
     )
     return inserted
+
+
+async def _senate_probe(client: httpx.AsyncClient, url: str) -> bool:
+    """senate_report_still_loads, re-accepting the terms once if the session
+    has lapsed — a lapse says nothing about whether eFD is up."""
+    for _ in range(2):
+        try:
+            return await senate_report_still_loads(client, url)
+        except SessionLapsed:
+            if await senate_accept_terms(client) is None:
+                return False
+    return False
 
 
 # Progress-tracker steps for the two phases, appended to the stock-trades

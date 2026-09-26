@@ -932,3 +932,52 @@ class TestPaperDoesNotMaskOutages:
         db_session.commit()
         with pytest.raises(RuntimeError):
             await _ingest_senate(db_session, filings, {})  # every electronic fetch fails
+
+
+class TestParserFailuresAreNotExcused:
+    async def test_reports_that_load_but_never_read_fail_the_phase_without_a_probe(self, db_session):
+        """A parser regression: every PDF downloads, every read crashes. The
+        source is fine — which is exactly why a probe mustn't excuse it."""
+        n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
+        index = {2025: []}
+        reports = {}
+        for i in range(n):
+            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
+                                          party="R", is_current=True))
+            index[2025].append(_house_filing(f"D{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}"))
+            reports[f"D{i}"] = AnnualReport(None, None, "unrecognized", final=False)
+        db_session.commit()
+        probe = AsyncMock(return_value=True)
+        with patch.object(holdings_pipeline, "house_report_still_loads", probe):
+            with pytest.raises(RuntimeError, match="none could be read"):
+                await _ingest_house(db_session, index, reports)
+        probe.assert_not_awaited()
+
+    async def test_a_re_read_that_fails_keeps_the_earlier_parsers_holdings(self, db_session, rep):
+        index = {2025: [_house_filing("SAME")]}
+        await _ingest_house(db_session, index, {"SAME": AnnualReport("Member", [_row(), _row()])})
+        # A parser upgrade re-reads the stored report, and can't read it.
+        with patch.object(holdings_pipeline, "HOUSE_PARSER_VERSION", 99):
+            await _ingest_house(db_session, index, {"SAME": AnnualReport(None, None, "unrecognized")})
+        disclosure = db_session.query(FinancialDisclosure).one()
+        assert (disclosure.parsed, db_session.query(FinancialHolding).count()) == (True, 2)
+
+
+class TestSenateProbe:
+    async def test_a_lapsed_session_is_re_accepted_not_read_as_an_outage(self):
+        from app.pipeline.fetch.senate_fd import SessionLapsed
+
+        probe = AsyncMock(side_effect=[SessionLapsed("terms"), True])
+        accept = AsyncMock(return_value="tok")
+        with patch.object(holdings_pipeline, "senate_report_still_loads", probe), \
+             patch.object(holdings_pipeline, "senate_accept_terms", accept):
+            assert await holdings_pipeline._senate_probe(None, "https://efd.example/r/") is True
+        accept.assert_awaited_once()
+
+    async def test_terms_that_cannot_be_re_accepted_read_as_down(self):
+        from app.pipeline.fetch.senate_fd import SessionLapsed
+
+        with patch.object(holdings_pipeline, "senate_report_still_loads",
+                          AsyncMock(side_effect=SessionLapsed("terms"))), \
+             patch.object(holdings_pipeline, "senate_accept_terms", AsyncMock(return_value=None)):
+            assert await holdings_pipeline._senate_probe(None, "https://efd.example/r/") is False

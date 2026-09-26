@@ -78,13 +78,11 @@ def current_senators(db: Session) -> list[Member]:
     return [Member(id, name) for id, name in rows]
 
 
-def match_senator(
-    db: Session, last: str, first: str, office: str | None = None, roster: list[Member] | None = None,
-) -> Member | None:
+def match_senator(roster: list[Member], last: str, first: str, office: str | None = None) -> Member | None:
+    """`roster` from current_senators, loaded once per phase."""
     if not _fold(last):
         return None
-    senators = roster if roster is not None else current_senators(db)
-    return _pick(senators, last, _first_names(first, _office_first_name(office)))
+    return _pick(roster, last, _first_names(first, _office_first_name(office)))
 
 
 def current_representatives(db: Session) -> list[Member]:
@@ -98,9 +96,8 @@ def current_representatives(db: Session) -> list[Member]:
     return [Member(*row) for row in rows]
 
 
-def match_representative(
-    db: Session, last: str, first: str, state_district: str, roster: list[Member] | None = None,
-) -> Member | None:
+def match_representative(roster: list[Member], last: str, first: str, state_district: str) -> Member | None:
+    """`roster` from current_representatives, loaded once per phase."""
     if not _fold(last):
         return None
     state = state_district[:2] if state_district else None
@@ -115,9 +112,8 @@ def match_representative(
     if state_district and len(state_district) > 2 and state_district[2:].isdigit():
         district = int(state_district[2:])
 
-    reps = roster if roster is not None else current_representatives(db)
     candidates = [
-        r for r in reps
+        r for r in roster
         if (not state or r.state == state) and (district is None or r.district == district)
     ]
     return _pick(candidates, last, _first_names(first))

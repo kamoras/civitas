@@ -78,16 +78,18 @@ export default function CollapsibleSection({
 
   // The toggle sits inside the heading, not the heading inside the toggle:
   // a button's content model is phrasing-only, and a heading wrapped in one
-  // drops out of the screen-reader heading list. The button's ::after
-  // stretches over the whole header row so the row stays one click target.
+  // drops out of the screen-reader heading list. The heading takes the row's
+  // free width and the button fills it, so the click target is wide and the
+  // focus ring outlines exactly that target; the summary and source beside
+  // it stay ordinary, selectable text.
   return (
     <div>
-      <div className="relative w-full flex items-baseline justify-between mb-3 group">
-        <Heading className={`text-lg ${titleColor}`}>
+      <div className="w-full flex items-baseline justify-between gap-3 mb-3">
+        <Heading className={`text-lg ${titleColor} flex-1 min-w-0`}>
           <button
             type="button"
             onClick={() => setOpen(!open)}
-            className="flex items-center gap-2 cursor-pointer text-left after:absolute after:inset-0 after:content-['']"
+            className="group w-full flex items-center gap-2 cursor-pointer text-left"
             aria-expanded={open}
             aria-controls={contentId}
           >

@@ -243,11 +243,19 @@ def parse_assets_table(page) -> list[HoldingRow] | None:
 
 async def report_still_loads(client: httpx.AsyncClient, report_url: str) -> bool:
     """Whether eFD serves a report page for `report_url` right now — a live
-    request, never the parse cache. The holdings phase asks this of a report
+    request, never the parse cache (report pages are session-bound Django
+    views, not edge-cached files). The holdings phase asks this of a report
     it already stored when a night's fetches all failed, to tell a source
-    that is down from a handful of filings that won't load."""
+    that is down from a handful of filings that won't load. Raises
+    SessionLapsed, as fetch_and_parse_annual does, so the caller can
+    re-accept the terms rather than read a lapse as an outage."""
     resp = await _request_with_retry(client, "GET", report_url)
-    return resp is not None and resp.status_code == 200 and is_report_page(resp.text)
+    if resp is None:
+        return False
+    doc = _as_doc(resp.text) if resp.status_code == 200 else None
+    if _redirects_to_terms(resp) or (doc is not None and is_terms_page(doc)):
+        raise SessionLapsed(f"HTTP {resp.status_code} for {report_url}")
+    return doc is not None and is_report_page(doc)
 
 
 async def fetch_and_parse_annual(

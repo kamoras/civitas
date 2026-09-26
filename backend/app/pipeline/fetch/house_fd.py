@@ -23,6 +23,7 @@ import asyncio
 import io
 import logging
 import re
+import time
 from collections.abc import Iterable
 
 import httpx
@@ -277,16 +278,32 @@ async def fetch_annual_filing_index(
     return await fetch_filing_index(client, db, year, filing_types=ANNUAL_FILING_TYPES, pdf_dir="financial-pdfs")
 
 
-async def report_still_loads(client: httpx.AsyncClient, pdf_url: str) -> bool:
-    """Whether the Clerk serves a PDF at `pdf_url` right now — a live
-    request, never the parse cache. The holdings phase asks this of a report
-    it already stored when a night's fetches all failed, to tell a source
-    that is down from a handful of filings that won't load."""
-    pdf_bytes = await fetch_bytes_with_retry(
-        client, _rate_limiter, pdf_url, "House Clerk",
-        headers=None, rate_limit_backoff_multiplier=2.0, retry_on_4xx=False,
+async def _download(client: httpx.AsyncClient, url: str, headers: dict | None = None) -> bytes | None:
+    """The one Clerk download policy, shared by the real fetch and the probe
+    below so the probe can't drift from the fetches it vouches for."""
+    return await fetch_bytes_with_retry(
+        client, _rate_limiter, url, "House Clerk",
+        headers=headers, rate_limit_backoff_multiplier=2.0, retry_on_4xx=False,
     )
-    return pdf_bytes is not None and pdf_bytes.startswith(b"%PDF")
+
+
+async def report_still_loads(client: httpx.AsyncClient, pdf_url: str) -> bool:
+    """Whether the Clerk's origin serves the PDF at `pdf_url` right now. The
+    holdings phase asks this of a report it already stored when a night's
+    fetches all failed, to tell a source that is down from a handful of
+    filings that won't load.
+
+    It must reach the origin: the stored report is the one most likely to
+    sit warm in an edge cache while the origin is down. So the query string
+    is unique to this request (the Clerk serves its PDFs with one — checked
+    2026-09-26) and the request says no-cache. And only the first kilobyte
+    is asked for — the Clerk honours Range (206) — since only the magic
+    bytes are read; a server that ignores Range still answers correctly."""
+    probe_url = f"{pdf_url}{'&' if '?' in pdf_url else '?'}probe={time.time_ns()}"
+    body = await _download(
+        client, probe_url, headers={"Range": "bytes=0-1023", "Cache-Control": "no-cache", "Pragma": "no-cache"},
+    )
+    return body is not None and body.startswith(b"%PDF")
 
 
 async def fetch_and_parse_annual(
@@ -304,10 +321,7 @@ async def fetch_and_parse_annual(
     if cached is not None:
         return cached
 
-    pdf_bytes = await fetch_bytes_with_retry(
-        client, _rate_limiter, filing["pdf_url"], "House Clerk",
-        headers=None, rate_limit_backoff_multiplier=2.0, retry_on_4xx=False,
-    )
+    pdf_bytes = await _download(client, filing["pdf_url"])
     if pdf_bytes is None:
         return None
 
