@@ -150,6 +150,13 @@ export function candidateName(c: { name: string; ballotName?: string | null }): 
   return c.ballotName || c.name;
 }
 
+/** "4-year terms" — an office's regular term, worded for the office rather
+ * than the winner, since a seat filled for the rest of an unexpired term
+ * runs shorter. Null when the backend has no term for it. */
+export function termPhrase(years: number | null | undefined): string | null {
+  return years ? `${years}-year terms` : null;
+}
+
 /** Canonical href for a state's ballot page.
  *
  * Plural "states" deliberately, matching the API path
