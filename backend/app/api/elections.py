@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cached_json
 from app.database import get_db
+from app.office_terms import term_years
 from app.election_calendar import (
     CLASS_I_STATES,
     CLASS_II_STATES,
@@ -784,6 +785,8 @@ def _statewide_section(db: Session, state: str, cycle: int) -> tuple[list[dict],
             "office": code if district is None else f"{code}-{district}",
             "label": label if district is None else f"{label}, District {district}",
             "nominees": sorted(by_office[(code, district)], key=lambda n: n["party"]),
+            # Null when data/office_terms.json does not list this office.
+            "termYears": term_years("statewide", state, code),
         }
         for code, label in STATEWIDE_OFFICE_LABELS.items()
         for district in sorted(
@@ -854,7 +857,10 @@ def _state_leg_section(db: Session, state: str, cycle: int, marker: dict | None)
             if ch == chamber
         ]
         if districts:
-            out.append({"chamber": chamber, "label": label, "districts": districts})
+            out.append({
+                "chamber": chamber, "label": label, "districts": districts,
+                "termYears": term_years("legislature", state, chamber),
+            })
     return out
 
 
@@ -949,7 +955,10 @@ def _judicial_section(
             if ct == court
         ]
         if entries:
-            out.append({"court": court, "label": label, "seats": entries})
+            out.append({
+                "court": court, "label": label, "seats": entries,
+                "termYears": term_years("judicial", state, court),
+            })
     return out, coverage
 
 

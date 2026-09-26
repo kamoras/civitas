@@ -1007,7 +1007,10 @@ export default function AboutPage() {
               contest&apos;s research opens beside it: money raised, a sitting member&apos;s
               voting record, and news coverage. On a phone it lists every contest and opens
               one per screen, with next and previous. It never marks a choice. Candidates appear
-              under the name their state prints on its ballot once a state source names them.
+              under the name their state prints on its ballot once a state source names them. Every contest
+              says the term it is for — two years for the U.S. House, six for the Senate, and for the
+              state offices we cover, each one&apos;s own term from its state&apos;s constitution or
+              statute. Where we have not confirmed a state office&apos;s term, none is shown.
             </P>
 
             <div className="space-y-4 mt-4">

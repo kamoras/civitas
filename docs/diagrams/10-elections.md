@@ -215,8 +215,10 @@ everything below reads it.
   that leaves the State column empty, a "State offices — not loaded yet"
   contest stands in, so the column never reads as a state electing nobody.
 - Federal contests carry their term: 2-year (House), 6-year (Senate), or
-  "fills the rest of the term" (special Senate). State terms are not shown
-  until the API carries them.
+  "fills the rest of the term" (special Senate). State offices, chambers and
+  courts carry `termYears` from `data/office_terms.json` (`app/office_terms.py`),
+  listed per state and office with sources and never defaulted; shown as the
+  office's term ("4-year terms").
 - Deep links: `#race-{id}` opens that race (a House id opens the House contest
   on that district), `#ballot-{key}` any other contest. Opening a contest
   rewrites the hash, so what a reader sees can be linked.

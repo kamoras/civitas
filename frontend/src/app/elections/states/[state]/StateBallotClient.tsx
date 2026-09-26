@@ -25,6 +25,7 @@ import {
   majorPartyOf,
   matchesDistrictQuery,
   pviColor,
+  termPhrase,
   tierCandidates,
 } from "@/lib/elections";
 import { safeHref } from "@/lib/formatting";
@@ -123,6 +124,9 @@ function StateLegChamberSection({ chamber }: { chamber: StateLegChamber }) {
       <h3 className="font-mono text-xs text-ink-lo mb-1">
         {chamber.label.toUpperCase()} — {chamber.districts.length}{" "}
         {chamber.districts.length === 1 ? "SEAT" : "SEATS"} CONTESTED
+        {termPhrase(chamber.termYears) && (
+          <span className="text-ink-min"> · {termPhrase(chamber.termYears)!.toUpperCase()}</span>
+        )}
       </h3>
       {chamber.districts.length > 3 && (
         <div className="mb-2">
@@ -204,7 +208,12 @@ function JudicialDetail({ ballot }: { ballot: StateBallot }) {
       </p>
       {judicialRaces.map((court) => (
         <div key={court.court} className="mb-4 last:mb-0">
-          <h3 className="font-mono text-xs text-ink-lo mb-2">{court.label.toUpperCase()}</h3>
+          <h3 className="font-mono text-xs text-ink-lo mb-2">
+            {court.label.toUpperCase()}
+            {termPhrase(court.termYears) && (
+              <span className="text-ink-min"> · {termPhrase(court.termYears)!.toUpperCase()}</span>
+            )}
+          </h3>
           <div className="space-y-1.5">
             {court.seats.map((seat) => (
               <div
@@ -255,7 +264,12 @@ function StatewideExecutiveDetail({ ballot }: { ballot: StateBallot }) {
               key={race.office}
               className="grid grid-cols-1 gap-1 border border-white/[0.09] bg-surface px-3 py-2.5 sm:grid-cols-[minmax(0,180px)_1fr] sm:gap-3"
             >
-              <span className="font-mono text-xs text-ink-lo sm:self-center">{race.label}</span>
+              <span className="font-mono text-xs text-ink-lo sm:self-center">
+                {race.label}
+                {termPhrase(race.termYears) && (
+                  <span className="block text-ink-min">{termPhrase(race.termYears)}</span>
+                )}
+              </span>
               <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
                 {race.nominees.map((n) => (
                   <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
@@ -775,7 +789,12 @@ function ContestOverview({
             <ul>
               {ballot.statewideRaces.map((r) => (
                 <li key={r.office} className="border-b border-white/[0.09] px-4 py-2">
-                  <span className="block text-[13px] font-bold text-ink-hi">{r.label}</span>
+                  <span className="block text-[13px] font-bold text-ink-hi">
+                    {r.label}
+                    {termPhrase(r.termYears) && (
+                      <span className="font-normal text-ink-lo"> · {termPhrase(r.termYears)}</span>
+                    )}
+                  </span>
                   <span className="flex flex-wrap gap-x-3 text-sm">
                     {r.nominees.map((n) => (
                       <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
@@ -796,6 +815,7 @@ function ContestOverview({
               <li key={c.chamber} className="border-b border-white/[0.09] px-4 py-2 text-[13px] text-ink-lo">
                 <span className="font-bold text-ink-hi">{c.label}</span> · {c.districts.length}{" "}
                 {c.districts.length === 1 ? "seat" : "seats"} contested
+                {termPhrase(c.termYears) && ` · ${termPhrase(c.termYears)}`}
               </li>
             ))}
           </ul>
@@ -815,6 +835,7 @@ function ContestOverview({
                 <li key={c.court} className="border-b border-white/[0.09] px-4 py-2 text-[13px] text-ink-lo">
                   <span className="font-bold text-ink-hi">{c.label}</span> · {c.seats.length}{" "}
                   {c.seats.length === 1 ? "seat" : "seats"}
+                  {termPhrase(c.termYears) && ` · ${termPhrase(c.termYears)}`}
                 </li>
               ))}
             </ul>

@@ -291,6 +291,8 @@ def test_state_ballot_drops_the_governor_omission_once_that_state_is_covered(db_
     assert any("Primary" in item for item in after["omits"])
     assert any("State legislative" in item for item in after["omits"])
     assert after["statewideRaces"][0]["nominees"][0]["name"] == "Real Person"
+    # The office's term, from data/office_terms.json.
+    assert after["statewideRaces"][0]["termYears"] == 4
 
 
 def test_state_ballot_drops_the_governor_omission_when_coverage_is_confirmed_none(db_session):
@@ -334,6 +336,7 @@ def test_state_ballot_drops_the_legislature_omission_once_seats_are_covered(db_s
     assert not any("State legislative" in item for item in after["omits"])
     assert after["stateLegRaces"][0]["chamber"] == "lower"
     assert after["stateLegRaces"][0]["districts"][0]["nominees"][0]["name"] == "Real Person"
+    assert after["stateLegRaces"][0]["termYears"] == 2  # Georgia's House: two-year terms
     # The omissions that are still true stay.
     assert any("County and municipal" in item for item in after["omits"])
     assert any("Judicial" in item for item in after["omits"])
