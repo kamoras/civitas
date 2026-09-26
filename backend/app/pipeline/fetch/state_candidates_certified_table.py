@@ -39,7 +39,17 @@ Optional, each because a live state needed it:
                                      posts the Senate and House separately)
   format.office_parse                read the office column with parse_office
                                      ("United States House of Representatives
-                                     District 1") instead of an exact code map
+                                     District 1") instead of an exact code map;
+                                     with district_column too, that column is
+                                     read after it (Nebraska prints "District
+                                     01" in a column of its own)
+  format.office_fill_down            the office is printed once per group and
+                                     left blank on the rows below it (Iowa)
+
+A PDF is read as a table too (Iowa, Nebraska): the row whose cells include
+every configured column heading is the header, and each later cell on the
+page belongs to the column it starts in (_column_starts). Cells are split
+where the gap between two words is wider than a space — see _CELL_GAP.
 
 Only the columns named here are read. Virginia's list carries every
 candidate's campaign email, phone and street address beside the ballot
@@ -54,7 +64,9 @@ import io
 import logging
 
 import httpx
+import pdfplumber
 
+from app.pipeline.fetch.ballot_measure_pdf_geometry import rows as _clustered_rows
 from app.pipeline.fetch.http_utils import fetch_bytes_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     clean_display_name,
@@ -71,7 +83,77 @@ logger = logging.getLogger(__name__)
 _rate_limiter = RateLimiter(rps=1.0)
 
 
-def _rows(payload: bytes, url: str) -> list[dict] | None:
+# Points. A space between two words of one cell measures 1.6-1.8 in both
+# Iowa's and Nebraska's lists; the narrowest gap between two cells is 5.3
+# (a phone number and an email) and between a party and a name 7.9.
+_CELL_GAP = 4.0
+
+
+def _cells(words: list[dict]) -> list[dict]:
+    """One printed row's words joined into cells: {x0, x1, text}."""
+    cells: list[dict] = []
+    for w in sorted(words, key=lambda w: w["x0"]):
+        if cells and w["x0"] - cells[-1]["x1"] < _CELL_GAP:
+            cells[-1]["x1"] = w["x1"]
+            cells[-1]["text"] += " " + w["text"]
+        else:
+            cells.append({"x0": w["x0"], "x1": w["x1"], "text": w["text"]})
+    return cells
+
+
+def _overlaps(cell: dict, heading: dict) -> bool:
+    return min(cell["x1"], heading["x1"]) > max(cell["x0"], heading["x0"])
+
+
+def _column_starts(header: list[dict], rows: list[list[dict]]) -> list[tuple[float, str]]:
+    """Where each heading's column begins on the page. Data is often
+    left-aligned under a centred heading, so a column starts at the
+    leftmost cell found under that heading alone — a cell spanning two
+    headings (a footer sentence) says nothing about either."""
+    starts = {h["text"]: h["x0"] for h in header}
+    for cells in rows:
+        for cell in cells:
+            hits = [h for h in header if _overlaps(cell, h)]
+            if len(hits) == 1:
+                starts[hits[0]["text"]] = min(starts[hits[0]["text"]], cell["x0"])
+    return sorted((x, text) for text, x in starts.items())
+
+
+def pdf_table_rows(pages: list[list[dict]], headings: list[str]) -> list[dict]:
+    """Rows keyed by heading from each page's words (pdfplumber
+    extract_words output). A page without the header row is skipped. Each
+    cell belongs to the column whose start is the nearest at or left of it,
+    so a short cell ("PO Box 33") that overlaps no heading still lands in
+    its own column rather than the nearest heading's."""
+    rows: list[dict] = []
+    for words in pages:
+        clustered = _clustered_rows(words)
+        lines = [_cells(clustered[row_id]) for row_id in sorted(clustered)]
+        at = next((i for i, cells in enumerate(lines) if set(headings) <= {c["text"] for c in cells}), None)
+        if at is None:
+            continue
+        body = lines[at + 1:]
+        starts = _column_starts(lines[at], body)
+        for cells in body:
+            row: dict[str, str] = {}
+            for cell in cells:
+                key = next((text for x, text in reversed(starts) if x <= cell["x0"] + 1.0), starts[0][1])
+                row[key] = f"{row.get(key, '')} {cell['text']}".strip()
+            rows.append(row)
+    return rows
+
+
+def _rows(payload: bytes, url: str, fmt: dict) -> list[dict] | None:
+    if payload[:5] == b"%PDF-":
+        headings = [fmt["office_column"], fmt["party_column"], *fmt["name_columns"]]
+        if fmt.get("district_column"):
+            headings.append(fmt["district_column"])
+        try:
+            with pdfplumber.open(io.BytesIO(payload)) as pdf:
+                return pdf_table_rows([page.extract_words() for page in pdf.pages], headings)
+        except Exception:
+            logger.exception("certified list PDF %s failed to parse", url)
+            return None
     if url.lower().split("?")[0].endswith(".csv"):
         try:
             return list(csv.DictReader(io.StringIO(payload.decode("utf-8-sig"))))
@@ -86,6 +168,8 @@ def parse_certified_rows(rows: list[dict], fmt: dict) -> list[dict]:
     by_label = bool(fmt.get("office_parse"))
     statuses = {str(v).strip().upper() for v in fmt.get("status_values") or []}
     exclude = {col: str(val).strip().upper() for col, val in (fmt.get("exclude") or {}).items()}
+    fill_down = bool(fmt.get("office_fill_down"))
+    carried = ""
     records: dict[tuple, dict] = {}
     for row in rows:
         if statuses and str(row.get(fmt["status_column"]) or "").strip().upper() not in statuses:
@@ -93,7 +177,22 @@ def parse_certified_rows(rows: list[dict], fmt: dict) -> list[dict]:
         if any(str(row.get(col) or "").strip().upper() == val for col, val in exclude.items()):
             continue
         label = " ".join(str(row.get(fmt["office_column"]) or "").split())
+        party_label = str(row.get(fmt["party_column"]) or "").strip()
+        display = clean_display_name(
+            " ".join(str(row.get(col) or "").strip() for col in fmt["name_columns"])
+        )
+        if fill_down:
+            # Only a candidate row sets the office carried to the rows below
+            # it: a page footer never does, and a blank-office row under
+            # "Governor" stays a governor's row rather than inheriting the
+            # last congressional district.
+            if not (party_label and display):
+                continue
+            label = label or carried
+            carried = label
         if by_label:
+            if fmt.get("district_column"):
+                label = f"{label} {' '.join(str(row.get(fmt['district_column']) or '').split())}".strip()
             parsed = parse_office(label)
             if parsed is None:
                 continue
@@ -106,16 +205,12 @@ def parse_certified_rows(rows: list[dict], fmt: dict) -> list[dict]:
             if office == "H":
                 digits = "".join(ch for ch in str(row.get(fmt["district_column"]) or "") if ch.isdigit())
                 district = int(digits) if digits else 0
-        display = clean_display_name(
-            " ".join(str(row.get(col) or "").strip() for col in fmt["name_columns"])
-        )
         last = (
             str(row.get(fmt["surname_column"]) or "").strip()
             if fmt.get("surname_column") else (surname(display) or "")
         )
         if not last:
             continue
-        party_label = str(row.get(fmt["party_column"]) or "").strip()
         records[(office, district, display.lower())] = {
             "office": office,
             "district": district,
@@ -162,7 +257,7 @@ async def fetch_confirmed_candidates(
         payload = await fetch_bytes_with_retry(client, _rate_limiter, url, f"{state} certified list {year}")
         if payload is None:
             return None
-        part = _rows(payload, url)
+        part = _rows(payload, url, fmt)
         if not part:
             logger.warning("%s certified list %s did not parse", state, url)
             return None

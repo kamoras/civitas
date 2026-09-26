@@ -264,6 +264,13 @@ def _surname_fallbacks(
     found = [c for c in candidates if _candidate_surname(c.name).split()[-1:] == [target]]
     if found:
         return found
+    # The mirror: the state prints the whole surname and FEC files only its
+    # last word — Maryland's "McClain Delaney" is FEC's "DELANEY, APRIL
+    # MCCLAIN" (MD-6, 2026).
+    if len(target.split()) > 1:
+        found = [c for c in candidates if _candidate_surname(c.name) == target.split()[-1]]
+        if found:
+            return found
     # A married or former surname filed as a given name: the ballot says
     # "Ashley Hinson" and FEC has "ARENHOLZ, ASHLEY HINSON" (IA Senate,
     # 2026 — the Republican nominee, unmatched without this).

@@ -42,7 +42,26 @@
       "strategy": "clarity",
       "statewide_offices": true,
       "runoff_threshold_pct": 35.0,
-      "description": "Second state on the Clarity adapter, added 2026-08-16 on a re-probe of all 50 states' Clarity feeds \u2014 Iowa had published nothing for 2026 when the same probe ran on 2026-08-12, and its 2026-06-02 primary (EID 126082) is there now, so this file's coverage grows without code as states publish. All 10 federal contests parse (4 districts x 2 parties, plus both Senate primaries). Ground-truthed on the real result: Miller-Meeks holding IA-01 against Pautsch with Bohannan again taking the Democratic side, and Ashley Hinson winning the Senate primary \u2014 which is why IA-02 is an open-seat race. runoff_threshold_pct is 35, and it is NOT a runoff rule: Iowa Code 43.52 sends a nomination to a party CONVENTION when nobody clears 35%, so a sub-threshold leader isn't merely unconfirmed, they may well not be the nominee at all. IA-04's Democratic primary is the live case \u2014 Dawson took it on 39.0% of a three-way field, close enough to that line to matter."
+      "description": "Second state on the Clarity adapter, added 2026-08-16 on a re-probe of all 50 states' Clarity feeds \u2014 Iowa had published nothing for 2026 when the same probe ran on 2026-08-12, and its 2026-06-02 primary (EID 126082) is there now, so this file's coverage grows without code as states publish. All 10 federal contests parse (4 districts x 2 parties, plus both Senate primaries). Ground-truthed on the real result: Miller-Meeks holding IA-01 against Pautsch with Bohannan again taking the Democratic side, and Ashley Hinson winning the Senate primary \u2014 which is why IA-02 is an open-seat race. runoff_threshold_pct is 35, and it is NOT a runoff rule: Iowa Code 43.52 sends a nomination to a party CONVENTION when nobody clears 35%, so a sub-threshold leader isn't merely unconfirmed, they may well not be the nominee at all. IA-04's Democratic primary is the live case \u2014 Dawson took it on 39.0% of a three-way field, close enough to that line to matter.",
+      "general_list": {
+        "source_name": "Iowa Secretary of State (general election candidate list)",
+        "strategy": "certified_table",
+        "runoff_threshold_pct": null,
+        "discovery": {
+          "page_url": "https://sos.iowa.gov/general-election",
+          "link_regex": "href=\"([^\"]*{year}%20General%20-%20Candidate%20List[^\"]*\\.pdf)\""
+        },
+        "format": {
+          "office_column": "For the Office Of\u2026",
+          "office_parse": true,
+          "office_fill_down": true,
+          "party_column": "Party",
+          "name_columns": [
+            "Ballot Name(s)"
+          ]
+        },
+        "description": "Added 2026-09-26. The Secretary of State's \"Candidate List, November 3, 2026 General Election\" PDF, re-issued as vacancies are filled (last dated 8/19/2026, the convention deadline): the ballot as it stands, including the No Party and Libertarian candidates primary results cannot see (IA-1 Bridgford, IA-2 Bushaw and Stewart, the Senate's Laehn). A PDF table: the office is printed once per group, so it is carried down to the rows beneath it. The link is found on the general-election page because the file is re-posted under a new upload folder each time."
+      }
     },
     "IL": {
       "source_name": "Illinois State Board of Elections (official vote totals by office)",
@@ -94,7 +113,33 @@
           "Other Write-Ins"
         ]
       },
-      "description": "Maryland publishes results as HTML tables under headings rather than as any downloadable file, which is why the html_table reader exists \u2014 the table alone never says which contest it is, so every row carries the heading stack it appeared under and the contest is built from it ('Representative in Congress' + 'District 1'). The link pattern deliberately matches EVERY office summary page rather than pinning the congressional one's internal office number: parse_office already refuses Governor, Comptroller and the state legislature, so matching broadly costs a few extra pages and survives Maryland renumbering its offices. The party heading joins the contest key ('Democratic Candidates - Vote for 1'): without it both parties' candidates for a district tally as ONE race and, in a district that leans hard either way, the other party's nominee is dropped entirely \u2014 8 records instead of 16. Verified live 2026-08-18 against the real 2026-06-23 primary: 92 candidate rows across all 8 districts."
+      "description": "Maryland publishes results as HTML tables under headings rather than as any downloadable file, which is why the html_table reader exists \u2014 the table alone never says which contest it is, so every row carries the heading stack it appeared under and the contest is built from it ('Representative in Congress' + 'District 1'). The link pattern deliberately matches EVERY office summary page rather than pinning the congressional one's internal office number: parse_office already refuses Governor, Comptroller and the state legislature, so matching broadly costs a few extra pages and survives Maryland renumbering its offices. The party heading joins the contest key ('Democratic Candidates - Vote for 1'): without it both parties' candidates for a district tally as ONE race and, in a district that leans hard either way, the other party's nominee is dropped entirely \u2014 8 records instead of 16. Verified live 2026-08-18 against the real 2026-06-23 primary: 92 candidate rows across all 8 districts.",
+      "general_list": {
+        "source_name": "Maryland State Board of Elections (general election candidate list)",
+        "strategy": "certified_table",
+        "runoff_threshold_pct": null,
+        "discovery": {
+          "index_url": "https://elections.maryland.gov/elections/{year}/general_candidates/index.html",
+          "index_regex": "href=\"?({year}_[A-Z]G_statewide_candidatelist\\.html)",
+          "link_regex": "href=\"?({year}_[A-Z]G_statewide_candidatelist\\.csv)"
+        },
+        "format": {
+          "office_column": "Office Name",
+          "office_parse": true,
+          "district_column": "Contest Run By District Name and Number",
+          "party_column": "Office Political Party",
+          "surname_column": "Candidate Ballot Last Name and Suffix",
+          "name_columns": [
+            "Candidate First Name and Middle Name",
+            "Candidate Ballot Last Name and Suffix"
+          ],
+          "status_column": "Candidate Status",
+          "status_values": [
+            "Active"
+          ]
+        },
+        "description": "Added 2026-09-26. The State Board's general-election candidate list, a CSV of every office with each candidate's status: \"Active\" is on the ballot; \"Withdrawn - date\" and \"Failed to Submit Required Number of Signatures - date\" are not (MD-5 had three such unaffiliated filers in 2026). Primary results never show the unaffiliated, Green and \"Other Candidates\" entries, and an uncontested primary shows no one. The list page is reached from the year's general_candidates index because its name carries the election type (GG in a gubernatorial year, PG in a presidential one). Only office, district, name, party and status are read; the file also carries campaign contact details. The office is read with parse_office, with the district column after it (\"Representative in Congress\" + \"Congressional District 1\"), so a Senate year needs no label written ahead of time: Maryland has no Senate seat up in 2026 and its 2024 list is no longer posted to check against."
+      }
     },
     "MN": {
       "source_name": "Minnesota Secretary of State (election night reporting files)",
@@ -649,7 +694,26 @@
       ],
       "runoff_threshold_pct": null,
       "settle_days": 45,
-      "description": "The SOS's own election-night-reporting site (electionresults.nebraska.gov) -- confirmed live 2026-09-07 to be running the SAME \"TotalVote\" vendor platform as Montana (identical resultsSW.aspx URL shape, identical wrapper-inside wrapper-border markup, the literal string \"totalvote\" in the page source -- see state_candidates_totalvote.py's module docstring). Unlike Montana, Nebraska splits federal offices across TWO queries: Senate lives on the SW (statewide) query mixed in with non-federal offices like Governor and Secretary of State (parse_office already returns None for those, so no extra filtering is needed), and House lives on its own CG (congressional-district) query -- both are fetched and merged. No eid param on either query always serves the CURRENT election, same as Montana; the page's own title (\"Primary Election May 12, 2026\", no hyphen unlike Montana's) is parsed and cross-checked against the requested year the same way. Nebraska nominates on a PLURALITY -- no federal-primary runoff in state law -- so runoff_threshold_pct is null. No certification flag exists here either: the page was still labelled \"Unofficial Results\" on 2026-09-07, almost four months after the May 12 primary, confirming that heading is permanent boilerplate rather than a real signal, so settle_days (45, matching Montana's observed vendor-wide reconciliation window) is the only freshness gate. Verified live 2026-09-07 against the real, current 2026 primary: Pete Ricketts (Senate R, real plurality winner of a 5-way field, 160,547 votes), Cindy Burbank (Senate D, real plurality winner of a 2-way field, 110,210 votes), Mike Flood (CD1 R, unopposed), Chris Backemeyer (CD1 D, real plurality winner of a 2-way field, 26,523 over 19,508), Nik Sandman (CD1 L, unopposed), Brinker Harding (CD2 R, unopposed), Denise Powell (CD2 D, real plurality winner of a close 7-way field, 22,516 over runner-up John Cavanaugh's 21,115), Eric Michael Foreman (CD2 L, unopposed), Adrian Smith (CD3 R, real plurality winner of a 2-way field, 60,549 over 33,020), Becky Kelly Stille (CD3 D, unopposed). Three federal contests (Senate and CD3) also carried a \"Legal Marijuana Now\" candidate -- normalize_party doesn't recognise that label, so those rows are silently dropped, matching every other vendor module in this system's existing behaviour for an unrecognised party."
+      "description": "The SOS's own election-night-reporting site (electionresults.nebraska.gov) -- confirmed live 2026-09-07 to be running the SAME \"TotalVote\" vendor platform as Montana (identical resultsSW.aspx URL shape, identical wrapper-inside wrapper-border markup, the literal string \"totalvote\" in the page source -- see state_candidates_totalvote.py's module docstring). Unlike Montana, Nebraska splits federal offices across TWO queries: Senate lives on the SW (statewide) query mixed in with non-federal offices like Governor and Secretary of State (parse_office already returns None for those, so no extra filtering is needed), and House lives on its own CG (congressional-district) query -- both are fetched and merged. No eid param on either query always serves the CURRENT election, same as Montana; the page's own title (\"Primary Election May 12, 2026\", no hyphen unlike Montana's) is parsed and cross-checked against the requested year the same way. Nebraska nominates on a PLURALITY -- no federal-primary runoff in state law -- so runoff_threshold_pct is null. No certification flag exists here either: the page was still labelled \"Unofficial Results\" on 2026-09-07, almost four months after the May 12 primary, confirming that heading is permanent boilerplate rather than a real signal, so settle_days (45, matching Montana's observed vendor-wide reconciliation window) is the only freshness gate. Verified live 2026-09-07 against the real, current 2026 primary: Pete Ricketts (Senate R, real plurality winner of a 5-way field, 160,547 votes), Cindy Burbank (Senate D, real plurality winner of a 2-way field, 110,210 votes), Mike Flood (CD1 R, unopposed), Chris Backemeyer (CD1 D, real plurality winner of a 2-way field, 26,523 over 19,508), Nik Sandman (CD1 L, unopposed), Brinker Harding (CD2 R, unopposed), Denise Powell (CD2 D, real plurality winner of a close 7-way field, 22,516 over runner-up John Cavanaugh's 21,115), Eric Michael Foreman (CD2 L, unopposed), Adrian Smith (CD3 R, real plurality winner of a 2-way field, 60,549 over 33,020), Becky Kelly Stille (CD3 D, unopposed). Three federal contests (Senate and CD3) also carried a \"Legal Marijuana Now\" candidate -- normalize_party doesn't recognise that label, so those rows are silently dropped, matching every other vendor module in this system's existing behaviour for an unrecognised party.",
+      "general_list": {
+        "source_name": "Nebraska Secretary of State (final statewide general candidate list)",
+        "strategy": "certified_table",
+        "runoff_threshold_pct": null,
+        "discovery": {
+          "page_url": "https://sos.nebraska.gov/elections",
+          "link_regex": "href=\"([^\"]*/{year}/[^\"]*General_Candidate[^\"]*\\.pdf)\""
+        },
+        "format": {
+          "office_column": "Office",
+          "office_parse": true,
+          "district_column": "District Name",
+          "party_column": "Party (if applicable)",
+          "name_columns": [
+            "Candidate Name"
+          ]
+        },
+        "description": "Added 2026-09-26. The Secretary of State's final statewide general candidate list (certified 2026-09-11), a PDF table. It carries the ballot's petition and minor-party candidates, none of whom a primary shows: Dan Osborn (By Petition) for Senate, and Legal Marijuana NOW, Nebraska Working People and America First nominees. Those three party names wrap onto a second line in the PDF, so their printed label is shortened to its first line; they carry no party code and match on name alone."
+      }
     },
     "SD": {
       "source_name": "South Dakota Secretary of State (Voter Information Portal candidate list)",

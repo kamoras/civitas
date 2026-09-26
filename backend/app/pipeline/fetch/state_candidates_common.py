@@ -812,10 +812,11 @@ def office_from_columns(row: dict, spec: dict | None) -> tuple[str, int | None] 
 # never inside a longer label, for the same reason a stray "R" in a
 # contest name must not become a Republican.
 # NOPTY is Louisiana's "No Party"; PETITION is South Carolina's label for
-# a candidate who reached the ballot by petition rather than a party.
+# a candidate who reached the ballot by petition rather than a party, and
+# Nebraska writes the same thing out as "By Petition".
 _INDEPENDENT_ABBR = frozenset({"IND", "INDEPENDENT", "UNA", "NPA", "NOP", "NP", "NOPTY", "PETITION"})
 _INDEPENDENT_RE = re.compile(
-    r"\b(independent|unaffiliated|no\s+party(\s+affiliation)?|non[\s-]?partisan)\b",
+    r"\b(independent|unaffiliated|no\s+party(\s+affiliation)?|non[\s-]?partisan|by\s+petition)\b",
     re.IGNORECASE,
 )
 

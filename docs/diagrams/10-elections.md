@@ -60,7 +60,7 @@ because that decides what the page can honestly claim.
 
 | Source kind | What it can see | States (2026-09-26) |
 |---|---|---|
-| **Certified general ballot** | Everyone on the November ballot, third parties, independents and post-primary replacements included | TX (`tx_civix`), NC (`tabular` + filing list), SD (`sd_vip`), LA (`voterportal`), SC (`vrems`), MO (`certified_pdf`); and as a `general_list` beside a primary-results source: ME, CO, VA, TN (`certified_table`), FL (`dos_canlist`), NJ (`nj_certification` official lists) |
+| **Certified general ballot** | Everyone on the November ballot, third parties, independents and post-primary replacements included | TX (`tx_civix`), NC (`tabular` + filing list), SD (`sd_vip`), LA (`voterportal`), SC (`vrems`), MO (`certified_pdf`); and as a `general_list` beside a primary-results source: ME, CO, VA, TN, MD, IA, NE (`certified_table`, spreadsheets and PDF tables), FL (`dos_canlist`), NJ (`nj_certification` official lists) |
 | **Primary results** | Each party's nominee. Cannot see a Libertarian, Green or independent who never ran in a primary, or a nominee replaced after the primary | the other 33 configured states — `tabular` (14), `clarity` (2), `tally_enr` (2), `totalvote_enr` (2) and 13 single-state strategies (WI's `canvass_summary_pdf` among them) |
 | **National fallback** | Nothing until Google publishes general-election contests, close to the election | MI, NV, NY, OH, OK (`google_civic`) |
 
@@ -100,6 +100,15 @@ API labels races "confirmed" only when that source was the complete ballot —
 never from config alone. `fallback` is different: a whole second source run
 only when the main one returns nothing (WI's canvass → Google Civic).
 
+`certified_table` reads a PDF as a table (IA, NE): the row holding every
+configured heading is the header, cells split at gaps wider than a space
+(`_CELL_GAP`), and each cell goes to the column it starts in — column starts
+learned from cells under exactly one heading, since data sits left-aligned
+under centred headings. `office_fill_down` carries a once-per-group office
+down, set only by candidate rows so a footer or a governor's group never
+inherits a congressional district. Scanned certifications (UT's OCR text,
+AL's images) are not read: one misread name would unconfirm a real nominee.
+
 ### Rules every strategy follows
 
 - **Federal contests only, recognised positively** (`parse_office`). Anything
@@ -123,7 +132,8 @@ stripped on both sides:
 
 1. Exact surname.
 2. Otherwise, in order, each only if the one before found nobody: the FEC
-   surname's last token (`WASSERMAN SCHULTZ`); a surname filed as the last
+   surname's last token (`WASSERMAN SCHULTZ`); the state surname's last token
+   (Maryland's "McClain Delaney" is `DELANEY, APRIL MCCLAIN`); a surname filed as the last
    given name (`ARENHOLZ, ASHLEY HINSON`); one spelling slip with the given
    name agreeing (`DAUGHTERY` / Daugherty).
 3. Several matches → the one whose party matches, then the one whose given
