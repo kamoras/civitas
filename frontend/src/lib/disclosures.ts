@@ -27,3 +27,11 @@ export function formatBracket(
 ): string {
   return openEnded ? `${fmt(low)}+` : `${fmt(low)} – ${fmt(high)}`;
 }
+
+/** When a report's holdings were held, for sentences like "None at year
+ * end": an annual report describes the year end; a Senate new-filer report
+ * the date it states; a paper filing (no date known) is taken as the
+ * annual report it almost always is. */
+export function asOfPhrase(asOfDate: string | null): string {
+  return !asOfDate || asOfDate.endsWith("-12-31") ? "at year end" : `on ${asOfDate}`;
+}

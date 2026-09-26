@@ -272,6 +272,9 @@ export interface Holdings {
   /** "scanned": a paper filing; "unrecognized": electronic, but in a layout
    * the parser can't read. Null when parsed. */
   unreadableReason: "scanned" | "unrecognized" | null;
+  /** The date the holdings describe (a year end for an annual report, the
+   * stated date for a new-filer report); null for a paper filing. */
+  asOfDate: string | null;
   /** A Senate paper filing made after this report ("annual report filed
    * 2026-05-14"). Paper filings state no year, so it can't be ranked
    * against this one; the page names it instead of implying this report is

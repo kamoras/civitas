@@ -289,7 +289,9 @@ class TestIngestSenateHoldings:
         mock_fetch.assert_not_called()
 
     def test_report_year(self):
-        year = holdings_pipeline._senate_report_year
+        def year(f):
+            return holdings_pipeline._year_of(holdings_pipeline._senate_as_of(f))
+
         assert year({"title": "Annual Report for CY 2025 (Amendment 1)"}) == 2025
         assert year({"title": "New Filer Report for 03/24/2026"}) == 2026
         # Paper filings state no year and none is inferred.
@@ -660,7 +662,7 @@ async def test_trade_and_holdings_ingests_share_one_index_download(db_session):
 class TestPaperAmendments:
     def test_a_paper_amendment_has_no_year_and_claims_none(self):
         amendment = _senate_filing("a", title="Annual Report (Amendment)", filed="2026-02-19", paper=True)
-        assert holdings_pipeline._senate_report_year(amendment) is None
+        assert holdings_pipeline._year_of(holdings_pipeline._senate_as_of(amendment)) is None
         assert holdings_pipeline._senate_report_label(amendment) == "annual report amendment filed 2026-02-19"
 
     async def test_a_later_paper_amendment_never_replaces_a_dated_report(self, db_session, senator):
@@ -1466,9 +1468,38 @@ class TestRankRules:
 
     def test_new_filer_dates_without_zero_padding(self):
         f = _senate_filing("n", title="New Filer Report for 3/4/2026")
-        assert holdings_pipeline._senate_report_year(f) == 2026
+        assert holdings_pipeline._year_of(holdings_pipeline._senate_as_of(f)) == 2026
         assert holdings_pipeline._senate_report_label(f) == "new-filer report as of 2026-03-04"
 
     async def test_a_note_that_cant_be_written_doesnt_fail_the_phase(self, db_session, senator):
         with patch.object(holdings_pipeline, "_note_later_paper", side_effect=RuntimeError("locked")):
             assert await _ingest_senate(db_session, [_senate_filing("e2025")], {"e2025": [_row()]}) == 1
+
+
+class TestStoredAndTonightMerge:
+    async def test_a_title_that_parses_later_fills_in_the_stored_rank(self, db_session, senator):
+        """Stored while its title didn't parse: once it does, the stored
+        row is repaired — so a partial search returning only an older
+        report can't outrank it."""
+        garbled = _senate_filing("cy2025", title="Annual Report for CY", filed="2026-05-11")
+        await _ingest_senate(db_session, [garbled], {"cy2025": [_row()]})
+        assert db_session.query(FinancialDisclosure).one().as_of_date is None
+        await _ingest_senate(db_session, [_senate_filing("cy2025", filed="2026-05-11")], {"cy2025": [_row()]})
+        stored = db_session.query(FinancialDisclosure).one()
+        assert (stored.as_of_date, stored.report_year, stored.report_label) == ("2025-12-31", 2025, "2025 annual report")
+        older = _senate_filing("cy2024", title="Annual Report for CY 2024", filed="2025-05-11")
+        await _ingest_senate(db_session, [older], {"cy2024": [_row()]})
+        assert db_session.query(FinancialDisclosure).one().filing_id == "cy2025"
+
+    async def test_tonights_date_is_kept_when_its_title_says_less(self, db_session, senator):
+        await _ingest_senate(db_session, [_senate_filing("cy2025", filed="")], {"cy2025": [_row()]})
+        await _ingest_senate(db_session, [_senate_filing("cy2025", title="Annual Report for CY", filed="2026-05-11")],
+                             {"cy2025": [_row()]})
+        stored = db_session.query(FinancialDisclosure).one()
+        assert (stored.as_of_date, stored.filed_date) == ("2025-12-31", "2026-05-11")
+
+    async def test_a_note_failure_alerts(self, db_session, senator):
+        with patch.object(holdings_pipeline, "_note_later_paper", side_effect=RuntimeError("locked")), \
+             patch.object(holdings_pipeline, "_alert") as alert:
+            await _ingest_senate(db_session, [_senate_filing("e2025")], {"e2025": [_row()]})
+        alert.assert_called_once()

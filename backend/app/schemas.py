@@ -240,6 +240,9 @@ class HoldingsSchema(CamelModel):
     # "2025 annual report", "new-filer report as of 2026-03-24" — what the
     # holdings describe, for the page to say in words.
     report_label: str = ""
+    # The date the holdings describe: a year end for an annual report, the
+    # stated date for a Senate new-filer report; None for a paper filing.
+    as_of_date: str | None = None
     filed_date: str | None = None
     source_url: str = ""
     # False: the report exists but couldn't be read (a scanned paper

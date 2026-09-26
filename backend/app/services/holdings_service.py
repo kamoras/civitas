@@ -176,6 +176,7 @@ def _build(db: Session, disclosure: FinancialDisclosure, page: int, per_page: in
         available=True,
         report_year=disclosure.report_year,
         report_label=disclosure.report_label,
+        as_of_date=disclosure.as_of_date,
         filed_date=disclosure.filed_date,
         source_url=disclosure.source_url,
         parsed=disclosure.parsed,

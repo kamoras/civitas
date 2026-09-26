@@ -32,6 +32,7 @@ function holdings(overrides: Partial<HoldingsData> = {}): HoldingsData {
     available: true,
     reportYear: 2025,
     reportLabel: "2025 annual report",
+    asOfDate: "2025-12-31",
     filedDate: "2026-05-15",
     sourceUrl: "https://example.com/report",
     parsed: true,
@@ -131,6 +132,16 @@ describe("Holdings", () => {
     expect(screen.queryByText(/paper/)).not.toBeInTheDocument();
     // Nothing to list, so no toggle.
     expect(screen.queryByRole("button", { name: /INVESTMENTS & ASSETS/ })).not.toBeInTheDocument();
+  });
+
+  it("dates a new-filer report's zero values to its own date, not a year end", async () => {
+    fetchSenatorHoldings.mockResolvedValue(holdings({
+      reportLabel: "new-filer report as of 2026-03-24", asOfDate: "2026-03-24",
+      categories: [category({ zeroValueCount: 1, share: 1 })],
+    }));
+    render(<Holdings memberId="S1" />);
+    expect(await screen.findByText(/1 none on 2026-03-24/)).toBeInTheDocument();
+    expect(screen.queryByText(/year end/)).not.toBeInTheDocument();
   });
 
   it("names a paper filing made after the charted report instead of implying this one is the latest", async () => {

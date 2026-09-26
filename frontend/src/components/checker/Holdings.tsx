@@ -7,7 +7,7 @@ import { formatCurrency } from "@/lib/formatting";
 import CollapsibleSection from "../shared/CollapsibleSection";
 import Pagination from "../shared/Pagination";
 import MetricTooltip from "./MetricTooltip";
-import { formatBracket, OWNER_LABEL } from "@/lib/disclosures";
+import { asOfPhrase, formatBracket, OWNER_LABEL } from "@/lib/disclosures";
 
 const HOLDINGS_PER_PAGE = 15;
 
@@ -22,11 +22,11 @@ const SOURCE_LABEL = {
 } as const;
 
 const ABOUT_TEXT =
-  "Every asset listed on this member's most recent annual financial disclosure report — held by the member, their spouse, or a dependent child at the end of the year. The Ethics in Government Act requires values to be reported in ranges (for example $15,001 – $50,000), never as exact amounts, so no net-worth figure is computed. Slices are sized by the midpoint of each range (the minimum, for the open-ended top range); the ranges themselves are what the member disclosed. The asset type is the one the member chose when filing. Informational only — not part of the overall score.";
+  "Every asset listed on this member's most recent financial disclosure report — held by the member, their spouse, or a dependent child at the end of the year for an annual report, or on the date it states for a newly seated senator's new-filer report. The Ethics in Government Act requires values to be reported in ranges (for example $15,001 – $50,000), never as exact amounts, so no net-worth figure is computed. Slices are sized by the midpoint of each range (the minimum, for the open-ended top range); the ranges themselves are what the member disclosed. The asset type is the one the member chose when filing. Informational only — not part of the overall score.";
 
-function formatHoldingValue(h: Holding): string {
+function formatHoldingValue(h: Holding, when: string): string {
   if (h.valueLow === null || h.valueHigh === null) return h.valueText || "Not stated";
-  if (h.valueHigh === 0) return "None at year end";
+  if (h.valueHigh === 0) return `None ${when}`;
   return formatBracket(h.valueLow, h.valueHigh, h.valueOpenEnded);
 }
 
@@ -165,10 +165,10 @@ function HoldingsDonut({
  * assets that range doesn't describe — reported as "None" at year end
  * (sold or closed: a stated value of zero) or with no value stated at all
  * ("Undetermined"). The two are different disclosures and are named apart. */
-function legendDetail(c: HoldingCategory): string {
+function legendDetail(c: HoldingCategory, when: string): string {
   const parts = [`${c.count} asset${c.count !== 1 ? "s" : ""}`];
   parts.push(c.weight > 0 ? formatRangeCompact(c.valueLow, c.valueHigh, c.openEnded) : "not charted");
-  if (c.zeroValueCount > 0) parts.push(`${c.zeroValueCount} none at year end`);
+  if (c.zeroValueCount > 0) parts.push(`${c.zeroValueCount} none ${when}`);
   if (c.unvaluedCount > 0) parts.push(`${c.unvaluedCount} no value stated`);
   return parts.join(" · ");
 }
@@ -178,8 +178,10 @@ function CategoryLegend({
   selected,
   onHover,
   onSelect,
+  when,
 }: {
   categories: HoldingCategory[];
+  when: string;
   selected: string | null;
   onHover: (key: string | null) => void;
   onSelect: (key: string) => void;
@@ -207,7 +209,7 @@ function CategoryLegend({
                 <span className="text-ink text-sm">{c.label}</span>
                 {/* Its own line, never truncated: the disclosed range is the
                     figure to quote, the share is only how the chart is drawn. */}
-                <span className="block text-ink-min text-xs">{legendDetail(c)}</span>
+                <span className="block text-ink-min text-xs">{legendDetail(c, when)}</span>
               </span>
               <span className="text-ink-hi text-sm font-mono">{c.weight > 0 ? formatShare(c.share) : "—"}</span>
             </button>
@@ -218,14 +220,14 @@ function CategoryLegend({
   );
 }
 
-function HoldingRow({ holding }: { holding: Holding }) {
+function HoldingRow({ holding, when }: { holding: Holding; when: string }) {
   return (
     <div className="panel p-3">
       <div className="text-ink text-sm break-words">
         {holding.assetName}
       </div>
       <div className="flex items-center gap-2 flex-wrap text-xs text-ink-min mt-1">
-        <span className="text-ink-lo font-mono">{formatHoldingValue(holding)}</span>
+        <span className="text-ink-lo font-mono">{formatHoldingValue(holding, when)}</span>
         <span>{holding.categoryLabel}</span>
         <span>{OWNER_LABEL[holding.owner]}</span>
         {holding.account && <span className="truncate max-w-full">in {holding.account}</span>}
@@ -320,6 +322,7 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
   if (!data) return null;
 
   const reportLabel = data.reportLabel || "latest annual report";
+  const when = asOfPhrase(data.asOfDate);
   const sourceLink = (
     <a
       href={data.sourceUrl}
@@ -352,8 +355,8 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
               data.unvaluedCount === data.holdingsCount
                 ? "none with a value stated"
                 : data.unvaluedCount === 0
-                  ? "each reported as none at year end"
-                  : "none with a value above zero at year end"
+                  ? `each reported as none ${when}`
+                  : `none with a value above zero ${when}`
             }.`}{" "}
         {about} · {sourceLink}
       </p>
@@ -372,6 +375,7 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
           />
           <CategoryLegend
             categories={data.categories}
+            when={when}
             selected={category}
             onHover={setHovered}
             onSelect={selectCategory}
@@ -456,7 +460,7 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
           </p>
           <div className={`space-y-2 ${loading ? "opacity-60 transition-opacity" : ""}`}>
             {data.holdings.map((h, i) => (
-              <HoldingRow key={`${h.assetName}-${data.page}-${i}`} holding={h} />
+              <HoldingRow key={`${h.assetName}-${data.page}-${i}`} holding={h} when={when} />
             ))}
           </div>
           <Pagination
