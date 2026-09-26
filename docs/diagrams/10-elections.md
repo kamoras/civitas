@@ -14,11 +14,15 @@ uses), `backend/app/api/elections.py` (what a page is allowed to show).
 flowchart LR
     NIGHTLY(["Nightly chain<br/>(scheduler.py)"]) --> SEN[Senate] --> SUP[Supplementary] --> HOUSE[House] --> STOCK[Stock trades] --> ELEC["<b>Election pipeline</b>"]
     QUARTER(["Every 15 min,<br/>election season only"]) --> COV["Coverage + posting phases only<br/>(_election_coverage_refresh)"]
+    SIX(["Every 6 h at :50 UTC,<br/>election season only"]) --> BAL["Ballot step only<br/>(_election_ballot_sync → run_ballot_sync)"]
 ```
 
 The election pipeline is last in the nightly chain, so an earlier pipeline
 that aborts the chain also skips it — check `election_pipeline_runs` after
-any nightly interruption.
+any nightly interruption. In the 60-day election season the ballot step
+(certified lists / primary results, then filing lists) also runs on its own
+every 6 hours, so an upstream abort can't hold ballots back; it and the
+nightly ballot phase each step aside while the other is running.
 
 ## The run
 

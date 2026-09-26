@@ -45,6 +45,11 @@ from app.http_client import make_async_client
 from app.models import BALLOT_ONLY_ID_PREFIX, Candidate, ElectionPipelineRun, PipelineStatus, Race, RaceCoverageItem, ScoreSnapshot
 from app.pipeline.analyze.score_calculator import get_district_pvi_map
 from app.pipeline.fetch.fec import fetch_all_candidates, fetch_candidate_financials
+from app.pipeline.fetch.state_candidates import (
+    crawl_for_new_sources,
+    sync_ballot_filings,
+    sync_confirmed_candidates,
+)
 from app.pipeline.fetch.state_election_dates import senate_election_known
 from app.pipeline.progress_tracker import ProgressTracker
 from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
@@ -99,6 +104,60 @@ def is_election_pipeline_running() -> bool:
 def election_pipeline_age():
     """Wall-clock age of the in-process election pipeline run, or None when idle."""
     return _tracker.age
+
+
+# The election-season ballot sync (scheduler.py) runs the ballot step on its
+# own between nightly runs; this is its overlap guard, separate from the
+# nightly run's so each can see the other.
+_ballot_tracker = PipelineRunTracker()
+
+
+def is_ballot_sync_running() -> bool:
+    return _ballot_tracker.is_running
+
+
+def ballot_sync_age():
+    """Wall-clock age of the in-process ballot sync, or None when idle."""
+    return _ballot_tracker.age
+
+
+def ballot_tracker() -> PipelineRunTracker:
+    return _ballot_tracker
+
+
+async def _sync_ballots(db: Session, client: httpx.AsyncClient, cycle: int) -> tuple[dict, dict]:
+    """Who is on each state's ballot: its certified list or primary results
+    (sync_confirmed_candidates), then its own filing list where it has one
+    (sync_ballot_filings) — the only way to see a candidate who reaches
+    November without running in a primary. Shared by the nightly run and
+    the election-season ballot sync so the two can never drift apart."""
+    confirm_result = await sync_confirmed_candidates(db, client, cycle)
+    filing_result = await sync_ballot_filings(db, client, cycle)
+    return confirm_result, filing_result
+
+
+async def run_ballot_sync(cycle: int | None = None) -> dict:
+    """The nightly run's ballot step, alone. Scheduled every few hours in
+    election season (scheduler.py) so a withdrawal or replacement reaches
+    the page the same day, and so a failure earlier in the nightly chain —
+    this pipeline runs last, after Senate, House and stock trades — can
+    never hold ballots back in the weeks voters are using them. Reads only
+    state election offices' published lists, a handful of requests each at
+    one per second; the roster and financial refresh stay nightly."""
+    cycle = cycle if cycle is not None else current_election_cycle()
+    db = SessionLocal()
+    try:
+        async with make_async_client() as client:
+            confirm_result, filing_result = await _sync_ballots(db, client, cycle)
+    finally:
+        db.close()
+    return {
+        "status": "ok",
+        "confirmed": sum(r.get("confirmed", 0) for r in confirm_result.values()),
+        "statesOk": sorted(s for s, r in confirm_result.items() if r.get("status") == "ok"),
+        "statesFailed": sorted(s for s, r in confirm_result.items() if r.get("status") != "ok"),
+        "filings": filing_result,
+    }
 
 
 def _race_id(cycle: int, office: str, state: str, district: int | None, is_special: bool = False) -> str:
@@ -725,6 +784,10 @@ def _prune_stale_coverage(db: Session) -> int:
     return deleted
 
 
+class _BallotSyncRunning(Exception):
+    """The nightly ballot phase stepping aside for a ballot sync in flight."""
+
+
 async def run_election_pipeline(cycle: int | None = None) -> dict:
     """Sync candidate rosters, refresh a prioritized batch of financials,
     ingest race coverage, post grounded Bluesky updates, and snapshot
@@ -781,12 +844,6 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
             logger.info("--- Election: CONFIRMED CANDIDATES ---")
             progress.begin("confirmed_candidates")
             try:
-                from app.pipeline.fetch.state_candidates import (
-                    crawl_for_new_sources,
-                    sync_confirmed_candidates,
-                    sync_ballot_filings,
-                )
-
                 # Weekly, not nightly: this sweeps every state that has no
                 # hand-verified source, and what it looks for — a state
                 # standing up a results portal, a new cycle's file
@@ -803,16 +860,15 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                         len(adopted), f" — {adopted}" if adopted else "",
                     )
 
-                confirm_result = await sync_confirmed_candidates(db, client, cycle)
+                # The election-season ballot sync may be mid-pass; two
+                # passes writing the same Candidate rows at once is the one
+                # thing to avoid, and that pass is doing this step anyway.
+                if is_ballot_sync_running():
+                    progress.complete("confirmed_candidates", detail="skipped (ballot sync running)")
+                    raise _BallotSyncRunning
+                confirm_result, filing_result = await _sync_ballots(db, client, cycle)
                 confirmed_total = sum(r["confirmed"] for r in confirm_result.values())
                 logger.info("Confirmed candidates: %s", confirm_result)
-
-                # What each state's own filing list says about both its
-                # ballots: who is on the primary one (the answer for the
-                # months before any primary), and who is on the general
-                # one — which is the only way to see a candidate who
-                # reaches November without running in a primary.
-                filing_result = await sync_ballot_filings(db, client, cycle)
                 if filing_result:
                     logger.info("Ballot filings: %s", filing_result)
 
@@ -841,6 +897,8 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                 if adopted:
                     detail += f"; crawler adopted {len(adopted)} this week: {', '.join(sorted(adopted))}"
                 progress.complete("confirmed_candidates", detail=detail)
+            except _BallotSyncRunning:
+                logger.info("Confirmed-candidate phase skipped — the ballot sync is running")
             except Exception:
                 db.rollback()
                 logger.exception("Confirmed-candidate sync failed — continuing")
