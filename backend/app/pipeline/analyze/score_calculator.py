@@ -1367,6 +1367,13 @@ _MIN_CONSTITUENT_REFERENCE_PARTY = 20
 _MIN_OPPOSED_SEATS_FOR_KINK = 5
 
 
+def party_vote_weight(party_alignment_weight: float | None) -> float:
+    """A party-labeled vote's weight in the break rate: its party-alignment
+    weight, or 1 when none was measured."""
+    weight = party_alignment_weight or 0.0
+    return weight if weight > 0.0 else 1.0
+
+
 def party_break_rate(voting_record: dict) -> tuple[float | None, int]:
     """(weighted share of party-labeled votes cast against the member's
     party, count of those votes). None when fewer than 3 are usable. The
@@ -1385,8 +1392,7 @@ def party_break_rate(voting_record: dict) -> tuple[float | None, int]:
         wp = v.get("votedWithParty") if isinstance(v, dict) else None
         if wp is None:
             continue
-        weight = v.get("partyAlignmentWeight") or 0.0
-        weight = weight if weight > 0.0 else 1.0
+        weight = party_vote_weight(v.get("partyAlignmentWeight"))
         if wp is True:
             with_party += weight
         else:

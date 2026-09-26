@@ -59,6 +59,7 @@ from app.pipeline.analyze.score_calculator import (  # noqa: E402
     compute_funding_reference,
     compute_les_reference,
     constituent_reference_inputs,
+    party_break_rate,
     derive_chamber_majority,
 )
 from app.pipeline.fetch.fec import select_recent_elections  # noqa: E402
@@ -288,8 +289,9 @@ def main() -> int:
                 if len(labeled) >= MIN_LABELED_VOTES else None
             ),
         }
-        if metrics["party_break_rate"] is not None and break_rate_past_saturation(
-            metrics["party_break_rate"], s["state"], s["party"],
+        scored_rate, _ = party_break_rate(payload["votingRecord"])
+        if metrics["party_break_rate"] is not None and scored_rate is not None and break_rate_past_saturation(
+            scored_rate, s["state"], s["party"],
             effective_party=payload["votingRecord"].get("effectiveParty"),
             reference=payload.get("constituentReference"),
         ):

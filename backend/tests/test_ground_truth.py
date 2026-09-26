@@ -158,6 +158,31 @@ class TestDerivedConsistency:
 
         assert not any(f["dimension"] == "IV" for f in check_ground_truth(db_session)["failures"])
 
+    def test_saturation_is_judged_on_the_weighted_rate_the_score_uses(self, db_session):
+        # The five top crossers break on under 20% of their votes by plain
+        # count — below saturation — but their breaks are the heavily
+        # weighted party-line votes, so the rate the score compares is ~80%,
+        # far past it, and a low score there is the design. The gate must
+        # judge saturation on that weighted rate, not the plain count.
+        for i in range(40):
+            s = _add_senator(
+                db_session, f"s{i}",
+                iv=10 if i >= 35 else 30 + i,
+                fi=95 - 1.5 * i,
+                total_raised=1_000_000,
+                total_from_pacs=1_000_000 * i / 50,
+                small_donor_pct=40 - 0.8 * i,
+            )
+            for j in range(200):
+                db_session.add(KeyVote(
+                    senator_id=s.id, bill_name=f"Bill {j}", bill_id=f"bill-{j}",
+                    date="2026-01-01", vote="Yea", voted_with_party=j >= i,
+                    party_alignment_weight=(1.0 if j < i else 0.05) if i >= 35 else 0.0,
+                ))
+        db_session.commit()
+
+        assert not any(f["dimension"] == "IV" for f in check_ground_truth(db_session)["failures"])
+
     def test_pac_totals_all_zero_flagged(self, db_session):
         # The historical silent-fetch regression: everyone funded, nobody
         # with a cent of PAC money on record.

@@ -64,7 +64,7 @@ from collections import Counter, defaultdict
 
 from scipy import stats as scipy_stats
 
-from app.pipeline.analyze.score_calculator import break_rate_past_saturation
+from app.pipeline.analyze.score_calculator import break_rate_past_saturation, party_vote_weight
 
 logger = logging.getLogger(__name__)
 
@@ -352,14 +352,21 @@ def _member_records(db, model) -> list[dict]:
     """Build the plain member records ``evaluate_derived_checks`` consumes
     from the chamber's current members and their labeled votes."""
     vote_model, fk_col = _vote_query_for(model)
-    counts: dict[str, list[int]] = defaultdict(lambda: [0, 0])  # id -> [breaks, labeled]
-    for member_id, with_party in (
-        db.query(fk_col, vote_model.voted_with_party)
+    # id -> [breaks, labeled, weighted breaks, weighted labeled]. The rank
+    # check reads the plain count, an independent reading of the raw votes;
+    # whether a member is past saturation is judged on the weighted rate,
+    # the statistic the score itself compares (party_break_rate).
+    counts: dict[str, list[float]] = defaultdict(lambda: [0, 0, 0.0, 0.0])
+    for member_id, with_party, weight in (
+        db.query(fk_col, vote_model.voted_with_party, vote_model.party_alignment_weight)
         .filter(vote_model.voted_with_party.isnot(None))
         .all()
     ):
+        w = party_vote_weight(weight)
         counts[member_id][0] += 0 if with_party else 1
         counts[member_id][1] += 1
+        counts[member_id][2] += 0.0 if with_party else w
+        counts[member_id][3] += w
 
     records = []
     for m in db.query(model).filter(model.is_current.is_(True)).all():
@@ -369,10 +376,10 @@ def _member_records(db, model) -> list[dict]:
         # direction-of-effect check against a different ratio than the one
         # scored would weaken for reasons unrelated to the scores.
         base = getattr(m, "total_contributions", None) or raised
-        breaks, labeled = counts[m.id]
+        breaks, labeled, w_breaks, w_labeled = counts[m.id]
         break_rate = breaks / labeled if labeled >= MIN_LABELED_VOTES else None
         if break_rate is not None and break_rate_past_saturation(
-            break_rate, m.state or "", m.party or "I",
+            w_breaks / w_labeled, m.state or "", m.party or "I",
             effective_party=getattr(m, "caucus_party", None),
             district=getattr(m, "district", None),
         ):
