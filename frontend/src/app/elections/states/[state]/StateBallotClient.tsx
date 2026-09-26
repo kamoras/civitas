@@ -631,7 +631,7 @@ function MeasuresSection({ ballot }: { ballot: StateBallot }) {
  * approximation, not a precinct-accurate lookup, and the copy below says
  * so: a town can contain more than one precinct.
  */
-function TownSection({ state, pageElectionDate }: { state: string; pageElectionDate: string }) {
+export function TownSection({ state, pageElectionDate }: { state: string; pageElectionDate: string }) {
   const [towns, setTowns] = useState<TownEntry[] | null>(null);
   const [selected, setSelected] = useState("");
   const [ballot, setBallot] = useState<TownBallot | null>(null);
@@ -651,13 +651,18 @@ function TownSection({ state, pageElectionDate }: { state: string; pageElectionD
     };
   }, [state]);
 
+  // Picking a town clears the previous town's ballot and marks loading in
+  // the same event, so no frame pairs the new town's name with the old
+  // town's races; the effect below only fetches.
+  const chooseTown = (town: string) => {
+    setSelected(town);
+    setBallot(null);
+    setLoading(town !== "");
+  };
+
   useEffect(() => {
-    if (!selected) {
-      setBallot(null);
-      return;
-    }
+    if (!selected) return;
     let cancelled = false;
-    setLoading(true);
     fetchTownBallot(state, selected)
       .then((b) => {
         if (!cancelled) setBallot(b);
@@ -693,7 +698,7 @@ function TownSection({ state, pageElectionDate }: { state: string; pageElectionD
         </p>
         <select
           value={selected}
-          onChange={(e) => setSelected(e.target.value)}
+          onChange={(e) => chooseTown(e.target.value)}
           className="bg-surface-base border border-white/15 text-ink-hi font-mono text-xs px-3 py-2 mb-4"
           aria-label="Select your town for local races (optional, approximate)"
         >
@@ -966,7 +971,9 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
           <StateLegislatureSection ballot={ballot} />
           <JudicialSection ballot={ballot} />
 
-          <TownSection state={ballot.state} pageElectionDate={ballot.electionDate} />
+          {/* Keyed by state: a town picked on one state's page must not carry
+              over to another's if the page component is reused. */}
+          <TownSection key={ballot.state} state={ballot.state} pageElectionDate={ballot.electionDate} />
 
           {!hasFederalRaces && (
             <p className="text-base text-ink-min">
