@@ -478,7 +478,8 @@ from app.pipeline.fetch.state_candidates_certified_table import (  # noqa: E402
     fetch_confirmed_candidates as fetch_certified_table,
     parse_certified_rows,
 )
-from app.pipeline.fetch.state_candidates_common import parse_office  # noqa: E402
+from app.pipeline.fetch.state_candidates_common import discover_certification_link, parse_office  # noqa: E402
+from app.pipeline.rate_limiter import RateLimiter  # noqa: E402
 
 
 def test_united_states_house_is_a_federal_label():
@@ -574,6 +575,7 @@ def test_florida_list_keeps_the_ballot_and_carries_the_district_forward():
     # Defeated, withdrawn and declared write-ins are not on the ballot.
 
 
+from app.pipeline.fetch.state_candidates_certified_table import _rows as _rows_of_certified_table  # noqa: E402
 from app.pipeline.fetch.state_candidates_certified_table import pdf_table_rows  # noqa: E402
 
 
@@ -786,3 +788,42 @@ async def test_every_linked_office_page_is_read_and_write_ins_are_not():
     assert {(r["office"], r["district"], r["display_name"], r["party"]) for r in got} == {
         ("S", None, "Andy Barr", "R"), ("H", 5, "Gerardo Serrano", "I"),
     }
+
+
+def test_tables_under_office_headings_with_the_party_in_the_name():
+    # Alaska: one table per office under an <h4>, the registration printed
+    # in the name cell, write-ins listed but not printed on the ballot.
+    page = ("<h4>UNITED STATES SENATOR</h4><table><tr><th>Candidate Name on Ballot</th><th>Contact</th></tr>"
+            "<tr><td>Heikes, Gerald L. (Registered Republican) (Certified)</td><td>x</td></tr>"
+            "<tr><td>Sullivan, Daniel J. Jr. (Registered Republican) (Certified)</td><td>x</td></tr>"
+            "<tr><td>Sullivan, Dan S. (Registered Republican) (Certified) Incumbent</td><td>x</td></tr>"
+            "<tr><td>Certified Write-In Hill, Sidney (Undeclared) (Certified)</td><td>x</td></tr></table>"
+            "<h4>UNITED STATES REPRESENTATIVE</h4><table><tr><th>Candidate Name on Ballot</th><th>Contact</th></tr>"
+            "<tr><td>Hill, Bill (Nonpartisan) (Certified)</td><td>x</td></tr></table>"
+            "<h4>SENATE DISTRICT A</h4><table><tr><th>Candidate Name on Ballot</th><th>Contact</th></tr>"
+            "<tr><td>Stedman, Bert K. (Registered Republican) (Certified)</td><td>x</td></tr></table>")
+    fmt = {"html_headings": True, "office_column": "heading_4", "office_parse": True,
+           "party_column": "Candidate Name on Ballot", "party_regex": "\\((?:Registered\\s+)?([^)]+)\\)",
+           "name_columns": ["Candidate Name on Ballot"], "name_last_first": True,
+           "exclude_regex": {"Candidate Name on Ballot": "^Certified Write-In"}}
+    rows = _rows_of_certified_table(page.encode(), "https://ak.test/candidates", fmt)
+    got = [(r["office"], r["display_name"], r["last_name"], r["party"], r["party_label"])
+           for r in parse_certified_rows(rows, fmt)]
+    assert got == [
+        ("S", "Gerald L. Heikes", "Heikes", "R", "Republican"),
+        ("S", "Daniel J. Sullivan Jr.", "Sullivan", "R", "Republican"),
+        ("S", "Dan S. Sullivan", "Sullivan", "R", "Republican"),
+        ("H", "Bill Hill", "Hill", "I", "Nonpartisan"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_two_digit_year_in_a_link():
+    # Alaska names its elections "26genr"; last cycle's link may still be up.
+    page = '<a href="https://ak.test/c/?election=24genr">2024</a> <a href="https://ak.test/c/?election=26genr">2026</a>'
+    async with _client(lambda request: httpx.Response(200, text=page)) as client:
+        url = await discover_certification_link(
+            client, RateLimiter(rps=1000), "https://ak.test/c/", 'href="(https://ak\\.test/c/\\?election={yy}genr)"',
+            2026, "AK",
+        )
+    assert url == "https://ak.test/c/?election=26genr"

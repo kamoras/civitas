@@ -217,7 +217,31 @@
         "name_format": "last_first"
       },
       "description": "Alaska runs a NONPARTISAN TOP-FOUR primary, so advance_count is 4 and every candidate is in one contest regardless of party \u2014 the same structural fork California and Washington's top-two introduced, one step wider. Its results are one precinct-level CSV per election, linked from the division's own results page (the 'enr26' path segment is per-cycle, so the pattern is what's written down, never the URL). Names are printed FEC-style, 'Darden, Dustin Thomas House', where the surname is everything before the comma and the trailing token is a middle name \u2014 hence name_format. Alaska's file is election-night data with no certification flag, and its date comes from the national calendar, so it withholds until 21 days past the primary. Verified live 2026-08-19: both federal contests present, 28,455 precinct rows. RE-PROBED 2026-09-21 after discovery began returning nothing (\"No 2026 results file discoverable for AK\"): the CSV is unchanged and still live at the same /enr26/results/ path, but Alaska moved the link off this landing page onto a per-election sub-page keyed by an internal id (/election-results/e/?id=26prim), so the one-hop discovery had nothing to match. Fixed with landing_page's existing optional index hop rather than any new code -- index_regex reads the id off the index and the HIGHEST one wins, so the cycle is still never written down. Verified live 2026-09-21: all three hops 200, and the real top-four advanced from each contest -- Senate Peltola (D) / Dan S. Sullivan (R) / Daniel J. Sullivan Jr. (no party) / Leslie (D), House Begich (R) / Hill (NON) / Schultz (D) / Hafner (D). The two Sullivans are two REAL different people, not a duplicate. STATE OFFICES surveyed at the same time and deliberately NOT opted in: the file carries Governor / Lieutenant Governor (matched) but its 50 legislative contests are ALL unmatched, in two shapes this codebase has not met -- a bare \"House District 1\" with no \"State\" qualifier, and LETTER-ONLY senate districts (\"Senate District A\" through S), where every other state's district identifier is numeric. Opting in on the Governor alone would drop an omits line while still omitting the whole legislature, which is the false completeness the flag exists to prevent. STATE OFFICES NOW LIVE (2026-09-21), once parse_state_leg_office learned Alaska's two shapes -- a bare \"House District 1\" and LETTER-only \"Senate District A\". Re-surveyed against the same real export and it now partitions completely: 2 federal, 1 statewide, 50 legislative, and the ONLY unmatched contest left is \"BM#1 23RCF2\", a ballot measure rather than an office. The counts are structurally right, not merely nonzero: 40 of 40 house seats (Alaska elects its whole house every two years) and 10 of 20 senate seats lettered A,C,E,G,I,K,M,O,Q,S -- every OTHER letter, which is exactly what a staggered four-year senate with half its seats up looks like. The single statewide contest is complete too, and this is the one state where a count of 1 is not a red flag: Alaska elects only a Governor / Lieutenant Governor ticket statewide, with no separately elected attorney general, secretary of state, treasurer or auditor to omit.",
-      "statewide_offices": true
+      "statewide_offices": true,
+      "general_list": {
+        "source_name": "Alaska Division of Elections (general election candidate list)",
+        "strategy": "certified_table",
+        "runoff_threshold_pct": null,
+        "discovery": {
+          "page_url": "https://www.elections.alaska.gov/election-candidates/",
+          "link_regex": "href=\"(https://www\\.elections\\.alaska\\.gov/candidates/\\?election={yy}genr)\""
+        },
+        "format": {
+          "html_headings": true,
+          "office_column": "heading_4",
+          "office_parse": true,
+          "party_column": "Candidate Name on Ballot",
+          "party_regex": "\\((?:Registered\\s+)?([^)]+)\\)",
+          "name_columns": [
+            "Candidate Name on Ballot"
+          ],
+          "name_last_first": true,
+          "exclude_regex": {
+            "Candidate Name on Ballot": "^Certified Write-In"
+          }
+        },
+        "description": "Added 2026-09-26. The Division of Elections' candidate list for the general election (\"26genr\", found from the candidates page with `{yy}`), one table per office under an <h4> heading. Alaska's top-four primary names four finalists, but a finalist who withdraws is replaced by the fifth-place finisher (2022's U.S. Senate race), which primary results cannot show; this list is the ballot as it stands. Each name carries the candidate's registration in parentheses (\"Peltola, Mary (Registered Democrat) (Certified)\"), which is where the party is read from (`party_regex`, the first parenthesis); \"Nonpartisan\" and \"Undeclared\" registrations are independent. Certified write-ins are listed too, prefixed \"Certified Write-In\", and excluded because they are not printed. Only the name cell is read; the address and contact cells are not."
+      }
     },
     "HI": {
       "source_name": "Hawaii Office of Elections (statewide summary file)",
@@ -750,7 +774,32 @@
       ],
       "runoff_threshold_pct": null,
       "settle_days": 45,
-      "description": "The SOS's own election-night-reporting site (electionresults.mt.gov), reached with no login and no bot-detection friction at all with plain browser headers -- running the same \"TotalVote\" vendor platform as Nebraska (see NE's entry and state_candidates_totalvote.py's module docstring for the shared design). ONE query, no discovery step: type=FED&map=CTY with NO eid param always serves the CURRENT election -- an explicit eid can point at a STALE past one instead (verified live 2026-09-06: a real eid found in the site's own county-export links actually returned 2024 General data, not the 2026 Primary), so the page's own title (\"Primary Election - June 2, 2026\") is parsed and cross-checked against the requested year before anything on it is trusted; once the same URL rolls over to the November general, that reads as \"nothing to confirm from this stage\" rather than a fetch failure. Montana bundles Senate and House under this one FED query, unlike Nebraska which splits them across two. Clean server-rendered HTML: one contest block per (office, party) -- Montana runs ordinary single-party primaries, never a mixed-party block (verified live: the 2026 Senate primary is 3 separate blocks, R/D/L). The office label (\"UNITED STATES SENATOR\" / \"UNITED STATES REPRESENTATIVE 1ST CONGRESSIONAL\") and party label (\"Republican\"/\"Democrat\"/\"Libertarian\"/\"Green\") both already match this system's shared parse_office/normalize_party with zero new parsing needed. A write-in row, if one ever draws enough votes to appear, is excluded the same way state_candidates_tn.py/canvass_xml.py already do -- not seen in the real 2026 field, a defensive guard rather than a fixture-driven fix. Montana nominates on a PLURALITY -- no federal-primary runoff exists in state law -- so runoff_threshold_pct is null. No certification flag is published anywhere on the results page itself (same shape as AR/CT/TN/FL), so settle_days is the only freshness gate -- set to 45, not this system's own DEFAULT_SETTLE_DAYS (30) or AR/CT's 21, because Montana's own 2026 Primary Reconciliation Report was still being updated as late as 7/17/2026, exactly 45 days after the June 2 primary: the directly-observed number itself, not a cited statutory deadline (none found in the time available for this research pass) or a rounder, more conservative one built on top of it. Verified live 2026-09-06 against the real, certified 2026 primary (100% precincts reporting): Kurt Alme (Senate R, real plurality winner of a 3-way field, 76.1%), Alani Bankhead (Senate D, real plurality winner of a 5-way field, 43.6%), Aaron Flint (CD1 R, real plurality winner of a 4-way field), Sam Forstag (CD1 D, real plurality winner of a 4-way field), Troy Downing (CD2 R, unopposed), Brian J Miller (CD2 D, real plurality winner of a 3-way field)."
+      "description": "The SOS's own election-night-reporting site (electionresults.mt.gov), reached with no login and no bot-detection friction at all with plain browser headers -- running the same \"TotalVote\" vendor platform as Nebraska (see NE's entry and state_candidates_totalvote.py's module docstring for the shared design). ONE query, no discovery step: type=FED&map=CTY with NO eid param always serves the CURRENT election -- an explicit eid can point at a STALE past one instead (verified live 2026-09-06: a real eid found in the site's own county-export links actually returned 2024 General data, not the 2026 Primary), so the page's own title (\"Primary Election - June 2, 2026\") is parsed and cross-checked against the requested year before anything on it is trusted; once the same URL rolls over to the November general, that reads as \"nothing to confirm from this stage\" rather than a fetch failure. Montana bundles Senate and House under this one FED query, unlike Nebraska which splits them across two. Clean server-rendered HTML: one contest block per (office, party) -- Montana runs ordinary single-party primaries, never a mixed-party block (verified live: the 2026 Senate primary is 3 separate blocks, R/D/L). The office label (\"UNITED STATES SENATOR\" / \"UNITED STATES REPRESENTATIVE 1ST CONGRESSIONAL\") and party label (\"Republican\"/\"Democrat\"/\"Libertarian\"/\"Green\") both already match this system's shared parse_office/normalize_party with zero new parsing needed. A write-in row, if one ever draws enough votes to appear, is excluded the same way state_candidates_tn.py/canvass_xml.py already do -- not seen in the real 2026 field, a defensive guard rather than a fixture-driven fix. Montana nominates on a PLURALITY -- no federal-primary runoff exists in state law -- so runoff_threshold_pct is null. No certification flag is published anywhere on the results page itself (same shape as AR/CT/TN/FL), so settle_days is the only freshness gate -- set to 45, not this system's own DEFAULT_SETTLE_DAYS (30) or AR/CT's 21, because Montana's own 2026 Primary Reconciliation Report was still being updated as late as 7/17/2026, exactly 45 days after the June 2 primary: the directly-observed number itself, not a cited statutory deadline (none found in the time available for this research pass) or a rounder, more conservative one built on top of it. Verified live 2026-09-06 against the real, certified 2026 primary (100% precincts reporting): Kurt Alme (Senate R, real plurality winner of a 3-way field, 76.1%), Alani Bankhead (Senate D, real plurality winner of a 5-way field, 43.6%), Aaron Flint (CD1 R, real plurality winner of a 4-way field), Sam Forstag (CD1 D, real plurality winner of a 4-way field), Troy Downing (CD2 R, unopposed), Brian J Miller (CD2 D, real plurality winner of a 3-way field).",
+      "general_list": {
+        "source_name": "Montana Secretary of State (candidate filing list)",
+        "strategy": "certified_table",
+        "runoff_threshold_pct": null,
+        "discovery": {
+          "page_url": "https://sosmt.gov/elections/filing/",
+          "link_regex": "href=\"(https://candidatefiling\\.mt\\.gov/candidatefiling/CandidateList\\.aspx\\?e=\\d+)\"",
+          "year_regex": "PRIMARY {year} Candidate List",
+          "form_button": "ctl00$ContentPlaceHolder1$grdCandidates$ctl00$ctl02$ctl00$ExportToCsvButton"
+        },
+        "format": {
+          "office_column": "Race",
+          "office_parse": true,
+          "district_column": "District",
+          "party_column": "Party Preference",
+          "name_columns": [
+            "Name"
+          ],
+          "status_column": "Status",
+          "status_values": [
+            "NOMINATED"
+          ]
+        },
+        "description": "Added 2026-09-26. The Secretary of State's candidate filing list for the cycle, exported through the page's own Export to CSV button (the grid is paged). Every filing carries a status, and \"NOMINATED\" is the November ballot: the primary winners plus minor-party nominees (MT-1's Nick Sheedy, whom no primary shows). FILED (lost the primary), Withdrawn, REMOVED and PENDING PETITION are not read, so an independent whose petition is still pending appears once the state marks them NOMINATED. The list is linked from the filing page under an election id that changes each cycle, and the page must name this year before anything is read. An asterisk marks an incumbent and is stripped as an annotation."
+      }
     },
     "NE": {
       "source_name": "Nebraska Secretary of State (Election Night Reporting)",
