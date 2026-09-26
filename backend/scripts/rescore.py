@@ -295,7 +295,9 @@ def main() -> int:
             effective_party=payload["votingRecord"].get("effectiveParty"),
             reference=payload.get("constituentReference"),
         ):
-            metrics["party_break_rate"] = None  # the score declines there by design
+            # the score declines there by design; checked in that direction
+            metrics["party_break_rate_past_saturation"] = metrics["party_break_rate"]
+            metrics["party_break_rate"] = None
         results.append({
             "metrics": metrics,
             "raw": {

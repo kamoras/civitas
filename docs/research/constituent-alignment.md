@@ -117,7 +117,8 @@ in the test. The effect is similar in safe seats (1.52, t=2.8) and other seats
 **Changed:** the expected break rate is now measured from the chamber every
 run, per party, with a bend at a swing seat (`compute_constituent_reference`).
 Scoring is symmetric around it, and the scale is the chamber's
-90th-percentile deviation.
+90th-percentile deviation. (Since v6.14 the score turns back down past that
+deviation on the crossing side; see section 8.)
 
 ### 5. No discount for flank-side defectors
 

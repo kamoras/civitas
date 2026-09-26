@@ -1367,6 +1367,12 @@ _MIN_CONSTITUENT_REFERENCE_PARTY = 20
 _MIN_OPPOSED_SEATS_FOR_KINK = 5
 
 
+# The deviation quantile Constituent Alignment's vote score saturates at
+# (deviation_p90): the most out-of-pattern tenth of a chamber, measured on
+# both sides of the expectation, sits at or past it.
+SATURATION_QUANTILE = 0.9
+
+
 def party_vote_weight(party_alignment_weight: float | None) -> float:
     """A party-labeled vote's weight in the break rate: its party-alignment
     weight, or 1 when none was measured."""
@@ -1457,7 +1463,7 @@ def compute_constituent_reference(members: list[tuple[str, float, float]]) -> di
         }
         fits[party] = fit
         deviations += [abs(r - _expected_break_rate(fit, a)) for a, r in rows]
-    p90 = float(np.quantile(deviations, 0.9))
+    p90 = float(np.quantile(deviations, SATURATION_QUANTILE))
     if p90 <= 0:
         return None
     return {"expected": fits, "deviation_p90": round(p90, 5), "n": len(deviations)}
@@ -1509,6 +1515,28 @@ def _seat_relative_vote_score(deviation: float, scale: float) -> float:
     return max(0.0, 100.0 - 50.0 * OVER_BREAK_DECLINE * (scaled - 1.0))
 
 
+def _seat_vote_expectation(
+    state: str,
+    party: str,
+    effective_party: str | None,
+    district: int | None,
+    reference: dict | None,
+) -> tuple[float, float | None, float | None]:
+    """(seat alignment, expected break rate, saturation deviation) for a
+    member, the last two None when the chamber has no measured expectation
+    for their party. The single derivation both the score
+    (_constituent_alignment_core) and the gate (break_rate_past_saturation)
+    read, so they can't disagree about who is past saturation."""
+    alignment = _signed_state_alignment(state, party, effective_party=effective_party, district=district)
+    chamber = "house" if district is not None else "senate"
+    ref = _constituent_reference(chamber, reference)
+    fit = (ref.get("expected") or {}).get(effective_party or party)
+    scale = ref.get("deviation_p90")
+    if fit is None or not scale:
+        return alignment, None, None
+    return alignment, _expected_break_rate(fit, alignment), float(scale)
+
+
 def break_rate_past_saturation(
     break_rate: float,
     state: str,
@@ -1519,17 +1547,11 @@ def break_rate_past_saturation(
 ) -> bool:
     """True when a member breaks with their party by more than the chamber's
     saturation deviation above their seat's expectation — the range where
-    the seat-relative vote score declines as the break rate rises. Used by
-    the ground-truth gate to keep that range out of its rises-with-break-rate
-    rank check."""
-    chamber = "house" if district is not None else "senate"
-    ref = _constituent_reference(chamber, reference)
-    fit = (ref.get("expected") or {}).get(effective_party or party)
-    scale = ref.get("deviation_p90")
-    if fit is None or not scale:
-        return False
-    alignment = _signed_state_alignment(state, party, effective_party=effective_party, district=district)
-    return break_rate - _expected_break_rate(fit, alignment) > float(scale)
+    the seat-relative vote score declines as the break rate rises. The
+    ground-truth gate checks that range separately, in the opposite
+    direction, from its rises-with-break-rate rank check."""
+    _, expected, scale = _seat_vote_expectation(state, party, effective_party, district, reference)
+    return expected is not None and break_rate - expected > scale
 
 
 # Weight of position congruence when a roll-call ideal point exists; the
@@ -1635,8 +1657,8 @@ def _constituent_alignment_core(
     contract as _funding_independence_core above."""
     effective_party = voting_record.get("effectiveParty", party)
     eval_party = effective_party or party
-    alignment = _signed_state_alignment(
-        state, party, effective_party=effective_party, district=district,
+    alignment, expected, deviation_scale = _seat_vote_expectation(
+        state, party, effective_party, district, reference,
     )
     chamber = "house" if district is not None else "senate"
 
@@ -1659,31 +1681,26 @@ def _constituent_alignment_core(
         )
 
     break_rate, n_party = party_break_rate(voting_record)
-    ref = _constituent_reference(chamber, reference)
-    vote_fit = (ref.get("expected") or {}).get(eval_party)
-    deviation_scale = ref.get("deviation_p90")
-    expected = None
     if break_rate is None:
         party_score = 50.0
         party_alignment_detail = "fewer than 3 party-labeled votes available — neutral 50"
-    elif vote_fit is None or not deviation_scale:
+    elif expected is None:
         party_score = 50.0
         party_alignment_detail = (
             f"break rate {break_rate:.1%}; no measured expectation for a "
             f"{eval_party or 'non-caucusing'} member of this chamber — neutral 50"
         )
     else:
-        expected = _expected_break_rate(vote_fit, alignment)
         deviation = break_rate - expected
-        party_score = _seat_relative_vote_score(deviation, float(deviation_scale))
+        party_score = _seat_relative_vote_score(deviation, deviation_scale)
         party_alignment_detail = (
             f"broke with party on {break_rate:.1%} of {n_party} party-labeled votes; "
             f"{eval_party} members of this chamber in seats with this lean "
             f"(signal {alignment:+.2f}) break on {expected:.1%}"
         )
-        if deviation > float(deviation_scale):
+        if deviation > deviation_scale:
             party_alignment_detail += (
-                f" — more than {float(deviation_scale):.1%} above that is past the "
+                f" — more than {deviation_scale:.1%} above that is past the "
                 "chamber's 90th-percentile gap, where breaking further lowers the score"
             )
 

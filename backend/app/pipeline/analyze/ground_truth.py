@@ -64,7 +64,12 @@ from collections import Counter, defaultdict
 
 from scipy import stats as scipy_stats
 
-from app.pipeline.analyze.score_calculator import break_rate_past_saturation, party_vote_weight
+from app.pipeline.analyze.population_reference import CONSTITUENT_REFERENCE
+from app.pipeline.analyze.score_calculator import (
+    SATURATION_QUANTILE,
+    break_rate_past_saturation,
+    party_vote_weight,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -111,11 +116,13 @@ _CONSISTENCY_CHECKS: list[tuple[str, str, int, str]] = [
      "PAC share of receipts (FEC)"),
     ("small_donor_pct", "score_funding_independence", +1,
      "small-donor share of receipts (FEC unitemized)"),
-    # Members past the saturation deviation are left out of this one
-    # (party_break_rate None): there the score declines by design as the
-    # break rate rises (score_calculator.OVER_BREAK_DECLINE).
+    # Constituent Alignment rises with the break rate up to the saturation
+    # deviation and falls past it (score_calculator.OVER_BREAK_DECLINE), so
+    # each side is checked in its own direction over its own members.
     ("party_break_rate", "score_constituent_alignment", +1,
      "observed party-break rate on labeled roll-call votes, below saturation"),
+    ("party_break_rate_past_saturation", "score_constituent_alignment", -1,
+     "observed party-break rate on labeled roll-call votes, past saturation"),
 ]
 
 
@@ -152,6 +159,17 @@ def _tie_extended_extreme(
     return ordered[idx:], ordered[:idx]
 
 
+def _past_saturation_share(members: list[dict]) -> float:
+    """Share of members with a readable break rate who sit past the
+    saturation deviation. By construction at most ~1 - SATURATION_QUANTILE
+    of the population the reference was measured on; the probe allows
+    twice that, because the gate reads the stored votes of current members
+    rather than the exact run population."""
+    past = sum(m["metrics"].get("party_break_rate_past_saturation") is not None for m in members)
+    readable = past + sum(m["metrics"].get("party_break_rate") is not None for m in members)
+    return past / readable if readable else 0.0
+
+
 def evaluate_derived_checks(members: list[dict], entity_label: str = "senators") -> dict:
     """Run the integrity + consistency checks over plain member records.
 
@@ -164,7 +182,10 @@ def evaluate_derived_checks(members: list[dict], entity_label: str = "senators")
          "scores": {score_attr: float | None},
          "metrics": {"pac_ratio": float | None,
                      "small_donor_pct": float | None,
-                     "party_break_rate": float | None},
+                     # the member's break rate goes in exactly one of these
+                     # two, by whether it is past saturation
+                     "party_break_rate": float | None,
+                     "party_break_rate_past_saturation": float | None},
          "raw": {"total_raised": float, "total_from_pacs": float,
                  "labeled_votes": int}}
 
@@ -212,6 +233,15 @@ def evaluate_derived_checks(members: list[dict], entity_label: str = "senators")
             "IV", "party-labeled votes exist",
             "no {label} has any party-labeled vote — vote fetch or "
             "party-labeling is producing nothing",
+        ),
+        (
+            _past_saturation_share(members) > 2 * (1 - SATURATION_QUANTILE),
+            "IV", "at most the chamber's out-of-pattern tail past saturation",
+            "more {label}s sit past Constituent Alignment's saturation "
+            "deviation than its definition allows (it is the chamber's "
+            f"{SATURATION_QUANTILE:.0%} quantile, so about "
+            f"{1 - SATURATION_QUANTILE:.0%} of members at most) — the "
+            "constituent reference and the votes disagree",
         ),
     ]
     for failed, dim_label, expectation, rationale in integrity_probes:
@@ -353,9 +383,11 @@ def _member_records(db, model) -> list[dict]:
     from the chamber's current members and their labeled votes."""
     vote_model, fk_col = _vote_query_for(model)
     # id -> [breaks, labeled, weighted breaks, weighted labeled]. The rank
-    # check reads the plain count, an independent reading of the raw votes;
-    # whether a member is past saturation is judged on the weighted rate,
-    # the statistic the score itself compares (party_break_rate).
+    # checks read the plain count, an independent reading of the raw votes;
+    # which side of saturation a member is on is judged on the weighted
+    # rate, the statistic the score itself compares (party_break_rate —
+    # storage already holds each roll call once, so no dedupe is needed).
+    reference = CONSTITUENT_REFERENCE.load()
     counts: dict[str, list[float]] = defaultdict(lambda: [0, 0, 0.0, 0.0])
     for member_id, with_party, weight in (
         db.query(fk_col, vote_model.voted_with_party, vote_model.party_alignment_weight)
@@ -378,12 +410,14 @@ def _member_records(db, model) -> list[dict]:
         base = getattr(m, "total_contributions", None) or raised
         breaks, labeled, w_breaks, w_labeled = counts[m.id]
         break_rate = breaks / labeled if labeled >= MIN_LABELED_VOTES else None
+        past_saturation = None
         if break_rate is not None and break_rate_past_saturation(
             w_breaks / w_labeled, m.state or "", m.party or "I",
             effective_party=getattr(m, "caucus_party", None),
             district=getattr(m, "district", None),
+            reference=reference,
         ):
-            break_rate = None
+            break_rate, past_saturation = None, break_rate
         records.append({
             "id": m.id,
             "name": m.name,
@@ -392,6 +426,7 @@ def _member_records(db, model) -> list[dict]:
                 "pac_ratio": (m.total_from_pacs or 0) / base if base > 0 else None,
                 "small_donor_pct": m.small_donor_percentage if base > 0 else None,
                 "party_break_rate": break_rate,
+                "party_break_rate_past_saturation": past_saturation,
             },
             "raw": {
                 "total_raised": raised,

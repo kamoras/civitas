@@ -68,10 +68,12 @@ def _add_votes(db, senator_id, breaks, total):
         ))
 
 
-def _healthy_population(db, n=40, votes_per_member=50):
+def _healthy_population(db, n=40, votes_per_member=200):
     """A population whose scores rank-track their raw data by construction:
     FI falls as PAC share rises and rises with small-donor share; IV rises
-    with the observed break rate."""
+    with the observed break rate, which stays below Constituent Alignment's
+    saturation deviation (0-19.5% against a ~7% expectation and 20-point
+    saturation), where the score is meant to rise."""
     for i in range(n):
         s = _add_senator(
             db, f"s{i}",
@@ -104,7 +106,7 @@ class TestDerivedConsistency:
                 total_from_pacs=1_000_000 * i / 50,
                 small_donor_pct=40 - 0.8 * i,
             )
-            _add_votes(db_session, s.id, breaks=i, total=50)
+            _add_votes(db_session, s.id, breaks=i, total=200)
         db_session.commit()
 
         failures = check_ground_truth(db_session)["failures"]
@@ -138,25 +140,56 @@ class TestDerivedConsistency:
             for f in failures
         )
 
-    def test_crossers_past_saturation_scored_lower_are_not_flagged(self, db_session):
-        # v6.14: past the saturation deviation the score falls as the break
-        # rate rises, by design. Members there are left out of the
-        # rises-with-break-rate check, so the gate stays quiet. Break rates
-        # run 0-78% against a ~7% expectation and 20-point saturation.
-        for i in range(40):
-            rate = i / 50
+    @staticmethod
+    def _peaked_population(db, past_iv):
+        """50 members below saturation (0-24.5% breaks, ~7% expected, 20-point
+        saturation) scored rising with break rate, and 10 past it (35-80%)
+        scored by past_iv(k), k = 0..9 in rising break-rate order."""
+        for i in range(60):
+            below = i < 50
+            breaks = i if below else 70 + 10 * (i - 50)
             s = _add_senator(
-                db_session, f"s{i}",
-                iv=25 + 1.5 * i if rate <= 0.25 else 10,
+                db, f"s{i}",
+                iv=25 + 1.5 * i if below else past_iv(i - 50),
                 fi=95 - 1.5 * i,
                 total_raised=1_000_000,
-                total_from_pacs=1_000_000 * i / 50,
-                small_donor_pct=40 - 0.8 * i,
+                total_from_pacs=1_000_000 * i / 60,
+                small_donor_pct=40 - 0.6 * i,
             )
-            _add_votes(db_session, s.id, breaks=i, total=50)
-        db_session.commit()
+            _add_votes(db, s.id, breaks=breaks, total=200)
+        db.commit()
 
-        assert not any(f["dimension"] == "IV" for f in check_ground_truth(db_session)["failures"])
+    def test_peaked_scores_pass(self, db_session):
+        # v6.14: rising to saturation, falling past it — the design.
+        self._peaked_population(db_session, past_iv=lambda k: 95 - 9 * k)
+        report = check_ground_truth(db_session)
+        assert report["failures"] == []
+
+    def test_scores_still_rising_past_saturation_flagged(self, db_session):
+        # A regression back to "more breaking always scores higher" past
+        # saturation is caught by the declining-side check.
+        self._peaked_population(db_session, past_iv=lambda k: 90 + k)
+        failures = check_ground_truth(db_session)["failures"]
+        assert any(
+            f["dimension"] == "IV" and "past saturation" in f["rationale"]
+            for f in failures
+        )
+
+    def test_reference_that_puts_most_members_past_saturation_flagged(self, db_session, monkeypatch):
+        # A broken reference (saturation shrunk to a sliver) would push most
+        # members out of the rising-side check; the probe says so rather
+        # than letting that check fall under its minimum and skip quietly.
+        from app.pipeline.analyze import population_reference
+
+        self._peaked_population(db_session, past_iv=lambda k: 95 - 9 * k)
+        broken = {c: {"expected": {"D": {"a": 0.0, "b": 0.0}}, "deviation_p90": 0.001}
+                  for c in ("senate", "house")}
+        monkeypatch.setattr(population_reference.CONSTITUENT_REFERENCE, "load", lambda: broken)
+        failures = check_ground_truth(db_session)["failures"]
+        assert any(
+            f["dimension"] == "IV" and "reference and the votes disagree" in f["rationale"]
+            for f in failures
+        )
 
     def test_saturation_is_judged_on_the_weighted_rate_the_score_uses(self, db_session):
         # The five top crossers break on under 20% of their votes by plain
@@ -236,7 +269,7 @@ class TestDerivedConsistency:
                 small_donor_percentage=40 - 0.8 * i,
             )
             db_session.add(s)
-            _add_votes(db_session, s.id, breaks=i, total=50)
+            _add_votes(db_session, s.id, breaks=i, total=200)
         db_session.commit()
 
         assert check_ground_truth(db_session)["failures"] == []

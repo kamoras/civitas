@@ -25,7 +25,7 @@ export interface ScoreVersion {
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
     version: "v6.14",
-    date: "2026-09-27",
+    date: "2026-09-26",
     title: "Constituent Alignment: breaking with your party far more than your seat calls for no longer scores as perfect",
     tldr: "Breaking with your party more often than members in similar seats still raises Constituent Alignment, up to a point. Past the point where the most out-of-pattern tenth of members sit, breaking even more now lowers it again. Before, anyone past that point scored 100 however far they went.",
     changes: [

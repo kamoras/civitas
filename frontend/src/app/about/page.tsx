@@ -314,7 +314,7 @@ export default function AboutPage() {
                   year, and a handful can by chance come mostly from one party.
                 </P>
                 <P>
-                  Why symmetric, and why no special treatment for safe seats: through v6.12 a member
+                  Why loyalty is scored too, and why no special treatment for safe seats: through v6.12 a member
                   more loyal than expected was held at neutral, on the argument that loyalty is
                   &quot;unreadable&quot;, and credit for breaking or for a centrist position shrank
                   in safe seats. We tested both choices against 2,545 U.S. House re-election results
