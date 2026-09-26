@@ -9,6 +9,7 @@ import {
   hourlySlots,
   runsPerDay,
   slotSum,
+  slotStates,
 } from "./trends";
 
 const run = (over: Partial<PipelineTrendRun>): PipelineTrendRun => ({
@@ -169,5 +170,52 @@ describe("finishedSince", () => {
   it("reports nothing on the first poll or while still running", () => {
     expect(finishedSince({}, [p("senate", false, "completed")])).toEqual([]);
     expect(finishedSince({ senate: true }, [p("senate", true, "running")])).toEqual([]);
+  });
+});
+
+describe("slotStates", () => {
+  const now = Date.parse("2026-09-26T08:30:00Z");
+  const r = (at: string) => ({
+    run: at,
+    recordedAt: at,
+    counts: {},
+    issuesPublished: 0,
+    suppressed: 0,
+  });
+  // Slots 03:15 .. 08:15. The nightly Senate run 03:00-05:00 blocks the 03:15
+  // and 04:15 ticks; 06:15 ran; 05:15 and 07:15 are real misses; 08:15 is now.
+  const slots = hourlySlots([r("2026-09-26T06:20:00")], 6, now);
+  const senate = run({
+    pipelineType: "senate",
+    startedAt: "2026-09-26T03:00:00",
+    elapsedSeconds: 7200,
+  });
+
+  it("tells a deliberate pipeline skip from a crash, and the current slot from either", () => {
+    expect(slotStates(slots, [senate], now)).toEqual([
+      "skipped",
+      "skipped",
+      "missing",
+      "ran",
+      "missing",
+      "pending",
+    ]);
+  });
+
+  it("treats a still-running pipeline as blocking up to now, and ignores non-blocking ones", () => {
+    const running = run({
+      pipelineType: "house",
+      startedAt: "2026-09-26T07:00:00",
+      status: "running",
+      elapsedSeconds: null,
+    });
+    const stock = run({
+      pipelineType: "stock_trades",
+      startedAt: "2026-09-26T05:00:00",
+      elapsedSeconds: 7200,
+    });
+    const states = slotStates(slots, [running, stock], now);
+    expect(states[2]).toBe("missing"); // 05:15: stock trades doesn't block refreshes
+    expect(states[4]).toBe("skipped"); // 07:15: House still running
   });
 });

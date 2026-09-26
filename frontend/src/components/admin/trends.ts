@@ -186,3 +186,45 @@ export function finishedSince(
       elapsedSeconds: p.elapsedSeconds,
     }));
 }
+
+/** The pipelines whose runs make scheduler.py skip an Action Center refresh. */
+const REFRESH_BLOCKING_PIPELINES = new Set(["senate", "house"]);
+
+export type SlotState = "ran" | "skipped" | "pending" | "missing";
+
+/**
+ * Why each refresh slot does or doesn't have a run.
+ *
+ * scheduler.py's hourly refresh deliberately returns without running while
+ * a Senate or House pipeline run is in progress, so the nightly chain leaves
+ * two or more empty slots every day. Counting those as missing would make
+ * "a refresh crashed" permanently true and therefore meaningless. A slot is:
+ * - ran: a run was recorded in it;
+ * - skipped: empty, and its HH:15 tick fell inside a blocking pipeline run;
+ * - pending: the current slot, still empty — its refresh may be running now;
+ * - missing: anything else — a refresh that crashed or never started.
+ */
+export function slotStates(
+  slots: HourSlot[],
+  pipelineRuns: PipelineTrendRun[],
+  now: number
+): SlotState[] {
+  const busy = pipelineRuns
+    .filter((r) => REFRESH_BLOCKING_PIPELINES.has(r.pipelineType) && r.startedAt)
+    .map((r) => {
+      const start = parseUTC(r.startedAt as string).getTime();
+      const end =
+        r.elapsedSeconds != null
+          ? start + r.elapsedSeconds * 1000
+          : r.status === "running"
+            ? now
+            : start;
+      return [start, end] as const;
+    });
+  return slots.map((slot, i) => {
+    if (slot.runs.length > 0) return "ran";
+    if (busy.some(([s, e]) => slot.start >= s && slot.start <= e)) return "skipped";
+    if (i === slots.length - 1) return "pending";
+    return "missing";
+  });
+}

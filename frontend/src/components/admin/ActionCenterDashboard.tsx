@@ -4,15 +4,17 @@ import { useEffect, useState } from "react";
 import { useNow } from "@/hooks/useNow";
 import {
   fetchAdminActionMetrics,
+  fetchAdminPipelineTrend,
   type ActionMetrics,
   type ActionMetricsRun,
   type ActionRefreshState,
+  type PipelineTrendRun,
 } from "@/lib/api";
 import LineChart from "./charts/LineChart";
 import { SERIES } from "./charts/palette";
 import { formatCompact } from "./charts/scale";
 import { formatDuration, formatTime, parseUTC } from "./format";
-import { hourlySlots, slotSum } from "./trends";
+import { hourlySlots, slotStates, slotSum } from "./trends";
 import { Panel, RankBars, Segmented, StatTile } from "./widgets";
 
 // --- Action Center Status Panel ---
@@ -174,15 +176,26 @@ export function ActionCenterDashboard({
   // days as "no refresh runs", which reads as the Action Center being dead.
   const [refetchFailed, setRefetchFailed] = useState(false);
 
+  // Senate/House runs over the same window: the scheduler skips a refresh
+  // while one is running, and those slots are not failures. Null when the
+  // lookup failed, in which case empty slots can't be classified.
+  const [pipelineRuns, setPipelineRuns] = useState<PipelineTrendRun[] | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     const load = () =>
-      // Two hours of slack: the backend's window is rolling, the chart's is
-      // slot-aligned, so fetch a superset and let the slots decide.
-      fetchAdminActionMetrics(token, limit + 2)
-        .then((m) => {
+      Promise.all([
+        // Two hours of slack: the backend's window is rolling, the chart's is
+        // slot-aligned, so fetch a superset and let the slots decide.
+        fetchAdminActionMetrics(token, limit + 2),
+        fetchAdminPipelineTrend(token, Math.ceil((limit + 2) / 24) + 1)
+          .then((t) => t.runs)
+          .catch(() => null),
+      ])
+        .then(([m, p]) => {
           if (cancelled) return;
           setMetrics(m);
+          setPipelineRuns(p);
           setLoadedLimit(limit);
           setFetchedAt(Date.now());
           setRefetchFailed(false);
@@ -203,7 +216,12 @@ export function ActionCenterDashboard({
   const slots = fetchedAt ? hourlySlots(metrics?.runs ?? [], hours, fetchedAt) : [];
   // Every figure on this tab is computed from these slots — the tiles, the
   // lines and the per-gate bars — so they all describe the same set of runs.
-  const ran = slots.filter((s) => s.runs.length > 0).length;
+  const states = slotStates(slots, pipelineRuns ?? [], fetchedAt);
+  const ran = states.filter((st) => st === "ran").length;
+  const skipped = states.filter((st) => st === "skipped").length;
+  const missing = states.filter((st) => st === "missing").length;
+  const runCount = slots.reduce((n, s) => n + s.runs.length, 0);
+  const loaded = fetchedAt > 0;
   const labels = slots.map((s) => hourLabel(s.start));
   const tickLabel = (i: number) => labels[i].replace(",", "");
   const count = (k: string) => slots.map((s) => slotSum(s, (r) => r.counts[k] ?? 0));
@@ -237,24 +255,30 @@ export function ActionCenterDashboard({
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile
-          label="Hours with a refresh"
-          value={`${ran} / ${hours}`}
-          tone={metrics && ran < hours - 1 ? "text-signal-amber" : "text-ink-hi"}
-          note="a missing hour is a refresh that crashed or never started — a gap in the charts"
+          label="Refreshes"
+          value={loaded ? `${ran} / ${ran + missing}` : "—"}
+          tone={loaded && missing > 0 && pipelineRuns ? "text-signal-amber" : "text-ink-hi"}
+          note={
+            !loaded
+              ? undefined
+              : !pipelineRuns
+                ? "couldn't load pipeline runs, so a skipped hour can't be told from a missed one"
+                : `${missing} missed (crashed or never started) · ${skipped} skipped while the nightly pipeline ran`
+          }
         />
         <StatTile
           label="Articles fetched"
-          value={formatCompact(fetched)}
-          note={`over ${ran} runs`}
+          value={loaded ? formatCompact(fetched) : "—"}
+          note={loaded ? `over ${runCount} runs` : undefined}
         />
         <StatTile
           label="Issues published"
-          value={published.toLocaleString()}
+          value={loaded ? published.toLocaleString() : "—"}
           note="new topics + updates to existing"
         />
         <StatTile
           label="Suppressed by a gate"
-          value={suppressed.toLocaleString()}
+          value={loaded ? suppressed.toLocaleString() : "—"}
           note="dropped by a validator — see below"
         />
       </div>
@@ -268,7 +292,7 @@ export function ActionCenterDashboard({
         <Panel title="Intake">
           <LineChart
             title="ARTICLES PER RUN"
-            subtitle="fetched from feeds, and how many passed the policy-relevance filter"
+            subtitle="fetched, and how many passed the policy-relevance filter; a gap is an hour with no refresh"
             xLabels={labels}
             xTickLabel={tickLabel}
             series={[
