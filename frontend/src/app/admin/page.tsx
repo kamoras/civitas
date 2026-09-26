@@ -434,6 +434,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
               dashboard={d}
               status={pipelineStatus}
               host={hostStats}
+              hostCpuPct={hostHistory[hostHistory.length - 1]?.cpuPct ?? null}
               goTo={selectTab}
             />
           )}

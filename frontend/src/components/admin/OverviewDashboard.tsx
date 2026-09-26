@@ -17,6 +17,7 @@ import { SERIES } from "./charts/palette";
 import { formatCompact, formatMs } from "./charts/scale";
 import { formatDay, formatDuration, formatTime, statusClass } from "./format";
 import { ServiceHealth } from "./SystemDashboard";
+import { formatPct } from "./useHostHistory";
 import { Panel, StatTile, UsageBar } from "./widgets";
 
 /** The sub-dashboard a row links through to. */
@@ -44,12 +45,15 @@ export function OverviewDashboard({
   dashboard,
   status,
   host,
+  hostCpuPct,
   goTo,
 }: {
   token: string;
   dashboard: AdminDashboard | null;
   status: AdminPipelineStatus | null;
   host: HostStats | null;
+  /** Latest CPU utilisation from the host poller; null until two readings. */
+  hostCpuPct: number | null;
   goTo: GoToTab;
 }) {
   const [visits, setVisits] = useState<VisitorStatsDay[] | null>(null);
@@ -84,7 +88,7 @@ export function OverviewDashboard({
   const loadToday = loadTimes?.days[loadTimes.days.length - 1]?.load;
   const finished = (trend ?? []).filter((r) => r.status !== "running");
   const failed = finished.filter((r) => r.status === "failed").length;
-  const loadPct = host?.loadAvg ? Math.round((host.loadAvg[0] / host.cpuCount) * 100) : null;
+  const cpuPct = hostCpuPct;
 
   const pipelines: {
     label: string;
@@ -225,9 +229,9 @@ export function OverviewDashboard({
             <div className="space-y-3 text-xs font-mono">
               {[
                 {
-                  label: "CPU LOAD",
-                  pct: loadPct ?? 0,
-                  text: loadPct != null ? `${loadPct}%` : "—",
+                  label: "CPU",
+                  pct: cpuPct ?? 0,
+                  text: cpuPct != null ? formatPct(cpuPct) : "—",
                   warn: 75,
                   crit: 90,
                 },
@@ -255,7 +259,8 @@ export function OverviewDashboard({
                     pct={m.pct}
                     warnAt={m.warn}
                     critAt={m.crit}
-                    ariaLabel={`${m.label} ${m.text}`}
+                    ariaLabel={m.label}
+                    valueText={m.text === "—" ? "no reading yet" : m.text}
                   />
                 </div>
               ))}
