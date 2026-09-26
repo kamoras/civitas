@@ -151,6 +151,16 @@ class TestSeatRelativeVotes:
         core = _constituent_alignment_core(record(20), [], {}, state="SW", party="D")
         assert core["score"] == 50 and "no measured expectation" in core["components"][0]["detail"]
 
+    def test_breakdown_does_not_call_the_preset_prior_a_measurement(self):
+        preset = {c: {"expected": {"D": {"a": 0.10, "b": -0.05, "b_opposed": -0.15}},
+                      "deviation_p90": 0.2, "n": None,
+                      "statistic": score_calculator.CONSTITUENT_REFERENCE_STATISTIC}
+                  for c in ("senate", "house")}
+        detail = _constituent_alignment_core(record(45), [], {}, state="SW", party="D",
+                                             reference=preset)["components"][0]["detail"]
+        assert "preset curve" in detail and "the preset saturation gap" in detail
+        assert "members of this chamber" not in detail
+
     def test_measured_references_carry_the_statistic(self):
         ref = compute_constituent_reference(
             [("D", 0.0, 0.1 + 0.01 * (i % 5)) for i in range(25)]

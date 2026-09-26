@@ -145,10 +145,16 @@ export default function RepresentationScore({
   const colorClass = getScoreColor(overall);
   const grade = getScoreGrade(overall);
 
+  // Below its high-confidence volume of party-line votes, Constituent
+  // Alignment's vote score is pulled toward 50 (score_calculator
+  // CONSTITUENT_FULL_CONFIDENCE_VOTES); the confidence grade says when.
   const votingBasis: string | undefined =
     !votingRecord || votingRecord.totalVotes === 0
       ? "no voting record · defaults to 50"
-      : `${votingRecord.totalVotes} votes tracked`;
+      : breakdown.confidence?.constituentAlignment &&
+          breakdown.confidence.constituentAlignment !== "high"
+        ? `${votingRecord.totalVotes} votes tracked · few party-line votes, score shrunk toward 50`
+        : `${votingRecord.totalVotes} votes tracked`;
 
   // Surface the FI sub-components so the score is an auditable claim,
   // not a black-box number (matches the methodology on /about).

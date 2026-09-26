@@ -130,11 +130,7 @@ class ChamberReference:
 
 LES_REFERENCE = ChamberReference("les_reference")
 FUNDING_REFERENCE = ChamberReference("funding_reference")
-# What a Constituent Alignment reference is measured on (v6.14): the
-# unweighted break rate over records with a full-confidence vote count.
-# v6.13's references (content-weighted rate, every member with 3+ votes)
-# are on a different scale and are skipped.
-CONSTITUENT_REFERENCE = ChamberReference(
-    "constituent_reference", statistic="unweighted-break-rate/full-confidence-records",
-)
+# The statistic its entries must be measured on is set by score_calculator
+# (CONSTITUENT_REFERENCE_STATISTIC), built from the constants it describes.
+CONSTITUENT_REFERENCE = ChamberReference("constituent_reference")
 PRESIDENT_REFERENCE = ChamberReference("president_reference", keys=("presidents",))

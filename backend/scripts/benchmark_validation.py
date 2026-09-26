@@ -194,6 +194,8 @@ def load_les(path: str, id_col: str, score_col: str) -> dict[str, float]:
 
 
 def run_chamber(chamber: str, congress: int, les: dict[str, float] | None, les_key: str) -> list[str]:
+    from app.pipeline.analyze.score_calculator import CONSTITUENT_FULL_CONFIDENCE_VOTES
+
     letter, voteview_chamber, table = CHAMBERS[chamber]
     print(f"\n=== {voteview_chamber} {congress} ===")
     member_rows = [r for r in fetch_csv(f"{VOTEVIEW}/members/{letter}{congress}_members.csv")
@@ -209,7 +211,8 @@ def run_chamber(chamber: str, congress: int, les: dict[str, float] | None, les_k
     print(f"party-unity roll calls: {n_unity}")
     rows = [
         {**m, "break_rate": breaks[icpsr][0] / breaks[icpsr][1], "n_votes": breaks[icpsr][1]}
-        for icpsr, m in members.items() if breaks.get(icpsr) and breaks[icpsr][1] >= 20
+        for icpsr, m in members.items()
+        if breaks.get(icpsr) and breaks[icpsr][1] >= CONSTITUENT_FULL_CONFIDENCE_VOTES
     ]
     vote_shape = seat_relative_vote_shape(rows)
     extremity = seat_relative_extremity(member_rows, chamber)

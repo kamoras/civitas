@@ -1490,10 +1490,16 @@ def constituent_reference_inputs(members: list[dict]) -> list[tuple[str, float, 
     return out
 
 
-# The statistic Constituent Alignment references are measured on — stamped
-# on every reference compute_constituent_reference produces, and checked by
-# CONSTITUENT_REFERENCE when it reads the persisted and bundled files.
-CONSTITUENT_REFERENCE_STATISTIC = CONSTITUENT_REFERENCE.statistic
+# The statistic Constituent Alignment references are measured on: the
+# unweighted break rate (party_break_rate) over records with at least
+# CONSTITUENT_FULL_CONFIDENCE_VOTES party-labeled votes. Stamped on every
+# reference compute_constituent_reference produces and checked by
+# CONSTITUENT_REFERENCE when it reads the persisted and bundled files, so a
+# reference measured under another rule — v6.13's content-weighted rate
+# over 3+-vote records, or a different threshold — is not scored against.
+# Built from the constant it depends on so changing that invalidates it.
+CONSTITUENT_REFERENCE_STATISTIC = f"unweighted-break-rate/n>={CONSTITUENT_FULL_CONFIDENCE_VOTES}"
+CONSTITUENT_REFERENCE.statistic = CONSTITUENT_REFERENCE_STATISTIC
 
 
 def _constituent_reference(chamber: str, reference: dict | None) -> dict:
@@ -1538,14 +1544,14 @@ OVER_BREAK_DECLINE = 1.0
 LOYAL_SIDE_SCALE = 4.0
 
 
-def _peaked_vote_shape(deviation: float, scale: float) -> float:
+def _peaked_vote_shape(deviation: float, scale: float, loyal_scale: float | None = None) -> float:
     """50 at the seat's expected break rate, falling to 0 for loyalty
-    LOYAL_SIDE_SCALE saturation deviations below it, rising to 100 at the
-    saturation deviation above it, then declining (OVER_BREAK_DECLINE)
-    past it."""
+    loyal_scale (default LOYAL_SIDE_SCALE) saturation deviations below it,
+    rising to 100 at the saturation deviation above it, then declining
+    (OVER_BREAK_DECLINE) past it."""
     scaled = deviation / scale
     if scaled < 0:
-        return 50.0 + 50.0 * max(scaled / LOYAL_SIDE_SCALE, -1.0)
+        return 50.0 + 50.0 * max(scaled / (loyal_scale or LOYAL_SIDE_SCALE), -1.0)
     if not past_saturation(deviation, scale):
         return 50.0 + 50.0 * scaled
     return max(0.0, 100.0 - 50.0 * OVER_BREAK_DECLINE * (scaled - 1.0))
@@ -1758,16 +1764,28 @@ def _constituent_alignment_core(
     else:
         deviation = break_rate - expected
         party_score = seat_relative_vote_score(deviation, deviation_scale, n_party)
-        party_alignment_detail = (
-            f"broke with party on {break_rate:.1%} of {n_party} party-labeled votes; "
+        # A reference with no member count is the bundled hand-set prior,
+        # used before a chamber's first measured run — not a measurement.
+        measured = _constituent_reference(chamber, reference).get("n") is not None
+        norm = (
             f"{eval_party} members of this chamber in seats with this lean "
             f"(signal {alignment:+.2f}) break on {expected:.1%}"
+            if measured else
+            f"a {eval_party} member of a seat with this lean (signal {alignment:+.2f}) is "
+            f"expected to break on {expected:.1%} (a preset curve until this chamber's "
+            "first measurement)"
+        )
+        party_alignment_detail = (
+            f"broke with party on {break_rate:.1%} of {n_party} party-labeled votes; {norm}"
         )
         if past_saturation(deviation, deviation_scale):
+            gap = (
+                f"the chamber's {round(SATURATION_QUANTILE * 100)}th-percentile gap"
+                if measured else "the preset saturation gap"
+            )
             party_alignment_detail += (
                 f" — breaking on more than {expected + deviation_scale:.1%} "
-                f"({deviation_scale * 100:.1f} points above that) is past the "
-                f"chamber's {round(SATURATION_QUANTILE * 100)}th-percentile gap, "
+                f"({deviation_scale * 100:.1f} points above that) is past {gap}, "
                 "where breaking further lowers the score"
             )
         if n_party < CONSTITUENT_FULL_CONFIDENCE_VOTES:

@@ -303,15 +303,23 @@ def evaluate_derived_checks(
     # readable.
     share = _past_saturation_share(members) if reference_measured else None
     if share is not None:
-        integrity_probes.append((
-            share > _PAST_SATURATION_TOLERANCE,
-            "IV", "at most the chamber's out-of-pattern tail past saturation",
-            f"{share:.0%} of full-confidence {{label}}s sit past Constituent "
-            "Alignment's saturation deviation; the reference defines it as the "
-            f"{SATURATION_QUANTILE:.0%} quantile (about {1 - SATURATION_QUANTILE:.0%} "
-            f"past it) and the gate allows up to {_PAST_SATURATION_TOLERANCE:.0%} — "
-            "the constituent reference and the votes disagree",
-        ))
+        checked += 1
+        if share > _PAST_SATURATION_TOLERANCE:
+            rationale = (
+                f"{share:.0%} of full-confidence {entity_label} sit past Constituent "
+                "Alignment's saturation deviation; the reference defines it as the "
+                f"{SATURATION_QUANTILE:.0%} quantile (about {1 - SATURATION_QUANTILE:.0%} "
+                f"past it) and the gate allows up to {_PAST_SATURATION_TOLERANCE:.0%} — "
+                "the constituent reference and the votes disagree"
+            )
+            failures.append({
+                "senator": f"ALL ({n_all} {entity_label})",
+                "dimension": "IV",
+                "score": round(share, 3),
+                "expected": [f"share past saturation <= {_PAST_SATURATION_TOLERANCE:.0%}", None],
+                "rationale": rationale,
+            })
+            logger.warning("DERIVED CHECK FAIL [IV]: %s", rationale)
     for failed, dim_label, expectation, rationale in integrity_probes:
         checked += 1
         if failed:

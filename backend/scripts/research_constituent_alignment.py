@@ -39,7 +39,6 @@ Run:
 """
 
 import argparse
-import contextlib
 import pathlib
 import sys
 import unicodedata
@@ -345,6 +344,9 @@ def loyalty_tests(m, p):
     # the scorer's own (shipped_expectation -> compute_constituent_reference),
     # not the kinked_fit the v6.13 sections above used.
     shipped = shipped_expectation(M[["id", "party", "alignment", "brk", "n"]].reset_index(drop=True))
+    if shipped is None:
+        print("breaking far above expectation: the scorer would not measure a reference here — skipped")
+        return hr
     S = S.merge(shipped[["id", "dev", "p90"]].rename(columns={"dev": "dev14"}), on="id")
     b0 = smf.ols(base, S).fit()
     dev, p90 = S.dev14, shipped.p90.iloc[0]
@@ -454,24 +456,12 @@ def senate_test(p):
 # whole seat (general election, every Senate election 1990-2024) and the
 # member's own party (House primaries 1990-2010).
 
-@contextlib.contextmanager
-def loyal_side_scale(k):
-    """Score with a different LOYAL_SIDE_SCALE for the sweep, then restore."""
-    shipped = score_calculator.LOYAL_SIDE_SCALE
-    score_calculator.LOYAL_SIDE_SCALE = k
-    try:
-        yield
-    finally:
-        score_calculator.LOYAL_SIDE_SCALE = shipped
-
-
 def v614_score(dev, p90, loyal_scale=None):
     """The shipped vote shape (score_calculator._peaked_vote_shape), with
     the shipped LOYAL_SIDE_SCALE unless one is given for the sweep."""
     dev = np.asarray(dev, float)
     p90 = np.broadcast_to(np.asarray(p90, float), dev.shape)  # one per chamber-congress, or a scalar
-    with loyal_side_scale(score_calculator.LOYAL_SIDE_SCALE if loyal_scale is None else loyal_scale):
-        return np.array([score_calculator._peaked_vote_shape(d, s) for d, s in zip(dev, p90)])
+    return np.array([score_calculator._peaked_vote_shape(d, s, loyal_scale) for d, s in zip(dev, p90)])
 
 
 def ascii_upper(s: pd.Series) -> pd.Series:

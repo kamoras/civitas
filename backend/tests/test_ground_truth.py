@@ -277,10 +277,10 @@ class TestDerivedConsistency:
                   for c in ("senate", "house")}
         monkeypatch.setattr(population_reference.CONSTITUENT_REFERENCE, "load", lambda: broken)
         failures = check_ground_truth(db_session, reference_measured=True)["failures"]
-        assert any(
-            f["dimension"] == "IV" and "reference and the votes disagree" in f["rationale"]
-            for f in failures
-        )
+        probe = [f for f in failures if "reference and the votes disagree" in f["rationale"]]
+        assert len(probe) == 1 and probe[0]["dimension"] == "IV"
+        # The record carries the share found and the threshold, not a bare 0.
+        assert probe[0]["score"] > 0.2 and "20%" in probe[0]["expected"][0]
 
     def test_probe_skipped_when_the_reference_was_not_measured_this_run(self, db_session, monkeypatch):
         # A fallback reference (too few members to measure one this run)
