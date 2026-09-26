@@ -186,6 +186,17 @@ export function ActionCenterDashboard({
   // while one is running, and those slots are not failures. Null when the
   // lookup failed, in which case empty slots can't be classified.
   const lastRefreshCompletedAt = ac?.lastCompletedAt ?? null;
+  // Changes when a pipeline the scheduler waits on starts or finishes, so
+  // the rows are refetched then: a finished run's row must replace the
+  // "running" one it was fetched as.
+  const blockingFlags = [
+    status?.isRunning,
+    status?.houseIsRunning,
+    status?.supplementaryIsRunning,
+    status?.stockTradesIsRunning,
+  ]
+    .map((f) => (f ? "1" : "0"))
+    .join("");
   const [pipelineRuns, setPipelineRuns] = useState<PipelineTrendRun[] | null>(null);
 
   useEffect(() => {
@@ -219,8 +230,9 @@ export function ActionCenterDashboard({
     // lastCompletedAt changes the moment a refresh finishes (the status poll
     // sees it within seconds), so its new row is fetched then rather than up
     // to five minutes later — until it lands, a refresh that ran past its
-    // slot would read as a missed hour.
-  }, [token, limit, lastRefreshCompletedAt]);
+    // slot would read as a missed hour. blockingFlags does the same for a
+    // pipeline run starting or finishing.
+  }, [token, limit, lastRefreshCompletedAt, blockingFlags]);
 
   const stale = loadedLimit !== limit;
   const hours = loadedLimit ?? limit;

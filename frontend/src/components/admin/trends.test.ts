@@ -243,6 +243,13 @@ describe("slotStates", () => {
     // Still genuinely running (flag set): blocks up to now.
     const live = { ...ctx, runningNow: { house: true } };
     expect(slotStates(slots, [orphan], now, live)[4]).toBe("skipped");
+    // Flag cleared with no restart since the run began: it just finished
+    // after the rows were fetched — not an orphan, so its ticks stay skipped.
+    const justFinished = { ...idle, processStartedAt: Date.parse("2026-09-20T00:00:00Z") };
+    expect(slotStates(slots, [orphan], now, justFinished).slice(0, 2)).toEqual([
+      "skipped",
+      "skipped",
+    ]);
   });
 
   it("marks a slow refresh still in flight as pending, and the ticks it blocks as skipped", () => {

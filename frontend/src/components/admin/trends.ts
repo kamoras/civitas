@@ -249,13 +249,19 @@ export function slotStates(
       // writes elapsed_seconds on every flush, so a running row carries the
       // time of its last flush, not its end.
       end = now;
-      if (blocker.inMemoryFlag && !ctx.runningNow[r.pipelineType]) {
-        // The row says running but the process doesn't: it was orphaned by
-        // a restart, and the scheduler stopped waiting when that happened.
-        end =
-          ctx.processStartedAt != null && ctx.processStartedAt > start
-            ? ctx.processStartedAt
-            : start;
+      if (
+        blocker.inMemoryFlag &&
+        !ctx.runningNow[r.pipelineType] &&
+        ctx.processStartedAt != null &&
+        ctx.processStartedAt > start
+      ) {
+        // The row says running, the process doesn't, and the process
+        // restarted after the run began: the row was orphaned by that
+        // restart, and the scheduler stopped waiting when it happened.
+        // Without a restart, a cleared flag means the run finished after
+        // these rows were fetched — keep blocking to now until the refetch
+        // (triggered by that flag change) brings the finished row.
+        end = ctx.processStartedAt;
       }
     } else {
       end = start + (r.elapsedSeconds ?? 0) * 1000;
