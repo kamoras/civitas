@@ -184,7 +184,7 @@ export default function SenatorCard({
                 </Title>
                 <div className="shrink-0 text-center border border-white/[0.07] bg-surface-base px-3 py-2">
                   <div
-                    className={`font-mono text-xl font-bold ${getScoreColor(senator.representationScore.overall)}`}
+                    className={`font-mono text-xl font-bold ${getScoreColor(displayScore(senator.representationScore.overall))}`}
                   >
                     {displayScore(senator.representationScore.overall)}
                   </div>

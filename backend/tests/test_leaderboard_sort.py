@@ -142,3 +142,10 @@ def test_rep_leaderboard_members_without_a_value_share_the_last_rank(db_session)
     db_session.commit()
     ranks = [e["rank"] for e in get_rep_leaderboard(db_session, sort="ideology")["entries"]]
     assert ranks == [1, 2, 2]
+
+
+def test_rep_score_ties_round_like_the_page():
+    """56.5 shows as 57 (Math.round); banker's rounding would rank it 56."""
+    from app.services.representative_service import _half_up
+
+    assert _half_up(56.5) == 57.0 and _half_up(57.5) == 58.0 and _half_up(56.49) == 56.0

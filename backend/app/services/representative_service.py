@@ -1,6 +1,7 @@
 """Service layer for House representative data — mirrors senator_service.py."""
 
 import json
+import math
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
@@ -298,16 +299,24 @@ REP_LEADERBOARD_SORTS: dict[str, str] = {
 }
 
 
+def _half_up(x: float) -> float:
+    """Math.round's rounding (half away from zero for these non-negative
+    values). Python's round() rounds half to even, so 56.5 would rank as 56
+    here while the page shows 57."""
+    return float(math.floor(x + 0.5))
+
+
 def _rep_sort_value(r, sort: str) -> float | None:
+    """What the House is ordered by. Scores and PAC shares are compared as
+    displayed (whole numbers), so members who show the same value share a
+    rank, matching the Senate table's competitionRanks keys."""
     if sort == "score":
-        # Whole number, as displayed: members who show the same score share
-        # a rank (frontend displayScore).
-        return float(round(compute_overall_score(r)))
+        return _half_up(compute_overall_score(r))
     if sort == "pac_dollars":
         return float(r.total_from_pacs or 0)
     if sort == "pac_pct":
         base = r.total_contributions or r.total_raised or 0
-        return (r.total_from_pacs or 0) / base * 100 if base > 0 else 0.0
+        return _half_up((r.total_from_pacs or 0) / base * 100) if base > 0 else 0.0
     if sort == "ideology":
         return r.ideology_score
     return r.leadership_score
@@ -545,7 +554,10 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
             party_alignment=cp.get("partyAlignment"),
         ))
 
-    db.query(RepSponsoredBill).filter(RepSponsoredBill.representative_id == rid).delete()
+    # An unavailable list (the fetch failed, or Phase 4b never reached this
+    # member) is not a record of zero bills: keep what is stored.
+    if not rep_data.get("sponsoredBillsUnavailable"):
+        db.query(RepSponsoredBill).filter(RepSponsoredBill.representative_id == rid).delete()
     for sp_data in rep_data.get("sponsoredBills", []):
         db.add(RepSponsoredBill(
             representative_id=rid,

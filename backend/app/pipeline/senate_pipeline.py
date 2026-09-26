@@ -307,10 +307,12 @@ def upsert_senator(db: Session, data: dict) -> None:
             )
         )
 
-    # Add sponsored bills
-    db.query(SponsoredBill).filter(
-        SponsoredBill.senator_id == senator_id
-    ).delete()
+    # Add sponsored bills — unless this run couldn't fetch them, in which
+    # case the empty list is not a record and the stored bills stay.
+    if not data.get("sponsoredBillsUnavailable"):
+        db.query(SponsoredBill).filter(
+            SponsoredBill.senator_id == senator_id
+        ).delete()
     for sp_data in data.get("sponsoredBills", []):
         db.add(
             SponsoredBill(
@@ -1945,6 +1947,7 @@ async def run_senate_pipeline(
                                     sp["policyArea"] = areas[0]["area"]
                         classified_sponsored.append(sp)
                     result["sponsoredBills"] = classified_sponsored
+                    result["sponsoredBillsUnavailable"] = bio_id_for_score in sponsored_unavailable
                     if classified_sponsored:
                         logger.info(
                             "    sponsored bills: %d (%d became law)",

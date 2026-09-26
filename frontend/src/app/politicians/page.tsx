@@ -78,14 +78,15 @@ function partyDot(party: string) {
   return <span className={`inline-block w-2 h-2 ${cls} mr-1.5`} />;
 }
 
-function ScoreBar({ score }: { score: number }) {
+function ScoreBar({ score: raw }: { score: number }) {
+  const score = displayScore(raw);
   const color = getScoreBgColor(score);
   return (
     <div className="flex items-center gap-2 min-w-0">
       <div className="flex-1 h-1 bg-white/[0.03] overflow-hidden">
         <div className={`h-full ${color}`} style={{ width: `${score}%` }} />
       </div>
-      <span className="font-mono text-xs text-ink w-8 text-right shrink-0">{displayScore(score)}</span>
+      <span className="font-mono text-xs text-ink w-8 text-right shrink-0">{score}</span>
     </div>
   );
 }
