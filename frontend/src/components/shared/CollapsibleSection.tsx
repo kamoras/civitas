@@ -76,22 +76,29 @@ export default function CollapsibleSection({
     );
   }
 
+  // The toggle sits inside the heading, not the heading inside the toggle:
+  // a button's content model is phrasing-only, and a heading wrapped in one
+  // drops out of the screen-reader heading list. The button's ::after
+  // stretches over the whole header row so the row stays one click target.
   return (
     <div>
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-baseline justify-between mb-3 group cursor-pointer"
-        aria-expanded={open}
-        aria-controls={contentId}
-      >
-        <Heading className={`text-lg ${titleColor} flex items-center gap-2`}>
-          <span
-            className="text-ink-min text-base font-mono group-hover:text-phos transition-colors"
-            aria-hidden="true"
+      <div className="relative w-full flex items-baseline justify-between mb-3 group">
+        <Heading className={`text-lg ${titleColor}`}>
+          <button
+            type="button"
+            onClick={() => setOpen(!open)}
+            className="flex items-center gap-2 cursor-pointer text-left after:absolute after:inset-0 after:content-['']"
+            aria-expanded={open}
+            aria-controls={contentId}
           >
-            {open ? "−" : "+"}
-          </span>
-          {title}
+            <span
+              className="text-ink-min text-base font-mono group-hover:text-phos transition-colors"
+              aria-hidden="true"
+            >
+              {open ? "−" : "+"}
+            </span>
+            {title}
+          </button>
         </Heading>
         <span className="flex items-center gap-3">
           {!open && summary && (
@@ -101,9 +108,13 @@ export default function CollapsibleSection({
           )}
           {source && <span className="text-xs text-ink-lo hidden sm:inline">{source}</span>}
         </span>
-      </button>
+      </div>
       {alwaysVisible}
-      {open && <div id={contentId}>{children}</div>}
+      {/* Always in the DOM so aria-controls resolves; the body mounts only
+          when open, so collapsed sections fetch nothing. */}
+      <div id={contentId} hidden={!open}>
+        {open && children}
+      </div>
     </div>
   );
 }

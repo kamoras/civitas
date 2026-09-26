@@ -255,7 +255,7 @@ async def fetch_and_parse_annual(
     accepted-terms session (senate_ptr.accept_terms).
     """
     if filing.get("is_paper"):
-        return AnnualReport(None, None, UNREADABLE_SCANNED)
+        return AnnualReport(None, None, UNREADABLE_SCANNED, live=False)
     cache_key = f"annual-parsed-v{PARSER_VERSION}-{senate_filing_id(filing['report_url'])}"
     cached = report_from_cache(api_cache_get(db, _CACHE_TIER, cache_key, max_age_hours=_FILING_MAX_AGE_HOURS))
     if cached is not None:

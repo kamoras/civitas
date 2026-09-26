@@ -26,7 +26,7 @@ table can be extended from the real value rather than a guess.
 
 import logging
 import re
-from dataclasses import MISSING, asdict, dataclass, fields
+from dataclasses import MISSING, asdict, dataclass, field, fields
 
 from app.pipeline.fetch.ptr_common import OPEN_ENDED_AMOUNT_RE, extract_ticker
 
@@ -78,6 +78,10 @@ class AnnualReport:
     # strands a filing for the cache's whole 30-day life
     # (see cache.api_cache_set).
     final: bool = True
+    # False when no request was made for it — served from the parse cache,
+    # or a paper filing (scanned images, never fetched). Such a result says
+    # nothing about whether the source is up (holdings_pipeline._SourceHealth).
+    live: bool = field(default=True, compare=False)
 
 
 UNREADABLE_SCANNED = "scanned"
@@ -108,13 +112,13 @@ def report_from_cache(cached: dict | None) -> "AnnualReport | None":
         return None
     rows = cached["holdings"]
     if rows is None:
-        return AnnualReport(cached.get("filer_status"), None, cached.get("unreadable_reason"))
+        return AnnualReport(cached.get("filer_status"), None, cached.get("unreadable_reason"), live=False)
     holdings = []
     for row in rows:
         if not isinstance(row, dict) or not _REQUIRED_HOLDING_FIELDS <= row.keys():
             return None
         holdings.append(HoldingRow(**{k: v for k, v in row.items() if k in _HOLDING_FIELDS}))
-    return AnnualReport(cached.get("filer_status"), holdings, cached.get("unreadable_reason"))
+    return AnnualReport(cached.get("filer_status"), holdings, cached.get("unreadable_reason"), live=False)
 
 
 # The House Clerk's published asset-type code list

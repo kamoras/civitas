@@ -72,7 +72,15 @@ def match_senator(
     return _pick(senators, last, _first_names(first, _office_first_name(office)))
 
 
-def match_representative(db: Session, last: str, first: str, state_district: str) -> Representative | None:
+def current_representatives(db: Session) -> list[Representative]:
+    """The roster match_representative compares against — load it once per
+    ingest phase and pass it in, rather than once per filer."""
+    return db.query(Representative).filter(Representative.is_current == True).all()  # noqa: E712
+
+
+def match_representative(
+    db: Session, last: str, first: str, state_district: str, roster: list[Representative] | None = None,
+) -> Representative | None:
     if not _fold(last):
         return None
     state = state_district[:2] if state_district else None
@@ -87,9 +95,9 @@ def match_representative(db: Session, last: str, first: str, state_district: str
     if state_district and len(state_district) > 2 and state_district[2:].isdigit():
         district = int(state_district[2:])
 
-    query = db.query(Representative).filter(Representative.is_current == True)  # noqa: E712
-    if state:
-        query = query.filter(Representative.state == state)
-    if district is not None:
-        query = query.filter(Representative.district == district)
-    return _pick(query.all(), last, _first_names(first))
+    reps = roster if roster is not None else current_representatives(db)
+    candidates = [
+        r for r in reps
+        if (not state or r.state == state) and (district is None or r.district == district)
+    ]
+    return _pick(candidates, last, _first_names(first))

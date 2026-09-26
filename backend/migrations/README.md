@@ -65,9 +65,10 @@ alone (it logs and starts) rather than letting Alembic fail with "Can't
 locate revision" and crash-loop the rollback — but only when that revision
 is a *later number* than the image's own head, which is why revisions are
 numbered sequentially (`0002`, `0003`, ...). Any other unknown revision
-still fails loudly. That guard only protects a
-rollback *to an image that has it*, so it shipped on its own before the
-first revision after the baseline (`0002`) did.
+still fails loudly. That guard only protects a rollback *to an image that
+has it*: it shipped in a release of its own, deployed before the first
+revision that relied on it (`0003`). `0002` predates it — a rollback across
+`0002` itself is not covered.
 
 So every release must leave a schema the image before it can still read:
 
@@ -84,8 +85,9 @@ column: presidents.gdp_growth_adjusted` on the migrated copy.
 
 ### Pending contract (the release after v6.13)
 
-Write these as the next free revision (`0003` or later — `0002` added the
-financial-holdings tables) once v6.13 is the running image:
+Write these as the next free revision (`0004` or later — `0002` added
+candidate ballot names, `0003` the financial-holdings tables) once v6.13 is
+the running image:
 
 | Change | Why it waits |
 |---|---|
