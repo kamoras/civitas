@@ -9,4 +9,10 @@ describe("formatBracket", () => {
   it("renders the open-ended top bracket as a floor, never a range", () => {
     expect(formatBracket(50000000, 50000000, true)).toBe("$50,000,000+");
   });
+
+  it("applies the same rule to compact sums", () => {
+    const compact = (n: number) => `$${(n / 1e6).toFixed(1)}M`;
+    expect(formatBracket(1e6, 5e6, false, compact)).toBe("$1.0M – $5.0M");
+    expect(formatBracket(5e7, 5e7, true, compact)).toBe("$50.0M+");
+  });
 });

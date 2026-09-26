@@ -513,9 +513,10 @@ async def run_holdings_phases(
             # holdings age silently for as long as it keeps failing.
             _alert(
                 f"{label} ingest failed",
-                f"The {label} phase of tonight's stock-trades run failed. That chamber's "
-                "stored holdings are unchanged and will age until a run succeeds — see "
-                "the server logs for the cause.",
+                f"The {label} phase of tonight's stock-trades run failed. Reports it stored "
+                "before failing are kept (each member is committed as it's done); every "
+                "other member's stored holdings stay as they were and will age until a "
+                "run succeeds — see the server logs for the cause.",
                 dedupe_key=f"{step}-failed-{utcnow():%Y-%m-%d}",
             )
     return counts, errors

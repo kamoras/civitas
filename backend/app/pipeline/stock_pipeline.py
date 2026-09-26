@@ -30,7 +30,7 @@ from app.database import SessionLocal
 from app.http_client import make_async_client
 from app.models import (
     PipelineRun, HousePipelineRun, PipelineStatus, President, PresidentTrade,
-    StockTrade, RepStockTrade, StockTradesPipelineRun,
+    Senator, StockTrade, RepStockTrade, StockTradesPipelineRun,
 )
 from app.pipeline.fetch.house_ptr import fetch_and_parse_ptr as fetch_house_ptr, fetch_ptr_filing_index
 from app.pipeline.fetch.president_ptr import (
@@ -42,6 +42,7 @@ from app.pipeline.fetch.sec_tickers import resolve_tickers
 from app.pipeline.holdings_pipeline import HOLDINGS_STEPS, run_holdings_phases
 from app.pipeline.filer_matching import match_representative as _match_representative
 from app.pipeline.filer_matching import match_senator as _match_senator
+from app.pipeline.fetch.senate_fd import is_senator_filing
 from app.pipeline.fetch.senate_ptr import (
     accept_terms as senate_accept_terms,
     fetch_and_parse_ptr as fetch_senate_ptr,
@@ -262,13 +263,22 @@ async def _ingest_senate(db: Session, client: httpx.AsyncClient) -> int:
 
     filings = await search_ptr_filings(since_date)
     inserted = 0
+    matched: dict[tuple, str | None] = {}  # one lookup per filer, not per filing
     for filing in filings:
         filing_id = senate_filing_id(filing["report_url"])
         if filing_id in existing_filing_ids:
             continue
-        senator = _match_senator(db, filing["last"], filing["first"], filing.get("office"))
-        if senator is None:
+        if filing.get("office") and not is_senator_filing(filing):
+            # A former senator's (or anyone else's) filing: never attributed
+            # to a sitting senator who happens to share the surname.
             continue
+        filer = (filing["last"], filing["first"], filing.get("office"))
+        if filer not in matched:
+            found = _match_senator(db, *filer)
+            matched[filer] = found.id if found is not None else None
+        if matched[filer] is None:
+            continue
+        senator = db.get(Senator, matched[filer])
         rows = await fetch_senate_ptr(client, db, filing)
         if not rows:
             continue

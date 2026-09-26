@@ -13,11 +13,17 @@ export const OWNER_LABEL: Record<DisclosureOwner, string> = {
   unknown: "OWNER NOT STATED",
 };
 
-/** A disclosed amount bracket, in full dollars. The forms' open-ended top
+/** A disclosed amount bracket, or a sum of them. The forms' open-ended top
  * bracket ("Over $50,000,000") states a floor and no ceiling, so it renders
  * as "$X+" — never as a range, since the stored upper figure is only a
  * placeholder equal to the floor. */
-export function formatBracket(low: number, high: number, openEnded: boolean): string {
-  const fmt = (n: number) => `$${n.toLocaleString()}`;
+export function formatBracket(
+  low: number,
+  high: number,
+  openEnded: boolean,
+  /** How to print one figure; full dollars by default, or a compact form
+   * ("$1.2M") for sums. The open-ended rule is the same either way. */
+  fmt: (n: number) => string = (n) => `$${n.toLocaleString()}`
+): string {
   return openEnded ? `${fmt(low)}+` : `${fmt(low)} – ${fmt(high)}`;
 }

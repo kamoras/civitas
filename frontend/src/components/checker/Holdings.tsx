@@ -35,7 +35,7 @@ function formatHoldingValue(h: Holding): string {
  * placeholder — so only the floor is shown, as "$X+" (the rule every
  * disclosure figure follows; see formatBracket). */
 function formatRangeCompact(low: number, high: number, openEnded: boolean): string {
-  return openEnded ? `${formatCurrency(low)}+` : `${formatCurrency(low)} – ${formatCurrency(high)}`;
+  return formatBracket(low, high, openEnded, formatCurrency);
 }
 
 function formatShare(share: number): string {
