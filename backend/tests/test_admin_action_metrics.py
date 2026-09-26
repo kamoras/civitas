@@ -224,3 +224,35 @@ async def test_limit_caps_the_window(db_session):
 
     assert result["runsReturned"] == 2
     assert result["totals"]["intake"]["articles_fetched"] == 2
+
+
+@pytest.mark.asyncio
+async def test_each_run_carries_published_and_suppressed_rollups(db_session):
+    from app.api.admin import admin_action_metrics
+
+    _metrics_row(db_session, "run-a", {
+        "articles_fetched": 61,
+        "issues_new_topic": 2,
+        "issues_matched_existing": 1,
+        "bsky_reposts_allowed": 5,
+        "issues_skipped_no_action_surface": 3,
+        "issues_skipped_grounding": 1,
+    })
+
+    run = (await admin_action_metrics(limit=48, db=db_session))["runs"][0]
+
+    assert run["issuesPublished"] == 3  # Bluesky posts are not issues
+    assert run["suppressed"] == 4
+
+
+@pytest.mark.asyncio
+async def test_since_hours_bounds_the_window_by_time(db_session):
+    from app.api.admin import admin_action_metrics
+
+    _metrics_row(db_session, "recent", {"issues_skipped_grounding": 1}, minutes_ago=30)
+    _metrics_row(db_session, "old", {"issues_skipped_grounding": 5}, minutes_ago=60 * 30)
+
+    result = await admin_action_metrics(limit=500, since_hours=24, db=db_session)
+
+    assert [r["run"] for r in result["runs"]] == ["recent"]
+    assert result["totals"]["suppressedTotal"] == 1
