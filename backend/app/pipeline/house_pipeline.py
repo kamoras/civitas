@@ -769,13 +769,13 @@ async def run_house_pipeline() -> dict:
             # (the Senate pipeline already works this way). The PAC-share
             # median needs every rep's funding, which the pass above fetches.
             from app.pipeline.live_references import (
-                live_constituent_reference,
+                live_constituent_reference_measured,
                 live_funding_reference,
             )
             funding_reference = live_funding_reference(
                 "house", [r.get("funding") or {} for r, _ in prepared_reps],
             )
-            constituent_reference = live_constituent_reference(
+            constituent_reference, constituent_reference_measured = live_constituent_reference_measured(
                 "house", [r for r, _ in prepared_reps],
             )
 
@@ -845,6 +845,7 @@ async def run_house_pipeline() -> dict:
                 )
                 gt_failures = check_ground_truth(
                     db, model=Representative, constituent_reference=constituent_reference,
+                    reference_measured=constituent_reference_measured,
                 ).get("failures", [])
                 gt_failures += check_score_distribution(db, model=Representative)
                 lines = "\n".join(

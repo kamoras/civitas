@@ -109,7 +109,7 @@ from app.pipeline.analyze.ollama_client import get_llm_stats, reset_client, rese
 from app.pipeline.analyze.policy_alignment import clear_alignment_cache
 from app.pipeline.analyze.score_calculator import calculate_confidence, calculate_scores
 from app.pipeline.live_references import (
-    live_constituent_reference,
+    live_constituent_reference_measured,
     live_funding_reference,
     live_les_reference,
 )
@@ -1809,7 +1809,7 @@ async def run_senate_pipeline(
             funding_reference = live_funding_reference(
                 "senate", [p.get("funding") or {} for p in senator_prepared],
             )
-            constituent_reference = live_constituent_reference(
+            constituent_reference, constituent_reference_measured = live_constituent_reference_measured(
                 "senate",
                 [{**p["senator"], "votingRecord": p["votingRecord"]} for p in senator_prepared],
             )
@@ -2068,7 +2068,10 @@ async def run_senate_pipeline(
                 check_ground_truth,
                 check_score_distribution,
             )
-            gt_report = check_ground_truth(db, constituent_reference=constituent_reference)
+            gt_report = check_ground_truth(
+                db, constituent_reference=constituent_reference,
+                reference_measured=constituent_reference_measured,
+            )
             # Persist on the run record so failures surface in the admin
             # dashboard instead of living only in logs — a silent drift
             # between scores and their raw records across an algorithm

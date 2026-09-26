@@ -93,6 +93,12 @@ def live_constituent_reference(chamber: str, members: list[dict]) -> dict:
     `members` are calculate_scores-shaped dicts. Falls back to the last
     persisted reference when either party has too few measurable members
     (e.g. a single-member filtered run)."""
+    return live_constituent_reference_measured(chamber, members)[0]
+
+
+def live_constituent_reference_measured(chamber: str, members: list[dict]) -> tuple[dict, bool]:
+    """live_constituent_reference, plus whether the reference was measured
+    from `members` this run (False when it fell back to the persisted one)."""
     from app.pipeline.analyze.population_reference import CONSTITUENT_REFERENCE
     from app.pipeline.analyze.score_calculator import (
         compute_constituent_reference,
@@ -106,6 +112,6 @@ def live_constituent_reference(chamber: str, members: list[dict]) -> dict:
             "Constituent Alignment expectation this run — scoring against the "
             "last persisted one", chamber,
         )
-        return CONSTITUENT_REFERENCE.load()
+        return CONSTITUENT_REFERENCE.load(), False
     logger.info("Constituent Alignment reference (%s): %s", chamber, ref)
-    return CONSTITUENT_REFERENCE.with_live(chamber, ref)
+    return CONSTITUENT_REFERENCE.with_live(chamber, ref), True

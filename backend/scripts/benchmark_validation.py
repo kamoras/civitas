@@ -1,15 +1,17 @@
 """External benchmark validation: Civitas scores vs independent records.
 
 Checks the stored scores against measures computed from data Civitas does not
-score from, using the same constructs the scores claim to measure (v6.13):
+score from, using the same constructs the scores claim to measure (v6.14):
 
   Constituent Alignment (both chambers, Voteview):
     1. Seat-relative break deviation — each member's break rate on
        Voteview party-unity votes (majority of one party against the other)
        minus the break rate same-party members show at the same seat lean,
        with the expectation measured from Voteview's own votes by the same
-       compute_constituent_reference the pipeline uses. CA should correlate
-       positively (it is the 70% vote component's construct on an
+       compute_constituent_reference the pipeline uses, folded at that
+       reference's saturation deviation (ground_truth.seat_relative_break_
+       position — since v6.14 the score falls again past it). CA should
+       correlate positively (it is the 70% vote component's construct on an
        independent vote record).
     2. Nokken-Poole seat-relative extremity — the member's congress-specific
        position minus the per-party fit on seat lean (build_chamber_ideal_
@@ -25,7 +27,7 @@ Run after algorithm changes, inside the backend container:
     docker exec "$(docker ps -q -f name=civitas_backend)" python3 scripts/benchmark_validation.py --chamber both
 
 Baselines: the v4.1/v4.2 figures this script used to print compared the
-pre-v6.13 design (raw break rate; DW-NOMINATE). v6.13 has no baseline yet —
+pre-v6.13 design (raw break rate; DW-NOMINATE). v6.14 has no baseline yet —
 record the first production run's correlations here, then investigate any
 later run where a correlation drops by more than ~0.15 or changes sign.
 """
@@ -109,8 +111,10 @@ def party_unity_breaks(members, vote_rows, min_party_votes=10):
 def seat_relative_deviation(rows: list[dict]) -> dict[str, float]:
     """bioguide -> break rate minus the same-party expectation at that seat
     lean, measured from these rows by the pipeline's own
-    compute_constituent_reference. rows: {bioguide, party, state, district,
+    compute_constituent_reference, folded at its saturation deviation the
+    way the vote score is. rows: {bioguide, party, state, district,
     break_rate}."""
+    from app.pipeline.analyze.ground_truth import seat_relative_break_position
     from app.pipeline.analyze.score_calculator import (
         _expected_break_rate,
         _signed_state_alignment,
@@ -128,7 +132,9 @@ def seat_relative_deviation(rows: list[dict]) -> dict[str, float]:
     if ref is None:
         return {}
     return {
-        bio: rate - _expected_break_rate(ref["expected"][party], alignment)
+        bio: seat_relative_break_position(
+            rate - _expected_break_rate(ref["expected"][party], alignment), ref["deviation_p90"],
+        )
         for bio, party, alignment, rate in keyed
     }
 
@@ -223,7 +229,7 @@ def run_chamber(chamber: str, congress: int, les: dict[str, float] | None, les_k
         if not ok:
             problems.append(f"{chamber}: {label} r={r:+.3f}, expected the opposite sign")
 
-    report("CA vs seat-relative break deviation", deviation, "ca", +1)
+    report("CA vs seat-relative break deviation (folded at saturation)", deviation, "ca", +1)
     report("CA vs Nokken-Poole seat-relative extremity", extremity, "ca", -1)
     if les is not None:
         key_of = {m["bioguide"]: m["icpsr"] for m in members.values()}

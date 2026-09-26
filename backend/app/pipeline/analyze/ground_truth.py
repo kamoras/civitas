@@ -67,7 +67,6 @@ from scipy import stats as scipy_stats
 
 from app.pipeline.analyze.population_reference import CONSTITUENT_REFERENCE
 from app.pipeline.analyze.score_calculator import (
-    OVER_BREAK_DECLINE,
     SATURATION_QUANTILE,
     party_break_rate,
     seat_break_deviation,
@@ -164,18 +163,18 @@ def _tie_extended_extreme(
 
 def seat_relative_break_position(deviation: float, scale: float) -> float:
     """A member's break rate relative to their seat's expectation, folded at
-    the saturation deviation the way the design says the vote score is:
-    equal to the deviation up to it, then falling at OVER_BREAK_DECLINE
-    past it, so the vote score is a monotone function of this and the rank
-    check stays valid if that design weight is retuned. Written from the
-    design, not by calling the scorer, so a scorer that stops turning down
-    decouples from it. What it can catch is population-level: in a Senate
-    with a handful of members past saturation, a fault confined to them
-    barely moves a whole-chamber rank test, and the per-member shape is
-    pinned by the unit tests (test_constituent_alignment.py) instead."""
-    if deviation <= scale:
-        return deviation
-    return scale - OVER_BREAK_DECLINE * (deviation - scale)
+    the saturation deviation: equal to the deviation up to it, then falling
+    one-for-one past it. The vote score must rank the same way.
+
+    Written from the design's shape, not from the scorer or its
+    OVER_BREAK_DECLINE: a rank check needs only the direction on each side,
+    so any positive decline rate ranks the same within the falling side,
+    while a scorer that stopped turning down (a rate of 0) decouples from
+    this. What it can catch is population-level: in a Senate with a handful
+    of members past saturation, a fault confined to them barely moves a
+    whole-chamber rank test, and the per-member shape is pinned by the unit
+    tests (test_constituent_alignment.py) instead."""
+    return deviation if deviation <= scale else 2 * scale - deviation
 
 
 def constituent_metrics(
@@ -220,7 +219,9 @@ def _past_saturation_share(members: list[dict]) -> float:
     return sum(readable) / len(readable) if len(readable) >= MIN_POPULATION else 0.0
 
 
-def evaluate_derived_checks(members: list[dict], entity_label: str = "senators") -> dict:
+def evaluate_derived_checks(
+    members: list[dict], entity_label: str = "senators", reference_measured: bool = False,
+) -> dict:
     """Run the integrity + consistency checks over plain member records.
 
     Pure-data entry point shared by ``check_ground_truth`` (ORM) and
@@ -236,6 +237,10 @@ def evaluate_derived_checks(members: list[dict], entity_label: str = "senators")
                      "past_saturation": bool | None},
          "raw": {"total_raised": float, "total_from_pacs": float,
                  "labeled_votes": int}}
+
+    ``reference_measured``: whether the Constituent Alignment reference
+    the records were judged against was measured from this population this
+    run. The past-saturation share probe runs only then.
 
     Returns {"checked": int, "failures": [{senator, dimension, score,
     expected, rationale}, ...]} — same failure shape the pipelines persist.
@@ -283,7 +288,10 @@ def evaluate_derived_checks(members: list[dict], entity_label: str = "senators")
             "party-labeling is producing nothing",
         ),
         (
-            _past_saturation_share(members) > 2 * (1 - SATURATION_QUANTILE),
+            # Only meaningful when the reference was measured from this
+            # population; a fallback reference from another run makes no
+            # promise about these members' spread.
+            reference_measured and _past_saturation_share(members) > 2 * (1 - SATURATION_QUANTILE),
             "IV", "at most the chamber's out-of-pattern tail past saturation",
             "more {label}s sit past Constituent Alignment's saturation "
             "deviation than its definition allows (it is the chamber's "
@@ -436,7 +444,7 @@ def _member_records(db, model, constituent_reference: dict | None = None) -> lis
     # so the gate judges members on the score's own statistic (its weights,
     # its minimum count). Storage holds each roll call once but bill_id is
     # not unique per roll call, so the row id is the identity.
-    current = [m for m in db.query(model).filter(model.is_current.is_(True)).all()]
+    current = db.query(model).filter(model.is_current.is_(True)).all()
     votes: dict[str, list[dict]] = defaultdict(list)
     for row_id, member_id, bill_id, with_party, weight in (
         db.query(
@@ -487,7 +495,9 @@ def _member_records(db, model, constituent_reference: dict | None = None) -> lis
     return records
 
 
-def check_ground_truth(db, model=None, constituent_reference: dict | None = None) -> dict:
+def check_ground_truth(
+    db, model=None, constituent_reference: dict | None = None, reference_measured: bool = False,
+) -> dict:
     """Check the chamber's scores for consistency with its own raw data.
 
     Args:
@@ -498,6 +508,9 @@ def check_ground_truth(db, model=None, constituent_reference: dict | None = None
         constituent_reference: the Constituent Alignment reference this
             run scored with (live_constituent_reference). Defaults to the
             persisted one, which differs only if persisting it failed.
+        reference_measured: whether that reference was measured from this
+            run's members (live_constituent_reference_measured); gates the
+            past-saturation share probe.
 
     Returns:
         {"checked": int, "failures": [ {senator, dimension, score,
@@ -508,7 +521,10 @@ def check_ground_truth(db, model=None, constituent_reference: dict | None = None
         model = Senator
     entity_label = "senators" if model.__name__ == "Senator" else "representatives"
 
-    report = evaluate_derived_checks(_member_records(db, model, constituent_reference), entity_label)
+    report = evaluate_derived_checks(
+        _member_records(db, model, constituent_reference), entity_label,
+        reference_measured=reference_measured,
+    )
 
     if not report["failures"]:
         logger.info(

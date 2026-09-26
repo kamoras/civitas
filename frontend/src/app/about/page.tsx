@@ -308,7 +308,9 @@ export default function AboutPage() {
                   expectation scores 50. Breaking less often scores below. Breaking more often
                   scores above, reaching 100 at the gap the chamber&apos;s most out-of-pattern
                   tenth of members show; past that gap the score falls at the same rate it rose,
-                  back to 50 at twice the gap and 0 at three times.
+                  back to 50 at twice the gap and 0 at three times. With fewer than 20
+                  party-labeled votes the result is pulled toward 50 in proportion, so a single
+                  break in a thin record can&apos;t reach either end.
                 </P>
                 <P>
                   What the ends mean: a 0 or 100 is a relative position, not a verdict. A 0 means

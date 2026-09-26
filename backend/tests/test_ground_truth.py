@@ -209,7 +209,7 @@ class TestDerivedConsistency:
             if i < 8:
                 _add_votes(db_session, s.id, breaks=100 if i < 2 else i, total=200)
         db_session.commit()
-        failures = check_ground_truth(db_session)["failures"]
+        failures = check_ground_truth(db_session, reference_measured=True)["failures"]
         assert not any("reference and the votes disagree" in f["rationale"] for f in failures)
 
     def test_break_rate_reads_each_stored_row_as_its_own_roll_call(self, db_session):
@@ -235,7 +235,9 @@ class TestDerivedConsistency:
         assert check_ground_truth(db_session)["failures"] == []
         run_ref = {c: {"expected": {"D": {"a": 0.0, "b": 0.0}}, "deviation_p90": 0.001}
                    for c in ("senate", "house")}
-        failures = check_ground_truth(db_session, constituent_reference=run_ref)["failures"]
+        failures = check_ground_truth(
+            db_session, constituent_reference=run_ref, reference_measured=True,
+        )["failures"]
         assert any("reference and the votes disagree" in f["rationale"] for f in failures)
 
     def test_reference_that_puts_most_members_past_saturation_flagged(self, db_session, monkeypatch):
@@ -248,11 +250,24 @@ class TestDerivedConsistency:
         broken = {c: {"expected": {"D": {"a": 0.0, "b": 0.0}}, "deviation_p90": 0.001}
                   for c in ("senate", "house")}
         monkeypatch.setattr(population_reference.CONSTITUENT_REFERENCE, "load", lambda: broken)
-        failures = check_ground_truth(db_session)["failures"]
+        failures = check_ground_truth(db_session, reference_measured=True)["failures"]
         assert any(
             f["dimension"] == "IV" and "reference and the votes disagree" in f["rationale"]
             for f in failures
         )
+
+    def test_probe_skipped_when_the_reference_was_not_measured_this_run(self, db_session, monkeypatch):
+        # A fallback reference (too few members to measure one this run)
+        # promises nothing about these members' spread, so the share probe
+        # stays out of it.
+        from app.pipeline.analyze import population_reference
+
+        self._peaked_population(db_session, past_iv=lambda k: 95 - 9 * k)
+        broken = {c: {"expected": {"D": {"a": 0.0, "b": 0.0}}, "deviation_p90": 0.001}
+                  for c in ("senate", "house")}
+        monkeypatch.setattr(population_reference.CONSTITUENT_REFERENCE, "load", lambda: broken)
+        failures = check_ground_truth(db_session)["failures"]
+        assert not any("reference and the votes disagree" in f["rationale"] for f in failures)
 
     def test_saturation_is_judged_on_the_weighted_rate_the_score_uses(self, db_session):
         # The five top crossers break on under 20% of their votes by plain

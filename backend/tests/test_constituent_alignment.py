@@ -79,6 +79,19 @@ class TestSeatRelativeVotes:
         assert score(record(50)) == 50
         assert score(record(70)) == 0 and score(record(90)) == 0
 
+    def test_few_votes_shrink_toward_neutral(self):
+        # 10 votes, 7 breaks: 70% against 10% expected is three saturation
+        # deviations past it (0 at full confidence), but 10 of the 20 votes
+        # full confidence needs pulls it halfway back to 50.
+        assert score(record(7, total=10)) == 25
+        assert score(record(1, total=10)) == 50
+        # From 20 votes on, no shrinkage.
+        assert score(record(14, total=20)) == 0
+
+    def test_breakdown_says_when_few_votes_shrink_it(self):
+        detail = _constituent_alignment_core(record(7, total=10), [], {}, state="SW", party="D")["components"][0]["detail"]
+        assert "only 10 votes" in detail
+
     def test_loyal_floor_unchanged(self):
         # An R in a D+15 state is expected to break 30%; never breaking is a
         # full saturation below, the floor.

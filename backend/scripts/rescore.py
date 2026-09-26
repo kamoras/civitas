@@ -221,12 +221,14 @@ def build_payload(cur, s, search, fin):
     }
 
 
-def attach_live_references(cur, senators, payloads) -> None:
+def attach_live_references(cur, senators, payloads) -> bool:
     """Measure this population's references the way the pipeline does
     (live_references), in memory: nothing is written to /data. Without
     this, calculate_scores falls back to the last persisted references,
     which can predate the current method (e.g. an LES reference with no
-    status_median), and the preview diverges from what a run would score."""
+    status_median), and the preview diverges from what a run would score.
+    Returns whether the Constituent Alignment reference was measured from
+    this population (the gate's saturation-share probe needs that)."""
     current = [p for s, p in zip(senators, payloads) if s.get("is_current", 1)]
     parties = [p["votingRecord"]["effectiveParty"] for p in current]
     cur.execute("SELECT party FROM presidents WHERE is_current = 1")
@@ -258,6 +260,7 @@ def attach_live_references(cur, senators, payloads) -> None:
         p["lesReference"] = les_ref
         p["fundingReference"] = funding_ref
         p["constituentReference"] = ca_ref
+    return ca is not None
 
 
 def main() -> int:
@@ -272,7 +275,7 @@ def main() -> int:
     senators = [dict(r) for r in cur.fetchall()]
 
     payloads = [build_payload(cur, s, search, fin) for s in senators]
-    attach_live_references(cur, senators, payloads)
+    ca_measured = attach_live_references(cur, senators, payloads)
 
     results = []
     for s, payload in zip(senators, payloads):
@@ -303,6 +306,7 @@ def main() -> int:
                 "labeled_votes": len(labeled),
             },
             "name": s["name"], "state": s["state"], "party": s["party"],
+            "is_current": bool(s.get("is_current", 1)),
             "raised": payload["funding"]["totalRaised"] or 0,
             "old": {
                 "fi": s["score_funding_independence"], "pp": s["score_promise_persistence"],
@@ -347,9 +351,11 @@ def main() -> int:
             "metrics": r["metrics"],
             "raw": r["raw"],
         }
-        for r in results
+        # The pipeline gate checks current members only; departed ones'
+        # votes are a prior congress's, judged against this one's reference.
+        for r in results if r["is_current"]
     ]
-    report = evaluate_derived_checks(members, "senators")
+    report = evaluate_derived_checks(members, "senators", reference_measured=ca_measured)
     for f in report["failures"]:
         print(f"  FAIL  {f['senator']} {f['dimension']}: {f['rationale']}")
     print(f"\n{len(report['failures'])} of {report['checked']} derived checks failed")

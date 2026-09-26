@@ -620,6 +620,12 @@ def explain_scores(senator: dict) -> dict:
     }
 
 
+# Party-labeled votes at which Constituent Alignment's data sufficiency is
+# graded "high" (calculate_confidence) and its vote score stops shrinking
+# toward 50. A volume count, the same for every member.
+CONSTITUENT_FULL_CONFIDENCE_VOTES = 20
+
+
 def calculate_confidence(senator: dict) -> dict[str, str]:
     """Data-sufficiency confidence per dimension: "high" | "medium" | "low".
 
@@ -669,7 +675,7 @@ def calculate_confidence(senator: dict) -> dict[str, str]:
     return {
         "fundingIndependence": grade(n_donors, 3, 10) if has_funding else "low",
         "promisePersistence": grade(n_evaluable, 3, 8),
-        "constituentAlignment": grade(n_party_votes, 5, 20),
+        "constituentAlignment": grade(n_party_votes, 5, CONSTITUENT_FULL_CONFIDENCE_VOTES),
         "fundingDiversity": grade(n_industries, 3, 6) if has_funding else "low",
         "legislativeEffectiveness": grade(len(bills), 2, 5),
     }
@@ -988,7 +994,7 @@ def _funding_independence_core(
     # multipliers 1.35 / 3.2 (AGENTS.md §3a); it is now measured every run
     # from the members being scored (compute_funding_reference), which also
     # keeps it on the same denominator as the ratio itself.
-    chamber = "house" if district is not None else "senate"
+    chamber = _chamber_of(district)
     ref = {
         **(FUNDING_REFERENCE.load().get(chamber) or {}),
         **((reference or {}).get(chamber) or {}),
@@ -1373,13 +1379,6 @@ _MIN_OPPOSED_SEATS_FOR_KINK = 5
 SATURATION_QUANTILE = 0.9
 
 
-def party_vote_weight(party_alignment_weight: float | None) -> float:
-    """A party-labeled vote's weight in the break rate: its party-alignment
-    weight, or 1 when none was measured."""
-    weight = party_alignment_weight or 0.0
-    return weight if weight > 0.0 else 1.0
-
-
 def party_break_rate(voting_record: dict) -> tuple[float | None, int]:
     """(weighted share of party-labeled votes cast against the member's
     party, count of those votes). None when fewer than 3 are usable. The
@@ -1398,7 +1397,8 @@ def party_break_rate(voting_record: dict) -> tuple[float | None, int]:
         wp = v.get("votedWithParty") if isinstance(v, dict) else None
         if wp is None:
             continue
-        weight = party_vote_weight(v.get("partyAlignmentWeight"))
+        weight = v.get("partyAlignmentWeight") or 0.0
+        weight = weight if weight > 0.0 else 1.0
         if wp is True:
             with_party += weight
         else:
@@ -1515,6 +1515,12 @@ def _seat_relative_vote_score(deviation: float, scale: float) -> float:
     return max(0.0, 100.0 - 50.0 * OVER_BREAK_DECLINE * (scaled - 1.0))
 
 
+def _chamber_of(district: int | None) -> str:
+    """A member's chamber from the scoring inputs: House members carry a
+    district (0 for at-large), senators none."""
+    return "house" if district is not None else "senate"
+
+
 def _seat_vote_expectation(
     state: str,
     party: str,
@@ -1528,8 +1534,7 @@ def _seat_vote_expectation(
     (_constituent_alignment_core) and the gate (seat_break_deviation)
     read, so they can't disagree about who is past saturation."""
     alignment = _signed_state_alignment(state, party, effective_party=effective_party, district=district)
-    chamber = "house" if district is not None else "senate"
-    ref = _constituent_reference(chamber, reference)
+    ref = _constituent_reference(_chamber_of(district), reference)
     fit = (ref.get("expected") or {}).get(effective_party or party)
     scale = ref.get("deviation_p90")
     if fit is None or not scale:
@@ -1662,7 +1667,7 @@ def _constituent_alignment_core(
     alignment, expected, deviation_scale = _seat_vote_expectation(
         state, party, effective_party, district, reference,
     )
-    chamber = "house" if district is not None else "senate"
+    chamber = _chamber_of(district)
 
     ideal = _member_ideal_points(chamber)
     dim1 = (ideal.get("members") or {}).get(bioguide_id) if bioguide_id else None
@@ -1694,12 +1699,22 @@ def _constituent_alignment_core(
         )
     else:
         deviation = break_rate - expected
-        party_score = _seat_relative_vote_score(deviation, deviation_scale)
+        # Linear shrinkage toward 50 until the vote count reaches the
+        # dimension's high-confidence volume (AGENTS.md principle 3): with a
+        # handful of labeled votes, one break moves the rate far enough to
+        # reach either end — or, past saturation, the floor.
+        vote_confidence = min(n_party / CONSTITUENT_FULL_CONFIDENCE_VOTES, 1.0)
+        party_score = 50.0 + (_seat_relative_vote_score(deviation, deviation_scale) - 50.0) * vote_confidence
         party_alignment_detail = (
             f"broke with party on {break_rate:.1%} of {n_party} party-labeled votes; "
             f"{eval_party} members of this chamber in seats with this lean "
             f"(signal {alignment:+.2f}) break on {expected:.1%}"
         )
+        if vote_confidence < 1.0:
+            party_alignment_detail += (
+                f"; only {n_party} votes, so the score is pulled toward 50 "
+                f"until {CONSTITUENT_FULL_CONFIDENCE_VOTES}"
+            )
         if deviation > deviation_scale:
             party_alignment_detail += (
                 f" — more than {deviation_scale:.1%} above that is past the "
