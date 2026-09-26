@@ -47,7 +47,7 @@ class HoldingRow:
     """
     asset_name: str
     asset_type: str          # raw form value: House code ("ST") or Senate label ("Stocks")
-    category: str            # one of HOLDING_CATEGORIES
+    category: str            # a key of config_definitions.HOLDING_CATEGORIES
     owner: str               # self | spouse | joint | dependent
     value_text: str
     value_low: float | None
@@ -82,24 +82,6 @@ class AnnualReport:
 UNREADABLE_SCANNED = "scanned"
 UNREADABLE_UNRECOGNIZED = "unrecognized"
 
-
-# Display order is the order here; the frontend receives labels and colors
-# from the API rather than hardcoding them (AGENTS.md, config as single
-# source of truth). Colors are a fixed categorical order validated for
-# colorblind separation and >= 3:1 contrast against the site's dark surface;
-# OTHER is deliberately a neutral gray, not a ninth hue. Color follows the
-# category, so a member without some category never repaints the rest.
-HOLDING_CATEGORIES: dict[str, dict[str, str]] = {
-    "STOCKS":      {"label": "Stocks",                "color": "#3987e5"},
-    "FUNDS":       {"label": "Mutual funds & ETFs",   "color": "#d95926"},
-    "BONDS":       {"label": "Bonds & Treasuries",    "color": "#199e70"},
-    "CASH":        {"label": "Bank & cash",           "color": "#c98500"},
-    "RETIREMENT":  {"label": "Retirement & pensions", "color": "#d55181"},
-    "REAL_ESTATE": {"label": "Real estate",           "color": "#008300"},
-    "BUSINESS":    {"label": "Business interests",    "color": "#9085e9"},
-    "CRYPTO":      {"label": "Crypto",                "color": "#e66767"},
-    "OTHER":       {"label": "Other",                 "color": "#8a857d"},
-}
 
 # The House Clerk's published asset-type code list
 # (https://fd.house.gov/reference/asset-type-codes.aspx, retrieved 2026-09),

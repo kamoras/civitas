@@ -116,6 +116,26 @@ POLICY_AREAS: list[str] = [
 
 VALID_INDUSTRIES = set(INDUSTRIES.keys())
 
+# Asset-holding categories for the scorecard's holdings breakdown (annual
+# financial disclosures). Each chamber's own asset-type vocabulary is mapped
+# onto these in pipeline/fetch/fd_common.py. Display order is the order
+# here; the frontend receives labels and colors from the API (GET
+# /api/config, and on each holdings response) rather than hardcoding them. Colors are a fixed categorical order validated for
+# colorblind separation and >= 3:1 contrast against the site's dark surface;
+# OTHER is deliberately a neutral gray, not a ninth hue. Color follows the
+# category, so a member without some category never repaints the rest.
+HOLDING_CATEGORIES: dict[str, dict[str, str]] = {
+    "STOCKS":      {"label": "Stocks",                "color": "#3987e5"},
+    "FUNDS":       {"label": "Mutual funds & ETFs",   "color": "#d95926"},
+    "BONDS":       {"label": "Bonds & Treasuries",    "color": "#199e70"},
+    "CASH":        {"label": "Bank & cash",           "color": "#c98500"},
+    "RETIREMENT":  {"label": "Retirement & pensions", "color": "#d55181"},
+    "REAL_ESTATE": {"label": "Real estate",           "color": "#008300"},
+    "BUSINESS":    {"label": "Business interests",    "color": "#9085e9"},
+    "CRYPTO":      {"label": "Crypto",                "color": "#e66767"},
+    "OTHER":       {"label": "Other",                 "color": "#8a857d"},
+}
+
 # Legislative pipeline stages for the "bills currently moving through
 # Congress" view. `order` drives the left-to-right position in the
 # process-flow visualization. Codes are produced by

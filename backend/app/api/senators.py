@@ -35,6 +35,7 @@ def get_config() -> JSONResponse:
     """
     from app.config_definitions import (
         BILL_STAGES,
+        HOLDING_CATEGORIES,
         INDUSTRIES,
         PLATFORM_CATEGORIES,
         POLICY_AREAS,
@@ -49,6 +50,7 @@ def get_config() -> JSONResponse:
         "platformCategories": PLATFORM_CATEGORIES,
         "policyAreas": POLICY_AREAS,
         "billStages": BILL_STAGES,
+        "holdingCategories": HOLDING_CATEGORIES,
     }, max_age=CACHE_TTL_CONFIG_S)
 
 

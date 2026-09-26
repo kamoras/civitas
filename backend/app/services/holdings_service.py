@@ -10,8 +10,8 @@ rather than a value — see HoldingCategorySchema.
 
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import FinancialDisclosure, Representative, Senator
-from app.pipeline.fetch.fd_common import HOLDING_CATEGORIES
+from app.models import FinancialDisclosure, FinancialHolding, Representative, Senator
+from app.config_definitions import HOLDING_CATEGORIES
 from app.schemas import HoldingCategorySchema, HoldingSchema, HoldingsSchema
 from app.services.pagination import paginate_bounds
 
@@ -27,18 +27,37 @@ def _midpoint(low: float | None, high: float | None) -> float:
     return (low + high) / 2
 
 
+def _to_schema(h: FinancialHolding) -> HoldingSchema:
+    category = h.category if h.category in HOLDING_CATEGORIES else "OTHER"
+    return HoldingSchema(
+        asset_name=h.asset_name,
+        account=h.account,
+        ticker=h.ticker,
+        asset_type=h.asset_type,
+        category=category,
+        category_label=HOLDING_CATEGORIES[category]["label"],
+        owner=h.owner,
+        value_text=h.value_text,
+        value_low=h.value_low,
+        value_high=h.value_high,
+    )
+
+
+def _is_valued(h: HoldingSchema) -> bool:
+    return h.value_low is not None and h.value_high is not None
+
+
 def _build(disclosure: FinancialDisclosure, page: int, per_page: int, category: str | None) -> HoldingsSchema:
-    holdings = list(disclosure.holdings)
+    # Every figure below is taken from the schema objects, so the open-ended
+    # rule lives only in HoldingSchema.value_open_ended.
+    holdings = [_to_schema(h) for h in disclosure.holdings]
 
-    by_category: dict[str, list] = {}
+    by_category: dict[str, list[HoldingSchema]] = {}
     for h in holdings:
-        by_category.setdefault(h.category if h.category in HOLDING_CATEGORIES else "OTHER", []).append(h)
+        by_category.setdefault(h.category, []).append(h)
 
-    valued = [h for h in holdings if h.value_low is not None and h.value_high is not None]
+    valued = [h for h in holdings if _is_valued(h)]
     total_weight = sum(_midpoint(h.value_low, h.value_high) for h in valued)
-
-    def is_open(h) -> bool:
-        return h.value_low is not None and h.value_low > 0 and h.value_high == h.value_low
 
     # Every category the report has holdings in is listed, so each holding
     # stays reachable through the legend filter; one with no stated value
@@ -48,7 +67,7 @@ def _build(disclosure: FinancialDisclosure, page: int, per_page: int, category: 
         in_category = by_category.get(key, [])
         if not in_category:
             continue
-        members = [h for h in in_category if h.value_low is not None and h.value_high is not None]
+        members = [h for h in in_category if _is_valued(h)]
         weight = sum(_midpoint(h.value_low, h.value_high) for h in members)
         categories.append(HoldingCategorySchema(
             category=key,
@@ -58,7 +77,7 @@ def _build(disclosure: FinancialDisclosure, page: int, per_page: int, category: 
             unvalued_count=len(in_category) - len(members),
             value_low=sum(h.value_low for h in members),
             value_high=sum(h.value_high for h in members),
-            open_ended=any(is_open(h) for h in members),
+            open_ended=any(h.value_open_ended for h in members),
             weight=weight,
             share=weight / total_weight if total_weight else 0.0,
         ))
@@ -69,15 +88,17 @@ def _build(disclosure: FinancialDisclosure, page: int, per_page: int, category: 
     # stated bracket sorts last rather than being dropped.
     listed = sorted(
         listed,
-        key=lambda h: (h.value_low is None, -_midpoint(h.value_low, h.value_high), h.asset_name.lower()),
+        key=lambda h: (not _is_valued(h), -_midpoint(h.value_low, h.value_high), h.asset_name.lower()),
     )
     total = len(listed)
     total_pages, page = paginate_bounds(total, page, per_page)
-    page_rows = listed[(page - 1) * per_page: page * per_page]
 
     return HoldingsSchema(
         available=True,
         report_year=disclosure.report_year,
+        report_label=disclosure.report_label or (
+            f"{disclosure.report_year} annual report" if disclosure.report_year else "annual report"
+        ),
         filed_date=disclosure.filed_date,
         source_url=disclosure.source_url,
         parsed=disclosure.parsed,
@@ -86,24 +107,10 @@ def _build(disclosure: FinancialDisclosure, page: int, per_page: int, category: 
         unvalued_count=len(holdings) - len(valued),
         total_low=sum(h.value_low for h in valued),
         total_high=sum(h.value_high for h in valued),
-        total_open_ended=any(is_open(h) for h in valued),
+        total_open_ended=any(h.value_open_ended for h in valued),
         categories=categories,
         category_filter=category,
-        holdings=[
-            HoldingSchema(
-                asset_name=h.asset_name,
-                account=h.account,
-                ticker=h.ticker,
-                asset_type=h.asset_type,
-                category=h.category,
-                category_label=HOLDING_CATEGORIES.get(h.category, HOLDING_CATEGORIES["OTHER"])["label"],
-                owner=h.owner,
-                value_text=h.value_text,
-                value_low=h.value_low,
-                value_high=h.value_high,
-            )
-            for h in page_rows
-        ],
+        holdings=listed[(page - 1) * per_page: page * per_page],
         total=total,
         page=page,
         per_page=per_page,

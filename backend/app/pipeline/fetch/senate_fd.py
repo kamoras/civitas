@@ -34,7 +34,13 @@ from app.pipeline.fetch.fd_common import (
     senate_category,
     ticker_for,
 )
-from app.pipeline.fetch.senate_ptr import ANNUAL_REPORT_TYPE, _request_with_retry, search_filings, senate_filing_id
+from app.pipeline.fetch.senate_ptr import (
+    ANNUAL_REPORT_TYPE,
+    SENATOR_FILER_TYPE,
+    _request_with_retry,
+    search_filings,
+    senate_filing_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +82,12 @@ def is_annual_title(title: str) -> bool:
 
 
 async def search_annual_filings(since_date: str) -> list[dict]:
-    return await search_filings(since_date, ANNUAL_REPORT_TYPE)
+    """Sitting senators' annual reports filed since since_date. Filtered to
+    the Senator filer type on the form itself: unfiltered, the search pages
+    through every candidate's report too (several times as many rows, each
+    extra page a slow real-browser round trip), only for
+    is_senator_filing to discard them."""
+    return await search_filings(since_date, ANNUAL_REPORT_TYPE, SENATOR_FILER_TYPE)
 
 
 def _cell_main_text(cell) -> str:
@@ -86,6 +97,18 @@ def _cell_main_text(cell) -> str:
     if strong is not None:
         return " ".join((strong.text_content() or "").split())
     return " ".join((cell.text or "").split())
+
+
+def is_report_page(page_html: str) -> bool:
+    """True when the page is a filed report: every electronic report renders
+    its content as numbered "Part N." sections (Part 1 honoraria through
+    Part 10 compensation), which the terms-agreement and error pages eFD
+    serves in a report's place lack."""
+    try:
+        doc = lxml_html.fromstring(page_html)
+    except Exception:
+        return False
+    return any(h.text_content().strip().lower().startswith("part ") for h in doc.xpath("//section//h3"))
 
 
 def parse_assets_table(page_html: str) -> list[HoldingRow] | None:
@@ -194,6 +217,13 @@ async def fetch_and_parse_annual(
         # Linked as unreadable for now, and retried next run (see
         # AnnualReport.final) rather than cached.
         return AnnualReport(None, None, UNREADABLE_UNRECOGNIZED, final=False)
+    if holdings is None and not is_report_page(resp.text):
+        # Not a report at all — the session lapsed and eFD served its terms
+        # page (or an error page) in the report's place. That says nothing
+        # about the report, so it is a failed fetch, retried next run, not
+        # an unreadable report cached for a month.
+        logger.warning("Senate eFD returned a non-report page for %s — session may have lapsed", filing["report_url"])
+        return None
     report = AnnualReport(None, holdings, None if holdings is not None else UNREADABLE_UNRECOGNIZED)
 
     # Unreadable results are cached too: a filed report never changes, and

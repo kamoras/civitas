@@ -130,8 +130,8 @@ class _FakePage:
     def locator(self, selector):
         return self._locators.get(("locator", selector), _FakeLocator())
 
-    def get_by_role(self, role, name=None):
-        return self._locators.get(("role", role, name), _FakeLocator())
+    def get_by_role(self, role, name=None, exact=None):
+        return self._locators.get(("role", role, name, exact), self._locators.get(("role", role, name), _FakeLocator()))
 
     def get_by_text(self, text, exact=None):
         return self._locators.get(("text", text), _FakeLocator())
@@ -165,6 +165,26 @@ class TestScrapeViaPage:
 
         assert len(filings) == 1
         assert filings[0]["first"] == "Jane"
+
+    @pytest.mark.asyncio
+    async def test_report_and_filer_type_checkboxes(self):
+        """The annual-report search ticks "Annual" and, exactly, "Senator" —
+        a substring match would also tick "Former Senator"."""
+        clicks = []
+        payload = {"recordsTotal": 0, "data": []}
+        page = _FakePage({
+            ("locator", "#agree_statement"): _FakeLocator(count=0),
+            ("role", "combobox", "Show entries"): _FakeLocator(count=0),
+            ("role", "checkbox", "Annual"): _FakeLocator(on_click=lambda: clicks.append("Annual")),
+            ("role", "checkbox", "Senator", True): _FakeLocator(on_click=lambda: clicks.append("Senator")),
+        })
+        page._locators[("role", "button", "Search Reports")] = _FakeLocator(
+            on_click=lambda: page.fire_response(_FakeSearchResponse(payload)),
+        )
+
+        await senate_ptr._scrape_via_page(page, "", senate_ptr.ANNUAL_REPORT_TYPE, senate_ptr.SENATOR_FILER_TYPE)
+
+        assert clicks == ["Annual", "Senator"]
 
     @pytest.mark.asyncio
     async def test_terms_gate_accepted_when_present(self):

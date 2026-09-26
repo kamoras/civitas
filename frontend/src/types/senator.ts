@@ -1,3 +1,5 @@
+import type { DisclosureOwner } from "@/lib/disclosures";
+
 export interface SponsoredBill {
   billId: string;
   title: string;
@@ -114,7 +116,7 @@ export interface PolicyAreaDetail {
 export interface StockTrade {
   ticker: string | null;
   assetName: string;
-  owner: "self" | "spouse" | "joint" | "dependent";
+  owner: DisclosureOwner;
   transactionType: "purchase" | "sale_full" | "sale_partial" | "exchange";
   transactionDate: string;
   disclosureDate: string;
@@ -231,7 +233,7 @@ export interface Holding {
   assetType: string;
   category: string;
   categoryLabel: string;
-  owner: "self" | "spouse" | "joint" | "dependent";
+  owner: DisclosureOwner;
   valueText: string;
   valueLow: number | null;
   valueHigh: number | null;
@@ -258,6 +260,9 @@ export interface Holdings {
   /** False when no annual report has been ingested for this member yet. */
   available: boolean;
   reportYear: number | null;
+  /** "2025 annual report", "new-filer report as of 2026-03-24" — what the
+   * holdings describe, as the page names it. */
+  reportLabel: string;
   filedDate: string | null;
   sourceUrl: string;
   /** False when the report exists but couldn't be read — see unreadableReason. */

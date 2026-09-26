@@ -552,6 +552,9 @@ class FinancialDisclosure(Base):
     representative_id: Mapped[str | None] = mapped_column(String, ForeignKey("representatives.id", ondelete="CASCADE"), nullable=True, index=True)
     filing_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     report_year: Mapped[int | None] = mapped_column(Integer, nullable=True)  # calendar year the holdings describe
+    # What the report is, as the scorecard names it: "2025 annual report",
+    # "2025 annual report (amended)", "new-filer report as of 2026-03-24".
+    report_label: Mapped[str] = mapped_column(String, default="")
     filed_date: Mapped[str | None] = mapped_column(String, nullable=True)
     source_url: Mapped[str] = mapped_column(String, default="")
     parsed: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -582,7 +585,7 @@ class FinancialHolding(Base):
     account: Mapped[str | None] = mapped_column(String, nullable=True)
     ticker: Mapped[str | None] = mapped_column(String, nullable=True)
     asset_type: Mapped[str] = mapped_column(String, default="")  # as filed: House code or Senate label
-    category: Mapped[str] = mapped_column(String, default="OTHER", index=True)  # fd_common.HOLDING_CATEGORIES
+    category: Mapped[str] = mapped_column(String, default="OTHER", index=True)  # config_definitions.HOLDING_CATEGORIES
     owner: Mapped[str] = mapped_column(String, default="self")  # self | spouse | joint | dependent
     value_text: Mapped[str] = mapped_column(String, default="")
     value_low: Mapped[float | None] = mapped_column(Float, nullable=True)

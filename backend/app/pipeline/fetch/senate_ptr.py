@@ -197,9 +197,10 @@ async def search_ptr_filings(since_date: str) -> list[dict]:
 # The search form's report-type checkbox labels (the site's own wording).
 PTR_REPORT_TYPE = "Periodic Transactions"
 ANNUAL_REPORT_TYPE = "Annual"
+SENATOR_FILER_TYPE = "Senator"
 
 
-async def search_filings(since_date: str, report_type: str) -> list[dict]:
+async def search_filings(since_date: str, report_type: str, filer_type: str | None = None) -> list[dict]:
     """Search for filings of `report_type` (a checkbox label on the search
     form) submitted on or after since_date (YYYY-MM-DD).
 
@@ -226,7 +227,7 @@ async def search_filings(since_date: str, report_type: str) -> list[dict]:
             try:
                 page = await browser.new_page()
                 page.set_default_timeout(_ACTION_TIMEOUT_MS)
-                return await _scrape_via_page(page, since_date, report_type)
+                return await _scrape_via_page(page, since_date, report_type, filer_type)
             finally:
                 await browser.close()
     except Exception:
@@ -234,7 +235,9 @@ async def search_filings(since_date: str, report_type: str) -> list[dict]:
         return []
 
 
-async def _scrape_via_page(page, since_date: str, report_type: str = PTR_REPORT_TYPE) -> list[dict]:
+async def _scrape_via_page(
+    page, since_date: str, report_type: str = PTR_REPORT_TYPE, filer_type: str | None = None,
+) -> list[dict]:
     """The actual eFD search flow, given an already-launched Playwright
     page. See search_ptr_filings for why this exists as a real browser
     session at all."""
@@ -251,6 +254,9 @@ async def _scrape_via_page(page, since_date: str, report_type: str = PTR_REPORT_
 
     await page.goto(SEARCH_URL, wait_until="domcontentloaded")
     await _click(page.get_by_role("checkbox", name=report_type))
+    if filer_type:
+        # Exact: "Senator" is also a substring of "Former Senator".
+        await _click(page.get_by_role("checkbox", name=filer_type, exact=True))
     us_date = _iso_to_us_date(since_date)
     if us_date:
         date_input = page.locator('input[name="submitted_start_date"]')

@@ -714,15 +714,22 @@ The same run then ingests each member's latest **annual financial disclosure**
 (`holdings_pipeline.py`) — the asset list behind the scorecard's holdings pie:
 House Schedule A parsed from word positions (`fetch/house_fd.py`; pdfplumber's
 table extraction drops most rows on this form), Senate Part 3 from the eFD HTML
-(`fetch/senate_fd.py`). One report per member, the newest, replacing the last.
-Asset categories come only from the asset type the *filer* declared (the
-House's two-letter codes, the Senate's type/subtype), mapped in
-`fd_common.py` — a form-vocabulary translation, never a guess from the asset's
-name. Values stay brackets (`low == high` is the same open-ended sentinel); the
-pie is drawn by bracket midpoints and says so, and no net-worth figure is
-produced. Scanned paper reports are stored `parsed=False` and linked, not
-OCR'd. Presidents are not covered yet: the OGE 278e is an ~850-page hybrid
-scan with no asset-type column.
+(`fetch/senate_fd.py`). One report per member, the newest, replacing the last
+— never replaced by an *older* one, which a partial index or search can turn
+up. Asset categories (`HOLDING_CATEGORIES` in `config_definitions.py`) come
+only from the asset type the *filer* declared (the House's two-letter codes,
+the Senate's type/subtype), mapped in `fd_common.py` — a form-vocabulary
+translation, never a guess from the asset's name. Values stay brackets
+(`low == high` is the same open-ended sentinel); the pie is drawn by bracket
+midpoints and says so, and no net-worth figure is produced. Reports that can't
+be read are stored `parsed=False` with a reason (`scanned` paper filing,
+`unrecognized` layout) and linked, not OCR'd. Each fetch module's
+`PARSER_VERSION` keys its parse cache and is stored per report — bump it when a
+parser's output changes, and already-ingested reports are re-read. Both
+phases are time-boxed (`holdings_pipeline.PHASE_BUDGET`), so a first run or a
+version bump spreads over a few nights instead of stretching the stock run
+past its 2h overrun alarm. Presidents are not covered yet: the OGE 278e is an
+~850-page hybrid scan with no asset-type column.
 
 Each senator is processed independently. The pipeline uses `PipelineRun`
 records to track progress and supports resumption.

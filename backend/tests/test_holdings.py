@@ -1,6 +1,7 @@
 """Tests for holdings_pipeline (which report is kept per member) and the
 holdings read path (holdings_service + the two API routes)."""
 
+import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -398,3 +399,86 @@ class TestTransientParseFailures:
         crashed = AnnualReport(None, None, "unrecognized", final=False)
         await _ingest_house(db_session, {2025: [_house_filing("NEW")]}, {"NEW": crashed})
         assert db_session.query(FinancialDisclosure).one().filing_id == "OLD"
+
+
+class TestNeverRollBack:
+    async def test_house_partial_index_keeps_the_newer_stored_report(self, db_session, rep):
+        """Last year's index failed to load, so only the year-before report
+        turned up: the stored newer report must survive."""
+        db_session.add(FinancialDisclosure(
+            representative_id="R1", filing_id="CY2025", report_year=2025, filed_date="2026-05-01",
+            source_url="x", parser_version=holdings_pipeline.HOUSE_PARSER_VERSION,
+        ))
+        db_session.commit()
+        count, mock_fetch = await _ingest_house(
+            db_session, {2024: [_house_filing("CY2024", year=2024, filing_date="2025-05-01")]},
+            {"CY2024": AnnualReport("Member", [_row()])},
+        )
+        assert count == 0
+        mock_fetch.assert_not_called()
+        assert db_session.query(FinancialDisclosure).one().filing_id == "CY2025"
+
+    async def test_senate_partial_search_keeps_the_newer_stored_report(self, db_session, senator):
+        db_session.add(FinancialDisclosure(
+            senator_id="S1", filing_id="cy2025", report_year=2025, filed_date="2026-05-11",
+            source_url="x", parser_version=holdings_pipeline.SENATE_PARSER_VERSION,
+        ))
+        db_session.commit()
+        await _ingest_senate(
+            db_session, [_senate_filing("cy2024", title="Annual Report for CY 2024", filed="2025-05-11")],
+            {"cy2024": [_row()]},
+        )
+        assert db_session.query(FinancialDisclosure).one().filing_id == "cy2025"
+
+
+class TestTimeBudget:
+    async def test_members_with_nothing_stored_go_first_and_the_rest_wait(self, db_session):
+        for rid, name, district in (("R1", "John Doe", 1), ("R2", "Mary Roe", 2)):
+            db_session.add(Representative(id=rid, name=name, state="TX", district=district, party="R", is_current=True))
+        db_session.add(FinancialDisclosure(
+            representative_id="R1", filing_id="OLD", report_year=2024, filed_date="2025-05-01", source_url="x",
+            parser_version=holdings_pipeline.HOUSE_PARSER_VERSION,
+        ))
+        db_session.commit()
+        index = {2025: [
+            _house_filing("R1NEW"),
+            _house_filing("R2NEW", last="Roe", first="Mary", district="TX02"),
+        ]}
+        reports = {"R1NEW": AnnualReport("Member", [_row()]), "R2NEW": AnnualReport("Member", [_row()])}
+
+        clock = iter([0.0, 0.0, 10_000.0, 10_000.0])  # deadline, then: R2 in time, R1 past it
+        with patch.object(holdings_pipeline.time, "monotonic", side_effect=lambda: next(clock)):
+            await _ingest_house(db_session, index, reports)
+
+        by_rep = {d.representative_id: d.filing_id for d in db_session.query(FinancialDisclosure).all()}
+        assert by_rep == {"R2": "R2NEW", "R1": "OLD"}
+
+
+class TestReportLabels:
+    def test_house(self):
+        label = holdings_pipeline._house_report_label
+        assert label({"year": 2025, "filing_type": "O"}) == "2025 annual report"
+        assert label({"year": 2025, "filing_type": "A"}) == "2025 annual report (amended)"
+
+    def test_senate(self):
+        label = holdings_pipeline._senate_report_label
+        assert label({"title": "Annual Report for CY 2025"}) == "2025 annual report"
+        assert label({"title": "Annual Report for CY 2025 (Amendment 1)"}) == "2025 annual report (amended)"
+        # A snapshot at its date, not a year-end report.
+        assert label({"title": "New Filer Report for 03/24/2026"}) == "new-filer report as of 2026-03-24"
+        assert label({"title": "Annual Report", "filed_date": "2026-08-13"}) == "2025 annual report"
+
+    async def test_label_is_stored_and_served(self, db_session, senator):
+        await _ingest_senate(
+            db_session, [_senate_filing("nf", title="New Filer Report for 03/24/2026", filed="2026-07-21")],
+            {"nf": [_row()]},
+        )
+        assert get_senator_holdings(db_session, "S1").report_label == "new-filer report as of 2026-03-24"
+
+
+def test_config_exposes_holding_categories():
+    from app.api.senators import get_config
+
+    body = json.loads(get_config().body)
+    assert body["holdingCategories"]["STOCKS"] == {"label": "Stocks", "color": "#3987e5"}
+    assert list(body["holdingCategories"])[-1] == "OTHER"

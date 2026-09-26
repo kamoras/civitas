@@ -13,9 +13,9 @@ from pathlib import Path
 import pytest
 
 from app.pipeline.fetch import fd_common
+from app.config_definitions import HOLDING_CATEGORIES
 from app.pipeline.fetch.fd_common import (
     HOUSE_ASSET_TYPE_CATEGORY,
-    HOLDING_CATEGORIES,
     SENATE_ASSET_SUBTYPE_CATEGORY,
     SENATE_ASSET_TYPE_CATEGORY,
     house_category,
@@ -350,7 +350,8 @@ class TestFetchCaching:
         from app.pipeline.fetch import senate_fd
 
         filing = {"report_url": "https://efdsearch.senate.gov/search/view/annual/abc/", "is_paper": False}
-        page = SimpleNamespace(text="<html><body>No assets part here</body></html>")
+        # A report (it has its numbered Parts) whose assets part is missing.
+        page = SimpleNamespace(text="<section><h3>Part 1. Honoraria Payments</h3><p>None disclosed.</p></section>")
         with patch.object(senate_fd, "_request_with_retry", new_callable=AsyncMock, return_value=page) as mock_get:
             first = await senate_fd.fetch_and_parse_annual(None, db_session, filing)
             second = await senate_fd.fetch_and_parse_annual(None, db_session, filing)
@@ -358,3 +359,20 @@ class TestFetchCaching:
         assert (first.holdings, first.unreadable_reason) == (None, "unrecognized")
         assert (second.holdings, second.unreadable_reason) == (None, "unrecognized")
         assert mock_get.await_count == 1
+
+
+    async def test_senate_terms_page_in_place_of_a_report_is_a_failed_fetch(self, db_session):
+        """A lapsed session serves the terms page instead of the report; that
+        says nothing about the report, so it is neither stored as unreadable
+        nor cached."""
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, patch
+
+        from app.pipeline.fetch import senate_fd
+
+        terms = SimpleNamespace(text='<form id="agreement_form"><input id="agree_statement" type="checkbox"></form>')
+        filing = {"report_url": "https://efdsearch.senate.gov/search/view/annual/abc/", "is_paper": False}
+        with patch.object(senate_fd, "_request_with_retry", new_callable=AsyncMock, return_value=terms), \
+             patch.object(senate_fd, "api_cache_set") as mock_set:
+            assert await senate_fd.fetch_and_parse_annual(None, db_session, filing) is None
+        mock_set.assert_not_called()

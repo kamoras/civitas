@@ -6,13 +6,26 @@ disclosure systems the trade ingest reads, and so is the filer matching.
 
 For every sitting member it keeps exactly one report — the newest one —
 and replaces the member's previous report when a newer one is found. A
-report covers holdings at one calendar year end, so an older report is
-superseded, not accumulated. Nothing is derived from the value brackets
-here; the read path (holdings_service) reports them as disclosed.
+report covers holdings at one date, so an older report is superseded, not
+accumulated — and never brought back: a partial index or search that only
+turned up a member's older report leaves the newer stored one alone.
+Nothing is derived from the value brackets here; the read path
+(holdings_service) reports them as disclosed.
+
+Each phase is time-boxed (PHASE_BUDGET). A normal run fetches only the
+handful of reports filed since the last one and finishes in a minute or
+two; the first run, or a PARSER_VERSION bump, has every member's report to
+read, and the budget spreads that over a few nightly runs instead of
+holding the stock-trades run — and the hourly action-center refresh that
+waits on it — past its 2h overrun alarm. Members with nothing stored go
+first, so coverage fills before re-reads.
 """
 
 import logging
 import re
+import time
+from dataclasses import dataclass
+from datetime import timedelta
 
 import httpx
 from sqlalchemy.orm import Session
@@ -40,9 +53,54 @@ logger = logging.getLogger(__name__)
 # (before they file) the year before.
 _YEARS_BACK = 2
 
+# Wall-clock budget for each holdings phase's report fetching. Measured
+# 2026-09: a first House run reads ~430 reports (~9 min in a dev container,
+# network-bound at the Clerk's 1 req/s; slower on the Pi's CPU), the Senate
+# ~100 (~4 min, most of it the browser search). Past the budget the
+# remaining members wait for the next run. Two phases at this budget add at
+# most 20 min to a stock run that normally finishes under 90, inside the
+# scheduler's 2h overrun threshold.
+PHASE_BUDGET = timedelta(minutes=10)
+
+
+@dataclass
+class _Stored:
+    filing_id: str
+    parser_version: int | None
+    report_year: int | None
+    filed_date: str | None
+
+
+def _stored_reports(db: Session, column) -> dict[str, _Stored]:
+    rows = db.query(
+        column, FinancialDisclosure.filing_id, FinancialDisclosure.parser_version,
+        FinancialDisclosure.report_year, FinancialDisclosure.filed_date,
+    ).filter(column.isnot(None))
+    return {owner_id: _Stored(*rest) for owner_id, *rest in rows.all()}
+
+
+def _is_current(stored: _Stored | None, filing_id: str, parser_version: int) -> bool:
+    """Already ingested: same filing, read by this parser. The same filing
+    read by an older parser is re-read, so a parser fix reaches every member
+    instead of only those who file something new."""
+    return stored is not None and (stored.filing_id, stored.parser_version) == (filing_id, parser_version)
+
+
+def _is_older(stored: _Stored | None, report_year: int | None, filed_date: str | None) -> bool:
+    """The candidate describes an earlier date than what's stored."""
+    if stored is None:
+        return False
+    return (report_year or 0, filed_date or "") < (stored.report_year or 0, stored.filed_date or "")
+
+
+def _members_in_order(per_member: dict[str, list[dict]], stored: dict[str, _Stored]) -> list[str]:
+    """Members with nothing stored first: under the time budget, filling a
+    missing scorecard section matters more than refreshing a present one."""
+    return sorted(per_member, key=lambda member_id: member_id in stored)
+
 
 def _replace_disclosure(
-    db: Session, *, owner_filter: dict, filing_id: str, report_year: int | None,
+    db: Session, *, owner_filter: dict, filing_id: str, report_year: int | None, report_label: str,
     filed_date: str | None, source_url: str, report: AnnualReport, parser_version: int,
 ) -> int:
     """Swap a member's stored report for this one. Returns holdings stored."""
@@ -52,6 +110,7 @@ def _replace_disclosure(
         **owner_filter,
         filing_id=filing_id,
         report_year=report_year,
+        report_label=report_label,
         filed_date=filed_date,
         source_url=source_url,
         parsed=report.holdings is not None,
@@ -76,20 +135,15 @@ def _replace_disclosure(
     return len(report.holdings or [])
 
 
-def _stored_versions(db: Session, column) -> dict[str, tuple[str, int | None]]:
-    """owner id -> (filing id, parser version) of the report stored for them.
-
-    A report counts as already ingested only when both match: the same
-    filing read by an older parser is re-read, so a parser fix reaches
-    every member instead of only those who file something new."""
-    rows = db.query(column, FinancialDisclosure.filing_id, FinancialDisclosure.parser_version).filter(
-        column.isnot(None)
-    )
-    return {owner_id: (filing_id, version) for owner_id, filing_id, version in rows.all()}
+def _house_report_label(filing: dict) -> str:
+    year = filing.get("year")
+    base = f"{year} annual report" if year else "annual report"
+    return f"{base} (amended)" if filing.get("filing_type") == "A" else base
 
 
 async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
     """Store each representative's newest annual report. Returns holdings stored."""
+    deadline = time.monotonic() + PHASE_BUDGET.total_seconds()
     current_year = utcnow().year
     # Candidate filings per representative, most preferred first: the
     # newest calendar year, then the latest filed within it (an amendment
@@ -111,14 +165,23 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
         # the run records it, instead of leaving every stored report to age.
         raise RuntimeError("House annual-report index returned no filings for either year")
 
-    stored = _stored_versions(db, FinancialDisclosure.representative_id)
+    stored = _stored_reports(db, FinancialDisclosure.representative_id)
     inserted = 0
-    for rep_id, filings in per_rep.items():
-        for filing in filings:
-            if stored.get(rep_id) == (filing["doc_id"], HOUSE_PARSER_VERSION):
+    order = _members_in_order(per_rep, stored)
+    for position, rep_id in enumerate(order):
+        if time.monotonic() > deadline:
+            logger.info("House holdings: time budget spent — %d members wait for the next run", len(order) - position)
+            break
+        mine = stored.get(rep_id)
+        for filing in per_rep[rep_id]:
+            if _is_current(mine, filing["doc_id"], HOUSE_PARSER_VERSION):
                 break  # already have the newest report, as this parser reads it
+            if _is_older(mine, filing.get("year"), filing.get("filing_date")):
+                # Only older reports than the stored one turned up (a year's
+                # index failed to load): keep the newer stored report.
+                break
             report = await fetch_house_annual(client, db, filing)
-            if report is None or (not report.final and rep_id in stored):
+            if report is None or (not report.final and mine is not None):
                 # Couldn't fetch or (transiently) read it this run: keep
                 # whatever is stored rather than falling back to an older
                 # report or replacing a readable one with a link.
@@ -133,18 +196,19 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
                 owner_filter={"representative_id": rep_id},
                 filing_id=filing["doc_id"],
                 report_year=filing.get("year"),
+                report_label=_house_report_label(filing),
                 filed_date=filing.get("filing_date"),
                 source_url=filing["pdf_url"],
                 report=report,
                 parser_version=HOUSE_PARSER_VERSION,
             )
             break
-    db.commit()
+        db.commit()  # per member, so a budget stop or a later crash keeps what's done
     return inserted
 
 
 _CY_RE = re.compile(r"\bCY\s*(\d{4})\b", re.I)
-_DATE_YEAR_RE = re.compile(r"\b\d{2}/\d{2}/(\d{4})\b")
+_DATE_RE = re.compile(r"\b(\d{2})/(\d{2})/(\d{4})\b")
 
 
 def _senate_report_year(filing: dict) -> int | None:
@@ -157,14 +221,26 @@ def _senate_report_year(filing: dict) -> int | None:
     title = filing.get("title") or ""
     if m := _CY_RE.search(title):
         return int(m.group(1))
-    if m := _DATE_YEAR_RE.search(title):
-        return int(m.group(1))
+    if m := _DATE_RE.search(title):
+        return int(m.group(3))
     filed = filing.get("filed_date") or ""
     return int(filed[:4]) - 1 if filed[:4].isdigit() else None
 
 
+def _senate_report_label(filing: dict) -> str:
+    """What the report is, in the words the page shows: a new-filer report
+    is a snapshot at its date, not a year-end annual report."""
+    title = filing.get("title") or ""
+    amended = " (amended)" if "amendment" in title.lower() else ""
+    if "new filer" in title.lower() and (m := _DATE_RE.search(title)):
+        return f"new-filer report as of {m.group(3)}-{m.group(1)}-{m.group(2)}{amended}"
+    year = _senate_report_year(filing)
+    return f"{year} annual report{amended}" if year else f"annual report{amended}"
+
+
 async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
     """Store each senator's newest annual report. Returns holdings stored."""
+    deadline = time.monotonic() + PHASE_BUDGET.total_seconds()
     if await senate_accept_terms(client) is None:
         raise RuntimeError("Could not establish a Senate eFD session")
 
@@ -183,16 +259,29 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
             continue
         per_senator.setdefault(senator.id, []).append(filing)
 
-    stored = _stored_versions(db, FinancialDisclosure.senator_id)
+    stored = _stored_reports(db, FinancialDisclosure.senator_id)
     inserted = 0
-    for senator_id, candidates in per_senator.items():
-        candidates.sort(key=lambda f: (_senate_report_year(f) or 0, f.get("filed_date") or ""), reverse=True)
+    order = _members_in_order(per_senator, stored)
+    for position, senator_id in enumerate(order):
+        if time.monotonic() > deadline:
+            logger.info("Senate holdings: time budget spent — %d members wait for the next run", len(order) - position)
+            break
+        candidates = sorted(
+            per_senator[senator_id],
+            key=lambda f: (_senate_report_year(f) or 0, f.get("filed_date") or ""),
+            reverse=True,
+        )
         filing = candidates[0]
         filing_id = senate_filing_id(filing["report_url"])
-        if stored.get(senator_id) == (filing_id, SENATE_PARSER_VERSION):
+        mine = stored.get(senator_id)
+        if _is_current(mine, filing_id, SENATE_PARSER_VERSION):
+            continue
+        if _is_older(mine, _senate_report_year(filing), filing.get("filed_date")):
+            # The search came back without the stored (newer) report — a
+            # page of results failed to load. Keep the newer one.
             continue
         report = await fetch_senate_annual(client, db, filing)
-        if report is None or (not report.final and senator_id in stored):
+        if report is None or (not report.final and mine is not None):
             # The page failed to load, or the parser crashed on it, this run:
             # keep what's stored and try again next run.
             continue
@@ -201,10 +290,11 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
             owner_filter={"senator_id": senator_id},
             filing_id=filing_id,
             report_year=_senate_report_year(filing),
+            report_label=_senate_report_label(filing),
             filed_date=filing.get("filed_date"),
             source_url=filing["report_url"],
             report=report,
             parser_version=SENATE_PARSER_VERSION,
         )
-    db.commit()
+        db.commit()
     return inserted

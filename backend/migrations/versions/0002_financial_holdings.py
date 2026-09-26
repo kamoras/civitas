@@ -21,6 +21,7 @@ def upgrade() -> None:
     sa.Column('representative_id', sa.String(), nullable=True),
     sa.Column('filing_id', sa.String(), nullable=False),
     sa.Column('report_year', sa.Integer(), nullable=True),
+    sa.Column('report_label', sa.String(), nullable=False),
     sa.Column('filed_date', sa.String(), nullable=True),
     sa.Column('source_url', sa.String(), nullable=False),
     sa.Column('parsed', sa.Boolean(), nullable=False),

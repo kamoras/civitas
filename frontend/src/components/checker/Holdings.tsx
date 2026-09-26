@@ -30,8 +30,12 @@ function formatHoldingValue(h: Holding): string {
   return formatBracket(h.valueLow, h.valueHigh, h.valueOpenEnded);
 }
 
+/** A summed range, compact. If any holding in the sum used the open-ended
+ * top bracket, the sum has no ceiling at all — its upper figure includes a
+ * placeholder — so only the floor is shown, as "$X+" (the rule every
+ * disclosure figure follows; see formatBracket). */
 function formatRangeCompact(low: number, high: number, openEnded: boolean): string {
-  return `${formatCurrency(low)} – ${formatCurrency(high)}${openEnded ? "+" : ""}`;
+  return openEnded ? `${formatCurrency(low)}+` : `${formatCurrency(low)} – ${formatCurrency(high)}`;
 }
 
 function formatShare(share: number): string {
@@ -297,7 +301,7 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
 
   if (!data) return null;
 
-  const reportLabel = data.reportYear ? `${data.reportYear} annual report` : "latest annual report";
+  const reportLabel = data.reportLabel || "latest annual report";
   const sourceLink = (
     <a
       href={data.sourceUrl}
@@ -371,7 +375,9 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
       summary={
         data.parsed
           ? `${data.holdingsCount} asset${data.holdingsCount !== 1 ? "s" : ""}`
-          : "paper filing"
+          : data.unreadableReason === "scanned"
+            ? "paper filing"
+            : "not machine-readable"
       }
       source={SOURCE_LABEL[chamber]}
       alwaysVisible={chart}
