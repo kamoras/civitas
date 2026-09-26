@@ -35,7 +35,7 @@ import httpx
 
 from app.pipeline.fetch.http_utils import BROWSER_JSON_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
-    normalize_party, parse_office, pick_nominees, surname,
+    federal_record, normalize_party, parse_office, pick_nominees,
 )
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -175,10 +175,7 @@ async def fetch_confirmed_candidates(
                 ]
                 won = pick_nominees(choices, threshold)
                 for name, _pct in won:
-                    last_name = surname(name)
-                    if last_name:
-                        records.append({
-                            "office": office, "district": district,
-                            "party": party, "last_name": last_name,
-                        })
+                    record = federal_record(office, district, party, name)
+                    if record:
+                        records.append(record)
     return records

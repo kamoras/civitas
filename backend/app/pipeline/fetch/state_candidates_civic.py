@@ -120,7 +120,7 @@ import httpx
 from app.config import settings
 from app.pipeline.fetch.civic_info import CIVIC_BASE, _parse_contests
 from app.pipeline.fetch.http_utils import fetch_with_retry
-from app.pipeline.fetch.state_candidates_common import normalize_party, parse_office, surname
+from app.pipeline.fetch.state_candidates_common import federal_record, normalize_party, parse_office
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -232,15 +232,9 @@ async def _voterinfo_contests(
 def _contest_candidates(contest: dict, office: str, district: int | None) -> list[dict]:
     results = []
     for cand in contest.get("candidates") or []:
-        last_name = surname(cand.get("name") or "")
-        if not last_name:
-            continue
-        results.append({
-            "office": office,
-            "district": district,
-            "party": normalize_party(cand.get("party") or ""),
-            "last_name": last_name,
-        })
+        record = federal_record(office, district, normalize_party(cand.get("party") or ""), cand.get("name") or "")
+        if record:
+            results.append(record)
     return results
 
 

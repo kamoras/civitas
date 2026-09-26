@@ -1,4 +1,9 @@
+# /api/ is deliberately NOT disallowed: the client-rendered pages (directory,
+# leaderboard, explore documents) load their content from /api/* in the
+# browser, and Googlebot's renderer honours robots.txt for those requests —
+# blocking /api/ would make Google index those pages as empty shells.
 User-agent: *
 Allow: /
+Disallow: /admin
 
 Sitemap: https://civitas-research.org/sitemap.xml

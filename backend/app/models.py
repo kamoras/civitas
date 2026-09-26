@@ -700,6 +700,11 @@ class Race(Base):
     )
 
 
+# Prefix of a Candidate id that is NOT an FEC candidate_id. FEC ids are a
+# letter and digits ("H6MO01222"), so a colon can never collide with one.
+BALLOT_ONLY_ID_PREFIX = "ballot:"
+
+
 class Candidate(Base):
     """A declared candidate in a Race, sourced from FEC candidate filings.
 
@@ -708,6 +713,13 @@ class Candidate(Base):
     Representative/President already follow with bioguide_id/UCSB-derived
     ids, so this candidate's FEC record can always be looked up directly
     without a separate crosswalk table.
+
+    The one exception is a candidate a state's own source puts on the
+    ballot who never filed with the FEC (a minor-party or independent
+    candidate under the FEC's reporting threshold, typically). They have
+    no FEC id, so their id is BALLOT_ONLY_ID_PREFIX + race + name, and
+    `fec_filed` is False. Without them a certified ballot page showed
+    fewer people than the real ballot — 7 of Louisiana's 41 in 2026.
     """
     __tablename__ = "candidates"
 
@@ -759,6 +771,12 @@ class Candidate(Base):
     updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
 
     race: Mapped["Race"] = relationship(back_populates="candidates")
+
+    @property
+    def fec_filed(self) -> bool:
+        """False for a ballot-only candidate: there is no FEC record to
+        link to, fetch totals for, or describe as "awaiting FEC sync"."""
+        return not self.id.startswith(BALLOT_ONLY_ID_PREFIX)
 
 
 class RaceCoverageItem(Base):
@@ -1680,6 +1698,34 @@ class IssueView(VisitsBase):
 
     date: Mapped[str] = mapped_column(String(10), primary_key=True)  # YYYY-MM-DD
     issue_public_id: Mapped[str] = mapped_column(String(16), primary_key=True)
+    count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class PageLoadTiming(VisitsBase):
+    """Page-load durations as a daily histogram per route — never per visit.
+
+    Each hard page load's Navigation Timing (TTFB, first contentful paint,
+    load event) is reported by the browser (`POST /api/track-timing`) and
+    folded into a fixed bucket ladder (api/visits.py's LOAD_TIMING_BUCKETS_MS):
+    one counter per (date, route template, metric, bucket). No hash, no
+    User-Agent, no exact duration is kept — only "one more load of
+    /leaderboard landed in the 750-1000ms bucket today" — so there is nothing
+    here that could single out a visitor, and the table is bounded by
+    days x routes x 3 metrics x ~20 buckets regardless of traffic.
+
+    A histogram rather than a running mean because the admin dashboard
+    charts p50/p95: one slow outlier moves a mean, and a mean can't be
+    turned back into percentiles later. Percentiles are interpolated inside
+    the bucket (admin.py's _histogram_percentile), so their precision is the
+    bucket width — plenty to see a regression, not a benchmark.
+    """
+    __tablename__ = "page_load_timings"
+
+    date: Mapped[str] = mapped_column(String(10), primary_key=True)  # YYYY-MM-DD
+    path: Mapped[str] = mapped_column(String(100), primary_key=True)
+    metric: Mapped[str] = mapped_column(String(8), primary_key=True)  # ttfb | fcp | load
+    # Upper bound of the bucket, in ms (a member of LOAD_TIMING_BUCKETS_MS).
+    bucket_ms: Mapped[int] = mapped_column(Integer, primary_key=True)
     count: Mapped[int] = mapped_column(Integer, default=0)
 
 

@@ -1,6 +1,14 @@
+import { pageMetadata } from "@/lib/site";
 import Navbar from "@/components/layout/Navbar";
 import PageMasthead from "@/components/layout/PageMasthead";
 import Footer from "@/components/layout/Footer";
+
+export const metadata = pageMetadata({
+  title: "About: How Civitas Scores Congress",
+  description:
+    "How Civitas scores members of Congress: data sources, funding independence, constituent alignment, and legislative effectiveness formulas — deterministic, auditable, and nonpartisan.",
+  path: "/about",
+});
 
 // Collapsed by default (2026-08). Reader feedback that the site reads dense
 // was partly about volume, not just spacing: this page measured 10,766 words
@@ -1074,6 +1082,44 @@ export default function AboutPage() {
                   who is on the November ballot instead, which also shows an independent
                   candidate that primary results can never reveal.
                 </P>
+                <P>
+                  A second look at the nine found that three of them publish their
+                  November ballot directly after all: Louisiana&apos;s results portal,
+                  South Carolina&apos;s candidate-tracking system and Missouri&apos;s
+                  certification of candidates to its counties. All three are now read
+                  as the ballot itself, third-party and independent candidates included.
+                </P>
+                <P>
+                  Reading the ballot rather than primary results also catches a nominee
+                  who is replaced after the primary. In Maine, Graham Platner won the
+                  Democratic Senate primary, withdrew in July, and the party nominated
+                  Troy Jackson; in South Carolina a special primary replaced the June
+                  winner for Senate. Where a state&apos;s source is its certified ballot, it
+                  is treated as the final word: anyone not on it is taken off the page.
+                </P>
+                <P>
+                  Everyone on a certified ballot is shown, including candidates who never
+                  filed with the FEC — they appear with &ldquo;no FEC filing&rdquo; instead
+                  of fundraising figures. Colorado, Virginia, Tennessee, Florida, New Jersey, Maryland,
+                  Iowa, Nebraska, New Mexico, Wyoming and Hawaii now read their certified candidate lists too (Tennessee&apos;s
+                  federal races alone list 36 independents; Florida&apos;s filled five districts its
+                  results file never mentioned; Iowa&apos;s replaced a retiring senator the page still
+                  showed), and Wisconsin its official primary canvass, a plain
+                  file on an otherwise blocked site. Until a state certifies its list, its
+                  primary results stand in, and the page says &ldquo;nominees&rdquo; rather
+                  than claiming the whole ballot. Utah and Alabama publish their certified lists
+                  only as scanned images, which we do not read: one misread name would take a
+                  real nominee off the page. The remaining five states sit behind bot
+                  challenges on their election sites, or in Oklahoma&apos;s case an API that
+                  requires logging in. We do not work around either.
+                </P>
+                <P>
+                  A Senate race only appears where the FEC&apos;s election calendar lists
+                  one. Before that check, a handful of people who file paperwork for
+                  offices in many states at once were enough to invent a Senate
+                  &ldquo;special election&rdquo; in New York and Hawaii, neither of which
+                  votes for a senator in 2026.
+                </P>
               </div>
 
               <div>
@@ -1267,6 +1313,13 @@ export default function AboutPage() {
                   ended. Neither was a lapse in phrasing — a paraphrase can be faithful to its
                   source and still unfit to repeat. Copying cannot invent a word that is not there,
                   so the whole class of error is structurally unavailable rather than filtered.
+                </P>
+                <P>
+                  The cost is that some stories yield no checkable sentence and publish nothing.
+                  At most two issues publish per hourly run, taken in rank order; when a top story
+                  fails the checks, the next-ranked story is tried rather than the run ending
+                  empty. Before that change, two failing top stories could leave the Action Center
+                  silent for a day while the news carried on.
                 </P>
                 <P>
                   The cost is silence. A cluster with no attributable assertion produces no issue at

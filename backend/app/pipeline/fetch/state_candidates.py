@@ -40,11 +40,14 @@ accurate as before this sync ran, never worse.
 """
 
 import logging
+import re
+import unicodedata
 
 import httpx
 from sqlalchemy.orm import Session
 
 from app.models import (
+    BALLOT_ONLY_ID_PREFIX,
     Candidate,
     JudicialNominee,
     Race,
@@ -68,8 +71,11 @@ from app.pipeline.fetch.state_source_crawler import (
     discover_filings,
     discover_source,
 )
+from app.pipeline.candidate_dedup import normalized_surname
 from app.pipeline.fetch.state_candidates_common import (
+    BALLOT_BASIS_TIER,
     PARTY_CODE_MAP,
+    ballot_basis_key,
     JUDICIAL_COURT_LABELS,
     JUDICIAL_MARKER_TIER,
     JUDICIAL_MARKER_TTL_HOURS,
@@ -81,10 +87,14 @@ from app.pipeline.fetch.state_candidates_common import (
     statewide_marker_key,
 )
 from app.pipeline.fetch.state_candidates_al import fetch_confirmed_candidates as _fetch_al
+from app.pipeline.fetch.state_candidates_canvass_summary_pdf import fetch_confirmed_candidates as _fetch_canvass_summary_pdf
 from app.pipeline.fetch.state_candidates_canvass_xml import fetch_confirmed_candidates as _fetch_canvass_xml
+from app.pipeline.fetch.state_candidates_certified_pdf import fetch_confirmed_candidates as _fetch_certified_pdf
+from app.pipeline.fetch.state_candidates_certified_table import fetch_confirmed_candidates as _fetch_certified_table
 from app.pipeline.fetch.state_candidates_civic import fetch_confirmed_candidates as _fetch_civic
 from app.pipeline.fetch.state_candidates_ct import fetch_confirmed_candidates as _fetch_ct
 from app.pipeline.fetch.state_candidates_clarity import fetch_confirmed_candidates as _fetch_clarity
+from app.pipeline.fetch.state_candidates_dos_canlist import fetch_confirmed_candidates as _fetch_dos_canlist
 from app.pipeline.fetch.state_candidates_enhanced_voting import (
     fetch_confirmed_candidates as _fetch_enhanced_voting,
 )
@@ -104,6 +114,8 @@ from app.pipeline.fetch.state_candidates_tally_enr import fetch_confirmed_candid
 from app.pipeline.fetch.state_candidates_tn import fetch_confirmed_candidates as _fetch_tn
 from app.pipeline.fetch.state_candidates_totalvote import fetch_confirmed_candidates as _fetch_totalvote
 from app.pipeline.fetch.state_candidates_tx import fetch_confirmed_candidates as _fetch_tx
+from app.pipeline.fetch.state_candidates_voterportal import fetch_confirmed_candidates as _fetch_voterportal
+from app.pipeline.fetch.state_candidates_vrems import fetch_confirmed_candidates as _fetch_vrems
 from app.pipeline.fetch.state_candidates_vt import fetch_confirmed_candidates as _fetch_vt
 from app.pipeline.fetch.state_candidates_wy import fetch_confirmed_candidates as _fetch_wy
 
@@ -135,6 +147,12 @@ STRATEGIES = {
     "ma_pd43": _fetch_ma,
     "me_results": _fetch_me,
     "sd_vip": _fetch_sd_vip,
+    "voterportal": _fetch_voterportal,
+    "vrems": _fetch_vrems,
+    "certified_pdf": _fetch_certified_pdf,
+    "certified_table": _fetch_certified_table,
+    "canvass_summary_pdf": _fetch_canvass_summary_pdf,
+    "dos_canlist": _fetch_dos_canlist,
     "google_civic": _fetch_civic,
     "nh_results": _fetch_nh,
     "enhanced_voting": _fetch_enhanced_voting,
@@ -162,77 +180,344 @@ def _race_id_for(cycle: int, state: str, office: str, district: int | None) -> s
     return f"{cycle}-HOUSE-{state}-{district if district is not None else 0}"
 
 
+def _fold(text: str) -> str:
+    """Lowercased with diacritics removed. FEC files names in plain ASCII
+    capitals and a state prints them as the candidate spells them, so
+    without this "Sánchez" never equals "SANCHEZ" — which left Linda
+    Sánchez (CA-41) unmatched and her race showing all eleven filers."""
+    decomposed = unicodedata.normalize("NFKD", text or "")
+    return "".join(ch for ch in decomposed if not unicodedata.combining(ch)).lower()
+
+
 def _candidate_surname(name: str) -> str:
     """FEC's Candidate.name is "LAST, FIRST MIDDLE ..." — the surname is
-    everything before the comma (same extraction elections.py's
-    _incumbent_link does)."""
-    return name.split(",")[0].strip().lower()
+    everything before the comma, minus a generational suffix. FEC puts
+    the suffix on either half ("CLEAVER II, EMANUEL"), and a state never
+    does, so without stripping it a sitting member of Congress goes
+    unconfirmed: "cleaver ii" is not "cleaver", and the last-token
+    fallback below then compares "ii". Applied to a state's own surname
+    too, which can carry one ("HAYNES III" from Texas)."""
+    return _fold(normalized_surname(name))
 
 
-def _first_name_key(name: str) -> str:
-    """The leading given-name token, lowercased, for tie-breaking only.
+# Words FEC appends to given names that are not names: honorifics, ranks,
+# suffixes. Skipped when reading the given-name half.
+_NOT_A_NAME = frozenset({
+    "mr", "mrs", "ms", "miss", "dr", "hon", "the", "honorable", "captain",
+    "jr", "sr", "ii", "iii", "iv", "v",
+})
+
+
+def _given_names(name: str) -> list[str]:
+    """The given-name tokens, folded, with honorifics and initials dropped.
 
     Both sides are normalised the same way: FEC files "SULLIVAN, DANIEL
     J" (surname, then given names) and a state prints "Sullivan, Daniel
-    J. Jr." or "Daniel J. Sullivan Jr.". Taking the first alphabetic
-    token AFTER any comma handles the first two; for the third the
-    leading token already is the given name. Punctuation and single
-    initials are dropped so "Dan S." and "DAN" agree.
-    """
+    J. Jr." or "Daniel J. Sullivan Jr.". Taking the tokens AFTER any comma
+    handles the first two; for the third the leading token already is the
+    given name."""
     tail = name.split(",", 1)[1] if "," in name else name
-    for token in tail.replace(".", " ").split():
-        word = "".join(ch for ch in token if ch.isalpha()).lower()
-        if len(word) > 1:
-            return word
-    return ""
+    words = ("".join(ch for ch in token if ch.isalpha()) for token in _fold(tail).replace(".", " ").split())
+    return [w for w in words if len(w) > 1 and w not in _NOT_A_NAME]
+
+
+def _first_name_key(name: str) -> str:
+    """The leading given name, for telling apart two people who share a
+    surname. Punctuation and single initials are dropped so "Dan S." and
+    "DAN" agree."""
+    given = _given_names(name)
+    return given[0] if given else ""
+
+
+def _one_transposition_or_typo(a: str, b: str) -> bool:
+    """True when a and b are one slip apart: one edit (a swap of two
+    adjacent letters counts as one), or the same letters with one moved
+    and the first three unchanged — "DAUGHTERY" for "Daugherty" is the
+    latter, two edits by any distance but plainly one mistake."""
+    if a == b or abs(len(a) - len(b)) > 1:
+        return False
+    if sorted(a) == sorted(b) and a[:3] == b[:3]:
+        return True
+    prev2: list[int] | None = None
+    prev = list(range(len(b) + 1))
+    for i in range(1, len(a) + 1):
+        cur = [i] + [0] * len(b)
+        for j in range(1, len(b) + 1):
+            cost = 0 if a[i - 1] == b[j - 1] else 1
+            cur[j] = min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost)
+            if prev2 is not None and i > 1 and j > 1 and a[i - 1] == b[j - 2] and a[i - 2] == b[j - 1]:
+                cur[j] = min(cur[j], prev2[j - 2] + 1)
+        prev2, prev = prev, cur
+    return prev[len(b)] == 1
+
+
+def _surname_fallbacks(
+    candidates: list[Candidate], target: str, display_name: str | None,
+) -> list[Candidate]:
+    """Candidates a state's surname reaches only indirectly. Each rule runs
+    only when the one before found nobody, and each still has to come out
+    UNIQUE in the race (the caller refuses anything ambiguous)."""
+    # A MULTI-WORD surname survives on the FEC side ("WASSERMAN SCHULTZ,
+    # DEBBIE") but not on the state's, because a state publishes a display
+    # name and the trailing token is all that can be taken from "Debbie
+    # Wasserman Schultz" without guessing where the surname begins.
+    found = [c for c in candidates if _candidate_surname(c.name).split()[-1:] == [target]]
+    if found:
+        return found
+    # The mirror: the state prints the whole surname and FEC files only its
+    # last word — Maryland's "McClain Delaney" is FEC's "DELANEY, APRIL
+    # MCCLAIN" (MD-6, 2026).
+    if len(target.split()) > 1:
+        found = [c for c in candidates if _candidate_surname(c.name) == target.split()[-1]]
+        if found:
+            return found
+    # A married or former surname filed as a given name: the ballot says
+    # "Ashley Hinson" and FEC has "ARENHOLZ, ASHLEY HINSON" (IA Senate,
+    # 2026 — the Republican nominee, unmatched without this).
+    found = [c for c in candidates if _given_names(c.name)[-1:] == [target]]
+    if found:
+        return found
+    # A one-letter slip on either side, only with the given name agreeing
+    # too: the ballot's "Brandon Coulter Daugherty" is FEC's "DAUGHTERY,
+    # BRANDON" (MO-2, 2026). Short surnames are excluded — one edit away
+    # from "Lee" is too many real names.
+    wanted = _first_name_key(display_name or "")
+    if wanted and len(target) >= 5:
+        return [
+            c for c in candidates
+            if _first_name_key(c.name) == wanted
+            and _one_transposition_or_typo(_candidate_surname(c.name), target)
+        ]
+    return []
 
 
 def _match_candidate(
     candidates: list[Candidate], last_name: str, party_code: str,
     display_name: str | None = None,
 ) -> Candidate | None:
-    target = last_name.strip().lower()
+    target = _candidate_surname(last_name)
     matches = [c for c in candidates if _candidate_surname(c.name) == target]
     if not matches:
-        # A MULTI-WORD surname survives on the FEC side ("WASSERMAN
-        # SCHULTZ, DEBBIE") but not on the state's, because a state
-        # publishes a display name and the trailing token is all that can
-        # be taken from "Debbie Wasserman Schultz" without guessing where
-        # the surname begins. Falling back to the FEC surname's own last
-        # token matches them up. Deliberately only a fallback, and still
-        # inside one race's small candidate list, so the
-        # never-guess-between-two rule below is what decides anything
-        # ambiguous. Affects every state, not just the one that surfaced
-        # it: Florida's 2024 file is where it showed up, but a Wasserman
-        # Schultz, a Van Drew or a De La Cruz would have gone unmatched
-        # anywhere.
-        matches = [
-            c for c in candidates
-            if _candidate_surname(c.name).split()[-1:] == [target]
-        ]
+        matches = _surname_fallbacks(candidates, target, display_name)
     if len(matches) == 1:
         return matches[0]
-    if len(matches) > 1:
-        expected_party = PARTY_CODE_MAP.get(party_code)
-        party_matches = [c for c in matches if c.party == expected_party]
-        if len(party_matches) == 1:
-            return party_matches[0]
-        # Last resort, and ONLY ever reached where the answer would
-        # otherwise be None: two candidates in one race sharing a surname
-        # AND a party. Alaska's 2026 Senate top-four genuinely advances
-        # two Sullivans, so refusing both published a two-Democrat
-        # ballot for a seat its Republican incumbent is defending. A
-        # given name separates them where party cannot; it can only turn
-        # a refusal into a match, never change one the surname already
-        # resolved uniquely, and an ambiguous given name still refuses.
-        if display_name:
-            wanted = _first_name_key(display_name)
-            if wanted:
-                pool = party_matches or matches
-                named = [c for c in pool if _first_name_key(c.name) == wanted]
-                if len(named) == 1:
-                    return named[0]
+    if not matches:
+        return None
+
+    expected_party = PARTY_CODE_MAP.get(party_code)
+    pool = [c for c in matches if c.party == expected_party] or matches
+    if len(pool) == 1:
+        return pool[0]
+    # Two candidates sharing a surname AND a party. A given name separates
+    # them where party cannot: Alaska's 2026 top-four advances two
+    # Sullivans, TX-34 has Eric and Mayra Flores, AZ-7 Raúl and Adelita
+    # Grijalva. It can only narrow; a given name nobody matches (a
+    # nickname, say) leaves the pool as it was.
+    wanted = _first_name_key(display_name or "")
+    if wanted:
+        pool = [c for c in pool if _first_name_key(c.name) == wanted] or pool
+        if len(pool) == 1:
+            return pool[0]
+    # One person under two FEC ids: FEC assigns a new candidate_id on a
+    # refiling, so a race can hold "BERRY, PAUL" twice (MO-1) or "ELLESON,
+    # JOHN D." beside "ELLESON, JOHN" (IL-9). candidate_dedup will not
+    # merge them unless their financials are identical, which is right for
+    # DISPLAY — but a ballot names one person, and refusing both left the
+    # nominee unconfirmed. Same surname, given name and party inside one
+    # race is the same person; confirm the record that raised money, and
+    # the other drops off the page with every other unconfirmed filer.
+    if len({(_first_name_key(c.name), c.party) for c in pool}) == 1 and _first_name_key(pool[0].name):
+        return max(pool, key=lambda c: (bool(c.has_raised_funds), c.contributions or 0, c.id))
     return None
+
+
+def _fec_candidates(race: Race) -> list[Candidate]:
+    """The race's FEC rows. A ballot-only row from an earlier run is the
+    state's own record echoed back, never something to match against: if
+    it were, a candidate who files with the FEC later could lose the match
+    to their own placeholder."""
+    return [c for c in race.candidates if c.fec_filed]
+
+
+# What a results file can print where a candidate's name goes. None of it
+# is a person, and a ballot-only row makes whatever it is visible.
+_NOT_A_PERSON_RE = re.compile(
+    r"write[\s-]*ins?\b|scattering|\b(over|under)\s*votes?\b|\bblank\b|"
+    r"none of (these|the above)|uncommitted|withdrawn",
+    re.IGNORECASE,
+)
+
+
+def _fec_style_name(display_name: str, last_name: str) -> str:
+    """The printed name in FEC's "LAST, GIVEN" shape, which is how every
+    other candidate on the page is named: 'Walter "Rocky" Beach' ->
+    'BEACH, WALTER "ROCKY"'. A name already printed last-first
+    ("Shah, Amish") is kept in that order."""
+    head, _, rest = display_name.partition(",")
+    if rest and _fold(head).strip() == _fold(last_name).strip():
+        return display_name.upper()
+    tokens = display_name.split()
+    want = [_fold(t) for t in last_name.split()]
+    n = len(want)
+    for i in range(len(tokens) - n, -1, -1):
+        if [_fold(t).strip(".,") for t in tokens[i:i + n]] == want:
+            given = " ".join(tokens[:i] + tokens[i + n:]).strip(" ,")
+            surname_text = " ".join(tokens[i:i + n]).strip(" ,")
+            return f"{surname_text}, {given}".upper() if given else surname_text.upper()
+    return display_name.upper()
+
+
+def _keep_ballot_only(db: Session, race: Race, record: dict) -> str | None:
+    """Record a state-listed candidate who has no FEC row, and return the
+    row's id — or None when the record is not safe to show as a person.
+
+    A surname alone is not enough to show anyone (Oregon's results PDF
+    prints only surnames, and "Smith (R)" is not a ballot entry), and a
+    results file's non-candidate rows must never become one."""
+    display = (record.get("display_name") or "").strip()
+    words = [w for w in re.split(r"[\s,]+", display) if any(ch.isalpha() for ch in w)]
+    if len(words) < 2 or _NOT_A_PERSON_RE.search(display):
+        return None
+    slug = re.sub(r"[^a-z0-9]+", "-", _fold(display)).strip("-")
+    cid = f"{BALLOT_ONLY_ID_PREFIX}{race.id}:{slug}"
+    cand = db.query(Candidate).filter(Candidate.id == cid).first()
+    if cand is None:
+        cand = Candidate(id=cid, race_id=race.id)
+        db.add(cand)
+    cand.name = _fec_style_name(display, record["last_name"])
+    # A party the matcher has no code for (South Carolina's Workers, say)
+    # keeps the state's own label rather than reading as "unknown".
+    cand.party = (
+        PARTY_CODE_MAP.get(record.get("party") or "")
+        or (record.get("party_label") or "").strip().upper()
+        or "UNK"
+    )
+    cand.has_raised_funds = False
+    cand.incumbent_challenge = None
+    cand.candidate_status = None
+    cand.confirmed_general = True
+    db.commit()
+    return cid
+
+
+def _has_general_filings(source: dict) -> bool:
+    """Whether this state has a filing list, whose general-election rows
+    then speak for its November ballot (North Carolina's do)."""
+    return bool(source.get("filings"))
+
+
+def _apply_ballot(
+    db: Session, cycle: int, state: str, records: list[dict],
+    *, keep_unlisted: bool, authoritative: bool,
+) -> dict:
+    """Confirm a state's federal records against its races.
+
+    `keep_unlisted`: a record that matches no FEC candidate is still a
+    person on the ballot — show them (ballot-only row) rather than drop
+    them. `authoritative`: these records ARE the certified November
+    ballot, so anyone confirmed in a race they cover but not on them is
+    unconfirmed (_unconfirm_off_ballot)."""
+    confirmed = unmatched = 0
+    ballot_only: set[str] = set()
+    listed: dict[str, set[str]] = {}
+    for record in records:
+        race_id = _race_id_for(cycle, state, record["office"], record["district"])
+        race = db.query(Race).filter(Race.id == race_id).first()
+        if race is None:
+            unmatched += 1
+            continue
+        listed.setdefault(race.id, set())
+        match = _match_candidate(
+            _fec_candidates(race), record["last_name"], record["party"], record.get("display_name"),
+        )
+        if match is None:
+            kept = _keep_ballot_only(db, race, record) if keep_unlisted else None
+            if kept:
+                ballot_only.add(kept)
+                continue
+            unmatched += 1
+            logger.info(
+                "No FEC match for confirmed %s candidate %s (%s) in %s",
+                state, record["last_name"], record["party"], race_id,
+            )
+            continue
+        if not match.confirmed_general:
+            match.confirmed_general = True
+            db.commit()
+        listed[race.id].add(match.id)
+        confirmed += 1
+    if keep_unlisted:
+        _prune_ballot_only(db, cycle, state, ballot_only)
+    withdrawn = _unconfirm_off_ballot(db, listed) if authoritative else 0
+    return {
+        "confirmed": confirmed, "unmatched": unmatched,
+        "ballotOnly": len(ballot_only), "unconfirmed": withdrawn,
+    }
+
+
+def _record_ballot_basis(db: Session, cycle: int, state: str, source: dict) -> None:
+    """Say which source answered for this state tonight — see
+    BALLOT_BASIS_TIER. Read by the API to decide "confirmed" (the whole
+    ballot) versus "nominees" (primary results) per state."""
+    api_cache_set(
+        db, BALLOT_BASIS_TIER, ballot_basis_key(state, cycle),
+        {
+            "complete": bool(source.get("general_ballot_complete")),
+            "sourceName": str(source.get("source_name") or ""),
+            "checkedAt": utcnow().isoformat() + "Z",
+        },
+        normal_ttl_hours=STATEWIDE_MARKER_TTL_HOURS,
+    )
+    db.commit()
+
+
+def _unconfirm_off_ballot(db: Session, listed: dict[str, set[str]]) -> int:
+    """For a state whose source IS its certified November ballot: anyone
+    confirmed in a race that list covers, but not on it, is not running.
+
+    `confirmed_general` is otherwise never cleared, which is right for
+    primary results (a nominee does not stop being one because a later
+    fetch hiccupped) and wrong once the state has certified its ballot.
+    Maine confirmed Graham Platner from the June primary he won; he
+    withdrew in July and the party nominated Troy Jackson. Adding Jackson
+    alone would have shown both. Scoped to the races the list actually
+    covers, so a race the list is missing (a parse slip) keeps what it
+    had rather than losing everyone."""
+    changed = 0
+    for race_id, keep in listed.items():
+        for cand in db.query(Candidate).filter(
+            Candidate.race_id == race_id, Candidate.confirmed_general.is_(True),
+        ):
+            if cand.fec_filed and cand.id not in keep:
+                cand.confirmed_general = False
+                changed += 1
+                logger.info("%s is no longer on the certified ballot for %s", cand.name, race_id)
+    if changed:
+        db.commit()
+    return changed
+
+
+def _prune_ballot_only(db: Session, cycle: int, state: str, kept: set[str]) -> None:
+    """Drop ballot-only rows this state's source no longer lists: the
+    candidate withdrew, or filed with the FEC and now matches a real row.
+    Only reached after a successful fetch — a source that failed says
+    nothing about who is on the ballot."""
+    stale = (
+        db.query(Candidate)
+        .join(Race, Candidate.race_id == Race.id)
+        .filter(
+            Race.state == state,
+            Race.cycle_year == cycle,
+            Candidate.id.startswith(BALLOT_ONLY_ID_PREFIX),
+        )
+        .all()
+    )
+    removed = [c for c in stale if c.id not in kept]
+    for cand in removed:
+        db.delete(cand)
+    if removed:
+        db.commit()
+        logger.info("%s: removed %d ballot-only candidate(s) no longer listed", state, len(removed))
 
 
 async def crawl_for_new_sources(
@@ -448,7 +733,7 @@ def _confirmed_match(db: Session, cycle: int, state: str, record: dict):
     if race is None:
         return None
     return _match_candidate(
-        race.candidates, record["last_name"], record["party"], record.get("display_name"),
+        _fec_candidates(race), record["last_name"], record["party"], record.get("display_name"),
     )
 
 
@@ -704,8 +989,11 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
     # to the weekly pass would leave that state dark until the next
     # Sunday — and dark on a fresh deploy. Three calls.
     try:
-        for state, dates in (await election_dates.fetch_fec_calendar(client, cycle)).items():
+        calendar = await election_dates.fetch_fec_calendar(client, cycle)
+        for state, dates in calendar.items():
             election_dates.save(state, cycle, dates)
+        if calendar:
+            election_dates.mark_calendar_read(cycle, utcnow().date().isoformat())
     except Exception:
         logger.exception("FEC election-date calendar read failed")
 
@@ -721,12 +1009,38 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
             results[state] = {"confirmed": 0, "unmatched": 0, "status": "not_configured"}
             continue
 
+        # A state's certified November list, when it has one, speaks for its
+        # federal races outright (see general_list in the sources file). It
+        # runs FIRST so a nominee the list has replaced is never confirmed
+        # from primary results only to be unconfirmed moments later.
+        general = source.get("general_list")
+        general_records = None
+        if general and STRATEGIES.get(general.get("strategy")):
+            try:
+                general_records = await STRATEGIES[general["strategy"]](client, cycle, state, general)
+            except Exception:
+                logger.exception("Certified general list fetch raised for %s", state)
+                general_records = None
+
         try:
             records = await strategy(client, cycle, state, source)
         except Exception:
             logger.exception("Confirmed-candidate fetch raised for %s", state)
             records = None
 
+        fallback = source.get("fallback")
+        if records is None and fallback and STRATEGIES.get(fallback.get("strategy")):
+            # A state's own second choice, named in its entry — Wisconsin's
+            # canvass file name changes between cycles, and until the new
+            # one is known its national fallback still says something.
+            logger.info("Falling back to %s for %s", fallback["strategy"], state)
+            try:
+                records = await STRATEGIES[fallback["strategy"]](client, cycle, state, fallback)
+            except Exception:
+                logger.exception("Fallback fetch raised for %s", state)
+                records = None
+            if records is not None:
+                source = fallback
         if records is None:
             # A hand-verified source that has broken falls back to whatever
             # the crawler last proved for this state, rather than the state
@@ -737,9 +1051,10 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
                 records = await STRATEGIES.get(spare.get("strategy"), _no_strategy)(
                     client, cycle, state, spare,
                 )
-        if records is None:
+        if records is None and general_records is None:
             results[state] = {"confirmed": 0, "unmatched": 0, "status": "fetch_failed"}
             continue
+        records = records or []
 
         # Neither a statewide executive office (Governor, AG, ...) nor a
         # seat in the state legislature has an FEC race to confirm
@@ -760,30 +1075,33 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
         state_leg_count = _sync_state_leg_nominees(db, cycle, state, source, state_leg)
         judicial_count = _sync_judicial_nominees(db, cycle, state, source, judicial)
 
-        confirmed = unmatched = 0
-        for record in records:
-            race_id = _race_id_for(cycle, state, record["office"], record["district"])
-            race = db.query(Race).filter(Race.id == race_id).first()
-            if race is None:
-                unmatched += 1
-                continue
-            match = _match_candidate(
-                race.candidates, record["last_name"], record["party"], record.get("display_name"),
+        # A state with its own general FILING list gets its November ballot
+        # from that list (sync_ballot_filings), which is what may speak for
+        # candidates this results file cannot see or has gone stale on.
+        # Here, it only confirms who the results name.
+        if general_records is not None:
+            # The certified ballot answered: it alone decides the federal
+            # races. Primary results above still supplied the state
+            # offices, which the list may not cover.
+            general_federal = [r for r in general_records if r["office"] in ("S", "H")]
+            applied = _apply_ballot(
+                db, cycle, state, general_federal, keep_unlisted=True, authoritative=True,
             )
-            if match is None:
-                unmatched += 1
-                logger.info(
-                    "No FEC match for confirmed %s candidate %s (%s) in %s",
-                    state, record["last_name"], record["party"], race_id,
-                )
-                continue
-            if not match.confirmed_general:
-                match.confirmed_general = True
-                db.commit()
-            confirmed += 1
+            _record_ballot_basis(db, cycle, state, {**general, "general_ballot_complete": True})
+        else:
+            ballot_is_elsewhere = _has_general_filings(source)
+            applied = _apply_ballot(
+                db, cycle, state, records,
+                keep_unlisted=not ballot_is_elsewhere,
+                authoritative=bool(source.get("general_ballot_complete")) and not ballot_is_elsewhere,
+            )
+            if not ballot_is_elsewhere:
+                _record_ballot_basis(db, cycle, state, source)
+        confirmed, unmatched = applied["confirmed"], applied["unmatched"]
 
         results[state] = {
             "confirmed": confirmed, "unmatched": unmatched,
+            "ballotOnly": applied["ballotOnly"], "unconfirmed": applied["unconfirmed"],
             "statewide": statewide_count, "stateLeg": state_leg_count,
             "judicial": judicial_count,
             "status": "ok",
@@ -824,19 +1142,27 @@ async def sync_ballot_filings(db: Session, client: httpx.AsyncClient, cycle: int
             election_dates.save(state, cycle, {"primary": found["primary_date"]})
         counts = {"primary": 0, "general": 0}
         unmatched = 0
-        for kind, flag in (("primary", "on_primary_ballot"),
-                           ("general", "confirmed_general")):
-            for record in found[kind]:
-                match = _confirmed_match(db, cycle, state, record)
-                if match is None:
-                    unmatched += 1
-                    continue
-                if not getattr(match, flag):
-                    setattr(match, flag, True)
-                    db.commit()
-                counts[kind] += 1
+        for record in found["primary"]:
+            match = _confirmed_match(db, cycle, state, record)
+            if match is None:
+                unmatched += 1
+                continue
+            if not match.on_primary_ballot:
+                match.on_primary_ballot = True
+                db.commit()
+            counts["primary"] += 1
+        applied = {"ballotOnly": 0, "unconfirmed": 0}
+        if found["general"]:
+            applied = _apply_ballot(
+                db, cycle, state, found["general"], keep_unlisted=True,
+                authoritative=bool(source.get("general_ballot_complete")),
+            )
+            _record_ballot_basis(db, cycle, state, source)
+            counts["general"] = applied["confirmed"]
+            unmatched += applied["unmatched"]
         results[state] = {
             **counts, "unmatched": unmatched,
+            "ballotOnly": applied["ballotOnly"], "unconfirmed": applied["unconfirmed"],
             "primary_date": found["primary_date"], "status": "ok",
         }
     return results

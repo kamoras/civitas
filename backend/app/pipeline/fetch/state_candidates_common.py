@@ -18,11 +18,18 @@ invented:
   NCSBE/NC    "US SENATE (DEM)"
 """
 
+import logging
 import re
 from collections.abc import Callable
+from urllib.parse import urljoin
+
+from app.pipeline.fetch.http_utils import fetch_text_with_retry
+
+logger = logging.getLogger(__name__)
 
 # Chamber wording varies ("United States Congress", "US HOUSE OF
-# REPRESENTATIVES", "U.S. Representative", Arkansas's real "U.S. Congress
+# REPRESENTATIVES", "U.S. Representative", Tennessee's certified list's
+# "United States House of Representatives District 1", Arkansas's real "U.S. Congress
 # District 02", Vermont's real bare "REPRESENTATIVE TO CONGRESS" — no
 # "U.S."/"United States" prefix, "to" not "in"); the ordinal in Colorado's
 # label advances every Congress, so nothing cycle-specific is matched.
@@ -39,7 +46,7 @@ from collections.abc import Callable
 # Congressional District 3 County Commissioner"), which would misread
 # that county race as a real federal contest.
 _CHAMBER_HOUSE = (
-    r"(?:United\s+States\s+(?:Congress\b|Representative)"
+    r"(?:United\s+States\s+(?:Congress\b|Representative|House\b)"
     r"|U\.?\s*S\.?\s*(?:House|Representative|Congress\b)"
     r"|(?:Representative\s+(?:in|to)\s+|\d+(?:st|nd|rd|th)\s+)Congress\b)"
 )
@@ -89,14 +96,17 @@ _PARTY_PATTERNS = [
     # FEC files their candidates as DEM.
     (re.compile(r"\b(?:democratic|democrat|dem|dfl|d-npl|dnl|npl)\b", re.IGNORECASE), "D"),
     (re.compile(r"\b(?:republican|rep|gop)\b", re.IGNORECASE), "R"),
-    # Arizona's own 3-letter codes ("LBT", "GRN") don't share a root with
-    # "lib"/"gre" — verified live off its canvass export.
-    (re.compile(r"\b(?:libertarian|lib|lbt)\b", re.IGNORECASE), "L"),
+    # Arizona's own 3-letter codes ("LBT", "GRN") and Wyoming's "LBR" don't
+    # share a root with "lib"/"gre" — verified live off each state's export.
+    (re.compile(r"\b(?:libertarian|lib|lbt|lbr)\b", re.IGNORECASE), "L"),
     (re.compile(r"\b(?:green|gre|grn)\b", re.IGNORECASE), "G"),
     (re.compile(r"\b(?:constitution|con|cst)\b", re.IGNORECASE), "C"),
 ]
 
-_SINGLE_LETTER_PARTIES = {"D", "R", "L", "G", "C"}
+# Codes read only as a party column's WHOLE value (see normalize_party).
+# Wyoming writes Constitution as "CT", which inside a longer label would be
+# Connecticut.
+_WHOLE_VALUE_PARTIES = {"D": "D", "R": "R", "L": "L", "G": "G", "C": "C", "CT": "C"}
 
 # Generational suffixes must not be mistaken for a surname.
 _NAME_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
@@ -305,6 +315,17 @@ STATEWIDE_MARKER_TTL_HOURS = 24 * 400
 
 def statewide_marker_key(state: str, cycle: int) -> str:
     return f"synced-{state}-{cycle}"
+
+
+# Which source last answered for a state's federal ballot, and whether that
+# source was its complete certified ballot. A state's config says what its
+# PRIMARY source is; a `fallback` can answer instead (a certified list not
+# posted yet), and then the page must not claim a complete ballot.
+BALLOT_BASIS_TIER = "ballot-basis"
+
+
+def ballot_basis_key(state: str, cycle: int) -> str:
+    return f"{state}-{cycle}"
 
 
 # Judicial gets its OWN marker rather than sharing the statewide one.
@@ -793,9 +814,13 @@ def office_from_columns(row: dict, spec: dict | None) -> tuple[str, int | None] 
 # Abbreviations are matched only as the WHOLE value (a party column),
 # never inside a longer label, for the same reason a stray "R" in a
 # contest name must not become a Republican.
-_INDEPENDENT_ABBR = frozenset({"IND", "INDEPENDENT", "UNA", "NPA", "NOP", "NP"})
+# NOPTY is Louisiana's "No Party"; PETITION is South Carolina's label for
+# a candidate who reached the ballot by petition rather than a party, and
+# Nebraska writes the same thing out as "By Petition". DTS is New Mexico's
+# "Declined to Select".
+_INDEPENDENT_ABBR = frozenset({"IND", "INDEPENDENT", "UNA", "NPA", "NOP", "NP", "NOPTY", "PETITION", "DTS"})
 _INDEPENDENT_RE = re.compile(
-    r"\b(independent|unaffiliated|no\s+party(\s+affiliation)?|non[\s-]?partisan)\b",
+    r"\b(independent|unaffiliated|no\s+party(\s+affiliation)?|non[\s-]?partisan|by\s+petition)\b",
     re.IGNORECASE,
 )
 
@@ -827,12 +852,60 @@ def normalize_party(text: str, ballot_list: bool = False) -> str | None:
     # ("R", "D" — Minnesota's results file). That is only safe to read
     # when the WHOLE value is the code: a contest label containing a
     # stray "R" must never become a Republican.
-    if value.upper() in _SINGLE_LETTER_PARTIES:
-        return value.upper()
+    if value.upper() in _WHOLE_VALUE_PARTIES:
+        return _WHOLE_VALUE_PARTIES[value.upper()]
     for pattern, code in _PARTY_PATTERNS:
         if pattern.search(value):
             return code
     return None
+
+
+async def discover_certification_link(
+    client, rate_limiter, page_url: str, link_regex: str, year: int, label: str,
+) -> str | None:
+    """The one link on `page_url` matching `link_regex` (with `{year}`
+    filled in), resolved against the page, or None.
+
+    For the certified-ballot strategies: a state posts the certification
+    on a landing page that stays put while the file name changes every
+    cycle, so the link is found, never pinned. None for both "not posted
+    yet" and "more than one match" — guessing which of two
+    certifications is current would be the one wrong answer."""
+    page_url = page_url.replace("{year}", str(year))
+    page = await fetch_text_with_retry(client, rate_limiter, page_url, f"{label} certification page")
+    if page is None:
+        return None
+    links = {m.group(1) for m in re.finditer(link_regex.replace("{year}", str(year)), page)}
+    if len(links) != 1:
+        logger.info("%s certification page links %d %d certifications", label, len(links), year)
+        return None
+    return urljoin(page_url, links.pop())
+
+
+def federal_record(
+    office: str, district: int | None, party: str | None, name: str,
+    *, last_first: bool = False,
+) -> dict | None:
+    """The record every strategy returns for a federal candidate, built
+    from the name as the state printed it, or None when that name yields
+    no surname.
+
+    `last_name` is what the matcher compares with FEC's surname.
+    `display_name` is the printed name, kept for the two things a surname
+    cannot do: tell apart two same-party candidates who share a surname
+    (TX-34's Eric and Mayra Flores), and show a candidate who is on the
+    ballot but never filed with the FEC, who has no FEC row to show
+    instead. A strategy that reduces names to surnames before picking a
+    winner loses the second one silently, which is why this takes the
+    full name and does the reduction itself.
+    """
+    last = surname(name, last_first=last_first)
+    if not last:
+        return None
+    return {
+        "office": office, "district": district, "party": party,
+        "last_name": last, "display_name": clean_display_name(name),
+    }
 
 
 def clean_display_name(display_name: str) -> str:
@@ -1063,6 +1136,10 @@ def resolve_confirmed_nominees(
                 "office": office, "district": district,
                 "party": party, "last_name": name,
             }
+            if name_transform and office in ("S", "H"):
+                # The whole printed name, kept beside the surname the
+                # matcher reads — see federal_record.
+                record["display_name"] = clean_display_name(won[0])
             # Present only where a district really has more than one
             # seat. A federal or single-member record carries no seat
             # concept at all, so it carries no key either.

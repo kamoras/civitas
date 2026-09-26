@@ -98,12 +98,12 @@ import httpx
 from app.pipeline.fetch.http_utils import fetch_json_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     clean_display_name,
+    federal_record,
     normalize_party,
     parse_office,
     parse_state_leg_office,
     parse_statewide_office,
     pick_nominees,
-    surname,
 )
 from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _settled
 from app.pipeline.rate_limiter import RateLimiter
@@ -283,7 +283,9 @@ async def fetch_confirmed_candidates(
             # A federal nominee is cut to a surname for FEC matching; a
             # state-office nominee has no FEC row and keeps what the
             # state printed.
-            reduce = surname if federal_race else clean_display_name
+            # A federal name is kept whole here and reduced when the record
+            # is built (federal_record), so the printed name survives.
+            reduce = (lambda n: n) if federal_race else clean_display_name
             choices = [
                 (reduce((choice_names.get(ch.get("choiceID")) or {}).get("name") or ""),
                  ch.get("totalVotes"))
@@ -308,7 +310,12 @@ async def fetch_confirmed_candidates(
     records = []
     for (o, d, p, st_seat), winners in by_seat.items():
         for name, _pct in winners:
-            record = {"office": o, "district": d, "party": p, "last_name": name}
+            if o in ("S", "H"):
+                record = federal_record(o, d, p, name)
+                if record is None:
+                    continue
+            else:
+                record = {"office": o, "district": d, "party": p, "last_name": name}
             if st_seat is not None:
                 record["seat"] = st_seat
             records.append(record)

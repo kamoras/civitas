@@ -296,7 +296,7 @@ class TestResolveConfirmedNominees:
         # -- proves the transform doesn't affect ranking.
         by_seat = {("H", None, "D"): [("Becca Balint", 100), ("Someone Else", 90)]}
         result = common.resolve_confirmed_nominees(by_seat, None, name_transform=common.surname)
-        assert result == [{"office": "H", "district": None, "party": "D", "last_name": "Balint"}]
+        assert result == [{"office": "H", "district": None, "party": "D", "last_name": "Balint", "display_name": "Becca Balint"}]
 
     def test_a_transform_that_empties_the_name_drops_the_seat(self):
         by_seat = {("H", None, "D"): [("   ", 100)]}

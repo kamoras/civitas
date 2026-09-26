@@ -20,7 +20,7 @@ flowchart TB
         RSS["RSS — AP · NPR · PBS · BBC<br/>The Hill · Politico · Roll Call<br/>9 feeds, 7 newsrooms<br/>+ 41 per-state newsrooms (elections)"]
         SOCIAL["Google Trends · Bluesky"]
         VSMART["Vote Smart<br/>statewide ballot measures<br/>optional, keyed"]
-        GCIVIC["Google Civic Info<br/>town-level local races<br/>optional, keyed, fixed address only"]
+        GCIVIC["Google Civic Info<br/>town-level local races + candidate fallback<br/>for states with no usable source<br/>keyed, fixed address only"]
     end
 
     subgraph PIPE["Pipelines — APScheduler"]

@@ -1,22 +1,11 @@
-import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/site";
 
-export const metadata: Metadata = {
-  title: "LEADERBOARD // CIVITAS",
+export const metadata = pageMetadata({
+  title: "Congress Leaderboard: Senators & Representatives Ranked",
   description:
-    "Rank all 535 members of Congress by representation score, PAC funding, and campaign finance independence — all sourced from public federal data.",
-  openGraph: {
-    title: "Congress Scorecard Leaderboard — Civitas",
-    description:
-      "See which senators and representatives score highest for independence from corporate PAC money. Ranked from public federal records.",
-    url: "https://civitas-research.org/leaderboard",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Congress Leaderboard — Civitas",
-    description:
-      "Rank all 535 members of Congress by campaign finance independence and representation score.",
-  },
-};
+    "Every member of Congress ranked by representation score, campaign finance independence, and PAC funding — plus presidents and Supreme Court justices — from public federal data.",
+  path: "/leaderboard",
+});
 
 export default function LeaderboardLayout({ children }: { children: React.ReactNode }) {
   return <>{children}</>;

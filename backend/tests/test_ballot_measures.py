@@ -211,6 +211,7 @@ def test_state_ballot_allows_dc(db_session):
     404 on a link the site itself produces."""
     data = _body(elections.state_ballot("dc", db=db_session))
     assert data["state"] == "DC"
+    assert data["stateName"] == "District of Columbia"
     assert any("Delegate" in item for item in data["omits"])
 
 
