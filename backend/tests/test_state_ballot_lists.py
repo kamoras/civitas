@@ -882,3 +882,34 @@ def test_the_states_printed_name_is_kept_but_never_a_last_first_one(db_session):
     # marks a "Last, First" printing, which is left to the FEC name.
     assert olszewski.ballot_name == 'John "Johnny O" Olszewski, Jr.'
     assert wallace.ballot_name is None
+
+
+from app.pipeline.fetch.state_candidates_grouped_list_pdf import parse_grouped_list  # noqa: E402
+
+
+def _w(x, text, top):
+    return {"x0": x, "x1": x + 8 * len(text), "top": top, "bottom": top + 8, "text": text}
+
+
+def _line(top, *cells):
+    return [_w(x, t, top) for x, t in cells]
+
+
+def test_grouped_list_reads_candidates_under_office_headings():
+    # Illinois's list in miniature: a page header with text left of the
+    # name column (not a candidate), an independent struck from the ballot
+    # on the line below, and a district that runs onto the next page.
+    fmt = {"name_x": 150, "date_x": 440, "removed_regex": r"\b(REMOVED|WITHDRAWN)\b"}
+    page1 = [
+        *_line(10, (32, "9/26/2026"), (74, "5:21PM"), (248, "WEBSITE"), (293, "CANDIDATE"), (350, "LIST")),
+        *_line(40, (252, "4TH"), (272, "CONGRESS")),
+        *_line(55, (18, "DEMOCRATIC"), (155, "Patty"), (185, "Garcia"), (448, "11/3/2025")),
+        *_line(70, (18, "INDEPENDENT"), (155, "Mayra"), (185, "Macias"), (448, "5/26/2026")),
+        *_line(80, (155, "8445"), (185, "S"), (195, "Kostner"), (300, "REMOVED"), (360, "7/21/2026")),
+    ]
+    page2 = [
+        *_line(10, (32, "9/26/2026"), (74, "5:21PM"), (248, "WEBSITE"), (293, "CANDIDATE"), (350, "LIST")),
+        *_line(55, (18, "INDEPENDENT"), (155, "Chris"), (185, "Getty"), (448, "5/18/2026")),
+    ]
+    got = [(r["district"], r["display_name"], r["party"]) for r in parse_grouped_list([page1, page2], fmt)]
+    assert got == [(4, "Patty Garcia", "D"), (4, "Chris Getty", "I")]
