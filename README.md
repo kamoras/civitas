@@ -563,7 +563,7 @@ unlocks on its own once its 21-day settle window passes.
 - Candidates appear under the name their state prints on its ballot ("Roy Cooper"), stored as `Candidate.ballot_name` whenever a state source matches them, and fall back to the FEC's ("COOPER, ROY") until one does. A "Last, First" printing is not stored — a comma does not reliably mark where a surname ends ("Olszewski, Jr.") — so those keep the FEC name.
 - A candidate the state has confirmed is on the ballot always shows, whatever their FEC record says. North Carolina's certified Libertarian for Senate had been hidden under "other filers" because she raised nothing and is not an FEC statutory candidate.
 
-The contest list is built once (`frontend/src/lib/ballotContests.ts`); the drawer is a real modal dialog (focus kept inside, Escape closes, focus returns), and `#race-{id}` / `#ballot-{key}` links open a contest directly.
+The contest list is built once (`frontend/src/lib/ballotContests.ts`); the drawer is a real modal dialog (focus kept inside, Escape closes, focus returns), and `#race-{id}` / `#ballot-{key}` links open a contest directly. `StateBallotClient.a11y.test.tsx` runs axe-core over the page and every kind of drawer (a race on each tab, the district picker, a picked district) on every CI run, with a guard test proving axe actually fires; colour contrast, which jsdom cannot compute, stays with the Lighthouse job.
 
 ### Finding your district without being asked where you live
 
