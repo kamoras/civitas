@@ -152,16 +152,21 @@ describe("Holdings — clicks while a request is in flight", () => {
 });
 
 describe("Holdings — paging while a filter request is in flight", () => {
-  it("keeps the requested category instead of dropping it", async () => {
+  it("disables the pager, whose pages describe the list being replaced", async () => {
     fetchSenatorHoldings.mockResolvedValueOnce(holdings({ totalPages: 2, total: 20 }));
     render(<Holdings memberId="S1" />);
     const stocks = await screen.findByRole("button", { name: /^Stocks/ });
 
     fetchSenatorHoldings.mockReturnValueOnce(new Promise<HoldingsData>(() => {})); // never resolves
-    fetchSenatorHoldings.mockResolvedValueOnce(holdings({ categoryFilter: "STOCKS", page: 2, totalPages: 2 }));
     await userEvent.click(stocks); // opens the list; request pending
-    await userEvent.click(screen.getByRole("button", { name: "Next page" }));
 
-    expect(fetchSenatorHoldings).toHaveBeenLastCalledWith("S1", { page: 2, perPage: 15, category: "STOCKS" });
+    expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Previous page" })).toBeDisabled();
+  });
+
+  it("renders nothing while the first response is outstanding", () => {
+    fetchSenatorHoldings.mockReturnValueOnce(new Promise<HoldingsData>(() => {}));
+    const { container } = render(<Holdings memberId="S1" />);
+    expect(container).toBeEmptyDOMElement();
   });
 });

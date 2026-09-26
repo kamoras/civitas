@@ -77,12 +77,14 @@ class _Stored:
     parser_version: int | None
     report_year: int | None
     filed_date: str | None
+    unreadable_reason: str | None
 
 
 def _stored_reports(db: Session, column) -> dict[str, _Stored]:
     rows = db.query(
         column, FinancialDisclosure.filing_id, FinancialDisclosure.parser_version,
         FinancialDisclosure.report_year, FinancialDisclosure.filed_date,
+        FinancialDisclosure.unreadable_reason,
     ).filter(column.isnot(None))
     return {owner_id: _Stored(*rest) for owner_id, *rest in rows.all()}
 
@@ -135,9 +137,7 @@ def _replace_disclosure(
         source_url=source_url,
         parsed=report.holdings is not None,
         unreadable_reason=report.unreadable_reason,
-        # A non-final read (the parser crashed) records no version, so the
-        # next run doesn't count the report as read and tries it again.
-        parser_version=parser_version if report.final else None,
+        parser_version=parser_version,
     )
     for row in report.holdings or []:
         disclosure.holdings.append(FinancialHolding(
@@ -177,11 +177,12 @@ class _FailureRun:
         self.source = source
         self.count = 0
 
-    def record(self, attempted: bool, fetched: bool, settled: bool) -> None:
-        """`settled`: the member turned out to be up to date (their stored
-        report is current or newer) — whatever failed on the way there, the
-        source served what was needed."""
-        if not attempted or settled:
+    def record(self, attempted: bool, fetched: bool) -> None:
+        """A member counts as failed when every fetch tried for them came
+        back with nothing usable — even if they then kept a stored report:
+        a newer report that can't be fetched is exactly what an outage looks
+        like on a night when only new reports need fetching."""
+        if not attempted:
             return
         self.count = 0 if fetched else self.count + 1
         if self.count >= MAX_CONSECUTIVE_FETCH_FAILURES:
@@ -221,33 +222,30 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
     order = _members_in_order(per_rep, stored)
     for position, rep_id in enumerate(order):
         mine = stored.get(rep_id)
-        attempted = fetched = settled = False
+        attempted = fetched = False
         out_of_time = False
         for filing in per_rep[rep_id]:
             if _is_current(mine, filing["doc_id"], HOUSE_PARSER_VERSION):
-                settled = True
                 break  # already have the newest report, as this parser reads it
             if _is_older(mine, filing.get("year"), filing.get("filing_date")):
                 # Only older reports than the stored one turned up (a year's
                 # index failed to load): keep the newer stored report.
-                settled = True
                 break
             if time.monotonic() > deadline:
                 out_of_time = True
                 break
             attempted = True
             report = await fetch_house_annual(client, db, filing)
-            if report is None:
-                # Couldn't fetch this filing (it may not even be the
-                # member's — a same-surname candidate's amendment can rank
-                # first): try the member's next one. _is_older above keeps
-                # that from ever displacing a newer stored report.
+            if report is None or not report.final:
+                # Nothing usable this run: not fetched, or a read that may be
+                # transient (the parser crashed) — which is stored nowhere,
+                # since "can't be read" would be a claim about the report
+                # that this run can't back. Try the member's next filing (the
+                # failed one may not even be theirs — a same-surname
+                # candidate's amendment can rank first); _is_older keeps that
+                # from ever displacing a newer stored report.
                 continue
             fetched = True
-            if not report.final and mine is not None:
-                # Transiently unreadable: keep the stored report rather than
-                # replacing a readable one with a link.
-                break
             status = (report.filer_status or "").lower()
             if status and status != "member":
                 # A candidate for the seat who shares the member's surname
@@ -277,7 +275,7 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
         if out_of_time:
             logger.info("House holdings: time budget spent — %d members wait for the next run", len(order) - position)
             break
-        failure_run.record(attempted, fetched, settled)
+        failure_run.record(attempted, fetched)
     return inserted
 
 
@@ -293,6 +291,18 @@ def _senate_rank(filing: dict) -> tuple[int, bool, str]:
     title = filing.get("title") or ""
     stated = bool(_CY_RE.search(title) or _DATE_RE.search(title))
     return (_senate_report_year(filing) or 0, stated, filing.get("filed_date") or "")
+
+
+def _senate_is_older(stored: _Stored | None, filing: dict) -> bool:
+    """_is_older, ranked as _senate_rank ranks: by year, then by whether the
+    year is stated, then by filing date. A stored scanned paper report's
+    year was inferred, so an electronic report stating the same year beats
+    it even when filed earlier — e.g. one that failed to load on the run
+    that stored the paper copy."""
+    if stored is None:
+        return False
+    stored_stated = stored.unreadable_reason != "scanned"
+    return _senate_rank(filing) < (stored.report_year or 0, stored_stated, stored.filed_date or "")
 
 
 def _is_paper_amendment(filing: dict) -> bool:
@@ -368,25 +378,16 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
     order = _members_in_order(per_senator, stored)
     for position, senator_id in enumerate(order):
         mine = stored.get(senator_id)
-        attempted = fetched = settled = False
+        attempted = fetched = False
         out_of_time = False
         for filing in sorted(per_senator[senator_id], key=_senate_rank, reverse=True):
             filing_id = senate_filing_id(filing["report_url"])
             if _is_current(mine, filing_id, SENATE_PARSER_VERSION):
-                settled = True
                 break
-            if _is_older(mine, _senate_report_year(filing), filing.get("filed_date")):
-                settled = True
+            if _senate_is_older(mine, filing):
                 # The search came back without the stored (newer) report — a
                 # page of results failed to load — or the best candidate left
                 # is a paper amendment of unknowable year. Keep what's stored.
-                break
-            year, stated, _ = _senate_rank(filing)
-            if mine is not None and not stated and mine.report_year == year:
-                # A paper report's year is inferred from its filing date; it
-                # never displaces a stored report for that same year, which
-                # may state it (a readable electronic report beats a scan).
-                settled = True
                 break
             if time.monotonic() > deadline:
                 out_of_time = True
@@ -406,15 +407,15 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
                         report = await fetch_senate_annual(client, db, filing)
                     except SessionLapsed:
                         report = None
-            if report is None:
-                # This filing won't load (withdrawn, or not a report page):
-                # fall through to the senator's next-best one.
+            if report is None or not report.final:
+                # Nothing usable this run: the filing won't load, or its read
+                # may be transient (a parser crash, or a page that is neither
+                # a report nor the terms page — an error or block page looks
+                # just like that). Stored nowhere: "can't be read" would be a
+                # claim about the report this run can't back. Fall through to
+                # the senator's next-best filing.
                 continue
             fetched = True
-            if not report.final and mine is not None:
-                # The parser crashed on it this run: keep what's stored and
-                # try again next run.
-                break
             inserted += _replace_disclosure(
                 db,
                 owner_filter={"senator_id": senator_id},
@@ -431,7 +432,7 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
         if out_of_time:
             logger.info("Senate holdings: time budget spent — %d members wait for the next run", len(order) - position)
             break
-        failure_run.record(attempted, fetched, settled)
+        failure_run.record(attempted, fetched)
     return inserted
 
 

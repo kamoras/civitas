@@ -1,7 +1,8 @@
 """Match a disclosure filer's name to a sitting senator or representative.
 
-Shared by the STOCK Act trade ingest and the annual holdings ingest
-(stock_pipeline.py): both read filings indexed by the filer's printed name,
+Shared by the STOCK Act trade ingest (stock_pipeline.py) and the annual
+holdings ingest (holdings_pipeline.py): both read filings indexed by the
+filer's printed name,
 and both must skip a filing rather than guess when the name is ambiguous.
 """
 

@@ -158,13 +158,9 @@ export default function StockTrades({ politicianId, filer = "senate" }: StockTra
   // the section only renders once we know there's something to show.
   if (!loading && (!data || data.total === 0) && !error) return null;
 
-  if (loading && !data) {
-    return (
-      <div className="panel p-4 text-center" role="status" aria-live="polite">
-        <span className="text-ink-lo text-sm animate-pulse">Loading stock trades...</span>
-      </div>
-    );
-  }
+  // Nothing until the first response: most members disclose no trades, and
+  // a loading panel that then vanishes shifts the whole scorecard below it.
+  if (loading && !data) return null;
 
   if (error && !data) {
     return (

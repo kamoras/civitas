@@ -389,13 +389,14 @@ class TestHoldingsRoutes:
 
 
 class TestTransientParseFailures:
-    async def test_a_crash_is_linked_but_retried_when_nothing_is_stored(self, db_session, rep):
+    async def test_a_crash_stores_nothing_and_is_retried_next_run(self, db_session, rep):
+        """A read that may be transient is no claim about the report: nothing
+        is stored (the section stays hidden rather than saying "can't be
+        read"), and the next run fetches it again."""
         crashed = AnnualReport(None, None, "unrecognized", final=False)
         await _ingest_house(db_session, {2025: [_house_filing("NEW")]}, {"NEW": crashed})
-        stored = db_session.query(FinancialDisclosure).one()
-        assert (stored.parsed, stored.parser_version) == (False, None)
+        assert db_session.query(FinancialDisclosure).count() == 0
 
-        # Next run: not counted as read, so it's fetched again.
         count, mock_fetch = await _ingest_house(
             db_session, {2025: [_house_filing("NEW")]}, {"NEW": AnnualReport("Member", [_row()])},
         )
@@ -747,10 +748,11 @@ class TestRound6:
             await holdings_pipeline.ingest_senate_holdings(db_session, None)
         assert accept.await_count == 1  # only the phase's own session setup
 
-    async def test_members_already_current_never_count_as_failures(self, db_session):
-        """Each member's newest index entry won't load (a same-surname
-        candidate's, say), but their stored report is current: nothing is
-        down, so the phase must not abort."""
+    async def test_newer_reports_that_wont_load_fail_the_phase_even_with_stored_ones(self, db_session):
+        """An outage on a night when only new reports need fetching: every
+        newer report fails, each member keeps their stored one. That run of
+        members must still fail the phase (and alert), not pass quietly —
+        and what was stored stays."""
         n = holdings_pipeline.MAX_CONSECUTIVE_FETCH_FAILURES + 2
         index = {2025: []}
         for i in range(n):
@@ -766,5 +768,37 @@ class TestRound6:
                 _house_filing(f"CUR{i}", filing_date="2026-05-01", **common),
             ]
         db_session.commit()
-        await _ingest_house(db_session, index, {})  # every CAND fetch fails; must not raise
+        with pytest.raises(RuntimeError):
+            await _ingest_house(db_session, index, {})  # every newer fetch fails
         assert db_session.query(FinancialDisclosure).count() == n
+
+
+class TestRound9:
+    async def test_a_readable_report_for_the_same_year_replaces_a_stored_scan(self, db_session, senator):
+        """The paper copy was stored because the electronic one failed to
+        load that run; filed earlier or not, the electronic report wins."""
+        db_session.add(FinancialDisclosure(
+            senator_id="S1", filing_id="paper", report_year=2025, filed_date="2026-08-12", source_url="x",
+            parsed=False, unreadable_reason="scanned", parser_version=holdings_pipeline.SENATE_PARSER_VERSION,
+        ))
+        db_session.commit()
+        filings = [
+            _senate_filing("paper", title="Annual Report", filed="2026-08-12", office="Senator", paper=True),
+            _senate_filing("e2025", title="Annual Report for CY 2025", filed="2026-05-15"),
+        ]
+        await _ingest_senate(db_session, filings, {"e2025": [_row()]})
+        stored = db_session.query(FinancialDisclosure).one()
+        assert (stored.filing_id, stored.parsed) == ("e2025", True)
+
+    async def test_an_unrecognizable_page_stores_nothing_for_a_new_member(self, db_session, senator):
+        """A block or error page looks just like an unknown layout; neither
+        may put "can't be read automatically" on a scorecard."""
+        async def fetch(_client, _db, filing):
+            return AnnualReport(None, None, "unrecognized", final=False)
+
+        with patch.object(holdings_pipeline, "senate_accept_terms", new_callable=AsyncMock, return_value="tok"), \
+             patch.object(holdings_pipeline, "search_annual_filings", new_callable=AsyncMock,
+                          return_value=[_senate_filing("x")]), \
+             patch.object(holdings_pipeline, "fetch_senate_annual", side_effect=fetch):
+            await holdings_pipeline.ingest_senate_holdings(db_session, None)
+        assert db_session.query(FinancialDisclosure).count() == 0

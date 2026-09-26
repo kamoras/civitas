@@ -253,7 +253,7 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
   // so a second click on a row whose request is still in flight clears it
   // rather than asking for it again. Reset to the shown category if that
   // request fails.
-  const requested = useRef<string | null>(null);
+  const [requested, setRequested] = useState<string | null>(null);
   // The category of the data on screen, for that failure path (which can't
   // see a render's `data`).
   const shown = useRef<string | null>(null);
@@ -261,7 +261,7 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
   const load = useCallback(
     async (page: number, cat: string | null) => {
       const seq = ++requestSeq.current;
-      requested.current = cat;
+      setRequested(cat);
       setLoading(true);
       setError(null);
       try {
@@ -273,7 +273,7 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
       } catch (e) {
         if (seq === requestSeq.current) {
           setError(e instanceof Error ? e.message : "Failed to load holdings");
-          requested.current = shown.current;
+          setRequested(shown.current);
         }
       } finally {
         if (seq === requestSeq.current) setLoading(false);
@@ -291,8 +291,10 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
   // leave the legend, the header and the list describing different things.
   const category = data?.categoryFilter ?? null;
 
+  const filterPending = loading && requested !== category;
+
   const selectCategory = (key: string) => {
-    const next = requested.current === key ? null : key;
+    const next = requested === key ? null : key;
     // Choosing a slice is asking to see those assets — reveal the list.
     if (next) setListOpen(true);
     load(1, next);
@@ -303,13 +305,9 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
   // "disclosed no assets" is information.
   if (!loading && !error && (!data || !data.available)) return null;
 
-  if (loading && !data) {
-    return (
-      <div className="panel p-4 text-center" role="status" aria-live="polite">
-        <span className="text-ink-lo text-sm animate-pulse">Loading holdings...</span>
-      </div>
-    );
-  }
+  // Nothing until the first response: most members have no report, and a
+  // loading panel that then vanishes shifts the whole scorecard below it.
+  if (loading && !data) return null;
 
   if (error && !data) {
     return (
@@ -449,9 +447,11 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
           <Pagination
             page={data.page}
             totalPages={data.totalPages}
-            // The most recently requested category, not the one on screen:
-            // paging while a filter request is in flight must not drop it.
-            onPageChange={(p) => load(p, requested.current)}
+            // While a different category is loading, this pager describes a
+            // list that's about to be replaced: page numbers from it would
+            // be applied to the wrong list, so it waits.
+            disabled={filterPending}
+            onPageChange={(p) => load(p, category)}
           />
         </div>
       )}

@@ -691,17 +691,14 @@ async def _sync_ballot_measures(db: Session, client: httpx.AsyncClient, cycle: i
         # Fail loud: a silently-broken adapter and a quiet week look
         # identical from the outside, and this is the one dataset where
         # that ambiguity costs a vote.
-        try:
-            from app.ops_alerts import send_ops_alert
-            send_ops_alert(
-                "Ballot measure ingest failed",
-                f"{failed} state(s) failed to ingest statewide ballot measures "
-                f"for {election_day}. Those states render as 'not yet covered' "
-                f"rather than 'no measures' until this clears.",
-                dedupe_key="ballot-measure-ingest",
-            )
-        except Exception:
-            logger.exception("Could not send ballot-measure ops alert")
+        from app.alerting import safe_ops_alert
+        safe_ops_alert(
+            "Ballot measure ingest failed",
+            f"{failed} state(s) failed to ingest statewide ballot measures "
+            f"for {election_day}. Those states render as 'not yet covered' "
+            f"rather than 'no measures' until this clears.",
+            dedupe_key="ballot-measure-ingest",
+        )
 
     return {
         "synced": synced,
