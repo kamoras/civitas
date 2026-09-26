@@ -245,8 +245,10 @@ def _hourly_action_refresh() -> None:
                 # PDF/OCR parsing over a bounded PTR filing set, not a
                 # 431-member scoring pass — normal runs finish in under
                 # 90 minutes, so 2h already gives ample headroom. The
-                # annual-holdings phases it also runs are time-boxed
-                # (holdings_pipeline.PHASE_BUDGET) so they can't eat it.
+                # annual-holdings phases it also runs cap their report
+                # fetching (holdings_pipeline.PHASE_BUDGET, 10 min each) —
+                # the part that scales with members; their index download
+                # and Senate search are single steps under request timeouts.
                 if _is_stale(stock_age, timedelta(hours=2)):
                     from app.ops_alerts import send_ops_alert
                     logger.warning(

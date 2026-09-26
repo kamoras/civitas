@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PaginatedStockTrades, StockTrade } from "@/types/senator";
 import { fetchPresidentStockTrades, fetchRepStockTrades, fetchSenatorStockTrades } from "@/lib/api";
 import CollapsibleSection from "../shared/CollapsibleSection";
@@ -128,17 +128,22 @@ export default function StockTrades({ politicianId, filer = "senate" }: StockTra
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Only the newest request may land: two quick page clicks can resolve
+  // out of order, and the older page must not overwrite the newer one.
+  const requestSeq = useRef(0);
+
   const fetchPage = useCallback(
     async (p: number) => {
+      const seq = ++requestSeq.current;
       setLoading(true);
       setError(null);
       try {
         const result = await FETCHER[filer](politicianId, { page: p, perPage: TRADES_PER_PAGE });
-        setData(result);
+        if (seq === requestSeq.current) setData(result);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load stock trades");
+        if (seq === requestSeq.current) setError(e instanceof Error ? e.message : "Failed to load stock trades");
       } finally {
-        setLoading(false);
+        if (seq === requestSeq.current) setLoading(false);
       }
     },
     [politicianId, filer]
@@ -161,7 +166,7 @@ export default function StockTrades({ politicianId, filer = "senate" }: StockTra
     );
   }
 
-  if (error) {
+  if (error && !data) {
     return (
       <div className="panel p-4 text-center" role="alert">
         <span className="text-signal-red text-sm">{error}</span>
@@ -184,6 +189,12 @@ export default function StockTrades({ politicianId, filer = "senate" }: StockTra
             ABOUT THIS DATA
           </MetricTooltip>
         </p>
+        {error && (
+          // A failed page change keeps the last page that loaded on screen.
+          <p className="text-signal-red text-sm" role="alert">
+            {error}
+          </p>
+        )}
         <div className={`space-y-2 ${loading ? "opacity-60 transition-opacity" : ""}`}>
           {data.trades.map((trade, i) => (
             <TradeRow key={`${trade.sourceUrl}-${i}`} trade={trade} />

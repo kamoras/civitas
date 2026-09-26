@@ -82,7 +82,10 @@ function HoldingsDonut({
 }) {
   // Only categories with a stated value draw a slice; the legend lists all.
   const slices = categories.filter((c) => c.weight > 0);
-  const focus = slices.find((c) => c.category === (active ?? selected)) ?? null;
+  // Hovering a legend row that has no slice falls back to the selection,
+  // rather than clearing the selected slice's highlight.
+  const focus =
+    slices.find((c) => c.category === active) ?? slices.find((c) => c.category === selected) ?? null;
   // Dim the rest only when the highlighted category is one of the drawn
   // slices; a legend row with no stated value has no slice to stand out.
   const label = slices.map((c) => `${c.label} ${formatShare(c.share)}`).join(", ");
@@ -157,18 +160,16 @@ function HoldingsDonut({
   );
 }
 
-/** A category's legend line. The range covers only the holdings that stated
- * one, so the count it is quoted against says how many that is. */
+/** A category's legend line: its disclosed range, and how many of its
+ * assets that range doesn't describe — reported as "None" at year end
+ * (sold or closed: a stated value of zero) or with no value stated at all
+ * ("Undetermined"). The two are different disclosures and are named apart. */
 function legendDetail(c: HoldingCategory): string {
-  const assets = `${c.count} asset${c.count !== 1 ? "s" : ""}`;
-  if (c.weight <= 0) {
-    return `${assets} · no year-end value stated, not charted`;
-  }
-  const range = formatRangeCompact(c.valueLow, c.valueHigh, c.openEnded);
-  if (c.unvaluedCount > 0) {
-    return `${assets} · ${range} for ${c.count - c.unvaluedCount} (${c.unvaluedCount} with no stated value)`;
-  }
-  return `${assets} · ${range}`;
+  const parts = [`${c.count} asset${c.count !== 1 ? "s" : ""}`];
+  parts.push(c.weight > 0 ? formatRangeCompact(c.valueLow, c.valueHigh, c.openEnded) : "not charted");
+  if (c.zeroValueCount > 0) parts.push(`${c.zeroValueCount} none at year end`);
+  if (c.unvaluedCount > 0) parts.push(`${c.unvaluedCount} no value stated`);
+  return parts.join(" · ");
 }
 
 function CategoryLegend({
@@ -332,13 +333,19 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
       <p className="panel p-4 text-sm text-ink-lo">
         {data.holdingsCount === 0
           ? `The ${reportLabel} lists no assets.`
-          : `The ${reportLabel} lists ${data.holdingsCount} asset${data.holdingsCount !== 1 ? "s" : ""}, none with a stated year-end value.`}{" "}
+          : `The ${reportLabel} lists ${data.holdingsCount} asset${data.holdingsCount !== 1 ? "s" : ""}, ${
+              data.unvaluedCount === data.holdingsCount
+                ? "none with a value stated"
+                : data.unvaluedCount === 0
+                  ? "each reported as none at year end"
+                  : "none with a value above zero at year end"
+            }.`}{" "}
         {about} · {sourceLink}
       </p>
     );
   } else {
     chart = (
-      <div className="panel p-4">
+      <div className={`panel p-4 ${loading ? "opacity-60 transition-opacity" : ""}`} aria-busy={loading}>
         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
           <HoldingsDonut
             categories={data.categories}
@@ -382,7 +389,19 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
             : "not machine-readable"
       }
       source={SOURCE_LABEL[chamber]}
-      alwaysVisible={chart}
+      alwaysVisible={
+        <>
+          {chart}
+          {/* Here, not in the list body: a failed filter or page change
+              must show even with the list collapsed. The data shown is
+              still the last that loaded. */}
+          {error && (
+            <p className="text-signal-red text-sm mt-2" role="alert">
+              {error}
+            </p>
+          )}
+        </>
+      }
       // Nothing to list for an unreadable or empty report — a toggle there
       // would open onto nothing.
       expandable={hasList}
@@ -405,12 +424,6 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
               </button>
             )}
           </p>
-          {error && (
-            <p className="text-signal-red text-sm" role="alert">
-              {/* The list below is still the last one that loaded. */}
-              {error}
-            </p>
-          )}
           <div className={`space-y-2 ${loading ? "opacity-60 transition-opacity" : ""}`}>
             {data.holdings.map((h, i) => (
               <HoldingRow key={`${h.assetName}-${data.page}-${i}`} holding={h} />

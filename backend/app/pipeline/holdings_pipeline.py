@@ -194,10 +194,15 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
             if failures >= MAX_CONSECUTIVE_FETCH_FAILURES:
                 db.commit()
                 raise RuntimeError(f"House Clerk: {failures} consecutive annual-report fetches failed")
-            if report is None or (not report.final and mine is not None):
-                # Couldn't fetch or (transiently) read it this run: keep
-                # whatever is stored rather than falling back to an older
-                # report or replacing a readable one with a link.
+            if report is None:
+                # Couldn't fetch this filing (it may not even be the
+                # member's — a same-surname candidate's amendment can rank
+                # first): try the member's next one. _is_older above keeps
+                # that from ever displacing a newer stored report.
+                continue
+            if not report.final and mine is not None:
+                # Transiently unreadable: keep the stored report rather than
+                # replacing a readable one with a link.
                 break
             status = (report.filer_status or "").lower()
             if status and status != "member":
@@ -232,39 +237,55 @@ _DATE_RE = re.compile(r"\b(\d{2})/(\d{2})/(\d{4})\b")
 
 
 def _senate_rank(filing: dict) -> tuple[int, bool, str]:
-    """Newest first: by the year the report describes, then by whether that
-    year was stated rather than inferred — a paper report's year is a guess
-    (_senate_report_year), and must not outrank an electronic report that
-    states the same year, e.g. a late paper amendment of an older report —
-    then by filing date."""
-    stated = bool(_CY_RE.search(filing.get("title") or "") or _DATE_RE.search(filing.get("title") or ""))
+    """Newest first: by the year the report describes (a paper amendment,
+    whose year can't be known, ranks below every report with one), then by
+    whether that year was stated rather than inferred, then by filing
+    date."""
+    title = filing.get("title") or ""
+    stated = bool(_CY_RE.search(title) or _DATE_RE.search(title))
     return (_senate_report_year(filing) or 0, stated, filing.get("filed_date") or "")
 
 
+def _is_paper_amendment(filing: dict) -> bool:
+    title = (filing.get("title") or "").lower()
+    return bool(filing.get("is_paper")) and "amendment" in title
+
+
 def _senate_report_year(filing: dict) -> int | None:
-    """The calendar year a Senate report's holdings describe.
+    """The calendar year a Senate report's holdings describe, or None when
+    it can't be known.
 
     "Annual Report for CY 2025" states it; a "New Filer Report for
-    03/24/2026" describes that date; a paper filing's link reads just
-    "Annual Report", so it falls back to the year before it was filed.
+    03/24/2026" describes that date. A paper filing's link reads only
+    "Annual Report" or "Annual Report (Amendment)". An original annual
+    report is filed the spring or summer after the year it covers, so the
+    year before its filing is its year. An amendment can amend any earlier
+    report — Ricketts' paper amendment of February 2026 (live, 2026-09)
+    amends something filed before any CY2025 report existed — so its year is
+    None, not a guess.
     """
     title = filing.get("title") or ""
     if m := _CY_RE.search(title):
         return int(m.group(1))
     if m := _DATE_RE.search(title):
         return int(m.group(3))
+    if _is_paper_amendment(filing):
+        return None
     filed = filing.get("filed_date") or ""
     return int(filed[:4]) - 1 if filed[:4].isdigit() else None
 
 
 def _senate_report_label(filing: dict) -> str:
     """What the report is, in the words the page shows: a new-filer report
-    is a snapshot at its date, not a year-end annual report."""
+    is a snapshot at its date, not a year-end annual report, and a paper
+    amendment's year isn't claimed."""
     title = filing.get("title") or ""
     amended = " (amended)" if "amendment" in title.lower() else ""
     if "new filer" in title.lower() and (m := _DATE_RE.search(title)):
         return f"new-filer report as of {m.group(3)}-{m.group(1)}-{m.group(2)}{amended}"
     year = _senate_report_year(filing)
+    if year is None and filing.get("filed_date"):
+        return f"annual report amendment filed {filing['filed_date']}"
     return f"{year} annual report{amended}" if year else f"annual report{amended}"
 
 
@@ -305,13 +326,14 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
             continue
         if _is_older(mine, _senate_report_year(filing), filing.get("filed_date")):
             # The search came back without the stored (newer) report — a
-            # page of results failed to load. Keep the newer one.
+            # page of results failed to load — or the best candidate is a
+            # paper amendment of unknowable year. Keep what's stored.
             continue
         year, stated, _ = _senate_rank(filing)
         if mine is not None and not stated and mine.report_year == year and mine.filing_id != filing_id:
-            # A paper report whose year is only inferred never displaces a
-            # stored report for that same year: it may be a late amendment
-            # of an older one.
+            # A paper report's year is inferred from its filing date; it
+            # never displaces a stored report for that same year, which may
+            # state it (a readable electronic report beats a scanned copy).
             continue
         report = await fetch_senate_annual(client, db, filing)
         if report is None and await senate_accept_terms(client) is not None:

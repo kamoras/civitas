@@ -517,12 +517,13 @@ export default function SenatorCard({
             chamber={chamber}
           />
 
-          {/* Keyed by member: navigating between two profiles can reuse
-              this card, and the section's open list and hover state belong
-              to the member they were chosen on. */}
+          {/* Both disclosure sections are keyed by member: navigating
+              between two profiles can reuse this card, and each section's
+              data, page and selection belong to the member they were
+              loaded for. */}
           <Holdings key={`${chamber}-${senator.id}`} memberId={senator.id} chamber={chamber} />
 
-          <StockTrades politicianId={senator.id} filer={chamber} />
+          <StockTrades key={`${chamber}-${senator.id}`} politicianId={senator.id} filer={chamber} />
 
           {senator.sponsoredBills && senator.sponsoredBills.length > 0 && (
             <SponsoredBills bills={senator.sponsoredBills} />

@@ -571,3 +571,76 @@ async def test_trade_and_holdings_ingests_share_one_index_download(db_session):
     assert "/ptr-pdfs/" in ptrs[0]["pdf_url"]
     assert [(f["doc_id"], f["prefix"]) for f in annuals] == [("2", "Hon.")]
     assert "/financial-pdfs/2025/2.pdf" in annuals[0]["pdf_url"]
+
+
+class TestPaperAmendments:
+    def test_a_paper_amendment_has_no_year_and_claims_none(self):
+        amendment = _senate_filing("a", title="Annual Report (Amendment)", filed="2026-02-19", paper=True)
+        assert holdings_pipeline._senate_report_year(amendment) is None
+        assert holdings_pipeline._senate_report_label(amendment) == "annual report amendment filed 2026-02-19"
+        # A paper original's year is the one before it was filed.
+        original = _senate_filing("o", title="Annual Report", filed="2026-08-12", paper=True)
+        assert holdings_pipeline._senate_report_year(original) == 2025
+
+    async def test_a_later_paper_amendment_never_replaces_a_dated_report(self, db_session, senator):
+        """Ricketts-shaped (live, 2026-09): an electronic CY2024 report, then
+        a paper amendment in February 2026 — before any CY2025 report — that
+        a filed-year-minus-one guess would have dated 2025 and put first."""
+        db_session.add(FinancialDisclosure(
+            senator_id="S1", filing_id="e2024", report_year=2024, filed_date="2025-05-11",
+            source_url="x", parser_version=holdings_pipeline.SENATE_PARSER_VERSION,
+        ))
+        db_session.commit()
+        filings = [
+            _senate_filing("e2024", title="Annual Report for CY 2024", filed="2025-05-11"),
+            _senate_filing("amend", title="Annual Report (Amendment)", filed="2026-02-19", office="Senator", paper=True),
+        ]
+        await _ingest_senate(db_session, filings, {"e2024": [_row()]})
+        assert db_session.query(FinancialDisclosure).one().filing_id == "e2024"
+
+    async def test_a_paper_amendment_is_used_when_it_is_all_there_is(self, db_session, senator):
+        filings = [_senate_filing("amend", title="Annual Report (Amendment)", filed="2026-08-10",
+                                  office="Senator", paper=True)]
+        await _ingest_senate(db_session, filings, {})
+        stored = db_session.query(FinancialDisclosure).one()
+        assert (stored.filing_id, stored.report_year, stored.parsed) == ("amend", None, False)
+
+
+class TestHouseFetchFailureFallsThrough:
+    async def test_an_unfetchable_candidate_filing_does_not_block_the_members_own(self, db_session, rep):
+        cand = {**_house_filing("CAND", filing_date="2026-08-01"), "filing_type": "A"}
+        member = _house_filing("MEMBER", filing_date="2026-05-01")
+        await _ingest_house(
+            db_session, {2025: [cand, member]}, {"CAND": None, "MEMBER": AnnualReport("Member", [_row()])},
+        )
+        assert db_session.query(FinancialDisclosure).one().filing_id == "MEMBER"
+
+
+class TestServiceDetails:
+    def test_none_at_year_end_is_counted_apart_from_no_stated_value(self, db_session, senator):
+        _store(db_session, [
+            _h("Sold", "STOCKS", 0.0, 0.0, value_text="None"),
+            _h("Unknown", "STOCKS", None, None, value_text="Undetermined"),
+            _h("Kept", "STOCKS", 1001.0, 15000.0),
+        ], senator_id="S1")
+        stocks = get_senator_holdings(db_session, "S1").categories[0]
+        assert (stocks.count, stocks.zero_value_count, stocks.unvalued_count) == (3, 1, 1)
+
+    def test_other_filter_includes_categories_no_longer_in_the_table(self, db_session, senator):
+        _store(db_session, [_h("Legacy", "RETIRED_CATEGORY", 1.0, 2.0), _h("Stock", "STOCKS", 1.0, 2.0)],
+               senator_id="S1")
+        result = get_senator_holdings(db_session, "S1", category="OTHER")
+        assert [h.asset_name for h in result.holdings] == ["Legacy"]
+        assert result.holdings[0].category == "OTHER"
+        assert {c.category for c in result.categories} == {"OTHER", "STOCKS"}
+
+    def test_page_order_is_largest_first_then_name_with_unvalued_last(self, db_session, senator):
+        _store(db_session, [
+            _h("b small", "STOCKS", 1.0, 1000.0),
+            _h("Undetermined thing", "OTHER", None, None),
+            _h("A small", "STOCKS", 1.0, 1000.0),
+            _h("Big", "FUNDS", 1000001.0, 5000000.0),
+        ], senator_id="S1")
+        names = [h.asset_name for h in get_senator_holdings(db_session, "S1", per_page=2, page=1).holdings]
+        names += [h.asset_name for h in get_senator_holdings(db_session, "S1", per_page=2, page=2).holdings]
+        assert names == ["Big", "A small", "b small", "Undetermined thing"]

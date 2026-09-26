@@ -48,7 +48,7 @@ class HoldingRow:
     asset_name: str
     asset_type: str          # raw form value: House code ("ST") or Senate label ("Stocks")
     category: str            # a key of config_definitions.HOLDING_CATEGORIES
-    owner: str               # self | spouse | joint | dependent
+    owner: str               # self | spouse | joint | dependent | unknown (Senate: unrecognized value)
     value_text: str
     value_low: float | None
     value_high: float | None

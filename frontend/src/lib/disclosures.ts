@@ -1,13 +1,16 @@
 /** Shared rendering rules for financial-disclosure figures (stock trades and
  * annual-report holdings), so the two scorecard sections can't drift apart. */
 
-export type DisclosureOwner = "self" | "spouse" | "joint" | "dependent";
+/** "unknown": an annual report's owner value the parser didn't recognize —
+ * shown as such, never assumed to be the member's. */
+export type DisclosureOwner = "self" | "spouse" | "joint" | "dependent" | "unknown";
 
 export const OWNER_LABEL: Record<DisclosureOwner, string> = {
   self: "SELF",
   spouse: "SPOUSE",
   joint: "JOINT",
   dependent: "DEPENDENT",
+  unknown: "OWNER NOT STATED",
 };
 
 /** A disclosed amount bracket, in full dollars. The forms' open-ended top

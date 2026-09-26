@@ -90,13 +90,25 @@ async def search_annual_filings(since_date: str) -> list[dict]:
     return await search_filings(since_date, ANNUAL_REPORT_TYPE, SENATOR_FILER_TYPE)
 
 
+def _own_text(cell) -> str:
+    """A cell's text without its nested <div> sub-lines (the muted location,
+    account-type and comment lines), however the main text itself is
+    wrapped — bare, or inside a <span>/<a>."""
+    parts = [cell.text or ""]
+    for child in cell:
+        if child.tag != "div":
+            parts.append(child.text_content() or "")
+        parts.append(child.tail or "")
+    return " ".join(" ".join(parts).split())
+
+
 def _cell_main_text(cell) -> str:
-    """The asset's name — its <strong> — without the muted sub-lines
-    (location, account type, filer comment) the cell nests under it."""
+    """The asset's name — its <strong> when the form uses one, otherwise the
+    cell's own text — without the muted sub-lines nested under it."""
     strong = cell.find(".//strong")
     if strong is not None:
         return " ".join((strong.text_content() or "").split())
-    return " ".join((cell.text or "").split())
+    return _own_text(cell)
 
 
 def is_report_page(page_html: str) -> bool:
@@ -150,11 +162,19 @@ def parse_assets_table(page_html: str) -> list[HoldingRow] | None:
         number = " ".join(cells[0].text_content().split())
         name = _cell_main_text(cells[c_asset])
         if not name:
+            logger.warning("Senate assets row %r has no readable asset name — skipped", number)
             continue
         type_cell = cells[c_type]
-        asset_type = " ".join((type_cell.text or "").split())
+        asset_type = _own_text(type_cell)
         subtype = " ".join(" ".join(div.text_content() for div in type_cell.xpath("./div")).split())
-        owner = _OWNER_VALUES.get(" ".join(cells[c_owner].text_content().split()).lower(), "self")
+        owner_text = " ".join(cells[c_owner].text_content().split()).lower()
+        owner = _OWNER_VALUES.get(owner_text)
+        if owner is None:
+            # Never default to the filer: an unrecognized value may well be a
+            # spouse's or child's asset. Shown as owner not stated, and
+            # logged so the table can be extended from the real value.
+            logger.info("Unrecognized Senate asset owner %r", owner_text)
+            owner = "unknown"
         value_text = " ".join(cells[c_value].text_content().split())
         low, high = parse_holding_value(value_text)
         raw.append((number, HoldingRow(

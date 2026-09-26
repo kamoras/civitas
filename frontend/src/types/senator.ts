@@ -248,6 +248,8 @@ export interface HoldingCategory {
   count: number;
   /** Of count, holdings with no stated bracket — outside valueLow/valueHigh/weight. */
   unvaluedCount: number;
+  /** Of count, holdings reported as "None" at year end (a stated zero). */
+  zeroValueCount: number;
   valueLow: number;
   valueHigh: number;
   openEnded: boolean;

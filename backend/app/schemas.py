@@ -125,6 +125,15 @@ class PaginatedVotesSchema(CamelModel):
     counts: VoteCountsSchema
 
 
+def is_open_ended(low: float | None, high: float | None) -> bool:
+    """The disclosure forms' open-ended top bracket ("Over $50,000,000"),
+    which states a floor and no ceiling. Stored as high == low — no real
+    bracket on these forms has equal bounds (ptr_common.parse_amount_range).
+    The one definition of that rule: trades, holdings, and every sum over
+    holdings use it."""
+    return low is not None and low > 0 and high == low
+
+
 # Statutory disclosure deadline under the STOCK Act (2012) — see issue #45.
 STOCK_ACT_DISCLOSURE_DEADLINE_DAYS = 45
 
@@ -157,7 +166,7 @@ class StockTradeSchema(CamelModel):
         # Derived, not stored — see StockTrade model comment on
         # days_to_disclose for why this isn't a separate DB column.
         self.late = self.days_to_disclose > STOCK_ACT_DISCLOSURE_DEADLINE_DAYS
-        self.amount_open_ended = self.amount_low > 0 and self.amount_high == self.amount_low
+        self.amount_open_ended = is_open_ended(self.amount_low, self.amount_high)
         return self
 
 
@@ -182,7 +191,9 @@ class HoldingSchema(CamelModel):
     asset_type: str
     category: str
     category_label: str
-    owner: Literal["self", "spouse", "joint", "dependent"] = "self"
+    # "unknown": the form's owner value wasn't one the parser recognizes —
+    # never guessed to be the member's.
+    owner: Literal["self", "spouse", "joint", "dependent", "unknown"] = "self"
     value_text: str
     value_low: float | None = None
     value_high: float | None = None
@@ -191,9 +202,7 @@ class HoldingSchema(CamelModel):
 
     @model_validator(mode="after")
     def _compute_open_ended(self) -> "HoldingSchema":
-        self.value_open_ended = (
-            self.value_low is not None and self.value_low > 0 and self.value_high == self.value_low
-        )
+        self.value_open_ended = is_open_ended(self.value_low, self.value_high)
         return self
 
 
@@ -212,6 +221,9 @@ class HoldingCategorySchema(CamelModel):
     # Of `count`, those with no stated bracket: listed under the category,
     # but not in value_low/value_high/weight.
     unvalued_count: int = 0
+    # Of `count`, those whose disclosed value was "None" — held at no value
+    # at year end (sold or closed). Stated, but zero, so they draw nothing.
+    zero_value_count: int = 0
     value_low: float
     value_high: float
     open_ended: bool

@@ -6,13 +6,19 @@ inferred here (AGENTS.md: the read path stays lightweight). The only
 derived figure is each slice's `weight`, the sum of bracket midpoints the
 chart is drawn with, and the schema documents it as a drawing convention
 rather than a value — see HoldingCategorySchema.
+
+The breakdown aggregates over light (category, low, high) tuples, and only
+the requested page of holdings is loaded as rows — ordered and limited in
+SQL — so a report listing a thousand assets costs one page of objects per
+request, not a thousand.
 """
 
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import case, func, or_
+from sqlalchemy.orm import Session
 
-from app.models import FinancialDisclosure, FinancialHolding, Representative, Senator
 from app.config_definitions import HOLDING_CATEGORIES
-from app.schemas import HoldingCategorySchema, HoldingSchema, HoldingsSchema
+from app.models import FinancialDisclosure, FinancialHolding, Representative, Senator
+from app.schemas import HoldingCategorySchema, HoldingSchema, HoldingsSchema, is_open_ended
 from app.services.pagination import paginate_bounds
 
 # The `category` query parameter accepts exactly the category keys.
@@ -27,8 +33,12 @@ def _midpoint(low: float | None, high: float | None) -> float:
     return (low + high) / 2
 
 
+def _category_key(category: str | None) -> str:
+    return category if category in HOLDING_CATEGORIES else "OTHER"
+
+
 def _to_schema(h: FinancialHolding) -> HoldingSchema:
-    category = h.category if h.category in HOLDING_CATEGORIES else "OTHER"
+    category = _category_key(h.category)
     return HoldingSchema(
         asset_name=h.asset_name,
         account=h.account,
@@ -43,56 +53,75 @@ def _to_schema(h: FinancialHolding) -> HoldingSchema:
     )
 
 
-def _is_valued(h: HoldingSchema) -> bool:
-    return h.value_low is not None and h.value_high is not None
+def _categories(rows: list[tuple[str, float | None, float | None]]) -> list[HoldingCategorySchema]:
+    """The breakdown, from (category, low, high) for every holding.
 
+    Every category the report has holdings in is listed, so each holding
+    stays reachable through the legend filter; one with nothing valued above
+    zero (weight 0) simply draws no slice."""
+    total_weight = sum(_midpoint(low, high) for _, low, high in rows)
+    by_category: dict[str, list[tuple[float | None, float | None]]] = {}
+    for category, low, high in rows:
+        by_category.setdefault(_category_key(category), []).append((low, high))
 
-def _build(disclosure: FinancialDisclosure, page: int, per_page: int, category: str | None) -> HoldingsSchema:
-    # Every figure below is taken from the schema objects, so the open-ended
-    # rule lives only in HoldingSchema.value_open_ended.
-    holdings = [_to_schema(h) for h in disclosure.holdings]
-
-    by_category: dict[str, list[HoldingSchema]] = {}
-    for h in holdings:
-        by_category.setdefault(h.category, []).append(h)
-
-    valued = [h for h in holdings if _is_valued(h)]
-    total_weight = sum(_midpoint(h.value_low, h.value_high) for h in valued)
-
-    # Every category the report has holdings in is listed, so each holding
-    # stays reachable through the legend filter; one with no stated value
-    # (weight 0) simply draws no slice.
     categories: list[HoldingCategorySchema] = []
     for key, meta in HOLDING_CATEGORIES.items():
-        in_category = by_category.get(key, [])
-        if not in_category:
+        brackets = by_category.get(key)
+        if not brackets:
             continue
-        members = [h for h in in_category if _is_valued(h)]
-        weight = sum(_midpoint(h.value_low, h.value_high) for h in members)
+        valued = [(low, high) for low, high in brackets if low is not None and high is not None]
+        weight = sum(_midpoint(low, high) for low, high in valued)
         categories.append(HoldingCategorySchema(
             category=key,
             label=meta["label"],
             color=meta["color"],
-            count=len(in_category),
-            unvalued_count=len(in_category) - len(members),
-            value_low=sum(h.value_low for h in members),
-            value_high=sum(h.value_high for h in members),
-            open_ended=any(h.value_open_ended for h in members),
+            count=len(brackets),
+            unvalued_count=len(brackets) - len(valued),
+            zero_value_count=sum(1 for low, high in valued if high == 0),
+            value_low=sum(low for low, _ in valued),
+            value_high=sum(high for _, high in valued),
+            open_ended=any(is_open_ended(low, high) for low, high in valued),
             weight=weight,
             share=weight / total_weight if total_weight else 0.0,
         ))
     # Largest first; HOLDING_CATEGORIES' own order breaks ties (a stable sort).
     categories.sort(key=lambda c: c.weight, reverse=True)
+    return categories
 
-    listed = by_category.get(category, []) if category else holdings
+
+def _build(db: Session, disclosure: FinancialDisclosure, page: int, per_page: int, category: str | None) -> HoldingsSchema:
+    in_report = FinancialHolding.disclosure_id == disclosure.id
+    rows = (
+        db.query(FinancialHolding.category, FinancialHolding.value_low, FinancialHolding.value_high)
+        .filter(in_report)
+        .all()
+    )
+    valued = [(low, high) for _, low, high in rows if low is not None and high is not None]
+
+    listed = db.query(FinancialHolding).filter(in_report)
+    if category == "OTHER":
+        # OTHER also collects any stored category no longer in the table.
+        listed = listed.filter(or_(
+            FinancialHolding.category == "OTHER",
+            FinancialHolding.category.notin_(list(HOLDING_CATEGORIES)),
+        ))
+    elif category:
+        listed = listed.filter(FinancialHolding.category == category)
+    total = listed.count()
+    total_pages, page = paginate_bounds(total, page, per_page)
     # Largest first, by the same midpoint the chart uses; a holding with no
     # stated bracket sorts last rather than being dropped.
-    listed = sorted(
-        listed,
-        key=lambda h: (not _is_valued(h), -_midpoint(h.value_low, h.value_high), h.asset_name.lower()),
+    page_rows = (
+        listed.order_by(
+            case((FinancialHolding.value_low.is_(None), 1), else_=0),
+            ((FinancialHolding.value_low + FinancialHolding.value_high) / 2).desc(),
+            func.lower(FinancialHolding.asset_name),
+            FinancialHolding.id,
+        )
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
     )
-    total = len(listed)
-    total_pages, page = paginate_bounds(total, page, per_page)
 
     return HoldingsSchema(
         available=True,
@@ -104,14 +133,14 @@ def _build(disclosure: FinancialDisclosure, page: int, per_page: int, category: 
         source_url=disclosure.source_url,
         parsed=disclosure.parsed,
         unreadable_reason=disclosure.unreadable_reason if not disclosure.parsed else None,
-        holdings_count=len(holdings),
-        unvalued_count=len(holdings) - len(valued),
-        total_low=sum(h.value_low for h in valued),
-        total_high=sum(h.value_high for h in valued),
-        total_open_ended=any(h.value_open_ended for h in valued),
-        categories=categories,
+        holdings_count=len(rows),
+        unvalued_count=len(rows) - len(valued),
+        total_low=sum(low for low, _ in valued),
+        total_high=sum(high for _, high in valued),
+        total_open_ended=any(is_open_ended(low, high) for low, high in valued),
+        categories=_categories(rows),
         category_filter=category,
-        holdings=listed[(page - 1) * per_page: page * per_page],
+        holdings=[_to_schema(h) for h in page_rows],
         total=total,
         page=page,
         per_page=per_page,
@@ -122,7 +151,6 @@ def _build(disclosure: FinancialDisclosure, page: int, per_page: int, category: 
 def _latest_disclosure(db: Session, **owner_filter) -> FinancialDisclosure | None:
     return (
         db.query(FinancialDisclosure)
-        .options(selectinload(FinancialDisclosure.holdings))
         .filter_by(**owner_filter)
         .order_by(FinancialDisclosure.report_year.desc(), FinancialDisclosure.id.desc())
         .first()
@@ -139,7 +167,7 @@ def get_senator_holdings(
     disclosure = _latest_disclosure(db, senator_id=senator_id)
     if disclosure is None:
         return HoldingsSchema(available=False)
-    return _build(disclosure, page, per_page, category)
+    return _build(db, disclosure, page, per_page, category)
 
 
 def get_rep_holdings(
@@ -151,4 +179,4 @@ def get_rep_holdings(
     disclosure = _latest_disclosure(db, representative_id=rep_id)
     if disclosure is None:
         return HoldingsSchema(available=False)
-    return _build(disclosure, page, per_page, category)
+    return _build(db, disclosure, page, per_page, category)
