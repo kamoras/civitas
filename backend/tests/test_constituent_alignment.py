@@ -141,6 +141,14 @@ class TestSeatRelativeVotes:
         ], "recentVotes": []}
         assert party_break_rate(rec) == (0.5, 3)
 
+    def test_malformed_vote_entries_are_skipped(self):
+        # A None left by a partial normalize must not crash the break rate
+        # (or calculate_confidence, which counts through it).
+        rec = record(10)
+        rec["recentVotes"] = [None, "junk"]
+        assert party_break_rate(rec) == (0.1, 100)
+        assert score_calculator.calculate_confidence({"votingRecord": rec})["constituentAlignment"] == "high"
+
     def test_each_roll_call_counts_once(self):
         rec = record(10)
         rec["recentVotes"] = [dict(v) for v in rec["keyVotes"] if not v["votedWithParty"]]

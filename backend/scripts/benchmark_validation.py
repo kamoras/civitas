@@ -111,17 +111,18 @@ def party_unity_breaks(members, vote_rows, min_party_votes=10):
     return breaks, n_unity
 
 
-def seat_relative_deviation(rows: list[dict]) -> dict[str, float]:
-    """bioguide -> break rate minus the same-party expectation at that seat
-    lean, measured from these rows by the pipeline's own
-    compute_constituent_reference, through the vote score's shape at its
+def seat_relative_vote_shape(rows: list[dict]) -> dict[str, float]:
+    """bioguide -> the seat-relative vote score recomputed on these rows:
+    break rate minus the same-party expectation at that seat lean (measured
+    from these rows by the pipeline's own compute_constituent_reference),
+    through score_calculator.seat_relative_vote_score at that reference's
     saturation deviation. rows: {bioguide, party, state, district,
-    break_rate}."""
+    break_rate, n_votes}."""
     from app.pipeline.analyze.score_calculator import (
         _expected_break_rate,
-        _seat_relative_vote_score,
         _signed_state_alignment,
         compute_constituent_reference,
+        seat_relative_vote_score,
     )
 
     inputs, keyed = [], []
@@ -130,17 +131,16 @@ def seat_relative_deviation(rows: list[dict]) -> dict[str, float]:
             continue
         alignment = _signed_state_alignment(r["state"], r["party"], district=r.get("district"))
         inputs.append((r["party"], alignment, r["break_rate"]))
-        keyed.append((r["bioguide"], r["party"], alignment, r["break_rate"]))
+        keyed.append((r["bioguide"], r["party"], alignment, r["break_rate"], r["n_votes"]))
     ref = compute_constituent_reference(inputs)
     if ref is None:
         return {}
     return {
-        bio: _seat_relative_vote_score(
-            rate - _expected_break_rate(ref["expected"][party], alignment), ref["deviation_p90"],
+        bio: seat_relative_vote_score(
+            rate - _expected_break_rate(ref["expected"][party], alignment), ref["deviation_p90"], n,
         )
-        for bio, party, alignment, rate in keyed
+        for bio, party, alignment, rate, n in keyed
     }
-
 
 def seat_relative_extremity(member_rows: list[dict], chamber: str) -> dict[str, float]:
     """bioguide -> Nokken-Poole (or DW-NOMINATE) position minus the per-party
@@ -202,10 +202,10 @@ def run_chamber(chamber: str, congress: int, les: dict[str, float] | None, les_k
     breaks, n_unity = party_unity_breaks(members, vote_rows)
     print(f"party-unity roll calls: {n_unity}")
     rows = [
-        {**m, "break_rate": breaks[icpsr][0] / breaks[icpsr][1]}
+        {**m, "break_rate": breaks[icpsr][0] / breaks[icpsr][1], "n_votes": breaks[icpsr][1]}
         for icpsr, m in members.items() if breaks.get(icpsr) and breaks[icpsr][1] >= 20
     ]
-    deviation = seat_relative_deviation(rows)
+    vote_shape = seat_relative_vote_shape(rows)
     extremity = seat_relative_extremity(member_rows, chamber)
 
     conn = sqlite3.connect(DB, uri=True)
@@ -232,7 +232,7 @@ def run_chamber(chamber: str, congress: int, les: dict[str, float] | None, les_k
         if not ok:
             problems.append(f"{chamber}: {label} r={r:+.3f}, expected the opposite sign")
 
-    report("CA vs seat-relative vote shape (Voteview)", deviation, "ca", +1)
+    report("CA vs seat-relative vote shape (Voteview)", vote_shape, "ca", +1)
     report("CA vs Nokken-Poole seat-relative extremity", extremity, "ca", -1)
     if les is not None:
         key_of = {m["bioguide"]: m["icpsr"] for m in members.values()}

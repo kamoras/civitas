@@ -632,51 +632,50 @@ function MeasuresSection({ ballot }: { ballot: StateBallot }) {
  * so: a town can contain more than one precinct.
  */
 export function TownSection({ state, pageElectionDate }: { state: string; pageElectionDate: string }) {
-  const [towns, setTowns] = useState<TownEntry[] | null>(null);
-  const [selected, setSelected] = useState("");
-  const [ballot, setBallot] = useState<TownBallot | null>(null);
-  const [loading, setLoading] = useState(false);
+  // Everything fetched is stored with the state (and town) it was fetched
+  // for, and read back only while those still match, so a new pick or a
+  // new state never shows the previous one's towns or races for a frame —
+  // no state is reset from inside an effect.
+  const [townsFor, setTownsFor] = useState<{ state: string; towns: TownEntry[] } | null>(null);
+  const [pick, setPick] = useState<{ state: string; town: string }>({ state, town: "" });
+  const [result, setResult] = useState<{ state: string; town: string; ballot: TownBallot } | null>(null);
+  const towns = townsFor?.state === state ? townsFor.towns : null;
+  const selected = pick.state === state ? pick.town : "";
+  const ballot = result && result.state === state && result.town === selected ? result.ballot : null;
+  const loading = selected !== "" && ballot === null;
 
   useEffect(() => {
     let cancelled = false;
     fetchTownsForState(state)
       .then((t) => {
-        if (!cancelled) setTowns(t);
+        if (!cancelled) setTownsFor({ state, towns: t });
       })
       .catch(() => {
-        if (!cancelled) setTowns([]);
+        if (!cancelled) setTownsFor({ state, towns: [] });
       });
     return () => {
       cancelled = true;
     };
   }, [state]);
 
-  // Picking a town clears the previous town's ballot and marks loading in
-  // the same event, so no frame pairs the new town's name with the old
-  // town's races; the effect below only fetches.
-  const chooseTown = (town: string) => {
-    setSelected(town);
-    setBallot(null);
-    setLoading(town !== "");
-  };
-
   useEffect(() => {
     if (!selected) return;
     let cancelled = false;
     fetchTownBallot(state, selected)
       .then((b) => {
-        if (!cancelled) setBallot(b);
+        if (!cancelled) setResult({ state, town: selected, ballot: b });
       })
       .catch(() => {
         if (!cancelled) {
-          setBallot({
-            status: "ingest_failed", address: null, source: null, sourceUrl: null,
-            electionName: null, electionDate: null, contests: [],
+          setResult({
+            state,
+            town: selected,
+            ballot: {
+              status: "ingest_failed", address: null, source: null, sourceUrl: null,
+              electionName: null, electionDate: null, contests: [],
+            },
           });
         }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
@@ -698,7 +697,7 @@ export function TownSection({ state, pageElectionDate }: { state: string; pageEl
         </p>
         <select
           value={selected}
-          onChange={(e) => chooseTown(e.target.value)}
+          onChange={(e) => setPick({ state, town: e.target.value })}
           className="bg-surface-base border border-white/15 text-ink-hi font-mono text-xs px-3 py-2 mb-4"
           aria-label="Select your town for local races (optional, approximate)"
         >
@@ -971,9 +970,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
           <StateLegislatureSection ballot={ballot} />
           <JudicialSection ballot={ballot} />
 
-          {/* Keyed by state: a town picked on one state's page must not carry
-              over to another's if the page component is reused. */}
-          <TownSection key={ballot.state} state={ballot.state} pageElectionDate={ballot.electionDate} />
+          <TownSection state={ballot.state} pageElectionDate={ballot.electionDate} />
 
           {!hasFederalRaces && (
             <p className="text-base text-ink-min">

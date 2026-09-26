@@ -1384,13 +1384,14 @@ def party_break_rate(voting_record: dict) -> tuple[float | None, int]:
     scorecard shows."""
     from app.pipeline.transform.normalize_votes import dedupe_votes
 
-    votes = dedupe_votes(
-        (voting_record.get("keyVotes") or []) + (voting_record.get("recentVotes") or [])
-    )
+    votes = dedupe_votes([
+        v for v in (voting_record.get("keyVotes") or []) + (voting_record.get("recentVotes") or [])
+        if isinstance(v, dict)
+    ])
     with_party = against = 0.0
     n = 0
     for v in votes:
-        wp = v.get("votedWithParty") if isinstance(v, dict) else None
+        wp = v.get("votedWithParty")
         if wp is None:
             continue
         weight = v.get("partyAlignmentWeight") or 0.0
@@ -1506,9 +1507,17 @@ def _seat_relative_vote_score(deviation: float, scale: float) -> float:
     full saturation deviation below it, rising to 100 at the saturation
     deviation above it, then declining (OVER_BREAK_DECLINE) past it."""
     scaled = deviation / scale
-    if scaled <= 1.0:
+    if not past_saturation(deviation, scale):
         return 50.0 + 50.0 * max(scaled, -1.0)
     return max(0.0, 100.0 - 50.0 * OVER_BREAK_DECLINE * (scaled - 1.0))
+
+
+def past_saturation(deviation: float, scale: float) -> bool:
+    """Whether a member's break rate sits past the saturation deviation
+    above their seat's expectation — where the vote score declines as the
+    rate rises. The one definition the breakdown text and the ground-truth
+    gate read."""
+    return deviation > scale
 
 
 def seat_relative_vote_score(deviation: float, scale: float, n_votes: int) -> float:
@@ -1712,7 +1721,7 @@ def _constituent_alignment_core(
             f"{eval_party} members of this chamber in seats with this lean "
             f"(signal {alignment:+.2f}) break on {expected:.1%}"
         )
-        if deviation > deviation_scale:
+        if past_saturation(deviation, deviation_scale):
             party_alignment_detail += (
                 f" — more than {deviation_scale:.1%} above that is past the "
                 f"chamber's {round(SATURATION_QUANTILE * 100)}th-percentile gap, "

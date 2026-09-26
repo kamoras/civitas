@@ -36,8 +36,8 @@ Three families of checks, all population-level:
    for whoever currently holds that profile.
 
 3. Extremes — Mann-Whitney U on the top/bottom decile by each raw
-   metric: the currently most independent decile must score
-   stochastically higher than the rest, and the least independent decile
+   metric: the decile the metric says should score highest must score
+   stochastically higher than the rest, and the lowest-expected decile
    lower. The lower-tail test is the derived form of the old "McConnell
    must NOT exceed 60" audit trap, without naming a leader who will
    eventually retire.
@@ -70,6 +70,7 @@ from app.pipeline.analyze.population_reference import CONSTITUENT_REFERENCE
 from app.pipeline.analyze.score_calculator import (
     SATURATION_QUANTILE,
     party_break_rate,
+    past_saturation,
     seat_break_deviation,
     seat_relative_vote_score,
 )
@@ -191,7 +192,7 @@ def constituent_metrics(
     )
     if dev is not None:
         out["seat_relative_vote"] = seat_relative_vote_score(*dev, labeled_votes)
-        out["past_saturation"] = dev[0] > dev[1]
+        out["past_saturation"] = past_saturation(*dev)
     return out
 
 
@@ -374,15 +375,18 @@ def evaluate_derived_checks(
         if n < MIN_EXTREMES_POPULATION:
             continue
 
-        # Extreme deciles by the raw metric, both tails. "most" = the decile
-        # the metric says should be scored most independent.
+        # Extreme deciles by the raw metric, both tails, named by what the
+        # metric says they should score: "highest-expected" is the decile
+        # that should score highest. (Not "most independent": for
+        # Constituent Alignment's peaked vote score the low tail holds the
+        # most loyal and the heaviest over-breakers alike.)
         k = max(int(n * EXTREME_FRACTION), MIN_POPULATION // 2)
         ordered = sorted(pairs, key=lambda p: p[0])
         most, most_rest = _tie_extended_extreme(ordered, k, from_start=direction <= 0)
         least, least_rest = _tie_extended_extreme(ordered, k, from_start=direction > 0)
         for group, rest, alternative, side in (
-            (most, most_rest, "greater", "most-independent"),
-            (least, least_rest, "less", "least-independent"),
+            (most, most_rest, "greater", "highest-expected"),
+            (least, least_rest, "less", "lowest-expected"),
         ):
             checked += 1
             group_scores = [y for _, y, _ in group]
@@ -556,10 +560,13 @@ def check_score_distribution(db, model=None) -> list[dict]:
       threshold to tune. Promise Persistence's historical collapse (76%
       of senators at the neutral prior) trips this immediately.
     - Self-history: today's stdev is compared against this algorithm
-      version's own per-date snapshot stdevs; a modified z-score below
-      -3.5 (Iglewicz & Hoaglin) flags a sudden within-version collapse.
-      Cross-version shifts are deliberate algorithm changes and are
-      annotated on the trend chart instead of alarmed here; gradual
+      version's own per-date snapshot stdevs within the current Congress;
+      a modified z-score below -3.5 (Iglewicz & Hoaglin) flags a sudden
+      collapse. Cross-version shifts are deliberate algorithm changes and
+      a new Congress resets the current-term window (AGENTS.md principle
+      6) — early in one, members have few votes and bills, and scores sit
+      near their shrinkage prior by design — so both are boundaries the
+      trend chart annotates rather than collapses alarmed here; gradual
       drift is score_calibration.py's job.
 
     Returns failures in the same shape as check_ground_truth's, so
@@ -567,6 +574,7 @@ def check_score_distribution(db, model=None) -> list[dict]:
     """
     from app.models import ScoreSnapshot
     from app.pipeline.analyze.score_calculator import ALGORITHM_VERSION
+    from app.pipeline.fetch.congress import congress_of_date
     from app.time_utils import utcnow
 
     if model is None:
@@ -593,8 +601,10 @@ def check_score_distribution(db, model=None) -> list[dict]:
         .all()
     )
     by_date: dict[str, list[tuple]] = defaultdict(list)
+    congress_now = congress_of_date(today)
     for row in history_rows:
-        by_date[row[0]].append(row[1:])
+        if congress_of_date(row[0]) == congress_now:
+            by_date[row[0]].append(row[1:])
 
     for idx, (dim, _col) in enumerate(_SNAPSHOT_COLUMN.items()):
         label = _DIM_LABEL.get(dim, dim)

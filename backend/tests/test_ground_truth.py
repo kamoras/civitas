@@ -5,6 +5,8 @@ every expectation the gate checks is derived from the test population's own
 raw data, mirroring how the gate works in production (AGENTS.md 1/3a).
 """
 
+import pytest
+
 from app.models import KeyVote, RepKeyVote, Representative, ScoreSnapshot, Senator
 from app.pipeline.analyze.ground_truth import (
     _tie_extended_extreme,
@@ -136,7 +138,7 @@ class TestDerivedConsistency:
 
         failures = check_ground_truth(db_session)["failures"]
         assert any(
-            f["dimension"] == "IV" and "most-independent decile" in f["senator"]
+            f["dimension"] == "IV" and "highest-expected decile" in f["senator"]
             for f in failures
         )
 
@@ -172,7 +174,7 @@ class TestDerivedConsistency:
         self._peaked_population(db_session, past_iv=lambda k: 90 + k)
         failures = check_ground_truth(db_session)["failures"]
         assert any(
-            f["dimension"] == "IV" and "least-independent decile" in f["senator"]
+            f["dimension"] == "IV" and "lowest-expected decile" in f["senator"]
             for f in failures
         )
 
@@ -196,7 +198,7 @@ class TestDerivedConsistency:
 
         failures = check_ground_truth(db_session)["failures"]
         assert any(
-            f["dimension"] == "IV" and "least-independent decile" in f["senator"]
+            f["dimension"] == "IV" and "lowest-expected decile" in f["senator"]
             for f in failures
         )
 
@@ -450,7 +452,7 @@ class TestTieExtendedExtreme:
         report = evaluate_derived_checks(members)
         least_failures = [
             f for f in report["failures"]
-            if f["dimension"] == "IV" and "least-independent decile" in f["senator"]
+            if f["dimension"] == "IV" and "lowest-expected decile" in f["senator"]
         ]
         assert least_failures, "expected this deliberately-ambiguous population to fail the check"
         assert "(16 of 100" in least_failures[0]["senator"]
@@ -471,6 +473,17 @@ def _add_snapshot_history(db, dates, values_fn, version=ALGORITHM_VERSION):
 
 
 class TestCheckScoreDistribution:
+    @pytest.fixture(autouse=True)
+    def _today(self, monkeypatch):
+        # Snapshot history below is dated July 2026, inside the 119th
+        # Congress; pin "today" there so the same-Congress history window
+        # doesn't depend on when the suite runs.
+        from datetime import datetime
+
+        from app import time_utils
+
+        monkeypatch.setattr(time_utils, "utcnow", lambda: datetime(2026, 7, 10, 12, 0))
+
     def test_point_mass_collapse_flagged(self, db_session):
         # A strict majority sharing one value is a collapse by definition —
         # the failure mode that hit Promise Persistence (76% at the neutral
@@ -532,6 +545,27 @@ class TestCheckScoreDistribution:
             db_session, dates,
             lambda d: [(20 + 6 * j) * (1 + 0.01 * d) for j in range(12)],
             version="v0-test",
+        )
+        db_session.commit()
+
+        assert check_score_distribution(db_session) == []
+
+    def test_history_from_the_previous_congress_ignored(self, db_session, monkeypatch):
+        # A new Congress resets the current-term window: early in it members
+        # have few votes and bills, so scores sit near their shrinkage prior
+        # by design. The last Congress's wide spread is not the baseline.
+        from datetime import datetime
+
+        from app import time_utils
+
+        monkeypatch.setattr(time_utils, "utcnow", lambda: datetime(2027, 1, 20, 12, 0))
+        for i in range(15):
+            _add_senator(db_session, f"s{i}", fi=48 + (i % 5) * 0.7,
+                         iv=20 + 4 * i, fd=20 + 4 * i, le=20 + 4 * i)
+        dates = [f"2026-12-0{d}" for d in range(1, 7)]
+        _add_snapshot_history(
+            db_session, dates,
+            lambda d: [(20 + 6 * j) * (1 + 0.01 * d) for j in range(12)],
         )
         db_session.commit()
 

@@ -602,6 +602,20 @@ describe("TownSection", () => {
     expect(fetchTownBallot).toHaveBeenCalledTimes(1);
   });
 
+  it("a new state starts from statewide, not the previous state's town", async () => {
+    vi.mocked(fetchTownBallot).mockResolvedValue(covered("Albany Mayor"));
+    const { rerender } = render(<TownSection state="NY" pageElectionDate="2026-11-03" />);
+
+    await userEvent.selectOptions(await screen.findByRole("combobox"), "Albany");
+    expect(await screen.findByText(/Albany Mayor/)).toBeInTheDocument();
+
+    rerender(<TownSection state="CA" pageElectionDate="2026-11-03" />);
+    expect(screen.queryByText(/Albany Mayor/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Loading/)).not.toBeInTheDocument();
+    expect(await screen.findByRole("combobox")).toHaveValue("");
+    expect(fetchTownBallot).not.toHaveBeenCalledWith("CA", "Albany");
+  });
+
   it("a failed lookup says so rather than showing nothing", async () => {
     vi.mocked(fetchTownBallot).mockRejectedValue(new Error("down"));
     render(<TownSection state="NY" pageElectionDate="2026-11-03" />);
