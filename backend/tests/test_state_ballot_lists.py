@@ -572,3 +572,63 @@ def test_florida_list_keeps_the_ballot_and_carries_the_district_forward():
         ("H", 10, "Maxwell Alejandro Frost", "D"),   # unopposed: the seat's only candidate
     }
     # Defeated, withdrawn and declared write-ins are not on the ballot.
+
+
+from app.pipeline.fetch.state_candidates_certified_table import pdf_table_rows  # noqa: E402
+
+
+def _words(*cells, top):
+    """One printed row: (x0, text) per word, each word 20pt wide."""
+    return [{"x0": x, "x1": x + 20, "top": top, "bottom": top + 8, "text": t} for x, t in cells]
+
+
+def test_pdf_table_reads_cells_under_their_headings_and_carries_the_office():
+    # Iowa's layout in miniature: headings centred over left-aligned data,
+    # the office printed once per group, a governor's group after the
+    # federal ones and a footer at the foot of the page. Hinson's short
+    # address reaches no heading; Turek's full one shows where the Address
+    # column starts, so Hinson's still lands there and not in her name.
+    header = _words((50, "Office"), (160, "Party"), (226, "Ballot"), (247, "Name"), (386, "Address"), top=80)
+    page = header + [
+        *_words((8, "United"), (29, "States"), (50, "Senator"), (156, "Republican"), (201, "Ashley"),
+                (222, "Hinson"), (302, "PO"), (323, "Box"), top=90),
+        *_words((156, "Democratic"), (201, "Josh"), (222, "Turek"), (302, "PO"), (323, "Box"),
+                (344, "1005,"), (365, "Council"), (386, "Bluffs"), top=110),
+        *_words((8, "Governor"), (156, "Republican"), (201, "Zach"), (222, "Lahn"), top=130),
+        *_words((156, "Democratic"), (201, "Rob"), (222, "Sand"), top=150),
+        *_words((8, "Ballot"), (29, "vacancies"), (50, "may"), (71, "be"), (92, "filled"), top=170),
+    ]
+    fmt = {"office_column": "Office", "office_parse": True, "office_fill_down": True,
+           "party_column": "Party", "name_columns": ["Ballot Name"]}
+    rows = pdf_table_rows([page], ["Office", "Party", "Ballot Name"])
+    assert rows[0]["Ballot Name"] == "Ashley Hinson" and rows[0]["Address"] == "PO Box"
+    got = [(r["office"], r["display_name"], r["party"]) for r in parse_certified_rows(rows, fmt)]
+    # Rob Sand, under Governor, never inherits the Senate office above it.
+    assert got == [("S", "Ashley Hinson", "R"), ("S", "Josh Turek", "D")]
+
+
+def test_certified_rows_read_the_district_column_after_the_office_and_keep_only_active():
+    # Maryland: the office and the district are separate columns, and a
+    # withdrawn or failed petitioner stays in the file with a status.
+    rows = [
+        {"Office Name": "Representative in Congress", "Contest": "Congressional District 5",
+         "Last": "Hall", "First": "Mildred Marie", "Party": "Other Candidates", "Status": "Active"},
+        {"Office Name": "Representative in Congress", "Contest": "Congressional District 5",
+         "Last": "Jordan", "First": "Brian S.", "Party": "Unaffiliated",
+         "Status": "Failed to Submit Required Number of Signatures - 08/11/2026"},
+        {"Office Name": "State Senator", "Contest": "Legislative District 1",
+         "Last": "McKay", "First": "Mike", "Party": "Republican", "Status": "Active"},
+        {"Office Name": "U.S. Senator", "Contest": "State Of Maryland",
+         "Last": "Osborn", "First": "Dan", "Party": "By Petition", "Status": "Active"},
+    ]
+    fmt = {"office_column": "Office Name", "office_parse": True, "district_column": "Contest",
+           "party_column": "Party", "surname_column": "Last", "name_columns": ["First", "Last"],
+           "status_column": "Status", "status_values": ["Active"]}
+    got = {(r["office"], r["district"], r["display_name"], r["party"]) for r in parse_certified_rows(rows, fmt)}
+    assert got == {("H", 5, "Mildred Marie Hall", None), ("S", None, "Dan Osborn", "I")}
+
+
+def test_match_reads_a_two_word_ballot_surname_filed_as_one_word():
+    delaney = _cand("DELANEY, APRIL MCCLAIN", "DEM", "H4MD06")
+    assert _match_candidate([delaney, _cand("FICKER, ROBIN", "REP", "H0MD06")], "McClain Delaney", "D",
+                            "April McClain Delaney") is delaney
