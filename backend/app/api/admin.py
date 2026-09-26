@@ -6,6 +6,7 @@ import logging
 import os
 import secrets
 from datetime import datetime
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import func
@@ -991,7 +992,8 @@ async def admin_pipeline_trend(
     days: int = Query(30, ge=1, le=366),
     db: Session = Depends(get_db),
 ):
-    """Every run of every pipeline started in the last `days`, oldest first.
+    """Every run of every pipeline started in the last `days` UTC calendar days
+    (today included), oldest first.
 
     The slim sibling of /pipeline/history for charting: one row per run with
     only type, start, status and duration, bounded by a date window rather
@@ -1000,12 +1002,15 @@ async def admin_pipeline_trend(
     different spans, so a shared x-axis would show one pipeline's failures
     stopping three weeks before another's.
     """
-    from datetime import timedelta
     from app.models import (
         ElectionPipelineRun, HousePipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun,
     )
 
-    cutoff = utcnow() - timedelta(days=days)
+    # From 00:00 UTC of the first calendar day, not "now minus N x 24h": the
+    # dashboard buckets these by UTC date, and a rolling cutoff would count
+    # runs from the afternoon of day -N in its totals that no day of the
+    # chart shows.
+    cutoff = datetime.strptime(_window_dates(days)[0], "%Y-%m-%d")
     runs = []
     for model, pipeline_type in (
         (PipelineRun, "senate"),
@@ -1453,6 +1458,9 @@ def _coerce_counts(raw) -> dict[str, int] | None:
 @router.get("/action-metrics", dependencies=[Depends(require_admin)])
 async def admin_action_metrics(
     limit: int = Query(48, ge=1, le=500),
+    # Annotated, so a direct call (tests, other modules) gets a real None
+    # rather than the Query() marker as its default.
+    since_hours: Annotated[int | None, Query(ge=1, le=24 * 60)] = None,
     db: Session = Depends(get_db),
 ) -> dict:
     """Per-run Action Center validator counters, newest run first.
@@ -1478,14 +1486,15 @@ async def admin_action_metrics(
 
     Runs are hourly, so gaps in ``runs`` are themselves a signal: a
     refresh that crashed or was still holding the lock leaves no row.
+    ``since_hours`` bounds the window by time instead of by row count, so
+    ``totals`` describe exactly the hours a caller charts — with ``limit``
+    alone, a window with gaps reaches further back to fill its quota.
     """
-    rows = (
-        db.query(ApiCache)
-        .filter(ApiCache.tier == "action-metrics")
-        .order_by(ApiCache.cached_at.desc())
-        .limit(limit)
-        .all()
-    )
+    query = db.query(ApiCache).filter(ApiCache.tier == "action-metrics")
+    if since_hours is not None:
+        from datetime import timedelta
+        query = query.filter(ApiCache.cached_at >= utcnow() - timedelta(hours=since_hours))
+    rows = query.order_by(ApiCache.cached_at.desc()).limit(limit).all()
 
     runs = []
     for row in rows:

@@ -17,6 +17,7 @@ import { ActionCenterDashboard } from "@/components/admin/ActionCenterDashboard"
 import { ActivePipelines } from "@/components/admin/ActivePipelines";
 import { DataDashboard } from "@/components/admin/DataDashboard";
 import { formatDuration } from "@/components/admin/format";
+import { finishedSince, type FinishedRun, type WatchedPipeline } from "@/components/admin/trends";
 import { OverviewDashboard } from "@/components/admin/OverviewDashboard";
 import { PipelinesDashboard } from "@/components/admin/PipelinesDashboard";
 import { SystemDashboard } from "@/components/admin/SystemDashboard";
@@ -135,11 +136,10 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
   const [pipelineStatus, setPipelineStatus] = useState<AdminPipelineStatus | null>(null);
   const [history, setHistory] = useState<PipelineHistoryRun[]>([]);
   const [loading, setLoading] = useState(true);
-  const [completionBanner, setCompletionBanner] = useState<{
-    label: string;
-    status: "completed" | "failed";
-    duration: string;
-  } | null>(null);
+  // Every run that finished since the banner was last clear — two
+  // pipelines can end between polls, and each deserves its line.
+  const [finishedRuns, setFinishedRuns] = useState<FinishedRun[]>([]);
+  const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Read once from the URL the page was opened with (this view only renders
   // client-side, after the session token loads, so window is available).
   const [tab, setTab] = useState<Tab>(tabFromLocation);
@@ -219,7 +219,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
       const s = await fetchAdminPipelineStatus(token);
       setPipelineStatus(s);
 
-      const watched = [
+      const watched: WatchedPipeline[] = [
         { key: "senate", label: "SENATE", running: s.isRunning, run: s.lastRun },
         { key: "house", label: "HOUSE", running: !!s.houseIsRunning, run: s.houseLastRun },
         {
@@ -240,15 +240,23 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
           running: !!s.electionIsRunning,
           run: s.electionLastRun,
         },
-      ];
-      const finished = watched.find((w) => !w.running && wasRunningRef.current[w.key]);
-      if (finished) {
-        setCompletionBanner({
-          label: finished.label,
-          status: finished.run?.status === "failed" ? "failed" : "completed",
-          duration: formatDuration(finished.run?.elapsedSeconds),
-        });
-        setTimeout(() => setCompletionBanner(null), 15000);
+      ].map((w) => ({
+        key: w.key,
+        label: w.label,
+        running: w.running,
+        status: w.run?.status,
+        elapsedSeconds: w.run?.elapsedSeconds,
+      }));
+      const finished = finishedSince(wasRunningRef.current, watched);
+      if (finished.length > 0) {
+        setFinishedRuns((prev) => [
+          ...finished,
+          ...prev.filter((p) => !finished.some((f) => f.key === p.key)),
+        ]);
+        // One timer for the whole banner, restarted by each new arrival —
+        // an earlier run's timer must not dismiss a later run's line.
+        if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
+        bannerTimerRef.current = setTimeout(() => setFinishedRuns([]), 15000);
         loadDashboard();
       }
       wasRunningRef.current = Object.fromEntries(watched.map((w) => [w.key, w.running]));
@@ -260,6 +268,13 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
   useEffect(() => {
     loadDashboard();
   }, [loadDashboard]);
+
+  useEffect(
+    () => () => {
+      if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
+    },
+    []
+  );
 
   const anyPipelineRunning = !!(
     pipelineStatus?.isRunning ||
@@ -328,30 +343,48 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
           </div>
         </div>
 
-        {/* Completion banner */}
-        {completionBanner && (
+        {/* Completion banner: one line per run that finished. Partial is
+            its own outcome (amber), never folded into success. */}
+        {finishedRuns.length > 0 && (
           <div
             role="status"
             aria-live="polite"
-            className={`mb-6 border  p-4 flex items-center justify-between ${
-              completionBanner.status === "completed"
-                ? "border-phos/40 bg-white/[0.03]"
-                : "border-signal-magenta/40 bg-signal-magenta/10"
+            className={`mb-6 border p-4 flex items-start justify-between gap-4 ${
+              finishedRuns.some((r) => r.status === "failed")
+                ? "border-signal-magenta/40 bg-signal-magenta/10"
+                : finishedRuns.some((r) => r.status === "partial")
+                  ? "border-signal-amber/40 bg-signal-amber/10"
+                  : "border-phos/40 bg-white/[0.03]"
             }`}
           >
-            <span
-              className={`text-sm font-mono font-bold ${
-                completionBanner.status === "completed" ? "text-ink-hi" : "text-signal-magenta"
-              }`}
-            >
-              {completionBanner.status === "completed"
-                ? `${completionBanner.label} PIPELINE COMPLETED`
-                : `${completionBanner.label} PIPELINE FAILED`}
-            </span>
-            <span className="text-ink-lo text-xs font-mono">{completionBanner.duration}</span>
+            <ul className="space-y-1">
+              {finishedRuns.map((r) => (
+                <li key={r.key} className="flex flex-wrap items-baseline gap-x-4">
+                  <span
+                    className={`text-sm font-mono font-bold ${
+                      r.status === "failed"
+                        ? "text-signal-magenta"
+                        : r.status === "partial"
+                          ? "text-signal-amber"
+                          : "text-ink-hi"
+                    }`}
+                  >
+                    {r.label} PIPELINE{" "}
+                    {r.status === "failed"
+                      ? "FAILED"
+                      : r.status === "partial"
+                        ? "FINISHED PARTIAL"
+                        : "COMPLETED"}
+                  </span>
+                  <span className="text-ink-lo text-xs font-mono">
+                    {formatDuration(r.elapsedSeconds)}
+                  </span>
+                </li>
+              ))}
+            </ul>
             <button
-              onClick={() => setCompletionBanner(null)}
-              className="text-ink-min hover:text-phos text-xs ml-4"
+              onClick={() => setFinishedRuns([])}
+              className="text-ink-min hover:text-phos text-xs"
               aria-label="Dismiss"
             >
               [x]

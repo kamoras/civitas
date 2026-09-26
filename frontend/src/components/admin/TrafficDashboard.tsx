@@ -185,7 +185,7 @@ export function TrafficDashboard({ token }: { token: string }) {
         <LineChart
           title={`${metricInfo.label} — P50 / P75 / P95 PER DAY`}
           subtitle={`${ltSamples.toLocaleString()} cold page loads measured in ${range}d; days with none are gaps`}
-          xLabels={labels}
+          xLabels={ltDays.map((d) => formatDay(d.date))}
           series={[
             {
               key: "p50",

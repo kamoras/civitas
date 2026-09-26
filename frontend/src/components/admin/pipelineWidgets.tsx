@@ -5,6 +5,7 @@ import TerminalTitlebar from "@/components/TerminalTitlebar";
 import type { PipelineHistoryRun, PipelineStepInfo } from "@/lib/api";
 import { cacheHitRate, describeRun } from "@/lib/pipelineRuns";
 import { formatDuration, formatTime, parseUTC } from "./format";
+import { historyPreview } from "./trends";
 
 export const PHASE_LABELS: Record<string, string> = {
   fetch: "FETCHING DATA",
@@ -380,16 +381,19 @@ export function PipelineProgressBar({
 }
 
 // --- Run History Table ---
-const HISTORY_PREVIEW_ROWS = 25;
+const HISTORY_PREVIEW_PER_TYPE = 5;
 
 export function RunHistory({ runs: allRuns }: { runs: PipelineHistoryRun[] }) {
   // The feed carries up to 20 runs of each of five pipelines — 100 rows,
-  // which buried everything below it. The newest 25 cover a few days of
-  // every pipeline; the rest are one click away.
+  // which buried everything below it. The preview keeps the newest few of
+  // EACH pipeline rather than the newest N overall: a shared cap is exactly
+  // what /pipeline/history avoids, since daily Senate/House runs would push
+  // a weekly Stock Trades failure out of view.
   const [showAll, setShowAll] = useState(false);
   if (allRuns.length === 0)
     return <p className="text-ink-min text-xs">No pipeline runs recorded.</p>;
-  const runs = showAll ? allRuns : allRuns.slice(0, HISTORY_PREVIEW_ROWS);
+  const preview = historyPreview(allRuns, HISTORY_PREVIEW_PER_TYPE);
+  const runs = showAll ? allRuns : preview;
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-xs font-mono">
@@ -472,7 +476,7 @@ export function RunHistory({ runs: allRuns }: { runs: PipelineHistoryRun[] }) {
           })}
         </tbody>
       </table>
-      {allRuns.length > HISTORY_PREVIEW_ROWS && (
+      {allRuns.length > preview.length && (
         <button
           type="button"
           onClick={() => setShowAll((v) => !v)}
@@ -480,7 +484,7 @@ export function RunHistory({ runs: allRuns }: { runs: PipelineHistoryRun[] }) {
           className="mt-2 text-xs font-mono text-ink-min hover:text-ink-lo"
         >
           {showAll
-            ? `Show the newest ${HISTORY_PREVIEW_ROWS} only`
+            ? `Show the newest ${HISTORY_PREVIEW_PER_TYPE} of each pipeline only`
             : `Show all ${allRuns.length} runs`}
         </button>
       )}

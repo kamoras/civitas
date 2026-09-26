@@ -7,7 +7,7 @@ import LineChart from "./charts/LineChart";
 import { SERIES } from "./charts/palette";
 import { formatCompact } from "./charts/scale";
 import { formatDuration, formatTime, parseUTC } from "./format";
-import { actionRunsOldestFirst } from "./trends";
+import { hourlySlots } from "./trends";
 import { Panel, RankBars, Segmented, StatTile } from "./widgets";
 
 // --- Action Center Status Panel ---
@@ -133,10 +133,19 @@ function ActionCenterStatus({ ac }: { ac: ActionRefreshState | null }) {
 }
 
 const WINDOW_OPTIONS = [
-  { value: 24, label: "24 RUNS" },
-  { value: 72, label: "72 RUNS" },
-  { value: 168, label: "168 RUNS" },
+  { value: 24, label: "24H" },
+  { value: 72, label: "72H" },
+  { value: 168, label: "7D" },
 ];
+
+const hourLabel = (ms: number) =>
+  new Date(ms).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 
 const counterLabel = (k: string) => k.replace(/_/g, " ");
 
@@ -147,34 +156,48 @@ export function ActionCenterDashboard({
   token: string;
   ac: ActionRefreshState | null;
 }) {
-  const [limit, setLimit] = useState(72);
+  const [limit, setLimit] = useState(72); // hours
   const [metrics, setMetrics] = useState<ActionMetrics | null>(null);
   const [loadedLimit, setLoadedLimit] = useState<number | null>(null);
+  // The hour slots are anchored to when the data was fetched, not a live
+  // clock: the window and the rows it is filled from always describe the
+  // same moment, and nothing re-renders every second for a value that only
+  // changes hourly. Refetched every few minutes so a new hour's run lands.
+  const [fetchedAt, setFetchedAt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    fetchAdminActionMetrics(token, limit)
-      .then((m) => {
-        if (!cancelled) setMetrics(m);
-      })
-      .catch(() => {
-        if (!cancelled) setMetrics(null);
-      })
-      .finally(() => {
-        if (!cancelled) setLoadedLimit(limit);
-      });
+    const load = () =>
+      fetchAdminActionMetrics(token, limit)
+        .then((m) => {
+          if (!cancelled) setMetrics(m);
+        })
+        .catch(() => {
+          if (!cancelled) setMetrics(null);
+        })
+        .finally(() => {
+          if (cancelled) return;
+          setLoadedLimit(limit);
+          setFetchedAt(Date.now());
+        });
+    load();
+    const id = setInterval(load, 5 * 60_000);
     return () => {
       cancelled = true;
+      clearInterval(id);
     };
   }, [token, limit]);
 
   const stale = loadedLimit !== limit;
-  const runs = actionRunsOldestFirst(metrics?.runs ?? []);
-  const labels = runs.map((r) => formatTime(r.recordedAt));
-  // Runs are hourly, so a date alone repeats on every tick; keep the hour.
+  // One slot per clock hour, so a refresh that crashed or never started is a
+  // gap in the lines rather than two neighbouring runs drawn side by side.
+  const hours = loadedLimit ?? limit;
+  const slots = fetchedAt ? hourlySlots(metrics?.runs ?? [], hours, fetchedAt) : [];
+  const ran = slots.filter((s) => s.run != null).length;
+  const labels = slots.map((s) => hourLabel(s.hour));
   const tickLabel = (i: number) => labels[i].replace(",", "");
-  const count = (k: string) => runs.map((r) => r.counts[k] ?? 0);
-  const published = runs.reduce((s, r) => s + r.issuesPublished, 0);
+  const count = (k: string) => slots.map((s) => (s.run ? (s.run.counts[k] ?? 0) : null));
+  const published = slots.reduce((sum, s) => sum + (s.run?.issuesPublished ?? 0), 0);
   const suppressed = metrics?.totals.suppressedTotal ?? 0;
   const fetched = metrics?.totals.intake.articles_fetched ?? 0;
   const suppressedEntries = Object.entries(metrics?.totals.suppressed ?? {})
@@ -188,14 +211,15 @@ export function ActionCenterDashboard({
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile
-          label="Refresh runs"
-          value={runs.length.toLocaleString()}
-          note="hourly; a gap is a run that crashed or never started"
+          label="Hours with a refresh"
+          value={`${ran} / ${hours}`}
+          tone={metrics && ran < hours - 1 ? "text-signal-amber" : "text-ink-hi"}
+          note="a missing hour is a refresh that crashed or never started — a gap in the charts"
         />
         <StatTile
           label="Articles fetched"
           value={formatCompact(fetched)}
-          note={`over ${runs.length} runs`}
+          note={`over ${ran} runs`}
         />
         <StatTile
           label="Issues published"
@@ -259,13 +283,13 @@ export function ActionCenterDashboard({
                 key: "published",
                 label: "Issues published",
                 color: SERIES[0],
-                values: runs.map((r) => r.issuesPublished),
+                values: slots.map((s) => s.run?.issuesPublished ?? null),
               },
               {
                 key: "suppressed",
                 label: "Suppressed by a gate",
                 color: SERIES[3],
-                values: runs.map((r) => r.suppressed),
+                values: slots.map((s) => s.run?.suppressed ?? null),
               },
             ]}
             formatValue={(v) => v.toLocaleString()}

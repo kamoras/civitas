@@ -73,4 +73,19 @@ describe("LineChart", () => {
     expect(within(rows[2]).getByText("—")).toBeInTheDocument();
     expect(within(rows[3]).getByText("9 v")).toBeInTheDocument();
   });
+
+  it("draws a dashed series dashed, so a reused hue still reads as a different series", () => {
+    const { container } = render(
+      <LineChart
+        {...base}
+        series={[
+          { key: "a", label: "Alpha", color: "#000", values: [1, 2, 3] },
+          { key: "b", label: "Beta", color: "#000", values: [3, 2, 1], dashed: true },
+        ]}
+      />
+    );
+    const paths = container.querySelectorAll("path");
+    expect(paths[0].getAttribute("stroke-dasharray")).toBeNull();
+    expect(paths[1].getAttribute("stroke-dasharray")).toBe("5 4");
+  });
 });

@@ -61,6 +61,11 @@ export function formatDay(isoDate: string): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
+/** A backend timestamp's date in the viewer's zone: "Sep 26" (matches formatTime). */
+export function formatLocalDay(iso: string): string {
+  return parseUTC(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 /** The status word's colour class — a status is always shown as a word too. */
 export function statusClass(status: string | null | undefined, stuck = false): string {
   if (stuck) return "text-signal-amber";

@@ -18,6 +18,22 @@ export interface LineSeries {
   color: string;
   /** One value per x position; null is a gap ("nothing measured"), not zero. */
   values: (number | null)[];
+  /**
+   * Draw dashed. The secondary encoding for a sixth-or-later series, which
+   * has to reuse one of the five validated hues.
+   */
+  dashed?: boolean;
+}
+
+/** The short stroke that keys a series in the legend and tooltip. */
+function LineKey({ color, dashed }: { color: string; dashed?: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="inline-block w-3.5 shrink-0"
+      style={{ borderTop: `2px ${dashed ? "dashed" : "solid"} ${color}` }}
+    />
+  );
 }
 
 interface LineChartProps {
@@ -190,11 +206,7 @@ export default function LineChart({
         <ul className="mb-2 flex flex-wrap gap-x-4 gap-y-1" aria-label={`${title} legend`}>
           {series.map((s) => (
             <li key={s.key} className="flex items-center gap-1.5 text-xs font-mono text-ink-lo">
-              <span
-                aria-hidden="true"
-                className="inline-block h-[2px] w-3.5"
-                style={{ background: s.color }}
-              />
+              <LineKey color={s.color} dashed={s.dashed} />
               {s.label}
             </li>
           ))}
@@ -294,6 +306,7 @@ export default function LineChart({
                     strokeWidth={2}
                     strokeLinejoin="round"
                     strokeLinecap="round"
+                    strokeDasharray={s.dashed ? "5 4" : undefined}
                   />
                   {singletons.map((i) => (
                     <circle key={i} cx={x(i)} cy={y(s.values[i] as number)} r={3} fill={s.color} />
@@ -347,11 +360,7 @@ export default function LineChart({
                 <div className="mb-1 text-ink-lo">{xLabels[active]}</div>
                 {series.map((s) => (
                   <div key={s.key} className="flex items-center gap-2 whitespace-nowrap">
-                    <span
-                      aria-hidden="true"
-                      className="inline-block h-[2px] w-3 shrink-0"
-                      style={{ background: s.color }}
-                    />
+                    <LineKey color={s.color} dashed={s.dashed} />
                     <span className="text-ink-hi tabular-nums">
                       {s.values[active] == null ? "—" : formatValue(s.values[active] as number)}
                     </span>

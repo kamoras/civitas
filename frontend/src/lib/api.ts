@@ -1302,13 +1302,16 @@ export interface ActionMetrics {
   runsReturned: number;
 }
 
+/** Action Center run counters for the last `hours` hours (see admin_action_metrics). */
 export async function fetchAdminActionMetrics(
   token: string,
-  limit: number = 48
+  hours: number = 72
 ): Promise<ActionMetrics> {
-  return requestJson(`${API_BASE}/admin/action-metrics?limit=${limit}`, "Action metrics failed", {
-    init: { headers: adminHeaders(token) },
-  });
+  return requestJson(
+    `${API_BASE}/admin/action-metrics?limit=500&since_hours=${hours}`,
+    "Action metrics failed",
+    { init: { headers: adminHeaders(token) } }
+  );
 }
 
 export interface PhaseTimingPhase {

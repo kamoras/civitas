@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { PipelineTrendRun } from "@/lib/api";
-import { actionRunsOldestFirst, dayWindow, durationPoints, runsPerDay } from "./trends";
+import {
+  actionRunsOldestFirst,
+  dayWindow,
+  durationPoints,
+  finishedSince,
+  historyPreview,
+  hourlySlots,
+  runsPerDay,
+} from "./trends";
 
 const run = (over: Partial<PipelineTrendRun>): PipelineTrendRun => ({
   id: 1,
@@ -83,5 +91,78 @@ describe("actionRunsOldestFirst", () => {
     ];
     expect(actionRunsOldestFirst(runs).map((r) => r.run)).toEqual(["a", "b"]);
     expect(runs[0].run).toBe("b");
+  });
+});
+
+describe("hourlySlots", () => {
+  const now = Date.parse("2026-09-26T10:30:00Z");
+  const r = (at: string, n = 0) => ({
+    run: at,
+    recordedAt: at,
+    counts: {},
+    issuesPublished: n,
+    suppressed: 0,
+  });
+
+  it("leaves a missing hour empty instead of closing the gap", () => {
+    const slots = hourlySlots(
+      [r("2026-09-26T10:05:00"), r("2026-09-26T08:05:00")], // 09:00 missing
+      3,
+      now
+    );
+    expect(slots.map((s) => s.run?.run ?? null)).toEqual([
+      "2026-09-26T08:05:00",
+      null,
+      "2026-09-26T10:05:00",
+    ]);
+  });
+
+  it("drops runs outside the window and keeps the later of two in one hour", () => {
+    const slots = hourlySlots(
+      [r("2026-09-26T10:50:00", 2), r("2026-09-26T10:05:00", 1), r("2026-09-25T01:00:00")],
+      2,
+      now
+    );
+    expect(slots[0].run).toBeNull();
+    expect(slots[1].run?.issuesPublished).toBe(2);
+  });
+});
+
+describe("historyPreview", () => {
+  it("keeps the newest runs of every pipeline, so a weekly one is never crowded out", () => {
+    const rows = [
+      ...Array.from({ length: 30 }, (_, i) => ({ pipelineType: "senate", startedAt: `s${i}` })),
+      { pipelineType: "stock_trades", startedAt: "old-stock" },
+    ];
+    const preview = historyPreview(rows, 5);
+    expect(preview.filter((r) => r.pipelineType === "senate")).toHaveLength(5);
+    expect(preview.map((r) => r.startedAt)).toContain("old-stock");
+  });
+});
+
+describe("finishedSince", () => {
+  const p = (key: string, running: boolean, status: string) => ({
+    key,
+    label: key.toUpperCase(),
+    running,
+    status,
+    elapsedSeconds: 10,
+  });
+
+  it("reports every pipeline that stopped, and partial as partial", () => {
+    const out = finishedSince({ house: true, election: true, senate: false }, [
+      p("senate", false, "completed"),
+      p("house", false, "partial"),
+      p("election", false, "failed"),
+    ]);
+    expect(out.map((f) => [f.key, f.status])).toEqual([
+      ["house", "partial"],
+      ["election", "failed"],
+    ]);
+  });
+
+  it("reports nothing on the first poll or while still running", () => {
+    expect(finishedSince({}, [p("senate", false, "completed")])).toEqual([]);
+    expect(finishedSince({ senate: true }, [p("senate", true, "running")])).toEqual([]);
   });
 });

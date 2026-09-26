@@ -17,7 +17,7 @@ import {
 import LineChart from "./charts/LineChart";
 import { PIPELINE_COLORS, PIPELINE_LABELS, SERIES, STATUS } from "./charts/palette";
 import { formatSecondsShort, niceDurationTicks } from "./charts/scale";
-import { formatDay, formatDuration, formatTime, statusClass } from "./format";
+import { formatDay, formatDuration, formatLocalDay, formatTime, statusClass } from "./format";
 import {
   LastRunSteps,
   PHASE_LABELS,
@@ -251,13 +251,22 @@ const PHASE_ORDER = [
   "finalize",
 ];
 
-function phaseColors(phases: string[]): Record<string, string> {
+function phaseColors(phases: string[]): Record<string, { color: string; dashed: boolean }> {
   const ordered = [...new Set(phases)].sort((a, b) => {
     const ia = PHASE_ORDER.indexOf(a);
     const ib = PHASE_ORDER.indexOf(b);
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
   });
-  return Object.fromEntries(ordered.map((p, i) => [p, SERIES[i % SERIES.length]]));
+  // Five validated hues. A sixth phase onward reuses one, so it also gets a
+  // second channel — dashed line, hatched bar — rather than a lookalike.
+  return Object.fromEntries(
+    ordered.map((p, i) => [p, { color: SERIES[i % SERIES.length], dashed: i >= SERIES.length }])
+  );
+}
+
+/** Bar fill for a phase: solid, or hatched at 45° when it shares a hue. */
+function phaseFill({ color, dashed }: { color: string; dashed: boolean }): string {
+  return dashed ? `repeating-linear-gradient(45deg, ${color} 0 3px, transparent 3px 6px)` : color;
 }
 
 const phaseLabel = (p: string) => PHASE_LABELS[p] ?? (p ? p.toUpperCase() : "UNTAGGED");
@@ -326,7 +335,8 @@ function PhaseTimings({ token }: { token: string }) {
               series={phases.map((p) => ({
                 key: p,
                 label: phaseLabel(p),
-                color: colors[p],
+                color: colors[p].color,
+                dashed: colors[p].dashed,
                 values: oldestFirst.map(
                   (r) => r.phases.find((x) => x.phase === p)?.seconds ?? null
                 ),
@@ -369,7 +379,10 @@ function PhaseTimings({ token }: { token: string }) {
           <div className="mt-6 mb-2 flex flex-wrap gap-x-4 gap-y-1" aria-hidden="true">
             {phases.map((p) => (
               <span key={p} className="flex items-center gap-1.5 text-xs font-mono text-ink-lo">
-                <span className="inline-block h-2 w-3" style={{ background: colors[p] }} />
+                <span
+                  className="inline-block h-2 w-3"
+                  style={{ background: phaseFill(colors[p]) }}
+                />
                 {phaseLabel(p)}
               </span>
             ))}
@@ -418,7 +431,7 @@ function PhaseTimings({ token }: { token: string }) {
                         <div
                           key={p.phase}
                           className="h-full"
-                          style={{ width: `${p.pct}%`, background: colors[p.phase] }}
+                          style={{ width: `${p.pct}%`, background: phaseFill(colors[p.phase]) }}
                           title={`${phaseLabel(p.phase)}: ${formatDuration(p.seconds)} (${p.pct}%)`}
                         />
                       ))}
@@ -531,7 +544,10 @@ function LastRunCards({
               <Stat label="LLM CALLS">{senate.llmCalls}</Stat>
               <Stat label="BILLS CLASSIFIED">{senate.billsClassified}</Stat>
               <Stat label="CACHE HIT RATE">
-                {cacheTotal > 0 ? `${Math.round((senate.cacheHits / cacheTotal) * 100)}%` : "—"}
+                {cacheTotal > 0 ? `${Math.round((senate.cacheHits / cacheTotal) * 100)}%` : "—"}{" "}
+                <span className="text-ink-min">
+                  ({senate.cacheHits}H / {senate.cacheMisses}M)
+                </span>
               </Stat>
             </>
           )
@@ -633,7 +649,11 @@ export function PipelinesDashboard({
 
   const stale = loadedRange !== range;
   const runs = trend ?? [];
-  const dates = dayWindow(range, utcToday());
+  // The window the data was fetched for, not the one just selected: while a
+  // wider range loads, drawing its extra days from the old data would show
+  // them as zero-run days — a false outage.
+  const shownRange = loadedRange ?? range;
+  const dates = dayWindow(shownRange, utcToday());
   const perDay = runsPerDay(runs, dates);
   const finished = runs.filter((r) => r.status !== "running");
   const failed = finished.filter((r) => r.status === "failed").length;
@@ -646,7 +666,7 @@ export function PipelinesDashboard({
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile
-          label={`Runs in ${range}d`}
+          label={`Runs in ${shownRange}d`}
           value={finished.length.toLocaleString()}
           note="all pipelines, finished"
         />
@@ -679,7 +699,7 @@ export function PipelinesDashboard({
         <Panel title="Outcomes">
           <LineChart
             title="FINISHED RUNS PER DAY, BY OUTCOME"
-            subtitle="all five pipelines together; today is still filling in"
+            subtitle="all five pipelines, by UTC start date; today is still filling in"
             xLabels={dayLabels}
             series={[
               {
@@ -717,7 +737,9 @@ export function PipelinesDashboard({
                 key={type}
                 title={PIPELINE_LABELS[type].toUpperCase()}
                 xLabels={labels}
-                xTickLabel={(i) => formatDay(points[i].startedAt.slice(0, 10))}
+                // Local date, the same clock formatTime uses for the tooltip
+                // and table, so a 03:00 UTC run isn't a day apart between them.
+                xTickLabel={(i) => formatLocalDay(points[i].startedAt)}
                 series={[
                   {
                     key: type,

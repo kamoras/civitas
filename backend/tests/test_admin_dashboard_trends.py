@@ -167,3 +167,25 @@ class TestPipelineTrend:
             ("senate", "completed"),
         ]
         assert result["runs"][1]["elapsedSeconds"] == 3600
+
+    async def test_window_starts_at_midnight_utc_of_the_first_calendar_day(self, db_session):
+        # days=2 covers yesterday and today by UTC date: a run late on the
+        # day before yesterday is outside it even if it is < 48h old.
+        today = datetime.now(UTC).replace(tzinfo=None, hour=0, minute=0, second=0, microsecond=0)
+        db_session.add_all([
+            PipelineRun(started_at=today - timedelta(days=1), status=PipelineStatus.COMPLETED),
+            PipelineRun(started_at=today - timedelta(days=1, minutes=1), status=PipelineStatus.FAILED),
+        ])
+        db_session.commit()
+
+        runs = (await admin_pipeline_trend(days=2, db=db_session))["runs"]
+        assert [r["status"] for r in runs] == ["completed"]
+
+
+class TestTrackTimingPath:
+    async def test_unknown_path_buckets_to_other_not_a_new_row_per_string(self, db_session):
+        await track_timing(path="/<script>alert(1)</script>", ttfb=None, fcp=None, load=500)
+        await track_timing(path="/wp-admin/x.php", ttfb=None, fcp=None, load=500)
+        _drain(db_session)
+        rows = db_session.query(PageLoadTiming).all()
+        assert [(r.path, r.count) for r in rows] == [("/other", 2)]

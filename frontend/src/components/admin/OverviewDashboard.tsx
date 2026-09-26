@@ -58,17 +58,25 @@ export function OverviewDashboard({
 
   useEffect(() => {
     let cancelled = false;
-    fetchAdminVisitorStats(token, 14)
-      .then((v) => !cancelled && setVisits(v))
-      .catch(() => !cancelled && setVisits([]));
-    fetchAdminLoadTimes(token, 1)
-      .then((l) => !cancelled && setLoadTimes(l))
-      .catch(() => {});
-    fetchAdminPipelineTrend(token, 7)
-      .then((t) => !cancelled && setTrend(t.runs))
-      .catch(() => !cancelled && setTrend([]));
+    const load = () => {
+      fetchAdminVisitorStats(token, 14)
+        .then((v) => !cancelled && setVisits(v))
+        .catch(() => !cancelled && setVisits((prev) => prev ?? []));
+      fetchAdminLoadTimes(token, 1)
+        .then((l) => !cancelled && setLoadTimes(l))
+        .catch(() => {});
+      fetchAdminPipelineTrend(token, 7)
+        .then((t) => !cancelled && setTrend(t.runs))
+        .catch(() => !cancelled && setTrend((prev) => prev ?? []));
+    };
+    load();
+    // Refreshed on the same cadence as the pipeline table beside these
+    // tiles, so a run that fails while Overview is open shows up in the
+    // "failed runs" count too, not only as FAILED in the table.
+    const id = setInterval(load, 30_000);
     return () => {
       cancelled = true;
+      clearInterval(id);
     };
   }, [token]);
 
