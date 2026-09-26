@@ -308,6 +308,14 @@ async def _scrape_via_page(page, since_date: str, report_type: str = PTR_REPORT_
     return filings
 
 
+def senate_filing_id(report_url: str) -> str:
+    """A report's stable id: the UUID that ends its eFD URL
+    (".../view/annual/<uuid>/"). The one derivation every Senate ingest
+    dedupes on — a second spelling of it would stop stored filings from
+    matching and re-fetch every one of them each run."""
+    return report_url.rstrip("/").rsplit("/", 1)[-1]
+
+
 def _html_table_to_rows(table_el) -> list[list[str | None]]:
     rows = []
     for tr in table_el.xpath(".//tr"):
@@ -327,7 +335,7 @@ async def fetch_and_parse_ptr(
     parse_confidence ("text" or "ocr"); never fabricates a row it can't
     confidently parse.
     """
-    filing_id = filing["report_url"].rstrip("/").rsplit("/", 1)[-1]
+    filing_id = senate_filing_id(filing["report_url"])
     cache_key = f"ptr-parsed-{filing_id}"
     cached = api_cache_get(db, "senate_ptr", cache_key, max_age_hours=24 * 30)
     if cached is not None:

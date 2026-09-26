@@ -24,6 +24,8 @@ def upgrade() -> None:
     sa.Column('filed_date', sa.String(), nullable=True),
     sa.Column('source_url', sa.String(), nullable=False),
     sa.Column('parsed', sa.Boolean(), nullable=False),
+    sa.Column('unreadable_reason', sa.String(), nullable=True),
+    sa.Column('parser_version', sa.Integer(), nullable=True),
     sa.Column('ingested_at', sa.DateTime(), nullable=False),
     sa.ForeignKeyConstraint(['representative_id'], ['representatives.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['senator_id'], ['senators.id'], ondelete='CASCADE'),

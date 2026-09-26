@@ -20,7 +20,13 @@ const SectionHeadingLevel = createContext<"h2" | "h3">("h3");
 
 export const SectionHeadingLevelProvider = SectionHeadingLevel.Provider;
 
-interface CollapsibleSectionProps {
+/** Controlled mode takes both props or neither — `open` alone would leave the
+ * header toggling state nobody reads. */
+type OpenControl =
+  | { open: boolean; onOpenChange: (open: boolean) => void }
+  | { open?: undefined; onOpenChange?: undefined };
+
+type CollapsibleSectionProps = OpenControl & {
   title: string;
   titleColor?: string;
   /** Compact summary shown on the right side of the header when collapsed */
@@ -31,12 +37,11 @@ interface CollapsibleSectionProps {
   defaultOpen?: boolean;
   /** Source attribution text */
   source?: string;
-  /** Controlled mode: pass both to let the caller open the section (e.g. a
-   * chart filter that reveals the list it filters). */
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
-  children: ReactNode;
-}
+  /** False when there is nothing to expand onto: the header renders as a
+   * plain heading, with no toggle, and only `alwaysVisible` shows. */
+  expandable?: boolean;
+  children?: ReactNode;
+};
 
 export default function CollapsibleSection({
   title,
@@ -47,6 +52,7 @@ export default function CollapsibleSection({
   source,
   open: controlledOpen,
   onOpenChange,
+  expandable = true,
   children,
 }: CollapsibleSectionProps) {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
@@ -54,6 +60,21 @@ export default function CollapsibleSection({
   const setOpen = onOpenChange ?? setUncontrolledOpen;
   const contentId = useId();
   const Heading = useContext(SectionHeadingLevel);
+
+  if (!expandable) {
+    return (
+      <div>
+        <div className="w-full flex items-baseline justify-between mb-3">
+          <Heading className={`text-lg ${titleColor}`}>{title}</Heading>
+          <span className="flex items-center gap-3">
+            {summary && <span className="text-xs text-ink-lo max-w-xs truncate hidden sm:inline">{summary}</span>}
+            {source && <span className="text-xs text-ink-lo hidden sm:inline">{source}</span>}
+          </span>
+        </div>
+        {alwaysVisible}
+      </div>
+    );
+  }
 
   return (
     <div>

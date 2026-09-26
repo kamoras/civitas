@@ -6,6 +6,7 @@ import { fetchPresidentStockTrades, fetchRepStockTrades, fetchSenatorStockTrades
 import CollapsibleSection from "../shared/CollapsibleSection";
 import Pagination from "../shared/Pagination";
 import MetricTooltip from "./MetricTooltip";
+import { formatBracket, OWNER_LABEL } from "@/lib/disclosures";
 
 const TRADES_PER_PAGE = 15;
 
@@ -25,20 +26,10 @@ const TXN_TYPE_LABEL: Record<StockTrade["transactionType"], string> = {
   exchange: "EXCHANGE",
 };
 
-const OWNER_LABEL: Record<StockTrade["owner"], string> = {
-  self: "SELF",
-  spouse: "SPOUSE",
-  joint: "JOINT",
-  dependent: "DEPENDENT",
-};
-
 function formatAmountRange(trade: StockTrade): string {
-  const fmt = (n: number) => `$${n.toLocaleString()}`;
-  // The top bracket on these forms discloses a floor and no ceiling, so
-  // there is no upper figure to show — see StockTrade.amountOpenEnded.
-  return trade.amountOpenEnded
-    ? `${fmt(trade.amountLow)}+`
-    : `${fmt(trade.amountLow)} – ${fmt(trade.amountHigh)}`;
+  // The top bracket on these forms discloses a floor and no ceiling — see
+  // StockTrade.amountOpenEnded and formatBracket.
+  return formatBracket(trade.amountLow, trade.amountHigh, trade.amountOpenEnded);
 }
 
 function TransactionBadge({ type }: { type: StockTrade["transactionType"] }) {

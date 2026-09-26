@@ -209,6 +209,9 @@ class HoldingCategorySchema(CamelModel):
     label: str
     color: str
     count: int
+    # Of `count`, those with no stated bracket: listed under the category,
+    # but not in value_low/value_high/weight.
+    unvalued_count: int = 0
     value_low: float
     value_high: float
     open_ended: bool
@@ -228,6 +231,8 @@ class HoldingsSchema(CamelModel):
     # filing). The scorecard links to it rather than showing an empty
     # breakdown that would read as "holds nothing".
     parsed: bool = False
+    # When not parsed: "scanned" (paper filing) or "unrecognized".
+    unreadable_reason: Literal["scanned", "unrecognized"] | None = None
     holdings_count: int = 0
     # Holdings the form gave no bracket for ("Undetermined") — listed, but
     # in no slice.

@@ -7,6 +7,7 @@ import { formatCurrency } from "@/lib/formatting";
 import CollapsibleSection from "../shared/CollapsibleSection";
 import Pagination from "../shared/Pagination";
 import MetricTooltip from "./MetricTooltip";
+import { formatBracket, OWNER_LABEL } from "@/lib/disclosures";
 
 const HOLDINGS_PER_PAGE = 15;
 
@@ -20,22 +21,13 @@ const SOURCE_LABEL = {
   house: "disclosures-clerk.house.gov",
 } as const;
 
-const OWNER_LABEL: Record<Holding["owner"], string> = {
-  self: "SELF",
-  spouse: "SPOUSE",
-  joint: "JOINT",
-  dependent: "DEPENDENT",
-};
-
 const ABOUT_TEXT =
   "Every asset listed on this member's most recent annual financial disclosure report — held by the member, their spouse, or a dependent child at the end of the year. The Ethics in Government Act requires values to be reported in ranges (for example $15,001 – $50,000), never as exact amounts, so no net-worth figure is computed. Slices are sized by the midpoint of each range (the minimum, for the open-ended top range); the ranges themselves are what the member disclosed. The asset type is the one the member chose when filing. Informational only — not part of the overall score.";
 
 function formatHoldingValue(h: Holding): string {
-  const fmt = (n: number) => `$${n.toLocaleString()}`;
   if (h.valueLow === null || h.valueHigh === null) return h.valueText || "Not stated";
-  if (h.valueOpenEnded) return `${fmt(h.valueLow)}+`;
   if (h.valueHigh === 0) return "None at year end";
-  return `${fmt(h.valueLow)} – ${fmt(h.valueHigh)}`;
+  return formatBracket(h.valueLow, h.valueHigh, h.valueOpenEnded);
 }
 
 function formatRangeCompact(low: number, high: number, openEnded: boolean): string {
@@ -84,8 +76,10 @@ function HoldingsDonut({
   onSelect: (key: string) => void;
   holdingsCount: number;
 }) {
-  const focus = categories.find((c) => c.category === (active ?? selected)) ?? null;
-  const label = categories.map((c) => `${c.label} ${formatShare(c.share)}`).join(", ");
+  // Only categories with a stated value draw a slice; the legend lists all.
+  const slices = categories.filter((c) => c.weight > 0);
+  const focus = slices.find((c) => c.category === (active ?? selected)) ?? null;
+  const label = slices.map((c) => `${c.label} ${formatShare(c.share)}`).join(", ");
 
   let cursor = 0;
   return (
@@ -98,20 +92,20 @@ function HoldingsDonut({
         aria-label={`Holdings by asset type: ${label}`}
         onMouseLeave={() => onHover(null)}
       >
-        {categories.length === 1 ? (
+        {slices.length === 1 ? (
           <circle
             cx={CENTER}
             cy={CENTER}
             r={(OUTER_R + INNER_R) / 2}
             fill="none"
-            stroke={categories[0].color}
+            stroke={slices[0].color}
             strokeWidth={OUTER_R - INNER_R}
-            onMouseEnter={() => onHover(categories[0].category)}
-            onClick={() => onSelect(categories[0].category)}
+            onMouseEnter={() => onHover(slices[0].category)}
+            onClick={() => onSelect(slices[0].category)}
             className="cursor-pointer"
           />
         ) : (
-          categories.map((c) => {
+          slices.map((c) => {
             const start = cursor;
             cursor += c.share;
             const dimmed = (active ?? selected) !== null && (active ?? selected) !== c.category;
@@ -157,6 +151,20 @@ function HoldingsDonut({
   );
 }
 
+/** A category's legend line. The range covers only the holdings that stated
+ * one, so the count it is quoted against says how many that is. */
+function legendDetail(c: HoldingCategory): string {
+  const assets = `${c.count} asset${c.count !== 1 ? "s" : ""}`;
+  if (c.weight <= 0) {
+    return `${assets} · no year-end value stated, not charted`;
+  }
+  const range = formatRangeCompact(c.valueLow, c.valueHigh, c.openEnded);
+  if (c.unvaluedCount > 0) {
+    return `${assets} · ${range} for ${c.count - c.unvaluedCount} (${c.unvaluedCount} with no stated value)`;
+  }
+  return `${assets} · ${range}`;
+}
+
 function CategoryLegend({
   categories,
   selected,
@@ -191,12 +199,9 @@ function CategoryLegend({
                 <span className="text-ink text-sm">{c.label}</span>
                 {/* Its own line, never truncated: the disclosed range is the
                     figure to quote, the share is only how the chart is drawn. */}
-                <span className="block text-ink-min text-xs">
-                  {c.count} asset{c.count !== 1 ? "s" : ""} ·{" "}
-                  {formatRangeCompact(c.valueLow, c.valueHigh, c.openEnded)}
-                </span>
+                <span className="block text-ink-min text-xs">{legendDetail(c)}</span>
               </span>
-              <span className="text-ink-hi text-sm font-mono">{formatShare(c.share)}</span>
+              <span className="text-ink-hi text-sm font-mono">{c.weight > 0 ? formatShare(c.share) : "—"}</span>
             </button>
           </li>
         );
@@ -230,7 +235,6 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
   const [data, setData] = useState<HoldingsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [category, setCategory] = useState<string | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
   // Only the newest request may land: a slow page-1 response arriving after
@@ -258,9 +262,13 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
     load(1, null);
   }, [load]);
 
+  // The selected category is whatever the shown data was fetched with —
+  // never a separately-held guess, so a failed or superseded request can't
+  // leave the legend, the header and the list describing different things.
+  const category = data?.categoryFilter ?? null;
+
   const selectCategory = (key: string) => {
     const next = category === key ? null : key;
-    setCategory(next);
     // Choosing a slice is asking to see those assets — reveal the list.
     if (next) setListOpen(true);
     load(1, next);
@@ -301,21 +309,25 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
     </a>
   );
 
+  const about = <MetricTooltip text={ABOUT_TEXT}>ABOUT THIS DATA</MetricTooltip>;
+  const hasSlices = data.categories.some((c) => c.weight > 0);
   let chart: ReactNode;
   if (!data.parsed) {
     chart = (
       <p className="panel p-4 text-sm text-ink-lo">
-        The {reportLabel} was filed on paper as scanned pages, so its assets can&apos;t be read reliably
-        enough to chart. {sourceLink}
+        {data.unreadableReason === "scanned"
+          ? `The ${reportLabel} was filed on paper as scanned pages, so its assets can't be read reliably enough to chart.`
+          : `The ${reportLabel} isn't in a layout that can be read automatically, so its assets aren't charted here.`}{" "}
+        {sourceLink}
       </p>
     );
-  } else if (data.categories.length === 0) {
+  } else if (!hasSlices) {
     chart = (
       <p className="panel p-4 text-sm text-ink-lo">
         {data.holdingsCount === 0
           ? `The ${reportLabel} lists no assets.`
-          : `The ${reportLabel} lists ${data.holdingsCount} asset${data.holdingsCount !== 1 ? "s" : ""}, none with a stated value.`}{" "}
-        {sourceLink}
+          : `The ${reportLabel} lists ${data.holdingsCount} asset${data.holdingsCount !== 1 ? "s" : ""}, none with a stated year-end value.`}{" "}
+        {about} · {sourceLink}
       </p>
     );
   } else {
@@ -343,13 +355,14 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
           {data.unvaluedCount > 0 && ` (${data.unvaluedCount} with no stated value, not charted)`} ·{" "}
           {reportLabel}
           {data.filedDate && `, filed ${data.filedDate}`} ·{" "}
-          <MetricTooltip text={ABOUT_TEXT}>ABOUT THIS DATA</MetricTooltip> · {sourceLink}
+          {about} · {sourceLink}
         </p>
       </div>
     );
   }
 
   const selectedLabel = data.categories.find((c) => c.category === category)?.label;
+  const hasList = data.parsed && data.holdingsCount > 0;
 
   return (
     <CollapsibleSection
@@ -362,10 +375,13 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
       }
       source={SOURCE_LABEL[chamber]}
       alwaysVisible={chart}
+      // Nothing to list for an unreadable or empty report — a toggle there
+      // would open onto nothing.
+      expandable={hasList}
       open={listOpen}
       onOpenChange={setListOpen}
     >
-      {data.parsed && data.holdingsCount > 0 && (
+      {hasList && (
         <div className="space-y-3 mt-4">
           <p className="text-xs text-ink-min" aria-live="polite">
             {selectedLabel
@@ -374,7 +390,7 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
             {selectedLabel && (
               <button
                 type="button"
-                onClick={() => selectCategory(category as string)}
+                onClick={() => load(1, null)}
                 className="text-ink-lo hover:text-phos underline"
               >
                 show all
@@ -383,6 +399,7 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
           </p>
           {error && (
             <p className="text-signal-red text-sm" role="alert">
+              {/* The list below is still the last one that loaded. */}
               {error}
             </p>
           )}

@@ -265,3 +265,96 @@ def test_fd_common_has_no_name_based_classification():
     for name, fn in inspect.getmembers(fd_common, inspect.isfunction):
         if fn.__module__ == fd_common.__name__ and "category" in name:
             assert "asset_name" not in inspect.signature(fn).parameters
+
+
+class TestLazySchedule:
+    def test_pages_after_schedule_a_are_never_read(self):
+        """parse_annual_pdf hands parse_schedule_a a lazy page generator;
+        on a long report most pages come after Schedule A and must not be
+        word-extracted at all."""
+        consumed = []
+
+        def pages():
+            for i, page in enumerate([
+                _heading("A", 10) + _header(30) + [_w("Cash", 25, 50), _w("[BA]", 60, 50), _w("None", 297, 50)],
+                _heading("B", 10),
+                [_w("never", 25, 10)],
+                [_w("read", 25, 10)],
+            ]):
+                consumed.append(i)
+                yield page
+
+        holdings = parse_schedule_a(pages())
+        assert [h.asset_name for h in holdings] == ["Cash"]
+        assert consumed == [0, 1]
+
+
+class TestFetchCaching:
+    async def test_house_parse_crash_is_linked_but_not_cached(self, db_session):
+        from unittest.mock import AsyncMock, patch
+
+        from app.pipeline.fetch import house_fd
+
+        filing = {"doc_id": "D1", "pdf_url": "https://clerk.example/2025/D1.pdf"}
+        with patch.object(house_fd, "fetch_bytes_with_retry", new_callable=AsyncMock, return_value=b"%PDF-broken"), \
+             patch.object(house_fd, "parse_annual_pdf", side_effect=ValueError("bad xref")), \
+             patch.object(house_fd, "api_cache_set") as mock_set:
+            report = await house_fd.fetch_and_parse_annual(None, db_session, filing)
+
+        # Linked as unreadable, but a crash may be transient: not cached.
+        assert (report.holdings, report.unreadable_reason, report.final) == (None, "unrecognized", False)
+        mock_set.assert_not_called()
+
+    async def test_house_unrecognized_layout_is_cached_under_the_parser_version(self, db_session):
+        from unittest.mock import AsyncMock, patch
+
+        from app.pipeline.fetch import house_fd
+        from app.pipeline.fetch.fd_common import AnnualReport
+
+        filing = {"doc_id": "D1", "pdf_url": "https://clerk.example/2025/D1.pdf"}
+        unrecognized = AnnualReport("Member", None, "unrecognized")
+        with patch.object(house_fd, "fetch_bytes_with_retry", new_callable=AsyncMock, return_value=b"%PDF"), \
+             patch.object(house_fd, "parse_annual_pdf", return_value=unrecognized), \
+             patch.object(house_fd, "api_cache_set") as mock_set:
+            report = await house_fd.fetch_and_parse_annual(None, db_session, filing)
+
+        assert report.final is True
+        key, payload = mock_set.call_args.args[2], mock_set.call_args.args[3]
+        assert key == f"annual-parsed-v{house_fd.PARSER_VERSION}-D1"
+        assert payload == {"filer_status": "Member", "holdings": None, "unreadable_reason": "unrecognized"}
+
+    async def test_house_download_failure_is_not_a_report(self, db_session):
+        from unittest.mock import AsyncMock, patch
+
+        from app.pipeline.fetch import house_fd
+
+        with patch.object(house_fd, "fetch_bytes_with_retry", new_callable=AsyncMock, return_value=None):
+            assert await house_fd.fetch_and_parse_annual(None, db_session, {"doc_id": "D", "pdf_url": "u"}) is None
+
+    async def test_senate_paper_report_is_scanned_without_a_fetch(self, db_session):
+        from unittest.mock import AsyncMock, patch
+
+        from app.pipeline.fetch import senate_fd
+
+        with patch.object(senate_fd, "_request_with_retry", new_callable=AsyncMock) as mock_get:
+            report = await senate_fd.fetch_and_parse_annual(
+                None, db_session, {"report_url": "https://efdsearch.senate.gov/search/view/paper/x/", "is_paper": True},
+            )
+        assert (report.holdings, report.unreadable_reason) == (None, "scanned")
+        mock_get.assert_not_called()
+
+    async def test_senate_unrecognized_page_is_cached_then_served_from_cache(self, db_session):
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, patch
+
+        from app.pipeline.fetch import senate_fd
+
+        filing = {"report_url": "https://efdsearch.senate.gov/search/view/annual/abc/", "is_paper": False}
+        page = SimpleNamespace(text="<html><body>No assets part here</body></html>")
+        with patch.object(senate_fd, "_request_with_retry", new_callable=AsyncMock, return_value=page) as mock_get:
+            first = await senate_fd.fetch_and_parse_annual(None, db_session, filing)
+            second = await senate_fd.fetch_and_parse_annual(None, db_session, filing)
+
+        assert (first.holdings, first.unreadable_reason) == (None, "unrecognized")
+        assert (second.holdings, second.unreadable_reason) == (None, "unrecognized")
+        assert mock_get.await_count == 1

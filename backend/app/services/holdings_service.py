@@ -40,17 +40,22 @@ def _build(disclosure: FinancialDisclosure, page: int, per_page: int, category: 
     def is_open(h) -> bool:
         return h.value_low is not None and h.value_low > 0 and h.value_high == h.value_low
 
+    # Every category the report has holdings in is listed, so each holding
+    # stays reachable through the legend filter; one with no stated value
+    # (weight 0) simply draws no slice.
     categories: list[HoldingCategorySchema] = []
     for key, meta in HOLDING_CATEGORIES.items():
-        members = [h for h in by_category.get(key, []) if h.value_low is not None and h.value_high is not None]
-        weight = sum(_midpoint(h.value_low, h.value_high) for h in members)
-        if weight <= 0:
+        in_category = by_category.get(key, [])
+        if not in_category:
             continue
+        members = [h for h in in_category if h.value_low is not None and h.value_high is not None]
+        weight = sum(_midpoint(h.value_low, h.value_high) for h in members)
         categories.append(HoldingCategorySchema(
             category=key,
             label=meta["label"],
             color=meta["color"],
-            count=len(by_category.get(key, [])),
+            count=len(in_category),
+            unvalued_count=len(in_category) - len(members),
             value_low=sum(h.value_low for h in members),
             value_high=sum(h.value_high for h in members),
             open_ended=any(is_open(h) for h in members),
@@ -76,6 +81,7 @@ def _build(disclosure: FinancialDisclosure, page: int, per_page: int, category: 
         filed_date=disclosure.filed_date,
         source_url=disclosure.source_url,
         parsed=disclosure.parsed,
+        unreadable_reason=disclosure.unreadable_reason if not disclosure.parsed else None,
         holdings_count=len(holdings),
         unvalued_count=len(holdings) - len(valued),
         total_low=sum(h.value_low for h in valued),

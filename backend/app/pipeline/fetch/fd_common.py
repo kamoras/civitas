@@ -56,6 +56,33 @@ class HoldingRow:
     ticker: str | None = None
 
 
+@dataclass
+class AnnualReport:
+    """One fetched annual report: who it says the filer is, and its assets.
+
+    holdings is None when the report was fetched but its asset list couldn't
+    be read (scanned paper filing, unrecognized layout) — stored as an
+    unparsed report and linked. filer_status is the House cover page's
+    "Status:" line; the Senate form has none (its search row's office
+    column is checked instead).
+    """
+    filer_status: str | None
+    holdings: list[HoldingRow] | None
+    # Why holdings is None: "scanned" (paper filing, no text to read) or
+    # "unrecognized" (electronic, but not in a layout the parser knows).
+    unreadable_reason: str | None = None
+    # False when the parser crashed rather than finding an unknown layout.
+    # The report is still stored (linked, not charted) but neither cached
+    # nor marked as read, so the next run tries it again — a crash may be
+    # transient, and caching a transient failure strands a filing for the
+    # cache's whole 30-day life (see cache.api_cache_set).
+    final: bool = True
+
+
+UNREADABLE_SCANNED = "scanned"
+UNREADABLE_UNRECOGNIZED = "unrecognized"
+
+
 # Display order is the order here; the frontend receives labels and colors
 # from the API rather than hardcoding them (AGENTS.md, config as single
 # source of truth). Colors are a fixed categorical order validated for

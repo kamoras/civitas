@@ -555,6 +555,13 @@ class FinancialDisclosure(Base):
     filed_date: Mapped[str | None] = mapped_column(String, nullable=True)
     source_url: Mapped[str] = mapped_column(String, default="")
     parsed: Mapped[bool] = mapped_column(Boolean, default=True)
+    # When not parsed: "scanned" (paper filing) or "unrecognized"
+    # (electronic, in a layout the parser can't read) — the page words its
+    # note differently for each.
+    unreadable_reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The fetch module's PARSER_VERSION that read this report; a newer one
+    # re-reads it (holdings_pipeline._stored_versions).
+    parser_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     ingested_at: Mapped[datetime] = mapped_column(default=utcnow)
 
     senator: Mapped["Senator"] = relationship(back_populates="financial_disclosures")

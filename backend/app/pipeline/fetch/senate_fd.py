@@ -25,12 +25,25 @@ from lxml import html as lxml_html
 from sqlalchemy.orm import Session
 
 from app.pipeline.cache import api_cache_get, api_cache_set
-from app.pipeline.fetch.fd_common import HoldingRow, parse_holding_value, senate_category, ticker_for
-from app.pipeline.fetch.senate_ptr import ANNUAL_REPORT_TYPE, _request_with_retry, search_filings
+from app.pipeline.fetch.fd_common import (
+    UNREADABLE_SCANNED,
+    UNREADABLE_UNRECOGNIZED,
+    AnnualReport,
+    HoldingRow,
+    parse_holding_value,
+    senate_category,
+    ticker_for,
+)
+from app.pipeline.fetch.senate_ptr import ANNUAL_REPORT_TYPE, _request_with_retry, search_filings, senate_filing_id
 
 logger = logging.getLogger(__name__)
 
 _CACHE_TIER = "senate_fd"
+# Bump whenever parse_assets_table's output changes for the same page: it
+# keys the parse cache and is stored on each FinancialDisclosure, so a
+# parser fix re-reads reports already ingested instead of leaving them as
+# the old parser read them.
+PARSER_VERSION = 1
 _FILING_MAX_AGE_HOURS = 24 * 30
 
 # The form's Owner values as printed (every value seen on file, 2026-09).
@@ -149,35 +162,48 @@ def parse_assets_table(page_html: str) -> list[HoldingRow] | None:
 
 async def fetch_and_parse_annual(
     client: httpx.AsyncClient, db: Session, filing: dict,
-) -> list[HoldingRow] | None:
+) -> AnnualReport | None:
     """Fetch one annual report page and parse its assets.
 
-    None when the report couldn't be read (fetch failure, paper filing,
-    unexpected layout); an empty list when it was read and lists no assets.
-    `client` must already carry an accepted-terms session
-    (senate_ptr.accept_terms).
+    None only when the page couldn't be fetched this run. Otherwise an
+    AnnualReport whose holdings are None when the report can't be read — a
+    paper filing (never fetched: it is scanned page images) or a page
+    without a recognizable assets table — and an empty list when it was
+    read and lists no assets. `client` must already carry an
+    accepted-terms session (senate_ptr.accept_terms).
     """
     if filing.get("is_paper"):
-        return None
-    filing_id = filing["report_url"].rstrip("/").rsplit("/", 1)[-1]
-    cache_key = f"annual-parsed-{filing_id}"
+        return AnnualReport(None, None, UNREADABLE_SCANNED)
+    cache_key = f"annual-parsed-v{PARSER_VERSION}-{senate_filing_id(filing['report_url'])}"
     cached = api_cache_get(db, _CACHE_TIER, cache_key, max_age_hours=_FILING_MAX_AGE_HOURS)
-    if cached is not None and cached.get("holdings") is not None:
-        return [HoldingRow(**row) for row in cached["holdings"]]
+    if cached is not None and "holdings" in cached:
+        holdings = cached["holdings"]
+        return AnnualReport(
+            None,
+            [HoldingRow(**row) for row in holdings] if holdings is not None else None,
+            cached.get("unreadable_reason"),
+        )
 
     resp = await _request_with_retry(client, "GET", filing["report_url"])
     if resp is None:
         return None
     try:
         holdings = parse_assets_table(resp.text)
-    except Exception as e:
-        logger.error("Failed to parse Senate annual report %s: %s", filing["report_url"], e)
-        return None
-    if holdings is None:
-        return None
+    except Exception:
+        logger.exception("Failed to parse Senate annual report %s", filing["report_url"])
+        # Linked as unreadable for now, and retried next run (see
+        # AnnualReport.final) rather than cached.
+        return AnnualReport(None, None, UNREADABLE_UNRECOGNIZED, final=False)
+    report = AnnualReport(None, holdings, None if holdings is not None else UNREADABLE_UNRECOGNIZED)
 
+    # Unreadable results are cached too: a filed report never changes, and
+    # PARSER_VERSION in the key is what retries them after a parser fix.
     api_cache_set(
-        db, _CACHE_TIER, cache_key, {"holdings": [asdict(h) for h in holdings]},
+        db, _CACHE_TIER, cache_key,
+        {
+            "holdings": [asdict(h) for h in holdings] if holdings is not None else None,
+            "unreadable_reason": report.unreadable_reason,
+        },
         normal_ttl_hours=_FILING_MAX_AGE_HOURS,
     )
-    return holdings
+    return report

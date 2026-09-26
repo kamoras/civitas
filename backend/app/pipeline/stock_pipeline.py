@@ -46,6 +46,7 @@ from app.pipeline.fetch.senate_ptr import (
     accept_terms as senate_accept_terms,
     fetch_and_parse_ptr as fetch_senate_ptr,
     search_ptr_filings,
+    senate_filing_id,
 )
 from app.pipeline.progress_tracker import ProgressTracker
 from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
@@ -61,6 +62,8 @@ STOCK_PIPELINE_STEPS = [
     ("house_holdings",  "fetch", "Ingest House annual disclosures (holdings)"),
     ("senate_holdings", "fetch", "Ingest Senate annual disclosures (holdings)"),
 ]
+TRADE_STEPS = ("house_ptr", "senate_ptr", "president_ptr")
+HOLDINGS_STEPS = ("house_holdings", "senate_holdings")
 
 # How far back to search on a cold start (no existing Senate trades in the
 # DB). The House walks whole yearly filing indexes instead (_ingest_house).
@@ -259,7 +262,7 @@ async def _ingest_senate(db: Session, client: httpx.AsyncClient) -> int:
     filings = await search_ptr_filings(since_date)
     inserted = 0
     for filing in filings:
-        filing_id = filing["report_url"].rstrip("/").rsplit("/", 1)[-1]
+        filing_id = senate_filing_id(filing["report_url"])
         if filing_id in existing_filing_ids:
             continue
         senator = _match_senator(db, filing["last"], filing["first"])
@@ -389,6 +392,7 @@ async def run_stock_trades_pipeline() -> dict:
         president_count = 0
         holdings_counts = {"house_holdings": 0, "senate_holdings": 0}
         error_parts: list[str] = []
+        failed_steps: set[str] = set()
         async with make_async_client() as client:
             progress.begin("house_ptr")
             try:
@@ -404,6 +408,7 @@ async def run_stock_trades_pipeline() -> dict:
                 db.rollback()
                 error_parts.append("House: failed — see server logs")
                 progress.fail("house_ptr")
+                failed_steps.add("house_ptr")
             progress.begin("senate_ptr")
             try:
                 senate_count = await _ingest_senate(db, client)
@@ -413,6 +418,7 @@ async def run_stock_trades_pipeline() -> dict:
                 db.rollback()
                 error_parts.append("Senate: failed — see server logs")
                 progress.fail("senate_ptr")
+                failed_steps.add("senate_ptr")
             progress.begin("president_ptr")
             try:
                 president_count = await _ingest_president(db, client)
@@ -422,6 +428,7 @@ async def run_stock_trades_pipeline() -> dict:
                 db.rollback()
                 error_parts.append("President: failed — see server logs")
                 progress.fail("president_ptr")
+                failed_steps.add("president_ptr")
             # Annual-report holdings (holdings_pipeline.py). Same sources,
             # same best-effort isolation: a failure here leaves the trade
             # rows above committed and the stored holdings untouched.
@@ -438,6 +445,7 @@ async def run_stock_trades_pipeline() -> dict:
                     db.rollback()
                     error_parts.append(f"{label}: failed — see server logs")
                     progress.fail(step)
+                    failed_steps.add(step)
 
         elapsed = round(time.time() - start_time, 1)
         logger.info(
@@ -447,11 +455,16 @@ async def run_stock_trades_pipeline() -> dict:
             holdings_counts["house_holdings"], holdings_counts["senate_holdings"],
         )
 
-        # FAILED only when every phase failed — one source being down still
-        # leaves the run's other ingested rows valid.
+        # FAILED when a whole ingest failed: every trade phase, or every
+        # holdings phase. One source being down still leaves the run's other
+        # rows valid, but counting all five phases together would let two
+        # healthy holdings phases mark a run COMPLETED whose trade ingest is
+        # entirely dead — and check_pipeline_staleness would never fire.
+        trade_failures = sum(step in failed_steps for step in TRADE_STEPS)
+        holdings_failures = sum(step in failed_steps for step in HOLDINGS_STEPS)
         run.status = (
             PipelineStatus.FAILED
-            if len(error_parts) == len(STOCK_PIPELINE_STEPS)
+            if trade_failures == len(TRADE_STEPS) or holdings_failures == len(HOLDINGS_STEPS)
             else PipelineStatus.COMPLETED
         )
         run.completed_at = utcnow()

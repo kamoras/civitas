@@ -244,6 +244,8 @@ export interface HoldingCategory {
   label: string;
   color: string;
   count: number;
+  /** Of count, holdings with no stated bracket — outside valueLow/valueHigh/weight. */
+  unvaluedCount: number;
   valueLow: number;
   valueHigh: number;
   openEnded: boolean;
@@ -258,8 +260,11 @@ export interface Holdings {
   reportYear: number | null;
   filedDate: string | null;
   sourceUrl: string;
-  /** False when the report exists but couldn't be read (scanned paper filing). */
+  /** False when the report exists but couldn't be read — see unreadableReason. */
   parsed: boolean;
+  /** "scanned": a paper filing; "unrecognized": electronic, but in a layout
+   * the parser can't read. Null when parsed. */
+  unreadableReason: "scanned" | "unrecognized" | null;
   holdingsCount: number;
   unvaluedCount: number;
   totalLow: number;

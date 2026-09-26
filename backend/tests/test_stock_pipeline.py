@@ -106,6 +106,27 @@ class TestStockTradesPipelineRunTracking:
         assert "President" in run.error_message
         assert "holdings" in run.error_message
 
+    def test_all_trade_phases_failing_fails_the_run_even_when_holdings_succeed(self, db_session):
+        """Holdings phases rarely raise, so counting them toward "every phase
+        failed" would record a run with a dead trade ingest as COMPLETED —
+        and the staleness alert would never fire."""
+        result = _run(
+            db_session,
+            house_result=RuntimeError("shared bug"), senate_result=RuntimeError("shared bug"),
+            president_result=RuntimeError("shared bug"),
+            house_holdings_result=10, senate_holdings_result=20,
+        )
+        assert result["status"] == "failed"
+
+    def test_both_holdings_phases_failing_fails_the_run(self, db_session):
+        result = _run(
+            db_session, house_result=2, senate_result=1,
+            house_holdings_result=RuntimeError("index gone"),
+            senate_holdings_result=RuntimeError("search broken"),
+        )
+        assert result["status"] == "failed"
+        assert result["house_trades"] == 2
+
     def test_holdings_failing_alone_leaves_the_trades_run_completed(self, db_session):
         result = _run(
             db_session, house_result=2, senate_result=1,

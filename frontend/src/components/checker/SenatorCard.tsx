@@ -517,7 +517,10 @@ export default function SenatorCard({
             chamber={chamber}
           />
 
-          <Holdings memberId={senator.id} chamber={chamber} />
+          {/* Keyed by member: navigating between two profiles can reuse
+              this card, and the section's open list and hover state belong
+              to the member they were chosen on. */}
+          <Holdings key={`${chamber}-${senator.id}`} memberId={senator.id} chamber={chamber} />
 
           <StockTrades politicianId={senator.id} filer={chamber} />
 

@@ -19,16 +19,21 @@ enough to attribute a value bracket to the right asset, and a misattributed
 value is worse than a link to the filing.
 """
 
+import asyncio
 import io
 import logging
 import re
-from dataclasses import asdict, dataclass
+from collections.abc import Iterable
+from dataclasses import asdict
 
 import httpx
 from sqlalchemy.orm import Session
 
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.fd_common import (
+    UNREADABLE_SCANNED,
+    UNREADABLE_UNRECOGNIZED,
+    AnnualReport,
     HoldingRow,
     house_category,
     parse_holding_value,
@@ -48,6 +53,11 @@ logger = logging.getLogger(__name__)
 ANNUAL_FILING_TYPES = {"O", "A"}
 
 _CACHE_TIER = "house_fd"
+# Bump whenever parse_schedule_a's output changes for the same PDF: it keys
+# the parse cache and is stored on each FinancialDisclosure, so a parser fix
+# re-reads reports already ingested instead of leaving them as the old
+# parser read them.
+PARSER_VERSION = 1
 _FILING_MAX_AGE_HOURS = 24 * 30
 
 # Rows start at the asset column; a new value bracket starts with a dollar
@@ -110,9 +120,13 @@ class _OpenRow:
         )
 
 
-def parse_schedule_a(pages_words: list[list[dict]]) -> list[HoldingRow] | None:
+def parse_schedule_a(pages_words: Iterable[list[dict]]) -> list[HoldingRow] | None:
     """Parse Schedule A from each page's words (pdfplumber extract_words
     with extra_attrs=["size"]).
+
+    Stops consuming `pages_words` once Schedule A has ended, so a caller
+    passing a lazy per-page generator never extracts the remaining pages
+    (the transactions, liabilities and gifts schedules) at all.
 
     Returns None when Schedule A wasn't found at all — not a House annual
     report layout, or no text layer — so the caller can tell "the member
@@ -124,6 +138,7 @@ def parse_schedule_a(pages_words: list[list[dict]]) -> list[HoldingRow] | None:
     in_schedule = False
     columns: tuple[float, float, float] | None = None  # owner, value, income x-starts
     row: _OpenRow | None = None
+    done = False
 
     def flush() -> None:
         nonlocal row
@@ -150,6 +165,9 @@ def parse_schedule_a(pages_words: list[list[dict]]) -> list[HoldingRow] | None:
                 else:
                     flush()
                     in_schedule = False
+                    done = saw_header
+                    if done:
+                        break
                 continue
             if size >= _HEADING_MIN_SIZE:
                 # Section headings. Schedule A's own heading is enough to
@@ -159,6 +177,10 @@ def parse_schedule_a(pages_words: list[list[dict]]) -> list[HoldingRow] | None:
                 in_schedule = False
                 if len(texts) > 1 and texts[1] == "A:":
                     saw_header = True
+                elif saw_header:
+                    # Schedule A appears once; the next section ends it.
+                    done = True
+                    break
                 continue
             if not in_schedule or columns is None:
                 continue
@@ -189,20 +211,11 @@ def parse_schedule_a(pages_words: list[list[dict]]) -> list[HoldingRow] | None:
             row.value.extend(value)
             if any(_CODE_TOKEN_RE.search(t) for t in asset):
                 row.closed = True
+        if done:
+            break
 
     flush()
     return holdings if saw_header else None
-
-
-@dataclass
-class AnnualReport:
-    """One parsed annual report: who it says the filer is, and Schedule A.
-
-    holdings is None when Schedule A couldn't be read (scanned paper filing,
-    unrecognized layout).
-    """
-    filer_status: str | None
-    holdings: list[HoldingRow] | None
 
 
 def filer_status(pages_words: list[list[dict]]) -> str | None:
@@ -224,10 +237,25 @@ def parse_annual_pdf(pdf_bytes: bytes) -> AnnualReport:
     import pdfplumber
 
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-        pages_words = [page.extract_words(extra_attrs=["size"]) for page in pdf.pages]
-    if not any(pages_words):
-        return AnnualReport(None, None)  # scanned paper filing — no text layer
-    return AnnualReport(filer_status(pages_words), parse_schedule_a(pages_words))
+        if not pdf.pages:
+            return AnnualReport(None, None, UNREADABLE_UNRECOGNIZED)
+        first = pdf.pages[0].extract_words(extra_attrs=["size"])
+        if not first:
+            # An electronic report's cover page always carries text (name,
+            # status, filing type); a scanned paper filing has none.
+            return AnnualReport(None, None, UNREADABLE_SCANNED)
+
+        def pages():
+            yield first
+            for page in pdf.pages[1:]:
+                yield page.extract_words(extra_attrs=["size"])
+
+        # Lazily: parse_schedule_a stops at the end of Schedule A, which on
+        # a long report is a small fraction of its pages.
+        holdings = parse_schedule_a(pages())
+        return AnnualReport(
+            filer_status([first]), holdings, None if holdings is not None else UNREADABLE_UNRECOGNIZED,
+        )
 
 
 async def fetch_annual_filing_index(
@@ -245,17 +273,19 @@ async def fetch_and_parse_annual(
 ) -> AnnualReport | None:
     """Download and parse one annual report.
 
-    None when the PDF couldn't be fetched or opened at all. Otherwise an
+    None only when the PDF couldn't be fetched this run. Otherwise an
     AnnualReport whose holdings are None when Schedule A couldn't be read
-    and an empty list when it was read and lists no assets.
+    (see unreadable_reason) and an empty list when it was read and lists no
+    assets.
     """
-    cache_key = f"annual-parsed-{filing['doc_id']}"
+    cache_key = f"annual-parsed-v{PARSER_VERSION}-{filing['doc_id']}"
     cached = api_cache_get(db, _CACHE_TIER, cache_key, max_age_hours=_FILING_MAX_AGE_HOURS)
     if cached is not None and "holdings" in cached:
         holdings = cached["holdings"]
         return AnnualReport(
             cached.get("filer_status"),
             [HoldingRow(**row) for row in holdings] if holdings is not None else None,
+            cached.get("unreadable_reason"),
         )
 
     pdf_bytes = await fetch_bytes_with_retry(
@@ -266,19 +296,23 @@ async def fetch_and_parse_annual(
         return None
 
     try:
-        report = parse_annual_pdf(pdf_bytes)
-    except Exception as e:
-        logger.error("Failed to parse House annual report %s: %s", filing["pdf_url"], e)
-        return None
+        # pdfplumber is CPU-bound; keep it off the event loop.
+        report = await asyncio.to_thread(parse_annual_pdf, pdf_bytes)
+    except Exception:
+        # Linked as unreadable for now, and retried next run (see
+        # AnnualReport.final) rather than cached.
+        logger.exception("Failed to parse House annual report %s", filing["pdf_url"])
+        return AnnualReport(None, None, UNREADABLE_UNRECOGNIZED, final=False)
 
-    # A filed report never changes (an amendment is its own filing), so a
-    # scanned one is cached as unreadable too rather than re-downloaded
-    # every run.
+    # A filed report never changes (an amendment is its own filing), so an
+    # unreadable one is cached too rather than re-downloaded every run;
+    # PARSER_VERSION in the key is what retries it after a parser fix.
     api_cache_set(
         db, _CACHE_TIER, cache_key,
         {
             "filer_status": report.filer_status,
             "holdings": [asdict(h) for h in report.holdings] if report.holdings is not None else None,
+            "unreadable_reason": report.unreadable_reason,
         },
         normal_ttl_hours=_FILING_MAX_AGE_HOURS,
     )

@@ -99,18 +99,43 @@ class TestIngestHouseHoldings:
         assert db_session.query(FinancialDisclosure).one().filing_id == "MEMBER"
 
     async def test_a_scanned_report_is_stored_as_unparsed_with_its_link(self, db_session, rep):
-        await _ingest_house(db_session, {2025: [_house_filing("SCAN")]}, {"SCAN": AnnualReport(None, None)})
+        await _ingest_house(
+            db_session, {2025: [_house_filing("SCAN")]}, {"SCAN": AnnualReport(None, None, "scanned")},
+        )
         disclosure = db_session.query(FinancialDisclosure).one()
         assert disclosure.parsed is False
+        assert disclosure.unreadable_reason == "scanned"
         assert disclosure.source_url.endswith("/SCAN.pdf")
         assert disclosure.holdings == []
 
     async def test_already_stored_report_is_not_refetched(self, db_session, rep):
-        db_session.add(FinancialDisclosure(representative_id="R1", filing_id="DONE", report_year=2025, source_url="x"))
+        db_session.add(FinancialDisclosure(
+            representative_id="R1", filing_id="DONE", report_year=2025, source_url="x",
+            parser_version=holdings_pipeline.HOUSE_PARSER_VERSION,
+        ))
         db_session.commit()
         count, mock_fetch = await _ingest_house(db_session, {2025: [_house_filing("DONE")]}, {})
         assert count == 0
         mock_fetch.assert_not_called()
+
+    async def test_same_report_read_by_an_older_parser_is_re_read(self, db_session, rep):
+        """A parser fix must reach reports already ingested, not only members
+        who happen to file something new."""
+        db_session.add(FinancialDisclosure(
+            representative_id="R1", filing_id="DONE", report_year=2025, source_url="x",
+            parser_version=holdings_pipeline.HOUSE_PARSER_VERSION - 1,
+        ))
+        db_session.commit()
+        count, mock_fetch = await _ingest_house(
+            db_session, {2025: [_house_filing("DONE")]}, {"DONE": AnnualReport("Member", [_row(), _row()])},
+        )
+        assert count == 2
+        stored = db_session.query(FinancialDisclosure).one()
+        assert stored.parser_version == holdings_pipeline.HOUSE_PARSER_VERSION
+
+    async def test_an_empty_index_fails_the_phase(self, db_session, rep):
+        with pytest.raises(RuntimeError):
+            await _ingest_house(db_session, {}, {})
 
     async def test_newer_report_replaces_the_stored_one(self, db_session, rep):
         old = FinancialDisclosure(representative_id="R1", filing_id="OLD", report_year=2024, source_url="x")
@@ -140,8 +165,16 @@ def _senate_filing(uuid, title="Annual Report for CY 2025", filed="2026-05-11", 
 
 
 async def _ingest_senate(db_session, filings, parsed):
+    """`parsed` maps a report id to its holdings list, None for an unreadable
+    report, or is missing the id for a page that failed to load."""
     async def fetch(_client, _db, filing):
-        return parsed.get(filing["report_url"].rstrip("/").rsplit("/", 1)[-1])
+        report_id = filing["report_url"].rstrip("/").rsplit("/", 1)[-1]
+        if filing.get("is_paper"):
+            return AnnualReport(None, None, "scanned")
+        if report_id not in parsed:
+            return None
+        holdings = parsed[report_id]
+        return AnnualReport(None, holdings, None if holdings is not None else "unrecognized")
 
     with patch.object(holdings_pipeline, "senate_accept_terms", new_callable=AsyncMock, return_value="tok"), \
          patch.object(holdings_pipeline, "search_annual_filings", new_callable=AsyncMock, return_value=filings), \
@@ -173,19 +206,51 @@ class TestIngestSenateHoldings:
         filings = [_senate_filing("scan", title="Annual Report", filed="2026-08-13", office="Senator", paper=True)]
         await _ingest_senate(db_session, filings, {})
         disclosure = db_session.query(FinancialDisclosure).one()
-        assert disclosure.parsed is False
+        assert (disclosure.parsed, disclosure.unreadable_reason) == (False, "scanned")
         assert disclosure.report_year == 2025  # year before it was filed
         assert "/paper/" in disclosure.source_url
 
-    async def test_electronic_report_that_fails_to_load_changes_nothing(self, db_session, senator):
-        await _ingest_senate(db_session, [_senate_filing("broken")], {"broken": None})
+    async def test_a_page_that_fails_to_load_changes_nothing(self, db_session, senator):
+        await _ingest_senate(db_session, [_senate_filing("broken")], {})
         assert db_session.query(FinancialDisclosure).count() == 0
 
-    async def test_no_session_no_search(self, db_session, senator):
+    async def test_an_unreadable_electronic_report_is_stored_unparsed_and_linked(self, db_session, senator):
+        """Not skipped: a skipped report left the member with no section at
+        all (reading as "no disclosure") and was re-fetched every night."""
+        await _ingest_senate(db_session, [_senate_filing("odd")], {"odd": None})
+        disclosure = db_session.query(FinancialDisclosure).one()
+        assert (disclosure.parsed, disclosure.unreadable_reason) == (False, "unrecognized")
+        assert disclosure.source_url.endswith("/odd/")
+
+    async def test_no_session_fails_the_phase_without_searching(self, db_session, senator):
         with patch.object(holdings_pipeline, "senate_accept_terms", new_callable=AsyncMock, return_value=None), \
              patch.object(holdings_pipeline, "search_annual_filings", new_callable=AsyncMock) as mock_search:
-            assert await holdings_pipeline.ingest_senate_holdings(db_session, None) == 0
+            with pytest.raises(RuntimeError):
+                await holdings_pipeline.ingest_senate_holdings(db_session, None)
         mock_search.assert_not_called()
+
+    async def test_a_search_with_no_senators_reports_fails_the_phase(self, db_session, senator):
+        """search_filings returns [] on any browser failure — every senator
+        files yearly, so none over two years is a broken search."""
+        with pytest.raises(RuntimeError):
+            await _ingest_senate(db_session, [], {})
+        with pytest.raises(RuntimeError):
+            await _ingest_senate(
+                db_session, [_senate_filing("c", office="Candidate (Candidate)", title="Candidate Report")], {},
+            )
+
+    async def test_stored_current_report_is_not_refetched(self, db_session, senator):
+        db_session.add(FinancialDisclosure(
+            senator_id="S1", filing_id="cy2025", report_year=2025, source_url="x",
+            parser_version=holdings_pipeline.SENATE_PARSER_VERSION,
+        ))
+        db_session.commit()
+        with patch.object(holdings_pipeline, "senate_accept_terms", new_callable=AsyncMock, return_value="tok"), \
+             patch.object(holdings_pipeline, "search_annual_filings", new_callable=AsyncMock,
+                          return_value=[_senate_filing("cy2025")]), \
+             patch.object(holdings_pipeline, "fetch_senate_annual", new_callable=AsyncMock) as mock_fetch:
+            assert await holdings_pipeline.ingest_senate_holdings(db_session, None) == 0
+        mock_fetch.assert_not_called()
 
     def test_report_year(self):
         year = holdings_pipeline._senate_report_year
@@ -233,13 +298,18 @@ class TestHoldingsService:
         assert result.total_low == 1001.0 + 15001.0 + 1000000.0
         assert result.total_high == 15000.0 + 50000.0 + 1000000.0
         assert result.total_open_ended is True
-        # Largest slice first; OTHER has no stated value so no slice.
-        assert [c.category for c in result.categories] == ["REAL_ESTATE", "FUNDS", "STOCKS"]
+        # Largest slice first. OTHER has no stated value, so it draws no
+        # slice (weight 0) but is still listed — its holding must stay
+        # reachable through the legend filter.
+        assert [c.category for c in result.categories] == ["REAL_ESTATE", "FUNDS", "STOCKS", "OTHER"]
+        other = result.categories[3]
+        assert (other.weight, other.share, other.count, other.unvalued_count) == (0.0, 0.0, 1, 1)
+        assert get_senator_holdings(db_session, "S1", category="OTHER").holdings[0].asset_name == "Art"
         total = 1000000.0 + 32500.5 + 8000.5
         assert result.categories[0].share == pytest.approx(1000000.0 / total)
         assert sum(c.share for c in result.categories) == pytest.approx(1.0)
         stocks = result.categories[2]
-        assert (stocks.count, stocks.label, stocks.open_ended) == (2, "Stocks", False)
+        assert (stocks.count, stocks.unvalued_count, stocks.label, stocks.open_ended) == (2, 0, "Stocks", False)
         assert stocks.color.startswith("#")
         # Listed largest first; the unvalued holding last rather than dropped.
         assert [h.asset_name for h in result.holdings] == ["Ranch", "Fund", "Apple", "Sold", "Art"]
@@ -261,9 +331,10 @@ class TestHoldingsService:
         assert clamped.page == 2
 
     def test_unparsed_report(self, db_session, senator):
-        _store(db_session, [], parsed=False, senator_id="S1")
+        _store(db_session, [], parsed=False, senator_id="S1", unreadable_reason="scanned")
         result = get_senator_holdings(db_session, "S1")
         assert result.available is True and result.parsed is False
+        assert result.unreadable_reason == "scanned"
         assert result.source_url == "https://example.com/f.pdf"
 
     def test_deleting_a_member_deletes_their_holdings(self, db_session, senator):
@@ -304,3 +375,26 @@ class TestHoldingsRoutes:
         assert client.get("/api/representatives/nope/holdings").status_code == 404
         assert client.get("/api/representatives/R1/holdings?category=bogus").status_code == 422
         assert client.get("/api/representatives/R1/holdings").json()["available"] is False
+
+
+class TestTransientParseFailures:
+    async def test_a_crash_is_linked_but_retried_when_nothing_is_stored(self, db_session, rep):
+        crashed = AnnualReport(None, None, "unrecognized", final=False)
+        await _ingest_house(db_session, {2025: [_house_filing("NEW")]}, {"NEW": crashed})
+        stored = db_session.query(FinancialDisclosure).one()
+        assert (stored.parsed, stored.parser_version) == (False, None)
+
+        # Next run: not counted as read, so it's fetched again.
+        count, mock_fetch = await _ingest_house(
+            db_session, {2025: [_house_filing("NEW")]}, {"NEW": AnnualReport("Member", [_row()])},
+        )
+        assert count == 1
+        mock_fetch.assert_called_once()
+        assert db_session.query(FinancialDisclosure).one().parsed is True
+
+    async def test_a_crash_never_replaces_a_readable_stored_report(self, db_session, rep):
+        db_session.add(FinancialDisclosure(representative_id="R1", filing_id="OLD", report_year=2024, source_url="x"))
+        db_session.commit()
+        crashed = AnnualReport(None, None, "unrecognized", final=False)
+        await _ingest_house(db_session, {2025: [_house_filing("NEW")]}, {"NEW": crashed})
+        assert db_session.query(FinancialDisclosure).one().filing_id == "OLD"
