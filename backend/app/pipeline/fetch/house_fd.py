@@ -279,12 +279,19 @@ async def fetch_annual_filing_index(
 
 
 async def _download(client: httpx.AsyncClient, url: str, headers: dict | None = None) -> bytes | None:
-    """The one Clerk download policy, shared by the real fetch and the probe
-    below so the probe can't drift from the fetches it vouches for."""
-    return await fetch_bytes_with_retry(
+    """The Clerk download policy, shared by the real fetch and the probe
+    below: the same limiter and retries, and a body that isn't a PDF is no
+    download. A 200 HTML page (a block, challenge or maintenance page) in a
+    PDF's place is the source failing, not a report the parser can't read —
+    left to the parser it would crash twice and be cached as unrecognized."""
+    body = await fetch_bytes_with_retry(
         client, _rate_limiter, url, "House Clerk",
         headers=headers, rate_limit_backoff_multiplier=2.0, retry_on_4xx=False,
     )
+    if body is not None and not body.startswith(b"%PDF"):
+        logger.warning("House Clerk served something other than a PDF for %s", url)
+        return None
+    return body
 
 
 async def report_still_loads(client: httpx.AsyncClient, pdf_url: str) -> bool:
@@ -303,7 +310,7 @@ async def report_still_loads(client: httpx.AsyncClient, pdf_url: str) -> bool:
     body = await _download(
         client, probe_url, headers={"Range": "bytes=0-1023", "Cache-Control": "no-cache", "Pragma": "no-cache"},
     )
-    return body is not None and body.startswith(b"%PDF")
+    return body is not None
 
 
 async def fetch_and_parse_annual(

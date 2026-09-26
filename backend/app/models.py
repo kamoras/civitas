@@ -562,8 +562,10 @@ class FinancialDisclosure(Base):
     # (electronic, in a layout the parser can't read) — the page words its
     # note differently for each.
     unreadable_reason: Mapped[str | None] = mapped_column(String, nullable=True)
-    # The fetch module's PARSER_VERSION that read this report; a newer one
-    # re-reads it (holdings_pipeline._is_current).
+    # The newest fetch-module PARSER_VERSION that has tried this report —
+    # the one that read it, or a later one whose re-read came back empty
+    # and was not allowed to replace it (holdings_pipeline.
+    # _keeps_earlier_read). A newer version re-reads it (_is_current).
     parser_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     ingested_at: Mapped[datetime] = mapped_column(default=utcnow)
 

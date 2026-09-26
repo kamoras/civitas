@@ -729,12 +729,17 @@ midpoints and says so, and no net-worth figure is produced. Reports that can't
 be read are stored `parsed=False` with a reason (`scanned` paper filing,
 `unrecognized` layout) and linked, not OCR'd. Each fetch module's
 `PARSER_VERSION` keys its parse cache and is stored per report — bump it when a
-parser's output changes, and already-ingested reports are re-read. Both
+parser's output changes, and already-ingested reports are re-read (a re-read
+that comes back empty keeps the earlier holdings). Both
 phases are time-boxed (`holdings_pipeline.PHASE_BUDGET`), so a first run or a
 version bump spreads over a few nights instead of stretching the stock run
 past its 2h overrun alarm. The holdings phases never decide the stock run's
 status (that stays "every trade phase failed"); each phase that fails sends
-its own ops alert instead. Presidents are not covered yet: the OGE 278e is an
+its own ops alert instead. A phase fails when reports load but none can be
+read (a parser regression or block page), or when members were tried and none
+loaded *and* a report already stored no longer loads either — that live probe,
+not a memory of failing filings, is what tells an outage from a few dead links
+(`_SourceHealth`). Presidents are not covered yet: the OGE 278e is an
 ~850-page hybrid scan with no asset-type column.
 
 Each senator is processed independently. The pipeline uses `PipelineRun`

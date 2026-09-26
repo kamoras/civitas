@@ -501,3 +501,19 @@ class TestReportStillLoads:
             with patch.object(senate_fd, "_request_with_retry", new_callable=AsyncMock, return_value=resp):
                 with pytest.raises(senate_fd.SessionLapsed):
                     await senate_fd.report_still_loads(None, "https://efd.example/r/")
+
+
+class TestHouseDownloadIsAPdf:
+    async def test_a_page_in_a_pdfs_place_is_a_failed_fetch_not_an_unreadable_report(self, db_session):
+        """A 200 HTML block page, left to the parser, would crash twice and
+        be cached as an unrecognized report."""
+        from unittest.mock import AsyncMock, patch
+
+        from app.pipeline.fetch import house_fd
+
+        filing = {"doc_id": "D1", "pdf_url": "https://clerk.example/2025/D1.pdf"}
+        with patch.object(house_fd, "fetch_bytes_with_retry", new_callable=AsyncMock,
+                          return_value=b"<html>Request blocked</html>"), \
+             patch.object(house_fd, "parse_annual_pdf") as parse:
+            assert await house_fd.fetch_and_parse_annual(None, db_session, filing) is None
+        parse.assert_not_called()

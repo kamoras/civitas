@@ -953,14 +953,56 @@ class TestParserFailuresAreNotExcused:
                 await _ingest_house(db_session, index, reports)
         probe.assert_not_awaited()
 
-    async def test_a_re_read_that_fails_keeps_the_earlier_parsers_holdings(self, db_session, rep):
+    @pytest.mark.parametrize("re_read", [
+        AnnualReport(None, None, "unrecognized"),  # can't find the schedule
+        AnnualReport("Member", []),  # finds it, reads no rows
+    ])
+    async def test_a_re_read_that_comes_back_empty_keeps_the_earlier_parsers_holdings(self, db_session, rep, re_read):
         index = {2025: [_house_filing("SAME")]}
         await _ingest_house(db_session, index, {"SAME": AnnualReport("Member", [_row(), _row()])})
-        # A parser upgrade re-reads the stored report, and can't read it.
         with patch.object(holdings_pipeline, "HOUSE_PARSER_VERSION", 99):
-            await _ingest_house(db_session, index, {"SAME": AnnualReport(None, None, "unrecognized")})
-        disclosure = db_session.query(FinancialDisclosure).one()
-        assert (disclosure.parsed, db_session.query(FinancialHolding).count()) == (True, 2)
+            await _ingest_house(db_session, index, {"SAME": re_read})
+            disclosure = db_session.query(FinancialDisclosure).one()
+            assert (disclosure.parsed, db_session.query(FinancialHolding).count()) == (True, 2)
+            # Marked as tried by v99, so it isn't re-read every night.
+            assert disclosure.parser_version == 99
+            _, mock_fetch = await _ingest_house(db_session, index, {"SAME": re_read})
+        assert mock_fetch.call_count == 0
+
+    async def test_a_re_read_with_rows_replaces_the_earlier_one(self, db_session, rep):
+        index = {2025: [_house_filing("SAME")]}
+        await _ingest_house(db_session, index, {"SAME": AnnualReport("Member", [_row(), _row()])})
+        with patch.object(holdings_pipeline, "HOUSE_PARSER_VERSION", 99):
+            await _ingest_house(db_session, index, {"SAME": AnnualReport("Member", [_row()])})
+        assert db_session.query(FinancialHolding).count() == 1
+
+    async def test_unrecognized_reads_are_not_reads(self, db_session):
+        """A parser whose locator stopped matching returns a final
+        "unrecognized" report for everything — that is not the source and
+        parser working."""
+        n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
+        index = {2025: []}
+        reports = {}
+        for i in range(n):
+            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
+                                          party="R", is_current=True))
+            index[2025].append(_house_filing(f"D{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}"))
+            reports[f"D{i}"] = AnnualReport("Member", None, "unrecognized")
+        db_session.commit()
+        with pytest.raises(RuntimeError, match="none could be read"):
+            await _ingest_house(db_session, index, reports)
+
+    async def test_one_unreadable_answer_does_not_hide_an_outage(self, db_session):
+        n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE + 3
+        index = {2025: []}
+        for i in range(n):
+            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
+                                          party="R", is_current=True))
+            index[2025].append(_house_filing(f"D{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}"))
+        db_session.commit()
+        # Every fetch fails but one, which answers with something unreadable.
+        with pytest.raises(RuntimeError, match="no report fetched"):
+            await _ingest_house(db_session, index, {"D0": AnnualReport(None, None, "unrecognized", final=False)})
 
 
 class TestSenateProbe:
@@ -972,6 +1014,16 @@ class TestSenateProbe:
         with patch.object(holdings_pipeline, "senate_report_still_loads", probe), \
              patch.object(holdings_pipeline, "senate_accept_terms", accept):
             assert await holdings_pipeline._senate_probe(None, "https://efd.example/r/") is True
+        accept.assert_awaited_once()
+
+    async def test_a_second_lapse_reads_as_down_after_one_re_accept(self):
+        from app.pipeline.fetch.senate_fd import SessionLapsed
+
+        accept = AsyncMock(return_value="tok")
+        with patch.object(holdings_pipeline, "senate_report_still_loads",
+                          AsyncMock(side_effect=SessionLapsed("terms"))), \
+             patch.object(holdings_pipeline, "senate_accept_terms", accept):
+            assert await holdings_pipeline._senate_probe(None, "https://efd.example/r/") is False
         accept.assert_awaited_once()
 
     async def test_terms_that_cannot_be_re_accepted_read_as_down(self):

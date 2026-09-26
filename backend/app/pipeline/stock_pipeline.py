@@ -30,7 +30,7 @@ from app.database import SessionLocal
 from app.http_client import make_async_client
 from app.models import (
     PipelineRun, HousePipelineRun, PipelineStatus, President, PresidentTrade,
-    Representative, Senator, StockTrade, RepStockTrade, StockTradesPipelineRun,
+    StockTrade, RepStockTrade, StockTradesPipelineRun,
 )
 from app.pipeline.fetch.house_ptr import fetch_and_parse_ptr as fetch_house_ptr, fetch_ptr_filing_index
 from app.pipeline.fetch.president_ptr import (
@@ -212,7 +212,6 @@ async def _ingest_house(db: Session, client: httpx.AsyncClient) -> int:
                 matched[filer] = found.id if found is not None else None
             if matched[filer] is None:
                 continue
-            rep = db.get(Representative, matched[filer])
             rows = await fetch_house_ptr(client, db, filing)
             if not rows:
                 continue
@@ -220,7 +219,7 @@ async def _ingest_house(db: Session, client: httpx.AsyncClient) -> int:
             for row in rows:
                 days = _compute_days_to_disclose(row.transaction_date, row.disclosure_date)
                 db.add(RepStockTrade(
-                    representative_id=rep.id,
+                    representative_id=matched[filer],
                     ticker=row.ticker,
                     asset_name=row.asset_name,
                     owner=row.owner,
@@ -286,7 +285,6 @@ async def _ingest_senate(db: Session, client: httpx.AsyncClient) -> int:
             matched[filer] = found.id if found is not None else None
         if matched[filer] is None:
             continue
-        senator = db.get(Senator, matched[filer])
         rows = await fetch_senate_ptr(client, db, filing)
         if not rows:
             continue
@@ -294,7 +292,7 @@ async def _ingest_senate(db: Session, client: httpx.AsyncClient) -> int:
         for row in rows:
             days = _compute_days_to_disclose(row.transaction_date, row.disclosure_date)
             db.add(StockTrade(
-                senator_id=senator.id,
+                senator_id=matched[filer],
                 ticker=row.ticker,
                 asset_name=row.asset_name,
                 owner=row.owner,
