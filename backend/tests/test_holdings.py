@@ -38,6 +38,15 @@ def _fresh_breakdown_cache():
     holdings_service._breakdown_cache.clear()
 
 
+@pytest.fixture(autouse=True)
+def _no_live_probes():
+    """The outage probes make real requests; by default every stored report
+    reads as gone. Tests about the probe patch it themselves (inside this)."""
+    with patch.object(holdings_pipeline, "house_report_still_loads", AsyncMock(return_value=False)), \
+         patch.object(holdings_pipeline, "senate_report_still_loads", AsyncMock(return_value=False)):
+        yield
+
+
 @pytest.fixture()
 def rep(db_session):
     r = Representative(id="R1", name="John Doe", state="TX", district=1, party="R", is_current=True)
@@ -712,11 +721,12 @@ class TestFallThroughAndMatching:
             _house_filing("MEMBER", filing_date="2026-05-01"),
         ]}
         # deadline set at 0; the first fetch is in time, the second is not.
-        clock = iter([0.0, 0.0, 10_000.0])
+        clock = iter([0.0, 0.0] + [10_000.0] * 20)
         with patch.object(holdings_pipeline.time, "monotonic", side_effect=lambda: next(clock)):
-            count, mock_fetch = await _ingest_house(db_session, index, {"CAND": None})
-        assert mock_fetch.call_count == 1
-        assert count == 0
+            # A whole budget spent with nothing fetched is itself suspicious.
+            with pytest.raises(RuntimeError, match="no report fetched"):
+                await _ingest_house(db_session, index, {"CAND": None})
+        assert db_session.query(FinancialDisclosure).count() == 0
 
     def test_member_prefix_tolerates_punctuation_and_case(self):
         assert holdings_pipeline._is_member_prefix("Hon.")
@@ -1066,13 +1076,49 @@ class TestParserRegressionSignal:
         reports = {f"D{i}": AnnualReport("Member", [] if i < n else [_row()]) for i in range(2 * n + 1)}
         await _ingest_house(db_session, index, reports)  # must not raise
 
-    async def test_shrunk_re_reads_count_as_misses(self, db_session):
+    async def test_a_re_read_with_fewer_rows_is_not_an_alarm(self, db_session):
+        """A parser fix that drops spurious rows looks exactly like this."""
         n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
         index = self._members(db_session, n)
         await _ingest_house(db_session, index, {f"D{i}": AnnualReport("Member", [_row(), _row()]) for i in range(n)})
         with patch.object(holdings_pipeline, "HOUSE_PARSER_VERSION", 99):
+            await _ingest_house(db_session, index, {f"D{i}": AnnualReport("Member", [_row()]) for i in range(n)})
+        assert db_session.query(FinancialHolding).count() == n
+
+    async def test_empty_where_the_earlier_parser_also_read_nothing_is_consistent(self, db_session):
+        n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
+        index = self._members(db_session, n)
+        empty = {f"D{i}": AnnualReport("Member", []) for i in range(n)}
+        with pytest.raises(RuntimeError, match="parser regression"):
+            await _ingest_house(db_session, index, empty)  # no earlier read to agree with
+        with patch.object(holdings_pipeline, "HOUSE_PARSER_VERSION", 99):
+            await _ingest_house(db_session, index, empty)  # agrees with v1: must not raise
+
+    async def test_scanned_where_an_earlier_parser_read_text_is_a_miss(self, db_session):
+        """"Scanned" is the parser's own verdict (no words on page one): a
+        text-extraction regression calls every report scanned."""
+        n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
+        index = self._members(db_session, n)
+        await _ingest_house(db_session, index, {f"D{i}": AnnualReport("Member", [_row()]) for i in range(n)})
+        with patch.object(holdings_pipeline, "HOUSE_PARSER_VERSION", 99):
             with pytest.raises(RuntimeError, match="parser regression"):
-                await _ingest_house(db_session, index, {f"D{i}": AnnualReport("Member", [_row()]) for i in range(n)})
+                await _ingest_house(db_session, index, {f"D{i}": AnnualReport(None, None, "scanned") for i in range(n)})
+        assert db_session.query(FinancialHolding).count() == n
+
+    async def test_a_candidates_report_does_not_count_for_the_member(self, db_session):
+        n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
+        index = {2025: []}
+        reports = {}
+        for i in range(n):
+            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
+                                          party="R", is_current=True))
+            common = {"last": f"Name{i}", "first": "Person", "district": f"TX{i + 1:02d}"}
+            index[2025] += [{**_house_filing(f"C{i}", filing_date="2026-08-01", **common), "filing_type": "A"},
+                            _house_filing(f"M{i}", filing_date="2026-05-01", **common)]
+            reports[f"C{i}"] = AnnualReport("Congressional Candidate", [])
+            reports[f"M{i}"] = AnnualReport("Member", [_row()])
+        db_session.commit()
+        await _ingest_house(db_session, index, reports)  # must not raise
 
     async def test_a_kept_regression_keeps_failing_the_phase(self, db_session):
         n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
@@ -1109,3 +1155,32 @@ class TestProbesSeveralStoredReports:
         with patch.object(holdings_pipeline, "_stored_urls") as lookup:
             await _ingest_house(db_session, {2025: [_house_filing("A")]}, {"A": AnnualReport("Member", [_row()])})
         lookup.assert_not_called()
+
+
+class TestHangingSource:
+    async def test_running_out_of_time_with_nothing_fetched_asks_the_source(self, db_session):
+        """A host that hangs costs minutes per request, so the budget runs
+        out after a couple of members — far short of the attempt threshold."""
+        for i in range(3):
+            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
+                                          party="R", is_current=True))
+        db_session.commit()
+        index = {2025: [_house_filing(f"D{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}")
+                        for i in range(3)]}
+        clock = iter([0.0, 0.0, 0.0, 10_000.0] + [10_000.0] * 20)
+        with patch.object(holdings_pipeline.time, "monotonic", side_effect=lambda: next(clock)):
+            with pytest.raises(RuntimeError, match="no report fetched"):
+                await _ingest_house(db_session, index, {})
+
+    async def test_probes_stop_at_their_budget(self):
+        import asyncio
+
+        health = holdings_pipeline._SourceHealth("X")
+        health.attempted = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
+
+        async def hangs(_url):
+            await asyncio.sleep(3600)
+
+        with patch.object(holdings_pipeline, "PROBE_BUDGET", holdings_pipeline.timedelta(milliseconds=50)):
+            with pytest.raises(RuntimeError, match="no report fetched"):
+                await health.check(lambda: ["u1", "u2", "u3"], hangs)

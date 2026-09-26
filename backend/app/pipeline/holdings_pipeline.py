@@ -21,6 +21,7 @@ waits on it — past its 2h overrun alarm. Members with nothing stored go
 first, so coverage fills before re-reads.
 """
 
+import asyncio
 import logging
 import re
 import time
@@ -72,6 +73,11 @@ _YEARS_BACK = 2
 # slower on the Pi's CPU), the Senate ~100 (~4 min, most of it the browser
 # search). Past the budget the remaining members wait for the next run.
 PHASE_BUDGET = timedelta(minutes=10)
+
+# Wall-clock cap on the outage probes at the end of a phase (_SourceHealth),
+# which run past PHASE_BUDGET: one retried request against a hanging host
+# alone takes ~3 minutes.
+PROBE_BUDGET = timedelta(minutes=3)
 
 # Members tried with nothing coming back live before _SourceHealth looks
 # further — asking the source about a stored report, or (when reports load
@@ -217,37 +223,41 @@ class _Outcome:
     """What one member's reads showed this run, about the source and about
     the parser — two separate questions.
 
-    Source (live requests only — a parse-cache hit or a paper filing that is
-    never fetched proves nothing about it, AnnualReport.live): `attempted`,
-    a live request was made; `fetched`, one returned a report (final: a
-    crash or an unrecognizable page may be a block page, not a report).
+    Source (`fetched`; live requests only — a parse-cache hit or a paper
+    filing that is never fetched proves nothing about it, AnnualReport.live):
+    `attempted`, a live request was made; `fetched`, one returned a report
+    (final: a crash or an unrecognizable page may be a block page).
 
-    Parser (every read this run, cached or live, since a cached read under
-    the current PARSER_VERSION is this parser's output): `parsed_ok`, a
-    report yielded rows; `parser_miss`, one came back unreadable, empty, or
-    with fewer rows than an earlier parser read from the same filing. A
-    scanned report never reaches the parser and counts neither way. Empty
-    and shrunk reads can be genuine, which is why _SourceHealth weighs
-    misses against reads rather than failing on any one.
+    Parser (`parsed`; every read of a report that is the member's, cached or
+    live, since a cached read under the current PARSER_VERSION is this
+    parser's output): `parsed_ok`, it yielded rows; `parser_miss`, it could
+    not be read, or came back empty or "scanned" where an earlier parser
+    read rows from the very same filing (a filed report never changes), or
+    empty with no earlier read to agree with it. Empty where an earlier
+    parser also read nothing is consistent, and a scanned report nobody has
+    read text from never reached the parser — neither counts. A re-read that
+    finds fewer rows than before counts neither way: a parser fix that
+    drops spurious rows looks exactly like that, so it is the parser tests'
+    call, not a runtime alarm's.
     """
 
     def __init__(self) -> None:
         self.attempted = self.fetched = self.parsed_ok = self.parser_miss = False
 
-    def observe(self, report: AnnualReport | None, prior: int | None = None) -> None:
+    def fetch(self, report: AnnualReport | None) -> None:
         if report is None or report.live:
             self.attempted = True
-        if report is None:
-            return  # a request was made and failed
-        if report.live and report.final:
+        if report is not None and report.live and report.final:
             self.fetched = True
-        if report.unreadable_reason == UNREADABLE_SCANNED:
-            return
+
+    def parsed(self, report: AnnualReport, prior: int | None) -> None:
         holdings = report.holdings
-        if holdings is None or not holdings or (prior is not None and len(holdings) < prior):
-            self.parser_miss = True
-        else:
+        if holdings:
             self.parsed_ok = True
+        elif report.unreadable_reason == UNREADABLE_SCANNED:
+            self.parser_miss = self.parser_miss or bool(prior)
+        elif holdings is None or prior != 0:
+            self.parser_miss = True
 
     def lapsed(self) -> None:
         """A request answered with eFD's terms page even after re-accepting."""
@@ -265,22 +275,27 @@ class _SourceHealth:
     - Parser: at least MIN_ATTEMPTS_FOR_OUTAGE members' reads missed, and
       misses outnumber good reads. A regression shows up as exactly that;
       the odd genuinely empty or unusual report does not. Nothing about
-      the source can excuse it.
-    - Source: at least MIN_ATTEMPTS_FOR_OUTAGE members tried and no report
-      fetched. That is an outage, or a night on which the only filings left
-      to fetch are ones that won't load (a PDF the index lists but the
-      Clerk 404s). Counts alone can't tell those apart, and neither can a
-      memory of past failures — anything that learns to stop counting a
-      filing also learns to stop seeing an outage. So the phase asks the
-      source directly: it re-requests reports it already stored, live and
-      past any cache. If one loads, the failures are those filings'; if
-      none does — or nothing is stored to ask about — the phase fails,
-      every night the outage lasts.
+      the source can excuse it. A kept earlier read (_keeps_earlier_read)
+      is re-read every run, so a regression keeps failing the phase for as
+      long as it lasts.
+    - Source: no report fetched, from at least MIN_ATTEMPTS_FOR_OUTAGE
+      members tried — or from any tried at all when the time budget ran out
+      first, which a source that hangs rather than refuses makes happen
+      after two or three members. That is an outage, or a night on which
+      the only filings left to fetch are ones that won't load (a PDF the
+      index lists but the Clerk 404s). Counts alone can't tell those apart,
+      and neither can a memory of past failures — anything that learns to
+      stop counting a filing also learns to stop seeing an outage. So the
+      phase asks the source directly: it re-requests reports it already
+      stored, live and past any cache, within PROBE_BUDGET. If one loads,
+      the failures are those filings'; if none does — or nothing is stored
+      to ask about — the phase fails, every night the outage lasts.
     """
 
     def __init__(self, source: str) -> None:
         self.source = source
         self.attempted = self.fetched = self.parsed_ok = self.parser_miss = 0
+        self.out_of_time = False
 
     def record(self, outcome: _Outcome) -> None:
         self.attempted += outcome.attempted
@@ -293,13 +308,23 @@ class _SourceHealth:
     ) -> None:
         if self.parser_miss >= MIN_ATTEMPTS_FOR_OUTAGE and self.parser_miss > self.parsed_ok:
             raise RuntimeError(
-                f"{self.source}: {self.parser_miss} members' reports read as unreadable, empty or shrunk, "
+                f"{self.source}: {self.parser_miss} members' reports read as unreadable or empty, "
                 f"{self.parsed_ok} read — a parser regression, or pages served in reports' place"
             )
-        if self.fetched or self.attempted < MIN_ATTEMPTS_FOR_OUTAGE:
+        if self.fetched or not self.attempted:
             return
+        if self.attempted < MIN_ATTEMPTS_FOR_OUTAGE and not self.out_of_time:
+            return
+        deadline = time.monotonic() + PROBE_BUDGET.total_seconds()
         for url in stored_urls():
-            if await still_loads(url):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            try:
+                loads = await asyncio.wait_for(still_loads(url), remaining)
+            except TimeoutError:
+                break
+            if loads:
                 logger.warning(
                     "%s: %d members' reports failed to load, but a stored report (%s) still does — "
                     "those filings, not the source", self.source, self.attempted, url,
@@ -373,8 +398,10 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
                 break
             report = await fetch_house_annual(client, db, filing)
             prior = _prior_count(mine, filing["doc_id"])
-            outcome.observe(report, prior)
+            outcome.fetch(report)
             if report is None or not report.final:
+                if report is not None:
+                    outcome.parsed(report, prior)  # a crash: the parser's, whoever filed it
                 # Nothing usable this run: not fetched, or a read that may be
                 # transient (the parser crashed) — which is stored nowhere,
                 # since "can't be read" would be a claim about the report
@@ -396,6 +423,7 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
                 # sitting member's filing does. Both are the Clerk's own
                 # structured index fields, not inferred from any name.
                 continue
+            outcome.parsed(report, prior)
             if _keeps_earlier_read(prior, report):
                 break
             inserted += _replace_disclosure(
@@ -413,6 +441,7 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
         db.commit()  # per member, so a budget stop or a later failure keeps what's done
         health.record(outcome)
         if out_of_time:
+            health.out_of_time = True
             logger.info("House holdings: time budget spent — %d members wait for the next run", len(order) - position)
             break
     await health.check(
@@ -538,7 +567,9 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
                     outcome.lapsed()
                     continue
             prior = _prior_count(mine, filing_id)
-            outcome.observe(report, prior)
+            outcome.fetch(report)
+            if report is not None:
+                outcome.parsed(report, prior)
             if report is None or not report.final:
                 # Nothing usable this run: the filing won't load, or its read
                 # may be transient (a parser crash, or a page that is neither
@@ -564,6 +595,7 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
         db.commit()
         health.record(outcome)
         if out_of_time:
+            health.out_of_time = True
             logger.info("Senate holdings: time budget spent — %d members wait for the next run", len(order) - position)
             break
     await health.check(
