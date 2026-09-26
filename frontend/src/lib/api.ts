@@ -161,7 +161,7 @@ export function __resetApiCache(): void {
   _inflight.clear();
 }
 
-async function cachedFetch<T>(url: string, ttlMs: number): Promise<T> {
+async function cachedFetch<T>(url: string, ttlMs: number, errorLabel = "Fetch failed"): Promise<T> {
   const now = Date.now();
   const hit = _fetchCache.get(url);
   if (hit && hit.expiry > now) return hit.data as T;
@@ -171,7 +171,9 @@ async function cachedFetch<T>(url: string, ttlMs: number): Promise<T> {
 
   const request = (async () => {
     const res = await fetch(url);
-    if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+    // Same "<label>: <status>" shape requestJson throws, so a section that
+    // shows the message names itself.
+    if (!res.ok) throw new Error(`${errorLabel}: ${res.status}`);
     const data: T = await res.json();
     _fetchCache.set(url, { data, expiry: Date.now() + ttlMs });
     if (_fetchCache.size > 100) {
@@ -382,13 +384,11 @@ async function fetchHoldings(
   if (options?.category) params.set("category", options.category);
   // Cached: legend toggles and paging back revisit the same URLs, and a
   // member's holdings change at most once a night.
-  try {
-    return await cachedFetch(`${API_BASE}/${CHAMBER_PATH[chamber]}/${memberId}/holdings?${params}`, TTL.MEDIUM);
-  } catch (e) {
-    // cachedFetch's own message is generic ("Fetch failed: 500"); the
-    // section shows this text, so say which section failed.
-    throw new Error(`Failed to load holdings${e instanceof Error ? ` (${e.message})` : ""}`);
-  }
+  return cachedFetch(
+    `${API_BASE}/${CHAMBER_PATH[chamber]}/${memberId}/holdings?${params}`,
+    TTL.MEDIUM,
+    "Failed to load holdings"
+  );
 }
 
 type HoldingsOptions = { page?: number; perPage?: number; category?: string | null };

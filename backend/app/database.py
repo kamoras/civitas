@@ -756,16 +756,32 @@ def _run_migrations(revision: str = "head", bind=None) -> None:
         # release only expands the schema (migrations/README.md, "Expand,
         # then contract"), so this image can still read it: leave the schema
         # alone and start.
-        known = {script.revision for script in ScriptDirectory.from_config(cfg).walk_revisions()}
-        current = set(MigrationContext.configure(conn).get_current_heads())
-        if current - known:
+        script_dir = ScriptDirectory.from_config(cfg)
+        known = {script.revision for script in script_dir.walk_revisions()}
+        unknown = set(MigrationContext.configure(conn).get_current_heads()) - known
+        if unknown and _all_later_than_head(unknown, script_dir.get_current_head()):
             logger.warning(
                 "Database is at revision %s, newer than this image's migrations — "
-                "not migrating (expected during a rollback)", ", ".join(sorted(current - known)),
+                "not migrating (expected during a rollback)", ", ".join(sorted(unknown)),
             )
             return
+        # Any other unknown revision (another branch's, a renamed file) is
+        # not a rollback: let Alembic fail loudly on it, as it always has.
         cfg.attributes["connection"] = conn
         command.upgrade(cfg, revision)
+
+
+def _all_later_than_head(revisions: set[str], head: str | None) -> bool:
+    """True when every revision is a later one in this project's sequence.
+
+    Revisions are numbered ("0001", "0002", ... — migrations/README.md), so
+    "later than this image's head" is a number comparison. That is what
+    tells a rollback (the database was migrated by the next release) from a
+    database stamped by something this image should refuse to start on.
+    """
+    if not head or not head.isdigit():
+        return False
+    return all(rev.isdigit() and int(rev) > int(head) for rev in revisions)
 
 
 def _baseline_metadata():

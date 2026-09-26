@@ -62,7 +62,10 @@ rollback`. Two consequences follow:
 The rollback case also means the previous image meets a database stamped
 with a revision it has never seen. `_run_migrations` leaves such a database
 alone (it logs and starts) rather than letting Alembic fail with "Can't
-locate revision" and crash-loop the rollback. That guard only protects a
+locate revision" and crash-loop the rollback — but only when that revision
+is a *later number* than the image's own head, which is why revisions are
+numbered sequentially (`0002`, `0003`, ...). Any other unknown revision
+still fails loudly. That guard only protects a
 rollback *to an image that has it*, so it shipped on its own before the
 first revision after the baseline (`0002`) did.
 

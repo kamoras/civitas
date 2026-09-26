@@ -419,3 +419,43 @@ class TestFetchCaching:
         filing = {"report_url": "https://efdsearch.senate.gov/search/view/annual/abc/", "is_paper": False}
         with patch.object(senate_fd, "_request_with_retry", new_callable=AsyncMock, return_value=moved):
             assert await senate_fd.fetch_and_parse_annual(None, db_session, filing) is None
+
+
+class TestParseCacheShape:
+    def test_round_trip(self):
+        from app.pipeline.fetch.fd_common import AnnualReport, HoldingRow, report_from_cache, report_to_cache
+
+        row = HoldingRow("Apple Inc. (AAPL)", "ST", "STOCKS", "self", "$1 - $1,000", 1.0, 1000.0, ticker="AAPL")
+        for report in (AnnualReport("Member", [row]), AnnualReport(None, None, "scanned"), AnnualReport(None, [])):
+            assert report_from_cache(report_to_cache(report)) == report
+
+    def test_rows_that_no_longer_fit_are_a_cache_miss_not_a_crash(self):
+        from app.pipeline.fetch.fd_common import report_from_cache
+
+        assert report_from_cache({"holdings": [{"asset_name": "X", "renamed_field": 1}]}) is None
+        assert report_from_cache({"unrelated": 1}) is None
+        assert report_from_cache(None) is None
+        # An extra field left by a newer layout is ignored, not fatal.
+        row = {"asset_name": "X", "asset_type": "ST", "category": "STOCKS", "owner": "self",
+               "value_text": "None", "value_low": 0.0, "value_high": 0.0, "added_later": True}
+        assert report_from_cache({"holdings": [row]}).holdings[0].asset_name == "X"
+
+
+class TestRepeatedCrash:
+    async def test_the_same_crash_twice_in_a_row_is_cached_as_unrecognized(self, db_session):
+        from unittest.mock import AsyncMock, patch
+
+        from app.pipeline.fetch import house_fd
+
+        filing = {"doc_id": "BROKEN", "pdf_url": "https://clerk.example/2025/BROKEN.pdf"}
+        with patch.object(house_fd, "fetch_bytes_with_retry", new_callable=AsyncMock, return_value=b"%PDF"), \
+             patch.object(house_fd, "parse_annual_pdf", side_effect=ValueError("bad xref")):
+            first = await house_fd.fetch_and_parse_annual(None, db_session, filing)
+            second = await house_fd.fetch_and_parse_annual(None, db_session, filing)
+        assert (first.final, second.final) == (False, True)
+        assert second.unreadable_reason == "unrecognized"
+        # ...and it is now served from the cache without another download.
+        with patch.object(house_fd, "fetch_bytes_with_retry", new_callable=AsyncMock) as get:
+            third = await house_fd.fetch_and_parse_annual(None, db_session, filing)
+        get.assert_not_called()
+        assert third.unreadable_reason == "unrecognized"

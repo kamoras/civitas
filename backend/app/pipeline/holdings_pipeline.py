@@ -45,7 +45,7 @@ from app.pipeline.fetch.senate_fd import (
 )
 from app.pipeline.fetch.senate_ptr import accept_terms as senate_accept_terms
 from app.pipeline.fetch.senate_ptr import senate_filing_id
-from app.pipeline.filer_matching import match_representative, match_senator
+from app.pipeline.filer_matching import current_senators, match_representative, match_senator
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -345,12 +345,13 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
         raise RuntimeError("Senate eFD annual-report search returned no senators' reports")
     per_senator: dict[str, list[dict]] = {}
     matched: dict[tuple[str, str, str | None], str | None] = {}  # one lookup per filer, not per filing
+    roster = current_senators(db)
     for filing in filings:
         if not is_senator_filing(filing) or not is_annual_title(filing.get("title") or ""):
             continue
         filer = (filing["last"], filing["first"], filing.get("office"))
         if filer not in matched:
-            senator = match_senator(db, *filer)
+            senator = match_senator(db, *filer, roster=roster)
             matched[filer] = senator.id if senator is not None else None
         if matched[filer] is not None:
             per_senator.setdefault(matched[filer], []).append(filing)
@@ -375,7 +376,11 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
             if time.monotonic() > deadline:
                 out_of_time = True
                 break
-            attempted = True
+            # A paper filing is never fetched (it's scanned images; the
+            # fetch returns without a request), so it proves nothing about
+            # whether eFD is up and counts neither way in _SourceHealth.
+            on_paper = bool(filing.get("is_paper"))
+            attempted = attempted or not on_paper
             try:
                 report = await fetch_senate_annual(client, db, filing)
             except SessionLapsed:
@@ -402,7 +407,7 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
                 # claim about the report this run can't back. Fall through to
                 # the senator's next-best filing.
                 continue
-            fetched = True
+            fetched = fetched or not on_paper
             inserted += _replace_disclosure(
                 db,
                 owner_filter={"senator_id": senator_id},

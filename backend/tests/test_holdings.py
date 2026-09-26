@@ -844,3 +844,22 @@ class TestOutagesStayVisible:
              patch.object(holdings_pipeline, "fetch_senate_annual", side_effect=SessionLapsed("terms page")):
             with pytest.raises(RuntimeError, match="re-accepted"):
                 await holdings_pipeline.ingest_senate_holdings(db_session, None)
+
+
+class TestPaperDoesNotMaskOutages:
+    async def test_paper_fallbacks_do_not_count_as_a_working_source(self, db_session):
+        """Every electronic report page fails; each senator falls back to a
+        paper filing, which involves no request at all. That must still read
+        as eFD being down."""
+        n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
+        filings = []
+        for i in range(n):
+            db_session.add(Senator(id=f"S{i}", name=f"Pat Name{i}", state="XX", party="D", is_current=True))
+            common = {"last": f"Name{i}", "first": "Pat", "office": f"Name{i}, Pat (Senator)"}
+            filings += [
+                {**_senate_filing(f"e{i}"), **common},
+                {**_senate_filing(f"p{i}", title="Annual Report", filed="2026-08-01", paper=True), **common},
+            ]
+        db_session.commit()
+        with pytest.raises(RuntimeError):
+            await _ingest_senate(db_session, filings, {})  # every electronic fetch fails

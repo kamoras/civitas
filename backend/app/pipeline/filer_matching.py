@@ -57,10 +57,18 @@ def _pick(candidates: list, last: str, firsts: set[str]):
     return None
 
 
-def match_senator(db: Session, last: str, first: str, office: str | None = None) -> Senator | None:
+def current_senators(db: Session) -> list[Senator]:
+    """The roster match_senator compares against — load it once per ingest
+    phase and pass it in, rather than once per filer."""
+    return db.query(Senator).filter(Senator.is_current == True).all()  # noqa: E712
+
+
+def match_senator(
+    db: Session, last: str, first: str, office: str | None = None, roster: list[Senator] | None = None,
+) -> Senator | None:
     if not _fold(last):
         return None
-    senators = db.query(Senator).filter(Senator.is_current == True).all()  # noqa: E712
+    senators = roster if roster is not None else current_senators(db)
     return _pick(senators, last, _first_names(first, _office_first_name(office)))
 
 

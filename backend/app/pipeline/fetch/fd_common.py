@@ -26,7 +26,7 @@ table can be extended from the real value rather than a guess.
 
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import MISSING, asdict, dataclass, fields
 
 from app.pipeline.fetch.ptr_common import OPEN_ENDED_AMOUNT_RE, extract_ticker
 
@@ -82,6 +82,39 @@ class AnnualReport:
 
 UNREADABLE_SCANNED = "scanned"
 UNREADABLE_UNRECOGNIZED = "unrecognized"
+
+
+# --- The parse cache (api_cache), shared by house_fd and senate_fd ---------
+
+_HOLDING_FIELDS = {f.name for f in fields(HoldingRow)}
+_REQUIRED_HOLDING_FIELDS = {
+    f.name for f in fields(HoldingRow) if f.default is MISSING and f.default_factory is MISSING
+}
+
+
+def report_to_cache(report: "AnnualReport") -> dict:
+    return {
+        "filer_status": report.filer_status,
+        "holdings": [asdict(h) for h in report.holdings] if report.holdings is not None else None,
+        "unreadable_reason": report.unreadable_reason,
+    }
+
+
+def report_from_cache(cached: dict | None) -> "AnnualReport | None":
+    """The cached report, or None for a miss — including an entry whose
+    rows no longer fit HoldingRow (a field added or renamed without a
+    PARSER_VERSION bump): that is re-fetched, never a crash mid-phase."""
+    if not cached or "holdings" not in cached:
+        return None
+    rows = cached["holdings"]
+    if rows is None:
+        return AnnualReport(cached.get("filer_status"), None, cached.get("unreadable_reason"))
+    holdings = []
+    for row in rows:
+        if not isinstance(row, dict) or not _REQUIRED_HOLDING_FIELDS <= row.keys():
+            return None
+        holdings.append(HoldingRow(**{k: v for k, v in row.items() if k in _HOLDING_FIELDS}))
+    return AnnualReport(cached.get("filer_status"), holdings, cached.get("unreadable_reason"))
 
 
 # The House Clerk's published asset-type code list
@@ -274,3 +307,22 @@ def strip_house_code(asset_text: str) -> tuple[str, str | None]:
 
 def ticker_for(asset_name: str) -> str | None:
     return extract_ticker(asset_name)
+
+
+def crashed_before(db, tier: str, key: str) -> bool:
+    """Record a parser crash on this filing and say whether it crashed on
+    the previous run too. A first crash may be transient (the read is
+    retried, not cached); the same crash twice in a row is taken as
+    deterministic, and the report is cached as unrecognized — otherwise a
+    permanently malformed file would be downloaded and re-parsed every
+    night, forever, with its member's section hidden."""
+    from app.pipeline.cache import api_cache_get, api_cache_set
+
+    marker = f"crash-{key}"
+    seen = api_cache_get(db, tier, marker, max_age_hours=_CRASH_MEMORY_HOURS) is not None
+    api_cache_set(db, tier, marker, {"crashed": True}, normal_ttl_hours=_CRASH_MEMORY_HOURS)
+    return seen
+
+
+# Long enough to span one nightly run to the next, with slack.
+_CRASH_MEMORY_HOURS = 72

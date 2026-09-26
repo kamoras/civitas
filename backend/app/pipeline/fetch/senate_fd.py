@@ -18,7 +18,6 @@ house_fd.py's module docstring for the same reasoning).
 """
 
 import logging
-from dataclasses import asdict
 from urllib.parse import urlparse
 
 import httpx
@@ -31,6 +30,9 @@ from app.pipeline.fetch.fd_common import (
     UNREADABLE_UNRECOGNIZED,
     AnnualReport,
     HoldingRow,
+    crashed_before,
+    report_from_cache,
+    report_to_cache,
     parse_holding_value,
     senate_category,
     ticker_for,
@@ -255,14 +257,9 @@ async def fetch_and_parse_annual(
     if filing.get("is_paper"):
         return AnnualReport(None, None, UNREADABLE_SCANNED)
     cache_key = f"annual-parsed-v{PARSER_VERSION}-{senate_filing_id(filing['report_url'])}"
-    cached = api_cache_get(db, _CACHE_TIER, cache_key, max_age_hours=_FILING_MAX_AGE_HOURS)
-    if cached is not None and "holdings" in cached:
-        holdings = cached["holdings"]
-        return AnnualReport(
-            None,
-            [HoldingRow(**row) for row in holdings] if holdings is not None else None,
-            cached.get("unreadable_reason"),
-        )
+    cached = report_from_cache(api_cache_get(db, _CACHE_TIER, cache_key, max_age_hours=_FILING_MAX_AGE_HOURS))
+    if cached is not None:
+        return cached
 
     resp = await _request_with_retry(client, "GET", filing["report_url"])
     if resp is None:
@@ -293,19 +290,15 @@ async def fetch_and_parse_annual(
         holdings = parse_assets_table(doc)
     except Exception:
         logger.exception("Failed to parse Senate annual report %s", filing["report_url"])
-        # Linked as unreadable for now, and retried next run (see
-        # AnnualReport.final) rather than cached.
-        return AnnualReport(None, None, UNREADABLE_UNRECOGNIZED, final=False)
+        if not crashed_before(db, _CACHE_TIER, cache_key):
+            # May be transient: nothing stored, retried next run (see
+            # AnnualReport.final).
+            return AnnualReport(None, None, UNREADABLE_UNRECOGNIZED, final=False)
+        # The same crash two runs running: deterministic — cached below.
+        holdings = None
     report = AnnualReport(None, holdings, None if holdings is not None else UNREADABLE_UNRECOGNIZED)
 
     # Unreadable results are cached too: a filed report never changes, and
     # PARSER_VERSION in the key is what retries them after a parser fix.
-    api_cache_set(
-        db, _CACHE_TIER, cache_key,
-        {
-            "holdings": [asdict(h) for h in holdings] if holdings is not None else None,
-            "unreadable_reason": report.unreadable_reason,
-        },
-        normal_ttl_hours=_FILING_MAX_AGE_HOURS,
-    )
+    api_cache_set(db, _CACHE_TIER, cache_key, report_to_cache(report), normal_ttl_hours=_FILING_MAX_AGE_HOURS)
     return report

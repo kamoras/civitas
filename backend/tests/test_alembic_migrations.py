@@ -113,9 +113,23 @@ def test_a_database_migrated_by_a_newer_image_is_left_alone(patched_engine):
     that newer revision; the older image must start anyway (the schema only
     ever expands between releases), not crash-loop the rollback."""
     database._run_migrations()
+    newer = f"{int(_head()) + 1:04d}"
     with patched_engine.begin() as conn:
-        conn.execute(text("UPDATE alembic_version SET version_num = 'from_a_newer_image'"))
+        conn.execute(text(f"UPDATE alembic_version SET version_num = '{newer}'"))
 
     database._run_migrations()  # must not raise
 
-    assert _revision(patched_engine) == "from_a_newer_image"
+    assert _revision(patched_engine) == newer
+
+
+def test_an_unknown_revision_that_is_not_a_later_one_still_fails_loudly(patched_engine):
+    """Another branch's revision, a renamed file: not a rollback. Starting
+    anyway would run the app against a schema nobody checked."""
+    from alembic.util.exc import CommandError
+
+    database._run_migrations()
+    with patched_engine.begin() as conn:
+        conn.execute(text("UPDATE alembic_version SET version_num = 'a1b2c3d4e5f6'"))
+
+    with pytest.raises(CommandError):
+        database._run_migrations()
