@@ -162,6 +162,11 @@ def build_payload(cur, s, search, fin):
         except Exception:
             areas = []
         key_votes.append({
+            # Storage holds each roll call once, but bill_id is not unique
+            # per roll call (a Senate key bill's documentName), so the row
+            # is the identity dedupe_votes must see; billId alone would
+            # merge a bill's cloture and passage votes.
+            "rcKey": f"row-{r['id']}",
             "billId": r["bill_id"], "vote": r["vote"],
             "policyArea": r["policy_area"] or "PROCEDURAL",
             "policyAreas": areas,
@@ -280,12 +285,12 @@ def main() -> int:
             for v in payload["votingRecord"]["keyVotes"]
             if v["votedWithParty"] is not None
         ]
-        scored_rate, _ = party_break_rate(payload["votingRecord"])
+        scored_rate, n_scored = party_break_rate(payload["votingRecord"])
         metrics = {
             "pac_ratio": funding["totalFromPACs"] / base if base > 0 else None,
             "small_donor_pct": funding["smallDonorPercentage"] if base > 0 else None,
             **constituent_metrics(
-                scored_rate, len(labeled), s["state"], s["party"],
+                scored_rate, n_scored, s["state"], s["party"],
                 effective_party=payload["votingRecord"].get("effectiveParty"),
                 reference=payload.get("constituentReference"),
             ),

@@ -200,6 +200,33 @@ class TestDerivedConsistency:
             for f in failures
         )
 
+    def test_probe_waits_for_enough_readable_members(self, db_session):
+        # Early in a congress: 8 members with enough votes, 2 past
+        # saturation. 25% of 8 is noise, not a broken reference.
+        for i in range(40):
+            s = _add_senator(db_session, f"s{i}", iv=50, total_raised=1_000_000,
+                             total_from_pacs=1_000_000 * i / 50, small_donor_pct=40 - 0.8 * i)
+            if i < 8:
+                _add_votes(db_session, s.id, breaks=100 if i < 2 else i, total=200)
+        db_session.commit()
+        failures = check_ground_truth(db_session)["failures"]
+        assert not any("reference and the votes disagree" in f["rationale"] for f in failures)
+
+    def test_break_rate_reads_each_stored_row_as_its_own_roll_call(self, db_session):
+        # A Senate key bill's cloture and passage votes share a bill_id. They
+        # are two roll calls and both count; bill_id alone would merge them.
+        from app.pipeline.analyze.ground_truth import _member_records
+
+        s = _add_senator(db_session, "s0")
+        for j in range(20):
+            db_session.add(KeyVote(
+                senator_id=s.id, bill_name="Same Bill", bill_id="S.1", date="2026-01-01",
+                vote="Yea", voted_with_party=j >= 5,
+            ))
+        db_session.commit()
+        record = _member_records(db_session, Senator)[0]
+        assert record["raw"]["labeled_votes"] == 20
+
     def test_gate_judges_members_on_the_reference_the_run_scored_with(self, db_session):
         # The persisted reference is healthy; the run's own reference (passed
         # in) puts nearly everyone past saturation, and the gate must read

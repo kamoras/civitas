@@ -67,8 +67,9 @@ from scipy import stats as scipy_stats
 
 from app.pipeline.analyze.population_reference import CONSTITUENT_REFERENCE
 from app.pipeline.analyze.score_calculator import (
+    OVER_BREAK_DECLINE,
     SATURATION_QUANTILE,
-    party_vote_weight,
+    party_break_rate,
     seat_break_deviation,
 )
 
@@ -163,11 +164,18 @@ def _tie_extended_extreme(
 
 def seat_relative_break_position(deviation: float, scale: float) -> float:
     """A member's break rate relative to their seat's expectation, folded at
-    the saturation deviation: equal to the deviation up to it, then falling
-    one-for-one past it. Constituent Alignment's vote score must rank the
-    same way. Deliberately the shape only, not score_calculator's decline
-    rate, so the gate still notices if the scorer stops turning down."""
-    return deviation if deviation <= scale else 2 * scale - deviation
+    the saturation deviation the way the design says the vote score is:
+    equal to the deviation up to it, then falling at OVER_BREAK_DECLINE
+    past it, so the vote score is a monotone function of this and the rank
+    check stays valid if that design weight is retuned. Written from the
+    design, not by calling the scorer, so a scorer that stops turning down
+    decouples from it. What it can catch is population-level: in a Senate
+    with a handful of members past saturation, a fault confined to them
+    barely moves a whole-chamber rank test, and the per-member shape is
+    pinned by the unit tests (test_constituent_alignment.py) instead."""
+    if deviation <= scale:
+        return deviation
+    return scale - OVER_BREAK_DECLINE * (deviation - scale)
 
 
 def constituent_metrics(
@@ -206,7 +214,10 @@ def _past_saturation_share(members: list[dict]) -> float:
     rather than the exact run population."""
     flags = [m["metrics"].get("past_saturation") for m in members]
     readable = [f for f in flags if f is not None]
-    return sum(readable) / len(readable) if readable else 0.0
+    # Same minimum as every rank check: early in a congress only a few
+    # members have enough labeled votes, and 2 of 8 is noise, not a
+    # disagreement between the reference and the votes.
+    return sum(readable) / len(readable) if len(readable) >= MIN_POPULATION else 0.0
 
 
 def evaluate_derived_checks(members: list[dict], entity_label: str = "senators") -> dict:
@@ -421,34 +432,39 @@ def _member_records(db, model, constituent_reference: dict | None = None) -> lis
     ``constituent_reference`` is the reference this run scored with; the
     persisted one when not given."""
     vote_model, fk_col = _vote_query_for(model)
-    # id -> [labeled, weighted breaks, weighted labeled]. The break rate is
-    # the weighted one the score compares (party_break_rate — storage holds
-    # each roll call once, so no dedupe is needed here).
-    counts: dict[str, list[float]] = defaultdict(lambda: [0, 0.0, 0.0])
-    for member_id, with_party, weight in (
-        db.query(fk_col, vote_model.voted_with_party, vote_model.party_alignment_weight)
+    # Each member's party-labeled votes, as the dicts party_break_rate reads,
+    # so the gate judges members on the score's own statistic (its weights,
+    # its minimum count). Storage holds each roll call once but bill_id is
+    # not unique per roll call, so the row id is the identity.
+    current = [m for m in db.query(model).filter(model.is_current.is_(True)).all()]
+    votes: dict[str, list[dict]] = defaultdict(list)
+    for row_id, member_id, bill_id, with_party, weight in (
+        db.query(
+            vote_model.id, fk_col, vote_model.bill_id,
+            vote_model.voted_with_party, vote_model.party_alignment_weight,
+        )
         .filter(vote_model.voted_with_party.isnot(None))
+        .filter(fk_col.in_([m.id for m in current]))
         .all()
     ):
-        w = party_vote_weight(weight)
-        counts[member_id][0] += 1
-        counts[member_id][1] += 0.0 if with_party else w
-        counts[member_id][2] += w
+        votes[member_id].append({
+            "rcKey": f"row-{row_id}", "billId": bill_id,
+            "votedWithParty": with_party, "partyAlignmentWeight": weight,
+        })
     if constituent_reference is None:
         constituent_reference = CONSTITUENT_REFERENCE.load()
 
     records = []
-    for m in db.query(model).filter(model.is_current.is_(True)).all():
+    for m in current:
         raised = m.total_raised or 0
         # The same denominator Funding Independence scores on (contributions,
         # falling back to receipts for rows scored before it existed) — a
         # direction-of-effect check against a different ratio than the one
         # scored would weaken for reasons unrelated to the scores.
         base = getattr(m, "total_contributions", None) or raised
-        labeled, w_breaks, w_labeled = counts[m.id]
+        rate, labeled = party_break_rate({"keyVotes": votes[m.id]})
         constituent = constituent_metrics(
-            w_breaks / w_labeled if w_labeled else None, labeled,
-            m.state or "", m.party or "I",
+            rate, labeled, m.state or "", m.party or "I",
             effective_party=getattr(m, "caucus_party", None),
             district=getattr(m, "district", None),
             reference=constituent_reference,

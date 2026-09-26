@@ -277,6 +277,10 @@ primaries), so the data gives no basis for an asymmetric shape.
 - **Loyalty was tested in one election.** Only the 108th House roll calls were
   available here. Carson et al. (2010) find the same pattern across many more
   congresses, but this replication is one year.
+- **The decline past saturation rests on House primaries.** No Senate
+  primary returns were tested (the Pettigrew, Owen & Wanless data are House
+  only), and in Senate general elections the slope past saturation is flat,
+  not negative. Senators are scored on the same shape by extension.
 - **The Senate loyal side does not replicate.** With every Senate election
   from 1990 to 2024 (N=461, section 8), the crossing side holds (2.28 up to
   saturation, t=1.9) but the loyal side does not (−0.50, t=−0.5), and the
