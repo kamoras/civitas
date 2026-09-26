@@ -28,7 +28,8 @@ from app.pipeline.fetch.http_utils import fetch_text_with_retry
 logger = logging.getLogger(__name__)
 
 # Chamber wording varies ("United States Congress", "US HOUSE OF
-# REPRESENTATIVES", "U.S. Representative", Arkansas's real "U.S. Congress
+# REPRESENTATIVES", "U.S. Representative", Tennessee's certified list's
+# "United States House of Representatives District 1", Arkansas's real "U.S. Congress
 # District 02", Vermont's real bare "REPRESENTATIVE TO CONGRESS" — no
 # "U.S."/"United States" prefix, "to" not "in"); the ordinal in Colorado's
 # label advances every Congress, so nothing cycle-specific is matched.
@@ -45,7 +46,7 @@ logger = logging.getLogger(__name__)
 # Congressional District 3 County Commissioner"), which would misread
 # that county race as a real federal contest.
 _CHAMBER_HOUSE = (
-    r"(?:United\s+States\s+(?:Congress\b|Representative)"
+    r"(?:United\s+States\s+(?:Congress\b|Representative|House\b)"
     r"|U\.?\s*S\.?\s*(?:House|Representative|Congress\b)"
     r"|(?:Representative\s+(?:in|to)\s+|\d+(?:st|nd|rd|th)\s+)Congress\b)"
 )
@@ -311,6 +312,17 @@ STATEWIDE_MARKER_TTL_HOURS = 24 * 400
 
 def statewide_marker_key(state: str, cycle: int) -> str:
     return f"synced-{state}-{cycle}"
+
+
+# Which source last answered for a state's federal ballot, and whether that
+# source was its complete certified ballot. A state's config says what its
+# PRIMARY source is; a `fallback` can answer instead (a certified list not
+# posted yet), and then the page must not claim a complete ballot.
+BALLOT_BASIS_TIER = "ballot-basis"
+
+
+def ballot_basis_key(state: str, cycle: int) -> str:
+    return f"{state}-{cycle}"
 
 
 # Judicial gets its OWN marker rather than sharing the statewide one.
@@ -854,6 +866,7 @@ async def discover_certification_link(
     cycle, so the link is found, never pinned. None for both "not posted
     yet" and "more than one match" — guessing which of two
     certifications is current would be the one wrong answer."""
+    page_url = page_url.replace("{year}", str(year))
     page = await fetch_text_with_retry(client, rate_limiter, page_url, f"{label} certification page")
     if page is None:
         return None

@@ -1089,10 +1089,15 @@ export default function AboutPage() {
                 <P>
                   Everyone on a certified ballot is shown, including candidates who never
                   filed with the FEC — they appear with &ldquo;no FEC filing&rdquo; instead
-                  of fundraising figures. The remaining six states sit behind bot
-                  challenges on their election sites, or in Oklahoma&apos;s case an API
-                  that requires logging in. We do not work around either; where the same
-                  office publishes a plain file on an open path, we use that instead.
+                  of fundraising figures. Colorado, Virginia, Tennessee, Florida and New Jersey now
+                  read their certified candidate lists too (Tennessee&apos;s federal races alone list
+                  36 independents; Florida&apos;s filled five districts its results file never
+                  mentioned), and Wisconsin its official primary canvass, a plain
+                  file on an otherwise blocked site. Until a state certifies its list, its
+                  primary results stand in, and the page says &ldquo;nominees&rdquo; rather
+                  than claiming the whole ballot. The remaining five states sit behind bot
+                  challenges on their election sites, or in Oklahoma&apos;s case an API that
+                  requires logging in. We do not work around either.
                 </P>
                 <P>
                   A Senate race only appears where the FEC&apos;s election calendar lists
