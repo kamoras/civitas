@@ -532,6 +532,24 @@ list), so it needs no new data, no lookup service and no network call.
 offer the two or three as a second tap rather than sending the reader
 elsewhere. The text filter stays for anyone who prefers it.
 
+Where a county answers nothing — a county split between districts, or a
+city holding several — a **map of the districts themselves** does. Every
+multi-district state page draws its districts, shaded by the same PVI
+rule as the district list (red R, blue D, paler = closer); hovering or
+tabbing to one previews its race, and clicking narrows the page to it.
+The outlines are the Census 119th-Congress cartographic boundary file,
+split per state and vendored under `frontend/public/data/cd/` (all 50
+states, 435 districts, ~207KB total; a page loads only its own state) by
+`backend/scripts/build_district_topology.py`, which refuses to write
+unless every state's district numbers match
+`county_district_crosswalk.json` and none was lost to simplification.
+At-large states get no map — one shape is nothing to choose between.
+Regenerate after redistricting:
+
+```bash
+python backend/scripts/build_district_topology.py
+```
+
 ### Race coverage: what counts as coverage
 
 A story is attached to a race by candidate name, and a bare surname is never

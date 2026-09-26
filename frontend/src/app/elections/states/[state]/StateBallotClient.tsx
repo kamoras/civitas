@@ -12,6 +12,7 @@ import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import BallotMeasureCard from "@/components/elections/BallotMeasureCard";
 import BallotBasisNotice from "@/components/elections/BallotBasisNotice";
 import DistrictFinder from "@/components/elections/DistrictFinder";
+import DistrictMap from "@/components/elections/DistrictMap";
 import TownContestCard from "@/components/elections/TownContestCard";
 import { districtAreaLabel, formatPvi, majorPartyOf, matchesDistrictQuery, pviColor, tierCandidates } from "@/lib/elections";
 import { safeHref } from "@/lib/formatting";
@@ -109,9 +110,11 @@ function HouseDistrictRow({
 }
 
 function HouseSection({
+  state,
   houseRaces,
   superseded,
 }: {
+  state: string;
   houseRaces: StateBallot["houseRaces"];
   superseded: boolean;
 }) {
@@ -180,7 +183,17 @@ function HouseSection({
             you have to know what to type, and typing is the step people
             skip. Counties are pickable because a person knows theirs
             without looking it up — almost nobody knows their district
-            number. */}
+            number. The map answers the case counties cannot: a county
+            split between districts, or a city holding several. */}
+        <DistrictMap
+          state={state}
+          races={houseRaces}
+          picked={pickedId}
+          onPick={(id) => {
+            setPickedId(id);
+            setFilter("");
+          }}
+        />
         {houseRaces.length > 3 && (
           <DistrictFinder
             races={houseRaces}
@@ -939,6 +952,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
 
           {ballot.houseRaces.length > 0 && (
             <HouseSection
+              state={ballot.state}
               houseRaces={ballot.houseRaces}
               superseded={ballot.ballotBasis?.supersededByPrimary ?? false}
             />

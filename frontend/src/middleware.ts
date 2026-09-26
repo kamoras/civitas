@@ -38,7 +38,10 @@ export function middleware(request: NextRequest, event: NextFetchEvent) {
 }
 
 export const config = {
+  // data/ is static geometry the maps fetch (public/data/) — a request for
+  // it is part of a page view, not another one, and counting it would log
+  // a second "/other" visit every time someone opened a state page.
   matcher: [
-    "/((?!api|_next/static|_next/image|admin|favicon.ico|icon.svg|sitemap.xml|robots.txt|opengraph-image).*)",
+    "/((?!api|_next/static|_next/image|data/|admin|favicon.ico|icon.svg|sitemap.xml|robots.txt|opengraph-image).*)",
   ],
 };

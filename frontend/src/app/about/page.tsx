@@ -1077,6 +1077,15 @@ export default function AboutPage() {
                   two or three as a second tap rather than sending you elsewhere. A text
                   filter remains for anyone who prefers it.
                 </P>
+                <P>
+                  Where a county is not enough — a county split between districts, or a
+                  city holding several — the page also draws a map of the districts
+                  themselves, from the Census Bureau&apos;s 119th-Congress boundary file.
+                  Each is shaded by the same lean rule as the list (redder leans
+                  Republican, bluer Democratic, paler is closer); hovering previews a
+                  district&apos;s race and clicking narrows the page to it. The map is
+                  served with the site, so it too sends nothing anywhere.
+                </P>
               </div>
 
               <div>
