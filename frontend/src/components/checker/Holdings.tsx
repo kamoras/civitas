@@ -86,8 +86,6 @@ function HoldingsDonut({
   // rather than clearing the selected slice's highlight.
   const focus =
     slices.find((c) => c.category === active) ?? slices.find((c) => c.category === selected) ?? null;
-  // Dim the rest only when the highlighted category is one of the drawn
-  // slices; a legend row with no stated value has no slice to stand out.
   const label = slices.map((c) => `${c.label} ${formatShare(c.share)}`).join(", ");
 
   let cursor = 0;
@@ -117,6 +115,9 @@ function HoldingsDonut({
           slices.map((c) => {
             const start = cursor;
             cursor += c.share;
+            // Dim the rest only when the highlighted category is one of the
+            // drawn slices; a legend row with no stated value has no slice
+            // to stand out.
             const dimmed = focus !== null && focus.category !== c.category;
             return (
               <path
@@ -248,16 +249,32 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
   // a later category click would otherwise overwrite the filtered list.
   const requestSeq = useRef(0);
 
+  // The category most recently asked for — what a click toggles against,
+  // so a second click on a row whose request is still in flight clears it
+  // rather than asking for it again. Reset to the shown category if that
+  // request fails.
+  const requested = useRef<string | null>(null);
+  // The category of the data on screen, for that failure path (which can't
+  // see a render's `data`).
+  const shown = useRef<string | null>(null);
+
   const load = useCallback(
     async (page: number, cat: string | null) => {
       const seq = ++requestSeq.current;
+      requested.current = cat;
       setLoading(true);
       setError(null);
       try {
         const result = await FETCHER[chamber](memberId, { page, perPage: HOLDINGS_PER_PAGE, category: cat });
-        if (seq === requestSeq.current) setData(result);
+        if (seq === requestSeq.current) {
+          setData(result);
+          shown.current = result.categoryFilter;
+        }
       } catch (e) {
-        if (seq === requestSeq.current) setError(e instanceof Error ? e.message : "Failed to load holdings");
+        if (seq === requestSeq.current) {
+          setError(e instanceof Error ? e.message : "Failed to load holdings");
+          requested.current = shown.current;
+        }
       } finally {
         if (seq === requestSeq.current) setLoading(false);
       }
@@ -275,7 +292,7 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
   const category = data?.categoryFilter ?? null;
 
   const selectCategory = (key: string) => {
-    const next = category === key ? null : key;
+    const next = requested.current === key ? null : key;
     // Choosing a slice is asking to see those assets — reveal the list.
     if (next) setListOpen(true);
     load(1, next);

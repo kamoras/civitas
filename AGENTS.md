@@ -732,7 +732,9 @@ be read are stored `parsed=False` with a reason (`scanned` paper filing,
 parser's output changes, and already-ingested reports are re-read. Both
 phases are time-boxed (`holdings_pipeline.PHASE_BUDGET`), so a first run or a
 version bump spreads over a few nights instead of stretching the stock run
-past its 2h overrun alarm. Presidents are not covered yet: the OGE 278e is an
+past its 2h overrun alarm. The holdings phases never decide the stock run's
+status (that stays "every trade phase failed"); both failing sends its own ops
+alert instead. Presidents are not covered yet: the OGE 278e is an
 ~850-page hybrid scan with no asset-type column.
 
 Each senator is processed independently. The pipeline uses `PipelineRun`

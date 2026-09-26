@@ -37,8 +37,9 @@ def _run(
          patch("app.pipeline.stock_pipeline._ingest_house", new_callable=AsyncMock) as mock_house, \
          patch("app.pipeline.stock_pipeline._ingest_senate", new_callable=AsyncMock) as mock_senate, \
          patch("app.pipeline.stock_pipeline._ingest_president", new_callable=AsyncMock) as mock_president, \
-         patch("app.pipeline.stock_pipeline.ingest_house_holdings", new_callable=AsyncMock) as mock_house_h, \
-         patch("app.pipeline.stock_pipeline.ingest_senate_holdings", new_callable=AsyncMock) as mock_senate_h:
+         patch("app.pipeline.holdings_pipeline.ingest_house_holdings", new_callable=AsyncMock) as mock_house_h, \
+         patch("app.pipeline.holdings_pipeline.ingest_senate_holdings", new_callable=AsyncMock) as mock_senate_h, \
+         patch("app.pipeline.holdings_pipeline._alert") as mock_alert:
         for mock, result in (
             (mock_house, house_result), (mock_senate, senate_result), (mock_president, president_result),
             (mock_house_h, house_holdings_result), (mock_senate_h, senate_holdings_result),
@@ -49,7 +50,9 @@ def _run(
                 mock.return_value = result if result is not None else 0
 
         import asyncio
-        return asyncio.run(stock_pipeline.run_stock_trades_pipeline())
+        result = asyncio.run(stock_pipeline.run_stock_trades_pipeline())
+        result["_holdings_alerts"] = mock_alert.call_count
+        return result
 
 
 class TestStockTradesPipelineRunTracking:
@@ -118,14 +121,22 @@ class TestStockTradesPipelineRunTracking:
         )
         assert result["status"] == "failed"
 
-    def test_both_holdings_phases_failing_fails_the_run(self, db_session):
+    def test_both_holdings_phases_failing_alerts_but_does_not_fail_the_trades_run(self, db_session):
+        """A holdings-only outage must not report stock trades as stale (the
+        run row is the trades pipeline's); it raises its own ops alert."""
         result = _run(
             db_session, house_result=2, senate_result=1,
             house_holdings_result=RuntimeError("index gone"),
             senate_holdings_result=RuntimeError("search broken"),
         )
-        assert result["status"] == "failed"
-        assert result["house_trades"] == 2
+        assert result["status"] == "completed"
+        assert result["_holdings_alerts"] == 1
+        run = db_session.query(StockTradesPipelineRun).one()
+        assert "House holdings" in run.error_message and "Senate holdings" in run.error_message
+
+    def test_one_holdings_phase_failing_raises_no_alert(self, db_session):
+        result = _run(db_session, house_holdings_result=RuntimeError("down"), senate_holdings_result=3)
+        assert result["_holdings_alerts"] == 0
 
     def test_holdings_failing_alone_leaves_the_trades_run_completed(self, db_session):
         result = _run(

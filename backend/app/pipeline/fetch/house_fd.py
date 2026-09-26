@@ -107,11 +107,21 @@ class _OpenRow:
         value_text = " ".join(self.value).strip()
         low, high = parse_holding_value(value_text)
         owner_code = " ".join(self.owner).strip().upper()
+        # A blank owner cell is the filer's own asset (the form's
+        # convention); SP/DC/JT are the form's codes. Anything else is not
+        # guessed to be the member's.
+        if not owner_code:
+            owner = "self"
+        elif owner_code in OWNER_CODES:
+            owner = OWNER_CODES[owner_code]
+        else:
+            logger.info("Unrecognized House owner code %r", owner_code)
+            owner = "unknown"
         return HoldingRow(
             asset_name=name,
             asset_type=code or "",
             category=house_category(code),
-            owner=OWNER_CODES.get(owner_code, "self"),
+            owner=owner,
             value_text=value_text,
             value_low=low,
             value_high=high,

@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
 _YEARS_BACK = 2
 
 # Wall-clock budget for each holdings phase, counted from the phase's start
-# and checked before each report fetch. Measured 2026-09: a first House run
+# and checked before every report fetch. Measured 2026-09: a first House run
 # reads ~430 reports (~9 min in a dev container, network-bound at the
 # Clerk's 1 req/s; slower on the Pi's CPU), the Senate ~100 (~4 min, most of
 # it the browser search). Past the budget the remaining members wait for the
@@ -64,10 +64,8 @@ _YEARS_BACK = 2
 # is a few pages, filtered to senators).
 PHASE_BUDGET = timedelta(minutes=10)
 
-# Consecutive report fetches that may fail before the phase gives up and
-# fails: one bad filing is that filing's problem, but a run of them is the
-# source (or its session) being down, which must show up as a failed phase
-# rather than a quietly short one.
+# Consecutive members with no report fetchable before the phase gives up
+# and fails (see _FailureRun).
 MAX_CONSECUTIVE_FETCH_FAILURES = 5
 
 
@@ -149,6 +147,30 @@ def _house_report_label(filing: dict) -> str:
     return f"{base} (amended)" if filing.get("filing_type") == "A" else base
 
 
+def _is_member_prefix(prefix: str | None) -> bool:
+    """The index's "Hon." — sitting members' honorific; candidates file as
+    "Mr."/"Dr."/"Ms." or with none. Tolerant of the period and case."""
+    return (prefix or "").strip().rstrip(".").lower() == "hon"
+
+
+class _FailureRun:
+    """Counts consecutive members whose every fetch attempt failed. One
+    bad filing is that filing's problem; a run of members with nothing
+    fetchable is the source (or its session) being down, and must fail the
+    phase rather than leave it quietly short."""
+
+    def __init__(self, source: str) -> None:
+        self.source = source
+        self.count = 0
+
+    def record(self, attempted: bool, fetched: bool) -> None:
+        if not attempted:
+            return
+        self.count = 0 if fetched else self.count + 1
+        if self.count >= MAX_CONSECUTIVE_FETCH_FAILURES:
+            raise RuntimeError(f"{self.source}: {self.count} members in a row with no report fetchable")
+
+
 async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
     """Store each representative's newest annual report. Returns holdings stored."""
     deadline = time.monotonic() + PHASE_BUDGET.total_seconds()
@@ -157,16 +179,19 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
     # newest calendar year, then the latest filed within it (an amendment
     # supersedes the original it amends).
     per_rep: dict[str, list[dict]] = {}
+    matched: dict[tuple[str, str, str], str | None] = {}  # one lookup per filer, not per filing
     indexed = 0
     for year in range(current_year - 1, current_year - 1 - _YEARS_BACK, -1):
         filings = await fetch_annual_filing_index(client, db, year)
         indexed += len(filings)
         filings = sorted(filings, key=lambda f: f.get("filing_date") or "", reverse=True)
         for filing in filings:
-            rep = match_representative(db, filing["last"], filing["first"], filing["state_district"])
-            if rep is None:
-                continue
-            per_rep.setdefault(rep.id, []).append(filing)
+            filer = (filing["last"], filing["first"], filing["state_district"])
+            if filer not in matched:
+                rep = match_representative(db, *filer)
+                matched[filer] = rep.id if rep is not None else None
+            if matched[filer] is not None:
+                per_rep.setdefault(matched[filer], []).append(filing)
     if indexed == 0:
         # Two calendar years with no annual report from anyone in the House
         # is a failed or changed index, not a quiet year — fail the phase so
@@ -175,13 +200,12 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
 
     stored = _stored_reports(db, FinancialDisclosure.representative_id)
     inserted = 0
-    failures = 0
+    failure_run = _FailureRun("House Clerk")
     order = _members_in_order(per_rep, stored)
     for position, rep_id in enumerate(order):
-        if time.monotonic() > deadline:
-            logger.info("House holdings: time budget spent — %d members wait for the next run", len(order) - position)
-            break
         mine = stored.get(rep_id)
+        attempted = fetched = False
+        out_of_time = False
         for filing in per_rep[rep_id]:
             if _is_current(mine, filing["doc_id"], HOUSE_PARSER_VERSION):
                 break  # already have the newest report, as this parser reads it
@@ -189,17 +213,18 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
                 # Only older reports than the stored one turned up (a year's
                 # index failed to load): keep the newer stored report.
                 break
+            if time.monotonic() > deadline:
+                out_of_time = True
+                break
+            attempted = True
             report = await fetch_house_annual(client, db, filing)
-            failures = failures + 1 if report is None else 0
-            if failures >= MAX_CONSECUTIVE_FETCH_FAILURES:
-                db.commit()
-                raise RuntimeError(f"House Clerk: {failures} consecutive annual-report fetches failed")
             if report is None:
                 # Couldn't fetch this filing (it may not even be the
                 # member's — a same-surname candidate's amendment can rank
                 # first): try the member's next one. _is_older above keeps
                 # that from ever displacing a newer stored report.
                 continue
+            fetched = True
             if not report.final and mine is not None:
                 # Transiently unreadable: keep the stored report rather than
                 # replacing a readable one with a link.
@@ -209,12 +234,13 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
                 # A candidate for the seat who shares the member's surname
                 # and district — not this member's report.
                 continue
-            if not status and filing.get("filing_type") != "O" and filing.get("prefix") != "Hon.":
+            if not status and filing.get("filing_type") != "O" and not _is_member_prefix(filing.get("prefix")):
                 # A scanned filing has no readable Status line. An original
                 # annual report ("O") is only ever a member's, but an
                 # amendment can be a candidate's — and in the index those
                 # carry no "Hon." (2025: 82 of 105 amendments), which every
-                # sitting member's filing does.
+                # sitting member's filing does. Both are the Clerk's own
+                # structured index fields, not inferred from any name.
                 continue
             inserted += _replace_disclosure(
                 db,
@@ -228,7 +254,11 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
                 parser_version=HOUSE_PARSER_VERSION,
             )
             break
-        db.commit()  # per member, so a budget stop or a later crash keeps what's done
+        db.commit()  # per member, so a budget stop or a later failure keeps what's done
+        if out_of_time:
+            logger.info("House holdings: time budget spent — %d members wait for the next run", len(order) - position)
+            break
+        failure_run.record(attempted, fetched)
     return inserted
 
 
@@ -312,51 +342,117 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
 
     stored = _stored_reports(db, FinancialDisclosure.senator_id)
     inserted = 0
-    failures = 0
+    failure_run = _FailureRun("Senate eFD")
     order = _members_in_order(per_senator, stored)
     for position, senator_id in enumerate(order):
-        if time.monotonic() > deadline:
+        mine = stored.get(senator_id)
+        attempted = fetched = False
+        out_of_time = False
+        for filing in sorted(per_senator[senator_id], key=_senate_rank, reverse=True):
+            filing_id = senate_filing_id(filing["report_url"])
+            if _is_current(mine, filing_id, SENATE_PARSER_VERSION):
+                break
+            if _is_older(mine, _senate_report_year(filing), filing.get("filed_date")):
+                # The search came back without the stored (newer) report — a
+                # page of results failed to load — or the best candidate left
+                # is a paper amendment of unknowable year. Keep what's stored.
+                break
+            year, stated, _ = _senate_rank(filing)
+            if mine is not None and not stated and mine.report_year == year:
+                # A paper report's year is inferred from its filing date; it
+                # never displaces a stored report for that same year, which
+                # may state it (a readable electronic report beats a scan).
+                break
+            if time.monotonic() > deadline:
+                out_of_time = True
+                break
+            attempted = True
+            report = await fetch_senate_annual(client, db, filing)
+            if report is None and await senate_accept_terms(client) is not None:
+                # The usual cause is the eFD session lapsing partway through
+                # the phase: accept the terms again and retry once.
+                report = await fetch_senate_annual(client, db, filing)
+            if report is None:
+                # This filing won't load (withdrawn, or not a report page):
+                # fall through to the senator's next-best one.
+                continue
+            fetched = True
+            if not report.final and mine is not None:
+                # The parser crashed on it this run: keep what's stored and
+                # try again next run.
+                break
+            inserted += _replace_disclosure(
+                db,
+                owner_filter={"senator_id": senator_id},
+                filing_id=filing_id,
+                report_year=_senate_report_year(filing),
+                report_label=_senate_report_label(filing),
+                filed_date=filing.get("filed_date"),
+                source_url=filing["report_url"],
+                report=report,
+                parser_version=SENATE_PARSER_VERSION,
+            )
+            break
+        db.commit()
+        if out_of_time:
             logger.info("Senate holdings: time budget spent — %d members wait for the next run", len(order) - position)
             break
-        candidates = sorted(per_senator[senator_id], key=_senate_rank, reverse=True)
-        filing = candidates[0]
-        filing_id = senate_filing_id(filing["report_url"])
-        mine = stored.get(senator_id)
-        if _is_current(mine, filing_id, SENATE_PARSER_VERSION):
-            continue
-        if _is_older(mine, _senate_report_year(filing), filing.get("filed_date")):
-            # The search came back without the stored (newer) report — a
-            # page of results failed to load — or the best candidate is a
-            # paper amendment of unknowable year. Keep what's stored.
-            continue
-        year, stated, _ = _senate_rank(filing)
-        if mine is not None and not stated and mine.report_year == year and mine.filing_id != filing_id:
-            # A paper report's year is inferred from its filing date; it
-            # never displaces a stored report for that same year, which may
-            # state it (a readable electronic report beats a scanned copy).
-            continue
-        report = await fetch_senate_annual(client, db, filing)
-        if report is None and await senate_accept_terms(client) is not None:
-            # The usual cause is the eFD session lapsing partway through the
-            # phase: accept the terms again and retry this report once.
-            report = await fetch_senate_annual(client, db, filing)
-        failures = failures + 1 if report is None else 0
-        if failures >= MAX_CONSECUTIVE_FETCH_FAILURES:
-            raise RuntimeError(f"Senate eFD: {failures} consecutive annual-report fetches failed")
-        if report is None or (not report.final and mine is not None):
-            # The page failed to load, or the parser crashed on it, this run:
-            # keep what's stored and try again next run.
-            continue
-        inserted += _replace_disclosure(
-            db,
-            owner_filter={"senator_id": senator_id},
-            filing_id=filing_id,
-            report_year=_senate_report_year(filing),
-            report_label=_senate_report_label(filing),
-            filed_date=filing.get("filed_date"),
-            source_url=filing["report_url"],
-            report=report,
-            parser_version=SENATE_PARSER_VERSION,
-        )
-        db.commit()
+        failure_run.record(attempted, fetched)
     return inserted
+
+
+# Progress-tracker steps for the two phases, appended to the stock-trades
+# run's own (stock_pipeline.STOCK_PIPELINE_STEPS).
+HOLDINGS_STEPS = [
+    ("house_holdings",  "fetch", "Ingest House annual disclosures (holdings)"),
+    ("senate_holdings", "fetch", "Ingest Senate annual disclosures (holdings)"),
+]
+
+
+async def run_holdings_phases(
+    db: Session, client: httpx.AsyncClient, progress,
+) -> tuple[dict[str, int], list[str]]:
+    """Run both phases, best-effort each. Returns (holdings stored per
+    step, error summaries for the run row).
+
+    Lives here rather than in stock_pipeline.py so that changing how the
+    holdings phases run never touches a file the analysis-code fingerprint
+    covers. When both phases fail, an ops alert says so directly: the
+    holdings phases deliberately don't decide the stock-trades run's status
+    (see stock_pipeline), so without it a holdings outage would go unseen.
+    """
+    counts = {step: 0 for step, _, _ in HOLDINGS_STEPS}
+    errors: list[str] = []
+    for (step, _, _), label, ingest in zip(
+        HOLDINGS_STEPS,
+        ("House holdings", "Senate holdings"),
+        (ingest_house_holdings, ingest_senate_holdings),
+    ):
+        progress.begin(step)
+        try:
+            counts[step] = await ingest(db, client)
+            progress.complete(step, detail=f"{counts[step]} holdings")
+        except Exception:
+            logger.exception("%s ingestion failed", label)
+            db.rollback()
+            errors.append(f"{label}: failed — see server logs")
+            progress.fail(step)
+    if len(errors) == len(HOLDINGS_STEPS):
+        _alert(
+            "Annual-report holdings ingest failed",
+            "Both the House and the Senate holdings phases of tonight's stock-trades run "
+            f"failed ({'; '.join(errors)}). Stored holdings are unchanged and will age "
+            "until a run succeeds — see the server logs for the cause.",
+            dedupe_key=f"holdings-ingest-failed-{utcnow():%Y-%m-%d}",
+        )
+    return counts, errors
+
+
+def _alert(subject: str, body: str, *, dedupe_key: str) -> None:
+    """Best-effort ops alert — never allowed to raise (the same pattern
+    president_ptr.py uses)."""
+    try:
+        from app.ops_alerts import send_ops_alert
+        send_ops_alert(subject, body, dedupe_key=dedupe_key)
+    except Exception:
+        logger.exception("Failed to send ops alert: %s", subject)

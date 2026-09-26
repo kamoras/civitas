@@ -7,11 +7,17 @@ derived figure is each slice's `weight`, the sum of bracket midpoints the
 chart is drawn with, and the schema documents it as a drawing convention
 rather than a value — see HoldingCategorySchema.
 
-The breakdown aggregates over light (category, low, high) tuples, and only
-the requested page of holdings is loaded as rows — ordered and limited in
-SQL — so a report listing a thousand assets costs one page of objects per
-request, not a thousand.
+Only the requested page of holdings is loaded as rows — ordered and limited
+in SQL. The breakdown (categories and totals) is the same for every page and
+filter of a report, so it is computed once per stored report and kept in a
+small in-process cache keyed by the report's id and ingest time: a new
+report, or a re-read one, gets a fresh entry. One backend worker (AGENTS.md)
+means one cache.
 """
+
+from collections import OrderedDict
+from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
@@ -89,14 +95,50 @@ def _categories(rows: list[tuple[str, float | None, float | None]]) -> list[Hold
     return categories
 
 
-def _build(db: Session, disclosure: FinancialDisclosure, page: int, per_page: int, category: str | None) -> HoldingsSchema:
-    in_report = FinancialHolding.disclosure_id == disclosure.id
+@dataclass(frozen=True)
+class _Breakdown:
+    holdings_count: int
+    unvalued_count: int
+    total_low: float
+    total_high: float
+    total_open_ended: bool
+    categories: tuple[HoldingCategorySchema, ...]
+
+
+# More than enough for the members viewed between deploys to stay warm;
+# each entry is ~9 category rows.
+_BREAKDOWN_CACHE_SIZE = 600
+_breakdown_cache: "OrderedDict[tuple[int, datetime | None], _Breakdown]" = OrderedDict()
+
+
+def _breakdown(db: Session, disclosure: FinancialDisclosure) -> _Breakdown:
+    key = (disclosure.id, disclosure.ingested_at)
+    if key in _breakdown_cache:
+        _breakdown_cache.move_to_end(key)
+        return _breakdown_cache[key]
     rows = (
         db.query(FinancialHolding.category, FinancialHolding.value_low, FinancialHolding.value_high)
-        .filter(in_report)
+        .filter(FinancialHolding.disclosure_id == disclosure.id)
         .all()
     )
     valued = [(low, high) for _, low, high in rows if low is not None and high is not None]
+    result = _Breakdown(
+        holdings_count=len(rows),
+        unvalued_count=len(rows) - len(valued),
+        total_low=sum(low for low, _ in valued),
+        total_high=sum(high for _, high in valued),
+        total_open_ended=any(is_open_ended(low, high) for low, high in valued),
+        categories=tuple(_categories(rows)),
+    )
+    _breakdown_cache[key] = result
+    if len(_breakdown_cache) > _BREAKDOWN_CACHE_SIZE:
+        _breakdown_cache.popitem(last=False)
+    return result
+
+
+def _build(db: Session, disclosure: FinancialDisclosure, page: int, per_page: int, category: str | None) -> HoldingsSchema:
+    in_report = FinancialHolding.disclosure_id == disclosure.id
+    breakdown = _breakdown(db, disclosure)
 
     listed = db.query(FinancialHolding).filter(in_report)
     if category == "OTHER":
@@ -133,12 +175,12 @@ def _build(db: Session, disclosure: FinancialDisclosure, page: int, per_page: in
         source_url=disclosure.source_url,
         parsed=disclosure.parsed,
         unreadable_reason=disclosure.unreadable_reason if not disclosure.parsed else None,
-        holdings_count=len(rows),
-        unvalued_count=len(rows) - len(valued),
-        total_low=sum(low for low, _ in valued),
-        total_high=sum(high for _, high in valued),
-        total_open_ended=any(is_open_ended(low, high) for low, high in valued),
-        categories=_categories(rows),
+        holdings_count=breakdown.holdings_count,
+        unvalued_count=breakdown.unvalued_count,
+        total_low=breakdown.total_low,
+        total_high=breakdown.total_high,
+        total_open_ended=breakdown.total_open_ended,
+        categories=list(breakdown.categories),
         category_filter=category,
         holdings=[_to_schema(h) for h in page_rows],
         total=total,

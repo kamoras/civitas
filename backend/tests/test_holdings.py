@@ -27,6 +27,17 @@ def _house_filing(doc_id, year=2025, filing_date="2026-05-01", last="Doe", first
     }
 
 
+@pytest.fixture(autouse=True)
+def _fresh_breakdown_cache():
+    """Each test's in-memory database restarts ids at 1; never let one
+    test's cached breakdown answer another's."""
+    from app.services import holdings_service
+
+    holdings_service._breakdown_cache.clear()
+    yield
+    holdings_service._breakdown_cache.clear()
+
+
 @pytest.fixture()
 def rep(db_session):
     r = Representative(id="R1", name="John Doe", state="TX", district=1, party="R", is_current=True)
@@ -644,3 +655,79 @@ class TestServiceDetails:
         names = [h.asset_name for h in get_senator_holdings(db_session, "S1", per_page=2, page=1).holdings]
         names += [h.asset_name for h in get_senator_holdings(db_session, "S1", per_page=2, page=2).holdings]
         assert names == ["Big", "A small", "b small", "Undetermined thing"]
+
+
+class TestRound5:
+    async def test_senate_unloadable_top_filing_falls_back_to_the_next(self, db_session, senator):
+        filings = [
+            _senate_filing("amended", title="Annual Report for CY 2025 (Amendment 1)", filed="2026-09-01"),
+            _senate_filing("original", title="Annual Report for CY 2025", filed="2026-05-11"),
+        ]
+        # "amended" never loads (missing from `parsed`); the original does.
+        await _ingest_senate(db_session, filings, {"original": [_row()]})
+        assert db_session.query(FinancialDisclosure).one().filing_id == "original"
+
+    async def test_failures_are_counted_per_member_not_per_filing(self, db_session):
+        """Members whose first filing fails but whose next one loads are not
+        a failing source."""
+        n = holdings_pipeline.MAX_CONSECUTIVE_FETCH_FAILURES + 2
+        index = {2025: []}
+        reports = {}
+        for i in range(n):
+            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
+                                          party="R", is_current=True))
+            bad = {**_house_filing(f"BAD{i}", filing_date="2026-08-01", last=f"Name{i}", first="Person",
+                                   district=f"TX{i + 1:02d}"), "filing_type": "A"}
+            good = _house_filing(f"GOOD{i}", filing_date="2026-05-01", last=f"Name{i}", first="Person",
+                                 district=f"TX{i + 1:02d}")
+            index[2025] += [bad, good]
+            reports[f"GOOD{i}"] = AnnualReport("Member", [_row()])
+        db_session.commit()
+        await _ingest_house(db_session, index, reports)  # must not raise
+        assert db_session.query(FinancialDisclosure).count() == n
+
+    async def test_budget_is_checked_before_every_fetch_not_only_each_member(self, db_session, rep):
+        index = {2025: [
+            {**_house_filing("CAND", filing_date="2026-08-01"), "filing_type": "A"},
+            _house_filing("MEMBER", filing_date="2026-05-01"),
+        ]}
+        # deadline set at 0; the first fetch is in time, the second is not.
+        clock = iter([0.0, 0.0, 10_000.0])
+        with patch.object(holdings_pipeline.time, "monotonic", side_effect=lambda: next(clock)):
+            count, mock_fetch = await _ingest_house(db_session, index, {"CAND": None})
+        assert mock_fetch.call_count == 1
+        assert count == 0
+
+    def test_member_prefix_tolerates_punctuation_and_case(self):
+        assert holdings_pipeline._is_member_prefix("Hon.")
+        assert holdings_pipeline._is_member_prefix("hon")
+        assert not holdings_pipeline._is_member_prefix("Mr.")
+        assert not holdings_pipeline._is_member_prefix(None)
+
+    async def test_each_filer_is_matched_once(self, db_session, rep):
+        index = {2025: [_house_filing("A1"), _house_filing("A2", filing_date="2026-06-01")],
+                 2024: [_house_filing("A0", year=2024)]}
+        with patch.object(holdings_pipeline, "match_representative",
+                          wraps=holdings_pipeline.match_representative) as spy:
+            await _ingest_house(db_session, index, {"A2": AnnualReport("Member", [_row()])})
+        assert spy.call_count == 1
+
+
+class TestBreakdownCache:
+    def test_breakdown_is_computed_once_per_report_and_a_new_report_gets_its_own(self, db_session, senator):
+        from app.services import holdings_service
+
+        first = _store(db_session, [_h("Apple", "STOCKS", 1001.0, 15000.0)], senator_id="S1")
+        with patch.object(holdings_service, "_categories", wraps=holdings_service._categories) as spy:
+            get_senator_holdings(db_session, "S1", page=1)
+            get_senator_holdings(db_session, "S1", page=2, category="STOCKS")
+            assert spy.call_count == 1
+
+            # Replace the report — even if SQLite hands the new row the same
+            # id, its ingest time differs, so the old breakdown can't answer.
+            db_session.delete(first)
+            db_session.commit()
+            _store(db_session, [_h("Bank", "CASH", 1.0, 1000.0)], senator_id="S1")
+            result = get_senator_holdings(db_session, "S1")
+            assert spy.call_count == 2
+        assert [c.category for c in result.categories] == ["CASH"]

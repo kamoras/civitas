@@ -131,3 +131,22 @@ describe("Holdings", () => {
     expect(screen.queryByRole("button", { name: /INVESTMENTS & ASSETS/ })).not.toBeInTheDocument();
   });
 });
+
+describe("Holdings — clicks while a request is in flight", () => {
+  it("a second click on the same row clears the selection instead of re-selecting it", async () => {
+    fetchSenatorHoldings.mockResolvedValueOnce(holdings());
+    render(<Holdings memberId="S1" />);
+    const stocks = await screen.findByRole("button", { name: /^Stocks/ });
+
+    let resolveFirst: (value: HoldingsData) => void = () => {};
+    fetchSenatorHoldings.mockReturnValueOnce(new Promise<HoldingsData>((r) => (resolveFirst = r)));
+    fetchSenatorHoldings.mockResolvedValueOnce(holdings());
+    await userEvent.click(stocks);
+    await userEvent.click(stocks);
+
+    expect(fetchSenatorHoldings.mock.calls.map((call) => call[1].category)).toEqual([null, "STOCKS", null]);
+    resolveFirst(holdings({ categoryFilter: "STOCKS" }));
+    // The superseded response never lands: the list stays unfiltered.
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Stocks/ })).toHaveAttribute("aria-pressed", "false"));
+  });
+});

@@ -39,7 +39,7 @@ from app.pipeline.fetch.president_ptr import (
 )
 from app.pipeline.fetch.ptr_common import TradeRow
 from app.pipeline.fetch.sec_tickers import resolve_tickers
-from app.pipeline.holdings_pipeline import ingest_house_holdings, ingest_senate_holdings
+from app.pipeline.holdings_pipeline import HOLDINGS_STEPS, run_holdings_phases
 from app.pipeline.filer_matching import match_representative as _match_representative
 from app.pipeline.filer_matching import match_senator as _match_senator
 from app.pipeline.fetch.senate_ptr import (
@@ -59,11 +59,9 @@ STOCK_PIPELINE_STEPS = [
     ("house_ptr",     "fetch", "Ingest House PTR filings"),
     ("senate_ptr",    "fetch", "Ingest Senate PTR filings"),
     ("president_ptr", "fetch", "Ingest presidential 278-T filings"),
-    ("house_holdings",  "fetch", "Ingest House annual disclosures (holdings)"),
-    ("senate_holdings", "fetch", "Ingest Senate annual disclosures (holdings)"),
+    *HOLDINGS_STEPS,
 ]
 TRADE_STEPS = ("house_ptr", "senate_ptr", "president_ptr")
-HOLDINGS_STEPS = ("house_holdings", "senate_holdings")
 
 # How far back to search on a cold start (no existing Senate trades in the
 # DB). The House walks whole yearly filing indexes instead (_ingest_house).
@@ -390,7 +388,6 @@ async def run_stock_trades_pipeline() -> dict:
         house_count = 0
         senate_count = 0
         president_count = 0
-        holdings_counts = {"house_holdings": 0, "senate_holdings": 0}
         error_parts: list[str] = []
         failed_steps: set[str] = set()
         async with make_async_client() as client:
@@ -429,23 +426,12 @@ async def run_stock_trades_pipeline() -> dict:
                 error_parts.append("President: failed — see server logs")
                 progress.fail("president_ptr")
                 failed_steps.add("president_ptr")
-            # Annual-report holdings (holdings_pipeline.py). Same sources,
-            # same best-effort isolation: a failure here leaves the trade
-            # rows above committed and the stored holdings untouched.
-            for step, label, ingest in (
-                ("house_holdings", "House holdings", ingest_house_holdings),
-                ("senate_holdings", "Senate holdings", ingest_senate_holdings),
-            ):
-                progress.begin(step)
-                try:
-                    holdings_counts[step] = await ingest(db, client)
-                    progress.complete(step, detail=f"{holdings_counts[step]} holdings")
-                except Exception:
-                    logger.exception("%s ingestion failed", label)
-                    db.rollback()
-                    error_parts.append(f"{label}: failed — see server logs")
-                    progress.fail(step)
-                    failed_steps.add(step)
+            # Annual-report holdings: same sources, same best-effort
+            # isolation (a failure leaves the trade rows above committed and
+            # the stored holdings untouched). The phases live in
+            # holdings_pipeline.py, which reports its own failures.
+            holdings_counts, holdings_errors = await run_holdings_phases(db, client, progress)
+            error_parts.extend(holdings_errors)
 
         elapsed = round(time.time() - start_time, 1)
         logger.info(
@@ -455,18 +441,15 @@ async def run_stock_trades_pipeline() -> dict:
             holdings_counts["house_holdings"], holdings_counts["senate_holdings"],
         )
 
-        # FAILED when a whole ingest failed: every trade phase, or every
-        # holdings phase. One source being down still leaves the run's other
-        # rows valid, but counting all five phases together would let two
-        # healthy holdings phases mark a run COMPLETED whose trade ingest is
-        # entirely dead — and check_pipeline_staleness would never fire.
+        # FAILED only when every trade phase failed — one source being down
+        # still leaves the run's other rows valid. The holdings phases don't
+        # count toward it either way: two healthy holdings phases must not
+        # mark a run COMPLETED whose trade ingest is entirely dead (the
+        # staleness alert would never fire), and a holdings-only outage must
+        # not report stock trades as stale — run_holdings_phases raises its
+        # own ops alert for that.
         trade_failures = sum(step in failed_steps for step in TRADE_STEPS)
-        holdings_failures = sum(step in failed_steps for step in HOLDINGS_STEPS)
-        run.status = (
-            PipelineStatus.FAILED
-            if trade_failures == len(TRADE_STEPS) or holdings_failures == len(HOLDINGS_STEPS)
-            else PipelineStatus.COMPLETED
-        )
+        run.status = PipelineStatus.FAILED if trade_failures == len(TRADE_STEPS) else PipelineStatus.COMPLETED
         run.completed_at = utcnow()
         run.house_trades_ingested = house_count
         run.senate_trades_ingested = senate_count
