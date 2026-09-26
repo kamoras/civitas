@@ -1322,6 +1322,14 @@ export default function AboutPage() {
                   silent for a day while the news carried on.
                 </P>
                 <P>
+                  Only one refresh runs at a time, even while a deploy briefly runs two copies of the
+                  site. The run that holds that turn renews its claim every minute, and a claim that
+                  goes ten minutes unrenewed is released. A claim used to last four hours whether or
+                  not its run was still alive, so a deploy that stopped a refresh partway through
+                  silenced the next four. On 26 September 2026, a day of steady deploys, that kept
+                  every refresh from running and no issue was published.
+                </P>
+                <P>
                   The cost is silence. A cluster with no attributable assertion produces no issue at
                   all, and some days carry fewer issues than others. Recommended actions remain
                   procedural — contacting representatives, attending public hearings, reading

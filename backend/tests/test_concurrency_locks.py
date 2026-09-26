@@ -17,6 +17,7 @@ from app.models import ApiCache, PipelineRun, PipelineStatus
 from app.pipeline.analyze.action_center import (
     _REFRESH_LOCK_STALE_S,
     _acquire_refresh_lock,
+    _beat_refresh_lock,
     _release_refresh_lock,
 )
 from app.time_utils import utcnow
@@ -62,23 +63,23 @@ class TestPipelineRunUniqueRunning:
 
 class TestActionRefreshLock:
     def test_lock_is_exclusive(self, db_session):
-        assert _acquire_refresh_lock(db_session) is True
-        assert _acquire_refresh_lock(db_session) is False  # held
+        assert _acquire_refresh_lock(db_session) is not None
+        assert _acquire_refresh_lock(db_session) is None  # held
 
     def test_release_allows_reacquire(self, db_session):
-        assert _acquire_refresh_lock(db_session) is True
-        _release_refresh_lock(db_session)
-        assert _acquire_refresh_lock(db_session) is True
+        token = _acquire_refresh_lock(db_session)
+        _release_refresh_lock(db_session, token)
+        assert _acquire_refresh_lock(db_session) is not None
 
     def test_stale_lock_is_taken_over(self, db_session):
-        # A crashed container never deletes its row — a holder older than
-        # the stale window must not block refreshes forever.
+        # A container killed mid-refresh never deletes its row — a holder
+        # that stopped beating must not block the next run.
         db_session.add(ApiCache(
             tier="action-refresh-lock", cache_key="lock", data_json="{}",
             cached_at=utcnow() - timedelta(seconds=_REFRESH_LOCK_STALE_S + 60),
         ))
         db_session.commit()
-        assert _acquire_refresh_lock(db_session) is True
+        assert _acquire_refresh_lock(db_session) is not None
 
     def test_fresh_lock_is_not_taken_over(self, db_session):
         db_session.add(ApiCache(
@@ -86,7 +87,28 @@ class TestActionRefreshLock:
             cached_at=utcnow() - timedelta(seconds=60),
         ))
         db_session.commit()
-        assert _acquire_refresh_lock(db_session) is False
+        assert _acquire_refresh_lock(db_session) is None
+
+    def test_a_beating_holder_keeps_a_lock_older_than_the_window(self, db_session):
+        # A refresh can legitimately run longer than the stale window; its
+        # heartbeat is what keeps it.
+        token = _acquire_refresh_lock(db_session)
+        row = db_session.query(ApiCache).filter(ApiCache.tier == "action-refresh-lock").one()
+        row.cached_at = utcnow() - timedelta(seconds=_REFRESH_LOCK_STALE_S + 60)
+        db_session.commit()
+        assert _beat_refresh_lock(db_session, token) is True
+        assert _acquire_refresh_lock(db_session) is None
+
+    def test_a_holder_that_lost_the_lease_cannot_touch_its_successor(self, db_session):
+        old = _acquire_refresh_lock(db_session)
+        row = db_session.query(ApiCache).filter(ApiCache.tier == "action-refresh-lock").one()
+        row.cached_at = utcnow() - timedelta(seconds=_REFRESH_LOCK_STALE_S + 60)
+        db_session.commit()
+        new = _acquire_refresh_lock(db_session)
+        assert new is not None and new != old
+        assert _beat_refresh_lock(db_session, old) is False
+        _release_refresh_lock(db_session, old)
+        assert _acquire_refresh_lock(db_session) is None  # successor still holds it
 
 
 class TestEnsureIndexesCreatesPartialUnique:
@@ -294,7 +316,7 @@ class TestRefreshActionIssuesLockWrapper:
     def test_lock_held_skips_run(self, db_session, monkeypatch):
         from app.pipeline.analyze import action_center
 
-        assert _acquire_refresh_lock(db_session) is True  # simulate other container
+        assert _acquire_refresh_lock(db_session) is not None  # simulate other container
         called = {"n": 0}
         monkeypatch.setattr(action_center, "_run_refresh", lambda db: called.__setitem__("n", called["n"] + 1) or 99)
 
@@ -307,7 +329,26 @@ class TestRefreshActionIssuesLockWrapper:
         monkeypatch.setattr(action_center, "_run_refresh", lambda db: 7)
         assert action_center.refresh_action_issues(db_session) == 7
         # Released in the finally — immediately reacquirable.
-        assert _acquire_refresh_lock(db_session) is True
+        assert _acquire_refresh_lock(db_session) is not None
+
+    def test_the_lease_is_renewed_while_the_refresh_runs(self, db_session, monkeypatch):
+        import time
+
+        from app.pipeline.analyze import action_center
+
+        monkeypatch.setattr(action_center, "_REFRESH_LOCK_BEAT_S", 0.02)
+        seen = []
+
+        def run(db):
+            first = db.query(ApiCache.cached_at).filter(ApiCache.tier == "action-refresh-lock").scalar()
+            time.sleep(0.3)
+            seen.append((first, db.query(ApiCache.cached_at).filter(ApiCache.tier == "action-refresh-lock").scalar()))
+            return 1
+
+        monkeypatch.setattr(action_center, "_run_refresh", run)
+        assert action_center.refresh_action_issues(db_session) == 1
+        (first, later), = seen
+        assert later > first
 
     def test_release_failure_is_swallowed(self, db_session, monkeypatch):
         # A failed release must not raise out of the refresh — the row
@@ -316,4 +357,4 @@ class TestRefreshActionIssuesLockWrapper:
             raise RuntimeError("db gone")
 
         monkeypatch.setattr(db_session, "query", boom)
-        _release_refresh_lock(db_session)  # must not raise
+        _release_refresh_lock(db_session, "token")  # must not raise

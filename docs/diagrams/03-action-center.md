@@ -3,6 +3,11 @@
 Runs hourly at :15, separate from the nightly pipeline because it operates on a
 different timescale and different data.
 
+One refresh runs at a time across containers: it holds a lease row in
+`api_cache`, renewed every minute by a heartbeat thread and taken over after ten
+minutes without a beat. A refresh killed by a deploy therefore costs at most the
+next hour, not four.
+
 ```mermaid
 flowchart TB
     TICK(["Hourly at :15"]) --> FETCH
