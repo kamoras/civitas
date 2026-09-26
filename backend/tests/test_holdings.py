@@ -949,7 +949,7 @@ class TestParserFailuresAreNotExcused:
         db_session.commit()
         probe = AsyncMock(return_value=True)
         with patch.object(holdings_pipeline, "house_report_still_loads", probe):
-            with pytest.raises(RuntimeError, match="none could be read"):
+            with pytest.raises(RuntimeError, match="parser regression"):
                 await _ingest_house(db_session, index, reports)
         probe.assert_not_awaited()
 
@@ -964,10 +964,11 @@ class TestParserFailuresAreNotExcused:
             await _ingest_house(db_session, index, {"SAME": re_read})
             disclosure = db_session.query(FinancialDisclosure).one()
             assert (disclosure.parsed, db_session.query(FinancialHolding).count()) == (True, 2)
-            # Marked as tried by v99, so it isn't re-read every night.
-            assert disclosure.parser_version == 99
+            # Not stamped as read by v99: it is re-read (from the parse cache)
+            # each night, so the regression keeps counting until it's fixed.
+            assert disclosure.parser_version == 1
             _, mock_fetch = await _ingest_house(db_session, index, {"SAME": re_read})
-        assert mock_fetch.call_count == 0
+        assert mock_fetch.call_count == 1
 
     async def test_a_re_read_with_rows_replaces_the_earlier_one(self, db_session, rep):
         index = {2025: [_house_filing("SAME")]}
@@ -989,7 +990,7 @@ class TestParserFailuresAreNotExcused:
             index[2025].append(_house_filing(f"D{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}"))
             reports[f"D{i}"] = AnnualReport("Member", None, "unrecognized")
         db_session.commit()
-        with pytest.raises(RuntimeError, match="none could be read"):
+        with pytest.raises(RuntimeError, match="parser regression"):
             await _ingest_house(db_session, index, reports)
 
     async def test_one_unreadable_answer_does_not_hide_an_outage(self, db_session):
@@ -1033,3 +1034,78 @@ class TestSenateProbe:
                           AsyncMock(side_effect=SessionLapsed("terms"))), \
              patch.object(holdings_pipeline, "senate_accept_terms", AsyncMock(return_value=None)):
             assert await holdings_pipeline._senate_probe(None, "https://efd.example/r/") is False
+
+
+class TestParserRegressionSignal:
+    def _members(self, db_session, n):
+        index = {2025: []}
+        for i in range(n):
+            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
+                                          party="R", is_current=True))
+            index[2025].append(_house_filing(f"D{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}"))
+        db_session.commit()
+        return index
+
+    async def test_a_scanned_report_does_not_hide_a_regression(self, db_session):
+        n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE + 1
+        index = self._members(db_session, n)
+        reports = {f"D{i}": AnnualReport("Member", None, "unrecognized") for i in range(n - 1)}
+        reports[f"D{n - 1}"] = AnnualReport(None, None, "scanned")
+        with pytest.raises(RuntimeError, match="parser regression"):
+            await _ingest_house(db_session, index, reports)
+
+    async def test_empty_reads_across_the_board_are_a_regression(self, db_session):
+        n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
+        index = self._members(db_session, n)
+        with pytest.raises(RuntimeError, match="parser regression"):
+            await _ingest_house(db_session, index, {f"D{i}": AnnualReport("Member", []) for i in range(n)})
+
+    async def test_a_few_empty_reports_among_good_reads_are_not(self, db_session):
+        n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
+        index = self._members(db_session, 2 * n + 1)
+        reports = {f"D{i}": AnnualReport("Member", [] if i < n else [_row()]) for i in range(2 * n + 1)}
+        await _ingest_house(db_session, index, reports)  # must not raise
+
+    async def test_shrunk_re_reads_count_as_misses(self, db_session):
+        n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
+        index = self._members(db_session, n)
+        await _ingest_house(db_session, index, {f"D{i}": AnnualReport("Member", [_row(), _row()]) for i in range(n)})
+        with patch.object(holdings_pipeline, "HOUSE_PARSER_VERSION", 99):
+            with pytest.raises(RuntimeError, match="parser regression"):
+                await _ingest_house(db_session, index, {f"D{i}": AnnualReport("Member", [_row()]) for i in range(n)})
+
+    async def test_a_kept_regression_keeps_failing_the_phase(self, db_session):
+        n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
+        index = self._members(db_session, n)
+        await _ingest_house(db_session, index, {f"D{i}": AnnualReport("Member", [_row()]) for i in range(n)})
+        # Cached reads (no request) of the broken parser's output, night after night.
+        broken = {f"D{i}": AnnualReport("Member", None, "unrecognized", live=False) for i in range(n)}
+        with patch.object(holdings_pipeline, "HOUSE_PARSER_VERSION", 99):
+            for _night in range(3):
+                with pytest.raises(RuntimeError, match="parser regression"):
+                    await _ingest_house(db_session, index, broken)
+        assert db_session.query(FinancialHolding).count() == n  # the earlier reads stay
+
+
+class TestProbesSeveralStoredReports:
+    async def test_one_withdrawn_stored_report_is_not_an_outage(self, db_session):
+        n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
+        index = {2025: []}
+        good = {}
+        for i in range(n + 3):
+            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
+                                          party="R", is_current=True))
+            index[2025].append(_house_filing(f"D{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}"))
+            if i >= n:
+                good[f"D{i}"] = AnnualReport("Member", [_row()])
+        db_session.commit()
+        await _ingest_house(db_session, index, good)
+        probe = AsyncMock(side_effect=[False, True])  # the newest stored one is gone; the next loads
+        with patch.object(holdings_pipeline, "house_report_still_loads", probe):
+            await _ingest_house(db_session, index, good)  # must not raise
+        assert probe.await_count == 2
+
+    async def test_stored_urls_are_only_looked_up_when_needed(self, db_session, rep):
+        with patch.object(holdings_pipeline, "_stored_urls") as lookup:
+            await _ingest_house(db_session, {2025: [_house_filing("A")]}, {"A": AnnualReport("Member", [_row()])})
+        lookup.assert_not_called()

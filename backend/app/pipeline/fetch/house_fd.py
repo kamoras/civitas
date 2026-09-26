@@ -44,8 +44,7 @@ from app.pipeline.fetch.fd_common import (
     strip_house_code,
     ticker_for,
 )
-from app.pipeline.fetch.house_ptr import _rate_limiter, fetch_filing_index
-from app.pipeline.fetch.http_utils import fetch_bytes_with_retry
+from app.pipeline.fetch.house_ptr import download_pdf, fetch_filing_index
 from app.pipeline.fetch.ptr_common import OWNER_CODES
 
 logger = logging.getLogger(__name__)
@@ -278,22 +277,6 @@ async def fetch_annual_filing_index(
     return await fetch_filing_index(client, db, year, filing_types=ANNUAL_FILING_TYPES, pdf_dir="financial-pdfs")
 
 
-async def _download(client: httpx.AsyncClient, url: str, headers: dict | None = None) -> bytes | None:
-    """The Clerk download policy, shared by the real fetch and the probe
-    below: the same limiter and retries, and a body that isn't a PDF is no
-    download. A 200 HTML page (a block, challenge or maintenance page) in a
-    PDF's place is the source failing, not a report the parser can't read —
-    left to the parser it would crash twice and be cached as unrecognized."""
-    body = await fetch_bytes_with_retry(
-        client, _rate_limiter, url, "House Clerk",
-        headers=headers, rate_limit_backoff_multiplier=2.0, retry_on_4xx=False,
-    )
-    if body is not None and not body.startswith(b"%PDF"):
-        logger.warning("House Clerk served something other than a PDF for %s", url)
-        return None
-    return body
-
-
 async def report_still_loads(client: httpx.AsyncClient, pdf_url: str) -> bool:
     """Whether the Clerk's origin serves the PDF at `pdf_url` right now. The
     holdings phase asks this of a report it already stored when a night's
@@ -307,7 +290,7 @@ async def report_still_loads(client: httpx.AsyncClient, pdf_url: str) -> bool:
     is asked for — the Clerk honours Range (206) — since only the magic
     bytes are read; a server that ignores Range still answers correctly."""
     probe_url = f"{pdf_url}{'&' if '?' in pdf_url else '?'}probe={time.time_ns()}"
-    body = await _download(
+    body = await download_pdf(
         client, probe_url, headers={"Range": "bytes=0-1023", "Cache-Control": "no-cache", "Pragma": "no-cache"},
     )
     return body is not None
@@ -328,7 +311,7 @@ async def fetch_and_parse_annual(
     if cached is not None:
         return cached
 
-    pdf_bytes = await _download(client, filing["pdf_url"])
+    pdf_bytes = await download_pdf(client, filing["pdf_url"])
     if pdf_bytes is None:
         return None
 

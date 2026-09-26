@@ -122,6 +122,22 @@ async def _fetch_index_entries(client: httpx.AsyncClient, db: Session, year: int
     return entries
 
 
+async def download_pdf(client: httpx.AsyncClient, url: str, headers: dict | None = None) -> bytes | None:
+    """The one Clerk download policy, for every House PDF fetch (PTRs,
+    annual reports, the annual-report probe): the same limiter and retries,
+    and a body that isn't a PDF is no download. A 200 HTML page (a block,
+    challenge or maintenance page) in a PDF's place is the source failing,
+    not a document the parser can't read."""
+    body = await fetch_bytes_with_retry(
+        client, _rate_limiter, url, "House Clerk",
+        headers=headers, rate_limit_backoff_multiplier=2.0, retry_on_4xx=False,
+    )
+    if body is not None and not body.startswith(b"%PDF"):
+        logger.warning("House Clerk served something other than a PDF for %s", url)
+        return None
+    return body
+
+
 async def fetch_and_parse_ptr(
     client: httpx.AsyncClient, db: Session, filing: dict,
 ) -> list[TradeRow]:
@@ -136,10 +152,7 @@ async def fetch_and_parse_ptr(
     if cached is not None:
         return [TradeRow(**row) for row in cached]
 
-    pdf_bytes = await fetch_bytes_with_retry(
-        client, _rate_limiter, filing["pdf_url"], "House Clerk",
-        headers=None, rate_limit_backoff_multiplier=2.0, retry_on_4xx=False,
-    )
+    pdf_bytes = await download_pdf(client, filing["pdf_url"])
     if pdf_bytes is None:
         return []
 

@@ -34,7 +34,7 @@ from sqlalchemy.orm import Session
 
 from app.alerting import safe_ops_alert as _alert
 from app.models import FinancialDisclosure, FinancialHolding
-from app.pipeline.fetch.fd_common import UNREADABLE_UNRECOGNIZED, AnnualReport
+from app.pipeline.fetch.fd_common import UNREADABLE_SCANNED, AnnualReport
 from app.pipeline.fetch.house_fd import PARSER_VERSION as HOUSE_PARSER_VERSION
 from app.pipeline.fetch.house_fd import fetch_and_parse_annual as fetch_house_annual, fetch_annual_filing_index
 from app.pipeline.fetch.house_fd import report_still_loads as house_report_still_loads
@@ -114,28 +114,32 @@ def _is_current(stored: _Stored | None, filing_id: str, parser_version: int) -> 
     return stored is not None and (stored.filing_id, stored.parser_version) == (filing_id, parser_version)
 
 
-def _keeps_earlier_read(
-    db: Session, mine: _Stored | None, owner_filter: dict, filing_id: str, report: AnnualReport, parser_version: int,
-) -> bool:
-    """A re-read of the very report already stored — after a parser upgrade
-    — that came back with nothing: unreadable, or no rows where the earlier
-    parser found some. A filed report never changes, so that is the new
-    parser's miss, not the report's; the earlier holdings stay, and a parser
-    regression never turns a scorecard's pie into "not machine-readable" or
-    "lists no assets". The row is marked as tried by this parser version so
-    it isn't re-read every night; the next version bump tries again."""
+def _prior_count(mine: _Stored | None, filing_id: str) -> int | None:
+    """Holdings an earlier parser read from this very filing, when it is the
+    one stored — what a re-read after a PARSER_VERSION bump is compared to."""
     if mine is None or mine.filing_id != filing_id or not mine.parsed:
+        return None
+    return mine.holding_count
+
+
+def _keeps_earlier_read(prior: int | None, report: AnnualReport) -> bool:
+    """A re-read of the very report already stored that came back with
+    nothing: unreadable, or no rows where the earlier parser found some. A
+    filed report never changes, so that is the new parser's miss, not the
+    report's; the earlier holdings stay, and a parser regression never turns
+    a scorecard's pie into "not machine-readable" or "lists no assets".
+
+    The stored row keeps its old parser_version, so the report is re-read
+    (from the parse cache — no request) every run: each re-read counts as a
+    parser miss in _SourceHealth, which keeps failing the phase for as long
+    as the regression affects enough members. Stamping it as tried would
+    silence the alarm after one night."""
+    if prior is None:
         return False
-    if report.holdings is not None and (report.holdings or not mine.holding_count):
-        return False
-    logger.warning(
-        "Parser v%d read nothing from %s, which an earlier parser read %d holdings from — keeping those",
-        parser_version, filing_id, mine.holding_count,
-    )
-    db.query(FinancialDisclosure).filter_by(**owner_filter, filing_id=filing_id).update(
-        {"parser_version": parser_version}, synchronize_session=False,
-    )
-    return True
+    if report.holdings is None or (not report.holdings and prior):
+        logger.warning("Parser read nothing from a report an earlier parser read %d holdings from — keeping those", prior)
+        return True
+    return False
 
 
 def _is_older(stored: _Stored | None, report_year: int | None, filed_date: str | None) -> bool:
@@ -210,28 +214,40 @@ def _is_member_prefix(prefix: str | None) -> bool:
 
 
 class _Outcome:
-    """What one member's fetches showed about the source this run.
+    """What one member's reads showed this run, about the source and about
+    the parser — two separate questions.
 
-    attempted: a live request was made. served: the source answered one
-    with a report. read: one was read — its holdings, or a scanned report
-    known as such; an "unrecognized" read is served but not read. Only live
-    requests count: a report answered from the parse cache, or a paper
-    filing that is never fetched, proves nothing either way
-    (AnnualReport.live).
+    Source (live requests only — a parse-cache hit or a paper filing that is
+    never fetched proves nothing about it, AnnualReport.live): `attempted`,
+    a live request was made; `fetched`, one returned a report (final: a
+    crash or an unrecognizable page may be a block page, not a report).
+
+    Parser (every read this run, cached or live, since a cached read under
+    the current PARSER_VERSION is this parser's output): `parsed_ok`, a
+    report yielded rows; `parser_miss`, one came back unreadable, empty, or
+    with fewer rows than an earlier parser read from the same filing. A
+    scanned report never reaches the parser and counts neither way. Empty
+    and shrunk reads can be genuine, which is why _SourceHealth weighs
+    misses against reads rather than failing on any one.
     """
 
     def __init__(self) -> None:
-        self.attempted = self.served = self.read = False
+        self.attempted = self.fetched = self.parsed_ok = self.parser_miss = False
 
-    def observe(self, report: AnnualReport | None) -> None:
-        if report is not None and not report.live:
-            return
-        self.attempted = True
+    def observe(self, report: AnnualReport | None, prior: int | None = None) -> None:
+        if report is None or report.live:
+            self.attempted = True
         if report is None:
             return  # a request was made and failed
-        self.served = True
-        if report.final and report.unreadable_reason != UNREADABLE_UNRECOGNIZED:
-            self.read = True
+        if report.live and report.final:
+            self.fetched = True
+        if report.unreadable_reason == UNREADABLE_SCANNED:
+            return
+        holdings = report.holdings
+        if holdings is None or not holdings or (prior is not None and len(holdings) < prior):
+            self.parser_miss = True
+        else:
+            self.parsed_ok = True
 
     def lapsed(self) -> None:
         """A request answered with eFD's terms page even after re-accepting."""
@@ -239,67 +255,74 @@ class _Outcome:
 
 
 class _SourceHealth:
-    """Whether a phase's source looked down, judged once the phase is done.
+    """Whether a phase's source or parser looked broken, judged once the
+    phase is done.
 
     Deliberately not an early abort: members with nothing stored are
     processed first, so a few genuinely broken filings bunched at the front
     would otherwise stop the phase before it reached anyone else.
 
-    Any member's report read means the source and the parser both work.
-    With none read:
-
-    - At least MIN_ATTEMPTS_FOR_OUTAGE members served a report and none
-      could be read: the parser has regressed, or something other than
-      reports is being served in their place. The phase fails; nothing
-      about the source can excuse it.
-    - At least MIN_ATTEMPTS_FOR_OUTAGE members tried: an outage, or a night
-      on which the only filings left to fetch are ones that won't load (a
-      PDF the index lists but the Clerk 404s). Counts alone can't tell those
-      apart, and neither can a memory of past failures — anything that
-      learns to stop counting a filing also learns to stop seeing an outage.
-      So the phase asks the source directly: it re-requests a report it
-      already stored, live and past any cache. If that loads, the failures
-      are those filings'; if not — or nothing is stored to ask about — the
-      phase fails, every night the outage lasts.
+    - Parser: at least MIN_ATTEMPTS_FOR_OUTAGE members' reads missed, and
+      misses outnumber good reads. A regression shows up as exactly that;
+      the odd genuinely empty or unusual report does not. Nothing about
+      the source can excuse it.
+    - Source: at least MIN_ATTEMPTS_FOR_OUTAGE members tried and no report
+      fetched. That is an outage, or a night on which the only filings left
+      to fetch are ones that won't load (a PDF the index lists but the
+      Clerk 404s). Counts alone can't tell those apart, and neither can a
+      memory of past failures — anything that learns to stop counting a
+      filing also learns to stop seeing an outage. So the phase asks the
+      source directly: it re-requests reports it already stored, live and
+      past any cache. If one loads, the failures are those filings'; if
+      none does — or nothing is stored to ask about — the phase fails,
+      every night the outage lasts.
     """
 
     def __init__(self, source: str) -> None:
         self.source = source
-        self.attempted = 0
-        self.served = 0
-        self.read = 0
+        self.attempted = self.fetched = self.parsed_ok = self.parser_miss = 0
 
     def record(self, outcome: _Outcome) -> None:
         self.attempted += outcome.attempted
-        self.served += outcome.served
-        self.read += outcome.read
+        self.fetched += outcome.fetched
+        self.parsed_ok += outcome.parsed_ok
+        self.parser_miss += outcome.parser_miss and not outcome.parsed_ok
 
-    async def check(self, stored_url: str | None, still_loads: Callable[[str], Awaitable[bool]]) -> None:
-        if self.read:
-            return
-        if self.served >= MIN_ATTEMPTS_FOR_OUTAGE:
-            raise RuntimeError(f"{self.source}: {self.served} members' reports loaded and none could be read")
-        if self.attempted < MIN_ATTEMPTS_FOR_OUTAGE:
-            return
-        if stored_url and await still_loads(stored_url):
-            logger.warning(
-                "%s: %d members' reports failed to load, but a stored report (%s) still does — "
-                "those filings, not the source", self.source, self.attempted, stored_url,
+    async def check(
+        self, stored_urls: Callable[[], list[str]], still_loads: Callable[[str], Awaitable[bool]],
+    ) -> None:
+        if self.parser_miss >= MIN_ATTEMPTS_FOR_OUTAGE and self.parser_miss > self.parsed_ok:
+            raise RuntimeError(
+                f"{self.source}: {self.parser_miss} members' reports read as unreadable, empty or shrunk, "
+                f"{self.parsed_ok} read — a parser regression, or pages served in reports' place"
             )
+        if self.fetched or self.attempted < MIN_ATTEMPTS_FOR_OUTAGE:
             return
+        for url in stored_urls():
+            if await still_loads(url):
+                logger.warning(
+                    "%s: %d members' reports failed to load, but a stored report (%s) still does — "
+                    "those filings, not the source", self.source, self.attempted, url,
+                )
+                return
         raise RuntimeError(f"{self.source}: {self.attempted} members tried, no report fetched")
 
 
-def _known_good_url(db: Session, owner_column) -> str | None:
-    """The most recently stored report that was fetched and read — the one
-    most likely to still be where it was."""
-    row = (
+# How many stored reports to ask about before calling the source down: one
+# could itself have been withdrawn since it was stored.
+_PROBES = 3
+
+
+def _stored_urls(db: Session, owner_column) -> list[str]:
+    """The most recently stored reports that were fetched and read — the
+    ones most likely to still be where they were."""
+    rows = (
         db.query(FinancialDisclosure.source_url)
         .filter(owner_column.isnot(None), FinancialDisclosure.parsed == True, FinancialDisclosure.source_url != "")  # noqa: E712
         .order_by(FinancialDisclosure.ingested_at.desc(), FinancialDisclosure.id.desc())
-        .first()
+        .limit(_PROBES)
     )
-    return row[0] if row else None
+    return [url for (url,) in rows]
 
 
 async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
@@ -349,7 +372,8 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
                 out_of_time = True
                 break
             report = await fetch_house_annual(client, db, filing)
-            outcome.observe(report)
+            prior = _prior_count(mine, filing["doc_id"])
+            outcome.observe(report, prior)
             if report is None or not report.final:
                 # Nothing usable this run: not fetched, or a read that may be
                 # transient (the parser crashed) — which is stored nowhere,
@@ -372,9 +396,7 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
                 # sitting member's filing does. Both are the Clerk's own
                 # structured index fields, not inferred from any name.
                 continue
-            if _keeps_earlier_read(
-                db, mine, {"representative_id": rep_id}, filing["doc_id"], report, HOUSE_PARSER_VERSION,
-            ):
+            if _keeps_earlier_read(prior, report):
                 break
             inserted += _replace_disclosure(
                 db,
@@ -394,7 +416,8 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
             logger.info("House holdings: time budget spent — %d members wait for the next run", len(order) - position)
             break
     await health.check(
-        _known_good_url(db, FinancialDisclosure.representative_id), lambda url: house_report_still_loads(client, url),
+        lambda: _stored_urls(db, FinancialDisclosure.representative_id),
+        lambda url: house_report_still_loads(client, url),
     )
     return inserted
 
@@ -514,7 +537,8 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
                     # problem, not this filing's. Try the next.
                     outcome.lapsed()
                     continue
-            outcome.observe(report)
+            prior = _prior_count(mine, filing_id)
+            outcome.observe(report, prior)
             if report is None or not report.final:
                 # Nothing usable this run: the filing won't load, or its read
                 # may be transient (a parser crash, or a page that is neither
@@ -523,7 +547,7 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
                 # claim about the report this run can't back. Fall through to
                 # the senator's next-best filing.
                 continue
-            if _keeps_earlier_read(db, mine, {"senator_id": senator_id}, filing_id, report, SENATE_PARSER_VERSION):
+            if _keeps_earlier_read(prior, report):
                 break
             inserted += _replace_disclosure(
                 db,
@@ -543,7 +567,7 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
             logger.info("Senate holdings: time budget spent — %d members wait for the next run", len(order) - position)
             break
     await health.check(
-        _known_good_url(db, FinancialDisclosure.senator_id), lambda url: _senate_probe(client, url),
+        lambda: _stored_urls(db, FinancialDisclosure.senator_id), lambda url: _senate_probe(client, url),
     )
     return inserted
 

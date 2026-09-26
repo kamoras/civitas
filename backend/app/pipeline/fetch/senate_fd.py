@@ -249,7 +249,7 @@ async def report_still_loads(client: httpx.AsyncClient, report_url: str) -> bool
     that is down from a handful of filings that won't load. Raises
     SessionLapsed, as fetch_and_parse_annual does, so the caller can
     re-accept the terms rather than read a lapse as an outage."""
-    resp = await _request_with_retry(client, "GET", report_url)
+    resp = await _request_with_retry(client, "GET", report_url, follow_redirects=False)
     if resp is None:
         return False
     doc = _as_doc(resp.text) if resp.status_code == 200 else None
@@ -278,17 +278,21 @@ async def fetch_and_parse_annual(
     if cached is not None:
         return cached
 
-    resp = await _request_with_retry(client, "GET", filing["report_url"])
+    # Redirects are not followed (fetch_with_retry follows them by default):
+    # a lapsed session answers with a redirect to the terms page, and a
+    # withdrawn report with some other redirect. Followed, both would land on
+    # a 200 page that is neither a report nor the terms form, and read as a
+    # report the parser can't recognize.
+    resp = await _request_with_retry(client, "GET", filing["report_url"], follow_redirects=False)
     if resp is None:
         return None
     doc = _as_doc(resp.text) if resp.status_code == 200 else None
     if _redirects_to_terms(resp) or (doc is not None and is_terms_page(doc)):
         # A lapsed session: eFD answers with a redirect to its terms page
-        # (fetch_with_retry passes 3xx through; the client doesn't follow
-        # it) or with the terms page itself. That says nothing about the
-        # report, so it's never stored as unreadable; raised rather than
-        # returned as None so the caller can re-accept the terms only when
-        # this actually happens.
+        # or with the terms page itself. That says nothing about the report,
+        # so it's never stored as unreadable; raised rather than returned as
+        # None so the caller can re-accept the terms only when this actually
+        # happens.
         raise SessionLapsed(f"HTTP {resp.status_code} for {filing['report_url']}")
     if resp.status_code != 200:
         # Any other redirect or non-200 success (a moved or withdrawn

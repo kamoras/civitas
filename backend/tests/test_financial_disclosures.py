@@ -293,10 +293,10 @@ class TestFetchCaching:
     async def test_house_parse_crash_is_linked_but_not_cached(self, db_session):
         from unittest.mock import AsyncMock, patch
 
-        from app.pipeline.fetch import house_fd
+        from app.pipeline.fetch import house_fd, house_ptr
 
         filing = {"doc_id": "D1", "pdf_url": "https://clerk.example/2025/D1.pdf"}
-        with patch.object(house_fd, "fetch_bytes_with_retry", new_callable=AsyncMock, return_value=b"%PDF-broken"), \
+        with patch.object(house_ptr, "fetch_bytes_with_retry", new_callable=AsyncMock, return_value=b"%PDF-broken"), \
              patch.object(house_fd, "parse_annual_pdf", side_effect=ValueError("bad xref")), \
              patch.object(house_fd, "api_cache_set") as mock_set:
             report = await house_fd.fetch_and_parse_annual(None, db_session, filing)
@@ -308,12 +308,12 @@ class TestFetchCaching:
     async def test_house_unrecognized_layout_is_cached_under_the_parser_version(self, db_session):
         from unittest.mock import AsyncMock, patch
 
-        from app.pipeline.fetch import house_fd
+        from app.pipeline.fetch import house_fd, house_ptr
         from app.pipeline.fetch.fd_common import AnnualReport
 
         filing = {"doc_id": "D1", "pdf_url": "https://clerk.example/2025/D1.pdf"}
         unrecognized = AnnualReport("Member", None, "unrecognized")
-        with patch.object(house_fd, "fetch_bytes_with_retry", new_callable=AsyncMock, return_value=b"%PDF"), \
+        with patch.object(house_ptr, "fetch_bytes_with_retry", new_callable=AsyncMock, return_value=b"%PDF"), \
              patch.object(house_fd, "parse_annual_pdf", return_value=unrecognized), \
              patch.object(house_fd, "api_cache_set") as mock_set:
             report = await house_fd.fetch_and_parse_annual(None, db_session, filing)
@@ -326,9 +326,9 @@ class TestFetchCaching:
     async def test_house_download_failure_is_not_a_report(self, db_session):
         from unittest.mock import AsyncMock, patch
 
-        from app.pipeline.fetch import house_fd
+        from app.pipeline.fetch import house_fd, house_ptr
 
-        with patch.object(house_fd, "fetch_bytes_with_retry", new_callable=AsyncMock, return_value=None):
+        with patch.object(house_ptr, "fetch_bytes_with_retry", new_callable=AsyncMock, return_value=None):
             assert await house_fd.fetch_and_parse_annual(None, db_session, {"doc_id": "D", "pdf_url": "u"}) is None
 
     async def test_senate_paper_report_is_scanned_without_a_fetch(self, db_session):
@@ -445,17 +445,17 @@ class TestRepeatedCrash:
     async def test_the_same_crash_twice_in_a_row_is_cached_as_unrecognized(self, db_session):
         from unittest.mock import AsyncMock, patch
 
-        from app.pipeline.fetch import house_fd
+        from app.pipeline.fetch import house_fd, house_ptr
 
         filing = {"doc_id": "BROKEN", "pdf_url": "https://clerk.example/2025/BROKEN.pdf"}
-        with patch.object(house_fd, "fetch_bytes_with_retry", new_callable=AsyncMock, return_value=b"%PDF"), \
+        with patch.object(house_ptr, "fetch_bytes_with_retry", new_callable=AsyncMock, return_value=b"%PDF"), \
              patch.object(house_fd, "parse_annual_pdf", side_effect=ValueError("bad xref")):
             first = await house_fd.fetch_and_parse_annual(None, db_session, filing)
             second = await house_fd.fetch_and_parse_annual(None, db_session, filing)
         assert (first.final, second.final) == (False, True)
         assert second.unreadable_reason == "unrecognized"
         # ...and it is now served from the cache without another download.
-        with patch.object(house_fd, "fetch_bytes_with_retry", new_callable=AsyncMock) as get:
+        with patch.object(house_ptr, "fetch_bytes_with_retry", new_callable=AsyncMock) as get:
             third = await house_fd.fetch_and_parse_annual(None, db_session, filing)
         get.assert_not_called()
         assert third.unreadable_reason == "unrecognized"
@@ -467,10 +467,10 @@ class TestReportStillLoads:
     async def test_house_probe_wants_a_pdf(self):
         from unittest.mock import AsyncMock, patch
 
-        from app.pipeline.fetch import house_fd
+        from app.pipeline.fetch import house_fd, house_ptr
 
         for body, expected in ((b"%PDF-1.7 ...", True), (b"<html>Not found</html>", False), (None, False)):
-            with patch.object(house_fd, "fetch_bytes_with_retry", new_callable=AsyncMock, return_value=body) as get:
+            with patch.object(house_ptr, "fetch_bytes_with_retry", new_callable=AsyncMock, return_value=body) as get:
                 assert await house_fd.report_still_loads(None, "https://clerk.example/x.pdf") is expected
         # Past any edge cache, and only the magic bytes.
         url = get.await_args.args[2]
@@ -509,11 +509,42 @@ class TestHouseDownloadIsAPdf:
         be cached as an unrecognized report."""
         from unittest.mock import AsyncMock, patch
 
-        from app.pipeline.fetch import house_fd
+        from app.pipeline.fetch import house_fd, house_ptr
 
         filing = {"doc_id": "D1", "pdf_url": "https://clerk.example/2025/D1.pdf"}
-        with patch.object(house_fd, "fetch_bytes_with_retry", new_callable=AsyncMock,
+        with patch.object(house_ptr, "fetch_bytes_with_retry", new_callable=AsyncMock,
                           return_value=b"<html>Request blocked</html>"), \
              patch.object(house_fd, "parse_annual_pdf") as parse:
             assert await house_fd.fetch_and_parse_annual(None, db_session, filing) is None
+        parse.assert_not_called()
+
+
+class TestEfdRedirectsAreNotFollowed:
+    async def test_report_fetch_and_probe_see_redirects_themselves(self, db_session):
+        """fetch_with_retry follows redirects by default; a lapse or a
+        withdrawn report is only recognizable if these requests don't."""
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, patch
+
+        from app.pipeline.fetch import senate_fd
+
+        moved = SimpleNamespace(status_code=301, text="", headers={"location": "/search/view/other/"})
+        filing = {"report_url": "https://efdsearch.senate.gov/search/view/annual/abc/", "is_paper": False}
+        with patch.object(senate_fd, "_request_with_retry", new_callable=AsyncMock, return_value=moved) as get:
+            assert await senate_fd.fetch_and_parse_annual(None, db_session, filing) is None
+            assert await senate_fd.report_still_loads(None, filing["report_url"]) is False
+        assert all(call.kwargs.get("follow_redirects") is False for call in get.await_args_list)
+
+
+class TestHousePtrDownloadIsAPdf:
+    async def test_a_page_in_a_ptrs_place_is_a_failed_fetch(self, db_session):
+        from unittest.mock import AsyncMock, patch
+
+        from app.pipeline.fetch import house_ptr
+
+        filing = {"doc_id": "P1", "pdf_url": "https://clerk.example/ptr/P1.pdf"}
+        with patch.object(house_ptr, "fetch_bytes_with_retry", new_callable=AsyncMock,
+                          return_value=b"<html>maintenance</html>"), \
+             patch.object(house_ptr, "parse_pdf_bytes") as parse:
+            assert await house_ptr.fetch_and_parse_ptr(None, db_session, filing) == []
         parse.assert_not_called()
