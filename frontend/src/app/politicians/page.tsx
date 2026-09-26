@@ -1,5 +1,6 @@
 "use client";
 
+import { displayScore } from "@/lib/formatting";
 import { Suspense, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -84,7 +85,7 @@ function ScoreBar({ score }: { score: number }) {
       <div className="flex-1 h-1 bg-white/[0.03] overflow-hidden">
         <div className={`h-full ${color}`} style={{ width: `${score}%` }} />
       </div>
-      <span className="font-mono text-xs text-ink w-8 text-right shrink-0">{score.toFixed(0)}</span>
+      <span className="font-mono text-xs text-ink w-8 text-right shrink-0">{displayScore(score)}</span>
     </div>
   );
 }

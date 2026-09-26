@@ -94,3 +94,51 @@ def test_president_leaderboard_still_ranks_former_presidents(db_session):
     result = get_president_leaderboard(db_session)
 
     assert [p.id for p in result] == ["obama-44"]
+
+
+# ── House: sorted and ranked over the whole chamber, then paginated ──
+
+def test_rep_leaderboard_sorts_by_pac_share_across_pages(db_session):
+    """Sorting one page of 50 in the browser ranked members only against
+    that page. The server sorts the whole chamber before paginating."""
+    for i in range(6):
+        r = _rep(f"R{i}", f"Rep {i}", funding_independence=90 - i)  # R0 best score
+        r.total_contributions = 1_000_000
+        r.total_from_pacs = 100_000 * i  # R5 most PAC-reliant
+        db_session.add(r)
+    db_session.commit()
+
+    page1 = get_rep_leaderboard(db_session, page=1, per_page=2, sort="pac_pct")
+    page2 = get_rep_leaderboard(db_session, page=2, per_page=2, sort="pac_pct")
+    assert [e["id"] for e in page1["entries"]] == ["R5", "R4"]
+    assert [e["rank"] for e in page2["entries"]] == [3, 4]
+    asc = get_rep_leaderboard(db_session, page=1, per_page=2, sort="pac_pct", direction="asc")
+    assert [e["id"] for e in asc["entries"]] == ["R0", "R1"]
+
+
+def test_rep_leaderboard_ties_share_a_rank(db_session):
+    db_session.add_all([
+        _rep("R1", "Adams", 90), _rep("R2", "Baker", 60), _rep("R3", "Clark", 60), _rep("R4", "Diaz", 10),
+    ])
+    db_session.commit()
+    entries = get_rep_leaderboard(db_session)["entries"]
+    assert [(e["id"], e["rank"]) for e in entries] == [("R1", 1), ("R2", 2), ("R3", 2), ("R4", 4)]
+
+
+def test_rep_leaderboard_missing_values_sort_last_both_ways(db_session):
+    a, b, c = _rep("R1", "A", 50), _rep("R2", "B", 50), _rep("R3", "C", 50)
+    a.ideology_score, b.ideology_score, c.ideology_score = -0.5, 0.5, None
+    db_session.add_all([a, b, c])
+    db_session.commit()
+    for direction, first in (("asc", "R1"), ("desc", "R2")):
+        ids = [e["id"] for e in get_rep_leaderboard(db_session, sort="ideology", direction=direction)["entries"]]
+        assert ids[0] == first and ids[-1] == "R3"
+
+
+def test_rep_leaderboard_members_without_a_value_share_the_last_rank(db_session):
+    a, b, c = _rep("R1", "A", 50), _rep("R2", "B", 50), _rep("R3", "C", 50)
+    a.ideology_score = 0.1
+    db_session.add_all([a, b, c])
+    db_session.commit()
+    ranks = [e["rank"] for e in get_rep_leaderboard(db_session, sort="ideology")["entries"]]
+    assert ranks == [1, 2, 2]
