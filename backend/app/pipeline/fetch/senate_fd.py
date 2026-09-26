@@ -111,6 +111,11 @@ def _cell_main_text(cell) -> str:
     return _own_text(cell)
 
 
+class SessionLapsed(Exception):
+    """eFD served something other than the report — its terms page or a
+    redirect to it — meaning the accepted-terms session has lapsed."""
+
+
 def is_report_page(page_html: str) -> bool:
     """True when the page is a filed report: every electronic report renders
     its content as numbered "Part N." sections (Part 1 honoraria through
@@ -208,7 +213,8 @@ async def fetch_and_parse_annual(
 ) -> AnnualReport | None:
     """Fetch one annual report page and parse its assets.
 
-    None only when the page couldn't be fetched this run. Otherwise an
+    Raises SessionLapsed when eFD answers with its terms page instead of
+    the report. None only when the page couldn't be fetched. Otherwise an
     AnnualReport whose holdings are None when the report can't be read — a
     paper filing (never fetched: it is scanned page images) or a page
     without a recognizable assets table — and an empty list when it was
@@ -234,13 +240,10 @@ async def fetch_and_parse_annual(
         # Not the report — a lapsed session answers with a redirect to the
         # terms page (the client doesn't follow redirects, so the body is
         # empty) or the terms page itself. That says nothing about the
-        # report: a failed fetch, retried, never an unreadable report cached
-        # for a month.
-        logger.warning(
-            "Senate eFD returned a non-report response (HTTP %s) for %s — session may have lapsed",
-            resp.status_code, filing["report_url"],
-        )
-        return None
+        # report: never an unreadable report cached for a month. Raised
+        # rather than returned as None so the caller can tell it from a
+        # plain failed fetch and re-accept the terms only when it happens.
+        raise SessionLapsed(f"HTTP {resp.status_code} non-report response for {filing['report_url']}")
     try:
         holdings = parse_assets_table(resp.text)
     except Exception:

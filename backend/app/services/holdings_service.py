@@ -15,6 +15,7 @@ report, or a re-read one, gets a fresh entry. One backend worker (AGENTS.md)
 means one cache.
 """
 
+import threading
 from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime
@@ -109,13 +110,18 @@ class _Breakdown:
 # each entry is ~9 category rows.
 _BREAKDOWN_CACHE_SIZE = 600
 _breakdown_cache: "OrderedDict[tuple[int, datetime | None], _Breakdown]" = OrderedDict()
+# Sync routes run in FastAPI's threadpool, so requests touch the cache
+# concurrently; every check-and-update of it happens under this lock.
+_breakdown_lock = threading.Lock()
 
 
 def _breakdown(db: Session, disclosure: FinancialDisclosure) -> _Breakdown:
     key = (disclosure.id, disclosure.ingested_at)
-    if key in _breakdown_cache:
-        _breakdown_cache.move_to_end(key)
-        return _breakdown_cache[key]
+    with _breakdown_lock:
+        cached = _breakdown_cache.get(key)
+        if cached is not None:
+            _breakdown_cache.move_to_end(key)
+            return cached
     rows = (
         db.query(FinancialHolding.category, FinancialHolding.value_low, FinancialHolding.value_high)
         .filter(FinancialHolding.disclosure_id == disclosure.id)
@@ -130,9 +136,10 @@ def _breakdown(db: Session, disclosure: FinancialDisclosure) -> _Breakdown:
         total_open_ended=any(is_open_ended(low, high) for low, high in valued),
         categories=tuple(_categories(rows)),
     )
-    _breakdown_cache[key] = result
-    if len(_breakdown_cache) > _BREAKDOWN_CACHE_SIZE:
-        _breakdown_cache.popitem(last=False)
+    with _breakdown_lock:
+        _breakdown_cache[key] = result
+        while len(_breakdown_cache) > _BREAKDOWN_CACHE_SIZE:
+            _breakdown_cache.popitem(last=False)
     return result
 
 

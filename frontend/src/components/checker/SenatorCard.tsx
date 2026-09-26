@@ -520,10 +520,12 @@ export default function SenatorCard({
           {/* Both disclosure sections are keyed by member: navigating
               between two profiles can reuse this card, and each section's
               data, page and selection belong to the member they were
-              loaded for. */}
-          <Holdings key={`${chamber}-${senator.id}`} memberId={senator.id} chamber={chamber} />
+              loaded for. The keys are prefixed per section: siblings must
+              not share one, or React can leave the previous member's
+              section mounted beside the new one. */}
+          <Holdings key={`holdings-${chamber}-${senator.id}`} memberId={senator.id} chamber={chamber} />
 
-          <StockTrades key={`${chamber}-${senator.id}`} politicianId={senator.id} filer={chamber} />
+          <StockTrades key={`trades-${chamber}-${senator.id}`} politicianId={senator.id} filer={chamber} />
 
           {senator.sponsoredBills && senator.sponsoredBills.length > 0 && (
             <SponsoredBills bills={senator.sponsoredBills} />

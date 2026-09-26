@@ -363,7 +363,7 @@ class TestFetchCaching:
         assert mock_get.await_count == 1
 
 
-    async def test_senate_terms_page_in_place_of_a_report_is_a_failed_fetch(self, db_session):
+    async def test_senate_terms_page_in_place_of_a_report_signals_a_lapsed_session(self, db_session):
         """A lapsed session serves the terms page instead of the report; that
         says nothing about the report, so it is neither stored as unreadable
         nor cached."""
@@ -382,5 +382,6 @@ class TestFetchCaching:
         for response in (terms, redirect):
             with patch.object(senate_fd, "_request_with_retry", new_callable=AsyncMock, return_value=response), \
                  patch.object(senate_fd, "api_cache_set") as mock_set:
-                assert await senate_fd.fetch_and_parse_annual(None, db_session, filing) is None
+                with pytest.raises(senate_fd.SessionLapsed):
+                    await senate_fd.fetch_and_parse_annual(None, db_session, filing)
             mock_set.assert_not_called()

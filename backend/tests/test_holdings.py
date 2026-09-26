@@ -502,11 +502,15 @@ class TestSourceFailures:
         assert stored <= {"D0"}
 
     async def test_senate_lapsed_session_is_re_accepted_and_the_report_retried(self, db_session, senator):
+        from app.pipeline.fetch.senate_fd import SessionLapsed
+
         attempts = []
 
         async def fetch(_client, _db, filing):
             attempts.append(filing["report_url"])
-            return None if len(attempts) == 1 else AnnualReport(None, [_row()])
+            if len(attempts) == 1:
+                raise SessionLapsed("terms page")
+            return AnnualReport(None, [_row()])
 
         accept = AsyncMock(return_value="tok")
         with patch.object(holdings_pipeline, "senate_accept_terms", accept), \
@@ -731,3 +735,36 @@ class TestBreakdownCache:
             result = get_senator_holdings(db_session, "S1")
             assert spy.call_count == 2
         assert [c.category for c in result.categories] == ["CASH"]
+
+
+class TestRound6:
+    async def test_a_plain_failed_fetch_does_not_re_accept_terms(self, db_session, senator):
+        accept = AsyncMock(return_value="tok")
+        with patch.object(holdings_pipeline, "senate_accept_terms", accept), \
+             patch.object(holdings_pipeline, "search_annual_filings", new_callable=AsyncMock,
+                          return_value=[_senate_filing("gone")]), \
+             patch.object(holdings_pipeline, "fetch_senate_annual", new_callable=AsyncMock, return_value=None):
+            await holdings_pipeline.ingest_senate_holdings(db_session, None)
+        assert accept.await_count == 1  # only the phase's own session setup
+
+    async def test_members_already_current_never_count_as_failures(self, db_session):
+        """Each member's newest index entry won't load (a same-surname
+        candidate's, say), but their stored report is current: nothing is
+        down, so the phase must not abort."""
+        n = holdings_pipeline.MAX_CONSECUTIVE_FETCH_FAILURES + 2
+        index = {2025: []}
+        for i in range(n):
+            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
+                                          party="R", is_current=True))
+            db_session.add(FinancialDisclosure(
+                representative_id=f"R{i}", filing_id=f"CUR{i}", report_year=2025, filed_date="2026-05-01",
+                source_url="x", parser_version=holdings_pipeline.HOUSE_PARSER_VERSION,
+            ))
+            common = {"last": f"Name{i}", "first": "Person", "district": f"TX{i + 1:02d}"}
+            index[2025] += [
+                {**_house_filing(f"CAND{i}", filing_date="2026-08-01", **common), "filing_type": "A"},
+                _house_filing(f"CUR{i}", filing_date="2026-05-01", **common),
+            ]
+        db_session.commit()
+        await _ingest_house(db_session, index, {})  # every CAND fetch fails; must not raise
+        assert db_session.query(FinancialDisclosure).count() == n

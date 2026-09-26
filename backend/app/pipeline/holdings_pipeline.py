@@ -36,6 +36,7 @@ from app.pipeline.fetch.house_fd import PARSER_VERSION as HOUSE_PARSER_VERSION
 from app.pipeline.fetch.house_fd import fetch_and_parse_annual as fetch_house_annual, fetch_annual_filing_index
 from app.pipeline.fetch.senate_fd import PARSER_VERSION as SENATE_PARSER_VERSION
 from app.pipeline.fetch.senate_fd import (
+    SessionLapsed,
     fetch_and_parse_annual as fetch_senate_annual,
     is_annual_title,
     is_senator_filing,
@@ -163,8 +164,11 @@ class _FailureRun:
         self.source = source
         self.count = 0
 
-    def record(self, attempted: bool, fetched: bool) -> None:
-        if not attempted:
+    def record(self, attempted: bool, fetched: bool, settled: bool) -> None:
+        """`settled`: the member turned out to be up to date (their stored
+        report is current or newer) — whatever failed on the way there, the
+        source served what was needed."""
+        if not attempted or settled:
             return
         self.count = 0 if fetched else self.count + 1
         if self.count >= MAX_CONSECUTIVE_FETCH_FAILURES:
@@ -204,14 +208,16 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
     order = _members_in_order(per_rep, stored)
     for position, rep_id in enumerate(order):
         mine = stored.get(rep_id)
-        attempted = fetched = False
+        attempted = fetched = settled = False
         out_of_time = False
         for filing in per_rep[rep_id]:
             if _is_current(mine, filing["doc_id"], HOUSE_PARSER_VERSION):
+                settled = True
                 break  # already have the newest report, as this parser reads it
             if _is_older(mine, filing.get("year"), filing.get("filing_date")):
                 # Only older reports than the stored one turned up (a year's
                 # index failed to load): keep the newer stored report.
+                settled = True
                 break
             if time.monotonic() > deadline:
                 out_of_time = True
@@ -258,7 +264,7 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
         if out_of_time:
             logger.info("House holdings: time budget spent — %d members wait for the next run", len(order) - position)
             break
-        failure_run.record(attempted, fetched)
+        failure_run.record(attempted, fetched, settled)
     return inserted
 
 
@@ -346,13 +352,15 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
     order = _members_in_order(per_senator, stored)
     for position, senator_id in enumerate(order):
         mine = stored.get(senator_id)
-        attempted = fetched = False
+        attempted = fetched = settled = False
         out_of_time = False
         for filing in sorted(per_senator[senator_id], key=_senate_rank, reverse=True):
             filing_id = senate_filing_id(filing["report_url"])
             if _is_current(mine, filing_id, SENATE_PARSER_VERSION):
+                settled = True
                 break
             if _is_older(mine, _senate_report_year(filing), filing.get("filed_date")):
+                settled = True
                 # The search came back without the stored (newer) report — a
                 # page of results failed to load — or the best candidate left
                 # is a paper amendment of unknowable year. Keep what's stored.
@@ -362,16 +370,26 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
                 # A paper report's year is inferred from its filing date; it
                 # never displaces a stored report for that same year, which
                 # may state it (a readable electronic report beats a scan).
+                settled = True
                 break
             if time.monotonic() > deadline:
                 out_of_time = True
                 break
             attempted = True
-            report = await fetch_senate_annual(client, db, filing)
-            if report is None and await senate_accept_terms(client) is not None:
-                # The usual cause is the eFD session lapsing partway through
-                # the phase: accept the terms again and retry once.
+            try:
                 report = await fetch_senate_annual(client, db, filing)
+            except SessionLapsed:
+                # The session lapsed partway through the phase: accept the
+                # terms again and retry this report once. Only on an actual
+                # lapse — a filing that simply won't load costs no extra
+                # round trips.
+                logger.info("Senate eFD session lapsed — re-accepting terms")
+                report = None
+                if await senate_accept_terms(client) is not None:
+                    try:
+                        report = await fetch_senate_annual(client, db, filing)
+                    except SessionLapsed:
+                        report = None
             if report is None:
                 # This filing won't load (withdrawn, or not a report page):
                 # fall through to the senator's next-best one.
@@ -397,7 +415,7 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
         if out_of_time:
             logger.info("Senate holdings: time budget spent — %d members wait for the next run", len(order) - position)
             break
-        failure_run.record(attempted, fetched)
+        failure_run.record(attempted, fetched, settled)
     return inserted
 
 
