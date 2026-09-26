@@ -102,7 +102,7 @@ describe("isActiveCandidate", () => {
     id: "H6GA07123",
     name: "Test Candidate",
     party: "DEM",
-    confirmed: true,
+    confirmed: false,
     incumbentChallenge: null,
     candidateStatus: null,
     hasRaisedFunds: false,
@@ -115,6 +115,12 @@ describe("isActiveCandidate", () => {
     expect(isActiveCandidate({ ...base, candidateStatus: "C" })).toBe(true);
     expect(isActiveCandidate({ ...base, hasRaisedFunds: true })).toBe(true);
     expect(isActiveCandidate({ ...base, incumbentChallenge: "I" })).toBe(true);
+  });
+
+  it("counts a candidate the state certified, even with no FEC activity", () => {
+    // North Carolina's Libertarian Senate nominee: on the certified ballot,
+    // no funds, not a statutory candidate.
+    expect(isActiveCandidate({ ...base, confirmed: true, candidateStatus: "N" })).toBe(true);
   });
 
   it("treats paper/prior-cycle filers as inactive", () => {
@@ -134,7 +140,9 @@ describe("tierCandidates", () => {
       id: "id",
       name: "name",
       party: "DEM",
-      confirmed: true,
+      // tierCandidates only runs on "filers"/"primary" races, where nobody
+      // is state-confirmed.
+      confirmed: false,
       incumbentChallenge: "C",
       candidateStatus: "C",
       hasRaisedFunds: true,

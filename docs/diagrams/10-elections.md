@@ -188,9 +188,39 @@ whether its primary has passed. The state page leads with it
 (`BallotBasisNotice`): filers after a primary get the loudest notice on the
 page ("these are not ballot positions"); a certified ballot gets none.
 
+## The page
+
+`StateBallotClient.tsx` lays the ballot out as a research tool, not a mock
+ballot: every contest is a box styled after a printed ballot (shaded header,
+the ballot's own "Vote for one"), and the order of the list is the ballot's
+order. `lib/ballotContests.ts` builds that list once from the API response;
+everything below reads it.
+
+- **Desktop**: three columns, Federal | State | Measures · local, fitting
+  about one screen. A contest's research opens in a drawer beside the ballot
+  (`ContestDrawer.tsx`), with Previous/Next through the whole list.
+- **Phone**: an index of every contest, one line each; a contest opens on its
+  own screen (the same drawer, full screen) with Previous/Next — the
+  voting-machine pattern, one contest per screen.
+- **Tabs only inside a race** (`RaceResearch.tsx`: Money / Record / News), never
+  across the ballot's sections: a voter needs every contest, but within one
+  contest those are supplemental views of the same candidates.
+- A section the API says nobody has checked is not a contest at all; the
+  page's "Not on this page" list (the API's `omits`) names it instead.
+- Deep links: `#race-{id}` opens that race (a House id opens the House contest
+  on that district), `#ballot-{key}` any other contest. Opening a contest
+  rewrites the hash, so what a reader sees can be linked.
+
+A candidate the state has confirmed is on the ballot counts as active
+whatever their FEC record says (`isActiveCandidate`): North Carolina's
+certified Libertarian for Senate raised nothing, is not an FEC statutory
+candidate, and had been filed away under "other filers" on a ballot she is
+printed on.
+
 ## Finding your district
 
-Civitas never asks for an address. The House section offers three ways in,
+Civitas never asks for an address. The U.S. Representative contest offers a
+district grid on the ballot itself, and in its drawer three more ways in,
 none of which sends anything anywhere:
 
 - **District map** (`DistrictMap.tsx`) — the state's districts from the

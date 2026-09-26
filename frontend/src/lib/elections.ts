@@ -175,9 +175,14 @@ export function measureStatusLabel(status: string): string {
 /** "Active" candidates get full card treatment; the rest (paper filers,
  * prior-cycle FEC records) are collapsed under "OTHER FEC FILERS" and
  * excluded from the fundraising bars. FEC "C" = statutory candidate.
+ *
+ * A candidate the state has confirmed is on the ballot is active whatever
+ * their FEC record says: North Carolina's certified Libertarian for Senate
+ * raised nothing and is not a statutory candidate, and was hidden under
+ * "other filers" on a ballot she is printed on.
  */
 export function isActiveCandidate(c: CandidateSummary): boolean {
-  return c.candidateStatus === "C" || c.hasRaisedFunds || c.incumbentChallenge === "I";
+  return c.confirmed || c.candidateStatus === "C" || c.hasRaisedFunds || c.incumbentChallenge === "I";
 }
 
 /** FEC party codes that are the Democratic Party's state-level

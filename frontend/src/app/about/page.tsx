@@ -1000,10 +1000,13 @@ export default function AboutPage() {
           {/* ── State ballots ── */}
           <Section title="STATE BALLOTS &amp; BALLOT MEASURES" id="state-ballots">
             <P>
-              Each state has a ballot page at <span className="text-signal-cyan">/elections/states/&lt;ST&gt;</span> showing
-              the federal contests on that state&apos;s ballot and its statewide ballot
-              measures. Every candidate race links through to full candidate detail —
-              FEC fundraising totals, filing status, and live news coverage.
+              Each state has a ballot page at <span className="text-signal-cyan">/elections/states/&lt;ST&gt;</span>, laid
+              out as a research tool rather than a mock ballot. On a computer it shows the
+              ballot in three columns — federal offices, state offices, then measures and
+              local contests — each contest set the way a printed ballot sets it, and any
+              contest&apos;s research opens beside it: money raised, a sitting member&apos;s
+              voting record, and news coverage. On a phone it lists every contest and opens
+              one per screen, with next and previous. It never marks a choice.
             </P>
 
             <div className="space-y-4 mt-4">
@@ -1020,12 +1023,14 @@ export default function AboutPage() {
                   statewide ballot measures, and statewide offices.
                 </P>
                 <P>
-                  So these pages cover the statewide slice and say so plainly, at the top
-                  of the page rather than in a footnote. Your U.S. House district, state
-                  legislative districts, county and city offices, judicial questions, and
-                  local measures are not shown, and each page links you to your own
-                  election office for the rest. We could show a true personal ballot only
-                  by asking for your home address and sending it to a third-party service —
+                  So these pages cover what can be shown statewide and say plainly what
+                  they leave out. Where a contest depends on where you live — your U.S.
+                  House district, and your state legislative seats where covered — you
+                  find yours on a map, by county or by town, never by typing an address.
+                  County and city offices, retention questions and local measures are
+                  listed as not shown, and each page links you to your own election
+                  office for the rest. We could show a true personal ballot only by
+                  asking for your home address and sending it to a third-party service —
                   which is exactly what this platform is built not to do.
                 </P>
               </div>
