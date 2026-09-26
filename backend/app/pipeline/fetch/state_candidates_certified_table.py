@@ -57,6 +57,10 @@ Optional, each because a live state needed it:
                                      page's form is posted back with that
                                      button, exactly as a visitor's click does
   format.name_last_first             names are printed "BERNING, Nathan M."
+  discovery.every_link               read EVERY page the link regex matches,
+                                     at least one (Kentucky links one page
+                                     per office, and a year with no Senate
+                                     race has no Senate page)
 
 An HTML page is read from its table whose header row carries every
 configured heading (New Mexico). A PDF is read as a table too (Iowa, Nebraska): the row whose cells include
@@ -76,13 +80,19 @@ import csv
 import io
 import logging
 import re
+from urllib.parse import urljoin
 
 import httpx
 import pdfplumber
 from lxml import html as lxml_html
 
 from app.pipeline.fetch.ballot_measure_pdf_geometry import rows as _clustered_rows
-from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_bytes_with_retry, fetch_with_retry
+from app.pipeline.fetch.http_utils import (
+    BROWSER_HEADERS,
+    fetch_bytes_with_retry,
+    fetch_text_with_retry,
+    fetch_with_retry,
+)
 from app.pipeline.fetch.state_candidates_common import (
     clean_display_name,
     discover_certification_link,
@@ -303,13 +313,28 @@ async def fetch_confirmed_candidates(
         )
         if page_url is None:
             return None
+    urls: list[str] = []
+    if discovery.get("every_link"):
+        page_url = page_url.replace("{year}", str(year))
+        page = await fetch_text_with_retry(client, _rate_limiter, page_url, f"{state} candidate list index")
+        if page is None:
+            return None
+        for link_regex in link_regexes:
+            urls += sorted({urljoin(page_url, m.group(1))
+                            for m in re.finditer(link_regex.replace("{year}", str(year)), page)})
+        if not urls:
+            logger.info("%s candidate list index links no list for %d", state, year)
+            return None
+    else:
+        for link_regex in link_regexes:
+            url = await discover_certification_link(client, _rate_limiter, page_url, link_regex, year, state)
+            if url is None:
+                return None
+            urls.append(url)
     rows: list[dict] = []
-    for link_regex in link_regexes:
+    for url in urls:
         # Every file is required: a Senate list without its House list is
         # half a ballot, and half a ballot would unconfirm real nominees.
-        url = await discover_certification_link(client, _rate_limiter, page_url, link_regex, year, state)
-        if url is None:
-            return None
         payload = await _download(client, url, discovery, year, state)
         if payload is None:
             return None

@@ -727,3 +727,62 @@ async def test_a_list_behind_the_pages_own_export_button():
     assert {(r["district"], r["display_name"], r["last_name"], r["party"]) for r in got} == {
         (1, "Nathan M. BERNING", "BERNING", "I"), (2, "Teresa LEGER FERNANDEZ", "LEGER FERNANDEZ", "D"),
     }
+
+
+import io  # noqa: E402
+import zipfile  # noqa: E402
+
+from app.pipeline.fetch.state_candidates_tabular import _xlsx_rows  # noqa: E402
+
+
+def test_xlsx_with_inline_strings_and_no_shared_string_table():
+    # Delaware's candidate list writes every cell as an inline string and
+    # ships no xl/sharedStrings.xml; the shared reader used to refuse it.
+    def c(ref, text):
+        return f'<c r="{ref}" t="inlineStr"><is><t>{text}</t></is></c>'
+    sheet = ('<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+             f'<row r="1">{c("A1", "Office")}{c("B1", "BallotName")}</row>'
+             f'<row r="2">{c("A2", "U.S. Senator")}{c("B2", "Chris Coons")}</row>'
+             '</sheetData></worksheet>')
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("xl/worksheets/sheet1.xml", sheet)
+    assert _xlsx_rows(buf.getvalue()) == [{"Office": "U.S. Senator", "BallotName": "Chris Coons"}]
+
+
+@pytest.mark.asyncio
+async def test_every_linked_office_page_is_read_and_write_ins_are_not():
+    # Kentucky: one page per office, linked from an index. A year with no
+    # Senate race has no Senate page, so every page found is read rather
+    # than requiring a fixed set; each must name this year's general.
+    index = ('<a href="Default.aspx?id=3">US Senator (4)</a> <a href="Default.aspx?id=4">US Representative (21)</a>'
+             '<a href="Default.aspx?id=11">State Senator (30)</a>')
+    header = ("<title>Election: {year} General Election</title><table><tr><th>Name / Running Mate</th>"
+              "<th>Office</th><th>District/Division</th><th>Party</th></tr>")
+    pages = {
+        "3": header + "<tr><td>Andy Barr</td><td>US Senator</td><td></td><td>Republican Party</td></tr></table>",
+        "4": header + ("<tr><td>Gerardo Serrano</td><td>US Representative</td><td>5th</td><td>Independent</td></tr>"
+                       "<tr><td>Billy Ray Wilson</td><td>US Representative</td><td>5th</td><td>Write-In</td></tr>"
+                       "</table>"),
+    }
+
+    def handler(request):
+        page_id = request.url.params.get("id")
+        if page_id is None:
+            return httpx.Response(200, text=index)
+        return httpx.Response(200, text=pages[page_id].replace("{year}", "2026"))
+
+    source = {
+        "discovery": {"page_url": "https://sos.test/CandidateFilings/",
+                      "link_regex": 'href="(Default\\.aspx\\?id=\\d+)"[^>]*>US (?:Senator|Representative)\\b',
+                      "every_link": True, "year_regex": "Election: {year} General Election"},
+        "format": {"office_column": "Office", "office_parse": True, "district_column": "District/Division",
+                   "party_column": "Party", "name_columns": ["Name / Running Mate"],
+                   "exclude": {"Party": "Write-In"}},
+    }
+    async with _client(handler) as client:
+        got = await fetch_certified_table(client, 2026, "KY", source)
+        assert await fetch_certified_table(client, 2028, "KY", source) is None
+    assert {(r["office"], r["district"], r["display_name"], r["party"]) for r in got} == {
+        ("S", None, "Andy Barr", "R"), ("H", 5, "Gerardo Serrano", "I"),
+    }
