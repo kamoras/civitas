@@ -556,6 +556,15 @@ class FinancialDisclosure(Base):
     # "2025 annual report (amended)", "new-filer report as of 2026-03-24".
     report_label: Mapped[str] = mapped_column(String, default="")
     filed_date: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Where this report ranks among the member's filings, newest first —
+    # (rank_year, filed_date, amended) — kept so a later run compares
+    # candidates against the stored report even when a partial index or
+    # search no longer returns it. rank_year is report_year, except for a
+    # Senate paper original known only to be newer than some year
+    # (holdings_pipeline._senate_ranks): it orders the report and is never
+    # shown. An amendment outranks an original of the same year and date.
+    rank_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    amended: Mapped[bool] = mapped_column(Boolean, default=False)
     source_url: Mapped[str] = mapped_column(String, default="")
     parsed: Mapped[bool] = mapped_column(Boolean, default=True)
     # When not parsed: "scanned" (paper filing) or "unrecognized"

@@ -107,6 +107,12 @@ class _Stored:
     filed_date: str | None
     parsed: bool
     holding_count: int
+    rank_year: int | None
+    amended: bool
+
+    @property
+    def rank(self) -> tuple[int, str, bool]:
+        return (self.rank_year or 0, self.filed_date or "", self.amended)
 
 
 def _stored_reports(db: Session, column) -> dict[str, _Stored]:
@@ -119,7 +125,7 @@ def _stored_reports(db: Session, column) -> dict[str, _Stored]:
         db.query(
             column, FinancialDisclosure.filing_id, FinancialDisclosure.parser_version,
             FinancialDisclosure.report_year, FinancialDisclosure.filed_date, FinancialDisclosure.parsed,
-            func.coalesce(counts.c.n, 0),
+            func.coalesce(counts.c.n, 0), FinancialDisclosure.rank_year, FinancialDisclosure.amended,
         )
         .outerjoin(counts, counts.c.disclosure_id == FinancialDisclosure.id)
         .filter(column.isnot(None))
@@ -161,23 +167,15 @@ def _keeps_earlier_read(prior: int | None, report: AnnualReport) -> bool:
     return True
 
 
-def _is_older(
-    stored: _Stored | None, stored_rank: tuple[int, str] | None, report_year: int | None, filed_date: str | None,
-) -> bool:
-    """The candidate describes an earlier date than what's stored, as
-    (year, filed date). The stored report is compared at its rank among
-    this run's filings when it is one of them (a paper filing ranks by
-    _senate_ranks' rules, which need the other filings to apply). When a
-    partial search or index missed it, a stored report with no known year
-    — a paper filing — is compared by filing date: a dated report filed
-    before it may be what it superseded, and must not come back."""
-    if stored is None:
-        return False
-    if stored_rank is not None:
-        return (report_year or 0, filed_date or "") < stored_rank
-    if stored.report_year is None and report_year:
-        return (filed_date or "") < (stored.filed_date or "")
-    return (report_year or 0, filed_date or "") < (stored.report_year or 0, stored.filed_date or "")
+Rank = tuple[int, str, bool]  # (year, filed date, amended): newest first when sorted descending
+
+
+def _is_older(stored: _Stored | None, rank: Rank) -> bool:
+    """The candidate ranks below what's stored. The stored report's own
+    rank was kept with it, so this holds even when a partial index or
+    search no longer returns the stored filing — what it superseded can't
+    come back."""
+    return stored is not None and rank < stored.rank
 
 
 def _members_in_order(per_member: dict[str, list[dict]], stored: dict[str, _Stored]) -> list[str]:
@@ -188,7 +186,7 @@ def _members_in_order(per_member: dict[str, list[dict]], stored: dict[str, _Stor
 
 def _replace_disclosure(
     db: Session, *, owner_filter: dict, filing_id: str, report_year: int | None, report_label: str,
-    filed_date: str | None, source_url: str, report: AnnualReport, parser_version: int,
+    filed_date: str | None, source_url: str, report: AnnualReport, parser_version: int, rank: Rank,
 ) -> int:
     """Swap a member's stored report for this one. Returns holdings stored."""
     # Bulk deletes, not the ORM cascade, which would load every stored
@@ -211,6 +209,8 @@ def _replace_disclosure(
         report_year=report_year,
         report_label=report_label,
         filed_date=filed_date,
+        rank_year=rank[0] or None,
+        amended=rank[2],
         source_url=source_url,
         parsed=report.holdings is not None,
         unreadable_reason=report.unreadable_reason,
@@ -250,20 +250,15 @@ class _Outcome:
     Only live requests count — a parse-cache hit or a paper filing that is
     never fetched proves nothing about the source (AnnualReport.live).
     `attempted`: a live request was made. `fetched`: one returned a report.
-    `failed_seconds`: time spent in requests that failed, which is how a
-    host that hangs, rather than refuses, shows itself.
     """
 
     def __init__(self) -> None:
         self.attempted = self.fetched = False
-        self.failed_seconds = 0.0
 
-    def fetch(self, report: AnnualReport | None, seconds: float) -> None:
+    def fetch(self, report: AnnualReport | None) -> None:
         if report is None or report.live:
             self.attempted = True
-        if report is None:
-            self.failed_seconds += seconds
-        elif report.live and report.final:
+        if report is not None and report.live and report.final:
             self.fetched = True
 
     def lapsed(self) -> None:
@@ -279,22 +274,23 @@ class _SourceHealth:
     processed first, so a few genuinely broken filings bunched at the front
     would otherwise stop the phase before it reached anyone else.
 
-    - Parser, counted per read (`parsed`, `contradicted`): only unambiguous
-      failures are misses — a crash, an unrecognized report, "scanned"
-      where an earlier parser read the same filing's text, or a Status line
-      read as a candidate's on a filing the index marks as a sitting
-      member's. Rows read are successes. Empty reads and changed row counts
-      are neither: a genuine report can list nothing, and a parser fix
-      changes counts too; the parser tests' real-filing fixtures are what
+    - Parser, counted per read (`parsed`): only unambiguous failures are
+      misses — a crash, an unrecognized report, or "scanned" where an
+      earlier parser read the same filing's text. Rows read are successes.
+      Empty reads, changed row counts and filer attribution are neither: a
+      genuine report can list nothing, a parser fix changes counts too, and
+      a former member running again reads as a candidate on a filing with
+      a member's honorific; the parser tests' real-filing fixtures are what
       guard those. At least MIN_ATTEMPTS_FOR_OUTAGE misses outnumbering
       successes fails the phase, and nothing about the source can excuse
       it. A kept earlier read (_keeps_earlier_read) is re-read every run, so
       a regression keeps failing the phase for as long as it lasts.
     - Source, counted per member (`record`): no report fetched from at
-      least MIN_ATTEMPTS_FOR_OUTAGE members tried — or FETCH_BUDGET ran out
-      with nothing fetched and at least half of it spent in requests that
-      failed, which is what a host that hangs rather than refuses looks
-      like after two or three members. That is an outage, or a night on
+      least MIN_ATTEMPTS_FOR_OUTAGE members tried — or from any tried when
+      FETCH_BUDGET ran out: with nothing fetched, the budget went on
+      requests that failed (a parse-cache hit or a paper filing takes no
+      time), which is what a host that hangs rather than refuses looks like
+      after two or three members. That is an outage, or a night on
       which the only filings left to fetch are ones that won't load (a PDF
       the index lists but the Clerk 404s). Counts alone can't tell those
       apart, and neither can a memory of past failures — anything that
@@ -309,14 +305,12 @@ class _SourceHealth:
     def __init__(self, source: str) -> None:
         self.source = source
         self.attempted = self.fetched = 0
-        self.failed_seconds = 0.0
         self.out_of_time = False
         self.parsed_ok = self.parser_miss = 0
 
     def record(self, outcome: _Outcome) -> None:
         self.attempted += outcome.attempted
         self.fetched += outcome.fetched
-        self.failed_seconds += outcome.failed_seconds
 
     def parsed(self, report: AnnualReport, prior: int | None) -> None:
         if report.holdings:
@@ -324,15 +318,10 @@ class _SourceHealth:
         elif report.holdings is None and (report.unreadable_reason != UNREADABLE_SCANNED or prior is not None):
             self.parser_miss += 1
 
-    def contradicted(self) -> None:
-        self.parser_miss += 1
-
     def _looks_down(self) -> bool:
         if self.fetched or not self.attempted:
             return False
-        if self.attempted >= MIN_ATTEMPTS_FOR_OUTAGE:
-            return True
-        return self.out_of_time and self.failed_seconds >= FETCH_BUDGET.total_seconds() / 2
+        return self.attempted >= MIN_ATTEMPTS_FOR_OUTAGE or self.out_of_time
 
     async def check(
         self, stored_urls: Callable[[], list[str]], still_loads: Callable[[str], Awaitable[bool]],
@@ -392,8 +381,8 @@ class _SkipFiling(Exception):
     filing's (a session that lapsed again right after re-accepting)."""
 
 
-# What a chamber's reader says about whose report it just read.
-_MEMBERS, _NOT_MEMBERS, _CONTRADICTS_INDEX = "member", "not member", "contradicts index"
+# Whose report a chamber's reader says it just read.
+_MEMBERS, _NOT_MEMBERS = "member", "not member"
 
 
 @dataclass
@@ -404,9 +393,9 @@ class _Chamber:
     owner_key: str  # FinancialDisclosure column naming the member
     parser_version: int
     filing_id: Callable[[dict], str]
-    # One member's filings, keyed by filing id, to the (year, filed date)
-    # they rank newest-first and compare to the stored report by.
-    ranks: Callable[[list[dict]], dict[str, tuple[int, str]]]
+    # One member's filings, keyed by filing id, to the Rank they sort
+    # newest-first and compare to the stored report by.
+    ranks: Callable[[list[dict]], dict[str, Rank]]
     fetch: Callable[[dict, float], Awaitable[AnnualReport | None]]  # (filing, deadline)
     owner: Callable[[dict, AnnualReport], str]
     fields: Callable[[dict], dict]  # report_year, report_label, filed_date, source_url
@@ -431,7 +420,7 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
             filing_id = chamber.filing_id(filing)
             if _is_current(mine, filing_id, chamber.parser_version):
                 break  # already have the newest report, as this parser reads it
-            if _is_older(mine, ranks.get(mine.filing_id) if mine else None, *ranks[filing_id]):
+            if _is_older(mine, ranks[filing_id]):
                 # Only older reports than the stored one turned up — a year's
                 # index or a page of search results failed to load, or the
                 # best left is a paper amendment of unknowable year. Keep
@@ -440,13 +429,15 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
             if time.monotonic() > deadline:
                 out_of_time = True
                 break
-            started = time.monotonic()
             try:
                 report = await chamber.fetch(filing, deadline)
             except _SkipFiling:
+                # Not the filing's fault, so not a reason to fall back to the
+                # member's older one — which, with nothing stored, would be
+                # shown as their latest. They wait for the next run.
                 outcome.lapsed()
-                continue
-            outcome.fetch(report, time.monotonic() - started)
+                break
+            outcome.fetch(report)
             if report is None:
                 # Not fetched this run. Try the member's next filing (the
                 # failed one may not even be theirs — a same-surname
@@ -460,10 +451,7 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
                 # run can't back. A crash is the parser's, whoever filed it.
                 health.parsed(report, prior)
                 continue
-            owner = chamber.owner(filing, report)
-            if owner == _CONTRADICTS_INDEX:
-                health.contradicted()
-            if owner != _MEMBERS:
+            if chamber.owner(filing, report) != _MEMBERS:
                 continue
             health.parsed(report, prior)
             if _keeps_earlier_read(prior, report):
@@ -475,14 +463,18 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
                 **chamber.fields(filing),
                 report=report,
                 parser_version=chamber.parser_version,
+                rank=ranks[filing_id],
             )
+            # Per member, so a budget stop or a later failure keeps what's done.
+            db.commit()
             break
-        db.commit()  # per member, so a budget stop or a later failure keeps what's done
         health.record(outcome)
         if out_of_time:
-            health.out_of_time = True
             logger.info("%s: time budget spent — %d members wait for the next run", chamber.source, len(order) - position)
             break
+    # Also true when the last fetch was cut off at the deadline and every
+    # member after it was already current.
+    health.out_of_time = time.monotonic() > deadline
     await health.check(lambda: _stored_urls(db, owner_column), chamber.still_loads)
     return inserted
 
@@ -491,17 +483,15 @@ def _house_owner(filing: dict, report: AnnualReport) -> str:
     """Whose report a House filing is. The Status line on its cover page
     says, when the report has text: a candidate for the seat can share the
     member's surname and district. A scanned report has no readable Status
-    line; then the Clerk's own structured index fields decide — an original
-    annual report ("O") is only ever a member's, and an amendment is a
-    member's only with the "Hon." every sitting member's filing carries (a
-    candidate's has none: 2025, 82 of 105 amendments). Neither is inferred
-    from any name. A Status line naming a candidate on a filing the index
-    marks "Hon." contradicts the index: the Status line was misread."""
+    line; then the Clerk's own structured index fields decide, never a
+    name. An original annual report ("O") is a sitting member's — in the
+    2025 index all 430 were (426 marked "Hon.", the other 4 sitting members
+    too), and every one carries a district. An amendment is a member's only
+    with the "Hon." every sitting member's filing carries (a candidate's
+    has none: 2025, 82 of 105 amendments)."""
     status = (report.filer_status or "").lower()
-    if status == "member":
-        return _MEMBERS
     if status:
-        return _CONTRADICTS_INDEX if _is_member_prefix(filing.get("prefix")) else _NOT_MEMBERS
+        return _MEMBERS if status == "member" else _NOT_MEMBERS
     if filing.get("filing_type") == "O" or _is_member_prefix(filing.get("prefix")):
         return _MEMBERS
     return _NOT_MEMBERS
@@ -541,7 +531,9 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
         owner_key="representative_id",
         parser_version=HOUSE_PARSER_VERSION,
         filing_id=lambda f: f["doc_id"],
-        ranks=lambda filings: {f["doc_id"]: (f.get("year") or 0, f.get("filing_date") or "") for f in filings},
+        ranks=lambda filings: {
+            f["doc_id"]: (f.get("year") or 0, f.get("filing_date") or "", f.get("filing_type") == "A") for f in filings
+        },
         fetch=lambda f, deadline: fetch_house_annual(client, db, f, deadline=deadline),
         owner=_house_owner,
         fields=lambda f: {
@@ -559,10 +551,9 @@ _CY_RE = re.compile(r"\bCY\s*(\d{4})\b", re.I)
 _DATE_RE = re.compile(r"\b(\d{2})/(\d{2})/(\d{4})\b")
 
 
-def _senate_ranks(filings: list[dict]) -> dict[str, tuple[int, str]]:
-    """One senator's filings, keyed by report URL, to the (year, filed date)
-    they rank and compare by — newest first, the order _is_older compares
-    stored reports in.
+def _senate_ranks(filings: list[dict]) -> dict[str, Rank]:
+    """One senator's filings, keyed by report URL, to the Rank they sort
+    and compare by: year, filing date, then an amendment over an original.
 
     A filing whose year isn't stated (a paper filing) ranks below every
     dated one — with one exception. A paper *original* annual report filed
@@ -584,7 +575,7 @@ def _senate_ranks(filings: list[dict]) -> dict[str, tuple[int, str]]:
         if (year := _senate_report_year(f)) is not None and is_annual_original(f)
     ]
     latest = max(dated_originals, default=None)
-    ranks: dict[str, tuple[int, str]] = {}
+    ranks: dict[str, Rank] = {}
     for f in filings:
         filed = f.get("filed_date") or ""
         year = _senate_report_year(f)
@@ -593,7 +584,7 @@ def _senate_ranks(filings: list[dict]) -> dict[str, tuple[int, str]]:
             and filed > latest[1] and filed[:4].isdigit() and int(filed[:4]) - 1 > latest[0]
         ):
             year = latest[0] + 1
-        ranks[f["report_url"]] = (year or 0, filed)
+        ranks[f["report_url"]] = (year or 0, filed, is_amendment_title(f.get("title") or ""))
     return ranks
 
 
