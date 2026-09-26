@@ -82,7 +82,8 @@ describe("RaceFullDetail", () => {
         race={race({
           candidates: [
             candidate({ id: "active", name: "Active Ann", hasRaisedFunds: true }),
-            candidate({ id: "other", name: "Paper Pete" }),
+            // A "filers" race: nobody in it is state-confirmed.
+            candidate({ id: "other", name: "Paper Pete", confirmed: false }),
           ],
         })}
       />
@@ -106,13 +107,6 @@ describe("RaceFullDetail", () => {
     // a reader both that a ballot answer exists AND that there's nobody
     // on record for it.
     expect(screen.queryByText(/every FEC filer/)).not.toBeInTheDocument();
-  });
-
-  it("points to this race's badge in the page-level coverage feed instead of repeating it", () => {
-    render(<RaceFullDetail race={race({ office: "H", district: 6 })} />);
-
-    expect(screen.getByText(/News coverage of this race is tagged/)).toBeInTheDocument();
-    expect(screen.getByText("HOUSE-6")).toBeInTheDocument();
   });
 
   it("tiers an unconfirmed race into leader cards plus a collapsed tail", () => {

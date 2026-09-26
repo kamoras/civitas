@@ -551,6 +551,18 @@ readers learn to skip. Of those eleven, South Dakota, Louisiana, South
 Carolina and Missouri now read their certified ballots, and New Hampshire
 unlocks on its own once its 21-day settle window passes.
 
+### The state ballot page
+
+`/elections/states/<ST>` is framed as ballot research, not a mock ballot: no marks, no "your picks", and every contest carries research signals (money raised against the race's top fundraiser, a sitting member's Representation Score, news count). It replaced a single 768px column of stacked panels (the news feed on top, one row per House district — 52 in California — and a box for every section, empty or not) that read as one endless scroll.
+
+- **Desktop**: three printed-ballot columns (Federal | State | Measures · local), each contest a box with a shaded header and the ballot's own instruction ("Vote for one"), fitting about one screen. A contest's research opens in a drawer beside it with Previous/Next through the ballot.
+- **Phone**: an index of every contest, one line each; a contest opens on its own screen (one contest per screen, the voting-machine pattern).
+- **Tabs only inside a race** (Money / Record / News). Research (NN/g "Tabs, Used Right"; the Center for Civic Design and EAC ballot guidelines) says tabs suit supplemental views a reader need not compare across, which describes a race's facets but not the ballot's sections: a voter needs every contest.
+- Federal offices are named one way everywhere: "U.S. Senator", "U.S. Representative".
+- A candidate the state has confirmed is on the ballot always shows, whatever their FEC record says. North Carolina's certified Libertarian for Senate had been hidden under "other filers" because she raised nothing and is not an FEC statutory candidate.
+
+The contest list is built once (`frontend/src/lib/ballotContests.ts`); the drawer is a real modal dialog (focus kept inside, Escape closes, focus returns), and `#race-{id}` / `#ballot-{key}` links open a contest directly.
+
 ### Finding your district without being asked where you live
 
 Civitas never asks for an address. An address box lived on the state
