@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.database import VisitsSessionLocal
 from app.issue_ids import from_public_id
-from app.models import IssueView, PageView, SiteVisit, VisitSalt
+from app.models import IssueView, PageLoadTiming, PageView, SiteVisit, VisitSalt
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,20 @@ router = APIRouter()
 # guaranteed" contract this table already had.
 _VISIT_QUEUE_MAXSIZE = 1000
 _VISIT_BATCH_MAX = 50
-_visit_queue: "asyncio.Queue[_VisitEvent]" = asyncio.Queue(maxsize=_VISIT_QUEUE_MAXSIZE)
+_visit_queue: "asyncio.Queue[_VisitEvent | _TimingEvent]" = asyncio.Queue(maxsize=_VISIT_QUEUE_MAXSIZE)
+
+# Upper bounds (ms) of the page-load histogram buckets PageLoadTiming counts
+# into. Roughly geometric, so the relative precision of an interpolated
+# percentile is about the same at 150ms as at 8s. A duration past the last
+# bound is dropped rather than clamped: a minute-long "load" is a tab that was
+# backgrounded or a laptop that slept mid-load, not a page that took a minute,
+# and clamping it into the top bucket would drag p95 toward a number no reader
+# actually waited for.
+LOAD_TIMING_BUCKETS_MS: tuple[int, ...] = (
+    50, 100, 150, 200, 300, 400, 500, 750, 1000, 1500, 2000,
+    2500, 3000, 4000, 5000, 7500, 10000, 15000, 20000, 30000,
+)
+LOAD_TIMING_METRICS: tuple[str, ...] = ("ttfb", "fcp", "load")
 
 
 @dataclass(frozen=True)
@@ -84,7 +97,27 @@ class _VisitEvent:
     issue_public_id: str | None = None
 
 
-def _write_visit_batch(batch: list["_VisitEvent"], db: Session) -> None:
+@dataclass(frozen=True)
+class _TimingEvent:
+    """One page load's Navigation Timing, already bucketed — see PageLoadTiming."""
+    date: str
+    normalized_path: str
+    # metric -> bucket upper bound (ms); only metrics the browser reported.
+    buckets: tuple[tuple[str, int], ...]
+
+
+def _bucket_for(ms: float) -> int | None:
+    """The LOAD_TIMING_BUCKETS_MS bound `ms` falls under, or None when it is
+    out of range (negative, NaN, or past the last bucket — see the ladder)."""
+    if not ms >= 0:  # also rejects NaN
+        return None
+    for bound in LOAD_TIMING_BUCKETS_MS:
+        if ms <= bound:
+            return bound
+    return None
+
+
+def _write_visit_batch(batch: list["_VisitEvent | _TimingEvent"], db: Session) -> None:
     """Write a batch of queued visit events in one transaction.
 
     Called by run_visit_consumer (via asyncio.to_thread, with a fresh
@@ -95,6 +128,19 @@ def _write_visit_batch(batch: list["_VisitEvent"], db: Session) -> None:
     """
     try:
         for event in batch:
+            if isinstance(event, _TimingEvent):
+                for metric, bucket in event.buckets:
+                    db.execute(
+                        sqlite_insert(PageLoadTiming).values(
+                            date=event.date, path=event.normalized_path,
+                            metric=metric, bucket_ms=bucket, count=1,
+                        ).on_conflict_do_update(
+                            index_elements=["date", "path", "metric", "bucket_ms"],
+                            set_={"count": PageLoadTiming.count + 1},
+                        )
+                    )
+                continue
+
             stmt = sqlite_insert(SiteVisit).values(
                 date=event.date,
                 visitor_hash=event.visitor_hash,
@@ -129,7 +175,7 @@ def _write_visit_batch(batch: list["_VisitEvent"], db: Session) -> None:
         db.rollback()
 
 
-def _write_visit_batch_with_own_session(batch: list["_VisitEvent"]) -> None:
+def _write_visit_batch_with_own_session(batch: list["_VisitEvent | _TimingEvent"]) -> None:
     """Entry point for asyncio.to_thread — owns the session lifecycle
     since, unlike _write_visit_batch, there's no request-scoped session
     to inject here."""
@@ -352,3 +398,41 @@ async def track_visit(request: Request, path: str = Query("/")) -> None:
         _visit_queue.put_nowait(event)
     except asyncio.QueueFull:
         logger.warning("Visit queue full (%d) — dropping visit event", _VISIT_QUEUE_MAXSIZE)
+
+
+@router.post("/track-timing", status_code=204)
+async def track_timing(
+    path: str = Query("/"),
+    ttfb: float | None = Query(None),
+    fcp: float | None = Query(None),
+    load: float | None = Query(None),
+) -> None:
+    """Records one hard page load's Navigation Timing (milliseconds), sent by
+    the browser's LoadTimingBeacon after the load event.
+
+    Unlike track-visit this is called by the browser itself, through nginx's
+    rate-limited /api/ location, so it reads nothing about the caller — no
+    IP, no User-Agent. The route is normalized exactly as track-visit's is and
+    each duration is reduced to its histogram bucket before it is queued (see
+    PageLoadTiming), so an arbitrary client can at most add counts to a
+    bounded set of (route, metric, bucket) cells — never grow the table with
+    strings of its own. Same queue and consumer as track-visit, for the same
+    reason: this must never write to the database on the request path.
+    Must stay `async def` — see track_visit.
+    """
+    buckets = tuple(
+        (metric, bucket)
+        for metric, value in (("ttfb", ttfb), ("fcp", fcp), ("load", load))
+        if value is not None and (bucket := _bucket_for(value)) is not None
+    )
+    if not buckets:
+        return
+    event = _TimingEvent(
+        date=datetime.now(UTC).date().isoformat(),
+        normalized_path=_normalize_path(path),
+        buckets=buckets,
+    )
+    try:
+        _visit_queue.put_nowait(event)
+    except asyncio.QueueFull:
+        logger.warning("Visit queue full (%d) — dropping timing event", _VISIT_QUEUE_MAXSIZE)

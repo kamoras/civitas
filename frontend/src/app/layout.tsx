@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Archivo, Press_Start_2P, Share_Tech_Mono } from "next/font/google";
 import ConfigProvider from "@/components/providers/ConfigProvider";
+import LoadTimingBeacon from "@/components/LoadTimingBeacon";
 import "./globals.css";
 
 // Display and prose. 400 for body, 600 for headings, 800 for the blunt
@@ -97,6 +98,7 @@ export default function RootLayout({
           </a>
           <div className="crt-overlay" aria-hidden="true" />
           {children}
+          <LoadTimingBeacon />
         </ConfigProvider>
       </body>
     </html>

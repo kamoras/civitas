@@ -1683,6 +1683,34 @@ class IssueView(VisitsBase):
     count: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class PageLoadTiming(VisitsBase):
+    """Page-load durations as a daily histogram per route — never per visit.
+
+    Each hard page load's Navigation Timing (TTFB, first contentful paint,
+    load event) is reported by the browser (`POST /api/track-timing`) and
+    folded into a fixed bucket ladder (api/visits.py's LOAD_TIMING_BUCKETS_MS):
+    one counter per (date, route template, metric, bucket). No hash, no
+    User-Agent, no exact duration is kept — only "one more load of
+    /leaderboard landed in the 750-1000ms bucket today" — so there is nothing
+    here that could single out a visitor, and the table is bounded by
+    days x routes x 3 metrics x ~20 buckets regardless of traffic.
+
+    A histogram rather than a running mean because the admin dashboard
+    charts p50/p95: one slow outlier moves a mean, and a mean can't be
+    turned back into percentiles later. Percentiles are interpolated inside
+    the bucket (admin.py's _histogram_percentile), so their precision is the
+    bucket width — plenty to see a regression, not a benchmark.
+    """
+    __tablename__ = "page_load_timings"
+
+    date: Mapped[str] = mapped_column(String(10), primary_key=True)  # YYYY-MM-DD
+    path: Mapped[str] = mapped_column(String(100), primary_key=True)
+    metric: Mapped[str] = mapped_column(String(8), primary_key=True)  # ttfb | fcp | load
+    # Upper bound of the bucket, in ms (a member of LOAD_TIMING_BUCKETS_MS).
+    bucket_ms: Mapped[int] = mapped_column(Integer, primary_key=True)
+    count: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class StatewideNominee(Base):
     """A confirmed nominee for a STATEWIDE EXECUTIVE office (Governor,
     Lieutenant Governor, Attorney General, Secretary of State, Treasurer).
