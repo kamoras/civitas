@@ -97,6 +97,7 @@ from app.pipeline.fetch.state_candidates_ms import fetch_confirmed_candidates as
 from app.pipeline.fetch.state_candidates_nh import fetch_confirmed_candidates as _fetch_nh
 from app.pipeline.fetch.state_candidates_nj import fetch_confirmed_candidates as _fetch_nj
 from app.pipeline.fetch.state_candidates_or import fetch_confirmed_candidates as _fetch_or
+from app.pipeline.fetch.state_candidates_sd_vip import fetch_confirmed_candidates as _fetch_sd_vip
 from app.pipeline.fetch.state_candidates_tabular import fetch_confirmed_candidates as _fetch_tabular
 from app.pipeline.fetch.state_candidates_pa import fetch_confirmed_candidates as _fetch_pa
 from app.pipeline.fetch.state_candidates_tally_enr import fetch_confirmed_candidates as _fetch_tally_enr
@@ -133,6 +134,7 @@ STRATEGIES = {
     "vt_enr": _fetch_vt,
     "ma_pd43": _fetch_ma,
     "me_results": _fetch_me,
+    "sd_vip": _fetch_sd_vip,
     "google_civic": _fetch_civic,
     "nh_results": _fetch_nh,
     "enhanced_voting": _fetch_enhanced_voting,

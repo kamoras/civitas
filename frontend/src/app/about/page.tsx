@@ -1049,8 +1049,19 @@ export default function AboutPage() {
                   Each state page now leads with what its lists actually are, and says
                   plainly when a primary has already passed. A state whose ballot is
                   certified says nothing at all — a notice on every page is one readers
-                  learn to skip. Closing the gap for those eleven states is separate work;
-                  this stops the page misdescribing it.
+                  learn to skip.
+                </P>
+                <P>
+                  Re-probing those eleven live found three different causes, not one. Nine
+                  rely on a national source that does not publish general-election
+                  candidates until close to the election. New Hampshire was not broken at
+                  all — its results are deliberately held for 21 days after its primary and
+                  were 18 days old. South Dakota was the only genuine fault: its
+                  election-night site serves whichever election is current, and a July
+                  runoff carrying only two state offices pushed the June federal results
+                  out of view. South Dakota now reads its Secretary of State&apos;s list of
+                  who is on the November ballot instead, which also shows an independent
+                  candidate that primary results can never reveal.
                 </P>
               </div>
 

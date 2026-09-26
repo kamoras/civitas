@@ -787,16 +787,42 @@ def office_from_columns(row: dict, spec: dict | None) -> tuple[str, int | None] 
     return "H", int(digits.group()) if digits else None
 
 
-def normalize_party(text: str) -> str | None:
+# "Independent"/"Unaffiliated", spelled the ways a ballot list writes
+# them. Read only when a caller says it is looking at a BALLOT, never at
+# primary results — see normalize_party.
+# Abbreviations are matched only as the WHOLE value (a party column),
+# never inside a longer label, for the same reason a stray "R" in a
+# contest name must not become a Republican.
+_INDEPENDENT_ABBR = frozenset({"IND", "INDEPENDENT", "UNA", "NPA", "NOP", "NP"})
+_INDEPENDENT_RE = re.compile(
+    r"\b(independent|unaffiliated|no\s+party(\s+affiliation)?|non[\s-]?partisan)\b",
+    re.IGNORECASE,
+)
+
+
+def normalize_party(text: str, ballot_list: bool = False) -> str | None:
     """Single-letter party code for `text` (a contest label or a party
     column), or None when no party is positively recognised. Never defaults
     to a major party: an unattributable contest is skipped instead.
 
-    "Unaffiliated"/"Independent" deliberately yield None — those candidates
-    don't run in a party primary, so a party-primary contest that appears
+    "Unaffiliated"/"Independent" yield None by default — those candidates
+    don't run in a party primary, so a party-PRIMARY contest that appears
     to be theirs is a label this doesn't understand, not a race to confirm.
+
+    `ballot_list` says the caller is reading a certified GENERAL-election
+    ballot rather than primary results, where that reasoning inverts: an
+    independent is a perfectly ordinary entry, and dropping them loses
+    exactly the candidate a ballot list exists to show. South Dakota's
+    Senate race is the live case — Brian Bengs (IND) is on the November
+    ballot and no primary-results source can ever see him. PARTY_CODE_MAP
+    already carries "I" -> "IND", so nothing downstream needed changing;
+    only this refused to produce it.
     """
     value = (text or "").strip()
+    if ballot_list and (
+        value.upper() in _INDEPENDENT_ABBR or _INDEPENDENT_RE.search(value)
+    ):
+        return "I"
     # A dedicated party column sometimes holds nothing but the letter
     # ("R", "D" — Minnesota's results file). That is only safe to read
     # when the WHOLE value is the code: a contest label containing a
