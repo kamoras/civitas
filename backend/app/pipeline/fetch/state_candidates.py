@@ -73,7 +73,9 @@ from app.pipeline.fetch.state_source_crawler import (
 )
 from app.pipeline.candidate_dedup import normalized_surname
 from app.pipeline.fetch.state_candidates_common import (
+    BALLOT_BASIS_TIER,
     PARTY_CODE_MAP,
+    ballot_basis_key,
     JUDICIAL_COURT_LABELS,
     JUDICIAL_MARKER_TIER,
     JUDICIAL_MARKER_TTL_HOURS,
@@ -85,12 +87,14 @@ from app.pipeline.fetch.state_candidates_common import (
     statewide_marker_key,
 )
 from app.pipeline.fetch.state_candidates_al import fetch_confirmed_candidates as _fetch_al
+from app.pipeline.fetch.state_candidates_canvass_summary_pdf import fetch_confirmed_candidates as _fetch_canvass_summary_pdf
 from app.pipeline.fetch.state_candidates_canvass_xml import fetch_confirmed_candidates as _fetch_canvass_xml
 from app.pipeline.fetch.state_candidates_certified_pdf import fetch_confirmed_candidates as _fetch_certified_pdf
 from app.pipeline.fetch.state_candidates_certified_table import fetch_confirmed_candidates as _fetch_certified_table
 from app.pipeline.fetch.state_candidates_civic import fetch_confirmed_candidates as _fetch_civic
 from app.pipeline.fetch.state_candidates_ct import fetch_confirmed_candidates as _fetch_ct
 from app.pipeline.fetch.state_candidates_clarity import fetch_confirmed_candidates as _fetch_clarity
+from app.pipeline.fetch.state_candidates_dos_canlist import fetch_confirmed_candidates as _fetch_dos_canlist
 from app.pipeline.fetch.state_candidates_enhanced_voting import (
     fetch_confirmed_candidates as _fetch_enhanced_voting,
 )
@@ -147,6 +151,8 @@ STRATEGIES = {
     "vrems": _fetch_vrems,
     "certified_pdf": _fetch_certified_pdf,
     "certified_table": _fetch_certified_table,
+    "canvass_summary_pdf": _fetch_canvass_summary_pdf,
+    "dos_canlist": _fetch_dos_canlist,
     "google_civic": _fetch_civic,
     "nh_results": _fetch_nh,
     "enhanced_voting": _fetch_enhanced_voting,
@@ -440,6 +446,22 @@ def _apply_ballot(
         "confirmed": confirmed, "unmatched": unmatched,
         "ballotOnly": len(ballot_only), "unconfirmed": withdrawn,
     }
+
+
+def _record_ballot_basis(db: Session, cycle: int, state: str, source: dict) -> None:
+    """Say which source answered for this state tonight — see
+    BALLOT_BASIS_TIER. Read by the API to decide "confirmed" (the whole
+    ballot) versus "nominees" (primary results) per state."""
+    api_cache_set(
+        db, BALLOT_BASIS_TIER, ballot_basis_key(state, cycle),
+        {
+            "complete": bool(source.get("general_ballot_complete")),
+            "sourceName": str(source.get("source_name") or ""),
+            "checkedAt": utcnow().isoformat() + "Z",
+        },
+        normal_ttl_hours=STATEWIDE_MARKER_TTL_HOURS,
+    )
+    db.commit()
 
 
 def _unconfirm_off_ballot(db: Session, listed: dict[str, set[str]]) -> int:
@@ -980,12 +1002,38 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
             results[state] = {"confirmed": 0, "unmatched": 0, "status": "not_configured"}
             continue
 
+        # A state's certified November list, when it has one, speaks for its
+        # federal races outright (see general_list in the sources file). It
+        # runs FIRST so a nominee the list has replaced is never confirmed
+        # from primary results only to be unconfirmed moments later.
+        general = source.get("general_list")
+        general_records = None
+        if general and STRATEGIES.get(general.get("strategy")):
+            try:
+                general_records = await STRATEGIES[general["strategy"]](client, cycle, state, general)
+            except Exception:
+                logger.exception("Certified general list fetch raised for %s", state)
+                general_records = None
+
         try:
             records = await strategy(client, cycle, state, source)
         except Exception:
             logger.exception("Confirmed-candidate fetch raised for %s", state)
             records = None
 
+        fallback = source.get("fallback")
+        if records is None and fallback and STRATEGIES.get(fallback.get("strategy")):
+            # A state's own second choice, named in its entry — Wisconsin's
+            # canvass file name changes between cycles, and until the new
+            # one is known its national fallback still says something.
+            logger.info("Falling back to %s for %s", fallback["strategy"], state)
+            try:
+                records = await STRATEGIES[fallback["strategy"]](client, cycle, state, fallback)
+            except Exception:
+                logger.exception("Fallback fetch raised for %s", state)
+                records = None
+            if records is not None:
+                source = fallback
         if records is None:
             # A hand-verified source that has broken falls back to whatever
             # the crawler last proved for this state, rather than the state
@@ -996,9 +1044,10 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
                 records = await STRATEGIES.get(spare.get("strategy"), _no_strategy)(
                     client, cycle, state, spare,
                 )
-        if records is None:
+        if records is None and general_records is None:
             results[state] = {"confirmed": 0, "unmatched": 0, "status": "fetch_failed"}
             continue
+        records = records or []
 
         # Neither a statewide executive office (Governor, AG, ...) nor a
         # seat in the state legislature has an FEC race to confirm
@@ -1023,12 +1072,24 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
         # from that list (sync_ballot_filings), which is what may speak for
         # candidates this results file cannot see or has gone stale on.
         # Here, it only confirms who the results name.
-        ballot_is_elsewhere = _has_general_filings(source)
-        applied = _apply_ballot(
-            db, cycle, state, records,
-            keep_unlisted=not ballot_is_elsewhere,
-            authoritative=bool(source.get("general_ballot_complete")) and not ballot_is_elsewhere,
-        )
+        if general_records is not None:
+            # The certified ballot answered: it alone decides the federal
+            # races. Primary results above still supplied the state
+            # offices, which the list may not cover.
+            general_federal = [r for r in general_records if r["office"] in ("S", "H")]
+            applied = _apply_ballot(
+                db, cycle, state, general_federal, keep_unlisted=True, authoritative=True,
+            )
+            _record_ballot_basis(db, cycle, state, {**general, "general_ballot_complete": True})
+        else:
+            ballot_is_elsewhere = _has_general_filings(source)
+            applied = _apply_ballot(
+                db, cycle, state, records,
+                keep_unlisted=not ballot_is_elsewhere,
+                authoritative=bool(source.get("general_ballot_complete")) and not ballot_is_elsewhere,
+            )
+            if not ballot_is_elsewhere:
+                _record_ballot_basis(db, cycle, state, source)
         confirmed, unmatched = applied["confirmed"], applied["unmatched"]
 
         results[state] = {
@@ -1089,6 +1150,7 @@ async def sync_ballot_filings(db: Session, client: httpx.AsyncClient, cycle: int
                 db, cycle, state, found["general"], keep_unlisted=True,
                 authoritative=bool(source.get("general_ballot_complete")),
             )
+            _record_ballot_basis(db, cycle, state, source)
             counts["general"] = applied["confirmed"]
             unmatched += applied["unmatched"]
         results[state] = {

@@ -24,6 +24,7 @@ from app.election_calendar import (
 )
 from app.http_client import make_async_client
 from app.models import (
+    ApiCache,
     BallotMeasure,
     Candidate,
     JudicialNominee,
@@ -53,6 +54,7 @@ from app.pipeline.fetch.civic_info import fetch_town_ballot
 from app.pipeline.fetch.civic_info import is_configured as civic_is_configured
 from app.pipeline.fetch.state_candidate_sources import source_for_state
 from app.pipeline.fetch.state_candidates_common import (
+    BALLOT_BASIS_TIER,
     JUDICIAL_COURT_LABELS,
     JUDICIAL_MARKER_TIER,
     JUDICIAL_MARKER_TTL_HOURS,
@@ -64,6 +66,7 @@ from app.pipeline.fetch.state_candidates_common import (
     STATEWIDE_MARKER_TIER,
     STATEWIDE_MARKER_TTL_HOURS,
     STATEWIDE_OFFICE_LABELS,
+    ballot_basis_key,
     statewide_marker_key,
 )
 from app.pipeline.fetch.state_election_dates import primary_date
@@ -216,8 +219,40 @@ def _candidate_summary(cand: Candidate, stale_incumbent_ids: frozenset[str] = fr
 _PRIMARY_NOMINATING_PARTIES = frozenset({"DEM", "REP"})
 
 
+def _ballot_basis_markers(db: Session, cycle: int) -> dict[str, bool]:
+    """{state: whether its last successful source was the complete certified
+    ballot} for `cycle`, in one query — see BALLOT_BASIS_TIER."""
+    suffix = f"-{cycle}"
+    out: dict[str, bool] = {}
+    for row in db.query(ApiCache).filter(ApiCache.tier == BALLOT_BASIS_TIER).all():
+        if row.cache_key.endswith(suffix):
+            try:
+                out[row.cache_key[: -len(suffix)]] = bool(json.loads(row.data_json).get("complete"))
+            except ValueError:
+                continue
+    return out
+
+
+def _complete_from(markers: dict[str, bool], state: str) -> bool:
+    """A state the pipeline has not recorded yet (the first night after a
+    deploy) falls back to what its configured source claims."""
+    if state in markers:
+        return markers[state]
+    source = source_for_state(state) or {}
+    return bool(source.get("general_ballot_complete") or source.get("general_list"))
+
+
+def _ballot_complete(db: Session, state: str, cycle: int) -> bool:
+    marker = api_cache_get(
+        db, BALLOT_BASIS_TIER, ballot_basis_key(state, cycle), max_age_hours=STATEWIDE_MARKER_TTL_HOURS,
+    )
+    if marker is not None:
+        return bool(marker.get("complete"))
+    return _complete_from({}, state)
+
+
 def _unopposed_nominees(
-    candidates: list[Candidate], confirmed: list[Candidate], state: str,
+    candidates: list[Candidate], confirmed: list[Candidate], state: str, complete: bool,
 ) -> list[Candidate]:
     """Real November candidates a primary-results file cannot see, because
     their primary was never held.
@@ -260,7 +295,7 @@ def _unopposed_nominees(
     # A certified ballot already names everyone on it. A party missing
     # from it has nobody on the November ballot, so re-admitting an FEC
     # filer for that party would add someone who is not running.
-    if source.get("general_ballot_complete"):
+    if complete:
         return []
     covered = {c.party for c in confirmed}
     coded_incumbents = [c for c in candidates if c.incumbent_challenge == "I"]
@@ -276,7 +311,7 @@ def _unopposed_nominees(
     return recovered
 
 
-def _confirmed_or_all(candidates: list[Candidate], state: str) -> list[Candidate]:
+def _confirmed_or_all(candidates: list[Candidate], state: str, complete: bool) -> list[Candidate]:
     """If a registered state source (state_candidate_sources.json /
     state_candidates.py) has confirmed any candidate in this race as an
     actual general-election nominee, return ONLY confirmed candidates — an
@@ -303,13 +338,13 @@ def _confirmed_or_all(candidates: list[Candidate], state: str) -> list[Candidate
     candidates = dedupe_candidates(candidates)
     confirmed = [c for c in candidates if c.confirmed_general]
     if confirmed:
-        return confirmed + _unopposed_nominees(candidates, confirmed, state)
+        return confirmed + _unopposed_nominees(candidates, confirmed, state, complete)
     if any(c.on_primary_ballot for c in candidates):
         return [c for c in candidates if c.on_primary_ballot]
     return candidates
 
 
-def _candidate_source(candidates: list[Candidate], state: str) -> str:
+def _candidate_source(candidates: list[Candidate], complete: bool) -> str:
     """WHICH of _confirmed_or_all's three answers a race's list is, so the
     page can say so instead of presenting three quite different things as
     one list. Computed here rather than in the frontend, which must not
@@ -329,8 +364,7 @@ def _candidate_source(candidates: list[Candidate], state: str) -> str:
                    a ballot.
     """
     if any(c.confirmed_general for c in candidates):
-        source = source_for_state(state) or {}
-        return "confirmed" if source.get("general_ballot_complete") else "nominees"
+        return "confirmed" if complete else "nominees"
     if any(c.on_primary_ballot for c in candidates):
         return "primary"
     return "filers"
@@ -418,9 +452,9 @@ def _stale_incumbent_ids(candidates: list[Candidate]) -> frozenset[str]:
     return frozenset()
 
 
-def _race_summary(race: Race, state_pvi: dict, district_pvi: dict) -> dict:
+def _race_summary(race: Race, state_pvi: dict, district_pvi: dict, complete: bool) -> dict:
     candidates = sorted(
-        _confirmed_or_all(race.candidates, race.state),
+        _confirmed_or_all(race.candidates, race.state, complete),
         key=lambda c: (c.cash_on_hand or 0.0),
         reverse=True,
     )
@@ -503,6 +537,7 @@ def _incumbent_link(
 def _race_full(
     race: Race, state_pvi: dict, district_pvi: dict,
     reps_by_district: dict[int, Representative], senators: list[Senator],
+    complete: bool,
 ) -> dict:
     """Same shape as race_detail's response, minus coverage — this backs
     the per-state ballot view, which needs every candidate (not just the
@@ -510,7 +545,7 @@ def _race_full(
     news feed, which stays one click away on the existing race-detail
     page. Confirmed-general filtering (see _confirmed_or_all) applies
     here too, same as race_detail."""
-    candidates = sorted(_confirmed_or_all(race.candidates, race.state), key=lambda c: (c.cash_on_hand or 0.0), reverse=True)
+    candidates = sorted(_confirmed_or_all(race.candidates, race.state, complete), key=lambda c: (c.cash_on_hand or 0.0), reverse=True)
     pvi, pvi_level = _pvi_for_race(race, state_pvi, district_pvi)
     stale_incumbent_ids = _stale_incumbent_ids(race.candidates)
     counties = None
@@ -527,7 +562,7 @@ def _race_full(
         "pvi": pvi,
         "pviLevel": pvi_level,
         "counties": counties,
-        "candidateSource": _candidate_source(race.candidates, race.state),
+        "candidateSource": _candidate_source(race.candidates, complete),
         "candidates": [
             {
                 **_candidate_summary(c, stale_incumbent_ids),
@@ -963,7 +998,8 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         r.district: r for r in db.query(Representative).filter(Representative.state == state).all()
     }
     senators = db.query(Senator).filter(Senator.state == state, Senator.is_current).all()
-    full = [_race_full(r, state_pvi, district_pvi, reps_by_district, senators) for r in races]
+    complete = _ballot_complete(db, state, cycle)
+    full = [_race_full(r, state_pvi, district_pvi, reps_by_district, senators, complete) for r in races]
     senate_races = [r for r in full if r["office"] == "S"]
     house_races = sorted(
         (r for r in full if r["office"] == "H"),
@@ -1087,7 +1123,11 @@ def list_races(db: Session = Depends(get_db)):
     )
     state_pvi = get_state_pvi_map()
     district_pvi = get_district_pvi_map()
-    data = [_race_summary(r, state_pvi, district_pvi) for r in races]
+    markers = _ballot_basis_markers(db, current_election_cycle())
+    data = [
+        _race_summary(r, state_pvi, district_pvi, _complete_from(markers, r.state))
+        for r in races
+    ]
     return cached_json(data, max_age=CACHE_TTL_LIST_S)
 
 
@@ -1294,7 +1334,8 @@ def race_detail(race_id: str, db: Session = Depends(get_db)):
 
     state_pvi = get_state_pvi_map()
     district_pvi = get_district_pvi_map()
-    candidates = sorted(_confirmed_or_all(race.candidates, race.state), key=lambda c: (c.cash_on_hand or 0.0), reverse=True)
+    complete = _ballot_complete(db, race.state, race.cycle_year)
+    candidates = sorted(_confirmed_or_all(race.candidates, race.state, complete), key=lambda c: (c.cash_on_hand or 0.0), reverse=True)
     stale_incumbent_ids = _stale_incumbent_ids(race.candidates)
     coverage = (
         db.query(RaceCoverageItem)
@@ -1317,7 +1358,7 @@ def race_detail(race_id: str, db: Session = Depends(get_db)):
         "isSpecial": race.is_special,
         "pvi": pvi,
         "pviLevel": pvi_level,
-        "candidateSource": _candidate_source(race.candidates, race.state),
+        "candidateSource": _candidate_source(race.candidates, complete),
         "candidates": [_candidate_summary(c, stale_incumbent_ids) for c in candidates],
         "coverage": [_coverage_item(item) for item in coverage],
     }, max_age=CACHE_TTL_DETAIL_S)
