@@ -60,7 +60,7 @@ because that decides what the page can honestly claim.
 
 | Source kind | What it can see | States (2026-09-26) |
 |---|---|---|
-| **Certified general ballot** | Everyone on the November ballot, third parties, independents and post-primary replacements included | TX (`tx_civix`), NC (`tabular` + filing list), SD (`sd_vip`), LA (`voterportal`), SC (`vrems`), MO (`certified_pdf`); and as a `general_list` beside a primary-results source: ME, CO, VA, TN, MD, IA, NE, NM, WY, HI (`certified_table`: spreadsheets, PDF tables, an HTML table, a page's own CSV export), FL (`dos_canlist`), NJ (`nj_certification` official lists) |
+| **Certified general ballot** | Everyone on the November ballot, third parties, independents and post-primary replacements included | TX (`tx_civix`), NC (`tabular` + filing list), SD (`sd_vip`), LA (`voterportal`), SC (`vrems`), MO (`certified_pdf`); and as a `general_list` beside a primary-results source: ME, CO, VA, TN, MD, IA, NE, NM, WY, HI, DE, KY (`certified_table`: spreadsheets, PDF tables, an HTML table, a page's own CSV export), FL (`dos_canlist`), NJ (`nj_certification` official lists) |
 | **Primary results** | Each party's nominee. Cannot see a Libertarian, Green or independent who never ran in a primary, or a nominee replaced after the primary | the other 33 configured states — `tabular` (14), `clarity` (2), `tally_enr` (2), `totalvote_enr` (2) and 13 single-state strategies (WI's `canvass_summary_pdf` among them) |
 | **National fallback** | Nothing until Google publishes general-election contests, close to the election | MI, NV, NY, OH, OK (`google_civic`) |
 
@@ -111,7 +111,9 @@ header row names every configured heading (NM); a fixed `discovery.url` that
 always shows the current election must match `year_regex` first. With
 `form_button` the page's own export button is the list (HI): its form is
 posted back with that button once the year matches. Format is decided from
-the bytes (zip, PDF, HTML, else CSV), not the address. Scanned certifications (UT's OCR text,
+the bytes (zip, PDF, HTML, else CSV), not the address. `every_link` reads
+every page a link regex matches (KY: one page per office) instead of
+requiring exactly one. Scanned certifications (UT's OCR text,
 AL's images) are not read: one misread name would unconfirm a real nominee.
 
 ### Rules every strategy follows
