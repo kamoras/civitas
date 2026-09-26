@@ -214,6 +214,17 @@ class TestDerivedConsistency:
         failures = check_ground_truth(db_session, reference_measured=True)["failures"]
         assert not any("reference and the votes disagree" in f["rationale"] for f in failures)
 
+    def test_probe_allows_exactly_twice_the_tail(self):
+        # 2 * (1 - 0.9) is 0.19999999999999996 in floating point; a share of
+        # exactly 20% is inside the documented tolerance.
+        members = [
+            {"name": f"m{i}", "scores": {}, "raw": {"labeled_votes": 50},
+             "metrics": {"seat_relative_vote": 50.0, "past_saturation": i < 20}}
+            for i in range(100)
+        ]
+        failures = evaluate_derived_checks(members, reference_measured=True)["failures"]
+        assert not any("reference and the votes disagree" in f["rationale"] for f in failures)
+
     def test_break_rate_reads_each_stored_row_as_its_own_roll_call(self, db_session):
         # A Senate key bill's cloture and passage votes share a bill_id. They
         # are two roll calls and both count; bill_id alone would merge them.

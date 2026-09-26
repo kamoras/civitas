@@ -68,8 +68,10 @@ from scipy import stats as scipy_stats
 
 from app.pipeline.analyze.population_reference import CONSTITUENT_REFERENCE
 from app.pipeline.analyze.score_calculator import (
+    CONSTITUENT_FULL_CONFIDENCE_VOTES,
     SATURATION_QUANTILE,
     party_break_rate,
+    party_vote_evidence,
     past_saturation,
     seat_break_deviation,
     seat_relative_vote_score,
@@ -147,6 +149,11 @@ def _tie_extended_extreme(
     landed in "the rest", contaminating the comparison group with
     members equally low on the raw metric and diluting the test's
     ability to find a real separation.
+
+    The rank check now runs on the recomputed vote score (seat_relative_
+    vote), where ties sit at the 0 floor from both tails (full loyalty in
+    an opposed seat, heavy breaking past saturation); the same extension
+    applies.
     """
     n = len(ordered)
     if from_start:
@@ -165,6 +172,7 @@ def _tie_extended_extreme(
 def constituent_metrics(
     break_rate: float | None,
     labeled_votes: int,
+    evidence: float,
     state: str,
     party: str,
     effective_party: str | None = None,
@@ -174,9 +182,12 @@ def constituent_metrics(
     """The Constituent Alignment inputs a member record carries:
     seat_relative_vote (the vote component recomputed from the raw votes by
     the scorer's own seat_relative_vote_score; None below MIN_LABELED_VOTES
-    or without a measured expectation) and past_saturation. ``break_rate``
-    and ``labeled_votes`` are party_break_rate's. Shared by the pipeline
-    gate and scripts/rescore.py so both judge members one way.
+    or without a measured expectation) and past_saturation (None unless
+    the record has full-confidence evidence — the same members the
+    reference's saturation point is measured on). ``break_rate`` and
+    ``labeled_votes`` are party_break_rate's, ``evidence`` is
+    party_vote_evidence's. Shared by the pipeline gate and
+    scripts/rescore.py so both judge members one way.
 
     The rank check against it asks whether stored scores still follow the
     stored votes — a plumbing and data check. The shape itself (the peak,
@@ -191,18 +202,26 @@ def constituent_metrics(
         district=district, reference=reference,
     )
     if dev is not None:
-        out["seat_relative_vote"] = seat_relative_vote_score(*dev, labeled_votes)
-        out["past_saturation"] = past_saturation(*dev)
+        out["seat_relative_vote"] = seat_relative_vote_score(*dev, evidence)
+        if evidence >= CONSTITUENT_FULL_CONFIDENCE_VOTES:
+            out["past_saturation"] = past_saturation(*dev)
     return out
 
 
+# Twice the reference's out-of-pattern tail (1 - SATURATION_QUANTILE),
+# rounded so the float arithmetic lands on the documented value: 0.2, not
+# 0.19999999999999996, which would fail a share of exactly 20%.
+_PAST_SATURATION_TOLERANCE = round(2 * (1 - SATURATION_QUANTILE), 9)
+
+
 def _past_saturation_share(members: list[dict]) -> float:
-    """Share of members with a readable relative break rate who sit past
-    the saturation deviation. The reference defines that deviation as the
-    chamber's SATURATION_QUANTILE, so at most ~1 - SATURATION_QUANTILE of
-    the population it was measured on is past it; the probe allows twice
-    that, because the gate reads the stored votes of current members
-    rather than the exact run population."""
+    """Share of full-confidence members who sit past the saturation
+    deviation. The reference defines that deviation as the SATURATION_
+    QUANTILE of the full-confidence members it was measured on, so at most
+    ~1 - SATURATION_QUANTILE of them are past it; the probe allows twice
+    that, because the gate reads current members' stored votes — members
+    whose scoring failed this run keep last run's — rather than the exact
+    run population."""
     flags = [m["metrics"].get("past_saturation") for m in members]
     readable = [f for f in flags if f is not None]
     # Same minimum as every rank check: early in a congress only a few
@@ -283,7 +302,7 @@ def evaluate_derived_checks(
             # Only meaningful when the reference was measured from this
             # population; a fallback reference from another run makes no
             # promise about these members' spread.
-            reference_measured and _past_saturation_share(members) > 2 * (1 - SATURATION_QUANTILE),
+            reference_measured and _past_saturation_share(members) > _PAST_SATURATION_TOLERANCE,
             "IV", "at most the chamber's out-of-pattern tail past saturation",
             "more {label}s sit past Constituent Alignment's saturation "
             "deviation than its definition allows (it is the chamber's "
@@ -465,9 +484,10 @@ def _member_records(db, model, constituent_reference: dict | None = None) -> lis
         # direction-of-effect check against a different ratio than the one
         # scored would weaken for reasons unrelated to the scores.
         base = getattr(m, "total_contributions", None) or raised
-        rate, labeled = party_break_rate({"keyVotes": votes[m.id]})
+        record = {"keyVotes": votes[m.id]}
+        rate, labeled = party_break_rate(record)
         constituent = constituent_metrics(
-            rate, labeled, m.state or "", m.party or "I",
+            rate, labeled, party_vote_evidence(record), m.state or "", m.party or "I",
             effective_party=getattr(m, "caucus_party", None),
             district=getattr(m, "district", None),
             reference=constituent_reference,
@@ -600,11 +620,14 @@ def check_score_distribution(db, model=None) -> list[dict]:
         )
         .all()
     )
+    # Same Congress by calendar date, the boundary the trend chart and the
+    # leaderboard arrows use. A CURRENT_CONGRESS setting left behind the
+    # calendar is ops_alerts.check_current_congress_staleness's to flag.
     by_date: dict[str, list[tuple]] = defaultdict(list)
-    congress_now = congress_of_date(today)
     for row in history_rows:
-        if congress_of_date(row[0]) == congress_now:
-            by_date[row[0]].append(row[1:])
+        by_date[row[0]].append(row[1:])
+    congress_now = congress_of_date(today)
+    by_date = {d: rows for d, rows in by_date.items() if congress_of_date(d) == congress_now}
 
     for idx, (dim, _col) in enumerate(_SNAPSHOT_COLUMN.items()):
         label = _DIM_LABEL.get(dim, dim)

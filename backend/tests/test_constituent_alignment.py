@@ -90,7 +90,22 @@ class TestSeatRelativeVotes:
 
     def test_breakdown_says_when_few_votes_shrink_it(self):
         detail = _constituent_alignment_core(record(7, total=10), [], {}, state="SW", party="D")["components"][0]["detail"]
-        assert "only 10 votes" in detail
+        assert "weight of about 10 full party-line votes" in detail
+
+    def test_a_record_of_mostly_low_weight_votes_counts_as_thin_evidence(self):
+        # 20 votes, but 18 near-bipartisan (weight 0.05) and 2 decisive: the
+        # rate (69% against 10% expected, far past saturation) rests on
+        # (2.9)^2 / 2.045 = 4.1 votes' worth of evidence (Kish), so it is
+        # shrunk like a four-vote record: ~40, not the ~2 full scale gives.
+        votes = [{"billId": f"b{i}", "votedWithParty": i >= 2,
+                  "partyAlignmentWeight": 1.0 if i < 2 else 0.05} for i in range(20)]
+        rec = {"keyVotes": votes, "recentVotes": []}
+        assert score_calculator.party_vote_evidence(rec) == pytest.approx(4.11, abs=0.01)
+        assert score(rec) == 40
+        assert score_calculator.calculate_confidence({"votingRecord": rec})["constituentAlignment"] == "low"
+
+    def test_equal_weights_evidence_is_the_vote_count(self):
+        assert score_calculator.party_vote_evidence(record(10, total=37)) == pytest.approx(37)
 
     def test_loyal_floor_unchanged(self):
         # An R in a D+15 state is expected to break 30%; never breaking is a
@@ -212,6 +227,9 @@ class TestMeasuredReference:
             {"state": "DS", "party": "I", "votingRecord": {**record(10), "effectiveParty": "D"}},
             {"state": "SW", "party": "I", "votingRecord": record(10)},  # no caucus: excluded
             {"state": "SW", "party": "R", "votingRecord": record(1, total=2)},  # too few votes
+            # Scorable but thin: shrunk in its own score, and kept out of the
+            # saturation point everyone else is measured against.
+            {"state": "SW", "party": "R", "votingRecord": record(5, total=10)},
         ]
         assert constituent_reference_inputs(members) == [("D", 0.0, 0.2), ("D", 1.0, 0.1)]
 

@@ -116,7 +116,8 @@ def seat_relative_vote_shape(rows: list[dict]) -> dict[str, float]:
     break rate minus the same-party expectation at that seat lean (measured
     from these rows by the pipeline's own compute_constituent_reference),
     through score_calculator.seat_relative_vote_score at that reference's
-    saturation deviation. rows: {bioguide, party, state, district,
+    saturation deviation (party-unity votes are unweighted, so each
+    member's evidence is their vote count). rows: {bioguide, party, state, district,
     break_rate, n_votes}."""
     from app.pipeline.analyze.score_calculator import (
         _expected_break_rate,
