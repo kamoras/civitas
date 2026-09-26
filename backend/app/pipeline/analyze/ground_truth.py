@@ -306,11 +306,11 @@ def evaluate_derived_checks(
         integrity_probes.append((
             share > _PAST_SATURATION_TOLERANCE,
             "IV", "at most the chamber's out-of-pattern tail past saturation",
-            "more {label}s sit past Constituent Alignment's saturation "
-            "deviation than its definition allows (it is the chamber's "
-            f"{SATURATION_QUANTILE:.0%} quantile, so about "
-            f"{1 - SATURATION_QUANTILE:.0%} of members at most) — the "
-            "constituent reference and the votes disagree",
+            f"{share:.0%} of full-confidence {{label}}s sit past Constituent "
+            "Alignment's saturation deviation; the reference defines it as the "
+            f"{SATURATION_QUANTILE:.0%} quantile (about {1 - SATURATION_QUANTILE:.0%} "
+            f"past it) and the gate allows up to {_PAST_SATURATION_TOLERANCE:.0%} — "
+            "the constituent reference and the votes disagree",
         ))
     for failed, dim_label, expectation, rationale in integrity_probes:
         checked += 1
@@ -593,7 +593,7 @@ def check_score_distribution(db, model=None) -> list[dict]:
     callers can merge the two lists.
     """
     from app.models import ScoreSnapshot
-    from app.pipeline.fetch.congress import congress_of_date
+    from app.pipeline.fetch.congress import congress_first_year, congress_of_date
     from app.time_utils import utcnow
 
     if model is None:
@@ -610,11 +610,14 @@ def check_score_distribution(db, model=None) -> list[dict]:
     # Per-date historical values for this chamber under the CURRENT
     # algorithm version, excluding today's just-written snapshot.
     snapshot_cols = [getattr(ScoreSnapshot, col) for col in _SNAPSHOT_COLUMN.values()]
+    congress_now = congress_of_date(today)
     history_rows = (
         db.query(ScoreSnapshot.date, *snapshot_cols)
         .filter(
             ScoreSnapshot.entity_type == entity_type,
             ScoreSnapshot.algorithm_version == ALGORITHM_VERSION,
+            # This Congress convened January 3 of its first year.
+            ScoreSnapshot.date >= f"{congress_first_year(congress_now)}-01-03",
             ScoreSnapshot.date < today,
         )
         .all()
@@ -625,8 +628,6 @@ def check_score_distribution(db, model=None) -> list[dict]:
     by_date: dict[str, list[tuple]] = defaultdict(list)
     for row in history_rows:
         by_date[row[0]].append(row[1:])
-    congress_now = congress_of_date(today)
-    by_date = {d: rows for d, rows in by_date.items() if congress_of_date(d) == congress_now}
 
     for idx, (dim, _col) in enumerate(_SNAPSHOT_COLUMN.items()):
         label = _DIM_LABEL.get(dim, dim)

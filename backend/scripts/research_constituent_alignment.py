@@ -270,7 +270,7 @@ def unity_breaks(obj):
         against = ((yea[i] & ~pmaj) | (nay[i] & pmaj)) & cast
         rows.append(dict(id=int(L.icpsrLegis[i]), state=L.state[i], party=L.party[i],
                          name=str(obj["legis.data"].index[i]).split(" (")[0].upper(),
-                         brk=against.sum() / max(cast.sum(), 1)))
+                         brk=against.sum() / max(cast.sum(), 1), n=int(cast.sum())))
     return pd.DataFrame(rows), int(unity.sum()), V.shape[1]
 
 
@@ -283,7 +283,7 @@ def kinked_fit(df):
 def loyalty_tests(m, p):
     hr = read_r(p["hr108.rda"], "hr108")
     R, n_unity, n_all = unity_breaks(hr)
-    M = m[m.cong == 108].merge(R[["id", "brk"]], on="id")
+    M = m[m.cong == 108].merge(R[["id", "brk", "n"]], on="id")
     print(f"\n== Loyalty: 108th House, {n_unity} party-unity roll calls of {n_all}; outcome 2004 ==")
 
     hand = np.where(M.alignment >= 0, .03 + .05 * (1 - M.alignment), .08 + .12 * (-M.alignment))
@@ -341,10 +341,15 @@ def loyalty_tests(m, p):
     # Is there such a thing as breaking too much? A score peaked at the
     # expectation (falling off both ways), the shipped v6.14 shape (rising
     # to the saturation point, falling past it), and the crossing-side slope
-    # past saturation. Saturation is the whole chamber's 90th-percentile
-    # deviation, as compute_constituent_reference measures it (every 108th
-    # House member has far more than 20 party-unity votes).
-    p90 = (M.brk - M.exp_party).abs().quantile(.9)
+    # past saturation. From here on the expectation and saturation point are
+    # the scorer's own (shipped_expectation -> compute_constituent_reference),
+    # not the kinked_fit the v6.13 sections above used.
+    shipped = shipped_expectation(M[["id", "party", "alignment", "brk", "n"]].reset_index(drop=True))
+    S = S.merge(shipped[["id", "dev", "p90"]].rename(columns={"dev": "dev14"}), on="id")
+    b0 = smf.ols(base, S).fit()
+    dev, p90 = S.dev14, shipped.p90.iloc[0]
+    S["dev_party"] = dev / dev.std()
+    S["neg"] = S.dev_party.clip(upper=0)
     S["absdev"] = S.dev_party.abs()
     S["peaked"] = 100 - 100 * (dev.abs() / p90).clip(0, 1)
     S["v614"] = v614_score(dev, p90)

@@ -615,9 +615,14 @@ describe("TownSection", () => {
     expect(await screen.findByRole("combobox")).toHaveValue("");
     expect(fetchTownBallot).not.toHaveBeenCalledWith("CA", "Albany");
 
-    // Coming back doesn't bring the old pick back either.
+    // Coming back doesn't bring the old pick back either, and re-picking
+    // the town shows loading, not the ballot from the earlier visit.
     rerender(<TownSection state="NY" pageElectionDate="2026-11-03" />);
     expect(await screen.findByRole("combobox")).toHaveValue("");
+    expect(screen.queryByText(/Albany Mayor/)).not.toBeInTheDocument();
+    vi.mocked(fetchTownBallot).mockImplementation(() => new Promise(() => {}));
+    await userEvent.selectOptions(picker(), "Albany");
+    expect(screen.getByText(/Loading Albany/)).toBeInTheDocument();
     expect(screen.queryByText(/Albany Mayor/)).not.toBeInTheDocument();
   });
 

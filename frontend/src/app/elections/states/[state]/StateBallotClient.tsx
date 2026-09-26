@@ -643,7 +643,10 @@ export function TownSection({ state, pageElectionDate }: { state: string; pageEl
   // "adjust state when a prop changes" pattern, applied during render), so
   // coming back to the first state starts from statewide again — the town
   // selector is an explicit, unremembered choice (AGENTS.md §8).
-  if (pick.state !== state) setPick({ state, town: "" });
+  if (pick.state !== state) {
+    setPick({ state, town: "" });
+    setResult(null); // and any ballot from that visit, so returning never shows it as current
+  }
   const towns = townsFor?.state === state ? townsFor.towns : null;
   const selected = pick.state === state ? pick.town : "";
   const ballot = result && result.state === state && result.town === selected ? result.ballot : null;
