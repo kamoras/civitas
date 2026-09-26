@@ -161,7 +161,11 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
             {cpuPct != null ? formatPct(cpuPct) : "—"}
           </span>
         </div>
-        <UsageBar pct={cpuPct ?? 0} ariaLabel="CPU utilisation percentage" />
+        <UsageBar
+          pct={cpuPct ?? 0}
+          ariaLabel="CPU utilisation"
+          valueText={cpuPct != null ? formatPct(cpuPct) : "no reading yet"}
+        />
         {/* Load average is a different quantity (runnable tasks, smoothed
             over 1/5/15 min), so it's shown as the number it is — not as a
             percentage, where an idle multi-core host rounds to 0%. */}
@@ -176,7 +180,11 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
           <span className="text-ink-lo text-xs font-mono tracking-wider">MEMORY</span>
           <span className="text-ink-hi text-xs font-mono tabular-nums">{stats.memUsedPct}%</span>
         </div>
-        <UsageBar pct={stats.memUsedPct} ariaLabel="Memory usage percentage" />
+        <UsageBar
+          pct={stats.memUsedPct}
+          ariaLabel="Memory usage"
+          valueText={`${stats.memUsedPct}%`}
+        />
         <div className="text-xs text-ink-min font-mono mt-1 tabular-nums">
           {formatBytes(stats.memUsedBytes)} / {formatBytes(stats.memTotalBytes)}
         </div>
@@ -190,7 +198,8 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
           pct={stats.diskUsedPct}
           warnAt={80}
           critAt={95}
-          ariaLabel="Disk usage percentage"
+          ariaLabel="Disk usage"
+          valueText={`${stats.diskUsedPct}%`}
         />
         <div className="text-xs text-ink-min font-mono mt-1 tabular-nums">
           {formatBytes(stats.diskFreeBytes)} free
@@ -209,6 +218,7 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
             warnAt={76}
             critAt={94}
             ariaLabel="CPU temperature"
+            valueText={`${stats.cpuTempC}°C`}
           />
         )}
         <div className="text-xs text-ink-min font-mono mt-1">

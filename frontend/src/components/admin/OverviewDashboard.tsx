@@ -259,7 +259,8 @@ export function OverviewDashboard({
                     pct={m.pct}
                     warnAt={m.warn}
                     critAt={m.crit}
-                    ariaLabel={`${m.label} ${m.text}`}
+                    ariaLabel={m.label}
+                    valueText={m.text}
                   />
                 </div>
               ))}
