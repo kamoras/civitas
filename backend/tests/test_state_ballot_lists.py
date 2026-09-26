@@ -469,7 +469,7 @@ async def test_a_fallback_answer_is_labelled_nominees_not_confirmed(db_session, 
 
     # CO's entry claims a complete ballot, but tonight its fallback (primary
     # results) answered, so the page must say "nominees".
-    assert elections_api._ballot_complete(db_session, "CO", 2026) is False
+    assert elections_api._race_complete(elections_api._ballot_marker(db_session, "CO", 2026), "CO", "2026-SEN-CO") is False
 
 
 # --- certified_table options Tennessee needed ---
@@ -539,7 +539,7 @@ async def test_a_certified_general_list_decides_federal_races_over_primary_resul
 
     flags = {c.id: c.confirmed_general for c in db_session.query(Candidate)}
     assert flags == {"S6ME1": False, "S6ME2": True}
-    assert elections_api._ballot_complete(db_session, "ME", 2026) is True
+    assert elections_api._race_complete(elections_api._ballot_marker(db_session, "ME", 2026), "ME", "2026-SEN-ME") is True
 
 
 # --- Florida's candidate list ---
@@ -827,3 +827,40 @@ async def test_a_two_digit_year_in_a_link():
             2026, "AK",
         )
     assert url == "https://ak.test/c/?election=26genr"
+
+
+@pytest.mark.asyncio
+async def test_a_partial_certified_list_decides_only_the_races_it_covers(db_session, monkeypatch):
+    # A national source knows only the districts it has a verified address
+    # for. It decides those races; primary results still fill the rest, and
+    # the page may call only the covered races "confirmed".
+    async def no_calendar(client, cycle):
+        return {}
+    monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+    monkeypatch.setattr(sc, "configured_states", lambda: {"ME"})
+    monkeypatch.setitem(sc.STRATEGIES, "me_results", AsyncMock(return_value=[
+        _rec("S", None, "D", "Platner", "Graham Platner"),
+        _rec("H", 2, "R", "LePage", "Paul LePage"),
+    ]))
+    monkeypatch.setitem(sc.STRATEGIES, "certified_table", AsyncMock(return_value=[
+        _rec("S", None, "D", "Jackson", "Troy D. Jackson"),
+        _rec("S", None, "I", "Indie", "Jordan Indie"),  # on the list, never filed with the FEC
+    ]))
+    _race(db_session, "2026-SEN-ME", "ME")
+    _race(db_session, "2026-HOUSE-ME-2", "ME", office="H", district=2)
+    _db_cand(db_session, "S6ME1", "2026-SEN-ME", "PLATNER, GRAHAM", "DEM")
+    _db_cand(db_session, "S6ME2", "2026-SEN-ME", "JACKSON, TROY", "DEM")
+    _db_cand(db_session, "H6ME2", "2026-HOUSE-ME-2", "LEPAGE, PAUL", "REP")
+    db_session.commit()
+
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+    flags = {c.id: c.confirmed_general for c in db_session.query(Candidate)}
+    assert flags["S6ME1"] is False and flags["S6ME2"] is True
+    assert flags["H6ME2"] is True  # the uncovered race still gets its nominee
+    # The list's ballot-only candidate survives the second (primary-results) pass.
+    assert any(cid.startswith("ballot:2026-SEN-ME:") for cid in flags)
+    marker = elections_api._ballot_marker(db_session, "ME", 2026)
+    assert marker["complete"] is False and marker["races"] == ["2026-SEN-ME"]
+    assert elections_api._race_complete(marker, "ME", "2026-SEN-ME") is True
+    assert elections_api._race_complete(marker, "ME", "2026-HOUSE-ME-2") is False

@@ -1103,7 +1103,9 @@ export default function AboutPage() {
                   primary results stand in, and the page says &ldquo;nominees&rdquo; rather
                   than claiming the whole ballot. Utah and Alabama publish their certified lists
                   only as scanned images, which we do not read: one misread name would take a
-                  real nominee off the page. The remaining five states sit behind bot
+                  real nominee off the page. For the races those states, Arkansas and Connecticut
+                  leave unseen — districts whose primary was uncontested — Google&apos;s election
+                  index fills in once it publishes the general election, and only for those races. The remaining five states sit behind bot
                   challenges on their election sites, or in Oklahoma&apos;s case an API that
                   requires logging in. We do not work around either.
                 </P>
