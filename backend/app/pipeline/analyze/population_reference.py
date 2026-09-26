@@ -51,12 +51,21 @@ class ChamberReference:
     {"senate": {...}, "house": {...}}; the presidential reference has the
     single key "presidents"."""
 
-    def __init__(self, name: str, keys: tuple[str, ...] = CHAMBERS):
+    def __init__(self, name: str, keys: tuple[str, ...] = CHAMBERS, statistic: str | None = None):
         self.name = name
         self.keys = keys
+        # When set, a per-chamber entry counts only if its "statistic" field
+        # equals this: a reference measured on a different statistic (left
+        # on /data by an older release) is skipped, falling back to the
+        # bundled entry, rather than scored against on the wrong scale.
+        self.statistic = statistic
         self.live_path = _LIVE_DIR / f"{name}.json"
         self.bundled_path = _BUNDLED_DIR / f"{name}.json"
         self._cache: tuple[tuple[float | None, float | None], dict] | None = None
+
+    def usable(self, entry: dict | None) -> bool:
+        """Whether one chamber's entry can be scored against."""
+        return bool(entry) and (self.statistic is None or entry.get("statistic") == self.statistic)
 
     def load(self) -> dict:
         """The live file layered over the bundled fallback, per chamber.
@@ -67,7 +76,17 @@ class ChamberReference:
         if self._cache is not None and self._cache[0] == key:
             return self._cache[1]
         bundled, live = _read_json(self.bundled_path), _read_json(self.live_path)
-        merged = {k: live.get(k) or bundled.get(k) for k in self.keys if live.get(k) or bundled.get(k)}
+        merged = {}
+        for k in self.keys:
+            for source, entry in (("live", live.get(k)), ("bundled", bundled.get(k))):
+                if self.usable(entry):
+                    merged[k] = entry
+                    break
+                if entry:
+                    logger.warning(
+                        "Skipping the %s %s entry for %s: measured on %r, not %r",
+                        source, self.name, k, entry.get("statistic"), self.statistic,
+                    )
         if not merged:
             logger.error(
                 "No %s reference (neither %s nor the bundled %s)",
@@ -75,12 +94,6 @@ class ChamberReference:
             )
         self._cache = (key, merged)
         return merged
-
-    def bundled(self) -> dict:
-        """The bundled pre-first-run fallback alone, without the live file
-        layered over it — for a caller that has to skip a live value it
-        can't use (score_calculator._constituent_reference)."""
-        return _read_json(self.bundled_path)
 
     def write(self, chamber: str, reference: dict) -> None:
         """Persist this run's reference for one chamber (read-merge-write:
@@ -111,5 +124,11 @@ class ChamberReference:
 
 LES_REFERENCE = ChamberReference("les_reference")
 FUNDING_REFERENCE = ChamberReference("funding_reference")
-CONSTITUENT_REFERENCE = ChamberReference("constituent_reference")
+# What a Constituent Alignment reference is measured on (v6.14): the
+# unweighted break rate over records with a full-confidence vote count.
+# v6.13's references (content-weighted rate, every member with 3+ votes)
+# are on a different scale and are skipped.
+CONSTITUENT_REFERENCE = ChamberReference(
+    "constituent_reference", statistic="unweighted-break-rate/full-confidence-records",
+)
 PRESIDENT_REFERENCE = ChamberReference("president_reference", keys=("presidents",))

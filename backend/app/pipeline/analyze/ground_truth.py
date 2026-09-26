@@ -212,7 +212,7 @@ def constituent_metrics(
 _PAST_SATURATION_TOLERANCE = round(2 * (1 - SATURATION_QUANTILE), 9)
 
 
-def _past_saturation_share(members: list[dict]) -> float:
+def _past_saturation_share(members: list[dict]) -> float | None:
     """Share of full-confidence members who sit past the saturation
     deviation. The reference defines that deviation as the SATURATION_
     QUANTILE of the full-confidence members it was measured on, so at most
@@ -224,8 +224,8 @@ def _past_saturation_share(members: list[dict]) -> float:
     readable = [f for f in flags if f is not None]
     # Same minimum as every rank check: early in a congress only a few
     # members have enough labeled votes, and 2 of 8 is noise, not a
-    # disagreement between the reference and the votes.
-    return sum(readable) / len(readable) if len(readable) >= MIN_POPULATION else 0.0
+    # disagreement between the reference and the votes. None: not run.
+    return sum(readable) / len(readable) if len(readable) >= MIN_POPULATION else None
 
 
 def evaluate_derived_checks(
@@ -298,11 +298,13 @@ def evaluate_derived_checks(
         ),
     ]
     # Only meaningful, and only counted as a check, when the reference was
-    # measured from this population; a fallback reference from another run
-    # makes no promise about these members' spread.
-    if reference_measured:
+    # measured from this population (a fallback reference from another run
+    # makes no promise about these members' spread) and enough members are
+    # readable.
+    share = _past_saturation_share(members) if reference_measured else None
+    if share is not None:
         integrity_probes.append((
-            _past_saturation_share(members) > _PAST_SATURATION_TOLERANCE,
+            share > _PAST_SATURATION_TOLERANCE,
             "IV", "at most the chamber's out-of-pattern tail past saturation",
             "more {label}s sit past Constituent Alignment's saturation "
             "deviation than its definition allows (it is the chamber's "

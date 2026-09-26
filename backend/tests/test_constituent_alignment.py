@@ -125,25 +125,29 @@ class TestSeatRelativeVotes:
         assert score(record(10), party="D", reference=ref) == 50
         assert score(record(10), party="R", reference=ref) == 75
 
-    def test_a_reference_measured_on_another_statistic_is_not_used(self, monkeypatch):
-        # A v6.13 reference on the /data volume (content-weighted rate, thin
-        # records included) must not set v6.14's saturation point: the
-        # score falls back to the bundled prior (20-point saturation, 10%
-        # swing-seat expectation here) instead.
-        from app.pipeline.analyze import population_reference
+    def test_a_reference_measured_on_another_statistic_is_not_used(self):
+        # A v6.13 reference left on the /data volume (content-weighted rate,
+        # thin records included) must not set v6.14's saturation point: the
+        # score falls back to the bundled prior (conftest: 20-point
+        # saturation, 10% swing-seat expectation).
+        import json
 
         stale = {c: {"expected": {"D": {"a": 0.0, "b": 0.0}}, "deviation_p90": 0.01}
                  for c in ("senate", "house")}
-        monkeypatch.setattr(population_reference.CONSTITUENT_REFERENCE, "load", lambda: stale)
+        CONSTITUENT_REFERENCE.live_path.write_text(json.dumps(stale))
+        CONSTITUENT_REFERENCE._cache = None
         assert score(record(20)) == 75
         # Passed in, unstamped, it isn't used either.
         assert score(record(20), reference=stale) == 75
 
-    def test_no_reference_on_the_current_statistic_scores_neutral(self, monkeypatch):
-        from app.pipeline.analyze import population_reference
+    def test_no_usable_reference_scores_neutral(self):
+        import json
 
-        monkeypatch.setattr(population_reference.CONSTITUENT_REFERENCE, "load", lambda: {})
-        monkeypatch.setattr(population_reference.CONSTITUENT_REFERENCE, "bundled", lambda: {})
+        stale = {c: {"expected": {"D": {"a": 0.0, "b": 0.0}}, "deviation_p90": 0.01}
+                 for c in ("senate", "house")}
+        CONSTITUENT_REFERENCE.live_path.write_text(json.dumps(stale))
+        CONSTITUENT_REFERENCE.bundled_path.write_text(json.dumps(stale))
+        CONSTITUENT_REFERENCE._cache = None
         core = _constituent_alignment_core(record(20), [], {}, state="SW", party="D")
         assert core["score"] == 50 and "no measured expectation" in core["components"][0]["detail"]
 

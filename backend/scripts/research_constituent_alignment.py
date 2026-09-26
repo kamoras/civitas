@@ -28,14 +28,20 @@ Data (public, fetched at pinned commits into --cache):
   - U.S. House primary elections 1956-2010 (Pettigrew, Owen & Wanless;
     Harvard Dataverse doi:10.7910/DVN/26448)
 
-Research-only dependencies, not in requirements.txt:
+The shipped expectation and vote shape are the scorer's own functions
+(score_calculator.compute_constituent_reference, _expected_break_rate,
+_peaked_vote_shape), so the evidence always describes the formula that
+ships. Run it with the backend's environment plus the research-only
+dependencies (not in requirements.txt):
     pip install pandas statsmodels rdata pyreadr
 Run:
     python backend/scripts/research_constituent_alignment.py [--cache DIR]
 """
 
 import argparse
+import contextlib
 import pathlib
+import sys
 import unicodedata
 import urllib.request
 import warnings
@@ -47,6 +53,9 @@ import rdata
 import statsmodels.formula.api as smf
 
 warnings.filterwarnings("ignore")
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+from app.pipeline.analyze import score_calculator  # noqa: E402
 
 RAW = "https://raw.githubusercontent.com"
 DATAVERSE = "https://dataverse.harvard.edu/api/access/datafile"
@@ -339,9 +348,10 @@ def loyalty_tests(m, p):
     S["absdev"] = S.dev_party.abs()
     S["peaked"] = 100 - 100 * (dev.abs() / p90).clip(0, 1)
     S["v614"] = v614_score(dev, p90)
+    S["v613"] = 50 + 50 * (dev / p90).clip(-1, 1)  # same chamber p90: like for like
     print("breaking far above expectation:")
     for k, label in (("absdev", "folded |deviation| (per SD)"), ("peaked", "peaked score (per point)"),
-                     ("v614", "v6.14 score (per point)")):
+                     ("v613", "v6.13 score, chamber p90 (per pt)"), ("v614", "v6.14 score (per point)")):
         r = smf.ols(f"{base} + {k}", S).fit(cov_type="HC1")
         print(f"  {label:30s} {r.params[k]:7.3f} (t={r.tvalues[k]:.1f}) dR2={r.rsquared - b0.rsquared:.4f}")
     r = smf.ols(f"{base} + dev_party + I(dev_party**2)", S).fit(cov_type="HC1")
@@ -439,13 +449,24 @@ def senate_test(p):
 # whole seat (general election, every Senate election 1990-2024) and the
 # member's own party (House primaries 1990-2010).
 
-def v614_score(dev, p90, loyal_scale=4.0):
-    """The shipped v6.14 vote shape (score_calculator._peaked_vote_shape):
-    50 at the expectation, 0 at loyal_scale gaps below, 100 at one gap
-    above, falling back to 0 at three."""
-    x = dev / p90
-    return np.where(x < 0, 50 + 50 * (x / loyal_scale).clip(lower=-1),
-                    np.where(x <= 1, 50 + 50 * x, (100 - 50 * (x - 1)).clip(lower=0)))
+@contextlib.contextmanager
+def loyal_side_scale(k):
+    """Score with a different LOYAL_SIDE_SCALE for the sweep, then restore."""
+    shipped = score_calculator.LOYAL_SIDE_SCALE
+    score_calculator.LOYAL_SIDE_SCALE = k
+    try:
+        yield
+    finally:
+        score_calculator.LOYAL_SIDE_SCALE = shipped
+
+
+def v614_score(dev, p90, loyal_scale=None):
+    """The shipped vote shape (score_calculator._peaked_vote_shape), with
+    the shipped LOYAL_SIDE_SCALE unless one is given for the sweep."""
+    dev = np.asarray(dev, float)
+    p90 = np.broadcast_to(np.asarray(p90, float), dev.shape)  # one per chamber-congress, or a scalar
+    with loyal_side_scale(score_calculator.LOYAL_SIDE_SCALE if loyal_scale is None else loyal_scale):
+        return np.array([score_calculator._peaked_vote_shape(d, s) for d, s in zip(dev, p90)])
 
 
 def ascii_upper(s: pd.Series) -> pd.Series:
@@ -475,24 +496,22 @@ def voteview_breaks(p, chamber_prefix, c):
 
 
 def shipped_expectation(M):
-    """The shipped reference (compute_constituent_reference over
-    constituent_reference_inputs): per party, brk = a + b*al (+ c*min(al, 0)
-    when >= 5 opposed seats), fit on members with at least 20 party-labeled
-    votes (CONSTITUENT_FULL_CONFIDENCE_VOTES), then applied to everyone;
-    the saturation point is those members' 90th-percentile |deviation|."""
-    full = M.n >= 20
-    for _, g in M.groupby("party"):
-        f = g[full.loc[g.index]]
-
-        def design(d):
-            return np.column_stack([np.ones(len(d)), d.alignment]
-                                   + ([np.minimum(d.alignment, 0)] if (f.alignment < 0).sum() >= 5 else []))
-        coef, *_ = np.linalg.lstsq(design(f), f.brk, rcond=None)
-        M.loc[g.index, "exp"] = np.clip(design(g) @ coef, 0, 1)
+    """The shipped reference, from the scorer itself: compute_constituent_
+    reference over members with a full-confidence vote count (the filter
+    constituent_reference_inputs applies), then each member's expected
+    rate and deviation. None when the scorer would not measure one (too
+    few full-confidence members per party)."""
+    full = M[M.n >= score_calculator.CONSTITUENT_FULL_CONFIDENCE_VOTES]
+    ref = score_calculator.compute_constituent_reference(
+        list(zip(full.party, full.alignment, full.brk)))
+    if ref is None:
+        return None
+    M = M.copy()
+    M["exp"] = [score_calculator._expected_break_rate(ref["expected"][p], a)
+                for p, a in zip(M.party, M.alignment)]
     M["dev"] = M.brk - M.exp
-    M["p90"] = M.dev[full].abs().quantile(.9)
+    M["p90"] = ref["deviation_p90"]
     return M
-
 
 def overbreak_terms(S):
     S = S.reset_index(drop=True)
@@ -536,6 +555,8 @@ def senate_general_test(p):
         M["alignment"] = ((M.presR - nat[py]) * 100 * M.sign / 15).clip(-1, 1)
         M["x"] = np.where(M.party == "R", M.presR, 1 - M.presR) * 100
         M = shipped_expectation(M)
+        if M is None:
+            continue
         M["year"] = yr
         c2 = cands[cands.year == yr]
         for i, r in M.iterrows():
@@ -580,6 +601,8 @@ def house_primary_test(p):
         py = max(y for y in nat.index if y < yr)
         M["alignment"] = ((M.prez - np.where(M.party == "R", nat[py], 1 - nat[py]) * 100) / 15).clip(-1, 1)
         M = shipped_expectation(M[M.prez.notna()].reset_index(drop=True))
+        if M is None:
+            continue
         M["fe"] = f"{yr}" + M.party
         rows.append(M)
     A = overbreak_terms(pd.concat(rows, ignore_index=True))

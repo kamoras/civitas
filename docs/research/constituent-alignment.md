@@ -269,9 +269,10 @@ with opposite signs (+2.30 per SD rising in the Senate, −3.02 falling in House
 primaries), so the data gives no basis for an asymmetric shape.
 
 The decline alone costs almost none of the electoral signal the symmetric
-v6.13 score had. With v6.13's loyal side, the peaked score predicts 2004 House
-vote share at ΔR² 0.0354 (t=4.9), against 0.0367 for the symmetric score. The
-shipped loyal side is gentler (section 9), which gives ΔR² 0.0285 (t=4.4).
+v6.13 score had. Both are measured on the same chamber-wide saturation point.
+With v6.13's loyal side, the peaked score predicts 2004 House vote share at
+ΔR² 0.0354 (t=4.9), against 0.0368 for the symmetric score. The shipped loyal
+side is gentler (section 9), which gives ΔR² 0.0285 (t=4.4).
 
 ### 9. How hard to score loyalty
 

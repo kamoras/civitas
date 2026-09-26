@@ -1490,40 +1490,21 @@ def constituent_reference_inputs(members: list[dict]) -> list[tuple[str, float, 
     return out
 
 
-# What a Constituent Alignment reference was measured on. A reference is
-# only comparable with the break rate it is scored against if both use the
-# same statistic, so every reference carries this and one without it (or
-# with an older one) is not used. v6.13 references were measured on the
-# content-weighted rate over every member with 3+ votes; one left on the
-# /data volume would otherwise set v6.14's saturation point on a different
-# scale until the next run replaced it, and indefinitely for any run that
-# falls back to the persisted reference.
-CONSTITUENT_REFERENCE_STATISTIC = "unweighted-break-rate/full-confidence-records"
-
-_stale_reference_warned: set[tuple[str, str]] = set()
+# The statistic Constituent Alignment references are measured on — stamped
+# on every reference compute_constituent_reference produces, and checked by
+# CONSTITUENT_REFERENCE when it reads the persisted and bundled files.
+CONSTITUENT_REFERENCE_STATISTIC = CONSTITUENT_REFERENCE.statistic
 
 
 def _constituent_reference(chamber: str, reference: dict | None) -> dict:
-    """The chamber's reference: the one passed in, else the persisted one,
-    else the bundled pre-first-run prior — the first measured on the current
-    statistic (CONSTITUENT_REFERENCE_STATISTIC). {} when none is."""
-    for source, ref in (
-        ("passed", (reference or {}).get(chamber)),
-        ("persisted", CONSTITUENT_REFERENCE.load().get(chamber)),
-        ("bundled", CONSTITUENT_REFERENCE.bundled().get(chamber)),
-    ):
-        if not ref:
-            continue
-        if ref.get("statistic") == CONSTITUENT_REFERENCE_STATISTIC:
-            return ref
-        if (chamber, source) not in _stale_reference_warned:
-            _stale_reference_warned.add((chamber, source))
-            logger.warning(
-                "Ignoring the %s %s Constituent Alignment reference: measured on %r, "
-                "not the current statistic %r",
-                source, chamber, ref.get("statistic"), CONSTITUENT_REFERENCE_STATISTIC,
-            )
-    return {}
+    """The chamber's reference: the one passed in if it was measured on the
+    current statistic, else the stored one CONSTITUENT_REFERENCE.load()
+    resolves (persisted, then bundled, skipping stale entries). {} when
+    none is usable."""
+    passed = (reference or {}).get(chamber)
+    if CONSTITUENT_REFERENCE.usable(passed):
+        return passed
+    return CONSTITUENT_REFERENCE.load().get(chamber) or {}
 
 
 # How fast the seat-relative vote score falls once a member's break rate
@@ -1551,7 +1532,8 @@ OVER_BREAK_DECLINE = 1.0
 # general-election cost, and its fit weakens as this flattens (dR2 0.0354
 # at 1, 0.0285 at 4). At 1 (v6.13) a senator a few points more loyal than
 # the seat's norm in today's Senate, whose whole saturation deviation is
-# under 4 points, scored 0: 28 of 101 on 2025 Voteview votes; at 4, 4 do.
+# under 4 points, scored 0 (Ossoff, Tina Smith), and 28 of 101 fell below
+# 25 on 2025 Voteview votes; at 4, 4 do.
 # Research note section 9.
 LOYAL_SIDE_SCALE = 4.0
 

@@ -214,6 +214,17 @@ class TestDerivedConsistency:
         failures = check_ground_truth(db_session, reference_measured=True)["failures"]
         assert not any("reference and the votes disagree" in f["rationale"] for f in failures)
 
+    def test_probe_is_not_counted_when_too_few_members_are_readable(self):
+        members = [
+            {"name": f"m{i}", "scores": {}, "raw": {"labeled_votes": 50},
+             "metrics": {"seat_relative_vote": None, "past_saturation": True if i < 3 else None}}
+            for i in range(40)
+        ]
+        measured = evaluate_derived_checks(members, reference_measured=True)
+        unmeasured = evaluate_derived_checks(members, reference_measured=False)
+        assert measured["checked"] == unmeasured["checked"]
+        assert not any("reference and the votes disagree" in f["rationale"] for f in measured["failures"])
+
     def test_probe_allows_exactly_twice_the_tail(self):
         # 2 * (1 - 0.9) is 0.19999999999999996 in floating point; a share of
         # exactly 20% is inside the documented tolerance.
