@@ -1406,5 +1406,24 @@ class TestPdfSniffing:
         from app.pipeline.fetch.house_ptr import _looks_like_pdf
 
         assert not _looks_like_pdf(b"<!doctype html><script>var x='%PDF-1.4';</script>")
+        assert not _looks_like_pdf(b'{"error": "file %PDF-1.4 unavailable"}')
+        assert not _looks_like_pdf(b"Service unavailable: %PDF-1.4")
         assert _looks_like_pdf(b"\xef\xbb\xbf\r\n%PDF-1.4 rest")
-        assert _looks_like_pdf(b"junk\x01\x02%PDF-1.7")
+        assert _looks_like_pdf(b"\x00\x01\xff\xfe%PDF-1.7")
+
+
+class TestReReadKeepsWhatWasKnown:
+    async def test_a_row_that_says_less_doesnt_demote_the_stored_report(self, db_session, rep):
+        """Tonight's index row for the stored amendment has no parseable
+        filing date: it must still be re-read after a parser bump (not cut
+        off by its own original), and keep its date and rank."""
+        amend = {**_house_filing("AMEND", filing_date="2026-06-01"), "filing_type": "A", "prefix": "Hon."}
+        orig = _house_filing("ORIG", filing_date="2026-05-01")
+        await _ingest_house(db_session, {2025: [orig, amend]}, {"AMEND": AnnualReport("Member", [_row()])})
+        assert db_session.query(FinancialDisclosure).one().filing_id == "AMEND"
+        garbled = {**amend, "filing_date": ""}
+        with patch.object(holdings_pipeline, "HOUSE_PARSER_VERSION", 99):
+            _, fetch = await _ingest_house(db_session, {2025: [orig, garbled]},
+                                           {"AMEND": AnnualReport("Member", [_row(), _row()])})
+        stored = db_session.query(FinancialDisclosure).one()
+        assert (stored.filing_id, stored.parser_version, stored.filed_date) == ("AMEND", 99, "2026-06-01")

@@ -90,6 +90,7 @@ class _Stored:
     parsed: bool
     holding_count: int
     amended: bool
+    report_label: str
 
     @property
     def rank(self) -> Rank:
@@ -99,6 +100,8 @@ class _Stored:
 def _stored_reports(db: Session, column) -> dict[str, _Stored]:
     counts = (
         db.query(FinancialHolding.disclosure_id, func.count().label("n"))
+        .join(FinancialDisclosure, FinancialDisclosure.id == FinancialHolding.disclosure_id)
+        .filter(column.isnot(None))  # this chamber's reports only
         .group_by(FinancialHolding.disclosure_id)
         .subquery()
     )
@@ -106,7 +109,7 @@ def _stored_reports(db: Session, column) -> dict[str, _Stored]:
         db.query(
             column, FinancialDisclosure.filing_id, FinancialDisclosure.parser_version,
             FinancialDisclosure.report_year, FinancialDisclosure.filed_date, FinancialDisclosure.parsed,
-            func.coalesce(counts.c.n, 0), FinancialDisclosure.amended,
+            func.coalesce(counts.c.n, 0), FinancialDisclosure.amended, FinancialDisclosure.report_label,
         )
         .outerjoin(counts, counts.c.disclosure_id == FinancialDisclosure.id)
         .filter(column.isnot(None))
@@ -148,14 +151,12 @@ def _keeps_earlier_read(prior: int | None, report: AnnualReport) -> bool:
     return True
 
 
-def _is_older(stored: _Stored | None, filing_id: str, rank: Rank) -> bool:
+def _is_older(stored: _Stored | None, rank: Rank) -> bool:
     """The candidate ranks below what's stored. The stored report's rank is
     kept with it (year, filing date, amended), so this holds even when a
     partial index or search no longer returns the stored filing — what it
-    superseded can't come back. The stored filing is never older than
-    itself, whatever this run's row for it says (a date that failed to
-    parse would otherwise stop it being re-read after a parser bump)."""
-    return stored is not None and filing_id != stored.filing_id and rank < stored.rank
+    superseded can't come back."""
+    return stored is not None and rank < stored.rank
 
 
 def _members_in_order(per_member: dict[str, list[dict]], stored: dict[str, _Stored]) -> list[str]:
@@ -395,11 +396,18 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
         outcome = _Outcome()
         out_of_time = False
         ranks = chamber.ranks(per_member[member_id])
+        # This run's row for the stored filing can say less than what was
+        # stored (a date or title that failed to parse). Then the stored
+        # rank and fields stand: otherwise the filing would sort — and be
+        # re-written — below the reports it superseded.
+        stored_says_more = mine is not None and mine.filing_id in ranks and mine.rank > ranks[mine.filing_id]
+        if stored_says_more:
+            ranks[mine.filing_id] = mine.rank
         for filing in sorted(per_member[member_id], key=lambda f: ranks[chamber.filing_id(f)], reverse=True):
             filing_id = chamber.filing_id(filing)
             if _is_current(mine, filing_id, chamber.parser_version):
                 break  # already have the newest report, as this parser reads it
-            if _is_older(mine, filing_id, ranks[filing_id]):
+            if _is_older(mine, ranks[filing_id]):
                 # Only older reports than the stored one turned up — a year's
                 # index or a page of search results failed to load, or the
                 # best left is a paper amendment of unknowable year. Keep
@@ -438,12 +446,9 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
             health.parsed(report, prior)
             if _keeps_earlier_read(prior, report):
                 break
-            fields, rank = chamber.fields(filing), ranks[filing_id]
-            if mine is not None and mine.filing_id == filing_id:
-                # A re-read of the stored report: never lose what was known
-                # about it to a row that says less this run.
-                fields["filed_date"] = fields["filed_date"] or mine.filed_date
-                rank = max(rank, mine.rank)
+            fields = chamber.fields(filing)
+            if stored_says_more and filing_id == mine.filing_id:
+                fields.update(report_year=mine.report_year, report_label=mine.report_label, filed_date=mine.filed_date)
             inserted += _replace_disclosure(
                 db,
                 owner_filter={chamber.owner_key: member_id},
@@ -451,7 +456,7 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
                 **fields,
                 report=report,
                 parser_version=chamber.parser_version,
-                rank=rank,
+                rank=ranks[filing_id],
             )
             # Per member, so a budget stop or a later failure keeps what's done.
             db.commit()
@@ -708,11 +713,21 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
         still_loads=lambda url: _senate_probe(client, url),
     )
     try:
-        return await _ingest_members(db, chamber, per_senator)
-    finally:
-        # Even when the phase fails its health check: reports replaced and
-        # committed before that would otherwise go without their note.
-        _note_later_paper(db, per_senator)
+        inserted = await _ingest_members(db, chamber, per_senator)
+    except BaseException:
+        # Reports replaced and committed before the failure still get their
+        # note — on a clean session: whatever the failure left half-done is
+        # rolled back, not committed with the note, and a note that can't be
+        # written doesn't replace the failure being raised.
+        db.rollback()
+        try:
+            _note_later_paper(db, per_senator)
+        except Exception:
+            logger.exception("Senate holdings: later-paper notes not updated")
+            db.rollback()
+        raise
+    _note_later_paper(db, per_senator)
+    return inserted
 
 
 async def run_holdings_phases(

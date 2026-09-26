@@ -123,12 +123,13 @@ async def _fetch_index_entries(client: httpx.AsyncClient, db: Session, year: int
 
 
 def _looks_like_pdf(body: bytes) -> bool:
-    """The PDF header, "%PDF-", within the first KB — the spec allows
-    leading bytes before it, and pdfplumber reads such files — in a body
-    that isn't markup. An HTML block or maintenance page can quote the
-    string; it can't be anything but markup from its first character."""
-    head = body[:1024]
-    return b"%PDF-" in head and not head.lstrip(b"\xef\xbb\xbf \t\r\n\x00").startswith(b"<")
+    """The PDF header, "%PDF-", within the first KB, after nothing but
+    binary or whitespace bytes. The spec allows leading bytes before the
+    header, and pdfplumber reads such files; but a text body — an HTML,
+    JSON or plain-text error page — that merely quotes the string has
+    printable text before it."""
+    at = body.find(b"%PDF-", 0, 1024)
+    return at != -1 and all(b < 0x21 or b > 0x7E for b in body[:at])
 
 
 async def download_pdf(client: httpx.AsyncClient, url: str, headers: dict | None = None) -> bytes | None:
