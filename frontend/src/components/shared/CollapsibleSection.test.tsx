@@ -10,6 +10,17 @@ describe("CollapsibleSection", () => {
     expect(screen.getByRole("button", { name: /Holdings/ }).closest("h3")).toBe(heading);
   });
 
+  it("names the heading by its title alone, whatever the summary says", () => {
+    render(
+      <CollapsibleSection title="Holdings" summary="213 assets" source="disclosures-clerk.house.gov">
+        body
+      </CollapsibleSection>,
+    );
+    expect(screen.getByRole("heading", { name: "Holdings" })).toBeTruthy();
+    // The whole header is still the toggle.
+    expect(screen.getByRole("button", { name: /Holdings.*213 assets/ })).toBeTruthy();
+  });
+
   it("keeps the controlled region in the DOM while collapsed, and mounts the body only when open", () => {
     render(<CollapsibleSection title="Holdings">body text</CollapsibleSection>);
     const toggle = screen.getByRole("button", { name: /Holdings/ });

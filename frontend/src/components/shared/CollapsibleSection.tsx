@@ -59,6 +59,7 @@ export default function CollapsibleSection({
   const open = controlledOpen ?? uncontrolledOpen;
   const setOpen = onOpenChange ?? setUncontrolledOpen;
   const contentId = useId();
+  const titleId = useId();
   const Heading = useContext(SectionHeadingLevel);
 
   if (!expandable) {
@@ -81,10 +82,12 @@ export default function CollapsibleSection({
   // drops out of the screen-reader heading list. The heading spans the row
   // and the button fills it — title, summary and source together — so the
   // whole header is one click target, as it always was, and the focus ring
-  // outlines exactly that target.
+  // outlines exactly that target. The heading is named by its title alone
+  // (aria-labelledby): the summary beside it is a changing status line, and
+  // a heading list should read the same whether the section is open or not.
   return (
     <div>
-      <Heading className={`text-lg ${titleColor} mb-3`}>
+      <Heading className={`text-lg ${titleColor} mb-3`} aria-labelledby={titleId}>
         <button
           type="button"
           onClick={() => setOpen(!open)}
@@ -99,7 +102,7 @@ export default function CollapsibleSection({
             >
               {open ? "−" : "+"}
             </span>
-            {title}
+            <span id={titleId}>{title}</span>
           </span>
           <span className="flex items-center gap-3 font-normal normal-case tracking-normal">
             {!open && summary && (

@@ -1363,3 +1363,26 @@ class TestLapseAndDeadlineEdges:
         with patch.object(holdings_pipeline.time, "monotonic", clock):
             with pytest.raises(RuntimeError, match="no report fetched"):
                 await _ingest_house(db_session, index, {}, on_fetch=hangs)
+
+
+class TestPaperOriginalRank:
+    def test_ranks_at_the_latest_year_it_can_cover(self):
+        """Two years of paper after a CY2023 e-filing: the 2026 paper
+        original covers 2025, and must outrank a later CY2024 amendment."""
+        cy2023 = _senate_filing("e2023", title="Annual Report for CY 2023", filed="2024-05-10")
+        paper = _senate_filing("p", title="Annual Report", filed="2026-05-14", paper=True)
+        amend = _senate_filing("a", title="Annual Report for CY 2024 (Amendment 1)", filed="2026-07-01")
+        ranks = holdings_pipeline._senate_ranks([cy2023, paper, amend])
+        assert ranks[paper["report_url"]] > ranks[amend["report_url"]]
+
+    async def test_a_stored_paper_report_is_re_read_after_a_parser_bump(self, db_session, senator):
+        """However this run ranks it, the stored filing is never older than
+        itself."""
+        e2024 = _senate_filing("e2024", title="Annual Report for CY 2024", filed="2025-05-11")
+        paper = _senate_filing("p", title="Annual Report", filed="2026-05-14", office="Senator", paper=True)
+        await _ingest_senate(db_session, [e2024, paper], {"e2024": [_row()]})
+        assert db_session.query(FinancialDisclosure).one().filing_id == "p"
+        # The dated original has left the search window; the paper now ranks (0, …).
+        with patch.object(holdings_pipeline, "SENATE_PARSER_VERSION", 99):
+            await _ingest_senate(db_session, [paper], {})
+        assert db_session.query(FinancialDisclosure).one().parser_version == 99

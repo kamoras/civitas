@@ -99,6 +99,9 @@ PHASE_CEILING = PREP_BUDGET + FETCH_BUDGET + PROBE_BUDGET
 MIN_ATTEMPTS_FOR_OUTAGE = 5
 
 
+Rank = tuple[int, str, bool]  # (year, filed date, amended): newest first when sorted descending
+
+
 @dataclass
 class _Stored:
     filing_id: str
@@ -111,7 +114,7 @@ class _Stored:
     amended: bool
 
     @property
-    def rank(self) -> tuple[int, str, bool]:
+    def rank(self) -> Rank:
         return (self.rank_year or 0, self.filed_date or "", self.amended)
 
 
@@ -167,15 +170,14 @@ def _keeps_earlier_read(prior: int | None, report: AnnualReport) -> bool:
     return True
 
 
-Rank = tuple[int, str, bool]  # (year, filed date, amended): newest first when sorted descending
-
-
-def _is_older(stored: _Stored | None, rank: Rank) -> bool:
+def _is_older(stored: _Stored | None, filing_id: str, rank: Rank) -> bool:
     """The candidate ranks below what's stored. The stored report's own
     rank was kept with it, so this holds even when a partial index or
     search no longer returns the stored filing — what it superseded can't
-    come back."""
-    return stored is not None and rank < stored.rank
+    come back. The stored filing itself is never older than itself, however
+    this run happens to rank it (a paper report's rank depends on which
+    other filings the search returned)."""
+    return stored is not None and filing_id != stored.filing_id and rank < stored.rank
 
 
 def _members_in_order(per_member: dict[str, list[dict]], stored: dict[str, _Stored]) -> list[str]:
@@ -420,7 +422,7 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
             filing_id = chamber.filing_id(filing)
             if _is_current(mine, filing_id, chamber.parser_version):
                 break  # already have the newest report, as this parser reads it
-            if _is_older(mine, ranks[filing_id]):
+            if _is_older(mine, filing_id, ranks[filing_id]):
                 # Only older reports than the stored one turned up — a year's
                 # index or a page of search results failed to load, or the
                 # best left is a paper amendment of unknowable year. Keep
@@ -432,17 +434,20 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
             try:
                 report = await chamber.fetch(filing, deadline)
             except _SkipFiling:
-                # Not the filing's fault, so not a reason to fall back to the
-                # member's older one — which, with nothing stored, would be
-                # shown as their latest. They wait for the next run.
+                # The session, not the filing: every other filing of this
+                # member's would lapse the same way. They wait for the next
+                # run. (A filing that fails on its own does fall through, below.)
                 outcome.lapsed()
                 break
             outcome.fetch(report)
             if report is None:
-                # Not fetched this run. Try the member's next filing (the
-                # failed one may not even be theirs — a same-surname
-                # candidate's amendment can rank first); _is_older keeps that
-                # from ever displacing a newer stored report.
+                # Not fetched this run. Try the member's next filing: the
+                # failed one may not even be theirs (a same-surname
+                # candidate's amendment can rank first), and an older report
+                # of theirs is labelled with its own year, so it never passes
+                # for the newer one. The newer one outranks it and is tried
+                # again every run; _is_older keeps a fall-through from ever
+                # displacing a newer stored report.
                 continue
             prior = _prior_count(mine, filing_id)
             if not report.final:
@@ -557,13 +562,15 @@ def _senate_ranks(filings: list[dict]) -> dict[str, Rank]:
 
     A filing whose year isn't stated (a paper filing) ranks below every
     dated one — with one exception. A paper *original* annual report filed
-    after the latest dated original (for year Y), in a year that has
-    already seen Y+1 end, covers a later year than Y: originals are filed
-    once a year, in order, and a calendar year's report can't be filed
-    before that year is over. Whichever year it is, it is newer, so it
-    ranks at Y+1. That year orders it and nothing else: it is never stored
-    or shown (_senate_report_year stays None). A paper amendment can amend
-    any earlier report, so it gets no such rank.
+    in year F, after the latest dated original (for year Y), covers a year
+    after Y (originals are filed once a year, in order) and no later than
+    F-1 (a year's report can't be filed before that year is over). When
+    F-1 > Y it ranks at F-1, the year it almost always covers: a late
+    original for an earlier year ranks too high only against reports for
+    year F-1, all of which are filed after it and still win on filing date.
+    That year orders it and nothing else: it is never shown
+    (_senate_report_year stays None). A paper amendment can amend any
+    earlier report, so it gets no such rank.
     """
     def is_annual_original(f: dict) -> bool:
         title = f.get("title") or ""
@@ -583,7 +590,7 @@ def _senate_ranks(filings: list[dict]) -> dict[str, Rank]:
             year is None and latest is not None and is_annual_original(f)
             and filed > latest[1] and filed[:4].isdigit() and int(filed[:4]) - 1 > latest[0]
         ):
-            year = latest[0] + 1
+            year = int(filed[:4]) - 1
         ranks[f["report_url"]] = (year or 0, filed, is_amendment_title(f.get("title") or ""))
     return ranks
 
