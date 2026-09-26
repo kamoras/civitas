@@ -189,6 +189,9 @@ def _candidate_summary(cand: Candidate, stale_incumbent_ids: frozenset[str] = fr
         # _unopposed_nominees). The page must render the second kind
         # less confidently rather than silently promoting it.
         "confirmed": bool(cand.confirmed_general),
+        # False for a candidate the state's ballot lists who never filed
+        # with the FEC: no FEC page to link, no totals ever coming.
+        "fecFiled": cand.fec_filed,
         "incumbentChallenge": None if cand.id in stale_incumbent_ids else cand.incumbent_challenge,
         "hasRaisedFunds": cand.has_raised_funds,
         "candidateStatus": cand.candidate_status,
@@ -253,6 +256,11 @@ def _unopposed_nominees(
     the page must not present it as a confirmed nominee."""
     source = source_for_state(state) or {}
     if (source.get("advance_count", 1) or 1) > 1:
+        return []
+    # A certified ballot already names everyone on it. A party missing
+    # from it has nobody on the November ballot, so re-admitting an FEC
+    # filer for that party would add someone who is not running.
+    if source.get("general_ballot_complete"):
         return []
     covered = {c.party for c in confirmed}
     coded_incumbents = [c for c in candidates if c.incumbent_challenge == "I"]

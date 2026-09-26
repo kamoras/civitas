@@ -158,10 +158,10 @@ def _parse_totals_pdf(content: bytes) -> list[dict]:
     # after -- unlike Vermont's "keep every real vote in the pool, only
     # refuse to declare a winner without a resolvable name" approach.
     by_seat = {
-        seat: [(n, v) for n, v in ((surname(n), v) for n, v in choices) if n]
+        seat: [(n, v) for n, v in choices if surname(n)]
         for seat, choices in by_seat.items()
     }
-    records = resolve_confirmed_nominees(by_seat, runoff_threshold_pct=None)
+    records = resolve_confirmed_nominees(by_seat, runoff_threshold_pct=None, name_transform=surname)
     return records
 
 

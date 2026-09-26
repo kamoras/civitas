@@ -45,7 +45,7 @@ import re
 import httpx
 
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
-from app.pipeline.fetch.state_candidates_common import normalize_party, pick_nominee, surname
+from app.pipeline.fetch.state_candidates_common import federal_record, normalize_party, pick_nominee, surname
 from app.pipeline.fetch.state_candidates_tabular import (
     MAX_DOWNLOAD_BYTES, _discover_urls, _withheld, _xlsx_rows,
 )
@@ -127,10 +127,9 @@ def _sum_precinct_votes(rows: list[dict]) -> dict[tuple[str, int | None, str], l
 
     choices: dict[tuple[str, int | None, str], list[tuple[str, int]]] = {}
     for (office, district, party, full_name), votes in totals.items():
-        last_name = surname(full_name)
-        if not last_name:
+        if not surname(full_name):
             continue
-        choices.setdefault((office, district, party), []).append((last_name, votes))
+        choices.setdefault((office, district, party), []).append((full_name, votes))
     return choices
 
 
@@ -168,9 +167,7 @@ async def fetch_confirmed_candidates(
     results = []
     for (office, district, party), choices in race_choices.items():
         won = pick_nominee(choices, runoff_threshold_pct=RUNOFF_THRESHOLD_PCT)
-        if won:
-            results.append({
-                "office": office, "district": district,
-                "party": party, "last_name": won[0],
-            })
+        record = federal_record(office, district, party, won[0]) if won else None
+        if record:
+            results.append(record)
     return results

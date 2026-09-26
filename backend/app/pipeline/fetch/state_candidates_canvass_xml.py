@@ -38,7 +38,7 @@ from app.pipeline.fetch.state_candidates_common import (
     normalize_party,
     parse_office,
     pick_nominees,
-    surname,
+    federal_record,
 )
 
 logger = logging.getLogger(__name__)
@@ -207,10 +207,7 @@ async def fetch_confirmed_candidates(
         party = normalize_party(party_code)
         if party is None:
             continue
-        last_name = surname(choice_name, last_first=True)
-        if not last_name:
-            continue
-        results.append({
-            "office": office, "district": district, "party": party, "last_name": last_name,
-        })
+        record = federal_record(office, district, party, choice_name, last_first=True)
+        if record:
+            results.append(record)
     return results

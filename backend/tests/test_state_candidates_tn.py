@@ -50,8 +50,8 @@ class TestSumPrecinctVotes:
     def test_real_majority_winners_resolved(self):
         choices = tn._sum_precinct_votes(ROWS)
         from app.pipeline.fetch.state_candidates_common import pick_nominee
-        assert pick_nominee(choices[("H", 1, "R")], 50.0) == ("Harshbarger", pytest.approx(100.0))
-        assert pick_nominee(choices[("H", 4, "R")], 50.0)[0] == "DesJarlais"
+        assert pick_nominee(choices[("H", 1, "R")], 50.0) == ("Diana Harshbarger", pytest.approx(100.0))
+        assert pick_nominee(choices[("H", 4, "R")], 50.0)[0].endswith("DesJarlais")
 
     def test_real_below_majority_race_is_absent_from_pick_nominee(self):
         # District 4's real Democratic field is a genuine 3-way split
@@ -66,7 +66,7 @@ class TestSumPrecinctVotes:
         # District 1 Republican votes for the same candidate: summing
         # must combine them, not just read the last row seen.
         choices = tn._sum_precinct_votes(ROWS)
-        harshbarger_votes = dict(choices[("H", 1, "R")])["Harshbarger"]
+        harshbarger_votes = dict(choices[("H", 1, "R")])["Diana Harshbarger"]
         precinct_rows = [
             r for r in ROWS
             if r.get("OFFICENAME") == "United States House of Representatives District 1"
@@ -115,7 +115,7 @@ class TestSumPrecinctVotes:
         ]
         choices = tn._sum_precinct_votes(rows)
         names = [n for n, _ in choices[("H", 1, "R")]]
-        assert names == ["Smith"]
+        assert names == ["John Smith"]
         assert ("H", 1, "D") not in choices  # not folded into a phantom D race either
 
     def test_non_federal_rows_are_ignored(self):
@@ -158,7 +158,7 @@ class TestFetchConfirmedCandidates:
         monkeypatch.setattr(tn, "_xlsx_rows", lambda content: ROWS)
         self._patched(monkeypatch, xlsx_content=b"placeholder")
         result = await tn.fetch_confirmed_candidates(None, 2026, "TN", {})
-        assert {"office": "H", "district": 1, "party": "R", "last_name": "Harshbarger"} in result
+        assert {"office": "H", "district": 1, "party": "R", "last_name": "Harshbarger", "display_name": "Diana Harshbarger"} in result
         assert not any(r["district"] == 4 and r["party"] == "D" for r in result)
 
     async def test_no_stages_discovered_returns_none(self, monkeypatch):

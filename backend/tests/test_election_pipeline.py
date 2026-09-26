@@ -259,6 +259,47 @@ class TestSyncRoster:
         oh = db_session.query(Race).filter(Race.id == "2026-SEN-OH-SPECIAL").one()
         assert oh.is_special is True
 
+    def _calendar(self, monkeypatch, senate_states):
+        from app.pipeline.fetch import state_election_dates as dates
+        cache = {"2026-_CALENDAR": {"read": "2026-09-26"}}
+        for st in senate_states:
+            cache[f"2026-{st}"] = {"senate": "2026-11-03"}
+        monkeypatch.setattr(dates, "_cache", cache)
+
+    def test_no_senate_race_where_the_calendar_lists_none(self, db_session, monkeypatch):
+        """NY and HI hold no Senate election in 2026. Serial filers with no
+        money and no FEC candidate status used to mint a 'special
+        election' in each."""
+        self._calendar(monkeypatch, ["GA", "FL", "OH"])
+        raws = [
+            self._raw(candidate_id="S6NY001", state="NY", candidate_status="N"),
+            self._raw(candidate_id="S6HI001", state="HI", candidate_status="N"),
+            self._raw(candidate_id="S6FL001", state="FL"),
+        ]
+        synced = election_pipeline._sync_roster(db_session, 2026, raws)
+
+        assert synced == 1
+        assert {r.id for r in db_session.query(Race)} == {"2026-SEN-FL-SPECIAL"}
+
+    def test_a_phantom_senate_race_already_on_file_is_removed(self, db_session, monkeypatch):
+        db_session.add(Race(id="2026-SEN-NY-SPECIAL", cycle_year=2026, office="S", state="NY",
+                            district=None, is_special=True))
+        db_session.add(Candidate(id="S6NY001", race_id="2026-SEN-NY-SPECIAL", name="SOLOMON, GAVIN",
+                                 party="REP"))
+        db_session.commit()
+        self._calendar(monkeypatch, ["GA"])
+
+        election_pipeline._sync_roster(db_session, 2026, [self._raw()])
+
+        assert {r.id for r in db_session.query(Race)} == {"2026-SEN-GA"}
+        assert db_session.query(Candidate).filter(Candidate.id == "S6NY001").count() == 0
+
+    def test_an_unread_calendar_leaves_the_class_rotation_in_charge(self, db_session, monkeypatch):
+        from app.pipeline.fetch import state_election_dates as dates
+        monkeypatch.setattr(dates, "_cache", {})
+        synced = election_pipeline._sync_roster(db_session, 2026, [self._raw(candidate_id="S6FL001", state="FL")])
+        assert synced == 1
+
     def test_senate_candidate_in_class_state_gets_regular_race(self, db_session):
         # GA's Class II seat IS up in 2026 — a plain race, not a special.
         election_pipeline._sync_roster(db_session, 2026, [self._raw()])

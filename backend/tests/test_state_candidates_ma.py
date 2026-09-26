@@ -39,6 +39,7 @@ per-race fixtures this file actually has, not all 15/2 real districts.
 from pathlib import Path
 
 from app.pipeline.fetch import state_candidates_ma as mam
+from app.pipeline.fetch.state_candidates_common import surname
 
 FIXTURES = Path(__file__).parent
 DISTRICT6 = (FIXTURES / "fixtures_ma_house_d_district6.html").read_text()
@@ -67,6 +68,8 @@ class TestParseElection:
     def test_reads_the_real_contested_district_field(self):
         result = mam._parse_election(DISTRICT6, "172973", 2026, "H")
         district, party, choices = result
+        # The parse keeps printed names; the resolver reduces the winner.
+        choices = [(surname(n), v) for n, v in choices]
         assert district == 6
         assert party == "D"
         assert dict(choices) == {
@@ -76,12 +79,16 @@ class TestParseElection:
 
     def test_reads_the_real_unopposed_district(self):
         district, party, choices = mam._parse_election(DISTRICT2, "172985", 2026, "H")
+        # The parse keeps printed names; the resolver reduces the winner.
+        choices = [(surname(n), v) for n, v in choices]
         assert district == 2
         assert party == "D"
         assert choices == [("McGovern", 80813)]
 
     def test_senate_has_no_district(self):
         district, party, choices = mam._parse_election(SENATE_D, "172905", 2026, "S")
+        # The parse keeps printed names; the resolver reduces the winner.
+        choices = [(surname(n), v) for n, v in choices]
         assert district is None
         assert party == "D"
         # Real data, not assumed: Markey's real primary opponent is Seth
@@ -90,6 +97,8 @@ class TestParseElection:
 
     def test_senate_republican_side_is_unopposed(self):
         district, party, choices = mam._parse_election(SENATE_R, "172906", 2026, "S")
+        # The parse keeps printed names; the resolver reduces the winner.
+        choices = [(surname(n), v) for n, v in choices]
         assert district is None
         assert party == "R"
         assert choices == [("Deaton", 221950)]
@@ -113,6 +122,8 @@ class TestParseElection:
             "</body></html>", '<footer><a title="Other Elections">More</a></footer></body></html>',
         )
         district, party, choices = mam._parse_election(with_trailing_title, "172985", 2026, "H")
+        # The parse keeps printed names; the resolver reduces the winner.
+        choices = [(surname(n), v) for n, v in choices]
         assert district == 2
         assert party == "D"
         assert choices == [("McGovern", 80813)]
@@ -167,10 +178,10 @@ class TestFetchConfirmedCandidates:
             "/172906/": SENATE_R,
         })
         result = await mam.fetch_confirmed_candidates(None, 2026, "MA", {})
-        assert {"office": "H", "district": 6, "party": "D", "last_name": "Koh"} in result
-        assert {"office": "H", "district": 2, "party": "D", "last_name": "McGovern"} in result
-        assert {"office": "S", "district": None, "party": "D", "last_name": "Markey"} in result
-        assert {"office": "S", "district": None, "party": "R", "last_name": "Deaton"} in result
+        assert {"office": "H", "district": 6, "party": "D", "last_name": "Koh", "display_name": "Dan Koh"} in result
+        assert {"office": "H", "district": 2, "party": "D", "last_name": "McGovern", "display_name": "James P. McGovern"} in result
+        assert {"office": "S", "district": None, "party": "D", "last_name": "Markey", "display_name": "Edward J. Markey"} in result
+        assert {"office": "S", "district": None, "party": "R", "last_name": "Deaton", "display_name": "John Deaton"} in result
         assert len(result) == 4
 
     async def test_a_known_primary_date_gates_via_settle_days(self, monkeypatch):
@@ -220,7 +231,7 @@ class TestFetchConfirmedCandidates:
 
         monkeypatch.setattr(mam, "fetch_text_with_retry", fake_text)
         result = await mam.fetch_confirmed_candidates(None, 2026, "MA", {})
-        assert {"office": "H", "district": 6, "party": "D", "last_name": "Koh"} in result
+        assert {"office": "H", "district": 6, "party": "D", "last_name": "Koh", "display_name": "Dan Koh"} in result
         assert len(result) == 1
 
     async def test_every_fetch_failing_returns_none_not_a_healthy_empty(self, monkeypatch):
@@ -239,6 +250,6 @@ class TestFetchConfirmedCandidates:
         })
         # Koh's real 6-way field win (40.9%) falls under a 50% bar.
         result = await mam.fetch_confirmed_candidates(None, 2026, "MA", {"runoff_threshold_pct": 50.0})
-        assert {"office": "H", "district": 6, "party": "D", "last_name": "Koh"} not in result
+        assert {"office": "H", "district": 6, "party": "D", "last_name": "Koh", "display_name": "Dan Koh"} not in result
         # McGovern's real unopposed 99.6% clears any real bar.
-        assert {"office": "H", "district": 2, "party": "D", "last_name": "McGovern"} in result
+        assert {"office": "H", "district": 2, "party": "D", "last_name": "McGovern", "display_name": "James P. McGovern"} in result

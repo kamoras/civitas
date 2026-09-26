@@ -106,6 +106,7 @@ import pdfplumber
 from app.pipeline.fetch.http_utils import fetch_bytes_with_retry, fetch_text_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     DiscoveryFailed,
+    federal_record,
     normalize_party,
     parse_office,
     resolve_confirmed_nominees,
@@ -339,9 +340,9 @@ async def fetch_confirmed_candidates(
                 winner = _parse_rcv_summary(text)
                 if winner is None:
                     raise DiscoveryFailed(f"{label}: RCV summary did not yield a cross-checked winner")
-                last_name = surname(winner, last_first=True)
-                if last_name:
-                    results.append({"office": office, "district": district, "party": party, "last_name": last_name})
+                record = federal_record(office, district, party, winner, last_first=True)
+                if record:
+                    results.append(record)
     except DiscoveryFailed as exc:
         logger.warning("ME results: discovery failed: %s", exc)
         return None

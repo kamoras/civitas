@@ -700,6 +700,11 @@ class Race(Base):
     )
 
 
+# Prefix of a Candidate id that is NOT an FEC candidate_id. FEC ids are a
+# letter and digits ("H6MO01222"), so a colon can never collide with one.
+BALLOT_ONLY_ID_PREFIX = "ballot:"
+
+
 class Candidate(Base):
     """A declared candidate in a Race, sourced from FEC candidate filings.
 
@@ -708,6 +713,13 @@ class Candidate(Base):
     Representative/President already follow with bioguide_id/UCSB-derived
     ids, so this candidate's FEC record can always be looked up directly
     without a separate crosswalk table.
+
+    The one exception is a candidate a state's own source puts on the
+    ballot who never filed with the FEC (a minor-party or independent
+    candidate under the FEC's reporting threshold, typically). They have
+    no FEC id, so their id is BALLOT_ONLY_ID_PREFIX + race + name, and
+    `fec_filed` is False. Without them a certified ballot page showed
+    fewer people than the real ballot — 7 of Louisiana's 41 in 2026.
     """
     __tablename__ = "candidates"
 
@@ -759,6 +771,12 @@ class Candidate(Base):
     updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
 
     race: Mapped["Race"] = relationship(back_populates="candidates")
+
+    @property
+    def fec_filed(self) -> bool:
+        """False for a ballot-only candidate: there is no FEC record to
+        link to, fetch totals for, or describe as "awaiting FEC sync"."""
+        return not self.id.startswith(BALLOT_ONLY_ID_PREFIX)
 
 
 class RaceCoverageItem(Base):

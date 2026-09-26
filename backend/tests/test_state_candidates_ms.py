@@ -73,7 +73,7 @@ class TestParseRecapPdf:
         # Littell, Till); only Colom's real majority survives.
         results = ms._parse_recap_pdf(_DEM_PDF, _THRESHOLD)
         senate = [r for r in results if r["office"] == "S"]
-        assert senate == [{"office": "S", "district": None, "party": "D", "last_name": "Colom"}]
+        assert senate == [{"office": "S", "district": None, "party": "D", "last_name": "Colom", "display_name": "Scott Colom"}]
 
 
 class TestProcessRows:
@@ -94,7 +94,7 @@ class TestProcessRows:
         ]
         results = ms._process_rows(rows, runoff_threshold_pct=None)
         assert results == [
-            {"office": "S", "district": None, "party": "D", "last_name": "Johnson"},
+            {"office": "S", "district": None, "party": "D", "last_name": "Johnson", "display_name": "Alice Johnson"},
         ]
         # Alice's 500 beats Bob's 300 for the single nomination — this
         # also pins that the two rows were correctly kept as two SEPARATE
@@ -111,7 +111,7 @@ class TestProcessRows:
             ["Jane Doe", "Republican", "9000"],
         ]
         results = ms._process_rows(rows, runoff_threshold_pct=None)
-        assert results == [{"office": "H", "district": 1, "party": "R", "last_name": "Doe"}]
+        assert results == [{"office": "H", "district": 1, "party": "R", "last_name": "Doe", "display_name": "Jane Doe"}]
 
     def test_a_candidate_below_the_runoff_threshold_confirms_nobody(self):
         rows = [
@@ -147,8 +147,8 @@ class TestFetchConfirmedCandidates:
             None, 2026, "MS", {"runoff_threshold_pct": _THRESHOLD},
         )
         assert len(result) == 10
-        assert {"office": "S", "district": None, "party": "R", "last_name": "Hyde-Smith"} in result
-        assert {"office": "S", "district": None, "party": "D", "last_name": "Colom"} in result
+        assert {"office": "S", "district": None, "party": "R", "last_name": "Hyde-Smith", "display_name": "Cindy Hyde-Smith"} in result
+        assert {"office": "S", "district": None, "party": "D", "last_name": "Colom", "display_name": "Scott Colom"} in result
 
     async def test_neither_party_published_yet_is_a_healthy_empty_list(self, monkeypatch):
         async def fake_discover(client, year, party_label):
@@ -202,8 +202,8 @@ class TestFetchConfirmedCandidates:
         result = await ms.fetch_confirmed_candidates(
             None, 2026, "MS", {"runoff_threshold_pct": 99.9},
         )
-        assert {"office": "S", "district": None, "party": "R", "last_name": "Hyde-Smith"} not in result
-        assert {"office": "H", "district": 2, "party": "R", "last_name": "Eller"} not in result
+        assert {"office": "S", "district": None, "party": "R", "last_name": "Hyde-Smith", "display_name": "Cindy Hyde-Smith"} not in result
+        assert {"office": "H", "district": 2, "party": "R", "last_name": "Eller", "display_name": "Ron Eller"} not in result
 
 
 class TestDiscoverPdfUrl:
