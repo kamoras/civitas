@@ -56,6 +56,12 @@ Optional, each because a live state needed it:
                                      button (Hawaii's candidate report): the
                                      page's form is posted back with that
                                      button, exactly as a visitor's click does
+  discovery.form_select              {select name: [option texts]} — with
+                                     form_button, the form is posted once per
+                                     option found, chosen by its visible text
+                                     (North Dakota's contest ids change each
+                                     election); a year missing an office (no
+                                     Senate race) skips it, but one must exist
   format.name_last_first             names are printed "BERNING, Nathan M."
   format.html_headings               an HTML page holds one table per office
                                      under a heading (Alaska's <h4>UNITED
@@ -325,10 +331,10 @@ async def fetch_confirmed_candidates(
         return None
 
     if discovery.get("url"):
-        payload = await _download(client, discovery["url"], discovery, year, state)
-        if payload is None:
+        payloads = await _download(client, discovery["url"], discovery, year, state)
+        if payloads is None:
             return None
-        return _records(state, _rows(payload, discovery["url"], fmt) or [], fmt)
+        return _records(state, [row for p in payloads for row in (_rows(p, discovery["url"], fmt) or [])], fmt)
 
     page_url = discovery.get("page_url")
     if discovery.get("index_url") and discovery.get("index_regex"):
@@ -359,23 +365,25 @@ async def fetch_confirmed_candidates(
     for url in urls:
         # Every file is required: a Senate list without its House list is
         # half a ballot, and half a ballot would unconfirm real nominees.
-        payload = await _download(client, url, discovery, year, state)
-        if payload is None:
+        payloads = await _download(client, url, discovery, year, state)
+        if payloads is None:
             return None
-        part = _rows(payload, url, fmt)
-        if not part:
-            logger.warning("%s certified list %s did not parse", state, url)
-            return None
-        rows += part
+        for payload in payloads:
+            part = _rows(payload, url, fmt)
+            if not part:
+                logger.warning("%s certified list %s did not parse", state, url)
+                return None
+            rows += part
     return _records(state, rows, fmt)
 
 
 async def _download(
     client: httpx.AsyncClient, url: str, discovery: dict, year: int, state: str,
-) -> bytes | None:
+) -> list[bytes] | None:
     """The list's bytes: the file itself, or — with form_button — what the
-    page's own export button returns. None when either fetch fails or the
-    page does not name this year's election."""
+    page's own button returns, once per `form_select` choice. None when any
+    fetch fails, the page does not name this year's election, or no choice
+    is on offer."""
     payload = await fetch_bytes_with_retry(client, _rate_limiter, url, f"{state} certified list {year}")
     if payload is None:
         return None
@@ -383,23 +391,48 @@ async def _download(
     if year_regex and not re.search(year_regex.replace("{year}", str(year)), payload.decode("utf-8", "replace")):
         logger.info("%s candidate list does not show the %d election yet", state, year)
         return None
-    if not discovery.get("form_button"):
-        return payload
+    button = discovery.get("form_button")
+    if not button:
+        return [payload]
     forms = lxml_html.fromstring(payload).xpath("//form")
     if not forms:
-        logger.warning("%s candidate list page has no form to export from", state)
+        logger.warning("%s candidate list page has no form to post", state)
         return None
-    data = {
+    form = forms[0]
+    # Posted back as a browser would: every hidden and text input, every
+    # dropdown at its current choice, and the button with its own value.
+    base = {
         field.get("name"): field.get("value") or ""
-        for field in forms[0].xpath(".//input[@name]")
+        for field in form.xpath(".//input[@name]")
         if (field.get("type") or "text").lower() in ("hidden", "text")
     }
-    data[discovery["form_button"]] = ""
-    resp = await fetch_with_retry(
-        client, _rate_limiter, "POST", url, data=data, headers=BROWSER_HEADERS,
-        log_label=f"{state} candidate list export {year}",
-    )
-    return resp.content if resp is not None else None
+    for select in form.xpath(".//select[@name]"):
+        current = select.xpath("./option[@selected]") or select.xpath("./option")
+        if current:
+            base[select.get("name")] = current[0].get("value") or ""
+    pressed = form.xpath(f'.//input[@name="{button}"]')
+    base[button] = (pressed[0].get("value") or "") if pressed else ""
+
+    posts = []
+    for field, texts in (discovery.get("form_select") or {}).items():
+        offered = {
+            " ".join(option.text_content().split()): option.get("value") or ""
+            for option in form.xpath(f'.//select[@name="{field}"]/option')
+        }
+        posts += [{**base, field: offered[text]} for text in texts if text in offered]
+    if discovery.get("form_select") and not posts:
+        logger.warning("%s candidate list offers none of the configured choices", state)
+        return None
+    payloads = []
+    for data in posts or [base]:
+        resp = await fetch_with_retry(
+            client, _rate_limiter, "POST", url, data=data, headers=BROWSER_HEADERS,
+            log_label=f"{state} candidate list {year}",
+        )
+        if resp is None:
+            return None
+        payloads.append(resp.content)
+    return payloads
 
 
 def _records(state: str, rows: list[dict], fmt: dict) -> list[dict] | None:

@@ -992,3 +992,42 @@ async def test_grouped_list_fetch_refuses_what_it_cannot_trust():
     )) is None
     # Configuration missing a key is reported, not guessed.
     assert await run(lambda r: httpx.Response(200), {"discovery": {}, "format": {}}) is None
+@pytest.mark.asyncio
+async def test_a_list_rendered_per_contest_chosen_from_a_dropdown():
+    # North Dakota: candidates render only once a contest is chosen and
+    # searched; the contest's value is a per-election id, so it is chosen
+    # by its visible text, and an office not on this year's ballot (no
+    # Senate race) is skipped rather than failing the list.
+    page = ('<html><h1>{year} General Election Contest/Candidate List</h1><form>'
+            '<input type="hidden" name="__VIEWSTATE" value="vs">'
+            '<select name="contest"><option value="0">All</option>'
+            '<option value="22055">Representative in Congress</option></select>'
+            '<input type="submit" name="search" value="Search"></form></html>')
+    table = ("<table><tr><th>Contest</th><th>First Name</th><th>Last Name</th><th>Party</th></tr>"
+             "<tr><td>Representative in Congress</td><td>Helene</td><td>Neville</td><td>independent nomination</td></tr>"
+             "</table>")
+    posted = []
+
+    def handler(request):
+        if request.url.host == "sos.test":
+            return httpx.Response(200, text='<a href="https://vip.test/candidatelist.aspx?eid=348">list</a>')
+        if request.method == "POST":
+            posted.append(request.content.decode())
+            return httpx.Response(200, text=table)
+        return httpx.Response(200, text=page.replace("{year}", "2026"))
+
+    def source(options):
+        return {
+            "discovery": {"page_url": "https://sos.test/elections",
+                          "link_regex": 'href="(https://vip\\.test/candidatelist\\.aspx\\?eid=\\d+)"',
+                          "year_regex": "{year} General Election Contest/Candidate List",
+                          "form_button": "search", "form_select": {"contest": options}},
+            "format": {"office_column": "Contest", "office_parse": True, "party_column": "Party",
+                       "surname_column": "Last Name", "name_columns": ["First Name", "Last Name"]},
+        }
+
+    async with _client(handler) as client:
+        got = await fetch_certified_table(client, 2026, "ND", source(["Representative in Congress", "United States Senator"]))
+        assert await fetch_certified_table(client, 2026, "ND", source(["United States Senator"])) is None
+    assert posted == ["__VIEWSTATE=vs&contest=22055&search=Search"]
+    assert [(r["office"], r["display_name"], r["party"]) for r in got] == [("H", "Helene Neville", "I")]
