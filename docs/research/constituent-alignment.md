@@ -329,7 +329,7 @@ scores differed by 1.9 points on average under v6.14, against 2.3 under
 v6.13. The sign changed from one Congress to the next, so the shape shows no
 systematic lean toward either party. Averages now sit around 52–55.
 
-The 119th Senate has the widest gap in the series: 6.1 points, D higher.
+The 119th Senate has the widest gap in the series: 6.0 points, D higher.
 Its heaviest breakers past the peak (Murkowski, Collins, Paul) are mostly
 Republicans. In a given Congress, the gap follows who breaks far past the
 norm.

@@ -212,7 +212,7 @@ def constituent_metrics(
 _PAST_SATURATION_TOLERANCE = round(2 * (1 - SATURATION_QUANTILE), 9)
 
 
-def _past_saturation_share(members: list[dict]) -> float | None:
+def _past_saturation_share(members: list[dict]) -> tuple[float, int] | None:
     """Share of full-confidence members who sit past the saturation
     deviation. The reference defines that deviation as the SATURATION_
     QUANTILE of the full-confidence members it was measured on, so at most
@@ -225,7 +225,9 @@ def _past_saturation_share(members: list[dict]) -> float | None:
     # Same minimum as every rank check: early in a congress only a few
     # members have enough labeled votes, and 2 of 8 is noise, not a
     # disagreement between the reference and the votes. None: not run.
-    return sum(readable) / len(readable) if len(readable) >= MIN_POPULATION else None
+    if len(readable) < MIN_POPULATION:
+        return None
+    return sum(readable) / len(readable), len(readable)
 
 
 def evaluate_derived_checks(
@@ -301,8 +303,9 @@ def evaluate_derived_checks(
     # measured from this population (a fallback reference from another run
     # makes no promise about these members' spread) and enough members are
     # readable.
-    share = _past_saturation_share(members) if reference_measured else None
-    if share is not None:
+    probe = _past_saturation_share(members) if reference_measured else None
+    if probe is not None:
+        share, n_readable = probe
         checked += 1
         if share > _PAST_SATURATION_TOLERANCE:
             rationale = (
@@ -313,7 +316,7 @@ def evaluate_derived_checks(
                 "the constituent reference and the votes disagree"
             )
             failures.append({
-                "senator": f"ALL ({n_all} {entity_label})",
+                "senator": f"{round(share * n_readable)} of {n_readable} full-confidence {entity_label}",
                 "dimension": "IV",
                 "score": round(share, 3),
                 "expected": [f"share past saturation <= {_PAST_SATURATION_TOLERANCE:.0%}", None],
@@ -416,19 +419,18 @@ def evaluate_derived_checks(
             (most, most_rest, "greater", "highest-expected"),
             (least, least_rest, "less", "lowest-expected"),
         ):
-            checked += 1
             group_scores = [y for _, y, _ in group]
             rest_scores = [y for _, y, _ in rest]
             if not rest_scores:
                 # A tie spanning the whole population (every member at one
                 # value of the metric) leaves nothing to compare against;
                 # the point-mass check is what speaks to that.
-                checked -= 1
                 logger.info(
                     "Derived checks: %s decile by %s is the whole population (tie) — skipping",
                     side, metric,
                 )
                 continue
+            checked += 1
             mw = scipy_stats.mannwhitneyu(
                 group_scores, rest_scores, alternative=alternative,
             )

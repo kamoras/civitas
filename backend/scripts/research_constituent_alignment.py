@@ -354,7 +354,7 @@ def loyalty_tests(m, p):
     S["neg"] = S.dev_party.clip(upper=0)
     S["absdev"] = S.dev_party.abs()
     S["peaked"] = 100 - 100 * (dev.abs() / p90).clip(0, 1)
-    S["v614"] = v614_score(dev, p90)
+    S["v614"] = v614_score(dev, p90, S.n)
     S["v613"] = 50 + 50 * (dev / p90).clip(-1, 1)  # same chamber p90: like for like
     print("breaking far above expectation:")
     for k, label in (("absdev", "folded |deviation| (per SD)"), ("peaked", "peaked score (per point)"),
@@ -370,10 +370,10 @@ def loyalty_tests(m, p):
           f"beyond it {r.params['pos2']:.2f} (t={r.tvalues['pos2']:.1f}, n={int((S.pos2 > 0).sum())})")
     print("loyal-side scale (gaps below the expectation where the score reaches 0):")
     for k in (1, 2, 4, 8):
-        S["sc"] = v614_score(dev, p90, k)
+        S["sc"] = v614_score(dev, p90, S.n, k)
         r = smf.ols(f"{base} + sc", S).fit(cov_type="HC1")
         print(f"  {k}x: {r.params['sc']:.3f}/pt (t={r.tvalues['sc']:.1f}) dR2={r.rsquared - b0.rsquared:.4f}")
-    S["sc"] = 50.0 + (v614_score(dev, p90) - 50.0) * (dev >= 0)
+    S["sc"] = 50.0 + (v614_score(dev, p90, S.n) - 50.0) * (dev >= 0)
     r = smf.ols(f"{base} + sc", S).fit(cov_type="HC1")
     print(f"  loyalty held at 50: {r.params['sc']:.3f}/pt (t={r.tvalues['sc']:.1f}) dR2={r.rsquared - b0.rsquared:.4f}")
     return hr
@@ -456,12 +456,15 @@ def senate_test(p):
 # whole seat (general election, every Senate election 1990-2024) and the
 # member's own party (House primaries 1990-2010).
 
-def v614_score(dev, p90, loyal_scale=None):
-    """The shipped vote shape (score_calculator._peaked_vote_shape), with
-    the shipped LOYAL_SIDE_SCALE unless one is given for the sweep."""
+def v614_score(dev, p90, n, loyal_scale=None):
+    """The shipped vote component: score_calculator._peaked_vote_shape (with
+    the shipped LOYAL_SIDE_SCALE unless one is given for the sweep), shrunk
+    toward 50 by vote count exactly as seat_relative_vote_score does."""
     dev = np.asarray(dev, float)
     p90 = np.broadcast_to(np.asarray(p90, float), dev.shape)  # one per chamber-congress, or a scalar
-    return np.array([score_calculator._peaked_vote_shape(d, s, loyal_scale) for d, s in zip(dev, p90)])
+    n = np.broadcast_to(np.asarray(n, float), dev.shape)
+    shape = np.array([score_calculator._peaked_vote_shape(d, s, loyal_scale) for d, s in zip(dev, p90)])
+    return 50 + (shape - 50) * np.minimum(n / score_calculator.CONSTITUENT_FULL_CONFIDENCE_VOTES, 1)
 
 
 def ascii_upper(s: pd.Series) -> pd.Series:
@@ -552,7 +555,7 @@ def senate_general_test(p):
         M = shipped_expectation(M)
         if M is None:
             continue
-        v14, v13 = v614_score(M.dev, M.p90), 50 + 50 * (M.dev / M.p90).clip(-1, 1)
+        v14, v13 = v614_score(M.dev, M.p90, M.n), 50 + 50 * (M.dev / M.p90).clip(-1, 1)
         party_means.append({"senate": c, **{
             f"{party} {v}": round(float(x[(M.party == party).values].mean()), 1)
             for party in ("D", "R") for v, x in (("v6.13", v13.values), ("v6.14", v14))}})
@@ -581,7 +584,7 @@ def senate_general_test(p):
     print(" loyal-side scale (gaps below the expectation where the score reaches 0):")
     b0 = smf.ols("own ~ x + I(x**2) + C(fe)", S).fit()
     for k in (1, 2, 4, 8):
-        S["sc"] = v614_score(S.dev, S.p90, k)
+        S["sc"] = v614_score(S.dev, S.p90, S.n, k)
         r = smf.ols("own ~ x + I(x**2) + C(fe) + sc", S).fit(cov_type="cluster", cov_kwds={"groups": S.gid})
         print(f"  {k}x: {r.params['sc']:.3f}/pt (t={r.tvalues['sc']:.1f}) dR2={r.rsquared - b0.rsquared:.4f}")
 

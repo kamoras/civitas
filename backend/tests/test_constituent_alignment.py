@@ -140,6 +140,22 @@ class TestSeatRelativeVotes:
         # Passed in, unstamped, it isn't used either.
         assert score(record(20), reference=stale) == 75
 
+    def test_setting_the_statistic_drops_what_was_loaded_under_the_old_one(self):
+        # A load() before score_calculator set the stamp must not keep a
+        # stale entry usable.
+        import json
+
+        stale = {"senate": {"expected": {"D": {"a": 0.0, "b": 0.0}}, "deviation_p90": 0.01}}
+        CONSTITUENT_REFERENCE.live_path.write_text(json.dumps(stale))
+        stamp = CONSTITUENT_REFERENCE.statistic
+        try:
+            CONSTITUENT_REFERENCE.statistic = None
+            assert CONSTITUENT_REFERENCE.load()["senate"]["deviation_p90"] == 0.01
+            CONSTITUENT_REFERENCE.statistic = stamp
+            assert CONSTITUENT_REFERENCE.load()["senate"]["deviation_p90"] == 0.2  # bundled
+        finally:
+            CONSTITUENT_REFERENCE.statistic = stamp
+
     def test_no_usable_reference_scores_neutral(self):
         import json
 

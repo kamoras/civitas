@@ -58,11 +58,22 @@ class ChamberReference:
         # equals this: a reference measured on a different statistic (left
         # on /data by an older release) is skipped, falling back to the
         # bundled entry, rather than scored against on the wrong scale.
-        self.statistic = statistic
+        self._statistic = statistic
         self.live_path = _LIVE_DIR / f"{name}.json"
         self.bundled_path = _BUNDLED_DIR / f"{name}.json"
         self._cache: tuple[tuple[float | None, float | None], dict] | None = None
         self._warned: set[tuple[str, str, str | None]] = set()
+
+    @property
+    def statistic(self) -> str | None:
+        return self._statistic
+
+    @statistic.setter
+    def statistic(self, value: str | None) -> None:
+        # Setting it changes which entries load() accepts, so drop anything
+        # loaded under the old value.
+        self._statistic = value
+        self._cache = None
 
     def usable(self, entry: dict | None) -> bool:
         """Whether one chamber's entry can be scored against."""

@@ -281,6 +281,8 @@ class TestDerivedConsistency:
         assert len(probe) == 1 and probe[0]["dimension"] == "IV"
         # The record carries the share found and the threshold, not a bare 0.
         assert probe[0]["score"] > 0.2 and "20%" in probe[0]["expected"][0]
+        # Labelled with the members it counted, not the whole chamber.
+        assert "full-confidence senators" in probe[0]["senator"]
 
     def test_probe_skipped_when_the_reference_was_not_measured_this_run(self, db_session, monkeypatch):
         # A fallback reference (too few members to measure one this run)

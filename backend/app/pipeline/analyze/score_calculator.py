@@ -1588,19 +1588,22 @@ def _seat_vote_expectation(
     effective_party: str | None,
     district: int | None,
     reference: dict | None,
-) -> tuple[float, float | None, float | None]:
-    """(seat alignment, expected break rate, saturation deviation) for a
-    member, the last two None when the chamber has no measured expectation
-    for their party. The single derivation both the score
-    (_constituent_alignment_core) and the gate (seat_break_deviation)
-    read, so they can't disagree about who is past saturation."""
+) -> tuple[float, float | None, float | None, bool]:
+    """(seat alignment, expected break rate, saturation deviation, whether
+    the reference was measured) for a member; expected and saturation are
+    None when the chamber has no usable expectation for their party, and
+    'measured' is False for the bundled preset prior (no member count).
+    The single derivation both the score (_constituent_alignment_core) and
+    the gate (seat_break_deviation) read, from one resolution of the
+    reference, so they can't disagree about who is past saturation."""
     alignment = _signed_state_alignment(state, party, effective_party=effective_party, district=district)
     ref = _constituent_reference(_chamber_of(district), reference)
     fit = (ref.get("expected") or {}).get(effective_party or party)
     scale = ref.get("deviation_p90")
+    measured = ref.get("n") is not None
     if fit is None or not scale:
-        return alignment, None, None
-    return alignment, _expected_break_rate(fit, alignment), float(scale)
+        return alignment, None, None, measured
+    return alignment, _expected_break_rate(fit, alignment), float(scale), measured
 
 
 def seat_break_deviation(
@@ -1616,7 +1619,7 @@ def seat_break_deviation(
     party — the two numbers the seat-relative vote score is a function of.
     The ground-truth gate reads them through here so it judges members on
     exactly the expectation the score used."""
-    _, expected, scale = _seat_vote_expectation(state, party, effective_party, district, reference)
+    _, expected, scale, _ = _seat_vote_expectation(state, party, effective_party, district, reference)
     if expected is None:
         return None
     return break_rate - expected, scale
@@ -1728,7 +1731,7 @@ def _constituent_alignment_core(
     contract as _funding_independence_core above."""
     effective_party = voting_record.get("effectiveParty", party)
     eval_party = effective_party or party
-    alignment, expected, deviation_scale = _seat_vote_expectation(
+    alignment, expected, deviation_scale, measured = _seat_vote_expectation(
         state, party, effective_party, district, reference,
     )
     chamber = _chamber_of(district)
@@ -1764,9 +1767,8 @@ def _constituent_alignment_core(
     else:
         deviation = break_rate - expected
         party_score = seat_relative_vote_score(deviation, deviation_scale, n_party)
-        # A reference with no member count is the bundled hand-set prior,
-        # used before a chamber's first measured run — not a measurement.
-        measured = _constituent_reference(chamber, reference).get("n") is not None
+        # measured is False for the bundled hand-set prior, used before a
+        # chamber's first measured run.
         norm = (
             f"{eval_party} members of this chamber in seats with this lean "
             f"(signal {alignment:+.2f}) break on {expected:.1%}"

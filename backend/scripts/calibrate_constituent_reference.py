@@ -62,6 +62,7 @@ def main() -> None:
         }
     finally:
         db.close()
+    measured_now = False
     for chamber, members in chambers.items():
         ref = compute_constituent_reference(constituent_reference_inputs(members))
         if ref is None:
@@ -80,8 +81,9 @@ def main() -> None:
             continue
         out[chamber] = ref
         out["_provenance"][chamber] = f"measured {out['_as_of']}"
+        measured_now = True
         print(f"{chamber}: {ref}")
-    if not any(v.startswith("measured") for v in out["_provenance"].values()):
+    if not measured_now:
         # Nothing was measured: don't restamp the file as freshly calibrated.
         out["_as_of"] = existing.get("_as_of", out["_as_of"])
     OUT.write_text(json.dumps(out, indent=1, sort_keys=True) + "\n")
