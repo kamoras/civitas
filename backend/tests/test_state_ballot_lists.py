@@ -689,3 +689,41 @@ def test_a_row_with_a_withdrawal_date_is_off_the_ballot():
            "status_column": "Date Withdrawn", "status_values": [""]}
     got = {(r["district"], r["display_name"], r["party"]) for r in parse_certified_rows(rows, fmt)}
     assert got == {(None, "Shawn Johnson", "L"), (None, "Jeffrey Haggit", "C")}
+
+
+@pytest.mark.asyncio
+async def test_a_list_behind_the_pages_own_export_button():
+    # Hawaii: a paged grid whose Export to CSV button returns every row. The
+    # page's form is posted back with that button, and only after the page
+    # names this year's election.
+    page = ('<html><h1>{year} Candidate Report</h1><form><input type="hidden" name="__VIEWSTATE" value="vs">'
+            '<input type="submit" name="export" value=""></form></html>')
+    listing = ('"Contests","Party","BallotName","Status"\r\n'
+               '"U.S. REPRESENTATIVE, DIST I","NONPARTISAN","BERNING, Nathan M.","In General"\r\n'
+               '"U.S. REPRESENTATIVE, DIST II","DEMOCRATIC","LEGER FERNANDEZ, Teresa","In General"\r\n'
+               '"U.S. REPRESENTATIVE, DIST I","DEMOCRATIC","BOOKER, Jennifer","In Primary"\r\n')
+    posted = []
+
+    def handler(request):
+        if request.url.host == "elections.test":
+            return httpx.Response(200, text='<a href="https://portal.test/Report.aspx?elid=94">x</a>')
+        if request.method == "POST":
+            posted.append(request.content.decode())
+            return httpx.Response(200, text=listing, headers={"content-type": "text/csv"})
+        return httpx.Response(200, text=page.replace("{year}", "2026"))
+
+    source = {
+        "discovery": {"page_url": "https://elections.test/reports",
+                      "link_regex": 'href="(https://portal\\.test/Report\\.aspx\\?elid=\\d+)"',
+                      "year_regex": "{year} Candidate Report", "form_button": "export"},
+        "format": {"office_column": "Contests", "office_parse": True, "party_column": "Party",
+                   "name_columns": ["BallotName"], "name_last_first": True,
+                   "status_column": "Status", "status_values": ["In General"]},
+    }
+    async with _client(handler) as client:
+        got = await fetch_certified_table(client, 2026, "HI", source)
+        assert await fetch_certified_table(client, 2028, "HI", source) is None
+    assert "__VIEWSTATE=vs" in posted[0] and "export=" in posted[0]
+    assert {(r["district"], r["display_name"], r["last_name"], r["party"]) for r in got} == {
+        (1, "Nathan M. BERNING", "BERNING", "I"), (2, "Teresa LEGER FERNANDEZ", "LEGER FERNANDEZ", "D"),
+    }
