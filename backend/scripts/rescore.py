@@ -63,7 +63,7 @@ from app.pipeline.analyze.score_calculator import (  # noqa: E402
 )
 from app.pipeline.fetch.fec import select_recent_elections  # noqa: E402
 from app.pipeline.transform.normalize_finance import summarize_election_totals  # noqa: E402
-from app.pipeline.transform.normalize_votes import stored_vote_identity  # noqa: E402
+from app.pipeline.transform.normalize_votes import stored_vote  # noqa: E402
 from app.pipeline.transform.candidate_names import is_candidate_self_donor  # noqa: E402
 
 DB = "file:/data/civitas.db?mode=ro"
@@ -163,12 +163,14 @@ def build_payload(cur, s, search, fin):
         except Exception:
             areas = []
         key_votes.append({
-            **stored_vote_identity(r["id"], r["bill_id"]),
+            **stored_vote(
+                r["id"], r["bill_id"],
+                None if r["voted_with_party"] is None else bool(r["voted_with_party"]),
+            ),
             "vote": r["vote"],
             "policyArea": r["policy_area"] or "PROCEDURAL",
             "policyAreas": areas,
             "partyAlignmentWeight": r["party_alignment_weight"] or 0.0,
-            "votedWithParty": None if r["voted_with_party"] is None else bool(r["voted_with_party"]),
             "stance": r["stance"] or "neutral",
         })
 

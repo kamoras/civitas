@@ -1428,10 +1428,10 @@ def compute_constituent_reference(members: list[tuple[str, float, float]]) -> di
     docs/research/constituent-alignment.md).
 
     deviation_p90 is the SATURATION_QUANTILE of |break rate - expected|
-    across both parties: the saturation scale. The vote score reaches its
-    ends there — 0 for loyalty that far below the expectation, 100 for
-    breaking that far above it — and declines past it on the breaking side
-    (v6.14, OVER_BREAK_DECLINE). Returns None unless BOTH parties have
+    across both parties: the saturation scale. The vote score reaches 100
+    for breaking that far above the expectation and declines past it
+    (OVER_BREAK_DECLINE); it reaches 0 for loyalty LOYAL_SIDE_SCALE times
+    that far below it (v6.14). Returns None unless BOTH parties have
     enough members — one party scored against a measured expectation and
     the other against a fallback would not be comparable (the same
     both-or-neither rule as fetch/voteview.py's ingestion gates).

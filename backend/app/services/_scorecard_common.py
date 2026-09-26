@@ -10,13 +10,11 @@ helpers).
 
 from typing import Any
 
-from app.pipeline.transform.normalize_votes import stored_vote_identity
+from app.pipeline.transform.normalize_votes import stored_vote
 
 
 def _vote_dict(v: Any) -> dict:
-    # Only what the score reads from a vote (party_break_rate): whether it
-    # went with the party, and which roll call it is.
-    return {**stored_vote_identity(v.id, v.bill_id), "votedWithParty": v.voted_with_party}
+    return stored_vote(v.id, v.bill_id, v.voted_with_party)
 
 
 def build_score_breakdown_entity(entity: Any, *, lobbying_donation_attr: str) -> dict:

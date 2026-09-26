@@ -322,6 +322,18 @@ more loyal scores 25; two gaps more disloyal scores 50 and three gaps scores
 0. On 2025 votes, 4 senators fall below 25 instead of 28 (Ossoff 36, Smith
 29).
 
+**Party balance.** The gentler loyal side and the over-break decline make
+the shape lopsided, so each party's average no longer sits at exactly 50.
+Across every Senate from the 101st to the 119th, the parties' average vote
+scores differed by 1.9 points on average under v6.14, against 2.3 under
+v6.13. The sign changed from one Congress to the next, so the shape shows no
+systematic lean toward either party. Averages now sit around 52–55.
+
+The 119th Senate has the widest gap in the series: 6.1 points, D higher.
+Its heaviest breakers past the peak (Murkowski, Collins, Paul) are mostly
+Republicans. In a given Congress, the gap follows who breaks far past the
+norm.
+
 This is a design weight, chosen on where the Senate and primary evidence
 point. The House 2004 fit is the cost: ΔR² falls from 0.0354 to 0.0285, and
 the score still carries a clear signal there (t=4.4).

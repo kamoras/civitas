@@ -62,6 +62,7 @@ class ChamberReference:
         self.live_path = _LIVE_DIR / f"{name}.json"
         self.bundled_path = _BUNDLED_DIR / f"{name}.json"
         self._cache: tuple[tuple[float | None, float | None], dict] | None = None
+        self._warned: set[tuple[str, str, str | None]] = set()
 
     def usable(self, entry: dict | None) -> bool:
         """Whether one chamber's entry can be scored against."""
@@ -82,7 +83,12 @@ class ChamberReference:
                 if self.usable(entry):
                     merged[k] = entry
                     break
-                if entry:
+                warn_key = (source, k, (entry or {}).get("statistic"))
+                if entry and warn_key not in self._warned:
+                    # Once per stale entry per process: a chamber write
+                    # re-reads the file, and the other chamber's stale entry
+                    # is expected until its own run replaces it.
+                    self._warned.add(warn_key)
                     logger.warning(
                         "Skipping the %s %s entry for %s: measured on %r, not %r",
                         source, self.name, k, entry.get("statistic"), self.statistic,

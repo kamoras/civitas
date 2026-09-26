@@ -320,9 +320,13 @@ export default function AboutPage() {
                   chamber&apos;s most out-of-pattern members; a 100 means as far above the expectation as those
                   members, and no further. Because the
                   expectation is fitted separately for each party, a member is only ever compared
-                  with their own party&apos;s members, and both parties&apos; average scores sit
-                  near 50. Which members reach an end in a given update depends on the chamber that
-                  year, and a handful can by chance come mostly from one party.
+                  with their own party&apos;s members. Averages sit a little above 50, because
+                  being more loyal than the norm costs less than breaking far too often. Neither
+                  party is favored by design: across every Senate from 1989 to today the two
+                  parties&apos; averages differed by about 2 points, and which party was higher
+                  changed from one Congress to the next. In a given Congress the gap follows who
+                  breaks far past the norm, which can by chance be mostly one party&apos;s
+                  members.
                 </P>
                 <P>
                   Why loyalty is scored too, and why no special treatment for safe seats: through v6.12 a member

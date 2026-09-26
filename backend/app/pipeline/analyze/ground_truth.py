@@ -66,7 +66,7 @@ from collections import Counter, defaultdict
 
 from scipy import stats as scipy_stats
 
-from app.pipeline.transform.normalize_votes import stored_vote_identity
+from app.pipeline.transform.normalize_votes import stored_vote
 from app.pipeline.analyze.score_calculator import (
     ALGORITHM_VERSION,
     CONSTITUENT_FULL_CONFIDENCE_VOTES,
@@ -466,7 +466,7 @@ def _member_records(db, model, constituent_reference: dict | None = None) -> lis
     persisted one when not given."""
     vote_model, fk_col = _vote_query_for(model)
     # Each member's party-labeled votes, as the dicts party_break_rate reads
-    # (identity from stored_vote_identity), so the gate judges members on
+    # (stored_vote), so the gate judges members on
     # the score's own statistic: its dedupe, its minimum count.
     current = db.query(model).filter(model.is_current.is_(True)).all()
     votes: dict[str, list[dict]] = defaultdict(list)
@@ -476,9 +476,7 @@ def _member_records(db, model, constituent_reference: dict | None = None) -> lis
         .filter(fk_col.in_([m.id for m in current]))
         .all()
     ):
-        votes[member_id].append({
-            **stored_vote_identity(row_id, bill_id), "votedWithParty": with_party,
-        })
+        votes[member_id].append(stored_vote(row_id, bill_id, with_party))
     records = []
     for m in current:
         raised = m.total_raised or 0

@@ -20,7 +20,7 @@ Data (public, fetched at pinned commits into --cache):
     roll-call matrices (Armstrong et al., "Analyzing Spatial Models of
     Choice and Judgment", github.com/uniofessex/asmcjr)
   - 109th Senate roll calls (R package pscl, github.com/cran/pscl)
-  - Every Senate (101st-118th) and House (101st-111th) roll call from
+  - Every Senate (101st-119th) and House (101st-111th) roll call from
     Voteview (voteview.com, Lewis et al.) -- not versioned upstream, so
     the newest congress can shift slightly between downloads
   - MIT Election Data + Science Lab, U.S. Senate 1976-2024 and President
@@ -73,7 +73,7 @@ SOURCES = {
     "president_1976_2024.csv": f"{DATAVERSE}/13887042",
     "house_primaries.dta": f"{DATAVERSE}/4271583?format=original",
 }
-SENATES, HOUSES = range(101, 119), range(101, 112)
+SENATES, HOUSES = range(101, 120), range(101, 112)  # the 119th Senate: party means only (no election yet)
 for _c in SENATES:
     for _k in ("votes", "members"):
         SOURCES[f"S{_c}_{_k}.csv"] = f"{VOTEVIEW}/{_k}/S{_c}_{_k}.csv"
@@ -546,7 +546,7 @@ def senate_general_test(p):
     g["race"] = g.special.astype(str)
     tot = g.groupby(["year", "state_po", "race", "pty"]).candidatevotes.sum().unstack(fill_value=0)
     cands = g.groupby(["year", "state_po", "race", "pty"]).cl.apply(set).reset_index()
-    rows = []
+    rows, party_means = [], []
     for c in SENATES:
         yr, py = 1788 + 2 * c, max(y for y in nat.index if y <= 1786 + 2 * c)
         M = voteview_breaks(p, "S", c)
@@ -557,6 +557,10 @@ def senate_general_test(p):
         M = shipped_expectation(M)
         if M is None:
             continue
+        v14, v13 = v614_score(M.dev, M.p90), 50 + 50 * (M.dev / M.p90).clip(-1, 1)
+        party_means.append({"senate": c, **{
+            f"{party} {v}": round(float(x[(M.party == party).values].mean()), 1)
+            for party in ("D", "R") for v, x in (("v6.13", v13.values), ("v6.14", v14))}})
         M["year"] = yr
         c2 = cands[cands.year == yr]
         for i, r in M.iterrows():
@@ -574,6 +578,11 @@ def senate_general_test(p):
     for label, d in (("1990-2008", S[S.year <= 2008]), ("2010-2024", S[S.year >= 2010])):
         print(f" {label} (N={len(d)}):")
         print_overbreak(overbreak_terms(d), "own", "x + I(x**2) + C(fe)")
+    P = pd.DataFrame(party_means)
+    P["gap v6.13"], P["gap v6.14"] = P["D v6.13"] - P["R v6.13"], P["D v6.14"] - P["R v6.14"]
+    print(" mean vote score by party, every Senate (D minus R = gap):")
+    print(P.round(1).to_string(index=False))
+    print(f"  mean |gap|: v6.13 {P['gap v6.13'].abs().mean():.1f}, v6.14 {P['gap v6.14'].abs().mean():.1f}")
     print(" loyal-side scale (gaps below the expectation where the score reaches 0):")
     b0 = smf.ols("own ~ x + I(x**2) + C(fe)", S).fit()
     for k in (1, 2, 4, 8):

@@ -38,6 +38,14 @@ def stored_vote_identity(row_id: int, bill_id: str) -> dict:
     return {"rcKey": f"row-{row_id}", "billId": bill_id}
 
 
+def stored_vote(row_id: int, bill_id: str, voted_with_party: bool | None) -> dict:
+    """A stored vote row as the dict party_break_rate reads: its identity
+    (stored_vote_identity) and whether it went with the party. The one
+    shape the ground-truth gate, the score-breakdown API and rescore.py
+    rebuild stored votes in."""
+    return {**stored_vote_identity(row_id, bill_id), "votedWithParty": voted_with_party}
+
+
 def house_roll_call_id(rc: dict) -> str:
     """Unique id for one House roll call — the House analog of
     bill_analyzer.recent_roll_call_key, used as both billId and rcKey for

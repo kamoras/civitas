@@ -24,6 +24,7 @@ import pathlib
 
 from app.database import SessionLocal
 from app.models import Representative, Senator
+from app.pipeline.analyze.population_reference import CONSTITUENT_REFERENCE
 from app.pipeline.analyze.score_calculator import (
     compute_constituent_reference,
     constituent_reference_inputs,
@@ -64,8 +65,15 @@ def main() -> None:
     for chamber, members in chambers.items():
         ref = compute_constituent_reference(constituent_reference_inputs(members))
         if ref is None:
+            kept = existing.get(chamber)
+            if not CONSTITUENT_REFERENCE.usable(kept):
+                raise SystemExit(
+                    f"{chamber}: too few full-confidence members to measure, and the previous "
+                    f"entry isn't usable (missing, or measured on {(kept or {}).get('statistic')!r}, "
+                    f"not {CONSTITUENT_REFERENCE.statistic!r}); nothing written"
+                )
             print(f"{chamber}: too few full-confidence members; kept the previous entry")
-            out[chamber] = existing.get(chamber)
+            out[chamber] = kept
             out["_provenance"][chamber] = (existing.get("_provenance") or {}).get(
                 chamber, f"kept from the file as of {existing.get('_as_of', 'unknown')}"
             )
