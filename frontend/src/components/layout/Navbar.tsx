@@ -4,9 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ACTION_CENTER_HREF } from "@/lib/routes";
+import { BSKY_PROFILE_URL } from "@/lib/site";
 import RecordsBand from "./RecordsBand";
 
-const BSKY_PROFILE_URL = "https://bsky.app/profile/civitas-research.org";
 
 const NAV_LINKS: readonly { href: string; label: string; accent?: boolean }[] = [
   { href: ACTION_CENTER_HREF, label: "ACTION CENTER", accent: true },

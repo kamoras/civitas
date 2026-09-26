@@ -407,7 +407,9 @@ Every hour at :15
        │                 + 0.25 × (trending score)
        │         Actionability leads: officials mentioned + similarity to the
        │         ingested civic-document corpus, not hand-authored keywords
-       │         Select the top clusters (MAX_ISSUES = 2)
+       │         Try ranked clusters in order (up to CANDIDATE_POOL = 6)
+       │         until MAX_ISSUES = 2 publish — a cluster that fails a gate
+       │         falls through to the next instead of ending the run
        ▼
   5. EXTRACT ─── The model LOCATES an assertion in one article; it never
        │         writes the sentence. post_composer.py checks both spans
@@ -421,7 +423,10 @@ Every hour at :15
        │         A cluster with no attributable assertion produces NO issue:
        │         MAX_ISSUES is a ceiling, not a quota. Publishing anyway is
        │         what produced "This coverage tracks the race and related
-       │         developments."
+       │         developments." Trying only the top two made the ceiling a
+       │         cap on ATTEMPTS: when both failed a run published nothing,
+       │         and the next hour ranked the same two first again (five
+       │         issues on 2026-09-23, none on 2026-09-26).
        │         Post-composition title deduplication (cosine_sim > 0.92)
        ▼
   6. PERSIST ─── Topic-keyed matching: each unique story maps to one permanent
@@ -485,9 +490,29 @@ An independent pipeline (`app/pipeline/election_pipeline.py`) with no data depen
 
 The FEC roster in phase 1 lists everyone who *filed* — including candidates who already lost their primary months ago. Showing all of them on a ballot page is not a cosmetic problem: it presents losers as options. A second, independent layer answers "who is really on the November ballot" from each state's own election authority.
 
+The whole flow — sources, matching, and what a race page may show — is drawn in [`docs/diagrams/10-elections.md`](docs/diagrams/10-elections.md).
+
 The constraint that shapes it: **no 50 bespoke scrapers.** Adapters are per *vendor*, not per state, so a state whose vendor is already supported is a JSON entry in `backend/app/data/state_candidate_sources.json`, never new code. Only a genuinely different vendor earns a module. **No adapter branches on a state's name** — every URL, slug, election-name pattern and runoff threshold lives in that file, whose own `_contract` key documents which keys each strategy honours. A state that needs a knob nobody has needed yet gets that knob added to its adapter for everyone, never an `if state ==` special case.
 
-Current coverage: **50 states configured across 24 strategies.** Some serve many states (`tabular` 15, `clarity` 3, `tally_enr` 2, `totalvote_enr` 2); many are a single state whose election authority genuinely is unlike anyone else's. Nine states (LA, MI, MO, NV, NY, OH, OK, SC, WI) have no usable per-state source and fall back to `google_civic`, a national source keyed on one fixed, publicly-known address per state — never a visitor's.
+Current coverage: **50 states configured across 30 strategies** (28 as a state's main source, plus two used only as a certified `general_list`). Some serve many states (`tabular` 15, `clarity` 3, `tally_enr` 2, `totalvote_enr` 2, and `certified_table` as four states' general list); many are a single state whose election authority genuinely is unlike anyone else's. Five states (MI, NV, NY, OH, OK) have no usable per-state source yet and fall back to `google_civic`, a national source keyed on one fixed, publicly-known address per state — never a visitor's.
+
+**The certified ballot beats primary results wherever a state publishes it.** Louisiana, South Carolina and Missouri sat on `google_civic` until 2026-09-26, and all three publish their November ballot directly: Louisiana's results portal stages the general election's candidate list (`voterportal`), South Carolina's candidate-tracking system lists it by office (`vrems`), and Missouri's Secretary of State certifies it to the counties as a PDF (`certified_pdf` — a list of names, so none of the name-to-vote misalignment that makes results PDFs unsafe). Maine moved too, for a sharper reason: its results reader was right about the June primary and wrong about the ballot. Graham Platner won the Democratic Senate primary, withdrew in July, and the party nominated Troy Jackson by convention — invisible to primary results, and Platner was still on the page. Maine's certified General Candidate List is now read instead (`certified_table`, a config-driven reader for any state that publishes its list as a spreadsheet). South Carolina had the same shape: Lindsey Graham won the June Republican primary outright, then a special primary and runoff nominated Darline Graham.
+
+**A certified ballot is authoritative; primary results are not.** `confirmed_general` is never cleared for a primary-results state, because a nominee does not stop being one when a later fetch hiccups. For a state whose source *is* its certified ballot (`general_ballot_complete`: TX, NC, SD, LA, SC, MO; and every state with a `general_list`: CO, FL, ME, NJ, TN, VA), anyone confirmed in a race the list covers but not on it is unconfirmed on the next successful fetch — that is what removes a withdrawn nominee instead of showing them beside their replacement. A race the list does not cover keeps what it had, and a failed fetch changes nothing. Those states also get no "unopposed" FEC filers added back, since a party missing from a certified ballot has nobody on it.
+
+**Everyone on the ballot is shown, FEC filing or not.** A candidate a state lists who never filed with the FEC (often a minor-party or independent candidate under the reporting threshold) used to match nothing and vanish — 7 of Louisiana's 41 federal ballot candidates. They now get a ballot-only row (`Candidate.fec_filed` is False; the id is `ballot:` + race + name, never an FEC id) built from the state's printed name, shown with "no FEC filing" instead of money and without an FEC link. It is removed when the state stops listing them or when they file and match a real FEC record. A bare surname or a results file's non-candidate row ("Write-in", "Scattering") never becomes one. To make this possible every strategy now carries the printed name (`display_name`) alongside the surname, through one shared builder (`federal_record`).
+
+**A Senate race exists only if the FEC's own election calendar lists one.** The roster used to treat any Senate filer in a state with no regular seat up as running in a special election, which is right for Florida and Ohio in 2026 and invented one for New York and Hawaii out of serial filers with no money and no FEC candidate status — New York's page showed a Senate race holding nine filings from four people. The FEC election-dates calendar lists exactly the 35 states holding a Senate general in 2026, specials included, and is already read every night; the roster now skips Senate filings anywhere it lists none and removes such races already on file (`senate_election_known`, `_remove_senate_races_nobody_holds`). If the calendar has never been read, the class rotation still decides.
+
+**Every state's ballot is certified by mid-September** (ballots must reach military and overseas voters 45 days before the election), so a certified list exists everywhere; the work is reaching it. Colorado's official general candidate list, Virginia's November federal-offices list and Tennessee's per-office November lists (its Senate race alone has eight independents, 36 across its federal races, all invisible to primary results) are now read the same way as Maine's (`certified_table`, a config-driven spreadsheet reader: which columns hold the office, district, party and name; an optional index hop; status and write-in filters; nothing else read — Virginia's file also carries campaign emails, phones and addresses). The certified list is a `general_list` beside the state's main source, not a replacement for it: it runs first and, when it answers, alone decides the federal races (so a replaced nominee is never confirmed, even for a moment within a run), while the main source keeps supplying statewide, legislative and judicial nominees the list may not cover — replacing Colorado's source outright had silently dropped its statewide nominees — and supplies federal nominees in the weeks before the list is posted. The API labels the page by whichever source actually answered (`BALLOT_BASIS_TIER` marker, read once per request) rather than by the state's config — a primary-results night says "nominees", not "confirmed".
+
+**Florida** cancels a party primary when only one candidate qualifies, so its results file had no rows at all for five districts (8, 10, 18, 26, 28), which fell back to every FEC filer. Its Division of Elections candidate list (`dos_canlist`) gives every federal candidate a status; the ballot is everyone Qualified, plus a seat's sole Unopposed candidate (elected without being printed — Maxwell Frost, FL-10), less declared write-ins: 77 candidates across all 28 districts. **New Jersey** read the July certification of party nominees, which skips independents and predates the amended certifications posted since (NJ-7, NJ-9, NJ-10, Senate); its Official General Election Candidates lists are the ballot as it stands, 38 candidates with 12 independents. Those lists print home addresses beside names, so a row counts as a candidate only when it has one — tested for presence, never read.
+
+**Wisconsin** is behind a Cloudflare challenge on every page, but its document files are served plainly, and the certified canvass of the August primary is one of them (`canvass_summary_pdf`: the state marks each nominee "Winner" itself, so nothing is derived from vote totals; SCATTERING and name-less winner lines name nobody). Its file name changed between cycles, so it is addressed from the primary date with Google Civic as `fallback`.
+
+What the remaining five have in common is not missing data but the door to it: their election sites answer server requests with a bot challenge (Cloudflare for NY and MI; Incapsula for NV; Ohio's every SOS host returned a "maintenance" page), and Oklahoma's results API requires logging in with a credential embedded in its page script. Passing a challenge or using a credential not issued to us is not something this pipeline does. Where the same authority publishes a plain file on an unprotected path — Wisconsin's official canvass is one — that file is the way in, and Wisconsin now reads it.
+
+**Matching a state's record to an FEC candidate** works inside one race and refuses anything still ambiguous. Measured against every configured state on 2026-09-26, it now handles: accents (`Sánchez` vs FEC's `SANCHEZ` had left Linda Sánchez's race showing all eleven filers); a generational suffix on either side (`CLEAVER II, EMANUEL`, Texas's `HAYNES III`); a married surname filed as a given name (`ARENHOLZ, ASHLEY HINSON` for Iowa's Senate nominee); one slip in spelling when the given name agrees too (`DAUGHTERY` for Daugherty); two same-party namesakes, separated by given name (TX-34's Eric and Mayra Flores, AZ-7's Raúl and Adelita Grijalva); and one person filed under two FEC ids (`BERRY, PAUL` twice in MO-1, `ELLESON, JOHN` and `ELLESON, JOHN D.` in IL-9), where the record that raised money is confirmed.
 
 **A runoff can take a results source away.** South Dakota sat on `totalvote_enr` returning nothing for 116 days after its primary, and neither the adapter nor the vendor was broken: that vendor serves whatever election is CURRENT, and SD's 2026-07-28 runoff carried only Governor and Secretary of State, so the June primary's federal results left the view — with no archive or election picker to reach them. Montana and Nebraska run the identical strategy unaffected, because neither held a runoff. SD now reads `vip.sdsos.gov/candidatelist.aspx`, the Secretary of State's list of who is ON the November ballot, which answers `confirmed_general` directly instead of inferring it from vote counts. That also surfaces a general-only independent (Brian Bengs, US Senate) that no primary-results source can structurally see — which is why `normalize_party` gained a `ballot_list` mode: reading "Independent" as a party is wrong for primary results and right for a certified ballot.
 
@@ -514,8 +539,9 @@ about two. The page had been saying those nominees "aren't confirmed
 state's races together with whether its primary has passed, and the state
 page leads with that rather than footnoting it — a state whose ballot is
 certified says nothing at all, because a notice on every page is one
-readers learn to skip. Closing the gap for those eleven states is
-separate work; this only stops the page misdescribing it.
+readers learn to skip. Of those eleven, South Dakota, Louisiana, South
+Carolina and Missouri now read their certified ballots, and New Hampshire
+unlocks on its own once its 21-day settle window passes.
 
 ### Finding your district without being asked where you live
 

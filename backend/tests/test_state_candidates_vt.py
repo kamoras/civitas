@@ -241,8 +241,8 @@ class TestFetchConfirmedCandidates:
     async def test_real_primary_resolves_to_the_real_winners(self, monkeypatch):
         _patched(monkeypatch)
         result = await vtm.fetch_confirmed_candidates(None, 2026, "VT", {"settle_days": 1})
-        assert {"office": "H", "district": None, "party": "D", "last_name": "BALINT"} in result
-        assert {"office": "H", "district": None, "party": "R", "last_name": "MALLOY"} in result
+        assert {"office": "H", "district": None, "party": "D", "last_name": "BALINT", "display_name": "BECCA BALINT"} in result
+        assert {"office": "H", "district": None, "party": "R", "last_name": "MALLOY", "display_name": "GERALD MALLOY"} in result
         assert len(result) == 2
 
     async def test_no_matching_election_confirms_nothing_yet(self, monkeypatch):
@@ -275,7 +275,7 @@ class TestFetchConfirmedCandidates:
         result = await vtm.fetch_confirmed_candidates(
             None, 2026, "VT", {"settle_days": 1, "runoff_threshold_pct": 90.0},
         )
-        assert {"office": "H", "district": None, "party": "D", "last_name": "BALINT"} in result
+        assert {"office": "H", "district": None, "party": "D", "last_name": "BALINT", "display_name": "BECCA BALINT"} in result
         # Malloy's real 4-town R total (367/451 = 81.4%) falls under a 90%
         # bar -- proves the threshold actually withholds a real leader.
-        assert {"office": "H", "district": None, "party": "R", "last_name": "MALLOY"} not in result
+        assert {"office": "H", "district": None, "party": "R", "last_name": "MALLOY", "display_name": "GERALD MALLOY"} not in result

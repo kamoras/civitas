@@ -160,6 +160,7 @@ async def fetch_confirmed_candidates(
                 "district": district,
                 "party": party,
                 "last_name": last,
+                "display_name": clean_display_name(raw_name),
             })
             continue
 

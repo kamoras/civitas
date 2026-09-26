@@ -2,10 +2,12 @@ import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { BillDetail } from "@/types/bill";
 import { usableRecord } from "@/lib/ssrPayload";
+import { absoluteUrl, pageMetadata } from "@/lib/site";
+import { describeBill, legislationJsonLd } from "@/lib/seo";
+import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import BillDetailClient from "./BillDetailClient";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
-const SITE = "https://civitas-research.org";
 
 async function fetchBill(id: string): Promise<BillDetail | null> {
   try {
@@ -27,21 +29,17 @@ export async function generateMetadata({
   const { id } = await params;
   const bill = await fetchBill(id);
 
-  const title = bill ? `${bill.billId} — ${bill.title} — Civitas` : "Bill — Civitas";
-  const description = bill
-    ? `${bill.billId}, sponsored by ${bill.sponsorName} (${bill.sponsorParty}-${bill.sponsorState}). ${bill.latestAction}`.trim()
-    : "Bill detail on Civitas.";
-
-  return {
-    title,
-    description,
-    openGraph: {
-      title,
-      description,
-      url: `${SITE}/bills/${id}`,
-      siteName: "Civitas",
-    },
-  };
+  if (!bill) {
+    return pageMetadata({
+      title: "Bill not found",
+      description: "No record for this bill.",
+      path: `/bills/${encodeURIComponent(id)}`,
+      noindex: true,
+    });
+  }
+  // Canonical from the record, not the request: "/bills/s.1" and
+  // "/bills/S.1" resolve to the same bill and must not index as two pages.
+  return pageMetadata({ ...describeBill(bill), path: `/bills/${encodeURIComponent(bill.billId)}`, type: "article" });
 }
 
 export default async function BillDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -50,5 +48,19 @@ export default async function BillDetailPage({ params }: { params: Promise<{ id:
 
   if (!bill) notFound();
 
-  return <BillDetailClient bill={bill} />;
+  return (
+    <>
+      <JsonLd
+        data={[
+          legislationJsonLd(bill),
+          breadcrumbList([
+            { name: "Home", url: absoluteUrl("/") },
+            { name: "Bills", url: absoluteUrl("/bills") },
+            { name: bill.billId, url: absoluteUrl(`/bills/${encodeURIComponent(bill.billId)}`) },
+          ]),
+        ]}
+      />
+      <BillDetailClient bill={bill} />
+    </>
+  );
 }

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BSKY_PROFILE_URL, GITHUB_REPO_URL } from "@/lib/site";
 
 /**
  * Colophon footer.
@@ -29,12 +30,12 @@ const INTERNAL_LINKS: readonly { href: string; label: string }[] = [
    announcement that every other external link on the site still makes. */
 const EXTERNAL_LINKS: readonly { href: string; label: string; aria: string }[] = [
   {
-    href: "https://bsky.app/profile/civitas-research.org",
+    href: BSKY_PROFILE_URL,
     label: "Bluesky",
     aria: "Civitas on Bluesky (opens in new tab)",
   },
   {
-    href: "https://github.com/kamoras/civitas",
+    href: GITHUB_REPO_URL,
     label: "Source",
     aria: "Civitas source code on GitHub (opens in new tab)",
   },

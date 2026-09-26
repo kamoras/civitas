@@ -13,6 +13,10 @@ export interface CandidateSummary {
    * (backend: _unopposed_nominees). candidateSource is per-race and
    * can't express that, which is why this is per-candidate. */
   confirmed: boolean;
+  /** False for someone the state's certified ballot lists who never filed
+   * with the FEC — no FEC page, and no totals will ever arrive. Optional
+   * because a backend deployed before this field omits it (= filed). */
+  fecFiled?: boolean;
   /** FEC code: "I"=Incumbent, "C"=Challenger, "O"=Open seat. Null if FEC
    * hasn't classified this candidate yet. */
   incumbentChallenge: string | null;
@@ -286,6 +290,9 @@ export interface BallotBasis {
 
 export interface StateBallot {
   state: string;
+  /** Full name ("California"). Optional only because a newer frontend can
+   * briefly run against an older backend mid-rollout — fall back to `state`. */
+  stateName?: string;
   cycleYear: number;
   electionDate: string;
   electionType: string;

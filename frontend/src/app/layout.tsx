@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Archivo, Press_Start_2P, Share_Tech_Mono } from "next/font/google";
 import ConfigProvider from "@/components/providers/ConfigProvider";
 import LoadTimingBeacon from "@/components/LoadTimingBeacon";
+import { HOME_DESCRIPTION, HOME_TITLE, SITE_NAME, SITE_URL } from "@/lib/site";
 import "./globals.css";
 
 // Display and prose. 400 for body, 600 for headings, 800 for the blunt
@@ -26,23 +27,29 @@ const shareTech = Share_Tech_Mono({
   variable: "--font-share-tech",
 });
 
+// Site-wide defaults only. No `alternates.canonical` and no `openGraph.url`
+// here — both are inherited by every route that doesn't set its own, which
+// would declare every page a duplicate of the homepage (see lib/site.ts).
+// Routes set theirs through `pageMetadata()`.
 export const metadata: Metadata = {
-  title: "CIVITAS // PUBLIC RECORD",
-  description:
-    "See how your senators and representatives vote, score their funding independence, and find civic actions — all from public federal data.",
-  keywords: [
-    "congressional voting records",
-    "campaign finance transparency",
-    "political accountability",
-    "civic data",
-    "Senate scorecard",
-    "House scorecard",
-  ],
+  // Without this, Next resolves relative metadata URLs — including the
+  // file-based opengraph-image every route inherits — against
+  // http://localhost:3000 in a self-hosted production build, so every
+  // social preview pointed at an address no crawler can reach.
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: HOME_TITLE,
+    template: `%s — ${SITE_NAME}`,
+  },
+  description: HOME_DESCRIPTION,
+  applicationName: SITE_NAME,
   openGraph: {
-    title: "CIVITAS // PUBLIC RECORD",
-    description:
-      "Congressional scorecards, campaign finance data, and civic actions — all sourced from public federal records.",
+    siteName: SITE_NAME,
+    locale: "en_US",
     type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
   },
 };
 

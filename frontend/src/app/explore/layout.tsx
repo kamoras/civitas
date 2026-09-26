@@ -1,22 +1,12 @@
-import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/site";
 
-export const metadata: Metadata = {
-  title: "EXPLORE // CIVITAS",
+// /explore/[id] sets its own canonical in its layout; see lib/site.ts.
+export const metadata = pageMetadata({
+  title: "Search Congressional Records, Floor Speeches & Executive Orders",
   description:
-    "Search congressional bills, votes, and policy documents by topic. Find which members of Congress are shaping the issues that matter to you.",
-  openGraph: {
-    title: "Explore Congressional Bills & Votes — Civitas",
-    description:
-      "Search bills, votes, and policy documents by topic. Discover how Congress is acting on issues that affect you.",
-    url: "https://civitas-research.org/explore",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Explore Congressional Bills & Votes — Civitas",
-    description:
-      "Search bills, votes, and policy documents by topic — all from public federal records.",
-  },
-};
+    "Search floor speeches, executive orders, federal rules, and bills by topic, and see which members of Congress are shaping each issue — all from public federal records.",
+  path: "/explore",
+});
 
 export default function ExploreLayout({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
