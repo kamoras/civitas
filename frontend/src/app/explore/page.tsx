@@ -15,7 +15,7 @@ import {
   type ExploreResult,
   type ExploreStats,
 } from "@/lib/api";
-import { localDateStr, formatUtcDate } from "@/lib/formatting";
+import { commentDaysLeft, formatUtcDate, isCommentPeriodOpen } from "@/lib/formatting";
 import { chamberColor, chamberBg, chamberLabel } from "@/lib/chamber";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import { useAsyncData } from "@/hooks/useAsyncData";
@@ -59,14 +59,7 @@ const formatDate = (dateStr: string): string =>
   formatUtcDate(dateStr, { year: "numeric", month: "short", day: "numeric" }, "en-US");
 
 function isCommentOpen(result: ExploreResult): boolean {
-  if (!result.commentUrl || !result.commentsCloseOn) return false;
-  return result.commentsCloseOn >= localDateStr();
-}
-
-function daysUntilClose(closeDate: string): number {
-  const close = new Date(closeDate + "T23:59:59");
-  const now = new Date();
-  return Math.max(0, Math.ceil((close.getTime() - now.getTime()) / 86_400_000));
+  return !!result.commentUrl && isCommentPeriodOpen(result.commentsCloseOn);
 }
 
 /**
@@ -98,7 +91,7 @@ function Snippet({ text }: { text: string }) {
 function ResultCard({ result, query }: { result: ExploreResult; query: string }) {
   const detailHref = `/explore/${result.id}?q=${encodeURIComponent(query)}`;
   const commentOpen = isCommentOpen(result);
-  const remaining = commentOpen ? daysUntilClose(result.commentsCloseOn) : 0;
+  const remaining = commentOpen ? commentDaysLeft(result.commentsCloseOn) : 0;
 
   return (
     <div className={`border transition-all ${chamberBg(result.chamber)}`}>

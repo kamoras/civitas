@@ -159,6 +159,45 @@ export function parseUtc(iso: string): Date | null {
 }
 
 /**
+ * Federal comment periods close at 11:59 PM Eastern on their
+ * `commentsCloseOn` date (Regulations.gov states every deadline that way).
+ * Whether a period is open is therefore a question about the calendar date
+ * in Eastern time — not UTC, which shut every period 4-5 hours early, and
+ * not the reader's own zone, which kept it open for a Pacific reader after
+ * the backend had started refusing the submission. The backend asks the
+ * same question (`comment_period_today` in backend/app/time_utils.py).
+ */
+const COMMENT_DEADLINE_TZ = "America/New_York";
+
+/** Today's date in the comment-deadline zone, as `YYYY-MM-DD`. */
+export function commentPeriodToday(now: number | Date = Date.now()): string {
+  // en-CA formats a date as YYYY-MM-DD.
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: COMMENT_DEADLINE_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
+/** True while a period closing on `closeDate` still accepts comments. */
+export function isCommentPeriodOpen(
+  closeDate: string | null | undefined,
+  now: number | Date = Date.now()
+): boolean {
+  return !!closeDate && closeDate >= commentPeriodToday(now);
+}
+
+/** Whole days until a period closes: 0 on the closing day itself (and
+ * after it), 1 the day before. */
+export function commentDaysLeft(closeDate: string, now: number | Date = Date.now()): number {
+  const close = Date.parse(`${closeDate}T00:00:00Z`);
+  const today = Date.parse(`${commentPeriodToday(now)}T00:00:00Z`);
+  if (Number.isNaN(close) || Number.isNaN(today)) return 0;
+  return Math.max(0, Math.round((close - today) / 86_400_000));
+}
+
+/**
  * Days remaining until a comment period closes, phrased for a reader.
  *
  * `asOf` is passed in rather than read from the clock: a countdown computed
@@ -166,9 +205,8 @@ export function parseUtc(iso: string): Date | null {
  * and untestable. Callers read the clock once, when the deadline arrives.
  */
 export function describeDaysLeft(closeDate: string, asOf: number): string {
-  const close = parseUtc(closeDate);
-  if (!close) return "";
-  const diff = Math.ceil((close.getTime() - asOf) / 86400000);
+  if (Number.isNaN(Date.parse(`${closeDate}T00:00:00Z`))) return "";
+  const diff = commentDaysLeft(closeDate, asOf);
   if (diff <= 0) return "closes today";
   if (diff === 1) return "1 day left";
   return `${diff} days left`;

@@ -20,7 +20,7 @@ from app.election_calendar import next_election_day, seats_up_for_year
 from app.fact_diff import new_facts_since
 from app.issue_ids import from_public_id, to_public_id
 from app.pipeline.analyze.score_calculator import compute_overall_score
-from app.time_utils import utcnow
+from app.time_utils import comment_period_today, utcnow
 from app.trending import compute_trending_issue_ids
 from app.models import (
     ActionIssue, ExploreDocument, IssueView, MonitorStatus,
@@ -490,8 +490,14 @@ class PulseVoteRequest(BaseModel):
         return v
 
 
+# Keyed on the same daily-salted HMAC of the IP that visit counting uses
+# (api/visits.py), never the IP itself: a raw address held for a day is
+# exactly the per-visitor identifier §8 of AGENTS.md rules out, and the
+# salt is deleted when the UTC day ends, so yesterday's keys cannot be
+# turned back into addresses. A new salt also means a new key, which makes
+# the dedup "one stance per issue per UTC day" — what the 429 says.
 _pulse_voted: dict[tuple[str, int], float] = {}
-_PULSE_DEDUP_WINDOW = 60.0 * 60 * 24  # 24h — one vote per issue per IP/day
+_PULSE_DEDUP_WINDOW = 60.0 * 60 * 24
 
 
 @router.post("/pulse")
@@ -510,9 +516,11 @@ async def record_pulse_vote(
     which a generic rate limit alone wouldn't (2026-07 audit found this
     endpoint had neither).
     """
-    ip = client_ip(request)
+    from app.api.visits import _daily_salt, _visitor_hash
+
+    salt = await _daily_salt(utcnow().date().isoformat())
     now = time.monotonic()
-    key = (ip, body.issue_id)
+    key = (_visitor_hash(client_ip(request), salt), body.issue_id)
     last = _pulse_voted.get(key)
     if last is not None and now - last < _PULSE_DEDUP_WINDOW:
         raise HTTPException(
@@ -890,7 +898,7 @@ def get_open_comments(response: Response, db: Session = Depends(get_db)):
     # Comment-period deadlines move in days, not minutes — an hour of
     # staleness has no real effect on this list.
     response.headers["Cache-Control"] = "public, max-age=3600"
-    today = utcnow().date().isoformat()
+    today = comment_period_today()
     docs = (
         db.query(ExploreDocument)
         .filter(

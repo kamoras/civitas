@@ -109,7 +109,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     warm_bill_collection_cache()
     loop = asyncio.get_running_loop()
     loop.run_in_executor(None, _preload_embedding_model)
-    asyncio.create_task(_bootstrap_explore())
+    # Held for the lifespan: the event loop keeps only a weak reference to a
+    # task, so an unreferenced one can be garbage-collected mid-ingestion.
+    bootstrap_task = asyncio.create_task(_bootstrap_explore())
 
     # Rebuild the sqlite-vec explore index when missing or built by a
     # different model (the 2026-07 chroma->sqlite-vec migration path, and
@@ -128,6 +130,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
     visit_consumer_task.cancel()
+    bootstrap_task.cancel()
     stop_scheduler()
 
 

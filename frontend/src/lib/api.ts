@@ -947,16 +947,26 @@ export async function submitDocumentComment(
   name: string = "Anonymous",
   organization: string = ""
 ): Promise<CommentSubmitResult> {
-  const params = new URLSearchParams({
-    comment,
-    name: name || "Anonymous",
-  });
-  if (organization) params.set("organization", organization);
-
-  const res = await fetch(`${API_BASE}/explore/${docId}/comments?${params}`, {
+  // A JSON body, never a query string: the URL of every request is written
+  // to nginx's and uvicorn's access logs, and a commenter's name and full
+  // comment text do not belong there. A 5,000-character comment also
+  // outgrows nginx's 8k request line once percent-encoded.
+  const res = await fetch(`${API_BASE}/explore/${docId}/comments`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ comment, name: name || "Anonymous", organization }),
   });
-  return res.json();
+  const data = await res.json().catch(() => null);
+  if (data && typeof data.success === "boolean") return data as CommentSubmitResult;
+  // FastAPI's own errors (the write rate limit's 429, a 422) carry
+  // `detail`, not `success`/`message` — without this the form showed a
+  // failure with no words in it.
+  const detail = data?.detail;
+  return {
+    success: false,
+    message:
+      typeof detail === "string" ? detail : "Submission failed. Please try again.",
+  };
 }
 
 export async function fetchExploreStats(): Promise<ExploreStats> {

@@ -872,7 +872,12 @@ the pending list).
     `await asyncio.to_thread()` to keep the event loop non-blocking
   - Set `Cache-Control` headers on relatively static endpoints (config,
     leaderboards, action issues) to enable browser and nginx proxy caching
-  - Backend runs with `--workers 2` in production to use multiple CPU cores
+  - Backend runs **one** uvicorn worker (`backend/Dockerfile`'s `CMD`); it
+    always has. The write rate limiter, the pulse dedup and the summary
+    cooldown are in-process state that assumes this. Two backend
+    *processes* still meet during a Swarm start-first rollout, when the
+    old and new tasks overlap on the same database, which is what the
+    `init_db` lock and the `IF NOT EXISTS` DDL guard against
   - Nginx applies rate limiting (`limit_req_zone`) and proxy caching for
     Action Center endpoints
 

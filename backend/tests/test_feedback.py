@@ -154,3 +154,31 @@ class TestFeedbackInjectionHardening:
         )
         out = _build_issue_body(body)
         assert "@evil" not in out  # zero-width space inserted after @/#
+
+    def test_page_url_markdown_is_inert(self):
+        """The page URL is client-supplied: a markdown link or image in it
+        must render literally, not as a live link or a tracking beacon."""
+        from app.api.feedback import _build_issue_body, FeedbackRequest
+        body = FeedbackRequest(
+            message="a valid feedback message",
+            category="bug",
+            page_url="[Reset your token](https://evil) ![](https://beacon/x.png)",
+        )
+        line = next(
+            ln for ln in _build_issue_body(body).splitlines() if ln.startswith("**Page:**")
+        )
+        assert line == "**Page:** ` [Reset your token](https://evil) ![](https://beacon/x.png) `"
+
+    def test_page_url_cannot_close_its_code_span(self):
+        from app.api.feedback import _build_issue_body, FeedbackRequest
+        body = FeedbackRequest(
+            message="a valid feedback message",
+            category="bug",
+            page_url="x`` [a](https://evil)\n\n![](https://b)",
+        )
+        line = next(
+            ln for ln in _build_issue_body(body).splitlines() if ln.startswith("**Page:**")
+        )
+        # Delimiter longer than the longest backtick run; the newline that
+        # would have started a new paragraph is flattened.
+        assert line.startswith("**Page:** ``` x``") and line.endswith(" ```")

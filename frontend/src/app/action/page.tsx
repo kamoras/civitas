@@ -11,7 +11,14 @@ import PageMasthead from "@/components/layout/PageMasthead";
 import { fetchActionIssues, fetchOpenComments, OpenCommentItem } from "@/lib/api";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { useUserState } from "@/hooks/useUserState";
-import { describeDaysLeft, formatUtcDate, isNewFact, issueDateLabel, issueRef } from "@/lib/formatting";
+import {
+  commentPeriodToday,
+  describeDaysLeft,
+  formatUtcDate,
+  isNewFact,
+  issueDateLabel,
+  issueRef,
+} from "@/lib/formatting";
 import { PARTY_COLORS, PARTY_BORDER } from "@/lib/partyStyles";
 import StancePulse from "@/components/action/StancePulse";
 import { LogActionButton } from "@/components/action/CivicTracker";
@@ -166,7 +173,7 @@ function HeroIssue({
   isDeepLinked?: boolean;
 }) {
   const heroRef = useRef<HTMLDivElement>(null);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = commentPeriodToday();
   const onMonitorSelect = onNavigate ? () => onNavigate("monitors") : undefined;
 
   useEffect(() => {
