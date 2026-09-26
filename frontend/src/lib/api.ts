@@ -382,7 +382,13 @@ async function fetchHoldings(
   if (options?.category) params.set("category", options.category);
   // Cached: legend toggles and paging back revisit the same URLs, and a
   // member's holdings change at most once a night.
-  return cachedFetch(`${API_BASE}/${CHAMBER_PATH[chamber]}/${memberId}/holdings?${params}`, TTL.MEDIUM);
+  try {
+    return await cachedFetch(`${API_BASE}/${CHAMBER_PATH[chamber]}/${memberId}/holdings?${params}`, TTL.MEDIUM);
+  } catch (e) {
+    // cachedFetch's own message is generic ("Fetch failed: 500"); the
+    // section shows this text, so say which section failed.
+    throw new Error(`Failed to load holdings${e instanceof Error ? ` (${e.message})` : ""}`);
+  }
 }
 
 type HoldingsOptions = { page?: number; perPage?: number; category?: string | null };

@@ -32,7 +32,6 @@ from sqlalchemy.orm import Session
 
 from app.alerting import safe_ops_alert as _alert
 from app.models import FinancialDisclosure, FinancialHolding
-from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.fd_common import AnnualReport
 from app.pipeline.fetch.house_fd import PARSER_VERSION as HOUSE_PARSER_VERSION
 from app.pipeline.fetch.house_fd import fetch_and_parse_annual as fetch_house_annual, fetch_annual_filing_index
@@ -76,14 +75,12 @@ class _Stored:
     parser_version: int | None
     report_year: int | None
     filed_date: str | None
-    unreadable_reason: str | None
 
 
 def _stored_reports(db: Session, column) -> dict[str, _Stored]:
     rows = db.query(
         column, FinancialDisclosure.filing_id, FinancialDisclosure.parser_version,
         FinancialDisclosure.report_year, FinancialDisclosure.filed_date,
-        FinancialDisclosure.unreadable_reason,
     ).filter(column.isnot(None))
     return {owner_id: _Stored(*rest) for owner_id, *rest in rows.all()}
 
@@ -193,38 +190,6 @@ class _SourceHealth:
             raise RuntimeError(f"{self.source}: {self.attempted} members tried, no report fetched")
 
 
-# A filing that has failed this many nightly runs in a row is "known bad" —
-# a report PDF the Clerk lists but 404s, one pdfplumber crashes on, a page
-# eFD won't serve. It is still tried each run (one request), but no longer
-# counts toward _SourceHealth: a handful of permanently broken filings must
-# not read as the source being down, night after night. A success forgets
-# the misses.
-KNOWN_BAD_AFTER = 3
-_MISS_TIER = "holdings_fetch_miss"
-_MISS_MAX_AGE_HOURS = 24 * 60
-
-
-def _miss_count(db: Session, filing_id: str) -> int:
-    cached = api_cache_get(db, _MISS_TIER, filing_id, max_age_hours=_MISS_MAX_AGE_HOURS)
-    return int(cached.get("count", 0)) if cached else 0
-
-
-def _is_known_bad(db: Session, filing_id: str) -> bool:
-    return _miss_count(db, filing_id) >= KNOWN_BAD_AFTER
-
-
-def _record_miss(db: Session, filing_id: str) -> None:
-    api_cache_set(
-        db, _MISS_TIER, filing_id, {"count": _miss_count(db, filing_id) + 1},
-        normal_ttl_hours=_MISS_MAX_AGE_HOURS,
-    )
-
-
-def _clear_miss(db: Session, filing_id: str) -> None:
-    if _miss_count(db, filing_id):
-        api_cache_set(db, _MISS_TIER, filing_id, {"count": 0}, normal_ttl_hours=_MISS_MAX_AGE_HOURS)
-
-
 async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
     """Store each representative's newest annual report. Returns holdings stored."""
     deadline = time.monotonic() + PHASE_BUDGET.total_seconds()
@@ -270,8 +235,7 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
             if time.monotonic() > deadline:
                 out_of_time = True
                 break
-            known_bad = _is_known_bad(db, filing["doc_id"])
-            attempted = attempted or not known_bad
+            attempted = True
             report = await fetch_house_annual(client, db, filing)
             if report is None or not report.final:
                 # Nothing usable this run: not fetched, or a read that may be
@@ -281,9 +245,7 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
                 # failed one may not even be theirs — a same-surname
                 # candidate's amendment can rank first); _is_older keeps that
                 # from ever displacing a newer stored report.
-                _record_miss(db, filing["doc_id"])
                 continue
-            _clear_miss(db, filing["doc_id"])
             fetched = True
             status = (report.filer_status or "").lower()
             if status and status != "member":
@@ -326,15 +288,9 @@ _DATE_RE = re.compile(r"\b(\d{2})/(\d{2})/(\d{4})\b")
 def _senate_rank(filing: dict) -> tuple[int, str]:
     """Newest first: by the year the report states, then by filing date. A
     report whose year isn't stated (a paper filing) ranks below every one
-    that states one, so it's used only when a senator has nothing dated."""
+    that states one, so it's used only when a senator has nothing dated.
+    The same order _is_older compares stored reports in."""
     return (_senate_report_year(filing) or 0, filing.get("filed_date") or "")
-
-
-def _senate_is_older(stored: _Stored | None, filing: dict) -> bool:
-    """_is_older, in _senate_rank's order."""
-    if stored is None:
-        return False
-    return _senate_rank(filing) < (stored.report_year or 0, stored.filed_date or "")
 
 
 def _senate_report_year(filing: dict) -> int | None:
@@ -411,7 +367,7 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
             filing_id = senate_filing_id(filing["report_url"])
             if _is_current(mine, filing_id, SENATE_PARSER_VERSION):
                 break
-            if _senate_is_older(mine, filing):
+            if _is_older(mine, _senate_report_year(filing), filing.get("filed_date")):
                 # The search came back without the stored (newer) report — a
                 # page of results failed to load — or the best candidate left
                 # is a paper amendment of unknowable year. Keep what's stored.
@@ -419,8 +375,7 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
             if time.monotonic() > deadline:
                 out_of_time = True
                 break
-            known_bad = _is_known_bad(db, filing_id)
-            attempted = attempted or not known_bad
+            attempted = True
             try:
                 report = await fetch_senate_annual(client, db, filing)
             except SessionLapsed:
@@ -437,8 +392,7 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
                 try:
                     report = await fetch_senate_annual(client, db, filing)
                 except SessionLapsed:
-                    # Lapsed again straight after re-accepting: a session
-                    # problem, not this filing's — no miss recorded.
+                    # Lapsed again straight after re-accepting: try the next.
                     continue
             if report is None or not report.final:
                 # Nothing usable this run: the filing won't load, or its read
@@ -447,9 +401,7 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
                 # just like that). Stored nowhere: "can't be read" would be a
                 # claim about the report this run can't back. Fall through to
                 # the senator's next-best filing.
-                _record_miss(db, filing_id)
                 continue
-            _clear_miss(db, filing_id)
             fetched = True
             inserted += _replace_disclosure(
                 db,

@@ -125,36 +125,47 @@ class SessionLapsed(Exception):
     redirect to it — meaning the accepted-terms session has lapsed."""
 
 
-def is_terms_page(page_html: str) -> bool:
+def _as_doc(page):
+    """An lxml document from page HTML (or one already parsed — the fetch
+    parses each page once and hands the tree to every check below). None
+    when there's nothing parseable."""
+    if not isinstance(page, str):
+        return page
+    try:
+        return lxml_html.fromstring(page)
+    except Exception:
+        return None
+
+
+def is_terms_page(page) -> bool:
     """True for eFD's statutory-use agreement page, which it serves (or
     redirects to) in place of any report once the accepted-terms session
     has lapsed — the same form accept_terms and the search flow submit."""
-    try:
-        doc = lxml_html.fromstring(page_html)
-    except Exception:
-        return False
-    return bool(doc.xpath('//*[@id="agreement_form"] | //*[@id="agree_statement"]'))
+    doc = _as_doc(page)
+    return doc is not None and bool(doc.xpath('//*[@id="agreement_form"] | //*[@id="agree_statement"]'))
 
 
-def is_report_page(page_html: str) -> bool:
+def is_report_page(page) -> bool:
     """True when the page is a filed report: every electronic report renders
     its content as numbered "Part N." sections (Part 1 honoraria through
     Part 10 compensation), which the terms-agreement and error pages eFD
     serves in a report's place lack."""
-    try:
-        doc = lxml_html.fromstring(page_html)
-    except Exception:
-        return False
-    return any(h.text_content().strip().lower().startswith("part ") for h in doc.xpath("//section//h3"))
+    doc = _as_doc(page)
+    return doc is not None and any(
+        h.text_content().strip().lower().startswith("part ") for h in doc.xpath("//section//h3")
+    )
 
 
-def parse_assets_table(page_html: str) -> list[HoldingRow] | None:
-    """Parse Part 3 (Assets) of an electronic annual report page.
+def parse_assets_table(page) -> list[HoldingRow] | None:
+    """Parse Part 3 (Assets) of an electronic annual report page (HTML or
+    an already-parsed document).
 
     Returns None when the page has no Part 3 assets table (not an
     electronic annual report), [] when the section exists and lists none.
     """
-    doc = lxml_html.fromstring(page_html)
+    doc = _as_doc(page)
+    if doc is None:
+        return None
     section = None
     for candidate in doc.xpath("//section"):
         heading = candidate.xpath(".//h3")
@@ -256,7 +267,8 @@ async def fetch_and_parse_annual(
     resp = await _request_with_retry(client, "GET", filing["report_url"])
     if resp is None:
         return None
-    if _redirects_to_terms(resp) or (resp.status_code == 200 and is_terms_page(resp.text)):
+    doc = _as_doc(resp.text) if resp.status_code == 200 else None
+    if _redirects_to_terms(resp) or (doc is not None and is_terms_page(doc)):
         # A lapsed session: eFD answers with a redirect to its terms page
         # (fetch_with_retry passes 3xx through; the client doesn't follow
         # it) or with the terms page itself. That says nothing about the
@@ -269,7 +281,7 @@ async def fetch_and_parse_annual(
         # report): a failed fetch, costing no terms round trip.
         logger.warning("Senate eFD answered HTTP %s for %s", resp.status_code, filing["report_url"])
         return None
-    if not is_report_page(resp.text):
+    if not is_report_page(doc):
         # A 200 page that is neither the terms page nor a report in the
         # layout this parser knows. It may be a changed layout or a
         # transient error page, and nothing here can tell which: linked as
@@ -278,7 +290,7 @@ async def fetch_and_parse_annual(
         logger.warning("Senate eFD page for %s is not in a recognized report layout", filing["report_url"])
         return AnnualReport(None, None, UNREADABLE_UNRECOGNIZED, final=False)
     try:
-        holdings = parse_assets_table(resp.text)
+        holdings = parse_assets_table(doc)
     except Exception:
         logger.exception("Failed to parse Senate annual report %s", filing["report_url"])
         # Linked as unreadable for now, and retried next run (see

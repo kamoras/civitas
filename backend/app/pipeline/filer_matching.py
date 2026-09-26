@@ -7,21 +7,19 @@ name is ambiguous.
 """
 
 import re
-import unicodedata
 
 from sqlalchemy.orm import Session
 
 from app.models import Representative, Senator
+from app.pipeline.transform.normalize_members import strip_accents
 
 
 def _fold(text: str | None) -> str:
-    """Lowercased, accents stripped (NFD), punctuation to spaces — the same
-    folding AGENTS.md 4a applies to roll-call names, because the disclosure
-    systems print "LUJAN" and "Velazquez" where the roster says "Luján" and
-    "Velázquez", and SQL ILIKE doesn't fold accents."""
-    decomposed = unicodedata.normalize("NFD", text or "")
-    plain = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
-    return " ".join(re.sub(r"[^a-z0-9]+", " ", plain.lower()).split())
+    """Lowercased, accents stripped, punctuation to spaces — the folding
+    AGENTS.md 4a applies to roll-call names (the same strip_accents), because
+    the disclosure systems print "LUJAN" and "Velazquez" where the roster
+    says "Luján" and "Velázquez", and SQL ILIKE doesn't fold accents."""
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", strip_accents(text or "").lower()).split())
 
 
 def _has_surname(name: str, last: str) -> bool:

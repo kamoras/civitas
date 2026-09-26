@@ -30,7 +30,7 @@ from app.database import SessionLocal
 from app.http_client import make_async_client
 from app.models import (
     PipelineRun, HousePipelineRun, PipelineStatus, President, PresidentTrade,
-    Senator, StockTrade, RepStockTrade, StockTradesPipelineRun,
+    Representative, Senator, StockTrade, RepStockTrade, StockTradesPipelineRun,
 )
 from app.pipeline.fetch.house_ptr import fetch_and_parse_ptr as fetch_house_ptr, fetch_ptr_filing_index
 from app.pipeline.fetch.president_ptr import (
@@ -198,14 +198,19 @@ async def _ingest_house(db: Session, client: httpx.AsyncClient) -> int:
 
     current_year = utcnow().year
     inserted = 0
+    matched: dict[tuple, str | None] = {}
     for year in (current_year - 1, current_year):
         filings = await fetch_ptr_filing_index(client, db, year)
         for filing in filings:
             if filing["doc_id"] in existing_rep_filing_ids:
                 continue
-            rep = _match_representative(db, filing["last"], filing["first"], filing["state_district"])
-            if rep is None:
+            filer = (filing["last"], filing["first"], filing["state_district"])
+            if filer not in matched:  # one lookup per filer, not per filing
+                found = _match_representative(db, *filer)
+                matched[filer] = found.id if found is not None else None
+            if matched[filer] is None:
                 continue
+            rep = db.get(Representative, matched[filer])
             rows = await fetch_house_ptr(client, db, filing)
             if not rows:
                 continue

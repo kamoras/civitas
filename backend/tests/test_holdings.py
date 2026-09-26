@@ -819,32 +819,20 @@ class TestReadabilityRules:
         assert db_session.query(FinancialDisclosure).count() == 0
 
 
-class TestKnownBadFilings:
-    async def test_known_bad_filings_stop_counting_toward_the_abort(self, db_session):
-        """Members with nothing stored go first; a handful whose only filing
-        never loads must not abort the phase every night once they're known."""
-        n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE + 1
+class TestOutagesStayVisible:
+    async def test_an_outage_fails_the_phase_every_night_it_lasts(self, db_session):
+        """Nothing may learn to stop counting failures while the source is
+        still down — every night of the outage fails the phase (and alerts)."""
+        n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
         index = {2025: []}
         for i in range(n):
             db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
                                           party="R", is_current=True))
-            index[2025].append(_house_filing(f"BAD{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}"))
+            index[2025].append(_house_filing(f"D{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}"))
         db_session.commit()
-
-        for _night in range(holdings_pipeline.KNOWN_BAD_AFTER):
+        for _night in range(5):
             with pytest.raises(RuntimeError):
                 await _ingest_house(db_session, index, {})
-        # Known bad now: still tried, but no longer an "outage".
-        count, mock_fetch = await _ingest_house(db_session, index, {})
-        assert count == 0
-        assert mock_fetch.call_count == n
-
-    async def test_a_success_forgets_the_misses(self, db_session, rep):
-        for _night in range(holdings_pipeline.KNOWN_BAD_AFTER):
-            await _ingest_house(db_session, {2025: [_house_filing("FLAKY")]}, {})
-        assert holdings_pipeline._is_known_bad(db_session, "FLAKY")
-        await _ingest_house(db_session, {2025: [_house_filing("FLAKY")]}, {"FLAKY": AnnualReport("Member", [_row()])})
-        assert not holdings_pipeline._is_known_bad(db_session, "FLAKY")
 
     async def test_failing_to_re_accept_the_terms_stops_the_phase(self, db_session, senator):
         from app.pipeline.fetch.senate_fd import SessionLapsed
