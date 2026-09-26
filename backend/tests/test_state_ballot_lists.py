@@ -516,3 +516,59 @@ async def test_every_listed_file_is_required():
                          "party_column": "Party", "name_columns": ["Candidate"]}}
     async with _client(handler) as client:
         assert await fetch_certified_table(client, 2026, "TN", source) is None
+
+
+@pytest.mark.asyncio
+async def test_a_certified_general_list_decides_federal_races_over_primary_results(db_session, monkeypatch):
+    # Maine 2026 in miniature: the primary results still name Platner, the
+    # certified list names Jackson. The list runs first and alone decides;
+    # Platner is never confirmed, not even for a moment within the run.
+    async def no_calendar(client, cycle):
+        return {}
+    monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+    monkeypatch.setattr(sc, "configured_states", lambda: {"ME"})
+    monkeypatch.setitem(sc.STRATEGIES, "me_results", AsyncMock(return_value=[_rec("S", None, "D", "Platner", "Graham Platner")]))
+    monkeypatch.setitem(sc.STRATEGIES, "certified_table", AsyncMock(return_value=[_rec("S", None, "D", "Jackson", "Troy D. Jackson")]))
+    _race(db_session, "2026-SEN-ME", "ME")
+    _db_cand(db_session, "S6ME1", "2026-SEN-ME", "PLATNER, GRAHAM", "DEM")
+    _db_cand(db_session, "S6ME2", "2026-SEN-ME", "JACKSON, TROY", "DEM")
+    db_session.commit()
+
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+    flags = {c.id: c.confirmed_general for c in db_session.query(Candidate)}
+    assert flags == {"S6ME1": False, "S6ME2": True}
+    assert elections_api._ballot_complete(db_session, "ME", 2026) is True
+
+
+# --- Florida's candidate list ---
+
+from app.pipeline.fetch.state_candidates_dos_canlist import parse_canlist  # noqa: E402
+
+FL_PAGE = """<html><body>
+<b>United States Senator</b>
+<table class="results"><tr><th>Candidate</th><th>Status</th><th>Primary</th><th>General</th></tr>
+<tr><td><a>Moody</a>, <a>Ashley</a> (REP) *Incumbent</td><td>Qualified</td><td>Won</td><td></td></tr>
+<tr><td>Gleason, Chris (REP)</td><td>Defeated</td><td>Eliminated</td><td></td></tr>
+<tr><td>Gillespie, Neil J. (NPA)</td><td>Qualified</td><td></td><td></td></tr>
+<tr><td>Toulme, Alix Christopher (WRI)</td><td>Qualified</td><td></td><td></td></tr>
+</table>
+<b>United States Representative</b>
+<table class="results"><tr><th>District</th><th>Candidate</th><th>Status</th><th>Primary</th><th>General</th></tr>
+<tr><td>1</td><td>Patronis, Jimmy (REP) *Incumbent</td><td>Qualified</td><td>Won</td><td></td></tr>
+<tr><td></td><td>Valimont, Gay (DEM)</td><td>Qualified</td><td>Unopposed</td><td></td></tr>
+<tr><td></td><td>Barnes, Henry L. "Rick" (DEM)</td><td>Withdrew</td><td></td><td></td></tr>
+<tr><td>10</td><td>Frost, Maxwell Alejandro (DEM) *Incumbent</td><td>Unopposed</td><td>Unopposed</td><td>Unopposed</td></tr>
+</table></body></html>"""
+
+
+def test_florida_list_keeps_the_ballot_and_carries_the_district_forward():
+    got = {(r["office"], r["district"], r["display_name"], r["party"]) for r in parse_canlist(FL_PAGE)}
+    assert got == {
+        ("S", None, "Ashley Moody", "R"),
+        ("S", None, "Neil J. Gillespie", "I"),       # no-party is an ordinary entry
+        ("H", 1, "Jimmy Patronis", "R"),
+        ("H", 1, "Gay Valimont", "D"),               # district carried from the row above
+        ("H", 10, "Maxwell Alejandro Frost", "D"),   # unopposed: the seat's only candidate
+    }
+    # Defeated, withdrawn and declared write-ins are not on the ballot.

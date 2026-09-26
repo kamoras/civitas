@@ -94,6 +94,7 @@ from app.pipeline.fetch.state_candidates_certified_table import fetch_confirmed_
 from app.pipeline.fetch.state_candidates_civic import fetch_confirmed_candidates as _fetch_civic
 from app.pipeline.fetch.state_candidates_ct import fetch_confirmed_candidates as _fetch_ct
 from app.pipeline.fetch.state_candidates_clarity import fetch_confirmed_candidates as _fetch_clarity
+from app.pipeline.fetch.state_candidates_dos_canlist import fetch_confirmed_candidates as _fetch_dos_canlist
 from app.pipeline.fetch.state_candidates_enhanced_voting import (
     fetch_confirmed_candidates as _fetch_enhanced_voting,
 )
@@ -151,6 +152,7 @@ STRATEGIES = {
     "certified_pdf": _fetch_certified_pdf,
     "certified_table": _fetch_certified_table,
     "canvass_summary_pdf": _fetch_canvass_summary_pdf,
+    "dos_canlist": _fetch_dos_canlist,
     "google_civic": _fetch_civic,
     "nh_results": _fetch_nh,
     "enhanced_voting": _fetch_enhanced_voting,
@@ -1000,6 +1002,19 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
             results[state] = {"confirmed": 0, "unmatched": 0, "status": "not_configured"}
             continue
 
+        # A state's certified November list, when it has one, speaks for its
+        # federal races outright (see general_list in the sources file). It
+        # runs FIRST so a nominee the list has replaced is never confirmed
+        # from primary results only to be unconfirmed moments later.
+        general = source.get("general_list")
+        general_records = None
+        if general and STRATEGIES.get(general.get("strategy")):
+            try:
+                general_records = await STRATEGIES[general["strategy"]](client, cycle, state, general)
+            except Exception:
+                logger.exception("Certified general list fetch raised for %s", state)
+                general_records = None
+
         try:
             records = await strategy(client, cycle, state, source)
         except Exception:
@@ -1029,9 +1044,10 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
                 records = await STRATEGIES.get(spare.get("strategy"), _no_strategy)(
                     client, cycle, state, spare,
                 )
-        if records is None:
+        if records is None and general_records is None:
             results[state] = {"confirmed": 0, "unmatched": 0, "status": "fetch_failed"}
             continue
+        records = records or []
 
         # Neither a statewide executive office (Governor, AG, ...) nor a
         # seat in the state legislature has an FEC race to confirm
@@ -1056,14 +1072,24 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
         # from that list (sync_ballot_filings), which is what may speak for
         # candidates this results file cannot see or has gone stale on.
         # Here, it only confirms who the results name.
-        ballot_is_elsewhere = _has_general_filings(source)
-        applied = _apply_ballot(
-            db, cycle, state, records,
-            keep_unlisted=not ballot_is_elsewhere,
-            authoritative=bool(source.get("general_ballot_complete")) and not ballot_is_elsewhere,
-        )
-        if not ballot_is_elsewhere:
-            _record_ballot_basis(db, cycle, state, source)
+        if general_records is not None:
+            # The certified ballot answered: it alone decides the federal
+            # races. Primary results above still supplied the state
+            # offices, which the list may not cover.
+            general_federal = [r for r in general_records if r["office"] in ("S", "H")]
+            applied = _apply_ballot(
+                db, cycle, state, general_federal, keep_unlisted=True, authoritative=True,
+            )
+            _record_ballot_basis(db, cycle, state, {**general, "general_ballot_complete": True})
+        else:
+            ballot_is_elsewhere = _has_general_filings(source)
+            applied = _apply_ballot(
+                db, cycle, state, records,
+                keep_unlisted=not ballot_is_elsewhere,
+                authoritative=bool(source.get("general_ballot_complete")) and not ballot_is_elsewhere,
+            )
+            if not ballot_is_elsewhere:
+                _record_ballot_basis(db, cycle, state, source)
         confirmed, unmatched = applied["confirmed"], applied["unmatched"]
 
         results[state] = {

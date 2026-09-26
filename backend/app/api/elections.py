@@ -238,7 +238,8 @@ def _complete_from(markers: dict[str, bool], state: str) -> bool:
     deploy) falls back to what its configured source claims."""
     if state in markers:
         return markers[state]
-    return bool((source_for_state(state) or {}).get("general_ballot_complete"))
+    source = source_for_state(state) or {}
+    return bool(source.get("general_ballot_complete") or source.get("general_list"))
 
 
 def _ballot_complete(db: Session, state: str, cycle: int) -> bool:
