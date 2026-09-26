@@ -171,13 +171,17 @@ const COMMENT_DEADLINE_TZ = "America/New_York";
 
 /** Today's date in the comment-deadline zone, as `YYYY-MM-DD`. */
 export function commentPeriodToday(now: number | Date = Date.now()): string {
-  // en-CA formats a date as YYYY-MM-DD.
-  return new Intl.DateTimeFormat("en-CA", {
+  // Assembled from parts rather than trusting a locale's layout (en-CA's
+  // YYYY-MM-DD): a runtime without that locale's data falls back to another
+  // layout silently, and the result is compared as a string.
+  const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: COMMENT_DEADLINE_TZ,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(now);
+  }).formatToParts(now);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
 /** True while a period closing on `closeDate` still accepts comments. */
