@@ -219,6 +219,9 @@ everything below reads it.
   courts carry `termYears` from `data/office_terms.json` (`app/office_terms.py`),
   listed per state and office with sources and never defaulted; shown as the
   office's term ("4-year terms").
+- Accessibility: `StateBallotClient.a11y.test.tsx` runs axe-core over the
+  page and each kind of drawer on every CI run (contrast is Lighthouse's job,
+  since jsdom does no layout).
 - Deep links: `#race-{id}` opens that race (a House id opens the House contest
   on that district), `#ballot-{key}` any other contest. Opening a contest
   rewrites the hash, so what a reader sees can be linked.
