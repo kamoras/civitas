@@ -260,7 +260,7 @@ export function OverviewDashboard({
                     warnAt={m.warn}
                     critAt={m.crit}
                     ariaLabel={m.label}
-                    valueText={m.text}
+                    valueText={m.text === "—" ? "no reading yet" : m.text}
                   />
                 </div>
               ))}
