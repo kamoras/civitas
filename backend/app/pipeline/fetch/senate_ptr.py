@@ -135,21 +135,29 @@ async def accept_terms(client: httpx.AsyncClient) -> str | None:
 def _parse_search_row(row: list) -> dict | None:
     """One DataTables row -> a filing dict, or None if it can't be parsed.
 
-    Column order: [first, last, office/filer description (unused),
-    link_html, filed_date]. Getting this wrong (e.g. assuming link_html
-    comes first) means searching for an href inside a plain name string
-    and silently matching nothing on every row.
+    Column order: [first, last, office/filer description, link_html,
+    filed_date]. Getting this wrong (e.g. assuming link_html comes first)
+    means searching for an href inside a plain name string and silently
+    matching nothing on every row.
+
+    The office cell ("Baldwin, Tammy (Senator)", "Candidate (Candidate)")
+    is kept because an annual-report search returns candidates' reports
+    too, and a candidate who shares a sitting senator's surname must not be
+    matched to that senator (see senate_fd.is_senator_filing).
     """
     if len(row) < 5:
         return None
-    first, last, _office, link_html, filed_date_raw = row[0], row[1], row[2], row[3], row[4]
+    first, last, office, link_html, filed_date_raw = row[0], row[1], row[2], row[3], row[4]
     link_match = re.search(r'href="([^"]+)"', link_html or "")
     if not link_match:
         return None
     report_path = link_match.group(1)
+    title = " ".join(re.sub(r"<[^>]+>", " ", link_html or "").split())
     return {
         "last": (last or "").strip(),
         "first": (first or "").strip(),
+        "office": (office or "").strip(),
+        "title": title,
         "filed_date": normalize_date(filed_date_raw),
         "report_url": f"{EFD_BASE}{report_path}" if report_path.startswith("/") else report_path,
         "is_paper": "/paper/" in report_path,
@@ -181,8 +189,22 @@ async def _wait_until(predicate, timeout_s: float = 10.0, poll_s: float = 0.1) -
 async def search_ptr_filings(since_date: str) -> list[dict]:
     """Search for PTR filings submitted on or after since_date (YYYY-MM-DD).
 
-    Returns one dict per filing: {last, first, filed_date, report_url,
-    is_paper}. Does not cache across runs (session-bound), unlike the
+    See search_filings — this is its "Periodic Transactions" report type.
+    """
+    return await search_filings(since_date, PTR_REPORT_TYPE)
+
+
+# The search form's report-type checkbox labels (the site's own wording).
+PTR_REPORT_TYPE = "Periodic Transactions"
+ANNUAL_REPORT_TYPE = "Annual"
+
+
+async def search_filings(since_date: str, report_type: str) -> list[dict]:
+    """Search for filings of `report_type` (a checkbox label on the search
+    form) submitted on or after since_date (YYYY-MM-DD).
+
+    Returns one dict per filing: {last, first, office, filed_date,
+    report_url, is_paper}. Does not cache across runs (session-bound), unlike the
     House index — a fresh search is cheap and the session itself expires.
 
     Drives a real headless Chromium tab through the actual search form
@@ -204,7 +226,7 @@ async def search_ptr_filings(since_date: str) -> list[dict]:
             try:
                 page = await browser.new_page()
                 page.set_default_timeout(_ACTION_TIMEOUT_MS)
-                return await _scrape_via_page(page, since_date)
+                return await _scrape_via_page(page, since_date, report_type)
             finally:
                 await browser.close()
     except Exception:
@@ -212,7 +234,7 @@ async def search_ptr_filings(since_date: str) -> list[dict]:
         return []
 
 
-async def _scrape_via_page(page, since_date: str) -> list[dict]:
+async def _scrape_via_page(page, since_date: str, report_type: str = PTR_REPORT_TYPE) -> list[dict]:
     """The actual eFD search flow, given an already-launched Playwright
     page. See search_ptr_filings for why this exists as a real browser
     session at all."""
@@ -228,7 +250,7 @@ async def _scrape_via_page(page, since_date: str) -> list[dict]:
         await _click(page.locator("#agreement_form button, #agreement_form input[type=submit]"))
 
     await page.goto(SEARCH_URL, wait_until="domcontentloaded")
-    await _click(page.get_by_role("checkbox", name="Periodic Transactions"))
+    await _click(page.get_by_role("checkbox", name=report_type))
     us_date = _iso_to_us_date(since_date)
     if us_date:
         date_input = page.locator('input[name="submitted_start_date"]')

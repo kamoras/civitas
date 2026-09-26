@@ -9,6 +9,7 @@ import IndustryBreakdown from "./IndustryBreakdown";
 import VotingRecord from "./VotingRecord";
 import LobbyingMatches from "./LobbyingMatches";
 import StockTrades from "./StockTrades";
+import Holdings from "./Holdings";
 import PlatformTracker from "./PlatformTracker";
 import DataHighlights from "./DataHighlights";
 import SponsoredBills from "./SponsoredBills";
@@ -515,6 +516,8 @@ export default function SenatorCard({
             votingRecord={senator.votingRecord}
             chamber={chamber}
           />
+
+          <Holdings memberId={senator.id} chamber={chamber} />
 
           <StockTrades politicianId={senator.id} filer={chamber} />
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { PaginatedStockTrades, StockTrade } from "@/types/senator";
 import { fetchPresidentStockTrades, fetchRepStockTrades, fetchSenatorStockTrades } from "@/lib/api";
 import CollapsibleSection from "../shared/CollapsibleSection";
+import Pagination from "../shared/Pagination";
 import MetricTooltip from "./MetricTooltip";
 
 const TRADES_PER_PAGE = 15;
@@ -108,41 +109,6 @@ function TradeRow({ trade }: { trade: StockTrade }) {
           SOURCE ↗
         </a>
       </div>
-    </div>
-  );
-}
-
-function Pagination({
-  page,
-  totalPages,
-  onPageChange,
-}: {
-  page: number;
-  totalPages: number;
-  onPageChange: (p: number) => void;
-}) {
-  if (totalPages <= 1) return null;
-  return (
-    <div className="flex items-center justify-center gap-2 mt-4">
-      <button
-        onClick={() => onPageChange(page - 1)}
-        disabled={page === 1}
-        aria-label="Previous page"
-        className="text-xs px-2 py-1 font-mono text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed"
-      >
-        &lt; PREV
-      </button>
-      <span className="text-xs text-ink-min">
-        page {page}/{totalPages}
-      </span>
-      <button
-        onClick={() => onPageChange(page + 1)}
-        disabled={page === totalPages}
-        aria-label="Next page"
-        className="text-xs px-2 py-1 font-mono text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed"
-      >
-        NEXT &gt;
-      </button>
     </div>
   );
 }

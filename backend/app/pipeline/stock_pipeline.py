@@ -30,7 +30,7 @@ from app.database import SessionLocal
 from app.http_client import make_async_client
 from app.models import (
     PipelineRun, HousePipelineRun, PipelineStatus, President, PresidentTrade,
-    Representative, Senator, StockTrade, RepStockTrade, StockTradesPipelineRun,
+    StockTrade, RepStockTrade, StockTradesPipelineRun,
 )
 from app.pipeline.fetch.house_ptr import fetch_and_parse_ptr as fetch_house_ptr, fetch_ptr_filing_index
 from app.pipeline.fetch.president_ptr import (
@@ -39,6 +39,9 @@ from app.pipeline.fetch.president_ptr import (
 )
 from app.pipeline.fetch.ptr_common import TradeRow
 from app.pipeline.fetch.sec_tickers import resolve_tickers
+from app.pipeline.holdings_pipeline import ingest_house_holdings, ingest_senate_holdings
+from app.pipeline.filer_matching import match_representative as _match_representative
+from app.pipeline.filer_matching import match_senator as _match_senator
 from app.pipeline.fetch.senate_ptr import (
     accept_terms as senate_accept_terms,
     fetch_and_parse_ptr as fetch_senate_ptr,
@@ -55,6 +58,8 @@ STOCK_PIPELINE_STEPS = [
     ("house_ptr",     "fetch", "Ingest House PTR filings"),
     ("senate_ptr",    "fetch", "Ingest Senate PTR filings"),
     ("president_ptr", "fetch", "Ingest presidential 278-T filings"),
+    ("house_holdings",  "fetch", "Ingest House annual disclosures (holdings)"),
+    ("senate_holdings", "fetch", "Ingest Senate annual disclosures (holdings)"),
 ]
 
 # How far back to search on a cold start (no existing Senate trades in the
@@ -109,59 +114,6 @@ def _other_pipeline_running(db: Session) -> bool:
         if running and utcnow() - running.started_at <= STALE_PIPELINE_TIMEOUT:
             return True
     return False
-
-
-def _match_senator(db: Session, last: str, first: str) -> Senator | None:
-    if not last:
-        return None
-    candidates = (
-        db.query(Senator)
-        .filter(Senator.is_current == True, Senator.name.ilike(f"%{last}%"))  # noqa: E712
-        .all()
-    )
-    if len(candidates) == 1:
-        return candidates[0]
-    if first:
-        for c in candidates:
-            if first.lower() in c.name.lower():
-                return c
-    # Ambiguous (multiple same-last-name matches, none disambiguated by
-    # first name) — skip rather than guess which one filed the PTR.
-    return None
-
-
-def _match_representative(db: Session, last: str, first: str, state_district: str) -> Representative | None:
-    if not last:
-        return None
-    state = state_district[:2] if state_district else None
-    # The House FD index supplies the FULL district ("CA27"), and
-    # Representative.district exists — so filter on it. Previously only the
-    # state was used, leaving same-state same-surname pairs to a fragile
-    # first-name substring match that silently skipped the filing every run
-    # whenever the formal filing name differed from the display name
-    # ("Michael" vs "Mike"). District makes the match exact for all 435
-    # voting seats.
-    district: int | None = None
-    if state_district and len(state_district) > 2 and state_district[2:].isdigit():
-        district = int(state_district[2:])
-
-    query = db.query(Representative).filter(
-        Representative.is_current == True, Representative.name.ilike(f"%{last}%")  # noqa: E712
-    )
-    if state:
-        query = query.filter(Representative.state == state)
-    if district is not None:
-        query = query.filter(Representative.district == district)
-    candidates = query.all()
-    if len(candidates) == 1:
-        return candidates[0]
-    if first:
-        for c in candidates:
-            if first.lower() in c.name.lower():
-                return c
-    # Ambiguous (multiple same-last-name matches, none disambiguated by
-    # first name) — skip rather than guess which one filed the PTR.
-    return None
 
 
 def _compute_days_to_disclose(transaction_date: str, disclosure_date: str) -> int:
@@ -435,6 +387,7 @@ async def run_stock_trades_pipeline() -> dict:
         house_count = 0
         senate_count = 0
         president_count = 0
+        holdings_counts = {"house_holdings": 0, "senate_holdings": 0}
         error_parts: list[str] = []
         async with make_async_client() as client:
             progress.begin("house_ptr")
@@ -469,11 +422,29 @@ async def run_stock_trades_pipeline() -> dict:
                 db.rollback()
                 error_parts.append("President: failed — see server logs")
                 progress.fail("president_ptr")
+            # Annual-report holdings (holdings_pipeline.py). Same sources,
+            # same best-effort isolation: a failure here leaves the trade
+            # rows above committed and the stored holdings untouched.
+            for step, label, ingest in (
+                ("house_holdings", "House holdings", ingest_house_holdings),
+                ("senate_holdings", "Senate holdings", ingest_senate_holdings),
+            ):
+                progress.begin(step)
+                try:
+                    holdings_counts[step] = await ingest(db, client)
+                    progress.complete(step, detail=f"{holdings_counts[step]} holdings")
+                except Exception:
+                    logger.exception("%s ingestion failed", label)
+                    db.rollback()
+                    error_parts.append(f"{label}: failed — see server logs")
+                    progress.fail(step)
 
         elapsed = round(time.time() - start_time, 1)
         logger.info(
-            "Stock trades pipeline: %d House rows, %d Senate rows, %d presidential rows",
+            "Stock trades pipeline: %d House rows, %d Senate rows, %d presidential rows; "
+            "%d House / %d Senate holdings",
             house_count, senate_count, president_count,
+            holdings_counts["house_holdings"], holdings_counts["senate_holdings"],
         )
 
         # FAILED only when every phase failed — one source being down still
@@ -493,7 +464,10 @@ async def run_stock_trades_pipeline() -> dict:
 
         return {
             "status": run.status, "house_trades": house_count, "senate_trades": senate_count,
-            "president_trades": president_count, "elapsed_seconds": elapsed,
+            "president_trades": president_count,
+            "house_holdings": holdings_counts["house_holdings"],
+            "senate_holdings": holdings_counts["senate_holdings"],
+            "elapsed_seconds": elapsed,
         }
     finally:
         _tracker.stop()

@@ -74,7 +74,8 @@ column: presidents.gdp_growth_adjusted` on the migrated copy.
 
 ### Pending contract (the release after v6.13)
 
-Write these as revision `0002` once v6.13 is the running image:
+Write these as the next free revision (`0003` or later — `0002` added the
+financial-holdings tables) once v6.13 is the running image:
 
 | Change | Why it waits |
 |---|---|

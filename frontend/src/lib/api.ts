@@ -1,4 +1,4 @@
-import { LeaderboardEntry, PaginatedStockTrades, PaginatedVotes, Senator } from "@/types/senator";
+import { Holdings, LeaderboardEntry, PaginatedStockTrades, PaginatedVotes, Senator } from "@/types/senator";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 import type { JusticeLeaderboardEntry } from "@/types/justice";
 import type { ActionIssue, ActionIssuesResponse, MyRepsResponse } from "@/types/action";
@@ -366,6 +366,34 @@ export async function fetchSenatorStockTrades(
   options?: { page?: number; perPage?: number }
 ): Promise<PaginatedStockTrades> {
   return fetchPaginatedStockTrades(CHAMBER_PATH[Chamber.Senate], senatorId, options);
+}
+
+/** Asset holdings from a member's latest annual financial disclosure: the
+ * by-category breakdown plus one page of holdings, largest first, optionally
+ * narrowed to one category. */
+async function fetchHoldings(
+  chamber: Chamber,
+  memberId: string,
+  options?: HoldingsOptions
+): Promise<Holdings> {
+  const params = new URLSearchParams();
+  if (options?.page) params.set("page", String(options.page));
+  if (options?.perPage) params.set("per_page", String(options.perPage));
+  if (options?.category) params.set("category", options.category);
+  return requestJson(
+    `${API_BASE}/${CHAMBER_PATH[chamber]}/${memberId}/holdings?${params}`,
+    "Failed to load holdings"
+  );
+}
+
+type HoldingsOptions = { page?: number; perPage?: number; category?: string | null };
+
+export async function fetchSenatorHoldings(senatorId: string, options?: HoldingsOptions): Promise<Holdings> {
+  return fetchHoldings(Chamber.Senate, senatorId, options);
+}
+
+export async function fetchRepHoldings(repId: string, options?: HoldingsOptions): Promise<Holdings> {
+  return fetchHoldings(Chamber.House, repId, options);
 }
 
 /** Disclosed buy/sell/exchange transactions from a president's OGE Form

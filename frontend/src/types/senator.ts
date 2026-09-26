@@ -219,3 +219,57 @@ export interface LeaderboardEntry {
   /** PageRank cosponsorship centrality, log-rescaled to [0, 1]; null if too little data. */
   leadershipScore: number | null;
 }
+
+/** One asset from a member's latest annual financial disclosure. Values are
+ * the disclosed bracket: null/null when the filing stated none
+ * ("Undetermined"), 0/0 when nothing was held at year end, and equal when
+ * the open-ended top bracket was used (see valueOpenEnded). */
+export interface Holding {
+  assetName: string;
+  account: string | null;
+  ticker: string | null;
+  assetType: string;
+  category: string;
+  categoryLabel: string;
+  owner: "self" | "spouse" | "joint" | "dependent";
+  valueText: string;
+  valueLow: number | null;
+  valueHigh: number | null;
+  /** Same rule as StockTrade.amountOpenEnded: render as "$X+", never a range. */
+  valueOpenEnded: boolean;
+}
+
+export interface HoldingCategory {
+  category: string;
+  label: string;
+  color: string;
+  count: number;
+  valueLow: number;
+  valueHigh: number;
+  openEnded: boolean;
+  /** Sum of bracket midpoints — what the slice is drawn with, not a value to quote. */
+  weight: number;
+  share: number;
+}
+
+export interface Holdings {
+  /** False when no annual report has been ingested for this member yet. */
+  available: boolean;
+  reportYear: number | null;
+  filedDate: string | null;
+  sourceUrl: string;
+  /** False when the report exists but couldn't be read (scanned paper filing). */
+  parsed: boolean;
+  holdingsCount: number;
+  unvaluedCount: number;
+  totalLow: number;
+  totalHigh: number;
+  totalOpenEnded: boolean;
+  categories: HoldingCategory[];
+  categoryFilter: string | null;
+  holdings: Holding[];
+  total: number;
+  page: number;
+  perPage: number;
+  totalPages: number;
+}

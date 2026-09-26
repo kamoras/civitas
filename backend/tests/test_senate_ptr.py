@@ -30,6 +30,8 @@ class TestParseSearchRow:
         assert parsed == {
             "last": "Doe",
             "first": "Jane",
+            "office": "Senator",
+            "title": "PTR",
             "filed_date": "2026-07-01",
             "report_url": "https://efdsearch.senate.gov/search/view/ptr/abc123/",
             "is_paper": False,
