@@ -407,7 +407,9 @@ Every hour at :15
        │                 + 0.25 × (trending score)
        │         Actionability leads: officials mentioned + similarity to the
        │         ingested civic-document corpus, not hand-authored keywords
-       │         Select the top clusters (MAX_ISSUES = 2)
+       │         Try ranked clusters in order (up to CANDIDATE_POOL = 6)
+       │         until MAX_ISSUES = 2 publish — a cluster that fails a gate
+       │         falls through to the next instead of ending the run
        ▼
   5. EXTRACT ─── The model LOCATES an assertion in one article; it never
        │         writes the sentence. post_composer.py checks both spans
@@ -421,7 +423,10 @@ Every hour at :15
        │         A cluster with no attributable assertion produces NO issue:
        │         MAX_ISSUES is a ceiling, not a quota. Publishing anyway is
        │         what produced "This coverage tracks the race and related
-       │         developments."
+       │         developments." Trying only the top two made the ceiling a
+       │         cap on ATTEMPTS: when both failed a run published nothing,
+       │         and the next hour ranked the same two first again (five
+       │         issues on 2026-09-23, none on 2026-09-26).
        │         Post-composition title deduplication (cosine_sim > 0.92)
        ▼
   6. PERSIST ─── Topic-keyed matching: each unique story maps to one permanent

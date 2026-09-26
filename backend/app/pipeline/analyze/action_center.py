@@ -170,6 +170,21 @@ CLUSTER_CENTROID_MERGE_THRESHOLD = 0.20
 # score distributions are being logged (see _rank_clusters).
 MAX_ISSUES = 2
 
+# How many ranked clusters a run may TRY to fill MAX_ISSUES slots. Separate
+# from MAX_ISSUES since extraction (2026-09-24): a cluster now publishes
+# only if the model locates at least two verbatim, attributed claims and
+# the issue anchors to a bill or a named official, so a top cluster can
+# fail — about one in four yields no claim at all (see the loop below).
+# Trying only the top two meant a run where both failed published nothing,
+# and the next hour ranked the same two clusters first and failed them
+# again: the Action Center went from five issues on 2026-09-23 to none on
+# 2026-09-26. Still at most MAX_ISSUES publish, and still in rank order,
+# so the strongest cluster that passes every gate wins — only a failure
+# now falls through to the next candidate instead of ending the run.
+# Three candidates per slot; a cluster that is tried costs one extraction
+# pass, and a run stops trying the moment both slots are filled.
+CANDIDATE_POOL = MAX_ISSUES * 3
+
 # Fact rule (6) guards against cross-topic contamination: facts pulled
 # from an unrelated article that survived cluster-coherence filtering. A
 # mechanical per-fact check was evaluated and rejected on measurement —
@@ -4407,7 +4422,7 @@ def _run_refresh(db: Session) -> int:
 
     # 5b. Deduplicate top clusters so two angles on the same story
     # don't both appear (e.g., "Tariff hikes" and "Market fallout from tariffs")
-    top_clusters = _deduplicate_top_clusters(ranked_clusters, ranked_scores, MAX_ISSUES)
+    top_clusters = _deduplicate_top_clusters(ranked_clusters, ranked_scores, CANDIDATE_POOL)
     action_metrics.increment("clusters_considered", len(top_clusters))
     _set_refresh_state(stage="issues", stage_detail=f"0/{len(top_clusters)}")
 
@@ -4443,6 +4458,9 @@ def _run_refresh(db: Session) -> int:
     generated_title_embs: list[tuple[str, "np.ndarray"]] = []
 
     for rank, cluster in enumerate(top_clusters, start=1):
+        if issues_created >= MAX_ISSUES:
+            break
+        action_metrics.increment("clusters_attempted")
         _set_refresh_state(stage_detail=f"{rank}/{len(top_clusters)}")
         # Filter the cluster to articles that are genuinely on-topic using
         # centered embeddings — the same space the clustering used. Raw cosine
@@ -4779,15 +4797,18 @@ def _run_refresh(db: Session) -> int:
             "image_credit": image_credit,
         }
 
+        # The slot this issue fills, not its candidate position: the third
+        # candidate publishing because the first two failed is issue #1.
+        slot = issues_created + 1
         if match:
             _matched_issue_ids.add(match.id)
             if match.status == ActionIssueStatus.DEVELOPING:
                 _promote_developing_issue(
-                    match, _new_values, rank, today, primary_article_date, facts, title,
+                    match, _new_values, slot, today, primary_article_date, facts, title,
                 )
             else:
                 _apply_matched_issue_update(
-                    match, _new_values, rank, today, primary_article_date, facts, title,
+                    match, _new_values, slot, today, primary_article_date, facts, title,
                 )
             # Split from the new-topic case below: `issues_created` counts
             # both, so a run that only ever re-matched yesterday's stories
@@ -4797,7 +4818,7 @@ def _run_refresh(db: Session) -> int:
             action_metrics.increment("issues_matched_existing")
         else:
             # Brand new topic — give it a permanent row and post to Bluesky.
-            new_row = ActionIssue(date=today, rank=rank, is_current=True, **_new_values)
+            new_row = ActionIssue(date=today, rank=slot, is_current=True, **_new_values)
             db.add(new_row)
             _new_issues.append(new_row)
             action_metrics.increment("issues_new_topic")
