@@ -793,7 +793,9 @@ def office_from_columns(row: dict, spec: dict | None) -> tuple[str, int | None] 
 # Abbreviations are matched only as the WHOLE value (a party column),
 # never inside a longer label, for the same reason a stray "R" in a
 # contest name must not become a Republican.
-_INDEPENDENT_ABBR = frozenset({"IND", "INDEPENDENT", "UNA", "NPA", "NOP", "NP"})
+# NOPTY is Louisiana's "No Party"; PETITION is South Carolina's label for
+# a candidate who reached the ballot by petition rather than a party.
+_INDEPENDENT_ABBR = frozenset({"IND", "INDEPENDENT", "UNA", "NPA", "NOP", "NP", "NOPTY", "PETITION"})
 _INDEPENDENT_RE = re.compile(
     r"\b(independent|unaffiliated|no\s+party(\s+affiliation)?|non[\s-]?partisan)\b",
     re.IGNORECASE,

@@ -68,6 +68,7 @@ from app.pipeline.fetch.state_source_crawler import (
     discover_filings,
     discover_source,
 )
+from app.pipeline.candidate_dedup import normalized_surname
 from app.pipeline.fetch.state_candidates_common import (
     PARTY_CODE_MAP,
     JUDICIAL_COURT_LABELS,
@@ -82,6 +83,7 @@ from app.pipeline.fetch.state_candidates_common import (
 )
 from app.pipeline.fetch.state_candidates_al import fetch_confirmed_candidates as _fetch_al
 from app.pipeline.fetch.state_candidates_canvass_xml import fetch_confirmed_candidates as _fetch_canvass_xml
+from app.pipeline.fetch.state_candidates_certified_pdf import fetch_confirmed_candidates as _fetch_certified_pdf
 from app.pipeline.fetch.state_candidates_civic import fetch_confirmed_candidates as _fetch_civic
 from app.pipeline.fetch.state_candidates_ct import fetch_confirmed_candidates as _fetch_ct
 from app.pipeline.fetch.state_candidates_clarity import fetch_confirmed_candidates as _fetch_clarity
@@ -104,6 +106,8 @@ from app.pipeline.fetch.state_candidates_tally_enr import fetch_confirmed_candid
 from app.pipeline.fetch.state_candidates_tn import fetch_confirmed_candidates as _fetch_tn
 from app.pipeline.fetch.state_candidates_totalvote import fetch_confirmed_candidates as _fetch_totalvote
 from app.pipeline.fetch.state_candidates_tx import fetch_confirmed_candidates as _fetch_tx
+from app.pipeline.fetch.state_candidates_voterportal import fetch_confirmed_candidates as _fetch_voterportal
+from app.pipeline.fetch.state_candidates_vrems import fetch_confirmed_candidates as _fetch_vrems
 from app.pipeline.fetch.state_candidates_vt import fetch_confirmed_candidates as _fetch_vt
 from app.pipeline.fetch.state_candidates_wy import fetch_confirmed_candidates as _fetch_wy
 
@@ -135,6 +139,9 @@ STRATEGIES = {
     "ma_pd43": _fetch_ma,
     "me_results": _fetch_me,
     "sd_vip": _fetch_sd_vip,
+    "voterportal": _fetch_voterportal,
+    "vrems": _fetch_vrems,
+    "certified_pdf": _fetch_certified_pdf,
     "google_civic": _fetch_civic,
     "nh_results": _fetch_nh,
     "enhanced_voting": _fetch_enhanced_voting,
@@ -164,9 +171,12 @@ def _race_id_for(cycle: int, state: str, office: str, district: int | None) -> s
 
 def _candidate_surname(name: str) -> str:
     """FEC's Candidate.name is "LAST, FIRST MIDDLE ..." — the surname is
-    everything before the comma (same extraction elections.py's
-    _incumbent_link does)."""
-    return name.split(",")[0].strip().lower()
+    everything before the comma, minus a generational suffix. FEC puts
+    the suffix on either half ("CLEAVER II, EMANUEL"), and a state never
+    does, so without stripping it a sitting member of Congress goes
+    unconfirmed: "cleaver ii" is not "cleaver", and the last-token
+    fallback below then compares "ii"."""
+    return normalized_surname(name)
 
 
 def _first_name_key(name: str) -> str:
@@ -217,6 +227,18 @@ def _match_candidate(
         party_matches = [c for c in matches if c.party == expected_party]
         if len(party_matches) == 1:
             return party_matches[0]
+        # One person under two FEC ids: FEC assigns a new candidate_id on
+        # a refiling, so a race can hold "BERRY, PAUL" twice (MO-1, 2026).
+        # candidate_dedup will not merge them unless their financials are
+        # identical, which is right for DISPLAY — but here a certified
+        # ballot names one Paul Berry, and refusing both left Missouri's
+        # Republican nominee unconfirmed. Identical full name AND party
+        # inside one race is the same person; confirm the record that
+        # actually raised money, and the other drops off the page with
+        # every other unconfirmed filer.
+        pool = party_matches or matches
+        if len({(c.name.strip().upper(), c.party) for c in pool}) == 1:
+            return max(pool, key=lambda c: (bool(c.has_raised_funds), c.contributions or 0, c.id))
         # Last resort, and ONLY ever reached where the answer would
         # otherwise be None: two candidates in one race sharing a surname
         # AND a party. Alaska's 2026 Senate top-four genuinely advances

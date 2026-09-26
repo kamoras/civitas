@@ -1063,6 +1063,24 @@ export default function AboutPage() {
                   who is on the November ballot instead, which also shows an independent
                   candidate that primary results can never reveal.
                 </P>
+                <P>
+                  A second look at the nine found that three of them publish their
+                  November ballot directly after all: Louisiana&apos;s results portal,
+                  South Carolina&apos;s candidate-tracking system and Missouri&apos;s
+                  certification of candidates to its counties. All three are now read
+                  as the ballot itself, third-party and independent candidates included.
+                  It mattered most in South Carolina, where the June primary winner for
+                  Senate was later replaced as nominee through a special primary — reading
+                  June&apos;s results would have named the wrong person.
+                </P>
+                <P>
+                  The remaining six sit behind bot challenges on their election sites, or
+                  in Oklahoma&apos;s case an API that requires logging in. We do not work
+                  around either; where the same office publishes a plain file on an open
+                  path, we use that instead. One limit applies everywhere: a candidate on a
+                  certified ballot who never filed with the FEC cannot yet appear, because
+                  race lists are built from FEC records.
+                </P>
               </div>
 
               <div>
