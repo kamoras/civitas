@@ -446,7 +446,13 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
               <HoldingRow key={`${h.assetName}-${data.page}-${i}`} holding={h} />
             ))}
           </div>
-          <Pagination page={data.page} totalPages={data.totalPages} onPageChange={(p) => load(p, category)} />
+          <Pagination
+            page={data.page}
+            totalPages={data.totalPages}
+            // The most recently requested category, not the one on screen:
+            // paging while a filter request is in flight must not drop it.
+            onPageChange={(p) => load(p, requested.current)}
+          />
         </div>
       )}
     </CollapsibleSection>

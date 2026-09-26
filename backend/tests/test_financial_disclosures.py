@@ -377,7 +377,9 @@ class TestFetchCaching:
         )
         # What the pipeline's client actually gets: redirects aren't
         # followed, so the lapse arrives as a 302 with an empty body.
-        redirect = SimpleNamespace(status_code=302, text="")
+        # (Live-checked 2026-09: a report fetched with no session is a 302
+        # to /search/home/.)
+        redirect = SimpleNamespace(status_code=302, text="", headers={"location": "/search/home/"})
         filing = {"report_url": "https://efdsearch.senate.gov/search/view/annual/abc/", "is_paper": False}
         for response in (terms, redirect):
             with patch.object(senate_fd, "_request_with_retry", new_callable=AsyncMock, return_value=response), \
@@ -403,3 +405,17 @@ class TestFetchCaching:
             report = await senate_fd.fetch_and_parse_annual(None, db_session, filing)
         assert (report.holdings, report.unreadable_reason, report.final) == (None, "unrecognized", False)
         mock_set.assert_not_called()
+
+
+    async def test_senate_redirect_elsewhere_is_a_plain_failed_fetch(self, db_session):
+        """A moved or withdrawn report isn't a lapsed session: no terms
+        round trip, just a failed fetch."""
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, patch
+
+        from app.pipeline.fetch import senate_fd
+
+        moved = SimpleNamespace(status_code=301, text="", headers={"location": "/search/view/annual/other/"})
+        filing = {"report_url": "https://efdsearch.senate.gov/search/view/annual/abc/", "is_paper": False}
+        with patch.object(senate_fd, "_request_with_retry", new_callable=AsyncMock, return_value=moved):
+            assert await senate_fd.fetch_and_parse_annual(None, db_session, filing) is None

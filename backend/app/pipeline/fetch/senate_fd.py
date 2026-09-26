@@ -19,6 +19,7 @@ house_fd.py's module docstring for the same reasoning).
 
 import logging
 from dataclasses import asdict
+from urllib.parse import urlparse
 
 import httpx
 from lxml import html as lxml_html
@@ -109,6 +110,14 @@ def _cell_main_text(cell) -> str:
     if strong is not None:
         return " ".join((strong.text_content() or "").split())
     return _own_text(cell)
+
+
+def _redirects_to_terms(resp) -> bool:
+    """A redirect whose target is eFD's home/terms page."""
+    if not 300 <= resp.status_code < 400:
+        return False
+    location = (getattr(resp, "headers", None) or {}).get("location", "")
+    return urlparse(location).path.rstrip("/") in ("/search/home", "/search")
 
 
 class SessionLapsed(Exception):
@@ -247,7 +256,7 @@ async def fetch_and_parse_annual(
     resp = await _request_with_retry(client, "GET", filing["report_url"])
     if resp is None:
         return None
-    if resp.status_code != 200 or is_terms_page(resp.text):
+    if _redirects_to_terms(resp) or (resp.status_code == 200 and is_terms_page(resp.text)):
         # A lapsed session: eFD answers with a redirect to its terms page
         # (fetch_with_retry passes 3xx through; the client doesn't follow
         # it) or with the terms page itself. That says nothing about the
@@ -255,6 +264,11 @@ async def fetch_and_parse_annual(
         # returned as None so the caller can re-accept the terms only when
         # this actually happens.
         raise SessionLapsed(f"HTTP {resp.status_code} for {filing['report_url']}")
+    if resp.status_code != 200:
+        # Any other redirect or non-200 success (a moved or withdrawn
+        # report): a failed fetch, costing no terms round trip.
+        logger.warning("Senate eFD answered HTTP %s for %s", resp.status_code, filing["report_url"])
+        return None
     if not is_report_page(resp.text):
         # A 200 page that is neither the terms page nor a report in the
         # layout this parser knows. It may be a changed layout or a

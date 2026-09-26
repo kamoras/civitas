@@ -112,8 +112,20 @@ def _replace_disclosure(
     filed_date: str | None, source_url: str, report: AnnualReport, parser_version: int,
 ) -> int:
     """Swap a member's stored report for this one. Returns holdings stored."""
-    for old in db.query(FinancialDisclosure).filter_by(**owner_filter).all():
-        db.delete(old)
+    # Bulk deletes, not the ORM cascade, which would load every stored
+    # holding into the session to delete it row by row — hundreds per member
+    # on a first run or a PARSER_VERSION bump, inside the phase's budget.
+    # SQLite here runs without FK enforcement, so the holdings go explicitly.
+    old_ids = [row.id for row in db.query(FinancialDisclosure.id).filter_by(**owner_filter)]
+    if old_ids:
+        # "fetch": anything already loaded is dropped from the session too,
+        # so a reused id can't collide with a stale object.
+        db.query(FinancialHolding).filter(FinancialHolding.disclosure_id.in_(old_ids)).delete(
+            synchronize_session="fetch",
+        )
+        db.query(FinancialDisclosure).filter(FinancialDisclosure.id.in_(old_ids)).delete(
+            synchronize_session="fetch",
+        )
     disclosure = FinancialDisclosure(
         **owner_filter,
         filing_id=filing_id,
@@ -339,13 +351,16 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
         # the search broke (search_filings returns [] on any failure).
         raise RuntimeError("Senate eFD annual-report search returned no senators' reports")
     per_senator: dict[str, list[dict]] = {}
+    matched: dict[tuple[str, str], str | None] = {}  # one lookup per filer, not per filing
     for filing in filings:
         if not is_senator_filing(filing) or not is_annual_title(filing.get("title") or ""):
             continue
-        senator = match_senator(db, filing["last"], filing["first"])
-        if senator is None:
-            continue
-        per_senator.setdefault(senator.id, []).append(filing)
+        filer = (filing["last"], filing["first"])
+        if filer not in matched:
+            senator = match_senator(db, *filer)
+            matched[filer] = senator.id if senator is not None else None
+        if matched[filer] is not None:
+            per_senator.setdefault(matched[filer], []).append(filing)
 
     stored = _stored_reports(db, FinancialDisclosure.senator_id)
     inserted = 0
