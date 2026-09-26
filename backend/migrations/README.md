@@ -59,6 +59,13 @@ rollback`. Two consequences follow:
 - If the new image fails its health check, Swarm runs the previous image
   against the *migrated* schema.
 
+The rollback case also means the previous image meets a database stamped
+with a revision it has never seen. `_run_migrations` leaves such a database
+alone (it logs and starts) rather than letting Alembic fail with "Can't
+locate revision" and crash-loop the rollback. That guard only protects a
+rollback *to an image that has it*, so it shipped on its own before the
+first revision after the baseline (`0002`) did.
+
 So every release must leave a schema the image before it can still read:
 
 - **Expand** (any release): add tables, add nullable or defaulted columns, add

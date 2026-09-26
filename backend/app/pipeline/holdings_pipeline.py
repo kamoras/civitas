@@ -30,6 +30,7 @@ from datetime import timedelta
 import httpx
 from sqlalchemy.orm import Session
 
+from app.alerting import safe_ops_alert as _alert
 from app.models import FinancialDisclosure, FinancialHolding
 from app.pipeline.fetch.fd_common import AnnualReport
 from app.pipeline.fetch.house_fd import PARSER_VERSION as HOUSE_PARSER_VERSION
@@ -433,11 +434,11 @@ async def run_holdings_phases(
     """Run both phases, best-effort each. Returns (holdings stored per
     step, error summaries for the run row).
 
-    Lives here rather than in stock_pipeline.py so that changing how the
-    holdings phases run never touches a file the analysis-code fingerprint
-    covers. When both phases fail, an ops alert says so directly: the
-    holdings phases deliberately don't decide the stock-trades run's status
-    (see stock_pipeline), so without it a holdings outage would go unseen.
+    Lives here rather than in stock_pipeline.py so that later changes to how
+    the holdings phases run don't touch a file the analysis-code fingerprint
+    covers. A failed phase sends its own ops alert: the holdings phases
+    deliberately don't decide the stock-trades run's status (see
+    stock_pipeline), so without it a holdings outage would go unseen.
     """
     counts = {step: 0 for step, _, _ in HOLDINGS_STEPS}
     errors: list[str] = []
@@ -455,22 +456,16 @@ async def run_holdings_phases(
             db.rollback()
             errors.append(f"{label}: failed — see server logs")
             progress.fail(step)
-    if len(errors) == len(HOLDINGS_STEPS):
-        _alert(
-            "Annual-report holdings ingest failed",
-            "Both the House and the Senate holdings phases of tonight's stock-trades run "
-            f"failed ({'; '.join(errors)}). Stored holdings are unchanged and will age "
-            "until a run succeeds — see the server logs for the cause.",
-            dedupe_key=f"holdings-ingest-failed-{utcnow():%Y-%m-%d}",
-        )
+            # Every failed phase alerts: the holdings phases don't decide
+            # the run's status, so the run row alone would let one chamber's
+            # holdings age silently for as long as it keeps failing.
+            _alert(
+                f"{label} ingest failed",
+                f"The {label} phase of tonight's stock-trades run failed. That chamber's "
+                "stored holdings are unchanged and will age until a run succeeds — see "
+                "the server logs for the cause.",
+                dedupe_key=f"{step}-failed-{utcnow():%Y-%m-%d}",
+            )
     return counts, errors
 
 
-def _alert(subject: str, body: str, *, dedupe_key: str) -> None:
-    """Best-effort ops alert — never allowed to raise (the same pattern
-    president_ptr.py uses)."""
-    try:
-        from app.ops_alerts import send_ops_alert
-        send_ops_alert(subject, body, dedupe_key=dedupe_key)
-    except Exception:
-        logger.exception("Failed to send ops alert: %s", subject)

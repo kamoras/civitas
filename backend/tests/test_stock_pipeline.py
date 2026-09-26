@@ -130,13 +130,19 @@ class TestStockTradesPipelineRunTracking:
             senate_holdings_result=RuntimeError("search broken"),
         )
         assert result["status"] == "completed"
-        assert result["_holdings_alerts"] == 1
+        assert result["_holdings_alerts"] == 2  # one per failed phase
         run = db_session.query(StockTradesPipelineRun).one()
         assert "House holdings" in run.error_message and "Senate holdings" in run.error_message
 
-    def test_one_holdings_phase_failing_raises_no_alert(self, db_session):
+    def test_one_holdings_phase_failing_alerts_for_that_phase(self, db_session):
+        """One chamber failing night after night would otherwise go unseen:
+        the run stays COMPLETED on the trades' account."""
         result = _run(db_session, house_holdings_result=RuntimeError("down"), senate_holdings_result=3)
-        assert result["_holdings_alerts"] == 0
+        assert result["status"] == "completed"
+        assert result["_holdings_alerts"] == 1
+
+    def test_trade_steps_are_every_non_holdings_step(self):
+        assert stock_pipeline.TRADE_STEPS == ("house_ptr", "senate_ptr", "president_ptr")
 
     def test_holdings_failing_alone_leaves_the_trades_run_completed(self, db_session):
         result = _run(

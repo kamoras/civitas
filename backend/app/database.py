@@ -743,9 +743,27 @@ def _run_migrations(revision: str = "head", bind=None) -> None:
     models (tests/test_alembic_migrations.py).
     """
     from alembic import command
+    from alembic.runtime.migration import MigrationContext
+    from alembic.script import ScriptDirectory
 
     cfg = _alembic_config()
     with (bind or engine).begin() as conn:
+        # A database at a revision this image doesn't have was migrated by a
+        # NEWER image — the case Swarm's automatic rollback creates: the new
+        # task upgrades the shared database, fails its health check, and the
+        # previous image starts against the migrated schema. Alembic would
+        # raise "Can't locate revision" and crash-loop the rollback. Every
+        # release only expands the schema (migrations/README.md, "Expand,
+        # then contract"), so this image can still read it: leave the schema
+        # alone and start.
+        known = {script.revision for script in ScriptDirectory.from_config(cfg).walk_revisions()}
+        current = set(MigrationContext.configure(conn).get_current_heads())
+        if current - known:
+            logger.warning(
+                "Database is at revision %s, newer than this image's migrations — "
+                "not migrating (expected during a rollback)", ", ".join(sorted(current - known)),
+            )
+            return
         cfg.attributes["connection"] = conn
         command.upgrade(cfg, revision)
 

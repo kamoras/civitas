@@ -61,7 +61,10 @@ STOCK_PIPELINE_STEPS = [
     ("president_ptr", "fetch", "Ingest presidential 278-T filings"),
     *HOLDINGS_STEPS,
 ]
-TRADE_STEPS = ("house_ptr", "senate_ptr", "president_ptr")
+# Every step that isn't a holdings step — derived, so a trade phase added to
+# the list above can't be left out of the run-status rule.
+_HOLDINGS_STEP_KEYS = {step for step, _, _ in HOLDINGS_STEPS}
+TRADE_STEPS = tuple(step for step, _, _ in STOCK_PIPELINE_STEPS if step not in _HOLDINGS_STEP_KEYS)
 
 # How far back to search on a cold start (no existing Senate trades in the
 # DB). The House walks whole yearly filing indexes instead (_ingest_house).

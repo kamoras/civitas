@@ -385,3 +385,21 @@ class TestFetchCaching:
                 with pytest.raises(senate_fd.SessionLapsed):
                     await senate_fd.fetch_and_parse_annual(None, db_session, filing)
             mock_set.assert_not_called()
+
+
+    async def test_senate_unfamiliar_page_is_unrecognized_but_retried_not_a_lapse(self, db_session):
+        """A 200 page that is neither the terms page nor a report is not a
+        lapsed session (no re-accept) — it's linked as unrecognized, and
+        not cached, since it may be a transient error page."""
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, patch
+
+        from app.pipeline.fetch import senate_fd
+
+        odd = SimpleNamespace(status_code=200, text="<html><body><h1>Service temporarily unavailable</h1></body></html>")
+        filing = {"report_url": "https://efdsearch.senate.gov/search/view/annual/abc/", "is_paper": False}
+        with patch.object(senate_fd, "_request_with_retry", new_callable=AsyncMock, return_value=odd), \
+             patch.object(senate_fd, "api_cache_set") as mock_set:
+            report = await senate_fd.fetch_and_parse_annual(None, db_session, filing)
+        assert (report.holdings, report.unreadable_reason, report.final) == (None, "unrecognized", False)
+        mock_set.assert_not_called()

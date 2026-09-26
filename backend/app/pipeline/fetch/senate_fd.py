@@ -116,6 +116,17 @@ class SessionLapsed(Exception):
     redirect to it — meaning the accepted-terms session has lapsed."""
 
 
+def is_terms_page(page_html: str) -> bool:
+    """True for eFD's statutory-use agreement page, which it serves (or
+    redirects to) in place of any report once the accepted-terms session
+    has lapsed — the same form accept_terms and the search flow submit."""
+    try:
+        doc = lxml_html.fromstring(page_html)
+    except Exception:
+        return False
+    return bool(doc.xpath('//*[@id="agreement_form"] | //*[@id="agree_statement"]'))
+
+
 def is_report_page(page_html: str) -> bool:
     """True when the page is a filed report: every electronic report renders
     its content as numbered "Part N." sections (Part 1 honoraria through
@@ -236,14 +247,22 @@ async def fetch_and_parse_annual(
     resp = await _request_with_retry(client, "GET", filing["report_url"])
     if resp is None:
         return None
-    if resp.status_code != 200 or not is_report_page(resp.text):
-        # Not the report — a lapsed session answers with a redirect to the
-        # terms page (the client doesn't follow redirects, so the body is
-        # empty) or the terms page itself. That says nothing about the
-        # report: never an unreadable report cached for a month. Raised
-        # rather than returned as None so the caller can tell it from a
-        # plain failed fetch and re-accept the terms only when it happens.
-        raise SessionLapsed(f"HTTP {resp.status_code} non-report response for {filing['report_url']}")
+    if resp.status_code != 200 or is_terms_page(resp.text):
+        # A lapsed session: eFD answers with a redirect to its terms page
+        # (fetch_with_retry passes 3xx through; the client doesn't follow
+        # it) or with the terms page itself. That says nothing about the
+        # report, so it's never stored as unreadable; raised rather than
+        # returned as None so the caller can re-accept the terms only when
+        # this actually happens.
+        raise SessionLapsed(f"HTTP {resp.status_code} for {filing['report_url']}")
+    if not is_report_page(resp.text):
+        # A 200 page that is neither the terms page nor a report in the
+        # layout this parser knows. It may be a changed layout or a
+        # transient error page, and nothing here can tell which: linked as
+        # unrecognized, but not cached and not marked read, so every run
+        # looks again (see AnnualReport.final).
+        logger.warning("Senate eFD page for %s is not in a recognized report layout", filing["report_url"])
+        return AnnualReport(None, None, UNREADABLE_UNRECOGNIZED, final=False)
     try:
         holdings = parse_assets_table(resp.text)
     except Exception:

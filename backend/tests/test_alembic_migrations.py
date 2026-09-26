@@ -105,3 +105,17 @@ def test_the_drift_check_is_not_vacuous(patched_engine):
     with patched_engine.begin() as conn:
         conn.execute(text("ALTER TABLE senators DROP COLUMN caucus_party"))
     assert any(d[0] == "add_column" and d[3].name == "caucus_party" for d in _diff(patched_engine))
+
+
+def test_a_database_migrated_by_a_newer_image_is_left_alone(patched_engine):
+    """Swarm's automatic rollback starts the previous image against a
+    database the failed new image already migrated. Alembic can't locate
+    that newer revision; the older image must start anyway (the schema only
+    ever expands between releases), not crash-loop the rollback."""
+    database._run_migrations()
+    with patched_engine.begin() as conn:
+        conn.execute(text("UPDATE alembic_version SET version_num = 'from_a_newer_image'"))
+
+    database._run_migrations()  # must not raise
+
+    assert _revision(patched_engine) == "from_a_newer_image"
