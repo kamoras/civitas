@@ -60,9 +60,9 @@ because that decides what the page can honestly claim.
 
 | Source kind | What it can see | States (2026-09-26) |
 |---|---|---|
-| **Certified general ballot** | Everyone on the November ballot, third parties, independents and post-primary replacements included | TX (`tx_civix`), NC (`tabular` + filing list), SD (`sd_vip`), LA (`voterportal`), SC (`vrems`), MO (`certified_pdf`), ME (`certified_table`) |
-| **Primary results** | Each party's nominee. Cannot see a Libertarian, Green or independent who never ran in a primary, or a nominee replaced after the primary | the other 37 configured states — `tabular` (14), `clarity` (3), `tally_enr` (2), `totalvote_enr` (2) and 16 single-state strategies |
-| **National fallback** | Nothing until Google publishes general-election contests, close to the election | MI, NV, NY, OH, OK, WI (`google_civic`) |
+| **Certified general ballot** | Everyone on the November ballot, third parties, independents and post-primary replacements included | TX (`tx_civix`), NC (`tabular` + filing list), SD (`sd_vip`), LA (`voterportal`), SC (`vrems`), MO (`certified_pdf`), ME, CO, VA (`certified_table`) |
+| **Primary results** | Each party's nominee. Cannot see a Libertarian, Green or independent who never ran in a primary, or a nominee replaced after the primary | the other 36 configured states — `tabular` (13), `clarity` (2), `tally_enr` (2), `totalvote_enr` (2) and 17 single-state strategies (WI's `canvass_summary_pdf` among them) |
+| **National fallback** | Nothing until Google publishes general-election contests, close to the election | MI, NV, NY, OH, OK (`google_civic`) |
 
 The first row is the states flagged `general_ballot_complete`. Transcribed
 from the JSON on the date shown; the JSON is authoritative.
@@ -83,13 +83,19 @@ list covers. For North Carolina the authoritative list is its filing list's
 general rows, so this runs in `sync_ballot_filings` rather than after the
 primary-results pass.
 
-**Why the six are on the fallback.** Their election sites answer server
-requests with a bot challenge (Cloudflare: NY, MI, WI; Incapsula: NV;
+**Why the five are on the fallback.** Their election sites answer server
+requests with a bot challenge (Cloudflare: NY, MI; Incapsula: NV;
 Ohio's SOS hosts return a "maintenance" 403), and Oklahoma's results API
 needs a login with a credential embedded in its page script. The pipeline
 does not defeat bot protection or use credentials not issued to it. The
 same office often publishes plain files on an open path — Wisconsin's
 official canvass PDF is one — and that is the way in.
+
+**A certified list before it exists.** Certified-list states (CO, VA) keep
+their previous primary-results entry as `fallback`, run when the list is not
+posted yet. The sync records which source answered (`_record_ballot_basis`,
+tier `ballot-basis`), and the API labels races "confirmed" only when that
+source was the complete ballot — never from config alone.
 
 ### Rules every strategy follows
 

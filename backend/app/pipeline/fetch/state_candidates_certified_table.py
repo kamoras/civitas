@@ -24,6 +24,24 @@ label parser should be taught to guess).
         "surname_column": "Last Name",
         "name_columns": ["First Name", "Middle Name", "Last Name", "Suffix"]
     }
+
+Optional, each because a live state needed it:
+  discovery.index_url + index_regex  one hop first, to the page that links the
+                                     file (Virginia: index -> "{year} November
+                                     Federal Offices" page -> xlsx)
+  format.surname_column omitted      the name is one printed column; the
+                                     surname is its last word (Colorado)
+  format.status_column/status_values keep only these statuses ("Qualified")
+  format.exclude                     {column: value} rows to drop — Colorado
+                                     lists declared write-ins, who are not
+                                     printed on the ballot
+
+Only the columns named here are read. Virginia's list carries every
+candidate's campaign email, phone and street address beside the ballot
+fields; this platform has no reason to hold them.
+
+Rows repeat (Virginia prints each candidate once per locality), so records
+are deduplicated.
 """
 
 import csv
@@ -37,6 +55,7 @@ from app.pipeline.fetch.state_candidates_common import (
     clean_display_name,
     discover_certification_link,
     normalize_party,
+    surname,
 )
 from app.pipeline.fetch.state_candidates_tabular import _xlsx_rows
 from app.pipeline.rate_limiter import RateLimiter
@@ -57,24 +76,33 @@ def _rows(payload: bytes, url: str) -> list[dict] | None:
 
 def parse_certified_rows(rows: list[dict], fmt: dict) -> list[dict]:
     """Federal candidate records from the list's rows."""
-    codes = {str(k).strip().upper(): v for k, v in (fmt.get("office_codes") or {}).items()}
-    records = []
+    codes = {" ".join(str(k).split()).upper(): v for k, v in (fmt.get("office_codes") or {}).items()}
+    statuses = {str(v).strip().upper() for v in fmt.get("status_values") or []}
+    exclude = {col: str(val).strip().upper() for col, val in (fmt.get("exclude") or {}).items()}
+    records: dict[tuple, dict] = {}
     for row in rows:
-        office = codes.get(str(row.get(fmt["office_column"]) or "").strip().upper())
+        if statuses and str(row.get(fmt["status_column"]) or "").strip().upper() not in statuses:
+            continue
+        if any(str(row.get(col) or "").strip().upper() == val for col, val in exclude.items()):
+            continue
+        office = codes.get(" ".join(str(row.get(fmt["office_column"]) or "").split()).upper())
         if office not in ("S", "H"):
             continue
         district = None
         if office == "H":
             digits = "".join(ch for ch in str(row.get(fmt["district_column"]) or "") if ch.isdigit())
             district = int(digits) if digits else 0
-        last = str(row.get(fmt["surname_column"]) or "").strip()
-        if not last:
-            continue
         display = clean_display_name(
             " ".join(str(row.get(col) or "").strip() for col in fmt["name_columns"])
         )
+        last = (
+            str(row.get(fmt["surname_column"]) or "").strip()
+            if fmt.get("surname_column") else (surname(display) or "")
+        )
+        if not last:
+            continue
         party_label = str(row.get(fmt["party_column"]) or "").strip()
-        records.append({
+        records[(office, district, display.lower())] = {
             "office": office,
             "district": district,
             # A certified ballot: "Independent"/"Unenrolled" is an entry.
@@ -82,8 +110,8 @@ def parse_certified_rows(rows: list[dict], fmt: dict) -> list[dict]:
             "last_name": last,
             "display_name": display,
             "party_label": party_label,
-        })
-    return records
+        }
+    return list(records.values())
 
 
 async def fetch_confirmed_candidates(
@@ -91,17 +119,24 @@ async def fetch_confirmed_candidates(
 ) -> list[dict] | None:
     discovery = source.get("discovery") or {}
     fmt = source.get("format") or {}
-    if not discovery.get("page_url") or not discovery.get("link_regex"):
+    if not (discovery.get("page_url") or discovery.get("index_url")) or not discovery.get("link_regex"):
         logger.warning("%s certified_table source needs discovery.page_url and link_regex", state)
         return None
     missing = [k for k in ("office_column", "office_codes", "district_column", "party_column",
-                           "surname_column", "name_columns") if not fmt.get(k)]
+                           "name_columns") if not fmt.get(k)]
     if missing:
         logger.warning("%s certified_table format is missing %s", state, missing)
         return None
 
+    page_url = discovery.get("page_url")
+    if discovery.get("index_url") and discovery.get("index_regex"):
+        page_url = await discover_certification_link(
+            client, _rate_limiter, discovery["index_url"], discovery["index_regex"], year, state,
+        )
+        if page_url is None:
+            return None
     url = await discover_certification_link(
-        client, _rate_limiter, discovery["page_url"], discovery["link_regex"], year, state,
+        client, _rate_limiter, page_url, discovery["link_regex"], year, state,
     )
     if url is None:
         return None

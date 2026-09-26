@@ -73,7 +73,9 @@ from app.pipeline.fetch.state_source_crawler import (
 )
 from app.pipeline.candidate_dedup import normalized_surname
 from app.pipeline.fetch.state_candidates_common import (
+    BALLOT_BASIS_TIER,
     PARTY_CODE_MAP,
+    ballot_basis_key,
     JUDICIAL_COURT_LABELS,
     JUDICIAL_MARKER_TIER,
     JUDICIAL_MARKER_TTL_HOURS,
@@ -85,6 +87,7 @@ from app.pipeline.fetch.state_candidates_common import (
     statewide_marker_key,
 )
 from app.pipeline.fetch.state_candidates_al import fetch_confirmed_candidates as _fetch_al
+from app.pipeline.fetch.state_candidates_canvass_summary_pdf import fetch_confirmed_candidates as _fetch_canvass_summary_pdf
 from app.pipeline.fetch.state_candidates_canvass_xml import fetch_confirmed_candidates as _fetch_canvass_xml
 from app.pipeline.fetch.state_candidates_certified_pdf import fetch_confirmed_candidates as _fetch_certified_pdf
 from app.pipeline.fetch.state_candidates_certified_table import fetch_confirmed_candidates as _fetch_certified_table
@@ -147,6 +150,7 @@ STRATEGIES = {
     "vrems": _fetch_vrems,
     "certified_pdf": _fetch_certified_pdf,
     "certified_table": _fetch_certified_table,
+    "canvass_summary_pdf": _fetch_canvass_summary_pdf,
     "google_civic": _fetch_civic,
     "nh_results": _fetch_nh,
     "enhanced_voting": _fetch_enhanced_voting,
@@ -440,6 +444,22 @@ def _apply_ballot(
         "confirmed": confirmed, "unmatched": unmatched,
         "ballotOnly": len(ballot_only), "unconfirmed": withdrawn,
     }
+
+
+def _record_ballot_basis(db: Session, cycle: int, state: str, source: dict) -> None:
+    """Say which source answered for this state tonight — see
+    BALLOT_BASIS_TIER. Read by the API to decide "confirmed" (the whole
+    ballot) versus "nominees" (primary results) per state."""
+    api_cache_set(
+        db, BALLOT_BASIS_TIER, ballot_basis_key(state, cycle),
+        {
+            "complete": bool(source.get("general_ballot_complete")),
+            "sourceName": str(source.get("source_name") or ""),
+            "checkedAt": utcnow().isoformat() + "Z",
+        },
+        normal_ttl_hours=STATEWIDE_MARKER_TTL_HOURS,
+    )
+    db.commit()
 
 
 def _unconfirm_off_ballot(db: Session, listed: dict[str, set[str]]) -> int:
@@ -986,6 +1006,19 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
             logger.exception("Confirmed-candidate fetch raised for %s", state)
             records = None
 
+        fallback = source.get("fallback")
+        if records is None and fallback and STRATEGIES.get(fallback.get("strategy")):
+            # A state's own second choice, named in its entry — Wisconsin's
+            # canvass file name changes between cycles, and until the new
+            # one is known its national fallback still says something.
+            logger.info("Falling back to %s for %s", fallback["strategy"], state)
+            try:
+                records = await STRATEGIES[fallback["strategy"]](client, cycle, state, fallback)
+            except Exception:
+                logger.exception("Fallback fetch raised for %s", state)
+                records = None
+            if records is not None:
+                source = fallback
         if records is None:
             # A hand-verified source that has broken falls back to whatever
             # the crawler last proved for this state, rather than the state
@@ -1029,6 +1062,8 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
             keep_unlisted=not ballot_is_elsewhere,
             authoritative=bool(source.get("general_ballot_complete")) and not ballot_is_elsewhere,
         )
+        if not ballot_is_elsewhere:
+            _record_ballot_basis(db, cycle, state, source)
         confirmed, unmatched = applied["confirmed"], applied["unmatched"]
 
         results[state] = {
@@ -1089,6 +1124,7 @@ async def sync_ballot_filings(db: Session, client: httpx.AsyncClient, cycle: int
                 db, cycle, state, found["general"], keep_unlisted=True,
                 authoritative=bool(source.get("general_ballot_complete")),
             )
+            _record_ballot_basis(db, cycle, state, source)
             counts["general"] = applied["confirmed"]
             unmatched += applied["unmatched"]
         results[state] = {

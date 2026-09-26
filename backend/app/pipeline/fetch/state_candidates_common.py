@@ -313,6 +313,17 @@ def statewide_marker_key(state: str, cycle: int) -> str:
     return f"synced-{state}-{cycle}"
 
 
+# Which source last answered for a state's federal ballot, and whether that
+# source was its complete certified ballot. A state's config says what its
+# PRIMARY source is; a `fallback` can answer instead (a certified list not
+# posted yet), and then the page must not claim a complete ballot.
+BALLOT_BASIS_TIER = "ballot-basis"
+
+
+def ballot_basis_key(state: str, cycle: int) -> str:
+    return f"{state}-{cycle}"
+
+
 # Judicial gets its OWN marker rather than sharing the statewide one.
 # The statewide marker covers the executive offices and the legislature
 # together because they are one claim — same ballot, same response,

@@ -332,16 +332,16 @@ async def test_a_non_candidate_row_never_becomes_a_person(db_session, only):
 
 @pytest.mark.asyncio
 async def test_primary_results_never_unconfirm_anyone(db_session, only):
-    # Colorado reads primary results: a later fetch that doesn't list a
+    # Pennsylvania reads primary results: a later fetch that doesn't list a
     # nominee is not evidence they left the ballot.
-    _race(db_session, "2026-SEN-CO", "CO")
-    _db_cand(db_session, "S6CO00001", "2026-SEN-CO", "HICKENLOOPER, JOHN", "DEM", confirmed_general=True)
+    _race(db_session, "2026-SEN-PA", "PA")
+    _db_cand(db_session, "S6PA00001", "2026-SEN-PA", "NOMINEE, JANE", "DEM", confirmed_general=True)
     db_session.commit()
-    only("CO", [_rec("S", None, "R", "Other", "Some Other")])
+    only("PA", [_rec("S", None, "R", "Other", "Some Other")])
 
     await sc.sync_confirmed_candidates(db_session, None, 2026)
 
-    assert db_session.query(Candidate).filter(Candidate.id == "S6CO00001").one().confirmed_general is True
+    assert db_session.query(Candidate).filter(Candidate.id == "S6PA00001").one().confirmed_general is True
 
 
 def test_match_folds_accents_and_reads_married_names():
@@ -366,3 +366,107 @@ def test_match_tolerates_one_transposed_letter_only_with_the_given_name():
 
 def _c(name, party, cid):
     return SimpleNamespace(name=name, party=party, id=cid, has_raised_funds=False, contributions=0)
+
+
+# --- Wisconsin: the certified canvass, and a state's own fallback source ---
+
+from app.pipeline.fetch.state_candidates_canvass_summary_pdf import parse_canvass  # noqa: E402
+
+WI_LINES = """WEC Canvass Reporting System
+Office GOVERNOR Total Votes: 1,283,728
+Party: Republican Total Votes: 491,013
+Winner 468,019 95.32% Tom Tiffany Republican
+Office REPRESENTATIVE IN CONGRESS DISTRICT 1 Total Votes: 122,554
+Party: Republican Total Votes: 51,119
+Winner 50,915 99.6% Bryan Steil Republican
+204 .4%
+SCATTERING
+Party: Democratic 71,403
+Total Votes:
+15,455 21.64% Peter Burgelis Democrat
+Winner 31,494 44.11% Mitchell Berman Democrat
+Party: REPRESENTATIVE IN CONGRESS DISTRICT 1 - Constitution Total Votes: 13
+Winner 13 100% SCATTERING
+Office REPRESENTATIVE IN CONGRESS DISTRICT 2 Total Votes: 165,383
+Party: Republican Total Votes: 1,179
+Winner 1,179 100% SCATTERING
+Party: Democratic Total Votes: 164,183
+Winner 144,365 87.93% Mark Pocan Democrat
+Report Generated - 8/27/2026 11:44:51 AM Page 5 of 79
+Office REPRESENTATIVE IN CONGRESS DISTRICT 2 Total Votes: 165,383
+Party: Democratic Total Votes: 164,183
+208 .13% SCATTERING
+Office REPRESENTATIVE IN CONGRESS DISTRICT 6 Total Votes: 150,000
+Party: Wisconsin Green Total Votes: 62
+Winner 62 100% Matthew Arndt Wisconsin
+Green
+Party: Libertarian Total Votes: 9
+Winner 9 100% Democrat
+""".splitlines()
+
+
+def test_canvass_reads_the_states_own_winner_marks():
+    got = {(r["district"], r["party"], r["display_name"]) for r in parse_canvass(WI_LINES)}
+    assert got == {
+        (1, "R", "Bryan Steil"),
+        (1, "D", "Mitchell Berman"),   # the marked winner, not the first name listed
+        (2, "D", "Mark Pocan"),        # once, though a page break repeats the office
+        (6, "G", "Matthew Arndt"),     # party wrapped onto the next line
+    }
+    # Governor is not federal; SCATTERING is not a person; a Winner line
+    # whose name was lost ("Winner 9 100% Democrat") names nobody.
+
+
+@pytest.mark.asyncio
+async def test_a_states_fallback_runs_when_its_source_returns_nothing(db_session, monkeypatch):
+    async def no_calendar(client, cycle):
+        return {}
+    monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+    monkeypatch.setattr(sc, "configured_states", lambda: {"WI"})
+    monkeypatch.setitem(sc.STRATEGIES, "canvass_summary_pdf", AsyncMock(return_value=None))
+    fallback = AsyncMock(return_value=[_rec("H", 2, "D", "Pocan", "Mark Pocan")])
+    monkeypatch.setitem(sc.STRATEGIES, "google_civic", fallback)
+    _race(db_session, "2026-HOUSE-WI-2", "WI", office="H", district=2)
+    _db_cand(db_session, "H8WI02156", "2026-HOUSE-WI-2", "POCAN, MARK", "DEM")
+    db_session.commit()
+
+    results = await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+    assert fallback.await_count == 1
+    assert results["WI"]["confirmed"] == 1
+
+
+# --- Which source answered decides "confirmed" vs "nominees" ---
+
+from app.api import elections as elections_api  # noqa: E402
+
+
+def test_a_complete_ballot_readmits_no_unopposed_filer(db_session):
+    _race(db_session, "2026-SEN-CO", "CO")
+    _db_cand(db_session, "S6CO1", "2026-SEN-CO", "HICKENLOOPER, JOHN", "DEM", confirmed_general=True)
+    _db_cand(db_session, "S6CO2", "2026-SEN-CO", "SOLO, REP FILER", "REP", incumbent_challenge="C")
+    db_session.commit()
+    race = db_session.query(Race).filter(Race.id == "2026-SEN-CO").one()
+
+    assert {c.id for c in elections_api._confirmed_or_all(race.candidates, "CO", False)} == {"S6CO1", "S6CO2"}
+    # A party missing from a certified ballot has nobody on it.
+    assert {c.id for c in elections_api._confirmed_or_all(race.candidates, "CO", True)} == {"S6CO1"}
+
+
+@pytest.mark.asyncio
+async def test_a_fallback_answer_is_labelled_nominees_not_confirmed(db_session, monkeypatch):
+    async def no_calendar(client, cycle):
+        return {}
+    monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+    monkeypatch.setattr(sc, "configured_states", lambda: {"CO"})
+    monkeypatch.setitem(sc.STRATEGIES, "certified_table", AsyncMock(return_value=None))
+    monkeypatch.setitem(sc.STRATEGIES, "clarity", AsyncMock(return_value=[_rec("S", None, "D", "Hickenlooper", "John Hickenlooper")]))
+    _race(db_session, "2026-SEN-CO", "CO")
+    _db_cand(db_session, "S6CO1", "2026-SEN-CO", "HICKENLOOPER, JOHN", "DEM")
+    db_session.commit()
+
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+    # CO's entry claims a complete ballot, but tonight its fallback (primary
+    # results) answered, so the page must say "nominees".
+    assert elections_api._ballot_complete(db_session, "CO", 2026) is False
