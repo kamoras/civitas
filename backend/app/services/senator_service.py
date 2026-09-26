@@ -58,6 +58,10 @@ STATE_NAMES: dict[str, str] = {
     "SD": "South Dakota", "TN": "Tennessee", "TX": "Texas", "UT": "Utah",
     "VT": "Vermont", "VA": "Virginia", "WA": "Washington", "WV": "West Virginia",
     "WI": "Wisconsin", "WY": "Wyoming",
+    # Not a state, but it has a House delegate and its own ballot page, and
+    # every lookup here falls back to the bare code — which put "DC" in
+    # front of readers wherever a full name belonged.
+    "DC": "District of Columbia",
 }
 
 

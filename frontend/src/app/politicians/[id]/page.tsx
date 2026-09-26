@@ -2,10 +2,12 @@ import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { PoliticianProfile } from "@/types/politicians";
 import { usableRecord } from "@/lib/ssrPayload";
+import { absoluteUrl, pageMetadata } from "@/lib/site";
+import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
+import { describeProfile, personJsonLd } from "@/lib/seo";
 import PoliticianProfileClient from "./PoliticianProfileClient";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
-const SITE = "https://civitas-research.org";
 
 async function fetchProfile(id: string): Promise<PoliticianProfile | null> {
   try {
@@ -26,32 +28,21 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const profile = await fetchProfile(id);
+  const path = `/politicians/${encodeURIComponent(id)}`;
 
-  const name = profile?.identity.name ?? "Politician";
-  const role = profile?.identity.role ?? "";
-  const state = profile?.identity.state ? `, ${profile.identity.state}` : "";
-  const title = `${name} — Civitas`;
-  const description = `${role}${state} — public record, scorecard, and active issues on Civitas.`;
+  if (!profile) {
+    return pageMetadata({ title: "Politician not found", description: "No record for this id.", path, noindex: true });
+  }
 
-  const ogImage = `${SITE}/api/og?politician=${id}`;
-
-  return {
+  const { title, description } = describeProfile(profile);
+  const ogImage = absoluteUrl(`/api/og?politician=${encodeURIComponent(id)}`);
+  return pageMetadata({
     title,
     description,
-    openGraph: {
-      title,
-      description,
-      url: `${SITE}/politicians/${id}`,
-      siteName: "Civitas",
-      images: [{ url: ogImage, width: 1200, height: 630, alt: name }],
-    },
-    twitter: {
-      card: "summary_large_image",
-      title,
-      description,
-      images: [{ url: ogImage, alt: name }],
-    },
-  };
+    path,
+    type: "profile",
+    images: [{ url: ogImage, width: 1200, height: 630, alt: profile.identity.name }],
+  });
 }
 
 export default async function PoliticianProfilePage({
@@ -64,5 +55,19 @@ export default async function PoliticianProfilePage({
 
   if (!profile) notFound();
 
-  return <PoliticianProfileClient profile={profile} />;
+  return (
+    <>
+      <JsonLd
+        data={[
+          personJsonLd(id, profile),
+          breadcrumbList([
+            { name: "Home", url: absoluteUrl("/") },
+            { name: "Politicians", url: absoluteUrl("/politicians") },
+            { name: profile.identity.name, url: absoluteUrl(`/politicians/${encodeURIComponent(id)}`) },
+          ]),
+        ]}
+      />
+      <PoliticianProfileClient profile={profile} />
+    </>
+  );
 }

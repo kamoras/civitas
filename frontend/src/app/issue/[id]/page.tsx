@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
@@ -8,10 +9,12 @@ import { usableRecord } from "@/lib/ssrPayload";
 import { formatUtcDate, isNewFact } from "@/lib/formatting";
 import { ACTION_CENTER_HREF } from "@/lib/routes";
 import { PolicyBadge, MonitorChips, NewFactTag, IssueImage } from "@/components/action/IssueEnrichment";
+import { absoluteUrl, pageMetadata } from "@/lib/site";
+import { articleJsonLd } from "@/lib/seo";
+import JsonLd from "@/components/seo/JsonLd";
 import IssueActions from "./IssueActions";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
-const SITE = "https://civitas-research.org";
 
 async function fetchIssue(id: string): Promise<ActionIssue | null> {
   try {
@@ -33,69 +36,36 @@ export async function generateMetadata({
   const { id } = await params;
   const issue = await fetchIssue(id);
 
-  const title = issue?.title ? `${issue.title} — Civitas` : "Civitas Action Center";
-  const description =
-    issue?.summary?.slice(0, 200) ?? "Track what Congress is doing — and what you can do about it.";
+  if (!issue) {
+    return pageMetadata({
+      title: "Issue not found",
+      description: "No record for this issue.",
+      path: `/issue/${encodeURIComponent(id)}`,
+      noindex: true,
+    });
+  }
 
-  return {
-    title,
-    description,
-    openGraph: {
-      title,
-      description,
-      url: `${SITE}/issue/${id}`,
-      siteName: "Civitas",
-      images: [
-        {
-          url: `${SITE}/api/og?issue=${id}`,
-          width: 1200,
-          height: 630,
-          alt: issue?.title ?? "Civitas Action Center",
-        },
-      ],
-      type: "article",
-    },
-    twitter: {
-      card: "summary_large_image",
-      title,
-      description,
-      images: [
-        {
-          url: `${SITE}/api/og?issue=${id}`,
-          alt: issue?.title ?? "Civitas Action Center",
-        },
-      ],
-    },
-  };
+  // Canonical from the record: public ids resolve case-insensitively
+  // (from_public_id), so the request's spelling isn't necessarily the one
+  // to index.
+  const path = `/issue/${issue.publicId}`;
+  const ogImage = absoluteUrl(`/api/og?issue=${issue.publicId}`);
+  return pageMetadata({
+    title: issue.title,
+    description: issue.summary || "Track what Congress is doing — and what you can do about it.",
+    path,
+    type: "article",
+    images: [{ url: ogImage, width: 1200, height: 630, alt: issue.title }],
+  });
 }
 
 export default async function IssuePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const issue = await fetchIssue(id);
 
-  if (!issue) {
-    return (
-      <>
-        <Navbar />
-        <main
-          id="main-content"
-          tabIndex={-1}
-          className="pt-[var(--header-clearance)] pb-16 px-4 min-h-screen flex items-center justify-center"
-        >
-          <div className="text-center space-y-4 relative z-10">
-            <div className="text-2xl font-mono text-ink-hi">ISSUE NOT FOUND</div>
-            <Link
-              href={ACTION_CENTER_HREF}
-              className="text-sm text-ink-lo hover:text-phos underline"
-            >
-              ← Back to Action Center
-            </Link>
-          </div>
-        </main>
-        <Footer />
-      </>
-    );
-  }
+  // A real 404, not a 200 page that says "not found": search engines
+  // index the latter as a thin duplicate of every other missing id.
+  if (!issue) notFound();
 
   const paragraphs = issue.fullStory
     ? issue.fullStory.split(/\n\n+/).filter((p) => p.trim())
@@ -107,6 +77,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
 
   return (
     <>
+      <JsonLd data={articleJsonLd(issue)} />
       <Navbar />
       <main
         id="main-content"
@@ -205,7 +176,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
             </section>
           )}
 
-          <IssueActions issue={issue} today={today} shareUrl={`${SITE}/issue/${id}`} />
+          <IssueActions issue={issue} today={today} shareUrl={absoluteUrl(`/issue/${issue.publicId}`)} />
 
           {/* Back */}
           <div className="pt-8 border-t border-white/[0.07]">
