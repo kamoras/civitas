@@ -6,6 +6,7 @@ import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import PageMasthead from "@/components/layout/PageMasthead";
 import Footer from "@/components/layout/Footer";
+import PageFallback from "@/components/layout/PageFallback";
 import BackToTop from "@/components/BackToTop";
 import {
   searchExplore,
@@ -176,7 +177,7 @@ function ResultCard({ result, query }: { result: ExploreResult; query: string })
 
 export default function ExplorePage() {
   return (
-    <Suspense>
+    <Suspense fallback={<PageFallback eyebrow={"Explore · search across every branch"} title={"Explore the record"} rows={4} />}>
       <ExplorePageInner />
     </Suspense>
   );

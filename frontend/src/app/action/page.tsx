@@ -6,6 +6,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import PageFallback from "@/components/layout/PageFallback";
 import PageMasthead from "@/components/layout/PageMasthead";
 import { fetchActionIssues, fetchOpenComments, OpenCommentItem } from "@/lib/api";
 import { useAsyncData } from "@/hooks/useAsyncData";
@@ -784,7 +785,7 @@ function OpenCommentsBanner() {
 
 export default function ActionPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<PageFallback eyebrow={"Action Center · what is moving right now"} title={"Today on the record"} rows={4} />}>
       <ActionPageInner />
     </Suspense>
   );

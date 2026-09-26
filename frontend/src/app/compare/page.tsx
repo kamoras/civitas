@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
 import PageMasthead from "@/components/layout/PageMasthead";
 import Footer from "@/components/layout/Footer";
+import PageFallback from "@/components/layout/PageFallback";
 import {
   fetchSenatorsByState,
   fetchSenator,
@@ -563,7 +564,7 @@ function ComparePageInner() {
 
 export default function ComparePage() {
   return (
-    <Suspense>
+    <Suspense fallback={<PageFallback eyebrow={"Compare · two legislators, side by side"} title={"Compare legislators"} rows={3} />}>
       <ComparePageInner />
     </Suspense>
   );
