@@ -410,8 +410,8 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
           {data.laterPaperUrl && (
             <p className="text-xs text-ink-lo mt-2">
               Also filed after this report, on paper: the {data.laterPaperLabel ?? "paper filing"}. A paper
-              filing is scanned page images and states no year that can be read here, so the breakdown
-              above stays with the {reportLabel}.{" "}
+              filing is scanned page images and states no year that can be read here, so this section
+              stays with the {reportLabel}.{" "}
               <a
                 href={data.laterPaperUrl}
                 target="_blank"

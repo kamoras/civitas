@@ -313,7 +313,7 @@ class TestFetchCaching:
 
         filing = {"doc_id": "D1", "pdf_url": "https://clerk.example/2025/D1.pdf"}
         unrecognized = AnnualReport("Member", None, "unrecognized")
-        with patch.object(house_ptr, "fetch_bytes_with_retry", new_callable=AsyncMock, return_value=b"%PDF"), \
+        with patch.object(house_ptr, "fetch_bytes_with_retry", new_callable=AsyncMock, return_value=b"%PDF-1.4"), \
              patch.object(house_fd, "parse_annual_pdf", return_value=unrecognized), \
              patch.object(house_fd, "api_cache_set") as mock_set:
             report = await house_fd.fetch_and_parse_annual(None, db_session, filing)
@@ -449,7 +449,7 @@ class TestRepeatedCrash:
         from app.pipeline.fetch import house_fd, house_ptr
 
         filing = {"doc_id": "BROKEN", "pdf_url": "https://clerk.example/2025/BROKEN.pdf"}
-        with patch.object(house_ptr, "fetch_bytes_with_retry", new_callable=AsyncMock, return_value=b"%PDF"), \
+        with patch.object(house_ptr, "fetch_bytes_with_retry", new_callable=AsyncMock, return_value=b"%PDF-1.4"), \
              patch.object(house_fd, "parse_annual_pdf", side_effect=ValueError("bad xref")):
             first = await house_fd.fetch_and_parse_annual(None, db_session, filing)
             second = await house_fd.fetch_and_parse_annual(None, db_session, filing)

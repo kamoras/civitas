@@ -39,7 +39,8 @@ from app.pipeline.fetch.president_ptr import (
 )
 from app.pipeline.fetch.ptr_common import TradeRow
 from app.pipeline.fetch.sec_tickers import resolve_tickers
-from app.pipeline.holdings_pipeline import HOLDINGS_STEPS, run_holdings_phases
+from app.holdings_schedule import HOLDINGS_STEPS
+from app.pipeline.holdings_pipeline import run_holdings_phases
 from app.pipeline.filer_matching import current_representatives, current_senators
 from app.pipeline.filer_matching import match_representative as _match_representative
 from app.pipeline.filer_matching import match_senator as _match_senator

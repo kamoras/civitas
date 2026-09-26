@@ -736,10 +736,11 @@ paper") rather than guessed to be newer. Each fetch module's
 parser's output changes, and already-ingested reports are re-read (a re-read
 that can't read the report at all keeps the earlier holdings; one that reads
 rows, or none, replaces them). Both phases are time-boxed
-(`holdings_pipeline.PHASE_CEILING`: index or search, report fetching, outage
+(`holdings_schedule.PHASE_CEILING`: index or search, report fetching, outage
 probes, each with its own budget), so a first run or a version bump spreads
 over a few nights, and the stock run's overrun alarm
-(`ops_alerts.stock_trades_overrun_budget`) allows for that ceiling. The holdings phases never decide the stock run's
+(`ops_alerts.stock_trades_overrun_budget`) allows for that ceiling. The
+holdings phases never decide the stock run's
 status (that stays "every trade phase failed"); each phase that fails sends
 its own ops alert instead. A phase fails on a parser regression — reads that
 cannot be read at all (a crash, an unrecognized report, "scanned" where an

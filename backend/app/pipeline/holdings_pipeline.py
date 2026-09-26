@@ -12,14 +12,14 @@ turned up a member's older report leaves the newer stored one alone.
 Nothing is derived from the value brackets here; the read path
 (holdings_service) reports them as disclosed.
 
-Each phase is time-boxed (PHASE_CEILING). A normal run fetches only the
-handful of reports filed since the last one and finishes in a minute or
-two; the first run, or a PARSER_VERSION bump, has every member's report to
-read, and the budget spreads that over a few nightly runs instead of
-holding the stock-trades run — and the hourly action-center refresh that
-waits on it — for longer (ops_alerts.stock_trades_overrun_budget allows
-for PHASE_CEILING). Members with nothing stored go
-first, so coverage fills before re-reads.
+Each phase is time-boxed (app/holdings_schedule.py). A normal run fetches
+only the handful of reports filed since the last one and finishes in a
+minute or two; the first run, or a PARSER_VERSION bump, has every member's
+report to read, and the budget spreads that over a few nightly runs instead
+of holding the stock-trades run — and the hourly action-center refresh that
+waits on it — for longer (ops_alerts.stock_trades_overrun_budget allows for
+PHASE_CEILING). Members with nothing stored go first, so coverage fills
+before re-reads.
 """
 
 import asyncio
@@ -148,12 +148,14 @@ def _keeps_earlier_read(prior: int | None, report: AnnualReport) -> bool:
     return True
 
 
-def _is_older(stored: _Stored | None, rank: Rank) -> bool:
+def _is_older(stored: _Stored | None, filing_id: str, rank: Rank) -> bool:
     """The candidate ranks below what's stored. The stored report's rank is
     kept with it (year, filing date, amended), so this holds even when a
     partial index or search no longer returns the stored filing — what it
-    superseded can't come back."""
-    return stored is not None and rank < stored.rank
+    superseded can't come back. The stored filing is never older than
+    itself, whatever this run's row for it says (a date that failed to
+    parse would otherwise stop it being re-read after a parser bump)."""
+    return stored is not None and filing_id != stored.filing_id and rank < stored.rank
 
 
 def _members_in_order(per_member: dict[str, list[dict]], stored: dict[str, _Stored]) -> list[str]:
@@ -397,7 +399,7 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
             filing_id = chamber.filing_id(filing)
             if _is_current(mine, filing_id, chamber.parser_version):
                 break  # already have the newest report, as this parser reads it
-            if _is_older(mine, ranks[filing_id]):
+            if _is_older(mine, filing_id, ranks[filing_id]):
                 # Only older reports than the stored one turned up — a year's
                 # index or a page of search results failed to load, or the
                 # best left is a paper amendment of unknowable year. Keep
@@ -436,14 +438,20 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
             health.parsed(report, prior)
             if _keeps_earlier_read(prior, report):
                 break
+            fields, rank = chamber.fields(filing), ranks[filing_id]
+            if mine is not None and mine.filing_id == filing_id:
+                # A re-read of the stored report: never lose what was known
+                # about it to a row that says less this run.
+                fields["filed_date"] = fields["filed_date"] or mine.filed_date
+                rank = max(rank, mine.rank)
             inserted += _replace_disclosure(
                 db,
                 owner_filter={chamber.owner_key: member_id},
                 filing_id=filing_id,
-                **chamber.fields(filing),
+                **fields,
                 report=report,
                 parser_version=chamber.parser_version,
-                rank=ranks[filing_id],
+                rank=rank,
             )
             # Per member, so a budget stop or a later failure keeps what's done.
             db.commit()
@@ -538,8 +546,9 @@ def _senate_ranks(filings: list[dict]) -> dict[str, Rank]:
 
     A paper filing states no year — not in its link, and not on its page,
     which is page images (checked 2026-09-26) — so it ranks below every
-    dated report and is used only when a senator has nothing dated. A
-    paper filing made after the report shown is named beside it instead
+    dated report, this run's or the one stored: a senator's newest dated
+    report stays, and a paper one is stored only for a senator with none.
+    A paper filing made after the report shown is named beside it instead
     (_note_later_paper): "filed later" is a fact; "newer" would be a guess.
     """
     return {
@@ -554,11 +563,13 @@ def _note_later_paper(db: Session, per_senator: dict[str, list[dict]]) -> None:
     none. Only for senators this search returned filings for: a senator it
     missed keeps whatever note they had."""
     for disclosure in db.query(FinancialDisclosure).filter(FinancialDisclosure.senator_id.in_(list(per_senator))):
+        # With no filing date stored, nothing can be said to be filed after it.
         later = [
             f for f in per_senator[disclosure.senator_id]
             if f.get("is_paper")
             and senate_filing_id(f["report_url"]) != disclosure.filing_id
-            and (f.get("filed_date") or "") > (disclosure.filed_date or "")
+            and disclosure.filed_date and f.get("filed_date")
+            and f["filed_date"] > disclosure.filed_date
         ]
         newest = max(later, key=lambda f: f.get("filed_date") or "", default=None)
         disclosure.later_paper_label = _senate_report_label(newest) if newest else None
@@ -696,9 +707,12 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
         },
         still_loads=lambda url: _senate_probe(client, url),
     )
-    inserted = await _ingest_members(db, chamber, per_senator)
-    _note_later_paper(db, per_senator)
-    return inserted
+    try:
+        return await _ingest_members(db, chamber, per_senator)
+    finally:
+        # Even when the phase fails its health check: reports replaced and
+        # committed before that would otherwise go without their note.
+        _note_later_paper(db, per_senator)
 
 
 async def run_holdings_phases(

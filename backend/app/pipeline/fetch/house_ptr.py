@@ -122,6 +122,15 @@ async def _fetch_index_entries(client: httpx.AsyncClient, db: Session, year: int
     return entries
 
 
+def _looks_like_pdf(body: bytes) -> bool:
+    """The PDF header, "%PDF-", within the first KB — the spec allows
+    leading bytes before it, and pdfplumber reads such files — in a body
+    that isn't markup. An HTML block or maintenance page can quote the
+    string; it can't be anything but markup from its first character."""
+    head = body[:1024]
+    return b"%PDF-" in head and not head.lstrip(b"\xef\xbb\xbf \t\r\n\x00").startswith(b"<")
+
+
 async def download_pdf(client: httpx.AsyncClient, url: str, headers: dict | None = None) -> bytes | None:
     """The one Clerk download policy, for every House PDF fetch (PTRs,
     annual reports, the annual-report probe): the same limiter and retries,
@@ -132,9 +141,7 @@ async def download_pdf(client: httpx.AsyncClient, url: str, headers: dict | None
         client, _rate_limiter, url, "House Clerk",
         headers=headers, rate_limit_backoff_multiplier=2.0, retry_on_4xx=False,
     )
-    # The PDF header may follow up to 1 KB of leading bytes (the spec allows
-    # it, and pdfplumber reads such files), so it's looked for there.
-    if body is not None and b"%PDF" not in body[:1024]:
+    if body is not None and not _looks_like_pdf(body):
         logger.warning("House Clerk served something other than a PDF for %s", url)
         return None
     return body

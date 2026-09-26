@@ -1310,8 +1310,10 @@ def test_the_stock_runs_overrun_budget_allows_for_the_holdings_phases():
 def test_the_watchdog_reads_the_budget_without_the_fetch_chain():
     """The overrun watchdog must not depend on Playwright or pdfplumber
     importing cleanly."""
+    import os
     import subprocess
     import sys
+    from pathlib import Path
 
     code = (
         "import sys\n"
@@ -1320,7 +1322,9 @@ def test_the_watchdog_reads_the_budget_without_the_fetch_chain():
         "assert 'app.pipeline.holdings_pipeline' not in sys.modules\n"
         "assert 'playwright' not in sys.modules\n"
     )
-    subprocess.run([sys.executable, "-c", code], check=True)
+    backend = Path(__file__).resolve().parents[1]
+    env = {**os.environ, "PYTHONPATH": str(backend)}
+    subprocess.run([sys.executable, "-c", code], check=True, cwd=backend, env=env)
 
 
 class TestLapseAndDeadlineEdges:
@@ -1366,3 +1370,41 @@ class TestLapseAndDeadlineEdges:
         with patch.object(holdings_pipeline.time, "monotonic", clock):
             with pytest.raises(RuntimeError, match="no report fetched"):
                 await _ingest_house(db_session, index, {}, on_fetch=hangs)
+
+
+class TestLaterPaperNoteEdges:
+    async def test_no_note_without_a_stored_filing_date(self, db_session, senator):
+        db_session.add(FinancialDisclosure(
+            senator_id="S1", filing_id="e2024", report_year=2024, filed_date=None, source_url="x",
+            parser_version=holdings_pipeline.SENATE_PARSER_VERSION,
+        ))
+        db_session.commit()
+        paper = _senate_filing("p", title="Annual Report (Amendment)", filed="2024-02-01", office="Senator", paper=True)
+        await _ingest_senate(db_session, [_senate_filing("e2024", title="Annual Report for CY 2024", filed=""), paper], {})
+        assert db_session.query(FinancialDisclosure).one().later_paper_url is None
+
+    async def test_the_note_is_written_even_when_the_phase_fails(self, db_session, senator):
+        e2024 = _senate_filing("e2024", title="Annual Report for CY 2024", filed="2025-05-11")
+        paper = _senate_filing("p", title="Annual Report", filed="2026-05-14", office="Senator", paper=True)
+        n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
+        others = []
+        for i in range(n):
+            db_session.add(Senator(id=f"X{i}", name=f"Pat Name{i}", state="XX", party="D", is_current=True))
+            others.append({**_senate_filing(f"x{i}"), "last": f"Name{i}", "first": "Pat",
+                           "office": f"Name{i}, Pat (Senator)"})
+        db_session.commit()
+        with pytest.raises(RuntimeError):
+            # Five reports nobody can read: a parser regression fails the phase.
+            await _ingest_senate(db_session, [e2024, paper, *others],
+                                 {"e2024": [_row()], **{f"x{i}": None for i in range(n)}})
+        stored = db_session.query(FinancialDisclosure).filter_by(senator_id="S1").one()
+        assert stored.later_paper_url == paper["report_url"]
+
+
+class TestPdfSniffing:
+    def test_markup_quoting_the_header_is_not_a_pdf(self):
+        from app.pipeline.fetch.house_ptr import _looks_like_pdf
+
+        assert not _looks_like_pdf(b"<!doctype html><script>var x='%PDF-1.4';</script>")
+        assert _looks_like_pdf(b"\xef\xbb\xbf\r\n%PDF-1.4 rest")
+        assert _looks_like_pdf(b"junk\x01\x02%PDF-1.7")
