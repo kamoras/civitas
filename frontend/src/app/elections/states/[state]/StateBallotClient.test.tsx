@@ -11,6 +11,7 @@ vi.mock("@/lib/api", () => ({
 vi.mock("@/components/layout/Navbar", () => ({ default: () => <header /> }));
 vi.mock("@/components/layout/Footer", () => ({ default: () => <footer /> }));
 vi.mock("@/components/BackToTop", () => ({ default: () => null }));
+vi.mock("@/components/elections/DistrictMap", () => ({ default: () => null }));
 
 // jsdom doesn't implement scrollIntoView — the app code's real, correct
 // call to it (deep-linking/expand-to-district) just has nothing to call
