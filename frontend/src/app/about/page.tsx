@@ -1090,7 +1090,7 @@ export default function AboutPage() {
                   Everyone on a certified ballot is shown, including candidates who never
                   filed with the FEC — they appear with &ldquo;no FEC filing&rdquo; instead
                   of fundraising figures. Colorado, Virginia, Tennessee, Florida, New Jersey, Maryland,
-                  Iowa and Nebraska now read their certified candidate lists too (Tennessee&apos;s
+                  Iowa, Nebraska, New Mexico and Wyoming now read their certified candidate lists too (Tennessee&apos;s
                   federal races alone list 36 independents; Florida&apos;s filled five districts its
                   results file never mentioned; Iowa&apos;s replaced a retiring senator the page still
                   showed), and Wisconsin its official primary canvass, a plain
