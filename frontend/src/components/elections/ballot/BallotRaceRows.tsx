@@ -1,5 +1,5 @@
 import type { BallotCandidate, RaceWithCandidates } from "@/types/election";
-import { isActiveCandidate, tierCandidates } from "@/lib/elections";
+import { candidateName, isActiveCandidate, tierCandidates } from "@/lib/elections";
 import { formatCurrency } from "@/lib/formatting";
 import { getPartyMeta } from "@/components/elections/CandidateCard";
 
@@ -42,7 +42,7 @@ export default function BallotRaceRows({ race }: { race: RaceWithCandidates }) {
             <div className="flex items-baseline justify-between gap-3">
               <span className="flex min-w-0 flex-col">
                 <span className="break-words text-[15px] font-bold text-ink-hi">
-                  {c.name}
+                  {candidateName(c)}
                   {c.incumbentChallenge === "I" && (
                     <span className="ml-2 align-middle font-mono text-[10px] font-normal tracking-[0.08em] text-ink-lo">
                       INCUMBENT

@@ -185,6 +185,9 @@ def _candidate_summary(cand: Candidate, stale_incumbent_ids: frozenset[str] = fr
     return {
         "id": cand.id,
         "name": cand.name,
+        # The state's printed ballot name when a state source has named
+        # this candidate; the page prefers it and falls back to `name`.
+        "ballotName": cand.ballot_name,
         "party": cand.party,
         # Per-CANDIDATE confidence, which `candidateSource` cannot carry:
         # a race's list can now mix a state-confirmed nominee with an

@@ -1006,7 +1006,8 @@ export default function AboutPage() {
               local contests — each contest set the way a printed ballot sets it, and any
               contest&apos;s research opens beside it: money raised, a sitting member&apos;s
               voting record, and news coverage. On a phone it lists every contest and opens
-              one per screen, with next and previous. It never marks a choice.
+              one per screen, with next and previous. It never marks a choice. Candidates appear
+              under the name their state prints on its ballot once a state source names them.
             </P>
 
             <div className="space-y-4 mt-4">

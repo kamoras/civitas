@@ -18,6 +18,7 @@ import ContestDrawer from "@/components/elections/ballot/ContestDrawer";
 import RaceResearch from "@/components/elections/ballot/RaceResearch";
 import { buildBallotContests, contestForHash, type BallotContest } from "@/lib/ballotContests";
 import {
+  candidateName,
   districtAreaLabel,
   formatPvi,
   isActiveCandidate,
@@ -283,6 +284,28 @@ function StatewideExecutiveDetail({ ballot }: { ballot: StateBallot }) {
   );
 }
 
+/** No state office of any kind on file for this state. Says what is
+ * missing and where to look, and never implies the state elects no one —
+ * the same claim-discipline as MeasuresSection's "not loaded" case. */
+function StateOfficesNotLoaded({ ballot, lookupHref }: { ballot: StateBallot; lookupHref: string }) {
+  return (
+    <div className="border border-signal-amber/40 bg-signal-amber/10 p-4">
+      <p className="text-sm text-signal-amber">
+        Civitas does not have {ballot.state}&apos;s own offices yet — its statewide offices,
+        state legislature and elected judges.
+      </p>
+      <p className="text-xs text-ink-lo mt-2">
+        This does <strong>not</strong> mean there are none on the ballot: those contests are read
+        state by state from each state&apos;s own results, and this one is not covered yet. Use the{" "}
+        <a href={lookupHref} target="_blank" rel="noopener noreferrer" className="text-signal-cyan hover:text-phos">
+          official lookup ↗
+        </a>{" "}
+        to see every contest on your ballot.
+      </p>
+    </div>
+  );
+}
+
 /** The measures, including the three ways the list can be empty.
  *
  * "This state has no measures" and "we don't know this state's measures"
@@ -526,7 +549,7 @@ function HouseDistrictOption({
         <span className="flex flex-wrap items-baseline gap-x-1.5 text-sm">
           {dem ? (
             <span className="text-dem-blue">
-              {dem.name}
+              {candidateName(dem)}
               {dem.incumbentChallenge === "I" ? " (I)" : ""}
             </span>
           ) : (
@@ -535,7 +558,7 @@ function HouseDistrictOption({
           <span className="text-[11px] text-ink-min">vs</span>
           {rep ? (
             <span className="text-rep-red">
-              {rep.name}
+              {candidateName(rep)}
               {rep.incumbentChallenge === "I" ? " (I)" : ""}
             </span>
           ) : (
@@ -799,6 +822,16 @@ function ContestOverview({
           </>
         ),
       );
+    case "stateNone":
+      return box(
+        <>
+          <p className="px-4 pt-3 text-[13px] text-ink-lo">
+            Civitas does not have this state&apos;s own offices yet — that does not mean there are
+            none on the ballot.
+          </p>
+          <OpenButton label="DETAILS" onClick={() => onOpen(contest.key)} />
+        </>,
+      );
     case "measures":
       return box(
         ballot.measures.length > 0 ? (
@@ -945,6 +978,8 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
         return <StateLegislatureDetail ballot={ballot} />;
       case "judicial":
         return <JudicialDetail ballot={ballot} />;
+      case "stateNone":
+        return <StateOfficesNotLoaded ballot={ballot} lookupHref={lookupHref} />;
       case "measures":
         return <MeasuresSection ballot={ballot} lookupHref={lookupHref} />;
       case "local":

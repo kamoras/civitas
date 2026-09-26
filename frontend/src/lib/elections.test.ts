@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  candidateName,
   districtAreaLabel,
   formatPvi,
   isActiveCandidate,
@@ -380,5 +381,21 @@ describe("matchesDistrictQuery", () => {
     const noCounties = { ...race, areas: null };
     expect(matchesDistrictQuery(noCounties, "providence")).toBe(false);
     expect(matchesDistrictQuery(noCounties, "amo")).toBe(true);
+  });
+});
+
+describe("candidateName", () => {
+  it("prefers the name the state prints on its ballot", () => {
+    expect(candidateName({ name: "COOPER, ROY", ballotName: "Roy Cooper" })).toBe("Roy Cooper");
+  });
+
+  it("falls back to the FEC name until a state source names the candidate", () => {
+    expect(candidateName({ name: "COOPER, ROY", ballotName: null })).toBe("COOPER, ROY");
+    expect(candidateName({ name: "COOPER, ROY" })).toBe("COOPER, ROY");
+  });
+
+  it("lets a reader find a district by the printed name too", () => {
+    const race = { district: 1, areas: [], candidates: [{ name: "COOPER, ROY", ballotName: "Roy Cooper" }] };
+    expect(matchesDistrictQuery(race, "roy cooper")).toBe(true);
   });
 });

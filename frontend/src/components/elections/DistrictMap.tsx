@@ -4,7 +4,7 @@ import type { KeyboardEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
 import type { RaceWithCandidates } from "@/types/election";
-import { formatPvi, majorPartyOf } from "@/lib/elections";
+import { candidateName, formatPvi, majorPartyOf } from "@/lib/elections";
 
 /**
  * Point at your neighbourhood; the page narrows to its district.
@@ -227,7 +227,7 @@ function DistrictPreview({ state, race }: { state: string; race: RaceWithCandida
             key={c.id}
             className={major === "DEM" ? "text-dem-blue" : major === "REP" ? "text-rep-red" : "text-ink-lo"}
           >
-            {c.name}
+            {candidateName(c)}
           </span>
         );
       })}
