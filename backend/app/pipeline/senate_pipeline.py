@@ -113,6 +113,7 @@ from app.pipeline.live_references import (
     live_funding_reference,
     live_les_reference,
 )
+from app.pipeline.partisan_depth_store import finalize_stored_partisan_depth
 from app.pipeline.sponsorship_backfill import backfill_withheld_sponsorship_scores
 
 # Assemble modules
@@ -653,30 +654,6 @@ async def _sponsored_bill_actions(client, db: Session, sp: dict) -> list[dict]:
     return await fetch_bill_actions(
         client, db, sp["congress"], sp["billType"].lower(), int(bill_number),
     ) or []
-
-
-def _finalize_stored_partisan_depth(db: Session) -> None:
-    """Relabel every current senator's stored partisan-depth profile against
-    the whole chamber (party_platform.finalize_partisan_depth). Reads from
-    the database, not this run's results, so a single-senator filtered run
-    is still compared with everyone. Never aborts the run: the per-senator
-    provisional labels stay if this fails."""
-    from app.pipeline.analyze.party_platform import finalize_partisan_depth
-
-    try:
-        rows = db.query(Senator).filter(Senator.is_current.is_(True), Senator.partisan_depth.isnot(None)).all()
-        profiles = []
-        for row in rows:
-            profile = json.loads(row.partisan_depth)
-            profile.setdefault("evalParty", row.party)
-            profiles.append((row, profile))
-        finalize_partisan_depth([p for _, p in profiles])
-        for row, profile in profiles:
-            row.partisan_depth = json.dumps(profile)
-        db.commit()
-    except Exception:
-        db.rollback()
-        logger.warning("Partisan-depth finalization failed — provisional labels kept", exc_info=True)
 
 
 def _recent_not_covered_by_key_bills(
@@ -2020,7 +1997,7 @@ async def run_senate_pipeline(
         pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
         db.commit()
 
-        _finalize_stored_partisan_depth(db)
+        finalize_stored_partisan_depth(db, Senator)
         _record_score_snapshots(db)
 
         run_calibration_check("senator")

@@ -386,7 +386,7 @@ audit found that pinned every House member's score near 87–89.) Content
 alignment still drives bills with no roll call and the per-area partisan
 depth breakdown.
 
-Partisan depth (how strongly a senator leans D or R) is computed primarily
+Partisan depth (how strongly a member of either chamber leans D or R) is computed primarily
 from the senator's actual voting record: for each policy area, the ratio of
 Yea/Nay votes on D-leaning vs R-leaning bills determines the area's alignment.
 Campaign promise text analysis is a secondary enrichment signal.  This follows

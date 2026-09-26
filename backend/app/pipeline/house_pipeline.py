@@ -821,6 +821,17 @@ async def run_house_pipeline() -> dict:
                     scores["confidence"] = calculate_confidence(rep)
                     rep["representationScore"] = scores
 
+                    # Partisan depth from the voting record and the
+                    # cosponsorship ideology prior, as for senators
+                    # (campaign promises no longer exist); relabelled
+                    # against the whole chamber once the run finishes.
+                    from app.pipeline.analyze.party_platform import analyze_partisan_depth
+                    rep["partisanDepth"] = analyze_partisan_depth(
+                        [], rep.get("party", ""),
+                        voting_record=rep.get("votingRecord") or {},
+                        ideology_score=i_score,
+                    )
+
                     # Set bioguideId for persistence
                     rep["bioguideId"] = bio_id
 
@@ -879,6 +890,11 @@ async def run_house_pipeline() -> dict:
                 logger.exception("House ground truth check failed (non-fatal)")
 
             progress.complete("snapshots")
+
+            from app.models import Representative
+            from app.pipeline.partisan_depth_store import finalize_stored_partisan_depth
+
+            finalize_stored_partisan_depth(db, Representative)
 
             elapsed = time.time() - start_time
             logger.info("=== HOUSE PIPELINE COMPLETE ===")
