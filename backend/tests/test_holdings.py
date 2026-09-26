@@ -802,3 +802,47 @@ class TestRound9:
              patch.object(holdings_pipeline, "fetch_senate_annual", side_effect=fetch):
             await holdings_pipeline.ingest_senate_holdings(db_session, None)
         assert db_session.query(FinancialDisclosure).count() == 0
+
+
+class TestRound10:
+    async def test_known_bad_filings_stop_counting_toward_the_abort(self, db_session):
+        """Members with nothing stored go first; a handful whose only filing
+        never loads must not abort the phase every night once they're known."""
+        n = holdings_pipeline.MAX_CONSECUTIVE_FETCH_FAILURES + 1
+        index = {2025: []}
+        for i in range(n):
+            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
+                                          party="R", is_current=True))
+            index[2025].append(_house_filing(f"BAD{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}"))
+        db_session.commit()
+
+        for _night in range(holdings_pipeline.KNOWN_BAD_AFTER):
+            with pytest.raises(RuntimeError):
+                await _ingest_house(db_session, index, {})
+        # Known bad now: still tried, but no longer an "outage".
+        count, mock_fetch = await _ingest_house(db_session, index, {})
+        assert count == 0
+        assert mock_fetch.call_count == n
+
+    async def test_a_success_forgets_the_misses(self, db_session, rep):
+        for _night in range(holdings_pipeline.KNOWN_BAD_AFTER):
+            await _ingest_house(db_session, {2025: [_house_filing("FLAKY")]}, {})
+        assert holdings_pipeline._is_known_bad(db_session, "FLAKY")
+        await _ingest_house(db_session, {2025: [_house_filing("FLAKY")]}, {"FLAKY": AnnualReport("Member", [_row()])})
+        assert not holdings_pipeline._is_known_bad(db_session, "FLAKY")
+
+    async def test_failing_to_re_accept_the_terms_stops_the_phase(self, db_session, senator):
+        from app.pipeline.fetch.senate_fd import SessionLapsed
+
+        accept = AsyncMock(side_effect=["tok", None])
+        with patch.object(holdings_pipeline, "senate_accept_terms", accept), \
+             patch.object(holdings_pipeline, "search_annual_filings", new_callable=AsyncMock,
+                          return_value=[_senate_filing("a")]), \
+             patch.object(holdings_pipeline, "fetch_senate_annual", side_effect=SessionLapsed("terms page")):
+            with pytest.raises(RuntimeError, match="re-accepted"):
+                await holdings_pipeline.ingest_senate_holdings(db_session, None)
+
+    def test_a_paper_original_filed_in_january_has_no_inferred_year(self):
+        year = holdings_pipeline._senate_report_year
+        assert year(_senate_filing("p", title="Annual Report", filed="2027-01-10", paper=True)) is None
+        assert year(_senate_filing("p", title="Annual Report", filed="2026-03-02", paper=True)) == 2025

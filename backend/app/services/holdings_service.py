@@ -175,9 +175,7 @@ def _build(db: Session, disclosure: FinancialDisclosure, page: int, per_page: in
     return HoldingsSchema(
         available=True,
         report_year=disclosure.report_year,
-        report_label=disclosure.report_label or (
-            f"{disclosure.report_year} annual report" if disclosure.report_year else "annual report"
-        ),
+        report_label=disclosure.report_label,
         filed_date=disclosure.filed_date,
         source_url=disclosure.source_url,
         parsed=disclosure.parsed,

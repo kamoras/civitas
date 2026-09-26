@@ -266,7 +266,7 @@ async def _ingest_senate(db: Session, client: httpx.AsyncClient) -> int:
         filing_id = senate_filing_id(filing["report_url"])
         if filing_id in existing_filing_ids:
             continue
-        senator = _match_senator(db, filing["last"], filing["first"])
+        senator = _match_senator(db, filing["last"], filing["first"], filing.get("office"))
         if senator is None:
             continue
         rows = await fetch_senate_ptr(client, db, filing)

@@ -380,10 +380,9 @@ async function fetchHoldings(
   if (options?.page) params.set("page", String(options.page));
   if (options?.perPage) params.set("per_page", String(options.perPage));
   if (options?.category) params.set("category", options.category);
-  return requestJson(
-    `${API_BASE}/${CHAMBER_PATH[chamber]}/${memberId}/holdings?${params}`,
-    "Failed to load holdings"
-  );
+  // Cached: legend toggles and paging back revisit the same URLs, and a
+  // member's holdings change at most once a night.
+  return cachedFetch(`${API_BASE}/${CHAMBER_PATH[chamber]}/${memberId}/holdings?${params}`, TTL.MEDIUM);
 }
 
 type HoldingsOptions = { page?: number; perPage?: number; category?: string | null };
