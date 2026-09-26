@@ -56,20 +56,18 @@ logger = logging.getLogger(__name__)
 # (before they file) the year before.
 _YEARS_BACK = 2
 
-# Wall-clock budget for each holdings phase, counted from the phase's start
-# and checked before every report fetch. Measured 2026-09: a first House run
-# reads ~430 reports (~9 min in a dev container, network-bound at the
-# Clerk's 1 req/s; slower on the Pi's CPU), the Senate ~100 (~4 min, most of
-# it the browser search). Past the budget the remaining members wait for the
-# next run. It bounds the report fetching, which is what grows with the
-# number of members; the index download and the Senate search before it
-# are single steps bounded by their own request timeouts (a normal search
-# is a few pages, filtered to senators).
+# Wall-clock budget for each holdings phase. The deadline is set when the
+# phase starts, so the index download and the Senate search count against
+# it; it is checked before every report fetch, so only a fetch already in
+# flight can run past it. Measured 2026-09: a first House run reads ~430
+# reports (~9 min in a dev container, network-bound at the Clerk's 1 req/s;
+# slower on the Pi's CPU), the Senate ~100 (~4 min, most of it the browser
+# search). Past the budget the remaining members wait for the next run.
 PHASE_BUDGET = timedelta(minutes=10)
 
-# Consecutive members with no report fetchable before the phase gives up
-# and fails (see _FailureRun).
-MAX_CONSECUTIVE_FETCH_FAILURES = 5
+# Members attempted with nothing fetched, and none fetched at all, before a
+# phase counts its source as down (see _SourceHealth).
+MIN_ATTEMPTS_FOR_OUTAGE = 5
 
 
 @dataclass
@@ -168,34 +166,39 @@ def _is_member_prefix(prefix: str | None) -> bool:
     return (prefix or "").strip().rstrip(".").lower() == "hon"
 
 
-class _FailureRun:
-    """Counts consecutive members whose every fetch attempt failed. One
-    bad filing is that filing's problem; a run of members with nothing
-    fetchable is the source (or its session) being down, and must fail the
-    phase rather than leave it quietly short."""
+class _SourceHealth:
+    """Whether a phase's source looked down, judged once the phase is done.
+
+    Deliberately not an early abort: members with nothing stored are
+    processed first, so a few genuinely broken filings bunched at the front
+    would otherwise stop the phase before it reached anyone else. A source
+    that is down fails every fetch; a source with some bad filings doesn't.
+    So the phase fails when at least MIN_ATTEMPTS_FOR_OUTAGE members were
+    tried and not one report came back — including members who then kept a
+    stored report, since a newer report that won't load is exactly what an
+    outage looks like on a night when only new reports need fetching.
+    """
 
     def __init__(self, source: str) -> None:
         self.source = source
-        self.count = 0
+        self.attempted = 0
+        self.fetched = 0
 
     def record(self, attempted: bool, fetched: bool) -> None:
-        """A member counts as failed when every fetch tried for them came
-        back with nothing usable — even if they then kept a stored report:
-        a newer report that can't be fetched is exactly what an outage looks
-        like on a night when only new reports need fetching."""
-        if not attempted:
-            return
-        self.count = 0 if fetched else self.count + 1
-        if self.count >= MAX_CONSECUTIVE_FETCH_FAILURES:
-            raise RuntimeError(f"{self.source}: {self.count} members in a row with no report fetchable")
+        self.attempted += attempted
+        self.fetched += fetched
+
+    def check(self) -> None:
+        if self.attempted >= MIN_ATTEMPTS_FOR_OUTAGE and not self.fetched:
+            raise RuntimeError(f"{self.source}: {self.attempted} members tried, no report fetched")
 
 
 # A filing that has failed this many nightly runs in a row is "known bad" —
 # a report PDF the Clerk lists but 404s, one pdfplumber crashes on, a page
 # eFD won't serve. It is still tried each run (one request), but no longer
-# counts toward _FailureRun: members with nothing stored are processed
-# first, so a handful of these at the front would otherwise abort the phase
-# every night before it reached anyone else. A success forgets the misses.
+# counts toward _SourceHealth: a handful of permanently broken filings must
+# not read as the source being down, night after night. A success forgets
+# the misses.
 KNOWN_BAD_AFTER = 3
 _MISS_TIER = "holdings_fetch_miss"
 _MISS_MAX_AGE_HOURS = 24 * 60
@@ -251,7 +254,7 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
 
     stored = _stored_reports(db, FinancialDisclosure.representative_id)
     inserted = 0
-    failure_run = _FailureRun("House Clerk")
+    health = _SourceHealth("House Clerk")
     order = _members_in_order(per_rep, stored)
     for position, rep_id in enumerate(order):
         mine = stored.get(rep_id)
@@ -308,10 +311,11 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
             )
             break
         db.commit()  # per member, so a budget stop or a later failure keeps what's done
+        health.record(attempted, fetched)
         if out_of_time:
             logger.info("House holdings: time budget spent — %d members wait for the next run", len(order) - position)
             break
-        failure_run.record(attempted, fetched)
+    health.check()
     return inserted
 
 
@@ -319,77 +323,56 @@ _CY_RE = re.compile(r"\bCY\s*(\d{4})\b", re.I)
 _DATE_RE = re.compile(r"\b(\d{2})/(\d{2})/(\d{4})\b")
 
 
-def _senate_rank(filing: dict) -> tuple[int, bool, str]:
-    """Newest first: by the year the report describes (a paper amendment,
-    whose year can't be known, ranks below every report with one), then by
-    whether that year was stated rather than inferred, then by filing
-    date."""
-    title = filing.get("title") or ""
-    stated = bool(_CY_RE.search(title) or _DATE_RE.search(title))
-    return (_senate_report_year(filing) or 0, stated, filing.get("filed_date") or "")
+def _senate_rank(filing: dict) -> tuple[int, str]:
+    """Newest first: by the year the report states, then by filing date. A
+    report whose year isn't stated (a paper filing) ranks below every one
+    that states one, so it's used only when a senator has nothing dated."""
+    return (_senate_report_year(filing) or 0, filing.get("filed_date") or "")
 
 
 def _senate_is_older(stored: _Stored | None, filing: dict) -> bool:
-    """_is_older, ranked as _senate_rank ranks: by year, then by whether the
-    year is stated, then by filing date. A stored scanned paper report's
-    year was inferred, so an electronic report stating the same year beats
-    it even when filed earlier — e.g. one that failed to load on the run
-    that stored the paper copy."""
+    """_is_older, in _senate_rank's order."""
     if stored is None:
         return False
-    stored_stated = stored.unreadable_reason != "scanned"
-    return _senate_rank(filing) < (stored.report_year or 0, stored_stated, stored.filed_date or "")
-
-
-def _is_paper_amendment(filing: dict) -> bool:
-    title = (filing.get("title") or "").lower()
-    return bool(filing.get("is_paper")) and "amendment" in title
+    return _senate_rank(filing) < (stored.report_year or 0, stored.filed_date or "")
 
 
 def _senate_report_year(filing: dict) -> int | None:
-    """The calendar year a Senate report's holdings describe, or None when
-    it can't be known.
+    """The calendar year a Senate report's holdings describe — only when
+    its title states it — else None.
 
     "Annual Report for CY 2025" states it; a "New Filer Report for
     03/24/2026" describes that date. A paper filing's link reads only
-    "Annual Report" or "Annual Report (Amendment)". An original annual
-    report is filed the spring or summer after the year it covers (due May
-    15, extensions into August), so for one filed March–December the year
-    before its filing is its year; January–February is ambiguous and None. An amendment can amend any earlier
-    report — Ricketts' paper amendment of February 2026 (live, 2026-09)
-    amends something filed before any CY2025 report existed — so its year is
-    None, not a guess.
+    "Annual Report", "Annual Report (Amendment)" or similar, and its year is
+    not inferred: an original is usually filed the year after the one it
+    covers, but late and early filings exist, and an amendment can amend any
+    earlier report (Ricketts' paper amendment of February 2026, live
+    2026-09, predates every CY2025 report). Every attempt to guess one
+    produced a report shown under the wrong year; None is the honest value.
     """
     title = filing.get("title") or ""
     if m := _CY_RE.search(title):
         return int(m.group(1))
     if m := _DATE_RE.search(title):
         return int(m.group(3))
-    if _is_paper_amendment(filing):
-        return None
-    filed = filing.get("filed_date") or ""
-    if not filed[:4].isdigit():
-        return None
-    if filed[5:7] in ("01", "02"):
-        # Filed in January or February: could be the year just ended (filed
-        # early) or the one before it (filed very late, past an extension).
-        # Not a guess this ranking should rest on.
-        return None
-    return int(filed[:4]) - 1
+    return None
 
 
 def _senate_report_label(filing: dict) -> str:
-    """What the report is, in the words the page shows: a new-filer report
-    is a snapshot at its date, not a year-end annual report, and a paper
-    amendment's year isn't claimed."""
-    title = filing.get("title") or ""
-    amended = " (amended)" if "amendment" in title.lower() else ""
-    if "new filer" in title.lower() and (m := _DATE_RE.search(title)):
-        return f"new-filer report as of {m.group(3)}-{m.group(1)}-{m.group(2)}{amended}"
+    """What the report is, in the words the page shows. A new-filer report
+    is a snapshot at its date, not a year-end annual report; an undated
+    (paper) filing is named by kind and filing date, never a guessed year."""
+    title = (filing.get("title") or "").lower()
+    amended = "amendment" in title
+    if "new filer" in title and (m := _DATE_RE.search(filing.get("title") or "")):
+        return f"new-filer report as of {m.group(3)}-{m.group(1)}-{m.group(2)}" + (" (amended)" if amended else "")
     year = _senate_report_year(filing)
-    if year is None and filing.get("filed_date"):
-        return f"annual report amendment filed {filing['filed_date']}"
-    return f"{year} annual report{amended}" if year else f"annual report{amended}"
+    if year is not None:
+        return f"{year} annual report" + (" (amended)" if amended else "")
+    kind = "new-filer report" if "new filer" in title else "annual report"
+    kind += " amendment" if amended else ""
+    filed = filing.get("filed_date")
+    return f"{kind} filed {filed}" if filed else kind
 
 
 async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
@@ -418,7 +401,7 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
 
     stored = _stored_reports(db, FinancialDisclosure.senator_id)
     inserted = 0
-    failure_run = _FailureRun("Senate eFD")
+    health = _SourceHealth("Senate eFD")
     order = _members_in_order(per_senator, stored)
     for position, senator_id in enumerate(order):
         mine = stored.get(senator_id)
@@ -454,7 +437,9 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
                 try:
                     report = await fetch_senate_annual(client, db, filing)
                 except SessionLapsed:
-                    report = None
+                    # Lapsed again straight after re-accepting: a session
+                    # problem, not this filing's — no miss recorded.
+                    continue
             if report is None or not report.final:
                 # Nothing usable this run: the filing won't load, or its read
                 # may be transient (a parser crash, or a page that is neither
@@ -479,10 +464,11 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
             )
             break
         db.commit()
+        health.record(attempted, fetched)
         if out_of_time:
             logger.info("Senate holdings: time budget spent — %d members wait for the next run", len(order) - position)
             break
-        failure_run.record(attempted, fetched)
+    health.check()
     return inserted
 
 

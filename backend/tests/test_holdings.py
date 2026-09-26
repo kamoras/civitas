@@ -218,7 +218,9 @@ class TestIngestSenateHoldings:
         await _ingest_senate(db_session, filings, {})
         disclosure = db_session.query(FinancialDisclosure).one()
         assert (disclosure.parsed, disclosure.unreadable_reason) == (False, "scanned")
-        assert disclosure.report_year == 2025  # year before it was filed
+        # A paper filing's year isn't stated, so none is claimed.
+        assert disclosure.report_year is None
+        assert disclosure.report_label == "annual report filed 2026-08-13"
         assert "/paper/" in disclosure.source_url
 
     async def test_a_page_that_fails_to_load_changes_nothing(self, db_session, senator):
@@ -267,8 +269,9 @@ class TestIngestSenateHoldings:
         year = holdings_pipeline._senate_report_year
         assert year({"title": "Annual Report for CY 2025 (Amendment 1)"}) == 2025
         assert year({"title": "New Filer Report for 03/24/2026"}) == 2026
-        assert year({"title": "Annual Report", "filed_date": "2026-08-13"}) == 2025
-        assert year({"title": "Annual Report", "filed_date": None}) is None
+        # Paper filings state no year and none is inferred.
+        assert year({"title": "Annual Report", "filed_date": "2026-08-13"}) is None
+        assert year({"title": "Annual Report (Amendment)", "filed_date": "2026-02-19"}) is None
 
 
 def _store(db_session, holdings, parsed=True, **owner):
@@ -477,7 +480,11 @@ class TestReportLabels:
         assert label({"title": "Annual Report for CY 2025 (Amendment 1)"}) == "2025 annual report (amended)"
         # A snapshot at its date, not a year-end report.
         assert label({"title": "New Filer Report for 03/24/2026"}) == "new-filer report as of 2026-03-24"
-        assert label({"title": "Annual Report", "filed_date": "2026-08-13"}) == "2025 annual report"
+        assert label({"title": "Annual Report", "filed_date": "2026-08-13"}) == "annual report filed 2026-08-13"
+        assert label({"title": "Annual Report (Amendment)", "filed_date": "2026-02-19"}) == (
+            "annual report amendment filed 2026-02-19"
+        )
+        assert label({"title": "New Filer Report", "filed_date": "2026-06-01"}) == "new-filer report filed 2026-06-01"
 
     async def test_label_is_stored_and_served(self, db_session, senator):
         await _ingest_senate(
@@ -488,19 +495,30 @@ class TestReportLabels:
 
 
 class TestSourceFailures:
-    async def test_house_run_of_fetch_failures_fails_the_phase_keeping_progress(self, db_session):
-        n = holdings_pipeline.MAX_CONSECUTIVE_FETCH_FAILURES + 1
+    async def test_a_source_that_serves_nothing_fails_the_phase(self, db_session):
+        n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
+        index = {2025: []}
+        for i in range(n + 1):
+            db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
+                                          party="R", is_current=True))
+            index[2025].append(_house_filing(f"D{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}"))
+        db_session.commit()
+        with pytest.raises(RuntimeError):
+            await _ingest_house(db_session, index, {})
+
+    async def test_some_bad_filings_do_not_fail_the_phase_and_everyone_is_processed(self, db_session):
+        """No early abort: bad filings bunched at the front (members with
+        nothing stored go first) must not starve the members after them."""
+        n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE + 2
         index = {2025: []}
         for i in range(n):
             db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
                                           party="R", is_current=True))
             index[2025].append(_house_filing(f"D{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}"))
         db_session.commit()
-        # The first report loads; every one after it fails.
-        with pytest.raises(RuntimeError):
-            await _ingest_house(db_session, index, {"D0": AnnualReport("Member", [_row()])})
-        stored = {d.filing_id for d in db_session.query(FinancialDisclosure).all()}
-        assert stored <= {"D0"}
+        # Only the last member's report loads.
+        await _ingest_house(db_session, index, {f"D{n - 1}": AnnualReport("Member", [_row()])})
+        assert [d.filing_id for d in db_session.query(FinancialDisclosure).all()] == [f"D{n - 1}"]
 
     async def test_senate_lapsed_session_is_re_accepted_and_the_report_retried(self, db_session, senator):
         from app.pipeline.fetch.senate_fd import SessionLapsed
@@ -523,7 +541,7 @@ class TestSourceFailures:
         assert accept.await_count == 2  # once at the start, once after the failure
 
 
-class TestSenateRanking:
+class TestSenateRankingByStatedYear:
     def test_a_stated_year_outranks_an_inferred_one(self):
         electronic = _senate_filing("e", title="Annual Report for CY 2024", filed="2025-05-11")
         # A paper amendment of an older report, filed later: its year (2024)
@@ -594,9 +612,6 @@ class TestPaperAmendments:
         amendment = _senate_filing("a", title="Annual Report (Amendment)", filed="2026-02-19", paper=True)
         assert holdings_pipeline._senate_report_year(amendment) is None
         assert holdings_pipeline._senate_report_label(amendment) == "annual report amendment filed 2026-02-19"
-        # A paper original's year is the one before it was filed.
-        original = _senate_filing("o", title="Annual Report", filed="2026-08-12", paper=True)
-        assert holdings_pipeline._senate_report_year(original) == 2025
 
     async def test_a_later_paper_amendment_never_replaces_a_dated_report(self, db_session, senator):
         """Ricketts-shaped (live, 2026-09): an electronic CY2024 report, then
@@ -662,7 +677,7 @@ class TestServiceDetails:
         assert names == ["Big", "A small", "b small", "Undetermined thing"]
 
 
-class TestRound5:
+class TestFallThroughAndMatching:
     async def test_senate_unloadable_top_filing_falls_back_to_the_next(self, db_session, senator):
         filings = [
             _senate_filing("amended", title="Annual Report for CY 2025 (Amendment 1)", filed="2026-09-01"),
@@ -675,7 +690,7 @@ class TestRound5:
     async def test_failures_are_counted_per_member_not_per_filing(self, db_session):
         """Members whose first filing fails but whose next one loads are not
         a failing source."""
-        n = holdings_pipeline.MAX_CONSECUTIVE_FETCH_FAILURES + 2
+        n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE + 2
         index = {2025: []}
         reports = {}
         for i in range(n):
@@ -738,7 +753,7 @@ class TestBreakdownCache:
         assert [c.category for c in result.categories] == ["CASH"]
 
 
-class TestRound6:
+class TestLapsesAndOutages:
     async def test_a_plain_failed_fetch_does_not_re_accept_terms(self, db_session, senator):
         accept = AsyncMock(return_value="tok")
         with patch.object(holdings_pipeline, "senate_accept_terms", accept), \
@@ -753,7 +768,7 @@ class TestRound6:
         newer report fails, each member keeps their stored one. That run of
         members must still fail the phase (and alert), not pass quietly —
         and what was stored stays."""
-        n = holdings_pipeline.MAX_CONSECUTIVE_FETCH_FAILURES + 2
+        n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE + 2
         index = {2025: []}
         for i in range(n):
             db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
@@ -773,12 +788,12 @@ class TestRound6:
         assert db_session.query(FinancialDisclosure).count() == n
 
 
-class TestRound9:
+class TestReadabilityRules:
     async def test_a_readable_report_for_the_same_year_replaces_a_stored_scan(self, db_session, senator):
         """The paper copy was stored because the electronic one failed to
         load that run; filed earlier or not, the electronic report wins."""
         db_session.add(FinancialDisclosure(
-            senator_id="S1", filing_id="paper", report_year=2025, filed_date="2026-08-12", source_url="x",
+            senator_id="S1", filing_id="paper", report_year=None, filed_date="2026-08-12", source_url="x",
             parsed=False, unreadable_reason="scanned", parser_version=holdings_pipeline.SENATE_PARSER_VERSION,
         ))
         db_session.commit()
@@ -804,11 +819,11 @@ class TestRound9:
         assert db_session.query(FinancialDisclosure).count() == 0
 
 
-class TestRound10:
+class TestKnownBadFilings:
     async def test_known_bad_filings_stop_counting_toward_the_abort(self, db_session):
         """Members with nothing stored go first; a handful whose only filing
         never loads must not abort the phase every night once they're known."""
-        n = holdings_pipeline.MAX_CONSECUTIVE_FETCH_FAILURES + 1
+        n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE + 1
         index = {2025: []}
         for i in range(n):
             db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
@@ -841,8 +856,3 @@ class TestRound10:
              patch.object(holdings_pipeline, "fetch_senate_annual", side_effect=SessionLapsed("terms page")):
             with pytest.raises(RuntimeError, match="re-accepted"):
                 await holdings_pipeline.ingest_senate_holdings(db_session, None)
-
-    def test_a_paper_original_filed_in_january_has_no_inferred_year(self):
-        year = holdings_pipeline._senate_report_year
-        assert year(_senate_filing("p", title="Annual Report", filed="2027-01-10", paper=True)) is None
-        assert year(_senate_filing("p", title="Annual Report", filed="2026-03-02", paper=True)) == 2025

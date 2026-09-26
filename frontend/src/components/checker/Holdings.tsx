@@ -338,7 +338,7 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
     chart = (
       <p className="panel p-4 text-sm text-ink-lo">
         {data.unreadableReason === "scanned"
-          ? `The ${reportLabel} was filed on paper as scanned pages, so its assets can't be read reliably enough to chart.`
+          ? `The ${reportLabel} is a scanned paper filing, so its assets can't be read reliably enough to chart.`
           : `The ${reportLabel} isn't in a layout that can be read automatically, so its assets aren't charted here.`}{" "}
         {sourceLink}
       </p>
