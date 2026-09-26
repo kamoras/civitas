@@ -182,17 +182,17 @@ describe("slotStates", () => {
     issuesPublished: 0,
     suppressed: 0,
   });
-  // Slots 03:15 .. 08:15. The nightly Senate run 03:00-05:00 blocks the 03:15
-  // and 04:15 ticks; 06:15 ran; 05:15 and 07:15 are real misses; 08:15 is now.
+  const idle = { runningNow: {}, processStartedAt: null, refreshStartedAt: null };
+  // Slots 03:15 .. 08:15; only 06:15 has a run.
   const slots = hourlySlots([r("2026-09-26T06:20:00")], 6, now);
-  const senate = run({
-    pipelineType: "senate",
-    startedAt: "2026-09-26T03:00:00",
-    elapsedSeconds: 7200,
-  });
 
   it("tells a deliberate pipeline skip from a crash, and the current slot from either", () => {
-    expect(slotStates(slots, [senate], now)).toEqual([
+    const senate = run({
+      pipelineType: "senate",
+      startedAt: "2026-09-26T03:00:00",
+      elapsedSeconds: 7200,
+    });
+    expect(slotStates(slots, [senate], now, idle)).toEqual([
       "skipped",
       "skipped",
       "missing",
@@ -202,20 +202,54 @@ describe("slotStates", () => {
     ]);
   });
 
-  it("treats a still-running pipeline as blocking up to now, and ignores non-blocking ones", () => {
-    const running = run({
+  it("treats every pipeline the scheduler waits on as blocking, and election as not", () => {
+    const at = (pipelineType: string) =>
+      run({ pipelineType, startedAt: "2026-09-26T07:00:00", elapsedSeconds: 1800 });
+    for (const type of ["senate", "house", "supplementary", "stock_trades"]) {
+      expect(slotStates(slots, [at(type)], now, idle)[4]).toBe("skipped");
+    }
+    expect(slotStates(slots, [at("election")], now, idle)[4]).toBe("missing");
+  });
+
+  it("stops blocking at the scheduler's stale limit", () => {
+    // Stock trades is honoured for 2h: ticks at 03:15 and 04:15 are skips,
+    // 05:15 onward the scheduler would have refreshed anyway.
+    const stock = run({
+      pipelineType: "stock_trades",
+      startedAt: "2026-09-26T03:00:00",
+      elapsedSeconds: 5 * 3600,
+    });
+    expect(slotStates(slots, [stock], now, idle).slice(0, 3)).toEqual([
+      "skipped",
+      "skipped",
+      "missing",
+    ]);
+  });
+
+  it("ends a row orphaned by a restart at the restart, not now", () => {
+    const orphan = run({
       pipelineType: "house",
-      startedAt: "2026-09-26T07:00:00",
+      startedAt: "2026-09-26T03:00:00",
       status: "running",
       elapsedSeconds: null,
     });
-    const stock = run({
-      pipelineType: "stock_trades",
-      startedAt: "2026-09-26T05:00:00",
-      elapsedSeconds: 7200,
-    });
-    const states = slotStates(slots, [running, stock], now);
-    expect(states[2]).toBe("missing"); // 05:15: stock trades doesn't block refreshes
-    expect(states[4]).toBe("skipped"); // 07:15: House still running
+    const ctx = { ...idle, processStartedAt: Date.parse("2026-09-26T04:30:00Z") };
+    expect(slotStates(slots, [orphan], now, ctx).slice(0, 3)).toEqual([
+      "skipped",
+      "skipped",
+      "missing",
+    ]);
+    // Still genuinely running (flag set): blocks up to now.
+    const live = { ...ctx, runningNow: { house: true } };
+    expect(slotStates(slots, [orphan], now, live)[4]).toBe("skipped");
+  });
+
+  it("marks a slow refresh still in flight as pending, and the ticks it blocks as skipped", () => {
+    const ctx = { ...idle, refreshStartedAt: Date.parse("2026-09-26T07:15:00Z") };
+    const early = hourlySlots([], 6, now);
+    const states = slotStates(early, [], now, ctx);
+    expect(states[4]).toBe("pending"); // 07:15, still running
+    expect(states[5]).toBe("pending"); // 08:15, current slot
+    expect(states[3]).toBe("missing"); // 06:15, before it started
   });
 });

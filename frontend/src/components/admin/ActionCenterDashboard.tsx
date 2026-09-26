@@ -8,6 +8,7 @@ import {
   type ActionMetrics,
   type ActionMetricsRun,
   type ActionRefreshState,
+  type AdminPipelineStatus,
   type PipelineTrendRun,
 } from "@/lib/api";
 import LineChart from "./charts/LineChart";
@@ -159,9 +160,14 @@ const counterLabel = (k: string) => k.replace(/_/g, " ");
 export function ActionCenterDashboard({
   token,
   ac,
+  status,
+  processStartedAt,
 }: {
   token: string;
   ac: ActionRefreshState | null;
+  /** Live pipeline flags — what the scheduler itself checks before a refresh. */
+  status: AdminPipelineStatus | null;
+  processStartedAt: string | null;
 }) {
   const [limit, setLimit] = useState(72); // hours
   const [metrics, setMetrics] = useState<ActionMetrics | null>(null);
@@ -216,7 +222,15 @@ export function ActionCenterDashboard({
   const slots = fetchedAt ? hourlySlots(metrics?.runs ?? [], hours, fetchedAt) : [];
   // Every figure on this tab is computed from these slots — the tiles, the
   // lines and the per-gate bars — so they all describe the same set of runs.
-  const states = slotStates(slots, pipelineRuns ?? [], fetchedAt);
+  const states = slotStates(slots, pipelineRuns ?? [], fetchedAt, {
+    runningNow: {
+      house: !!status?.houseIsRunning,
+      supplementary: !!status?.supplementaryIsRunning,
+      stock_trades: !!status?.stockTradesIsRunning,
+    },
+    processStartedAt: processStartedAt ? parseUTC(processStartedAt).getTime() : null,
+    refreshStartedAt: ac?.isRunning && ac.startedAt ? parseUTC(ac.startedAt).getTime() : null,
+  });
   const ran = states.filter((st) => st === "ran").length;
   const skipped = states.filter((st) => st === "skipped").length;
   const missing = states.filter((st) => st === "missing").length;
@@ -263,7 +277,7 @@ export function ActionCenterDashboard({
               ? undefined
               : !pipelineRuns
                 ? "couldn't load pipeline runs, so a skipped hour can't be told from a missed one"
-                : `${missing} missed (crashed or never started) · ${skipped} skipped while the nightly pipeline ran`
+                : `${missing} missed (crashed or never started) · ${skipped} skipped while a pipeline or a slow refresh ran`
           }
         />
         <StatTile

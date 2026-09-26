@@ -187,44 +187,94 @@ export function finishedSince(
     }));
 }
 
-/** The pipelines whose runs make scheduler.py skip an Action Center refresh. */
-const REFRESH_BLOCKING_PIPELINES = new Set(["senate", "house"]);
+/**
+ * Everything that makes scheduler.py's _hourly_action_refresh return without
+ * running, with the age past which it stops waiting (its _is_stale limits).
+ * Mirror that guard exactly: a pipeline missing here turns every nightly skip
+ * into a false "missed", and a cap missing here lets a hung run hide a real
+ * outage. Election does not block refreshes.
+ */
+const REFRESH_BLOCKERS: Record<string, { staleAfterMs: number; inMemoryFlag: boolean }> = {
+  // Senate is checked through its DB row; the rest through in-process
+  // running flags, which a restart clears even if the row still says
+  // "running".
+  senate: { staleAfterMs: 8 * 3_600_000, inMemoryFlag: false },
+  house: { staleAfterMs: 8 * 3_600_000, inMemoryFlag: true },
+  supplementary: { staleAfterMs: 8 * 3_600_000, inMemoryFlag: true },
+  stock_trades: { staleAfterMs: 2 * 3_600_000, inMemoryFlag: true },
+};
+/** A previous refresh still running also blocks the next tick, for up to 4h. */
+const REFRESH_STALE_AFTER_MS = 4 * 3_600_000;
 
 export type SlotState = "ran" | "skipped" | "pending" | "missing";
 
+export interface SlotContext {
+  /** Which pipelines the backend says are running right now (in-memory flags). */
+  runningNow: Record<string, boolean>;
+  /** When the backend process started (ms) — a restart clears in-memory flags. */
+  processStartedAt: number | null;
+  /** The Action Center refresh in flight, if any (ms it started). */
+  refreshStartedAt: number | null;
+}
+
 /**
- * Why each refresh slot does or doesn't have a run.
- *
- * scheduler.py's hourly refresh deliberately returns without running while
- * a Senate or House pipeline run is in progress, so the nightly chain leaves
- * two or more empty slots every day. Counting those as missing would make
- * "a refresh crashed" permanently true and therefore meaningless. A slot is:
+ * Why each refresh slot does or doesn't have a run:
  * - ran: a run was recorded in it;
- * - skipped: empty, and its HH:15 tick fell inside a blocking pipeline run;
- * - pending: the current slot, still empty — its refresh may be running now;
+ * - skipped: empty, and its HH:15 tick fell while the scheduler was
+ *   deliberately waiting — on a nightly pipeline run, or on a previous
+ *   refresh still going;
+ * - pending: empty, but its refresh is still running (or it is the current
+ *   slot, whose refresh may be running now);
  * - missing: anything else — a refresh that crashed or never started.
+ *
+ * Each blocking interval ends where the scheduler stops honouring it: at the
+ * run's end, at its stale limit, and — for pipelines tracked by an in-memory
+ * flag — at the restart that cleared the flag, even if its DB row was left
+ * "running".
  */
 export function slotStates(
   slots: HourSlot[],
   pipelineRuns: PipelineTrendRun[],
-  now: number
+  now: number,
+  ctx: SlotContext
 ): SlotState[] {
-  const busy = pipelineRuns
-    .filter((r) => REFRESH_BLOCKING_PIPELINES.has(r.pipelineType) && r.startedAt)
-    .map((r) => {
-      const start = parseUTC(r.startedAt as string).getTime();
-      const end =
-        r.elapsedSeconds != null
-          ? start + r.elapsedSeconds * 1000
-          : r.status === "running"
-            ? now
+  const busy: [number, number][] = [];
+  for (const r of pipelineRuns) {
+    const blocker = REFRESH_BLOCKERS[r.pipelineType];
+    if (!blocker || !r.startedAt) continue;
+    const start = parseUTC(r.startedAt).getTime();
+    let end: number;
+    if (r.elapsedSeconds != null) {
+      end = start + r.elapsedSeconds * 1000;
+    } else if (r.status === "running") {
+      end = now;
+      if (blocker.inMemoryFlag && !ctx.runningNow[r.pipelineType]) {
+        // The row says running but the process doesn't: it was orphaned by
+        // a restart, and the scheduler stopped waiting when that happened.
+        end =
+          ctx.processStartedAt != null && ctx.processStartedAt > start
+            ? ctx.processStartedAt
             : start;
-      return [start, end] as const;
-    });
+      }
+    } else {
+      end = start;
+    }
+    busy.push([start, Math.min(end, start + blocker.staleAfterMs)]);
+  }
+  const refreshSlot =
+    ctx.refreshStartedAt == null
+      ? -1
+      : slots.findIndex(
+          (s) => ctx.refreshStartedAt! >= s.start && ctx.refreshStartedAt! < s.start + 3_600_000
+        );
+  if (ctx.refreshStartedAt != null) {
+    busy.push([ctx.refreshStartedAt, Math.min(now, ctx.refreshStartedAt + REFRESH_STALE_AFTER_MS)]);
+  }
+
   return slots.map((slot, i) => {
     if (slot.runs.length > 0) return "ran";
+    if (i === refreshSlot || i === slots.length - 1) return "pending";
     if (busy.some(([s, e]) => slot.start >= s && slot.start <= e)) return "skipped";
-    if (i === slots.length - 1) return "pending";
     return "missing";
   });
 }

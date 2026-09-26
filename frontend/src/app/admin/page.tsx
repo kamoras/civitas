@@ -448,7 +448,12 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
             />
           )}
           {tab === "action" && (
-            <ActionCenterDashboard token={token} ac={pipelineStatus?.actionRefresh ?? null} />
+            <ActionCenterDashboard
+              token={token}
+              ac={pipelineStatus?.actionRefresh ?? null}
+              status={pipelineStatus}
+              processStartedAt={d?.uptime?.processStartedAt ?? null}
+            />
           )}
           {tab === "data" && <DataDashboard d={d} />}
           {tab === "system" && (
