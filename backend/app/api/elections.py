@@ -68,6 +68,7 @@ from app.pipeline.fetch.state_candidates_common import (
 )
 from app.pipeline.fetch.state_election_dates import primary_date
 from app.pipeline.fetch.town_directory import address_for_town, towns_for_state
+from app.services.senator_service import STATE_NAMES
 from app.time_utils import utcnow
 
 # The 50 states, from the same class sets election_pipeline.py derives its
@@ -979,6 +980,9 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
 
     return cached_json({
         "state": state,
+        # The full name is what people search for ("California ballot
+        # measures"), and the page's title and heading had only the code.
+        "stateName": STATE_NAMES.get(state, state),
         "cycleYear": cycle,
         # The federal general is the only date derivable from statute
         # (2 U.S.C. §7). Primaries are party-specific and set by each
