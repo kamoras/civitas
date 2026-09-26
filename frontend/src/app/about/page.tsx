@@ -305,18 +305,19 @@ export default function AboutPage() {
                   the chamber itself every time the pipeline runs, not set by hand: a separate line
                   per party, allowed to bend at a swing seat, so a Republican in a Biden-won seat is
                   compared with how Republicans in seats like that really vote. Matching the
-                  expectation scores 50. Breaking less often scores below. Breaking more often
-                  scores above, reaching 100 at the gap the chamber&apos;s most out-of-pattern
-                  tenth of members show; past that gap the score falls at the same rate it rose,
-                  back to 50 at twice the gap and 0 at three times. Each party-line roll call counts
+                  expectation scores 50. Breaking more often scores above, reaching 100 at the gap
+                  the chamber&apos;s most out-of-pattern tenth of members show; past that gap the
+                  score falls at the same rate it rose, back to 50 at twice the gap and 0 at three
+                  times. Breaking less often scores below, more gently: 0 only at four times the
+                  gap, so being more loyal than the norm costs less than breaking far too often. Each party-line roll call counts
                   once. With fewer than 20 of them the result is pulled toward 50 in proportion, so
                   a single break in a thin record can&apos;t reach either end.
                 </P>
                 <P>
                   What the ends mean: a 0 or 100 is a relative position, not a verdict. A 0 means
-                  the member breaks with their party far less often than members of their own party
-                  in seats that lean the same way, or far more often still than the chamber&apos;s
-                  most out-of-pattern members; a 100 means as far above the expectation as those
+                  the member breaks with their party very much less often than members of their own
+                  party in seats that lean the same way, or far more often still than the
+                  chamber&apos;s most out-of-pattern members; a 100 means as far above the expectation as those
                   members, and no further. Because the
                   expectation is fitted separately for each party, a member is only ever compared
                   with their own party&apos;s members, and both parties&apos; average scores sit

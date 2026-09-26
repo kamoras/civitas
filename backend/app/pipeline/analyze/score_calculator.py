@@ -1537,14 +1537,35 @@ def _constituent_reference(chamber: str, reference: dict | None) -> dict:
 # SD), while the general electorate is flat past it. Research note section 8.
 OVER_BREAK_DECLINE = 1.0
 
+# How far below the seat's expected break rate, in saturation deviations,
+# loyalty has to reach before the vote score hits 0 (v6.14). A design
+# weight, not a fitted one: at equal distance from the seat's norm, extra
+# loyalty costs less than extra disloyalty past the peak (which reaches 0
+# at 3 deviations — OVER_BREAK_DECLINE), because that is where the evidence
+# points for the Senate and for a member's own party. In Senate elections
+# 1990-2024 loyalty beyond the seat's norm carried no vote-share cost at
+# any scale (t~1.2, flatter scales fitting slightly better); own-party
+# primary voters punished excess disloyalty (-3.0 pts/SD) and not
+# loyalty; the literature has primary voters rewarding loyalty (Pyeatt
+# 2015). Against it, the 2004 House test found loyalty the strongest
+# general-election cost, and its fit weakens as this flattens (dR2 0.0354
+# at 1, 0.0285 at 4). At 1 (v6.13) a senator a few points more loyal than
+# the seat's norm in today's Senate, whose whole saturation deviation is
+# under 4 points, scored 0: 28 of 101 on 2025 Voteview votes; at 4, 4 do.
+# Research note section 9.
+LOYAL_SIDE_SCALE = 4.0
+
 
 def _peaked_vote_shape(deviation: float, scale: float) -> float:
-    """50 at the seat's expected break rate, falling to 0 for loyalty a
-    full saturation deviation below it, rising to 100 at the saturation
-    deviation above it, then declining (OVER_BREAK_DECLINE) past it."""
+    """50 at the seat's expected break rate, falling to 0 for loyalty
+    LOYAL_SIDE_SCALE saturation deviations below it, rising to 100 at the
+    saturation deviation above it, then declining (OVER_BREAK_DECLINE)
+    past it."""
     scaled = deviation / scale
+    if scaled < 0:
+        return 50.0 + 50.0 * max(scaled / LOYAL_SIDE_SCALE, -1.0)
     if not past_saturation(deviation, scale):
-        return 50.0 + 50.0 * max(scaled, -1.0)
+        return 50.0 + 50.0 * scaled
     return max(0.0, 100.0 - 50.0 * OVER_BREAK_DECLINE * (scaled - 1.0))
 
 
@@ -1654,14 +1675,17 @@ def _calc_constituent_alignment(
          data): the member's break rate on party-labeled votes minus the
          break rate their chamber's same-party members show at the same seat
          lean — both measured each run (compute_constituent_reference).
-         50 at expectation, below for breaking less, above for breaking
-         more up to the chamber's 90th-percentile deviation (100), then
+         50 at expectation; below for breaking less, reaching 0 at
+         LOYAL_SIDE_SCALE times the chamber's 90th-percentile deviation;
+         above for breaking more up to that deviation (100), then
          declining for breaking further (OVER_BREAK_DECLINE).
            - Loyalty below expectation is scored, not held neutral. In the
              2004 House test the below-expectation side carried the
              strongest association with vote share (2.3 pts per SD, t=3.4),
              consistent with Carson et al. 2010. The pre-v6.13 floor
-             ("unreadable") discarded it.
+             ("unreadable") discarded it. Since v6.14 it is scored more
+             gently than excess disloyalty (LOYAL_SIDE_SCALE): Senate
+             elections show no cost for it.
            - No seat-safety discount on either side: the association was
              the same in safe and competitive seats (1.5 vs 1.4 pts/SD).
            - No discount for flank-side defectors (Kirkland & Slapin 2017's

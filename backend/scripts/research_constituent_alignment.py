@@ -336,10 +336,9 @@ def loyalty_tests(m, p):
     # deviation, as compute_constituent_reference measures it (every 108th
     # House member has far more than 20 party-unity votes).
     p90 = (M.brk - M.exp_party).abs().quantile(.9)
-    x = dev / p90
     S["absdev"] = S.dev_party.abs()
     S["peaked"] = 100 - 100 * (dev.abs() / p90).clip(0, 1)
-    S["v614"] = np.where(x <= 1, 50 + 50 * x.clip(lower=-1), (100 - 50 * (x - 1)).clip(lower=0))
+    S["v614"] = v614_score(dev, p90)
     print("breaking far above expectation:")
     for k, label in (("absdev", "folded |deviation| (per SD)"), ("peaked", "peaked score (per point)"),
                      ("v614", "v6.14 score (per point)")):
@@ -352,6 +351,14 @@ def loyalty_tests(m, p):
     r = smf.ols(f"{base} + neg + pos1 + pos2", S).fit(cov_type="HC1")
     print(f"  crossing slope up to saturation {r.params['pos1']:.2f} (t={r.tvalues['pos1']:.1f}); "
           f"beyond it {r.params['pos2']:.2f} (t={r.tvalues['pos2']:.1f}, n={int((S.pos2 > 0).sum())})")
+    print("loyal-side scale (gaps below the expectation where the score reaches 0):")
+    for k in (1, 2, 4, 8):
+        S["sc"] = v614_score(dev, p90, k)
+        r = smf.ols(f"{base} + sc", S).fit(cov_type="HC1")
+        print(f"  {k}x: {r.params['sc']:.3f}/pt (t={r.tvalues['sc']:.1f}) dR2={r.rsquared - b0.rsquared:.4f}")
+    S["sc"] = 50.0 + (v614_score(dev, p90) - 50.0) * (dev >= 0)
+    r = smf.ols(f"{base} + sc", S).fit(cov_type="HC1")
+    print(f"  loyalty held at 50: {r.params['sc']:.3f}/pt (t={r.tvalues['sc']:.1f}) dR2={r.rsquared - b0.rsquared:.4f}")
     return hr
 
 
@@ -431,6 +438,15 @@ def senate_test(p):
 # "what voters sent them to do" depends on which voters (Fenno 1978): the
 # whole seat (general election, every Senate election 1990-2024) and the
 # member's own party (House primaries 1990-2010).
+
+def v614_score(dev, p90, loyal_scale=4.0):
+    """The shipped v6.14 vote shape (score_calculator._peaked_vote_shape):
+    50 at the expectation, 0 at loyal_scale gaps below, 100 at one gap
+    above, falling back to 0 at three."""
+    x = dev / p90
+    return np.where(x < 0, 50 + 50 * (x / loyal_scale).clip(lower=-1),
+                    np.where(x <= 1, 50 + 50 * x, (100 - 50 * (x - 1)).clip(lower=0)))
+
 
 def ascii_upper(s: pd.Series) -> pd.Series:
     return s.map(lambda x: unicodedata.normalize("NFD", str(x)).encode("ascii", "ignore").decode().upper())
@@ -537,6 +553,12 @@ def senate_general_test(p):
     for label, d in (("1990-2008", S[S.year <= 2008]), ("2010-2024", S[S.year >= 2010])):
         print(f" {label} (N={len(d)}):")
         print_overbreak(overbreak_terms(d), "own", "x + I(x**2) + C(fe)")
+    print(" loyal-side scale (gaps below the expectation where the score reaches 0):")
+    b0 = smf.ols("own ~ x + I(x**2) + C(fe)", S).fit()
+    for k in (1, 2, 4, 8):
+        S["sc"] = v614_score(S.dev, S.p90, k)
+        r = smf.ols("own ~ x + I(x**2) + C(fe) + sc", S).fit(cov_type="cluster", cov_kwds={"groups": S.gid})
+        print(f"  {k}x: {r.params['sc']:.3f}/pt (t={r.tvalues['sc']:.1f}) dR2={r.rsquared - b0.rsquared:.4f}")
 
 
 def house_primary_test(p):

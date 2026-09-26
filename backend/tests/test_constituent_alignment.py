@@ -59,14 +59,25 @@ class TestSeatRelativeVotes:
         assert score(record(10)) == 50
 
     def test_loyalty_below_expectation_scores_below_neutral(self):
-        # 0% vs 10% expected: half the saturation deviation -> 25.
-        assert score(record(0)) == 25
+        # 0% vs 10% expected: half a saturation deviation below, on a loyal
+        # side that reaches 0 at four of them -> 50 - 50 * 0.5 / 4.
+        assert score(record(0)) == 44
 
     def test_breaking_more_than_expected_scores_above_neutral(self):
         assert score(record(20)) == 75
 
-    def test_symmetric_around_the_expectation(self):
-        assert score(record(20)) - 50 == 50 - score(record(0))
+    def test_extra_loyalty_costs_less_than_extra_disloyalty(self):
+        # v6.14: at equal distance from the seat's norm, loyalty is penalized
+        # less than disloyalty past the peak (20-point gap, on the shape).
+        from app.pipeline.analyze.score_calculator import _peaked_vote_shape
+
+        assert _peaked_vote_shape(-0.4, 0.2) == pytest.approx(25)
+        assert _peaked_vote_shape(0.4, 0.2) == pytest.approx(50)
+        assert _peaked_vote_shape(0.6, 0.2) == pytest.approx(0, abs=1e-9)
+        assert _peaked_vote_shape(-0.6, 0.2) == pytest.approx(12.5)
+        # Loyalty reaches the floor only at four gaps below.
+        assert _peaked_vote_shape(-0.8, 0.2) == pytest.approx(0, abs=1e-9)
+        assert _peaked_vote_shape(-0.7, 0.2) > 0
 
     def test_peaks_at_the_chambers_p90_deviation(self):
         assert score(record(30)) == 100
@@ -92,10 +103,10 @@ class TestSeatRelativeVotes:
         detail = _constituent_alignment_core(record(7, total=10), [], {}, state="SW", party="D")["components"][0]["detail"]
         assert "only 10 votes" in detail
 
-    def test_loyal_floor_unchanged(self):
-        # An R in a D+15 state is expected to break 30%; never breaking is a
-        # full saturation below, the floor.
-        assert score(record(0), state="DS", party="R") == 0
+    def test_full_loyalty_in_an_opposed_seat(self):
+        # An R in a D+15 state is expected to break 30%; never breaking is
+        # 1.5 gaps below: 50 - 50 * 1.5 / 4.
+        assert score(record(0), state="DS", party="R") == 31
 
     def test_no_safe_seat_discount_on_either_side(self):
         # The same deviation from the seat's expectation scores the same in
@@ -106,7 +117,7 @@ class TestSeatRelativeVotes:
     def test_opposed_seat_expects_more_crossing(self):
         # An R in a D+15 state is expected to break 30% of the time.
         assert score(record(30), state="DS", party="R") == 50
-        assert score(record(10), state="DS", party="R") == 0
+        assert score(record(10), state="DS", party="R") == 38  # one gap below
 
     def test_expectation_is_per_party(self):
         ref = {"senate": {"deviation_p90": 0.2, "statistic": score_calculator.CONSTITUENT_REFERENCE_STATISTIC, "expected": {
