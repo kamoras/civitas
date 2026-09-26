@@ -144,7 +144,8 @@ TEST_PRESIDENT_REFERENCE = {
 # opposed one (-1); saturation at a 20-point deviation.
 _TEST_EXPECTED = {"a": 0.10, "b": -0.05, "b_opposed": -0.15, "n": 50}
 TEST_CONSTITUENT_REFERENCE = {
-    chamber: {"expected": {"D": _TEST_EXPECTED, "R": _TEST_EXPECTED}, "deviation_p90": 0.20, "n": 100}
+    chamber: {"expected": {"D": _TEST_EXPECTED, "R": _TEST_EXPECTED}, "deviation_p90": 0.20, "n": 100,
+              "statistic": "unweighted-break-rate/full-confidence-records"}
     for chamber in ("senate", "house")
 }
 

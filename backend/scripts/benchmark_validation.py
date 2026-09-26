@@ -120,28 +120,33 @@ def seat_relative_vote_shape(rows: list[dict]) -> dict[str, float]:
     member's evidence is their vote count). rows: {bioguide, party, state, district,
     break_rate, n_votes}."""
     from app.pipeline.analyze.score_calculator import (
-        _expected_break_rate,
         _signed_state_alignment,
         compute_constituent_reference,
+        seat_break_deviation,
         seat_relative_vote_score,
     )
 
-    inputs, keyed = [], []
+    inputs = []
     for r in rows:
-        if r["party"] not in ("D", "R"):
-            continue
-        alignment = _signed_state_alignment(r["state"], r["party"], district=r.get("district"))
-        inputs.append((r["party"], alignment, r["break_rate"]))
-        keyed.append((r["bioguide"], r["party"], alignment, r["break_rate"], r["n_votes"]))
+        if r["party"] in ("D", "R"):
+            alignment = _signed_state_alignment(r["state"], r["party"], district=r.get("district"))
+            inputs.append((r["party"], alignment, r["break_rate"]))
     ref = compute_constituent_reference(inputs)
     if ref is None:
         return {}
-    return {
-        bio: seat_relative_vote_score(
-            rate - _expected_break_rate(ref["expected"][party], alignment), ref["deviation_p90"], n,
+    out = {}
+    for r in rows:
+        if r["party"] not in ("D", "R"):
+            continue
+        # The score's own expectation lookup, handed this reference for
+        # whichever chamber the row belongs to.
+        dev = seat_break_deviation(
+            r["break_rate"], r["state"], r["party"], district=r.get("district"),
+            reference={"senate": ref, "house": ref},
         )
-        for bio, party, alignment, rate, n in keyed
-    }
+        if dev is not None:
+            out[r["bioguide"]] = seat_relative_vote_score(*dev, r["n_votes"])
+    return out
 
 def seat_relative_extremity(member_rows: list[dict], chamber: str) -> dict[str, float]:
     """bioguide -> Nokken-Poole (or DW-NOMINATE) position minus the per-party

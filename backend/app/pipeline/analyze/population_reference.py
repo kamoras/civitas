@@ -76,6 +76,12 @@ class ChamberReference:
         self._cache = (key, merged)
         return merged
 
+    def bundled(self) -> dict:
+        """The bundled pre-first-run fallback alone, without the live file
+        layered over it — for a caller that has to skip a live value it
+        can't use (score_calculator._constituent_reference)."""
+        return _read_json(self.bundled_path)
+
     def write(self, chamber: str, reference: dict) -> None:
         """Persist this run's reference for one chamber (read-merge-write:
         each chamber's pipeline owns its own key). Never raises — the

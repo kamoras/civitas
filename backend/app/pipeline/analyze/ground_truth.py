@@ -66,7 +66,6 @@ from collections import Counter, defaultdict
 
 from scipy import stats as scipy_stats
 
-from app.pipeline.analyze.population_reference import CONSTITUENT_REFERENCE
 from app.pipeline.transform.normalize_votes import stored_vote_identity
 from app.pipeline.analyze.score_calculator import (
     ALGORITHM_VERSION,
@@ -410,6 +409,16 @@ def evaluate_derived_checks(
             checked += 1
             group_scores = [y for _, y, _ in group]
             rest_scores = [y for _, y, _ in rest]
+            if not rest_scores:
+                # A tie spanning the whole population (every member at one
+                # value of the metric) leaves nothing to compare against;
+                # the point-mass check is what speaks to that.
+                checked -= 1
+                logger.info(
+                    "Derived checks: %s decile by %s is the whole population (tie) — skipping",
+                    side, metric,
+                )
+                continue
             mw = scipy_stats.mannwhitneyu(
                 group_scores, rest_scores, alternative=alternative,
             )
@@ -468,9 +477,6 @@ def _member_records(db, model, constituent_reference: dict | None = None) -> lis
         votes[member_id].append({
             **stored_vote_identity(row_id, bill_id), "votedWithParty": with_party,
         })
-    if constituent_reference is None:
-        constituent_reference = CONSTITUENT_REFERENCE.load()
-
     records = []
     for m in current:
         raised = m.total_raised or 0

@@ -109,10 +109,39 @@ class TestSeatRelativeVotes:
         assert score(record(10), state="DS", party="R") == 0
 
     def test_expectation_is_per_party(self):
-        ref = {"senate": {"deviation_p90": 0.2, "expected": {
+        ref = {"senate": {"deviation_p90": 0.2, "statistic": score_calculator.CONSTITUENT_REFERENCE_STATISTIC, "expected": {
             "D": {"a": 0.10, "b": 0.0}, "R": {"a": 0.0, "b": 0.0}}}}
         assert score(record(10), party="D", reference=ref) == 50
         assert score(record(10), party="R", reference=ref) == 75
+
+    def test_a_reference_measured_on_another_statistic_is_not_used(self, monkeypatch):
+        # A v6.13 reference on the /data volume (content-weighted rate, thin
+        # records included) must not set v6.14's saturation point: the
+        # score falls back to the bundled prior (20-point saturation, 10%
+        # swing-seat expectation here) instead.
+        from app.pipeline.analyze import population_reference
+
+        stale = {c: {"expected": {"D": {"a": 0.0, "b": 0.0}}, "deviation_p90": 0.01}
+                 for c in ("senate", "house")}
+        monkeypatch.setattr(population_reference.CONSTITUENT_REFERENCE, "load", lambda: stale)
+        assert score(record(20)) == 75
+        # Passed in, unstamped, it isn't used either.
+        assert score(record(20), reference=stale) == 75
+
+    def test_no_reference_on_the_current_statistic_scores_neutral(self, monkeypatch):
+        from app.pipeline.analyze import population_reference
+
+        monkeypatch.setattr(population_reference.CONSTITUENT_REFERENCE, "load", lambda: {})
+        monkeypatch.setattr(population_reference.CONSTITUENT_REFERENCE, "bundled", lambda: {})
+        core = _constituent_alignment_core(record(20), [], {}, state="SW", party="D")
+        assert core["score"] == 50 and "no measured expectation" in core["components"][0]["detail"]
+
+    def test_measured_references_carry_the_statistic(self):
+        ref = compute_constituent_reference(
+            [("D", 0.0, 0.1 + 0.01 * (i % 5)) for i in range(25)]
+            + [("R", 0.0, 0.1 + 0.01 * (i % 5)) for i in range(25)]
+        )
+        assert ref["statistic"] == score_calculator.CONSTITUENT_REFERENCE_STATISTIC
 
     def test_district_lean_sets_a_house_members_expectation(self):
         # AL-7 is D+13 while Alabama is R+15: a Democrat there holds a safe
@@ -174,6 +203,8 @@ class TestSeatRelativeVotes:
         past = _constituent_alignment_core(record(45), [], {}, state="SW", party="D")["components"][0]["detail"]
         within = _constituent_alignment_core(record(25), [], {}, state="SW", party="D")["components"][0]["detail"]
         assert "breaking further lowers the score" in past
+        # The turning point as a rate, and the gap in points, not "20% above 10%".
+        assert "more than 30.0% (20.0 points above that)" in past
         assert "breaking further" not in within
 
     def test_breakdown_names_the_comparison(self):

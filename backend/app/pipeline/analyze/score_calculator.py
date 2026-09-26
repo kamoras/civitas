@@ -1460,7 +1460,10 @@ def compute_constituent_reference(members: list[tuple[str, float, float]]) -> di
     p90 = float(np.quantile(deviations, SATURATION_QUANTILE))
     if p90 <= 0:
         return None
-    return {"expected": fits, "deviation_p90": round(p90, 5), "n": len(deviations)}
+    return {
+        "expected": fits, "deviation_p90": round(p90, 5), "n": len(deviations),
+        "statistic": CONSTITUENT_REFERENCE_STATISTIC,
+    }
 
 
 def constituent_reference_inputs(members: list[dict]) -> list[tuple[str, float, float]]:
@@ -1487,8 +1490,40 @@ def constituent_reference_inputs(members: list[dict]) -> list[tuple[str, float, 
     return out
 
 
+# What a Constituent Alignment reference was measured on. A reference is
+# only comparable with the break rate it is scored against if both use the
+# same statistic, so every reference carries this and one without it (or
+# with an older one) is not used. v6.13 references were measured on the
+# content-weighted rate over every member with 3+ votes; one left on the
+# /data volume would otherwise set v6.14's saturation point on a different
+# scale until the next run replaced it, and indefinitely for any run that
+# falls back to the persisted reference.
+CONSTITUENT_REFERENCE_STATISTIC = "unweighted-break-rate/full-confidence-records"
+
+_stale_reference_warned: set[tuple[str, str]] = set()
+
+
 def _constituent_reference(chamber: str, reference: dict | None) -> dict:
-    return (reference or {}).get(chamber) or CONSTITUENT_REFERENCE.load().get(chamber) or {}
+    """The chamber's reference: the one passed in, else the persisted one,
+    else the bundled pre-first-run prior — the first measured on the current
+    statistic (CONSTITUENT_REFERENCE_STATISTIC). {} when none is."""
+    for source, ref in (
+        ("passed", (reference or {}).get(chamber)),
+        ("persisted", CONSTITUENT_REFERENCE.load().get(chamber)),
+        ("bundled", CONSTITUENT_REFERENCE.bundled().get(chamber)),
+    ):
+        if not ref:
+            continue
+        if ref.get("statistic") == CONSTITUENT_REFERENCE_STATISTIC:
+            return ref
+        if (chamber, source) not in _stale_reference_warned:
+            _stale_reference_warned.add((chamber, source))
+            logger.warning(
+                "Ignoring the %s %s Constituent Alignment reference: measured on %r, "
+                "not the current statistic %r",
+                source, chamber, ref.get("statistic"), CONSTITUENT_REFERENCE_STATISTIC,
+            )
+    return {}
 
 
 # How fast the seat-relative vote score falls once a member's break rate
@@ -1503,7 +1538,7 @@ def _constituent_reference(chamber: str, reference: dict | None) -> dict:
 OVER_BREAK_DECLINE = 1.0
 
 
-def _seat_relative_vote_score(deviation: float, scale: float) -> float:
+def _peaked_vote_shape(deviation: float, scale: float) -> float:
     """50 at the seat's expected break rate, falling to 0 for loyalty a
     full saturation deviation below it, rising to 100 at the saturation
     deviation above it, then declining (OVER_BREAK_DECLINE) past it."""
@@ -1523,13 +1558,13 @@ def past_saturation(deviation: float, scale: float) -> bool:
 
 def seat_relative_vote_score(deviation: float, scale: float, n_votes: int) -> float:
     """Constituent Alignment's seat-relative vote component: the peaked
-    shape (_seat_relative_vote_score), shrunk linearly toward 50 until the
+    shape (_peaked_vote_shape), shrunk linearly toward 50 until the
     member has CONSTITUENT_FULL_CONFIDENCE_VOTES party-labeled votes
     (AGENTS.md principle 3) — with a handful of votes one break moves the
     rate far enough to reach either end, or past saturation the floor. The
     one implementation the score and the ground-truth gate both call."""
     confidence = min(n_votes / CONSTITUENT_FULL_CONFIDENCE_VOTES, 1.0)
-    return 50.0 + (_seat_relative_vote_score(deviation, scale) - 50.0) * confidence
+    return 50.0 + (_peaked_vote_shape(deviation, scale) - 50.0) * confidence
 
 
 def _chamber_of(district: int | None) -> str:
@@ -1724,7 +1759,8 @@ def _constituent_alignment_core(
         )
         if past_saturation(deviation, deviation_scale):
             party_alignment_detail += (
-                f" — more than {deviation_scale:.1%} above that is past the "
+                f" — breaking on more than {expected + deviation_scale:.1%} "
+                f"({deviation_scale * 100:.1f} points above that) is past the "
                 f"chamber's {round(SATURATION_QUANTILE * 100)}th-percentile gap, "
                 "where breaking further lowers the score"
             )

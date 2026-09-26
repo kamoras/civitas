@@ -14,7 +14,7 @@ from app.pipeline.analyze.ground_truth import (
     check_score_distribution,
     evaluate_derived_checks,
 )
-from app.pipeline.analyze.score_calculator import ALGORITHM_VERSION
+from app.pipeline.analyze.score_calculator import ALGORITHM_VERSION, CONSTITUENT_REFERENCE_STATISTIC
 
 
 def _add_senator(db, id_, *, fi=50.0, iv=50.0, fd=50.0, le=50.0,
@@ -246,7 +246,8 @@ class TestDerivedConsistency:
         # the one it is given.
         self._peaked_population(db_session, past_iv=lambda k: 95 - 9 * k)
         assert check_ground_truth(db_session)["failures"] == []
-        run_ref = {c: {"expected": {"D": {"a": 0.0, "b": 0.0}}, "deviation_p90": 0.001}
+        run_ref = {c: {"expected": {"D": {"a": 0.0, "b": 0.0}}, "deviation_p90": 0.001,
+                       "statistic": CONSTITUENT_REFERENCE_STATISTIC}
                    for c in ("senate", "house")}
         failures = check_ground_truth(
             db_session, constituent_reference=run_ref, reference_measured=True,
@@ -260,7 +261,8 @@ class TestDerivedConsistency:
         from app.pipeline.analyze import population_reference
 
         self._peaked_population(db_session, past_iv=lambda k: 95 - 9 * k)
-        broken = {c: {"expected": {"D": {"a": 0.0, "b": 0.0}}, "deviation_p90": 0.001}
+        broken = {c: {"expected": {"D": {"a": 0.0, "b": 0.0}}, "deviation_p90": 0.001,
+                       "statistic": CONSTITUENT_REFERENCE_STATISTIC}
                   for c in ("senate", "house")}
         monkeypatch.setattr(population_reference.CONSTITUENT_REFERENCE, "load", lambda: broken)
         failures = check_ground_truth(db_session, reference_measured=True)["failures"]
@@ -276,7 +278,8 @@ class TestDerivedConsistency:
         from app.pipeline.analyze import population_reference
 
         self._peaked_population(db_session, past_iv=lambda k: 95 - 9 * k)
-        broken = {c: {"expected": {"D": {"a": 0.0, "b": 0.0}}, "deviation_p90": 0.001}
+        broken = {c: {"expected": {"D": {"a": 0.0, "b": 0.0}}, "deviation_p90": 0.001,
+                       "statistic": CONSTITUENT_REFERENCE_STATISTIC}
                   for c in ("senate", "house")}
         monkeypatch.setattr(population_reference.CONSTITUENT_REFERENCE, "load", lambda: broken)
         failures = check_ground_truth(db_session)["failures"]
