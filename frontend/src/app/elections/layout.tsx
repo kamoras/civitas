@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { RaceSummary } from "@/types/election";
+import { pageMetadata } from "@/lib/site";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -18,29 +19,16 @@ async function fetchCycleYear(): Promise<number | null> {
   }
 }
 
+// Canonical /elections. The state pages beneath set their own; the
+// /elections/[raceId] route only redirects. See lib/site.ts.
 export async function generateMetadata(): Promise<Metadata> {
   const cycleYear = await fetchCycleYear();
-  const title = cycleYear
-    ? `${cycleYear} Midterm Elections — Civitas`
-    : "Midterm Elections — Civitas";
-  const listDescription = cycleYear
-    ? `Every ${cycleYear} Senate and House race`
-    : "Every Senate and House race";
-
-  return {
-    title,
-    description: `${listDescription} — candidates, FEC fundraising totals, partisan lean, and live news coverage, all sourced from public federal data.`,
-    openGraph: {
-      title,
-      description: `Track ${listDescription.toLowerCase()}: candidates, fundraising, partisan lean, and live coverage.`,
-      url: "https://civitas-research.org/elections",
-    },
-    twitter: {
-      card: "summary_large_image",
-      title,
-      description: `Track ${listDescription.toLowerCase()}: candidates, fundraising, and live coverage.`,
-    },
-  };
+  const year = cycleYear ? `${cycleYear} ` : "";
+  return pageMetadata({
+    title: `${year}Elections by State: Senate, House & Ballot Measures`,
+    description: `Every ${year}U.S. Senate and House race by state — candidates, FEC fundraising, partisan lean, and statewide ballot measures quoted from official sources.`,
+    path: "/elections",
+  });
 }
 
 export default function ElectionsLayout({ children }: { children: React.ReactNode }) {

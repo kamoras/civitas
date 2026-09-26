@@ -1,14 +1,15 @@
-import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/site";
 import Navbar from "@/components/layout/Navbar";
 import PageMasthead from "@/components/layout/PageMasthead";
 import Footer from "@/components/layout/Footer";
 import { SCORE_VERSIONS } from "@/lib/scoreVersions";
 
-export const metadata: Metadata = {
-  title: "Scoring Changelog — Civitas",
+export const metadata = pageMetadata({
+  title: "Scoring Changelog",
   description:
     "Version history of the Civitas scoring algorithms — every formula and data-input change, and why it was made.",
-};
+  path: "/changelog",
+});
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (

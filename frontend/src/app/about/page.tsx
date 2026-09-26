@@ -1,6 +1,14 @@
+import { pageMetadata } from "@/lib/site";
 import Navbar from "@/components/layout/Navbar";
 import PageMasthead from "@/components/layout/PageMasthead";
 import Footer from "@/components/layout/Footer";
+
+export const metadata = pageMetadata({
+  title: "About: How Civitas Scores Congress",
+  description:
+    "How Civitas scores members of Congress: data sources, funding independence, constituent alignment, and legislative effectiveness formulas — deterministic, auditable, and nonpartisan.",
+  path: "/about",
+});
 
 // Collapsed by default (2026-08). Reader feedback that the site reads dense
 // was partly about volume, not just spacing: this page measured 10,766 words
