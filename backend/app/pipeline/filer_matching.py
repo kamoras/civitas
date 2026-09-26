@@ -7,6 +7,7 @@ name is ambiguous.
 """
 
 import re
+from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
@@ -57,30 +58,49 @@ def _pick(candidates: list, last: str, firsts: set[str]):
     return None
 
 
-def current_senators(db: Session) -> list[Senator]:
+@dataclass(frozen=True)
+class Member:
+    """A roster entry as plain values. The ingest phases commit after every
+    fetch, and a commit expires every ORM object in the session — a roster
+    of Senator/Representative rows held across those commits would reload
+    each row, one SELECT apiece, on the next filer's match."""
+
+    id: str
+    name: str
+    state: str | None = None
+    district: int | None = None
+
+
+def current_senators(db: Session) -> list[Member]:
     """The roster match_senator compares against — load it once per ingest
     phase and pass it in, rather than once per filer."""
-    return db.query(Senator).filter(Senator.is_current == True).all()  # noqa: E712
+    rows = db.query(Senator.id, Senator.name).filter(Senator.is_current == True).all()  # noqa: E712
+    return [Member(id, name) for id, name in rows]
 
 
 def match_senator(
-    db: Session, last: str, first: str, office: str | None = None, roster: list[Senator] | None = None,
-) -> Senator | None:
+    db: Session, last: str, first: str, office: str | None = None, roster: list[Member] | None = None,
+) -> Member | None:
     if not _fold(last):
         return None
     senators = roster if roster is not None else current_senators(db)
     return _pick(senators, last, _first_names(first, _office_first_name(office)))
 
 
-def current_representatives(db: Session) -> list[Representative]:
+def current_representatives(db: Session) -> list[Member]:
     """The roster match_representative compares against — load it once per
     ingest phase and pass it in, rather than once per filer."""
-    return db.query(Representative).filter(Representative.is_current == True).all()  # noqa: E712
+    rows = (
+        db.query(Representative.id, Representative.name, Representative.state, Representative.district)
+        .filter(Representative.is_current == True)  # noqa: E712
+        .all()
+    )
+    return [Member(*row) for row in rows]
 
 
 def match_representative(
-    db: Session, last: str, first: str, state_district: str, roster: list[Representative] | None = None,
-) -> Representative | None:
+    db: Session, last: str, first: str, state_district: str, roster: list[Member] | None = None,
+) -> Member | None:
     if not _fold(last):
         return None
     state = state_district[:2] if state_district else None

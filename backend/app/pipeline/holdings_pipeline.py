@@ -24,6 +24,7 @@ first, so coverage fills before re-reads.
 import logging
 import re
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import timedelta
 
@@ -32,10 +33,10 @@ from sqlalchemy.orm import Session
 
 from app.alerting import safe_ops_alert as _alert
 from app.models import FinancialDisclosure, FinancialHolding
-from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.fd_common import AnnualReport
 from app.pipeline.fetch.house_fd import PARSER_VERSION as HOUSE_PARSER_VERSION
 from app.pipeline.fetch.house_fd import fetch_and_parse_annual as fetch_house_annual, fetch_annual_filing_index
+from app.pipeline.fetch.house_fd import report_still_loads as house_report_still_loads
 from app.pipeline.fetch.senate_fd import PARSER_VERSION as SENATE_PARSER_VERSION
 from app.pipeline.fetch.senate_fd import (
     SessionLapsed,
@@ -44,6 +45,7 @@ from app.pipeline.fetch.senate_fd import (
     is_senator_filing,
     search_annual_filings,
 )
+from app.pipeline.fetch.senate_fd import report_still_loads as senate_report_still_loads
 from app.pipeline.fetch.senate_ptr import accept_terms as senate_accept_terms
 from app.pipeline.fetch.senate_ptr import senate_filing_id
 from app.pipeline.filer_matching import (
@@ -174,12 +176,22 @@ class _SourceHealth:
 
     Deliberately not an early abort: members with nothing stored are
     processed first, so a few genuinely broken filings bunched at the front
-    would otherwise stop the phase before it reached anyone else. A source
-    that is down fails every fetch; a source with some bad filings doesn't.
-    So the phase fails when at least MIN_ATTEMPTS_FOR_OUTAGE members were
-    tried and not one report came back — including members who then kept a
-    stored report, since a newer report that won't load is exactly what an
-    outage looks like on a night when only new reports need fetching.
+    would otherwise stop the phase before it reached anyone else.
+
+    A night on which at least MIN_ATTEMPTS_FOR_OUTAGE members were tried
+    and not one report came back live is either an outage or a night on
+    which the only filings left to fetch are ones that won't load (a PDF the
+    index lists but the Clerk 404s). Counts alone can't tell those apart,
+    and neither can a memory of past failures — anything that learns to
+    stop counting a filing also learns to stop seeing an outage. So the
+    phase asks the source directly: it re-requests a report it already
+    stored, live. If that loads, the source is up and the failures belong
+    to those filings; if it doesn't — or nothing is stored to ask about —
+    the phase fails, every night the outage lasts.
+
+    Only live requests count either way: a report answered from the parse
+    cache, or a paper filing that is never fetched, proves nothing about
+    the source (AnnualReport.live).
     """
 
     def __init__(self, source: str) -> None:
@@ -191,46 +203,28 @@ class _SourceHealth:
         self.attempted += attempted
         self.fetched += fetched
 
-    def check(self) -> None:
-        if self.attempted >= MIN_ATTEMPTS_FOR_OUTAGE and not self.fetched:
-            raise RuntimeError(f"{self.source}: {self.attempted} members tried, no report fetched")
+    async def check(self, stored_url: str | None, still_loads: Callable[[str], Awaitable[bool]]) -> None:
+        if self.attempted < MIN_ATTEMPTS_FOR_OUTAGE or self.fetched:
+            return
+        if stored_url and await still_loads(stored_url):
+            logger.warning(
+                "%s: %d members' reports failed to load, but a stored report (%s) still does — "
+                "those filings, not the source", self.source, self.attempted, stored_url,
+            )
+            return
+        raise RuntimeError(f"{self.source}: {self.attempted} members tried, no report fetched")
 
 
-# A filing whose fetch has failed on this many runs *on which the same
-# source served other reports fine* is "known bad" — a PDF the Clerk lists
-# but 404s, a page eFD won't serve. It is still tried each run, but no longer
-# counts as an attempt in _SourceHealth, so a handful of them can't raise a
-# false outage every quiet night. Only nights with a live success count
-# toward it: during a real outage nothing is fetched, no miss is recorded,
-# and the outage keeps failing the phase for as long as it lasts. A success
-# forgets the misses.
-KNOWN_BAD_AFTER = 3
-_MISS_TIER = "holdings_fetch_miss"
-_MISS_MAX_AGE_HOURS = 24 * 60
-
-
-def _miss_count(db: Session, filing_id: str) -> int:
-    cached = api_cache_get(db, _MISS_TIER, filing_id, max_age_hours=_MISS_MAX_AGE_HOURS)
-    return int(cached.get("count", 0)) if cached else 0
-
-
-def _is_known_bad(db: Session, filing_id: str) -> bool:
-    return _miss_count(db, filing_id) >= KNOWN_BAD_AFTER
-
-
-def _clear_miss(db: Session, filing_id: str) -> None:
-    if _miss_count(db, filing_id):
-        api_cache_set(db, _MISS_TIER, filing_id, {"count": 0}, normal_ttl_hours=_MISS_MAX_AGE_HOURS)
-
-
-def _remember_misses(db: Session, health: "_SourceHealth", failed_ids: list[str]) -> None:
-    if not health.fetched:
-        return  # nothing came back at all: the source's problem, not these filings'
-    for filing_id in failed_ids:
-        api_cache_set(
-            db, _MISS_TIER, filing_id, {"count": _miss_count(db, filing_id) + 1},
-            normal_ttl_hours=_MISS_MAX_AGE_HOURS,
-        )
+def _known_good_url(db: Session, owner_column) -> str | None:
+    """The most recently stored report that was fetched and read — the one
+    most likely to still be where it was."""
+    row = (
+        db.query(FinancialDisclosure.source_url)
+        .filter(owner_column.isnot(None), FinancialDisclosure.parsed == True, FinancialDisclosure.source_url != "")  # noqa: E712
+        .order_by(FinancialDisclosure.ingested_at.desc(), FinancialDisclosure.id.desc())
+        .first()
+    )
+    return row[0] if row else None
 
 
 async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
@@ -264,7 +258,6 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
     stored = _stored_reports(db, FinancialDisclosure.representative_id)
     inserted = 0
     health = _SourceHealth("House Clerk")
-    failed_ids: list[str] = []
     order = _members_in_order(per_rep, stored)
     for position, rep_id in enumerate(order):
         mine = stored.get(rep_id)
@@ -280,13 +273,10 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
             if time.monotonic() > deadline:
                 out_of_time = True
                 break
-            known_bad = _is_known_bad(db, filing["doc_id"])
             report = await fetch_house_annual(client, db, filing)
             live = report is None or report.live  # None: a request was made and failed
-            attempted = attempted or (live and not known_bad)
+            attempted = attempted or live
             if report is None or not report.final:
-                if live:
-                    failed_ids.append(filing["doc_id"])
                 # Nothing usable this run: not fetched, or a read that may be
                 # transient (the parser crashed) — which is stored nowhere,
                 # since "can't be read" would be a claim about the report
@@ -295,7 +285,6 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
                 # candidate's amendment can rank first); _is_older keeps that
                 # from ever displacing a newer stored report.
                 continue
-            _clear_miss(db, filing["doc_id"])
             fetched = fetched or report.live
             status = (report.filer_status or "").lower()
             if status and status != "member":
@@ -327,8 +316,9 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
         if out_of_time:
             logger.info("House holdings: time budget spent — %d members wait for the next run", len(order) - position)
             break
-    _remember_misses(db, health, failed_ids)
-    health.check()
+    await health.check(
+        _known_good_url(db, FinancialDisclosure.representative_id), lambda url: house_report_still_loads(client, url),
+    )
     return inserted
 
 
@@ -410,7 +400,6 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
     stored = _stored_reports(db, FinancialDisclosure.senator_id)
     inserted = 0
     health = _SourceHealth("Senate eFD")
-    failed_ids: list[str] = []
     order = _members_in_order(per_senator, stored)
     for position, senator_id in enumerate(order):
         mine = stored.get(senator_id)
@@ -428,7 +417,6 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
             if time.monotonic() > deadline:
                 out_of_time = True
                 break
-            known_bad = _is_known_bad(db, filing_id)
             try:
                 report = await fetch_senate_annual(client, db, filing)
             except SessionLapsed:
@@ -450,10 +438,8 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
                     attempted = True
                     continue
             live = report is None or report.live  # None: a request was made and failed
-            attempted = attempted or (live and not known_bad)
+            attempted = attempted or live
             if report is None or not report.final:
-                if live:
-                    failed_ids.append(filing_id)
                 # Nothing usable this run: the filing won't load, or its read
                 # may be transient (a parser crash, or a page that is neither
                 # a report nor the terms page — an error or block page looks
@@ -461,7 +447,6 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
                 # claim about the report this run can't back. Fall through to
                 # the senator's next-best filing.
                 continue
-            _clear_miss(db, filing_id)
             fetched = fetched or report.live
             inserted += _replace_disclosure(
                 db,
@@ -480,8 +465,9 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
         if out_of_time:
             logger.info("Senate holdings: time budget spent — %d members wait for the next run", len(order) - position)
             break
-    _remember_misses(db, health, failed_ids)
-    health.check()
+    await health.check(
+        _known_good_url(db, FinancialDisclosure.senator_id), lambda url: senate_report_still_loads(client, url),
+    )
     return inserted
 
 

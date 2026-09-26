@@ -1,7 +1,6 @@
 """Tests for holdings_pipeline (which report is kept per member) and the
 holdings read path (holdings_service + the two API routes)."""
 
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -835,9 +834,10 @@ class TestOutagesStayVisible:
             with pytest.raises(RuntimeError):
                 await _ingest_house(db_session, index, {})
 
-    def _dead_links_beside_working_ones(self, db_session):
+    def _dead_links_beside_a_stored_report(self, db_session):
         """MIN_ATTEMPTS_FOR_OUTAGE members whose only filing always fails,
-        plus one member whose filing loads."""
+        plus one member whose report is already stored — a quiet night on
+        which only the dead links are left to fetch."""
         n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
         index = {2025: []}
         for i in range(n + 1):
@@ -847,49 +847,40 @@ class TestOutagesStayVisible:
         db_session.commit()
         return index, {f"D{n}": AnnualReport("Member", [_row()])}
 
-    async def test_filings_that_keep_failing_while_the_source_works_stop_counting(self, db_session):
-        index, reports = self._dead_links_beside_working_ones(db_session)
-        # The one good report is stored on night one and skipped after that,
-        # so only the dead links are fetched — which reads as an outage...
+    async def test_dead_links_on_a_quiet_night_are_not_an_outage(self, db_session):
+        index, reports = self._dead_links_beside_a_stored_report(db_session)
+        await _ingest_house(db_session, index, reports)  # stores the good one
+        probe = AsyncMock(return_value=True)
+        with patch.object(holdings_pipeline, "house_report_still_loads", probe):
+            for _night in range(5):
+                await _ingest_house(db_session, index, reports)  # must not raise
+        stored_url = db_session.query(FinancialDisclosure).one().source_url
+        probe.assert_awaited_with(None, stored_url)
+
+    async def test_an_outage_with_reports_stored_fails_every_night(self, db_session):
+        index, reports = self._dead_links_beside_a_stored_report(db_session)
         await _ingest_house(db_session, index, reports)
-        for _night in range(holdings_pipeline.KNOWN_BAD_AFTER - 1):
-            with pytest.raises(RuntimeError):
-                await _ingest_house(db_session, index, reports)
-        # ...until they're known bad. Night one had a live success, so it
-        # counted; the failing nights in between did not.
-        misses = {f"D{i}": holdings_pipeline._miss_count(db_session, f"D{i}")
-                  for i in range(holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE)}
-        assert set(misses.values()) == {1}
+        with patch.object(holdings_pipeline, "house_report_still_loads", AsyncMock(return_value=False)):
+            for _night in range(5):
+                with pytest.raises(RuntimeError):
+                    await _ingest_house(db_session, index, reports)
 
-    async def test_known_bad_filings_are_forgotten_once_they_load(self, db_session):
-        index, reports = self._dead_links_beside_working_ones(db_session)
-        for _night in range(holdings_pipeline.KNOWN_BAD_AFTER):
-            # Keep the good member unstored so every night has a live success.
-            db_session.query(FinancialHolding).delete()
-            db_session.query(FinancialDisclosure).delete()
-            db_session.commit()
-            await _ingest_house(db_session, index, reports)
-        assert holdings_pipeline._is_known_bad(db_session, "D0")
-        db_session.query(FinancialHolding).delete()
-        db_session.query(FinancialDisclosure).delete()
-        db_session.commit()
-        # Known-bad filings no longer count: one dead member among working
-        # ones is not an outage even with the rest down.
-        await _ingest_house(db_session, index, {**reports, "D0": AnnualReport("Member", [_row()])})
-        assert holdings_pipeline._miss_count(db_session, "D0") == 0
-        assert holdings_pipeline._is_known_bad(db_session, "D1")
-
-    async def test_known_bad_filings_do_not_count_as_attempts(self, db_session):
-        index, reports = self._dead_links_beside_working_ones(db_session)
+    async def test_the_senate_asks_efd_about_a_stored_report_too(self, db_session):
         n = holdings_pipeline.MIN_ATTEMPTS_FOR_OUTAGE
-        for i in range(n):
-            for _ in range(holdings_pipeline.KNOWN_BAD_AFTER):
-                holdings_pipeline._remember_misses(
-                    db_session, SimpleNamespace(fetched=1), [f"D{i}"],
-                )
-        # The working member is already stored: only dead links are fetched.
-        await _ingest_house(db_session, index, reports)
-        await _ingest_house(db_session, index, reports)  # must not raise
+        filings = []
+        for i in range(n + 1):
+            db_session.add(Senator(id=f"S{i}", name=f"Pat Name{i}", state="XX", party="D", is_current=True))
+            filings.append({**_senate_filing(f"e{i}"), "last": f"Name{i}", "first": "Pat",
+                            "office": f"Name{i}, Pat (Senator)"})
+        db_session.commit()
+        await _ingest_senate(db_session, filings, {f"e{n}": [_row()]})
+        for answer, raises in ((True, False), (False, True)):
+            with patch.object(holdings_pipeline, "senate_report_still_loads", AsyncMock(return_value=answer)):
+                if raises:
+                    with pytest.raises(RuntimeError):
+                        await _ingest_senate(db_session, filings, {f"e{n}": [_row()]})
+                else:
+                    await _ingest_senate(db_session, filings, {f"e{n}": [_row()]})
 
     async def test_cache_hits_are_not_attempts_or_successes(self, db_session):
         """A report answered from the parse cache made no request: it
@@ -911,8 +902,6 @@ class TestOutagesStayVisible:
         db_session.commit()
         with pytest.raises(RuntimeError):
             await _ingest_house(db_session, index, reports)
-        # Nothing live came back, so no filing is blamed.
-        assert holdings_pipeline._miss_count(db_session, "NEW0") == 0
 
     async def test_failing_to_re_accept_the_terms_stops_the_phase(self, db_session, senator):
         from app.pipeline.fetch.senate_fd import SessionLapsed

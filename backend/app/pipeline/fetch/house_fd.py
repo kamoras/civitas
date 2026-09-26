@@ -277,6 +277,18 @@ async def fetch_annual_filing_index(
     return await fetch_filing_index(client, db, year, filing_types=ANNUAL_FILING_TYPES, pdf_dir="financial-pdfs")
 
 
+async def report_still_loads(client: httpx.AsyncClient, pdf_url: str) -> bool:
+    """Whether the Clerk serves a PDF at `pdf_url` right now — a live
+    request, never the parse cache. The holdings phase asks this of a report
+    it already stored when a night's fetches all failed, to tell a source
+    that is down from a handful of filings that won't load."""
+    pdf_bytes = await fetch_bytes_with_retry(
+        client, _rate_limiter, pdf_url, "House Clerk",
+        headers=None, rate_limit_backoff_multiplier=2.0, retry_on_4xx=False,
+    )
+    return pdf_bytes is not None and pdf_bytes.startswith(b"%PDF")
+
+
 async def fetch_and_parse_annual(
     client: httpx.AsyncClient, db: Session, filing: dict,
 ) -> AnnualReport | None:

@@ -459,3 +459,33 @@ class TestRepeatedCrash:
             third = await house_fd.fetch_and_parse_annual(None, db_session, filing)
         get.assert_not_called()
         assert third.unreadable_reason == "unrecognized"
+
+
+class TestReportStillLoads:
+    """The live probe the holdings phase uses to tell an outage from dead links."""
+
+    async def test_house_probe_wants_a_pdf(self):
+        from unittest.mock import AsyncMock, patch
+
+        from app.pipeline.fetch import house_fd
+
+        for body, expected in ((b"%PDF-1.7 ...", True), (b"<html>Not found</html>", False), (None, False)):
+            with patch.object(house_fd, "fetch_bytes_with_retry", new_callable=AsyncMock, return_value=body):
+                assert await house_fd.report_still_loads(None, "https://clerk.example/x.pdf") is expected
+
+    async def test_senate_probe_wants_a_report_page(self):
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, patch
+
+        from app.pipeline.fetch import senate_fd
+
+        report = "<section><h3>Part 1. Honoraria Payments</h3></section>"
+        cases = (
+            (SimpleNamespace(status_code=200, text=report), True),
+            (SimpleNamespace(status_code=200, text="<form id='agreement_form'></form>"), False),
+            (SimpleNamespace(status_code=302, text=""), False),
+            (None, False),
+        )
+        for resp, expected in cases:
+            with patch.object(senate_fd, "_request_with_retry", new_callable=AsyncMock, return_value=resp):
+                assert await senate_fd.report_still_loads(None, "https://efd.example/r/") is expected

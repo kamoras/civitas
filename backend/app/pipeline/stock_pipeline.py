@@ -40,7 +40,7 @@ from app.pipeline.fetch.president_ptr import (
 from app.pipeline.fetch.ptr_common import TradeRow
 from app.pipeline.fetch.sec_tickers import resolve_tickers
 from app.pipeline.holdings_pipeline import HOLDINGS_STEPS, run_holdings_phases
-from app.pipeline.filer_matching import current_representatives, current_senators
+from app.pipeline.filer_matching import Member, current_representatives, current_senators
 from app.pipeline.filer_matching import match_representative as _match_representative
 from app.pipeline.filer_matching import match_senator as _match_senator
 from app.pipeline.fetch.senate_fd import is_senator_filing
@@ -200,7 +200,7 @@ async def _ingest_house(db: Session, client: httpx.AsyncClient) -> int:
     current_year = utcnow().year
     inserted = 0
     matched: dict[tuple, str | None] = {}
-    roster: list[Representative] | None = None
+    roster: list[Member] | None = None
     for year in (current_year - 1, current_year):
         filings = await fetch_ptr_filing_index(client, db, year)
         for filing in filings:
