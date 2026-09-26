@@ -50,7 +50,13 @@ Optional, each because a live state needed it:
                                      Mexico's candidate portal), so the page
                                      must name this year's election before a
                                      row is read — last cycle's list would
-                                     confirm last cycle's people
+                                     confirm last cycle's people; year_regex
+                                     is honoured on a discovered page too
+  discovery.form_button              the list is the page's own "Export to CSV"
+                                     button (Hawaii's candidate report): the
+                                     page's form is posted back with that
+                                     button, exactly as a visitor's click does
+  format.name_last_first             names are printed "BERNING, Nathan M."
 
 An HTML page is read from its table whose header row carries every
 configured heading (New Mexico). A PDF is read as a table too (Iowa, Nebraska): the row whose cells include
@@ -76,7 +82,7 @@ import pdfplumber
 from lxml import html as lxml_html
 
 from app.pipeline.fetch.ballot_measure_pdf_geometry import rows as _clustered_rows
-from app.pipeline.fetch.http_utils import fetch_bytes_with_retry
+from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_bytes_with_retry, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     clean_display_name,
     discover_certification_link,
@@ -188,12 +194,14 @@ def _rows(payload: bytes, url: str, fmt: dict) -> list[dict] | None:
         except Exception:
             logger.exception("certified list PDF %s failed to parse", url)
             return None
-    if url.lower().split("?")[0].endswith(".csv"):
-        try:
-            return list(csv.DictReader(io.StringIO(payload.decode("utf-8-sig"))))
-        except (UnicodeDecodeError, csv.Error):
-            return None
-    return _xlsx_rows(payload)
+    if payload[:2] == b"PK":  # an xlsx workbook is a zip
+        return _xlsx_rows(payload)
+    # Anything else is CSV, whatever the address ends in (Hawaii's export
+    # is served from an .aspx page).
+    try:
+        return list(csv.DictReader(io.StringIO(payload.decode("utf-8-sig"))))
+    except (UnicodeDecodeError, csv.Error):
+        return None
 
 
 def parse_certified_rows(rows: list[dict], fmt: dict) -> list[dict]:
@@ -212,9 +220,12 @@ def parse_certified_rows(rows: list[dict], fmt: dict) -> list[dict]:
             continue
         label = " ".join(str(row.get(fmt["office_column"]) or "").split())
         party_label = str(row.get(fmt["party_column"]) or "").strip()
-        display = clean_display_name(
-            " ".join(str(row.get(col) or "").strip() for col in fmt["name_columns"])
-        )
+        printed = " ".join(str(row.get(col) or "").strip() for col in fmt["name_columns"]).strip()
+        printed_last = ""
+        if fmt.get("name_last_first") and "," in printed:
+            printed_last, _, given = printed.partition(",")
+            printed = f"{given.strip()} {printed_last.strip()}"
+        display = clean_display_name(printed)
         if fill_down:
             # Only a candidate row sets the office carried to the rows below
             # it: a page footer never does, and a blank-office row under
@@ -239,10 +250,12 @@ def parse_certified_rows(rows: list[dict], fmt: dict) -> list[dict]:
             if office == "H":
                 digits = "".join(ch for ch in str(row.get(fmt["district_column"]) or "") if ch.isdigit())
                 district = int(digits) if digits else 0
-        last = (
-            str(row.get(fmt["surname_column"]) or "").strip()
-            if fmt.get("surname_column") else (surname(display) or "")
-        )
+        if fmt.get("surname_column"):
+            last = str(row.get(fmt["surname_column"]) or "").strip()
+        elif printed_last:
+            last = clean_display_name(printed_last)  # the whole surname: "LEGER FERNANDEZ"
+        else:
+            last = surname(display) or ""
         if not last:
             continue
         records[(office, district, display.lower())] = {
@@ -278,14 +291,10 @@ async def fetch_confirmed_candidates(
         return None
 
     if discovery.get("url"):
-        payload = await fetch_bytes_with_retry(client, _rate_limiter, discovery["url"], f"{state} certified list {year}")
+        payload = await _download(client, discovery["url"], discovery, year, state)
         if payload is None:
             return None
-        if not re.search(discovery["year_regex"].replace("{year}", str(year)), payload.decode("utf-8", "replace")):
-            logger.info("%s candidate list does not show the %d election yet", state, year)
-            return None
-        rows = _rows(payload, discovery["url"], fmt)
-        return _records(state, rows or [], fmt)
+        return _records(state, _rows(payload, discovery["url"], fmt) or [], fmt)
 
     page_url = discovery.get("page_url")
     if discovery.get("index_url") and discovery.get("index_regex"):
@@ -301,7 +310,7 @@ async def fetch_confirmed_candidates(
         url = await discover_certification_link(client, _rate_limiter, page_url, link_regex, year, state)
         if url is None:
             return None
-        payload = await fetch_bytes_with_retry(client, _rate_limiter, url, f"{state} certified list {year}")
+        payload = await _download(client, url, discovery, year, state)
         if payload is None:
             return None
         part = _rows(payload, url, fmt)
@@ -310,6 +319,38 @@ async def fetch_confirmed_candidates(
             return None
         rows += part
     return _records(state, rows, fmt)
+
+
+async def _download(
+    client: httpx.AsyncClient, url: str, discovery: dict, year: int, state: str,
+) -> bytes | None:
+    """The list's bytes: the file itself, or — with form_button — what the
+    page's own export button returns. None when either fetch fails or the
+    page does not name this year's election."""
+    payload = await fetch_bytes_with_retry(client, _rate_limiter, url, f"{state} certified list {year}")
+    if payload is None:
+        return None
+    year_regex = discovery.get("year_regex")
+    if year_regex and not re.search(year_regex.replace("{year}", str(year)), payload.decode("utf-8", "replace")):
+        logger.info("%s candidate list does not show the %d election yet", state, year)
+        return None
+    if not discovery.get("form_button"):
+        return payload
+    forms = lxml_html.fromstring(payload).xpath("//form")
+    if not forms:
+        logger.warning("%s candidate list page has no form to export from", state)
+        return None
+    data = {
+        field.get("name"): field.get("value") or ""
+        for field in forms[0].xpath(".//input[@name]")
+        if (field.get("type") or "text").lower() in ("hidden", "text")
+    }
+    data[discovery["form_button"]] = ""
+    resp = await fetch_with_retry(
+        client, _rate_limiter, "POST", url, data=data, headers=BROWSER_HEADERS,
+        log_label=f"{state} candidate list export {year}",
+    )
+    return resp.content if resp is not None else None
 
 
 def _records(state: str, rows: list[dict], fmt: dict) -> list[dict] | None:

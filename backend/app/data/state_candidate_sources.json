@@ -243,7 +243,32 @@
         "votes_column": "Total Votes",
         "name_format": "last_first"
       },
-      "description": "Hawaii publishes one tab-delimited summary per election, opening with a '#FormatVersion' banner before the header row (hence skip_lines). It numbers congressional districts in ROMAN numerals \u2014 'U.S. Representative, Dist I' \u2014 which parse_office now reads, bounded to I-XX. Its party lives on the CONTEST ('N' nonpartisan, 'D', 'R', 'G'), so the contest key carries it and the nonpartisan races are skipped for having no party at all. Names are 'CASE, Ed', surname before the comma. The file carries no date, so its date comes from the national calendar and it withholds until 21 days past the primary."
+      "description": "Hawaii publishes one tab-delimited summary per election, opening with a '#FormatVersion' banner before the header row (hence skip_lines). It numbers congressional districts in ROMAN numerals \u2014 'U.S. Representative, Dist I' \u2014 which parse_office now reads, bounded to I-XX. Its party lives on the CONTEST ('N' nonpartisan, 'D', 'R', 'G'), so the contest key carries it and the nonpartisan races are skipped for having no party at all. Names are 'CASE, Ed', surname before the comma. The file carries no date, so its date comes from the national calendar and it withholds until 21 days past the primary.",
+      "general_list": {
+        "source_name": "Hawaii Office of Elections (candidate report)",
+        "strategy": "certified_table",
+        "runoff_threshold_pct": null,
+        "discovery": {
+          "page_url": "https://elections.hawaii.gov/candidates/candidate-reports/",
+          "link_regex": "href=\"(https://olvr\\.hawaii\\.gov/Controls/CandidateFiling\\.aspx\\?elid=\\d+)\"",
+          "year_regex": "{year} Candidate Report",
+          "form_button": "ctl00$cphFooter$rdgSearch$ctl00$ctl02$ctl00$ExportToCsvButton"
+        },
+        "format": {
+          "office_column": "Contests",
+          "office_parse": true,
+          "party_column": "Party",
+          "name_columns": [
+            "BallotName"
+          ],
+          "name_last_first": true,
+          "status_column": "Status",
+          "status_values": [
+            "In General"
+          ]
+        },
+        "description": "Added 2026-09-26. The Office of Elections' candidate report gives every filing a status, and \"In General\" is the November ballot. It adds HI-1's nonpartisan candidate Nathan Berning, whom the primary results cannot show. The report is a paged grid; its own Export to CSV button returns the whole list, so the page's form is posted back with that button, as a visitor's click would. The report is linked from the candidate-reports page by an election id that changes each cycle, and `year_regex` checks the page names this year before anything is read. Names are printed \"BERNING, Nathan M.\" (`name_last_first`). Only contest, party, name and status are read; the export also carries addresses, phones and emails."
+      }
     },
     "CA": {
       "source_name": "California Secretary of State (certified Statement of Vote)",
