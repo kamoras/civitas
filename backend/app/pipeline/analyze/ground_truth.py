@@ -28,9 +28,10 @@ Three families of checks, all population-level:
 2. Direction-of-effect — Spearman rank correlation between each score
    and an upstream raw metric it must track: Funding Independence must
    fall as the PAC share of receipts rises and rise with small-donor
-   share; Constituent Alignment must rise with the observed party-break
-   rate relative to the seat's expectation — up to the saturation
-   deviation, then fall past it (v6.14; seat_relative_break_position). "The most PAC-free members must score high on FI" is exactly
+   share; Constituent Alignment must track its vote component recomputed
+   from the stored party-labeled votes (constituent_metrics — since v6.14
+   that component peaks at the saturation deviation, so raw break rate
+   alone no longer ranks it). "The most PAC-free members must score high on FI" is exactly
    what the old Sanders/Warren rows asserted, computed fresh each run
    for whoever currently holds that profile.
 
@@ -70,6 +71,7 @@ from app.pipeline.analyze.score_calculator import (
     SATURATION_QUANTILE,
     party_break_rate,
     seat_break_deviation,
+    seat_relative_vote_score,
 )
 
 logger = logging.getLogger(__name__)
@@ -117,14 +119,12 @@ _CONSISTENCY_CHECKS: list[tuple[str, str, int, str]] = [
      "PAC share of receipts (FEC)"),
     ("small_donor_pct", "score_funding_independence", +1,
      "small-donor share of receipts (FEC unitemized)"),
-    # Constituent Alignment rises with the break rate relative to the seat's
-    # expectation up to the saturation deviation and falls past it
-    # (v6.14), so the metric is that relative break rate folded at the
-    # peak — one check over the whole chamber, the heaviest breakers
-    # included, rather than a falling-side check the Senate's handful of
-    # members past saturation could never populate.
-    ("seat_relative_break", "score_constituent_alignment", +1,
-     "observed party-break rate relative to the seat's expectation, folded at saturation"),
+    # Constituent Alignment's vote component recomputed from the stored
+    # votes (constituent_metrics): one check over the whole chamber, the
+    # heaviest breakers included, rather than a falling-side check the
+    # Senate's handful of members past saturation could never populate.
+    ("seat_relative_vote", "score_constituent_alignment", +1,
+     "seat-relative vote score recomputed from the stored party-labeled votes"),
 ]
 
 
@@ -161,22 +161,6 @@ def _tie_extended_extreme(
     return ordered[idx:], ordered[:idx]
 
 
-def seat_relative_break_position(deviation: float, scale: float) -> float:
-    """A member's break rate relative to their seat's expectation, folded at
-    the saturation deviation: equal to the deviation up to it, then falling
-    one-for-one past it. The vote score must rank the same way.
-
-    Written from the design's shape, not from the scorer or its
-    OVER_BREAK_DECLINE: a rank check needs only the direction on each side,
-    so any positive decline rate ranks the same within the falling side,
-    while a scorer that stopped turning down (a rate of 0) decouples from
-    this. What it can catch is population-level: in a Senate with a handful
-    of members past saturation, a fault confined to them barely moves a
-    whole-chamber rank test, and the per-member shape is pinned by the unit
-    tests (test_constituent_alignment.py) instead."""
-    return deviation if deviation <= scale else 2 * scale - deviation
-
-
 def constituent_metrics(
     break_rate: float | None,
     labeled_votes: int,
@@ -187,11 +171,18 @@ def constituent_metrics(
     reference: dict | None = None,
 ) -> dict:
     """The Constituent Alignment inputs a member record carries:
-    seat_relative_break (None below MIN_LABELED_VOTES or without a measured
-    expectation) and past_saturation. ``break_rate`` is the weighted rate
-    the score compares (score_calculator.party_break_rate). Shared by the
-    pipeline gate and scripts/rescore.py so both judge members one way."""
-    out = {"seat_relative_break": None, "past_saturation": None}
+    seat_relative_vote (the vote component recomputed from the raw votes by
+    the scorer's own seat_relative_vote_score; None below MIN_LABELED_VOTES
+    or without a measured expectation) and past_saturation. ``break_rate``
+    and ``labeled_votes`` are party_break_rate's. Shared by the pipeline
+    gate and scripts/rescore.py so both judge members one way.
+
+    The rank check against it asks whether stored scores still follow the
+    stored votes — a plumbing and data check. The shape itself (the peak,
+    the decline, the shrinkage) is pinned by test_constituent_alignment.py,
+    not here: a gate metric written to differ from the formula would flag
+    every legitimate design change as a failure."""
+    out = {"seat_relative_vote": None, "past_saturation": None}
     if break_rate is None or labeled_votes < MIN_LABELED_VOTES:
         return out
     dev = seat_break_deviation(
@@ -199,7 +190,7 @@ def constituent_metrics(
         district=district, reference=reference,
     )
     if dev is not None:
-        out["seat_relative_break"] = seat_relative_break_position(*dev)
+        out["seat_relative_vote"] = seat_relative_vote_score(*dev, labeled_votes)
         out["past_saturation"] = dev[0] > dev[1]
     return out
 
@@ -233,7 +224,7 @@ def evaluate_derived_checks(
          "scores": {score_attr: float | None},
          "metrics": {"pac_ratio": float | None,
                      "small_donor_pct": float | None,
-                     "seat_relative_break": float | None,
+                     "seat_relative_vote": float | None,
                      "past_saturation": bool | None},
          "raw": {"total_raised": float, "total_from_pacs": float,
                  "labeled_votes": int}}

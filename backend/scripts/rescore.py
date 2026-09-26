@@ -283,11 +283,6 @@ def main() -> int:
         funding = payload["funding"]
         raised = funding["totalRaised"] or 0
         base = funding["totalContributions"] or raised
-        labeled = [
-            v["votedWithParty"]
-            for v in payload["votingRecord"]["keyVotes"]
-            if v["votedWithParty"] is not None
-        ]
         scored_rate, n_scored = party_break_rate(payload["votingRecord"])
         metrics = {
             "pac_ratio": funding["totalFromPACs"] / base if base > 0 else None,
@@ -303,7 +298,7 @@ def main() -> int:
             "raw": {
                 "total_raised": raised,
                 "total_from_pacs": funding["totalFromPACs"],
-                "labeled_votes": len(labeled),
+                "labeled_votes": n_scored,
             },
             "name": s["name"], "state": s["state"], "party": s["party"],
             "is_current": bool(s.get("is_current", 1)),

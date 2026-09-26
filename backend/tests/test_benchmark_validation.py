@@ -66,7 +66,7 @@ def senate(tmp_path, monkeypatch):
 def test_the_constructs_correlate_in_the_expected_direction(senate, capsys):
     assert bv.run_chamber("senate", 119, None, "icpsr") == []
     out = capsys.readouterr().out
-    assert "CA vs seat-relative break deviation (folded at saturation): r = +" in out
+    assert "CA vs seat-relative vote shape (Voteview): r = +" in out
     assert "CA vs Nokken-Poole seat-relative extremity: r = -" in out
 
 

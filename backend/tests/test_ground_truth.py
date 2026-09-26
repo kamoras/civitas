@@ -168,7 +168,7 @@ class TestDerivedConsistency:
     def test_scores_still_rising_past_saturation_flagged(self, db_session):
         # A regression back to "more breaking always scores higher" past
         # saturation puts the chamber's heaviest breakers at the top of IV
-        # while the folded metric puts them at the bottom.
+        # while their vote score recomputed from the votes puts them at the bottom.
         self._peaked_population(db_session, past_iv=lambda k: 90 + k)
         failures = check_ground_truth(db_session)["failures"]
         assert any(
@@ -178,7 +178,7 @@ class TestDerivedConsistency:
 
     def test_senate_sized_chamber_catches_a_regression_past_saturation(self, db_session):
         # A real Senate has only a handful of members past saturation — too
-        # few for a check of their own. The folded metric keeps them in the
+        # few for a check of their own. The recomputed vote score keeps them in the
         # whole-chamber check: 94 below saturation scored rising, 6 far past
         # it wrongly scored 100.
         for i in range(100):
@@ -434,7 +434,7 @@ class TestTieExtendedExtreme:
             members.append({
                 "name": f"tied{i}",
                 "scores": {"score_constituent_alignment": 50.0},
-                "metrics": {"seat_relative_break": 0.0, "pac_ratio": 0.3, "small_donor_pct": 20.0},
+                "metrics": {"seat_relative_vote": 0.0, "pac_ratio": 0.3, "small_donor_pct": 20.0},
                 "raw": {"total_raised": 1_000_000, "total_from_pacs": 100_000,
                         "labeled_votes": 50},
             })
@@ -442,7 +442,7 @@ class TestTieExtendedExtreme:
             members.append({
                 "name": f"m{i}",
                 "scores": {"score_constituent_alignment": 10.0 + i * (80.0 / 83)},
-                "metrics": {"seat_relative_break": float(i + 1), "pac_ratio": 0.3, "small_donor_pct": 20.0},
+                "metrics": {"seat_relative_vote": float(i + 1), "pac_ratio": 0.3, "small_donor_pct": 20.0},
                 "raw": {"total_raised": 1_000_000, "total_from_pacs": 100_000,
                         "labeled_votes": 50},
             })

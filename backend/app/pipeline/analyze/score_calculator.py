@@ -652,13 +652,9 @@ def calculate_confidence(senator: dict) -> dict[str, str]:
     has_funding = funding_share_base(funding) > 0
     n_donors = len(funding.get("topDonors") or [])
     n_industries = len(funding.get("industryBreakdown") or [])
-    all_votes = (voting_record.get("keyVotes") or []) + (
-        voting_record.get("recentVotes") or []
-    )
-    n_party_votes = sum(
-        1 for v in all_votes
-        if isinstance(v, dict) and v.get("votedWithParty") is not None
-    )
+    # The same deduplicated count the score's shrinkage reads, so the
+    # confidence grade and the breakdown's "only n votes" can't disagree.
+    _, n_party_votes = party_break_rate(voting_record)
     n_evaluable = sum(
         1 for p in promises
         if isinstance(p, dict) and p.get("alignment") in (PromiseAlignment.KEPT, PromiseAlignment.PARTIAL, PromiseAlignment.BROKEN)
@@ -1515,6 +1511,17 @@ def _seat_relative_vote_score(deviation: float, scale: float) -> float:
     return max(0.0, 100.0 - 50.0 * OVER_BREAK_DECLINE * (scaled - 1.0))
 
 
+def seat_relative_vote_score(deviation: float, scale: float, n_votes: int) -> float:
+    """Constituent Alignment's seat-relative vote component: the peaked
+    shape (_seat_relative_vote_score), shrunk linearly toward 50 until the
+    member has CONSTITUENT_FULL_CONFIDENCE_VOTES party-labeled votes
+    (AGENTS.md principle 3) — with a handful of votes one break moves the
+    rate far enough to reach either end, or past saturation the floor. The
+    one implementation the score and the ground-truth gate both call."""
+    confidence = min(n_votes / CONSTITUENT_FULL_CONFIDENCE_VOTES, 1.0)
+    return 50.0 + (_seat_relative_vote_score(deviation, scale) - 50.0) * confidence
+
+
 def _chamber_of(district: int | None) -> str:
     """A member's chamber from the scoring inputs: House members carry a
     district (0 for at-large), senators none."""
@@ -1699,27 +1706,22 @@ def _constituent_alignment_core(
         )
     else:
         deviation = break_rate - expected
-        # Linear shrinkage toward 50 until the vote count reaches the
-        # dimension's high-confidence volume (AGENTS.md principle 3): with a
-        # handful of labeled votes, one break moves the rate far enough to
-        # reach either end — or, past saturation, the floor.
-        vote_confidence = min(n_party / CONSTITUENT_FULL_CONFIDENCE_VOTES, 1.0)
-        party_score = 50.0 + (_seat_relative_vote_score(deviation, deviation_scale) - 50.0) * vote_confidence
+        party_score = seat_relative_vote_score(deviation, deviation_scale, n_party)
         party_alignment_detail = (
             f"broke with party on {break_rate:.1%} of {n_party} party-labeled votes; "
             f"{eval_party} members of this chamber in seats with this lean "
             f"(signal {alignment:+.2f}) break on {expected:.1%}"
         )
-        if vote_confidence < 1.0:
-            party_alignment_detail += (
-                f"; only {n_party} votes, so the score is pulled toward 50 "
-                f"until {CONSTITUENT_FULL_CONFIDENCE_VOTES}"
-            )
         if deviation > deviation_scale:
             party_alignment_detail += (
                 f" — more than {deviation_scale:.1%} above that is past the "
                 f"chamber's {round(SATURATION_QUANTILE * 100)}th-percentile gap, "
                 "where breaking further lowers the score"
+            )
+        if n_party < CONSTITUENT_FULL_CONFIDENCE_VOTES:
+            party_alignment_detail += (
+                f"; only {n_party} votes, so the score is pulled toward 50 "
+                f"until {CONSTITUENT_FULL_CONFIDENCE_VOTES}"
             )
 
     congruence_weight = POSITION_CONGRUENCE_WEIGHT if congruence_score is not None else 0.0

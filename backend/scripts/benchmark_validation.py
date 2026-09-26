@@ -8,11 +8,14 @@ score from, using the same constructs the scores claim to measure (v6.14):
        Voteview party-unity votes (majority of one party against the other)
        minus the break rate same-party members show at the same seat lean,
        with the expectation measured from Voteview's own votes by the same
-       compute_constituent_reference the pipeline uses, folded at that
-       reference's saturation deviation (ground_truth.seat_relative_break_
-       position — since v6.14 the score falls again past it). CA should
-       correlate positively (it is the 70% vote component's construct on an
-       independent vote record).
+       compute_constituent_reference the pipeline uses, put through the
+       score's own vote shape (score_calculator.seat_relative_vote_score —
+       since v6.14 it peaks at the saturation deviation) at that
+       reference's own saturation point. The peak is Voteview's
+       SATURATION_QUANTILE, not the pipeline's: the two vote sets differ in
+       scale, and the same quantile rule is the like-for-like comparison.
+       CA should correlate positively (it is the 70% vote component's
+       construct on an independent vote record).
     2. Nokken-Poole seat-relative extremity — the member's congress-specific
        position minus the per-party fit on seat lean (build_chamber_ideal_
        points, as the pipeline). CA should correlate negatively.
@@ -111,12 +114,12 @@ def party_unity_breaks(members, vote_rows, min_party_votes=10):
 def seat_relative_deviation(rows: list[dict]) -> dict[str, float]:
     """bioguide -> break rate minus the same-party expectation at that seat
     lean, measured from these rows by the pipeline's own
-    compute_constituent_reference, folded at its saturation deviation the
-    way the vote score is. rows: {bioguide, party, state, district,
+    compute_constituent_reference, through the vote score's shape at its
+    saturation deviation. rows: {bioguide, party, state, district,
     break_rate}."""
-    from app.pipeline.analyze.ground_truth import seat_relative_break_position
     from app.pipeline.analyze.score_calculator import (
         _expected_break_rate,
+        _seat_relative_vote_score,
         _signed_state_alignment,
         compute_constituent_reference,
     )
@@ -132,7 +135,7 @@ def seat_relative_deviation(rows: list[dict]) -> dict[str, float]:
     if ref is None:
         return {}
     return {
-        bio: seat_relative_break_position(
+        bio: _seat_relative_vote_score(
             rate - _expected_break_rate(ref["expected"][party], alignment), ref["deviation_p90"],
         )
         for bio, party, alignment, rate in keyed
@@ -229,7 +232,7 @@ def run_chamber(chamber: str, congress: int, les: dict[str, float] | None, les_k
         if not ok:
             problems.append(f"{chamber}: {label} r={r:+.3f}, expected the opposite sign")
 
-    report("CA vs seat-relative break deviation (folded at saturation)", deviation, "ca", +1)
+    report("CA vs seat-relative vote shape (Voteview)", deviation, "ca", +1)
     report("CA vs Nokken-Poole seat-relative extremity", extremity, "ca", -1)
     if les is not None:
         key_of = {m["bioguide"]: m["icpsr"] for m in members.values()}

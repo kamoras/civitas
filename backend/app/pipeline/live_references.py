@@ -86,19 +86,15 @@ def live_funding_reference(chamber: str, fundings: list[dict]) -> dict:
     return FUNDING_REFERENCE.with_live(chamber, ref)
 
 
-def live_constituent_reference(chamber: str, members: list[dict]) -> dict:
+def live_constituent_reference_measured(chamber: str, members: list[dict]) -> tuple[dict, bool]:
     """This run's Constituent Alignment expectation for `chamber` (per-party
     break rate by seat lean — see score_calculator.compute_constituent_
-    reference), persisted and merged the same way as live_funding_reference.
-    `members` are calculate_scores-shaped dicts. Falls back to the last
-    persisted reference when either party has too few measurable members
-    (e.g. a single-member filtered run)."""
-    return live_constituent_reference_measured(chamber, members)[0]
-
-
-def live_constituent_reference_measured(chamber: str, members: list[dict]) -> tuple[dict, bool]:
-    """live_constituent_reference, plus whether the reference was measured
-    from `members` this run (False when it fell back to the persisted one)."""
+    reference), persisted and merged the same way as live_funding_reference,
+    and whether it was measured from `members` this run. `members` are
+    calculate_scores-shaped dicts. Falls back to the last persisted
+    reference (measured False) when either party has too few measurable
+    members (e.g. a single-member filtered run) — the ground-truth gate's
+    saturation-share probe needs to know which it got."""
     from app.pipeline.analyze.population_reference import CONSTITUENT_REFERENCE
     from app.pipeline.analyze.score_calculator import (
         compute_constituent_reference,
