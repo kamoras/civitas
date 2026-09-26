@@ -167,13 +167,49 @@ class TestDerivedConsistency:
 
     def test_scores_still_rising_past_saturation_flagged(self, db_session):
         # A regression back to "more breaking always scores higher" past
-        # saturation is caught by the declining-side check.
+        # saturation puts the chamber's heaviest breakers at the top of IV
+        # while the folded metric puts them at the bottom.
         self._peaked_population(db_session, past_iv=lambda k: 90 + k)
         failures = check_ground_truth(db_session)["failures"]
         assert any(
-            f["dimension"] == "IV" and "past saturation" in f["rationale"]
+            f["dimension"] == "IV" and "least-independent decile" in f["senator"]
             for f in failures
         )
+
+    def test_senate_sized_chamber_catches_a_regression_past_saturation(self, db_session):
+        # A real Senate has only a handful of members past saturation — too
+        # few for a check of their own. The folded metric keeps them in the
+        # whole-chamber check: 94 below saturation scored rising, 6 far past
+        # it wrongly scored 100.
+        for i in range(100):
+            below = i < 94
+            s = _add_senator(
+                db_session, f"s{i}",
+                iv=5 + i if below else 100,
+                fi=95 - 0.9 * i,
+                total_raised=1_000_000,
+                total_from_pacs=1_000_000 * i / 100,
+                small_donor_pct=40 - 0.4 * i,
+            )
+            _add_votes(db_session, s.id, breaks=i // 5 if below else 120 + 10 * (i - 94), total=200)
+        db_session.commit()
+
+        failures = check_ground_truth(db_session)["failures"]
+        assert any(
+            f["dimension"] == "IV" and "least-independent decile" in f["senator"]
+            for f in failures
+        )
+
+    def test_gate_judges_members_on_the_reference_the_run_scored_with(self, db_session):
+        # The persisted reference is healthy; the run's own reference (passed
+        # in) puts nearly everyone past saturation, and the gate must read
+        # the one it is given.
+        self._peaked_population(db_session, past_iv=lambda k: 95 - 9 * k)
+        assert check_ground_truth(db_session)["failures"] == []
+        run_ref = {c: {"expected": {"D": {"a": 0.0, "b": 0.0}}, "deviation_p90": 0.001}
+                   for c in ("senate", "house")}
+        failures = check_ground_truth(db_session, constituent_reference=run_ref)["failures"]
+        assert any("reference and the votes disagree" in f["rationale"] for f in failures)
 
     def test_reference_that_puts_most_members_past_saturation_flagged(self, db_session, monkeypatch):
         # A broken reference (saturation shrunk to a sliver) would push most
@@ -356,7 +392,7 @@ class TestTieExtendedExtreme:
             members.append({
                 "name": f"tied{i}",
                 "scores": {"score_constituent_alignment": 50.0},
-                "metrics": {"party_break_rate": 0.0, "pac_ratio": 0.3, "small_donor_pct": 20.0},
+                "metrics": {"seat_relative_break": 0.0, "pac_ratio": 0.3, "small_donor_pct": 20.0},
                 "raw": {"total_raised": 1_000_000, "total_from_pacs": 100_000,
                         "labeled_votes": 50},
             })
@@ -364,7 +400,7 @@ class TestTieExtendedExtreme:
             members.append({
                 "name": f"m{i}",
                 "scores": {"score_constituent_alignment": 10.0 + i * (80.0 / 83)},
-                "metrics": {"party_break_rate": float(i + 1), "pac_ratio": 0.3, "small_donor_pct": 20.0},
+                "metrics": {"seat_relative_break": float(i + 1), "pac_ratio": 0.3, "small_donor_pct": 20.0},
                 "raw": {"total_raised": 1_000_000, "total_from_pacs": 100_000,
                         "labeled_votes": 50},
             })

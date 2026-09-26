@@ -1525,7 +1525,7 @@ def _seat_vote_expectation(
     """(seat alignment, expected break rate, saturation deviation) for a
     member, the last two None when the chamber has no measured expectation
     for their party. The single derivation both the score
-    (_constituent_alignment_core) and the gate (break_rate_past_saturation)
+    (_constituent_alignment_core) and the gate (seat_break_deviation)
     read, so they can't disagree about who is past saturation."""
     alignment = _signed_state_alignment(state, party, effective_party=effective_party, district=district)
     chamber = "house" if district is not None else "senate"
@@ -1537,21 +1537,23 @@ def _seat_vote_expectation(
     return alignment, _expected_break_rate(fit, alignment), float(scale)
 
 
-def break_rate_past_saturation(
+def seat_break_deviation(
     break_rate: float,
     state: str,
     party: str,
     effective_party: str | None = None,
     district: int | None = None,
     reference: dict | None = None,
-) -> bool:
-    """True when a member breaks with their party by more than the chamber's
-    saturation deviation above their seat's expectation — the range where
-    the seat-relative vote score declines as the break rate rises. The
-    ground-truth gate checks that range separately, in the opposite
-    direction, from its rises-with-break-rate rank check."""
+) -> tuple[float, float] | None:
+    """(break rate minus the seat's expected rate, the chamber's saturation
+    deviation), or None without a measured expectation for the member's
+    party — the two numbers the seat-relative vote score is a function of.
+    The ground-truth gate reads them through here so it judges members on
+    exactly the expectation the score used."""
     _, expected, scale = _seat_vote_expectation(state, party, effective_party, district, reference)
-    return expected is not None and break_rate - expected > scale
+    if expected is None:
+        return None
+    return break_rate - expected, scale
 
 
 # Weight of position congruence when a roll-call ideal point exists; the
@@ -1701,7 +1703,8 @@ def _constituent_alignment_core(
         if deviation > deviation_scale:
             party_alignment_detail += (
                 f" — more than {deviation_scale:.1%} above that is past the "
-                "chamber's 90th-percentile gap, where breaking further lowers the score"
+                f"chamber's {round(SATURATION_QUANTILE * 100)}th-percentile gap, "
+                "where breaking further lowers the score"
             )
 
     congruence_weight = POSITION_CONGRUENCE_WEIGHT if congruence_score is not None else 0.0

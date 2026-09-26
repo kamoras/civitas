@@ -43,7 +43,7 @@ if "/app" not in sys.path:
     sys.path.append("/app")
 
 from app.pipeline.analyze.ground_truth import (  # noqa: E402
-    MIN_LABELED_VOTES,
+    constituent_metrics,
     evaluate_derived_checks,
 )
 from app.config import settings  # noqa: E402
@@ -53,7 +53,6 @@ from app.pipeline.analyze.population_reference import (  # noqa: E402
     LES_REFERENCE,
 )
 from app.pipeline.analyze.score_calculator import (  # noqa: E402
-    break_rate_past_saturation,
     calculate_scores,
     compute_constituent_reference,
     compute_funding_reference,
@@ -281,23 +280,16 @@ def main() -> int:
             for v in payload["votingRecord"]["keyVotes"]
             if v["votedWithParty"] is not None
         ]
+        scored_rate, _ = party_break_rate(payload["votingRecord"])
         metrics = {
             "pac_ratio": funding["totalFromPACs"] / base if base > 0 else None,
             "small_donor_pct": funding["smallDonorPercentage"] if base > 0 else None,
-            "party_break_rate": (
-                labeled.count(False) / len(labeled)
-                if len(labeled) >= MIN_LABELED_VOTES else None
+            **constituent_metrics(
+                scored_rate, len(labeled), s["state"], s["party"],
+                effective_party=payload["votingRecord"].get("effectiveParty"),
+                reference=payload.get("constituentReference"),
             ),
         }
-        scored_rate, _ = party_break_rate(payload["votingRecord"])
-        if metrics["party_break_rate"] is not None and scored_rate is not None and break_rate_past_saturation(
-            scored_rate, s["state"], s["party"],
-            effective_party=payload["votingRecord"].get("effectiveParty"),
-            reference=payload.get("constituentReference"),
-        ):
-            # the score declines there by design; checked in that direction
-            metrics["party_break_rate_past_saturation"] = metrics["party_break_rate"]
-            metrics["party_break_rate"] = None
         results.append({
             "metrics": metrics,
             "raw": {
