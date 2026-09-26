@@ -1024,6 +1024,52 @@ export default function AboutPage() {
 
               <div>
                 <h3 className="text-xs text-ink-lo tracking-widest mb-2">
+                  WHETHER A CANDIDATE LIST IS THE BALLOT
+                </h3>
+                <P>
+                  Four quite different things can fill a candidate list, and they used to
+                  look identical: a state&apos;s certified November ballot; nominees derived
+                  from primary results (which cannot see a Libertarian, Green or
+                  independent who never ran in one); the people on a primary ballot; and —
+                  when nothing has confirmed anything — every active FEC filer, some of
+                  whom will never appear on any ballot.
+                </P>
+                <P>
+                  The calendar decides whether that last one is still an honest answer.
+                  Before a primary it is the best available: nobody knows the ballot yet.
+                  After one it means the ballot <em>has</em> been decided and we do not
+                  have it. On 26 September 2026, 39 states had certified candidates and
+                  eleven were still showing FEC filers months after their own primary —
+                  Ohio by 144 days, New York by 95, with one New York race listing 25
+                  filers for a ballot holding about two. Those pages said nominees
+                  &ldquo;aren&apos;t confirmed yet&rdquo;, which told a reader a settled
+                  contest was still open.
+                </P>
+                <P>
+                  Each state page now leads with what its lists actually are, and says
+                  plainly when a primary has already passed. A state whose ballot is
+                  certified says nothing at all — a notice on every page is one readers
+                  learn to skip. Closing the gap for those eleven states is separate work;
+                  this stops the page misdescribing it.
+                </P>
+              </div>
+
+              <div>
+                <h3 className="text-xs text-ink-lo tracking-widest mb-2">
+                  FINDING YOUR DISTRICT BY POINTING, NOT TYPING
+                </h3>
+                <P>
+                  You can pick the county you live in and the page narrows to the district
+                  covering it. The index is built from what is already on the page, so
+                  nothing is typed, sent or stored, and no lookup service is involved.
+                  About 13% of US counties span more than one district — those offer the
+                  two or three as a second tap rather than sending you elsewhere. A text
+                  filter remains for anyone who prefers it.
+                </P>
+              </div>
+
+              <div>
+                <h3 className="text-xs text-ink-lo tracking-widest mb-2">
                   AN OPTIONAL TOWN SELECTOR — WITHOUT YOUR ADDRESS
                 </h3>
                 <P>
