@@ -174,11 +174,11 @@ class TestFetchConfirmedCandidatesArkansas:
     async def test_real_primary_resolves_to_the_real_certified_winners(self, monkeypatch):
         self._patched(monkeypatch)
         result = await tenr.fetch_confirmed_candidates(None, 2026, "AR", AR_SOURCE)
-        assert {"office": "S", "district": None, "party": "R", "last_name": "Cotton"} in result
-        assert {"office": "S", "district": None, "party": "D", "last_name": "Shoffner"} in result
-        assert {"office": "H", "district": 2, "party": "R", "last_name": "Hill"} in result
-        assert {"office": "H", "district": 2, "party": "D", "last_name": "Jones"} in result
-        assert {"office": "H", "district": 4, "party": "D", "last_name": "Russell"} in result
+        assert {"office": "S", "district": None, "party": "R", "last_name": "Cotton", "display_name": "Tom Cotton"} in result
+        assert {"office": "S", "district": None, "party": "D", "last_name": "Shoffner", "display_name": "Hallie Shoffner"} in result
+        assert {"office": "H", "district": 2, "party": "R", "last_name": "Hill", "display_name": "French Hill"} in result
+        assert {"office": "H", "district": 2, "party": "D", "last_name": "Jones", "display_name": "Chris Jones"} in result
+        assert {"office": "H", "district": 4, "party": "D", "last_name": "Russell", "display_name": 'James "Rus" Russell, III'} in result
         assert len(result) == 5
 
     async def test_non_federal_contests_in_the_search_list_are_excluded(self, monkeypatch):
@@ -308,7 +308,7 @@ class TestFetchConfirmedCandidatesArkansas:
         # still clears 50, so assert the SHARE, not just presence, to
         # prove the unknown choice's votes were actually included.
         cd4 = [r for r in result if r["district"] == 4]
-        assert cd4 == [{"office": "H", "district": 4, "party": "D", "last_name": "Leader"}]
+        assert cd4 == [{"office": "H", "district": 4, "party": "D", "last_name": "Leader", "display_name": "Known Leader"}]
 
     async def test_an_unresolvable_top_choice_blocks_confirmation_rather_than_winning(self, monkeypatch):
         # If the vote-leader's own choiceID is the one missing from the
@@ -390,7 +390,7 @@ class TestFetchConfirmedCandidatesArkansas:
         monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
         result = await tenr.fetch_confirmed_candidates(None, 2026, "AR", AR_SOURCE)
         cd4 = [r for r in result if r["district"] == 4]
-        assert cd4 == [{"office": "H", "district": 4, "party": "D", "last_name": "Winner"}]
+        assert cd4 == [{"office": "H", "district": 4, "party": "D", "last_name": "Winner", "display_name": "Runoff Winner"}]
 
 
 @pytest.mark.asyncio
@@ -410,8 +410,8 @@ class TestFetchConfirmedCandidatesNorthDakota:
     async def test_real_primary_resolves_to_the_real_certified_winners(self, monkeypatch):
         self._patched(monkeypatch)
         result = await tenr.fetch_confirmed_candidates(None, 2026, "ND", ND_SOURCE)
-        assert {"office": "H", "district": None, "party": "R", "last_name": "Fedorchak"} in result
-        assert {"office": "H", "district": None, "party": "D", "last_name": "Hammer"} in result
+        assert {"office": "H", "district": None, "party": "R", "last_name": "Fedorchak", "display_name": "Julie Fedorchak"} in result
+        assert {"office": "H", "district": None, "party": "D", "last_name": "Hammer", "display_name": "Trygve Hammer"} in result
         assert len(result) == 2
 
     async def test_no_contest_type_filter_falls_back_to_parse_office(self, monkeypatch):

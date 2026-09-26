@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Archivo, Press_Start_2P, Share_Tech_Mono } from "next/font/google";
 import ConfigProvider from "@/components/providers/ConfigProvider";
+import LoadTimingBeacon from "@/components/LoadTimingBeacon";
 import { HOME_DESCRIPTION, HOME_TITLE, SITE_NAME, SITE_URL } from "@/lib/site";
 import "./globals.css";
 
@@ -104,6 +105,7 @@ export default function RootLayout({
           </a>
           <div className="crt-overlay" aria-hidden="true" />
           {children}
+          <LoadTimingBeacon />
         </ConfigProvider>
       </body>
     </html>

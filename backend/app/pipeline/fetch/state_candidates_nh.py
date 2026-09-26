@@ -94,7 +94,7 @@ from urllib.parse import urljoin
 import httpx
 
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_bytes_with_retry, fetch_text_with_retry
-from app.pipeline.fetch.state_candidates_common import parse_office, pick_nominee, surname
+from app.pipeline.fetch.state_candidates_common import federal_record, parse_office, pick_nominee
 from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _settled, _xlsx_rows
 from app.pipeline.fetch.state_election_dates import primary_date
 from app.pipeline.rate_limiter import RateLimiter
@@ -286,7 +286,7 @@ async def fetch_confirmed_candidates(
             won = pick_nominee(_office_choices(rows, party_letter), runoff_threshold_pct=None)
             if not won:
                 continue
-            last_name = surname(won[0])
-            if last_name:
-                results.append({"office": office, "district": district, "party": party, "last_name": last_name})
+            record = federal_record(office, district, party, won[0])
+            if record:
+                results.append(record)
     return results

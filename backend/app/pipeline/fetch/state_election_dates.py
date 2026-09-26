@@ -86,6 +86,32 @@ def primary_date(state: str, cycle: int) -> str | None:
     return (_load().get(f"{cycle}-{state.upper()}") or {}).get("primary")
 
 
+# The key under which a successful read of the national calendar is
+# recorded, so "the FEC lists no Senate election here" can be told apart
+# from "we have never read the calendar".
+_CALENDAR_KEY = "_CALENDAR"
+
+
+def senate_election_known(state: str, cycle: int) -> bool | None:
+    """Whether the FEC's election calendar lists a `cycle` Senate general
+    election in `state` — True/False once the calendar has been read, None
+    if it never has (callers then fall back to the class rotation).
+
+    The calendar is the only record of a Senate SPECIAL election that
+    exists. Without it the roster treated any Senate filer in a state with
+    no regular seat up as running in a special — and minted a "special
+    election" for New York and Hawaii in 2026 out of nothing but serial
+    filers with no money and no FEC candidate status."""
+    known = _load()
+    if f"{cycle}-{_CALENDAR_KEY}" not in known:
+        return None
+    return bool((known.get(f"{cycle}-{state.upper()}") or {}).get("senate"))
+
+
+def mark_calendar_read(cycle: int, on: str) -> None:
+    save(_CALENDAR_KEY, cycle, {"read": on})
+
+
 def all_dates() -> dict[str, Any]:
     """Every date known, keyed "{cycle}-{STATE}"."""
     return dict(_load())
@@ -147,6 +173,10 @@ async def fetch_fec_calendar(client: httpx.AsyncClient, cycle: int) -> dict[str,
         if row.get("office_sought") not in ("H", "S"):
             continue
         entry = calendar.setdefault(state.upper(), {})
+        if row.get("office_sought") == "S" and kind == "general election":
+            # A regular seat or a special filled on election day (FL and
+            # OH in 2026) — either way, a Senate race on this ballot.
+            entry.setdefault("senate", held)
         if kind == "primary election":
             entry.setdefault("primary", held)
         elif "runoff" in kind and "general" not in kind:

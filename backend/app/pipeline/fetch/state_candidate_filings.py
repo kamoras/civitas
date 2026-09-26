@@ -48,7 +48,7 @@ import httpx
 
 from app.election_calendar import next_election_day
 from app.pipeline.fetch.state_candidates_common import (
-    normalize_party, office_from_columns, parse_office, surname,
+    clean_display_name, normalize_party, office_from_columns, parse_office, surname,
 )
 
 logger = logging.getLogger(__name__)
@@ -159,6 +159,8 @@ async def fetch_ballot_candidates(
         into[(office, district, party, last_name.lower())] = {
             "office": office, "district": district,
             "party": party, "last_name": last_name,
+            "display_name": clean_display_name(_cell(row, choice_col)),
+            "party_label": _cell(row, own_party_col or party_col) if (own_party_col or party_col) else "",
         }
 
     return {

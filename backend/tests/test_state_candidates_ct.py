@@ -95,7 +95,7 @@ class TestPartyNominees:
     async def test_real_democratic_primary_resolves_to_the_real_upset_winner(self, monkeypatch):
         await self._patched(monkeypatch, election_id=DEM_ID, version=10138, lookup=DEM_LOOKUP, votes=DEM_VOTES)
         result = await ct._party_nominees(None, DEM_ID, 2026)
-        assert result == [{"office": "H", "district": 1, "party": "D", "last_name": "Bronin"}]
+        assert result == [{"office": "H", "district": 1, "party": "D", "last_name": "Bronin", "display_name": "Luke Bronin"}]
 
     async def test_real_republican_primary_resolves_to_the_real_winners(self, monkeypatch):
         await self._patched(monkeypatch, election_id=REP_ID, version=10237, lookup=REP_LOOKUP, votes=REP_VOTES)
@@ -165,7 +165,7 @@ class TestPartyNominees:
         await self._patched(monkeypatch, election_id=DEM_ID, version=10138, lookup=DEM_LOOKUP, votes=votes)
         result = await ct._party_nominees(None, DEM_ID, 2026)
         assert [r for r in result if r["district"] == 1] == [
-            {"office": "H", "district": 1, "party": "D", "last_name": "Larson"},
+            {"office": "H", "district": 1, "party": "D", "last_name": "Larson", "display_name": "John B. Larson"},
         ]
 
 

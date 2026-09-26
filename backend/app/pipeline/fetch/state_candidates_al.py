@@ -64,7 +64,13 @@ from html.parser import HTMLParser
 import httpx
 
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
-from app.pipeline.fetch.state_candidates_common import normalize_party, parse_office, pick_nominee, surname
+from app.pipeline.fetch.state_candidates_common import (
+    federal_record,
+    normalize_party,
+    parse_office,
+    pick_nominee,
+    surname,
+)
 from app.pipeline.fetch.state_candidates_tabular import _votes
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -203,14 +209,11 @@ async def fetch_confirmed_candidates(
         party = normalize_party(contest)
         if party is None:
             continue
-        choices_by_name = [(surname(name), votes) for name, votes in choices]
-        choices_by_name = [(n, v) for n, v in choices_by_name if n]
+        choices_by_name = [(name, votes) for name, votes in choices if surname(name)]
         won = pick_nominee(choices_by_name, runoff_threshold_pct=None)
-        if won:
-            results.append({
-                "office": office, "district": district,
-                "party": party, "last_name": won[0],
-            })
+        record = federal_record(office, district, party, won[0]) if won else None
+        if record:
+            results.append(record)
 
     if not results:
         logger.warning("AL special primary results yielded no confirmed nominees")

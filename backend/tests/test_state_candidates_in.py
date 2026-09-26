@@ -87,7 +87,7 @@ class TestRaceResults:
             {"PARTY": "D", "CandidateName": "Gamma, G.", "TOTAL": 900, "isWinner": "T"},
         ]}}
         results = ind._race_results(race, "H", 1)
-        assert results == [{"office": "H", "district": 1, "party": "D", "last_name": "Gamma"}]
+        assert results == [{"office": "H", "district": 1, "party": "D", "last_name": "Gamma", "display_name": "Gamma, G."}]
 
 
 @pytest.mark.asyncio
@@ -109,10 +109,10 @@ class TestFetchConfirmedCandidates:
     async def test_real_districts_resolve_to_real_winners(self, monkeypatch):
         self._patched(monkeypatch)
         result = await ind.fetch_confirmed_candidates(None, 2026, "IN", {})
-        assert {"office": "H", "district": 1, "party": "D", "last_name": "Mrvan"} in result
-        assert {"office": "H", "district": 1, "party": "R", "last_name": "Regnitz"} in result
-        assert {"office": "H", "district": 4, "party": "R", "last_name": "Baird"} in result
-        assert {"office": "H", "district": 4, "party": "D", "last_name": "Cox"} in result
+        assert {"office": "H", "district": 1, "party": "D", "last_name": "Mrvan", "display_name": "Mrvan, Frank Frank"} in result
+        assert {"office": "H", "district": 1, "party": "R", "last_name": "Regnitz", "display_name": "Regnitz, Barb Barbara"} in result
+        assert {"office": "H", "district": 4, "party": "R", "last_name": "Baird", "display_name": "Baird, Jim Jim"} in result
+        assert {"office": "H", "district": 4, "party": "D", "last_name": "Cox", "display_name": "Cox, Drew Drew"} in result
 
     async def test_losing_candidates_in_a_crowded_field_are_excluded(self, monkeypatch):
         # District 4's real field has 11 candidates; only 2 (one per
@@ -125,7 +125,7 @@ class TestFetchConfirmedCandidates:
     async def test_non_ascii_name_is_handled(self, monkeypatch):
         self._patched(monkeypatch)
         result = await ind.fetch_confirmed_candidates(None, 2026, "IN", {})
-        assert {"office": "H", "district": 7, "party": "D", "last_name": "Carson"} in result
+        assert {"office": "H", "district": 7, "party": "D", "last_name": "Carson", "display_name": "Carson, André André"} in result
 
     async def test_settings_fetch_failure_returns_none(self, monkeypatch):
         async def fake(*a, **kw):

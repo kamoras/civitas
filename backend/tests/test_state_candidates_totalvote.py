@@ -190,15 +190,15 @@ class TestFetchConfirmedCandidatesMontana:
     async def test_real_primary_resolves_to_the_real_certified_winners(self, monkeypatch):
         _patched_single(monkeypatch, MT_HTML)
         result = await tv.fetch_confirmed_candidates(None, 2026, "MT", MT_SOURCE)
-        assert {"office": "S", "district": None, "party": "R", "last_name": "ALME"} in result
-        assert {"office": "S", "district": None, "party": "D", "last_name": "BANKHEAD"} in result
-        assert {"office": "S", "district": None, "party": "L", "last_name": "AUSTIN"} in result
-        assert {"office": "H", "district": 1, "party": "R", "last_name": "FLINT"} in result
-        assert {"office": "H", "district": 1, "party": "D", "last_name": "FORSTAG"} in result
-        assert {"office": "H", "district": 1, "party": "L", "last_name": "SHEEDY"} in result
-        assert {"office": "H", "district": 2, "party": "R", "last_name": "DOWNING"} in result
-        assert {"office": "H", "district": 2, "party": "D", "last_name": "MILLER"} in result
-        assert {"office": "H", "district": 2, "party": "L", "last_name": "MCCRACKEN"} in result
+        assert {"office": "S", "district": None, "party": "R", "last_name": "ALME", "display_name": "KURT ALME"} in result
+        assert {"office": "S", "district": None, "party": "D", "last_name": "BANKHEAD", "display_name": "ALANI BANKHEAD"} in result
+        assert {"office": "S", "district": None, "party": "L", "last_name": "AUSTIN", "display_name": "KYLE AUSTIN"} in result
+        assert {"office": "H", "district": 1, "party": "R", "last_name": "FLINT", "display_name": "AARON FLINT"} in result
+        assert {"office": "H", "district": 1, "party": "D", "last_name": "FORSTAG", "display_name": "SAM FORSTAG"} in result
+        assert {"office": "H", "district": 1, "party": "L", "last_name": "SHEEDY", "display_name": "NICK SHEEDY"} in result
+        assert {"office": "H", "district": 2, "party": "R", "last_name": "DOWNING", "display_name": "TROY DOWNING"} in result
+        assert {"office": "H", "district": 2, "party": "D", "last_name": "MILLER", "display_name": "BRIAN J MILLER"} in result
+        assert {"office": "H", "district": 2, "party": "L", "last_name": "MCCRACKEN", "display_name": "PATRICK MCCRACKEN"} in result
         assert len(result) == 9
 
     async def test_unopposed_candidates_still_confirm(self, monkeypatch):
@@ -208,8 +208,8 @@ class TestFetchConfirmedCandidatesMontana:
         # nothing to confirm.
         _patched_single(monkeypatch, MT_HTML)
         result = await tv.fetch_confirmed_candidates(None, 2026, "MT", MT_SOURCE)
-        assert {"office": "H", "district": 2, "party": "R", "last_name": "DOWNING"} in result
-        assert {"office": "H", "district": 1, "party": "L", "last_name": "SHEEDY"} in result
+        assert {"office": "H", "district": 2, "party": "R", "last_name": "DOWNING", "display_name": "TROY DOWNING"} in result
+        assert {"office": "H", "district": 1, "party": "L", "last_name": "SHEEDY", "display_name": "NICK SHEEDY"} in result
 
     async def test_a_page_still_on_the_prior_cycle_confirms_nothing_yet(self, monkeypatch):
         # Real risk this guards against: the site not having rolled over
@@ -276,16 +276,16 @@ class TestFetchConfirmedCandidatesNebraska:
         # combined, not just whichever query happens first.
         _patched_by_type(monkeypatch, {"SW": NE_SW_HTML, "CG": NE_CG_HTML})
         result = await tv.fetch_confirmed_candidates(None, 2026, "NE", NE_SOURCE)
-        assert {"office": "S", "district": None, "party": "R", "last_name": "Ricketts"} in result
-        assert {"office": "S", "district": None, "party": "D", "last_name": "Burbank"} in result
-        assert {"office": "H", "district": 1, "party": "R", "last_name": "Flood"} in result
-        assert {"office": "H", "district": 1, "party": "D", "last_name": "Backemeyer"} in result
-        assert {"office": "H", "district": 1, "party": "L", "last_name": "Sandman"} in result
-        assert {"office": "H", "district": 2, "party": "R", "last_name": "Harding"} in result
-        assert {"office": "H", "district": 2, "party": "D", "last_name": "Powell"} in result
-        assert {"office": "H", "district": 2, "party": "L", "last_name": "Foreman"} in result
-        assert {"office": "H", "district": 3, "party": "R", "last_name": "Smith"} in result
-        assert {"office": "H", "district": 3, "party": "D", "last_name": "Stille"} in result
+        assert {"office": "S", "district": None, "party": "R", "last_name": "Ricketts", "display_name": "Pete Ricketts"} in result
+        assert {"office": "S", "district": None, "party": "D", "last_name": "Burbank", "display_name": "Cindy Burbank"} in result
+        assert {"office": "H", "district": 1, "party": "R", "last_name": "Flood", "display_name": "Mike Flood"} in result
+        assert {"office": "H", "district": 1, "party": "D", "last_name": "Backemeyer", "display_name": "Chris Backemeyer"} in result
+        assert {"office": "H", "district": 1, "party": "L", "last_name": "Sandman", "display_name": "Nik Sandman"} in result
+        assert {"office": "H", "district": 2, "party": "R", "last_name": "Harding", "display_name": "Brinker Harding"} in result
+        assert {"office": "H", "district": 2, "party": "D", "last_name": "Powell", "display_name": "Denise Powell"} in result
+        assert {"office": "H", "district": 2, "party": "L", "last_name": "Foreman", "display_name": "Eric Michael Foreman"} in result
+        assert {"office": "H", "district": 3, "party": "R", "last_name": "Smith", "display_name": "Adrian Smith"} in result
+        assert {"office": "H", "district": 3, "party": "D", "last_name": "Stille", "display_name": "Becky Kelly Stille"} in result
         assert len(result) == 10
 
     async def test_a_close_real_field_still_resolves_to_the_true_plurality_winner(self, monkeypatch):
@@ -295,7 +295,7 @@ class TestFetchConfirmedCandidatesNebraska:
         # accident on Montana's more lopsided fields but wrong here.
         _patched_by_type(monkeypatch, {"SW": NE_SW_HTML, "CG": NE_CG_HTML})
         result = await tv.fetch_confirmed_candidates(None, 2026, "NE", NE_SOURCE)
-        assert {"office": "H", "district": 2, "party": "D", "last_name": "Powell"} in result
+        assert {"office": "H", "district": 2, "party": "D", "last_name": "Powell", "display_name": "Denise Powell"} in result
 
     async def test_one_query_failing_fails_the_whole_fetch(self, monkeypatch):
         # If either half of Nebraska's two-query fetch fails, the result
@@ -339,9 +339,9 @@ class TestFetchConfirmedCandidatesNebraska:
         # wired through, not just harmlessly present.
         _patched_by_type(monkeypatch, {"SW": NE_SW_HTML, "CG": NE_CG_HTML})
         result = await tv.fetch_confirmed_candidates(None, 2026, "NE", {**NE_SOURCE, "runoff_threshold_pct": 50.0})
-        assert {"office": "H", "district": 2, "party": "D", "last_name": "Powell"} not in result
+        assert {"office": "H", "district": 2, "party": "D", "last_name": "Powell", "display_name": "Denise Powell"} not in result
         # Unopposed/majority races elsewhere are untouched by the same threshold.
-        assert {"office": "H", "district": 1, "party": "R", "last_name": "Flood"} in result
+        assert {"office": "H", "district": 1, "party": "R", "last_name": "Flood", "display_name": "Mike Flood"} in result
 
 
 class TestFetchConfirmedCandidatesSouthDakota:

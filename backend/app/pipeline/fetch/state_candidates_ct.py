@@ -84,7 +84,12 @@ import re
 import httpx
 
 from app.pipeline.fetch.http_utils import fetch_json_with_retry
-from app.pipeline.fetch.state_candidates_common import normalize_party, office_from_columns, pick_nominee, surname
+from app.pipeline.fetch.state_candidates_common import (
+    federal_record,
+    normalize_party,
+    office_from_columns,
+    pick_nominee,
+)
 from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _settled
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -168,11 +173,11 @@ async def _party_nominees(
                     vote_count = int(vote.get("V"))
                 except (TypeError, ValueError):
                     continue
-                name = surname(candidates.get(choice_id, {}).get("NM") or "")
-                choices.append((name, vote_count))
+                choices.append((candidates.get(choice_id, {}).get("NM") or "", vote_count))
         won = pick_nominee(choices, runoff_threshold_pct=None)
-        if won and won[0]:
-            records.append({"office": "H", "district": district, "party": party, "last_name": won[0]})
+        record = federal_record("H", district, party, won[0]) if won else None
+        if record:
+            records.append(record)
     return records
 
 

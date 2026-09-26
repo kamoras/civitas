@@ -44,7 +44,7 @@ import re
 import httpx
 
 from app.pipeline.fetch.http_utils import fetch_json_with_retry
-from app.pipeline.fetch.state_candidates_common import normalize_party, pick_nominee, surname
+from app.pipeline.fetch.state_candidates_common import federal_record, normalize_party, pick_nominee, surname
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -120,20 +120,18 @@ def _race_results(race: dict, office: str, district: int | None) -> list[dict]:
         party = normalize_party(cand.get("PARTY", ""))
         if party is None:
             continue
-        last_name = surname(cand.get("CandidateName", ""), last_first=True)
+        name = cand.get("CandidateName", "")
         votes = cand.get("TOTAL")
-        if not last_name or not isinstance(votes, int):
+        if not surname(name, last_first=True) or not isinstance(votes, int):
             continue
-        by_party.setdefault(party, []).append((last_name, votes))
+        by_party.setdefault(party, []).append((name, votes))
 
     results = []
     for party, choices in by_party.items():
         won = pick_nominee(choices, runoff_threshold_pct=None)
-        if won:
-            results.append({
-                "office": office, "district": district,
-                "party": party, "last_name": won[0],
-            })
+        record = federal_record(office, district, party, won[0], last_first=True) if won else None
+        if record:
+            results.append(record)
     return results
 
 

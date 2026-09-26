@@ -19,7 +19,7 @@ flowchart TB
     CLUSTER --> RANK
 
     RANK["<b>4. RANK</b><br/>0.40 × civic actionability<br/>0.35 × source breadth<br/>0.25 × trending relevance"]
-    RANK --> TOP["Select top 2 (MAX_ISSUES)"]
+    RANK --> TOP["Try ranked clusters in order<br/>up to 6 (CANDIDATE_POOL)<br/>until 2 publish (MAX_ISSUES)"]
     TOP --> EXTRACT
 
     EXTRACT["<b>5. EXTRACT</b><br/>model LOCATES spans; post_composer<br/>verifies verbatim + adjacency + clause end,<br/>then renders. no claim → no issue"]

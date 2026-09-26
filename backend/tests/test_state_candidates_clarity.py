@@ -13,6 +13,7 @@ import os
 import pytest
 
 from app.pipeline.fetch import state_candidates_clarity as cl
+from app.pipeline.fetch.state_candidates_common import surname
 
 _FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures_co_clarity_summary.json")
 
@@ -66,15 +67,15 @@ class TestParseParty:
 
 class TestSurname:
     def test_takes_the_trailing_token(self):
-        assert cl._surname("Melat Kiros") == "Kiros"
-        assert cl._surname("Dwayne L. Romero") == "Romero"
+        assert surname("Melat Kiros") == "Kiros"
+        assert surname("Dwayne L. Romero") == "Romero"
 
     def test_drops_a_generational_suffix(self):
-        assert cl._surname("Robert Cruz Jr.") == "Cruz"
-        assert cl._surname("Harold Ford III") == "Ford"
+        assert surname("Robert Cruz Jr.") == "Cruz"
+        assert surname("Harold Ford III") == "Ford"
 
     def test_blank_name_yields_none(self):
-        assert cl._surname("   ") is None
+        assert surname("   ") is None
 
 
 class TestNominee:
@@ -152,7 +153,7 @@ class TestFetchConfirmedCandidates:
         assert {r["last_name"] for r in records} == {"Hickenlooper", "Kiros", "Boebert"}
         # The Governor contest in the same feed must not appear.
         assert all(r["office"] in ("S", "H") for r in records)
-        assert {"office": "H", "district": 1, "party": "D", "last_name": "Kiros"} in records
+        assert {"office": "H", "district": 1, "party": "D", "last_name": "Kiros", "display_name": "Melat Kiros"} in records
 
     @pytest.mark.asyncio
     async def test_missing_primary_returns_none_not_empty(self, monkeypatch):
@@ -338,9 +339,9 @@ class TestFetchConfirmedCandidatesLandingPageDiscovery:
         source = {"runoff_threshold_pct": None, "discovery": _WV_DISCOVERY}
         records = await cl.fetch_confirmed_candidates(None, 2026, "WV", source)
 
-        assert {"office": "S", "district": None, "party": "R", "last_name": "CAPITO"} in records
-        assert {"office": "S", "district": None, "party": "D", "last_name": "ANDERSON"} in records
-        assert {"office": "H", "district": 1, "party": "D", "last_name": "GEORGE"} in records
+        assert {"office": "S", "district": None, "party": "R", "last_name": "CAPITO", "display_name": "SHELLEY MOORE CAPITO"} in records
+        assert {"office": "S", "district": None, "party": "D", "last_name": "ANDERSON", "display_name": "RACHEL FETTY ANDERSON"} in records
+        assert {"office": "H", "district": 1, "party": "D", "last_name": "GEORGE", "display_name": "VINCE GEORGE"} in records
         # A candidate with an Mc-surname (McKINNEY) is a real loser in this
         # field and must not corrupt the winner pick.
         assert not any(r["last_name"] == "McKINNEY" for r in records)

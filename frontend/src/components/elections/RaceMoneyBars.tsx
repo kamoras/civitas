@@ -65,7 +65,11 @@ export default function RaceMoneyBars({
                 )}
               </p>
               <p className="shrink-0 font-mono text-xs tabular-nums text-ink-lo">
-                {c.hasRaisedFunds ? formatCurrency(raised) : "no funds reported"}
+                {c.fecFiled === false
+                  ? "no FEC filing"
+                  : c.hasRaisedFunds
+                    ? formatCurrency(raised)
+                    : "no funds reported"}
               </p>
             </div>
 

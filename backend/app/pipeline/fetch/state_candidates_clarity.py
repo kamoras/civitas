@@ -92,7 +92,7 @@ from app.pipeline.fetch.state_candidates_common import (
     parse_state_leg_office as _parse_state_leg_office,
     parse_statewide_office as _parse_statewide_office,
     pick_nominee,
-    surname as _surname,
+    federal_record,
 )
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -288,13 +288,18 @@ async def fetch_confirmed_candidates(
         # A federal nominee is matched against an FEC row, which files
         # surnames; a state-office nominee has no FEC row to match or
         # render from, so the printed name is kept whole.
-        last_name = _surname(won[0]) if federal else _clean_display_name(won[0])
-        if not last_name:
-            continue
-        record = {
-            "office": office, "district": district,
-            "party": party, "last_name": last_name,
-        }
+        if federal:
+            record = federal_record(office, district, party, won[0])
+            if record is None:
+                continue
+        else:
+            last_name = _clean_display_name(won[0])
+            if not last_name:
+                continue
+            record = {
+                "office": office, "district": district,
+                "party": party, "last_name": last_name,
+            }
         if seat is not None:
             record["seat"] = seat
         results.append(record)

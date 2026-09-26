@@ -30,6 +30,7 @@ import zipfile
 from pathlib import Path
 
 from app.pipeline.fetch import state_candidates_wy as wy
+from app.pipeline.fetch.state_candidates_common import surname
 
 FIXTURES = Path(__file__).parent
 
@@ -255,7 +256,7 @@ class TestFederalTotals:
     def test_finds_all_real_federal_candidates(self):
         rows = wy._find_summary_sheet_rows(ZIP_BYTES)
         totals = wy._federal_totals(rows)
-        names = {t[3] for t in totals}
+        names = {surname(t[3]) for t in totals}
         assert names == {
             "Edwards", "Hageman", "Holtz", "Mead", "Skovgard",  # Senate R
             "Benavidez", "Byrd",  # Senate D
@@ -269,12 +270,12 @@ class TestFederalTotals:
         # counted under it -- not a real candidate, must not surface as
         # a surname of "Candidate".
         rows = wy._find_summary_sheet_rows(ZIP_BYTES)
-        names = {t[3] for t in wy._federal_totals(rows)}
+        names = {surname(t[3]) for t in wy._federal_totals(rows)}
         assert "Candidate" not in names
 
     def test_write_ins_overvotes_undervotes_are_excluded(self):
         rows = wy._find_summary_sheet_rows(ZIP_BYTES)
-        names = {t[3] for t in wy._federal_totals(rows)}
+        names = {surname(t[3]) for t in wy._federal_totals(rows)}
         assert not names & {"Write-Ins", "Overvotes", "Undervotes"}
 
     def test_office_and_party_are_forward_filled_correctly(self):
@@ -284,7 +285,7 @@ class TestFederalTotals:
         # marker 4 columns off, misclassifying the real House Democratic
         # candidates as Republican.
         rows = wy._find_summary_sheet_rows(ZIP_BYTES)
-        by_name = {t[3]: (t[0], t[2]) for t in wy._federal_totals(rows)}
+        by_name = {surname(t[3]): (t[0], t[2]) for t in wy._federal_totals(rows)}
         assert by_name["Hageman"] == ("S", "R")
         assert by_name["Byrd"] == ("S", "D")
         assert by_name["Gray"] == ("H", "R")
@@ -299,7 +300,7 @@ class TestFederalTotals:
         # the wrong office/party, no error).
         rows = wy._find_summary_sheet_rows(ZIP_BYTES)
         rows_with_extra = [rows[0], ["", "unexpected extra row"], *rows[1:]]
-        by_name = {t[3]: (t[0], t[2]) for t in wy._federal_totals(rows_with_extra)}
+        by_name = {surname(t[3]): (t[0], t[2]) for t in wy._federal_totals(rows_with_extra)}
         assert by_name["Hageman"] == ("S", "R")
         assert by_name["Kinney"] == ("H", "D")
 
@@ -322,10 +323,10 @@ class TestFetchConfirmedCandidates:
     async def test_real_primary_resolves_to_the_real_certified_winners(self, monkeypatch):
         _patched(monkeypatch, ZIP_BYTES)
         result = await wy.fetch_confirmed_candidates(None, 2026, "WY", {"settle_days": 1})
-        assert {"office": "S", "district": None, "party": "R", "last_name": "Hageman"} in result
-        assert {"office": "S", "district": None, "party": "D", "last_name": "Byrd"} in result
-        assert {"office": "H", "district": None, "party": "R", "last_name": "Gray"} in result
-        assert {"office": "H", "district": None, "party": "D", "last_name": "Kinney"} in result
+        assert {"office": "S", "district": None, "party": "R", "last_name": "Hageman", "display_name": "Harriet Hageman"} in result
+        assert {"office": "S", "district": None, "party": "D", "last_name": "Byrd", "display_name": "James Byrd"} in result
+        assert {"office": "H", "district": None, "party": "R", "last_name": "Gray", "display_name": "Chuck Gray"} in result
+        assert {"office": "H", "district": None, "party": "D", "last_name": "Kinney", "display_name": "Lisa Kinney"} in result
         assert len(result) == 4
 
     async def test_fetch_failure_returns_none(self, monkeypatch):
@@ -358,6 +359,6 @@ class TestFetchConfirmedCandidates:
         # present at null.
         _patched(monkeypatch, ZIP_BYTES)
         result = await wy.fetch_confirmed_candidates(None, 2026, "WY", {"settle_days": 1, "runoff_threshold_pct": 50.0})
-        assert {"office": "H", "district": None, "party": "R", "last_name": "Gray"} not in result
+        assert {"office": "H", "district": None, "party": "R", "last_name": "Gray", "display_name": "Chuck Gray"} not in result
         # The Senate races, real clear majorities, are untouched by the same threshold.
-        assert {"office": "S", "district": None, "party": "R", "last_name": "Hageman"} in result
+        assert {"office": "S", "district": None, "party": "R", "last_name": "Hageman", "display_name": "Harriet Hageman"} in result

@@ -188,12 +188,11 @@ def _process_rows(line_tokens: list[list[str]], runoff_threshold_pct: float | No
 
     by_seat: dict[tuple[str, int | None, str], list[tuple[str, int]]] = {}
     for (office, district, raw_name), (party, votes) in running.items():
-        last_name = surname(raw_name)
-        if not last_name:
+        if not surname(raw_name):
             continue
-        by_seat.setdefault((office, district, party), []).append((last_name, votes))
+        by_seat.setdefault((office, district, party), []).append((raw_name, votes))
 
-    return resolve_confirmed_nominees(by_seat, runoff_threshold_pct)
+    return resolve_confirmed_nominees(by_seat, runoff_threshold_pct, name_transform=surname)
 
 
 def _parse_recap_pdf(content: bytes, runoff_threshold_pct: float | None) -> list[dict]:

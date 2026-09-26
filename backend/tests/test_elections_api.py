@@ -278,7 +278,7 @@ class TestUnopposedNomineesAreNotTreatedAsLosers:
         db_session.commit()
 
         race = db_session.query(Race).filter(Race.id == "2026-HOUSE-FL-21").first()
-        assert sorted(c.id for c in elections._confirmed_or_all(race.candidates, "FL")) == ["DNOM", "MAST"]
+        assert sorted(c.id for c in elections._confirmed_or_all(race.candidates, "FL", False)) == ["DNOM", "MAST"]
 
     def test_the_single_fec_incumbent_comes_back_from_a_crowded_party(self, db_session):
         """Mark Warner's shape: several Democrats hold FEC filings, so
@@ -294,7 +294,7 @@ class TestUnopposedNomineesAreNotTreatedAsLosers:
         db_session.commit()
 
         race = db_session.query(Race).filter(Race.id == "2026-SEN-VA").first()
-        got = sorted(c.id for c in elections._confirmed_or_all(race.candidates, "VA"))
+        got = sorted(c.id for c in elections._confirmed_or_all(race.candidates, "VA", False))
         assert got == ["RNOM", "WARNER"]
 
     def test_a_crowded_party_with_no_incumbent_is_not_guessed_at(self, db_session):
@@ -309,7 +309,7 @@ class TestUnopposedNomineesAreNotTreatedAsLosers:
         db_session.commit()
 
         race = db_session.query(Race).filter(Race.id == "2026-SEN-VA").first()
-        assert [c.id for c in elections._confirmed_or_all(race.candidates, "VA")] == ["RNOM"]
+        assert [c.id for c in elections._confirmed_or_all(race.candidates, "VA", False)] == ["RNOM"]
 
     def test_independents_and_minor_parties_never_come_back(self, db_session):
         """They qualify by petition, not by primary, so a primary file
@@ -325,7 +325,7 @@ class TestUnopposedNomineesAreNotTreatedAsLosers:
         db_session.commit()
 
         race = db_session.query(Race).filter(Race.id == "2026-SEN-VA").first()
-        assert sorted(c.id for c in elections._confirmed_or_all(race.candidates, "VA")) == ["DNOM", "RNOM"]
+        assert sorted(c.id for c in elections._confirmed_or_all(race.candidates, "VA", False)) == ["DNOM", "RNOM"]
 
     def test_a_top_four_state_is_left_alone_entirely(self, db_session):
         """Alaska's single combined contest really does decide every
@@ -338,7 +338,7 @@ class TestUnopposedNomineesAreNotTreatedAsLosers:
         db_session.commit()
 
         race = db_session.query(Race).filter(Race.id == "2026-SEN-AK").first()
-        assert [c.id for c in elections._confirmed_or_all(race.candidates, "AK")] == ["A1"]
+        assert [c.id for c in elections._confirmed_or_all(race.candidates, "AK", False)] == ["A1"]
 
     def test_an_incumbent_who_lost_their_primary_stays_filtered(self, db_session):
         """The regression this must not cause. Losing a primary implies
@@ -352,19 +352,19 @@ class TestUnopposedNomineesAreNotTreatedAsLosers:
         db_session.commit()
 
         race = db_session.query(Race).filter(Race.id == "2026-SEN-GA").first()
-        assert [c.id for c in elections._confirmed_or_all(race.candidates, "GA")] == ["WINNER"]
+        assert [c.id for c in elections._confirmed_or_all(race.candidates, "GA", False)] == ["WINNER"]
 
     def test_the_payload_marks_which_candidates_are_actually_confirmed(self, db_session):
         """A mixed list must not present the recovered candidate as a
         state-confirmed nominee — candidateSource is per-race and cannot
         carry this."""
-        _race(db_session, "2026-HOUSE-FL-21", "FL", office="H", district=21)
-        _candidate(db_session, "DNOM", "2026-HOUSE-FL-21", "MARTIN, JAMES",
+        _race(db_session, "2026-HOUSE-GA-11", "GA", office="H", district=11)
+        _candidate(db_session, "DNOM", "2026-HOUSE-GA-11", "MARTIN, JAMES",
                    party="DEM", confirmed_general=True)
-        _candidate(db_session, "MAST", "2026-HOUSE-FL-21", "MAST, BRIAN", party="REP")
+        _candidate(db_session, "MAST", "2026-HOUSE-GA-11", "MAST, BRIAN", party="REP")
         db_session.commit()
 
-        data = _body(elections.race_detail("2026-HOUSE-FL-21", db_session))
+        data = _body(elections.race_detail("2026-HOUSE-GA-11", db_session))
         by_id = {c["id"]: c for c in data["candidates"]}
         assert by_id["DNOM"]["confirmed"] is True
         assert by_id["MAST"]["confirmed"] is False

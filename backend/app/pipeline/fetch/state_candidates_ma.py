@@ -213,9 +213,10 @@ def _parse_election(html: str, election_id: str, year: int, office: str) -> tupl
 
     choices = []
     for cid, vote_text in zip(header_ids, votes):
-        name = surname(names[cid])
-        if name and vote_text.isdigit():
-            choices.append((name, int(vote_text)))
+        # The whole name travels with the votes; the resolver reduces the
+        # winner to a surname and keeps the printed name beside it.
+        if surname(names[cid]) and vote_text.isdigit():
+            choices.append((names[cid], int(vote_text)))
     return district, party, choices
 
 
@@ -263,7 +264,7 @@ async def fetch_confirmed_candidates(
                 continue
             by_group[key] = choices
 
-    results = resolve_confirmed_nominees(by_group, runoff_threshold_pct)
+    results = resolve_confirmed_nominees(by_group, runoff_threshold_pct, name_transform=surname)
     if not results and any_fetch_failed:
         return None
     return results

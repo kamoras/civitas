@@ -139,8 +139,12 @@ async def fetch_confirmed_candidates(
         if not last_name or not party:
             continue
         office, district = parsed
+        full = (row.get("txFullNameBallot") or "").strip() or " ".join(
+            p for p in ((row.get("txFirstNameBallot") or "").strip(), last_name) if p
+        )
         results.append({
             "office": office, "district": district,
             "party": party, "last_name": last_name,
+            "display_name": full,
         })
     return results

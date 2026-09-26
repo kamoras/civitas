@@ -36,8 +36,9 @@ class TestFetchConfirmedCandidates:
 
         # District 1 Democratic: Shah led Galán-Woods 29002-25267 — the
         # plurality winner, not the alphabetically- or first-listed one.
-        assert {"office": "H", "district": 1, "party": "D", "last_name": "Shah"} in results
-        assert {"office": "H", "district": 1, "party": "R", "last_name": "Feely"} in results
+        assert {"office": "H", "district": 1, "party": "D", "last_name": "Shah", "display_name": "Shah, Amish"} in results
+        assert {"office": "H", "district": 1, "party": "R", "last_name": "Feely",
+            "display_name": "Feely, Thomas 'Jay', IV"} in results
         # District 3 Green: the only choice is a write-in (isWriteIn=true),
         # so this contest names nobody — a real field with zero real
         # candidates is not the same as a contest that failed to parse.
@@ -103,7 +104,7 @@ class TestFetchConfirmedCandidates:
         results = await cx.fetch_confirmed_candidates(None, 2026, "AZ", _SOURCE)
 
         assert results != []  # settled, not withheld
-        assert {"office": "H", "district": 1, "party": "D", "last_name": "Shah"} in results
+        assert {"office": "H", "district": 1, "party": "D", "last_name": "Shah", "display_name": "Shah, Amish"} in results
 
     async def test_exact_tie_confirms_nobody(self, monkeypatch):
         # Two Republicans tied for CD1 confirms neither — the same
@@ -117,7 +118,7 @@ class TestFetchConfirmedCandidates:
 
         assert not any(r["district"] == 1 and r["party"] == "R" for r in results)
         # District 1 Democratic (untouched by the edit) still confirms.
-        assert {"office": "H", "district": 1, "party": "D", "last_name": "Shah"} in results
+        assert {"office": "H", "district": 1, "party": "D", "last_name": "Shah", "display_name": "Shah, Amish"} in results
 
 
 @pytest.mark.asyncio
