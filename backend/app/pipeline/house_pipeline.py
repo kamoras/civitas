@@ -843,7 +843,9 @@ async def run_house_pipeline() -> dict:
                     check_ground_truth,
                     check_score_distribution,
                 )
-                gt_failures = check_ground_truth(db, model=Representative).get("failures", [])
+                gt_failures = check_ground_truth(
+                    db, model=Representative, constituent_reference=constituent_reference,
+                ).get("failures", [])
                 gt_failures += check_score_distribution(db, model=Representative)
                 lines = "\n".join(
                     f"- {f.get('senator', '?')} {f.get('dimension', '?')}="

@@ -29,7 +29,8 @@ Three families of checks, all population-level:
    and an upstream raw metric it must track: Funding Independence must
    fall as the PAC share of receipts rises and rise with small-donor
    share; Constituent Alignment must rise with the observed party-break
-   rate. "The most PAC-free members must score high on FI" is exactly
+   rate relative to the seat's expectation — up to the saturation
+   deviation, then fall past it (v6.14; seat_relative_break_position). "The most PAC-free members must score high on FI" is exactly
    what the old Sanders/Warren rows asserted, computed fresh each run
    for whoever currently holds that profile.
 
@@ -63,6 +64,14 @@ import warnings
 from collections import Counter, defaultdict
 
 from scipy import stats as scipy_stats
+
+from app.pipeline.analyze.population_reference import CONSTITUENT_REFERENCE
+from app.pipeline.analyze.score_calculator import (
+    OVER_BREAK_DECLINE,
+    SATURATION_QUANTILE,
+    party_break_rate,
+    seat_break_deviation,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -109,8 +118,14 @@ _CONSISTENCY_CHECKS: list[tuple[str, str, int, str]] = [
      "PAC share of receipts (FEC)"),
     ("small_donor_pct", "score_funding_independence", +1,
      "small-donor share of receipts (FEC unitemized)"),
-    ("party_break_rate", "score_constituent_alignment", +1,
-     "observed party-break rate on labeled roll-call votes"),
+    # Constituent Alignment rises with the break rate relative to the seat's
+    # expectation up to the saturation deviation and falls past it
+    # (v6.14), so the metric is that relative break rate folded at the
+    # peak — one check over the whole chamber, the heaviest breakers
+    # included, rather than a falling-side check the Senate's handful of
+    # members past saturation could never populate.
+    ("seat_relative_break", "score_constituent_alignment", +1,
+     "observed party-break rate relative to the seat's expectation, folded at saturation"),
 ]
 
 
@@ -147,6 +162,64 @@ def _tie_extended_extreme(
     return ordered[idx:], ordered[:idx]
 
 
+def seat_relative_break_position(deviation: float, scale: float) -> float:
+    """A member's break rate relative to their seat's expectation, folded at
+    the saturation deviation the way the design says the vote score is:
+    equal to the deviation up to it, then falling at OVER_BREAK_DECLINE
+    past it, so the vote score is a monotone function of this and the rank
+    check stays valid if that design weight is retuned. Written from the
+    design, not by calling the scorer, so a scorer that stops turning down
+    decouples from it. What it can catch is population-level: in a Senate
+    with a handful of members past saturation, a fault confined to them
+    barely moves a whole-chamber rank test, and the per-member shape is
+    pinned by the unit tests (test_constituent_alignment.py) instead."""
+    if deviation <= scale:
+        return deviation
+    return scale - OVER_BREAK_DECLINE * (deviation - scale)
+
+
+def constituent_metrics(
+    break_rate: float | None,
+    labeled_votes: int,
+    state: str,
+    party: str,
+    effective_party: str | None = None,
+    district: int | None = None,
+    reference: dict | None = None,
+) -> dict:
+    """The Constituent Alignment inputs a member record carries:
+    seat_relative_break (None below MIN_LABELED_VOTES or without a measured
+    expectation) and past_saturation. ``break_rate`` is the weighted rate
+    the score compares (score_calculator.party_break_rate). Shared by the
+    pipeline gate and scripts/rescore.py so both judge members one way."""
+    out = {"seat_relative_break": None, "past_saturation": None}
+    if break_rate is None or labeled_votes < MIN_LABELED_VOTES:
+        return out
+    dev = seat_break_deviation(
+        break_rate, state, party, effective_party=effective_party,
+        district=district, reference=reference,
+    )
+    if dev is not None:
+        out["seat_relative_break"] = seat_relative_break_position(*dev)
+        out["past_saturation"] = dev[0] > dev[1]
+    return out
+
+
+def _past_saturation_share(members: list[dict]) -> float:
+    """Share of members with a readable relative break rate who sit past
+    the saturation deviation. The reference defines that deviation as the
+    chamber's SATURATION_QUANTILE, so at most ~1 - SATURATION_QUANTILE of
+    the population it was measured on is past it; the probe allows twice
+    that, because the gate reads the stored votes of current members
+    rather than the exact run population."""
+    flags = [m["metrics"].get("past_saturation") for m in members]
+    readable = [f for f in flags if f is not None]
+    # Same minimum as every rank check: early in a congress only a few
+    # members have enough labeled votes, and 2 of 8 is noise, not a
+    # disagreement between the reference and the votes.
+    return sum(readable) / len(readable) if len(readable) >= MIN_POPULATION else 0.0
+
+
 def evaluate_derived_checks(members: list[dict], entity_label: str = "senators") -> dict:
     """Run the integrity + consistency checks over plain member records.
 
@@ -159,7 +232,8 @@ def evaluate_derived_checks(members: list[dict], entity_label: str = "senators")
          "scores": {score_attr: float | None},
          "metrics": {"pac_ratio": float | None,
                      "small_donor_pct": float | None,
-                     "party_break_rate": float | None},
+                     "seat_relative_break": float | None,
+                     "past_saturation": bool | None},
          "raw": {"total_raised": float, "total_from_pacs": float,
                  "labeled_votes": int}}
 
@@ -207,6 +281,15 @@ def evaluate_derived_checks(members: list[dict], entity_label: str = "senators")
             "IV", "party-labeled votes exist",
             "no {label} has any party-labeled vote — vote fetch or "
             "party-labeling is producing nothing",
+        ),
+        (
+            _past_saturation_share(members) > 2 * (1 - SATURATION_QUANTILE),
+            "IV", "at most the chamber's out-of-pattern tail past saturation",
+            "more {label}s sit past Constituent Alignment's saturation "
+            "deviation than its definition allows (it is the chamber's "
+            f"{SATURATION_QUANTILE:.0%} quantile, so about "
+            f"{1 - SATURATION_QUANTILE:.0%} of members at most) — the "
+            "constituent reference and the votes disagree",
         ),
     ]
     for failed, dim_label, expectation, rationale in integrity_probes:
@@ -343,28 +426,49 @@ def _vote_query_for(model):
     return RepKeyVote, RepKeyVote.representative_id
 
 
-def _member_records(db, model) -> list[dict]:
+def _member_records(db, model, constituent_reference: dict | None = None) -> list[dict]:
     """Build the plain member records ``evaluate_derived_checks`` consumes
-    from the chamber's current members and their labeled votes."""
+    from the chamber's current members and their labeled votes.
+    ``constituent_reference`` is the reference this run scored with; the
+    persisted one when not given."""
     vote_model, fk_col = _vote_query_for(model)
-    counts: dict[str, list[int]] = defaultdict(lambda: [0, 0])  # id -> [breaks, labeled]
-    for member_id, with_party in (
-        db.query(fk_col, vote_model.voted_with_party)
+    # Each member's party-labeled votes, as the dicts party_break_rate reads,
+    # so the gate judges members on the score's own statistic (its weights,
+    # its minimum count). Storage holds each roll call once but bill_id is
+    # not unique per roll call, so the row id is the identity.
+    current = [m for m in db.query(model).filter(model.is_current.is_(True)).all()]
+    votes: dict[str, list[dict]] = defaultdict(list)
+    for row_id, member_id, bill_id, with_party, weight in (
+        db.query(
+            vote_model.id, fk_col, vote_model.bill_id,
+            vote_model.voted_with_party, vote_model.party_alignment_weight,
+        )
         .filter(vote_model.voted_with_party.isnot(None))
+        .filter(fk_col.in_([m.id for m in current]))
         .all()
     ):
-        counts[member_id][0] += 0 if with_party else 1
-        counts[member_id][1] += 1
+        votes[member_id].append({
+            "rcKey": f"row-{row_id}", "billId": bill_id,
+            "votedWithParty": with_party, "partyAlignmentWeight": weight,
+        })
+    if constituent_reference is None:
+        constituent_reference = CONSTITUENT_REFERENCE.load()
 
     records = []
-    for m in db.query(model).filter(model.is_current.is_(True)).all():
+    for m in current:
         raised = m.total_raised or 0
         # The same denominator Funding Independence scores on (contributions,
         # falling back to receipts for rows scored before it existed) — a
         # direction-of-effect check against a different ratio than the one
         # scored would weaken for reasons unrelated to the scores.
         base = getattr(m, "total_contributions", None) or raised
-        breaks, labeled = counts[m.id]
+        rate, labeled = party_break_rate({"keyVotes": votes[m.id]})
+        constituent = constituent_metrics(
+            rate, labeled, m.state or "", m.party or "I",
+            effective_party=getattr(m, "caucus_party", None),
+            district=getattr(m, "district", None),
+            reference=constituent_reference,
+        )
         records.append({
             "id": m.id,
             "name": m.name,
@@ -372,9 +476,7 @@ def _member_records(db, model) -> list[dict]:
             "metrics": {
                 "pac_ratio": (m.total_from_pacs or 0) / base if base > 0 else None,
                 "small_donor_pct": m.small_donor_percentage if base > 0 else None,
-                "party_break_rate": (
-                    breaks / labeled if labeled >= MIN_LABELED_VOTES else None
-                ),
+                **constituent,
             },
             "raw": {
                 "total_raised": raised,
@@ -385,7 +487,7 @@ def _member_records(db, model) -> list[dict]:
     return records
 
 
-def check_ground_truth(db, model=None) -> dict:
+def check_ground_truth(db, model=None, constituent_reference: dict | None = None) -> dict:
     """Check the chamber's scores for consistency with its own raw data.
 
     Args:
@@ -393,6 +495,9 @@ def check_ground_truth(db, model=None) -> dict:
         model: Senator (default) or Representative — the derived checks
             are chamber-agnostic, unlike the named reference table they
             replaced (which is why the House previously had no gate).
+        constituent_reference: the Constituent Alignment reference this
+            run scored with (live_constituent_reference). Defaults to the
+            persisted one, which differs only if persisting it failed.
 
     Returns:
         {"checked": int, "failures": [ {senator, dimension, score,
@@ -403,7 +508,7 @@ def check_ground_truth(db, model=None) -> dict:
         model = Senator
     entity_label = "senators" if model.__name__ == "Senator" else "representatives"
 
-    report = evaluate_derived_checks(_member_records(db, model), entity_label)
+    report = evaluate_derived_checks(_member_records(db, model, constituent_reference), entity_label)
 
     if not report["failures"]:
         logger.info(

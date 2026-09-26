@@ -2068,7 +2068,7 @@ async def run_senate_pipeline(
                 check_ground_truth,
                 check_score_distribution,
             )
-            gt_report = check_ground_truth(db)
+            gt_report = check_ground_truth(db, constituent_reference=constituent_reference)
             # Persist on the run record so failures surface in the admin
             # dashboard instead of living only in logs — a silent drift
             # between scores and their raw records across an algorithm

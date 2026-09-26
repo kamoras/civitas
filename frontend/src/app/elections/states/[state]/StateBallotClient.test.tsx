@@ -1,8 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import StateBallotClient from "./StateBallotClient";
-import type { RaceWithCandidates, StateBallot } from "@/types/election";
+import StateBallotClient, { TownSection } from "./StateBallotClient";
+import { fetchTownBallot, fetchTownsForState } from "@/lib/api";
+import type { RaceWithCandidates, StateBallot, TownBallot } from "@/types/election";
 
 vi.mock("@/lib/api", () => ({
   fetchTownsForState: vi.fn().mockResolvedValue([]),
@@ -534,5 +535,78 @@ describe("JudicialSection confirmed-none", () => {
       />,
     );
     expect(screen.queryByText(/No judicial contests are on/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("TownSection", () => {
+  function covered(office: string): TownBallot {
+    return {
+      status: "covered",
+      address: "1 Town Hall Sq",
+      source: "Google Civic",
+      sourceUrl: null,
+      electionName: null,
+      electionDate: "2026-11-03",
+      contests: [{ kind: "contest", office, candidates: [] }],
+    };
+  }
+
+  function deferred<T>() {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((r) => (resolve = r));
+    return { promise, resolve };
+  }
+
+  const picker = () => screen.getByLabelText(/Select your town/);
+
+  beforeEach(() => {
+    vi.mocked(fetchTownsForState).mockResolvedValue([
+      { name: "Albany", sourceName: "City of Albany" },
+      { name: "Buffalo", sourceName: "City of Buffalo" },
+    ]);
+    vi.mocked(fetchTownBallot).mockReset();
+  });
+  afterEach(() => {
+    vi.mocked(fetchTownsForState).mockResolvedValue([]);
+  });
+
+  it("never shows the previous town's races under the next town's name", async () => {
+    const buffalo = deferred<TownBallot>();
+    vi.mocked(fetchTownBallot).mockImplementation((_state: string, town: string) =>
+      town === "Albany" ? Promise.resolve(covered("Albany Mayor")) : buffalo.promise,
+    );
+    render(<TownSection state="NY" pageElectionDate="2026-11-03" />);
+
+    await userEvent.selectOptions(await screen.findByRole("combobox"), "Albany");
+    expect(await screen.findByText(/Albany Mayor/)).toBeInTheDocument();
+
+    await userEvent.selectOptions(picker(), "Buffalo");
+    expect(screen.getByText(/Loading Buffalo/)).toBeInTheDocument();
+    expect(screen.queryByText(/Albany Mayor/)).not.toBeInTheDocument();
+
+    buffalo.resolve(covered("Buffalo Council"));
+    expect(await screen.findByText(/Buffalo Council/)).toBeInTheDocument();
+    expect(screen.queryByText(/Loading/)).not.toBeInTheDocument();
+  });
+
+  it("going back to statewide clears the town's races without fetching", async () => {
+    vi.mocked(fetchTownBallot).mockResolvedValue(covered("Albany Mayor"));
+    render(<TownSection state="NY" pageElectionDate="2026-11-03" />);
+
+    await userEvent.selectOptions(await screen.findByRole("combobox"), "Albany");
+    expect(await screen.findByText(/Albany Mayor/)).toBeInTheDocument();
+
+    await userEvent.selectOptions(picker(), "");
+    expect(screen.queryByText(/Albany Mayor/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Loading/)).not.toBeInTheDocument();
+    expect(fetchTownBallot).toHaveBeenCalledTimes(1);
+  });
+
+  it("a failed lookup says so rather than showing nothing", async () => {
+    vi.mocked(fetchTownBallot).mockRejectedValue(new Error("down"));
+    render(<TownSection state="NY" pageElectionDate="2026-11-03" />);
+
+    await userEvent.selectOptions(await screen.findByRole("combobox"), "Albany");
+    expect(await screen.findByText(/Could not load Albany/)).toBeInTheDocument();
   });
 });

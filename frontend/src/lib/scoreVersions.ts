@@ -24,6 +24,17 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.14",
+    date: "2026-09-26",
+    title: "Constituent Alignment: breaking with your party far more than your seat calls for no longer scores as perfect",
+    tldr: "Breaking with your party more often than members in similar seats still raises Constituent Alignment, up to a point. Past the point where the most out-of-pattern tenth of members sit, breaking even more now lowers it again. Before, anyone past that point scored 100 however far they went.",
+    changes: [
+      "The vote part of Constituent Alignment still scores 50 when a member breaks with their party as often as same-party members in similarly-leaning seats, below 50 for breaking less and above for breaking more. It still reaches 100 at the gap the chamber's most out-of-pattern tenth of members show. Past that gap it now falls at the same rate it rose: back to 50 at twice the gap and 0 at three times. It used to stay at 100.",
+      "Why: a member is elected both by their state or district and under a party label. Tested against every Senate general election from 1990 to 2024 (461 incumbents), voters across the whole state stopped rewarding extra breaks at that point. In House primaries from 1990 to 2010 (3,867 incumbents), the member's own party's voters gave challenged incumbents about 3 points less of the primary vote for each further standard deviation of breaking. The political science literature finds the same split. Where the decline starts is measured from the chamber every update; how steeply it falls (mirroring the rise) is a design choice, since no study estimates it. The full study is in docs/research/constituent-alignment.md.",
+      "The score explanation now says when a member is past that point.",
+    ],
+  },
+  {
     version: "v6.13",
     date: "2026-09-24",
     title: "Each vote counts once; alignment rebuilt on election evidence; references measured from the current population",

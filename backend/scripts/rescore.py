@@ -43,7 +43,7 @@ if "/app" not in sys.path:
     sys.path.append("/app")
 
 from app.pipeline.analyze.ground_truth import (  # noqa: E402
-    MIN_LABELED_VOTES,
+    constituent_metrics,
     evaluate_derived_checks,
 )
 from app.config import settings  # noqa: E402
@@ -58,6 +58,7 @@ from app.pipeline.analyze.score_calculator import (  # noqa: E402
     compute_funding_reference,
     compute_les_reference,
     constituent_reference_inputs,
+    party_break_rate,
     derive_chamber_majority,
 )
 from app.pipeline.fetch.fec import select_recent_elections  # noqa: E402
@@ -161,6 +162,11 @@ def build_payload(cur, s, search, fin):
         except Exception:
             areas = []
         key_votes.append({
+            # Storage holds each roll call once, but bill_id is not unique
+            # per roll call (a Senate key bill's documentName), so the row
+            # is the identity dedupe_votes must see; billId alone would
+            # merge a bill's cloture and passage votes.
+            "rcKey": f"row-{r['id']}",
             "billId": r["bill_id"], "vote": r["vote"],
             "policyArea": r["policy_area"] or "PROCEDURAL",
             "policyAreas": areas,
@@ -279,12 +285,14 @@ def main() -> int:
             for v in payload["votingRecord"]["keyVotes"]
             if v["votedWithParty"] is not None
         ]
+        scored_rate, n_scored = party_break_rate(payload["votingRecord"])
         metrics = {
             "pac_ratio": funding["totalFromPACs"] / base if base > 0 else None,
             "small_donor_pct": funding["smallDonorPercentage"] if base > 0 else None,
-            "party_break_rate": (
-                labeled.count(False) / len(labeled)
-                if len(labeled) >= MIN_LABELED_VOTES else None
+            **constituent_metrics(
+                scored_rate, n_scored, s["state"], s["party"],
+                effective_party=payload["votingRecord"].get("effectiveParty"),
+                reference=payload.get("constituentReference"),
             ),
         }
         results.append({
