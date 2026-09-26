@@ -23,6 +23,7 @@ before re-reads.
 """
 
 import asyncio
+import dataclasses
 import logging
 import re
 import time
@@ -127,9 +128,10 @@ class _Stored:
         return _rank(self.as_of_date, self.amended, self.filed_date)
 
     def rank_fields(self) -> dict:
-        """What the stored row knows that decides its rank and its label."""
+        """What the stored row knows that decides its rank and its label
+        (its year follows from as_of_date: _year_of)."""
         return {
-            "report_year": self.report_year, "report_label": self.report_label, "filed_date": self.filed_date,
+            "report_label": self.report_label, "filed_date": self.filed_date,
             "as_of_date": self.as_of_date, "amended": self.amended,
         }
 
@@ -185,15 +187,12 @@ def _keeps_earlier_read(prior: int | None, report: AnnualReport) -> bool:
 
 def _merge_known(stored: dict, tonight: dict) -> dict:
     """One filing's fields from two nights' rows. What the title says —
-    year, as-of date, label, amended — comes as a set from whichever row's
-    title parsed (tonight's, if both did), so a label never disagrees with
-    its date; the filing date from whichever has one."""
+    as-of date, label, amended — comes as a set from whichever row's title
+    parsed (tonight's, if both did), so a label never disagrees with its
+    date. (Tonight's row already carries the stored filing date when it
+    had none of its own: _ingest_members recomputes it with that date.)"""
     title_from = tonight if tonight["as_of_date"] or not stored["as_of_date"] else stored
-    merged = {**tonight}
-    for key in ("report_year", "as_of_date", "report_label", "amended"):
-        merged[key] = title_from[key]
-    merged["filed_date"] = tonight["filed_date"] or stored["filed_date"]
-    return merged
+    return {**tonight, **{key: title_from[key] for key in ("as_of_date", "report_label", "amended")}}
 
 
 def _is_older(stored: _Stored | None, rank: Rank) -> bool:
@@ -211,7 +210,7 @@ def _members_in_order(per_member: dict[str, list[dict]], stored: dict[str, _Stor
 
 
 def _replace_disclosure(
-    db: Session, *, owner_filter: dict, filing_id: str, report_year: int | None, report_label: str,
+    db: Session, *, owner_filter: dict, filing_id: str, report_label: str,
     filed_date: str | None, source_url: str, report: AnnualReport, parser_version: int, as_of_date: str | None,
     amended: bool,
 ) -> int:
@@ -233,7 +232,7 @@ def _replace_disclosure(
     disclosure = FinancialDisclosure(
         **owner_filter,
         filing_id=filing_id,
-        report_year=report_year,
+        report_year=_year_of(as_of_date),
         report_label=report_label,
         filed_date=filed_date,
         as_of_date=as_of_date,
@@ -445,7 +444,6 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
         out_of_time = False
         fields = {chamber.filing_id(f): chamber.fields(f) for f in per_member[member_id]}
         ranks = {fid: _rank(v["as_of_date"], v["amended"], v["filed_date"]) for fid, v in fields.items()}
-        repaired = False
         if mine is not None and mine.filing_id in fields:
             own = next(f for f in per_member[member_id] if chamber.filing_id(f) == mine.filing_id)
             if not own.get(chamber.date_key) and mine.filed_date:
@@ -457,17 +455,23 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
             # comes from whichever has it, so the filing neither sorts below
             # the reports it superseded nor keeps a gap tonight's row fills.
             merged = _merge_known(mine.rank_fields(), fields[mine.filing_id])
-            repaired = any(merged[k] != v for k, v in mine.rank_fields().items())
             fields[mine.filing_id] = merged
             ranks[mine.filing_id] = _rank(merged["as_of_date"], merged["amended"], merged["filed_date"])
+            repair = {k: merged[k] for k, v in mine.rank_fields().items() if merged[k] != v}
+            if repair:
+                # Saved now, whatever happens to this member below, and used
+                # for every comparison: the stored report's rank is what it
+                # is, not what it was stored with.
+                db.query(FinancialDisclosure).filter_by(
+                    **{chamber.owner_key: member_id}, filing_id=mine.filing_id,
+                ).update({**repair, "report_year": _year_of(merged["as_of_date"])}, synchronize_session=False)
+                db.commit()
+                mine = dataclasses.replace(
+                    mine, **repair, report_year=_year_of(merged["as_of_date"]),
+                )
         for filing in sorted(per_member[member_id], key=lambda f: ranks[chamber.filing_id(f)], reverse=True):
             filing_id = chamber.filing_id(filing)
             if _is_current(mine, filing_id, chamber.parser_version):
-                if repaired:
-                    db.query(FinancialDisclosure).filter_by(
-                        **{chamber.owner_key: member_id}, filing_id=filing_id,
-                    ).update({k: fields[filing_id][k] for k in mine.rank_fields()}, synchronize_session=False)
-                    db.commit()
                 break  # already have the newest report, as this parser reads it
             if _is_older(mine, ranks[filing_id]):
                 # Only older reports than the stored one turned up — a year's
@@ -586,7 +590,6 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
         owner=_house_owner,
         date_key="filing_date",
         fields=lambda f: {
-            "report_year": f.get("year") or None,
             "report_label": _house_report_label(f),
             "filed_date": f.get("filing_date") or None,
             "source_url": f["pdf_url"],
@@ -642,9 +645,11 @@ def _write_notes(db: Session, per_senator: dict[str, list[dict]]) -> None:
 
 def _note_later_paper(db: Session, per_senator: dict[str, list[dict]]) -> None:
     """Name, beside each senator's stored report, the newest paper filing
-    they made after it (see _senate_as_of), or clear the note when there is
-    none. Only for senators this search returned filings for: a senator it
-    missed keeps whatever note they had."""
+    they made after it (see _senate_as_of). Only for senators this search
+    returned filings for, and a note is only ever replaced by a later paper
+    filing or dropped once the stored report is itself filed after it —
+    never cleared just because tonight's rows lack it, since a page of
+    search results that failed to load looks exactly like that."""
     for disclosure in db.query(FinancialDisclosure).filter(FinancialDisclosure.senator_id.in_(list(per_senator))):
         # With no filing date stored, nothing can be said to be filed after it.
         later = [
@@ -654,27 +659,46 @@ def _note_later_paper(db: Session, per_senator: dict[str, list[dict]]) -> None:
             and disclosure.filed_date and f.get("filed_date")
             and f["filed_date"] > disclosure.filed_date
         ]
-        newest = max(later, key=lambda f: f.get("filed_date") or "", default=None)
-        disclosure.later_paper_label = _senate_report_label(newest) if newest else None
-        disclosure.later_paper_url = newest["report_url"] if newest else None
+        newest = max(later, key=lambda f: f["filed_date"], default=None)
+        if newest is not None:
+            if not disclosure.later_paper_filed or newest["filed_date"] >= disclosure.later_paper_filed:
+                disclosure.later_paper_label = _senate_fields(newest)["report_label"]
+                disclosure.later_paper_url = newest["report_url"]
+                disclosure.later_paper_filed = newest["filed_date"]
+        elif disclosure.later_paper_url and not (
+            disclosure.filed_date and disclosure.later_paper_filed
+            and disclosure.later_paper_filed > disclosure.filed_date
+        ):
+            disclosure.later_paper_label = disclosure.later_paper_url = disclosure.later_paper_filed = None
     db.commit()
 
 
-def _senate_report_label(filing: dict) -> str:
+def _senate_fields(filing: dict) -> dict:
+    """What gets stored for a Senate filing (_Chamber.fields), from one
+    parse of its title."""
+    title = filing.get("title") or ""
+    as_of = _senate_as_of(filing)
+    amended = is_amendment_title(title)
+    return {
+        "report_label": _senate_report_label(title, as_of, amended, filing.get("filed_date")),
+        "filed_date": filing.get("filed_date") or None,
+        "source_url": filing["report_url"],
+        "as_of_date": as_of,
+        "amended": amended,
+    }
+
+
+def _senate_report_label(title: str, as_of: str | None, amended: bool, filed: str | None) -> str:
     """What the report is, in the words the page shows. A new-filer report
     is a snapshot at its date, not a year-end annual report; an undated
     (paper) filing is named by kind and filing date, never a guessed year."""
-    title = filing.get("title") or ""
-    amended = is_amendment_title(title)
     new_filer = is_new_filer_title(title)
-    as_of = _senate_as_of(filing)
     if new_filer and as_of:
         return f"new-filer report as of {as_of}" + (" (amended)" if amended else "")
     if as_of:
         return f"{as_of[:4]} annual report" + (" (amended)" if amended else "")
     kind = "new-filer report" if new_filer else "annual report"
     kind += " amendment" if amended else ""
-    filed = filing.get("filed_date")
     return f"{kind} filed {filed}" if filed else kind
 
 
@@ -759,14 +783,7 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
         fetch=lambda f, deadline: _fetch_senate(client, db, f, deadline),
         owner=lambda f, report: _MEMBERS,  # the search is filtered to senators' own filings
         date_key="filed_date",
-        fields=lambda f: {
-            "report_year": _year_of(_senate_as_of(f)),
-            "report_label": _senate_report_label(f),
-            "filed_date": f.get("filed_date") or None,
-            "source_url": f["report_url"],
-            "as_of_date": _senate_as_of(f),
-            "amended": is_amendment_title(f.get("title") or ""),
-        },
+        fields=_senate_fields,
         still_loads=lambda url: _senate_probe(client, url),
     )
     try:

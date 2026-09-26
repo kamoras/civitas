@@ -27,6 +27,7 @@ def upgrade() -> None:
     sa.Column('amended', sa.Boolean(), nullable=False),
     sa.Column('later_paper_label', sa.String(), nullable=True),
     sa.Column('later_paper_url', sa.String(), nullable=True),
+    sa.Column('later_paper_filed', sa.String(), nullable=True),
     sa.Column('source_url', sa.String(), nullable=False),
     sa.Column('parsed', sa.Boolean(), nullable=False),
     sa.Column('unreadable_reason', sa.String(), nullable=True),

@@ -572,6 +572,7 @@ class FinancialDisclosure(Base):
     # the latest.
     later_paper_label: Mapped[str | None] = mapped_column(String, nullable=True)
     later_paper_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    later_paper_filed: Mapped[str | None] = mapped_column(String, nullable=True)
     source_url: Mapped[str] = mapped_column(String, default="")
     parsed: Mapped[bool] = mapped_column(Boolean, default=True)
     # When not parsed: "scanned" (paper filing) or "unrecognized"

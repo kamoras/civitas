@@ -504,7 +504,9 @@ class TestReportLabels:
         assert label({"year": 2025, "filing_type": "A"}) == "2025 annual report (amended)"
 
     def test_senate(self):
-        label = holdings_pipeline._senate_report_label
+        def label(f):
+            return holdings_pipeline._senate_fields({"report_url": "u", **f})["report_label"]
+
         assert label({"title": "Annual Report for CY 2025"}) == "2025 annual report"
         assert label({"title": "Annual Report for CY 2025 (Amendment 1)"}) == "2025 annual report (amended)"
         # A snapshot at its date, not a year-end report.
@@ -663,7 +665,7 @@ class TestPaperAmendments:
     def test_a_paper_amendment_has_no_year_and_claims_none(self):
         amendment = _senate_filing("a", title="Annual Report (Amendment)", filed="2026-02-19", paper=True)
         assert holdings_pipeline._year_of(holdings_pipeline._senate_as_of(amendment)) is None
-        assert holdings_pipeline._senate_report_label(amendment) == "annual report amendment filed 2026-02-19"
+        assert holdings_pipeline._senate_fields(amendment)["report_label"] == "annual report amendment filed 2026-02-19"
 
     async def test_a_later_paper_amendment_never_replaces_a_dated_report(self, db_session, senator):
         """Ricketts-shaped (live, 2026-09): an electronic CY2024 report, then
@@ -1469,7 +1471,7 @@ class TestRankRules:
     def test_new_filer_dates_without_zero_padding(self):
         f = _senate_filing("n", title="New Filer Report for 3/4/2026")
         assert holdings_pipeline._year_of(holdings_pipeline._senate_as_of(f)) == 2026
-        assert holdings_pipeline._senate_report_label(f) == "new-filer report as of 2026-03-04"
+        assert holdings_pipeline._senate_fields(f)["report_label"] == "new-filer report as of 2026-03-04"
 
     async def test_a_note_that_cant_be_written_doesnt_fail_the_phase(self, db_session, senator):
         with patch.object(holdings_pipeline, "_note_later_paper", side_effect=RuntimeError("locked")):
@@ -1503,3 +1505,26 @@ class TestStoredAndTonightMerge:
              patch.object(holdings_pipeline, "_alert") as alert:
             await _ingest_senate(db_session, [_senate_filing("e2025")], {"e2025": [_row()]})
         alert.assert_called_once()
+
+
+class TestRepairIsUsedAndKept:
+    async def test_a_repaired_rank_guards_against_an_older_report(self, db_session, senator):
+        """Reproduces the review case: garbled title on night one; on night
+        two the title parses but the re-read fails, and the older CY2024
+        report must not replace it."""
+        await _ingest_senate(db_session, [_senate_filing("cy2025", title="Annual Report for CY", filed="2026-05-11")],
+                             {"cy2025": [_row()]})
+        filings = [_senate_filing("cy2025", filed="2026-05-11"),
+                   _senate_filing("cy2024", title="Annual Report for CY 2024", filed="2025-05-11")]
+        with patch.object(holdings_pipeline, "SENATE_PARSER_VERSION", 2):
+            await _ingest_senate(db_session, filings, {"cy2024": [_row()]})  # cy2025's re-read fails
+        stored = db_session.query(FinancialDisclosure).one()
+        assert (stored.filing_id, stored.as_of_date, stored.report_year) == ("cy2025", "2025-12-31", 2025)
+
+    async def test_the_later_paper_note_survives_a_search_that_misses_it(self, db_session, senator):
+        e2025 = _senate_filing("e2025", filed="2026-05-11")
+        paper = _senate_filing("p", title="Annual Report (Amendment)", filed="2026-08-12", office="Senator", paper=True)
+        await _ingest_senate(db_session, [e2025, paper], {"e2025": [_row()]})
+        await _ingest_senate(db_session, [e2025], {"e2025": [_row()]})  # the paper row's page failed to load
+        stored = db_session.query(FinancialDisclosure).one()
+        assert (stored.later_paper_url, stored.later_paper_filed) == (paper["report_url"], "2026-08-12")
