@@ -124,10 +124,12 @@ async def _fetch_index_entries(client: httpx.AsyncClient, db: Session, year: int
 
 def _looks_like_pdf(body: bytes) -> bool:
     """The PDF header, "%PDF-", within the first KB, after nothing but
-    binary or whitespace bytes. The spec allows leading bytes before the
-    header, and pdfplumber reads such files; but a text body — an HTML,
-    JSON or plain-text error page — that merely quotes the string has
-    printable text before it."""
+    binary or whitespace bytes. Every Clerk PDF seen so far starts with it
+    at byte 0 (126 of 126 downloaded, 2026-09); the spec allows leading
+    bytes, so binary ones (a BOM, stray NULs) are tolerated. Printable text
+    is not: that is what an HTML, JSON or plain-text error page quoting the
+    string has before it, and taking one for a report would also let the
+    outage probe vouch for a source that is down."""
     at = body.find(b"%PDF-", 0, 1024)
     return at != -1 and all(b < 0x21 or b > 0x7E for b in body[:at])
 

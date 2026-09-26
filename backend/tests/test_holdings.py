@@ -1427,3 +1427,39 @@ class TestReReadKeepsWhatWasKnown:
                                            {"AMEND": AnnualReport("Member", [_row(), _row()])})
         stored = db_session.query(FinancialDisclosure).one()
         assert (stored.filing_id, stored.parser_version, stored.filed_date) == ("AMEND", 99, "2026-06-01")
+
+
+class TestRankRules:
+    async def test_an_amendment_supersedes_its_original_even_without_a_filing_date(self, db_session, rep):
+        orig = _house_filing("ORIG", filing_date="2026-05-01")
+        amend = {**_house_filing("AMEND", filing_date=""), "filing_type": "A", "prefix": "Hon."}
+        reports = {"ORIG": AnnualReport("Member", [_row()]), "AMEND": AnnualReport("Member", [_row(), _row()])}
+        await _ingest_house(db_session, {2025: [orig]}, reports)
+        await _ingest_house(db_session, {2025: [orig, amend]}, reports)
+        assert db_session.query(FinancialDisclosure).one().filing_id == "AMEND"
+
+    async def test_among_paper_filings_an_original_goes_before_a_later_amendment(self, db_session, senator):
+        """An undated amendment can amend any earlier report."""
+        original = _senate_filing("p1", title="Annual Report", filed="2025-05-10", office="Senator", paper=True)
+        amendment = _senate_filing("p2", title="Annual Report (Amendment)", filed="2026-02-01", office="Senator",
+                                   paper=True)
+        await _ingest_senate(db_session, [original, amendment], {})
+        stored = db_session.query(FinancialDisclosure).one()
+        assert stored.filing_id == "p1"
+        assert stored.later_paper_label == "annual report amendment filed 2026-02-01"
+
+    async def test_a_missing_filing_date_is_filled_in_once_the_row_has_one(self, db_session, senator):
+        undated = _senate_filing("e2025", filed="")
+        await _ingest_senate(db_session, [undated], {"e2025": [_row()]})
+        assert db_session.query(FinancialDisclosure).one().filed_date is None
+        await _ingest_senate(db_session, [_senate_filing("e2025", filed="2026-05-11")], {"e2025": [_row()]})
+        assert db_session.query(FinancialDisclosure).one().filed_date == "2026-05-11"
+
+    def test_new_filer_dates_without_zero_padding(self):
+        f = _senate_filing("n", title="New Filer Report for 3/4/2026")
+        assert holdings_pipeline._senate_report_year(f) == 2026
+        assert holdings_pipeline._senate_report_label(f) == "new-filer report as of 2026-03-04"
+
+    async def test_a_note_that_cant_be_written_doesnt_fail_the_phase(self, db_session, senator):
+        with patch.object(holdings_pipeline, "_note_later_paper", side_effect=RuntimeError("locked")):
+            assert await _ingest_senate(db_session, [_senate_filing("e2025")], {"e2025": [_row()]}) == 1
