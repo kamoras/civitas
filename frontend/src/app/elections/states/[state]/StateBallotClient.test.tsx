@@ -67,6 +67,12 @@ function ballot(overrides: Partial<StateBallot> = {}): StateBallot {
     electionDate: "2026-11-03",
     electionType: "general",
     primaryDate: null,
+    ballotBasis: {
+      basis: "filers",
+      primaryPassed: null,
+      daysSincePrimary: null,
+      supersededByPrimary: false,
+    },
     statePvi: 6,
     senateRaces: [],
     nextSenateElection: null,

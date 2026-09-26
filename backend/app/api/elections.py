@@ -6,6 +6,7 @@ a separate, fuller namespace for the new candidate-research feature)."""
 import json
 import logging
 import pathlib
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import and_, not_
@@ -324,6 +325,63 @@ def _candidate_source(candidates: list[Candidate], state: str) -> str:
     if any(c.on_primary_ballot for c in candidates):
         return "primary"
     return "filers"
+
+
+# Order from weakest evidence to strongest, so a state's basis is the
+# WEAKEST of its races — a page is only as certain as its least certain
+# contest, and saying "confirmed" while one race is still guesswork is
+# the failure this exists to prevent.
+_BASIS_STRENGTH = ("filers", "primary", "nominees", "confirmed")
+
+
+def _ballot_basis(races: list[dict], primary_date_iso: str | None) -> dict:
+    """What this state's candidate lists actually ARE, and whether that
+    is still defensible given the calendar.
+
+    `_candidate_source` already answers the first half per race. The
+    second half is what nothing surfaced: "filers" means something
+    completely different before and after a primary. Before, it is the
+    honest best answer — nobody knows the ballot yet. After, it means the
+    ballot HAS been decided and this platform does not have it, while the
+    page goes on showing every FEC filer as though the race were open.
+
+    Measured 2026-09-26 across all 50 states: 39 had certified
+    candidates, and ELEVEN were still on `filers` after their primary —
+    Ohio by 144 days, Louisiana 133, New York 95, with up to 25 filers
+    listed in a single race whose real ballot holds about two. Those
+    states' pages were not merely out of date, they were telling a voter
+    that a settled contest was still open.
+
+    So the state-level basis is reported with the calendar attached, and
+    the frontend is handed the judgement rather than re-deriving it (the
+    page must not compute what the API already knows).
+    """
+    sources = {r.get("candidateSource") for r in races if r.get("candidateSource")}
+    if not sources:
+        basis = None
+    else:
+        basis = min(sources, key=lambda x: _BASIS_STRENGTH.index(x)
+                    if x in _BASIS_STRENGTH else 0)
+
+    passed, days_since = None, None
+    if primary_date_iso:
+        try:
+            pd = date.fromisoformat(primary_date_iso)
+        except (TypeError, ValueError):
+            pd = None
+        if pd:
+            today = utcnow().date()
+            passed = pd < today
+            days_since = (today - pd).days if passed else None
+
+    return {
+        "basis": basis,
+        "primaryPassed": passed,
+        "daysSincePrimary": days_since,
+        # The one field the page actually branches on: the list is FEC
+        # filers for a contest whose primary is already decided.
+        "supersededByPrimary": bool(basis == "filers" and passed),
+    }
 
 
 def _stale_incumbent_ids(candidates: list[Candidate]) -> frozenset[str]:
@@ -933,6 +991,10 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         # never a calendar maintained here — null for a state whose source
         # doesn't date itself, which is the honest answer.
         "primaryDate": primary_date(state, cycle),
+        # What the candidate lists on this page actually are, and whether
+        # the calendar has overtaken them — see _ballot_basis. The page
+        # must not re-derive this from primaryDate itself.
+        "ballotBasis": _ballot_basis(senate_races + house_races, primary_date(state, cycle)),
         "statePvi": state_pvi.get(state),
         "senateRaces": senate_races,
         # Only meaningful (and only computed) when this state's seat

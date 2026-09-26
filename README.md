@@ -487,7 +487,7 @@ The FEC roster in phase 1 lists everyone who *filed* — including candidates wh
 
 The constraint that shapes it: **no 50 bespoke scrapers.** Adapters are per *vendor*, not per state, so a state whose vendor is already supported is a JSON entry in `backend/app/data/state_candidate_sources.json`, never new code. Only a genuinely different vendor earns a module. **No adapter branches on a state's name** — every URL, slug, election-name pattern and runoff threshold lives in that file, whose own `_contract` key documents which keys each strategy honours. A state that needs a knob nobody has needed yet gets that knob added to its adapter for everyone, never an `if state ==` special case.
 
-Current coverage: **50 states configured across 23 strategies.** Some serve many states (`tabular` 14, `clarity` 3, `totalvote_enr` 3, `tally_enr` 2); many are a single state whose election authority genuinely is unlike anyone else's. Ten states (DE, LA, MI, MO, NV, NY, OH, OK, SC, WI) have no usable per-state source and fall back to `google_civic`, a national source keyed on one fixed, publicly-known address per state — never a visitor's.
+Current coverage: **50 states configured across 23 strategies.** Some serve many states (`tabular` 15, `clarity` 3, `totalvote_enr` 3, `tally_enr` 2); many are a single state whose election authority genuinely is unlike anyone else's. Nine states (LA, MI, MO, NV, NY, OH, OK, SC, WI) have no usable per-state source and fall back to `google_civic`, a national source keyed on one fixed, publicly-known address per state — never a visitor's.
 
 Three rules do most of the work, all for the same reason — a wrong name here changes a vote:
 
@@ -496,6 +496,39 @@ Three rules do most of the work, all for the same reason — a wrong name here c
 - **Certification is a signal, not a promise.** Where a vendor publishes an official/certified flag it is honoured, but `settle_days` sits underneath as a failsafe, because that flag is not reliably flipped (Utah's stayed false a month after its own signed canvass was published on the same portal).
 
 What a visitor sees follows directly: a state with confirmed nominees renders a flat, confirmed list; a state without them falls back to FEC filers ranked by money raised, and the page says so rather than implying the ranking means anything about who will win.
+
+**And the calendar decides whether that fallback is still honest.** Filers
+are the right answer while a primary is ahead — nobody knows the ballot
+yet. Once it has been held, the same list means the ballot *has* been
+decided and this platform does not have it, which is a different claim
+and a much worse one to leave unsaid. Measured across all 50 states on
+2026-09-26: 39 had certified candidates, and eleven were still showing
+filers after their own primary — Ohio by 144 days, Louisiana 133, New
+York 95, with one New York race listing 25 filers for a ballot that holds
+about two. The page had been saying those nominees "aren't confirmed
+*yet*".
+
+`_ballot_basis` (api/elections.py) now reports the WEAKEST basis across a
+state's races together with whether its primary has passed, and the state
+page leads with that rather than footnoting it — a state whose ballot is
+certified says nothing at all, because a notice on every page is one
+readers learn to skip. Closing the gap for those eleven states is
+separate work; this only stops the page misdescribing it.
+
+### Finding your district without being asked where you live
+
+Civitas never asks for an address. An address box lived on the state
+ballot page until 2026-09 and was removed; a text filter replaced it,
+which is better but still a chore — you have to know what to type, and
+typing is the step people skip.
+
+Counties are pickable instead, because a person knows theirs without
+looking it up where almost nobody knows their district NUMBER. The index
+is built from the rows already on the page (every race carries its county
+list), so it needs no new data, no lookup service and no network call.
+**13% of US counties span more than one district** (409 of 3,142) — those
+offer the two or three as a second tap rather than sending the reader
+elsewhere. The text filter stays for anyone who prefers it.
 
 ### Race coverage: what counts as coverage
 
