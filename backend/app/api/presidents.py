@@ -62,11 +62,15 @@ async def trigger_pipeline(
 
 
 def _run_pipeline_background():
+    from app.background import WritesHeld, writing
     from app.pipeline.president_pipeline import run_president_pipeline
 
     db = SessionLocal()
     try:
-        asyncio.run(run_president_pipeline(db))
+        with writing("President pipeline"):
+            asyncio.run(run_president_pipeline(db))
+    except WritesHeld as held:
+        logger.info("%s", held)
     except Exception as e:
         logger.error("President pipeline failed: %s", e, exc_info=True)
     finally:

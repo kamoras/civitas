@@ -33,7 +33,7 @@ def _run_hourly_refresh(
 ):
     from app import scheduler
 
-    with patch("app.scheduler.threading.Thread", _SyncThread), \
+    with patch("app.background.threading.Thread", _SyncThread), \
          patch("app.scheduler.get_action_refresh_state", return_value=refresh_state), \
          patch("app.database.SessionLocal") as mock_session_local, \
          patch("app.scheduler.refresh_action_issues") as mock_refresh:
@@ -166,7 +166,7 @@ class TestNightlyPipelineCascadingSkip:
     ):
         from app import scheduler
 
-        with patch("app.scheduler.threading.Thread", _SyncThread), \
+        with patch("app.background.threading.Thread", _SyncThread), \
              patch("app.scheduler.run_senate_pipeline", new_callable=AsyncMock) as mock_senate, \
              patch("app.scheduler.run_supplementary_pipeline", new_callable=AsyncMock) as mock_supp, \
              patch("app.scheduler.run_house_pipeline", new_callable=AsyncMock) as mock_house, \
@@ -264,7 +264,7 @@ class TestElectionCoverageRefresh:
     ):
         from app import scheduler
 
-        with patch("app.scheduler.threading.Thread", _SyncThread), \
+        with patch("app.background.threading.Thread", _SyncThread), \
              patch("app.api.action.is_election_season", return_value=in_season), \
              patch("app.scheduler.is_election_pipeline_running", return_value=pipeline_running), \
              patch("app.scheduler.election_pipeline_age", return_value=pipeline_age), \
@@ -343,7 +343,7 @@ class TestElectionCoverageRefreshExceptionHandling:
     def test_ingestion_failure_is_caught_and_logged(self):
         from app import scheduler
 
-        with patch("app.scheduler.threading.Thread", _SyncThread), \
+        with patch("app.background.threading.Thread", _SyncThread), \
              patch("app.api.action.is_election_season", return_value=True), \
              patch("app.scheduler.is_election_pipeline_running", return_value=False), \
              patch("app.database.SessionLocal", return_value=MagicMock()), \
@@ -369,7 +369,7 @@ class TestElectionBallotSync:
         sync = AsyncMock(return_value=result or {
             "status": "ok", "confirmed": 5, "statesOk": ["AK"], "statesFailed": [], "filings": {},
         }, side_effect=error)
-        with patch("app.scheduler.threading.Thread", _SyncThread), \
+        with patch("app.background.threading.Thread", _SyncThread), \
              patch("app.api.action.is_election_season", return_value=in_season), \
              patch("app.scheduler.is_election_pipeline_running", return_value=pipeline_running), \
              patch("app.scheduler.election_pipeline_age", return_value=pipeline_age), \

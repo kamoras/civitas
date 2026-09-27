@@ -416,9 +416,15 @@ async def trigger_explore_pipeline(
 
 
 async def _run_explore_pipeline():
+    from app.background import WritesHeld, writing
     from app.pipeline.explore_pipeline import run_explore_pipeline
     try:
-        result = await run_explore_pipeline(days_back=60)
+        # Registered for the admin data reset: the pipeline hands its writes
+        # to threads while this awaits.
+        with writing("Explore pipeline"):
+            result = await run_explore_pipeline(days_back=60)
         logger.info("Explore pipeline result: %s", result)
+    except WritesHeld as held:
+        logger.info("%s", held)
     except Exception as e:
         logger.error("Explore pipeline background task failed: %s", e)

@@ -25,6 +25,7 @@ import hashlib
 import json
 import logging
 import pathlib
+import weakref
 
 import numpy as np
 
@@ -41,9 +42,10 @@ SUBSTANTIVE_PROTOTYPES: tuple[str, ...] = (
 
 _CALIBRATION_PATH = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "commemorative_calibration.json"
 _calibration_cache: dict | None = None
-# Prototype embeddings per encoder (keyed by id): vectors from one model
-# are meaningless against another's.
-_prototype_cache: dict[int, tuple[np.ndarray, np.ndarray]] = {}
+# Prototype embeddings per encoder: vectors from one model are meaningless
+# against another's. Keyed by the encoder itself, weakly — an id() key is
+# reused once its encoder is collected, handing the next one stale vectors.
+_prototype_cache: "weakref.WeakKeyDictionary[object, tuple[np.ndarray, np.ndarray]]" = weakref.WeakKeyDictionary()
 
 
 def prototype_hash() -> str:
@@ -62,12 +64,12 @@ def calibration() -> dict:
 def commemorative_margins(titles: list[str], model) -> np.ndarray:
     """Best commemorative-prototype similarity minus substantive similarity,
     per title. `model` is a SentenceTransformer-compatible encoder."""
-    if id(model) not in _prototype_cache:
-        _prototype_cache[id(model)] = (
+    if model not in _prototype_cache:
+        _prototype_cache[model] = (
             model.encode(list(COMMEMORATIVE_PROTOTYPES), normalize_embeddings=True, show_progress_bar=False),
             model.encode(list(SUBSTANTIVE_PROTOTYPES), normalize_embeddings=True, show_progress_bar=False),
         )
-    commem, subst = _prototype_cache[id(model)]
+    commem, subst = _prototype_cache[model]
     emb = model.encode(list(titles), normalize_embeddings=True, show_progress_bar=False)
     return (emb @ commem.T).max(axis=1) - (emb @ subst.T).max(axis=1)
 

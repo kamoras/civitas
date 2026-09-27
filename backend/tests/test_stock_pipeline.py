@@ -400,11 +400,15 @@ class TestRereadTrades:
         _, mock_fetch = await self._reread(db_session, fetch)
         mock_fetch.assert_not_called()
 
-    async def test_a_paper_filing_is_not_fetched_again(self, db_session):
-        """Its page is page images: a re-read would never read it."""
+    async def test_a_paper_filing_is_fetched_as_one(self, db_session):
         self._stored(db_session, "p", "https://efdsearch.senate.gov/search/view/paper/p/")
-        _, mock_fetch = await self._reread(db_session, AsyncMock(return_value=[]))
-        mock_fetch.assert_not_called()
+
+        async def fetch(_client, _db, filing):
+            assert filing["is_paper"] is True
+            return [self._row("p", filing["report_url"], owner="unknown")]
+
+        count, _ = await self._reread(db_session, fetch)
+        assert count == 1
 
     async def test_a_row_without_a_real_filed_date_offers_none(self, db_session):
         """Stored before the filed-date fix, a row's disclosure date is its

@@ -307,13 +307,11 @@ async def _ingest_senate(db: Session, client: httpx.AsyncClient) -> int:
 class _StoredSource:
     """One trade table whose stored filings can be read again: `fetch`
     takes a filing's stored id, source URL and the filed date its stored
-    rows carry, if any. `skip_url` names stored filings that can't be read
-    again (a Senate paper filing's page is page images)."""
+    rows carry, if any."""
     label: str
     model: type
     owner_key: str
     fetch: Callable[[str, str, str | None], Awaitable[list[TradeRow]]]
-    skip_url: str | None = None
 
 
 # A filing that didn't read is not tried again for this long, so a few dead
@@ -332,8 +330,8 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
     keeps its rows and waits _REREAD_RETRY_HOURS. Returns filings re-read."""
     sources = [
         _StoredSource("Senate", StockTrade, "senator_id", lambda _fid, url, filed: fetch_senate_ptr(
-            client, db, {"report_url": url, "is_paper": False, "stored_filed_date": filed},
-        ), skip_url="%/view/paper/%"),
+            client, db, {"report_url": url, "is_paper": "/view/paper/" in url, "stored_filed_date": filed},
+        )),
         _StoredSource("House", RepStockTrade, "representative_id", lambda fid, url, _filed: fetch_house_ptr(
             client, db, {"doc_id": fid, "pdf_url": url},
         )),
@@ -349,11 +347,11 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
             model.filing_id,
             func.min(model.source_url),
             # A filed date the rows really carry: an electronic row stored
-            # before the filed-date fix has its transaction date there.
+            # before the filed-date fix has its transaction date there. A
+            # same-day filing's rows are left out too, which loses nothing:
+            # the parser's fallback for its disclosure date is that same day.
             func.max(case((model.disclosure_date != model.transaction_date, model.disclosure_date))),
         ).filter(model.parser_version < PTR_PARSER_VERSION)
-        if source.skip_url:
-            query = query.filter(~model.source_url.like(source.skip_url))
         stale = query.group_by(model.filing_id).order_by(func.max(model.disclosure_date).desc()).all()
         if stale and source.label == "Senate" and await senate_accept_terms(client) is None:
             logger.warning("Senate PTR re-read skipped: no eFD session")

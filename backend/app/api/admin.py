@@ -1431,29 +1431,20 @@ async def admin_clear_stuck_election(db: Session = Depends(get_db)):
     return _clear_stuck_runs(db, ElectionPipelineRun, is_election_pipeline_running(), "Election")
 
 
-def _running_writers(db: Session) -> list[str]:
-    """Everything writing the database now: this process's writer threads
-    (app.background — the nightly chain, API-triggered runs, the refreshes,
-    boot-time reindexing), and — visible from any process, a rollout's other
-    task included — a pipeline with a live run row or a live Action Center
-    refresh lease."""
-    from app.background import running_writers
+# Written on a run row the reset holds, so a process that dies mid-reset
+# leaves rows startup recognizes and clears (main._invalidate_orphaned_pipelines).
+RESET_HOLD_MARKER = "Held by the admin data reset"
+
+
+def _reset_locks() -> dict[str, type]:
     from app.models import (
         ElectionPipelineRun, HousePipelineRun, PipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun,
     )
-    from app.pipeline.analyze.action_center import refresh_lock_held
-    from app.pipeline.run_tracker import run_in_progress
 
-    running = running_writers()
-    for label, model in (
-        ("Senate", PipelineRun), ("Supplementary", SupplementaryPipelineRun), ("House", HousePipelineRun),
-        ("Stock trades", StockTradesPipelineRun), ("Election", ElectionPipelineRun),
-    ):
-        if run_in_progress(db, model):
-            running.append(f"{label} run")
-    if refresh_lock_held(db):
-        running.append("Action Center refresh")
-    return running
+    return {
+        "Senate run": PipelineRun, "Supplementary run": SupplementaryPipelineRun, "House run": HousePipelineRun,
+        "Stock trades run": StockTradesPipelineRun, "Election run": ElectionPipelineRun,
+    }
 
 
 @router.post("/data/reset", dependencies=[Depends(require_admin)])
@@ -1465,20 +1456,52 @@ async def admin_reset_data(db: Session = Depends(get_db)):
     run can rebuild (the Action Center's, run history). The next pipeline
     runs rebuild the rest from scratch with the latest code.
 
-    Refused while anything writes (_running_writers). The wipe then runs on
-    the event loop, deliberately: the scheduler (AsyncIOScheduler) and every
-    API trigger start their work from this loop, so holding it is what keeps
-    a writer from starting mid-wipe. It is a few table deletes on an
-    otherwise idle database — seconds, well inside the healthcheck's
-    tolerance — and a rare admin action.
+    Every writer is held off for the whole wipe, not only checked before it:
+
+    - In this process, app.background.exclusive(): granted only while no
+      writer thread or task is registered, and while held none starts.
+    - In any process — a rollout's other task included — the run lock of
+      each pipeline and the Action Center refresh's lease, the locks those
+      jobs take themselves.
+
+    Anything already running refuses the reset (409, naming it). One gap is
+    left: the bill, ballot and coverage refreshes take no database lock, so
+    in a rollout's other task they aren't held off; they only update rows
+    the next pipeline run rewrites.
     """
-    running = _running_writers(db)
-    if running:
-        raise HTTPException(status_code=409, detail=f"Cannot reset while running: {', '.join(running)}")
-
+    from app.background import WritersBusy, exclusive
     from app.database import reset_all_data
+    from app.pipeline.analyze.action_center import _acquire_refresh_lock, _release_refresh_lock
+    from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
 
-    summary = reset_all_data()
+    try:
+        with exclusive("Another data reset"):
+            held, running = [], []
+            for label, model in _reset_locks().items():
+                run = acquire_pipeline_lock(db, model, STALE_PIPELINE_TIMEOUT)
+                if run is None:
+                    running.append(label)
+                else:
+                    run.error_message = RESET_HOLD_MARKER
+                    held.append(run)
+            db.commit()
+            lease = _acquire_refresh_lock(db)
+            if lease is None:
+                running.append("Action Center refresh")
+            try:
+                if running:
+                    raise WritersBusy(running)
+                # Off the event loop: the holds above, not a blocked loop,
+                # are what keep writers out.
+                summary = await asyncio.to_thread(reset_all_data)
+            finally:
+                for run in held:
+                    db.delete(run)
+                db.commit()
+                if lease is not None:
+                    _release_refresh_lock(db, lease)
+    except WritersBusy as busy:
+        raise HTTPException(status_code=409, detail=f"Cannot reset while running: {busy}") from None
     total_rows = sum(v for k, v in summary.items() if isinstance(v, int))
     return {
         "status": "reset_complete",

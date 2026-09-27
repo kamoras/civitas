@@ -62,11 +62,15 @@ async def trigger_pipeline(
 
 
 def _run_pipeline_background():
+    from app.background import WritesHeld, writing
     from app.pipeline.justice_pipeline import run_justice_pipeline
 
     db = SessionLocal()
     try:
-        asyncio.run(run_justice_pipeline(db))
+        with writing("Justice pipeline"):
+            asyncio.run(run_justice_pipeline(db))
+    except WritesHeld as held:
+        logger.info("%s", held)
     except Exception as e:
         logger.error("Justice pipeline failed: %s", e, exc_info=True)
     finally:

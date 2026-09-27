@@ -87,6 +87,8 @@ class TestResetGuard:
                 await admin_reset_data(db=db_session)
         reset.assert_not_called()
         assert refused.value.status_code == 409
+        # The locks it took on the idle pipelines are given back.
+        assert db_session.query(models.PipelineRun).count() == 0
         return refused.value.detail
 
     async def test_refuses_while_a_pipeline_run_is_live_in_any_process(self, db_session):
@@ -96,7 +98,7 @@ class TestResetGuard:
         db_session.commit()
         assert "House run" in await self._refused(db_session)
 
-    async def test_refuses_while_a_writer_thread_or_task_runs(self, db_session):
+    async def test_refuses_while_a_writer_in_this_process_runs(self, db_session):
         from app.background import writing
 
         with writing("bill-status-refresh"):
@@ -108,10 +110,37 @@ class TestResetGuard:
         assert _acquire_refresh_lock(db_session) is not None
         assert "Action Center refresh" in await self._refused(db_session)
 
-    async def test_runs_when_nothing_writes(self, db_session):
+    async def test_holds_every_writer_off_for_the_wipe_and_lets_go_after(self, db_session):
         from app.api.admin import admin_reset_data
+        from app.background import start_writer
+        from app.pipeline.analyze.action_center import _acquire_refresh_lock
+        from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
 
-        with patch("app.database.reset_all_data", return_value={"senators": 2}) as reset:
+        during = {}
+
+        def wipe():
+            during["senate_lock_free"] = acquire_pipeline_lock(db_session, models.PipelineRun, STALE_PIPELINE_TIMEOUT) is not None
+            during["lease_free"] = _acquire_refresh_lock(db_session) is not None
+            during["writer_started"] = start_writer(lambda: None, name="test-late") is not None
+            return {"senators": 2}
+
+        with patch("app.database.reset_all_data", side_effect=wipe):
             result = await admin_reset_data(db=db_session)
-        reset.assert_called_once()
         assert result["rowsDeleted"] == 2
+        assert during == {"senate_lock_free": False, "lease_free": False, "writer_started": False}
+        assert db_session.query(models.PipelineRun).count() == 0
+        assert _acquire_refresh_lock(db_session) is not None
+
+
+def test_startup_clears_the_run_locks_a_dead_reset_held(db_session, monkeypatch):
+    from app.api.admin import RESET_HOLD_MARKER
+    from app.main import _invalidate_orphaned_pipelines
+    from app.time_utils import utcnow
+
+    db_session.add(models.HousePipelineRun(status="running", started_at=utcnow(), error_message=RESET_HOLD_MARKER))
+    db_session.add(models.StockTradesPipelineRun(status="running", started_at=utcnow()))  # a real run: not the reset's
+    db_session.commit()
+    monkeypatch.setattr("app.database.SessionLocal", lambda: db_session)
+    _invalidate_orphaned_pipelines()
+    assert db_session.query(models.HousePipelineRun).count() == 0
+    assert db_session.query(models.StockTradesPipelineRun).count() == 1

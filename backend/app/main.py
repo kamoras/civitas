@@ -6,6 +6,7 @@ import logging
 from app.config import settings
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
@@ -14,7 +15,7 @@ from app.api.router import api_router
 from app.database import init_db
 from app.scheduler import start_scheduler, stop_scheduler
 from app.time_utils import utcnow
-from app.background import start_writer
+from app.background import WritesHeld, start_writer, writing
 
 # Configure logging level from PIPELINE_LOG_LEVEL env setting
 _level_name = (settings.PIPELINE_LOG_LEVEL or "info").upper()
@@ -50,7 +51,12 @@ async def _bootstrap_explore() -> None:
             _logger = logging.getLogger("app.main")
             _logger.info("Explore document store is empty — running initial ingestion")
             from app.pipeline.explore_pipeline import run_explore_pipeline
-            await run_explore_pipeline(days_back=60)
+            # Registered for the admin data reset: the pipeline hands its
+            # writes to threads while this awaits.
+            with writing("Explore bootstrap"):
+                await run_explore_pipeline(days_back=60)
+    except WritesHeld as held:
+        logging.getLogger("app.main").info("%s", held)
     except Exception as e:
         logging.getLogger("app.main").warning("Explore bootstrap failed: %s", e)
 
@@ -75,6 +81,14 @@ def _invalidate_orphaned_pipelines() -> None:
 
     db = SessionLocal()
     try:
+        # Run locks the admin data reset held when this process died.
+        from app.api.admin import RESET_HOLD_MARKER, _reset_locks
+
+        for model in _reset_locks().values():
+            db.query(model).filter(
+                model.status == PipelineStatus.RUNNING, model.error_message == RESET_HOLD_MARKER,
+            ).delete(synchronize_session=False)
+        db.commit()
         orphaned = db.query(PipelineRun).filter(PipelineRun.status == PipelineStatus.RUNNING).all()
         for run in orphaned:
             run.status = PipelineStatus.STALE
@@ -156,6 +170,15 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+
+
+@app.exception_handler(WritesHeld)
+async def _writes_held(_request, held: WritesHeld) -> JSONResponse:
+    """An endpoint's writer refused while the admin data reset holds the
+    database (app.background.writing)."""
+    return JSONResponse(status_code=409, content={"detail": str(held)})
+
 
 app.add_middleware(GZipMiddleware, minimum_size=500)
 # Added after GZip, so it runs *outside* it: a 304 short-circuit should

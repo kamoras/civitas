@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import threading
 from datetime import timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -532,9 +531,8 @@ def start_scheduler() -> None:
     # Pipeline overrun watchdog — alerts once per run past the budget
     from app.ops_alerts import check_pipeline_overrun, check_pipeline_staleness
     scheduler.add_job(
-        lambda: threading.Thread(
-            target=check_pipeline_overrun, daemon=True, name="pipeline-watchdog"
-        ).start(),
+        # Writers too (the alert history lives in api_cache).
+        lambda: start_writer(check_pipeline_overrun, name="pipeline-watchdog"),
         CronTrigger(minute="5,35"),
         id="pipeline_watchdog",
         replace_existing=True,
@@ -546,9 +544,7 @@ def start_scheduler() -> None:
     # rather than half-hourly since it is measured in days, and it
     # dedupes per pipeline per day regardless.
     scheduler.add_job(
-        lambda: threading.Thread(
-            target=check_pipeline_staleness, daemon=True, name="pipeline-staleness-watchdog"
-        ).start(),
+        lambda: start_writer(check_pipeline_staleness, name="pipeline-staleness-watchdog"),
         CronTrigger(minute="20"),
         id="pipeline_staleness_watchdog",
         replace_existing=True,
