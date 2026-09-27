@@ -401,9 +401,14 @@ def _record_score_snapshots(db: Session) -> None:
     logger.info("Recorded score snapshots for %d senators on %s", len(senators), today)
 
 
-def _acquire_pipeline_lock(db: Session) -> "tuple[PipelineRun | None, str | None]":
+def _acquire_pipeline_lock(db: Session, *, lease_held: bool = False) -> "tuple[PipelineRun | None, str | None]":
     """Atomically create a new locked run: (run, None), or (None, why) —
     run_tracker.acquire_pipeline_lock_why.
+
+    `lease_held`: the caller holds lease.SENATE_RUN, which every Senate run
+    holds for its duration — so no other run is live, and a RUNNING row is a
+    dead run's, cleared now rather than refusing every run until it ages
+    past the stale timeout (a process killed mid-run during a rollout).
 
     Uses the shared SQLite database so the lock works across blue/green
     containers. Atomicity is enforced by the database itself: a partial
@@ -418,7 +423,8 @@ def _acquire_pipeline_lock(db: Session) -> "tuple[PipelineRun | None, str | None
     """
     from app.pipeline.run_tracker import acquire_pipeline_lock_why
 
-    return acquire_pipeline_lock_why(db, PipelineRun, timedelta(seconds=STALE_PIPELINE_TIMEOUT_S))
+    stale_after = timedelta(0) if lease_held else timedelta(seconds=STALE_PIPELINE_TIMEOUT_S)
+    return acquire_pipeline_lock_why(db, PipelineRun, stale_after)
 
 
 # Hashed paths that cannot change how anything is classified or scored, so
@@ -854,7 +860,7 @@ async def run_senate_pipeline(
         refused = _take_senate_run_lease(run_lease)
         pipeline_run = None
         if refused is None:
-            pipeline_run, refused = _acquire_pipeline_lock(db)
+            pipeline_run, refused = _acquire_pipeline_lock(db, lease_held=True)
     except BaseException:
         # Before the run's own try: let go of the lease (and its heartbeat)
         # here, or it would be renewed for as long as the process lives.

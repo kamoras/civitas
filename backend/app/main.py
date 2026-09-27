@@ -81,29 +81,16 @@ def _invalidate_orphaned_pipelines() -> None:
     A dead process's run leaves the row behind; but during a rollout's
     overlap the other task may be running it for real. The run holds a
     lease (lease.SENATE_RUN) for its duration, so: no live lease, the row is
-    an orphan; a live one, keep checking until it isn't — the other task
-    finishes the run, or dies and its lease goes stale — and decide then.
+    an orphan, marked stale now. A live one is left alone — if that run
+    dies too, the next Senate run, holding the lease itself, clears the row
+    as it starts (senate_pipeline._acquire_pipeline_lock's `lease_held`).
     """
-    from app.pipeline import lease
-    from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT
-
-    if _check_orphaned_senate_runs():
-        def _watch() -> None:
-            import time
-
-            # Past the run lock's own stale window a Senate run clears the
-            # row itself (run_tracker.acquire_pipeline_lock_why): no need to.
-            give_up = time.monotonic() + STALE_PIPELINE_TIMEOUT.total_seconds()
-            while time.monotonic() < give_up and _check_orphaned_senate_runs():
-                time.sleep(lease.BEAT_S)
-
-        start_writer(_watch, name="orphaned-senate-run-watch")
+    _check_orphaned_senate_runs()
 
 
 def _check_orphaned_senate_runs() -> bool:
-    """One check: marks orphaned rows stale. True when it should be checked
-    again later — a live run holds the lease, or the check itself failed (a
-    locked database is no reason to leave a dead run's row RUNNING)."""
+    """Marks orphaned rows stale. True when a row was left — a live run
+    holds the lease, or the check itself failed."""
     from app.database import SessionLocal
     from app.models import PipelineRun, PipelineStatus
     from app.pipeline import lease

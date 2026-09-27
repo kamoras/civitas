@@ -203,26 +203,46 @@ class TestYieldingToAReset:
         assert db_session.query(models.ApiCache).filter_by(tier=lease.ACTION_REFRESH).count() == 0
 
 
-def test_startup_waits_out_a_senate_run_live_in_another_process(db_session, monkeypatch):
-    """A live run's row is left alone, and watched: once its lease is no
-    longer live — the other task finished, or died — the row is decided."""
+def test_a_senate_run_live_elsewhere_is_left_alone_and_cleared_by_the_next_run(db_session, monkeypatch):
+    """At startup a live run's row is left alone. If that run dies too, the
+    next Senate run — holding the lease, so no other run is live — clears
+    its row as it starts rather than refusing every run for 12 hours."""
     from app import main
-    from app.pipeline import lease
+    from app.pipeline import lease, senate_pipeline
     from app.time_utils import utcnow
 
     db_session.add(models.PipelineRun(status="running", started_at=utcnow()))
     db_session.commit()
     token = lease.acquire(db_session, lease.SENATE_RUN)  # its run, beating elsewhere
     monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
-    watchers = []
-    monkeypatch.setattr(main, "start_writer", lambda target, name: watchers.append(target))
-
     main._invalidate_orphaned_pipelines()
-    assert db_session.query(models.PipelineRun).one().status == "running" and len(watchers) == 1
+    assert db_session.query(models.PipelineRun).one().status == "running"
 
     lease.release(db_session, lease.SENATE_RUN, token)  # the other task died
-    watchers[0]()
-    assert db_session.query(models.PipelineRun).one().status == "stale"
+    assert senate_pipeline._acquire_pipeline_lock(db_session)[1] == "already_running"  # without the lease
+    run, refused = senate_pipeline._acquire_pipeline_lock(db_session, lease_held=True)
+    assert refused is None and run is not None
+    statuses = sorted(r.status for r in db_session.query(models.PipelineRun).all())
+    assert statuses == ["running", "stale"]
+
+
+def test_a_run_that_yields_to_the_reset_writes_nothing(db_session):
+    """Not even the stale mark on a dead run's row: it rolls back with the
+    new row (lease.DATA_RESET's contract)."""
+    from datetime import timedelta
+
+    from app.pipeline import lease
+    from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock_why
+    from app.time_utils import utcnow
+
+    db_session.add(models.HousePipelineRun(status="running", started_at=utcnow() - timedelta(hours=13)))
+    db_session.commit()
+    lease.acquire(db_session, lease.DATA_RESET)
+    assert acquire_pipeline_lock_why(db_session, models.HousePipelineRun, STALE_PIPELINE_TIMEOUT) == (
+        None, lease.REFUSED_BY_RESET,
+    )
+    db_session.expire_all()
+    assert [r.status for r in db_session.query(models.HousePipelineRun).all()] == ["running"]
 
 
 def test_startup_clears_a_senate_run_nobody_holds(db_session, monkeypatch):
@@ -388,6 +408,18 @@ class TestLease:
         lease.acquire(db_session, lease.BILL_REFRESH)
         assert lease.holder(db_session, lease.BILL_REFRESH) == lease.TIERS[lease.BILL_REFRESH]
 
+    def test_a_failed_holders_uncommitted_work_is_not_committed_by_the_release(self, db_session):
+        from app.pipeline import lease
+
+        with pytest.raises(ValueError):
+            with lease.holding(db_session, lease.ACTION_REFRESH) as token:
+                assert token is not None
+                db_session.add(models.ApiCache(tier="t", cache_key="half-written", data_json="{}"))
+                db_session.flush()
+                raise ValueError("the refresh failed")
+        assert db_session.query(models.ApiCache).filter_by(cache_key="half-written").count() == 0
+        assert not lease.held(db_session, lease.ACTION_REFRESH)
+
     def test_every_lease_is_one_the_reset_names(self):
         from app.pipeline import lease
 
@@ -477,7 +509,7 @@ class TestLease:
 
         monkeypatch.setattr(senate_pipeline, "SessionLocal", lambda: _Unclosable(db_session))
 
-        def broken(_db):
+        def broken(_db, **_kw):
             raise RuntimeError("disk I/O error")
 
         monkeypatch.setattr(senate_pipeline, "_acquire_pipeline_lock", broken)

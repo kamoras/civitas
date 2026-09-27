@@ -104,34 +104,26 @@ def acquire_pipeline_lock_why(
     """
     from app.models import PipelineStatus
 
-    running = db.query(model).filter(model.status == PipelineStatus.RUNNING).first()
-    if running:
-        age = utcnow() - running.started_at
-        if age > stale_timeout:
-            running.status = PipelineStatus.STALE
-            running.completed_at = utcnow()
-            running.error_message = f"Marked stale: exceeded {stale_timeout} timeout"
-            try:
-                db.commit()
-            except OperationalError as error:
-                db.rollback()
-                from app.pipeline import lease
-
-                if not lease.is_locked(error):
-                    raise
-                logger.warning("%s not started: the database is locked by another writer", model.__name__)
-                return None, lease.REFUSED_BUSY
-            logger.warning(
-                "Cleaned up stale %s run #%d (age: %s)", model.__name__, running.id, age,
-            )
-        else:
-            return None, ALREADY_RUNNING
-
     from app.pipeline import lease
 
-    run = model(started_at=utcnow(), status=PipelineStatus.RUNNING)
-    db.add(run)
+    running = db.query(model).filter(model.status == PipelineStatus.RUNNING).first()
+    cleared = None
+    if running:
+        age = utcnow() - running.started_at
+        if age <= stale_timeout:
+            return None, ALREADY_RUNNING
+        # Marked stale in the same transaction as the new row and the reset
+        # check below, not committed ahead of them: a run that yields to the
+        # reset backs out with a rollback, writing nothing (lease.DATA_RESET).
+        running.status = PipelineStatus.STALE
+        running.completed_at = utcnow()
+        running.error_message = f"Marked stale: exceeded {stale_timeout} timeout"
+        cleared = (running.id, age)
+
     try:
+        db.flush()  # the stale mark before the new row: one RUNNING row at a time
+        run = model(started_at=utcnow(), status=PipelineStatus.RUNNING)
+        db.add(run)
         db.flush()
         if lease.held(db, lease.DATA_RESET):
             # Checked inside the insert's own transaction (see
@@ -154,6 +146,8 @@ def acquire_pipeline_lock_why(
         # admin data reset's wipe, say) holding it. Not this run's to wait on.
         logger.warning("%s not started: the database is locked by another writer", model.__name__)
         return None, lease.REFUSED_BUSY
+    if cleared is not None:
+        logger.warning("Cleaned up stale %s run #%d (age: %s)", model.__name__, *cleared)
     return run, None
 
 

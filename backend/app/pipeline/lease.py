@@ -291,6 +291,11 @@ def holding(
         return
     try:
         yield held_lease.token
+    except BaseException:
+        # The holder failed: its uncommitted work on this session isn't the
+        # release's to commit — the release below commits on `db`.
+        db.rollback()
+        raise
     finally:
         _let_go(held_lease)
 

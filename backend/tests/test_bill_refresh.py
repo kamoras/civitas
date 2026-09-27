@@ -71,6 +71,7 @@ def actions_stub(monkeypatch):
 
     async def _fake(db, client, congress, bill_type, number):
         Stub.calls.append((congress, bill_type, number))
+        db.commit()  # as the real fetch does (api_cache_set): it expires every loaded row
         return Stub.result
 
     monkeypatch.setattr(bill_refresh, "_fetch_fresh_actions", _fake)
@@ -227,12 +228,19 @@ class TestApplyUpdates:
         db_session.commit()
 
         async def reinserted(db, client, congress, bill_type, number):
-            db.query(SponsoredBill).filter(SponsoredBill.id == row_id).delete()
-            db.add(SponsoredBill(
+            # The nightly pipeline, on its own connection, rewrites the
+            # member's bills while the pass fetches.
+            from sqlalchemy.orm import sessionmaker
+
+            other = sessionmaker(bind=db.get_bind())()
+            other.query(SponsoredBill).filter(SponsoredBill.id == row_id).delete()
+            other.add(SponsoredBill(
                 id=row_id, senator_id="s1", bill_id="S.250", title="Another bill", stage="REFERRED",
                 congress=CURRENT, latest_action="Read twice.", latest_action_date="2026-07-01", bill_type="S",
             ))
-            db.flush()
+            other.commit()
+            other.close()
+            db.commit()  # as the real fetch does: the pass's loaded rows expire
             return [{"actionCode": "17000", "type": "Floor", "text": "Passed Senate."}]
 
         monkeypatch.setattr(bill_refresh, "_fetch_fresh_actions", reinserted)
@@ -249,6 +257,7 @@ class TestApplyUpdates:
 
         async def deleted_meanwhile(db, client, congress, bill_type, number):
             db.query(SponsoredBill).filter(SponsoredBill.id == bill.id).delete()
+            db.commit()
             return actions_stub.result
 
         monkeypatch.setattr(bill_refresh, "_fetch_fresh_actions", deleted_meanwhile)

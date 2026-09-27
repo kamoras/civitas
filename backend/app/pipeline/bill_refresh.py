@@ -183,10 +183,17 @@ async def _apply_updates(
     # none holds SQLite's write lock across the fetches between them.
     writes: list[tuple[type, int, str, str, bool, str | None, dict]] = []
     for model in (SponsoredBill, RepSponsoredBill):
+        # Values, not ORM rows: the actions fetch below commits, expiring
+        # every loaded row, and a row read again after that holds whatever
+        # the nightly pipeline has written since (a reused id, a newer
+        # action) — not what the guards were checked against — or is gone.
         rows = []
         for i in range(0, len(bill_ids), 500):  # stay under SQLite's bind-parameter limit
             rows.extend(
-                db.query(model)
+                db.query(
+                    model.id, model.bill_id, model.latest_action, model.latest_action_date,
+                    model.is_law, model.bill_type, model.congress,
+                )
                 .filter(model.bill_id.in_(bill_ids[i:i + 500]))
                 .filter(model.congress >= settings.CURRENT_CONGRESS)
                 .all()
