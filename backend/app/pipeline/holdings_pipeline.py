@@ -24,7 +24,6 @@ before re-reads.
 
 import asyncio
 import dataclasses
-import functools
 import logging
 import re
 import time
@@ -408,14 +407,9 @@ class _SourceHealth:
             return
         deadline = time.monotonic() + PROBE_BUDGET.total_seconds()
         for url in stored_urls():
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
+            if time.monotonic() >= deadline:
                 break
-            try:
-                loads = await asyncio.wait_for(still_loads(url), remaining)
-            except TimeoutError:
-                break
-            if loads:
+            if await until_deadline(still_loads(url), deadline):
                 logger.warning(
                     "%s: %d members' reports failed to load, but a stored report (%s) still does — "
                     "those filings, not the source", self.source, self.attempted, url,
@@ -499,6 +493,10 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
         mine = stored.get(member_id)
         outcome = _Outcome()
         out_of_time = False
+        # One row per filing: a paginated search can return a row twice (a
+        # page shifting under a new filing), and a failing filing shouldn't
+        # be fetched twice.
+        per_member[member_id] = list({chamber.filing_id(f): f for f in per_member[member_id]}.values())
         fields = {chamber.filing_id(f): chamber.fields(f) for f in per_member[member_id]}
         ranks = {fid: chamber.rank(v, fid) for fid, v in fields.items()}
         if mine is not None and mine.filing_id in fields:
@@ -522,8 +520,10 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
                 db.query(FinancialDisclosure).filter_by(
                     **{chamber.owner_key: member_id}, filing_id=mine.filing_id,
                 ).update(repair, synchronize_session=False)
-                # Committed with the member's replacement, if any, or at the
-                # end of the phase — not one transaction per member.
+                # Committed at once: rare (a row that says more than what was
+                # stored), and an open write would hold SQLite's lock across
+                # the downloads that follow.
+                db.commit()
                 mine = dataclasses.replace(mine, **repair)
         stored_rank = chamber.rank(mine.rank_fields(), mine.filing_id) if mine is not None else None
         for filing in sorted(per_member[member_id], key=lambda f: ranks[chamber.filing_id(f)], reverse=True):
@@ -584,7 +584,6 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
         if out_of_time:
             logger.info("%s: time budget spent — %d members wait for the next run", chamber.source, len(order) - position)
             break
-    db.commit()  # the rank repairs of members that stored nothing new
     # Also true when the last fetch was cut off at the deadline and every
     # member after it was already current.
     health.out_of_time = time.monotonic() > deadline
@@ -749,25 +748,21 @@ def _note_later_filing(db: Session, per_senator: dict[str, list[dict]]) -> None:
 
 def _senate_fields(filing: dict) -> dict:
     """What gets stored for a Senate filing (_Chamber.fields), from one
-    parse of its title — memoized, so the rank, the note and the label all
-    read the same parse (_senate_fields_of)."""
-    return dict(_senate_fields_of(filing.get("title") or "", filing.get("filed_date"), filing["report_url"]))
-
-
-@functools.lru_cache(maxsize=4096)
-def _senate_fields_of(title: str, filed: str | None, report_url: str) -> tuple:
-    as_of = _senate_as_of({"title": title})
+    parse of its title — the one function the rank, the note and the label
+    all read."""
+    title = filing.get("title") or ""
+    as_of = _senate_as_of(filing)
     amended = is_amendment_title(title)
-    return tuple({
-        "report_label": _senate_report_label(title, as_of, amended, filed),
-        "filed_date": filed or None,
-        "source_url": report_url,
+    return {
+        "report_label": _senate_report_label(title, as_of, amended, filing.get("filed_date")),
+        "filed_date": filing.get("filed_date") or None,
+        "source_url": filing["report_url"],
         "as_of_date": as_of,
         "amended": amended,
         # "(Amendment 2)" after "(Amendment 1)" — a same-day tiebreak only
         # (see _rank); an unnumbered one has none.
         "seq": int(m.group(1)) if (m := _AMENDMENT_NO_RE.search(title)) else 0,
-    }.items())
+    }
 
 
 def _senate_report_label(title: str, as_of: str | None, amended: bool, filed: str | None) -> str:

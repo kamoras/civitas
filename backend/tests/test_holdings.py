@@ -1719,3 +1719,14 @@ class TestRound40:
             await _ingest_senate(db_session, [garbled, older], {"cy2025": [_row()], "cy2024": [_row()]})
         stored = db_session.query(FinancialDisclosure).one()
         assert (stored.filing_id, stored.as_of_date) == ("cy2025", "2025-12-31")
+
+
+class TestDuplicateRows:
+    async def test_a_row_listed_twice_is_fetched_once(self, db_session, senator):
+        filing = _senate_filing("e2025")
+        with patch.object(holdings_pipeline, "senate_accept_terms", new_callable=AsyncMock, return_value="tok"), \
+             patch.object(holdings_pipeline, "search_annual_filings", new_callable=AsyncMock,
+                          return_value=[filing, dict(filing)]), \
+             patch.object(holdings_pipeline, "fetch_senate_annual", AsyncMock(return_value=None)) as fetch:
+            await holdings_pipeline.ingest_senate_holdings(db_session, None)
+        assert fetch.await_count == 1
