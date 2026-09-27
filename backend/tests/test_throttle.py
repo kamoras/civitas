@@ -3,36 +3,36 @@
 import multiprocessing
 import sqlite3
 import time
+from datetime import datetime, timezone
 
 import pytest
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
 
 from app.api import throttle
-from app.database import VisitsBase
 
 
-def _file_store(path: str):
-    engine = create_engine(f"sqlite:///{path}", connect_args={"timeout": 30})
-    VisitsBase.metadata.create_all(bind=engine)
-    return engine
+def _rows(path: str, sql: str) -> list:
+    conn = sqlite3.connect(path)
+    try:
+        return conn.execute(sql).fetchall()
+    finally:
+        conn.close()
 
 
 def _worker(path: str, calls: int, start, results) -> None:
     """One API worker process: its own interpreter and module state, the
-    same database file."""
-    throttle._session_factory = throttle.make_session_factory(f"sqlite:///{path}", busy_timeout_s=30)
+    same store file."""
+    throttle.use_path(path)
     start.wait()
     allowed = sum(throttle.hit("write", "k", limit=20, period=3600).allowed for _ in range(calls))
     claimed = sum(throttle.claim("pulse", "k:1", period=3600) for _ in range(calls))
-    results.put((allowed, claimed))
+    results.put((allowed, claimed, throttle.client_key("203.0.113.1", "pulse", "1")))
 
 
-def test_a_limit_holds_across_processes(tmp_path):
+def test_limits_claims_and_keys_hold_across_processes(tmp_path):
     # The reason this module exists: with per-process state, two workers
-    # would each allow 20 (40 total) and each grant the claim once.
-    path = str(tmp_path / "visits.db")
-    _file_store(path).dispose()
+    # would each allow 20 (40 total), each grant the claim once, and — with
+    # a salt of their own — key one client differently.
+    path = str(tmp_path / "throttle.db")
     ctx = multiprocessing.get_context("spawn")
     start, results = ctx.Event(), ctx.Queue()
     procs = [ctx.Process(target=_worker, args=(path, 15, start, results)) for _ in range(2)]
@@ -43,8 +43,9 @@ def test_a_limit_holds_across_processes(tmp_path):
     for p in procs:
         p.join(timeout=60)
 
-    assert sum(allowed for allowed, _ in totals) == 20
-    assert sum(claimed for _, claimed in totals) == 1
+    assert sum(allowed for allowed, _, _ in totals) == 20
+    assert sum(claimed for _, claimed, _ in totals) == 1
+    assert totals[0][2] == totals[1][2]
 
 
 @pytest.mark.usefixtures("throttle_store")
@@ -58,7 +59,12 @@ class TestHit:
             refused = throttle.hit("b", "k", limit=3, period=3600)
             assert (refused.allowed, refused.remaining) == (False, 0)
 
-    def test_the_previous_window_still_counts_across_a_boundary(self, throttle_store, monkeypatch):
+    def test_a_cost_counts_as_that_many(self):
+        assert throttle.hit("b", "k", limit=7, period=3600, cost=5).allowed
+        assert not throttle.hit("b", "k", limit=7, period=3600, cost=5).allowed
+        assert throttle.hit("b", "k", limit=7, period=3600, cost=2).allowed  # the refusal wasn't counted
+
+    def test_the_previous_window_still_counts_across_a_boundary(self, monkeypatch):
         # A fixed window would reset at the boundary and allow 2x the limit.
         period = 60.0
         at = [1_000_000 * period + period - 1]  # one second before a boundary
@@ -81,9 +87,13 @@ class TestHit:
         throttle.hit("b", "old", limit=3, period=60)
         at[0] = 600.0
         throttle.hit("b", "new", limit=3, period=60)
-        with throttle_store.connect() as conn:
-            keys = [r[0] for r in conn.execute(text("SELECT key FROM throttle_windows"))]
-        assert keys == ["new"]
+        assert _rows(throttle_store, "SELECT key FROM windows") == [("new",)]
+
+    def test_clear(self, throttle_store):
+        throttle.hit("b", "k", limit=3, period=60)
+        throttle.hit("c", "k", limit=3, period=60)
+        throttle.clear("b")
+        assert _rows(throttle_store, "SELECT bucket FROM windows") == [("c",)]
 
 
 @pytest.mark.usefixtures("throttle_store")
@@ -117,9 +127,7 @@ class TestClaim:
         throttle.claim("pulse", "old", period=86400)
         at[0] = 86400 + 61
         throttle.claim("summary", "new", period=30)
-        with throttle_store.connect() as conn:
-            keys = [r[0] for r in conn.execute(text("SELECT key FROM throttle_claims"))]
-        assert keys == ["new"]
+        assert _rows(throttle_store, "SELECT key FROM claims") == [("new",)]
 
     def test_the_purge_runs_at_most_once_a_minute(self, throttle_store, monkeypatch):
         at = [1000.0]
@@ -128,20 +136,52 @@ class TestClaim:
         throttle.claim("b", "old", period=1)
         at[0] += 30
         throttle.claim("b", "new", period=1)
-        with throttle_store.connect() as conn:
-            assert conn.execute(text("SELECT COUNT(*) FROM throttle_claims")).scalar() == 2
+        assert _rows(throttle_store, "SELECT COUNT(*) FROM claims") == [(2,)]
+
+
+@pytest.mark.usefixtures("throttle_store")
+class TestClientKey:
+    def test_stable_within_a_day_and_distinct_by_purpose_and_scope(self):
+        key = throttle.client_key("203.0.113.1", "pulse", "1")
+        assert key == throttle.client_key("203.0.113.1", "pulse", "1")
+        others = {
+            throttle.client_key("203.0.113.1", "pulse", "2"),
+            throttle.client_key("203.0.113.1", "write"),
+            throttle.client_key("203.0.113.2", "pulse", "1"),
+        }
+        assert key not in others and len(others) == 3
+        assert len(key) == 32 and "203.0.113.1" not in key
+
+    def test_a_new_day_replaces_the_salt(self, throttle_store, monkeypatch):
+        key = throttle.client_key("203.0.113.1", "pulse", "1")
+
+        class _Tomorrow(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return datetime(2099, 1, 2, tzinfo=timezone.utc)
+
+        monkeypatch.setattr(throttle, "datetime", _Tomorrow)
+        assert throttle.client_key("203.0.113.1", "pulse", "1") != key
+        assert _rows(throttle_store, "SELECT date FROM salts") == [("2099-01-02",)]
+
+    def test_not_the_visitor_hash_a_visit_stores(self):
+        from app.api.visits import _visitor_hash
+
+        key = throttle.client_key("203.0.113.1", "write")
+        for (visit_salt,) in _rows(throttle._path, "SELECT salt FROM salts"):
+            assert _visitor_hash("203.0.113.1", visit_salt) != key
 
 
 class TestFailsOpen:
-    """A locked or missing store lets requests through rather than turning
+    """A locked or unusable store lets requests through rather than turning
     every limited endpoint into an outage."""
 
     @pytest.fixture(autouse=True)
-    def _missing_tables(self, monkeypatch):
-        engine = create_engine("sqlite:///:memory:")
-        monkeypatch.setattr(throttle, "_session_factory", sessionmaker(bind=engine))
+    def _unusable(self, tmp_path):
+        previous = throttle._path
+        throttle.use_path(str(tmp_path / "no-such-dir" / "throttle.db"))
         yield
-        engine.dispose()
+        throttle.use_path(previous)
 
     def test_hit(self):
         decision = throttle.hit("b", "k", limit=3, period=60)
@@ -150,52 +190,30 @@ class TestFailsOpen:
     def test_claim(self):
         assert throttle.claim("b", "k", period=30)
 
-    def test_release(self):
+    def test_release_and_clear(self):
         throttle.release("b", "k")  # logs, doesn't raise
+        throttle.clear("b")
+
+    def test_client_key(self):
+        assert throttle.client_key("203.0.113.1", "write") == "unavailable"
 
 
-def test_a_held_write_lock_is_waited_on_briefly_not_for_the_full_timeout(tmp_path, monkeypatch):
-    path = str(tmp_path / "visits.db")
-    _file_store(path).dispose()
-    monkeypatch.setattr(throttle, "_session_factory", throttle.make_session_factory(f"sqlite:///{path}", 0.2))
-    blocker = sqlite3.connect(path)
+def test_a_held_write_lock_is_waited_on_briefly(throttle_store, monkeypatch):
+    monkeypatch.setattr(throttle, "_BUSY_TIMEOUT_S", 0.2)
+    throttle.use_path(throttle_store + "x")  # a fresh connection, with the short timeout
+    throttle.hit("b", "k", limit=3, period=60)  # creates the schema
+    blocker = sqlite3.connect(throttle_store + "x", isolation_level=None)
     try:
         blocker.execute("BEGIN IMMEDIATE")
         started = time.monotonic()
         assert throttle.hit("b", "k", limit=3, period=60).allowed  # failed open
         assert time.monotonic() - started < 5
     finally:
-        blocker.rollback()
+        blocker.execute("ROLLBACK")
         blocker.close()
-        throttle._session_factory.kw["bind"].dispose()
 
 
-def test_its_short_timeout_never_reaches_the_visits_engine(tmp_path, monkeypatch):
-    # An earlier version set the short timeout per connection and
-    # "restored" it after commit — by then on a different pooled
-    # connection, leaving 2 s on the one the visit consumer next used.
-    from app.database import _sqlite_connect_args_for
-
-    path = str(tmp_path / "visits.db")
-    _file_store(path).dispose()
-    factory = throttle.make_session_factory(f"sqlite:///{path}")
-    monkeypatch.setattr(throttle, "_session_factory", factory)
-    for _ in range(5):
-        throttle.hit("b", "k", limit=100, period=60)
-    with factory.kw["bind"].connect() as conn:
-        assert conn.exec_driver_sql("PRAGMA busy_timeout").scalar() == int(throttle._BUSY_TIMEOUT_S * 1000)
-    visits_engine = create_engine(f"sqlite:///{path}", connect_args=_sqlite_connect_args_for(f"sqlite:///{path}"))
-    with visits_engine.connect() as conn:
-        assert conn.exec_driver_sql("PRAGMA busy_timeout").scalar() == 30_000
-    visits_engine.dispose()
-    factory.kw["bind"].dispose()
-
-
-def test_a_store_that_cannot_be_opened_fails_open(monkeypatch):
-    def broken():
-        raise throttle.SQLAlchemyError("unable to open database file")
-
-    monkeypatch.setattr(throttle, "_session_factory", broken)
-    assert throttle.hit("b", "k", limit=3, period=60).allowed
-    assert throttle.claim("b", "k", period=30)
-    throttle.release("b", "k")
+def test_pointing_at_the_same_path_again_reconnects(throttle_store):
+    throttle.hit("b", "k", limit=3, period=60)
+    throttle.use_path(throttle_store)  # closes this thread's connection
+    assert not throttle.hit("b", "k", limit=1, period=60).allowed  # still counting, not failing open

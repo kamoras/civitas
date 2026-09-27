@@ -975,18 +975,19 @@ the pending list).
     has its own copy, so a limit stretches to its value times the worker
     count and a once-per-day dedup lets a second vote through on the other
     worker. Rate limits and once-per-period rules go through
-    `app/api/throttle.py` (`hit`, `claim`), whose tables live in the visits
-    database. Keys come from `rate_limit.client_key`: an HMAC of the IP
-    under the day's visit salt, tagged by purpose — never an IP, and never
-    the visitor hash `SiteVisit` stores, so no throttle row joins to a visit.
-    Every row expires. The hourly upstream-lookup budget
-    (`rate_limit.spend_upstream`) is one shared count the same way.
+    `app/api/throttle.py` (`hit`, `claim`): a SQLite file in RAM
+    (`/dev/shm`), shared by the container's workers and never on disk —
+    the same lifetime and exposure the per-process dicts had. Keys come
+    from `throttle.client_key`: an HMAC of the IP under the store's own
+    salt for the current day — never an IP, and never the visitor hash
+    `SiteVisit` stores. Every row expires. The hourly upstream-lookup
+    budget (`rate_limit.spend_upstream`) is one shared count the same way.
+    Caches of data every client sees alike (`bill_service`'s collection
+    cache) are fine per process.
   - A module cache of a file the pipeline rewrites must notice the rewrite
     from the API process: keep a `file_cache.files_stamp` of it and reload
     when it moves. Clearing the cache from the writer only clears the
     writer's own process.
-    Caches of data every client sees alike (`bill_service`'s collection
-    cache, the data-version memo) are fine per process.
   - Two backend *processes* also meet during a Swarm start-first rollout,
     when the old and new tasks overlap on the same database, which is what
     the `init_db` lock and the `IF NOT EXISTS` DDL guard against

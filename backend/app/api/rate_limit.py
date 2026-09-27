@@ -67,33 +67,11 @@ def client_ip(request: Request) -> str:
     return peer or "unknown"
 
 
-# Bits of the HMAC a throttle key keeps. The day's salt sits in the same
-# database as the throttle rows, and the IPv4 space is small enough to
-# enumerate, so a full-length key would let anyone holding that file during
-# the day recover which address voted on which issue. 24 bits leaves each
-# key matching ~256 IPv4 addresses (2^32 / 2^24), so no row names one. The
-# price is shared buckets: two real visitors land on the same key with
-# probability ~n^2 / 2^25 per issue a day (0.3% of one vote at n = 300).
-_KEY_BITS = 24
-
-
 async def client_key(request: Request, purpose: str, scope: str = "") -> str:
-    """The key a per-client limit counts under: a truncated HMAC of
-    client_ip under the day's visit salt (api/visits.py), tagged with
-    `purpose` and `scope`. Never the IP itself, never the visitor hash
-    SiteVisit stores — so a throttle row can't be joined to a visit
-    (AGENTS.md §8) — and too short to single out an address (_KEY_BITS).
-    Rows for different purposes or scopes (one visitor's votes on two
-    issues) can't be joined to each other."""
-    import hashlib
-    import hmac
-
-    from app.api.visits import _daily_salt
-    from app.time_utils import utcnow
-
-    salt = await _daily_salt(utcnow().date().isoformat())
-    message = f"{purpose}\x00{client_ip(request)}\x00{scope}".encode()
-    return hmac.new(salt, message, hashlib.sha256).hexdigest()[: _KEY_BITS // 4]
+    """The key a per-client limit counts this request's client under — an
+    HMAC of client_ip under the throttle store's own salt for the day
+    (throttle.client_key). Never the IP, never joinable to a visit."""
+    return await asyncio.to_thread(throttle.client_key, client_ip(request), purpose, scope)
 
 
 class _PerClientLimit:

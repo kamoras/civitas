@@ -52,21 +52,26 @@ def db_session():
     engine.dispose()
 
 
-@pytest.fixture()
-def throttle_store(monkeypatch):
-    """An isolated store for api/throttle.py. Its tables live in the visits
-    database, which in tests is an unshared `:memory:` engine (a fresh,
-    table-less database per connection) — so without this every limit
-    fails open and nothing a test asserts about one is being exercised."""
+@pytest.fixture(scope="session")
+def _throttle_dir(tmp_path_factory):
+    return tmp_path_factory.mktemp("throttle")
+
+
+@pytest.fixture(autouse=True)
+def throttle_store(_throttle_dir):
+    """A fresh store for api/throttle.py for every test, in a file of its
+    own; yields its path. Autouse: the default lives in /dev/shm, where
+    limits counted by one test (20 writes a minute) would refuse the next
+    test's requests. Nothing is created until a test uses it."""
+    import uuid
+
     from app.api import throttle
 
-    engine = create_engine(
-        "sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool,
-    )
-    VisitsBase.metadata.create_all(bind=engine)
-    monkeypatch.setattr(throttle, "_session_factory", sessionmaker(bind=engine, autoflush=False))
-    yield engine
-    engine.dispose()
+    previous = throttle._path
+    path = str(_throttle_dir / f"{uuid.uuid4().hex}.db")
+    throttle.use_path(path)
+    yield path
+    throttle.use_path(previous)
 
 
 # Explore search's ranking parameters are generated data — measured against

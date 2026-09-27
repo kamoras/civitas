@@ -17,7 +17,7 @@ TEST-NET documentation ranges (198.51.100/24, 203.0.113/24) as private,
 so those are not valid stand-ins for a public peer here.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi import HTTPException
@@ -65,13 +65,7 @@ class TestClientIp:
         assert client_ip(req) == "unknown"
 
 
-@pytest.fixture()
-def _fixed_salt():
-    with patch("app.api.visits._daily_salt", AsyncMock(return_value=b"s" * 32)):
-        yield
-
-
-@pytest.mark.usefixtures("throttle_store", "_fixed_salt")
+@pytest.mark.usefixtures("throttle_store")
 class TestWriteRateLimit:
     async def test_allows_under_limit(self):
         req = _make_request("8.8.4.1")
@@ -106,27 +100,17 @@ class TestWriteRateLimit:
                     await write_rate_limit(req)
 
     async def test_the_ip_itself_is_never_stored(self, throttle_store):
-        from sqlalchemy import text
+        import sqlite3
 
         await write_rate_limit(_make_request("8.8.4.7"))
-        with throttle_store.connect() as conn:
-            keys = [row[0] for row in conn.execute(text("SELECT key FROM throttle_windows"))]
+        conn = sqlite3.connect(throttle_store)
+        keys = [row[0] for row in conn.execute("SELECT key FROM windows")]
+        conn.close()
         assert keys and all("8.8.4.7" not in k for k in keys)
         assert keys == [await client_key(_make_request("8.8.4.7"), "write")]
 
-    async def test_a_key_cannot_be_joined_to_a_visit(self):
-        # SiteVisit stores _visitor_hash(ip, salt); a throttle row holding
-        # the same value would turn the visits table into a per-visitor log
-        # of what each visitor did (AGENTS.md §8).
-        from app.api.visits import _visitor_hash
 
-        req = _make_request("8.8.4.10")
-        keys = {await client_key(req, p, s) for p, s in [("write", ""), ("pulse", "1"), ("pulse", "2")]}
-        assert len(keys) == 3
-        assert _visitor_hash("8.8.4.10", b"s" * 32) not in keys
-
-
-@pytest.mark.usefixtures("throttle_store", "_fixed_salt")
+@pytest.mark.usefixtures("throttle_store")
 class TestPublicApiRateLimit:
     async def test_counts_down_then_refuses_with_headers(self):
         from types import SimpleNamespace
@@ -157,14 +141,3 @@ class TestPublicApiRateLimit:
         for _ in range(20):
             await write_rate_limit(req)
         await _rate_limit_dep(req)  # a separate bucket
-
-
-@pytest.mark.usefixtures("_fixed_salt")
-async def test_a_key_is_too_short_to_single_out_an_address():
-    # Enumerating the IPv4 space against the day's salt must leave many
-    # candidates per key, never one.
-    from app.api import rate_limit
-
-    key = await client_key(_make_request("8.8.4.11"), "pulse", "3")
-    assert len(key) * 4 == rate_limit._KEY_BITS
-    assert 2 ** 32 / 2 ** rate_limit._KEY_BITS >= 256

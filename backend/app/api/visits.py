@@ -196,7 +196,11 @@ async def run_visit_consumer() -> None:
     its own write blocks the loop the same way the old inline write did.
     """
     while True:
-        event = await _visit_queue.get()
+        _forget_stale_salts()
+        try:
+            event = await asyncio.wait_for(_visit_queue.get(), timeout=_STALE_SALT_CHECK_S)
+        except TimeoutError:
+            continue
         batch = [event]
         while len(batch) < _VISIT_BATCH_MAX:
             try:
@@ -291,6 +295,23 @@ async def _daily_salt(date: str) -> bytes:
 
 
 _fallback_salt: tuple[str, bytes] | None = None
+
+
+# How often an idle worker checks for a salt left over from a previous day.
+_STALE_SALT_CHECK_S = 60.0
+
+
+def _forget_stale_salts() -> None:
+    """Drop any salt this process holds for a day that has ended. The shared
+    salt's row is deleted when a new day's is made; without this, a worker
+    that saw no traffic since would keep yesterday's in memory — and with
+    it, the means to recompute yesterday's visitor hashes (AGENTS.md §8)."""
+    global _salt_cache, _fallback_salt
+    today = datetime.now(UTC).date().isoformat()
+    if _salt_cache is not None and _salt_cache[0] != today:
+        _salt_cache = None
+    if _fallback_salt is not None and _fallback_salt[0] != today:
+        _fallback_salt = None
 
 
 def _fallback_salt_for(date: str) -> bytes:

@@ -2,7 +2,7 @@
 in separate processes (docker-compose.swarm.yml). What each role starts,
 and what the API role refuses."""
 
-from datetime import datetime, timezone
+from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
@@ -63,7 +63,7 @@ class TestStartup:
     async def test_api_starts_only_the_read_side(self, started, role):
         role("api")
         assert await self._run(started) == {
-            "init-db", "bill-cache", "_preload_embedding_models", "visit-consumer",
+            "init-db", "bill-cache", "_preload_search_model", "visit-consumer",
         }
 
     async def test_worker_starts_only_the_pipeline_side(self, started, role):
@@ -75,31 +75,28 @@ class TestStartup:
     async def test_all_starts_both(self, started, role):
         role("all")
         assert await self._run(started) == {
-            "init-db", "sweep", "scheduler", "bill-cache", "_preload_embedding_models",
+            "init-db", "sweep", "scheduler", "bill-cache", "_preload_search_model",
             "explore-bootstrap", "startup-jobs", "visit-consumer",
         }
 
 
-def test_both_embedding_models_are_preloaded():
-    # Explore search encodes with the similarity model; only the primary
-    # used to be preloaded, so the first search still loaded one inline.
+def test_only_the_search_model_is_preloaded():
+    # Explore search encodes with the similarity model. Every API worker
+    # holds its own copy of whatever is preloaded, and the primary model
+    # serves only /api/qa, so it loads on first use instead.
     loaded: list[str] = []
     with patch("app.pipeline.vector_store.get_similarity_model", lambda: loaded.append("similarity")), \
             patch("app.pipeline.vector_store.get_embedding_model", lambda: loaded.append("primary")):
-        main_module._preload_embedding_models()
-    assert sorted(loaded) == ["primary", "similarity"]
+        main_module._preload_search_model()
+    assert loaded == ["similarity"]
 
 
-def test_a_failed_model_preload_does_not_stop_the_other():
-    loaded: list[str] = []
-
+def test_a_failed_model_preload_is_only_logged():
     def boom():
         raise OSError("no model files")
 
-    with patch("app.pipeline.vector_store.get_similarity_model", boom), \
-            patch("app.pipeline.vector_store.get_embedding_model", lambda: loaded.append("primary")):
-        main_module._preload_embedding_models()
-    assert loaded == ["primary"]
+    with patch("app.pipeline.vector_store.get_similarity_model", boom):
+        main_module._preload_search_model()
 
 
 class TestWriters:
@@ -133,21 +130,47 @@ class TestWriters:
 
 
 class TestNextRunTime:
-    def test_computed_from_the_schedule_where_the_scheduler_is_not_running(self, monkeypatch):
+    """The API process runs no scheduler: it reports the next run from the
+    heartbeat the pipeline process's scheduler keeps, and nothing once that
+    goes stale — a pipeline service that is down has no next run."""
+
+    @pytest.fixture()
+    def shared_db(self, db_session, monkeypatch):
+        from contextlib import contextmanager
+
+        from sqlalchemy.orm import Session
+
+        @contextmanager
+        def _scope():
+            session = Session(bind=db_session.get_bind())
+            try:
+                yield session
+            finally:
+                session.close()
+
+        monkeypatch.setattr("app.database.session_scope", _scope)
+        return db_session
+
+    def test_reported_while_the_heartbeat_is_fresh(self, shared_db, monkeypatch):
         from app import scheduler
 
-        monkeypatch.setattr(settings, "PIPELINE_CRON_SCHEDULE", "0 3 * * *")
+        monkeypatch.setattr(scheduler, "_live_next_run", lambda: "2026-09-29T03:00:00+00:00")
+        scheduler._record_next_run()
         assert not scheduler.scheduler.running
-        next_run = datetime.fromisoformat(scheduler.get_next_run_time())
-        now = datetime.now(timezone.utc)
-        assert (next_run.hour, next_run.minute) == (3, 0)
-        assert next_run.utcoffset().total_seconds() == 0
-        assert 0 < (next_run - now).total_seconds() <= 24 * 3600
+        assert scheduler.get_next_run_time() == "2026-09-29T03:00:00+00:00"
 
-    def test_none_for_an_invalid_schedule(self, monkeypatch):
+    def test_none_once_the_heartbeat_is_stale(self, shared_db, monkeypatch):
         from app import scheduler
 
-        monkeypatch.setattr(settings, "PIPELINE_CRON_SCHEDULE", "not a cron")
+        monkeypatch.setattr(scheduler, "_live_next_run", lambda: "2026-09-29T03:00:00+00:00")
+        scheduler._record_next_run()
+        later = scheduler.utcnow() + scheduler._HEARTBEAT_STALE + timedelta(seconds=1)
+        monkeypatch.setattr(scheduler, "utcnow", lambda: later)
+        assert scheduler.get_next_run_time() is None
+
+    def test_none_without_any_heartbeat(self, shared_db):
+        from app import scheduler
+
         assert scheduler.get_next_run_time() is None
 
 

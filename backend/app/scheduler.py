@@ -641,7 +641,15 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    scheduler.add_job(
+        lambda: _start_job(_record_next_run, name="scheduler-heartbeat"),
+        CronTrigger(minute=f"*/{_HEARTBEAT_MINUTES}"),
+        id="scheduler_heartbeat",
+        replace_existing=True,
+    )
+
     scheduler.start()
+    _start_job(_record_next_run, name="scheduler-heartbeat")
     logger.info(
         "Scheduler started with cron: %s (+ hourly action refresh at :15, bill status refresh at :45)",
         settings.PIPELINE_CRON_SCHEDULE,
@@ -655,22 +663,66 @@ def stop_scheduler() -> None:
         logger.info("Scheduler stopped")
 
 
-def get_next_run_time() -> str | None:
-    """Return the next scheduled run time as an ISO string, or None.
+# Where the scheduler's process records its next nightly run, for a process
+# that doesn't run the scheduler (the read-only API, PROCESS_ROLE=api) to
+# report: rewritten every _HEARTBEAT_MINUTES, and reported only while fresh,
+# so a pipeline service that is down stops advertising a run that won't
+# happen.
+_HEARTBEAT_TIER = "scheduler"
+_HEARTBEAT_KEY = "next-run"
+_HEARTBEAT_MINUTES = 5
+_HEARTBEAT_STALE = timedelta(minutes=3 * _HEARTBEAT_MINUTES)
 
-    Read off the live job where this process runs the scheduler, and
-    computed from the same schedule where it doesn't — the read-only API
-    process (settings.PROCESS_ROLE), which serves /api/pipeline/status.
-    """
+
+def _live_next_run() -> str | None:
     job = scheduler.get_job("pipeline_run")
     if job and job.next_run_time:
         return job.next_run_time.isoformat()
-    if scheduler.running:
-        return None
-    trigger = _nightly_trigger()
-    if trigger is None:
-        return None
-    from datetime import datetime, timezone
+    return None
 
-    next_fire = trigger.get_next_fire_time(None, datetime.now(timezone.utc))
-    return next_fire.isoformat() if next_fire else None
+
+def _record_next_run() -> None:
+    import json
+
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+    from app.database import session_scope
+    from app.models import ApiCache
+
+    now = utcnow()
+    data = json.dumps({"nextRun": _live_next_run()})
+    with session_scope() as db:
+        db.execute(
+            sqlite_insert(ApiCache)
+            .values(tier=_HEARTBEAT_TIER, cache_key=_HEARTBEAT_KEY, data_json=data, cached_at=now)
+            .on_conflict_do_update(index_elements=["tier", "cache_key"], set_={"data_json": data, "cached_at": now})
+        )
+        db.commit()
+
+
+def get_next_run_time() -> str | None:
+    """Return the next scheduled run time as an ISO string, or None.
+
+    Read off the live job where this process runs the scheduler; elsewhere
+    (the read-only API process) from the heartbeat the scheduler's process
+    keeps, and None once that goes stale — the pipeline service is down.
+    """
+    if scheduler.running:
+        return _live_next_run()
+    import json
+
+    from app.database import session_scope
+    from app.models import ApiCache
+
+    with session_scope() as db:
+        row = (
+            db.query(ApiCache)
+            .filter(ApiCache.tier == _HEARTBEAT_TIER, ApiCache.cache_key == _HEARTBEAT_KEY)
+            .first()
+        )
+        if row is None or row.cached_at < utcnow() - _HEARTBEAT_STALE:
+            return None
+        try:
+            return json.loads(row.data_json).get("nextRun")
+        except (TypeError, ValueError):
+            return None

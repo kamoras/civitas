@@ -126,3 +126,21 @@ class TestLegacyRekey:
         after = db_session.execute(text("SELECT date, COUNT(*) FROM site_visits GROUP BY date")).all()
         assert before == after
 
+
+
+def test_a_salt_from_a_day_that_ended_is_dropped(monkeypatch):
+    # An idle worker must not hold yesterday's salt: it could recompute
+    # every one of yesterday's hashes from an IP.
+    monkeypatch.setattr(visits, "_salt_cache", ("2000-01-01", b"x" * 32))
+    monkeypatch.setattr(visits, "_fallback_salt", ("2000-01-01", b"y" * 32))
+    visits._forget_stale_salts()
+    assert visits._salt_cache is None and visits._fallback_salt is None
+
+
+def test_todays_salt_is_kept(monkeypatch):
+    from datetime import UTC, datetime
+
+    today = datetime.now(UTC).date().isoformat()
+    monkeypatch.setattr(visits, "_salt_cache", (today, b"x" * 32))
+    visits._forget_stale_salts()
+    assert visits._salt_cache == (today, b"x" * 32)

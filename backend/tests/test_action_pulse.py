@@ -2,7 +2,7 @@
 keeping the visitor's IP address."""
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi import HTTPException
@@ -27,12 +27,11 @@ def _issue(db_session) -> int:
     return issue.id
 
 
-async def _vote(db_session, ip: str, issue_id: int, salt: bytes = b"s" * 32):
-    with patch("app.api.visits._daily_salt", AsyncMock(return_value=salt)):
-        return await record_pulse_vote(
-            _request(ip), PulseVoteRequest(issue_id=issue_id, stance="concerned"),
-            None, db_session,
-        )
+async def _vote(db_session, ip: str, issue_id: int):
+    return await record_pulse_vote(
+        _request(ip), PulseVoteRequest(issue_id=issue_id, stance="concerned"),
+        None, db_session,
+    )
 
 
 async def test_second_vote_same_day_is_refused(db_session):
@@ -52,12 +51,13 @@ async def test_other_visitors_are_unaffected(db_session):
 
 
 async def test_the_ip_itself_is_never_held(db_session, throttle_store):
-    from sqlalchemy import text
+    import sqlite3
 
     issue_id = _issue(db_session)
     await _vote(db_session, "203.0.113.7", issue_id)
-    with throttle_store.connect() as conn:
-        held = [row[0] for row in conn.execute(text("SELECT key FROM throttle_claims"))]
+    conn = sqlite3.connect(throttle_store)
+    held = [row[0] for row in conn.execute("SELECT key FROM claims")]
+    conn.close()
     assert held and all("203.0.113.7" not in key for key in held)
 
 
@@ -71,10 +71,21 @@ async def test_a_vote_on_a_missing_issue_does_not_use_up_the_day(db_session):
     assert again.value.status_code == 404  # not 429
 
 
-async def test_a_new_day_salt_allows_a_new_vote(db_session):
+async def test_a_new_day_allows_a_new_vote(db_session, monkeypatch):
+    from datetime import datetime, timezone
+
+    from app.api import throttle
+
     issue_id = _issue(db_session)
-    await _vote(db_session, "203.0.113.7", issue_id, salt=b"a" * 32)
-    again = await _vote(db_session, "203.0.113.7", issue_id, salt=b"b" * 32)
+    await _vote(db_session, "203.0.113.7", issue_id)
+
+    class _Tomorrow(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2099, 1, 2, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(throttle, "datetime", _Tomorrow)
+    again = await _vote(db_session, "203.0.113.7", issue_id)
     assert again["concernedCount"] == 2
 
 
