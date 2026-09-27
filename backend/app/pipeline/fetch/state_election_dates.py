@@ -44,11 +44,12 @@ import json
 import logging
 import os
 import re
+from collections.abc import Callable
 from typing import Any
 
 import httpx
 
-from app.atomic_write import LockTimeout, update_json_file
+from app.atomic_write import update_first_writable
 
 logger = logging.getLogger(__name__)
 
@@ -110,48 +111,57 @@ def senate_election_known(state: str, cycle: int) -> bool | None:
     return bool((known.get(f"{cycle}-{state.upper()}") or {}).get("senate"))
 
 
-def mark_calendar_read(cycle: int, on: str) -> None:
-    save(_CALENDAR_KEY, cycle, {"read": on})
-
-
 def all_dates() -> dict[str, Any]:
     """Every date known, keyed "{cycle}-{STATE}"."""
     return dict(_load())
 
 
-def save(state: str, cycle: int, dates: dict) -> None:
+def save(state: str, cycle: int, dates: dict) -> bool:
     """Record what is known about a state's cycle. Merges rather than
     replaces, so a per-state read that knows only the primary doesn't drop
-    the runoff the national calendar supplied, or vice versa."""
+    the runoff the national calendar supplied, or vice versa. False when it
+    wasn't recorded (atomic_write.update_first_writable)."""
+    return _update(_merged(state, cycle, dates), f"election dates for {state}")
+
+
+def save_calendar(cycle: int, calendar: dict[str, dict], read_on: str) -> bool:
+    """Record the national calendar's dates for every state and that it was
+    read, in one update: every state's dates and the "read" marker land
+    together or not at all, so the marker never vouches for a state whose
+    dates weren't recorded (senate_election_known would read that state's
+    missing Senate race as "none")."""
+    changes = [_merged(state, cycle, dates) for state, dates in calendar.items()]
+    changes.append(_merged(_CALENDAR_KEY, cycle, {"read": read_on}))
+
+    def merge_all(known: dict[str, Any]) -> dict[str, Any]:
+        for change in changes:
+            known = change(known)
+        return known
+
+    return _update(merge_all, f"the {cycle} election calendar")
+
+
+def _merged(state: str, cycle: int, dates: dict) -> Callable[[dict[str, Any]], dict[str, Any]]:
     key = f"{cycle}-{state.upper()}"
 
     def merge(known: dict[str, Any]) -> dict[str, Any]:
         known[key] = {**known.get(key, {}), **{k: v for k, v in dates.items() if v}}
         return known
 
-    def publish(known: dict[str, Any]) -> None:
-        global _cache
-        _cache = known
+    return merge
 
+
+def _publish(known: dict[str, Any]) -> None:
+    global _cache
+    _cache = known
+
+
+def _update(change: Callable[[dict[str, Any]], dict[str, Any]], what: str) -> bool:
     # Merged into the file as it stands now, under its lock: the source
-    # crawl and a ballot sync both write here (update_json_file).
-    for path in _PATHS:
-        try:
-            update_json_file(
-                path, merge, missing=lambda: dict(_load()), written=publish, indent=2, sort_keys=True,
-            )
-            return
-        except LockTimeout:
-            # Another writer held the file far past a write's length. Not
-            # the next path, where the next read wouldn't look: this date
-            # isn't recorded (file and cache agree), and the next read of
-            # the state's calendar finds it again.
-            logger.warning("Election dates for %s not recorded — the file stayed locked", state)
-            return
-        except OSError:
-            continue
-    logger.warning("Nowhere writable to record election dates for %s", state)
-    publish(merge(dict(_load())))
+    # crawl and a ballot sync both write here.
+    return update_first_writable(
+        _PATHS, change, missing=lambda: dict(_load()), publish=_publish, what=what, indent=2, sort_keys=True,
+    )
 
 
 async def fetch_fec_calendar(client: httpx.AsyncClient, cycle: int) -> dict[str, dict]:

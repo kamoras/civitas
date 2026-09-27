@@ -42,7 +42,6 @@ accurate as before this sync ran, never worse.
 import logging
 import re
 import unicodedata
-from collections.abc import Callable
 
 import httpx
 from sqlalchemy.orm import Session
@@ -536,9 +535,7 @@ def _prune_ballot_only(
 
 
 async def crawl_for_new_sources(
-    db: Session, client: httpx.AsyncClient, cycle: int, *,
-    after: str | None = None,
-    on_state: Callable[[str, str], None] | None = None,
+    db: Session, client: httpx.AsyncClient, cycle: int,
 ) -> dict:
     """Look for a usable results source in every state that doesn't have a
     hand-verified one, and keep the ones that prove out. Returns per-state
@@ -562,15 +559,11 @@ async def crawl_for_new_sources(
 
     One state's failure (an adapter raising on a changed page) is that
     state's "error", not the sweep's end: every other state is still
-    crawled, and it is crawled again on the next weekly sweep. `after`
-    continues a sweep cut off partway: only the states sorted after it are
-    crawled. `on_state(state, outcome)` hears each state as it finishes, so
-    a caller cut off partway knows where to continue and what it adopted.
+    crawled, and it is crawled again on the next weekly sweep.
     """
     hand_verified = (_sources_file().get("states") or {})
     outcomes: dict[str, str] = {}
-    for state in sorted(st for st in ELECTION_DOMAINS if after is None or st > after):
-        cut_off = False  # a state the crawl was cancelled out of isn't finished
+    for state in sorted(ELECTION_DOMAINS):
         try:
             hand = hand_verified.get(state)
             # A hand-verified state is left alone while its source works. When
@@ -647,24 +640,23 @@ async def crawl_for_new_sources(
                 )
                 outcomes[state] = "unproven" if not records else "rejected"
                 continue
-            save_discovered(state, {k: v for k, v in found.items() if not k.startswith("_")}
-                            | {"source_name": found.get("_evidence", "discovered"),
-                               "description": f"Found automatically on {utcnow().date().isoformat()}: "
-                                              f"{found.get('_evidence')}. Nomination rules are NOT "
-                                              f"inferred — a state needing a runoff threshold, a "
-                                              f"convention rule or top-two counting still needs a "
-                                              f"hand-verified entry, which overrides this one."})
+            recorded = save_discovered(
+                state, {k: v for k, v in found.items() if not k.startswith("_")}
+                | {"source_name": found.get("_evidence", "discovered"),
+                   "description": f"Found automatically on {utcnow().date().isoformat()}: "
+                                  f"{found.get('_evidence')}. Nomination rules are NOT "
+                                  f"inferred — a state needing a runoff threshold, a "
+                                  f"convention rule or top-two counting still needs a "
+                                  f"hand-verified entry, which overrides this one."},
+            )
+            if not recorded:  # proved, but not kept: not "adopted"
+                outcomes[state] = "error"
+                continue
             outcomes[state] = f"adopted ({matched}/{len(records)} matched)"
             logger.info("Adopted a discovered source for %s: %s", state, found.get("_evidence"))
         except Exception:
             logger.exception("Source crawl failed for %s — moving on to the next state", state)
             outcomes[state] = "error"
-        except BaseException:
-            cut_off = True
-            raise
-        finally:
-            if on_state is not None and not cut_off:
-                on_state(state, outcomes.get(state, "unchanged"))
     return outcomes
 
 
@@ -702,7 +694,8 @@ async def _adopt_filings(
     stored = dict(_discovered_source(state) or base or {})
     stored["filings"] = candidate_source["filings"]
     stored.setdefault("source_name", filings["_evidence"])
-    save_discovered(state, stored)
+    if not save_discovered(state, stored):
+        return "error"  # proved, but not kept: not "adopted"
     if held:
         election_dates.save(state, cycle, {"primary": held})
     logger.info(
@@ -757,7 +750,8 @@ async def _forget_if_broken(client: httpx.AsyncClient, cycle: int, state: str) -
         "Forgetting the discovered source for %s — it no longer fetches: %s",
         state, source.get("source_name"),
     )
-    save_discovered(state, None)
+    if not save_discovered(state, None):
+        return "error"  # still in use: not "forgotten"
     return "forgotten"
 
 
@@ -1045,10 +1039,8 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
     # Sunday — and dark on a fresh deploy. Three calls.
     try:
         calendar = await election_dates.fetch_fec_calendar(client, cycle)
-        for state, dates in calendar.items():
-            election_dates.save(state, cycle, dates)
         if calendar:
-            election_dates.mark_calendar_read(cycle, utcnow().date().isoformat())
+            election_dates.save_calendar(cycle, calendar, utcnow().date().isoformat())
     except Exception:
         logger.exception("FEC election-date calendar read failed")
 

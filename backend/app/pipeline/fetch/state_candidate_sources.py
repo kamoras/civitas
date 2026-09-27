@@ -22,7 +22,7 @@ import logging
 import os
 from typing import Any
 
-from app.atomic_write import LockTimeout, update_json_file
+from app.atomic_write import update_first_writable
 
 logger = logging.getLogger(__name__)
 
@@ -75,9 +75,10 @@ def _load_discovered() -> dict[str, Any]:
     return _discovered_cache
 
 
-def save_discovered(state: str, source: dict[str, Any] | None) -> None:
+def save_discovered(state: str, source: dict[str, Any] | None) -> bool:
     """Record (or, with None, forget) what the crawler proved for `state`.
-    Never touches the hand-verified file."""
+    Never touches the hand-verified file. False when it wasn't recorded
+    (atomic_write.update_first_writable)."""
     def record(discovered: dict[str, Any]) -> dict[str, Any]:
         if source is None:
             discovered.pop(state.upper(), None)
@@ -89,25 +90,11 @@ def save_discovered(state: str, source: dict[str, Any] | None) -> None:
         global _discovered_cache
         _discovered_cache = discovered
 
-    # Into the file as it stands now, under its lock (update_json_file).
-    for path in _DISCOVERED_PATHS:
-        try:
-            update_json_file(
-                path, record, missing=lambda: dict(_load_discovered()), written=publish,
-                indent=2, sort_keys=True,
-            )
-            return
-        except LockTimeout:
-            # Another writer held the file far past a write's length. Not
-            # the next path, where the next read wouldn't look: this isn't
-            # recorded (file and cache agree), and the next crawl of the
-            # state proves it again.
-            logger.warning("Discovered source for %s not recorded — the file stayed locked", state)
-            return
-        except OSError:
-            continue
-    logger.warning("Nowhere writable to record discovered source for %s", state)
-    publish(record(dict(_load_discovered())))
+    # Into the file as it stands now, under its lock.
+    return update_first_writable(
+        _DISCOVERED_PATHS, record, missing=lambda: dict(_load_discovered()), publish=publish,
+        what=f"the discovered source for {state}", indent=2, sort_keys=True,
+    )
 
 
 def discovered_states() -> set[str]:

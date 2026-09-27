@@ -57,52 +57,47 @@ class TestCrawlAdoption:
         monkeypatch.setattr(sc, "discover_filings", no_filings)
         monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"ZZ": ["example.gov"]})
         monkeypatch.setattr(sc, "STRATEGIES", {"tabular": fake_fetch})
-        monkeypatch.setattr(sc, "save_discovered", lambda st, src: saved.update({st: src}))
+        monkeypatch.setattr(sc, "save_discovered", lambda st, src: saved.update({st: src}) or True)
         return saved
 
     @pytest.mark.asyncio
     async def test_one_states_failure_is_that_states_not_the_sweeps(self, db_session, monkeypatch):
         """A hand-verified adapter raising on a changed page costs its state,
-        not every state after it; a cut-off (cancellation) still ends the
-        sweep, and what it hears is only the states that finished."""
-        import asyncio
-
+        not every state after it."""
         self._patch(monkeypatch, records=[])
-        monkeypatch.setattr(sc, "ELECTION_DOMAINS", {st: ["x.gov"] for st in ("AA", "BB", "CC")})
+        monkeypatch.setattr(sc, "ELECTION_DOMAINS", {st: ["x.gov"] for st in ("AA", "BB")})
 
         async def broken(client, cycle, state, source):
             raise ValueError("the page changed")
 
         monkeypatch.setattr(sc, "STRATEGIES", {"broken": broken})
         monkeypatch.setattr(sc, "_sources_file", lambda: {"states": {"AA": {"strategy": "broken"}}})
+        monkeypatch.setattr(sc, "_forget_if_broken", lambda *a: _none())
+        crawled = []
 
         async def discover(client, state, cycle, rules=None):
-            if state == "CC":
-                raise asyncio.CancelledError  # cut off here
+            crawled.append(state)
             return None
 
         monkeypatch.setattr(sc, "discover_source", discover)
-        monkeypatch.setattr(sc, "_forget_if_broken", lambda *a: _none())
-        heard = []
-        with pytest.raises(asyncio.CancelledError):
-            await sc.crawl_for_new_sources(db_session, None, 2026, on_state=lambda st, out: heard.append((st, out)))
-        assert heard == [("AA", "error"), ("BB", "none")]
+        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert outcomes["AA"] == "error" and crawled == ["BB"]
 
     @pytest.mark.asyncio
-    async def test_a_sweep_continues_after_the_state_it_reached(self, db_session, monkeypatch):
-        """Forward only: a continued sweep never wraps back to the start."""
-        self._patch(monkeypatch, records=[])
-        monkeypatch.setattr(sc, "ELECTION_DOMAINS", {st: ["x.gov"] for st in ("AA", "BB", "CC")})
-        order = []
+    async def test_a_source_proved_but_not_recorded_is_not_adopted(self, db_session, monkeypatch):
+        """A save that lost a lock race isn't reported as an adoption."""
+        # Matched records are needed for the adoption path: reuse the
+        # positive test's setup through _patch, then make the save fail.
+        saved = self._patch(monkeypatch, records=[])
+        monkeypatch.setattr(sc, "save_discovered", lambda st, src: False)
+        monkeypatch.setattr(sc, "_confirmed_match", lambda *a: object())
 
-        async def discover(client, state, cycle, rules=None):
-            order.append(state)
-            return None
+        async def one_record(client, cycle, state, source):
+            return [{"office": "S", "name": "A Person"}]
 
-        monkeypatch.setattr(sc, "discover_source", discover)
-        monkeypatch.setattr(sc, "_forget_if_broken", lambda *a: _none())
-        await sc.crawl_for_new_sources(db_session, None, 2026, after="AA")
-        assert order == ["BB", "CC"]
+        monkeypatch.setattr(sc, "STRATEGIES", {"tabular": one_record})
+        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert outcomes["ZZ"] == "error" and saved == {}
 
     @pytest.mark.asyncio
     async def test_adopts_a_source_whose_nominees_are_real_candidates(

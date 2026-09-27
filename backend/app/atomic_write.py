@@ -18,18 +18,24 @@ two — can't each write back a copy missing the other's change.
 
 import fcntl
 import json
+import logging
 import os
 import stat
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import Any
 
+logger = logging.getLogger(__name__)
+
 # How long update_json_file waits for another writer's lock. A holder keeps
-# it for one read and one write of a small file — milliseconds. The writers
-# are pipeline steps, each on its own thread and event loop (never the
-# API's), so a wait delays only the pipeline that waits.
-LOCK_WAIT_S = 5.0
+# it for one read and one write of a small file — milliseconds — so a wait
+# this long means a stuck writer, not a busy one. The writers are pipeline
+# steps, each on its own thread and event loop (never the API's), so a wait
+# delays only the pipeline that waits; a loop of saves behind a stuck
+# writer costs this much per save, which is why the batchable ones (the
+# FEC calendar) are written in one update.
+LOCK_WAIT_S = 2.0
 
 
 class LockTimeout(Exception):
@@ -112,3 +118,33 @@ def _lock(fd: int, path: str) -> None:
             if time.monotonic() >= give_up:
                 raise LockTimeout(f"{path} stayed locked by another writer for {LOCK_WAIT_S}s") from None
             time.sleep(0.02)
+
+
+def update_first_writable(
+    paths: Iterable[str],
+    change: Callable[[dict[str, Any]], dict[str, Any]],
+    *,
+    missing: Callable[[], dict[str, Any]],
+    publish: Callable[[dict[str, Any]], None],
+    what: str,
+    **dump_kwargs: Any,
+) -> bool:
+    """`change` a shared data file with a module cache: the first writable
+    of `paths` (update_json_file), `publish(data)` updating the cache under
+    the file's lock. True when the change took effect — written, or, with
+    nowhere writable at all, applied to the cache alone. False when another
+    writer held the file past LOCK_WAIT_S: nothing is recorded (the file
+    and the cache agree), and nothing goes to a later path, where the next
+    read wouldn't look. The caller says what that costs."""
+    for path in paths:
+        try:
+            update_json_file(path, change, missing=missing, written=publish, **dump_kwargs)
+            return True
+        except LockTimeout:
+            logger.warning("%s not recorded — %s stayed locked by another writer", what, path)
+            return False
+        except OSError:
+            continue
+    logger.warning("Nowhere writable to record %s", what)
+    publish(change(dict(missing())))
+    return True

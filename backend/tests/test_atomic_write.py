@@ -162,9 +162,33 @@ def test_a_date_that_loses_a_lock_race_is_dropped_not_misfiled(workdir, monkeypa
     with open(f"{primary}.lock", "a") as held:
         fcntl.flock(held.fileno(), fcntl.LOCK_EX)
         dates.save("MN", 2026, {"primary": "2026-08-11"})
+        assert dates.save("MN", 2026, {"primary": "2026-08-12"}) is False  # the caller hears it
     assert dates.primary_date("MN", 2026) is None
     assert not primary.exists() and not fallback.exists()
 
     dates.save("WI", 2026, {"primary": "2026-08-11"})  # the lock is free again
     assert set(json.loads(primary.read_text())) == {"2026-WI"}
     assert dates.primary_date("WI", 2026) == "2026-08-11"
+
+
+def test_the_calendar_and_its_read_marker_land_together(workdir, monkeypatch):
+    """One update: the marker never vouches for a state whose dates weren't
+    recorded, and a lost lock race records neither."""
+    import fcntl
+
+    from app import atomic_write
+    from app.pipeline.fetch import state_election_dates as dates
+
+    primary = workdir / "dates.json"
+    monkeypatch.setattr(dates, "_PATHS", (str(primary),))
+    monkeypatch.setattr(dates, "_cache", None)
+    monkeypatch.setattr(atomic_write, "LOCK_WAIT_S", 0.05)
+    calendar = {"OH": {"primary": "2028-03-14", "senate": True}, "MN": {"primary": "2028-08-08"}}
+    with open(f"{primary}.lock", "a") as held:
+        fcntl.flock(held.fileno(), fcntl.LOCK_EX)
+        assert dates.save_calendar(2028, calendar, "2027-12-01") is False
+    assert dates.senate_election_known("OH", 2028) is None  # not read, rather than "no race"
+    assert dates.save_calendar(2028, calendar, "2027-12-01") is True
+    assert dates.senate_election_known("OH", 2028) is True
+    assert dates.senate_election_known("MN", 2028) is False
+    assert dates.primary_date("MN", 2028) == "2028-08-08"

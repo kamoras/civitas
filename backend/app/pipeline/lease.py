@@ -50,9 +50,6 @@ EXPLORE = "explore-lock"
 BILL_REFRESH = "bill-refresh-lock"
 BALLOT_SYNC = "ballot-sync-lock"
 COVERAGE_REFRESH = "coverage-refresh-lock"
-# The nightly election run's weekly ballot-source crawl: outside the ballot
-# sync's guards (it writes no Candidate row), but a writer all the same.
-SOURCE_CRAWL = "source-crawl-lock"
 # Every lease, which the data reset's wipe leaves in api_cache — its own, and
 # any other that may be live — with what each one's holder is.
 TIERS = {
@@ -66,7 +63,6 @@ TIERS = {
     BILL_REFRESH: "Bill status refresh",
     BALLOT_SYNC: "Ballot sync",
     COVERAGE_REFRESH: "Election coverage refresh",
-    SOURCE_CRAWL: "Ballot source crawl",
 }
 
 # Ten missed beats ride out a SQLite writer holding the database for
@@ -113,10 +109,6 @@ HUNG_AFTER = {
     BILL_REFRESH: timedelta(hours=2),
     BALLOT_SYNC: timedelta(hours=2),
     COVERAGE_REFRESH: timedelta(hours=2),
-    # A step in the middle of the nightly election run, so well inside the
-    # run's own limit; a sweep that needs longer goes on the next night
-    # (election_pipeline._weekly_source_crawl's cursor).
-    SOURCE_CRAWL: timedelta(hours=2),
 }
 
 
@@ -553,18 +545,6 @@ async def tracked_job_async(tier: str, tracker, *, who: str | None = None) -> As
         with _slot(tier, tracker, who):
             async with _bounded(tier, who):
                 yield granted
-
-
-@asynccontextmanager
-async def bounded_job_async(tier: str, *, who: str | None = None) -> AsyncIterator[Granted]:
-    """job_async() for work with no tracker: true while the lease is held,
-    and the body cut off (CutOff) at max_hold, when it stops holding."""
-    async with job_async(tier, who=who) as granted:
-        if not granted:
-            yield granted
-            return
-        async with _bounded(tier, who):
-            yield granted
 
 
 def run_tracked(tier: str, tracker, work, *, who: str | None = None):
