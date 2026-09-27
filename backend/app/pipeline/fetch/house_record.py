@@ -6,7 +6,6 @@ for ingestion into the explore document store.
 """
 
 import logging
-import re
 
 import httpx
 from sqlalchemy.orm import Session
@@ -16,16 +15,15 @@ from app.pipeline.fetch.congressional_record import (
     _fetch_json,
     _strip_html,
     _fetch_htm,
+    SPEAKER_RE,
     fetch_crec_packages,
+    speaker_of,
 )
 
 logger = logging.getLogger(__name__)
 
 GOVINFO_API_BASE = "https://api.govinfo.gov"
 
-_SPEAKER_RE = re.compile(
-    r"(?:Mr|Mrs|Ms|Miss)\.\s+([A-Z][A-Z\-\' ]{1,25})\."
-)
 
 _SKIP_SPEAKERS = frozenset({
     "SPEAKER", "SPEAKER pro tempore",
@@ -99,14 +97,14 @@ async def fetch_house_granule_text(
 
 def parse_house_speaking_turns(text: str) -> list[dict]:
     """Split House Congressional Record text into speaker-attributed segments."""
-    markers = list(_SPEAKER_RE.finditer(text))
+    markers = list(SPEAKER_RE.finditer(text))
     if not markers:
         return []
 
     turns: list[dict] = []
     for i, m in enumerate(markers):
-        speaker = m.group(1).strip().rstrip(".")
-        if speaker in _SKIP_SPEAKERS:
+        name, speaker = speaker_of(m)
+        if name in _SKIP_SPEAKERS:
             continue
 
         start = m.end()
@@ -134,7 +132,7 @@ async def fetch_house_floor_remarks(
     Each dict has keys: speaker, text, date, title — ready for explore
     document ingestion.
     """
-    cache_key = f"house-floor-remarks-{days_back}d-v1"
+    cache_key = f"house-floor-remarks-{days_back}d-v2"  # v2: "NAME of State" speakers
     cached = api_cache_get(db, "govinfo", cache_key)
     if cached is not None:
         return cached

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from app.api.rate_limit import UpstreamRouteLimit, spend_upstream
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, cached_json
 from app.database import get_db
 from app.http_client import make_async_client
@@ -54,18 +55,26 @@ def get_bill(bill_id: str, db: Session = Depends(get_db)) -> JSONResponse:
 
 @router.get("/bills/{bill_id}/record")
 async def get_bill_record(
+    _rl: UpstreamRouteLimit,
     bill_id: str,
     congress: int | None = Query(None, ge=93, le=200),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     """Any bill's public record: Congress.gov's summary, sponsors, actions
     and text versions, and every stored roll call on it with each party's
-    split. `congress` defaults to the current one."""
+    split. `congress` defaults to the current one.
+
+    A cache miss fetches from Congress.gov on the pipeline's own key, so the
+    route is rate-limited and its upstream calls budgeted (rate_limit.py);
+    a congress that hasn't begun is refused before anything is fetched."""
     if parse_bill_id(bill_id) is None:
         raise HTTPException(status_code=404, detail="Not a bill id")
-    congress = congress or expected_current_congress()
+    current = expected_current_congress()
+    congress = congress or current
+    if congress > current:
+        raise HTTPException(status_code=404, detail="That Congress hasn't convened")
     async with make_async_client() as client:
-        raw = await fetch_bill_record(client, db, congress, bill_id)
+        raw = await fetch_bill_record(client, db, congress, bill_id, spend=spend_upstream)
     if raw["not_found"]:
         raise HTTPException(status_code=404, detail="Bill not found")
     return _cached_json(shape_record(db, congress, bill_id, raw), max_age=CACHE_TTL_DETAIL_S)

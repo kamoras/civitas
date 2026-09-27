@@ -19,6 +19,15 @@ logger = logging.getLogger(__name__)
 
 CONGRESS_API_BASE = "https://api.congress.gov/v3"
 
+
+def congress_gov_bill_url(congress: int, url_type: str, number: str | int) -> str:
+    """A bill's public congress.gov page. `url_type` is congress.gov's own
+    ("house-bill", "senate-joint-resolution"...); the congress is written as
+    an ordinal ("119th-congress"), and a wrong suffix 404s."""
+    from app.ordinals import ordinal
+
+    return f"https://www.congress.gov/bill/{ordinal(congress)}-congress/{url_type}/{number}"
+
 _rate_limiter = RateLimiter(settings.CONGRESS_RPS)
 
 # Roll-call-number probe search, shared by the Senate and House "recent
@@ -858,6 +867,9 @@ def parse_house_vote_xml(
     legis_num = _meta_text("legis-num")
     vote_desc = _meta_text("vote-desc")
     vote_result = _meta_text("vote-result")
+    # "2/3 YEA-AND-NAY" on a suspension; a plain "YEA-AND-NAY" or
+    # "RECORDED VOTE" states no fraction and needs a simple majority.
+    requirement = re.match(r"\s*(\d+/\d+)", _meta_text("vote-type"))
     # e.g. "22-Jul-2026" — confirmed live against a real vote XML. Was
     # never parsed at all before (voteDate hardcoded to ""), which early-
     # signal reporting needs a real date for (ActionIssue.date). Left as
@@ -907,6 +919,7 @@ def parse_house_vote_xml(
         "documentName": legis_num,
         "result": vote_result,
         "rejected": roll_call_rejected(vote_result),
+        "majorityRequirement": requirement.group(1) if requirement else "1/2",
         "members": members,
         "chamber": "House",
     }

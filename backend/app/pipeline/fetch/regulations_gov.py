@@ -9,11 +9,14 @@ Rate limit: 1,000 requests/hour with an API key.
 
 import logging
 import re
+from collections.abc import Callable
 
 import httpx
+from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.http_client import make_async_client
+from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
 
 logger = logging.getLogger(__name__)
@@ -25,15 +28,34 @@ REG_BASE = "https://api.regulations.gov/v4"
 _COMMENTS_TIMEOUT_S = 15.0
 
 
-def _extract_document_object_id(comment_url: str) -> str | None:
-    """Extract the regulations.gov document objectId from a comment URL.
-
-    URLs look like:
+def _extract_document_id(comment_url: str) -> str | None:
+    """The regulations.gov documentId ("EPA-HQ-OAR-2021-0208-0001") from a
+    document's comment or page URL:
       https://www.regulations.gov/commenton/EPA-HQ-OAR-2021-0208-0001
       https://www.regulations.gov/document/EPA-HQ-OAR-2021-0208-0001
     """
-    match = re.search(r"regulations\.gov/(?:commenton|document)/([A-Z0-9_-]+)", comment_url)
+    match = re.search(r"regulations\.gov/(?:commenton|document)/([A-Za-z0-9_-]+)", comment_url)
     return match.group(1) if match else None
+
+
+_CACHE_TIER = "regulations"
+# A document's objectId never changes once assigned.
+_OBJECT_ID_CACHE_HOURS = 24 * 365
+# Comments post slowly; an hour-old page is current enough to read.
+_COMMENTS_CACHE_HOURS = 1
+
+
+async def _object_id(client: httpx.AsyncClient, api_key: str, document_id: str) -> str | None:
+    """The document's objectId, which the comments listing is keyed on."""
+    resp = await client.get(
+        f"{REG_BASE}/documents/{document_id}",
+        headers={"X-Api-Key": api_key},
+        timeout=_COMMENTS_TIMEOUT_S,
+    )
+    if resp.status_code != 200:
+        logger.warning("Regulations.gov document %s returned %d", document_id, resp.status_code)
+        return None
+    return ((resp.json().get("data") or {}).get("attributes") or {}).get("objectId") or None
 
 
 async def fetch_comments(
@@ -42,8 +64,19 @@ async def fetch_comments(
     page_number: int = 1,
     sort_by: str = "postedDate",
     sort_order: str = "desc",
+    *,
+    db: Session | None = None,
+    spend: Callable[[int], None] | None = None,
 ) -> dict:
     """Fetch public comments for a document from regulations.gov.
+
+    The listing is filtered on the document's objectId (a hex id such as
+    0900006483a6cba3), not the documentId in its URL: filter[commentOnId]
+    takes the objectId, and given the documentId it matched nothing, so every
+    document read as having no comments. The objectId is looked up once and
+    kept. With `db`, the objectId and each page are cached; `spend(n)` is
+    charged with the requests a call will make before it makes them (the
+    public route's upstream budget; it raises to refuse).
 
     Returns dict with keys: comments, totalElements, pageSize, pageNumber
     """
@@ -51,22 +84,41 @@ async def fetch_comments(
     if not api_key:
         return {"comments": [], "totalElements": 0, "error": "API key not configured"}
 
-    doc_id = _extract_document_object_id(comment_url)
-    if not doc_id:
+    document_id = _extract_document_id(comment_url)
+    if not document_id:
         return {"comments": [], "totalElements": 0, "error": "Could not parse document ID"}
 
-    params = {
-        "filter[commentOnId]": doc_id,
-        "page[size]": max(min(page_size, 25), 5),
-        "page[number]": page_number,
-        "sort": f"{'-' if sort_order == 'desc' else ''}{sort_by}",
-    }
+    size = max(min(page_size, 25), 5)
+    sort = f"{'-' if sort_order == 'desc' else ''}{sort_by}"
+    id_key = f"objectid-{document_id}"
+    page_key = f"comments-{document_id}-{size}-{page_number}-{sort}"
+    object_id = page = None
+    if db is not None:
+        object_id = (api_cache_get(db, _CACHE_TIER, id_key, max_age_hours=_OBJECT_ID_CACHE_HOURS) or {}).get("objectId")
+        page = api_cache_get(db, _CACHE_TIER, page_key, max_age_hours=_COMMENTS_CACHE_HOURS)
+    if page is not None:
+        return page
+    if spend is not None:
+        spend(1 if object_id else 2)
 
     async with make_async_client() as client:
         try:
+            if not object_id:
+                object_id = await _object_id(client, api_key, document_id)
+                if not object_id:
+                    return {"comments": [], "totalElements": 0, "error": "Document not found on Regulations.gov"}
+                if db is not None:
+                    api_cache_set(db, _CACHE_TIER, id_key, {"objectId": object_id},
+                                  normal_ttl_hours=_OBJECT_ID_CACHE_HOURS)
+
             resp = await client.get(
                 f"{REG_BASE}/comments",
-                params=params,
+                params={
+                    "filter[commentOnId]": object_id,
+                    "page[size]": size,
+                    "page[number]": page_number,
+                    "sort": sort,
+                },
                 headers={"X-Api-Key": api_key},
                 timeout=_COMMENTS_TIMEOUT_S,
             )
@@ -96,12 +148,15 @@ async def fetch_comments(
                     "category": attrs.get("category", ""),
                 })
 
-            return {
+            result = {
                 "comments": comments,
                 "totalElements": meta.get("totalElements", len(comments)),
-                "pageSize": page_size,
+                "pageSize": size,
                 "pageNumber": page_number,
             }
+            if db is not None:
+                api_cache_set(db, _CACHE_TIER, page_key, result, normal_ttl_hours=_COMMENTS_CACHE_HOURS)
+            return result
 
         except httpx.TimeoutException:
             logger.warning("Regulations.gov request timed out")
@@ -127,7 +182,7 @@ async def submit_comment(
     if not api_key:
         return {"success": False, "message": "API key not configured"}
 
-    doc_id = _extract_document_object_id(comment_url)
+    doc_id = _extract_document_id(comment_url)
     if not doc_id:
         return {"success": False, "message": "Could not parse document ID"}
 

@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
-from app.api.cache_headers import DataVersionCacheMiddleware
+from app.api.cache_headers import ETagCacheMiddleware
 from app.api.router import api_router
 from app.database import init_db
 from app.scheduler import start_scheduler, stop_scheduler
@@ -188,7 +188,7 @@ app.add_middleware(GZipMiddleware, minimum_size=500)
 # Added after GZip, so it runs *outside* it: a 304 short-circuit should
 # never reach the compressor, and the ETag is a weak validator precisely
 # because the body below it may or may not have been compressed.
-app.add_middleware(DataVersionCacheMiddleware)
+app.add_middleware(ETagCacheMiddleware)
 _cors_origins = [
     o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()
 ] if settings.CORS_ORIGINS else [

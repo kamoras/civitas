@@ -3,7 +3,6 @@
 import asyncio
 import json
 import logging
-import secrets
 import time
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query
@@ -11,9 +10,9 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.api.auth import check_pipeline_token
 from app.api.public import RateLimit
-from app.api.rate_limit import WriteRateLimit
-from app.config import settings
+from app.api.rate_limit import UpstreamRouteLimit, WriteRateLimit, spend_upstream
 from app.database import get_db
 from app.models import ExploreDocument
 from app.services.explore_search import hybrid_search
@@ -204,6 +203,7 @@ async def get_explore_document(doc_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{doc_id}/comments")
 async def get_document_comments(
+    _rl: UpstreamRouteLimit,
     doc_id: int,
     page: int = Query(1, ge=1, le=100),
     page_size: int = Query(25, ge=1, le=25),
@@ -226,6 +226,8 @@ async def get_document_comments(
         comment_url=doc.comment_url,
         page_size=page_size,
         page_number=page,
+        db=db,
+        spend=spend_upstream,
     )
     return JSONResponse(content=result)
 
@@ -243,30 +245,17 @@ async def post_document_comment(
     _rl: WriteRateLimit,
     submission: CommentSubmission | None = Body(None),
     db: Session = Depends(get_db),
-    # Legacy transport, kept for exactly one release so a frontend task that
-    # has not rolled yet (Swarm updates the two services independently, and
-    # a rollback reverts only one) can still submit. The body is the real
-    # interface: a query string lands in nginx's and uvicorn's access logs,
-    # which put every commenter's name and full comment text in the
-    # container logs — and a 5,000-character comment, percent-encoded, can
-    # outgrow nginx's 8k request-line buffer and fail with a 414. Remove
-    # these four parameters in the release after this one.
-    comment: str | None = Query(None, min_length=10, max_length=5000, include_in_schema=False),
-    name: str = Query("Anonymous", max_length=100, include_in_schema=False),
-    organization: str = Query("", max_length=200, include_in_schema=False),
-    dry_run: bool = Query(False, include_in_schema=False),
 ):
     """Submit a public comment on a regulatory document via regulations.gov.
 
-    Send the comment as a JSON body. Set ``dry_run`` to validate everything
-    without actually submitting.
+    Send the comment as a JSON body, never a query string: a URL lands in
+    nginx's and uvicorn's access logs, which would put every commenter's name
+    and full comment text in the container logs (the query transport, kept
+    one release for frontend tasks still rolling, was removed 2026-09). Set
+    ``dry_run`` to validate everything without actually submitting.
     """
     if submission is None:
-        if comment is None:
-            raise HTTPException(status_code=422, detail="Comment text is required")
-        submission = CommentSubmission(
-            comment=comment, name=name, organization=organization, dry_run=dry_run,
-        )
+        raise HTTPException(status_code=422, detail="Comment text is required")
     comment = submission.comment
     name = submission.name
     organization = submission.organization
@@ -283,10 +272,10 @@ async def post_document_comment(
         if doc.comments_close_on < comment_period_today():
             raise HTTPException(status_code=400, detail="The comment period for this document has closed")
 
-    from app.pipeline.fetch.regulations_gov import submit_comment, _extract_document_object_id
+    from app.pipeline.fetch.regulations_gov import submit_comment, _extract_document_id
 
     if dry_run:
-        reg_doc_id = _extract_document_object_id(doc.comment_url)
+        reg_doc_id = _extract_document_id(doc.comment_url)
         return JSONResponse(content={
             "success": True,
             "dryRun": True,
@@ -402,11 +391,7 @@ async def get_explore_document_summary(
 @router.post("/pipeline/trigger")
 async def trigger_explore_pipeline(authorization: str | None = Header(default=None)):
     """Trigger the explore document ingestion pipeline."""
-    if not settings.PIPELINE_TRIGGER_TOKEN:
-        raise HTTPException(status_code=503, detail="Pipeline trigger token not configured")
-    expected = f"Bearer {settings.PIPELINE_TRIGGER_TOKEN}"
-    if not authorization or not secrets.compare_digest(authorization, expected):
-        raise HTTPException(status_code=403, detail="Invalid token")
+    check_pipeline_token(authorization)
 
     from app.api.pipeline_runner import run_pipeline_in_thread
 

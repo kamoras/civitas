@@ -71,3 +71,23 @@ class TestParseSpeakingTurns:
         speakers = [t["speaker"] for t in turns]
         assert "SMITH" not in speakers
         assert "JONES" in speakers
+
+
+class TestSpeakersTheRecordQualifies:
+    BODY = " I rise today to speak about the appropriations bill before us this week."
+
+    def test_a_shared_surname_carries_its_state(self):
+        text = f"Mr. SCOTT of Florida.{self.BODY} Mr. SCOTT of South Carolina.{self.BODY}"
+        assert [t["speaker"] for t in parse_speaking_turns(text)] == [
+            "SCOTT of Florida", "SCOTT of South Carolina",
+        ]
+
+    def test_mixed_case_and_two_word_surnames(self):
+        text = f"Mr. McGOVERN.{self.BODY} Ms. BLUNT ROCHESTER.{self.BODY} Ms. DeLAURO.{self.BODY}"
+        assert [t["speaker"] for t in parse_speaking_turns(text)] == ["McGOVERN", "BLUNT ROCHESTER", "DeLAURO"]
+
+    def test_the_house_parser_reads_them_too(self):
+        from app.pipeline.fetch.house_record import parse_house_speaking_turns
+
+        text = f"Mr. JOHNSON of Louisiana.{self.BODY}"
+        assert [t["speaker"] for t in parse_house_speaking_turns(text)] == ["JOHNSON of Louisiana"]
