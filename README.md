@@ -10,9 +10,9 @@ House representatives, presidents, and Supreme Court justices. It also
 features an Action Center that surfaces trending civic issues from news
 analysis, auto-detects ongoing national concerns as trackable monitors,
 and builds a year-in-review timeline. Voting records, campaign finance,
-floor speeches, judicial opinions, and stated platforms are analyzed using
-embedding-based classification, content-based party alignment, and
-deterministic scoring — all running locally on a Raspberry Pi 5 with zero
+floor speeches, judicial opinions, and party platforms are analyzed using
+embedding-based classification, roll-call party alignment (content-based
+where no roll call exists), and deterministic scoring — all running locally on a Raspberry Pi 5 with zero
 external API calls to cloud AI services.
 
 ---
@@ -204,7 +204,7 @@ not for scoring.
 
 ### Phase 5 — JUSTICES
 
-Fetches and scores Supreme Court justices from Oyez (`justice_analyzer.py`):
+Fetches and scores Supreme Court justices from Oyez (`justice_analyzer.py`), weekly on Sunday UTC (or whenever the table is empty — the uncached per-case crawl takes hours):
 - Pulls each justice's votes in the Court's decided cases
 - Scores consistency: how little a justice's agreement differs between their appointing party's bloc and the other, weighted toward close decisions
 - Scores independence: per non-unanimous case, the share of the opposing bloc on the justice's side times the share of their own bloc against it, averaged
@@ -267,9 +267,9 @@ The pipeline is structured around a specific set of constraints that shape every
 
 ### Why a Nightly Batch Pipeline?
 
-A 100-senator + 435-representative full refresh requires 4–6 hours cold (warm: 45–90 minutes). Online/streaming processing is not viable at these volumes on the target hardware: the sentence-transformer model occupies ~90 MB, the LLM occupies ~900 MB, and peak memory during the analyze phase (overlapped embedding + LLM) reaches ~3 GB. Batching allows us to control memory precisely, while a separate hourly pipeline handles the Action Center's lower-latency requirements.
+A 100-senator + 435-representative full refresh requires 4–6 hours cold (warm: 45–90 minutes). Online/streaming processing is not viable at these volumes on the target hardware: two sentence-transformer models occupy ~90 MB each and the LLM ~900 MB (a separate service, used only by the Action Center and justice summaries — the member pipelines make no LLM call). Batching allows us to control memory precisely, while a separate hourly pipeline handles the Action Center's lower-latency requirements.
 
-The pipeline uses a SQLite-level mutex (`PipelineRun.status == "running"`) rather than a process-level lock, making it safe to deploy in multi-container blue/green environments: any new container discovering an in-progress run on startup marks it `stale` rather than blocking.
+Each pipeline holds a database-level lock rather than a process-level one: a run row with `status = "running"`, which a partial UNIQUE index lets only one process insert at a time (`run_tracker.acquire_pipeline_lock`), so two backend processes overlapping during a Swarm rollout can't both start the same pipeline. Pipelines run as threads of the backend, so a restart kills them without letting them record it; on startup the backend marks every pipeline's leftover `running` row `stale` (`main._invalidate_orphaned_pipelines`), and a row older than 12 hours is cleared at the next acquisition. `check-and-deploy.sh` does not deploy while any pipeline is running.
 
 ### Why an Adversarial Data Architecture?
 
@@ -290,24 +290,25 @@ module docstring for the measured cost/quality numbers that motivated the
 removal.
 
 The LLM is still used where the output genuinely requires natural-language
-synthesis from unstructured input: Action Center issue generation (daily
-news clustering → structured facts/summary) and Supreme Court justice
+synthesis from unstructured input: Action Center claim location (it
+points at an attributable sentence in a clustered article; the text shown is
+the source's own, checked verbatim) and Supreme Court justice
 profile summaries (9 justices, from pre-computed voting statistics).
 
 Everything else uses geometric methods in sentence-embedding space:
 
 | Task | Method | Rationale |
 |------|---------|-----------|
-| Bill policy area | Nearest centroid (18 prototypes) | Deterministic, explainable, ~100ms vs. ~30s |
-| Donor industry | k-NN (300+ labeled entities) | Generalizes from precedent; full audit trail |
-| Party alignment | Nearest centroid (party platform corpora) | Content-based, not vote-based — avoids circular reasoning |
-| Lobbying conflicts | Cosine similarity (donor industry ↔ bill policy) | Transparent, reproducible threshold |
+| Bill policy area | Prototype similarity, kNN over the learning store for the residual (17 areas incl. procedural) | Deterministic, explainable, ~100ms vs. ~30s |
+| Donor industry | Tiered: FEC metadata → learning store → prototype similarity → kNN | Generalizes from precedent; full audit trail |
+| Party alignment | The roll call's actual party split; content similarity to party platform positions only where no roll call exists | Loyalty is defined by how the parties voted (see "Party Alignment" below) |
+| Donor–vote connections | Industry funding share × policy-anchored vote similarity | Transparent, reproducible threshold |
 | Key vote selection | Composite score: party deviation + donor overlap | Fully deterministic |
 | Monitor deduplication | Pairwise cosine (full text + title-only) | Robust to surface paraphrase |
 | Issue deduplication | Post-LLM title embedding similarity | Catches LLM-generated near-duplicates missed by pre-filtering |
 | Issue topic continuity | Cosine similarity across 2-day lookback | Ensures same story maps to same DB row across runs and rank changes |
 
-LLM calls per full nightly run: 0 (Phase 3 is fully deterministic, see above). The LLM runs on its own schedule for Action Center issue generation (hourly, a handful of calls per run) and the Supreme Court justice pipeline (9 calls, once per nightly run). Embedding operations per full nightly run: ~50,000. The pipeline is a **semantic classification and retrieval system** that uses a language model only where natural-language synthesis is unavoidable.
+LLM calls per full nightly run: 0 (Phase 3 is fully deterministic, see above). The LLM runs on its own schedule for Action Center claim location (hourly, a handful of calls per run) and the Supreme Court justice profiles (one call per justice, in the weekly Sunday refresh). Embedding operations per full nightly run: ~50,000. The pipeline is a **semantic classification and retrieval system** that uses a language model only where natural-language synthesis is unavoidable.
 
 ### Why Local Inference?
 
@@ -316,7 +317,7 @@ LLM calls per full nightly run: 0 (Phase 3 is fully deterministic, see above). T
 3. **Reproducibility.** Model weights are pinned. An analysis run today produces identical output to one run six months ago on the same input. Cloud-hosted models update without notice.
 4. **Latency independence.** No rate limits, no network jitter, no API quota.
 
-The choice of LFM2.5-1.2B-Instruct over larger alternatives (7B+) is deliberate. The inference tasks here are structured extraction — completing a constrained template (list key facts, classify stance, extract promise text) — not open-ended generation. Empirically, a ~1B-class model produces acceptable quality on these tasks in a few seconds per call on ARM, vs. 25–45s for a 7B model. The quality ceiling is determined by the structure of the prompt, not model size.
+The choice of LFM2.5-1.2B-Instruct over larger alternatives (7B+) is deliberate. The inference tasks here are structured extraction — completing a constrained template (key facts and actions from a cluster of news articles, a justice profile from precomputed voting statistics) — not open-ended generation. Empirically, a ~1B-class model produces acceptable quality on these tasks in a few seconds per call on ARM, vs. 25–45s for a 7B model. The quality ceiling is determined by the structure of the prompt, not model size.
 
 ---
 
@@ -355,25 +356,25 @@ These three are documented at the point of definition in code, alongside two pur
 
 A persistent learning store (SQLite `LearnedClassification`) accumulates labeled classifications across pipeline runs. A vector reference corpus (the `vec_bills` sqlite-vec table) grows with each run. Together they implement a retrieval-augmented classification pattern: past decisions inform future ones, reducing both latency and error rate over time (Lewis et al. 2020).
 
-Confidence levels distinguish source quality:
-- `1.0` — rule-based (FEC metadata, exact match)
-- `0.9` — embedding-based (cosine similarity classification)
-- `0.7` — LLM-based (structured extraction)
+Confidence levels distinguish source quality (`donor_classifier_ai._CONFIDENCE_MAP`):
+- `1.0` — FEC structured metadata
+- `0.92` — an embedding cross-check that corrected a previously learned industry
+- `0.9` — embedding prototype similarity
+- `0.75` — kNN vote. Stored for lookup, but never used as a kNN reference example: only labels from an upstream tier vote, so one run's guess can't become the next run's evidence.
 
 This enables selective re-verification: low-confidence classifications from previous runs can be re-evaluated when related code changes.
 
-**Version-aware artifact management** ensures updated analysis algorithms always produce fresh results. At pipeline start, a SHA-256 fingerprint of all analysis source files (their docstring-stripped syntax trees, so comment edits don't count) is compared to the stored hash from the last run. If the code has changed, stale artifacts (LLM cache, learned classifications, kNN reference corpus) are cleared so updated algorithms start clean. The API cache (raw Congress.gov / FEC / GovInfo responses) is never cleared — it reflects source data, not processing logic.
+**Version-aware artifact management** ensures updated analysis algorithms always produce fresh results. At pipeline start, a SHA-256 fingerprint of all analysis source files (their docstring-stripped syntax trees, so comment edits don't count) is compared to the stored hash from the last run. If the code has changed, stale artifacts (analysis cache, learned classifications, kNN reference corpus) are cleared so updated algorithms start clean. The API cache (raw Congress.gov / FEC / GovInfo responses) is never cleared — it reflects source data, not processing logic.
 
 ### Party Alignment (Content-Based)
 
-Party alignment for bills is determined by **what the bill does**, not how senators voted on it. This addresses a fundamental limitation of roll-call-based ideology measures (Poole & Rosenthal 1985; Clinton, Jackman & Rivers 2004): vote outcomes reflect party discipline, logrolling, and strategic calculation as much as the bill's ideological content.
+A bill's party alignment comes from **how the parties actually voted on it** whenever a roll call exists, and from its content only when none does (`party_platform.refine_with_vote_data`). Its consumer is the voted-with-party computation, and "did this member break with their party" is defined by the parties' real split: a bill whose content reads partisan but passed with both party majorities must not count as a party-line vote. (Content used to win over a bipartisan split; a 2026-06 audit found that pinned every House member's score near 87–89.)
 
-The system implements a nearest-centroid classifier (Rocchio 1971) in sentence-embedding space:
+Where no roll call exists, and for the per-area partisan-depth breakdown, a nearest-centroid classifier (Rocchio 1971) in sentence-embedding space reads the content:
 1. Each party's platform positions per policy area are embedded as centroids
 2. Bill text is embedded and compared to both party centroids
 3. Stance direction (pro/anti) disambiguates policy-area overlap
-4. Vote tallies refine (not override) the content-based classification
-5. Sponsor party data serves as supervised ground truth for adaptive learning
+4. Sponsor party data serves as supervised ground truth for adaptive learning
 
 Independent senators have their caucus party inferred mathematically from voting patterns (proportion of votes aligning with each party), ensuring they are scored fairly against the party they actually caucus with.
 
@@ -388,7 +389,7 @@ Every hour at :15
        │
        ▼
   1. FETCH ───── RSS (AP, NPR, PBS, BBC, The Hill, Politico, Roll Call —
-       │         9 feeds across 7 newsrooms; NPR's two desks count as one)
+       │         8 feeds across 7 newsrooms; NPR's two desks count as one)
        │         + Google Trends + Bluesky trending
        │         48-hour article window; direct URLs only (no redirect wrappers)
        │         Reddit was a third trending source until 2026-09: it now
@@ -398,11 +399,11 @@ Every hour at :15
        │         as a source that simply had nothing to say.
        ▼
   2. FILTER ──── Embed each article against 24 policy prototypes (19 US, 5 intl.)
-       │         Discard cosine_sim < 0.22 (off-topic articles)
+       │         Discard cosine_sim < 0.20 (off-topic articles)
        ▼
   3. CLUSTER ─── Pairwise cosine similarity on title embeddings
        │         Merge clusters starting at centroid similarity 0.20, self-
-       │         calibrated upward in 0.05 steps (to 0.61 max) to avoid
+       │         calibrated upward in 0.05 steps (to 0.60 max) to avoid
        │         collapsing everything into one mega-cluster
        │         Titles are compared with the day's mean headline vector
        │         removed. The later per-cluster split and coherence filter
@@ -482,7 +483,7 @@ Every hour at :15
 
 **Why cluster before ranking?** Articles about the same event arrive from multiple outlets within minutes. Without clustering, every "top issue" would be the same story from AP, NPR, BBC, and PBS. Clustering first, then ranking by source breadth, surfaces the most distinct newsworthy topics.
 
-**Why filter at 0.22 cosine similarity?** The policy prototype filter is deliberately permissive. False negatives (dropping a real policy story) are worse than false positives. Borderline cases are handled downstream by extraction rather than by asking a model to be neutral: a cluster that yields no verbatim, adjacently-asserted claim simply produces no issue.
+**Why filter at 0.20 cosine similarity?** The policy prototype filter is deliberately permissive. False negatives (dropping a real policy story) are worse than false positives. Borderline cases are handled downstream by extraction rather than by asking a model to be neutral: a cluster that yields no verbatim, adjacently-asserted claim simply produces no issue.
 
 **Why a 5-day monitor threshold?** A topic appearing in the top issues on 5+ distinct days within two weeks is structurally different from a one-day news spike — it indicates a developing situation citizens may need to track. Shorter thresholds created too many ephemeral monitors.
 
@@ -806,30 +807,30 @@ Each senator and House representative carries five sub-scores (0-100, higher = b
 | **Funding Independence** | 33% | PAC dependency + small-donor share + top-donor concentration + industry concentration | Stratmann 2005; Parmigiani 2025 |
 | **Constituent Alignment** | 33% | Break rate vs. same-party members in same-lean seats + roll-call position congruence (Nokken-Poole vs. seat-conditional norm) | Carson et al. 2010; Canes-Wrone, Brady & Cogan 2002; Nokken & Poole 2004 |
 | **Legislative Effectiveness** | 34% | Stage-normalized Volden & Wiseman LES (majority-status-benchmarked) + cosponsorship leadership (PageRank) + bipartisan coalition attraction | Volden & Wiseman 2014; Harbridge-Yong, Volden & Wiseman 2023 |
-| Promise Persistence | unweighted (v6.0) | Campaign commitments kept vs. broken + vote participation | Naurin 2011; Martin 2011 |
-| Funding Diversity | unweighted (v6.5, folded into FI) | Donor traceability + industry diversity (inverse HHI) | Rhoades 1993; Parmigiani 2025 |
+| Promise Persistence | unweighted (v6.0) | Always the neutral 50: campaign-promise tracking was removed in 2026-07 (its formula — commitments kept vs. broken + vote participation — has no input) | Naurin 2011; Martin 2011 |
+| Funding Diversity | unweighted (v6.5, folded into FI) | Source breadth + industry diversity (inverse HHI) | Rhoades 1993; Parmigiani 2025 |
 
-House representatives use the same scoring framework, data sources, and classification pipeline as senators, ensuring comparable scores across chambers (with chamber-specific calibration constants where the chambers' real baselines genuinely differ — PAC-ratio multiplier and effectiveness baselines). One sourcing difference: senators' campaign commitments come from scraped senate.gov platform text (LLM-extracted, heuristic fallback), while representatives' positions are derived from the bills they sponsor and evaluated against their floor votes with embeddings only — the House pipeline makes no LLM calls for promise analysis.
+House representatives use the same scoring framework, data sources, and classification pipeline as senators, ensuring comparable scores across chambers (with chamber-specific calibration constants where the chambers' real baselines genuinely differ — PAC-ratio multiplier and effectiveness baselines).
 
 Score history is tracked in `ScoreSnapshot` records so the frontend can render historical score trends per senator/representative.
 
-Additional senator metrics (informational, not scored):
+Additional member metrics, both chambers (informational, not scored):
 
 | Metric | What It Measures | Technique |
 |--------|------------------|-----------|
-| **Leadership Score** | Legislative influence — how many peers cosponsor this senator's bills | PageRank on cosponsorship graph (Brin & Page 1998) |
+| **Leadership Score** | Legislative influence — how many peers cosponsor this member's bills | PageRank on cosponsorship graph (Brin & Page 1998) |
 | **Ideology Score** | Behavioral ideological position derived from cosponsorship patterns | SVD on cosponsorship matrix (Tauberer 2012) |
-| **Partisan Depth** | How deeply aligned with their party across policy areas | Content-based voting analysis with SVD ideology as a prior (linear blend) |
+| **Partisan Depth** | How deeply aligned with their party across policy areas | Yea/Nay ratio on D- vs R-leaning bills per area, with SVD ideology as a prior while votes are few; the label is the member's tercile within their own party |
 
 ### Supreme Court Justice Scores
 
-Each justice is scored on impartiality and ideological consistency based on case-level voting data from the Oyez Project and Supreme Court APIs.
+Each justice is scored on consistency and independence (`JUSTICE_SCORE_WEIGHTS`) from case-level voting data from the Oyez Project and supremecourt.gov — see Phase 5 above for the formulas.
 
 ### Presidential Scores
 
 Presidents are scored on four dimensions — Public Mandate (21.67%), Effectiveness (21.67%), Agency Alignment (21.67%), and Historical Legacy (35%) — using a mix of live API data (BLS employment, BEA/FRED GDP, Federal Register rulemaking) and historical records (C-SPAN Historians Survey, UCSB American Presidency Project approval and election margins, MeasuringWorth GDP). Independence, Follow-Through, and Competence were removed in 2026-07 rather than left as hand-set values with no live formula behind them; a president with no data source for a dimension shows N/A and the overall score renormalizes over whichever dimensions actually apply. See the [scoring changelog](/changelog) for the full account.
 
-All scores default to 50 when data is insufficient. No LLM input is used in score calculation — formulas are deterministic and auditable.
+A member's dimension falls back to a neutral 50 when its data is missing or too thin to trust (a failed fetch, a new member), and is shrunk toward 50 as its evidence thins; a president's dimension with no data source shows N/A instead. A record that is present but empty is not missing: a member with no substantive bills after half a year in office scores Legislative Effectiveness on a credit of 0. No LLM input is used in score calculation — formulas are deterministic and auditable.
 
 ---
 

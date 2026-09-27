@@ -847,7 +847,7 @@ def _classify_remaining_via_nn(
 
 
 _CONFIDENCE_MAP = {
-    "fec": 1.0, "rules": 0.95, "embedding_correction": 0.92,
+    "fec": 1.0, "embedding_correction": 0.92,
     "semantic": 0.9, "embedding": 0.9, "nn": 0.75,
 }
 

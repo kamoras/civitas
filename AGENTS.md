@@ -38,12 +38,13 @@ here, say so explicitly with the evidence, rather than filing it away.
 Civitas is an AI/ML political transparency platform that scores U.S. senators,
 House representatives, presidents, and Supreme Court justices on how well they
 represent constituents. It aggregates voting records, campaign finance, floor
-speeches, judicial opinions, and stated platforms from official government
-sources, then analyzes them using embedding-based classification, content-based
-party alignment, and deterministic scoring. It also features an Action Center
+speeches, judicial opinions, and party platforms from official government
+sources, then analyzes them using embedding-based classification, roll-call
+party alignment (content-based where no roll call exists), and deterministic
+scoring. It also features an Action Center
 that surfaces trending civic issues from news feeds, auto-detects ongoing
 national concerns as trackable monitors, builds a year-in-review timeline, and
-provides non-partisan summaries with recommended actions. Everything runs
+shows each story in its sources' own words with recommended actions. Everything runs
 locally on a single self-hosted device with zero cloud AI calls.
 
 ## Architecture
@@ -60,7 +61,7 @@ locally on a single self-hosted device with zero cloud AI calls.
   Explore search; see `pipeline/lexical_index.py`
 - **Deployment**: Docker Swarm (single-node), `docker stack deploy` for zero-downtime rolling updates, nginx (in-stack) reverse proxy with caching
 - **Branches covered**: Senate (100 senators), House (435 representatives), Presidents (historical + modern), Supreme Court (9 justices)
-- **News Feeds**: RSS parsing (AP, NPR, Reuters, PBS) + Google Trends + Reddit trending for Action Center
+- **News Feeds**: RSS parsing (AP, NPR, PBS, BBC, The Hill, Politico, Roll Call) + Google Trends + Bluesky trending for Action Center; 41 per-state newsrooms for election races
 - **Action Center**: National monitors (auto-detected ongoing concerns), year-in-review timeline, elections tab
 - **Elections**: State index → per-state ballot page (federal contests + statewide ballot measures, quoted verbatim) → race/candidate detail with FEC financials
 
@@ -148,11 +149,15 @@ of these approaches:
   classifications become labeled examples for future runs
 - **Statistical formulas** with shrinkage toward neutral for scoring metrics
 - **LLM inference** for tasks that require natural language synthesis from
-  unstructured input: Action Center issue generation and justice profile
-  summaries. (Per-senator/rep narrative generation and promise evaluation
-  used to be LLM-based; both were removed in 2026-07 after live audits
-  found the output unreliable regardless of prompting approach — see
-  `cross_reference.py`'s and `policy_alignment.py`'s module docstrings.)
+  unstructured input: Action Center claim location (verbatim-checked),
+  monitor significance and merge decisions, timeline period summaries,
+  Bluesky post text, early-signal vote drafts, on-request Explore document
+  summaries (`POST /api/explore/{id}/summary`, a write), and justice profile
+  summaries. Never a score, and never ballot content (§7). (Per-senator/rep
+  narrative generation and promise evaluation used to be LLM-based; both
+  were removed in 2026-07 after live audits found the output unreliable
+  regardless of prompting approach — see `cross_reference.py`'s and
+  `policy_alignment.py`'s module docstrings.)
 
 **Never add hardcoded keyword lists, regex patterns, suffix checks, or
 if/else string-matching heuristics to make classification decisions.** If you
@@ -202,7 +207,7 @@ the residual.
 | 2 | Sentence-transformer cosine similarity | Industry, donor type, bill policy, party alignment, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection, category normalization |
 | 2b | SVD / PageRank on cosponsorship matrix | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
 | 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills |
-| 4 | LLM (LFM2.5-1.2B-Instruct) | Action center issue summarization, justice profile summaries |
+| 4 | LLM (LFM2.5-1.2B-Instruct) | Natural-language text only — Action Center claims and summaries, Bluesky posts, Explore document summaries, justice profiles (full list in the bullet above) |
 
 When FEC metadata is ambiguous (e.g., entity_type "COM" could be a corporate
 employee PAC or a purely political PAC), the system defers to tier 2
@@ -661,9 +666,12 @@ that office, comparison against predecessors is the only meaningful ranking.
 In addition to the main pipeline, the **Action Center pipeline** runs hourly to
 surface trending civic issues. It fetches RSS feeds from low-bias news sources,
 filters articles for U.S. policy relevance using embedding similarity, clusters
-related articles, incorporates trending topics from Google Trends and Reddit,
-and uses the LLM to generate non-partisan summaries with recommended citizen
-actions. Results are stored in the `action_issues` table.
+related articles, incorporates trending topics from Google Trends and Bluesky,
+and uses the LLM only to *locate* attributable claims in the articles: the
+summary and facts are the sources' own words, checked verbatim
+(`post_composer.py`), and the recommended actions are built from real bill and
+source URLs (`_build_actions_from_data`), never written by the model. Results
+are stored in the `action_issues` table.
 
 Feed descriptions are **stripped of HTML** as they are parsed
 (`news_feeds._strip_html`): the WordPress-backed feeds put real markup in

@@ -19,11 +19,11 @@ flowchart TB
     FETCH --> FILTER
 
     FILTER["<b>2. FILTER</b><br/>embed each article against<br/>24 policy prototypes (19 US, 5 international)"]
-    FILTER --> RELCHECK{"cosine ≥ 0.22?"}
+    FILTER --> RELCHECK{"cosine ≥ 0.20?"}
     RELCHECK -->|no| DROP(["Discard — off topic"])
     RELCHECK -->|yes| CLUSTER
 
-    CLUSTER["<b>3. CLUSTER</b><br/>pairwise cosine on title embeddings<br/>merge from centroid sim 0.20,<br/>self-calibrating up in 0.05 steps to 0.61"]
+    CLUSTER["<b>3. CLUSTER</b><br/>pairwise cosine on title embeddings<br/>merge from centroid sim 0.20,<br/>self-calibrating up in 0.05 steps to 0.60"]
     CLUSTER --> RANK
 
     RANK["<b>4. RANK</b><br/>0.40 × civic actionability<br/>0.35 × source breadth<br/>0.25 × trending relevance"]
@@ -77,7 +77,7 @@ within minutes. Rank first and every "top issue" is the same story from AP,
 NPR, BBC and PBS. Clustering first, then ranking by source breadth, surfaces
 *distinct* stories.
 
-**0.22 relevance filter is deliberately permissive.** A false negative drops a
+**0.20 relevance filter is deliberately permissive.** A false negative drops a
 real policy story; a false positive is caught downstream by extraction — a
 cluster that yields no verbatim, adjacently-asserted claim produces no issue at
 all. The asymmetry favours recall.
@@ -108,7 +108,7 @@ articles instead of 14.
 **Self-calibrating cluster merge.** A fixed similarity threshold either
 fragments one story across many clusters or collapses everything into one
 mega-cluster, depending on the day's news. Starting at 0.20 and stepping up to
-at most 0.61 lets the run find its own threshold.
+at most 0.60 lets the run find its own threshold.
 
 **5 days in 14 for a monitor.** A topic in the top issues on five separate days
 within a fortnight is structurally different from a one-day spike — it's a
