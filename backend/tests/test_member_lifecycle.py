@@ -424,3 +424,14 @@ def test_a_different_person_under_the_same_id_loses_only_the_departed_chambers_l
     links = {d.chamber: d.politician_id for d in db_session.query(ExploreDocument)}
     assert links == {"House": None, "Senate": "smith-john"}
 
+
+
+def test_a_profile_shows_whichever_chamber_the_member_serves_in_now(db_session):
+    from app.api.politicians import _detect_branch
+
+    _senator(db_session, "same-id", "S000010", is_current=False, left=RECENT)
+    _rep(db_session, "same-id", "S000010")
+    db_session.flush()
+    assert _detect_branch("same-id", db_session)[0] == "house"
+    db_session.get(Representative, "same-id").is_current = False
+    assert _detect_branch("same-id", db_session)[0] == "senate"

@@ -255,12 +255,18 @@ def list_politicians(
 # ---------------------------------------------------------------------------
 
 def _detect_branch(pid: str, db: Session) -> tuple[str, object] | None:
-    row = db.query(Senator).filter(Senator.id == pid).first()
-    if row:
-        return ("senate", row)
-    row = db.query(Representative).filter(Representative.id == pid).first()
-    if row:
-        return ("house", row)
+    # Both chambers' ids are the member's "last-first" name, so one id can be
+    # a departed row in one chamber and a serving member in the other (a
+    # representative who went on to the Senate, or back): the serving one is
+    # who the page is about.
+    senator = db.query(Senator).filter(Senator.id == pid).first()
+    rep = db.query(Representative).filter(Representative.id == pid).first()
+    if rep and rep.is_current and not (senator and senator.is_current):
+        return ("house", rep)
+    if senator:
+        return ("senate", senator)
+    if rep:
+        return ("house", rep)
     row = db.query(President).filter(President.id == pid).first()
     if row:
         return ("president", row)
