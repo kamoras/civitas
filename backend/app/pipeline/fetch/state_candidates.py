@@ -537,6 +537,7 @@ def _prune_ballot_only(
 
 async def crawl_for_new_sources(
     db: Session, client: httpx.AsyncClient, cycle: int, *,
+    after: str | None = None,
     on_state: Callable[[str, str], None] | None = None,
 ) -> dict:
     """Look for a usable results source in every state that doesn't have a
@@ -561,12 +562,14 @@ async def crawl_for_new_sources(
 
     One state's failure (an adapter raising on a changed page) is that
     state's "error", not the sweep's end: every other state is still
+    crawled, and it is crawled again on the next weekly sweep. `after`
+    continues a sweep cut off partway: only the states sorted after it are
     crawled. `on_state(state, outcome)` hears each state as it finishes, so
-    a caller cut off partway still knows what was adopted before the cut.
+    a caller cut off partway knows where to continue and what it adopted.
     """
     hand_verified = (_sources_file().get("states") or {})
     outcomes: dict[str, str] = {}
-    for state in sorted(ELECTION_DOMAINS):
+    for state in sorted(st for st in ELECTION_DOMAINS if after is None or st > after):
         cut_off = False  # a state the crawl was cancelled out of isn't finished
         try:
             hand = hand_verified.get(state)

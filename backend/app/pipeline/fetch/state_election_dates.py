@@ -48,7 +48,7 @@ from typing import Any
 
 import httpx
 
-from app.atomic_write import SharedJsonFile
+from app.atomic_write import LockTimeout, update_json_file
 
 logger = logging.getLogger(__name__)
 
@@ -129,17 +129,29 @@ def save(state: str, cycle: int, dates: dict) -> None:
         known[key] = {**known.get(key, {}), **{k: v for k, v in dates.items() if v}}
         return known
 
+    def publish(known: dict[str, Any]) -> None:
+        global _cache
+        _cache = known
+
     # Merged into the file as it stands now, under its lock: the source
-    # crawl and a ballot sync both write here (atomic_write.SharedJsonFile).
-    _FILE.update(merge, state)
-
-
-def _publish(known: dict[str, Any]) -> None:
-    global _cache
-    _cache = known
-
-
-_FILE = SharedJsonFile("Election dates", lambda: _PATHS, lambda: _load(), _publish, indent=2, sort_keys=True)
+    # crawl and a ballot sync both write here (update_json_file).
+    for path in _PATHS:
+        try:
+            update_json_file(
+                path, merge, missing=lambda: dict(_load()), written=publish, indent=2, sort_keys=True,
+            )
+            return
+        except LockTimeout:
+            # Another writer held the file far past a write's length. Not
+            # the next path, where the next read wouldn't look: this date
+            # isn't recorded (file and cache agree), and the next read of
+            # the state's calendar finds it again.
+            logger.warning("Election dates for %s not recorded — the file stayed locked", state)
+            return
+        except OSError:
+            continue
+    logger.warning("Nowhere writable to record election dates for %s", state)
+    publish(merge(dict(_load())))
 
 
 async def fetch_fec_calendar(client: httpx.AsyncClient, cycle: int) -> dict[str, dict]:

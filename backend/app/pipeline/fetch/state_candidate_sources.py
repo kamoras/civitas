@@ -22,7 +22,7 @@ import logging
 import os
 from typing import Any
 
-from app.atomic_write import SharedJsonFile
+from app.atomic_write import LockTimeout, update_json_file
 
 logger = logging.getLogger(__name__)
 
@@ -85,19 +85,29 @@ def save_discovered(state: str, source: dict[str, Any] | None) -> None:
             discovered[state.upper()] = source
         return discovered
 
-    # Into the file as it stands now, under its lock (atomic_write.SharedJsonFile).
-    _DISCOVERED_FILE.update(record, state)
+    def publish(discovered: dict[str, Any]) -> None:
+        global _discovered_cache
+        _discovered_cache = discovered
 
-
-def _publish_discovered(discovered: dict[str, Any]) -> None:
-    global _discovered_cache
-    _discovered_cache = discovered
-
-
-_DISCOVERED_FILE = SharedJsonFile(
-    "Discovered source", lambda: _DISCOVERED_PATHS, lambda: _load_discovered(), _publish_discovered,
-    indent=2, sort_keys=True,
-)
+    # Into the file as it stands now, under its lock (update_json_file).
+    for path in _DISCOVERED_PATHS:
+        try:
+            update_json_file(
+                path, record, missing=lambda: dict(_load_discovered()), written=publish,
+                indent=2, sort_keys=True,
+            )
+            return
+        except LockTimeout:
+            # Another writer held the file far past a write's length. Not
+            # the next path, where the next read wouldn't look: this isn't
+            # recorded (file and cache agree), and the next crawl of the
+            # state proves it again.
+            logger.warning("Discovered source for %s not recorded — the file stayed locked", state)
+            return
+        except OSError:
+            continue
+    logger.warning("Nowhere writable to record discovered source for %s", state)
+    publish(record(dict(_load_discovered())))
 
 
 def discovered_states() -> set[str]:

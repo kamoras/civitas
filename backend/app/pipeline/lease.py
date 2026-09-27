@@ -113,9 +113,10 @@ HUNG_AFTER = {
     BILL_REFRESH: timedelta(hours=2),
     BALLOT_SYNC: timedelta(hours=2),
     COVERAGE_REFRESH: timedelta(hours=2),
-    # A step of the nightly election run, bounded like the Supplementary
-    # steps: by the run's own hung-run limit.
-    SOURCE_CRAWL: _pipeline_timeout(),
+    # A step in the middle of the nightly election run, so well inside the
+    # run's own limit; a sweep that needs longer goes on the next night
+    # (election_pipeline._weekly_source_crawl's cursor).
+    SOURCE_CRAWL: timedelta(hours=2),
 }
 
 

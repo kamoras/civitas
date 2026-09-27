@@ -605,7 +605,7 @@ class TestBallotSync:
         from app.pipeline import lease
 
         def crawl(error):
-            async def sweep(db, client, cycle, *, on_state=None):
+            async def sweep(db, client, cycle, *, after=None, on_state=None):
                 if error is not None:
                     raise error
                 for state, outcome in {"NM": "adopted results", "WY": "none"}.items():
@@ -641,6 +641,36 @@ class TestBallotSync:
         assert step["detail"] == "skipped: Ballot sync is already running; crawler adopted 1 this week: NM"
         crawled, _, _ = run()
         assert crawled == 0  # done for the week
+
+    def test_a_sweep_cut_off_continues_the_next_night_and_then_completes(self, db_session):
+        from app.pipeline import lease
+
+        calls = []
+
+        def sweep(cut):
+            async def run(db, client, cycle, *, after=None, on_state=None):
+                calls.append(after)
+                on_state("NM", "adopted results")
+                if cut:
+                    raise lease.CutOff("Election pipeline's source crawl cut off")
+                on_state("WY", "none")
+                return {}
+            return run
+
+        def night(cut):
+            with (
+                patch("app.pipeline.election_pipeline.SessionLocal", return_value=db_session),
+                patch("app.pipeline.election_pipeline.fetch_all_candidates", return_value=[]),
+                _mock_downstream_pipeline_phases(),
+                patch("app.pipeline.election_pipeline.crawl_for_new_sources", side_effect=sweep(cut)),
+            ):
+                asyncio.run(election_pipeline.run_election_pipeline(2026))
+
+        night(cut=True)
+        night(cut=False)
+        night(cut=False)
+        assert calls == [None, "NM"]  # continued after NM, then done for the week
+        assert not election_pipeline._crawl_due(db_session)
 
     def test_a_lease_that_cannot_be_taken_fails_only_its_phases(self, db_session):
         """Taking a step's lease can raise (the database): that fails the

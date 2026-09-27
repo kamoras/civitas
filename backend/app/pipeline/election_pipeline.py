@@ -779,16 +779,25 @@ def _prune_stale_coverage(db: Session) -> int:
 
 
 # When the last source crawl completed, in api_cache — so "weekly" is a
-# week since it last ran, and a night the ballot guards refused it (or it
-# failed) is made up the next night rather than the next week.
+# week since it last ran, and a night the crawl was held off (or failed) is
+# made up the next night rather than the next week.
 _CRAWL_TIER, _CRAWL_KEY = "election", "source-crawl-completed"
 # A little under a week: the nightly run's start time drifts by minutes.
 _CRAWL_EVERY_HOURS = 7 * 24 - 12
+# A sweep cut off at its time limit: the last state it finished. The next
+# night continues after it — forward only, never wrapping — and the sweep
+# is complete when it reaches the last state.
+_CRAWL_CURSOR_KEY = "source-crawl-cursor"
+_CRAWL_CURSOR_HOURS = 30 * 24
+
+
+def _crawl_due(db: Session) -> bool:
+    return api_cache_get(db, _CRAWL_TIER, _CRAWL_KEY, max_age_hours=_CRAWL_EVERY_HOURS) is None
 
 
 async def _weekly_source_crawl(db: Session, client, cycle: int) -> dict[str, str]:
     """Crawl for new ballot sources, when a week has passed since the last
-    crawl completed; the states it adopted. Weekly, not nightly: this sweeps
+    sweep completed; the states it adopted. Weekly, not nightly: this sweeps
     every state that has no hand-verified source, and what it looks for — a
     state standing up a results portal, a new cycle's file appearing —
     moves on the scale of weeks, not hours. Runs BEFORE the sync so anything
@@ -797,25 +806,32 @@ async def _weekly_source_crawl(db: Session, client, cycle: int) -> dict[str, str
     source and election-date files it shares with the sync are updated
     under their own lock (atomic_write.update_json_file). Under a lease of
     its own instead (lease.SOURCE_CRAWL), which yields to a data reset and
-    cuts it off at max_hold. Best-effort — a failure, a refusal or a
-    cut-off is logged, costs the night's sync nothing, and is retried the
-    next night."""
+    cuts it off at max_hold; a sweep cut off continues the next night where
+    it stopped. Best-effort — a failure, a refusal or a cut-off is logged,
+    and costs the night's sync nothing."""
     adopted: dict[str, str] = {}  # as each state finishes, so a cut-off still reports them
 
     def finished(state: str, outcome: str) -> None:
         if outcome.startswith("adopted"):
             adopted[state] = outcome
+        try:
+            api_cache_set(db, _CRAWL_TIER, _CRAWL_CURSOR_KEY, {"after": state})
+        except Exception:
+            db.rollback()  # the sweep goes on; a cut-off would only repeat this state
+            logger.warning("Source crawl: couldn't record reaching %s", state, exc_info=True)
 
     try:
+        if not _crawl_due(db):  # the usual night: no lease taken
+            return {}
         async with lease.bounded_job_async(lease.SOURCE_CRAWL, who="Election pipeline's source crawl") as granted:
             if not granted:
                 return {}
-            # Read under the lease, as it is written.
-            if api_cache_get(db, _CRAWL_TIER, _CRAWL_KEY, max_age_hours=_CRAWL_EVERY_HOURS) is not None:
+            # Again under the lease, where the marker and cursor are written.
+            if not _crawl_due(db):
                 return {}
-            await crawl_for_new_sources(db, client, cycle, on_state=finished)
-            # Inside the lease: a data reset that wipes the marker can't
-            # start between the crawl and this write.
+            cursor = api_cache_get(db, _CRAWL_TIER, _CRAWL_CURSOR_KEY, max_age_hours=_CRAWL_CURSOR_HOURS) or {}
+            await crawl_for_new_sources(db, client, cycle, after=cursor.get("after"), on_state=finished)
+            api_cache_set(db, _CRAWL_TIER, _CRAWL_CURSOR_KEY, {"after": None})
             api_cache_set(db, _CRAWL_TIER, _CRAWL_KEY, {"completedAt": utcnow().isoformat()})
         logger.info(
             "Source crawl: %d state(s) adopted%s",
@@ -824,7 +840,7 @@ async def _weekly_source_crawl(db: Session, client, cycle: int) -> dict[str, str
     except lease.CutOff as cut:
         db.rollback()
         logger.warning(
-            "%s — %d adopted before it; the crawl runs again tomorrow, and the sync goes ahead",
+            "%s — %d adopted before it; the sweep continues where it stopped tomorrow, and the sync goes ahead",
             cut, len(adopted),
         )
     except Exception:

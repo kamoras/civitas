@@ -62,17 +62,21 @@ class TestCrawlAdoption:
 
     @pytest.mark.asyncio
     async def test_one_states_failure_is_that_states_not_the_sweeps(self, db_session, monkeypatch):
-        """An adapter raising on a changed page costs its state, not every
-        state after it; a cut-off (cancellation) still ends the sweep, and
-        what it hears is only the states that finished."""
+        """A hand-verified adapter raising on a changed page costs its state,
+        not every state after it; a cut-off (cancellation) still ends the
+        sweep, and what it hears is only the states that finished."""
         import asyncio
 
         self._patch(monkeypatch, records=[])
         monkeypatch.setattr(sc, "ELECTION_DOMAINS", {st: ["x.gov"] for st in ("AA", "BB", "CC")})
 
+        async def broken(client, cycle, state, source):
+            raise ValueError("the page changed")
+
+        monkeypatch.setattr(sc, "STRATEGIES", {"broken": broken})
+        monkeypatch.setattr(sc, "_sources_file", lambda: {"states": {"AA": {"strategy": "broken"}}})
+
         async def discover(client, state, cycle, rules=None):
-            if state == "AA":
-                raise ValueError("the page changed")
             if state == "CC":
                 raise asyncio.CancelledError  # cut off here
             return None
@@ -83,6 +87,22 @@ class TestCrawlAdoption:
         with pytest.raises(asyncio.CancelledError):
             await sc.crawl_for_new_sources(db_session, None, 2026, on_state=lambda st, out: heard.append((st, out)))
         assert heard == [("AA", "error"), ("BB", "none")]
+
+    @pytest.mark.asyncio
+    async def test_a_sweep_continues_after_the_state_it_reached(self, db_session, monkeypatch):
+        """Forward only: a continued sweep never wraps back to the start."""
+        self._patch(monkeypatch, records=[])
+        monkeypatch.setattr(sc, "ELECTION_DOMAINS", {st: ["x.gov"] for st in ("AA", "BB", "CC")})
+        order = []
+
+        async def discover(client, state, cycle, rules=None):
+            order.append(state)
+            return None
+
+        monkeypatch.setattr(sc, "discover_source", discover)
+        monkeypatch.setattr(sc, "_forget_if_broken", lambda *a: _none())
+        await sc.crawl_for_new_sources(db_session, None, 2026, after="AA")
+        assert order == ["BB", "CC"]
 
     @pytest.mark.asyncio
     async def test_adopts_a_source_whose_nominees_are_real_candidates(
