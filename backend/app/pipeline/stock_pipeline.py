@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 import httpx
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
@@ -92,7 +92,7 @@ SENATE_REVISIT_DAYS = 90
 # dashboard detect a "stuck" run (DB row still says "running" but this
 # tracker says not-running after a restart) rather than only the DB row,
 # which a crashed/killed process can never update to "failed" itself.
-_tracker = PipelineRunTracker("Stock trades")
+_tracker = PipelineRunTracker()
 
 
 def is_stock_pipeline_running() -> bool:
@@ -306,16 +306,20 @@ async def _ingest_senate(db: Session, client: httpx.AsyncClient) -> int:
 @dataclass(frozen=True)
 class _StoredSource:
     """One trade table whose stored filings can be read again: `fetch`
-    takes a filing's stored id and source URL."""
+    takes a filing's stored id, source URL and the filed date its stored
+    rows carry, if any. `skip_url` names stored filings that can't be read
+    again (a Senate paper filing's page is page images)."""
     label: str
     model: type
     owner_key: str
-    fetch: Callable[[str, str], Awaitable[list[TradeRow]]]
+    fetch: Callable[[str, str, str | None], Awaitable[list[TradeRow]]]
+    skip_url: str | None = None
 
 
 # A filing that didn't read is not tried again for this long, so a few dead
-# links can't spend every night's budget ahead of the filings that do read.
-_REREAD_RETRY_HOURS = 24 * 7
+# links can't spend every night's budget ahead of the filings that do read;
+# one that never reads again costs a request a month.
+_REREAD_RETRY_HOURS = 24 * 30
 _REREAD_TIER = "ptr_reread"
 
 
@@ -327,13 +331,13 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
     index, whose windows reach back only weeks. A filing that doesn't read
     keeps its rows and waits _REREAD_RETRY_HOURS. Returns filings re-read."""
     sources = [
-        _StoredSource("Senate", StockTrade, "senator_id", lambda _fid, url: fetch_senate_ptr(
-            client, db, {"report_url": url, "is_paper": "/view/paper/" in url},
-        )),
-        _StoredSource("House", RepStockTrade, "representative_id", lambda fid, url: fetch_house_ptr(
+        _StoredSource("Senate", StockTrade, "senator_id", lambda _fid, url, filed: fetch_senate_ptr(
+            client, db, {"report_url": url, "is_paper": False, "stored_filed_date": filed},
+        ), skip_url="%/view/paper/%"),
+        _StoredSource("House", RepStockTrade, "representative_id", lambda fid, url, _filed: fetch_house_ptr(
             client, db, {"doc_id": fid, "pdf_url": url},
         )),
-        _StoredSource("President", PresidentTrade, "president_id", lambda fid, url: fetch_president_ptr(
+        _StoredSource("President", PresidentTrade, "president_id", lambda fid, url, _filed: fetch_president_ptr(
             db, {"doc_id": fid, "pdf_url": url},
         )),
     ]
@@ -341,17 +345,20 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
     reread = 0
     for source in sources:
         model = source.model
-        stale = (
-            db.query(model.filing_id, func.min(model.source_url))
-            .filter(model.parser_version < PTR_PARSER_VERSION)
-            .group_by(model.filing_id)
-            .order_by(func.max(model.disclosure_date).desc())
-            .all()
-        )
+        query = db.query(
+            model.filing_id,
+            func.min(model.source_url),
+            # A filed date the rows really carry: an electronic row stored
+            # before the filed-date fix has its transaction date there.
+            func.max(case((model.disclosure_date != model.transaction_date, model.disclosure_date))),
+        ).filter(model.parser_version < PTR_PARSER_VERSION)
+        if source.skip_url:
+            query = query.filter(~model.source_url.like(source.skip_url))
+        stale = query.group_by(model.filing_id).order_by(func.max(model.disclosure_date).desc()).all()
         if stale and source.label == "Senate" and await senate_accept_terms(client) is None:
             logger.warning("Senate PTR re-read skipped: no eFD session")
             continue
-        for position, (filing_id, url) in enumerate(stale):
+        for position, (filing_id, url, filed) in enumerate(stale):
             if time.monotonic() >= deadline:
                 logger.info("PTR re-read: time budget spent — %d %s filings wait", len(stale) - position, source.label)
                 return reread
@@ -359,7 +366,7 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
             if api_cache_get(db, _REREAD_TIER, failed_key, max_age_hours=_REREAD_RETRY_HOURS) is not None:
                 continue
             try:
-                rows = await source.fetch(filing_id, url)
+                rows = await source.fetch(filing_id, url, filed)
                 if rows:
                     await _classify_rows_industry(db, client, rows)
             except Exception:

@@ -86,7 +86,7 @@ HOUSE_PIPELINE_STEPS = [
 # the house pipeline is running (prevents concurrent SQLite write
 # conflicts). See PipelineRunTracker's docstring for why this exists
 # alongside HousePipelineRun's DB-persisted status.
-_tracker = PipelineRunTracker("House")
+_tracker = PipelineRunTracker()
 
 
 def is_house_pipeline_running() -> bool:

@@ -1,7 +1,5 @@
 import logging
-import threading
 import time
-from contextlib import contextmanager
 from datetime import timedelta
 from typing import TypeVar
 
@@ -94,25 +92,6 @@ def acquire_pipeline_lock(db: Session, model: type[_RunModel], stale_timeout: ti
     return run
 
 
-# Set while the admin data reset runs (api/admin.py). The pipelines with a
-# run table are held off by the reset holding their locks; the jobs without
-# one (the bill, ballot and coverage refreshes) check this before starting.
-_writes_paused = threading.Event()
-
-
-def writes_paused() -> bool:
-    return _writes_paused.is_set()
-
-
-@contextmanager
-def pause_writes():
-    _writes_paused.set()
-    try:
-        yield
-    finally:
-        _writes_paused.clear()
-
-
 class PipelineRunTracker:
     """In-process running/age tracker for a pipeline that also persists
     its status to a DB row (HousePipelineRun/StockTradesPipelineRun).
@@ -138,20 +117,9 @@ class PipelineRunTracker:
     so this only ever has one writer.
     """
 
-    # Every tracker, so what must not run alongside every writer (the admin
-    # data reset) can ask them all instead of keeping its own list.
-    _all: "list[PipelineRunTracker]" = []
-
-    def __init__(self, name: str) -> None:
-        self.name = name
+    def __init__(self) -> None:
         self._running: bool = False
         self._started_at: float | None = None
-        PipelineRunTracker._all.append(self)
-
-    @classmethod
-    def running(cls) -> list[str]:
-        """The names of every tracked job running in this process."""
-        return [tracker.name for tracker in cls._all if tracker.is_running]
 
     def start(self) -> None:
         self._running = True

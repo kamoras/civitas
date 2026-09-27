@@ -264,7 +264,7 @@ def check_state_pvi_staleness() -> None:
 def stock_trades_overrun_budget() -> timedelta:
     """How long a stock-trades run may take before it counts as hung: 2h
     for the trade phases (normal runs finish in under 90 minutes), plus the
-    time-boxed steps it also runs — the Senate trade re-read, and the
+    time-boxed steps it also runs — the re-read of stored trades, and the
     annual-holdings phases, each capped at holdings_schedule.PHASE_CEILING —
     at the budgets they set themselves rather than restated here."""
     from app.holdings_schedule import HOLDINGS_STEPS, PHASE_CEILING, PTR_REREAD_BUDGET

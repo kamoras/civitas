@@ -336,6 +336,30 @@ class TestFiledDateBecomesDisclosureDate:
         )
         assert (rows[0].disclosure_date, rows[0].owner) == ("2026-07-01", "spouse")
 
+    @pytest.mark.asyncio
+    async def test_a_page_without_one_falls_back_to_the_stored_filed_date(self, monkeypatch):
+        html = """
+        <html><body><table>
+          <tr><th>Transaction Date</th><th>Owner</th><th>Asset Name</th>
+              <th>Asset Type</th><th>Type</th><th>Amount</th></tr>
+          <tr><td>6/1/2026</td><td>Self</td><td>Apple Inc. (AAPL)</td>
+              <td>Stock</td><td>Purchase</td><td>$1,001 - $15,000</td></tr>
+        </table></body></html>
+        """
+
+        async def fake_request(client, method, url, **kwargs):
+            return _FakeResponse(text=html)
+
+        monkeypatch.setattr(senate_ptr, "_request_with_retry", fake_request)
+        monkeypatch.setattr(senate_ptr, "api_cache_get", lambda *a, **k: None)
+        monkeypatch.setattr(senate_ptr, "api_cache_set", lambda *a, **k: None)
+
+        rows = await senate_ptr.fetch_and_parse_ptr(None, None, {
+            "report_url": "https://efdsearch.senate.gov/search/view/ptr/abc123/", "is_paper": False,
+            "stored_filed_date": "2026-06-20",
+        })
+        assert rows[0].disclosure_date == "2026-06-20"
+
 
 class TestRepeatedRowsAcrossPages:
     @pytest.mark.asyncio

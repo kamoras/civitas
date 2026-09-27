@@ -29,7 +29,7 @@ SUPPLEMENTARY_PIPELINE_STEPS = [
     ("president_scorecards", "presidents", "Score presidents"),
 ]
 
-_tracker = PipelineRunTracker("Supplementary")
+_tracker = PipelineRunTracker()
 
 
 def is_supplementary_pipeline_running() -> bool:

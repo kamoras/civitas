@@ -94,7 +94,7 @@ STATES_WITH_FEDERAL_RACES = CLASS_I_STATES | CLASS_II_STATES | CLASS_III_STATES
 # review: unbounded growth on a Pi's SQLite).
 COVERAGE_RETENTION_DAYS = 90
 
-_tracker = PipelineRunTracker("Election")
+_tracker = PipelineRunTracker()
 
 
 def is_election_pipeline_running() -> bool:
@@ -109,7 +109,7 @@ def election_pipeline_age():
 # The election-season ballot sync (scheduler.py) runs the ballot step on its
 # own between nightly runs; this is its overlap guard, separate from the
 # nightly run's so each can see the other.
-_ballot_tracker = PipelineRunTracker("Ballot sync")
+_ballot_tracker = PipelineRunTracker()
 
 
 def is_ballot_sync_running() -> bool:

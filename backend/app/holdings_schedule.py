@@ -1,5 +1,5 @@
 """How long the stock-trades run's time-boxed steps may take — the
-annual-holdings phases and the Senate trade re-read — and what the holdings
+annual-holdings phases and the re-read of stored trades — and what the holdings
 phases are.
 
 Kept apart from the pipelines so the operator watchdogs that need these
@@ -39,7 +39,7 @@ PROBE_BUDGET = timedelta(minutes=2)
 # run's overrun alarm allows for (ops_alerts.stock_trades_overrun_budget).
 PHASE_CEILING = PREP_BUDGET + FETCH_BUDGET + PROBE_BUDGET
 
-# How long a night may spend re-reading stored Senate trades an older PTR
-# parser read (stock_pipeline._reread_senate). The rest wait for the next
-# night, newest first.
+# How long a night may spend re-reading stored trades an older PTR parser
+# read, across all three sources (stock_pipeline._reread_trades). The rest
+# wait for the next night.
 PTR_REREAD_BUDGET = timedelta(minutes=10)

@@ -43,6 +43,7 @@ import struct
 import threading
 
 from sentence_transformers import SentenceTransformer
+from app.background import start_writer
 
 logger = logging.getLogger(__name__)
 
@@ -858,4 +859,4 @@ def ensure_explore_index(db_session_factory) -> None:
         finally:
             db.close()
 
-    threading.Thread(target=_reindex, name="explore-reindex", daemon=True).start()
+    start_writer(_reindex, name="explore-reindex")

@@ -42,10 +42,11 @@ class TradeRow:
     filing_id: str = ""
     industry: str | None = None
 
-# Bump whenever a parser here reads the same filing differently. Stored
-# electronic Senate trades read by an older version are read again
-# (stock_pipeline._reread_senate). 2: owners printed as words, and an owner
-# the form doesn't state is "unknown" rather than the filer.
+# Bump whenever a parser here reads the same filing differently: every
+# stored trade an older version read — House, Senate and presidential — is
+# read again (stock_pipeline._reread_trades), within a nightly budget.
+# 2: owners printed as words, and an owner the form doesn't state is
+# "unknown" rather than the filer.
 PARSER_VERSION = 2
 
 # PTR owner codes -> our owner vocabulary (StockTrade.owner / RepStockTrade.owner).

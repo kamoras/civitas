@@ -364,15 +364,13 @@ def senate_filing_id(report_url: str) -> str:
 _FILED_RE = re.compile(r"\bFiled\s+(\d{1,2}/\d{1,2}/\d{4})")
 
 
-def _page_filed_date(page_html: str) -> str | None:
-    """The filing date a report page states in its header, as YYYY-MM-DD —
-    the same date the search lists (checked 2026-09-27 on three live
-    filings)."""
-    if not page_html:
-        return None
+def _page_filed_date(doc) -> str | None:
+    """The filing date a parsed report page states in its header, as
+    YYYY-MM-DD — the same date the search lists (checked 2026-09-27 on three
+    live filings)."""
     # Text nodes joined with spaces: adjacent elements' text would otherwise
     # run together ("ReportFiled").
-    match = _FILED_RE.search(" ".join(" ".join(lxml_html.fromstring(page_html).itertext()).split()))
+    match = _FILED_RE.search(" ".join(" ".join(doc.itertext()).split()))
     return normalize_date(match.group(1)) if match else None
 
 
@@ -407,6 +405,7 @@ async def fetch_and_parse_ptr(
 
     rows: list[TradeRow] = []
     confidence = "text"
+    page_filed = None
     if filing.get("is_paper"):
         pdf_link = re.search(r'href="([^"]+\.pdf)"', resp.text, re.I)
         if pdf_link:
@@ -419,6 +418,7 @@ async def fetch_and_parse_ptr(
     else:
         try:
             doc = lxml_html.fromstring(resp.text)
+            page_filed = _page_filed_date(doc)
             for table_el in doc.xpath("//table"):
                 table_rows = _html_table_to_rows(table_el)
                 # eFD prints every owner as a word, "Self" included.
@@ -426,10 +426,11 @@ async def fetch_and_parse_ptr(
         except Exception as e:
             logger.error("Failed to parse Senate PTR HTML %s: %s", filing["report_url"], e)
 
-    # The search result's filed date, or the one the page states in its
-    # header ("Filed 09/21/2026 @ 2:52 PM") — a re-read of a stored filing
-    # has no search result.
-    filed_date = filing.get("filed_date") or _page_filed_date(resp.text)
+    # The search result's filed date; for a re-read of a stored filing,
+    # which has no search result, the one the page states in its header
+    # ("Filed 09/21/2026 @ 2:52 PM"), or failing that the one its stored
+    # rows already carried.
+    filed_date = filing.get("filed_date") or page_filed or filing.get("stored_filed_date")
     for row in rows:
         row.parse_confidence = confidence
         row.source_url = filing["report_url"]

@@ -3,7 +3,6 @@ from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 
 import logging
-import threading
 from app.config import settings
 
 from fastapi import FastAPI
@@ -15,6 +14,7 @@ from app.api.router import api_router
 from app.database import init_db
 from app.scheduler import start_scheduler, stop_scheduler
 from app.time_utils import utcnow
+from app.background import start_writer
 
 # Configure logging level from PIPELINE_LOG_LEVEL env setting
 _level_name = (settings.PIPELINE_LOG_LEVEL or "info").upper()
@@ -138,7 +138,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         rescore_stale_legislative_effectiveness(_rescore_session)
         rescore_stale_constituent_alignment(_rescore_session)
 
-    threading.Thread(target=_startup_rescore, name="startup-rescore", daemon=True).start()
+    start_writer(_startup_rescore, name="startup-rescore")
 
     from app.api.visits import run_visit_consumer
     visit_consumer_task = asyncio.create_task(run_visit_consumer())

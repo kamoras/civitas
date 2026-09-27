@@ -21,8 +21,8 @@ from app.pipeline.election_pipeline import (
     run_ballot_sync, is_ballot_sync_running, ballot_sync_age, ballot_tracker,
 )
 from app.pipeline.analyze.action_center import get_action_refresh_state, refresh_action_issues
-from app.pipeline.run_tracker import writes_paused
 from app.time_utils import utcnow
+from app.background import start_writer
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +141,7 @@ def _nightly_pipeline() -> None:
         finally:
             loop.close()
 
-    threading.Thread(target=_run, daemon=True, name="nightly-pipeline").start()
+    start_writer(_run, name="nightly-pipeline")
 
 
 def _hourly_action_refresh() -> None:
@@ -288,7 +288,7 @@ def _hourly_action_refresh() -> None:
         except Exception:
             logger.exception("Action center refresh failed")
 
-    threading.Thread(target=_run, daemon=True, name="action-refresh").start()
+    start_writer(_run, name="action-refresh")
 
 
 def _hourly_bill_status_refresh() -> None:
@@ -332,7 +332,7 @@ def _hourly_bill_status_refresh() -> None:
         except Exception:
             logger.exception("Bill status refresh failed")
 
-    threading.Thread(target=_run, daemon=True, name="bill-status-refresh").start()
+    start_writer(_run, name="bill-status-refresh")
 
 
 def _election_coverage_refresh() -> None:
@@ -380,9 +380,6 @@ def _election_coverage_refresh() -> None:
                 "Previous election coverage refresh has been running for %s — "
                 "treating as hung and proceeding anyway", age,
             )
-        if writes_paused():
-            logger.info("Election coverage refresh skipped — data reset in progress")
-            return
         coverage_tracker().start()
         try:
             from app.database import SessionLocal
@@ -412,7 +409,7 @@ def _election_coverage_refresh() -> None:
         finally:
             coverage_tracker().stop()
 
-    threading.Thread(target=_run, daemon=True, name="election-coverage-refresh").start()
+    start_writer(_run, name="election-coverage-refresh")
 
 
 def _election_ballot_sync() -> None:
@@ -450,9 +447,6 @@ def _election_ballot_sync() -> None:
                 logger.info("Ballot sync skipped — the previous one is still running")
                 return
             logger.warning("Previous ballot sync has been running for %s — proceeding anyway", age)
-        if writes_paused():
-            logger.info("Ballot sync skipped — data reset in progress")
-            return
         ballot_tracker().start()
         loop = asyncio.new_event_loop()
         try:
@@ -467,7 +461,7 @@ def _election_ballot_sync() -> None:
             loop.close()
             ballot_tracker().stop()
 
-    threading.Thread(target=_run, daemon=True, name="election-ballot-sync").start()
+    start_writer(_run, name="election-ballot-sync")
 
 
 def start_scheduler() -> None:

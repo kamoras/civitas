@@ -5,7 +5,6 @@ import json
 import logging
 import os
 import secrets
-import threading
 from datetime import datetime
 from typing import Annotated
 
@@ -1287,6 +1286,7 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
     index end up disagreeing about what exists.
     """
     from app.models import ExploreDocument
+    from app.background import writing
     from app.pipeline.analyze.document_authority import update_document_authority
     from app.pipeline.lexical_index import rebuild_index
     from app.pipeline.vector_store import (
@@ -1295,36 +1295,39 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
         embed_explore_documents,
     )
 
-    try:
-        clear_explore()
-    except Exception:
-        pass
+    # Registered for the admin data reset: the awaits below free the loop
+    # while threads write the explore tables.
+    with writing("Explore re-embed"):
+        try:
+            clear_explore()
+        except Exception:
+            pass
 
-    all_docs = db.query(ExploreDocument).all()
-    doc_dicts = [
-        {
-            "id": d.id,
-            "title": d.title,
-            "summary": d.summary,
-            "body": d.body,
-            "doc_type": d.doc_type,
-            "source": d.source,
-            "date": d.date,
-            "politician_name": d.politician_name,
-            "politician_id": d.politician_id,
-            "chamber": d.chamber,
-        }
-        for d in all_docs
-    ]
+        all_docs = db.query(ExploreDocument).all()
+        doc_dicts = [
+            {
+                "id": d.id,
+                "title": d.title,
+                "summary": d.summary,
+                "body": d.body,
+                "doc_type": d.doc_type,
+                "source": d.source,
+                "date": d.date,
+                "politician_name": d.politician_name,
+                "politician_id": d.politician_id,
+                "chamber": d.chamber,
+            }
+            for d in all_docs
+        ]
 
-    def _run():
-        count = embed_explore_documents(doc_dicts)
-        _write_model_version()
-        return count
+        def _run():
+            count = embed_explore_documents(doc_dicts)
+            _write_model_version()
+            return count
 
-    count = await asyncio.to_thread(_run)
-    indexed = await asyncio.to_thread(rebuild_index, db)
-    authority = await asyncio.to_thread(update_document_authority, db)
+        count = await asyncio.to_thread(_run)
+        indexed = await asyncio.to_thread(rebuild_index, db)
+        authority = await asyncio.to_thread(update_document_authority, db)
     return {"embedded": count, "keywordIndexed": indexed, "authority": authority}
 
 
@@ -1428,8 +1431,29 @@ async def admin_clear_stuck_election(db: Session = Depends(get_db)):
     return _clear_stuck_runs(db, ElectionPipelineRun, is_election_pipeline_running(), "Election")
 
 
-# Background threads started at boot that write tables a reset deletes.
-_STARTUP_WRITER_THREADS = {"explore-reindex", "explore-fts-backfill", "startup-rescore"}
+def _running_writers(db: Session) -> list[str]:
+    """Everything writing the database now: this process's writer threads
+    (app.background — the nightly chain, API-triggered runs, the refreshes,
+    boot-time reindexing), and — visible from any process, a rollout's other
+    task included — a pipeline with a live run row or a live Action Center
+    refresh lease."""
+    from app.background import running_writers
+    from app.models import (
+        ElectionPipelineRun, HousePipelineRun, PipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun,
+    )
+    from app.pipeline.analyze.action_center import refresh_lock_held
+    from app.pipeline.run_tracker import run_in_progress
+
+    running = running_writers()
+    for label, model in (
+        ("Senate", PipelineRun), ("Supplementary", SupplementaryPipelineRun), ("House", HousePipelineRun),
+        ("Stock trades", StockTradesPipelineRun), ("Election", ElectionPipelineRun),
+    ):
+        if run_in_progress(db, model):
+            running.append(f"{label} run")
+    if refresh_lock_held(db):
+        running.append("Action Center refresh")
+    return running
 
 
 @router.post("/data/reset", dependencies=[Depends(require_admin)])
@@ -1441,47 +1465,20 @@ async def admin_reset_data(db: Session = Depends(get_db)):
     run can rebuild (the Action Center's, run history). The next pipeline
     runs rebuild the rest from scratch with the latest code.
 
-    Every writer is held off for the whole wipe, not just checked before
-    it: the reset takes each pipeline's run lock and the Action Center
-    refresh's lease — the database-level locks those jobs take themselves,
-    so a job in another process (a rollout's other task) is held off too —
-    and pauses the in-process jobs that have none. Anything already running
-    refuses the reset.
+    Refused while anything writes (_running_writers). The wipe then runs on
+    the event loop, deliberately: the scheduler (AsyncIOScheduler) and every
+    API trigger start their work from this loop, so holding it is what keeps
+    a writer from starting mid-wipe. It is a few table deletes on an
+    otherwise idle database — seconds, well inside the healthcheck's
+    tolerance — and a rare admin action.
     """
-    from app.database import reset_all_data
-    from app.models import (
-        ElectionPipelineRun, HousePipelineRun, PipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun,
-    )
-    from app.pipeline.analyze.action_center import _acquire_refresh_lock, _release_refresh_lock
-    from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT, PipelineRunTracker, acquire_pipeline_lock, pause_writes
+    running = _running_writers(db)
+    if running:
+        raise HTTPException(status_code=409, detail=f"Cannot reset while running: {', '.join(running)}")
 
-    locks = {
-        "Senate": PipelineRun, "Supplementary": SupplementaryPipelineRun, "House": HousePipelineRun,
-        "Stock trades": StockTradesPipelineRun, "Election": ElectionPipelineRun,
-    }
-    with pause_writes():
-        held, running = [], []
-        for label, model in locks.items():
-            run = acquire_pipeline_lock(db, model, STALE_PIPELINE_TIMEOUT)
-            if run is None:
-                running.append(label)
-            else:
-                held.append(run)
-        lease = _acquire_refresh_lock(db)
-        if lease is None:
-            running.append("Action Center refresh")
-        running += [name for name in PipelineRunTracker.running() if name not in locks]
-        running += sorted(t.name for t in threading.enumerate() if t.name in _STARTUP_WRITER_THREADS)
-        try:
-            if running:
-                raise HTTPException(status_code=409, detail=f"Cannot reset while running: {', '.join(running)}")
-            summary = await asyncio.to_thread(reset_all_data)
-        finally:
-            for run in held:
-                db.delete(run)
-            db.commit()
-            if lease is not None:
-                _release_refresh_lock(db, lease)
+    from app.database import reset_all_data
+
+    summary = reset_all_data()
     total_rows = sum(v for k, v in summary.items() if isinstance(v, int))
     return {
         "status": "reset_complete",

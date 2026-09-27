@@ -13,9 +13,9 @@ than issuing multiple run_until_complete calls.
 
 import asyncio
 import logging
-import threading
 from collections.abc import Awaitable
 from typing import Callable
+from app.background import start_writer
 
 logger = logging.getLogger(__name__)
 
@@ -42,4 +42,4 @@ def run_pipeline_in_thread(
         finally:
             loop.close()
 
-    threading.Thread(target=_run, daemon=True, name=name).start()
+    start_writer(_run, name=name)

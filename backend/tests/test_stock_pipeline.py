@@ -377,7 +377,9 @@ class TestRereadTrades:
         self._stored(db_session, "c", f"{base}/ptr/c/", version=PARSER_VERSION)  # already current
 
         async def fetch(_client, _db, filing):
-            assert "filed_date" not in filing  # the page states it
+            # No search result: the page states the filed date, and failing
+            # that the one the stored rows carry.
+            assert "filed_date" not in filing and filing["stored_filed_date"] == "2026-01-20"
             return [self._row("a", filing["report_url"])] if filing["report_url"].endswith("/a/") else []
 
         count, mock_fetch = await self._reread(db_session, fetch)
@@ -398,12 +400,25 @@ class TestRereadTrades:
         _, mock_fetch = await self._reread(db_session, fetch)
         mock_fetch.assert_not_called()
 
-    async def test_a_paper_filing_is_fetched_as_one(self, db_session):
+    async def test_a_paper_filing_is_not_fetched_again(self, db_session):
+        """Its page is page images: a re-read would never read it."""
         self._stored(db_session, "p", "https://efdsearch.senate.gov/search/view/paper/p/")
+        _, mock_fetch = await self._reread(db_session, AsyncMock(return_value=[]))
+        mock_fetch.assert_not_called()
+
+    async def test_a_row_without_a_real_filed_date_offers_none(self, db_session):
+        """Stored before the filed-date fix, a row's disclosure date is its
+        transaction date — not a filed date to fall back on."""
+        from app.models import StockTrade
+
+        self._stored(db_session, "a", "https://efdsearch.senate.gov/search/view/ptr/a/")
+        db_session.query(StockTrade).update({"disclosure_date": "2026-01-02"})
+        db_session.commit()
+        seen = []
 
         async def fetch(_client, _db, filing):
-            assert filing["is_paper"] is True
-            return [self._row("p", filing["report_url"], owner="unknown")]
+            seen.append(filing["stored_filed_date"])
+            return []
 
-        count, _ = await self._reread(db_session, fetch)
-        assert count == 1
+        await self._reread(db_session, fetch)
+        assert seen == [None]

@@ -47,11 +47,11 @@ from __future__ import annotations
 
 import logging
 import re
-import threading
 
 from sqlalchemy import text
 
 from app.pipeline.explore_ranking import field_weights, text_shape
+from app.background import start_writer
 
 logger = logging.getLogger(__name__)
 
@@ -191,10 +191,7 @@ def _backfill_in_background(engine) -> None:
     ranker that didn't return a document. This mirrors how
     `vector_store.ensure_explore_index` handles its own reindex.
     """
-    threading.Thread(
-        target=_run_backfill, args=(engine,),
-        name="explore-fts-backfill", daemon=True,
-    ).start()
+    start_writer(_run_backfill, name="explore-fts-backfill", args=(engine,))
 
 
 def _run_backfill(engine) -> None:

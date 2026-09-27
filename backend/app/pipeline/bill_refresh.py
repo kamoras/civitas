@@ -35,7 +35,7 @@ from app.models import RepSponsoredBill, SponsoredBill
 from app.pipeline.analyze.bill_stage import classify_bill_stage_from_actions
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.congress import CONGRESS_API_BASE, _fetch_with_retry
-from app.pipeline.run_tracker import PipelineRunTracker, writes_paused
+from app.pipeline.run_tracker import PipelineRunTracker
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ _MAX_LIST_PAGES = 8  # up to 2,000 most-recently-updated bills per cycle
 # Anything past the cap is caught by later cycles or the nightly rebuild.
 _MAX_ACTION_FETCHES = 500
 
-_tracker = PipelineRunTracker("Bill refresh")
+_tracker = PipelineRunTracker()
 
 
 def is_bill_refresh_running() -> bool:
@@ -210,8 +210,6 @@ async def refresh_bill_statuses(db: Session | None = None) -> dict:
     opens (and closes) its own session."""
     if _tracker.is_running:
         return {"status": "skipped", "reason": "previous refresh still running"}
-    if writes_paused():
-        return {"status": "skipped", "reason": "data reset in progress"}
     _tracker.start()
     try:
         owns_session = db is None
