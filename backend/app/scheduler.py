@@ -21,6 +21,7 @@ from app.pipeline.election_pipeline import (
     run_ballot_sync, is_ballot_sync_running, ballot_sync_age, ballot_tracker,
 )
 from app.pipeline.analyze.action_center import get_action_refresh_state, refresh_action_issues
+from app.pipeline.congress_activity import congress_sync_age, is_congress_sync_running, run_congress_sync
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -449,6 +450,34 @@ def _election_ballot_sync() -> None:
     threading.Thread(target=_run, daemon=True, name="election-ballot-sync").start()
 
 
+def _congress_activity_sync() -> None:
+    """The /congress record: new roll calls, today's floor logs and the
+    Daily Digest (pipeline/congress_activity.py). Half-hourly all year:
+    the chambers' logs are live during a session day, and each run is a
+    few requests when nothing is new."""
+    def _run():
+        if is_congress_sync_running():
+            age = congress_sync_age()
+            if not _is_stale(age, timedelta(hours=2)):
+                logger.info("Congress sync skipped — the previous one is still running")
+                return
+            logger.warning("Previous Congress sync has been running for %s — proceeding anyway", age)
+        loop = asyncio.new_event_loop()
+        try:
+            result = loop.run_until_complete(run_congress_sync())
+            logger.info(
+                "Congress sync: roll calls %s; floor logs %s; digests %s",
+                {k: v["stored"] for k, v in result["rollCalls"].items()},
+                result["floorLogs"], result["digests"],
+            )
+        except Exception:
+            logger.exception("Congress sync failed")
+        finally:
+            loop.close()
+
+    threading.Thread(target=_run, daemon=True, name="congress-activity-sync").start()
+
+
 def start_scheduler() -> None:
     """Parse the cron schedule from settings and start the scheduler.
 
@@ -511,6 +540,15 @@ def start_scheduler() -> None:
         _election_ballot_sync,
         CronTrigger(hour="*/6", minute="50", timezone="UTC"),
         id="election_ballot_sync",
+        replace_existing=True,
+    )
+
+    # The /congress record — half-hourly at :10/:40, clear of the :15
+    # action refresh and the :45 bill refresh.
+    scheduler.add_job(
+        _congress_activity_sync,
+        CronTrigger(minute="10,40", timezone="UTC"),
+        id="congress_activity_sync",
         replace_existing=True,
     )
 

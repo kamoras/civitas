@@ -509,6 +509,27 @@ Every hour at :15
 
 ---
 
+## Congress Record (Half-hourly)
+
+What each chamber did each day, for the Congress reports. Every half hour (`congress_activity.py`):
+
+```
+  ROLL CALLS ── senate.gov vote XML, clerk.house.gov/evs: from the highest
+       │        stored number up, every member's position kept
+  FLOOR LOGS ── House Clerk FloorSummary/YYYYMMDD.xml, Senate floor activity
+       │        XML: today's and yesterday's, the live view of a session day
+  DAILY DIGEST ─ the Congressional Record's own summary of each day (GovInfo,
+                published the next day): replaces the live row as final;
+                the last week until final, older days back-filled from the
+                119th Congress's first day, 20 per run
+```
+
+**Nothing is rewritten.** Each passed, failed or reported measure, confirmation and committee meeting keeps the Digest's own sentence; the parser only decides which heading it sits under and reads the bill number. It is tested against real issues from both chambers (`backend/tests/fixtures/daily_digest`).
+
+**A missing file is not a failed fetch.** A 404, or senate.gov's redirect of a missing file to its "not found" page, means the chamber has nothing for that day. Anything else writes nothing, so a day is never made final from part of its Digest, and the back-fill stops before a failed day to retry it.
+
+---
+
 ## Election Pipeline (Nightly)
 
 An independent pipeline (`app/pipeline/election_pipeline.py`) with no data dependency on the Senate/House/President runs. Six phases, each fault-isolated so one failure doesn't take the others down:
