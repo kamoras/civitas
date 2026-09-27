@@ -10,6 +10,14 @@ const nextConfig = {
   // Lighthouse audit caught. The cost is the first byte waiting for the
   // metadata fetch the page makes anyway (cached, revalidate 3600).
   htmlLimitedBots: /.*/,
+  // /bills moved under /congress (2026-09): old links — search results,
+  // Bluesky posts, Action Center issues — keep working.
+  async redirects() {
+    return [
+      { source: "/bills", destination: "/congress/bills", permanent: true },
+      { source: "/bills/:id", destination: "/congress/bills/:id", permanent: true },
+    ];
+  },
   async rewrites() {
     const backendUrl = process.env.BACKEND_URL || "http://backend:8000";
     return [

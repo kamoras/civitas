@@ -130,7 +130,7 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
         {/* Bill list */}
         <div className="space-y-1.5">
           {visible.map((bill) => {
-            const url = `/bills/${encodeURIComponent(bill.billId)}`;
+            const url = `/congress/bills/${encodeURIComponent(bill.billId)}`;
             const badge = bill.partyLeaning ? PARTY_BADGE[bill.partyLeaning] : null;
             return (
               <div

@@ -8,6 +8,9 @@ from sqlalchemy.orm import Session
 
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, cached_json
 from app.database import get_db
+from app.http_client import make_async_client
+from app.pipeline.fetch.congress import expected_current_congress
+from app.services.bill_record import fetch_bill_record, parse_bill_id, shape_record
 from app.services.bill_service import get_bill_detail, get_bills_in_flight
 
 router = APIRouter()
@@ -47,3 +50,22 @@ def get_bill(bill_id: str, db: Session = Depends(get_db)) -> JSONResponse:
     if detail is None:
         raise HTTPException(status_code=404, detail="Bill not found")
     return _cached_json(detail.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)
+
+
+@router.get("/bills/{bill_id}/record")
+async def get_bill_record(
+    bill_id: str,
+    congress: int | None = Query(None, ge=93, le=200),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Any bill's public record: Congress.gov's summary, sponsors, actions
+    and text versions, and every stored roll call on it with each party's
+    split. `congress` defaults to the current one."""
+    if parse_bill_id(bill_id) is None:
+        raise HTTPException(status_code=404, detail="Not a bill id")
+    congress = congress or expected_current_congress()
+    async with make_async_client() as client:
+        raw = await fetch_bill_record(client, db, congress, bill_id)
+    if raw["not_found"]:
+        raise HTTPException(status_code=404, detail="Bill not found")
+    return _cached_json(shape_record(db, congress, bill_id, raw), max_age=CACHE_TTL_DETAIL_S)

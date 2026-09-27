@@ -10,7 +10,7 @@ import RecordsBand from "./RecordsBand";
 
 const NAV_LINKS: readonly { href: string; label: string; accent?: boolean }[] = [
   { href: ACTION_CENTER_HREF, label: "ACTION CENTER", accent: true },
-  { href: "/bills", label: "BILLS" },
+  { href: "/congress", label: "CONGRESS" },
   { href: "/politicians", label: "POLITICIANS" },
   { href: "/elections", label: "ELECTIONS" },
   { href: "/leaderboard", label: "LEADERBOARD" },

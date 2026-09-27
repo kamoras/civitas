@@ -106,7 +106,7 @@ export function legislationJsonLd(bill: BillDetail) {
     "@type": "Legislation",
     name: bill.title,
     legislationIdentifier: bill.billId,
-    url: absoluteUrl(`/bills/${encodeURIComponent(bill.billId)}`),
+    url: absoluteUrl(`/congress/bills/${encodeURIComponent(bill.billId)}`),
     ...(bill.introducedDate ? { legislationDate: bill.introducedDate } : {}),
     legislationJurisdiction: "US",
     sponsor: {

@@ -97,7 +97,7 @@ external API calls to cloud AI services.
                            ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │  Next.js 16 frontend  (port 3000)                                            │
-│  /politicians  /bills  /leaderboard  /action  /explore  /compare             │
+│  /politicians  /congress  /leaderboard  /action  /explore  /compare          │
 │  /elections  /elections/states/<ST>  /issue  /about  /changelog  /admin       │
 │  /accessibility  /feedback                                                   │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -109,7 +109,7 @@ external API calls to cloud AI services.
 > fits. They render as pictures on GitHub. The diagrams here stay ASCII so the
 > README reads the same in a terminal.
 
-**Server rendering:** `/action`, `/leaderboard`, `/bills`, `/explore` and
+**Server rendering:** `/action`, `/leaderboard`, `/congress`, `/explore` and
 `/compare` keep their view state in the address bar, and `useSearchParams()` has
 no value during SSR — so React suspends and the server renders the nearest
 `<Suspense>` fallback. Each of those pages supplies a real one
@@ -525,6 +525,10 @@ What each chamber did each day, for the Congress reports. Every half hour (`cong
 ```
 
 **Nothing is rewritten.** Each passed, failed or reported measure, confirmation and committee meeting keeps the Digest's own sentence; the parser only decides which heading it sits under and reads the bill number. It is tested against real issues from both chambers (`backend/tests/fixtures/daily_digest`).
+
+**Served as reports.** `GET /api/congress/latest`, `/day/{YYYY-MM-DD}`, `/week/{any day of it}` and `/month/{YYYY-MM}` return each chamber's day or period: every count, the "passed both chambers" list, the closest votes and the one-line summary are computed in `congress_service.py` from the stored rows by rule, so a summary reads "The Senate passed 3 bills, agreed to 4 resolutions and took 3 record votes" and never characterises what passed. `GET /api/congress/votes/{chamber}/{congress}/{session}/{number}` is one roll call with every member's position, linked to their page. `GET /api/bills/{id}/record` is any bill's record (not only one a current member sponsored): Congress.gov's CRS summary, sponsors, cosponsors, actions and text versions, plus every stored roll call on it with each party's split. A Congress.gov part that could not be fetched is named in `unavailable` and never cached, so an outage does not read as a bill with no actions.
+
+**The pages.** `/congress` is the latest day either chamber met; `/congress/2026-09-24`, `/congress/week/2026-09-21` and `/congress/month/2026-09` are a day, a week and a month, each with the Senate and the House side by side. `/congress/bills` is the in-motion list that used to be `/bills` (old links redirect), and `/congress/bills/{id}` is any bill's page: the CRS summary, sponsor and cosponsors, the full action history with a link to each day's report, text versions, and every recorded vote with each party's split and each member's position, filterable by state. A day whose Digest is not out yet shows the chambers' live floor logs and says so.
 
 **A missing file is not a failed fetch.** A 404, or senate.gov's redirect of a missing file to its "not found" page, means the chamber has nothing for that day. Anything else writes nothing, so a day is never made final from part of its Digest, and the back-fill stops before a failed day to retry it.
 
@@ -1327,7 +1331,7 @@ civitas/
 │   │   ├── politicians/      # Unified directory + per-member profile
 │   │   │   └── [id]/         #   (senator, representative, president, and justice
 │   │   │                     #    scorecards all render into this one page)
-│   │   ├── bills/            # Bills-in-motion — grouped by stage, sortable
+│   │   ├── congress/         # Daily/weekly/monthly Congress reports; bills/ (in-motion list, any bill's page)
 │   │   ├── compare/          # Side-by-side senator/representative comparison
 │   │   ├── explore/          # Hybrid search over government documents
 │   │   ├── elections/        # State index, per-state ballot pages (federal contests

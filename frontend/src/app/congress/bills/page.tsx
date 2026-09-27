@@ -7,6 +7,7 @@ import TerminalTitlebar from "@/components/TerminalTitlebar";
 import Footer from "@/components/layout/Footer";
 import PageFallback from "@/components/layout/PageFallback";
 import PageMasthead from "@/components/layout/PageMasthead";
+import { CongressTabs } from "@/components/congress/CongressNav";
 import BackToTop from "@/components/BackToTop";
 import BillStageFlow, { ALL_STAGE_CODES } from "@/components/bills/BillStageFlow";
 import BillStageGroup from "@/components/bills/BillStageGroup";
@@ -81,6 +82,7 @@ function BillsPageContent() {
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className="max-w-6xl mx-auto">
+          <CongressTabs active="bills" />
           <PageMasthead
             className="mb-8"
             eyebrow="Bills · legislative pipeline"
