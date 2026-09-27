@@ -11,7 +11,7 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy.exc import OperationalError, TimeoutError as SATimeoutError
 from sqlalchemy.orm import Session, selectinload
 
-from datetime import date
+from datetime import date, timedelta
 
 from app.api.admin import require_admin
 from app.api.rate_limit import WriteRateLimit, client_ip
@@ -1161,11 +1161,11 @@ def _upcoming_civic_events(year: int, today: date) -> list[dict]:
             "linkLabel": "View races & state info",
         })
 
-    scotus_term_start = date(year, 10, 7)
-    if scotus_term_start.weekday() == 5:
-        scotus_term_start = date(year, 10, 9)
-    elif scotus_term_start.weekday() == 6:
-        scotus_term_start = date(year, 10, 8)
+    # The first Monday in October (28 U.S.C. § 2). This was October 7th
+    # moved off a weekend, which is the first Monday only when the 7th is one:
+    # 2026's term was dated Wednesday the 7th, not Monday the 5th.
+    october_first = date(year, 10, 1)
+    scotus_term_start = october_first + timedelta(days=(0 - october_first.weekday()) % 7)
     if scotus_term_start >= today and scotus_term_start.year == year:
         events.append({
             "date": scotus_term_start.isoformat(),
@@ -1173,7 +1173,7 @@ def _upcoming_civic_events(year: int, today: date) -> list[dict]:
             "description": "The Supreme Court begins its new term on the first Monday in October,"
                            " hearing oral arguments and issuing opinions through June.",
             "category": "scotus",
-            "link": "/scorecard?branch=scotus",
+            "link": "/politicians?branch=scotus",
             "linkLabel": "View justice scorecards",
         })
 
@@ -1202,7 +1202,7 @@ def _upcoming_civic_events(year: int, today: date) -> list[dict]:
                 "title": "Presidential Inauguration Day",
                 "description": "The president-elect is sworn into office at the U.S. Capitol.",
                 "category": "executive",
-                "link": "/scorecard?branch=president",
+                "link": "/politicians?branch=president",
                 "linkLabel": "View presidential scorecards",
             })
 
@@ -1250,7 +1250,6 @@ async def get_timeline(
     year_summary_row = db.query(YearSummary).filter(YearSummary.year == year).first()
 
     # Group entries by month and week
-    from datetime import timedelta
     entries_by_month: dict[int, list] = {}
     theme_counts: dict[str, int] = {}
     for e in entries:

@@ -10,6 +10,12 @@ const nextConfig = {
   // Lighthouse audit caught. The cost is the first byte waiting for the
   // metadata fetch the page makes anyway (cached, revalidate 3600).
   htmlLimitedBots: /.*/,
+  // /scorecard became /politicians (same ?branch= and ?state=), and posts
+  // already published on Bluesky still link to it. The query string is
+  // carried over.
+  async redirects() {
+    return [{ source: "/scorecard", destination: "/politicians", permanent: true }];
+  },
   async rewrites() {
     const backendUrl = process.env.BACKEND_URL || "http://backend:8000";
     return [
