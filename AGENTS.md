@@ -199,7 +199,7 @@ the residual.
 | Tier | Technique | Used For |
 |------|-----------|----------|
 | 1 | FEC structured metadata / learning store | Unambiguous entity types, previously classified entities |
-| 2 | Sentence-transformer cosine similarity | Industry, donor type, bill policy, party alignment, stance direction, procedural detection, skip entity detection, employer filtering, memo transfer detection, category normalization |
+| 2 | Sentence-transformer cosine similarity | Industry, donor type, bill policy, party alignment, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection, category normalization |
 | 2b | SVD / PageRank on cosponsorship matrix | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
 | 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills |
 | 4 | LLM (LFM2.5-1.2B-Instruct) | Action center issue summarization, justice profile summaries |
@@ -315,8 +315,8 @@ The correct pattern, established by `_district_pvi()` /
 
    Better still, when the population a value describes is the one the
    pipeline is scoring, measure it in the run itself. Legislative
-   Effectiveness's reference (chamber median credit, average baseline,
-   spread, current majority party) is computed from the members each run
+   Effectiveness's reference (per-stage bill totals, chamber median credit,
+   average baseline, spread, current majority party) is computed from the members each run
    is about to score (`compute_les_reference`), persisted to
    `/data/les_reference.json` for the API's breakdowns, with
    `app/data/les_reference.json` (`scripts/calibrate_les_credit_scale.py`)
@@ -386,7 +386,7 @@ audit found that pinned every House member's score near 87–89.) Content
 alignment still drives bills with no roll call and the per-area partisan
 depth breakdown.
 
-Partisan depth (how strongly a senator leans D or R) is computed primarily
+Partisan depth (how strongly a member of either chamber leans D or R) is computed primarily
 from the senator's actual voting record: for each policy area, the ratio of
 Yea/Nay votes on D-leaning vs R-leaning bills determines the area's alignment.
 Campaign promise text analysis is a secondary enrichment signal.  This follows
@@ -818,6 +818,7 @@ the pending list).
 | Industry classification (embeddings + PAC decontextualization) | `backend/app/pipeline/transform/industry_classifier.py` |
 | Donor type classification (tiered + batch skip detection) | `backend/app/pipeline/analyze/donor_classifier_ai.py` |
 | Bill policy area + stance derivation (embedding-based) | `backend/app/pipeline/analyze/bill_analyzer.py` |
+| Commemorative bill detection (LES 1x tier; calibrated threshold) | `backend/app/pipeline/analyze/commemorative.py` + `backend/scripts/calibrate_commemorative.py` |
 | Party alignment (content-based) + partisan depth | `backend/app/pipeline/analyze/party_platform.py` |
 | Caucus inference (votes + cosponsorship) | `backend/app/pipeline/transform/normalize_votes.py` |
 | kNN classifier + inverse-freq balancing | `backend/app/pipeline/analyze/nn_classifier.py` |

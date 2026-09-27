@@ -4,6 +4,7 @@ import TerminalTitlebar from "@/components/TerminalTitlebar";
 import { getJusticeLabel, getScoreColor, getScoreBgColor } from "@/lib/representation";
 import { MetricBar, StatBox } from "@/components/shared/ScoreMetric";
 import type { Justice, JusticeScore } from "@/types/justice";
+import { displayScore } from "@/lib/formatting";
 
 const PARTY_BADGE: Record<string, { label: string; color: string; bg: string; border: string }> = {
   R: {
@@ -75,7 +76,7 @@ export function JusticeCard({
   titleAs?: "h1" | "h2";
 }) {
   const SectionHeading = Title === "h1" ? "h2" : "h3";
-  const overall = justice.score.overall;
+  const overall = displayScore(justice.score.overall);
   const pb = getPartyBadge(justice.appointingParty);
 
   const agreementEntries = Object.entries(justice.agreementMatrix).sort(([, a], [, b]) => b - a);

@@ -16,6 +16,7 @@ out/
 
 # lighthouse ci reports (generated locally and in CI)
 .lighthouseci/
+.lighthouseci-populated/
 
 # production
 build/

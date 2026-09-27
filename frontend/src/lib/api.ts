@@ -290,10 +290,16 @@ export interface PaginatedLeaderboard {
 export async function fetchRepLeaderboard(
   page: number = 1,
   perPage: number = 50,
-  party?: string
+  party?: string,
+  sort?: string,
+  dir?: "asc" | "desc"
 ): Promise<PaginatedLeaderboard> {
   const params = new URLSearchParams({ page: String(page), per_page: String(perPage) });
   if (party) params.set("party", party);
+  // The House is paginated, so it is sorted and ranked on the server, over
+  // the whole chamber — never by re-sorting one page here.
+  if (sort) params.set("sort", sort);
+  if (dir) params.set("dir", dir);
   const url = `${API_BASE}/representatives/leaderboard?${params}`;
   return withShape<PaginatedLeaderboard>(
     await requestJson(url, "Failed to load house leaderboard"),
