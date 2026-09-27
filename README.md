@@ -402,6 +402,12 @@ Every hour at :15
        │         Merge clusters starting at centroid similarity 0.20, self-
        │         calibrated upward in 0.05 steps (to 0.61 max) to avoid
        │         collapsing everything into one mega-cluster
+       │         Titles are compared with the day's mean headline vector
+       │         removed. The later per-cluster split and coherence filter
+       │         used to remove the CLUSTER's own mean instead, which erases
+       │         the topic the articles share: live runs kept 1 of 5
+       │         same-story articles, and on 2026-09-27's feed the filter
+       │         kept 28 articles where the day's mean keeps 48.
        ▼
   4. RANK ────── score = 0.40 × (civic actionability)
        │                 + 0.35 × (source breadth)

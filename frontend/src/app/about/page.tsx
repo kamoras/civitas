@@ -1292,7 +1292,10 @@ export default function AboutPage() {
                   policy relevance using embedding cosine similarity against policy area prototypes
                   — the same sentence-transformer model used throughout the platform. Articles that
                   pass the relevance threshold are clustered by semantic similarity to group
-                  coverage of the same story across sources.
+                  coverage of the same story across sources. Headlines are compared after removing
+                  what every headline that day has in common, so only the topic counts. A later
+                  step used to remove only what one cluster&apos;s headlines had in common, which is
+                  the topic itself, and it threw away most of each story&apos;s coverage.
                 </P>
               </div>
 
