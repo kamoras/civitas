@@ -1,11 +1,14 @@
 """Tests for Action Center deduplication and national monitor creation logic."""
 
 import json
+import sqlite3
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
 from app.models import (
     ActionIssue,
@@ -19,6 +22,7 @@ from app.models import (
     Representative,
     Senator,
 )
+from app.database import Base
 from app.time_utils import utcnow
 from app.pipeline.fetch.news_feeds import NewsArticle
 from app.pipeline.analyze.action_center import (
@@ -1672,6 +1676,33 @@ class TestRecordGenerationSample:
             broken_db, "action_center_issue", rank=1, attempt=1,
             input_text="x", output={"summary": "y"}, passed=True,
         )  # must not raise
+
+    def test_does_not_hold_the_callers_write_transaction(self, tmp_path):
+        """The refresh loop's session commits only after every cluster's
+        LLM work. A sample flushed into it held SQLite's write lock for the
+        rest of the run and starved every other writer, the refresh lock's
+        heartbeat first (2026-09-27)."""
+        path = tmp_path / "samples.db"
+        engine = create_engine(f"sqlite:///{path}")
+        Base.metadata.create_all(engine, tables=[LlmGenerationSample.__table__])
+        refresh_db = Session(bind=engine)
+        try:
+            _record_generation_sample(
+                refresh_db, "action_center_issue", rank=1, attempt=1,
+                input_text="x", output={"summary": "y"}, passed=True,
+            )
+            other = sqlite3.connect(path, timeout=0)
+            other.execute(
+                "INSERT INTO llm_generation_samples "
+                "(task, rank, attempt, input_text, output_json, passed, created_at) "
+                "VALUES ('t', 1, 1, 'x', '{}', 1, '2026-09-27')"
+            )
+            other.commit()
+            assert other.execute("SELECT COUNT(*) FROM llm_generation_samples").fetchone()[0] == 2
+            other.close()
+        finally:
+            refresh_db.close()
+            engine.dispose()
 
 
 

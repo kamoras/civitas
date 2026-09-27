@@ -413,9 +413,19 @@ def _record_generation_sample(
     a positive example. Best-effort: a failure here must never break
     issue generation itself, since this table only feeds a future
     training run, not anything the site serves today.
+
+    Written and committed on its own short-lived session, never flushed
+    into the caller's. The caller is the refresh loop, whose next commit
+    comes only after every remaining cluster's embedding and LLM work: a
+    flush there opened SQLite's single write transaction and held it for
+    ~15 minutes a run (2026-09-27), so every other writer — the refresh
+    lock's own heartbeat, the election coverage refresh — waited out its
+    30s busy timeout and failed. The heartbeat failing is what let the
+    lease go stale while its holder was still running.
     """
+    sample_db = Session(bind=db.get_bind())
     try:
-        db.add(LlmGenerationSample(
+        sample_db.add(LlmGenerationSample(
             task=task,
             rank=rank,
             attempt=attempt,
@@ -424,9 +434,12 @@ def _record_generation_sample(
             passed=passed,
             violations=json.dumps(violations) if violations else None,
         ))
-        db.flush()
+        sample_db.commit()
     except Exception:
         logger.exception("Failed to record LLM generation sample (task=%s, rank=%d)", task, rank)
+        sample_db.rollback()
+    finally:
+        sample_db.close()
 
 
 
@@ -3539,7 +3552,7 @@ def _merge_similar_monitors(monitors: list[NationalMonitor], model, db: Session)
     """Pairwise-compare a monitor list and merge any that are similar
     enough. Above _MONITOR_AUTO_MERGE_SIM, monitors merge outright;
     between that and _MONITOR_MERGE_SIM, an LLM call verifies first.
-    Returns True if anything merged, so the caller knows to db.flush().
+    Returns True if anything merged, so the caller knows to commit.
 
     _update_national_monitors calls this twice — once for monitors that
     existed before today's new ones are created, once again afterward to
@@ -3681,6 +3694,11 @@ def _update_national_monitors(today: str, db: Session) -> None:
     and to detect new recurring topics from past days' issues.
     Every monitor update traces to a specific source article — no LLM-generated
     facts, only condensed summaries of sourced articles.
+
+    Every write here is committed, never just flushed, before the next LLM
+    call: a flush opens SQLite's one write transaction, and holding it
+    across a model call starves every other writer for the call's length —
+    the refresh lock's heartbeat included (see _record_generation_sample).
     """
     try:
         from app.pipeline.vector_store import get_embedding_model
@@ -3714,7 +3732,7 @@ def _update_national_monitors(today: str, db: Session) -> None:
     # Step 1: Merge any existing monitors that are too similar to each other.
     _set_refresh_state(stage_detail="1/4 dedup")
     if _merge_similar_monitors(existing_monitors, model, db):
-        db.flush()
+        db.commit()
         existing_monitors = db.query(NationalMonitor).all()
 
     # Step 2: Match today's issues to existing monitors and add updates
@@ -3869,7 +3887,7 @@ def _update_national_monitors(today: str, db: Session) -> None:
             # Ensure unique slug. `int(time.time()) % 1000` (previous
             # suffix) wasn't actually unique: two monitors created in the
             # same wall-clock second — plausible in this tight loop — got
-            # the same suffix and the second's db.flush() below raised
+            # the same suffix and the second's write below raised
             # UNIQUE constraint failed: national_monitors.slug, which
             # propagated out of _run_refresh uncaught (see 2026-07-27 fix
             # in refresh_action_issues). uuid4 makes the collision
@@ -3888,7 +3906,7 @@ def _update_national_monitors(today: str, db: Session) -> None:
                 last_article_date=today,
             )
             db.add(monitor)
-            db.flush()
+            db.commit()
 
             seen_sources: set[str] = set()
             source_urls = json.loads(issue.source_urls or "[]")
@@ -3924,7 +3942,7 @@ def _update_national_monitors(today: str, db: Session) -> None:
     # Step 3b: Re-merge after creating new monitors.
     all_monitors = db.query(NationalMonitor).all()
     if _merge_similar_monitors(all_monitors, model, db):
-        db.flush()
+        db.commit()
 
     # Step 4: Lifecycle management — watching, closing, and cleaning up
     _set_refresh_state(stage_detail="4/4 lifecycle")
