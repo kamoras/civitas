@@ -195,12 +195,14 @@ EXPLORE_RETRIEVAL_WEIGHT: float = 1.0
 # to stamp CONSTITUENT_REFERENCE at construction (it can't import the scorer).
 
 # Fewest party-labeled votes Constituent Alignment reads a break rate from
-# (party_break_rate); below it the vote part is a neutral 50.
+# (party_break_rate); below it the vote part is the party's measured typical
+# score (a neutral 50 without one).
 CONSTITUENT_MIN_VOTES = 3
 
 # Party-labeled votes at which Constituent Alignment's data sufficiency is
 # graded "high" (calculate_confidence) and its vote score stops shrinking
-# toward 50. A volume count, the same for every member.
+# toward the party's typical score (50 without one). A volume count, the
+# same for every member.
 CONSTITUENT_FULL_CONFIDENCE_VOTES = 20
 
 # The quantile of |residual| (standard deviations per vote from the seat's

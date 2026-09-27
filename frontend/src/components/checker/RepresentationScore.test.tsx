@@ -48,6 +48,11 @@ describe("RepresentationScore constituent basis line", () => {
     expect(screen.getByText(/vote part keeps 60% of its distance from the party's typical score/)).toBeInTheDocument();
   });
 
+  it("names 50 as the target when no typical score was measured yet", () => {
+    renderWith("shrunk-neutral:0.50");
+    expect(screen.getByText(/vote part keeps 50% of its distance from 50$/)).toBeInTheDocument();
+  });
+
   it("says nothing extra at full confidence or for scores stored before the status existed", () => {
     renderWith("full");
     expect(screen.getByText("40 votes tracked")).toBeInTheDocument();

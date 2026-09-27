@@ -260,6 +260,10 @@ inline academic citations.
 Key mathematical properties:
 - **Linear shrinkage**: Scores regress toward 50 when data is sparse (e.g.,
   a senator with 1 campaign promise gets a score near 50, not 0 or 100).
+  Two exceptions: Constituent Alignment's vote part shrinks toward the
+  party's measured typical score (its scale tops out at the seat's norm, so
+  50 is below average), and Legislative Effectiveness doesn't shrink (a
+  member's bills are the whole record, not a sample).
   The rate is the count confidence below — fixed, not estimated from the
   population's variance, so do not call it Bayesian or empirical Bayes
 - **Count confidence**: `min(n / threshold, 1.0)` ensures minimum sample
@@ -388,7 +392,8 @@ depth breakdown.
 
 One procedural exception, read from the chamber's own result field and
 never from vote counts: a **majority leader's** Nay on a motion the chamber
-recorded as rejected, which their own party supported, is not a break. The
+recorded as rejected, which their own party supported, is not a break, nor
+is their Yea on a motion recorded as carried over their party's opposition. The
 leader switches to the prevailing side so that they can move to reconsider (Senate
 Rule XIII; House Rule XIX cl. 2). It is scored as no party signal
 (`MAJORITY_LEADER_TITLES` in `normalize_votes.py`), and only for votes cast

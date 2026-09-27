@@ -1222,8 +1222,9 @@ function LeaderboardContent() {
                     Click any row to view full profile.
                   </p>
                   <p className="font-sans text-xs text-ink-min">
-                    Scores are shrunk toward 50 when data is thin — members with limited public data are pulled
-                    toward 50, not penalized or rewarded
+                    Scores are shrunk toward a neutral value when data is thin — members with limited public
+                    data are pulled toward 50 (for Constituent Alignment, toward their party&apos;s typical
+                    score), not penalized or rewarded
                   </p>
                 </div>
               )}

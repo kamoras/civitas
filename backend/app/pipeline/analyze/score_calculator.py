@@ -701,7 +701,9 @@ def _constituent_vote_part_status(senator: dict) -> str:
     typical — the bundled prior, or no reference for the party: neutral
     50), "neutral:no-expectation" (no usable reference
     for the member's party), "shrunk:<share kept>" (under
-    CONSTITUENT_FULL_CONFIDENCE_VOTES) or "full". Read from the scoring
+    CONSTITUENT_FULL_CONFIDENCE_VOTES, pulled toward the party's typical
+    score), "shrunk-neutral:<share kept>" (the same, pulled toward a neutral
+    50 — no measured typical) or "full". Read from the scoring
     function itself (_constituent_alignment_core), so the branch that
     scored the vote is the one that labels it — given the same member dict,
     reference included, that calculate_scores received."""
@@ -1618,7 +1620,8 @@ def constituent_reference_inputs(members: list[dict]) -> list[tuple[str, float, 
     break rate rests on a full-confidence count of votes — exactly the values
     _constituent_alignment_core compares, so the reference and the scores
     can't disagree. Thinner records are left out: the score itself pulls
-    them toward 50 as too noisy to read at full scale, and their 0/33/67%
+    them toward the party's typical score (50 under the bundled prior) as
+    too noisy to read at full scale, and their 0/33/67%
     rates would otherwise set the saturation point everyone else is scored
     against."""
     out = []
@@ -1936,8 +1939,11 @@ def _constituent_alignment_core(
     else:
         residual = seat_residual(break_rate, expected, n_party)
         party_score = seat_relative_vote_score(residual, scale, n_party, typical)
+        # Which target a thin record is pulled toward, so the scorecard can
+        # name it: the party's measured typical score, or a neutral 50.
+        shrink = "shrunk" if typical is not None else "shrunk-neutral"
         vote_part_status = (
-            f"shrunk:{n_party / CONSTITUENT_FULL_CONFIDENCE_VOTES:.2f}"
+            f"{shrink}:{n_party / CONSTITUENT_FULL_CONFIDENCE_VOTES:.2f}"
             if n_party < CONSTITUENT_FULL_CONFIDENCE_VOTES else "full"
         )
         # measured is False for the bundled hand-set prior, used before a

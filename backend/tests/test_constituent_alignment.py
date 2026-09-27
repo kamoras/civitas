@@ -606,12 +606,17 @@ class TestVotePartStatus:
         assert self.status(record(1, total=2), constituentReference=prior) == "neutral:few-votes"
         core = _constituent_alignment_core(record(7, total=10), [], {}, state="SW", party="D", reference=prior)
         assert core["score"] == 25 and "pulled toward a neutral 50" in core["components"][0]["detail"]
+        assert self.status(record(1, total=10), constituentReference=prior) == "shrunk-neutral:0.50"
 
     def test_no_expectation(self):
         assert self.status(record(1, total=10), party="I") == "neutral:no-expectation"
 
     def test_shrunk_share(self):
-        assert self.status(record(1, total=12)) == "shrunk:0.60"
+        ref = {"senate": {"statistic": score_calculator.CONSTITUENT_REFERENCE_STATISTIC, "n": 50, "expected": {
+            "D": {"a": 0.10, "b": 0.0, "scale": 0.3, "typical": 85.0}}}}
+        assert self.status(record(1, total=12), constituentReference=ref) == "shrunk:0.60"
+        # No measured typical (conftest's pinned reference): pulled toward 50.
+        assert self.status(record(1, total=12)) == "shrunk-neutral:0.60"
 
     def test_full(self):
         assert self.status(record(5, total=40)) == "full"

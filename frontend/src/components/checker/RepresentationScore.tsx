@@ -162,9 +162,13 @@ export default function RepresentationScore({
     if (status === "typical:few-votes") return `${tracked} · too few party-line votes, vote part set to the party's typical score`;
     if (status === "neutral:few-votes") return `${tracked} · too few party-line votes, vote part neutral 50`;
     if (status === "neutral:no-expectation") return `${tracked} · no party norm to compare with, vote part neutral 50`;
-    if (status?.startsWith("shrunk:")) {
-      const kept = Math.round(parseFloat(status.slice("shrunk:".length)) * 100);
-      if (Number.isFinite(kept)) return `${tracked} · few party-line votes, vote part keeps ${kept}% of its distance from the party's typical score`;
+    // "shrunk" pulls toward the party's measured typical score,
+    // "shrunk-neutral" toward 50 (no measured typical yet).
+    const shrunk = status?.match(/^(shrunk|shrunk-neutral):(.+)$/);
+    if (shrunk) {
+      const kept = Math.round(parseFloat(shrunk[2]) * 100);
+      const target = shrunk[1] === "shrunk" ? "the party's typical score" : "50";
+      if (Number.isFinite(kept)) return `${tracked} · few party-line votes, vote part keeps ${kept}% of its distance from ${target}`;
     }
     return tracked;
   })();
@@ -264,8 +268,8 @@ export default function RepresentationScore({
       </div>
 
       <div className="mt-3 text-xs text-ink-lo">
-        Data: fec.gov · congress.gov · govinfo.gov · voteview.com · Scores regress toward 50 when
-        data is sparse
+        Data: fec.gov · congress.gov · govinfo.gov · voteview.com · Scores regress toward a neutral
+        value when data is sparse (50, or the party&apos;s typical score for Constituent Alignment)
       </div>
     </div>
   );

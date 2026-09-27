@@ -41,7 +41,7 @@ export interface Senator {
         "high" | "medium" | "low"
       >
     > & {
-      /** "typical:few-votes" | "neutral:few-votes" | "neutral:no-expectation" | "shrunk:<share kept>" | "full" */
+      /** "typical:few-votes" | "neutral:few-votes" | "neutral:no-expectation" | "shrunk:<share kept>" | "shrunk-neutral:<share kept>" | "full" */
       constituentAlignmentVotePart?: string;
     };
   };
