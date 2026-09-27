@@ -6,7 +6,9 @@ different timescale and different data.
 One refresh runs at a time across containers: it holds a lease row in
 `api_cache`, renewed every minute by a heartbeat thread and taken over after ten
 minutes without a beat. A refresh killed by a deploy therefore costs at most the
-next hour, not four.
+next hour, not four. No stage holds a write open across a model call: SQLite
+has one writer, and a flush left uncommitted through the cluster loop starved
+the heartbeat for fifteen minutes a run (2026-09-27).
 
 ```mermaid
 flowchart TB

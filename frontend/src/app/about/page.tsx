@@ -1343,7 +1343,10 @@ export default function AboutPage() {
                   goes ten minutes unrenewed is released. A claim used to last four hours whether or
                   not its run was still alive, so a deploy that stopped a refresh partway through
                   silenced the next four. On 26 September 2026, a day of steady deploys, that kept
-                  every refresh from running and no issue was published.
+                  every refresh from running and no issue was published. The renewal itself then
+                  failed for most of each run, because the refresh held the database&rsquo;s single write
+                  slot open across its model calls; it now saves each write before the next call, so
+                  the renewal and every other writer get a turn.
                 </P>
                 <P>
                   The cost is silence. A cluster with no attributable assertion produces no issue at
