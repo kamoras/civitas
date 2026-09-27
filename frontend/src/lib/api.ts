@@ -1033,6 +1033,14 @@ export function sendLoadTiming(t: {
   navigator.sendBeacon(`${API_BASE}/track-timing?${params}`);
 }
 
+/** A navigation inside the app, which the middleware cannot see
+ *  (NavigationBeacon; lib/pageLoad.ts says why). Same endpoint and the same
+ *  counting as a page load: nginx sets the X-Real-IP the visitor hash uses. */
+export function sendNavigation(path: string) {
+  if (typeof navigator === "undefined" || typeof navigator.sendBeacon !== "function") return;
+  navigator.sendBeacon(`${API_BASE}/track-visit?${new URLSearchParams({ path })}`);
+}
+
 // --- Admin API ---
 
 function adminHeaders(token: string): HeadersInit {
