@@ -366,15 +366,17 @@ This enables selective re-verification: low-confidence classifications from prev
 
 **Version-aware artifact management** ensures updated analysis algorithms always produce fresh results. At pipeline start, a SHA-256 fingerprint of all analysis source files (their docstring-stripped syntax trees, so comment edits don't count) is compared to the stored hash from the last run. If the code has changed, stale artifacts (analysis cache, learned classifications, kNN reference corpus) are cleared so updated algorithms start clean. The API cache (raw Congress.gov / FEC / GovInfo responses) is never cleared — it reflects source data, not processing logic.
 
-### Party Alignment (Content-Based)
+### Party Alignment (Vote Split First, Content Where There's No Roll Call)
 
-A bill's party alignment comes from **how the parties actually voted on it** whenever a roll call exists, and from its content only when none does (`party_platform.refine_with_vote_data`). Its consumer is the voted-with-party computation, and "did this member break with their party" is defined by the parties' real split: a bill whose content reads partisan but passed with both party majorities must not count as a party-line vote. (Content used to win over a bipartisan split; a 2026-06 audit found that pinned every House member's score near 87–89.)
+A bill's party alignment comes from **how the parties actually voted on it** whenever a roll call exists (`refine_with_vote_data`), and from its content only when none does. The consumer is the voted-with-party computation, and "did this member break with their party" is defined by the parties' real split: a bill whose content reads partisan but passed with both party majorities must not count as a party-line vote. (Content used to win over a bipartisan split; a 2026-06 audit found that pinned every House member's score near 87–89.)
 
-Where no roll call exists, and for the per-area partisan-depth breakdown, a nearest-centroid classifier (Rocchio 1971) in sentence-embedding space reads the content:
+Where there is no roll call, and for the per-area partisan depth breakdown, the system uses a nearest-centroid classifier (Rocchio 1971) in sentence-embedding space:
 1. Each party's platform positions per policy area are embedded as centroids
 2. Bill text is embedded and compared to both party centroids
 3. Stance direction (pro/anti) disambiguates policy-area overlap
 4. Sponsor party data serves as supervised ground truth for adaptive learning
+
+One procedural exception, read from the chamber's own result field: a **majority leader** who votes with the prevailing side against their own party — a Nay on a motion the chamber recorded as rejected, or a Yea on one carried over their party's opposition — is doing so to be able to move to reconsider (Senate Rule XIII; House Rule XIX cl. 2), so the vote carries no party signal. It applies only within the member's tenure as majority leader (`leadership_tenures.json`); the Speaker and minority leader are never exempted. In the 119th Congress every off-party vote by Thune (16) and Scalise (1) was such a switch.
 
 Independent senators have their caucus party inferred mathematically from voting patterns (proportion of votes aligning with each party), ensuring they are scored fairly against the party they actually caucus with.
 
@@ -401,13 +403,21 @@ Every hour at :15
   2. FILTER ──── Embed each article against 24 policy prototypes (19 US, 5 intl.)
        │         Discard cosine_sim < 0.20 (off-topic articles)
        ▼
-  3. CLUSTER ─── Pairwise cosine similarity on title embeddings
-       │         Merge clusters starting at centroid similarity 0.20, self-
-       │         calibrated upward in 0.05 steps (to 0.60 max) to avoid
-       │         collapsing everything into one mega-cluster
+  3. CLUSTER ─── Complete linkage on title embeddings at cosine 0.40:
+       │         EVERY pair in a cluster must clear it, so a chain of
+       │         look-alikes (floods ~ storm ~ epidemic) can't form one
+       │         story. Single linkage plus a centroid merge from 0.20 built
+       │         2026-09-27's chimeras: a Bangkok-floods title over a Hawaii
+       │         hurricane lede and facts about a nor'easter and Fiji's HIV
+       │         epidemic. Title similarity can't tell same-event from
+       │         same-theme (18 labelled pairs overlapped 0.16-0.82 vs
+       │         0.24-0.46), so a split beats a wrong merge. The same-run
+       │         duplicate check drops a look-alike cluster rather than
+       │         appending it (appending folded Hurricane Nolo into the
+       │         nor'easter on that feed).
        │         Titles are compared with the day's mean headline vector
-       │         removed. The later per-cluster split and coherence filter
-       │         used to remove the CLUSTER's own mean instead, which erases
+       │         removed. The coherence filter used to remove the CLUSTER's
+       │         own mean instead, which erases
        │         the topic the articles share: live runs kept 1 of 5
        │         same-story articles, and on 2026-09-27's feed the filter
        │         kept 28 articles where the day's mean keeps 48.

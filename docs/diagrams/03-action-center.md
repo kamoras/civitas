@@ -23,7 +23,7 @@ flowchart TB
     RELCHECK -->|no| DROP(["Discard — off topic"])
     RELCHECK -->|yes| CLUSTER
 
-    CLUSTER["<b>3. CLUSTER</b><br/>pairwise cosine on title embeddings<br/>merge from centroid sim 0.20,<br/>self-calibrating up in 0.05 steps to 0.60"]
+    CLUSTER["<b>3. CLUSTER</b><br/>complete linkage on title embeddings<br/>every pair ≥ 0.40"]
     CLUSTER --> RANK
 
     RANK["<b>4. RANK</b><br/>0.40 × civic actionability<br/>0.35 × source breadth<br/>0.25 × trending relevance"]
@@ -90,9 +90,9 @@ relationship no source stated (issue 748), a House member called a senator (750)
 and filler (751). Migration 0004 cleared the stored prose; those issues show no
 story.
 
-**Every title comparison uses the day's mean, not a cluster's.** Pass 1 removes
-the day's average headline vector so topic dimensions dominate. The per-cluster
-split and coherence filter re-centered on the cluster's own mean, which removes
+**Every title comparison uses the day's mean, not a cluster's.** Clustering removes
+the day's average headline vector so topic dimensions dominate. The coherence
+filter (and a since-removed per-cluster split) re-centered on the cluster's own mean, which removes
 the shared topic itself; one article then scored 1.00 and its same-story
 siblings scored negative. Both now use `_center_titles` with the day's mean
 (2026-09-27 feed: 48 articles kept vs 28).
@@ -105,10 +105,21 @@ made"). Headline and summary are joined with the headline closed as a sentence
 at the headline's end look cut off, and on 2026-09-27 left 5 claims from 40
 articles instead of 14.
 
-**Self-calibrating cluster merge.** A fixed similarity threshold either
-fragments one story across many clusters or collapses everything into one
-mega-cluster, depending on the day's news. Starting at 0.20 and stepping up to
-at most 0.60 lets the run find its own threshold.
+**Complete linkage, not single.** Every pair of articles in a cluster must be
+at least 0.40 alike. Single linkage (each article like one other) plus a
+centroid merge from 0.20 chained stories that only share a theme: on
+2026-09-27 one issue carried a Bangkok-floods title, a Hawaii-hurricane lede
+and facts about a nor'easter and an HIV epidemic in Fiji. Title similarity
+cannot separate same-event from same-theme pairs (18 hand-labelled pairs from
+that feed: 0.16-0.82 vs 0.24-0.46, no better with summaries or the other
+model), so clustering errs toward splitting: a split story costs source
+breadth (its second cluster is dropped as a duplicate in the same run, or
+matched to the same issue in a later one), a wrong merge publishes a chimera.
+The same-run duplicate check now drops, never merges: appending the duplicate
+was single linkage again, and on that feed folded Hurricane Nolo into the
+nor'easter. On that
+feed it gave 12 multi-article clusters, 10 of them one story each, where the old passes built a
+9-article weather cluster and an 8-article China/AI/Russia one.
 
 **5 days in 14 for a monitor.** A topic in the top issues on five separate days
 within a fortnight is structurally different from a one-day spike — it's a

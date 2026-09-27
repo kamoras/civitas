@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal, get_args
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, computed_field, model_validator
 
 
 def to_camel(string: str) -> str:
@@ -129,10 +129,25 @@ class PaginatedVotesSchema(CamelModel):
 STOCK_ACT_DISCLOSURE_DEADLINE_DAYS = 45
 
 
+_Owner = Literal["self", "spouse", "joint", "dependent", "unknown"]
+_OWNERS = get_args(_Owner)
+
+
+def _stated_owner(value: object) -> object:
+    return value if value in _OWNERS else "unknown"
+
+
+# Whose asset a disclosed trade is. "unknown": the form's owner value wasn't
+# one the parser recognizes — never guessed to be the member's. A stored
+# value outside the set (a row written by another image's parser) reads the
+# same way, rather than failing the member's whole response.
+DisclosureOwner = Annotated[_Owner, BeforeValidator(_stated_owner)]
+
+
 class StockTradeSchema(CamelModel):
     ticker: str | None = None
     asset_name: str
-    owner: Literal["self", "spouse", "joint", "dependent"] = "self"
+    owner: DisclosureOwner = "self"
     transaction_type: Literal["purchase", "sale_full", "sale_partial", "exchange"]
     transaction_date: str
     disclosure_date: str

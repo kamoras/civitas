@@ -743,11 +743,49 @@ def _run_migrations(revision: str = "head", bind=None) -> None:
     models (tests/test_alembic_migrations.py).
     """
     from alembic import command
+    from alembic.runtime.migration import MigrationContext
+    from alembic.script import ScriptDirectory
 
     cfg = _alembic_config()
     with (bind or engine).begin() as conn:
+        # A database at a revision this image doesn't have was migrated by a
+        # NEWER image — the case Swarm's automatic rollback creates: the new
+        # task upgrades the shared database, fails its health check, and the
+        # previous image starts against the migrated schema. Alembic would
+        # raise "Can't locate revision" and crash-loop the rollback. Every
+        # release only expands the schema (migrations/README.md, "Expand,
+        # then contract"), so this image can still read it: leave the schema
+        # alone and start.
+        script_dir = ScriptDirectory.from_config(cfg)
+        known = {script.revision for script in script_dir.walk_revisions()}
+        unknown = set(MigrationContext.configure(conn).get_current_heads()) - known
+        if unknown and _all_later_than_head(unknown, script_dir.get_current_head()):
+            logger.warning(
+                "Database is at revision %s, newer than this image's migrations — "
+                "not migrating (expected during a rollback)", ", ".join(sorted(unknown)),
+            )
+            return
+        # Any other unknown revision (not a number, or not past this image's
+        # head) is not a rollback: let Alembic fail loudly on it, as it
+        # always has. The number comparison is sound because only main is
+        # deployed and its revisions form one numbered chain
+        # (tests/test_alembic_migrations.py checks it): a branch revision
+        # sharing a number with main's fails that check once merged.
         cfg.attributes["connection"] = conn
         command.upgrade(cfg, revision)
+
+
+def _all_later_than_head(revisions: set[str], head: str | None) -> bool:
+    """True when every revision is a later one in this project's sequence.
+
+    Revisions are numbered ("0001", "0002", ... — migrations/README.md), so
+    "later than this image's head" is a number comparison. That is what
+    tells a rollback (the database was migrated by the next release) from a
+    database stamped by something this image should refuse to start on.
+    """
+    if not head or not head.isdigit():
+        return False
+    return all(rev.isdigit() and int(rev) > int(head) for rev in revisions)
 
 
 def _baseline_metadata():
