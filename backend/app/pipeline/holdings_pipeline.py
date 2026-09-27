@@ -185,24 +185,30 @@ def _keeps_earlier_read(prior: int | None, report: AnnualReport) -> bool:
     replaces it: a parser fix looks exactly like that.
 
     The stored row keeps its old parser_version, so the report is re-read
-    (from the parse cache — no request) every run, and each re-read counts
-    as a parser miss in _SourceHealth for as long as the regression lasts.
-    Stamping it as tried would silence the alarm after one night."""
+    every run — from the parse cache for its 30 days, then downloaded again
+    (live, counted like any fetch, inside FETCH_BUDGET) — and each re-read
+    counts as a parser miss in _SourceHealth for as long as the regression
+    lasts. Stamping it as tried would silence the alarm after one night."""
     if prior is None or report.holdings is not None:
         return False
     logger.warning("Parser could not read a report an earlier parser read %d holdings from — keeping those", prior)
     return True
 
 
-def _merge_known(stored: dict, tonight: dict) -> dict:
+def _merge_known(stored: dict, tonight: dict, same_rules: bool) -> dict:
     """One filing's fields from two nights' rows. What the row's title or
     type says — as-of date, label, amended, seq (a Senate title's amendment
     number; a House document id, which never differs) — comes as a set from
     whichever row's title parsed (tonight's, if both did), so a label never
     disagrees with its date. (Tonight's row already carries the stored
     filing date when it had none of its own: _ingest_members recomputes it
-    with that date.)"""
-    title_from = tonight if tonight["as_of_date"] or not stored["as_of_date"] else stored
+    with that date.)
+
+    Only while the stored row was derived by the same rules (same_rules:
+    the same PARSER_VERSION — the title rules in _senate_fields are part of
+    what it versions). After a bump, tonight's derivation stands, so a
+    tightened rule reaches rows stored under the old one."""
+    title_from = tonight if tonight["as_of_date"] or not stored["as_of_date"] or not same_rules else stored
     return {**tonight, **{key: title_from[key] for key in ("as_of_date", "report_label", "amended", "seq")}}
 
 
@@ -497,7 +503,9 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
             # either may lack what failed to parse on its night. Each value
             # comes from whichever has it, so the filing neither sorts below
             # the reports it superseded nor keeps a gap tonight's row fills.
-            merged = _merge_known(mine.rank_fields(), fields[mine.filing_id])
+            merged = _merge_known(
+                mine.rank_fields(), fields[mine.filing_id], mine.parser_version == chamber.parser_version,
+            )
             fields[mine.filing_id] = merged
             ranks[mine.filing_id] = chamber.rank(merged, mine.filing_id)
             repair = {k: merged[k] for k, v in mine.rank_fields().items() if merged[k] != v}
@@ -720,10 +728,10 @@ def _note_later_filing(db: Session, per_senator: dict[str, list[dict]]) -> None:
         ]
         # Filing date, then report URL: two filed the same day resolve the
         # same way every run, whatever order the search returned them in.
-        newest = max(later, key=lambda f: (f["filed_date"], f["report_url"]), default=None)
+        newest = max(later, key=lambda f: (f["filed_date"], senate_filing_id(f["report_url"])), default=None)
         if newest is not None:
-            noted = (disclosure.later_filing_filed or "", disclosure.later_filing_url or "")
-            if (newest["filed_date"], newest["report_url"]) >= noted:
+            noted = (disclosure.later_filing_filed or "", senate_filing_id(disclosure.later_filing_url or ""))
+            if (newest["filed_date"], senate_filing_id(newest["report_url"])) >= noted:
                 disclosure.later_filing_label = _senate_fields(newest)["report_label"]
                 disclosure.later_filing_url = newest["report_url"]
                 disclosure.later_filing_filed = newest["filed_date"]
@@ -734,7 +742,9 @@ def _note_later_filing(db: Session, per_senator: dict[str, list[dict]]) -> None:
 
 def _senate_fields(filing: dict) -> dict:
     """What gets stored for a Senate filing (_Chamber.fields), from one
-    parse of its title."""
+    parse of its title. These title rules are part of what
+    senate_fd.PARSER_VERSION versions: changing one is a bump, so stored
+    rows are re-derived (_merge_known)."""
     title = filing.get("title") or ""
     as_of = _senate_as_of(filing)
     amended = is_amendment_title(title)
@@ -767,7 +777,11 @@ def _senate_report_label(title: str, as_of: str | None, amended: bool, filed: st
 async def _senate_candidates(db: Session, client: httpx.AsyncClient) -> dict[str, list[dict]]:
     if await senate_accept_terms(client) is None:
         raise RuntimeError("Could not establish a Senate eFD session")
-    filings = await search_annual_filings(f"{utcnow().year - _YEARS_BACK}-01-01")
+    # Filed since last Jan 1 — covering reports for the same two calendar
+    # years the House phase reads (last year's, filed this year, and the
+    # year before's, filed last year); earlier filings can't be anyone's
+    # newest, and each extra page is a slow real-browser round trip.
+    filings = await search_annual_filings(f"{utcnow().year - (_YEARS_BACK - 1)}-01-01")
     if not any(is_senator_filing(f) and is_annual_title(f.get("title") or "") for f in filings):
         # Every senator files one every year; none across two years means
         # the search broke (search_filings returns [] on any failure).
