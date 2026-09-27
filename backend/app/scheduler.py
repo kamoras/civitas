@@ -65,8 +65,9 @@ def _start_job(target, *, name: str, alert: bool = False) -> None:
 
 def _nightly_pipeline() -> None:
     """Run the nightly sequence: Senate, then explore docs/SCOTUS/
-    presidents, then House, then stock trades — four independent
-    pipelines run one after another, not one combined pipeline.
+    presidents, then House, then stock trades, then elections — five
+    independent pipelines run one after another, not one combined
+    pipeline. A skip or a crash anywhere ends the chain there.
 
     Runs in a background thread with its own event loop so the main
     uvicorn loop stays responsive during long-running pipeline phases.

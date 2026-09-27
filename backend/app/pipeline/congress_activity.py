@@ -70,6 +70,12 @@ _ROLL_CALL_BATCH = 250
 # How many numbers past a missing roll call to probe before deciding the
 # chamber has no more votes (a file can be late while the next is up).
 _ROLL_CALL_LOOKAHEAD = 3
+# A number passed over that way is asked for again on each run while the
+# vote after it is this recent: long enough for a late file to be posted,
+# short enough that a number the chamber really skipped stops costing a
+# request. At most _GAP_RETRIES of them per chamber per run.
+_GAP_RETRY_DAYS = 14
+_GAP_RETRIES = 10
 
 _DIGEST_CURSOR_KEY = "congress-digest-backfill-cursor"
 _LAST_RUN_KEY = "congress-sync-last-run"
@@ -255,6 +261,21 @@ async def sync_digest(client: httpx.AsyncClient, db: Session, day: date) -> str:
         row.is_final = True
         row.fetched_at = utcnow()
         _replace_events(db, chamber, iso, "digest", action["events"] + committees)
+    for chamber in ("senate", "house"):
+        if (chamber, "floor") in texts:
+            continue
+        # A Record issue has a floor section for each chamber that met,
+        # pro forma sessions included, so a chamber with none did not meet
+        # (2026-09-21: the Senate's section only). Recorded as final, or the
+        # day would read "no record yet" and be fetched again every run
+        # for a week. A floor log that says the chamber met is left alone.
+        row = _day_row(db, chamber, iso)
+        if row.in_session:
+            continue
+        row.source = "digest"
+        row.source_url = f"https://www.govinfo.gov/app/details/{package}"
+        row.is_final = True
+        row.fetched_at = utcnow()
     db.commit()
     return "ok"
 
@@ -344,21 +365,71 @@ def _store_roll_call(db: Session, chamber: str, congress: int, session: int, num
     db.commit()
 
 
+def _gaps_to_retry(db: Session, chamber: str, congress: int, session: int, today: date) -> list[int]:
+    """Numbers below the highest stored that have no row, while the vote
+    after each is recent (_GAP_RETRY_DAYS), newest first."""
+    rows = db.query(RollCall.number, RollCall.date).filter_by(
+        chamber=chamber, congress=congress, session=session,
+    ).order_by(RollCall.number.desc()).all()
+    cutoff = (today - timedelta(days=_GAP_RETRY_DAYS)).isoformat()
+    gaps: list[int] = []
+    for (above, above_date), (below, _) in zip(rows, rows[1:] + [(0, "")]):
+        if (above_date or "") < cutoff:
+            break
+        gaps += range(above - 1, below, -1)
+        if len(gaps) >= _GAP_RETRIES:
+            break
+    return gaps[:_GAP_RETRIES]
+
+
+def _roll_call_url(chamber: str, congress: int, session: int, number: int) -> str:
+    if chamber == "senate":
+        return floor_logs.senate_roll_call_url(congress, session, number)
+    return floor_logs.house_roll_call_url(congress_first_year(congress) + session - 1, number)
+
+
+def _parse_roll_call(chamber: str, text: str, congress: int, session: int, number: int) -> dict | None:
+    if chamber == "senate":
+        return parse_senate_vote_xml(text, congress, session, number)
+    return parse_house_vote_xml(text, congress_first_year(congress) + session - 1, number)
+
+
+async def _retry_gaps(client: httpx.AsyncClient, db: Session, chamber: str,
+                      congress: int, session: int) -> tuple[int, str]:
+    """Ask again for the numbers the forward scan passed over."""
+    stored = 0
+    for number in _gaps_to_retry(db, chamber, congress, session, eastern_today()):
+        url = _roll_call_url(chamber, congress, session, number)
+        body = await _get(client, url, label=f"{chamber} roll call")
+        if body is None:
+            return stored, "failed"
+        if body is _ABSENT:
+            continue
+        text = body.decode("utf-8", errors="replace")
+        parsed = _parse_roll_call(chamber, text, congress, session, number)
+        if parsed is None:
+            return stored, "failed"
+        amended = _senate_amended_bill(text) if chamber == "senate" else None
+        _store_roll_call(db, chamber, congress, session, number, parsed, url, bill_id=amended)
+        stored += 1
+    return stored, "ok"
+
+
 async def sync_roll_calls(client: httpx.AsyncClient, db: Session, chamber: str,
                           congress: int, session: int, limit: int = _ROLL_CALL_BATCH) -> tuple[int, str]:
-    """New roll calls for one chamber's session -> (stored, outcome)."""
+    """New roll calls for one chamber's session -> (stored, outcome):
+    first the numbers an earlier scan passed over, then onward from the
+    highest stored."""
+    stored, outcome = await _retry_gaps(client, db, chamber, congress, session)
+    if outcome != "ok":
+        return stored, outcome
     highest = db.query(func.max(RollCall.number)).filter_by(
         chamber=chamber, congress=congress, session=session,
     ).scalar() or 0
-    year = congress_first_year(congress) + session - 1
-    stored = 0
     number = highest + 1
     misses = 0
     while stored < limit:
-        if chamber == "senate":
-            url = floor_logs.senate_roll_call_url(congress, session, number)
-        else:
-            url = floor_logs.house_roll_call_url(year, number)
+        url = _roll_call_url(chamber, congress, session, number)
         body = await _get(client, url, label=f"{chamber} roll call")
         if body is None:
             return stored, "failed"
@@ -369,13 +440,13 @@ async def sync_roll_calls(client: httpx.AsyncClient, db: Session, chamber: str,
             number += 1
             continue
         text = body.decode("utf-8", errors="replace")
-        parsed = (parse_senate_vote_xml(text, congress, session, number) if chamber == "senate"
-                  else parse_house_vote_xml(text, year, number))
+        parsed = _parse_roll_call(chamber, text, congress, session, number)
         if parsed is None:
             return stored, "failed"
         if misses:
-            # A number with no file between two that have one: the chamber
-            # skipped it. Logged, not retried, so it cannot stall the run.
+            # A number with no file between two that have one: late, or
+            # skipped by the chamber. Passed over so it cannot stall the
+            # run; the next runs ask for it again (_retry_gaps).
             logger.warning("%s roll call(s) %d-%d missing before %d (%d-%d)", chamber,
                            number - misses, number - 1, number, congress, session)
             misses = 0
