@@ -88,6 +88,14 @@ pipeline_is_busy() {
   if ! status=$(curl -fsS --max-time 5 \
     -H "Authorization: Bearer $admin_token" \
     "http://localhost:8081/api/admin/pipeline/status" 2>/dev/null); then
+    # The status lives in the pipeline service. If that service exists and
+    # has no task running at all, nothing can be running in it either —
+    # and deferring would block the very deploy that fixes it, forever.
+    if docker service inspect civitas_pipeline >/dev/null 2>&1 \
+      && [[ "$(docker service ps civitas_pipeline --filter desired-state=running --format '{{.CurrentState}}' 2>/dev/null | grep -c '^Running' || true)" == "0" ]]; then
+      log "pipeline status unreachable and civitas_pipeline has no running task — nothing to wait for"
+      return 1
+    fi
     _busy_reason="couldn't reach pipeline status"
     return 0
   fi
@@ -177,6 +185,16 @@ if [[ -z "${FORCE_DEPLOY:-}" ]] && command -v gh >/dev/null 2>&1; then
   esac
 fi
 
+# Whether every replica `service` wants is running. With a HEALTHCHECK,
+# Swarm holds a task in "starting" until it passes, so "Running" here means
+# healthy.
+service_is_up() {
+  local service="$1" desired running
+  desired=$(docker service inspect "$service" --format '{{.Spec.Mode.Replicated.Replicas}}' 2>/dev/null) || return 1
+  running=$(docker service ps "$service" --filter desired-state=running --format '{{.CurrentState}}' 2>/dev/null | grep -c '^Running' || true)
+  [[ "$desired" =~ ^[0-9]+$ && "$desired" -gt 0 && "$running" -ge "$desired" ]]
+}
+
 wait_for_rollout() {
   local service="$1" timeout="${2:-180}"
   for i in $(seq 1 "$timeout"); do
@@ -184,8 +202,13 @@ wait_for_rollout() {
     state=$(docker service inspect "$service" --format '{{.UpdateStatus.State}}' 2>/dev/null || echo "")
     case "$state" in
       completed|"")
-        log "$service rollout complete after ${i}s"
-        return 0
+        # Empty is also what a service has on the deploy that creates it
+        # (it was never updated), so an empty state proves nothing on its
+        # own: wait for its replicas to be up and healthy too.
+        if service_is_up "$service"; then
+          log "$service rollout complete after ${i}s"
+          return 0
+        fi
         ;;
       rollback_started|rollback_completed|paused)
         log "$service rollout failed (state=$state) — Swarm auto-rolled back"

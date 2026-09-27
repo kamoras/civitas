@@ -278,11 +278,24 @@ async def _daily_salt(date: str) -> bytes:
     except Exception:
         # Degrade to a process-local salt: this worker's count of today's
         # uniques may overlap the other worker's, but nothing reversible is
-        # ever stored. Retried on the next visit (not cached).
-        logger.warning("Visit salt unavailable — using a process-local salt for this visit", exc_info=True)
-        return secrets.token_bytes(32)
+        # ever stored. The shared salt is retried on the next call (this
+        # isn't cached as it). One fallback per process per day, not one per
+        # call: a fresh salt each time made every visit a new unique and
+        # every rate-limit key new, which switched the limits off.
+        logger.warning("Visit salt unavailable — using this process's fallback salt", exc_info=True)
+        return _fallback_salt_for(date)
     _salt_cache = (date, salt)
     return salt
+
+
+_fallback_salt: tuple[str, bytes] | None = None
+
+
+def _fallback_salt_for(date: str) -> bytes:
+    global _fallback_salt
+    if _fallback_salt is None or _fallback_salt[0] != date:
+        _fallback_salt = (date, secrets.token_bytes(32))
+    return _fallback_salt[1]
 
 
 def _visitor_hash(ip: str, salt: bytes) -> str:

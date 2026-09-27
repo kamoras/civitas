@@ -1,6 +1,7 @@
 """api/throttle.py: the limits every API worker process shares."""
 
 import multiprocessing
+import sqlite3
 import time
 
 import pytest
@@ -20,8 +21,7 @@ def _file_store(path: str):
 def _worker(path: str, calls: int, start, results) -> None:
     """One API worker process: its own interpreter and module state, the
     same database file."""
-    engine = create_engine(f"sqlite:///{path}", connect_args={"timeout": 30})
-    throttle._session_factory = sessionmaker(bind=engine)
+    throttle._session_factory = throttle.make_session_factory(f"sqlite:///{path}", busy_timeout_s=30)
     start.wait()
     allowed = sum(throttle.hit("write", "k", limit=20, period=3600).allowed for _ in range(calls))
     claimed = sum(throttle.claim("pulse", "k:1", period=3600) for _ in range(calls))
@@ -77,7 +77,7 @@ class TestHit:
     def test_expired_windows_are_purged(self, throttle_store, monkeypatch):
         at = [0.0]
         monkeypatch.setattr(throttle.time, "time", lambda: at[0])
-        monkeypatch.setattr(throttle, "_PURGE_EVERY", 1)
+        monkeypatch.setattr(throttle, "_last_purge", -1e9)
         throttle.hit("b", "old", limit=3, period=60)
         at[0] = 600.0
         throttle.hit("b", "new", limit=3, period=60)
@@ -108,16 +108,28 @@ class TestClaim:
         throttle.release("b", "k")
         assert throttle.claim("b", "k", period=30)
 
-    def test_expired_claims_are_purged(self, throttle_store, monkeypatch):
+    def test_expired_claims_are_purged_in_every_bucket(self, throttle_store, monkeypatch):
+        # A quiet bucket's rows (a day's pulse claims) go as surely as a
+        # busy one's: the purge is by expiry, across buckets, on a timer.
         at = [0.0]
         monkeypatch.setattr(throttle.time, "time", lambda: at[0])
-        monkeypatch.setattr(throttle, "_PURGE_EVERY", 1)
-        throttle.claim("b", "old", period=30)
-        at[0] = 100.0
-        throttle.claim("b", "new", period=30)
+        monkeypatch.setattr(throttle, "_last_purge", 0.0)
+        throttle.claim("pulse", "old", period=86400)
+        at[0] = 86400 + 61
+        throttle.claim("summary", "new", period=30)
         with throttle_store.connect() as conn:
             keys = [r[0] for r in conn.execute(text("SELECT key FROM throttle_claims"))]
         assert keys == ["new"]
+
+    def test_the_purge_runs_at_most_once_a_minute(self, throttle_store, monkeypatch):
+        at = [1000.0]
+        monkeypatch.setattr(throttle.time, "time", lambda: at[0])
+        monkeypatch.setattr(throttle, "_last_purge", 1000.0)
+        throttle.claim("b", "old", period=1)
+        at[0] += 30
+        throttle.claim("b", "new", period=1)
+        with throttle_store.connect() as conn:
+            assert conn.execute(text("SELECT COUNT(*) FROM throttle_claims")).scalar() == 2
 
 
 class TestFailsOpen:
@@ -143,10 +155,10 @@ class TestFailsOpen:
 
 
 def test_a_held_write_lock_is_waited_on_briefly_not_for_the_full_timeout(tmp_path, monkeypatch):
-    engine = _file_store(str(tmp_path / "visits.db"))
-    monkeypatch.setattr(throttle, "_session_factory", sessionmaker(bind=engine))
-    monkeypatch.setattr(throttle, "_BUSY_TIMEOUT_MS", 200)
-    blocker = engine.raw_connection()
+    path = str(tmp_path / "visits.db")
+    _file_store(path).dispose()
+    monkeypatch.setattr(throttle, "_session_factory", throttle.make_session_factory(f"sqlite:///{path}", 0.2))
+    blocker = sqlite3.connect(path)
     try:
         blocker.execute("BEGIN IMMEDIATE")
         started = time.monotonic()
@@ -155,4 +167,35 @@ def test_a_held_write_lock_is_waited_on_briefly_not_for_the_full_timeout(tmp_pat
     finally:
         blocker.rollback()
         blocker.close()
-        engine.dispose()
+        throttle._session_factory.kw["bind"].dispose()
+
+
+def test_its_short_timeout_never_reaches_the_visits_engine(tmp_path, monkeypatch):
+    # An earlier version set the short timeout per connection and
+    # "restored" it after commit — by then on a different pooled
+    # connection, leaving 2 s on the one the visit consumer next used.
+    from app.database import _sqlite_connect_args_for
+
+    path = str(tmp_path / "visits.db")
+    _file_store(path).dispose()
+    factory = throttle.make_session_factory(f"sqlite:///{path}")
+    monkeypatch.setattr(throttle, "_session_factory", factory)
+    for _ in range(5):
+        throttle.hit("b", "k", limit=100, period=60)
+    with factory.kw["bind"].connect() as conn:
+        assert conn.exec_driver_sql("PRAGMA busy_timeout").scalar() == int(throttle._BUSY_TIMEOUT_S * 1000)
+    visits_engine = create_engine(f"sqlite:///{path}", connect_args=_sqlite_connect_args_for(f"sqlite:///{path}"))
+    with visits_engine.connect() as conn:
+        assert conn.exec_driver_sql("PRAGMA busy_timeout").scalar() == 30_000
+    visits_engine.dispose()
+    factory.kw["bind"].dispose()
+
+
+def test_a_store_that_cannot_be_opened_fails_open(monkeypatch):
+    def broken():
+        raise throttle.SQLAlchemyError("unable to open database file")
+
+    monkeypatch.setattr(throttle, "_session_factory", broken)
+    assert throttle.hit("b", "k", limit=3, period=60).allowed
+    assert throttle.claim("b", "k", period=30)
+    throttle.release("b", "k")

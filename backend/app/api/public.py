@@ -41,7 +41,7 @@ _RATE_PERIOD = 60.0
 
 
 async def _rate_limit_dep(request: Request) -> None:
-    key = await client_key(request)
+    key = await client_key(request, "public-api")
     decision = await asyncio.to_thread(
         throttle.hit, "public-api", key, limit=_RATE_LIMIT, period=_RATE_PERIOD,
     )

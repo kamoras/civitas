@@ -976,7 +976,17 @@ the pending list).
     count and a once-per-day dedup lets a second vote through on the other
     worker. Rate limits and once-per-period rules go through
     `app/api/throttle.py` (`hit`, `claim`), whose tables live in the visits
-    database and are keyed by the day's salted visitor hash, never an IP.
+    database. Keys come from `rate_limit.client_key`: an HMAC of the IP
+    under the day's visit salt, tagged by purpose — never an IP, and never
+    the visitor hash `SiteVisit` stores, so no throttle row joins to a visit.
+    Every row expires. Background jobs that change data outside a pipeline
+    run hold a lease, and releasing it moves the HTTP data version
+    (`lease.DATA_CHANGED_TIER`); a route whose response changes with
+    requests themselves goes in `cache_headers._NO_VALIDATOR_ROUTES`.
+  - A module cache of a file the pipeline rewrites must notice the rewrite
+    from the API process: keep a `file_cache.files_stamp` of it and reload
+    when it moves. Clearing the cache from the writer only clears the
+    writer's own process.
     Caches of data every client sees alike (`bill_service`'s collection
     cache, the data-version memo) are fine per process.
   - Two backend *processes* also meet during a Swarm start-first rollout,

@@ -65,19 +65,28 @@ def client_ip(request: Request) -> str:
     return peer or "unknown"
 
 
-async def client_key(request: Request) -> str:
-    """The key per-client limits count under: the day's salted visitor hash
-    of client_ip (api/visits.py), so no limiter stores an IP address."""
-    from app.api.visits import _daily_salt, _visitor_hash
+async def client_key(request: Request, purpose: str, scope: str = "") -> str:
+    """The key a per-client limit counts under: an HMAC of client_ip under
+    the day's visit salt (api/visits.py), tagged with `purpose` and
+    `scope`. Never the IP itself, and never the visitor hash SiteVisit
+    stores — so a throttle row can't be joined to a visit (AGENTS.md §8),
+    and rows for different purposes or scopes (one visitor's votes on two
+    issues) can't be joined to each other. Once the day's salt is deleted,
+    no key can be recomputed from an address."""
+    import hashlib
+    import hmac
+
+    from app.api.visits import _daily_salt
     from app.time_utils import utcnow
 
     salt = await _daily_salt(utcnow().date().isoformat())
-    return _visitor_hash(client_ip(request), salt)
+    message = f"{purpose}\x00{client_ip(request)}\x00{scope}".encode()
+    return hmac.new(salt, message, hashlib.sha256).hexdigest()[:32]
 
 
 async def write_rate_limit(request: Request) -> None:
     """FastAPI dependency: 20 mutation requests/minute per IP."""
-    key = await client_key(request)
+    key = await client_key(request, "write")
     decision = await asyncio.to_thread(
         throttle.hit, "write", key, limit=_WRITE_LIMIT, period=_WRITE_PERIOD,
     )

@@ -49,6 +49,7 @@ from typing import Any
 import httpx
 
 from app.atomic_write import write_text_atomic
+from app.file_cache import Stamp, files_stamp
 
 logger = logging.getLogger(__name__)
 
@@ -62,13 +63,19 @@ _PATHS = (
     os.path.join(os.getcwd(), "data", "state_election_dates.json"),
 )
 
+# The election pipeline (the pipeline process) writes the file; the API
+# processes read it through primary_date and reload when its mtime changes
+# (file_cache.files_stamp).
 _cache: dict[str, Any] | None = None
+_cache_stamp: Stamp = None
 
 
 def _load() -> dict[str, Any]:
-    global _cache
-    if _cache is not None:
+    global _cache, _cache_stamp
+    stamp = files_stamp(_PATHS)
+    if _cache is not None and stamp == _cache_stamp:
         return _cache
+    _cache_stamp = stamp
     for path in _PATHS:
         try:
             with open(path, encoding="utf-8") as fh:
@@ -123,7 +130,7 @@ def save(state: str, cycle: int, dates: dict) -> None:
     """Record what is known about a state's cycle. Merges rather than
     replaces, so a per-state read that knows only the primary doesn't drop
     the runoff the national calendar supplied, or vice versa."""
-    global _cache
+    global _cache, _cache_stamp
     known = dict(_load())
     key = f"{cycle}-{state.upper()}"
     known[key] = {**known.get(key, {}), **{k: v for k, v in dates.items() if v}}
@@ -139,6 +146,7 @@ def save(state: str, cycle: int, dates: dict) -> None:
     else:
         logger.warning("Nowhere writable to record election dates for %s", state)
     _cache = known
+    _cache_stamp = files_stamp(_PATHS)
 
 
 async def fetch_fec_calendar(client: httpx.AsyncClient, cycle: int) -> dict[str, dict]:

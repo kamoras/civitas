@@ -113,6 +113,23 @@ def _query_data_version() -> str:
             )
             if row is not None:
                 stamps.append(f"{model.__tablename__}:{row.id}:{row.completed_at.isoformat()}")
+        # Everything else that writes in the background — the hourly
+        # refreshes, election coverage, the ballot and congress syncs, the
+        # explore ingest, a data reset — holds a lease, and releasing one
+        # records when (lease.release, DATA_CHANGED_TIER). Without it a
+        # response those jobs changed kept the same ETag until the next
+        # pipeline run, and every revalidating cache (browser, nginx,
+        # Cloudflare) was told for a day that its copy was current.
+        from app.models import ApiCache
+        from app.pipeline.lease import DATA_CHANGED_KEY, DATA_CHANGED_TIER
+
+        changed = (
+            db.query(ApiCache.cached_at)
+            .filter(ApiCache.tier == DATA_CHANGED_TIER, ApiCache.cache_key == DATA_CHANGED_KEY)
+            .scalar()
+        )
+        if changed is not None:
+            stamps.append(f"changed:{changed.isoformat()}")
         if not stamps:
             # Nothing has ever completed. Return a constant rather than a
             # timestamp: a value that changed every second would make every
@@ -189,6 +206,21 @@ _ROUTE_CACHE_CONTROL_OVERRIDES: list[tuple[re.Pattern[str], str]] = [
 ]
 
 
+# Routes whose responses change between background writes, so no data
+# version can validate them: they are cached for their max-age and never
+# answered with a 304. The issue lists carry pulse-vote counts and today's
+# views (trending), both written by requests; a document's comments are
+# fetched live from regulations.gov.
+_NO_VALIDATOR_ROUTES: list[re.Pattern[str]] = [
+    re.compile(r"^/api/action/issues(/.*)?$"),
+    re.compile(r"^/api/explore/[^/]+/comments$"),
+]
+
+
+def _has_validator(path: str) -> bool:
+    return not any(pattern.match(path) for pattern in _NO_VALIDATOR_ROUTES)
+
+
 def _route_cache_control_override(path: str) -> str | None:
     for pattern, value in _ROUTE_CACHE_CONTROL_OVERRIDES:
         if pattern.match(path):
@@ -216,6 +248,12 @@ class DataVersionCacheMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         if request.method != "GET" or not _is_cacheable_path(request.url.path):
             return await call_next(request)
+
+        if not _has_validator(request.url.path):
+            response = await call_next(request)
+            if response.status_code == 200 and "Cache-Control" not in response.headers:
+                response.headers["Cache-Control"] = _cache_control()
+            return response
 
         version = data_version()
         if version is None:

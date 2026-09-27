@@ -128,3 +128,25 @@ class TestSummaryEndpointGuards:
             with pytest.raises(HTTPException) as exc_info:
                 await get_explore_document_summary(doc.id, None, db=db_session)
         assert exc_info.value.status_code == 429
+
+
+class TestCommentsCaching:
+    """Comments are fetched live from regulations.gov: an error is this
+    moment's, and must not be cached for every later visitor."""
+
+    async def _get(self, db_session, result):
+        from unittest.mock import AsyncMock
+
+        from app.api.explore import get_document_comments
+
+        doc = _make_doc(db_session, comment_url="https://www.regulations.gov/document/EPA-1")
+        with patch("app.pipeline.fetch.regulations_gov.fetch_comments", AsyncMock(return_value=result)):
+            return await get_document_comments(doc.id, page=1, page_size=25, db=db_session)
+
+    async def test_a_failed_fetch_is_never_stored(self, db_session):
+        resp = await self._get(db_session, {"comments": [], "totalElements": 0, "error": "Rate limit reached"})
+        assert resp.headers["Cache-Control"] == "no-store"
+
+    async def test_a_good_fetch_is_cached_briefly(self, db_session):
+        resp = await self._get(db_session, {"comments": [{"id": "1"}], "totalElements": 1})
+        assert resp.headers["Cache-Control"] == "public, max-age=300"

@@ -446,3 +446,62 @@ class TestRouteOverrideRegistryMatchesLiveRoutes:
                 f"route actually sets {live_value!r} — update "
                 f"_ROUTE_CACHE_CONTROL_OVERRIDES in cache_headers.py"
             )
+
+
+# --- Writes outside pipeline runs ----------------------------------------
+
+def test_a_background_job_finishing_moves_the_version(db_session, monkeypatch):
+    """The hourly Action Center and bill refreshes, election coverage, the
+    ballot and congress syncs and the explore ingest write no pipeline-run
+    row — each holds a lease instead. Their changes kept the old ETag, and a
+    revalidating cache (browser, nginx, Cloudflare) was told its copy was
+    current until the next nightly run."""
+    from app.pipeline import lease
+
+    monkeypatch.setattr("app.database.SessionLocal", lambda: db_session)
+    db_session.add(PipelineRun(status="completed", completed_at=utcnow()))
+    db_session.commit()
+    before = ch._query_data_version()
+
+    token = lease.acquire(db_session, lease.BILL_REFRESH)
+    assert token is not None
+    assert ch._query_data_version() == before  # holding it changes nothing yet
+    lease.release(db_session, lease.BILL_REFRESH, token)
+
+    assert ch._query_data_version() != before
+
+
+@pytest.fixture()
+def request_driven_client(monkeypatch):
+    app = FastAPI()
+    app.add_middleware(ch.DataVersionCacheMiddleware)
+
+    @app.get("/api/action/issues")
+    def issues(response: Response):
+        response.headers["Cache-Control"] = "public, max-age=30"
+        return {"ok": True}
+
+    @app.get("/api/explore/{doc_id}/comments")
+    def comments():
+        return {"ok": True}
+
+    monkeypatch.setattr(ch, "data_version", lambda: "run-v1")
+    return TestClient(app)
+
+
+@pytest.mark.parametrize("path", ["/api/action/issues", "/api/explore/7/comments"])
+def test_routes_changed_by_requests_carry_no_validator(request_driven_client, path):
+    # Pulse votes and today's views change the issue lists between any two
+    # background writes; comments come live from regulations.gov. No data
+    # version can say whether a copy is current, so they are cached for
+    # their max-age only and never answered with a 304.
+    resp = request_driven_client.get(path)
+    assert resp.status_code == 200
+    assert "ETag" not in resp.headers
+    assert resp.headers["Cache-Control"].startswith("public, max-age=")
+    again = request_driven_client.get(path, headers={"If-None-Match": ch._etag_for("run-v1")})
+    assert again.status_code == 200 and again.content
+
+
+def test_other_routes_keep_their_validator(client):
+    assert "ETag" in client.get("/api/senators").headers

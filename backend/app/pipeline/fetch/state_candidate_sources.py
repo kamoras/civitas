@@ -23,6 +23,7 @@ import os
 from typing import Any
 
 from app.atomic_write import write_text_atomic
+from app.file_cache import Stamp, files_stamp
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,11 @@ _DISCOVERED_PATHS = (
 )
 
 _cache: dict[str, Any] | None = None
+# The crawler (the election pipeline, in the pipeline process) writes the
+# discovered file; the API processes read it through source_for_state and
+# reload when its mtime changes (file_cache.files_stamp).
 _discovered_cache: dict[str, Any] | None = None
+_discovered_stamp: Stamp = None
 
 
 def _load() -> dict[str, Any]:
@@ -59,9 +64,11 @@ def _load() -> dict[str, Any]:
 
 
 def _load_discovered() -> dict[str, Any]:
-    global _discovered_cache
-    if _discovered_cache is not None:
+    global _discovered_cache, _discovered_stamp
+    stamp = files_stamp(_DISCOVERED_PATHS)
+    if _discovered_cache is not None and stamp == _discovered_stamp:
         return _discovered_cache
+    _discovered_stamp = stamp
     for path in _DISCOVERED_PATHS:
         try:
             with open(path, encoding="utf-8") as fh:
@@ -94,8 +101,9 @@ def save_discovered(state: str, source: dict[str, Any] | None) -> None:
             continue
     else:
         logger.warning("Nowhere writable to record discovered source for %s", state)
-    global _discovered_cache
+    global _discovered_cache, _discovered_stamp
     _discovered_cache = discovered
+    _discovered_stamp = files_stamp(_DISCOVERED_PATHS)
 
 
 def discovered_states() -> set[str]:

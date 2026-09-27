@@ -488,9 +488,9 @@ class PulseVoteRequest(BaseModel):
         return v
 
 
-# Keyed on the same daily-salted HMAC of the IP that visit counting uses
-# (api/visits.py), never the IP itself: a raw address held for a day is
-# exactly the per-visitor identifier §8 of AGENTS.md rules out, and the
+# Keyed on an HMAC of the IP and the issue under the day's visit salt
+# (rate_limit.client_key), never the IP itself: a raw address held for a day
+# is exactly the per-visitor identifier §8 of AGENTS.md rules out, and the
 # salt is deleted when the UTC day ends, so yesterday's keys cannot be
 # turned back into addresses. A new salt also means a new key, which makes
 # the dedup "one stance per issue per UTC day" — what the 429 says. Held in
@@ -519,7 +519,7 @@ async def record_pulse_vote(
     from app.api import throttle
     from app.api.rate_limit import client_key
 
-    key = f"{await client_key(request)}:{body.issue_id}"
+    key = await client_key(request, _PULSE_BUCKET, str(body.issue_id))
     if not await asyncio.to_thread(throttle.claim, _PULSE_BUCKET, key, period=_PULSE_DEDUP_WINDOW):
         raise HTTPException(
             status_code=429,

@@ -112,7 +112,18 @@ class TestWriteRateLimit:
         with throttle_store.connect() as conn:
             keys = [row[0] for row in conn.execute(text("SELECT key FROM throttle_windows"))]
         assert keys and all("8.8.4.7" not in k for k in keys)
-        assert keys == [await client_key(_make_request("8.8.4.7"))]
+        assert keys == [await client_key(_make_request("8.8.4.7"), "write")]
+
+    async def test_a_key_cannot_be_joined_to_a_visit(self):
+        # SiteVisit stores _visitor_hash(ip, salt); a throttle row holding
+        # the same value would turn the visits table into a per-visitor log
+        # of what each visitor did (AGENTS.md §8).
+        from app.api.visits import _visitor_hash
+
+        req = _make_request("8.8.4.10")
+        keys = {await client_key(req, p, s) for p, s in [("write", ""), ("pulse", "1"), ("pulse", "2")]}
+        assert len(keys) == 3
+        assert _visitor_hash("8.8.4.10", b"s" * 32) not in keys
 
 
 @pytest.mark.usefixtures("throttle_store", "_fixed_salt")

@@ -54,7 +54,11 @@ class TestDailySalt:
         assert [r.date for r in db_session.query(VisitSalt).all()] == ["2026-09-25"]
 
     def test_unavailable_store_degrades_without_caching(self, monkeypatch):
+        # One fallback per process per day, never cached as the shared
+        # salt (retried next call). A fresh salt per call made every visit a
+        # new unique and every rate-limit key new — switching the limits off.
         monkeypatch.setattr(visits, "_salt_cache", None)
+        monkeypatch.setattr(visits, "_fallback_salt", None)
 
         def boom(date):
             raise RuntimeError("db down")
@@ -62,7 +66,8 @@ class TestDailySalt:
         monkeypatch.setattr(visits, "_load_or_create_salt", boom)
         a = asyncio.run(_daily_salt("2026-09-24"))
         b = asyncio.run(_daily_salt("2026-09-24"))
-        assert a != b and visits._salt_cache is None
+        assert a == b and visits._salt_cache is None
+        assert asyncio.run(_daily_salt("2026-09-25")) != a
 
 
 class TestHash:
@@ -120,3 +125,4 @@ class TestLegacyRekey:
         database._rekey_legacy_visitor_hashes()
         after = db_session.execute(text("SELECT date, COUNT(*) FROM site_visits GROUP BY date")).all()
         assert before == after
+

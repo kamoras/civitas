@@ -1766,9 +1766,12 @@ class ThrottleWindow(VisitsBase):
     """Requests counted per fixed window, for the per-client rate limits
     that must hold across every API worker process (api/throttle.py).
 
-    `key` is never an IP address: per-client limits key on the same
-    daily-salted HMAC visit counting uses (SiteVisit.visitor_hash), and rows
-    are deleted two windows after they close.
+    `key` is never an IP address, and never a visitor hash another table
+    holds: per-client keys are an HMAC under the day's visit salt with a
+    purpose tag of their own (api/rate_limit.client_key), so a row can't be
+    joined to SiteVisit — nor, for the pulse dedup, to the same visitor's
+    other rows. Deleted once `expires_at` passes; unlinkable to any address
+    once the day's salt is gone.
     """
     __tablename__ = "throttle_windows"
 
@@ -1776,18 +1779,20 @@ class ThrottleWindow(VisitsBase):
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     window: Mapped[int] = mapped_column(Integer, primary_key=True)  # epoch seconds // period
     count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    expires_at: Mapped[float] = mapped_column(Float, nullable=False, index=True)  # epoch seconds
 
 
 class ThrottleClaim(VisitsBase):
     """The last time something was claimed, for once-per-period rules that
     must hold across every API worker process (api/throttle.claim): one
     pulse vote per issue per visitor per day, one summary generation per
-    document per cooldown. Same keying rule as ThrottleWindow."""
+    document per cooldown. Same keying and expiry rules as ThrottleWindow."""
     __tablename__ = "throttle_claims"
 
     bucket: Mapped[str] = mapped_column(String(32), primary_key=True)
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     claimed_at: Mapped[float] = mapped_column(Float, nullable=False)  # epoch seconds
+    expires_at: Mapped[float] = mapped_column(Float, nullable=False, index=True)
 
 
 class VisitsMigration(VisitsBase):

@@ -226,7 +226,12 @@ async def get_document_comments(
         page_size=page_size,
         page_number=page,
     )
-    return JSONResponse(content=result)
+    # Fetched live, so an error here (a rate limit, a timeout) is this
+    # moment's, not the document's: cached, one visitor's failure would be
+    # served to every visitor for the whole lifetime. Answered 200 either
+    # way — the page shows the message in place of the list.
+    cache_control = "no-store" if result.get("error") else "public, max-age=300"
+    return JSONResponse(content=result, headers={"Cache-Control": cache_control})
 
 
 class CommentSubmission(BaseModel):

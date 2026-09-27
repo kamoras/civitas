@@ -34,6 +34,7 @@ from typing import Any
 import httpx
 
 from app.atomic_write import write_text_atomic
+from app.file_cache import Stamp, files_stamp
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -46,16 +47,21 @@ _VOLUME_PATH = "/data/state_ballot_lookup.json"
 # writes — an accessor cached for the process lifetime without that
 # invalidation would serve the pre-verification copy until the container
 # restarted (the bug district_pvi.py's explicit cache reset exists to
-# avoid).
+# avoid). That clear only reaches the writer's own process; the API
+# processes, which serve lookup_for_state, reload when the volume copy's
+# mtime changes (file_cache.files_stamp).
 _cache: dict[str, Any] | None = None
+_cache_stamp: Stamp = None
 
 _LINK_CHECK_TIMEOUT_S = 10.0
 
 
 def _load() -> dict[str, Any]:
-    global _cache
-    if _cache is not None:
+    global _cache, _cache_stamp
+    stamp = files_stamp([_VOLUME_PATH])
+    if _cache is not None and stamp == _cache_stamp:
         return _cache
+    _cache_stamp = stamp
     for path in (_VOLUME_PATH, _BUNDLED_PATH):
         try:
             with open(path, encoding="utf-8") as fh:
