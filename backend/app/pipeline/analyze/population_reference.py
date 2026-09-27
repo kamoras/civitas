@@ -23,6 +23,7 @@ import json
 import logging
 import pathlib
 
+from app.config_definitions import CONSTITUENT_REFERENCE_STATISTIC
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -51,12 +52,30 @@ class ChamberReference:
     {"senate": {...}, "house": {...}}; the presidential reference has the
     single key "presidents"."""
 
-    def __init__(self, name: str, keys: tuple[str, ...] = CHAMBERS):
+    def __init__(self, name: str, keys: tuple[str, ...] = CHAMBERS, statistic: str | None = None):
         self.name = name
         self.keys = keys
+        # When set, a per-chamber entry counts only if its "statistic" field
+        # equals this: a reference measured on a different statistic (left
+        # on /data by an older release) is skipped, falling back to the
+        # bundled entry, rather than scored against on the wrong scale.
+        self._statistic = statistic
         self.live_path = _LIVE_DIR / f"{name}.json"
         self.bundled_path = _BUNDLED_DIR / f"{name}.json"
         self._cache: tuple[tuple[float | None, float | None], dict] | None = None
+        self._warned: set[tuple[str, str, str | None]] = set()
+
+    @property
+    def statistic(self) -> str | None:
+        """Fixed at construction: which stored entries load() accepts."""
+        return self._statistic
+
+    def usable(self, entry: dict | None) -> bool:
+        """Whether one chamber's entry can be scored against."""
+        return (
+            isinstance(entry, dict) and bool(entry)
+            and (self.statistic is None or entry.get("statistic") == self.statistic)
+        )
 
     def load(self) -> dict:
         """The live file layered over the bundled fallback, per chamber.
@@ -67,7 +86,22 @@ class ChamberReference:
         if self._cache is not None and self._cache[0] == key:
             return self._cache[1]
         bundled, live = _read_json(self.bundled_path), _read_json(self.live_path)
-        merged = {k: live.get(k) or bundled.get(k) for k in self.keys if live.get(k) or bundled.get(k)}
+        merged = {}
+        for k in self.keys:
+            for source, entry in (("live", live.get(k)), ("bundled", bundled.get(k))):
+                if self.usable(entry):
+                    merged[k] = entry
+                    break
+                warn_key = (source, k, entry.get("statistic") if isinstance(entry, dict) else repr(entry)[:40])
+                if entry and warn_key not in self._warned:
+                    # Once per stale entry per process: a chamber write
+                    # re-reads the file, and the other chamber's stale entry
+                    # is expected until its own run replaces it.
+                    self._warned.add(warn_key)
+                    logger.warning(
+                        "Skipping the %s %s entry for %s: measured on %r, not %r",
+                        source, self.name, k, warn_key[2], self.statistic,
+                    )
         if not merged:
             logger.error(
                 "No %s reference (neither %s nor the bundled %s)",
@@ -105,5 +139,5 @@ class ChamberReference:
 
 LES_REFERENCE = ChamberReference("les_reference")
 FUNDING_REFERENCE = ChamberReference("funding_reference")
-CONSTITUENT_REFERENCE = ChamberReference("constituent_reference")
+CONSTITUENT_REFERENCE = ChamberReference("constituent_reference", statistic=CONSTITUENT_REFERENCE_STATISTIC)
 PRESIDENT_REFERENCE = ChamberReference("president_reference", keys=("presidents",))

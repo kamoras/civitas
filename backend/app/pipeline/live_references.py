@@ -26,6 +26,20 @@ def sitting_president_party(db: Session) -> str | None:
     return row[0] if row else None
 
 
+def measure_les_reference(
+    chamber: str, members: list[tuple[list[dict], str | None]], majority: str | None,
+) -> dict | None:
+    """`chamber`'s Legislative Effectiveness reference measured from
+    `members`, not persisted (None when too few members to measure)."""
+    from app.pipeline.analyze.population_reference import LES_REFERENCE
+    from app.pipeline.analyze.score_calculator import compute_les_reference
+
+    previous = LES_REFERENCE.load().get(chamber) or {}
+    return compute_les_reference(
+        members, settings.CURRENT_CONGRESS, majority, previous.get("advancement_rates"),
+    )
+
+
 def live_les_reference(
     chamber: str, members: list[tuple[list[dict], str | None]], db: Session,
 ) -> dict | None:
@@ -36,10 +50,7 @@ def live_les_reference(
     one — a single-member filter run, or the first days of a congress.
     """
     from app.pipeline.analyze.population_reference import LES_REFERENCE
-    from app.pipeline.analyze.score_calculator import (
-        compute_les_reference,
-        derive_chamber_majority,
-    )
+    from app.pipeline.analyze.score_calculator import derive_chamber_majority
 
     majority = derive_chamber_majority(
         [party for _, party in members], chamber, sitting_president_party(db),
@@ -50,10 +61,7 @@ def live_les_reference(
             "adjustment falls back to the historical table for this congress",
             chamber,
         )
-    previous = LES_REFERENCE.load().get(chamber) or {}
-    ref = compute_les_reference(
-        members, settings.CURRENT_CONGRESS, majority, previous.get("advancement_rates"),
-    )
+    ref = measure_les_reference(chamber, members, majority)
     if ref is None:
         logger.warning(
             "Too few %s members with substantive bills to measure an LES reference "
@@ -86,13 +94,15 @@ def live_funding_reference(chamber: str, fundings: list[dict]) -> dict:
     return FUNDING_REFERENCE.with_live(chamber, ref)
 
 
-def live_constituent_reference(chamber: str, members: list[dict]) -> dict:
+def live_constituent_reference_measured(chamber: str, members: list[dict]) -> tuple[dict, bool]:
     """This run's Constituent Alignment expectation for `chamber` (per-party
     break rate by seat lean — see score_calculator.compute_constituent_
-    reference), persisted and merged the same way as live_funding_reference.
-    `members` are calculate_scores-shaped dicts. Falls back to the last
-    persisted reference when either party has too few measurable members
-    (e.g. a single-member filtered run)."""
+    reference), persisted and merged the same way as live_funding_reference,
+    and whether it was measured from `members` this run. `members` are
+    calculate_scores-shaped dicts. Falls back to the last persisted
+    reference (measured False) when either party has too few measurable
+    members (e.g. a single-member filtered run) — the ground-truth gate's
+    saturation-share probe needs to know which it got."""
     from app.pipeline.analyze.population_reference import CONSTITUENT_REFERENCE
     from app.pipeline.analyze.score_calculator import (
         compute_constituent_reference,
@@ -102,10 +112,11 @@ def live_constituent_reference(chamber: str, members: list[dict]) -> dict:
     ref = compute_constituent_reference(constituent_reference_inputs(members))
     if ref is None:
         logger.warning(
-            "Too few %s members with party-labeled votes to measure the "
-            "Constituent Alignment expectation this run — scoring against the "
-            "last persisted one", chamber,
+            "Too few full-confidence %s members (party-labeled votes >= "
+            "CONSTITUENT_FULL_CONFIDENCE_VOTES, per party) to measure the "
+            "Constituent Alignment expectation this run — expected early in a "
+            "Congress; scoring against the last persisted one", chamber,
         )
-        return CONSTITUENT_REFERENCE.load()
+        return CONSTITUENT_REFERENCE.load(), False
     logger.info("Constituent Alignment reference (%s): %s", chamber, ref)
-    return CONSTITUENT_REFERENCE.with_live(chamber, ref)
+    return CONSTITUENT_REFERENCE.with_live(chamber, ref), True

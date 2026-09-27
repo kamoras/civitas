@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 
 import logging
+import threading
 from app.config import settings
 
 from fastapi import FastAPI
@@ -124,12 +125,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception:
         logging.getLogger(__name__).exception("Explore index check failed (non-fatal)")
 
-    # A release that rescales Legislative Effectiveness leaves the stored
-    # scores and reference on the old scale until the nightly run; bring
-    # them over now so pages and their breakdowns agree (les_rescore.py).
-    from app.database import SessionLocal as _les_session
-    from app.pipeline.les_rescore import start_les_rescore
-    start_les_rescore(_les_session)
+    # A release that rescales Legislative Effectiveness or Constituent
+    # Alignment leaves the stored scores and reference on the old scale until
+    # the nightly run; bring them over now so pages and their breakdowns agree
+    # (les_rescore.py, constituent_rescore.py). One thread, one after the
+    # other, so the two never contend for SQLite's write lock.
+    from app.database import SessionLocal as _rescore_session
+    from app.pipeline.constituent_rescore import rescore_stale_constituent_alignment
+    from app.pipeline.les_rescore import rescore_stale_legislative_effectiveness
+
+    def _startup_rescore() -> None:
+        rescore_stale_legislative_effectiveness(_rescore_session)
+        rescore_stale_constituent_alignment(_rescore_session)
+
+    threading.Thread(target=_startup_rescore, name="startup-rescore", daemon=True).start()
 
     from app.api.visits import run_visit_consumer
     visit_consumer_task = asyncio.create_task(run_visit_consumer())

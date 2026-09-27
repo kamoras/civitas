@@ -1,4 +1,4 @@
-"""Constituent Alignment (v6.13): measured, symmetric, no safe-seat scaling.
+"""Constituent Alignment (v6.15): measured, no safe-seat scaling, peaked.
 
 Each design choice here was decided by testing it against U.S. House
 re-election results (docs/research/constituent-alignment.md):
@@ -8,6 +8,8 @@ re-election results (docs/research/constituent-alignment.md):
 - Below-expected loyalty scores below neutral (it was held at 50).
 - Neither component is scaled by seat safety (both were).
 - Position is congress-specific Nokken-Poole, not career DW-NOMINATE.
+- Breaking past the saturation deviation lowers the score again (v6.15):
+  own-party primary voters punish it and the whole seat stops rewarding it.
 
 conftest pins the reference: expected break rate 10% in a swing seat, 5% in
 a maximally safe one, 30% in a maximally opposed one; saturation at a
@@ -57,17 +59,54 @@ class TestSeatRelativeVotes:
         assert score(record(10)) == 50
 
     def test_loyalty_below_expectation_scores_below_neutral(self):
-        # 0% vs 10% expected: half the saturation deviation -> 25.
-        assert score(record(0)) == 25
+        # 0% vs 10% expected: half a saturation deviation below, on a loyal
+        # side that reaches 0 at four of them -> 50 - 50 * 0.5 / 4.
+        assert score(record(0)) == 44
 
     def test_breaking_more_than_expected_scores_above_neutral(self):
         assert score(record(20)) == 75
 
-    def test_symmetric_around_the_expectation(self):
-        assert score(record(20)) - 50 == 50 - score(record(0))
+    def test_extra_loyalty_costs_less_than_extra_disloyalty(self):
+        # v6.15: at equal distance from the seat's norm, loyalty is penalized
+        # less than disloyalty past the peak (20-point gap, on the shape).
+        from app.pipeline.analyze.score_calculator import _peaked_vote_shape
 
-    def test_saturates_at_the_chambers_p90_deviation(self):
-        assert score(record(30)) == 100 and score(record(60)) == 100
+        assert _peaked_vote_shape(-0.4, 0.2) == pytest.approx(25)
+        assert _peaked_vote_shape(0.4, 0.2) == pytest.approx(50)
+        assert _peaked_vote_shape(0.6, 0.2) == pytest.approx(0, abs=1e-9)
+        assert _peaked_vote_shape(-0.6, 0.2) == pytest.approx(12.5)
+        # Loyalty reaches the floor only at four gaps below.
+        assert _peaked_vote_shape(-0.8, 0.2) == pytest.approx(0, abs=1e-9)
+        assert _peaked_vote_shape(-0.7, 0.2) > 0
+
+    def test_peaks_at_the_chambers_p90_deviation(self):
+        assert score(record(30)) == 100
+        assert score(record(29)) < 100 and score(record(31)) < 100
+
+    def test_breaking_past_saturation_declines_at_the_rate_it_rose(self):
+        # 10% expected, 20-point saturation: 100 at 30%, back to 50 at 50%
+        # (twice the saturation deviation), 0 at 70% and beyond.
+        assert score(record(40)) == 75 == score(record(20))
+        assert score(record(50)) == 50
+        assert score(record(70)) == 0 and score(record(90)) == 0
+
+    def test_few_votes_shrink_toward_neutral(self):
+        # 10 votes, 7 breaks: 70% against 10% expected is three saturation
+        # deviations past it (0 at full confidence), but 10 of the 20 votes
+        # full confidence needs pulls it halfway back to 50.
+        assert score(record(7, total=10)) == 25
+        assert score(record(1, total=10)) == 50
+        # From 20 votes on, no shrinkage.
+        assert score(record(14, total=20)) == 0
+
+    def test_breakdown_says_when_few_votes_shrink_it(self):
+        detail = _constituent_alignment_core(record(7, total=10), [], {}, state="SW", party="D")["components"][0]["detail"]
+        assert "only 10 votes" in detail
+
+    def test_full_loyalty_in_an_opposed_seat(self):
+        # An R in a D+15 state is expected to break 30%; never breaking is
+        # 1.5 gaps below: 50 - 50 * 1.5 / 4.
+        assert score(record(0), state="DS", party="R") == 31
 
     def test_no_safe_seat_discount_on_either_side(self):
         # The same deviation from the seat's expectation scores the same in
@@ -78,13 +117,63 @@ class TestSeatRelativeVotes:
     def test_opposed_seat_expects_more_crossing(self):
         # An R in a D+15 state is expected to break 30% of the time.
         assert score(record(30), state="DS", party="R") == 50
-        assert score(record(10), state="DS", party="R") == 0
+        assert score(record(10), state="DS", party="R") == 38  # one gap below
 
     def test_expectation_is_per_party(self):
-        ref = {"senate": {"deviation_p90": 0.2, "expected": {
+        ref = {"senate": {"deviation_p90": 0.2, "statistic": score_calculator.CONSTITUENT_REFERENCE_STATISTIC, "expected": {
             "D": {"a": 0.10, "b": 0.0}, "R": {"a": 0.0, "b": 0.0}}}}
         assert score(record(10), party="D", reference=ref) == 50
         assert score(record(10), party="R", reference=ref) == 75
+
+    def test_a_reference_measured_on_another_statistic_is_not_used(self):
+        # A v6.13 reference left on the /data volume (content-weighted rate,
+        # thin records included) must not set v6.15's saturation point: the
+        # score falls back to the bundled prior (conftest: 20-point
+        # saturation, 10% swing-seat expectation).
+        import json
+
+        stale = {c: {"expected": {"D": {"a": 0.0, "b": 0.0}}, "deviation_p90": 0.01}
+                 for c in ("senate", "house")}
+        CONSTITUENT_REFERENCE.live_path.write_text(json.dumps(stale))
+        CONSTITUENT_REFERENCE._cache = None
+        assert score(record(20)) == 75
+        # Passed in, unstamped, it isn't used either.
+        assert score(record(20), reference=stale) == 75
+
+    def test_a_malformed_stored_entry_falls_back_instead_of_crashing(self):
+        import json
+
+        CONSTITUENT_REFERENCE.live_path.write_text(json.dumps({"senate": "x", "house": [1, 2]}))
+        CONSTITUENT_REFERENCE._cache = None
+        assert score(record(20)) == 75  # the bundled prior
+
+    def test_no_usable_reference_scores_neutral(self):
+        import json
+
+        stale = {c: {"expected": {"D": {"a": 0.0, "b": 0.0}}, "deviation_p90": 0.01}
+                 for c in ("senate", "house")}
+        CONSTITUENT_REFERENCE.live_path.write_text(json.dumps(stale))
+        CONSTITUENT_REFERENCE.bundled_path.write_text(json.dumps(stale))
+        CONSTITUENT_REFERENCE._cache = None
+        core = _constituent_alignment_core(record(20), [], {}, state="SW", party="D")
+        assert core["score"] == 50 and "no measured expectation" in core["components"][0]["detail"]
+
+    def test_breakdown_does_not_call_the_preset_prior_a_measurement(self):
+        preset = {c: {"expected": {"D": {"a": 0.10, "b": -0.05, "b_opposed": -0.15}},
+                      "deviation_p90": 0.2, "n": None,
+                      "statistic": score_calculator.CONSTITUENT_REFERENCE_STATISTIC}
+                  for c in ("senate", "house")}
+        detail = _constituent_alignment_core(record(45), [], {}, state="SW", party="D",
+                                             reference=preset)["components"][0]["detail"]
+        assert "preset curve" in detail and "the preset saturation gap" in detail
+        assert "members of this chamber" not in detail
+
+    def test_measured_references_carry_the_statistic(self):
+        ref = compute_constituent_reference(
+            [("D", 0.0, 0.1 + 0.01 * (i % 5)) for i in range(25)]
+            + [("R", 0.0, 0.1 + 0.01 * (i % 5)) for i in range(25)]
+        )
+        assert ref["statistic"] == score_calculator.CONSTITUENT_REFERENCE_STATISTIC
 
     def test_district_lean_sets_a_house_members_expectation(self):
         # AL-7 is D+13 while Alabama is R+15: a Democrat there holds a safe
@@ -105,13 +194,24 @@ class TestSeatRelativeVotes:
         assert core["score"] == 50
         assert "no measured expectation" in core["components"][0]["detail"]
 
-    def test_vote_weights_are_used(self):
+    def test_each_party_labeled_roll_call_counts_once_unweighted(self):
+        # v6.15: partyAlignmentWeight is the bill's content lean, not how
+        # the roll call split; weighting by it made a content-bipartisan
+        # bill (0.0, read as 1.0) outweigh a 0.01-lean one a hundredfold.
         rec = {"keyVotes": [
             {"billId": "a", "votedWithParty": False, "partyAlignmentWeight": 1.0},
-            {"billId": "b", "votedWithParty": True, "partyAlignmentWeight": 0.5},
-            {"billId": "c", "votedWithParty": True, "partyAlignmentWeight": 0.5},
+            {"billId": "b", "votedWithParty": True, "partyAlignmentWeight": 0.0},
+            {"billId": "c", "votedWithParty": True, "partyAlignmentWeight": 0.01},
         ], "recentVotes": []}
-        assert party_break_rate(rec) == (0.5, 3)
+        assert party_break_rate(rec) == (pytest.approx(1 / 3), 3)
+
+    def test_malformed_vote_entries_are_skipped(self):
+        # A None left by a partial normalize must not crash the break rate
+        # (or calculate_confidence, which counts through it).
+        rec = record(10)
+        rec["recentVotes"] = [None, "junk"]
+        assert party_break_rate(rec) == (0.1, 100)
+        assert score_calculator.calculate_confidence({"votingRecord": rec})["constituentAlignment"] == "high"
 
     def test_each_roll_call_counts_once(self):
         rec = record(10)
@@ -126,9 +226,18 @@ class TestSeatRelativeVotes:
         assert _calc_constituent_alignment(record(20), lobbying, {}, state="SW", party="D") == \
             score(record(20))
 
-    def test_monotonic_in_break_rate(self):
-        scores = [score(record(b)) for b in (0, 5, 10, 20, 40)]
-        assert scores == sorted(scores) and scores[-1] - scores[0] == 75
+    def test_rises_to_saturation_then_falls(self):
+        rising = [score(record(b)) for b in (0, 5, 10, 20, 30)]
+        falling = [score(record(b)) for b in (30, 40, 50, 60)]
+        assert rising == sorted(rising) and falling == sorted(falling, reverse=True)
+
+    def test_breakdown_says_when_past_saturation(self):
+        past = _constituent_alignment_core(record(45), [], {}, state="SW", party="D")["components"][0]["detail"]
+        within = _constituent_alignment_core(record(25), [], {}, state="SW", party="D")["components"][0]["detail"]
+        assert "breaking further lowers the score" in past
+        # The turning point as a rate, and the gap in points, not "20% above 10%".
+        assert "more than 30.0% (20.0 points above that)" in past
+        assert "breaking further" not in within
 
     def test_breakdown_names_the_comparison(self):
         detail = _constituent_alignment_core(record(20), [], {}, state="SW", party="D")["components"][0]["detail"]
@@ -169,24 +278,27 @@ class TestMeasuredReference:
             {"state": "DS", "party": "I", "votingRecord": {**record(10), "effectiveParty": "D"}},
             {"state": "SW", "party": "I", "votingRecord": record(10)},  # no caucus: excluded
             {"state": "SW", "party": "R", "votingRecord": record(1, total=2)},  # too few votes
+            # Scorable but thin: shrunk in its own score, and kept out of the
+            # saturation point everyone else is measured against.
+            {"state": "SW", "party": "R", "votingRecord": record(5, total=10)},
         ]
         assert constituent_reference_inputs(members) == [("D", 0.0, 0.2), ("D", 1.0, 0.1)]
 
     def test_pipeline_persists_this_runs_reference(self):
-        from app.pipeline.live_references import live_constituent_reference
+        from app.pipeline.live_references import live_constituent_reference_measured
 
         members = [{"state": "SW", "party": p, "votingRecord": record(10 + i % 5)}
                    for p in ("D", "R") for i in range(25)]
-        merged = live_constituent_reference("house", members)
-        assert merged["house"]["n"] == 50
+        merged, measured = live_constituent_reference_measured("house", members)
+        assert measured and merged["house"]["n"] == 50
         assert CONSTITUENT_REFERENCE.load()["house"]["n"] == 50
         assert merged["senate"]["deviation_p90"] == 0.2  # untouched
 
     def test_too_few_members_keeps_the_last_reference(self):
-        from app.pipeline.live_references import live_constituent_reference
+        from app.pipeline.live_references import live_constituent_reference_measured
 
-        merged = live_constituent_reference("senate", [{"state": "SW", "party": "D", "votingRecord": record(10)}])
-        assert merged == CONSTITUENT_REFERENCE.load()
+        merged, measured = live_constituent_reference_measured("senate", [{"state": "SW", "party": "D", "votingRecord": record(10)}])
+        assert not measured and merged == CONSTITUENT_REFERENCE.load()
 
 
 class TestPositionCongruence:
@@ -298,3 +410,25 @@ def test_votes_without_an_identity_are_not_collapsed():
 
     votes = [{"votedWithParty": True}, {"votedWithParty": False}, {"billId": "a"}, {"billId": "a"}]
     assert len(dedupe_votes(votes)) == 3
+
+
+
+class TestVotePartStatus:
+    """calculate_confidence records how the vote part was scored, so the
+    scorecard states it instead of re-deriving the rule."""
+
+    def status(self, rec, **kw):
+        return score_calculator.calculate_confidence(
+            {"state": "SW", "party": "D", "votingRecord": rec, **kw})["constituentAlignmentVotePart"]
+
+    def test_few_votes(self):
+        assert self.status(record(1, total=2)) == "neutral:few-votes"
+
+    def test_no_expectation(self):
+        assert self.status(record(1, total=10), party="I") == "neutral:no-expectation"
+
+    def test_shrunk_share(self):
+        assert self.status(record(1, total=12)) == "shrunk:0.60"
+
+    def test_full(self):
+        assert self.status(record(5, total=40)) == "full"

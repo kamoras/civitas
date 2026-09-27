@@ -227,6 +227,23 @@ class TestBackfillWithheldSponsorshipScores:
         )
 
 
+def test_upsert_senator_persists_confidence(db_session):
+    # Senators' confidence grades (and the Constituent Alignment vote-part
+    # status) were never written before v6.15; only the House saved them.
+    import json
+
+    from app.pipeline.senate_pipeline import upsert_senator
+
+    confidence = {"constituentAlignment": "medium", "constituentAlignmentVotePart": "shrunk:0.60"}
+    upsert_senator(db_session, {
+        "id": "s-test", "name": "Senator Test", "state": "SW", "party": "D",
+        "representationScore": {"constituentAlignment": 55, "confidence": confidence},
+    })
+    db_session.commit()
+    stored = db_session.query(Senator).filter(Senator.id == "s-test").one()
+    assert json.loads(stored.score_confidence) == confidence
+
+
 def test_house_representatives_are_backfilled_too(db_session):
     """The House pipeline used to score every member without their stored
     sponsorship values on a withheld run; the shared helper takes either
