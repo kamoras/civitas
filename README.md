@@ -524,6 +524,8 @@ What each chamber did each day, for the Congress reports. Every half hour (`cong
                 119th Congress's first day, 20 per run
 ```
 
+**Newest first.** A run reads today's floor logs and the last week's Digests before any back-fill, and the current session's roll calls before the previous session's, so a fresh database (a first deploy, a data reset) shows this week within one run rather than after the Congress's first months.
+
 **Nothing is rewritten.** Each passed, failed or reported measure, confirmation and committee meeting keeps the Digest's own sentence; the parser only decides which heading it sits under and reads the bill number. It is tested against real issues from both chambers (`backend/tests/fixtures/daily_digest`).
 
 **Served as reports.** `GET /api/congress/latest`, `/day/{YYYY-MM-DD}`, `/week/{any day of it}` and `/month/{YYYY-MM}` return each chamber's day or period: every count, the "passed both chambers" list, the closest votes and the one-line summary are computed in `congress_service.py` from the stored rows by rule, so a summary reads "The Senate passed 3 bills, agreed to 4 resolutions and took 3 record votes" and never characterises what passed. `GET /api/congress/votes/{chamber}/{congress}/{session}/{number}` is one roll call with every member's position, linked to their page. `GET /api/bills/{id}/record` is any bill's record (not only one a current member sponsored): Congress.gov's CRS summary, sponsors, cosponsors, actions and text versions, plus every stored roll call on it with each party's split. A Congress.gov part that could not be fetched is named in `unavailable` and never cached, so an outage does not read as a bill with no actions.
