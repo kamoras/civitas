@@ -339,9 +339,10 @@ class TestRepeatedRowsAcrossPages:
         assert sorted(f["first"] for f in filings) == ["A", "B", "C"]
 
     @pytest.mark.asyncio
-    async def test_a_repeated_row_is_not_reported_as_a_short_search(self, caplog):
-        """Both pages loaded; one filing was listed twice. The rows the
-        pages held reached recordsTotal, so nothing is reported missing."""
+    async def test_a_repeated_row_is_reported_as_what_it_is(self, caplog):
+        """Both pages loaded; one row came twice. That is either a filing
+        listed twice or one displaced by a shifting order — not a page that
+        failed to load."""
         pages = [
             {"recordsTotal": 2, "data": [_search_row("A", "One", path="/search/view/ptr/a/")]},
             {"recordsTotal": 2, "data": [_search_row("A", "One", path="/search/view/ptr/a/")]},
@@ -367,4 +368,5 @@ class TestRepeatedRowsAcrossPages:
             filings = await senate_ptr._scrape_via_page(page, "")
 
         assert [f["first"] for f in filings] == ["A"]
-        assert "returned" not in caplog.text
+        assert "didn't load" not in caplog.text
+        assert "showed 1 distinct rows of 2" in caplog.text

@@ -238,6 +238,8 @@ class TestSenateAssetsTable:
     def test_an_account_is_a_container_even_when_its_middle_row_is_unreadable(self):
         page = _SENATE_PAGE.replace(
             '<tr><td>2.2</td>',
+            # 3.1 is there but names nothing, so the parser skips it.
+            '<tr><td>3.1</td><td><strong></strong></td><td>Brokerage</td><td>Self</td><td>--</td><td></td><td></td></tr>'
             '<tr><td>3.1.1</td><td><strong>Deep Fund</strong></td><td>Mutual Funds<div class="muted">Mutual Fund'
             '</div></td><td>Self</td><td>$1,001 - $15,000</td><td></td><td></td></tr><tr><td>2.2</td>',
         )

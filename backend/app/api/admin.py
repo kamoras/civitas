@@ -1427,26 +1427,49 @@ async def admin_clear_stuck_election(db: Session = Depends(get_db)):
     return _clear_stuck_runs(db, ElectionPipelineRun, is_election_pipeline_running(), "Election")
 
 
+def _running_writers(db: Session) -> list[str]:
+    """Every job that writes what a reset deletes and is running now."""
+    from app.api.pipeline import _is_pipeline_running
+    from app.pipeline.analyze.election_coverage import is_coverage_refresh_running
+    from app.pipeline.bill_refresh import is_bill_refresh_running
+    from app.pipeline.election_pipeline import is_ballot_sync_running, is_election_pipeline_running
+    from app.pipeline.house_pipeline import is_house_pipeline_running
+    from app.pipeline.stock_pipeline import is_stock_pipeline_running
+    from app.pipeline.supplementary_pipeline import is_supplementary_pipeline_running
+
+    checks = {
+        "Senate": lambda: _is_pipeline_running(db),
+        "Supplementary": is_supplementary_pipeline_running,
+        "House": is_house_pipeline_running,
+        "Stock trades": is_stock_pipeline_running,
+        "Election": is_election_pipeline_running,
+        "Ballot sync": is_ballot_sync_running,
+        "Bill refresh": is_bill_refresh_running,
+        "Coverage refresh": is_coverage_refresh_running,
+    }
+    return [name for name, running in checks.items() if running()]
+
+
 @router.post("/data/reset", dependencies=[Depends(require_admin)])
 async def admin_reset_data(db: Session = Depends(get_db)):
-    """Wipe all pipeline-generated data for a clean start.
+    """Wipe what the pipelines derive from their sources, for a clean start.
 
-    Clears every table but database.RESET_KEEPS (senators, votes, donors,
-    learning store, caches, the vector store), then re-seeds static
-    reference data. The next pipeline run
-    will rebuild everything from scratch with the latest code.
+    Clears senators, votes, donors, the learning store, caches and the
+    vector store — every table except database.RESET_KEEPS, the history no
+    run can rebuild (the Action Center's, run history). The next pipeline
+    runs rebuild the rest from scratch with the latest code.
     """
-    from app.api.pipeline import _is_pipeline_running
-
-    if _is_pipeline_running(db):
+    running = _running_writers(db)
+    if running:
         raise HTTPException(
             status_code=409,
-            detail="Cannot reset while the pipeline is running",
+            detail=f"Cannot reset while running: {', '.join(running)}",
         )
 
     from app.database import reset_all_data
 
-    summary = reset_all_data()
+    # A wipe of every table: off the event loop, which serves every visitor.
+    summary = await asyncio.to_thread(reset_all_data)
     total_rows = sum(v for k, v in summary.items() if isinstance(v, int))
     return {
         "status": "reset_complete",

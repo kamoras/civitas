@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Literal, get_args
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, computed_field, model_validator
 
@@ -138,7 +138,8 @@ def is_open_ended(low: float | None, high: float | None) -> bool:
 STOCK_ACT_DISCLOSURE_DEADLINE_DAYS = 45
 
 
-_OWNERS = ("self", "spouse", "joint", "dependent", "unknown")
+_Owner = Literal["self", "spouse", "joint", "dependent", "unknown"]
+_OWNERS = get_args(_Owner)
 
 
 def _stated_owner(value: object) -> object:
@@ -149,7 +150,7 @@ def _stated_owner(value: object) -> object:
 # value wasn't one the parser recognizes — never guessed to be the member's.
 # A stored value outside the set (a row written by another image's parser)
 # reads the same way, rather than failing the member's whole response.
-DisclosureOwner = Annotated[Literal[_OWNERS], BeforeValidator(_stated_owner)]
+DisclosureOwner = Annotated[_Owner, BeforeValidator(_stated_owner)]
 
 
 class StockTradeSchema(CamelModel):

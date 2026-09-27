@@ -37,6 +37,7 @@ from app.pipeline.fetch.fd_common import (
     senate_category,
     ticker_for,
 )
+from app.pipeline.fetch.ptr_common import OWNER_WORDS
 from app.pipeline.fetch.senate_ptr import (
     ANNUAL_REPORT_TYPE,
     SENATOR_FILER_TYPE,
@@ -54,12 +55,6 @@ _CACHE_TIER = "senate_fd"
 # the old parser read them.
 PARSER_VERSION = 1
 _FILING_MAX_AGE_HOURS = 24 * 30
-
-# The form's Owner values as printed (every value seen on file, 2026-09).
-_OWNER_VALUES = {
-    "self": "self", "spouse": "spouse", "joint": "joint",
-    "child": "dependent", "dependent child": "dependent", "dependent": "dependent",
-}
 
 # The report titles a senator's asset list appears under. A candidate report
 # or a termination report lists assets too, but only as of entering or
@@ -220,7 +215,7 @@ def parse_assets_table(page) -> list[HoldingRow] | None:
         asset_type = _own_text(type_cell)
         subtype = " ".join(" ".join(div.text_content() for div in type_cell.xpath("./div")).split())
         owner_text = " ".join(cells[c_owner].text_content().split()).lower()
-        owner = _OWNER_VALUES.get(owner_text)
+        owner = OWNER_WORDS.get(owner_text)
         if owner is None:
             # Never default to the filer: an unrecognized value may well be a
             # spouse's or child's asset. Shown as owner not stated, and

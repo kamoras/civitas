@@ -8,6 +8,7 @@ from app.pipeline.fetch.ptr_common import (
     classify_transaction_type,
     extract_ticker,
     normalize_date,
+    owner_from_cell,
     parse_amount_range,
     parse_table_rows,
 )
@@ -106,6 +107,22 @@ def test_parse_table_rows_happy_path():
     assert rows[1].transaction_type == "sale_full"
 
 
+def test_owner_from_cell_reads_codes_and_words_and_never_guesses_the_filer():
+    assert [owner_from_cell(c) for c in ("SP", "jt", "DC", "")] == ["spouse", "joint", "dependent", "self"]
+    # The Senate's eFD tables print words, not codes.
+    assert [owner_from_cell(c) for c in ("Spouse", "Joint", "Child", "Dependent Child", "Self")] == [
+        "spouse", "joint", "dependent", "dependent", "self",
+    ]
+    assert owner_from_cell("Trust") == "unknown"
+
+
+def test_parse_table_rows_reads_a_senate_owner_word():
+    rows = parse_table_rows(_table(
+        ["Spouse", "Apple Inc. (AAPL)", "Purchase", "1/2/2026", "2/1/2026", "$1,001 - $15,000"],
+    ))
+    assert rows[0].owner == "spouse"
+
+
 def test_parse_table_rows_skips_unparseable_rows_without_fabricating():
     table = _table(
         # No transaction type, no date, no amount — should be skipped, not guessed.
@@ -184,6 +201,8 @@ class TestParseOcrLine:
         assert row.transaction_date == "2026-06-23"
         assert row.amount_low == 15001.0
         assert row.amount_high == 50000.0
+        # The line carries no owner column: not stated, never the filer's.
+        assert row.owner == "unknown"
 
     def test_leading_row_number_does_not_pollute_the_amount(self):
         """The confirmed live bug: the fallback-only version of this

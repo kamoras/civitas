@@ -44,6 +44,27 @@ class TradeRow:
 
 # PTR owner codes -> our owner vocabulary (StockTrade.owner / RepStockTrade.owner).
 OWNER_CODES = {"SP": "spouse", "DC": "dependent", "JT": "joint"}
+# The Senate's eFD tables print the owner as a word instead (every value
+# seen on file, 2026-09) — its annual reports and its electronic PTRs alike.
+OWNER_WORDS = {
+    "self": "self", "spouse": "spouse", "joint": "joint",
+    "child": "dependent", "dependent child": "dependent", "dependent": "dependent",
+}
+
+
+def owner_from_cell(cell: str) -> str:
+    """Our owner value for a form's owner cell. Blank is the filer's own —
+    the forms leave the column empty for the filer. A value that is neither
+    a code nor a word the forms print is "unknown", never assumed to be the
+    filer's: it may well be a spouse's or child's."""
+    text = " ".join(cell.split())
+    if not text:
+        return "self"
+    owner = OWNER_CODES.get(text.upper()) or OWNER_WORDS.get(text.lower())
+    if owner is None:
+        logger.info("Unrecognized disclosure owner value %r", text)
+        return "unknown"
+    return owner
 
 # Transaction-type text as printed on the form -> our vocabulary. Matched
 # case-insensitively against a substring since forms vary slightly in
@@ -201,7 +222,7 @@ def parse_table_rows(table: list[list[str | None]]) -> list[TradeRow]:
         rows.append(TradeRow(
             ticker=extract_ticker(asset_cell),
             asset_name=asset_cell,
-            owner=OWNER_CODES.get(owner_cell, "self"),
+            owner=owner_from_cell(owner_cell),
             transaction_type=txn_type,
             transaction_date=txn_date,
             disclosure_date=notify_date,
@@ -270,7 +291,9 @@ def _parse_ocr_line(line: str) -> TradeRow | None:
         return TradeRow(
             ticker=extract_ticker(asset_name),
             asset_name=asset_name,
-            owner="self",
+            # The line pattern doesn't read an owner column, so the owner is
+            # not stated rather than assumed to be the filer.
+            owner="unknown",
             transaction_type=txn_type,
             transaction_date=txn_date,
             disclosure_date=txn_date,
@@ -298,7 +321,7 @@ def _parse_ocr_line(line: str) -> TradeRow | None:
     return TradeRow(
         ticker=extract_ticker(line),
         asset_name=line.strip(),
-        owner="self",
+        owner="unknown",  # no owner column read; see the pattern above
         transaction_type=txn_type,
         transaction_date=txn_date,
         disclosure_date=disclosure_date or txn_date,

@@ -2,7 +2,7 @@ import logging
 from collections.abc import Generator
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine, event, func, inspect, select, text
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import settings
@@ -1000,22 +1000,36 @@ def _init_db_locked() -> None:
     # (2026-07, see president_pipeline.py's module docstring).
 
 
-# Tables a reset leaves alone: records of things that happened outside this
-# database, which no pipeline run can rebuild.
+# Tables a reset leaves alone: history no pipeline run can rebuild. A reset
+# clears what the pipelines derive from their sources, so the next run can
+# rebuild it with the latest code; these record what already happened.
 RESET_KEEPS = frozenset({
+    # The Action Center's history: each day's issues (with what was posted
+    # to Bluesky about them — wiped, the repost gates would have nothing to
+    # compare against), the timeline, the monitors and the period summaries.
+    # The feeds they came from only carry recent items.
+    "action_issues", "timeline_entries", "national_monitors", "monitor_updates",
+    "week_summaries", "month_summaries", "year_summaries",
     # Which members the Bluesky account has already spotlighted — posts
     # that were really made. Wiped, the rotation would repeat them.
     "bsky_senator_spotlights",
     # LLM generations captured as fine-tuning data, accumulated over months.
     "llm_generation_samples",
+    # Run history. ops_alerts.check_pipeline_staleness reads a pipeline with
+    # no runs as a fresh deployment and stays silent, so wiping these would
+    # disarm it for a chain that stops after the reset; the phase timings
+    # and rate-limit stats exist only as cross-run history.
+    "pipeline_runs", "supplementary_pipeline_runs", "house_pipeline_runs",
+    "stock_trades_pipeline_runs", "election_pipeline_runs",
+    "pipeline_phase_timings", "pipeline_rate_limit_stats",
 })
 
 
 def reset_all_data() -> dict:
     """Drop all pipeline-generated data and start fresh.
 
-    Truncates every table except RESET_KEEPS, resets the vector store's
-    collections, and re-seeds static reference data (presidents).
+    Truncates every table except RESET_KEEPS and resets the vector store's
+    collections. Presidents come back with the next president pipeline run.
     Returns a summary of what was cleared.
     """
     from app import models  # noqa: F401
@@ -1027,12 +1041,12 @@ def reset_all_data() -> dict:
         # ORM cascade and SQLite doesn't enforce foreign keys, so a child
         # left behind would reattach to a recreated member). Derived from the
         # schema rather than listed by hand: a hand-kept list silently
-        # missed the election tables (#215) and later a dozen more.
+        # missed the election tables (#215), and later the nominee and
+        # holdings tables.
         for table in reversed(Base.metadata.sorted_tables):
             if table.name in RESET_KEEPS:
                 continue
-            summary[table.name] = db.execute(select(func.count()).select_from(table)).scalar_one()
-            db.execute(table.delete())
+            summary[table.name] = db.execute(table.delete()).rowcount
         db.commit()
     finally:
         db.close()

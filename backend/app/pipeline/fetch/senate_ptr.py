@@ -285,19 +285,28 @@ async def _scrape_via_page(
             pass
         await _wait_until(lambda: len(responses) > before)
 
-    filings, received, total = await _page_through(page, responses)
+    filings, distinct, received, total = await _page_through(page, responses)
+    # Reported, not retried in the same browser session: every caller
+    # searches again on its next nightly run, and holdings never lets a
+    # partial search replace a newer stored report (_is_older).
     if total and received < total:
-        # The pages held fewer rows than recordsTotal: one didn't load.
-        # Reported, not retried in the same browser session: every caller
-        # searches again on its next nightly run, and holdings never lets a
-        # partial search replace a newer stored report (_is_older).
-        logger.warning("Senate eFD search returned %d of %d rows", received, total)
+        logger.warning("Senate eFD search returned %d of %d rows — a results page didn't load", received, total)
+    elif total and distinct < total:
+        # Every row arrived, but some twice. Either the same filing was
+        # listed twice or the ordering shifted between pages and a repeat
+        # took the place of a filing that was never shown; the search
+        # can't tell which.
+        logger.warning(
+            "Senate eFD search showed %d distinct rows of %d — a filing listed twice, "
+            "or one displaced by a shifting order", distinct, total,
+        )
     return filings
 
 
-async def _page_through(page, responses: list) -> tuple[list[dict], int, int]:
+async def _page_through(page, responses: list) -> tuple[list[dict], int, int, int]:
     """Collect every results page from the latest response on. Returns the
-    parsed filings, how many rows the pages held, and recordsTotal.
+    parsed filings, how many distinct rows and how many rows in all the
+    pages held, and recordsTotal.
 
     Paging stops early only once every row is accounted for by distinct
     content: a row can reappear on a later page when the ordering shifts,
@@ -328,7 +337,7 @@ async def _page_through(page, responses: list) -> tuple[list[dict], int, int]:
         await _click(next_el)
         if not await _wait_until(lambda: len(responses) > before):
             break
-    return list(by_id.values()), received, total
+    return list(by_id.values()), len(by_id) + len(unparsed), received, total
 
 
 def _collect_rows(by_id: dict[str, dict], unparsed: set[str], rows: list) -> None:

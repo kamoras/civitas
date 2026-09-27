@@ -1,8 +1,8 @@
 /** Shared rendering rules for financial-disclosure figures (stock trades and
  * annual-report holdings), so the two scorecard sections can't drift apart. */
 
-/** "unknown": an annual report's owner value the parser didn't recognize —
- * shown as such, never assumed to be the member's. */
+/** "unknown": a trade's or holding's owner the form didn't state in a way
+ * the parser reads — shown as such, never assumed to be the member's. */
 export type DisclosureOwner = "self" | "spouse" | "joint" | "dependent" | "unknown";
 
 export const OWNER_LABEL: Record<DisclosureOwner, string> = {
