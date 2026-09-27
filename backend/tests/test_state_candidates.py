@@ -695,6 +695,57 @@ class TestAWeakerSourceNeverPrunesTheCertifiedBallot:
                          keep_unlisted=True, authoritative=False, prune=False)
         assert self._ids(db_session) == ["H1"]
 
+    def test_two_people_on_one_list_never_share_a_row(self, db_session):
+        """Chris and Christine Smith, both certified and neither FEC-filed:
+        "chris" is a short form of "christine", but a row this pass kept
+        for one is never reused for the other."""
+        _race(db_session, "2026-HOUSE-CA-3", "CA", office="H", district=3)
+        db_session.commit()
+        rec = {"office": "H", "district": 3, "party": "D", "last_name": "SMITH"}
+        sc._apply_ballot(db_session, 2026, "CA", [rec | {"display_name": "Chris Smith"},
+                                                   rec | {"display_name": "Christine Smith"}],
+                         keep_unlisted=True, authoritative=True)
+        assert len([i for i in self._ids(db_session) if i.startswith("ballot:")]) == 2
+
+    def test_an_ambiguous_placeholder_is_left_alone(self, db_session):
+        """John's FEC row filed as "SMITH, J" fits Jane's row by initial as
+        well as John's: with two candidates, neither is guessed — John's is
+        taken by his exact given name, Jane's stays."""
+        _race(db_session, "2026-HOUSE-CA-4", "CA", office="H", district=4)
+        db_session.commit()
+        rec = {"office": "H", "district": 4, "party": "D", "last_name": "SMITH"}
+        jane, john = rec | {"display_name": "Jane Smith"}, rec | {"display_name": "John Smith"}
+        sc._apply_ballot(db_session, 2026, "CA", [jane, john], keep_unlisted=True, authoritative=True)
+        _candidate(db_session, "H1", "2026-HOUSE-CA-4", "SMITH, J", party="DEM")
+        db_session.commit()
+        sc._apply_ballot(db_session, 2026, "CA", [john], keep_unlisted=True, authoritative=False, prune=False)
+        assert "ballot:2026-HOUSE-CA-4:jane-smith" in self._ids(db_session)
+
+    def test_a_different_partys_different_person_is_not_matched_to_the_one_fec_row(self, db_session):
+        """Mary Smith (Libertarian, never FEC-filed) beside John Smith (DEM,
+        filed): the lone same-surname FEC row is not hers."""
+        _race(db_session, "2026-HOUSE-CA-5", "CA", office="H", district=5)
+        _candidate(db_session, "H1", "2026-HOUSE-CA-5", "SMITH, JOHN", party="DEM")
+        db_session.commit()
+        mary = {"office": "H", "district": 5, "party": "L", "last_name": "SMITH", "display_name": "Mary Smith"}
+        sc._apply_ballot(db_session, 2026, "CA", [mary], keep_unlisted=True, authoritative=False)
+        assert "ballot:2026-HOUSE-CA-5:mary-smith" in self._ids(db_session)
+        assert db_session.get(Candidate, "H1").confirmed_general is not True
+
+    def test_a_nickname_or_a_recoded_party_alone_still_matches(self, db_session):
+        _race(db_session, "2026-HOUSE-CA-6", "CA", office="H", district=6)
+        _candidate(db_session, "H1", "2026-HOUSE-CA-6", "JONES, JAMES", party="DEM")
+        db_session.commit()
+        jim = {"office": "H", "district": 6, "party": "D", "last_name": "JONES", "display_name": "Jim Jones"}
+        sc._apply_ballot(db_session, 2026, "CA", [jim], keep_unlisted=True, authoritative=False)
+        assert db_session.get(Candidate, "H1").confirmed_general is True
+
+    def test_names_without_a_given_half_match_nothing(self):
+        assert sc._same_given_name("SMITH", "SMITH") is False
+        assert sc._given_initial("SMITH, MR. J") == "j"
+        assert sc._same_given_name("SMITH, DR. JOHN", "SMITH, J") is True
+        assert sc._same_given_name("SMITH, MR. J", "SMITH, MARY") is False
+
     def test_one_person_spelled_two_ways_keeps_one_row(self, db_session):
         _race(db_session, "2026-HOUSE-CO-1", "CO", office="H", district=1)
         db_session.commit()
