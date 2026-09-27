@@ -1,12 +1,12 @@
 {
  "_as_of": "2026-07",
  "_provenance": {
-  "house": "hand-set prior, not a measurement: the curve Constituent Alignment used before v6.13 (expected break rate 3% in a safe aligned seat, 8% in a swing seat, 20% in a strongly opposed one; saturation 25 points), rewritten in the fitted form a + b*alignment + b_opposed*min(alignment, 0) and applied to both parties; stamped with the current statistic so it stays usable before a chamber's first measured run",
-  "senate": "hand-set prior, not a measurement: the curve Constituent Alignment used before v6.13 (expected break rate 3% in a safe aligned seat, 8% in a swing seat, 20% in a strongly opposed one; saturation 25 points), rewritten in the fitted form a + b*alignment + b_opposed*min(alignment, 0) and applied to both parties; stamped with the current statistic so it stays usable before a chamber's first measured run"
+  "house": "hand-set prior, not a measurement: the curve Constituent Alignment used before v6.13 (expected break rate 3% in a safe aligned seat, 8% in a swing seat, 20% in a strongly opposed one; saturation 25 points), rewritten in the linear form a + b*alignment + b_opposed*min(alignment, 0) and applied to both parties. Since v6.16 the scale is in standard deviations per vote: the 25-point saturation divided by the binomial spread at the curve's swing-seat rate, 0.25 / sqrt(0.08 * 0.92) = 0.92151. Stamped with the current statistic so it stays usable before a chamber's first measured run",
+  "senate": "hand-set prior, not a measurement: the curve Constituent Alignment used before v6.13 (expected break rate 3% in a safe aligned seat, 8% in a swing seat, 20% in a strongly opposed one; saturation 25 points), rewritten in the linear form a + b*alignment + b_opposed*min(alignment, 0) and applied to both parties. Since v6.16 the scale is in standard deviations per vote: the 25-point saturation divided by the binomial spread at the curve's swing-seat rate, 0.25 / sqrt(0.08 * 0.92) = 0.92151. Stamped with the current statistic so it stays usable before a chamber's first measured run"
  },
- "_source": "Pre-first-run fallback only: the pipeline measures this per chamber every run (score_calculator.compute_constituent_reference \u2014 per-party least squares of break rate on seat alignment, kinked at a swing seat) and writes /data/constituent_reference.json, which takes precedence. These values are the hand-set curve Constituent Alignment used before v6.13 (expected break rate 3% in a safe aligned seat, 8% in a swing seat, 20% in a strongly opposed one; saturation 25 points), rewritten in the fitted form (a + b*alignment + b_opposed*min(alignment, 0)) and applied to both parties; no measurement of the live population exists yet to replace them. The first pipeline run does. Regenerate from a populated database with backend/scripts/calibrate_constituent_reference.py. The hand-set curve is not a measurement of any particular break-rate statistic, so it is stamped with the current one (config_definitions.CONSTITUENT_REFERENCE_STATISTIC; rerun this script or re-stamp by hand if that changes) and stays usable as a prior; measured references carry the stamp of what they were measured on.",
+ "_source": "Pre-first-run fallback only: the pipeline measures this per chamber every run (score_calculator.compute_constituent_reference \u2014 per-party fractional logit of break rate on seat alignment, kinked at a swing seat, scaled by the 90th-percentile residual in standard deviations per vote) and writes /data/constituent_reference.json, which takes precedence. These values are the hand-set curve Constituent Alignment used before v6.13 (expected break rate 3% in a safe aligned seat, 8% in a swing seat, 20% in a strongly opposed one; saturation 25 points, converted to standard deviations per vote at the swing-seat rate), rewritten in the linear form (a + b*alignment + b_opposed*min(alignment, 0)) and applied to both parties; no measurement of the live population exists yet to replace them. The first pipeline run does. Regenerate from a populated database with backend/scripts/calibrate_constituent_reference.py. The hand-set curve is not a measurement of any particular break-rate statistic, so it is stamped with the current one (config_definitions.CONSTITUENT_REFERENCE_STATISTIC; rerun this script or re-stamp by hand if that changes) and stays usable as a prior; measured references carry the stamp of what they were measured on.",
  "house": {
-  "deviation_p90": 0.25,
+  "deviation_p90": 0.92151,
   "expected": {
    "D": {
     "a": 0.08,
@@ -22,10 +22,10 @@
    }
   },
   "n": null,
-  "statistic": "unweighted-break-rate/n>=20/q=0.9"
+  "statistic": "unweighted-break-rate/logit/party-residual/n>=20/q=0.9"
  },
  "senate": {
-  "deviation_p90": 0.25,
+  "deviation_p90": 0.92151,
   "expected": {
    "D": {
     "a": 0.08,
@@ -41,6 +41,6 @@
    }
   },
   "n": null,
-  "statistic": "unweighted-break-rate/n>=20/q=0.9"
+  "statistic": "unweighted-break-rate/logit/party-residual/n>=20/q=0.9"
  }
 }

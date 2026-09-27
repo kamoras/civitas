@@ -24,6 +24,22 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.16",
+    date: "2026-09-27",
+    title: "Constituent Alignment: highest when a member breaks with their party about as often as their seat's norm",
+    tldr: "The vote part of Constituent Alignment now scores 100 when a member breaks with their party about as often as same-party members in similarly-leaning seats, and falls both ways: steeply for breaking too often, half as steeply for being more loyal. The gap is measured in standard deviations, so a few extra points count for more where members of that seat rarely break.",
+    changes: [
+      "Why: the score measured distance in percentage points from an expectation that a few heavy breakers pulled upward. Gary Peters, breaking on 3.5% of votes where the expectation said 7.1%, scored 41 even though most swing-seat Democrats break about as rarely as he does; 33 of 47 Democrats and 46 of 53 Republicans scored under 50. Bill Cassidy, breaking on 5.5% where members of seats like his break about 1.5%, scored 90, because four extra points counted the same wherever they fell. Now Peters scores 83 and Cassidy 26.",
+      "The gap is measured in standard deviations per vote. Where the seat's members rarely break, a few extra breaks is a large departure; where they often do, the same few is a small one. The expected rate is now fitted with a curve that can't reach 0%, so the safest seats have a measurable norm too.",
+      "Matching the norm scores 100. Breaking more often reaches 0 at one and a half times the gap that the most out-of-pattern tenth of the member's party shows; being more loyal reaches 0 only at three times that gap.",
+      "Each party is read on its own yardstick. On one shared yardstick, whichever party was more unified in a given Congress scored higher just for that: tested across every Senate since 1989, the parties' averages differed by 7.9 points, and by as much as 22. On per-party yardsticks they differ by 1.8, as before this change, and which party is higher changes from one Congress to the next.",
+      "The evidence points two ways, and the About page says so. A member's own party's primary voters reward exactly this shape (House primaries 1990–2010: incumbents who scored higher won a larger share of the primary vote). The electorate as a whole rewards breaking more than the norm (Senate general elections 1990–2024, House 2004). The score follows the first: it measures whether a member does what they were elected to do, under a party label as well as by a seat.",
+      "A party's majority leader votes with the winning side against their own party (no on a motion about to fail, or yes on one carrying over their party's opposition) so that they can move to reconsider it later; only a member on the winning side may. Those procedural votes were counted as breaks with the party: all 16 of Senate Majority Leader John Thune's in this Congress, and House Majority Leader Steve Scalise's one. They no longer count.",
+      "With fewer than 20 party-labeled votes, the score is now pulled toward what a typical member of the same party scores, not toward 50. Once matching the norm scores 100, 50 sits below nearly everyone, and pulling toward it would rank newcomers below their colleagues just for having few votes.",
+      "Senators' leadership titles and committee assignments are now saved and shown; only House members' were.",
+    ],
+  },
+  {
     version: "v6.15",
     date: "2026-09-27",
     title: "Constituent Alignment: breaking with your party far more than your seat calls for no longer scores as perfect",

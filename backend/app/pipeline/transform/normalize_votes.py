@@ -6,8 +6,112 @@ Includes party alignment analysis.
 """
 
 import logging
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+# The majority leader votes Nay on a motion that is about to fail even when
+# they support it, because only a member who voted on the prevailing side
+# may move to reconsider (Senate Rule XIII; House Rule XIX clause 2) — the
+# switch keeps the motion alive for another try. It is a documented
+# procedural convention of the office, not a break with party, and counting
+# it as one made the Senate Majority Leader's 16 "breaks" in the 119th
+# Congress (every one a Nay on a rejected cloture vote his own conference
+# supported) read as a maverick record. The same rule covers the mirror
+# case — a Yea on a motion that carried over the leader's own party's
+# opposition — and any rejected or carried question, not only cloture: the
+# roll call can't tell a leader's switch from a decisive vote of conscience
+# on the same side. The evidence is the Nay case: in the 119th Congress every
+# off-party vote by either majority leader was a Nay on a rejected motion
+# (all but one on cloture). No mirror-case vote occurred; that half follows
+# from the rule itself, not from observed votes. Scoped to the majority leader only:
+# it is the leader's job to make that motion, and the Speaker and the
+# minority leader have no such practice (the Speaker voted Aye on the same
+# failed House rule the Majority Leader voted No on). Exact titles as
+# unitedstates/congress-legislators prints them (committee_leadership.py) —
+# "Assistant Senate Majority Leader" is a different office and must not
+# match, so don't loosen this to a substring test.
+MAJORITY_LEADER_TITLES = frozenset({"Senate Majority Leader", "House Majority Leader"})
+
+# A member with no tenure dates but a current majority-leader title (the
+# tenure file hasn't been refreshed since they took the job) is treated as
+# holding it throughout — the scoring window is the current congress, which
+# a current leader almost always led from its first day.
+_ALWAYS = (None, None)
+
+
+def majority_leader_spans(
+    current_title: str | None, tenures: list[dict] | None,
+) -> list[tuple[str | None, str | None]]:
+    """The [start, end) date spans (ISO strings; end None = still held)
+    during which a member was their chamber's majority leader, from their
+    leadership_tenures entry. Falls back to the current title, held
+    throughout, when the tenure data has no majority-leader span for them.
+    Empty for everyone else."""
+    spans = [
+        (t.get("start"), t.get("end"))
+        for t in tenures or []
+        if t.get("title") in MAJORITY_LEADER_TITLES
+    ]
+    if spans:
+        return spans
+    if current_title in MAJORITY_LEADER_TITLES:
+        return [_ALWAYS]
+    return []
+
+
+def vote_date_iso(raw: str | None) -> str | None:
+    """A roll call's date as YYYY-MM-DD, from either the ISO form (House
+    parser, key-bill action dates) or Senate.gov's "October 14, 2025,
+    05:34 PM". None if it is neither."""
+    text = " ".join((raw or "").split())
+    if not text:
+        return None
+    try:
+        return datetime.strptime(text[:10], "%Y-%m-%d").strftime("%Y-%m-%d")
+    except ValueError:
+        pass
+    parts = text.split(",")
+    if len(parts) >= 2:
+        try:
+            return datetime.strptime(
+                f"{parts[0].strip()}, {parts[1].strip()}", "%B %d, %Y",
+            ).strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+    return None
+
+
+def stamp_roll_call_outcome(bill: dict, roll_call: dict) -> None:
+    """Copy the roll call's own outcome onto the classified vote dict that
+    represents it: motionRejected (the chamber's result, True / False /
+    None = unknown — see congress.roll_call_rejected) and rollCallDate."""
+    bill["motionRejected"] = roll_call.get("rejected")
+    bill["rollCallDate"] = vote_date_iso(roll_call.get("voteDate"))
+
+
+def is_reconsider_switch(
+    bill: dict, leader_spans: list[tuple[str | None, str | None]] | None,
+) -> str | None:
+    """The prevailing side ("Nay" if the question was rejected, "Yea" if it
+    carried) when a vote on it by this member could be the majority leader's
+    reconsider switch (MAJORITY_LEADER_TITLES): the member held the office
+    on the vote's date and the chamber recorded the outcome. None otherwise
+    — an unknown result or date is not enough; the exemption needs the
+    chamber's own word on which side prevailed."""
+    rejected = bill.get("motionRejected")
+    if not leader_spans or rejected not in (True, False):
+        return None
+    prevailing = "Nay" if rejected else "Yea"
+    date = vote_date_iso(bill.get("rollCallDate") or bill.get("date"))
+    for start, end in leader_spans:
+        if (start, end) == _ALWAYS:
+            return prevailing
+        if date is None:
+            continue
+        if (start is None or start <= date) and (end is None or date < end):
+            return prevailing
+    return None
 
 
 def vote_identity(vote: dict) -> str:
@@ -62,12 +166,38 @@ def dedupe_votes(votes: list[dict]) -> list[dict]:
     return out
 
 
+def reconsider_switch_applied(
+    party: str, vote: str, party_leaning: str | None, reconsider_switch: str | None,
+) -> bool:
+    """Whether the reconsider-switch exemption turns this vote from a break
+    into no party signal: an eligible roll call (is_reconsider_switch gives
+    the prevailing side), the member voting with the prevailing side, and
+    their own party on the losing one — a Nay on a rejected question their
+    party backed (party_leaning, the side that voted Yea, is theirs), or a
+    Yea on a carried one it opposed (the other party was the Yea side)."""
+    if not reconsider_switch or vote != reconsider_switch or party not in ("R", "D"):
+        return False
+    if reconsider_switch == "Nay":
+        return party_leaning == party
+    return party_leaning in ("R", "D") and party_leaning != party
+
+
 def _determine_party_alignment(
     senator_party: str,
     vote: str,
     party_leaning: str | None,
+    *,
+    reconsider_switch: str | None = None,
 ) -> bool | None:
     """Determine if a senator voted with or against their party.
+
+    reconsider_switch (see is_reconsider_switch): the side that prevailed,
+    when the member was majority leader and the chamber recorded the
+    outcome. A vote with the prevailing side against the member's own
+    party is the procedural switch, not a break — it returns None (no
+    party signal) rather than False (reconsider_switch_applied). It never
+    turns a vote into a party-line one, and a vote against the party on
+    the losing side stays a break.
 
     For Independents, uses their inferred caucus party (see
     _infer_caucus_party). This ensures that senators like Sanders (I-VT)
@@ -88,6 +218,9 @@ def _determine_party_alignment(
     effective_party = senator_party
     if effective_party == "I":
         return None  # caller must resolve caucus first
+
+    if reconsider_switch_applied(effective_party, vote, party_leaning, reconsider_switch):
+        return None
 
     if effective_party == party_leaning:
         return vote == "Yea"
@@ -250,6 +383,7 @@ def normalize_votes(
     senator_votes: dict[str, str],
     senator_party: str = "I",
     cosponsorship_profile: dict | None = None,
+    leader_spans: list[tuple[str | None, str | None]] | None = None,
 ) -> dict:
     """Normalize voting data for a senator.
 
@@ -264,6 +398,8 @@ def normalize_votes(
         senator_party: Senator's party ("R", "D", "I").
         cosponsorship_profile: {"d_cosponsored": int, "r_cosponsored": int}
             for caucus inference (optional).
+        leader_spans: majority_leader_spans() for this member — when they
+            were majority leader, for the reconsider-switch exemption.
 
     Returns:
         Normalized voting record.
@@ -308,8 +444,10 @@ def normalize_votes(
 
         # Party alignment (uses effective_party for Independents)
         party_leaning = bill.get("partyLeaning")
+        reconsider_switch = is_reconsider_switch(bill, leader_spans)
         party_aligned = _determine_party_alignment(
-            effective_party, normalized_vote, party_leaning
+            effective_party, normalized_vote, party_leaning,
+            reconsider_switch=reconsider_switch,
         )
         if party_aligned is True:
             voted_with_party += 1
@@ -328,6 +466,9 @@ def normalize_votes(
             "description": bill.get("description", ""),
             "partyLeaning": party_leaning,
             "votedWithParty": party_aligned,
+            "reconsiderSwitch": reconsider_switch_applied(
+                effective_party, normalized_vote, party_leaning, reconsider_switch,
+            ),
             "voteCategory": "recent",
             "rcKey": bill.get("rcKey"),
         })
@@ -357,6 +498,7 @@ def normalize_recent_votes(
     senator_state: str,
     senator_party: str,
     effective_party: str | None = None,
+    leader_spans: list[tuple[str | None, str | None]] | None = None,
 ) -> list[dict]:
     """Normalize recent roll call votes for a senator.
 
@@ -367,6 +509,7 @@ def normalize_recent_votes(
         senator_state: Senator's state code.
         senator_party: Senator's party.
         effective_party: Inferred caucus party for Independents (from normalize_votes).
+        leader_spans: see normalize_votes.
 
     Returns:
         List of normalized vote dicts for the senator.
@@ -400,8 +543,10 @@ def normalize_recent_votes(
             normalized_vote = "Nay"
 
         party_leaning = bill.get("partyLeaning")
+        reconsider_switch = is_reconsider_switch(bill, leader_spans)
         party_aligned = _determine_party_alignment(
-            party_for_alignment, normalized_vote, party_leaning
+            party_for_alignment, normalized_vote, party_leaning,
+            reconsider_switch=reconsider_switch,
         )
 
         votes.append({
@@ -416,6 +561,9 @@ def normalize_recent_votes(
             "description": bill.get("description", ""),
             "partyLeaning": party_leaning,
             "votedWithParty": party_aligned,
+            "reconsiderSwitch": reconsider_switch_applied(
+                party_for_alignment, normalized_vote, party_leaning, reconsider_switch,
+            ),
             "voteCategory": "recent",
             "rcKey": bill.get("rcKey"),
         })

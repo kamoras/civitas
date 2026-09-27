@@ -14,7 +14,8 @@ manually and its output committed to git under app/data/ — meaning
 leadership titles ("Speaker of the House", "Senate Majority Leader", etc.)
 only ever changed when someone remembered to re-run it and commit the
 result. Fully automated now: Supplementary refreshes /data/committee_
-membership.json and /data/leadership_roles.json (the persistent writable
+membership.json, /data/leadership_roles.json and /data/leadership_
+tenures.json (the persistent writable
 volume) on the same weekly-or-empty cadence as its SCOTUS justice refresh.
 A fetch/gate failure keeps the previous run's data (never punitive), same
 contract as write_member_ideal_points. The bundled app/data/*.json files
@@ -45,6 +46,7 @@ SOURCE_DESC = (
 
 _MEMBERSHIP_PATH = "/data/committee_membership.json"
 _LEADERSHIP_PATH = "/data/leadership_roles.json"
+_TENURES_PATH = "/data/leadership_tenures.json"
 
 # A small, low-frequency site (three files, once a week) — no aggressive
 # pacing needed, but the shared retry/limiter infra keeps a transient
@@ -109,6 +111,41 @@ def build_leadership_roles(legislators_raw: list[dict]) -> dict[str, str]:
     return result
 
 
+def build_leadership_tenures(legislators_raw: list[dict]) -> dict[str, list[dict]]:
+    """bioguide_id -> every leadership role the member has held, current or
+    past: [{title, chamber, start, end}], oldest first. `end` is None for a
+    role still held.
+
+    build_leadership_roles keeps only the current title, which is right for
+    display but can't answer "did this member hold that title on the day of
+    a given vote" — Constituent Alignment needs that (see
+    normalize_votes.MAJORITY_LEADER_TITLES), because a title change
+    mid-window (a leader whose party loses the majority) would otherwise
+    reclassify votes cast under the old title. The source's `start`/`end`
+    are the role's own dates; an `end` equal to the next role's `start` is
+    the handover day, so a span is read as half-open [start, end).
+    """
+    result: dict[str, list[dict]] = {}
+    for person in legislators_raw:
+        bioguide = (person.get("id") or {}).get("bioguide")
+        if not bioguide:
+            continue
+        spans = [
+            {
+                "title": r["title"],
+                "chamber": r.get("chamber"),
+                "start": str(r["start"]) if r.get("start") else None,
+                "end": str(r["end"]) if r.get("end") else None,
+            }
+            for r in (person.get("leadership_roles") or [])
+            if r.get("title")
+        ]
+        if spans:
+            spans.sort(key=lambda r: r["start"] or "")
+            result[bioguide] = spans
+    return result
+
+
 def ingestion_gates(
     committee_membership: dict[str, list[dict]], leadership_roles: dict[str, str],
 ) -> list[str]:
@@ -163,6 +200,7 @@ async def refresh_committee_leadership_data(client: httpx.AsyncClient | None = N
 
         committee_membership = build_committee_membership(membership_raw, committees_raw)
         leadership_roles = build_leadership_roles(legislators_raw)
+        leadership_tenures = build_leadership_tenures(legislators_raw)
         failures = ingestion_gates(committee_membership, leadership_roles)
         if failures:
             for f in failures:
@@ -171,6 +209,7 @@ async def refresh_committee_leadership_data(client: httpx.AsyncClient | None = N
 
         _write_json(_MEMBERSHIP_PATH, "membership", committee_membership)
         _write_json(_LEADERSHIP_PATH, "roles", leadership_roles)
+        _write_json(_TENURES_PATH, "tenures", leadership_tenures)
         from app.pipeline.transform.committee_data import clear_committee_data_cache
         clear_committee_data_cache()
         logger.info(

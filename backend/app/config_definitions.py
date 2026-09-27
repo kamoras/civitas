@@ -195,27 +195,31 @@ EXPLORE_RETRIEVAL_WEIGHT: float = 1.0
 # to stamp CONSTITUENT_REFERENCE at construction (it can't import the scorer).
 
 # Fewest party-labeled votes Constituent Alignment reads a break rate from
-# (party_break_rate); below it the vote part is a neutral 50.
+# (party_break_rate); below it the vote part is the party's measured typical
+# score (a neutral 50 without one).
 CONSTITUENT_MIN_VOTES = 3
 
 # Party-labeled votes at which Constituent Alignment's data sufficiency is
 # graded "high" (calculate_confidence) and its vote score stops shrinking
-# toward 50. A volume count, the same for every member.
+# toward the party's typical score (50 without one). A volume count, the
+# same for every member.
 CONSTITUENT_FULL_CONFIDENCE_VOTES = 20
 
-# The deviation quantile Constituent Alignment's vote score saturates at
-# (deviation_p90): the most out-of-pattern tenth of a chamber, measured on
-# both sides of the expectation, sits at or past it.
+# The quantile of |residual| (standard deviations per vote from the seat's
+# expected break rate) that sets Constituent Alignment's vote-score scale,
+# per party: the most out-of-pattern tenth of a party's members in a chamber,
+# measured on both sides of the expectation, sits at or past it.
 SATURATION_QUANTILE = 0.9
 
 # What a Constituent Alignment reference is measured on: the unweighted
 # break rate (party_break_rate) over records with at least
-# CONSTITUENT_FULL_CONFIDENCE_VOTES party-labeled votes, saturating at the
-# SATURATION_QUANTILE (written exactly, so any change to either constant
+# CONSTITUENT_FULL_CONFIDENCE_VOTES party-labeled votes, its expectation a
+# fractional-logit fit, its scale per party the SATURATION_QUANTILE of the
+# Pearson residual per vote (written exactly, so any change to either constant
 # changes the stamp). CONSTITUENT_REFERENCE accepts only stored entries
-# carrying it, so one measured under another rule — v6.13's content-weighted
-# rate over 3+-vote records, or another threshold or quantile — is not
-# scored against.
+# carrying it, so one measured under another rule — v6.15's least-squares
+# expectation and percentage-point scale, v6.13's content-weighted rate,
+# another threshold or quantile — is not scored against.
 CONSTITUENT_REFERENCE_STATISTIC = (
-    f"unweighted-break-rate/n>={CONSTITUENT_FULL_CONFIDENCE_VOTES}/q={SATURATION_QUANTILE!r}"
+    f"unweighted-break-rate/logit/party-residual/n>={CONSTITUENT_FULL_CONFIDENCE_VOTES}/q={SATURATION_QUANTILE!r}"
 )

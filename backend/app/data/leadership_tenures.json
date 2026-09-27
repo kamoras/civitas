@@ -1,0 +1,847 @@
+{
+ "_source": "unitedstates/congress-legislators (CC0-1.0), retrieved 2026-09-27; regenerate with backend/scripts/fetch_committee_data.py",
+ "tenures": {
+  "A000371": [
+   {
+    "chamber": "house",
+    "end": "2023-01-03",
+    "start": "2021-01-03",
+    "title": "House Democratic Caucus Vice Chair"
+   },
+   {
+    "chamber": "house",
+    "end": "2025-01-03",
+    "start": "2023-01-03",
+    "title": "House Democratic Caucus Chair"
+   },
+   {
+    "chamber": "house",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "House Democratic Caucus Chair"
+   }
+  ],
+  "B001230": [
+   {
+    "chamber": "senate",
+    "end": "2023-01-03",
+    "start": "2021-01-03",
+    "title": "Senate Democratic Conference Secretary"
+   },
+   {
+    "chamber": "senate",
+    "end": "2025-01-03",
+    "start": "2023-01-03",
+    "title": "Senate Democratic Conference Secretary"
+   },
+   {
+    "chamber": "senate",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "Senate Democratic Conference Secretary"
+   }
+  ],
+  "B001261": [
+   {
+    "chamber": "senate",
+    "end": "2021-01-03",
+    "start": "2019-01-03",
+    "title": "Senate Republican Conference Chair"
+   },
+   {
+    "chamber": "senate",
+    "end": "2023-01-03",
+    "start": "2021-01-03",
+    "title": "Senate Republican Conference Chair"
+   },
+   {
+    "chamber": "senate",
+    "end": "2025-01-03",
+    "start": "2023-01-03",
+    "title": "Senate Republican Conference Chair"
+   },
+   {
+    "chamber": "senate",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "Senate Majority Whip"
+   }
+  ],
+  "B001288": [
+   {
+    "chamber": "senate",
+    "end": "2025-01-03",
+    "start": "2023-01-03",
+    "title": "Senate Democratic Policy & Communications Committee Vice Chair"
+   },
+   {
+    "chamber": "senate",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "Senate Democratic Strategic Communications Committee Chair"
+   }
+  ],
+  "C000537": [
+   {
+    "chamber": "house",
+    "end": "2021-01-03",
+    "start": "2019-01-03",
+    "title": "House Majority Whip"
+   },
+   {
+    "chamber": "house",
+    "end": "2023-01-03",
+    "start": "2021-01-03",
+    "title": "House Majority Whip"
+   },
+   {
+    "chamber": "house",
+    "end": "2024-03-20",
+    "start": "2021-01-03",
+    "title": "Assistant House Minority Leader"
+   }
+  ],
+  "C001047": [
+   {
+    "chamber": "senate",
+    "end": "2025-01-03",
+    "start": "2023-01-03",
+    "title": "Senate Republican Conference Vice Chair"
+   },
+   {
+    "chamber": "senate",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "Senate Republican Policy Committee Chair"
+   }
+  ],
+  "C001056": [
+   {
+    "chamber": "senate",
+    "end": "2015-01-03",
+    "start": "2013-01-03",
+    "title": "Senate Minority Whip"
+   },
+   {
+    "chamber": "senate",
+    "end": "2017-01-03",
+    "start": "2015-01-03",
+    "title": "Senate Majority Whip"
+   },
+   {
+    "chamber": "senate",
+    "end": "2019-01-03",
+    "start": "2017-01-03",
+    "title": "Senate Majority Whip"
+   }
+  ],
+  "C001095": [
+   {
+    "chamber": "senate",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "Senate Republican Conference Chair"
+   }
+  ],
+  "C001101": [
+   {
+    "chamber": "house",
+    "end": "2023-01-03",
+    "start": "2021-01-03",
+    "title": "Assistant Speaker of the House"
+   },
+   {
+    "chamber": "house",
+    "end": "2025-01-03",
+    "start": "2023-01-03",
+    "title": "House Minority Whip"
+   },
+   {
+    "chamber": "house",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "House Minority Whip"
+   }
+  ],
+  "C001113": [
+   {
+    "chamber": "senate",
+    "end": "2025-01-03",
+    "start": "2023-01-03",
+    "title": "Senate Democratic Outreach Vice Chair"
+   },
+   {
+    "chamber": "senate",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "Senate Democratic Outreach Vice Chair"
+   }
+  ],
+  "D000563": [
+   {
+    "chamber": "senate",
+    "end": "2007-01-03",
+    "start": "2005-01-04",
+    "title": "Senate Minority Whip"
+   },
+   {
+    "chamber": "senate",
+    "end": "2009-01-06",
+    "start": "2007-01-04",
+    "title": "Senate Majority Whip"
+   },
+   {
+    "chamber": "senate",
+    "end": "2011-01-05",
+    "start": "2009-01-06",
+    "title": "Senate Majority Whip"
+   },
+   {
+    "chamber": "senate",
+    "end": "2013-01-03",
+    "start": "2011-01-05",
+    "title": "Senate Majority Whip"
+   },
+   {
+    "chamber": "senate",
+    "end": "2015-01-03",
+    "start": "2013-01-03",
+    "title": "Senate Majority Whip"
+   },
+   {
+    "chamber": "senate",
+    "end": "2017-01-03",
+    "start": "2015-01-03",
+    "title": "Senate Minority Whip"
+   },
+   {
+    "chamber": "senate",
+    "end": "2019-01-03",
+    "start": "2017-01-03",
+    "title": "Senate Minority Whip"
+   },
+   {
+    "chamber": "senate",
+    "end": "2021-01-03",
+    "start": "2019-01-03",
+    "title": "Senate Minority Whip"
+   },
+   {
+    "chamber": "senate",
+    "end": "2021-01-20",
+    "start": "2021-01-03",
+    "title": "Senate Minority Whip"
+   },
+   {
+    "chamber": "senate",
+    "end": "2023-01-03",
+    "start": "2021-01-20",
+    "title": "Senate Majority Whip"
+   },
+   {
+    "chamber": "senate",
+    "end": "2025-01-03",
+    "start": "2023-01-03",
+    "title": "Senate Majority Whip"
+   },
+   {
+    "chamber": "senate",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "Senate Minority Whip"
+   }
+  ],
+  "D000618": [
+   {
+    "chamber": "house",
+    "end": "2025-01-03",
+    "start": "2023-01-03",
+    "title": "Senate Republican Committee Chair"
+   }
+  ],
+  "E000294": [
+   {
+    "chamber": "house",
+    "end": "2025-01-03",
+    "start": "2023-01-03",
+    "title": "House Majority Whip"
+   },
+   {
+    "chamber": "house",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "House Majority Whip"
+   }
+  ],
+  "E000295": [
+   {
+    "chamber": "senate",
+    "end": "2021-01-03",
+    "start": "2019-01-03",
+    "title": "Senate Republican Conference Vice Chair"
+   },
+   {
+    "chamber": "senate",
+    "end": "2023-01-03",
+    "start": "2021-01-03",
+    "title": "Senate Republican Conference Vice Chair"
+   },
+   {
+    "chamber": "senate",
+    "end": "2025-01-03",
+    "start": "2023-01-03",
+    "title": "Senate Republican Policy Committee Chair"
+   }
+  ],
+  "G000386": [
+   {
+    "chamber": "senate",
+    "end": "2021-01-03",
+    "start": "2019-01-03",
+    "title": "President Pro Tempore of the Senate"
+   },
+   {
+    "chamber": "senate",
+    "end": "2021-01-20",
+    "start": "2021-01-03",
+    "title": "President Pro Tempore of the Senate"
+   },
+   {
+    "chamber": "senate",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "President Pro Tempore of the Senate"
+   }
+  ],
+  "H000874": [
+   {
+    "chamber": "house",
+    "end": "2005-01-03",
+    "start": "2003-01-07",
+    "title": "House Minority Whip"
+   },
+   {
+    "chamber": "house",
+    "end": "2007-01-03",
+    "start": "2005-01-04",
+    "title": "House Minority Whip"
+   },
+   {
+    "chamber": "house",
+    "end": "2013-01-03",
+    "start": "2011-01-05",
+    "title": "House Minority Whip"
+   },
+   {
+    "chamber": "house",
+    "end": "2015-01-03",
+    "start": "2013-01-03",
+    "title": "House Minority Whip"
+   },
+   {
+    "chamber": "house",
+    "end": "2017-01-03",
+    "start": "2015-01-06",
+    "title": "House Minority Whip"
+   },
+   {
+    "chamber": "house",
+    "end": "2019-01-03",
+    "start": "2017-01-03",
+    "title": "House Minority Whip"
+   },
+   {
+    "chamber": "house",
+    "end": "2021-01-03",
+    "start": "2019-01-03",
+    "title": "House Majority Leader"
+   },
+   {
+    "chamber": "house",
+    "end": "2023-01-03",
+    "start": "2021-01-03",
+    "title": "House Majority Leader"
+   }
+  ],
+  "H001067": [
+   {
+    "chamber": "house",
+    "end": "2023-01-03",
+    "start": "2021-01-03",
+    "title": "House Republican Conference Secretary"
+   }
+  ],
+  "H001082": [
+   {
+    "chamber": "house",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "House Republican Policy Committee Chair"
+   }
+  ],
+  "J000294": [
+   {
+    "chamber": "house",
+    "end": "2021-01-03",
+    "start": "2019-01-03",
+    "title": "House Democratic Caucus Chair"
+   },
+   {
+    "chamber": "house",
+    "end": "2023-01-03",
+    "start": "2021-01-03",
+    "title": "House Democratic Caucus Chair"
+   },
+   {
+    "chamber": "house",
+    "end": "2025-01-03",
+    "start": "2023-01-03",
+    "title": "House Minority Leader"
+   },
+   {
+    "chamber": "house",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "House Minority Leader"
+   }
+  ],
+  "J000299": [
+   {
+    "chamber": "house",
+    "end": "2023-01-03",
+    "start": "2021-01-03",
+    "title": "House Republican Conference Vice Chair"
+   },
+   {
+    "chamber": "house",
+    "end": "2025-01-03",
+    "start": "2023-10-25",
+    "title": "Speaker of the House"
+   },
+   {
+    "chamber": "house",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "Speaker of the House"
+   }
+  ],
+  "K000367": [
+   {
+    "chamber": "senate",
+    "end": "2021-01-03",
+    "start": "2019-01-03",
+    "title": "Senate Democratic Steering Committee Chair"
+   },
+   {
+    "chamber": "senate",
+    "end": "2023-01-03",
+    "start": "2021-01-03",
+    "title": "Senate Democratic Steering Committee Chair"
+   },
+   {
+    "chamber": "senate",
+    "end": "2025-01-03",
+    "start": "2023-01-03",
+    "title": "Senate Democratic Steering Committee Chair"
+   },
+   {
+    "chamber": "senate",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "Senate Democratic Steering Committee Chair"
+   }
+  ],
+  "L000570": [
+   {
+    "chamber": "house",
+    "end": "2021-01-03",
+    "start": "2019-01-03",
+    "title": "Assistant Speaker of the House"
+   }
+  ],
+  "L000575": [
+   {
+    "chamber": "senate",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "Senate Republican Conference Vice Chair"
+   }
+  ],
+  "L000582": [
+   {
+    "chamber": "house",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "House Democratic Caucus Vice Chair"
+   }
+  ],
+  "M000355": [
+   {
+    "chamber": "senate",
+    "end": "2009-01-06",
+    "start": "2007-01-04",
+    "title": "Senate Minority Leader"
+   },
+   {
+    "chamber": "senate",
+    "end": "2011-01-05",
+    "start": "2009-01-06",
+    "title": "Senate Minority Leader"
+   },
+   {
+    "chamber": "senate",
+    "end": "2013-01-03",
+    "start": "2011-01-05",
+    "title": "Senate Minority Leader"
+   },
+   {
+    "chamber": "senate",
+    "end": "2015-01-03",
+    "start": "2013-01-03",
+    "title": "Senate Minority Leader"
+   },
+   {
+    "chamber": "senate",
+    "end": "2017-01-03",
+    "start": "2015-01-03",
+    "title": "Senate Majority Leader"
+   },
+   {
+    "chamber": "senate",
+    "end": "2019-01-03",
+    "start": "2017-01-03",
+    "title": "Senate Majority Leader"
+   },
+   {
+    "chamber": "senate",
+    "end": "2021-01-03",
+    "start": "2019-01-03",
+    "title": "Senate Majority Leader"
+   },
+   {
+    "chamber": "senate",
+    "end": "2021-01-20",
+    "start": "2021-01-03",
+    "title": "Senate Majority Leader"
+   },
+   {
+    "chamber": "senate",
+    "end": "2023-01-03",
+    "start": "2021-01-20",
+    "title": "Senate Minority Leader"
+   },
+   {
+    "chamber": "senate",
+    "end": "2025-01-03",
+    "start": "2023-01-03",
+    "title": "Senate Minority Leader"
+   }
+  ],
+  "M001111": [
+   {
+    "chamber": "senate",
+    "end": "2021-01-03",
+    "start": "2019-01-03",
+    "title": "Assistant Senate Minority Leader"
+   },
+   {
+    "chamber": "senate",
+    "end": "2021-01-20",
+    "start": "2021-01-03",
+    "title": "Assistant Senate Minority Leader"
+   },
+   {
+    "chamber": "senate",
+    "end": "2025-01-03",
+    "start": "2021-01-03",
+    "title": "President Pro Tempore of the Senate"
+   },
+   {
+    "chamber": "senate",
+    "end": "2023-01-03",
+    "start": "2021-01-20",
+    "title": "Assistant Senate Majority Leader"
+   }
+  ],
+  "M001136": [
+   {
+    "chamber": "house",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "House Republican Conference Chair"
+   }
+  ],
+  "M001169": [
+   {
+    "chamber": "senate",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "Senate Democratic Conference Deputy Secretary"
+   }
+  ],
+  "N000191": [
+   {
+    "chamber": "house",
+    "end": "2025-01-03",
+    "start": "2024-03-20",
+    "title": "Assistant House Minority Leader"
+   },
+   {
+    "chamber": "house",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "Assistant House Minority Leader"
+   }
+  ],
+  "P000197": [
+   {
+    "chamber": "house",
+    "end": "2013-01-03",
+    "start": "2011-01-05",
+    "title": "House Minority Leader"
+   },
+   {
+    "chamber": "house",
+    "end": "2015-01-03",
+    "start": "2013-01-03",
+    "title": "House Minority Leader"
+   },
+   {
+    "chamber": "house",
+    "end": "2017-01-03",
+    "start": "2015-01-06",
+    "title": "House Minority Leader"
+   },
+   {
+    "chamber": "house",
+    "end": "2019-01-03",
+    "start": "2017-01-03",
+    "title": "House Minority Leader"
+   },
+   {
+    "chamber": "house",
+    "end": "2021-01-03",
+    "start": "2019-01-03",
+    "title": "Speaker of the House"
+   },
+   {
+    "chamber": "house",
+    "end": "2023-01-03",
+    "start": "2021-01-03",
+    "title": "Speaker of the House"
+   }
+  ],
+  "P000609": [
+   {
+    "chamber": "house",
+    "end": "2021-01-03",
+    "start": "2019-01-03",
+    "title": "House Republican Policy Committee Chair"
+   },
+   {
+    "chamber": "house",
+    "end": "2023-01-03",
+    "start": "2021-01-03",
+    "title": "House Republican Policy Committee Chair"
+   },
+   {
+    "chamber": "house",
+    "end": "2025-01-03",
+    "start": "2021-01-03",
+    "title": "House Republican Policy Committee Chair"
+   }
+  ],
+  "S000033": [
+   {
+    "chamber": "senate",
+    "end": "2025-01-03",
+    "start": "2023-01-03",
+    "title": "Senate Democratic Outreach Chair"
+   },
+   {
+    "chamber": "senate",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "Senate Democratic Outreach Chair"
+   }
+  ],
+  "S000148": [
+   {
+    "chamber": "senate",
+    "end": "2019-01-03",
+    "start": "2017-01-03",
+    "title": "Senate Minority Leader"
+   },
+   {
+    "chamber": "senate",
+    "end": "2021-01-03",
+    "start": "2019-01-03",
+    "title": "Senate Minority Leader"
+   },
+   {
+    "chamber": "senate",
+    "end": "2021-01-20",
+    "start": "2021-01-03",
+    "title": "Senate Minority Leader"
+   },
+   {
+    "chamber": "senate",
+    "end": "2023-01-03",
+    "start": "2021-01-20",
+    "title": "Senate Majority Leader"
+   },
+   {
+    "chamber": "senate",
+    "end": "2025-01-03",
+    "start": "2023-01-03",
+    "title": "Senate Majority Leader"
+   },
+   {
+    "chamber": "senate",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "Senate Minority Leader"
+   }
+  ],
+  "S001176": [
+   {
+    "chamber": "house",
+    "end": "2015-01-03",
+    "start": "2014-08-01",
+    "title": "House Majority Whip"
+   },
+   {
+    "chamber": "house",
+    "end": "2017-01-03",
+    "start": "2015-01-06",
+    "title": "House Majority Whip"
+   },
+   {
+    "chamber": "house",
+    "end": "2019-01-03",
+    "start": "2017-01-03",
+    "title": "House Majority Whip"
+   },
+   {
+    "chamber": "house",
+    "end": "2021-01-03",
+    "start": "2019-01-03",
+    "title": "House Minority Whip"
+   },
+   {
+    "chamber": "house",
+    "end": "2023-01-03",
+    "start": "2021-01-03",
+    "title": "House Minority Whip"
+   },
+   {
+    "chamber": "house",
+    "end": "2025-01-03",
+    "start": "2023-01-03",
+    "title": "House Majority Leader"
+   },
+   {
+    "chamber": "house",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "House Majority Leader"
+   }
+  ],
+  "S001184": [
+   {
+    "chamber": "senate",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "Senate Republican Committee Chair"
+   }
+  ],
+  "S001194": [
+   {
+    "chamber": "senate",
+    "end": "2025-01-03",
+    "start": "2023-01-03",
+    "title": "Senate Democratic Conference Deputy Secretary"
+   },
+   {
+    "chamber": "senate",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "Senate Democratic Conference Deputy Secretary"
+   }
+  ],
+  "S001196": [
+   {
+    "chamber": "house",
+    "end": "2023-01-03",
+    "start": "2021-05-14",
+    "title": "House Republican Conference Chair"
+   },
+   {
+    "chamber": "house",
+    "end": "2025-01-03",
+    "start": "2023-01-03",
+    "title": "House Republican Conference Chair"
+   }
+  ],
+  "T000250": [
+   {
+    "chamber": "senate",
+    "end": "2021-01-03",
+    "start": "2019-01-03",
+    "title": "Assistant Senate Majority Leader"
+   },
+   {
+    "chamber": "senate",
+    "end": "2021-01-20",
+    "start": "2021-01-03",
+    "title": "Senate Majority Whip"
+   },
+   {
+    "chamber": "senate",
+    "end": "2023-01-03",
+    "start": "2021-01-20",
+    "title": "Senate Minority Whip"
+   },
+   {
+    "chamber": "senate",
+    "end": "2025-01-03",
+    "start": "2023-01-03",
+    "title": "Senate Minority Whip"
+   },
+   {
+    "chamber": "senate",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "Senate Majority Leader"
+   }
+  ],
+  "W000805": [
+   {
+    "chamber": "senate",
+    "end": "2025-01-03",
+    "start": "2023-01-03",
+    "title": "Senate Democratic Conference Vice Chair"
+   },
+   {
+    "chamber": "senate",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "Senate Democratic Conference Vice Chair"
+   }
+  ],
+  "W000817": [
+   {
+    "chamber": "senate",
+    "end": "2025-01-03",
+    "start": "2023-01-03",
+    "title": "Senate Democratic Conference Vice Chair"
+   },
+   {
+    "chamber": "senate",
+    "end": null,
+    "start": "2025-01-03",
+    "title": "Senate Democratic Conference Vice Chair"
+   }
+  ]
+ }
+}
