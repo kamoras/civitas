@@ -159,7 +159,7 @@ def _issue_bill_ids(issue: ActionIssue) -> set[str]:
 
 
 def _internal_bill_congresses(db: Session, bill_ids: set[str]) -> dict[str, set[int]]:
-    """{bill_id: {congress, ...}} for bills our own /bills/{id} page can show.
+    """{bill_id: {congress, ...}} for bills our own /congress/bills/{id} page can show.
 
     Mirrors bill_service.get_bill_detail's lookup (current members'
     sponsored bills, either chamber) so we only emit an internal link when
@@ -257,7 +257,7 @@ def _build_issue_response(
                     name=b.get("name", b["id"]),
                     id=b["id"],
                     url=b["url"],
-                    internal_url=f"/bills/{bill_id}" if is_internal else None,
+                    internal_url=f"/congress/bills/{bill_id}" if is_internal else None,
                 ).model_dump(by_alias=True)
             )
 

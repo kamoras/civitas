@@ -497,20 +497,25 @@ async def run_congress_sync() -> dict:
     try:
         today = eastern_today()
         congress = expected_current_congress()
+        # Newest first: a fresh database (first deploy, a data reset) shows
+        # this week before the back-fill of the Congress's first months.
+        # The first run on 2026-09-27 fetched 1,000 roll calls from January
+        # 2025 before any recent day, and /congress read February 2025 as
+        # the latest day for twenty minutes.
         async with make_async_client() as client:
-            votes: dict[str, dict] = {}
-            for chamber in ("senate", "house"):
-                for session in (1, 2):
-                    n, status = await sync_roll_calls(client, db, chamber, congress, session)
-                    votes[f"{chamber}-{session}"] = {"stored": n, "status": status}
-            result["rollCalls"] = votes
-            fixed, status = await repair_house_requirements(client, db)
-            result["requirementsRepaired"] = {"repaired": fixed, "status": status}
             result["floorLogs"] = {
                 d.isoformat(): await sync_floor_logs(client, db, d)
                 for d in (today - timedelta(days=1), today)
             }
             result["digests"] = await sync_digests(client, db, today)
+            votes: dict[str, dict] = {}
+            for session in (2, 1):
+                for chamber in ("senate", "house"):
+                    n, status = await sync_roll_calls(client, db, chamber, congress, session)
+                    votes[f"{chamber}-{session}"] = {"stored": n, "status": status}
+            result["rollCalls"] = votes
+            fixed, status = await repair_house_requirements(client, db)
+            result["requirementsRepaired"] = {"repaired": fixed, "status": status}
         result["finishedAt"] = utcnow().isoformat()
         api_cache_set(db, _CACHE_TIER, _LAST_RUN_KEY, result, normal_ttl_hours=24 * 30)
         return result

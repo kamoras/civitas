@@ -31,7 +31,7 @@ export interface RelatedBill {
   name: string;
   id: string;
   url: string;
-  /** Path to our own bill page ("/bills/HR.22") when we host this bill. */
+  /** Path to our own bill page ("/congress/bills/HR.22") when we host this bill. */
   internalUrl?: string | null;
 }
 

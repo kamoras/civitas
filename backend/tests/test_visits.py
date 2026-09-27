@@ -73,6 +73,14 @@ class TestNormalizePath:
         assert _normalize_path("/bills") == "/bills"
         assert _normalize_path("/feedback") == "/feedback"
 
+    def test_congress_pages(self):
+        # A bill page and a day report are different routes under one
+        # prefix: the longer prefix must win.
+        assert _normalize_path("/congress") == "/congress"
+        assert _normalize_path("/congress/bills") == "/congress/bills"
+        assert _normalize_path("/congress/bills/S.4668") == "/congress/bills/[id]"
+        assert _normalize_path("/congress/2026-09-24") == "/congress/[id]"
+
 
 class TestExtractIssuePublicId:
     def test_well_formed_issue_path_extracts_the_id(self):

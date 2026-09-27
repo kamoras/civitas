@@ -1329,6 +1329,32 @@ export default function AboutPage() {
           </Section>
 
           {/* ── Action Center ── */}
+          <Section title="CONGRESS REPORTS" id="congress">
+            <P>
+              The Congress pages answer what the Senate and the House did on a given day, week or
+              month. The source is the Congressional Record&apos;s Daily Digest, the Record&apos;s own
+              summary of each day, published by the Government Publishing Office the next day.
+              Until it appears, the page shows each chamber&apos;s live floor log. Record votes
+              come from each chamber&apos;s roll-call files, with every member&apos;s vote. The
+              record is filled in newest first, back to the start of the 119th Congress.
+            </P>
+            <P>
+              Every entry uses the record&apos;s own wording. The one-line summary at the top of a
+              report is filled from counts by a fixed template, such as &quot;The Senate passed 3
+              bills, agreed to 4 resolutions and took 3 record votes.&quot; It never describes what a
+              bill does or whether it is good. &quot;Passed both chambers&quot; means a measure was passed
+              by the chamber it did not start in, which it can only reach by passing the first.
+              A chamber that did not meet is shown as not in session. A source that could not be
+              read is shown as unavailable, never as a day with nothing in it.
+            </P>
+            <P>
+              Every bill named in a report links to its page, including bills sponsored by
+              members who have since left: the Congressional Research Service summary, sponsor
+              and cosponsors, the full action history, the text versions, and each recorded vote
+              with every member&apos;s position.
+            </P>
+          </Section>
+
           <Section title="ACTION CENTER">
             <P>
               The Action Center surfaces the most important civic issues of the day using automated
@@ -1978,7 +2004,7 @@ export default function AboutPage() {
               />
               <Row
                 label="Congressional Record Daily Digest"
-                value="The Record's own summary of each day in each chamber (measures passed, failed and reported, nominations confirmed, committee meetings, next meeting), via GovInfo, quoted as published — both chambers"
+                value="The Record's own summary of each day in each chamber (measures passed, failed and reported, nominations confirmed, committee meetings, next meeting), via GovInfo, quoted as published — both chambers. Once a day's record is final, the Civitas Bluesky account posts it: the day's one-line count summary and the numbers of the bills passed, never their titles, since an official short title can read as advocacy"
               />
               <Row
                 label="House Clerk"

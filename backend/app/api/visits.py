@@ -305,13 +305,15 @@ def _visitor_hash(ip: str, salt: bytes) -> str:
 _KNOWN_STATIC_PATHS = {
     "/", "/about", "/accessibility", "/action", "/bills", "/changelog",
     "/compare", "/environmental", "/explore", "/feedback", "/leaderboard",
-    "/politicians", "/elections",
+    "/politicians", "/elections", "/congress", "/congress/bills",
     # /scorecard has no page anymore (renamed) but old Bluesky posts still
     # link to it — kept here so that 404 traffic stays visibly labeled
     # "/scorecard" instead of draining into the unlabeled "/other" bucket.
     "/scorecard",
 }
-_DYNAMIC_PREFIXES = ("/politicians/", "/issue/", "/explore/", "/elections/")
+# Longest first: "/congress/bills/S.1" is a bill page, "/congress/2026-09-24"
+# a day report.
+_DYNAMIC_PREFIXES = ("/congress/bills/", "/politicians/", "/issue/", "/explore/", "/elections/", "/congress/")
 
 
 def _normalize_path(raw: str) -> str:

@@ -417,3 +417,45 @@ def test_house_votes_stored_without_a_requirement_are_repaired_once(db_session, 
     monkeypatch.setattr(ca, "_get", _fake_get({}))
     assert _run(ca.repair_house_requirements(None, db_session)) == (0, "ok")
 
+
+def test_a_run_reads_the_newest_first(monkeypatch):
+    # Floor logs, then recent Digests, then the current session's votes
+    # before the previous session's: a fresh database shows this week
+    # within one run (the first production run spent twenty minutes on
+    # January 2025 first).
+    from contextlib import asynccontextmanager
+    from unittest.mock import MagicMock
+
+    calls = []
+
+    async def floor(client, db, day):
+        calls.append(("floor", day.isoformat()))
+        return {"house": "ok", "senate": "ok"}
+
+    async def digests(client, db, today):
+        calls.append(("digests",))
+        return {}
+
+    async def votes(client, db, chamber, congress, session, limit=250):
+        calls.append(("votes", chamber, session))
+        return 0, "ok"
+
+    @asynccontextmanager
+    async def client():
+        yield None
+
+    monkeypatch.setattr(ca, "sync_floor_logs", floor)
+    monkeypatch.setattr(ca, "sync_digests", digests)
+    monkeypatch.setattr(ca, "sync_roll_calls", votes)
+    monkeypatch.setattr(ca, "make_async_client", client)
+    monkeypatch.setattr(ca, "SessionLocal", MagicMock)
+    monkeypatch.setattr(ca, "api_cache_set", lambda *a, **k: None)
+    monkeypatch.setattr(ca, "eastern_today", lambda: date(2026, 9, 27))
+    monkeypatch.setattr(ca, "expected_current_congress", lambda: 119)
+    result = asyncio.run(ca.run_congress_sync())
+    assert calls == [
+        ("floor", "2026-09-26"), ("floor", "2026-09-27"), ("digests",),
+        ("votes", "senate", 2), ("votes", "house", 2), ("votes", "senate", 1), ("votes", "house", 1),
+    ]
+    assert set(result["rollCalls"]) == {"senate-2", "house-2", "senate-1", "house-1"}
+    assert not ca.is_congress_sync_running()

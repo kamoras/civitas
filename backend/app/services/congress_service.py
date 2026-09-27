@@ -109,10 +109,22 @@ def _list_phrase(parts: list[str]) -> str:
 
 # ── Rows to wire shapes ───────────────────────────────────────────
 
+def _next_step(e: CongressEvent) -> str | None:
+    """For a passed measure: "both" (it has now passed both chambers),
+    "senate"/"house" (it goes there next), or None (a resolution, or not a
+    passage)."""
+    if e.kind != "passed" or not e.bill_id or is_resolution(e.bill_id):
+        return None
+    if passed_both_chambers(e.bill_id, e.chamber):
+        return "both"
+    return "house" if e.chamber == "senate" else "senate"
+
+
 def _event(e: CongressEvent) -> dict:
     return {
         "kind": e.kind, "name": e.name, "text": e.text, "billId": e.bill_id,
         "billLabel": bill_label(e.bill_id), "isResolution": is_resolution(e.bill_id),
+        "nextStep": _next_step(e),
         "time": e.time, "pages": e.pages, "date": e.date, "chamber": e.chamber,
     }
 

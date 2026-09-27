@@ -1,0 +1,89 @@
+"""The daily Congress post: its text, and which days it may post."""
+
+from datetime import date
+
+import pytest
+
+from app.models import CongressDay
+from app.pipeline.analyze import congress_bluesky as cb
+
+
+def _report(senate_passed, house_passed=()):
+    def ev(bill, res=False):
+        return {"billId": bill, "isResolution": res}
+    return {
+        "date": "2026-09-24",
+        "sentence": "The Senate passed 3 bills, agreed to 4 resolutions and took 3 record votes. "
+                    "The House met for 3 minutes and took no record votes.",
+        "chambers": {
+            "senate": {"passed": [ev(b, b.startswith("SRES")) for b in senate_passed]},
+            "house": {"passed": [ev(b) for b in house_passed]},
+        },
+    }
+
+
+def test_the_post_is_the_template_sentence_and_bill_numbers():
+    text = cb.compose_post(_report(["S.3257", "S.3258", "HR.2388", "SRES.902"]))
+    assert text == (
+        "Congress, Thursday, September 24. The Senate passed 3 bills, agreed to 4 resolutions and took 3 "
+        "record votes. The House met for 3 minutes and took no record votes. "
+        "Senate passed: S. 3257, S. 3258, H.R. 2388."
+    )
+
+
+def test_a_long_list_says_how_many_more():
+    text = cb.compose_post(_report([f"S.{n}" for n in range(1, 8)]))
+    assert text.endswith("Senate passed: S. 1, S. 2, S. 3, S. 4 and 3 more.")
+
+
+def _day(db, iso, chamber, in_session=True, final=True):
+    db.add(CongressDay(chamber=chamber, date=iso, in_session=in_session, is_final=final, source="digest"))
+
+
+@pytest.fixture
+def posting(monkeypatch):
+    sent = []
+    monkeypatch.setattr(cb.settings, "BSKY_HANDLE", "civitas.test", raising=False)
+    monkeypatch.setattr(cb.settings, "BSKY_APP_PASSWORD", "x", raising=False)
+    monkeypatch.setattr(cb, "day_report", lambda db, day: {**_report(["S.1"]), "date": day.isoformat()})
+    monkeypatch.setattr(cb, "publish_post", lambda text, url, **kw: sent.append(url) or True)
+    return sent
+
+
+def test_posts_the_newest_final_session_day_once(db_session, posting):
+    for iso in ("2026-09-23", "2026-09-24"):
+        _day(db_session, iso, "senate")
+        _day(db_session, iso, "house", in_session=False)
+    db_session.commit()
+    today = date(2026, 9, 26)
+    assert cb.post_daily_congress(db_session, today) == date(2026, 9, 24)
+    assert cb.post_daily_congress(db_session, today) == date(2026, 9, 23)
+    assert cb.post_daily_congress(db_session, today) is None
+    assert posting == ["https://civitas-research.org/congress/2026-09-24", "https://civitas-research.org/congress/2026-09-23"]
+
+
+def test_never_a_day_still_on_the_floor_log_a_day_nobody_met_or_an_old_day(db_session, posting):
+    _day(db_session, "2026-09-25", "senate", final=False)   # live, not final
+    _day(db_session, "2026-09-25", "house")
+    _day(db_session, "2026-09-26", "senate", in_session=False)  # neither met
+    _day(db_session, "2026-09-26", "house", in_session=False)
+    _day(db_session, "2026-06-10", "senate")                # back-filled history
+    _day(db_session, "2026-06-10", "house")
+    db_session.commit()
+    assert cb.post_daily_congress(db_session, date(2026, 9, 27)) is None
+    assert posting == []
+
+
+def test_a_failed_publish_is_tried_again(db_session, posting, monkeypatch):
+    _day(db_session, "2026-09-24", "senate")
+    _day(db_session, "2026-09-24", "house")
+    db_session.commit()
+    monkeypatch.setattr(cb, "publish_post", lambda *a, **k: False)
+    assert cb.post_daily_congress(db_session, date(2026, 9, 25)) is None
+    monkeypatch.setattr(cb, "publish_post", lambda *a, **k: True)
+    assert cb.post_daily_congress(db_session, date(2026, 9, 25)) == date(2026, 9, 24)
+
+
+def test_no_credentials_no_post(db_session, monkeypatch):
+    monkeypatch.setattr(cb.settings, "BSKY_HANDLE", "", raising=False)
+    assert cb.post_daily_congress(db_session, date(2026, 9, 25)) is None
