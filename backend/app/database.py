@@ -765,8 +765,12 @@ def _run_migrations(revision: str = "head", bind=None) -> None:
                 "not migrating (expected during a rollback)", ", ".join(sorted(unknown)),
             )
             return
-        # Any other unknown revision (another branch's, a renamed file) is
-        # not a rollback: let Alembic fail loudly on it, as it always has.
+        # Any other unknown revision (not a number, or not past this image's
+        # head) is not a rollback: let Alembic fail loudly on it, as it
+        # always has. The number comparison is sound because only main is
+        # deployed and its revisions form one numbered chain
+        # (tests/test_alembic_migrations.py checks it): a branch revision
+        # sharing a number with main's fails that check once merged.
         cfg.attributes["connection"] = conn
         command.upgrade(cfg, revision)
 

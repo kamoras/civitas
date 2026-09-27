@@ -39,7 +39,7 @@ def _run(
          patch("app.pipeline.stock_pipeline._ingest_president", new_callable=AsyncMock) as mock_president, \
          patch("app.pipeline.holdings_pipeline.ingest_house_holdings", new_callable=AsyncMock) as mock_house_h, \
          patch("app.pipeline.holdings_pipeline.ingest_senate_holdings", new_callable=AsyncMock) as mock_senate_h, \
-         patch("app.pipeline.holdings_pipeline._alert") as mock_alert:
+         patch("app.pipeline.holdings_pipeline.send_ops_alert") as mock_alert:
         for mock, result in (
             (mock_house, house_result), (mock_senate, senate_result), (mock_president, president_result),
             (mock_house_h, house_holdings_result), (mock_senate_h, senate_holdings_result),

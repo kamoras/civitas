@@ -61,6 +61,23 @@ def test_one_head():
     assert len(ScriptDirectory.from_config(database._alembic_config()).get_heads()) == 1
 
 
+def test_revisions_form_one_numbered_chain():
+    """_run_migrations tells a rollback from a stray revision by number, so
+    the numbers must be one sequence, each revising the one before. Two
+    branches that each took the next number fail here once both are merged
+    (Alembic itself only warns about a duplicate id, keeping one file)."""
+    import re
+    from pathlib import Path
+
+    script_dir = ScriptDirectory.from_config(database._alembic_config())
+    files = sorted(Path(script_dir.versions).glob("[0-9]*.py"))
+    ids = [re.search(r"^revision = ['\"](\w+)['\"]", f.read_text(), re.M).group(1) for f in files]
+    assert ids == [f"{n:04d}" for n in range(1, len(files) + 1)]
+    for script in script_dir.walk_revisions():
+        expected = None if script.revision == "0001" else f"{int(script.revision) - 1:04d}"
+        assert script.down_revision == expected, script.revision
+
+
 def test_upgrade_is_idempotent(patched_engine):
     database._run_migrations()
     database._run_migrations()

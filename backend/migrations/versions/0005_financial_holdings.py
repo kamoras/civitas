@@ -1,15 +1,15 @@
 """Financial disclosures and holdings (annual-report asset lists).
 
-Revision ID: 0003
-Revises: 0002
+Revision ID: 0005
+Revises: 0004
 Create Date: 2026-09-26
 """
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = '0003'
-down_revision = '0002'
+revision = '0005'
+down_revision = '0004'
 branch_labels = None
 depends_on = None
 
