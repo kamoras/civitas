@@ -100,9 +100,15 @@ def senate_floor_url(day: date) -> str:
 
 
 def parse_senate_floor(xml: bytes) -> dict | None:
-    """The Senate floor log -> {convened_at, adjourned_at, adjournment_text,
-    events}; one event per measure acted on (its status lines joined with
-    " -- ", as the Senate prints them) and one per section of prose."""
+    """The Senate floor log -> {in_session, convened_at, adjourned_at,
+    adjournment_text, next_meeting, events}; one event per measure acted on
+    (its status lines joined with " -- ", as the Senate prints them) and one
+    per section of prose.
+
+    On a day the Senate does not meet it still publishes a file, holding
+    only <convsched> ("The Senate is scheduled to reconvene at 3 p.m.
+    Monday, September 28, 2026."): no opening, no sections. That is a day
+    not in session, never a day it met and did nothing."""
     try:
         root = etree.fromstring(xml)
     except etree.XMLSyntaxError:
@@ -134,7 +140,10 @@ def parse_senate_floor(xml: bytes) -> dict | None:
 
     convened = _TIME_RE.search(intro)
     adjourned = _TIME_RE.search(adjournment)
+    schedule = _text(root.find("convsched"))
     return {
+        "in_session": bool(events),
+        "next_meeting": schedule or None,
         "convened_at": convened.group(1) if convened else None,
         "adjourned_at": adjourned.group(1) if adjourned else None,
         "adjournment_text": adjournment,
