@@ -16,6 +16,7 @@ import {
   fetchPviMap,
   fetchRaces,
   fetchRepStates,
+  fetchSenatorHoldings,
   fetchSenatorsByState,
   fetchStates,
   fetchTimeline,
@@ -362,5 +363,27 @@ describe("submitDocumentComment", () => {
     const result = await submitDocumentComment(7, "A comment long enough.");
     expect(result.success).toBe(false);
     expect(result.message).toMatch(/Submission failed/);
+  });
+});
+
+describe("fetchSenatorHoldings", () => {
+  beforeEach(() => __resetApiCache());
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("drops a member's pages cached from a report since replaced", async () => {
+    const report = (sourceUrl: string, page: number) => ({ sourceUrl, page });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => report("old", 1) })   // page 1, cached
+      .mockResolvedValueOnce({ ok: true, json: async () => report("new", 2) })   // page 2, after the swap
+      .mockResolvedValueOnce({ ok: true, json: async () => report("new", 1) });  // page 1 again, refetched
+    vi.stubGlobal("fetch", fetchMock);
+
+    expect((await fetchSenatorHoldings("S1", { page: 1 })).sourceUrl).toBe("old");
+    expect((await fetchSenatorHoldings("S1", { page: 2 })).sourceUrl).toBe("new");
+    expect((await fetchSenatorHoldings("S1", { page: 1 })).sourceUrl).toBe("new");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    // And the fresh page-2 response stayed cached.
+    expect((await fetchSenatorHoldings("S1", { page: 2 })).sourceUrl).toBe("new");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });

@@ -159,6 +159,7 @@ const _inflight = new Map<string, Promise<unknown>>();
 export function __resetApiCache(): void {
   _fetchCache.clear();
   _inflight.clear();
+  _holdingsFiling.clear();
 }
 
 async function cachedFetch<T>(url: string, ttlMs: number, errorLabel = "Fetch failed"): Promise<T> {
@@ -383,13 +384,34 @@ async function fetchHoldings(
   if (options?.perPage) params.set("per_page", String(options.perPage));
   if (options?.category) params.set("category", options.category);
   // Cached: legend toggles and paging back revisit the same URLs, and a
-  // member's holdings change at most once a night.
-  return cachedFetch(
-    `${API_BASE}/${CHAMBER_PATH[chamber]}/${memberId}/holdings?${params}`,
-    TTL.MEDIUM,
-    "Failed to load holdings"
-  );
+  // member's holdings change at most once a night. But every page carries
+  // its report's breakdown and link, so pages cached from a report since
+  // replaced must not mix with the new one: when a response names a
+  // different filing from the one last seen for this member, the member's
+  // cached pages are dropped and this one is fetched fresh.
+  const base = `${API_BASE}/${CHAMBER_PATH[chamber]}/${memberId}/holdings?`;
+  const url = `${base}${params}`;
+  const load = () => cachedFetch<Holdings>(url, TTL.MEDIUM, "Failed to load holdings");
+  const hit = _fetchCache.get(url);
+  const fromCache = hit !== undefined && hit.expiry > Date.now();
+  let data = await load();
+  const seen = _holdingsFiling.get(base);
+  if (seen !== undefined && data.sourceUrl !== seen) {
+    const kept = _fetchCache.get(url);
+    _fetchCache.forEach((_, key) => {
+      if (key.startsWith(base)) _fetchCache.delete(key);
+    });
+    // A cached page is the stale one: fetch it fresh. A fresh one is the
+    // newer report: keep it, and let the other pages refetch when visited.
+    if (fromCache) data = await load();
+    else if (kept) _fetchCache.set(url, kept);
+  }
+  _holdingsFiling.set(base, data.sourceUrl);
+  return data;
 }
+
+/** The filing (source URL) each member's holdings pages last came from. */
+const _holdingsFiling = new Map<string, string>();
 
 type HoldingsOptions = { page?: number; perPage?: number; category?: string | null };
 

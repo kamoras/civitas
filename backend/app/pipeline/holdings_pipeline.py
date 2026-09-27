@@ -436,9 +436,12 @@ def _stored_urls(db: Session, owner_column) -> list[str]:
 
 async def _within(step: Awaitable[T], budget: timedelta, what: str) -> T:
     """A phase's preparation step, failed if it outlasts PREP_BUDGET."""
-    result = await until_deadline(step, time.monotonic() + budget.total_seconds())
+    started = time.monotonic()
+    result = await until_deadline(step, started + budget.total_seconds())
     if result is None:  # the steps it bounds return collections, never None
-        raise RuntimeError(f"{what} took longer than {budget}")
+        if time.monotonic() - started >= budget.total_seconds():
+            raise RuntimeError(f"{what} took longer than {budget}")
+        raise RuntimeError(f"{what} timed out")
     return result
 
 
@@ -492,6 +495,10 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
         mine = stored.get(member_id)
         outcome = _Outcome()
         out_of_time = False
+        # One row per filing: the House index can list a document twice
+        # (2025: Ansari's 10078188), and a failing filing shouldn't be
+        # fetched twice. (The Senate search is de-duplicated as it pages.)
+        per_member[member_id] = list({chamber.filing_id(f): f for f in per_member[member_id]}.values())
         fields = {chamber.filing_id(f): chamber.fields(f) for f in per_member[member_id]}
         ranks = {fid: chamber.rank(v, fid) for fid, v in fields.items()}
         if mine is not None and mine.filing_id in fields:

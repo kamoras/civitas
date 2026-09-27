@@ -343,5 +343,8 @@ async def until_deadline(step, deadline: float | None):
     try:
         return await asyncio.wait_for(step, max(deadline - time.monotonic(), 0.001))
     except TimeoutError:
-        logger.info("Holdings: a request in flight was cut off at the time budget")
+        if time.monotonic() >= deadline:
+            logger.info("Holdings: a request in flight was cut off at the time budget")
+        else:
+            logger.warning("Holdings: a request timed out before the time budget")
         return None

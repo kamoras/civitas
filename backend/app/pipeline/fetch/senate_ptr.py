@@ -287,19 +287,39 @@ async def _scrape_via_page(
         await _wait_until(lambda: len(responses) > before)
 
     by_id: dict[str, dict] = {}
-    unparsed = total = 0
+    unparsed: set[str] = set()
+    total = await _page_through(page, responses, by_id, unparsed)
+    if total and len(by_id) + len(unparsed) < total:
+        # The results are ordered by filing date, and eFD's order within a
+        # date isn't stable from one page request to the next: a row can
+        # repeat on the next page while another is never shown. A second
+        # pass through a fresh search usually turns up what the first one
+        # missed; anything still missing is reported, not guessed at.
+        before = len(responses)
+        await _click(page.get_by_role("button", name="Search Reports"))
+        if await _wait_until(lambda: len(responses) > before):
+            total = await _page_through(page, responses, by_id, unparsed) or total
+    filings.extend(by_id.values())
+    if total and len(by_id) + len(unparsed) < total:
+        logger.warning("Senate eFD search returned %d of %d filings", len(by_id) + len(unparsed), total)
+    return filings
+
+
+async def _page_through(page, responses: list, by_id: dict[str, dict], unparsed: set[str]) -> int:
+    """Collect every results page from the latest response on, into `by_id`
+    (and the rows that don't parse into `unparsed`, keyed the same way so
+    a repeat never counts twice). Returns recordsTotal."""
+    total = 0
     for _ in range(_MAX_PAGES):
-        resp = responses[-1]
         try:
-            payload = await resp.json()
+            payload = await responses[-1].json()
         except Exception:
             logger.error("Senate eFD search response was not JSON — session/endpoint may have changed")
             break
 
         total = payload.get("recordsTotal", 0)
-        unparsed += _collect_rows(by_id, payload.get("data", []))
-
-        if len(by_id) + unparsed >= total:
+        _collect_rows(by_id, unparsed, payload.get("data", []))
+        if len(by_id) + len(unparsed) >= total:
             break
 
         next_el = page.get_by_text("Next", exact=True)
@@ -309,28 +329,20 @@ async def _scrape_via_page(
         await _click(next_el)
         if not await _wait_until(lambda: len(responses) > before):
             break
-
-    filings.extend(by_id.values())
-    if total and len(by_id) + unparsed < total:
-        # A page repeated rows and another was never shown, or paging
-        # stopped early: some filings are missing from this search.
-        logger.warning("Senate eFD search returned %d of %d filings", len(by_id) + unparsed, total)
-    return filings
+    return total
 
 
-def _collect_rows(by_id: dict[str, dict], rows: list) -> int:
-    """Add a results page's rows to `by_id`, keyed by filing — rows sorted
-    by filing date aren't in a stable order within a date, so a row can
-    reappear on the next page, and counted twice it would stop pagination
-    short. The first sighting is kept. Returns how many rows didn't parse."""
-    unparsed = 0
+def _collect_rows(by_id: dict[str, dict], unparsed: set[str], rows: list) -> None:
+    """Add a results page's rows to `by_id`, keyed by filing, and the rows
+    that don't parse to `unparsed`, keyed by their content — a row can
+    reappear on a later page (see _scrape_via_page), and counted twice it
+    would end paging before every row was seen. The first sighting is kept."""
     for row in rows:
         parsed = _parse_search_row(row)
         if parsed is None:
-            unparsed += 1
+            unparsed.add(repr(row))
         else:
             by_id.setdefault(senate_filing_id(parsed["report_url"]), parsed)
-    return unparsed
 
 
 def senate_filing_id(report_url: str) -> str:
