@@ -29,8 +29,12 @@ class TestCheckPipelineOverrunAllFourPipelines:
         mock_alert.assert_not_called()
 
     def test_senate_overrunning_its_8h_budget_alerts(self, db_session):
+        from app.pipeline import lease
+
         db_session.add(PipelineRun(started_at=utcnow() - timedelta(hours=9), status=PipelineStatus.RUNNING))
         db_session.commit()
+        _check(db_session).assert_not_called()  # no live lease: a dead run's row, not an overrun
+        lease.acquire(db_session, lease.SENATE_RUN)
         mock_alert = _check(db_session)
         mock_alert.assert_called_once()
         assert "Senate" in mock_alert.call_args[0][0]
@@ -74,6 +78,9 @@ class TestCheckPipelineOverrunAllFourPipelines:
         mock_alert.assert_not_called()
 
     def test_multiple_overrunning_pipelines_each_alert_independently(self, db_session):
+        from app.pipeline import lease
+
+        lease.acquire(db_session, lease.SENATE_RUN)  # the Senate run is live
         db_session.add(PipelineRun(started_at=utcnow() - timedelta(hours=9), status=PipelineStatus.RUNNING))
         db_session.add(StockTradesPipelineRun(started_at=utcnow() - timedelta(hours=3), status=PipelineStatus.RUNNING))
         db_session.commit()

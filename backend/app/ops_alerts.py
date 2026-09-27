@@ -289,18 +289,25 @@ def check_pipeline_overrun() -> None:
     """
     from app.database import SessionLocal
     from app.models import (
-        HousePipelineRun, PipelineRun, PipelineStatus,
-        StockTradesPipelineRun, SupplementaryPipelineRun,
+        HousePipelineRun, PipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun,
     )
+
+    from app.pipeline.run_tracker import live_run
 
     default_budget = timedelta(hours=settings.PIPELINE_OVERRUN_ALERT_HOURS)
     db = SessionLocal()
     try:
+        # Live runs only (run_tracker.live_run), however old: a Senate row
+        # whose lease no live run holds is a dead run's, not an overrunning
+        # one — check_pipeline_staleness reports a run that never finished.
         checks = [
-            ("Senate", db.query(PipelineRun).filter(PipelineRun.status == PipelineStatus.RUNNING).first(), default_budget),
-            ("House", db.query(HousePipelineRun).filter(HousePipelineRun.status == PipelineStatus.RUNNING).first(), default_budget),
-            ("Supplementary", db.query(SupplementaryPipelineRun).filter(SupplementaryPipelineRun.status == PipelineStatus.RUNNING).first(), default_budget),
-            ("Stock trades", db.query(StockTradesPipelineRun).filter(StockTradesPipelineRun.status == PipelineStatus.RUNNING).first(), stock_trades_overrun_budget()),
+            (label, live_run(db, model, timedelta.max), budget)
+            for label, model, budget in (
+                ("Senate", PipelineRun, default_budget),
+                ("House", HousePipelineRun, default_budget),
+                ("Supplementary", SupplementaryPipelineRun, default_budget),
+                ("Stock trades", StockTradesPipelineRun, stock_trades_overrun_budget()),
+            )
         ]
     finally:
         db.close()

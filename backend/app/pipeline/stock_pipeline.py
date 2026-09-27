@@ -57,7 +57,7 @@ from app.pipeline.fetch.senate_ptr import (
     senate_filing_id,
 )
 from app.pipeline.progress_tracker import ProgressTracker
-from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, MEMBER_PIPELINE_RUNNING, acquire_pipeline_lock_why, skip_reason_text
+from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, MEMBER_PIPELINE_RUNNING, acquire_pipeline_lock_why, run_in_progress, skip_reason_text
 from app.pipeline.transform.industry_classifier import classify_batch_with_learning
 from app.time_utils import utcnow
 
@@ -115,17 +115,12 @@ def _other_pipeline_running(db: Session) -> bool:
     a killed process — a deploy restarting the container mid-run) used
     to block Stock forever, with no auto-clear anywhere in this check.
     Confirmed live: this is what left stock-trades data stale for 4+
-    days after a since-fixed deploy-race incident. A row this old is
-    treated as dead, not as "still running" — same STALE_PIPELINE_TIMEOUT
-    bar acquire_pipeline_lock_why uses to actually clear these rows, so this
-    check and the thing that eventually cleans them up agree on what
-    "stuck" means.
+    days after a since-fixed deploy-race incident. Liveness is
+    run_tracker.live_run's — the same test every other reader and the
+    run locks apply — so this check and the thing that eventually cleans
+    these rows up agree on what "stuck" means.
     """
-    for model in (PipelineRun, HousePipelineRun):
-        running = db.query(model).filter(model.status == PipelineStatus.RUNNING).first()
-        if running and utcnow() - running.started_at <= STALE_PIPELINE_TIMEOUT:
-            return True
-    return False
+    return any(run_in_progress(db, model) for model in (PipelineRun, HousePipelineRun))
 
 
 def _compute_days_to_disclose(transaction_date: str, disclosure_date: str) -> int:

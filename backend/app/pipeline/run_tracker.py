@@ -37,14 +37,38 @@ def run_tables() -> dict[str, type]:
     }
 
 
-def run_in_progress(db: Session, model: type[_RunModel], stale_timeout: timedelta = STALE_PIPELINE_TIMEOUT) -> bool:
-    """Whether a `model` run is RUNNING and young enough to be real. A row
-    older than `stale_timeout` is one a killed process left behind (the
-    same bar acquire_pipeline_lock_why clears it by), not a live run."""
+def _run_lease(model: type) -> "str | None":
+    """The lease every run of `model` holds for its duration, if any: the
+    Senate run's (lease.SENATE_RUN, taken before its row is written)."""
+    from app.models import PipelineRun
+    from app.pipeline import lease
+
+    return lease.SENATE_RUN if model is PipelineRun else None
+
+
+def live_run(db: Session, model: type[_RunModel], stale_timeout: timedelta = STALE_PIPELINE_TIMEOUT) -> "_RunModel | None":
+    """`model`'s RUNNING row if its run is live, else None. Live: younger
+    than `stale_timeout` (older, a killed process left it — the bar
+    acquire_pipeline_lock_why clears it by) and, for a run that holds a
+    lease for its duration (_run_lease), while that lease is held — a
+    RUNNING Senate row with no live lease is a dead run's, whatever its
+    age. Every reader asking "is a Senate run going?" asks this, so none
+    waits out a dead run's row that another has seen through."""
     from app.models import PipelineStatus
+    from app.pipeline import lease
 
     running = db.query(model).filter(model.status == PipelineStatus.RUNNING).first()
-    return running is not None and utcnow() - running.started_at < stale_timeout
+    if running is None or utcnow() - running.started_at >= stale_timeout:
+        return None
+    tier = _run_lease(model)
+    if tier is not None and not lease.held(db, tier):
+        return None
+    return running
+
+
+def run_in_progress(db: Session, model: type[_RunModel], stale_timeout: timedelta = STALE_PIPELINE_TIMEOUT) -> bool:
+    """Whether a `model` run is live (live_run)."""
+    return live_run(db, model, stale_timeout) is not None
 
 
 # A refusal because the lock's own holder is live (acquire_pipeline_lock_why);
@@ -69,7 +93,7 @@ def skip_reason_text(reason: str | None, tier: str | None = None) -> str:
 
 
 def acquire_pipeline_lock_why(
-    db: Session, model: type[_RunModel], stale_timeout: timedelta,
+    db: Session, model: type[_RunModel], stale_timeout: timedelta, *, stale_because: str | None = None,
 ) -> "tuple[_RunModel | None, str | None]":
     """Atomically create a new locked run of `model`, auto-clearing a
     stale leftover RUNNING row first. Returns (run, None), or (None, why):
@@ -117,7 +141,8 @@ def acquire_pipeline_lock_why(
         # reset backs out with a rollback, writing nothing (lease.DATA_RESET).
         running.status = PipelineStatus.STALE
         running.completed_at = utcnow()
-        running.error_message = f"Marked stale: exceeded {stale_timeout} timeout"
+        # Why, for the run history: its age, or the caller's reason.
+        running.error_message = f"Marked stale: {stale_because or f'exceeded {stale_timeout} timeout'}"
         cleared = (running.id, age)
 
     try:

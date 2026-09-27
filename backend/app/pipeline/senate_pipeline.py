@@ -423,8 +423,11 @@ def _acquire_pipeline_lock(db: Session, *, lease_held: bool = False) -> "tuple[P
     """
     from app.pipeline.run_tracker import acquire_pipeline_lock_why
 
-    stale_after = timedelta(0) if lease_held else timedelta(seconds=STALE_PIPELINE_TIMEOUT_S)
-    return acquire_pipeline_lock_why(db, PipelineRun, stale_after)
+    if lease_held:
+        return acquire_pipeline_lock_why(
+            db, PipelineRun, timedelta(0), stale_because="no live run held the Senate run's lease",
+        )
+    return acquire_pipeline_lock_why(db, PipelineRun, timedelta(seconds=STALE_PIPELINE_TIMEOUT_S))
 
 
 # Hashed paths that cannot change how anything is classified or scored, so

@@ -209,8 +209,13 @@ class TestOtherPipelineRunningStaleness:
     """
 
     def test_recent_running_senate_row_blocks(self, db_session):
+        from app.pipeline import lease
+
         db_session.add(PipelineRun(started_at=utcnow() - timedelta(minutes=5), status=PipelineStatus.RUNNING))
         db_session.commit()
+        # Without its lease the row is a dead run's (run_tracker.live_run)...
+        assert stock_pipeline._other_pipeline_running(db_session) is False
+        lease.acquire(db_session, lease.SENATE_RUN)  # ...with it, a live one
         assert stock_pipeline._other_pipeline_running(db_session) is True
 
     def test_recent_running_house_row_blocks(self, db_session):

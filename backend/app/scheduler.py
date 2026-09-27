@@ -210,31 +210,24 @@ def _hourly_action_refresh() -> None:
                         age,
                     )
                     return
+            # A run "running" for >8h almost certainly crashed without
+            # updating its status, and one whose lease no live run holds
+            # did (run_tracker.live_run): proceed past either rather than
+            # blocking the action center indefinitely.
             from app.database import SessionLocal
-            from app.models import PipelineRun, PipelineStatus
+            from app.models import PipelineRun
+            from app.pipeline.run_tracker import live_run
             db = SessionLocal()
             try:
-                running = db.query(PipelineRun).filter(PipelineRun.status == PipelineStatus.RUNNING).first()
+                running = live_run(db, PipelineRun, timedelta(hours=8))
             finally:
                 db.close()
-            if running:
-                age = utcnow() - running.started_at
-                if _is_stale(age, timedelta(hours=8)):
-                    # Pipeline run has been "running" for >8h — it almost certainly
-                    # crashed without updating its status. Proceed rather than blocking
-                    # the action center indefinitely.
-                    logger.warning(
-                        "Stale PipelineRun detected (run #%d started %s, age %s) "
-                        "— treating as stale and proceeding with action center refresh",
-                        running.id, running.started_at.isoformat(), age,
-                    )
-                else:
-                    logger.info(
-                        "Action center refresh skipped — nightly pipeline is running "
-                        "(run #%d, age %s)",
-                        running.id, age,
-                    )
-                    return
+            if running is not None:
+                logger.info(
+                    "Action center refresh skipped — nightly pipeline is running (run #%d, age %s)",
+                    running.id, utcnow() - running.started_at,
+                )
+                return
             if is_house_pipeline_running():
                 house_age = house_pipeline_age()
                 if _is_stale(house_age, timedelta(hours=8)):
@@ -338,13 +331,14 @@ def _hourly_bill_status_refresh() -> None:
             from app.pipeline.bill_refresh import bill_tracker, refresh_bill_statuses
 
             from app.database import SessionLocal
-            from app.models import PipelineRun, PipelineStatus
+            from app.models import PipelineRun
+            from app.pipeline.run_tracker import run_in_progress
             db = SessionLocal()
             try:
-                running = db.query(PipelineRun).filter(PipelineRun.status == PipelineStatus.RUNNING).first()
+                running = run_in_progress(db, PipelineRun, timedelta(hours=8))  # live_run's liveness
             finally:
                 db.close()
-            if running and not _is_stale(utcnow() - running.started_at, timedelta(hours=8)):
+            if running:
                 logger.info("Bill status refresh skipped — nightly pipeline is running")
                 return
             if is_house_pipeline_running() and not _is_stale(house_pipeline_age(), timedelta(hours=8)):

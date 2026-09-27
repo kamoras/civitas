@@ -8,10 +8,9 @@ from sqlalchemy.orm import Session
 from app.api.pipeline_runner import run_pipeline_in_thread
 from app.config import settings
 from app.database import get_db
-from app.models import PipelineRun, PipelineStatus
+from app.models import PipelineRun
 from app.pipeline.senate_pipeline import run_senate_pipeline
 from app.schemas import PipelineRunSchema, PipelineStatusSchema
-from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -25,15 +24,12 @@ _STALE_RUN_AFTER = timedelta(hours=12)
 def _is_pipeline_running(db: Session) -> bool:
     """Check the shared database for a currently running pipeline.
 
-    A run older than ``_STALE_RUN_AFTER`` is considered stale and ignored.
+    A run older than ``_STALE_RUN_AFTER`` is considered stale and ignored,
+    and so is one whose lease no live run holds (run_tracker.live_run).
     """
-    cutoff = utcnow() - _STALE_RUN_AFTER
-    return (
-        db.query(PipelineRun)
-        .filter(PipelineRun.status == PipelineStatus.RUNNING, PipelineRun.started_at > cutoff)
-        .first()
-        is not None
-    )
+    from app.pipeline.run_tracker import run_in_progress
+
+    return run_in_progress(db, PipelineRun, _STALE_RUN_AFTER)
 
 
 @router.get("/pipeline/status", response_model=PipelineStatusSchema)

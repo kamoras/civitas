@@ -583,3 +583,23 @@ def test_busy_holds_off_a_fresh_run_not_a_hung_one():
     assert tracker.busy(hung_after=timedelta(hours=2)) and tracker.age < timedelta(minutes=1)
     tracker.stop(second)
     assert not tracker.is_running and tracker.holder is None
+
+
+def test_a_senate_row_is_live_while_its_lease_is_held(db_session):
+    """One test of liveness for every reader (run_tracker.live_run): the
+    status endpoint, the triggers, the reset, the rescores, Stock, alerts."""
+    from app.api.pipeline import _is_pipeline_running
+    from app.pipeline import lease
+    from app.pipeline.run_tracker import live_run, run_in_progress
+    from app.time_utils import utcnow
+
+    db_session.add(models.PipelineRun(status="running", started_at=utcnow()))
+    db_session.add(models.HousePipelineRun(status="running", started_at=utcnow()))
+    db_session.commit()
+    assert live_run(db_session, models.PipelineRun) is None  # its run died: no live lease
+    assert not _is_pipeline_running(db_session)
+    assert run_in_progress(db_session, models.HousePipelineRun)  # House runs hold no lease: age alone
+    token = lease.acquire(db_session, lease.SENATE_RUN)
+    assert live_run(db_session, models.PipelineRun) is not None and _is_pipeline_running(db_session)
+    lease.release(db_session, lease.SENATE_RUN, token)
+    assert not run_in_progress(db_session, models.PipelineRun)

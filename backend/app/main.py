@@ -81,16 +81,17 @@ def _invalidate_orphaned_pipelines() -> None:
     A dead process's run leaves the row behind; but during a rollout's
     overlap the other task may be running it for real. The run holds a
     lease (lease.SENATE_RUN) for its duration, so: no live lease, the row is
-    an orphan, marked stale now. A live one is left alone — if that run
-    dies too, the next Senate run, holding the lease itself, clears the row
-    as it starts (senate_pipeline._acquire_pipeline_lock's `lease_held`).
+    an orphan, marked stale now. A live one is left alone. Nothing depends
+    on this tidy-up: every reader judges the row by its lease too
+    (run_tracker.live_run) — a row this leaves, or fails to mark, reads as
+    dead once its run's lease lapses — and the next Senate run clears it
+    (senate_pipeline._acquire_pipeline_lock's `lease_held`).
     """
     _check_orphaned_senate_runs()
 
 
-def _check_orphaned_senate_runs() -> bool:
-    """Marks orphaned rows stale. True when a row was left — a live run
-    holds the lease, or the check itself failed."""
+def _check_orphaned_senate_runs() -> None:
+    """Marks orphaned rows stale (see _invalidate_orphaned_pipelines)."""
     from app.database import SessionLocal
     from app.models import PipelineRun, PipelineStatus
     from app.pipeline import lease
@@ -103,10 +104,8 @@ def _check_orphaned_senate_runs() -> bool:
         orphaned = db.query(PipelineRun.id, PipelineRun.started_at).filter(
             PipelineRun.status == PipelineStatus.RUNNING,
         ).all()
-        if not orphaned:
-            return False
-        if lease.held(db, lease.SENATE_RUN):
-            return True
+        if not orphaned or lease.held(db, lease.SENATE_RUN):
+            return
         # Conditional on the row still RUNNING: a run that finished between
         # the reads above (its lease let go after its row was final) keeps
         # the status it wrote.
@@ -126,11 +125,11 @@ def _check_orphaned_senate_runs() -> bool:
                 "Invalidated orphaned pipeline run #%d (started %s)", run.id, run.started_at,
             )
     except Exception as e:
-        logging.getLogger("app.main").warning("Orphan pipeline cleanup failed (checking again): %s", e)
-        return True
+        logging.getLogger("app.main").warning(
+            "Orphan pipeline cleanup failed: %s — the row reads as dead once no lease is live", e,
+        )
     finally:
         db.close()
-    return False
 
 
 PROCESS_STARTED_AT: str | None = None
