@@ -106,7 +106,9 @@ def _rank(
     only keeps the choice stable. A Senate amendment's seq is the number in
     its title, and there the filing date — reliable in the eFD search —
     decides first: an unnumbered amendment has no number to compare, so the
-    number only breaks a same-day tie. The filing id last makes any
+    number only breaks a same-day tie. (Every Senate report stored in the
+    2026-09 live runs had a filing date — 210 of 210 — so a row without one
+    ranking below dated amendments of its year is the case that isn't seen.) The filing id last makes any
     remaining tie resolve the same way every run, whatever order a search
     returns.
 
@@ -134,11 +136,6 @@ class _Stored:
     report_label: str
     as_of_date: str | None
     seq: int
-    seq_before_date: bool
-
-    @property
-    def rank(self) -> Rank:
-        return _rank(self.as_of_date, self.amended, self.filed_date, self.seq, self.filing_id, self.seq_before_date)
 
     def rank_fields(self) -> dict:
         """What the stored row knows that decides its rank and its label."""
@@ -148,7 +145,7 @@ class _Stored:
         }
 
 
-def _stored_reports(db: Session, column, seq_before_date: bool) -> dict[str, _Stored]:
+def _stored_reports(db: Session, column) -> dict[str, _Stored]:
     rows = (
         db.query(
             column, FinancialDisclosure.filing_id, FinancialDisclosure.parser_version,
@@ -160,7 +157,7 @@ def _stored_reports(db: Session, column, seq_before_date: bool) -> dict[str, _St
         .filter(column.isnot(None))
         .group_by(FinancialDisclosure.id)
     )
-    return {owner_id: _Stored(*rest, seq_before_date) for owner_id, *rest in rows.all()}
+    return {owner_id: _Stored(*rest) for owner_id, *rest in rows.all()}
 
 
 def _is_current(stored: _Stored | None, filing_id: str, parser_version: int) -> bool:
@@ -209,12 +206,12 @@ def _merge_known(stored: dict, tonight: dict) -> dict:
     return {**tonight, **{key: title_from[key] for key in ("as_of_date", "report_label", "amended", "seq")}}
 
 
-def _is_older(stored: _Stored | None, rank: Rank) -> bool:
-    """The candidate ranks below what's stored. The stored report's rank is
-    kept with it (_Stored.rank), so this holds even when a
-    partial index or search no longer returns the stored filing — what it
+def _is_older(stored_rank: Rank | None, rank: Rank) -> bool:
+    """The candidate ranks below what's stored. The stored report's rank
+    comes from its own stored fields, so this holds even when a partial
+    index or search no longer returns the stored filing — what it
     superseded can't come back."""
-    return stored is not None and rank < stored.rank
+    return stored_rank is not None and rank < stored_rank
 
 
 def _members_in_order(per_member: dict[str, list[dict]], stored: dict[str, _Stored]) -> list[str]:
@@ -458,12 +455,20 @@ class _Chamber:
     seq_before_date: bool  # see _rank
     still_loads: Callable[[str], Awaitable[bool]]
 
+    def rank(self, fields: dict, filing_id: str) -> Rank:
+        """A filing's rank from its stored or to-be-stored fields — the one
+        place a rank is computed, with this chamber's seq rule."""
+        return _rank(
+            fields["as_of_date"], fields["amended"], fields["filed_date"], fields["seq"], filing_id,
+            self.seq_before_date,
+        )
+
 
 async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, list[dict]]) -> int:
     """Store each member's newest report from their candidate filings.
     Returns holdings stored."""
     owner_column = getattr(FinancialDisclosure, chamber.owner_key)
-    stored = _stored_reports(db, owner_column, chamber.seq_before_date)
+    stored = _stored_reports(db, owner_column)
     health = _SourceHealth(chamber.source)
     deadline = time.monotonic() + FETCH_BUDGET.total_seconds()
     inserted = 0
@@ -473,10 +478,7 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
         outcome = _Outcome()
         out_of_time = False
         fields = {chamber.filing_id(f): chamber.fields(f) for f in per_member[member_id]}
-        ranks = {
-            fid: _rank(v["as_of_date"], v["amended"], v["filed_date"], v["seq"], fid, chamber.seq_before_date)
-            for fid, v in fields.items()
-        }
+        ranks = {fid: chamber.rank(v, fid) for fid, v in fields.items()}
         if mine is not None and mine.filing_id in fields:
             own = next(f for f in per_member[member_id] if chamber.filing_id(f) == mine.filing_id)
             if not own.get(chamber.date_key) and mine.filed_date:
@@ -489,10 +491,7 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
             # the reports it superseded nor keeps a gap tonight's row fills.
             merged = _merge_known(mine.rank_fields(), fields[mine.filing_id])
             fields[mine.filing_id] = merged
-            ranks[mine.filing_id] = _rank(
-                merged["as_of_date"], merged["amended"], merged["filed_date"], merged["seq"], mine.filing_id,
-                chamber.seq_before_date,
-            )
+            ranks[mine.filing_id] = chamber.rank(merged, mine.filing_id)
             repair = {k: merged[k] for k, v in mine.rank_fields().items() if merged[k] != v}
             if repair:
                 # Saved now, whatever happens to this member below, and used
@@ -503,11 +502,12 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
                 ).update(repair, synchronize_session=False)
                 db.commit()
                 mine = dataclasses.replace(mine, **repair)
+        stored_rank = chamber.rank(mine.rank_fields(), mine.filing_id) if mine is not None else None
         for filing in sorted(per_member[member_id], key=lambda f: ranks[chamber.filing_id(f)], reverse=True):
             filing_id = chamber.filing_id(filing)
             if _is_current(mine, filing_id, chamber.parser_version):
                 break  # already have the newest report, as this parser reads it
-            if _is_older(mine, ranks[filing_id]):
+            if _is_older(stored_rank, ranks[filing_id]):
                 # Only older reports than the stored one turned up — a year's
                 # index or a page of search results failed to load, or the
                 # best left is a paper amendment of unknowable year. Keep
@@ -696,9 +696,12 @@ def _note_later_filing(db: Session, per_senator: dict[str, list[dict]]) -> None:
             and senate_filing_id(f["report_url"]) != disclosure.filing_id
             and _filed_after(f.get("filed_date"), disclosure.filed_date)
         ]
-        newest = max(later, key=lambda f: f["filed_date"], default=None)
+        # Filing date, then report URL: two filed the same day resolve the
+        # same way every run, whatever order the search returned them in.
+        newest = max(later, key=lambda f: (f["filed_date"], f["report_url"]), default=None)
         if newest is not None:
-            if not _filed_after(disclosure.later_filing_filed, newest["filed_date"]):
+            noted = (disclosure.later_filing_filed or "", disclosure.later_filing_url or "")
+            if (newest["filed_date"], newest["report_url"]) >= noted:
                 disclosure.later_filing_label = _senate_fields(newest)["report_label"]
                 disclosure.later_filing_url = newest["report_url"]
                 disclosure.later_filing_filed = newest["filed_date"]
@@ -855,9 +858,10 @@ async def run_holdings_phases(
     counts = {step: 0 for step, _, _ in HOLDINGS_STEPS}
     errors: list[str] = []
     for step, _, _ in HOLDINGS_STEPS:
-        label, ingest = phases[step]
+        label = phases.get(step, (step, None))[0]
         progress.begin(step)
         try:
+            ingest = phases[step][1]  # inside the try: a step with no ingest fails as one phase
             counts[step] = await ingest(db, client)
             progress.complete(step, detail=f"{counts[step]} holdings")
         except Exception:

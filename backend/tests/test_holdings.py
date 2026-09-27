@@ -1617,3 +1617,28 @@ class TestPhaseTable:
              patch.object(holdings_pipeline, "ingest_senate_holdings", senate):
             counts, errors = await holdings_pipeline.run_holdings_phases(MagicMock(), None, MagicMock())
         assert (calls, counts, errors) == (["senate", "house"], {"senate_holdings": 2, "house_holdings": 1}, [])
+
+
+class TestNoteAndPhaseEdges:
+    async def test_same_day_undated_filings_give_a_stable_note(self, db_session, senator):
+        e2025 = _senate_filing("e2025", filed="2026-05-11")
+        p1 = _senate_filing("p1", title="Annual Report", filed="2026-08-12", office="Senator", paper=True)
+        p2 = _senate_filing("p2", title="Annual Report (Amendment)", filed="2026-08-12", office="Senator", paper=True)
+        await _ingest_senate(db_session, [e2025, p1, p2], {"e2025": [_row()]})
+        first = db_session.query(FinancialDisclosure).one().later_filing_url
+        await _ingest_senate(db_session, [e2025, p2, p1], {"e2025": [_row()]})
+        assert db_session.query(FinancialDisclosure).one().later_filing_url == first
+
+    async def test_a_step_without_an_ingest_fails_as_one_phase(self):
+        from unittest.mock import MagicMock
+
+        async def house(_db, _client):
+            return 1
+
+        steps = [*holdings_pipeline.HOLDINGS_STEPS, ("president_holdings", "fetch", "x")]
+        with patch.object(holdings_pipeline, "HOLDINGS_STEPS", steps), \
+             patch.object(holdings_pipeline, "ingest_house_holdings", house), \
+             patch.object(holdings_pipeline, "ingest_senate_holdings", house), \
+             patch.object(holdings_pipeline, "_alert"):
+            counts, errors = await holdings_pipeline.run_holdings_phases(MagicMock(), None, MagicMock())
+        assert counts["house_holdings"] == 1 and len(errors) == 1 and "president_holdings" in errors[0]

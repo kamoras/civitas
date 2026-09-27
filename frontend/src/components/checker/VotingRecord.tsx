@@ -12,6 +12,7 @@ import { fetchSenatorVotes, fetchRepVotes } from "@/lib/api";
 import CollapsibleSection from "../shared/CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
 import { PARTY_BADGE, policyAreaBadgeClass } from "@/lib/partyStyles";
+import Pagination from "@/components/shared/Pagination";
 
 const VOTES_PER_PAGE = 15;
 
@@ -248,69 +249,6 @@ function VoteFilter({
   );
 }
 
-function Pagination({
-  page,
-  totalPages,
-  onPageChange,
-}: {
-  page: number;
-  totalPages: number;
-  onPageChange: (p: number) => void;
-}) {
-  if (totalPages <= 1) return null;
-
-  const pages: (number | "...")[] = [];
-  for (let i = 1; i <= totalPages; i++) {
-    if (i === 1 || i === totalPages || (i >= page - 1 && i <= page + 1)) {
-      pages.push(i);
-    } else if (pages[pages.length - 1] !== "...") {
-      pages.push("...");
-    }
-  }
-
-  return (
-    <div className="flex items-center justify-center gap-1 mt-4">
-      <button
-        onClick={() => onPageChange(page - 1)}
-        disabled={page === 1}
-        aria-label="Previous page"
-        className="text-xs px-2 py-1 font-mono text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed"
-      >
-        &lt; PREV
-      </button>
-      {pages.map((p, i) =>
-        p === "..." ? (
-          <span key={`dot-${i}`} className="text-ink-min text-xs px-1">
-            ...
-          </span>
-        ) : (
-          <button
-            key={p}
-            onClick={() => onPageChange(p)}
-            aria-label={`Page ${p}`}
-            aria-current={p === page ? "page" : undefined}
-            className={`text-xs w-7 h-7 font-mono border transition-all ${
-              p === page
-                ? "text-ink-hi border-white/15 bg-white/[0.03]"
-                : "text-ink-min border-transparent hover:border-white/[0.07]"
-            }`}
-          >
-            {p}
-          </button>
-        )
-      )}
-      <button
-        onClick={() => onPageChange(page + 1)}
-        disabled={page === totalPages}
-        aria-label="Next page"
-        className="text-xs px-2 py-1 font-mono text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed"
-      >
-        NEXT &gt;
-      </button>
-    </div>
-  );
-}
-
 type VoteFilterType = "all" | "yea" | "nay" | "against-party";
 
 function PaginatedVoteList({
@@ -430,7 +368,7 @@ function PaginatedVoteList({
         ))}
       </div>
 
-      <Pagination page={data.page} totalPages={data.totalPages} onPageChange={handlePageChange} />
+      <Pagination numbered page={data.page} totalPages={data.totalPages} onPageChange={handlePageChange} />
     </div>
   );
 }
