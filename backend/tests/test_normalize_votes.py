@@ -9,7 +9,12 @@ from app.pipeline.transform.normalize_votes import (
     _infer_caucus_party,
     compute_party_split,
     extract_senator_vote,
+    is_reconsider_switch,
+    majority_leader_spans,
+    normalize_recent_votes,
     normalize_votes,
+    stamp_roll_call_outcome,
+    vote_date_iso,
 )
 
 
@@ -336,3 +341,159 @@ class TestInferCaucusPartyCombined:
         votes.update({f"r{i}": "Nay" for i in range(5)})
         cosponsor = {"d_cosponsored": 18, "r_cosponsored": 1}
         assert _infer_caucus_party(bills, votes, cosponsor) == "D"
+
+
+class TestMajorityLeaderReconsiderSwitch:
+    """The majority leader switches to Nay on a motion about to fail so they
+    can move to reconsider (Senate Rule XIII; House Rule XIX cl. 2). That
+    Nay is not a break with party — but only for the majority leader, only
+    while they hold the office, and only when the chamber recorded the
+    motion as rejected."""
+
+    THUNE_TENURES = [
+        {"title": "Senate Minority Whip", "chamber": "senate", "start": "2023-01-03", "end": "2025-01-03"},
+        {"title": "Senate Majority Leader", "chamber": "senate", "start": "2025-01-03", "end": None},
+    ]
+    SCHUMER_TENURES = [
+        {"title": "Senate Majority Leader", "chamber": "senate", "start": "2023-01-03", "end": "2025-01-03"},
+        {"title": "Senate Minority Leader", "chamber": "senate", "start": "2025-01-03", "end": None},
+    ]
+
+    @staticmethod
+    def _rc(leaning="R", rejected=True, date="October 14, 2025,  05:34 PM", bill_id="HR5371"):
+        bill = {"billId": bill_id, "billName": "Continuing appropriations",
+                "policyArea": "BUDGET", "partyLeaning": leaning, "description": ""}
+        stamp_roll_call_outcome(bill, {"rejected": rejected, "voteDate": date})
+        return bill
+
+    def _alignment(self, bill, vote, party="R", title="Senate Majority Leader", tenures=None):
+        spans = majority_leader_spans(title, tenures if tenures is not None else self.THUNE_TENURES)
+        return _determine_party_alignment(
+            party, vote, bill["partyLeaning"],
+            reconsider_switch=is_reconsider_switch(bill, spans),
+        )
+
+    def test_majority_leader_nay_on_rejected_motion_is_not_a_break(self):
+        assert self._alignment(self._rc(), "Nay") is None
+
+    def test_majority_leader_nay_on_passed_motion_stays_a_break(self):
+        assert self._alignment(self._rc(rejected=False), "Nay") is False
+
+    def test_unknown_result_is_not_exempted(self):
+        assert self._alignment(self._rc(rejected=None), "Nay") is False
+
+    def test_majority_leader_yea_with_party_still_counts_with_party(self):
+        assert self._alignment(self._rc(), "Yea") is True
+
+    def test_nay_on_other_partys_rejected_motion_still_counts_with_party(self):
+        assert self._alignment(self._rc(leaning="D"), "Nay") is True
+
+    def test_majority_leader_yea_on_motion_carried_over_own_party_is_not_a_break(self):
+        # The mirror case: the other party's motion carried against the
+        # leader's own party, and the leader switched to Yea — the
+        # prevailing side — to be able to move to reconsider.
+        assert self._alignment(self._rc(leaning="D", rejected=False), "Yea") is None
+
+    def test_majority_leader_yea_on_carried_motion_own_party_backed_counts_with_party(self):
+        assert self._alignment(self._rc(rejected=False), "Yea") is True
+
+    def test_mirror_case_needs_the_majority_leader(self):
+        bill = self._rc(leaning="R", rejected=False, date="March 14, 2025,  01:30 PM")
+        assert self._alignment(
+            bill, "Yea", party="D", title="Senate Minority Leader", tenures=self.SCHUMER_TENURES,
+        ) is False
+
+    def test_minority_leader_is_never_exempted(self):
+        # Schumer's March 2025 CR cloture: a real break, and it stays one.
+        bill = self._rc(leaning="D", rejected=True, date="March 14, 2025,  01:30 PM")
+        assert self._alignment(
+            bill, "Nay", party="D", title="Senate Minority Leader", tenures=self.SCHUMER_TENURES,
+        ) is False
+
+    def test_vote_outside_majority_leader_tenure_is_a_break(self):
+        # Thune was minority whip in 2024, not majority leader.
+        bill = self._rc(date="June 4, 2024,  11:00 AM")
+        assert self._alignment(bill, "Nay") is False
+
+    def test_vote_inside_a_past_majority_leader_tenure_is_exempted(self):
+        # Schumer led the majority in 2023-24; his current title is minority
+        # leader, but the tenure dates decide.
+        bill = self._rc(leaning="D", date="2024-02-07")
+        assert self._alignment(
+            bill, "Nay", party="D", title="Senate Minority Leader", tenures=self.SCHUMER_TENURES,
+        ) is None
+
+    def test_handover_day_belongs_to_the_new_role(self):
+        bill = self._rc(leaning="D", date="2025-01-03")
+        assert self._alignment(
+            bill, "Nay", party="D", title="Senate Minority Leader", tenures=self.SCHUMER_TENURES,
+        ) is False
+
+    def test_speaker_is_not_exempted(self):
+        bill = self._rc(date="2026-06-30")
+        assert self._alignment(bill, "Nay", title="Speaker of the House", tenures=[
+            {"title": "Speaker of the House", "chamber": "house", "start": "2023-10-25", "end": None},
+        ]) is False
+
+    def test_assistant_majority_leader_is_a_different_office(self):
+        assert majority_leader_spans("Assistant Senate Majority Leader", [
+            {"title": "Assistant Senate Majority Leader", "start": "2021-01-20", "end": None},
+        ]) == []
+
+    def test_missing_tenure_data_falls_back_to_current_title(self):
+        assert majority_leader_spans("House Majority Leader", None)
+        assert self._alignment(self._rc(date="2026-06-30"), "Nay",
+                               title="House Majority Leader", tenures=[]) is None
+
+    def test_no_title_and_no_tenure_means_no_spans(self):
+        assert majority_leader_spans(None, None) == []
+
+    def test_vote_date_formats(self):
+        assert vote_date_iso("October 14, 2025,  05:34 PM") == "2025-10-14"
+        assert vote_date_iso("2026-06-30") == "2026-06-30"
+        assert vote_date_iso("") is None
+        assert vote_date_iso("sometime") is None
+
+    def test_aggregate_counts_skip_the_switch(self):
+        spans = majority_leader_spans("Senate Majority Leader", self.THUNE_TENURES)
+        bills = [self._rc(bill_id=f"rej{i}") for i in range(3)]
+        bills += [self._rc(rejected=False, bill_id=f"pass{i}") for i in range(2)]
+        bills += [self._rc(rejected=False, bill_id=f"yea{i}") for i in range(5)]
+        votes = {f"rej{i}": "Nay" for i in range(3)}
+        votes.update({f"pass{i}": "Nay" for i in range(2)})
+        votes.update({f"yea{i}": "Yea" for i in range(5)})
+
+        result = normalize_votes("T000250", bills, votes, "R", leader_spans=spans)
+        assert result["votedWithPartyCount"] == 5
+        assert result["votedAgainstPartyCount"] == 2  # only the Nays on passed motions
+        by_id = {v["billId"]: v for v in result["keyVotes"]}
+        assert by_id["rej0"]["votedWithParty"] is None
+        assert by_id["rej0"]["reconsiderSwitch"] is True
+        assert by_id["pass0"]["reconsiderSwitch"] is False
+
+        # Without the leader's spans the same record shows five breaks.
+        plain = normalize_votes("X000001", bills, votes, "R")
+        assert plain["votedAgainstPartyCount"] == 5
+
+    def test_recent_votes_path_applies_the_same_rule(self):
+        spans = majority_leader_spans("Senate Majority Leader", self.THUNE_TENURES)
+        bill = self._rc()
+        bill["rcKey"] = "119-1-571"
+        rc_map = {"119-1-571": {"members": [
+            {"lastName": "Thune", "state": "SD", "party": "R", "voteCast": "Nay"},
+        ]}}
+        votes = normalize_recent_votes([bill], rc_map, "Thune", "SD", "R", leader_spans=spans)
+        assert votes[0]["votedWithParty"] is None
+        assert votes[0]["reconsiderSwitch"] is True
+
+        votes = normalize_recent_votes([bill], rc_map, "Thune", "SD", "R")
+        assert votes[0]["votedWithParty"] is False
+
+
+def test_partisan_depth_ignores_reconsider_switch_votes():
+    from app.pipeline.analyze.party_platform import _alignments_from_votes
+
+    vote = {"vote": "Nay", "policyArea": "BUDGET", "partyLeaning": "R", "policyAreas": []}
+    assert _alignments_from_votes({"keyVotes": [vote, vote]})[0]["alignment"] == "D"
+    switched = {**vote, "reconsiderSwitch": True}
+    assert _alignments_from_votes({"keyVotes": [switched, switched]}) == []

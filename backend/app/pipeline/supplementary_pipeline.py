@@ -140,8 +140,11 @@ async def run_supplementary_pipeline() -> dict:
         # successful ingest — the bundled app/data/*.json fallback loads
         # fine in the meantime, but should be refreshed immediately rather
         # than waiting up to a week for the first real data.
-        from app.pipeline.transform.committee_data import load_leadership_roles
-        leadership_missing = not load_leadership_roles()
+        from app.pipeline.transform.committee_data import (
+            leadership_tenures_on_volume,
+            load_leadership_roles,
+        )
+        leadership_missing = not load_leadership_roles() or not leadership_tenures_on_volume()
         run_committee_leadership = leadership_missing or utcnow().weekday() == 6
         if not run_committee_leadership:
             logger.info("Committee/leadership refresh skipped (weekly cadence; next on Sunday UTC)")

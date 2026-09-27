@@ -46,7 +46,6 @@ from app.pipeline.analyze.action_center import (
     _bsky_repost_has_new_information,
     _is_exact_content_duplicate,
     _issue_signature,
-    _largest_coherent_subgroup,
     _center_titles,
     _mentions_full_name,
     _signatures_match,
@@ -79,20 +78,6 @@ def _make_issue(date: str, title: str, sources: list[str]) -> ActionIssue:
     )
 
 
-def _block_sim_matrix(group_sizes: list[int], within: float = 0.9, across: float = 0.1) -> np.ndarray:
-    """A similarity matrix made of dense within-group blocks and a sparse
-    cross-group fill — synthetic stand-in for one coherent topic (within)
-    vs. an unrelated one (across), without needing real embeddings."""
-    n = sum(group_sizes)
-    m = np.full((n, n), across)
-    start = 0
-    for size in group_sizes:
-        m[start:start + size, start:start + size] = within
-        start += size
-    np.fill_diagonal(m, 1.0)
-    return m
-
-
 class TestCenterTitles:
     """Per-cluster checks must center on the day's mean, as pass 1 does.
     Centering a coherent cluster on its own mean subtracted the topic its
@@ -119,27 +104,34 @@ class TestCenterTitles:
         assert (vecs @ centroid).min() < 0.25
 
 
-class TestLargestCoherentSubgroup:
-    def test_single_coherent_group_is_not_split(self):
-        matrix = _block_sim_matrix([4])
-        assert _largest_coherent_subgroup(matrix, 0.4) == [0, 1, 2, 3]
+class TestClusterArticles:
+    """Complete linkage: a cluster is a set of articles that are ALL alike,
+    never a chain of pairwise resemblances (issue 759, 2026-09-27)."""
 
-    def test_genuine_bimodal_split_keeps_larger_group(self):
-        # 3 articles about one topic, 2 about an unrelated one — the "Iran
-        # war" / "ICE tension" scenario this function exists to catch.
-        matrix = _block_sim_matrix([3, 2])
-        assert _largest_coherent_subgroup(matrix, 0.4) == [0, 1, 2]
+    def _cluster(self, monkeypatch, vectors):
+        from app.pipeline.analyze import action_center as ac
 
-    def test_lone_outlier_is_not_treated_as_a_second_topic(self):
-        # One stray article (size 1) is below _CLUSTER_SPLIT_MIN_SUBGROUP_SIZE
-        # — SOURCE_SIM_FLOOR's own centroid-distance filter handles this case.
-        matrix = _block_sim_matrix([4, 1])
-        assert _largest_coherent_subgroup(matrix, 0.4) == [0, 1, 2, 3, 4]
+        arts = [NewsArticle(title=f"t{i}", summary="", url=f"u{i}", source_name="s", published=None)
+                for i in range(len(vectors))]
+        monkeypatch.setattr(ac, "_embed_texts", lambda texts: np.array(vectors, dtype=float))
+        return sorted(sorted(a.title for a in c) for c in ac._cluster_articles([(a, None) for a in arts]))
 
-    def test_small_minority_group_is_not_treated_as_a_second_topic(self):
-        # 2 of 10 articles (20%) is below _CLUSTER_SPLIT_MIN_SUBGROUP_SHARE.
-        matrix = _block_sim_matrix([8, 2])
-        assert _largest_coherent_subgroup(matrix, 0.4) == list(range(10))
+    def test_a_chain_of_resemblances_is_not_one_cluster(self, monkeypatch):
+        # Symmetric so centering on the day's mean leaves them as written:
+        # a~b and b~c at 0.71, a~c at 0 (floods ~ storm ~ epidemic). Single
+        # linkage made {a, b, c}; complete linkage keeps a and c apart.
+        a, b, c = [1, 0, 0, 0], [0.7, 0.7, 0, 0], [0, 1, 0, 0]
+        vectors = [a, b, c, [-x for x in a], [-x for x in b], [-x for x in c], [0, 0, 1, 0], [0, 0, -1, 0]]
+        clusters = self._cluster(monkeypatch, vectors)
+        assert not any({"t0", "t2"} <= set(c) for c in clusters)
+
+    def test_same_story_coverage_is_one_cluster(self, monkeypatch):
+        vectors = [[1, 0.05, 0], [1, -0.05, 0], [0.98, 0, 0.05], [0, 1, 0], [0, 0, 1], [-1, -1, -1]]
+        clusters = self._cluster(monkeypatch, vectors)
+        assert ["t0", "t1", "t2"] in clusters
+
+    def test_one_article(self, monkeypatch):
+        assert self._cluster(monkeypatch, [[1, 0]]) == [["t0"]]
 
 
 class TestRankClusters:
@@ -236,6 +228,10 @@ class TestDeduplicateTopClusters:
 
         result_titles = {a.title for cluster in result for a in cluster}
         assert "Healthcare bill passes Senate committee" in result_titles
+        # The duplicate is dropped, not folded into c1: appending it was
+        # single linkage one step later and built 2026-09-27's chimeras.
+        assert result[0] == [c1[0]]
+        assert "Trade war tariffs rise for Chinese imports" not in result_titles
 
         # Bucket-level check, not just aggregate counts: counting selected
         # vs rejected alone can't tell "c1, c3 selected" apart from the

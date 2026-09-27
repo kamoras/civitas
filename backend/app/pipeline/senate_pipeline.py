@@ -76,14 +76,17 @@ from app.pipeline.progress_tracker import ProgressTracker
 # Transform modules
 from app.pipeline.transform.normalize_finance import normalize_finance
 from app.pipeline.transform.normalize_members import normalize_members
+from app.pipeline.transform.committee_data import load_leadership_tenures
 from app.pipeline.transform.normalize_votes import (
     compute_party_split,
     compute_party_vote_split,
     dedupe_votes,
     extract_senator_vote,
     find_senate_roll_call,
+    majority_leader_spans,
     normalize_recent_votes,
     normalize_votes,
+    stamp_roll_call_outcome,
     vote_identity,
 )
 
@@ -199,6 +202,15 @@ def upsert_senator(db: Session, data: dict) -> None:
         "office_address": data.get("officeAddress") or "",
         "updated_at": utcnow(),
     }
+    # Leadership title and committees (normalize_members). Never persisted
+    # for senators before 2026-09 — only the House path
+    # (representative_service.upsert_representative) wrote them, so every
+    # senator served leadershipTitle null and no committees. Same rule as
+    # the House: a record without the key leaves the stored value alone.
+    if "leadershipTitle" in data:
+        senator_fields["leadership_title"] = data["leadershipTitle"]
+    if "committees" in data:
+        senator_fields["committees"] = json.dumps(data["committees"] or [])
 
     if existing:
         for key, value in senator_fields.items():
@@ -1481,6 +1493,7 @@ async def run_senate_pipeline(
         for bill in classified_bills:
             roll_call_data = roll_call_data_map.get(bill["billId"])
             if roll_call_data:
+                stamp_roll_call_outcome(bill, roll_call_data)
                 split = compute_party_vote_split(roll_call_data)
                 vote_split = split["label"] if split else None
                 bill["partyLeaning"] = refine_with_vote_data(
@@ -1522,6 +1535,7 @@ async def run_senate_pipeline(
             rc_id = rc.get("rcKey") or rc.get("billId", "")
             roll_call_data = recent_rc_map.get(rc_id)
             if roll_call_data:
+                stamp_roll_call_outcome(rc, roll_call_data)
                 split = compute_party_vote_split(roll_call_data)
                 computed_split = split["label"] if split else None
                 if computed_split:
@@ -1647,12 +1661,19 @@ async def run_senate_pipeline(
                 senator_cosponsor_profile = cosponsorship_profiles.get(
                     senator.get("bioguideId", ""),
                 )
+                # The majority leader's Nay on a failing motion is the
+                # reconsider switch, not a break (MAJORITY_LEADER_TITLES).
+                leader_spans = majority_leader_spans(
+                    senator.get("leadershipTitle"),
+                    load_leadership_tenures().get(senator.get("bioguideId", "")),
+                )
                 voting_record = normalize_votes(
                     senator.get("bioguideId", ""),
                     all_classified,
                     senator_votes,
                     senator_party=senator.get("party", "I"),
                     cosponsorship_profile=senator_cosponsor_profile,
+                    leader_spans=leader_spans,
                 )
 
                 # Normalize recent votes for display in the UI
@@ -1664,6 +1685,7 @@ async def run_senate_pipeline(
                     senator["state"],
                     senator.get("party", "I"),
                     effective_party=voting_record.get("effectiveParty"),
+                    leader_spans=leader_spans,
                 )
                 voting_record["recentVotes"] = recent_senator_votes
                 # normalize_votes saw the recent roll calls too (for the

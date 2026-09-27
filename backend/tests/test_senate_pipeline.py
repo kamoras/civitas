@@ -244,6 +244,42 @@ def test_upsert_senator_persists_confidence(db_session):
     assert json.loads(stored.score_confidence) == confidence
 
 
+def test_upsert_senator_persists_leadership_title_and_committees(db_session):
+    # Never written for senators before 2026-09 (only the House path saved
+    # them), so the API served every senator leadershipTitle null.
+    import json
+
+    from app.pipeline.senate_pipeline import upsert_senator
+
+    committees = [{"committeeName": "Senate Committee on Finance", "chamber": "senate", "title": None}]
+    base = {"id": "s-thune", "name": "John Thune", "state": "SD", "party": "R"}
+    upsert_senator(db_session, {
+        **base, "leadershipTitle": "Senate Majority Leader", "committees": committees,
+    })
+    db_session.commit()
+    stored = db_session.query(Senator).filter(Senator.id == "s-thune").one()
+    assert stored.leadership_title == "Senate Majority Leader"
+    assert json.loads(stored.committees) == committees
+
+    # Updating an existing row writes them too, including clearing a title
+    # the member no longer holds.
+    upsert_senator(db_session, {**base, "leadershipTitle": None, "committees": []})
+    db_session.commit()
+    db_session.refresh(stored)
+    assert stored.leadership_title is None
+    assert json.loads(stored.committees) == []
+
+    # A record that doesn't carry the keys leaves the stored values alone.
+    upsert_senator(db_session, {
+        **base, "leadershipTitle": "Senate Majority Leader", "committees": committees,
+    })
+    upsert_senator(db_session, dict(base))
+    db_session.commit()
+    db_session.refresh(stored)
+    assert stored.leadership_title == "Senate Majority Leader"
+    assert json.loads(stored.committees) == committees
+
+
 def test_house_representatives_are_backfilled_too(db_session):
     """The House pipeline used to score every member without their stored
     sponsorship values on a withheld run; the shared helper takes either

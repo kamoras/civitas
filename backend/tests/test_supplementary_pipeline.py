@@ -142,12 +142,29 @@ class TestSupplementaryPipelineRunTracking:
         with patch("app.pipeline.supplementary_pipeline.utcnow",
                    return_value=datetime(2026, 7, 15)), \
              patch("app.pipeline.transform.committee_data.load_leadership_roles",
-                   return_value={"T000250": "Senate Majority Leader"}):
+                   return_value={"T000250": "Senate Majority Leader"}), \
+             patch("app.pipeline.transform.committee_data.leadership_tenures_on_volume",
+                   return_value=True):
             _run(db_session)
 
         run = db_session.query(SupplementaryPipelineRun).one()
         assert run.committee_leadership_skipped is True
         assert run.committee_leadership_refreshed is False
+
+    def test_committee_leadership_runs_when_tenures_file_missing(self, db_session):
+        """A volume that predates leadership_tenures.json has titles but no
+        tenure dates — refresh at once rather than wait for Sunday."""
+        with patch("app.pipeline.supplementary_pipeline.utcnow",
+                   return_value=datetime(2026, 7, 15)), \
+             patch("app.pipeline.transform.committee_data.load_leadership_roles",
+                   return_value={"T000250": "Senate Majority Leader"}), \
+             patch("app.pipeline.transform.committee_data.leadership_tenures_on_volume",
+                   return_value=False):
+            _run(db_session, committee_leadership_result=True)
+
+        run = db_session.query(SupplementaryPipelineRun).one()
+        assert run.committee_leadership_skipped is False
+        assert run.committee_leadership_refreshed is True
 
     def test_committee_leadership_runs_when_missing_regardless_of_day(self, db_session):
         with patch("app.pipeline.supplementary_pipeline.utcnow",

@@ -25,6 +25,8 @@ from zoneinfo import ZoneInfo
 
 import httpx
 import numpy as np
+from scipy.cluster.hierarchy import fcluster, linkage
+from scipy.spatial.distance import squareform
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
@@ -152,8 +154,6 @@ _US_CIVIC_PROTOTYPES = [
 # 0.027-0.053 — threshold sits mid-gap with wide margin on both sides.
 POLICY_RELEVANCE_THRESHOLD = 0.20
 CLUSTER_TITLE_THRESHOLD = 0.40
-# Floor of the self-calibrating pass-2 merge scan (see _cluster_articles).
-CLUSTER_CENTROID_MERGE_THRESHOLD = 0.20
 # How many candidate clusters get an LLM generation attempt per hourly run.
 # 2026-08: lowered from 4 to 2 as a deliberate capacity choice, not a
 # recalibrated quality threshold — there's a real difference between the
@@ -1327,202 +1327,71 @@ def _filter_policy_relevant(
     return relevant
 
 
-def _agglomerative_cluster(
-    sim_matrix: np.ndarray,
-    threshold: float,
-) -> list[list[int]]:
-    """Run greedy agglomerative clustering on a precomputed similarity matrix."""
-    n = sim_matrix.shape[0]
-    clusters: list[list[int]] = []
-    cluster_map: dict[int, int] = {}
-    assigned: set[int] = set()
-
-    pairs = []
-    for i in range(n):
-        for j in range(i + 1, n):
-            pairs.append((float(sim_matrix[i, j]), i, j))
-    pairs.sort(reverse=True)
-
-    for score, i, j in pairs:
-        if score < threshold:
-            break
-        ci = cluster_map.get(i)
-        cj = cluster_map.get(j)
-        if ci is not None and cj is not None:
-            if ci != cj:
-                src, dst = (cj, ci) if len(clusters[ci]) >= len(clusters[cj]) else (ci, cj)
-                for idx in clusters[src]:
-                    cluster_map[idx] = dst
-                clusters[dst].extend(clusters[src])
-                clusters[src] = []
-        elif ci is not None:
-            clusters[ci].append(j)
-            cluster_map[j] = ci
-            assigned.add(j)
-        elif cj is not None:
-            clusters[cj].append(i)
-            cluster_map[i] = cj
-            assigned.add(i)
-        else:
-            new_id = len(clusters)
-            clusters.append([i, j])
-            cluster_map[i] = new_id
-            cluster_map[j] = new_id
-            assigned.update([i, j])
-
-    for i in range(n):
-        if i not in assigned:
-            clusters.append([i])
-
-    return [c for c in clusters if c]
-
-
-# A second sub-cluster must have at least this many articles, and be at
-# least this share of the cluster, to count as a genuine second topic
-# rather than a couple of stray outliers already handled by SOURCE_SIM_FLOOR.
-_CLUSTER_SPLIT_MIN_SUBGROUP_SIZE = 2
-_CLUSTER_SPLIT_MIN_SUBGROUP_SHARE = 0.25
-
-
 def _center_titles(embeddings: np.ndarray, mean: np.ndarray) -> np.ndarray:
     """Unit title vectors with the day's generic-headline direction removed.
 
-    `mean` must be the whole day's, as pass 1 computes it — never a single
-    cluster's (see the coherence filter in _run_refresh for what that did).
+    `mean` must be the whole day's, as _cluster_articles computes it — never
+    a single cluster's (see the coherence filter in _run_refresh for what
+    that did).
     """
     centered = embeddings - mean
     norms = np.linalg.norm(centered, axis=1, keepdims=True)
     return centered / np.where(norms < 1e-9, 1.0, norms)
 
 
-def _largest_coherent_subgroup(sim_matrix: np.ndarray, threshold: float) -> list[int]:
-    """Indices of the largest sub-cluster in ``sim_matrix``, or all indices
-    if it doesn't meaningfully split.
-
-    _cluster_articles' pass-2 centroid merge only guards against one
-    cluster swallowing most of the day's articles (its size cap) — it
-    doesn't stop two roughly-balanced unrelated topics from landing in one
-    small cluster, and SOURCE_SIM_FLOOR's centroid-distance filter can't
-    catch that either: a centroid sitting between two topics of similar
-    size scores both of them "above floor" toward their own shared
-    midpoint (observed 2026-07: an issue titled "political risks from war
-    in Iran; ICE escalates tension" merged two unrelated policy areas).
-    Re-clustering just this cluster's own similarity matrix at the same
-    threshold pass 1 uses to decide "same specific issue" catches a real
-    topic split that distance-from-centroid alone misses. This can only
-    ever keep one topic — the larger one is kept and the rest dropped
-    rather than inventing a combined title for two different issues.
-    """
-    n = sim_matrix.shape[0]
-    subgroups = _agglomerative_cluster(sim_matrix, threshold)
-    if len(subgroups) <= 1:
-        return list(range(n))
-    sizes = sorted((len(g) for g in subgroups), reverse=True)
-    if sizes[1] >= _CLUSTER_SPLIT_MIN_SUBGROUP_SIZE and sizes[1] / n >= _CLUSTER_SPLIT_MIN_SUBGROUP_SHARE:
-        return sorted(max(subgroups, key=len))
-    return list(range(n))
-
-
 def _cluster_articles(
     items: list[tuple[NewsArticle, np.ndarray]],
 ) -> list[list[NewsArticle]]:
-    """Group articles about the same civic issue using two-pass clustering.
+    """Group articles reporting the same story: complete linkage on
+    day-centered title embeddings, so EVERY pair in a cluster is at least
+    CLUSTER_TITLE_THRESHOLD alike.
 
-    News outlets cover the same issue with very different framing —
-    "Iran missiles hit Israel", "Oil prices surge from Iran conflict",
-    and "Rising gas prices imperil Republican majority" are all facets
-    of one civic issue. A single-pass approach at a conservative
-    threshold treats them as separate stories.
+    Single linkage asked only that each article resemble ONE other, and a
+    second pass then merged whole clusters whose centroids scored as low as
+    0.20, to join different-angle coverage of one event. Both chained
+    stories that merely share a theme. Issue 759 (2026-09-27) was titled
+    for Bangkok's floods, led with a Hawaii hurricane and listed facts about
+    a Northeast nor'easter and an HIV epidemic in Fiji; issue 753's Xi–Trump
+    summit took its title from an article about Chinese students and a
+    professor. Replayed on that day's 50 policy-relevant articles, the old
+    passes built a 9-article weather cluster and an 8-article China/AI/
+    Russia one whose mean pairwise similarity was 0.09.
 
-    Pass 1 — title-only embeddings at CLUSTER_TITLE_THRESHOLD:
-        Re-embeds just the headline (stripping summary noise) so articles
-        sharing the same event/subject merge even if their angle differs.
-
-    Pass 2 — centroid merge at CLUSTER_CENTROID_MERGE_THRESHOLD:
-        Computes each cluster's centroid and merges clusters that are
-        still close enough to be the same broad topic. This catches
-        different-angle coverage (military vs economic vs political)
-        that may not share enough title keywords to merge in pass 1.
+    No threshold rescues either pass, because title similarity cannot tell
+    "same event" from "same theme": on 18 hand-labelled pairs from that
+    feed, same-event pairs scored 0.16-0.82 and different-event pairs
+    0.24-0.46, and adding the summary or switching to the similarity model
+    left the ranges overlapping just as much. So the linkage has to be
+    conservative. A missed merge costs source breadth — the thinner cluster
+    is dropped by _deduplicate_top_clusters or matched to the same issue by
+    _find_matching_issue — while a wrong merge publishes a chimera. Complete linkage at the same threshold turned
+    that feed into 12 multi-article clusters, 10 of them one story each and
+    the other two a pair apiece, and lost the summit's different-angle
+    merges.
     """
     if not items:
         return []
+    if len(items) == 1:
+        return [[items[0][0]]]
 
-    # Pass 1: cluster on title-only embeddings (less source-specific noise).
-    # Center embeddings before computing similarity — the embedding model places
-    # all English news headlines in a tight cluster (~0.74 median cosine sim),
-    # so raw similarity is uninformative. Subtracting the batch mean removes the
-    # "generic news article" component and makes topic-specific dimensions dominate.
-    titles = [a.title for a, _ in items]
-    title_embeddings = _embed_texts(titles)
-    centered_embs = _center_titles(title_embeddings, title_embeddings.mean(axis=0))
-    title_sim = centered_embs @ centered_embs.T
-
-    pass1 = _agglomerative_cluster(title_sim, CLUSTER_TITLE_THRESHOLD)
-    logger.info(
-        "Clustering pass 1 (titles, threshold=%.2f): %d articles → %d clusters",
-        CLUSTER_TITLE_THRESHOLD, len(items), len(pass1),
+    # Centered because the embedding model puts every English headline in a
+    # tight band (~0.74 median cosine); removing the day's mean leaves the
+    # topic-specific directions.
+    title_embeddings = _embed_texts([a.title for a, _ in items])
+    centered = _center_titles(title_embeddings, title_embeddings.mean(axis=0))
+    distance = np.clip(1.0 - centered @ centered.T, 0.0, None)
+    labels = fcluster(
+        linkage(squareform(distance, checks=False), method="complete"),
+        t=1.0 - CLUSTER_TITLE_THRESHOLD, criterion="distance",
     )
-
-    # Pass 2: merge clusters whose centroids are close (using centered embeddings)
-    if len(pass1) > 1:
-        centroids = np.zeros((len(pass1), centered_embs.shape[1]))
-        for ci, indices in enumerate(pass1):
-            centroid = centered_embs[indices].mean(axis=0)
-            norm = np.linalg.norm(centroid)
-            centroids[ci] = centroid / norm if norm > 0 else centroid
-
-        centroid_sim = centroids @ centroids.T
-
-        # The merge is single-link, so a fixed threshold chain-merges on
-        # bad days: at 0.20 one 2026-07 run collapsed 121/125 articles
-        # into a single cluster spanning NATO, a Senate race, and a
-        # toddler human-interest story, leaving only junk as separate
-        # issues. Instead of a magic constant, self-calibrate per run:
-        # scan upward from the floor and keep the most aggressive merge
-        # whose largest cluster stays within a sanity cap — one story
-        # can dominate a news day, but not be most of it.
-        n_articles = len(items)
-        size_cap = max(8, round(0.20 * n_articles))
-        merge_groups = pass1_groups = [[ci] for ci in range(len(pass1))]
-        chosen_threshold = None
-        for threshold in np.arange(CLUSTER_CENTROID_MERGE_THRESHOLD, 0.61, 0.05):
-            candidate = _agglomerative_cluster(centroid_sim, float(threshold))
-            largest = max(sum(len(pass1[ci]) for ci in g) for g in candidate)
-            if largest <= size_cap:
-                merge_groups = candidate
-                chosen_threshold = float(threshold)
-                break
-        if chosen_threshold is None:
-            merge_groups = pass1_groups
-            logger.warning(
-                "Centroid merge skipped — every scanned threshold produced a "
-                "cluster larger than %d articles", size_cap,
-            )
-        else:
-            logger.info(
-                "Centroid merge threshold self-calibrated to %.2f "
-                "(largest cluster ≤ %d articles)",
-                chosen_threshold, size_cap,
-            )
-
-        merged: list[list[int]] = []
-        for group in merge_groups:
-            combined: list[int] = []
-            for ci in group:
-                combined.extend(pass1[ci])
-            merged.append(combined)
-    else:
-        merged = pass1
-
-    result: list[list[NewsArticle]] = []
-    for cluster_indices in merged:
-        result.append([items[idx][0] for idx in cluster_indices])
-
+    groups: dict[int, list[NewsArticle]] = {}
+    for (article, _), label in zip(items, labels):
+        groups.setdefault(int(label), []).append(article)
     logger.info(
-        "Clustering pass 2 (centroids, threshold=%.2f): %d → %d clusters",
-        CLUSTER_CENTROID_MERGE_THRESHOLD, len(pass1), len(result),
+        "Clustering (complete linkage, threshold=%.2f): %d articles → %d clusters",
+        CLUSTER_TITLE_THRESHOLD, len(items), len(groups),
     )
-    return result
+    return list(groups.values())
 
 
 def _compute_trending_boost(
@@ -1859,12 +1728,16 @@ def _deduplicate_top_clusters(
 
     Greedily picks the highest-ranked cluster, then skips any subsequent
     cluster whose centroid is too similar to an already-selected one.
-    With two-pass clustering, most merging happens earlier; this is a
-    final safety net before LLM analysis.
 
-    Remaining duplicates that slip through are merged into the earlier
-    selected cluster rather than discarded, so their articles contribute
-    to the LLM prompt for that issue.
+    A duplicate is dropped, not merged into the cluster it resembles. It
+    used to be appended to it, which is single linkage again one step
+    later: on 2026-09-27's feed, once _cluster_articles stopped chaining,
+    this step folded Hurricane Nolo into the nor'easter, an AI-fund tax
+    story into an AI-hacking one and a voter-database ruling into the
+    Missouri map. Title similarity can't tell those from same-story pairs
+    (see _cluster_articles), and the higher-ranked cluster already carries
+    the story. The cluster_dedup_merged_* counters keep their name for the
+    series; they count clusters judged duplicates.
 
     ranked_scores[i] is ranked_clusters[i]'s combined _rank_clusters score
     — needed here, not in _rank_clusters, because THIS function decides
@@ -1926,9 +1799,8 @@ def _deduplicate_top_clusters(
             action_metrics.increment_bucket(f"cluster_dedup_{outcome}_sim_bucket", best_sim)
 
         if merged_into is not None:
-            ranked_clusters[merged_into].extend(ranked_clusters[i])
             logger.info(
-                "Merged cluster '%s...' into '%s...' (sim=%.3f)",
+                "Dropped cluster '%s...' as a duplicate of '%s...' (sim=%.3f)",
                 ranked_clusters[i][0].title[:40],
                 ranked_clusters[merged_into][0].title[:40],
                 float(embeddings[i] @ embeddings[merged_into]),
@@ -4124,7 +3996,7 @@ def _run_refresh(db: Session) -> int:
     _set_refresh_state(stage="cluster")
     clusters = _cluster_articles(relevant)
     # The day's mean title embedding: the "generic news headline" direction
-    # pass 1 subtracted. Every per-cluster check below measures in that
+    # clustering subtracted. Every per-cluster check below measures in that
     # same space (see the coherence filter for why not the cluster's own).
     day_title_mean = _embed_texts([a.title for a, _ in relevant]).mean(axis=0)
 
@@ -4187,28 +4059,13 @@ def _run_refresh(db: Session) -> int:
         # whichever article is noisiest, which then scores 1.00 against it
         # while its siblings score negative. Live logs showed exactly that
         # ("1/5 articles on-topic (sims: 1.00, -0.11, -0.15, -0.25, -0.27)"),
-        # and the split below broke one Missouri-map cluster into fragments
+        # and a since-removed topic split broke one Missouri-map cluster into fragments
         # and kept two of eight same-story articles. Measured on the
         # 2026-09-27 feed (9 clusters of 3+): the filter kept 28 articles
         # cluster-centered, 48 day-centered, and every coherent cluster's
         # articles scored 0.47-0.91 instead of one high and the rest negative.
         cluster_titles = [a.title for a in cluster]
         centered_normed = _center_titles(_embed_texts(cluster_titles), day_title_mean)
-
-        # Split off a second genuine topic before the centroid-distance filter
-        # below, which can't detect a roughly-balanced two-topic cluster (see
-        # _largest_coherent_subgroup). Re-clustering drops article count, so
-        # everything after this point only ever sees the retained subgroup.
-        keep_idx = _largest_coherent_subgroup(centered_normed @ centered_normed.T, CLUSTER_TITLE_THRESHOLD)
-        if len(keep_idx) < len(cluster):
-            logger.warning(
-                "Rank %d cluster split — dropping %d article(s) covering a "
-                "second, unrelated topic: %s",
-                rank, len(cluster) - len(keep_idx),
-                [cluster[i].title[:60] for i in range(len(cluster)) if i not in keep_idx],
-            )
-            cluster = [cluster[i] for i in keep_idx]
-            centered_normed = centered_normed[keep_idx]
 
         c_centroid = centered_normed.mean(axis=0)
         c_norm = float(np.linalg.norm(c_centroid))

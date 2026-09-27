@@ -60,10 +60,15 @@ from app.pipeline.fetch.fec import (
 from app.pipeline.fetch.lda import enrich_lobbying_matches_with_lda
 from app.pipeline.run_checks import persist_ground_truth_failures, run_calibration_check
 from app.pipeline.transform.normalize_members import normalize_house_members
+from app.pipeline.transform.committee_data import load_leadership_tenures
 from app.pipeline.transform.normalize_votes import (
     extract_representative_vote,
     find_house_roll_call,
+    is_reconsider_switch,
+    majority_leader_spans,
     normalize_votes,
+    reconsider_switch_applied,
+    stamp_roll_call_outcome,
     compute_party_split,
     compute_party_vote_split,
     _determine_party_alignment,
@@ -323,6 +328,7 @@ async def run_house_pipeline() -> dict:
                 bill_id = bill.get("billId", "")
                 rc = house_roll_calls.get(bill_id)
                 if rc:
+                    stamp_roll_call_outcome(bill, rc)
                     vote_split = compute_party_vote_split(rc)
                     split = vote_split["label"] if vote_split else None
                     bill["partyLeaning"] = refine_with_vote_data(
@@ -333,6 +339,7 @@ async def run_house_pipeline() -> dict:
                 bill_id = bill.get("billId", "")
                 rc = recent_rc_map.get(bill_id)
                 if rc:
+                    stamp_roll_call_outcome(bill, rc)
                     vote_split = compute_party_vote_split(rc)
                     split = vote_split["label"] if vote_split else None
                     bill["partyLeaning"] = refine_with_vote_data(
@@ -649,12 +656,19 @@ async def run_house_pipeline() -> dict:
                                     "vote": vote,
                                 })
 
-                    # Normalize votes
+                    # Normalize votes. The majority leader's Nay on a
+                    # failing motion is the reconsider switch, not a break
+                    # (MAJORITY_LEADER_TITLES).
+                    leader_spans = majority_leader_spans(
+                        rep.get("leadershipTitle"),
+                        load_leadership_tenures().get(bio_id),
+                    )
                     voting_data = normalize_votes(
                         bio_id,
                         classified_bills,
                         rep_votes,
                         rep.get("party", "I"),
+                        leader_spans=leader_spans,
                     )
 
                     # Add recent votes
@@ -671,8 +685,10 @@ async def run_house_pipeline() -> dict:
                         party_leaning = rv.get("partyLeaning")
                         # Same rule as every other vote (normalize_votes); this
                         # used to be an inline copy that could drift from it.
+                        reconsider_switch = is_reconsider_switch(rv, leader_spans)
                         voted_with_party = _determine_party_alignment(
                             effective_party, normalized, party_leaning,
+                            reconsider_switch=reconsider_switch,
                         )
 
                         voting_data["recentVotes"].append({
@@ -687,6 +703,10 @@ async def run_house_pipeline() -> dict:
                             "description": rv.get("description", ""),
                             "partyLeaning": party_leaning,
                             "votedWithParty": voted_with_party,
+                            "reconsiderSwitch": reconsider_switch_applied(
+                                effective_party, normalized, party_leaning,
+                                reconsider_switch,
+                            ),
                             "voteCategory": "recent",
                             "rcKey": rv.get("billId", ""),
                         })

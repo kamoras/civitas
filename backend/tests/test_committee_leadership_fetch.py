@@ -52,6 +52,34 @@ class TestBuildAndGates:
         roles = cl.build_leadership_roles(legislators_raw)
         assert "M000002" not in roles  # end date in the past
 
+    def test_tenures_keep_every_role_with_its_dates(self):
+        """The current-title map drops dates and past roles; the tenure map
+        keeps both, so a vote can be checked against the title held on its
+        own date (Schumer led the majority until 2025-01-03)."""
+        legislators_raw = [{
+            "id": {"bioguide": "S000148"},
+            "leadership_roles": [
+                {"title": "Senate Minority Leader", "chamber": "senate", "start": "2025-01-03"},
+                {"title": "Senate Majority Leader", "chamber": "senate",
+                 "start": "2023-01-03", "end": "2025-01-03"},
+            ],
+        }, {"id": {"bioguide": "X000001"}}]
+        tenures = cl.build_leadership_tenures(legislators_raw)
+        assert tenures == {"S000148": [
+            {"title": "Senate Majority Leader", "chamber": "senate", "start": "2023-01-03", "end": "2025-01-03"},
+            {"title": "Senate Minority Leader", "chamber": "senate", "start": "2025-01-03", "end": None},
+        ]}
+        # The existing current-title consumers are unchanged.
+        assert cl.build_leadership_roles(legislators_raw) == {"S000148": "Senate Minority Leader"}
+
+    def test_tenure_dates_parsed_as_yaml_dates_become_iso_strings(self):
+        import datetime
+        tenures = cl.build_leadership_tenures([{
+            "id": {"bioguide": "T000250"},
+            "leadership_roles": [{"title": "Senate Majority Leader", "start": datetime.date(2025, 1, 3)}],
+        }])
+        assert tenures["T000250"][0]["start"] == "2025-01-03"
+
     def test_low_membership_coverage_fails_gate(self):
         membership = {f"M{i:06d}": [] for i in range(50)}  # far below the 400 floor
         roles = {"M000001": "Senate Majority Leader"}
@@ -70,6 +98,7 @@ class TestRefresh:
         leadership_path = tmp_path / "leadership_roles.json"
         monkeypatch.setattr(cl, "_MEMBERSHIP_PATH", str(membership_path))
         monkeypatch.setattr(cl, "_LEADERSHIP_PATH", str(leadership_path))
+        monkeypatch.setattr(cl, "_TENURES_PATH", str(tmp_path / "leadership_tenures.json"))
         committee_data.clear_committee_data_cache()
         return membership_path, leadership_path
 
@@ -88,6 +117,13 @@ class TestRefresh:
         assert await cl.refresh_committee_leadership_data() is True
         assert json.loads(leadership_path.read_text())["roles"]["M000001"] == "Senate Majority Leader"
         assert len(json.loads(membership_path.read_text())["membership"]) == 410
+        tenures = json.loads((tmp_path / "leadership_tenures.json").read_text())["tenures"]
+        assert tenures["M000001"] == [
+            {"title": "Senate Majority Leader", "chamber": None, "start": "2025-01-03", "end": None},
+        ]
+        # An expired role is dropped from the current-title map but kept,
+        # with its dates, in the tenure map.
+        assert tenures["M000002"][0]["end"] == "2020-01-01"
 
     async def test_fetch_failure_keeps_previous_data(self, monkeypatch, tmp_path):
         membership_path, leadership_path = self._patch_paths(monkeypatch, tmp_path)
@@ -143,4 +179,6 @@ class TestRefresh:
         monkeypatch.setattr(cl, "_fetch_yaml", fake_fetch)
         assert await cl.refresh_committee_leadership_data() is True
         assert committee_data.load_leadership_roles()["M000001"] == "Senate Majority Leader"
+        assert committee_data.load_leadership_tenures()["M000001"][0]["start"] == "2025-01-03"
+        assert committee_data.leadership_tenures_on_volume() is True
         committee_data.clear_committee_data_cache()

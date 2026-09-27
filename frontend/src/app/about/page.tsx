@@ -190,7 +190,12 @@ export default function AboutPage() {
               shrinkage estimation, which keeps small samples from producing extreme estimates
               <Cite id="19">Efron &amp; Morris 1975</Cite>, but it is a simpler version: the pull
               is set by a fixed count of observations, not estimated from the data the way their
-              estimator is.
+              estimator is. Two scores differ. Constituent Alignment&apos;s vote part pulls a thin
+              record toward what a typical member of the same party scores instead, because its
+              scale tops out at the seat&apos;s norm and 50 would sit below nearly every member.
+              Legislative Effectiveness&apos;s bill component isn&apos;t pulled by bill count, because a
+              member&apos;s bills are their whole record rather than a sample; its leadership
+              component is still pulled toward 50 for members with short tenure.
             </P>
             <P>
               The Action Center extends this mission to daily civic engagement. It automatically
@@ -291,11 +296,9 @@ export default function AboutPage() {
                 <Gist>
                   checks whether a member&apos;s voting matches what their state or district elected
                   them to do, compared with what members of their own party in similarly-leaning
-                  seats actually do. Voting with your party is the norm in a safe seat, so it only
-                  counts against a member when they are more loyal than their own party&apos;s
-                  members in comparable seats — and breaking more often than them counts in their
-                  favor, up to a point. Breaking far more than that counts against them again.
-                  Every part of this design was tested against how voters actually respond.
+                  seats actually do. Breaking with the party about as often as those members do
+                  scores highest. Breaking much more often counts against a member, and being more
+                  loyal than them counts against them too, but more gently.
                 </Gist>
                 <P>
                   Measures how far a member&apos;s voting sits from what their seat asks of it — not
@@ -304,29 +307,29 @@ export default function AboutPage() {
                   seats with the same partisan lean (Cook PVI). That expectation is measured from
                   the chamber itself every time the pipeline runs, not set by hand: a separate line
                   per party, allowed to bend at a swing seat, so a Republican in a Biden-won seat is
-                  compared with how Republicans in seats like that really vote. Matching the
-                  expectation scores 50. Breaking more often scores above, reaching 100 at the gap
-                  the chamber&apos;s most out-of-pattern tenth of members show; past that gap the
-                  score falls at the same rate it rose, back to 50 at twice the gap and 0 at three
-                  times. Breaking less often scores below, more gently: 0 only at four times the
-                  gap, so being more loyal than the norm costs less than breaking far too often. Each party-line roll call counts
-                  once. With fewer than 20 of them the result is pulled toward 50 in proportion, so
-                  a single break in a thin record can&apos;t reach either end.
+                  compared with how Republicans in seats like that really vote. The gap is measured
+                  in standard deviations rather than percentage points: four extra points on a seat
+                  whose members break 1.5% of the time is breaking several times as often as its
+                  norm, while four extra on a seat whose members break 7% is a modest departure.
+                  Matching the expectation scores 100. Breaking more often lowers the score,
+                  reaching 0 at one and a half times the gap that the most out-of-pattern tenth of
+                  the member&apos;s party shows. Breaking less often lowers it more gently, reaching 0
+                  only at three times that gap, so being more loyal than the norm costs less than
+                  breaking too often. Each party-line roll call counts once. With fewer than 20 of
+                  them the result is pulled, in proportion, toward what a typical member of the same
+                  party scores, so a single break in a thin record can&apos;t reach either end and a
+                  newcomer isn&apos;t ranked below their colleagues just for having few votes.
                 </P>
                 <P>
-                  What the ends mean: a 0 or 100 is a relative position, not a verdict. A 0 means
-                  the member breaks with their party very much less often than members of their own
-                  party in seats that lean the same way, or far more often still than the
-                  chamber&apos;s most out-of-pattern members; a 100 means as far above the expectation as those
-                  members, and no further. Because the
-                  expectation is fitted separately for each party, a member is only ever compared
-                  with their own party&apos;s members. Averages sit a little above 50, because
-                  being more loyal than the norm costs less than breaking far too often. Neither
-                  party is favored by design: across every Senate from 1989 to today the two
-                  parties&apos; averages differed by about 2 points, and which party was higher
-                  changed from one Congress to the next. In a given Congress the gap follows who
-                  breaks far past the norm, which can by chance be mostly one party&apos;s
-                  members.
+                  What the ends mean: a 0 or 100 is a relative position, not a verdict. A 100 means
+                  the member breaks with their party about as often as members of their own party
+                  in seats that lean the same way. A 0 means they break far more often than that,
+                  or, much more rarely, far less. Each party&apos;s expectation and yardstick are
+                  measured from that party&apos;s own members, so a member is only ever compared
+                  with their own party, and a party that happens to be more unified in a given
+                  Congress isn&apos;t scored higher for it: across every Senate from 1989 to today
+                  the two parties&apos; averages differed by 1.8 points on average, and which party was
+                  higher changed from one Congress to the next.
                 </P>
                 <P>
                   Why loyalty is scored too, and why no special treatment for safe seats: through v6.12 a member
@@ -344,13 +347,18 @@ export default function AboutPage() {
                   safe seats as in competitive ones, for voting and for position alike, so neither
                   gets a safe-seat discount now. Members who break from the flank side of their
                   party (Kirkland &amp; Slapin 2017) did not fare worse for it, so their breaks are
-                  not discounted either. Why the score turns down past that gap: a member is
-                  elected by a seat and under a party label, so both were tested. Across every
-                  Senate general election from 1990 to 2024, voters in the whole state stopped
-                  rewarding extra breaks at that point; in House primaries from 1990 to 2010, the
-                  member&apos;s own party&apos;s voters gave challenged incumbents about 3 points
-                  less of the primary vote for each further standard deviation of breaking. How
-                  steeply the score falls is a design choice (it mirrors the rise), since no study
+                  not discounted either. Why the score is highest at the seat&apos;s norm (since
+                  v6.16): the score asks whether a member does what their seat elected them to do,
+                  and a member elected by a seat and under a party label answers to both. The
+                  member&apos;s own party&apos;s voters reward exactly this shape: in House primaries
+                  from 1990 to 2010, incumbents who scored higher on it won a larger share of the
+                  primary vote, and those who broke far more than their seat&apos;s norm lost about
+                  3 points per standard deviation. The electorate as a whole leans the other way:
+                  across Senate general elections from 1990 to 2024 and the 2004 House elections,
+                  members who broke more than their seat&apos;s norm did somewhat better, and even
+                  heavy breakers were not punished. We report that rather than hide it — the score
+                  follows what a member was elected under, not what maximizes their vote share.
+                  Where the score reaches 0 on each side is a design choice, since no study
                   estimates it. The full study, including where the evidence is weak (the
                   association fades after 2008 as elections nationalized, and the Senate does not
                   confirm the House result for loyalty), is in the project repository at
@@ -1314,6 +1322,17 @@ export default function AboutPage() {
                   what every headline that day has in common, so only the topic counts. A later
                   step used to remove only what one cluster&apos;s headlines had in common, which is
                   the topic itself, and it threw away most of each story&apos;s coverage.
+                </P>
+                <P>
+                  Articles join one story only if every one of them resembles every other. The
+                  earlier rule asked only that each article resemble one other, so stories chained
+                  together by theme: on 27 September 2026 an issue titled for floods in Bangkok led
+                  with a hurricane near Hawaii and listed facts about a nor&apos;easter and an HIV
+                  epidemic in Fiji. Headline similarity cannot reliably tell the same event from
+                  the same kind of event, so the grouping errs toward keeping stories apart. Two
+                  articles about one event may land in separate groups; the smaller one is set
+                  aside as a duplicate rather than folded in, so the issue cites fewer sources.
+                  That is a smaller error than publishing an issue built from unrelated stories.
                 </P>
               </div>
 
