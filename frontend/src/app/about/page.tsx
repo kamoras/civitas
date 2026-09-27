@@ -1977,8 +1977,16 @@ export default function AboutPage() {
                 value="Full bill text for policy area classification, Congressional Record floor proceedings for advocacy analysis — both chambers"
               />
               <Row
+                label="Congressional Record Daily Digest"
+                value="The Record's own summary of each day in each chamber (measures passed, failed and reported, nominations confirmed, committee meetings, next meeting), via GovInfo, quoted as published — both chambers"
+              />
+              <Row
+                label="House Clerk"
+                value="The live House floor log (every floor action, timed) and House roll-call votes with every member's position"
+              />
+              <Row
                 label="Senate.gov"
-                value="Official senator websites scraped for platform text (used for the platform summary) and roll-call vote records with per-member votes — Senate only. Campaign-promise extraction from this same platform text was tried four times and removed entirely in 2026-07 (see AI Usage above), for both chambers"
+                value="The live Senate floor activity log; official senator websites scraped for platform text (used for the platform summary) and roll-call vote records with per-member votes — Senate only. Campaign-promise extraction from this same platform text was tried four times and removed entirely in 2026-07 (see AI Usage above), for both chambers"
               />
             </div>
 

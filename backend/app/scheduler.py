@@ -20,6 +20,7 @@ from app.pipeline.election_pipeline import (
     run_ballot_sync, ballot_tracker,
 )
 from app.pipeline.analyze.action_center import get_action_refresh_state, refresh_action_issues
+from app.pipeline.congress_activity import congress_sync_age, is_congress_sync_running, run_congress_sync
 from app.time_utils import utcnow
 from app.background import WritesHeld, start_writer
 from app.pipeline import lease
@@ -476,6 +477,40 @@ def _election_ballot_sync() -> None:
     _start_job(_run, name="election-ballot-sync")
 
 
+def _congress_activity_sync() -> None:
+    """The /congress record: new roll calls, today's floor logs and the
+    Daily Digest (pipeline/congress_activity.py). Half-hourly all year:
+    the chambers' logs are live during a session day, and each run is a
+    few requests when nothing is new."""
+    def _run():
+        if is_congress_sync_running():
+            age = congress_sync_age()
+            if not _is_stale(age, lease.max_hold(lease.CONGRESS_SYNC)):
+                logger.info("Congress sync skipped — the previous one is still running")
+                return
+            logger.warning("Previous Congress sync has been running for %s — proceeding anyway", age)
+        # Its lease, taken past the check above, so a tick that bails holds
+        # nothing, and a data reset in any process sees the sync (and the
+        # sync sees the reset).
+        with lease.job(lease.CONGRESS_SYNC, who="Congress sync") as held:
+            if not held:
+                return
+            loop = asyncio.new_event_loop()
+            try:
+                result = loop.run_until_complete(run_congress_sync())
+                logger.info(
+                    "Congress sync: roll calls %s; floor logs %s; digests %s",
+                    {k: v["stored"] for k, v in result["rollCalls"].items()},
+                    result["floorLogs"], result["digests"],
+                )
+            except Exception:
+                logger.exception("Congress sync failed")
+            finally:
+                loop.close()
+
+    _start_job(_run, name="congress-activity-sync")
+
+
 def start_scheduler() -> None:
     """Parse the cron schedule from settings and start the scheduler.
 
@@ -538,6 +573,15 @@ def start_scheduler() -> None:
         _election_ballot_sync,
         CronTrigger(hour="*/6", minute="50", timezone="UTC"),
         id="election_ballot_sync",
+        replace_existing=True,
+    )
+
+    # The /congress record — half-hourly at :10/:40, clear of the :15
+    # action refresh and the :45 bill refresh.
+    scheduler.add_job(
+        _congress_activity_sync,
+        CronTrigger(minute="10,40", timezone="UTC"),
+        id="congress_activity_sync",
         replace_existing=True,
     )
 

@@ -2028,3 +2028,112 @@ class JudicialNominee(Base):
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     source_name: Mapped[str] = mapped_column(String(200), default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class CongressDay(Base):
+    """What one chamber did on one day, as the record says it (/congress).
+
+    One row per chamber per calendar day it appears in a source: the
+    Congressional Record's Daily Digest once published (final), before
+    that the chamber's own live floor log. `source` says which, and
+    `is_final` whether the Digest has replaced the live log. A day the
+    Digest says the chamber did not meet is stored with in_session False,
+    so "not in session" is a finding and a missing row is "not fetched".
+    """
+    __tablename__ = "congress_days"
+    __table_args__ = (UniqueConstraint("chamber", "date", name="uq_congress_day_chamber_date"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    chamber: Mapped[str] = mapped_column(String(6), nullable=False)  # "senate" | "house"
+    date: Mapped[str] = mapped_column(String(10), nullable=False, index=True)  # YYYY-MM-DD
+    in_session: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    # Verbatim from the record: "Senate convened at 10 a.m. and adjourned
+    # at 4:05 p.m., until ..." / "The House met at 2:30 p.m. and ...".
+    adjournment_text: Mapped[str] = mapped_column(Text, default="")
+    convened_at: Mapped[str | None] = mapped_column(String(16), nullable=True)   # "10 a.m."
+    adjourned_at: Mapped[str | None] = mapped_column(String(16), nullable=True)  # "4:05 p.m."
+    # The Digest's "Next Meeting of the SENATE": when, and its program.
+    next_meeting: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    next_program: Mapped[str] = mapped_column(Text, default="")
+    # Counts the record states in words ("Seventy-four bills and fourteen
+    # resolutions were introduced"); NULL when the record gives none.
+    bills_introduced: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    resolutions_introduced: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    introduced_text: Mapped[str] = mapped_column(Text, default="")
+    source: Mapped[str] = mapped_column(String(16), nullable=False)  # "digest" | "floor_log"
+    source_url: Mapped[str] = mapped_column(String(500), default="")
+    is_final: Mapped[bool] = mapped_column(Boolean, default=False)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class CongressEvent(Base):
+    """One entry of a chamber's day: a measure passed, failed or reported,
+    a nomination confirmed, a committee meeting, or a floor-log line.
+
+    `text` is the record's own wording, never rewritten. Record votes are
+    not events: they live in RollCall, which has the tally and every
+    member's position.
+    """
+    __tablename__ = "congress_events"
+    __table_args__ = (Index("ix_congress_event_day", "chamber", "date"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    chamber: Mapped[str] = mapped_column(String(6), nullable=False)
+    date: Mapped[str] = mapped_column(String(10), nullable=False)
+    # "passed" | "failed" | "reported" | "confirmed" | "committee" | "floor"
+    kind: Mapped[str] = mapped_column(String(12), nullable=False)
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)  # order within the day
+    name: Mapped[str] = mapped_column(String(500), default="")  # short title / committee
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    # Bill id in the site's form ("S.3257", "HCONRES.89"); NULL when none.
+    bill_id: Mapped[str | None] = mapped_column(String(24), nullable=True, index=True)
+    time: Mapped[str | None] = mapped_column(String(16), nullable=True)  # floor log only
+    pages: Mapped[str] = mapped_column(String(60), default="")  # "Pages S5017-19"
+    source: Mapped[str] = mapped_column(String(16), nullable=False)
+
+
+class RollCall(Base):
+    """A recorded vote, from the chamber's own roll-call XML."""
+    __tablename__ = "roll_calls"
+    __table_args__ = (
+        UniqueConstraint("chamber", "congress", "session", "number", name="uq_roll_call"),
+        Index("ix_roll_call_date", "date"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    chamber: Mapped[str] = mapped_column(String(6), nullable=False)
+    congress: Mapped[int] = mapped_column(Integer, nullable=False)
+    session: Mapped[int] = mapped_column(Integer, nullable=False)
+    number: Mapped[int] = mapped_column(Integer, nullable=False)
+    date: Mapped[str] = mapped_column(String(10), nullable=False)  # YYYY-MM-DD
+    question: Mapped[str] = mapped_column(Text, default="")
+    title: Mapped[str] = mapped_column(Text, default="")
+    result: Mapped[str] = mapped_column(String(120), default="")
+    rejected: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    majority_requirement: Mapped[str] = mapped_column(String(10), default="")
+    yeas: Mapped[int] = mapped_column(Integer, default=0)
+    nays: Mapped[int] = mapped_column(Integer, default=0)
+    present: Mapped[int] = mapped_column(Integer, default=0)
+    not_voting: Mapped[int] = mapped_column(Integer, default=0)
+    bill_id: Mapped[str | None] = mapped_column(String(24), nullable=True, index=True)
+    source_url: Mapped[str] = mapped_column(String(300), default="")
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class RollCallPosition(Base):
+    """How one member voted on one roll call, as the chamber recorded it."""
+    __tablename__ = "roll_call_positions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    roll_call_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("roll_calls.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    # House XML carries the bioguide id; Senate XML carries the LIS id.
+    member_id: Mapped[str] = mapped_column(String(12), nullable=False)
+    last_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    first_name: Mapped[str] = mapped_column(String(80), default="")
+    party: Mapped[str] = mapped_column(String(2), default="")
+    state: Mapped[str] = mapped_column(String(2), default="")
+    # "Yea" | "Nay" | "Present" | "Not Voting" (the House's "Aye"/"No"
+    # are stored as recorded).
+    position: Mapped[str] = mapped_column(String(12), nullable=False)

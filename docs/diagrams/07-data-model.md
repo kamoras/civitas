@@ -261,6 +261,47 @@ Three modelling decisions here are load-bearing rather than incidental:
   same empty list — and on a page about somebody's ballot those are very
   different claims. See AGENTS.md principle 7.
 
+## Congress record
+
+```mermaid
+erDiagram
+    CONGRESS_DAYS ||--o{ CONGRESS_EVENTS : "same chamber + date"
+    ROLL_CALLS ||--o{ ROLL_CALL_POSITIONS : "has"
+    CONGRESS_DAYS {
+        string chamber "senate | house"
+        string date "YYYY-MM-DD, unique with chamber"
+        bool in_session "false is a finding, a missing row is not"
+        string adjournment_text "verbatim"
+        string next_meeting "verbatim"
+        string source "digest | floor_log"
+        bool is_final "the Daily Digest replaced the live log"
+    }
+    CONGRESS_EVENTS {
+        string kind "passed | failed | reported | confirmed | committee | floor"
+        string text "the record's own wording"
+        string bill_id "S.3257, HCONRES.89 - no FK"
+        string source "digest | floor_log"
+    }
+    ROLL_CALLS {
+        string chamber
+        int congress
+        int session
+        int number "unique with chamber, congress, session"
+        string result "the chamber's own"
+        int yeas "counted from the positions"
+        string bill_id "no FK"
+    }
+    ROLL_CALL_POSITIONS {
+        int roll_call_id FK
+        string member_id "bioguide (House) or LIS id (Senate)"
+        string position "as recorded: Yea, Nay, Aye, No, Present, Not Voting"
+    }
+```
+
+`bill_id` has no foreign key for the same reason `ACTION_ISSUES`' bill ids do
+not: a bill a former member sponsored, or one no tracked member sponsored, is
+still a bill the chambers act on. See [11 — Congress record](11-congress.md).
+
 ## Score history
 
 ```mermaid
