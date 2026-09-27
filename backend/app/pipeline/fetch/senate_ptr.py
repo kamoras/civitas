@@ -286,6 +286,8 @@ async def _scrape_via_page(
             pass
         await _wait_until(lambda: len(responses) > before)
 
+    by_id: dict[str, dict] = {}
+    unparsed = total = 0
     for _ in range(_MAX_PAGES):
         resp = responses[-1]
         try:
@@ -295,12 +297,9 @@ async def _scrape_via_page(
             break
 
         total = payload.get("recordsTotal", 0)
-        for row in payload.get("data", []):
-            parsed = _parse_search_row(row)
-            if parsed is not None:
-                filings.append(parsed)
+        unparsed += _collect_rows(by_id, payload.get("data", []))
 
-        if len(filings) >= total:
+        if len(by_id) + unparsed >= total:
             break
 
         next_el = page.get_by_text("Next", exact=True)
@@ -311,7 +310,27 @@ async def _scrape_via_page(
         if not await _wait_until(lambda: len(responses) > before):
             break
 
+    filings.extend(by_id.values())
+    if total and len(by_id) + unparsed < total:
+        # A page repeated rows and another was never shown, or paging
+        # stopped early: some filings are missing from this search.
+        logger.warning("Senate eFD search returned %d of %d filings", len(by_id) + unparsed, total)
     return filings
+
+
+def _collect_rows(by_id: dict[str, dict], rows: list) -> int:
+    """Add a results page's rows to `by_id`, keyed by filing — rows sorted
+    by filing date aren't in a stable order within a date, so a row can
+    reappear on the next page, and counted twice it would stop pagination
+    short. The first sighting is kept. Returns how many rows didn't parse."""
+    unparsed = 0
+    for row in rows:
+        parsed = _parse_search_row(row)
+        if parsed is None:
+            unparsed += 1
+        else:
+            by_id.setdefault(senate_filing_id(parsed["report_url"]), parsed)
+    return unparsed
 
 
 def senate_filing_id(report_url: str) -> str:

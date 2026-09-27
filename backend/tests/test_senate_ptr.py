@@ -153,7 +153,7 @@ class TestScrapeViaPage:
 
     @pytest.mark.asyncio
     async def test_single_page_no_terms_gate_no_length_dropdown(self):
-        payload = {"recordsTotal": 1, "data": [_search_row("Jane", "Doe")]}
+        payload = {"recordsTotal": 1, "data": [_search_row("Jane", "Doe", path="/search/view/ptr/r1/")]}
         page = _FakePage({
             ("locator", "#agree_statement"): _FakeLocator(count=0),
             ("role", "combobox", "Show entries"): _FakeLocator(count=0),
@@ -221,8 +221,8 @@ class TestScrapeViaPage:
 
     @pytest.mark.asyncio
     async def test_pagination_stops_when_next_disabled(self):
-        page1 = {"recordsTotal": 3, "data": [_search_row("A", "One"), _search_row("B", "Two")]}
-        page2 = {"recordsTotal": 3, "data": [_search_row("C", "Three")]}
+        page1 = {"recordsTotal": 3, "data": [_search_row("A", "One", path="/search/view/ptr/r2/"), _search_row("B", "Two", path="/search/view/ptr/r3/")]}
+        page2 = {"recordsTotal": 3, "data": [_search_row("C", "Three", path="/search/view/ptr/r4/")]}
         responses = iter([_FakeSearchResponse(page1), _FakeSearchResponse(page2)])
 
         page = _FakePage({
@@ -246,8 +246,8 @@ class TestScrapeViaPage:
 
     @pytest.mark.asyncio
     async def test_pagination_continues_across_pages(self):
-        page1 = {"recordsTotal": 3, "data": [_search_row("A", "One"), _search_row("B", "Two")]}
-        page2 = {"recordsTotal": 3, "data": [_search_row("C", "Three")]}
+        page1 = {"recordsTotal": 3, "data": [_search_row("A", "One", path="/search/view/ptr/r5/"), _search_row("B", "Two", path="/search/view/ptr/r6/")]}
+        page2 = {"recordsTotal": 3, "data": [_search_row("C", "Three", path="/search/view/ptr/r7/")]}
         responses = iter([_FakeSearchResponse(page1), _FakeSearchResponse(page2)])
 
         page = _FakePage({

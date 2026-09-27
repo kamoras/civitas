@@ -1722,11 +1722,13 @@ class TestRound40:
 
 
 class TestDuplicateRows:
-    async def test_a_row_listed_twice_is_fetched_once(self, db_session, senator):
-        filing = _senate_filing("e2025")
-        with patch.object(holdings_pipeline, "senate_accept_terms", new_callable=AsyncMock, return_value="tok"), \
-             patch.object(holdings_pipeline, "search_annual_filings", new_callable=AsyncMock,
-                          return_value=[filing, dict(filing)]), \
-             patch.object(holdings_pipeline, "fetch_senate_annual", AsyncMock(return_value=None)) as fetch:
-            await holdings_pipeline.ingest_senate_holdings(db_session, None)
-        assert fetch.await_count == 1
+    def test_a_row_repeated_across_pages_is_counted_once(self):
+        from app.pipeline.fetch import senate_ptr
+
+        by_id: dict = {}
+        page = [{"url": "a"}, {"url": "b"}, {"url": None}]
+        with patch.object(senate_ptr, "_parse_search_row",
+                          side_effect=lambda r: {"report_url": f"https://e/view/annual/{r['url']}/"} if r["url"] else None):
+            unparsed = senate_ptr._collect_rows(by_id, page)
+            unparsed += senate_ptr._collect_rows(by_id, [{"url": "b"}, {"url": "c"}])
+        assert (sorted(by_id), unparsed) == (["a", "b", "c"], 1)

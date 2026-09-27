@@ -22,7 +22,6 @@ PHASE_CEILING). Members with nothing stored go first, so coverage fills
 before re-reads.
 """
 
-import asyncio
 import dataclasses
 import logging
 import re
@@ -437,10 +436,10 @@ def _stored_urls(db: Session, owner_column) -> list[str]:
 
 async def _within(step: Awaitable[T], budget: timedelta, what: str) -> T:
     """A phase's preparation step, failed if it outlasts PREP_BUDGET."""
-    try:
-        return await asyncio.wait_for(step, budget.total_seconds())
-    except TimeoutError:
-        raise RuntimeError(f"{what} took longer than {budget}") from None
+    result = await until_deadline(step, time.monotonic() + budget.total_seconds())
+    if result is None:  # the steps it bounds return collections, never None
+        raise RuntimeError(f"{what} took longer than {budget}")
+    return result
 
 
 class _SkipFiling(Exception):
@@ -493,10 +492,6 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
         mine = stored.get(member_id)
         outcome = _Outcome()
         out_of_time = False
-        # One row per filing: a paginated search can return a row twice (a
-        # page shifting under a new filing), and a failing filing shouldn't
-        # be fetched twice.
-        per_member[member_id] = list({chamber.filing_id(f): f for f in per_member[member_id]}.values())
         fields = {chamber.filing_id(f): chamber.fields(f) for f in per_member[member_id]}
         ranks = {fid: chamber.rank(v, fid) for fid, v in fields.items()}
         if mine is not None and mine.filing_id in fields:
@@ -726,7 +721,7 @@ def _note_later_filing(db: Session, per_senator: dict[str, list[dict]]) -> None:
     for disclosure in db.query(FinancialDisclosure).filter(FinancialDisclosure.senator_id.in_(list(per_senator))):
         later = [
             f for f in per_senator[disclosure.senator_id]
-            if not _senate_fields(f)["as_of_date"]
+            if not _senate_as_of(f)
             and senate_filing_id(f["report_url"]) != disclosure.filing_id
             # On the same day counts: an undated amendment filed alongside
             # the dated report may be the later of the two.
