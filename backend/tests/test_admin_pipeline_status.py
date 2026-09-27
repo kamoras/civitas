@@ -116,3 +116,74 @@ async def test_history_includes_election_pipeline_type(db_session):
     assert entry["candidatesSynced"] == 6917
     assert entry["financialsRefreshed"] == 500
     assert entry["coverageItemsIngested"] == 42
+
+
+@pytest.mark.asyncio
+async def test_status_reports_a_data_reset_so_deploys_wait_it_out(db_session):
+    """check-and-deploy.sh reads dataResetIsRunning with the pipeline flags:
+    killing a reset mid-wipe leaves indexes describing rows that are gone."""
+    from app.api.admin import admin_pipeline_status
+    from app.pipeline import lease
+
+    assert (await admin_pipeline_status(db=db_session))["dataResetIsRunning"] is False
+    lease.acquire(db_session, lease.DATA_RESET)
+    assert (await admin_pipeline_status(db=db_session))["dataResetIsRunning"] is True
+
+
+
+_FLAGS = [
+    ("app.pipeline.house_pipeline", "is_house_pipeline_running", "houseIsRunning"),
+    ("app.pipeline.stock_pipeline", "is_stock_pipeline_running", "stockTradesIsRunning"),
+    ("app.pipeline.supplementary_pipeline", "is_supplementary_pipeline_running", "supplementaryIsRunning"),
+    ("app.pipeline.election_pipeline", "is_election_pipeline_running", "electionIsRunning"),
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("raised_before_rows", [True, False], ids=["finishing", "starting"])
+async def test_a_run_changing_state_during_a_poll_never_reads_as_stuck(db_session, monkeypatch, raised_before_rows):
+    """A run commits its RUNNING row before raising its flag and its final
+    status before dropping it. A flag read only on one side of the row
+    queries would, for a run starting (or finishing) mid-poll, pair a
+    lowered flag with a RUNNING row — shown as stuck. Each flag here is up
+    on exactly one side of the first query; every pipeline must still read
+    as running."""
+    from sqlalchemy import event
+
+    from app.api.admin import admin_pipeline_status
+
+    queried = []
+    for module, name, _key in _FLAGS:
+        monkeypatch.setattr(
+            f"{module}.{name}", lambda: (not queried) if raised_before_rows else bool(queried),
+        )
+
+    def on_query(*_args):
+        queried.append(True)
+
+    engine = db_session.get_bind()
+    event.listen(engine, "before_cursor_execute", on_query)
+    try:
+        result = await admin_pipeline_status(db=db_session)
+    finally:
+        event.remove(engine, "before_cursor_execute", on_query)
+    assert all(result[key] for _m, _n, key in _FLAGS)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "reads, running, clearable",
+    [
+        ([(None, False, False), (7, True, False)], True, False),  # started during the poll
+        ([(7, True, False), (None, False, False)], True, False),  # finished during it
+        ([(7, True, True), (7, True, True)], True, True),  # stuck on both reads: offered Clear
+        ([(7, True, True), (8, True, False)], True, False),  # cleared and restarted meanwhile
+    ],
+)
+async def test_the_senate_state_is_read_on_both_sides_of_its_row(db_session, monkeypatch, reads, running, clearable):
+    from app.api.admin import admin_pipeline_status
+
+    calls = iter(reads)
+    monkeypatch.setattr("app.pipeline.run_tracker.senate_run_state", lambda db: next(calls))
+    result = await admin_pipeline_status(db=db_session)
+    assert (result["isRunning"], result["senateRowClearable"]) == (running, clearable)

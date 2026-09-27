@@ -3,7 +3,6 @@
 import asyncio
 import json
 import logging
-import threading
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -1048,7 +1047,9 @@ async def refresh_action_center(db: Session = Depends(get_db)):
         finally:
             loop.close()
 
-    threading.Thread(target=_run, daemon=True, name="action-refresh").start()
+    from app.background import start_writer
+
+    start_writer(_run, name="action-refresh")
     return {"message": "Action center refresh triggered"}
 
 

@@ -69,20 +69,12 @@ MIN_SURNAME_LENGTH = 4
 BLUESKY_SEARCH_BATCH = 50
 
 # In-process guard shared by the 15-minute election-season refresh and the
-# nightly pipeline's coverage phase, so two ingestion/posting passes can't
+# nightly pipeline's coverage phase (behind the COVERAGE_REFRESH lease, see
+# lease.tracked_job), so two ingestion/posting passes can't
 # interleave (2026-07 review B3: duplicate rows and duplicate public
 # posts; same pattern as _hourly_action_refresh's guard after the
 # 2026-07-13 pileup incident).
 _coverage_tracker = PipelineRunTracker()
-
-
-def is_coverage_refresh_running() -> bool:
-    return _coverage_tracker.is_running
-
-
-def coverage_refresh_age():
-    """Wall-clock age of the in-process coverage refresh, or None when idle."""
-    return _coverage_tracker.age
 
 
 def coverage_tracker() -> PipelineRunTracker:

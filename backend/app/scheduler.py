@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import threading
 from datetime import timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -18,11 +17,13 @@ from app.pipeline.stock_pipeline import (
 )
 from app.pipeline.election_pipeline import (
     run_election_pipeline, is_election_pipeline_running, election_pipeline_age,
-    run_ballot_sync, is_ballot_sync_running, ballot_sync_age, ballot_tracker,
+    run_ballot_sync, ballot_tracker,
 )
 from app.pipeline.analyze.action_center import get_action_refresh_state, refresh_action_issues
 from app.pipeline.congress_activity import congress_sync_age, is_congress_sync_running, run_congress_sync
 from app.time_utils import utcnow
+from app.background import WritesHeld, start_writer
+from app.pipeline import lease
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,31 @@ def _is_stale(age: timedelta | None, threshold: timedelta) -> bool:
     caller proceeds instead of waiting on it indefinitely. Shared by every
     running-process guard in `_hourly_action_refresh` below."""
     return age is not None and age > threshold
+
+
+def _start_job(target, *, name: str, alert: bool = False) -> None:
+    """Start a scheduled job's thread. While the admin data reset holds the
+    database the job doesn't run this time: logged, and for the nightly
+    chain — whose skip leaves the wiped database unbuilt for a day — an ops
+    alert, as for any other skipped nightly run.
+
+    A job that takes no run lock of its own holds its lease (lease.job or
+    lease.tracked_job) while it runs, so a reset in another process sees it,
+    and it sees the reset — taken inside the job, past its own checks, so a
+    tick that bails holds nothing another entry point would skip over."""
+    try:
+        start_writer(target, name=name)
+    except WritesHeld as held:
+        logger.warning("%s", held)
+        if alert:
+            from app.ops_alerts import send_ops_alert
+
+            send_ops_alert(
+                "Nightly pipeline skipped: data reset in progress",
+                f"{held}. Nothing ran tonight; trigger the pipeline once the reset has finished, or the "
+                "database stays empty until tomorrow night's run.",
+                dedupe_key=f"nightly-skipped-reset-{utcnow():%Y-%m-%d}",
+            )
 
 
 def _nightly_pipeline() -> None:
@@ -68,8 +94,7 @@ def _nightly_pipeline() -> None:
         logger.info("%s pipeline skipped — %s", label, result.get("reason", "unknown reason"))
         send_ops_alert(
             f"Nightly {label} run skipped",
-            f"The scheduled {label} pipeline did not start because a "
-            f"previous run of it was still active. {label} data will be a "
+            f"The scheduled {label} pipeline did not start because {_skip_cause(result.get('reason'))}. {label} data will be a "
             "day stale unless triggered manually. If this was Senate, "
             "note that Supplementary/House/Stock never ran either tonight "
             "— the chain stops here, it does not skip just this one step.",
@@ -77,17 +102,34 @@ def _nightly_pipeline() -> None:
         )
         return True
 
+    def _skip_cause(reason: str | None) -> str:
+        """What held the run off: the skip's own reason (every pipeline's
+        lock refusal carries one — run_tracker.acquire_pipeline_lock_why)."""
+        from app.pipeline.run_tracker import skip_reason_text
+
+        return skip_reason_text(reason)
+
     def _run():
-        # Loud, deduped alert if CURRENT_CONGRESS has fallen behind the
-        # calendar before we score another day against a possibly-dead one.
-        check_current_congress_staleness()
-        # Same idea for FEEDBACK_TOKEN's mandatory PAT expiration — a real
-        # GitHub API call, so this one is self-gated to run at most weekly.
-        check_feedback_token_expiration()
-        # Same idea for state_pvi.json's election-year window — this one
-        # can't self-advance (see the check's own docstring for why), so
-        # the alert is the only signal that a manual refresh is due.
-        check_state_pvi_staleness()
+        # Loud, deduped alerts before another night's scoring. Each is a
+        # warning about the chain, never a reason to skip it: one that
+        # raises is logged and the pipelines still run.
+        pre_checks = (
+            # CURRENT_CONGRESS fallen behind the calendar, before we score
+            # another day against a possibly-dead one.
+            check_current_congress_staleness,
+            # FEEDBACK_TOKEN's mandatory PAT expiration — a real GitHub API
+            # call, so this one is self-gated to run at most weekly.
+            check_feedback_token_expiration,
+            # state_pvi.json's election-year window — this one can't
+            # self-advance (see the check's own docstring for why), so the
+            # alert is the only signal that a manual refresh is due.
+            check_state_pvi_staleness,
+        )
+        for check in pre_checks:
+            try:
+                check()
+            except Exception:
+                logger.exception("Pre-pipeline check %s failed", check.__name__)
         loop = asyncio.new_event_loop()
         try:
             result = loop.run_until_complete(run_senate_pipeline())
@@ -131,7 +173,7 @@ def _nightly_pipeline() -> None:
         finally:
             loop.close()
 
-    threading.Thread(target=_run, daemon=True, name="nightly-pipeline").start()
+    _start_job(_run, name="nightly-pipeline", alert=True)
 
 
 def _hourly_action_refresh() -> None:
@@ -151,7 +193,7 @@ def _hourly_action_refresh() -> None:
             if state.get("is_running"):
                 started = state.get("started_at")
                 age = utcnow() - started if started else None
-                if _is_stale(age, timedelta(hours=4)):
+                if _is_stale(age, lease.max_hold(lease.ACTION_REFRESH)):
                     # Same reasoning as the stale-PipelineRun checks below: a
                     # refresh this old (normal is minutes, worst case with a
                     # degraded LLM is ~1-2h) is wedged, not just slow. This
@@ -169,31 +211,24 @@ def _hourly_action_refresh() -> None:
                         age,
                     )
                     return
+            # A run "running" for >8h almost certainly crashed without
+            # updating its status, and one whose lease no live run holds
+            # did (run_tracker.live_run): proceed past either rather than
+            # blocking the action center indefinitely.
             from app.database import SessionLocal
-            from app.models import PipelineRun, PipelineStatus
+            from app.models import PipelineRun
+            from app.pipeline.run_tracker import live_run
             db = SessionLocal()
             try:
-                running = db.query(PipelineRun).filter(PipelineRun.status == PipelineStatus.RUNNING).first()
+                running = live_run(db, PipelineRun, timedelta(hours=8))
             finally:
                 db.close()
-            if running:
-                age = utcnow() - running.started_at
-                if _is_stale(age, timedelta(hours=8)):
-                    # Pipeline run has been "running" for >8h — it almost certainly
-                    # crashed without updating its status. Proceed rather than blocking
-                    # the action center indefinitely.
-                    logger.warning(
-                        "Stale PipelineRun detected (run #%d started %s, age %s) "
-                        "— treating as stale and proceeding with action center refresh",
-                        running.id, running.started_at.isoformat(), age,
-                    )
-                else:
-                    logger.info(
-                        "Action center refresh skipped — nightly pipeline is running "
-                        "(run #%d, age %s)",
-                        running.id, age,
-                    )
-                    return
+            if running is not None:
+                logger.info(
+                    "Action center refresh skipped — nightly pipeline is running (run #%d, age %s)",
+                    running.id, utcnow() - running.started_at,
+                )
+                return
             if is_house_pipeline_running():
                 house_age = house_pipeline_age()
                 if _is_stale(house_age, timedelta(hours=8)):
@@ -220,9 +255,9 @@ def _hourly_action_refresh() -> None:
                     return
             if is_supplementary_pipeline_running():
                 supp_age = supplementary_pipeline_age()
-                # 8h, not stock's 2h: on its weekly SCOTUS-refresh day this
-                # pipeline includes the uncached per-case Oyez crawl, which
-                # can run 5h+ — a tight threshold would misfire as "hung"
+                # 8h, not stock's shorter stock_trades_overrun_budget(): on
+                # its weekly SCOTUS-refresh day this pipeline includes the
+                # uncached per-case Oyez crawl, which can run 5h+ — a tight threshold would misfire as "hung"
                 # on a run that's just legitimately slow that day.
                 if _is_stale(supp_age, timedelta(hours=8)):
                     from app.ops_alerts import send_ops_alert
@@ -245,9 +280,13 @@ def _hourly_action_refresh() -> None:
                 stock_age = stock_pipeline_age()
                 # Shorter overrun threshold than House's 8h: stock trades is
                 # PDF/OCR parsing over a bounded PTR filing set, not a
-                # 431-member scoring pass — normal runs finish in under
-                # 90 minutes, so 2h already gives ample headroom.
-                if _is_stale(stock_age, timedelta(hours=2)):
+                # 431-member scoring pass. The budget (2h for the trade
+                # phases, which normally finish in under 90 minutes, plus
+                # the annual-holdings phases' own ceiling) is shared with
+                # ops_alerts.check_pipeline_overrun.
+                from app.ops_alerts import stock_trades_overrun_budget
+
+                if _is_stale(stock_age, stock_trades_overrun_budget()):
                     from app.ops_alerts import send_ops_alert
                     logger.warning(
                         "Stock trades pipeline has been running for %s — "
@@ -256,8 +295,8 @@ def _hourly_action_refresh() -> None:
                     )
                     send_ops_alert(
                         "Stock trades pipeline overrun",
-                        f"The stock trades pipeline has been running for {stock_age} "
-                        "(normal is under 2h) and is likely hung. The action center "
+                        f"The stock trades pipeline has been running for {stock_age}, past its "
+                        f"{stock_trades_overrun_budget()} budget, and is likely hung. The action center "
                         "is no longer waiting for it.",
                         dedupe_key=f"stock-overrun-{utcnow():%Y-%m-%d}",
                     )
@@ -274,7 +313,7 @@ def _hourly_action_refresh() -> None:
         except Exception:
             logger.exception("Action center refresh failed")
 
-    threading.Thread(target=_run, daemon=True, name="action-refresh").start()
+    _start_job(_run, name="action-refresh")
 
 
 def _hourly_bill_status_refresh() -> None:
@@ -290,35 +329,38 @@ def _hourly_bill_status_refresh() -> None:
     """
     def _run():
         try:
-            from app.pipeline.bill_refresh import is_bill_refresh_running, refresh_bill_statuses
+            from app.pipeline.bill_refresh import bill_tracker, refresh_bill_statuses
 
-            if is_bill_refresh_running():
-                logger.info("Bill status refresh skipped — previous refresh still running")
-                return
             from app.database import SessionLocal
-            from app.models import PipelineRun, PipelineStatus
+            from app.models import PipelineRun
+            from app.pipeline.run_tracker import run_in_progress
             db = SessionLocal()
             try:
-                running = db.query(PipelineRun).filter(PipelineRun.status == PipelineStatus.RUNNING).first()
+                running = run_in_progress(db, PipelineRun, timedelta(hours=8))  # live_run's liveness
             finally:
                 db.close()
-            if running and not _is_stale(utcnow() - running.started_at, timedelta(hours=8)):
+            if running:
                 logger.info("Bill status refresh skipped — nightly pipeline is running")
                 return
             if is_house_pipeline_running() and not _is_stale(house_pipeline_age(), timedelta(hours=8)):
                 logger.info("Bill status refresh skipped — house pipeline is running")
                 return
 
-            loop = asyncio.new_event_loop()
-            try:
-                summary = loop.run_until_complete(refresh_bill_statuses())
-            finally:
-                loop.close()
-            logger.info("Bill status refresh: %s", summary)
+            # Under its tracker and lease (lease.run_tracked), so a pass in
+            # this process, a reset or a refresh in another process sees it,
+            # taken only past the checks above: a tick that bails holds
+            # nothing. Cut off where they stop holding, never left running
+            # beside the next: two passes at once would let the older one's
+            # snapshot overwrite the newer one's rows.
+            summary = lease.run_tracked(
+                lease.BILL_REFRESH, bill_tracker(), refresh_bill_statuses, who="Bill status refresh",
+            )
+            if summary is not None:
+                logger.info("Bill status refresh: %s", summary)
         except Exception:
             logger.exception("Bill status refresh failed")
 
-    threading.Thread(target=_run, daemon=True, name="bill-status-refresh").start()
+    _start_job(_run, name="bill-status-refresh")
 
 
 def _election_coverage_refresh() -> None:
@@ -339,9 +381,7 @@ def _election_coverage_refresh() -> None:
 
     def _run():
         from app.pipeline.analyze.election_coverage import (
-            coverage_refresh_age,
             coverage_tracker,
-            is_coverage_refresh_running,
         )
 
         if is_election_pipeline_running():
@@ -355,47 +395,38 @@ def _election_coverage_refresh() -> None:
             )
         # Self-overlap guard: the PREVIOUS 15-minute refresh may still be
         # mid-flight (degraded LLM, slow network) — overlapping passes
-        # double-ingest and double-post. Same shape as
-        # _hourly_action_refresh's guard above.
-        if is_coverage_refresh_running():
-            age = coverage_refresh_age()
-            if not _is_stale(age, timedelta(hours=2)):
-                logger.info("Election coverage refresh skipped — previous refresh still running")
-                return
-            logger.warning(
-                "Previous election coverage refresh has been running for %s — "
-                "treating as hung and proceeding anyway", age,
-            )
-        coverage_tracker().start()
-        try:
-            from app.database import SessionLocal
-            from app.pipeline.analyze.election_bluesky import post_race_coverage_updates
-            from app.pipeline.analyze.election_coverage import ingest_race_coverage
+        # double-ingest and double-post; so may the nightly election
+        # pipeline's coverage phase. Under its tracker and lease
+        # (lease.run_tracked), taken only now, past the check above: a tick
+        # that bails must not hold them, or the nightly phase reaching them
+        # at that moment would skip. Cut off where they stop holding; the
+        # posting loop, which doesn't await, stops at the same deadline.
+        from app.database import SessionLocal
+        from app.pipeline.analyze.election_bluesky import post_race_coverage_updates
+        from app.pipeline.analyze.election_coverage import ingest_race_coverage
 
-            async def _refresh():
-                db = SessionLocal()
-                try:
-                    async with make_async_client() as client:
-                        ingested = await ingest_race_coverage(db, client)
-                    posted = post_race_coverage_updates(db)
-                    logger.info(
-                        "Election-season coverage refresh: %d ingested, %d posted",
-                        ingested, posted,
-                    )
-                finally:
-                    db.close()
-
-            loop = asyncio.new_event_loop()
+        async def _refresh():
+            deadline = lease.deadline(lease.COVERAGE_REFRESH)
+            db = SessionLocal()
             try:
-                loop.run_until_complete(_refresh())
+                async with make_async_client() as client:
+                    ingested = await ingest_race_coverage(db, client)
+                posted = post_race_coverage_updates(db, deadline=deadline)
+                logger.info(
+                    "Election-season coverage refresh: %d ingested, %d posted",
+                    ingested, posted,
+                )
             finally:
-                loop.close()
+                db.close()
+
+        try:
+            lease.run_tracked(
+                lease.COVERAGE_REFRESH, coverage_tracker(), _refresh, who="Election coverage refresh",
+            )
         except Exception:
             logger.exception("Election coverage refresh failed")
-        finally:
-            coverage_tracker().stop()
 
-    threading.Thread(target=_run, daemon=True, name="election-coverage-refresh").start()
+    _start_job(_run, name="election-coverage-refresh")
 
 
 def _election_ballot_sync() -> None:
@@ -427,27 +458,23 @@ def _election_ballot_sync() -> None:
                 "Election pipeline has been running for %s — treating as hung "
                 "and proceeding with the ballot sync anyway", age,
             )
-        if is_ballot_sync_running():
-            age = ballot_sync_age()
-            if not _is_stale(age, timedelta(hours=2)):
-                logger.info("Ballot sync skipped — the previous one is still running")
-                return
-            logger.warning("Previous ballot sync has been running for %s — proceeding anyway", age)
-        ballot_tracker().start()
-        loop = asyncio.new_event_loop()
+        # Under its tracker and lease (lease.run_tracked), shared with the
+        # nightly pipeline's ballot step, taken only now, past the check
+        # above: a tick that bails must not hold them, or the nightly step
+        # reaching them at that moment would skip. Cut off where they stop
+        # holding.
         try:
-            result = loop.run_until_complete(run_ballot_sync())
+            result = lease.run_tracked(lease.BALLOT_SYNC, ballot_tracker(), run_ballot_sync, who="Ballot sync")
+            if result is None:
+                return
             logger.info(
                 "Election-season ballot sync: %d confirmed, %d states ok, failed: %s",
                 result["confirmed"], len(result["statesOk"]), result["statesFailed"] or "none",
             )
         except Exception:
             logger.exception("Election-season ballot sync failed")
-        finally:
-            loop.close()
-            ballot_tracker().stop()
 
-    threading.Thread(target=_run, daemon=True, name="election-ballot-sync").start()
+    _start_job(_run, name="election-ballot-sync")
 
 
 def _congress_activity_sync() -> None:
@@ -555,9 +582,8 @@ def start_scheduler() -> None:
     # Pipeline overrun watchdog — alerts once per run past the budget
     from app.ops_alerts import check_pipeline_overrun, check_pipeline_staleness
     scheduler.add_job(
-        lambda: threading.Thread(
-            target=check_pipeline_overrun, daemon=True, name="pipeline-watchdog"
-        ).start(),
+        # Writers too (the alert history lives in api_cache).
+        lambda: _start_job(check_pipeline_overrun, name="pipeline-watchdog"),
         CronTrigger(minute="5,35"),
         id="pipeline_watchdog",
         replace_existing=True,
@@ -569,11 +595,21 @@ def start_scheduler() -> None:
     # rather than half-hourly since it is measured in days, and it
     # dedupes per pipeline per day regardless.
     scheduler.add_job(
-        lambda: threading.Thread(
-            target=check_pipeline_staleness, daemon=True, name="pipeline-staleness-watchdog"
-        ).start(),
+        lambda: _start_job(check_pipeline_staleness, name="pipeline-staleness-watchdog"),
         CronTrigger(minute="20"),
         id="pipeline_staleness_watchdog",
+        replace_existing=True,
+    )
+
+    # A run a crash or a rollout left RUNNING, once it is proven dead
+    # (run_tracker.tidy_dead_runs): run history stops showing it as running.
+    # Readers already see through it (run_tracker.live_run).
+    from app.pipeline.run_tracker import tidy_dead_runs
+
+    scheduler.add_job(
+        lambda: _start_job(tidy_dead_runs, name="dead-run-tidy"),
+        CronTrigger(minute="25"),
+        id="dead_run_tidy",
         replace_existing=True,
     )
 

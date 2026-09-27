@@ -91,3 +91,19 @@ class TestSkippedFilingIsRetried:
              patch.object(stock_pipeline, "fetch_senate_ptr", fetch):
             asyncio.run(stock_pipeline._ingest_senate(db_session, client=None))
         fetch.assert_not_called()
+
+
+class TestFilerAttribution:
+    def test_a_former_senators_filing_is_not_given_to_a_sitting_namesake(self, db_session):
+        """Only one sitting senator named Smith — the former senator Smith's
+        PTR must still not land on her scorecard."""
+        _senator(db_session, "s-1", "Jane Smith")
+        db_session.commit()
+        fetch = AsyncMock(return_value=[])
+        filings = [{"last": "Smith", "first": "Robert", "office": "Smith, Robert (Former Senator)",
+                    "filed_date": "2026-09-20", "report_url": "https://efd/ptr/bob/", "is_paper": False}]
+        with patch.object(stock_pipeline, "senate_accept_terms", AsyncMock(return_value="tok")), \
+             patch.object(stock_pipeline, "search_ptr_filings", AsyncMock(return_value=filings)), \
+             patch.object(stock_pipeline, "fetch_senate_ptr", fetch):
+            asyncio.run(stock_pipeline._ingest_senate(db_session, client=None))
+        fetch.assert_not_called()

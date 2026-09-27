@@ -167,6 +167,17 @@ describe("finishedSince", () => {
     ]);
   });
 
+  it("reports a run that stopped with its row still running as stuck, not completed", () => {
+    const out = finishedSince({ senate: true, house: true }, [
+      p("senate", false, "running"),
+      p("house", false, "stale"),
+    ]);
+    expect(out.map((f) => [f.key, f.status])).toEqual([
+      ["senate", "stuck"],
+      ["house", "stuck"],
+    ]);
+  });
+
   it("reports nothing on the first poll or while still running", () => {
     expect(finishedSince({}, [p("senate", false, "completed")])).toEqual([]);
     expect(finishedSince({ senate: true }, [p("senate", true, "running")])).toEqual([]);

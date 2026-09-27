@@ -562,7 +562,7 @@ def _ensure_indexes() -> None:
         # unbounded history of completed/failed/stale rows is unaffected.
         #
         # Applies to House, Stock, and Supplementary too, alongside a
-        # stale-row auto-clear (run_tracker.acquire_pipeline_lock) — a row
+        # stale-row auto-clear (run_tracker.acquire_pipeline_lock_why) — a row
         # orphaned by a killed process (a deploy restarting the container
         # mid-run) would otherwise stay "running" forever, silently
         # blocking every future run of that pipeline.
@@ -1000,11 +1000,36 @@ def _init_db_locked() -> None:
     # (2026-07, see president_pipeline.py's module docstring).
 
 
+# Tables a reset leaves alone: history no pipeline run can rebuild. A reset
+# clears what the pipelines derive from their sources, so the next run can
+# rebuild it with the latest code; these record what already happened.
+RESET_KEEPS = frozenset({
+    # The Action Center's history: each day's issues (with what was posted
+    # to Bluesky about them — wiped, the repost gates would have nothing to
+    # compare against), the timeline, the monitors and the period summaries.
+    # The feeds they came from only carry recent items.
+    "action_issues", "timeline_entries", "national_monitors", "monitor_updates",
+    "week_summaries", "month_summaries", "year_summaries",
+    # Which members the Bluesky account has already spotlighted — posts
+    # that were really made. Wiped, the rotation would repeat them.
+    "bsky_senator_spotlights",
+    # LLM generations captured as fine-tuning data, accumulated over months.
+    "llm_generation_samples",
+    # Run history. ops_alerts.check_pipeline_staleness reads a pipeline with
+    # no runs as a fresh deployment and stays silent, so wiping these would
+    # disarm it for a chain that stops after the reset; the phase timings
+    # and rate-limit stats exist only as cross-run history.
+    "pipeline_runs", "supplementary_pipeline_runs", "house_pipeline_runs",
+    "stock_trades_pipeline_runs", "election_pipeline_runs",
+    "pipeline_phase_timings", "pipeline_rate_limit_stats",
+})
+
+
 def reset_all_data() -> dict:
     """Drop all pipeline-generated data and start fresh.
 
-    Truncates every table except the schema itself, resets the vector
-    store's collections, and re-seeds static reference data (presidents).
+    Truncates every table except RESET_KEEPS and resets the vector store's
+    collections. Presidents come back with the next president pipeline run.
     Returns a summary of what was cleared.
     """
     from app import models  # noqa: F401
@@ -1012,57 +1037,30 @@ def reset_all_data() -> dict:
     summary: dict[str, int] = {}
     db = SessionLocal()
     try:
-        for model_cls in [
-            models.Donor,
-            models.IndustryDonation,
-            models.KeyVote,
-            models.LobbyingMatch,
-            models.CampaignPromise,
-            models.SponsoredBill,
-            models.StockTrade,
-            models.RepDonor,
-            models.RepIndustryDonation,
-            models.RepKeyVote,
-            models.RepLobbyingMatch,
-            models.RepCampaignPromise,
-            models.RepSponsoredBill,
-            models.RepStockTrade,
-            # Before models.President below — the delete order here is
-            # child-then-parent throughout, and a president row's cascade
-            # would otherwise take these with it uncounted.
-            models.PresidentTrade,
-            models.JusticeVote,
-            models.MonitorUpdate,
-            models.NationalMonitor,
-            models.TimelineEntry,
-            models.LearnedClassification,
-            models.ApiCache,
-            models.AnalysisCache,
-            models.ExploreDocument,
-            models.ScoreSnapshot,
-            models.PipelineRun,
-            # Election-cycle tables. These were omitted when the
-            # midterm-elections feature landed (2026-07), so an admin
-            # reset silently left the candidate roster, race coverage and
-            # run history behind while reporting a clean wipe — the same
-            # class of omission the drops list above was bitten by in
-            # #215. Child-then-parent, like every other pair here:
-            # Candidate/RaceCoverageItem cascade from Race.
-            models.Candidate,
-            models.RaceCoverageItem,
-            models.Race,
-            models.BallotMeasure,
-            models.MeasureCoverage,
-            models.ElectionPipelineRun,
-            models.Senator,
-            models.Representative,
-            models.Justice,
-            models.President,
-        ]:
-            table = model_cls.__tablename__
-            count = db.query(model_cls).count()
-            summary[table] = count
-            db.query(model_cls).delete()
+        # Every table, children before parents (the bulk deletes skip the
+        # ORM cascade and SQLite doesn't enforce foreign keys, so a child
+        # left behind would reattach to a recreated member). Derived from the
+        # schema rather than listed by hand: a hand-kept list silently
+        # missed the election tables (#215), and later the nominee and
+        # holdings tables.
+        for table in reversed(Base.metadata.sorted_tables):
+            if table.name in RESET_KEEPS:
+                continue
+            wipe = table.delete()
+            if table.name == "api_cache":
+                # The leases (app.pipeline.lease): the reset's own, which is
+                # what holds other processes' writers off while it runs, and
+                # any other that may be live.
+                from app.pipeline import lease
+
+                wipe = wipe.where(table.c.tier.notin_(lease.TIERS))
+            summary[table.name] = db.execute(wipe).rowcount
+        # A kept issue's links to Explore documents name them by rowid, and
+        # SQLite hands the rebuilt documents the same rowids again: left, the
+        # links would point at unrelated documents.
+        db.execute(text("UPDATE action_issues SET related_explore_ids = '[]'"))
+        # One transaction: a failure partway leaves nothing half-wiped. (The
+        # reset's lease outlasts it unbeaten — lease.stale_after.)
         db.commit()
     finally:
         db.close()

@@ -53,9 +53,23 @@ a markup, being ordered reported, discharged, or placed on a calendar
 (which only happens once committee has already reported the bill out).
 """
 
+import re
+
 from app.config_definitions import BillStage
 
 _FALLBACK_STAGE = BillStage.INTRODUCED
+
+# What a "Floor" action says when the bill itself is being taken up on the
+# floor rather than passed, received or presented (those carry mapped
+# codes). "Floor" alone is too coarse to act on, so the text has to name
+# floor consideration: the Senate's "Considered by Senate", "Cloture on
+# the measure ... invoked", "Motion to proceed ...", "Measure laid before
+# Senate", and the House's consideration under a rule or suspension.
+_FLOOR_CONSIDERATION_RE = re.compile(
+    r"\b(considered|cloture|motion to proceed|laid before|suspend the rules"
+    r"|under the provisions of rule|failed of passage|motion to recommit)\b",
+    re.IGNORECASE,
+)
 
 # Empirically observed (type, actionCode) -> stage, keyed by actionCode
 # alone (actionCode is unique across types in practice). See module
@@ -123,6 +137,8 @@ def _stage_from_type_and_text(action_type: str | None, text: str) -> BillStage |
         # ENTIRE action history was "Introduced in Senate" followed by
         # exactly this, nothing else, ever.
         return BillStage.REFERRED if "referred" in text_lower else BillStage.INTRODUCED
+    if action_type == "Floor" and _FLOOR_CONSIDERATION_RE.search(text):
+        return BillStage.ON_FLOOR
     if action_type in ("Committee", "Calendars"):
         # Unlike IntroReferral above, a bare automatic referral is never
         # typed "Committee" or "Calendars" in practice (confirmed against
@@ -143,12 +159,41 @@ _STAGE_RANK: dict[BillStage, int] = {
     BillStage.INTRODUCED: 1,
     BillStage.REFERRED: 2,
     BillStage.IN_COMMITTEE: 3,
-    BillStage.PASSED_CHAMBER: 4,
-    BillStage.IN_OTHER_CHAMBER: 5,
-    BillStage.TO_PRESIDENT: 6,
-    BillStage.VETOED: 7,
-    BillStage.ENACTED: 8,
+    BillStage.ON_FLOOR: 4,
+    BillStage.PASSED_CHAMBER: 5,
+    BillStage.IN_OTHER_CHAMBER: 6,
+    BillStage.TO_PRESIDENT: 7,
+    BillStage.VETOED: 8,
+    BillStage.ENACTED: 9,
 }
+
+
+# How Congress.gov words the action that makes a bill law. One copy: the
+# bill refresh's write-time SQL guard matches the same phrases.
+LAW_ACTION_PHRASES = ("became public law", "became private law")
+
+
+def became_law_action(text: str | None) -> bool:
+    """Whether a latest-action text records the bill becoming law —
+    Congress.gov's "Became Public Law No: ..." or "Became Private Law No:
+    ..." (a private relief bill is a law too, and its BecameLaw action is
+    ENACTED to classify_bill_stage_from_actions). Not any mention of a
+    Public Law: plenty of ordinary actions cite one (a motion "pursuant to
+    section 904 of Public Law 93-344"). The reading for a writer with no
+    action history to hand; one with it uses is_enacted."""
+    lowered = (text or "").lower()
+    return any(phrase in lowered for phrase in LAW_ACTION_PHRASES)
+
+
+def is_enacted(latest_text: str | None, actions: list[dict] | None = None) -> bool:
+    """is_law, as every writer of a bill row reads it: the latest action
+    says it became law (became_law_action), or — where the action history is to hand —
+    that history reaches ENACTED by its structured codes and types (signed
+    by the President, before a law number is assigned, included), so is_law
+    and the stage classify_bill_stage_from_actions gives can't disagree."""
+    if became_law_action(latest_text):
+        return True
+    return bool(actions) and classify_bill_stage_from_actions(actions) == BillStage.ENACTED
 
 
 def classify_bill_stage_from_actions(actions: list[dict], is_law: bool = False) -> BillStage:
@@ -191,7 +236,9 @@ def classify_bill_stage_from_actions(actions: list[dict], is_law: bool = False) 
             continue
         if stage == BillStage.PASSED_CHAMBER:
             passed_seen = True
-        elif passed_seen and stage in (BillStage.INTRODUCED, BillStage.REFERRED, BillStage.IN_COMMITTEE):
+        elif passed_seen and stage in (
+            BillStage.INTRODUCED, BillStage.REFERRED, BillStage.IN_COMMITTEE, BillStage.ON_FLOOR,
+        ):
             stage = BillStage.IN_OTHER_CHAMBER
         if best is None or _STAGE_RANK[stage] > _STAGE_RANK[best]:
             best = stage

@@ -247,7 +247,7 @@ export function PresidentCard({
             The section hides itself when there are no rows, so a
             just-inaugurated president sees nothing until the first
             filing lands. */}
-        {president.isCurrent && <StockTrades politicianId={president.id} filer="president" />}
+        {president.isCurrent && <StockTrades key={president.id} politicianId={president.id} filer="president" />}
 
         {/* Key Stats */}
         <div>

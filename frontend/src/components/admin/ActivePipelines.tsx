@@ -1,6 +1,6 @@
 "use client";
 
-import type { AdminPipelineStatus } from "@/lib/api";
+import { senateIsRunning, type AdminPipelineStatus } from "@/lib/api";
 import { PipelineProgressBar } from "./pipelineWidgets";
 
 /**
@@ -19,11 +19,11 @@ export function ActivePipelines({
             only ever checked pipelineStatus.isRunning (Senate), so House /
             Stock Trades / Supplementary never showed this view while
             actively running, only Senate did. */}
-      {pipelineStatus?.isRunning && pipelineStatus.lastRun && (
+      {senateIsRunning(pipelineStatus) && pipelineStatus?.lastRun && (
         <div className="mb-6">
           <PipelineProgressBar
             title="SENATE PIPELINE ACTIVE"
-            isRunning={pipelineStatus.isRunning}
+            isRunning
             run={pipelineStatus.lastRun}
             etaConfig={{
               processed: pipelineStatus.lastRun.senatorsProcessed,

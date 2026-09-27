@@ -166,6 +166,7 @@ class Senator(Base):
     campaign_promises: Mapped[list["CampaignPromise"]] = relationship(back_populates="senator", cascade="all, delete-orphan")
     sponsored_bills: Mapped[list["SponsoredBill"]] = relationship(back_populates="senator", cascade="all, delete-orphan")
     stock_trades: Mapped[list["StockTrade"]] = relationship(back_populates="senator", cascade="all, delete-orphan")
+    financial_disclosures: Mapped[list["FinancialDisclosure"]] = relationship(back_populates="senator", cascade="all, delete-orphan")
 
 
 class Donor(Base):
@@ -297,7 +298,7 @@ class StockTrade(Base):
     senator_id: Mapped[str] = mapped_column(String, ForeignKey("senators.id", ondelete="CASCADE"), nullable=False, index=True)
     ticker: Mapped[str | None] = mapped_column(String, nullable=True)  # not all disclosed assets are tickered equities
     asset_name: Mapped[str] = mapped_column(String, nullable=False)
-    owner: Mapped[str] = mapped_column(String, default="self")  # self | spouse | joint | dependent
+    owner: Mapped[str] = mapped_column(String, default="self")  # self | spouse | joint | dependent | unknown
     transaction_type: Mapped[str] = mapped_column(String, nullable=False)  # purchase | sale_full | sale_partial | exchange
     transaction_date: Mapped[str] = mapped_column(String, nullable=False)
     disclosure_date: Mapped[str] = mapped_column(String, nullable=False)
@@ -313,6 +314,10 @@ class StockTrade(Base):
     # reliable — see grounding.py's precedent of never silently trusting
     # unverified extracted content.
     parse_confidence: Mapped[str] = mapped_column(String, default="text")
+    # ptr_common.PARSER_VERSION that read the filing; one read by an older
+    # version is read again (stock_pipeline._reread_trades). Rows stored
+    # before versions existed are 1.
+    parser_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
 
     senator: Mapped["Senator"] = relationship(back_populates="stock_trades")
 
@@ -396,6 +401,7 @@ class Representative(Base):
     campaign_promises: Mapped[list["RepCampaignPromise"]] = relationship(back_populates="representative", cascade="all, delete-orphan")
     sponsored_bills: Mapped[list["RepSponsoredBill"]] = relationship(back_populates="representative", cascade="all, delete-orphan")
     stock_trades: Mapped[list["RepStockTrade"]] = relationship(back_populates="representative", cascade="all, delete-orphan")
+    financial_disclosures: Mapped[list["FinancialDisclosure"]] = relationship(back_populates="representative", cascade="all, delete-orphan")
 
 
 class RepDonor(Base):
@@ -534,8 +540,97 @@ class RepStockTrade(Base):
     source_url: Mapped[str] = mapped_column(String, default="")
     filing_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     parse_confidence: Mapped[str] = mapped_column(String, default="text")
+    # ptr_common.PARSER_VERSION that read the filing; one read by an older
+    # version is read again (stock_pipeline._reread_trades). Rows stored
+    # before versions existed are 1.
+    parser_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
 
     representative: Mapped["Representative"] = relationship(back_populates="stock_trades")
+
+
+class FinancialDisclosure(Base):
+    """A member's most recent annual financial disclosure report — the one
+    whose asset list (House Schedule A / Senate Part 3) backs the holdings
+    breakdown on their scorecard. Informational only, not scored.
+
+    Exactly one of senator_id / representative_id is set. Only the latest
+    report per member is kept: a report describes holdings at one year end,
+    so an older one is superseded rather than accumulated.
+
+    `parsed` is False for a report that exists but couldn't be read (a
+    scanned paper filing): the scorecard then links to it instead of
+    showing an empty breakdown that would read as "holds nothing".
+    """
+    __tablename__ = "financial_disclosures"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    senator_id: Mapped[str | None] = mapped_column(String, ForeignKey("senators.id", ondelete="CASCADE"), nullable=True, index=True)
+    representative_id: Mapped[str | None] = mapped_column(String, ForeignKey("representatives.id", ondelete="CASCADE"), nullable=True, index=True)
+    filing_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    # What the report is, as the scorecard names it: "2025 annual report",
+    # "2025 annual report (amended)", "new-filer report as of 2026-03-24".
+    report_label: Mapped[str] = mapped_column(String, default="")
+    filed_date: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The date the holdings describe (YYYY-MM-DD): the year end for an
+    # annual report, the stated date for a Senate new-filer report, NULL
+    # for a Senate paper filing (it states none). With `amended`, `seq`,
+    # filed_date and filing_id it is the report's rank among the member's
+    # filings (holdings_pipeline._rank), kept so a later run can compare
+    # against it even when the stored filing is missing from that run's
+    # index.
+    as_of_date: Mapped[str | None] = mapped_column(String, nullable=True)
+    amended: Mapped[bool] = mapped_column(Boolean, default=False)
+    # The House document id (ordering amendments before the filing date,
+    # which the index can inherit from the original) or the Senate title's
+    # amendment number (breaking a same-day tie only) — see
+    # holdings_pipeline._rank.
+    seq: Mapped[int] = mapped_column(Integer, default=0)
+    # The newest Senate filing made on or after this report's filing date
+    # whose as-of date can't be known — a paper filing (its page is page
+    # images) or one whose title states no year — and so can't be ranked
+    # against a dated report. It is
+    # named here instead, as filed ("annual report filed 2026-05-14"), so
+    # the scorecard can say a later filing exists rather than imply this one
+    # is the latest.
+    later_filing_label: Mapped[str | None] = mapped_column(String, nullable=True)
+    later_filing_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    later_filing_filed: Mapped[str | None] = mapped_column(String, nullable=True)
+    source_url: Mapped[str] = mapped_column(String, default="")
+    parsed: Mapped[bool] = mapped_column(Boolean, default=True)
+    # When not parsed: "scanned" (paper filing) or "unrecognized"
+    # (electronic, in a layout the parser can't read) — the page words its
+    # note differently for each.
+    unreadable_reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The fetch module's PARSER_VERSION that read this report; a newer one
+    # re-reads it (holdings_pipeline._is_current).
+    parser_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ingested_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+    senator: Mapped["Senator"] = relationship(back_populates="financial_disclosures")
+    representative: Mapped["Representative"] = relationship(back_populates="financial_disclosures")
+    holdings: Mapped[list["FinancialHolding"]] = relationship(back_populates="disclosure", cascade="all, delete-orphan")
+
+
+class FinancialHolding(Base):
+    """One asset from a FinancialDisclosure. Values are the disclosed
+    *bracket*, never an exact figure — see fetch/fd_common.HoldingRow for
+    the encoding (NULL = no bracket stated; low == high = open-ended top
+    bracket)."""
+    __tablename__ = "financial_holdings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    disclosure_id: Mapped[int] = mapped_column(Integer, ForeignKey("financial_disclosures.id", ondelete="CASCADE"), nullable=False, index=True)
+    asset_name: Mapped[str] = mapped_column(String, nullable=False)
+    account: Mapped[str | None] = mapped_column(String, nullable=True)
+    ticker: Mapped[str | None] = mapped_column(String, nullable=True)
+    asset_type: Mapped[str] = mapped_column(String, default="")  # as filed: House code or Senate label
+    category: Mapped[str] = mapped_column(String, default="OTHER", index=True)  # config_definitions.HOLDING_CATEGORIES
+    owner: Mapped[str] = mapped_column(String, default="self")  # self | spouse | joint | dependent | unknown
+    value_text: Mapped[str] = mapped_column(String, default="")
+    value_low: Mapped[float | None] = mapped_column(Float, nullable=True)
+    value_high: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    disclosure: Mapped["FinancialDisclosure"] = relationship(back_populates="holdings")
 
 
 class President(Base):
@@ -650,7 +745,7 @@ class PresidentTrade(Base):
     president_id: Mapped[str] = mapped_column(String, ForeignKey("presidents.id", ondelete="CASCADE"), nullable=False, index=True)
     ticker: Mapped[str | None] = mapped_column(String, nullable=True)  # crypto and bond lines carry none
     asset_name: Mapped[str] = mapped_column(String, nullable=False)
-    owner: Mapped[str] = mapped_column(String, default="self")  # self | spouse | joint | dependent
+    owner: Mapped[str] = mapped_column(String, default="self")  # self | spouse | joint | dependent | unknown
     transaction_type: Mapped[str] = mapped_column(String, nullable=False)  # purchase | sale_full | sale_partial | exchange
     transaction_date: Mapped[str] = mapped_column(String, nullable=False)
     disclosure_date: Mapped[str] = mapped_column(String, nullable=False)
@@ -661,6 +756,10 @@ class PresidentTrade(Base):
     source_url: Mapped[str] = mapped_column(String, default="")
     filing_id: Mapped[str] = mapped_column(String, nullable=False, index=True)  # dedupe key
     parse_confidence: Mapped[str] = mapped_column(String, default="text")
+    # ptr_common.PARSER_VERSION that read the filing; one read by an older
+    # version is read again (stock_pipeline._reread_trades). Rows stored
+    # before versions existed are 1.
+    parser_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
 
     president: Mapped["President"] = relationship(back_populates="trades")
 

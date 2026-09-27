@@ -116,6 +116,28 @@ POLICY_AREAS: list[str] = [
 
 VALID_INDUSTRIES = set(INDUSTRIES.keys())
 
+# Asset-holding categories for the scorecard's holdings breakdown (annual
+# financial disclosures). Each chamber's own asset-type vocabulary is mapped
+# onto these in pipeline/fetch/fd_common.py. The frontend never hardcodes
+# them: every holdings response carries each category's label and color.
+# The breakdown lists categories largest first; this order is the tie-break
+# and the order the colors were validated in. Display-only — exempt from the
+# analysis-code fingerprint (senate_pipeline._DISPLAY_ONLY_NAMES). Colors are a fixed categorical order validated for
+# colorblind separation and >= 3:1 contrast against the site's dark surface;
+# OTHER is deliberately a neutral gray, not a ninth hue. Color follows the
+# category, so a member without some category never repaints the rest.
+HOLDING_CATEGORIES: dict[str, dict[str, str]] = {
+    "STOCKS":      {"label": "Stocks",                "color": "#3987e5"},
+    "FUNDS":       {"label": "Mutual funds & ETFs",   "color": "#d95926"},
+    "BONDS":       {"label": "Bonds & Treasuries",    "color": "#199e70"},
+    "CASH":        {"label": "Bank & cash",           "color": "#c98500"},
+    "RETIREMENT":  {"label": "Retirement & pensions", "color": "#d55181"},
+    "REAL_ESTATE": {"label": "Real estate",           "color": "#008300"},
+    "BUSINESS":    {"label": "Business interests",    "color": "#9085e9"},
+    "CRYPTO":      {"label": "Crypto",                "color": "#e66767"},
+    "OTHER":       {"label": "Other",                 "color": "#8a857d"},
+}
+
 # Legislative pipeline stages for the "bills currently moving through
 # Congress" view. `order` drives the left-to-right position in the
 # process-flow visualization. Codes are produced by
@@ -132,11 +154,17 @@ BILL_STAGES: dict[str, dict] = {
     # because nearly all of them simply hadn't died yet.
     "REFERRED":         {"name": "Referred to Committee", "color": "#60a5fa", "order": 2},
     "IN_COMMITTEE":     {"name": "In Committee",       "color": "#3b82f6", "order": 3},
-    "PASSED_CHAMBER":   {"name": "Passed Chamber",     "color": "#8b5cf6", "order": 4},
-    "IN_OTHER_CHAMBER": {"name": "In Other Chamber",   "color": "#f59e0b", "order": 5},
-    "TO_PRESIDENT":     {"name": "To President",       "color": "#ec4899", "order": 6},
-    "ENACTED":          {"name": "Enacted",            "color": "#00ff41", "order": 7},
-    "VETOED":           {"name": "Vetoed",             "color": "#ef4444", "order": 8},
+    # 2026-09: a bill reported out of committee and under floor debate
+    # (motion to proceed, cloture, "considered by Senate") had no stage of
+    # its own, so it read "In Committee" through a week of floor votes
+    # (S. 4668, 119th Congress). Volden & Wiseman call this step "action
+    # beyond committee".
+    "ON_FLOOR":         {"name": "On the Floor",       "color": "#ff8a3d", "order": 4},
+    "PASSED_CHAMBER":   {"name": "Passed Chamber",     "color": "#8b5cf6", "order": 5},
+    "IN_OTHER_CHAMBER": {"name": "In Other Chamber",   "color": "#f59e0b", "order": 6},
+    "TO_PRESIDENT":     {"name": "To President",       "color": "#ec4899", "order": 7},
+    "ENACTED":          {"name": "Enacted",            "color": "#00ff41", "order": 8},
+    "VETOED":           {"name": "Vetoed",             "color": "#ef4444", "order": 9},
 }
 
 # Derived from BILL_STAGES's keys rather than listed separately, so a code

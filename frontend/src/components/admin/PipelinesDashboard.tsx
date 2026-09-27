@@ -4,9 +4,11 @@ import { useEffect, useState, type ReactNode } from "react";
 import {
   clearStuckElectionPipeline,
   clearStuckHousePipeline,
+  clearStuckSenatePipeline,
   clearStuckStockTradesPipeline,
   clearStuckSupplementaryPipeline,
   fetchAdminPipelineTimings,
+  senateIsRunning,
   fetchAdminPipelineTrend,
   type AdminDashboard,
   type AdminPipelineStatus,
@@ -103,9 +105,10 @@ function PipelineStatusPanel({
       <div className="space-y-1.5 text-sm font-mono">
         <StuckAwareRow
           label="SENATE"
-          isRunning={!!status?.isRunning}
+          isRunning={senateIsRunning(status)}
           run={senate}
           token={token}
+          clear={clearStuckSenatePipeline}
           onCleared={onChanged}
           detail={
             senate && (

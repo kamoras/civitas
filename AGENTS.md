@@ -229,7 +229,11 @@ computes a SHA-256 fingerprint of all analysis-relevant source files
 (everything in `app/pipeline/` except `fetch/`, plus `config_definitions.py`).
 Each file is hashed as its docstring-stripped AST (`_normalized_source`), so
 editing a comment or docstring does not count as a code change — only code,
-string constants (prototypes, prompts) and thresholds do. This fingerprint is
+string constants (prototypes, prompts) and thresholds do. A short, tested
+exemption list covers what cannot affect classification or scoring:
+`_NOT_ANALYSIS_PATHS` (the holdings ingest, filer matching) and
+`_DISPLAY_ONLY_NAMES` (display-only constants such as `HOLDING_CATEGORIES`),
+both in `senate_pipeline.py`. This fingerprint is
 compared to the stored hash from the last pipeline run:
 
 - **Same hash** → all learning data is preserved (learning store, analysis
@@ -736,6 +740,46 @@ those as `$X+`. All three filer groups serialize through that one schema, so a
 field added there reaches senators, representatives, and the president
 together.
 
+The same run then ingests each member's latest **annual financial disclosure**
+(`holdings_pipeline.py`) — the asset list behind the scorecard's holdings pie:
+House Schedule A parsed from word positions (`fetch/house_fd.py`; pdfplumber's
+table extraction drops most rows on this form), Senate Part 3 from the eFD HTML
+(`fetch/senate_fd.py`). One report per member, the newest, replacing the last
+— never replaced by an *older* one, which a partial index or search can turn
+up. Asset categories (`HOLDING_CATEGORIES` in `config_definitions.py`) come
+only from the asset type the *filer* declared (the House's two-letter codes,
+the Senate's type/subtype), mapped in `fd_common.py` — a form-vocabulary
+translation, never a guess from the asset's name. Values stay brackets
+(`low == high` is the same open-ended sentinel); the pie is drawn by bracket
+midpoints and says so, and no net-worth figure is produced. Reports that can't
+be read are stored `parsed=False` with a reason (`scanned` paper filing,
+`unrecognized` layout) and linked, not OCR'd. A Senate paper filing states
+no year anywhere eFD shows it (its page is page images), so no year is
+claimed or inferred for it: it ranks below every dated report, and an undated
+filing (paper, or a title with no year) filed on or after the shown report's
+date is named beside it ("also filed, on or after this report's filing date")
+rather than guessed to be newer. Each fetch module's
+`PARSER_VERSION` keys its parse cache and is stored per report — bump it when a
+parser's output changes, and already-ingested reports are re-read (a re-read
+that can't read the report at all keeps the earlier holdings; one that reads
+rows, or none, replaces them). Both phases are time-boxed
+(`holdings_schedule.PHASE_CEILING`: index or search, report fetching, outage
+probes, each with its own budget), so a first run or a version bump spreads
+over a few nights, and the stock run's overrun alarm
+(`ops_alerts.stock_trades_overrun_budget`) allows for that ceiling. The
+holdings phases never decide the stock run's
+status (that stays "every trade phase failed"); each phase that fails sends
+its own ops alert instead. A phase fails on a parser regression — reads that
+cannot be read at all (a crash, an unrecognized report, "scanned" where an
+earlier parser read the text) outnumbering good ones, counted every night the
+regression lasts; empty reads and changed row counts are the parser tests'
+job, since a fix looks the same — or when members were tried (or the budget
+went on requests that failed) and none loaded *and* none of the reports
+already stored still loads either. That live probe, not a
+memory of failing filings, is what tells an outage from a few dead links
+(`_SourceHealth`). Presidents are not covered yet: the OGE 278e is an
+~850-page hybrid scan with no asset-type column.
+
 Each senator is processed independently. The pipeline uses `PipelineRun`
 records to track progress and supports resumption.
 
@@ -840,6 +884,7 @@ the pending list).
 | Pipeline orchestration | `backend/app/scheduler.py` (entrypoint), `backend/app/pipeline/senate_pipeline.py` / `house_pipeline.py` |
 | Departed-member detection + removal | `backend/app/pipeline/member_lifecycle.py` |
 | Stock trade disclosures | `backend/app/pipeline/stock_pipeline.py` |
+| Annual-report holdings (scorecard pie) | `backend/app/pipeline/holdings_pipeline.py`, `fetch/house_fd.py`, `fetch/senate_fd.py`, `fetch/fd_common.py`, `services/holdings_service.py`, `frontend/src/components/checker/Holdings.tsx` |
 | Scoring formulas | `backend/app/pipeline/analyze/score_calculator.py` |
 | Industry classification (embeddings + PAC decontextualization) | `backend/app/pipeline/transform/industry_classifier.py` |
 | Donor type classification (tiered + batch skip detection) | `backend/app/pipeline/analyze/donor_classifier_ai.py` |

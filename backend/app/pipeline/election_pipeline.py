@@ -52,7 +52,8 @@ from app.pipeline.fetch.state_candidates import (
 )
 from app.pipeline.fetch.state_election_dates import senate_election_known
 from app.pipeline.progress_tracker import ProgressTracker
-from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
+from app.pipeline import lease
+from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_tracked_run, skip_reason_text
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -107,18 +108,10 @@ def election_pipeline_age():
 
 
 # The election-season ballot sync (scheduler.py) runs the ballot step on its
-# own between nightly runs; this is its overlap guard, separate from the
-# nightly run's so each can see the other.
+# own between nightly runs; this is its in-process overlap guard, behind the
+# BALLOT_SYNC lease (lease.tracked_job), shared by the sync and the nightly
+# run's ballot step so each can see the other.
 _ballot_tracker = PipelineRunTracker()
-
-
-def is_ballot_sync_running() -> bool:
-    return _ballot_tracker.is_running
-
-
-def ballot_sync_age():
-    """Wall-clock age of the in-process ballot sync, or None when idle."""
-    return _ballot_tracker.age
 
 
 def ballot_tracker() -> PipelineRunTracker:
@@ -784,8 +777,46 @@ def _prune_stale_coverage(db: Session) -> int:
     return deleted
 
 
-class _BallotSyncRunning(Exception):
-    """The nightly ballot phase stepping aside for a ballot sync in flight."""
+def _adopted_detail(adopted: dict[str, str]) -> str:
+    """The crawl's part of the phase's dashboard detail — whether this
+    week's crawl (Sundays only) found anything new."""
+    if not adopted:
+        return ""
+    return f"; crawler adopted {len(adopted)} this week: {', '.join(sorted(adopted))}"
+
+
+async def _confirmed_candidates_phase(db: Session, client, cycle: int) -> str:
+    """The nightly run's ballot sync, run holding the ballot sync's guards;
+    returns the dashboard's detail line."""
+    confirm_result, filing_result = await _sync_ballots(db, client, cycle)
+    confirmed_total = sum(r["confirmed"] for r in confirm_result.values())
+    logger.info("Confirmed candidates: %s", confirm_result)
+    if filing_result:
+        logger.info("Ballot filings: %s", filing_result)
+
+    # The admin dashboard's only window into this phase beyond
+    # a bare total — which states are actually configured, and
+    # whether this week's crawl (Sundays only) found anything
+    # new — was previously log-only (2026-09 gap: an admin
+    # reading the dashboard had no way to tell "16 states
+    # confirmed" from "every state failed but one").
+    configured_states = sorted(
+        s for s, r in confirm_result.items() if r["status"] == "ok"
+    )
+    detail = f"{confirmed_total} confirmed across {len(configured_states)} states"
+    # Non-federal nominees are stored, not "confirmed"
+    # against an FEC row, so they are invisible in the count
+    # above — and there can be a lot of them (Rhode Island
+    # alone stores 9 executive and 133 legislative). Reporting
+    # only the federal number would let a run that did most of
+    # its work off-ballot look like a quiet one, which is the
+    # same misreading this detail line was added to prevent.
+    non_federal = sum(
+        r.get("statewide", 0) + r.get("stateLeg", 0) for r in confirm_result.values()
+    )
+    if non_federal:
+        detail += f"; {non_federal} state-office nominees"
+    return detail
 
 
 async def run_election_pipeline(cycle: int | None = None) -> dict:
@@ -794,14 +825,14 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
     fundraising. Returns a summary dict with counts."""
     cycle = cycle if cycle is not None else current_election_cycle()
     db = SessionLocal()
+    _run_token = None  # no run of ours for the finally to stop until start() below
 
-    run = acquire_pipeline_lock(db, ElectionPipelineRun, STALE_PIPELINE_TIMEOUT)
+    run, _run_token, refused = acquire_tracked_run(db, ElectionPipelineRun, STALE_PIPELINE_TIMEOUT, _tracker)
     if run is None:
-        logger.warning("Election pipeline already running in another process — skipping")
+        logger.warning("Election pipeline not started: %s", skip_reason_text(refused))
         db.close()
-        return {"status": "skipped", "reason": "already_running"}
+        return {"status": "skipped", "reason": refused}
 
-    _tracker.start()
     start_time = time.time()
     progress = ProgressTracker(run, ELECTION_PIPELINE_STEPS, db, start_time)
 
@@ -843,6 +874,7 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
             db.commit()
             logger.info("--- Election: CONFIRMED CANDIDATES ---")
             progress.begin("confirmed_candidates")
+            confirmed_open = True  # until the phase is marked done or skipped
             try:
                 # Weekly, not nightly: this sweeps every state that has no
                 # hand-verified source, and what it looks for — a state
@@ -859,50 +891,33 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                         "Source crawl: %d state(s) adopted%s",
                         len(adopted), f" — {adopted}" if adopted else "",
                     )
-
                 # The election-season ballot sync may be mid-pass; two
                 # passes writing the same Candidate rows at once is the one
                 # thing to avoid, and that pass is doing this step anyway.
-                if is_ballot_sync_running():
-                    progress.complete("confirmed_candidates", detail="skipped (ballot sync running)")
-                    raise _BallotSyncRunning
-                confirm_result, filing_result = await _sync_ballots(db, client, cycle)
-                confirmed_total = sum(r["confirmed"] for r in confirm_result.values())
-                logger.info("Confirmed candidates: %s", confirm_result)
-                if filing_result:
-                    logger.info("Ballot filings: %s", filing_result)
-
-                # The admin dashboard's only window into this phase beyond
-                # a bare total — which states are actually configured, and
-                # whether this week's crawl (Sundays only) found anything
-                # new — was previously log-only (2026-09 gap: an admin
-                # reading the dashboard had no way to tell "16 states
-                # confirmed" from "every state failed but one").
-                configured_states = sorted(
-                    s for s, r in confirm_result.items() if r["status"] == "ok"
-                )
-                detail = f"{confirmed_total} confirmed across {len(configured_states)} states"
-                # Non-federal nominees are stored, not "confirmed"
-                # against an FEC row, so they are invisible in the count
-                # above — and there can be a lot of them (Rhode Island
-                # alone stores 9 executive and 133 legislative). Reporting
-                # only the federal number would let a run that did most of
-                # its work off-ballot look like a quiet one, which is the
-                # same misreading this detail line was added to prevent.
-                non_federal = sum(
-                    r.get("statewide", 0) + r.get("stateLeg", 0) for r in confirm_result.values()
-                )
-                if non_federal:
-                    detail += f"; {non_federal} state-office nominees"
-                if adopted:
-                    detail += f"; crawler adopted {len(adopted)} this week: {', '.join(sorted(adopted))}"
-                progress.complete("confirmed_candidates", detail=detail)
-            except _BallotSyncRunning:
-                logger.info("Confirmed-candidate phase skipped — the ballot sync is running")
+                # Holding the sync's tracker and lease (lease.tracked_job, as
+                # the scheduled sync does), so a sync in this process or
+                # another can't start beside this pass.
+                async with lease.tracked_job_async(
+                    lease.BALLOT_SYNC, _ballot_tracker, who="Election pipeline's confirmed-candidate phase",
+                ) as granted:
+                    if not granted:
+                        progress.skip(
+                            "confirmed_candidates", detail=f"skipped: {granted.why}{_adopted_detail(adopted)}",
+                        )
+                    else:
+                        detail = await _confirmed_candidates_phase(db, client, cycle)
+                        progress.complete("confirmed_candidates", detail=detail + _adopted_detail(adopted))
+                    confirmed_open = False
+            except lease.CutOff as cut:
+                db.rollback()
+                logger.warning("Confirmed-candidate phase: %s — continuing", cut)
+                if confirmed_open:
+                    progress.fail("confirmed_candidates")
             except Exception:
                 db.rollback()
                 logger.exception("Confirmed-candidate sync failed — continuing")
-                progress.fail("confirmed_candidates")
+                if confirmed_open:
+                    progress.fail("confirmed_candidates")
 
             run.current_phase = "measures"
             db.commit()
@@ -937,64 +952,90 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
             except Exception:
                 logger.exception("Ballot lookup link verification failed — continuing")
 
-            # Coverage + posting share an in-process tracker with the
-            # 15-minute election-season refresh (scheduler.py) so the two
-            # entry points can't interleave — concurrent passes would
-            # double-ingest and double-post (2026-07 review B3). If a
-            # refresh is mid-flight right now, skip these two phases; the
-            # in-season cadence re-covers them within 15 minutes.
+            # Coverage + posting are also run by the 15-minute
+            # election-season refresh (scheduler.py); concurrent passes would
+            # double-ingest and double-post (2026-07 review B3). Holding the
+            # refresh's lease and tracker (lease.tracked_job, as the refresh
+            # does), so a refresh in this process or another can't run
+            # beside this pass; if one is mid-flight, these two phases are
+            # skipped and the in-season cadence re-covers them within 15
+            # minutes. A failure here (taking the guards included) fails
+            # whichever of these phases hadn't finished, not the rest of
+            # the run.
             from app.pipeline.analyze.election_coverage import (
                 coverage_tracker,
                 ingest_race_coverage,
-                is_coverage_refresh_running,
             )
 
-            if is_coverage_refresh_running():
-                logger.info(
-                    "Election coverage/posting phases skipped — a coverage "
-                    "refresh is already running",
-                )
-                progress.complete("coverage_ingestion", detail="skipped (refresh running)")
-                progress.complete("bluesky_posting", detail="skipped (refresh running)")
-            else:
-                coverage_tracker().start()
-                try:
-                    run.current_phase = "coverage"
-                    db.commit()
-                    logger.info("--- Election: COVERAGE INGESTION ---")
-                    progress.begin("coverage_ingestion")
-                    try:
-                        ingested = await ingest_race_coverage(db, client)
-                        run.coverage_items_ingested = ingested
-                        logger.info("Ingested %d coverage items", ingested)
-                        progress.complete("coverage_ingestion", detail=f"{ingested} items")
-                    except Exception:
-                        db.rollback()
-                        logger.exception("Coverage ingestion failed — continuing")
-                        progress.fail("coverage_ingestion")
+            coverage_open = ["coverage_ingestion", "bluesky_posting"]  # phases not yet finished
+            try:
+                async with lease.tracked_job_async(
+                    lease.COVERAGE_REFRESH, coverage_tracker(), who="Election pipeline's coverage/posting phases",
+                ) as granted:
+                    if not granted:
+                        for phase in coverage_open:
+                            progress.skip(phase, detail=f"skipped: {granted.why}")
+                        coverage_open.clear()
+                    else:
+                        # The cut-off fires only at an await; the posting
+                        # loop, which doesn't await, stops here itself.
+                        coverage_deadline = lease.deadline(lease.COVERAGE_REFRESH)
+                        run.current_phase = "coverage"
+                        db.commit()
+                        logger.info("--- Election: COVERAGE INGESTION ---")
+                        progress.begin("coverage_ingestion")
+                        try:
+                            ingested = await ingest_race_coverage(db, client)
+                            run.coverage_items_ingested = ingested
+                            logger.info("Ingested %d coverage items", ingested)
+                            progress.complete("coverage_ingestion", detail=f"{ingested} items")
+                        except Exception:
+                            db.rollback()
+                            logger.exception("Coverage ingestion failed — continuing")
+                            progress.fail("coverage_ingestion")
+                        coverage_open.remove("coverage_ingestion")
 
-                    run.current_phase = "posting"
-                    db.commit()
-                    logger.info("--- Election: BLUESKY POSTING ---")
-                    progress.begin("bluesky_posting")
-                    try:
-                        # Re-derive the relevance cut from the corpus this
-                        # run just ingested, before it gates that corpus —
-                        # same order and same stale-beats-nothing failure
-                        # mode as explore_ranking.calibrate_and_store.
-                        from app.pipeline.analyze import race_relevance
-                        race_relevance.calibrate_and_store(db)
+                        run.current_phase = "posting"
+                        db.commit()
+                        logger.info("--- Election: BLUESKY POSTING ---")
+                        progress.begin("bluesky_posting")
+                        try:
+                            if time.monotonic() >= coverage_deadline:
+                                # The calibration and the posting loop don't
+                                # await, so the cut-off can't stop them; not
+                                # starting them past the deadline keeps them
+                                # inside the guards (each is minutes at most,
+                                # within the lease's stale window).
+                                raise lease.CutOff("Election pipeline's posting phase reached its deadline")
+                            # Re-derive the relevance cut from the corpus this
+                            # run just ingested, before it gates that corpus —
+                            # same order and same stale-beats-nothing failure
+                            # mode as explore_ranking.calibrate_and_store.
+                            from app.pipeline.analyze import race_relevance
+                            race_relevance.calibrate_and_store(db)
 
-                        from app.pipeline.analyze.election_bluesky import post_race_coverage_updates
-                        posted = post_race_coverage_updates(db)
-                        logger.info("Posted %d race coverage updates", posted)
-                        progress.complete("bluesky_posting", detail=f"{posted} posted")
-                    except Exception:
-                        db.rollback()
-                        logger.exception("Bluesky posting failed — continuing")
-                        progress.fail("bluesky_posting")
-                finally:
-                    coverage_tracker().stop()
+                            from app.pipeline.analyze.election_bluesky import post_race_coverage_updates
+                            posted = post_race_coverage_updates(db, deadline=coverage_deadline)
+                            logger.info("Posted %d race coverage updates", posted)
+                            progress.complete("bluesky_posting", detail=f"{posted} posted")
+                        except lease.CutOff as cut:
+                            logger.warning("%s — its items wait for the next run", cut)
+                            progress.skip("bluesky_posting", detail="skipped: reached its deadline")
+                        except Exception:
+                            db.rollback()
+                            logger.exception("Bluesky posting failed — continuing")
+                            progress.fail("bluesky_posting")
+                        coverage_open.remove("bluesky_posting")
+            except lease.CutOff as cut:
+                db.rollback()
+                logger.warning("Election coverage/posting phases: %s — continuing", cut)
+                for phase in coverage_open:
+                    progress.fail(phase)
+            except Exception:
+                db.rollback()
+                logger.exception("Election coverage/posting phases failed — continuing")
+                for phase in coverage_open:
+                    progress.fail(phase)
 
             run.current_phase = "snapshot"
             db.commit()
@@ -1038,5 +1079,5 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
             logger.exception("Failed to record election pipeline failure")
         return {"status": PipelineStatus.FAILED, "error": summary}
     finally:
-        _tracker.stop()
+        _tracker.stop(_run_token)
         db.close()

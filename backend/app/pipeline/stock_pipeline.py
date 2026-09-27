@@ -21,31 +21,43 @@ PresidentTrade's docstring.
 
 import logging
 import time
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 import httpx
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.http_client import make_async_client
+from app.pipeline.cache import api_cache_get, api_cache_set
 from app.models import (
     PipelineRun, HousePipelineRun, PipelineStatus, President, PresidentTrade,
-    Representative, Senator, StockTrade, RepStockTrade, StockTradesPipelineRun,
+    StockTrade, RepStockTrade, StockTradesPipelineRun,
 )
 from app.pipeline.fetch.house_ptr import fetch_and_parse_ptr as fetch_house_ptr, fetch_ptr_filing_index
 from app.pipeline.fetch.president_ptr import (
     fetch_and_parse_ptr as fetch_president_ptr,
     fetch_ptr_filing_index as fetch_president_ptr_index,
 )
+from app.pipeline.fetch.ptr_common import PARSER_VERSION as PTR_PARSER_VERSION
 from app.pipeline.fetch.ptr_common import TradeRow
 from app.pipeline.fetch.sec_tickers import resolve_tickers
+from app.holdings_schedule import HOLDINGS_STEPS, PTR_REREAD_BUDGET
+from app.pipeline.holdings_pipeline import run_holdings_phases
+from app.pipeline.filer_matching import FilerMatcher, current_representatives, current_senators
+from app.pipeline.filer_matching import match_representative as _match_representative
+from app.pipeline.filer_matching import match_senator as _match_senator
+from app.pipeline.fetch.senate_fd import is_senator_filing
 from app.pipeline.fetch.senate_ptr import (
     accept_terms as senate_accept_terms,
     fetch_and_parse_ptr as fetch_senate_ptr,
     search_ptr_filings,
+    senate_filing_id,
 )
 from app.pipeline.progress_tracker import ProgressTracker
-from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
+from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, MEMBER_PIPELINE_RUNNING, acquire_tracked_run, run_in_progress, skip_reason_text
 from app.pipeline.transform.industry_classifier import classify_batch_with_learning
 from app.time_utils import utcnow
 
@@ -55,7 +67,12 @@ STOCK_PIPELINE_STEPS = [
     ("house_ptr",     "fetch", "Ingest House PTR filings"),
     ("senate_ptr",    "fetch", "Ingest Senate PTR filings"),
     ("president_ptr", "fetch", "Ingest presidential 278-T filings"),
+    *HOLDINGS_STEPS,
 ]
+# Every step that isn't a holdings step — derived, so a trade phase added to
+# the list above can't be left out of the run-status rule.
+_HOLDINGS_STEP_KEYS = {step for step, _, _ in HOLDINGS_STEPS}
+TRADE_STEPS = tuple(step for step, _, _ in STOCK_PIPELINE_STEPS if step not in _HOLDINGS_STEP_KEYS)
 
 # How far back to search on a cold start (no existing Senate trades in the
 # DB). The House walks whole yearly filing indexes instead (_ingest_house).
@@ -98,70 +115,12 @@ def _other_pipeline_running(db: Session) -> bool:
     a killed process — a deploy restarting the container mid-run) used
     to block Stock forever, with no auto-clear anywhere in this check.
     Confirmed live: this is what left stock-trades data stale for 4+
-    days after a since-fixed deploy-race incident. A row this old is
-    treated as dead, not as "still running" — same STALE_PIPELINE_TIMEOUT
-    bar acquire_pipeline_lock uses to actually clear these rows, so this
-    check and the thing that eventually cleans them up agree on what
-    "stuck" means.
+    days after a since-fixed deploy-race incident. Liveness is
+    run_tracker.live_run's — the same test every other reader and the
+    run locks apply — so this check and the thing that eventually cleans
+    these rows up agree on what "stuck" means.
     """
-    for model in (PipelineRun, HousePipelineRun):
-        running = db.query(model).filter(model.status == PipelineStatus.RUNNING).first()
-        if running and utcnow() - running.started_at <= STALE_PIPELINE_TIMEOUT:
-            return True
-    return False
-
-
-def _match_senator(db: Session, last: str, first: str) -> Senator | None:
-    if not last:
-        return None
-    candidates = (
-        db.query(Senator)
-        .filter(Senator.is_current == True, Senator.name.ilike(f"%{last}%"))  # noqa: E712
-        .all()
-    )
-    if len(candidates) == 1:
-        return candidates[0]
-    if first:
-        for c in candidates:
-            if first.lower() in c.name.lower():
-                return c
-    # Ambiguous (multiple same-last-name matches, none disambiguated by
-    # first name) — skip rather than guess which one filed the PTR.
-    return None
-
-
-def _match_representative(db: Session, last: str, first: str, state_district: str) -> Representative | None:
-    if not last:
-        return None
-    state = state_district[:2] if state_district else None
-    # The House FD index supplies the FULL district ("CA27"), and
-    # Representative.district exists — so filter on it. Previously only the
-    # state was used, leaving same-state same-surname pairs to a fragile
-    # first-name substring match that silently skipped the filing every run
-    # whenever the formal filing name differed from the display name
-    # ("Michael" vs "Mike"). District makes the match exact for all 435
-    # voting seats.
-    district: int | None = None
-    if state_district and len(state_district) > 2 and state_district[2:].isdigit():
-        district = int(state_district[2:])
-
-    query = db.query(Representative).filter(
-        Representative.is_current == True, Representative.name.ilike(f"%{last}%")  # noqa: E712
-    )
-    if state:
-        query = query.filter(Representative.state == state)
-    if district is not None:
-        query = query.filter(Representative.district == district)
-    candidates = query.all()
-    if len(candidates) == 1:
-        return candidates[0]
-    if first:
-        for c in candidates:
-            if first.lower() in c.name.lower():
-                return c
-    # Ambiguous (multiple same-last-name matches, none disambiguated by
-    # first name) — skip rather than guess which one filed the PTR.
-    return None
+    return any(run_in_progress(db, model) for model in (PipelineRun, HousePipelineRun))
 
 
 def _compute_days_to_disclose(transaction_date: str, disclosure_date: str) -> int:
@@ -236,41 +195,50 @@ async def _classify_rows_industry(
             row.industry = industry
 
 
+def _trade(model, *, row: TradeRow, **owner):
+    """A stored trade row of `model` (StockTrade, RepStockTrade or
+    PresidentTrade) for one parsed transaction; `owner` names the filer
+    (senator_id=, representative_id= or president_id=). The one place a
+    parsed row becomes a stored one, for every chamber and for re-reads."""
+    return model(
+        **owner,
+        ticker=row.ticker,
+        asset_name=row.asset_name,
+        owner=row.owner,
+        transaction_type=row.transaction_type,
+        transaction_date=row.transaction_date,
+        disclosure_date=row.disclosure_date,
+        days_to_disclose=_compute_days_to_disclose(row.transaction_date, row.disclosure_date),
+        amount_low=row.amount_low,
+        amount_high=row.amount_high,
+        industry=row.industry or "UNCLASSIFIED",
+        source_url=row.source_url,
+        filing_id=row.filing_id,
+        parse_confidence=row.parse_confidence,
+        parser_version=PTR_PARSER_VERSION,
+    )
+
+
 async def _ingest_house(db: Session, client: httpx.AsyncClient) -> int:
     existing_rep_filing_ids = {row[0] for row in db.query(RepStockTrade.filing_id).all()}
 
     current_year = utcnow().year
     inserted = 0
+    match = FilerMatcher(current_representatives(db), _match_representative)
     for year in (current_year - 1, current_year):
         filings = await fetch_ptr_filing_index(client, db, year)
         for filing in filings:
             if filing["doc_id"] in existing_rep_filing_ids:
                 continue
-            rep = _match_representative(db, filing["last"], filing["first"], filing["state_district"])
-            if rep is None:
+            rep_id = match(filing["last"], filing["first"], filing["state_district"])
+            if rep_id is None:
                 continue
             rows = await fetch_house_ptr(client, db, filing)
             if not rows:
                 continue
             await _classify_rows_industry(db, client, rows)
             for row in rows:
-                days = _compute_days_to_disclose(row.transaction_date, row.disclosure_date)
-                db.add(RepStockTrade(
-                    representative_id=rep.id,
-                    ticker=row.ticker,
-                    asset_name=row.asset_name,
-                    owner=row.owner,
-                    transaction_type=row.transaction_type,
-                    transaction_date=row.transaction_date,
-                    disclosure_date=row.disclosure_date,
-                    days_to_disclose=days,
-                    amount_low=row.amount_low,
-                    amount_high=row.amount_high,
-                    industry=row.industry or "UNCLASSIFIED",
-                    source_url=row.source_url,
-                    filing_id=row.filing_id,
-                    parse_confidence=row.parse_confidence,
-                ))
+                db.add(_trade(RepStockTrade, representative_id=rep_id, row=row))
                 inserted += 1
             existing_rep_filing_ids.add(filing["doc_id"])
     db.commit()
@@ -306,39 +274,141 @@ async def _ingest_senate(db: Session, client: httpx.AsyncClient) -> int:
 
     filings = await search_ptr_filings(since_date)
     inserted = 0
+    match = FilerMatcher(current_senators(db), _match_senator)
     for filing in filings:
-        filing_id = filing["report_url"].rstrip("/").rsplit("/", 1)[-1]
+        filing_id = senate_filing_id(filing["report_url"])
         if filing_id in existing_filing_ids:
             continue
-        senator = _match_senator(db, filing["last"], filing["first"])
-        if senator is None:
+        if filing.get("office") and not is_senator_filing(filing):
+            # A former senator's (or anyone else's) filing: never attributed
+            # to a sitting senator who happens to share the surname.
+            continue
+        senator_id = match(filing["last"], filing["first"], filing.get("office"))
+        if senator_id is None:
             continue
         rows = await fetch_senate_ptr(client, db, filing)
         if not rows:
             continue
         await _classify_rows_industry(db, client, rows)
         for row in rows:
-            days = _compute_days_to_disclose(row.transaction_date, row.disclosure_date)
-            db.add(StockTrade(
-                senator_id=senator.id,
-                ticker=row.ticker,
-                asset_name=row.asset_name,
-                owner=row.owner,
-                transaction_type=row.transaction_type,
-                transaction_date=row.transaction_date,
-                disclosure_date=row.disclosure_date,
-                days_to_disclose=days,
-                amount_low=row.amount_low,
-                amount_high=row.amount_high,
-                industry=row.industry or "UNCLASSIFIED",
-                source_url=row.source_url,
-                filing_id=row.filing_id,
-                parse_confidence=row.parse_confidence,
-            ))
+            db.add(_trade(StockTrade, senator_id=senator_id, row=row))
             inserted += 1
         existing_filing_ids.add(filing_id)
     db.commit()
     return inserted
+
+
+@dataclass(frozen=True)
+class _StoredSource:
+    """One trade table whose stored filings can be read again: `fetch`
+    takes a filing's stored id, source URL and the filed date its stored
+    rows carry, if any."""
+    label: str
+    model: type
+    owner_key: str
+    fetch: Callable[[str, str, str | None], Awaitable[list[TradeRow]]]
+
+
+# A filing that didn't read is not tried again for this long, so a few dead
+# links can't spend every night's budget ahead of the filings that do read;
+# one that never reads again costs a request a month.
+_REREAD_RETRY_HOURS = 24 * 30
+_REREAD_TIER = "ptr_reread"
+# This many failures in a row with nothing read looks like the source being
+# down: its re-read stops for the night, and they sit out the next one.
+_REREAD_OUTAGE_AFTER = 5
+# Past the next night's run and short of the one after, whatever time each
+# starts: the nightly chain's stages run for hours, so the re-read's start
+# drifts by that much from night to night.
+_SIT_OUT_A_NIGHT = timedelta(hours=36)
+
+
+async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
+    """Read stored filings again when an older ptr_common.PARSER_VERSION
+    read them, replacing their rows — the Senate's first (its owners were
+    misread), newest first within each, until PTR_REREAD_BUDGET is spent.
+    Every stored row names its filing's URL, so this needs no search or
+    index, whose windows reach back only weeks. A filing that doesn't read
+    keeps its rows and waits _REREAD_RETRY_HOURS — or sits out a night, when
+    its source read nothing that night, which may be the source being down,
+    not the filing. Returns filings re-read."""
+    sources = [
+        _StoredSource("Senate", StockTrade, "senator_id", lambda _fid, url, filed: fetch_senate_ptr(
+            client, db, {"report_url": url, "is_paper": "/view/paper/" in url, "stored_filed_date": filed},
+        )),
+        _StoredSource("House", RepStockTrade, "representative_id", lambda fid, url, _filed: fetch_house_ptr(
+            client, db, {"doc_id": fid, "pdf_url": url},
+        )),
+        _StoredSource("President", PresidentTrade, "president_id", lambda fid, url, _filed: fetch_president_ptr(
+            db, {"doc_id": fid, "pdf_url": url},
+        )),
+    ]
+    deadline = time.monotonic() + PTR_REREAD_BUDGET.total_seconds()
+    reread = 0
+    for source in sources:
+        model = source.model
+        query = db.query(
+            model.filing_id,
+            func.min(model.source_url),
+            # A filed date the rows really carry: an electronic row stored
+            # before the filed-date fix has its transaction date there. A
+            # same-day filing's rows are left out too, which loses nothing:
+            # the parser's fallback for its disclosure date is that same day.
+            func.max(case((model.disclosure_date != model.transaction_date, model.disclosure_date))),
+        ).filter(model.parser_version < PTR_PARSER_VERSION)
+        stale = query.group_by(model.filing_id).order_by(func.max(model.disclosure_date).desc()).all()
+        if stale and source.label == "Senate" and await senate_accept_terms(client) is None:
+            logger.warning("Senate PTR re-read skipped: no eFD session")
+            continue
+        read, failed = 0, []
+        for position, (filing_id, url, filed) in enumerate(stale):
+            if time.monotonic() >= deadline:
+                logger.info("PTR re-read: time budget spent — %d %s filings wait", len(stale) - position, source.label)
+                break
+            failed_key = f"failed-{source.label}-{filing_id}"
+            marker = api_cache_get(db, _REREAD_TIER, failed_key, max_age_hours=_REREAD_RETRY_HOURS)
+            # A marker that names no time is one written before markers did,
+            # which waits out its month (the max_age above).
+            if marker is not None and marker.get("retry_after", "9999") > utcnow().isoformat():
+                continue
+            try:
+                rows = await source.fetch(filing_id, url, filed)
+                if rows:
+                    await _classify_rows_industry(db, client, rows)
+            except Exception:
+                logger.exception("PTR re-read of %s filing %s failed", source.label, filing_id)
+                db.rollback()
+                rows = []
+            if not rows:
+                failed.append((failed_key, url))
+                if not read and len(failed) >= _REREAD_OUTAGE_AFTER:
+                    break
+                continue
+            stored = db.query(model).filter(model.filing_id == filing_id)
+            filer = getattr(stored.first(), source.owner_key)
+            stored.delete(synchronize_session="fetch")
+            for row in rows:
+                db.add(_trade(model, row=row, **{source.owner_key: filer}))
+            db.commit()
+            read += 1
+        reread += read
+        # A failure beside filings that read is the filing's: it waits a
+        # month. On a night nothing read it may be the source's, down: the
+        # filings sit out the next night — whenever the chain reaches the
+        # re-read, dead links at the head of the order let it reach the
+        # filings behind them — and are tried the night after.
+        wait = timedelta(hours=_REREAD_RETRY_HOURS) if read else _SIT_OUT_A_NIGHT
+        if failed and not read:
+            logger.warning("PTR re-read: %s read nothing (%d failed) — they sit out a night, not a month",
+                           source.label, len(failed))
+        for failed_key, url in failed:
+            api_cache_set(
+                db, _REREAD_TIER, failed_key, {"url": url, "retry_after": (utcnow() + wait).isoformat()},
+                normal_ttl_hours=_REREAD_RETRY_HOURS,
+            )
+        if time.monotonic() >= deadline:
+            break
+    return reread
 
 
 async def _ingest_president(db: Session, client: httpx.AsyncClient) -> int:
@@ -381,23 +451,7 @@ async def _ingest_president(db: Session, client: httpx.AsyncClient) -> int:
             continue
         await _classify_rows_industry(db, client, rows)
         for row in rows:
-            days = _compute_days_to_disclose(row.transaction_date, row.disclosure_date)
-            db.add(PresidentTrade(
-                president_id=president.id,
-                ticker=row.ticker,
-                asset_name=row.asset_name,
-                owner=row.owner,
-                transaction_type=row.transaction_type,
-                transaction_date=row.transaction_date,
-                disclosure_date=row.disclosure_date,
-                days_to_disclose=days,
-                amount_low=row.amount_low,
-                amount_high=row.amount_high,
-                industry=row.industry or "UNCLASSIFIED",
-                source_url=row.source_url,
-                filing_id=row.filing_id,
-                parse_confidence=row.parse_confidence,
-            ))
+            db.add(_trade(PresidentTrade, president_id=president.id, row=row))
             inserted += 1
         existing_filing_ids.add(filing["doc_id"])
     db.commit()
@@ -412,10 +466,11 @@ async def run_stock_trades_pipeline() -> dict:
     filings does not prevent the others from being ingested.
     """
     db: Session = SessionLocal()
+    _run_token = None  # no run of ours for the finally to stop until start() below
     try:
         if _other_pipeline_running(db):
             logger.info("Stock trades pipeline skipped — a member pipeline is currently running")
-            return {"status": "skipped", "reason": "member_pipeline_running"}
+            return {"status": "skipped", "reason": MEMBER_PIPELINE_RUNNING}
 
         # Same reasoning as senate_pipeline.py's own lock: until 2026-07-23
         # this was an unconditional insert with no lock at all, so a row
@@ -423,12 +478,11 @@ async def run_stock_trades_pipeline() -> dict:
         # every future Stock run via _other_pipeline_running's check above
         # (which any OTHER pipeline's own stuck row would also trip) and
         # this one (a stuck STOCK row blocking Stock's own next attempt).
-        run = acquire_pipeline_lock(db, StockTradesPipelineRun, STALE_PIPELINE_TIMEOUT)
+        run, _run_token, refused = acquire_tracked_run(db, StockTradesPipelineRun, STALE_PIPELINE_TIMEOUT, _tracker)
         if run is None:
-            logger.info("Stock trades pipeline already running in another process — skipping")
-            return {"status": "skipped", "reason": "already_running"}
+            logger.warning("Stock trades pipeline not started: %s", skip_reason_text(refused))
+            return {"status": "skipped", "reason": refused}
 
-        _tracker.start()
         start_time = time.time()
         progress = ProgressTracker(run, STOCK_PIPELINE_STEPS, db, start_time)
 
@@ -436,6 +490,7 @@ async def run_stock_trades_pipeline() -> dict:
         senate_count = 0
         president_count = 0
         error_parts: list[str] = []
+        failed_steps: set[str] = set()
         async with make_async_client() as client:
             progress.begin("house_ptr")
             try:
@@ -451,6 +506,7 @@ async def run_stock_trades_pipeline() -> dict:
                 db.rollback()
                 error_parts.append("House: failed — see server logs")
                 progress.fail("house_ptr")
+                failed_steps.add("house_ptr")
             progress.begin("senate_ptr")
             try:
                 senate_count = await _ingest_senate(db, client)
@@ -460,6 +516,7 @@ async def run_stock_trades_pipeline() -> dict:
                 db.rollback()
                 error_parts.append("Senate: failed — see server logs")
                 progress.fail("senate_ptr")
+                failed_steps.add("senate_ptr")
             progress.begin("president_ptr")
             try:
                 president_count = await _ingest_president(db, client)
@@ -469,20 +526,42 @@ async def run_stock_trades_pipeline() -> dict:
                 db.rollback()
                 error_parts.append("President: failed — see server logs")
                 progress.fail("president_ptr")
+                failed_steps.add("president_ptr")
+            # Stored filings an older parser read. Not a trade phase of its
+            # own: a failure here is logged and reported, and leaves the
+            # night's new trades, already committed, as they are.
+            try:
+                reread = await _reread_trades(db, client)
+                if reread:
+                    logger.info("PTR re-read: %d stored filings read again", reread)
+            except Exception:
+                logger.exception("PTR re-read failed")
+                db.rollback()
+                error_parts.append("Re-read of stored filings: failed — see server logs")
+            # Annual-report holdings: same sources, same best-effort
+            # isolation (a failure leaves the trade rows above committed and
+            # the stored holdings untouched). The phases live in
+            # holdings_pipeline.py, which reports its own failures.
+            holdings_counts, holdings_errors = await run_holdings_phases(db, client, progress)
+            error_parts.extend(holdings_errors)
 
         elapsed = round(time.time() - start_time, 1)
         logger.info(
-            "Stock trades pipeline: %d House rows, %d Senate rows, %d presidential rows",
+            "Stock trades pipeline: %d House rows, %d Senate rows, %d presidential rows; "
+            "%d House / %d Senate holdings",
             house_count, senate_count, president_count,
+            holdings_counts["house_holdings"], holdings_counts["senate_holdings"],
         )
 
-        # FAILED only when every phase failed — one source being down still
-        # leaves the run's other ingested rows valid.
-        run.status = (
-            PipelineStatus.FAILED
-            if len(error_parts) == len(STOCK_PIPELINE_STEPS)
-            else PipelineStatus.COMPLETED
-        )
+        # FAILED only when every trade phase failed — one source being down
+        # still leaves the run's other rows valid. The holdings phases don't
+        # count toward it either way: two healthy holdings phases must not
+        # mark a run COMPLETED whose trade ingest is entirely dead (the
+        # staleness alert would never fire), and a holdings-only outage must
+        # not report stock trades as stale — run_holdings_phases raises its
+        # own ops alert for that.
+        trade_failures = sum(step in failed_steps for step in TRADE_STEPS)
+        run.status = PipelineStatus.FAILED if trade_failures == len(TRADE_STEPS) else PipelineStatus.COMPLETED
         run.completed_at = utcnow()
         run.house_trades_ingested = house_count
         run.senate_trades_ingested = senate_count
@@ -493,8 +572,11 @@ async def run_stock_trades_pipeline() -> dict:
 
         return {
             "status": run.status, "house_trades": house_count, "senate_trades": senate_count,
-            "president_trades": president_count, "elapsed_seconds": elapsed,
+            "president_trades": president_count,
+            "house_holdings": holdings_counts["house_holdings"],
+            "senate_holdings": holdings_counts["senate_holdings"],
+            "elapsed_seconds": elapsed,
         }
     finally:
-        _tracker.stop()
+        _tracker.stop(_run_token)
         db.close()

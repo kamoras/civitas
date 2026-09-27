@@ -12,6 +12,8 @@ import { fetchSenatorVotes, fetchRepVotes } from "@/lib/api";
 import CollapsibleSection from "../shared/CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
 import { PARTY_BADGE, policyAreaBadgeClass } from "@/lib/partyStyles";
+import Pagination from "@/components/shared/Pagination";
+import { useLatestRequest } from "@/hooks/useLatestRequest";
 
 const VOTES_PER_PAGE = 15;
 
@@ -248,69 +250,6 @@ function VoteFilter({
   );
 }
 
-function Pagination({
-  page,
-  totalPages,
-  onPageChange,
-}: {
-  page: number;
-  totalPages: number;
-  onPageChange: (p: number) => void;
-}) {
-  if (totalPages <= 1) return null;
-
-  const pages: (number | "...")[] = [];
-  for (let i = 1; i <= totalPages; i++) {
-    if (i === 1 || i === totalPages || (i >= page - 1 && i <= page + 1)) {
-      pages.push(i);
-    } else if (pages[pages.length - 1] !== "...") {
-      pages.push("...");
-    }
-  }
-
-  return (
-    <div className="flex items-center justify-center gap-1 mt-4">
-      <button
-        onClick={() => onPageChange(page - 1)}
-        disabled={page === 1}
-        aria-label="Previous page"
-        className="text-xs px-2 py-1 font-mono text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed"
-      >
-        &lt; PREV
-      </button>
-      {pages.map((p, i) =>
-        p === "..." ? (
-          <span key={`dot-${i}`} className="text-ink-min text-xs px-1">
-            ...
-          </span>
-        ) : (
-          <button
-            key={p}
-            onClick={() => onPageChange(p)}
-            aria-label={`Page ${p}`}
-            aria-current={p === page ? "page" : undefined}
-            className={`text-xs w-7 h-7 font-mono border transition-all ${
-              p === page
-                ? "text-ink-hi border-white/15 bg-white/[0.03]"
-                : "text-ink-min border-transparent hover:border-white/[0.07]"
-            }`}
-          >
-            {p}
-          </button>
-        )
-      )}
-      <button
-        onClick={() => onPageChange(page + 1)}
-        disabled={page === totalPages}
-        aria-label="Next page"
-        className="text-xs px-2 py-1 font-mono text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed"
-      >
-        NEXT &gt;
-      </button>
-    </div>
-  );
-}
-
 type VoteFilterType = "all" | "yea" | "nay" | "against-party";
 
 function PaginatedVoteList({
@@ -324,31 +263,18 @@ function PaginatedVoteList({
   voteCount: number;
   chamber?: "senate" | "house";
 }) {
-  const [filter, setFilter] = useState<VoteFilterType>("all");
-  const [data, setData] = useState<PaginatedVotes | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // `filter` is the one last asked for, `shownFilter` the one the votes on
+  // screen were fetched with.
+  const {
+    data, loading, error, requested: filter, shown: shownFilter, request,
+  } = useLatestRequest<PaginatedVotes, VoteFilterType>("all", "Failed to load votes");
 
   const fetchVotes = useCallback(
-    async (p: number, f: VoteFilterType) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const fetcher = chamber === "house" ? fetchRepVotes : fetchSenatorVotes;
-        const result = await fetcher(senatorId, {
-          category,
-          page: p,
-          perPage: VOTES_PER_PAGE,
-          filter: f,
-        });
-        setData(result);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load votes");
-      } finally {
-        setLoading(false);
-      }
+    (p: number, f: VoteFilterType) => {
+      const fetcher = chamber === "house" ? fetchRepVotes : fetchSenatorVotes;
+      request(f, () => fetcher(senatorId, { category, page: p, perPage: VOTES_PER_PAGE, filter: f }));
     },
-    [senatorId, category, chamber]
+    [request, senatorId, category, chamber]
   );
 
   useEffect(() => {
@@ -358,12 +284,11 @@ function PaginatedVoteList({
   }, [fetchVotes, voteCount]);
 
   const handleFilterChange = (f: VoteFilterType) => {
-    setFilter(f);
     fetchVotes(1, f);
   };
 
   const handlePageChange = (p: number) => {
-    fetchVotes(p, filter);
+    fetchVotes(p, shownFilter);
   };
 
   if (voteCount === 0) return null;
@@ -376,7 +301,7 @@ function PaginatedVoteList({
     );
   }
 
-  if (error) {
+  if (error && !data) {
     return (
       <div className="panel p-4 text-center" role="alert">
         <span className="text-signal-red text-sm">{error}</span>
@@ -424,13 +349,27 @@ function PaginatedVoteList({
         </div>
       )}
 
+      {error && (
+        // A failed filter or page change keeps the last votes that loaded.
+        <p className="text-signal-red text-sm mb-2" role="alert">
+          {error}
+        </p>
+      )}
+
       <div className="space-y-2">
         {data.votes.map((vote) => (
           <VoteCard key={`${category}-${vote.billId}`} vote={vote} expandable />
         ))}
       </div>
 
-      <Pagination page={data.page} totalPages={data.totalPages} onPageChange={handlePageChange} />
+      <Pagination
+        numbered
+        page={data.page}
+        totalPages={data.totalPages}
+        onPageChange={handlePageChange}
+        // The pages of a list a filter change is replacing.
+        disabled={loading && filter !== shownFilter}
+      />
     </div>
   );
 }

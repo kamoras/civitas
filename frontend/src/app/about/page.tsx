@@ -435,7 +435,9 @@ export default function AboutPage() {
                   <Cite id="34">Volden &amp; Wiseman 2014</Cite> Legislative Effectiveness Score.
                   Each sponsored bill counts, by significance (5x for bills and joint resolutions,
                   1x for simple and concurrent resolutions), at every stage it reaches: introduced,
-                  committee action, passed its chamber, became law. At each stage the member&apos;s
+                  committee action, passed its chamber, became law. (Bills pages also show when a
+                  bill is on the floor, debated but not yet passed; for this score that still
+                  counts as committee action.) At each stage the member&apos;s
                   count is divided by the chamber&apos;s total at that stage, and the stages are
                   added up so that the average member scores 1.0. Few bills get far, so the later
                   stages have small totals, and a bill that becomes law counts for about as much as

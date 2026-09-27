@@ -1,3 +1,5 @@
+import type { DisclosureOwner } from "@/lib/disclosures";
+
 export interface SponsoredBill {
   billId: string;
   title: string;
@@ -43,7 +45,7 @@ export interface Senator {
         "high" | "medium" | "low"
       >
     > & {
-      /** "typical:few-votes" | "neutral:few-votes" | "neutral:no-expectation" | "shrunk:<share kept>" | "shrunk-neutral:<share kept>" | "full" */
+      /** "neutral:few-votes" | "neutral:no-expectation" | "shrunk:<share kept>" | "full" */
       constituentAlignmentVotePart?: string;
     };
   };
@@ -130,9 +132,7 @@ export interface PolicyAreaDetail {
 export interface StockTrade {
   ticker: string | null;
   assetName: string;
-  // "unknown": the form didn't state whose it is in a way the parser
-  // recognizes — never guessed to be the member's.
-  owner: "self" | "spouse" | "joint" | "dependent" | "unknown";
+  owner: DisclosureOwner;
   transactionType: "purchase" | "sale_full" | "sale_partial" | "exchange";
   transactionDate: string;
   disclosureDate: string;
@@ -239,4 +239,76 @@ export interface LeaderboardEntry {
   ideologyLabel: string | null;
   /** PageRank cosponsorship centrality, log-rescaled to [0, 1]; null if too little data. */
   leadershipScore: number | null;
+}
+
+/** One asset from a member's latest annual financial disclosure. Values are
+ * the disclosed bracket: null/null when the filing stated none
+ * ("Undetermined"), 0/0 when nothing was held at year end, and equal when
+ * the open-ended top bracket was used (see valueOpenEnded). */
+export interface Holding {
+  assetName: string;
+  account: string | null;
+  ticker: string | null;
+  assetType: string;
+  category: string;
+  categoryLabel: string;
+  owner: DisclosureOwner;
+  valueText: string;
+  valueLow: number | null;
+  valueHigh: number | null;
+  /** Same rule as StockTrade.amountOpenEnded: render as "$X+", never a range. */
+  valueOpenEnded: boolean;
+}
+
+export interface HoldingCategory {
+  category: string;
+  label: string;
+  color: string;
+  count: number;
+  /** Of count, holdings with no stated bracket — outside valueLow/valueHigh/weight. */
+  unvaluedCount: number;
+  /** Of count, holdings reported as "None" at year end (a stated zero). */
+  zeroValueCount: number;
+  valueLow: number;
+  valueHigh: number;
+  openEnded: boolean;
+  /** Sum of bracket midpoints — what the slice is drawn with, not a value to quote. */
+  weight: number;
+  share: number;
+}
+
+export interface Holdings {
+  /** False when no annual report has been ingested for this member yet. */
+  available: boolean;
+  /** "2025 annual report", "new-filer report as of 2026-03-24" — what the
+   * holdings describe, as the page names it. */
+  reportLabel: string;
+  filedDate: string | null;
+  sourceUrl: string;
+  /** False when the report exists but couldn't be read — see unreadableReason. */
+  parsed: boolean;
+  /** "scanned": a paper filing; "unrecognized": electronic, but in a layout
+   * the parser can't read. Null when parsed. */
+  unreadableReason: "scanned" | "unrecognized" | null;
+  /** The date the holdings describe (a year end for an annual report, the
+   * stated date for a new-filer report); null for a paper filing. */
+  asOfDate: string | null;
+  /** A Senate filing made on or after this report's date that states no year it can be
+   * ranked by (a paper filing, or a title without one) — "annual report
+   * filed 2026-05-14". The page names it instead of implying this report is
+   * the latest filed. */
+  laterFilingLabel: string | null;
+  laterFilingUrl: string | null;
+  holdingsCount: number;
+  unvaluedCount: number;
+  totalLow: number;
+  totalHigh: number;
+  totalOpenEnded: boolean;
+  categories: HoldingCategory[];
+  categoryFilter: string | null;
+  holdings: Holding[];
+  total: number;
+  page: number;
+  perPage: number;
+  totalPages: number;
 }

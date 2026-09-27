@@ -11,6 +11,7 @@ from app.api.response_helpers import (
     score_history_json,
 )
 from app.database import get_db
+from app.services.holdings_service import HOLDING_CATEGORY_PATTERN, get_senator_holdings
 
 from app.services.senator_service import (
     get_leaderboard,
@@ -117,6 +118,23 @@ def get_stock_trades(
 ) -> JSONResponse:
     """Return paginated STOCK Act trade disclosures for a senator."""
     result = get_senator_stock_trades(db, senator_id, page, per_page)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Senator not found")
+    return _cached_json(result.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)
+
+
+@router.get("/senators/{senator_id}/holdings")
+def get_senator_holdings_route(
+    senator_id: str,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(15, ge=1, le=100),
+    category: str | None = Query(None, pattern=HOLDING_CATEGORY_PATTERN),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Return the asset holdings from the latest annual financial disclosure:
+    a by-category breakdown plus a page of holdings, largest first
+    (optionally one category's)."""
+    result = get_senator_holdings(db, senator_id, page, per_page, category)
     if result is None:
         raise HTTPException(status_code=404, detail="Senator not found")
     return _cached_json(result.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)

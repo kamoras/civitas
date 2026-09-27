@@ -170,6 +170,7 @@ import logging
 import math
 import statistics
 
+from app.atomic_write import update_json_file
 from app.config_definitions import (
     CONSTITUENT_FULL_CONFIDENCE_VOTES,
     CONSTITUENT_MIN_VOTES,
@@ -402,29 +403,28 @@ def write_member_ideal_points(chamber: str, data: dict) -> None:
     """Persist one chamber's gated ideal-point section (fetch/voteview.py's
     build output) to /data/member_ideal_points.json. Read-merge-write, not
     overwrite — the two chamber pipelines run independently and each owns
-    only its own section, exactly like write_party_ideology_bounds above.
+    only its own section — under the file's lock (update_json_file), so two
+    chambers writing at once can't drop each other's.
     Callers gate BEFORE calling (refresh_member_ideal_points): this
     function persists what it's given.
 
     Never raises: best-effort side artifact, a write failure must not
     abort an otherwise-successful pipeline run (the loader then serves
-    the previous file, or skips the component) — same contract and same
-    hard-learned rationale as write_party_ideology_bounds.
+    the previous file, or skips the component).
     """
-    import json
     import pathlib
     global _member_ideal_points_cache
     path = pathlib.Path(_MEMBER_IDEAL_POINTS_PATH)
     try:
-        try:
-            existing = json.loads(path.read_text())
-        except Exception:
-            existing = {}
         from app.pipeline.fetch.voteview import METHOD_DESC, SOURCE_DESC
-        existing["_source"] = SOURCE_DESC
-        existing["_method"] = METHOD_DESC
-        existing[chamber] = data
-        path.write_text(json.dumps(existing, indent=1, sort_keys=True) + "\n")
+
+        def merge(existing: dict) -> dict:
+            existing["_source"] = SOURCE_DESC
+            existing["_method"] = METHOD_DESC
+            existing[chamber] = data
+            return existing
+
+        update_json_file(path, merge, indent=1, sort_keys=True, end="\n")
         _member_ideal_points_cache = None  # force reload next _member_ideal_points() call
     except Exception:
         logger.warning(
@@ -2375,6 +2375,10 @@ _LES_STAGE_ORDER: dict[str, int] = {
     # sponsored-bills summary reading "135 bills, 123 advancing").
     "REFERRED": 1,
     "IN_COMMITTEE": 2,
+    # V&W's "action beyond committee" is a stage of its own; crediting it
+    # here would move every sponsor's score, so ON_FLOOR (2026-09, a display
+    # stage) scores as committee action until that is decided separately.
+    "ON_FLOOR": 2,
     "PASSED_CHAMBER": 3,
     "IN_OTHER_CHAMBER": 3,  # already passed its own chamber; no separate V&W stage for this
     "TO_PRESIDENT": 3,      # same — passed both chambers, not yet a new milestone

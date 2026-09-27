@@ -34,7 +34,9 @@ const SUBSTANTIVE_BILL_TYPES = new Set(["s", "hr", "sjres", "hjres"]);
 // live, one senator's sponsored-bills summary read "135 bills, 123
 // advancing" — 91% of her substantive bills, because nearly all of them
 // simply hadn't died yet, not because they were unusually far along.
-const ADVANCING_STAGES = new Set(["PASSED_CHAMBER", "IN_OTHER_CHAMBER", "TO_PRESIDENT"]);
+// ON_FLOOR (2026-09) is past committee by definition: reported out and
+// taken up by the chamber, which is exactly what "advancing" means here.
+const ADVANCING_STAGES = new Set(["ON_FLOOR", "PASSED_CHAMBER", "IN_OTHER_CHAMBER", "TO_PRESIDENT"]);
 
 // `stage` (BILL_STAGES taxonomy, backend/app/config_definitions.py) is the
 // more reliable signal when present. Falling back to the original

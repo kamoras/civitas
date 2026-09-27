@@ -56,6 +56,9 @@ def test_skipped_while_a_pipeline_run_is_in_progress(db_session, pinned_populati
     _seed(db_session)
     db_session.add(PipelineRun(status=PipelineStatus.RUNNING))
     db_session.commit()
+    from app.pipeline import lease
+
+    lease.acquire(db_session, lease.SENATE_RUN)  # the run's own lease: it is live
     assert rescore_stale_legislative_effectiveness(_factory(db_session)) == []
 
 

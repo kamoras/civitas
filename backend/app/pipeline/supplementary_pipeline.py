@@ -15,8 +15,9 @@ from datetime import timedelta
 
 from app.database import SessionLocal
 from app.models import Justice, PipelineStatus, SupplementaryPipelineRun
+from app.pipeline import lease
 from app.pipeline.progress_tracker import ProgressTracker
-from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
+from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_tracked_run, skip_reason_text
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,7 @@ async def run_supplementary_pipeline() -> dict:
     """Ingest explore documents, refresh SCOTUS justice scorecards
     (weekly cadence), and update president scorecards."""
     db = SessionLocal()
+    _run_token = None  # no run of ours for the finally to stop until start() below
 
     # Same reasoning as senate_pipeline.py's own lock: until 2026-07-23
     # this was an unconditional insert with no lock at all, so a row
@@ -53,13 +55,12 @@ async def run_supplementary_pipeline() -> dict:
     # supplementary run. Confirmed live: this left supplementary data
     # (explore docs, SCOTUS, presidents) stale for 1+ day after a
     # since-fixed deploy-race incident.
-    run = acquire_pipeline_lock(db, SupplementaryPipelineRun, STALE_PIPELINE_TIMEOUT)
+    run, _run_token, refused = acquire_tracked_run(db, SupplementaryPipelineRun, STALE_PIPELINE_TIMEOUT, _tracker)
     if run is None:
-        logger.warning("Supplementary pipeline already running in another process — skipping")
+        logger.warning("Supplementary pipeline not started: %s", skip_reason_text(refused))
         db.close()
-        return {"status": "skipped", "reason": "already_running"}
+        return {"status": "skipped", "reason": refused}
 
-    _tracker.start()
     start_time = time.time()
     progress = ProgressTracker(run, SUPPLEMENTARY_PIPELINE_STEPS, db, start_time)
 
@@ -72,17 +73,21 @@ async def run_supplementary_pipeline() -> dict:
         logger.info("--- Supplementary: EXPLORE DOCUMENTS ---")
         progress.begin("explore_documents")
         try:
-            from app.pipeline.explore_pipeline import run_explore_pipeline
-            explore_result = await run_explore_pipeline(days_back=60)
-            # Count NEW documents per source — the old sum over all int
-            # values picked up total_embedded (historically the whole
-            # corpus), reporting "N ingested" when nothing new arrived.
-            total_docs = sum(
-                (explore_result.get("new_documents") or {}).values()
-            )
-            run.explore_docs_ingested = total_docs
-            logger.info("Explore pipeline ingested %d documents", total_docs)
-            progress.complete("explore_documents", detail=f"{total_docs} ingested")
+            async with lease.job_async(lease.EXPLORE, who="Supplementary pipeline's explore step") as held:
+                if not held:
+                    progress.skip("explore_documents", detail=f"skipped: {held.why}")
+                else:
+                    from app.pipeline.explore_pipeline import run_explore_pipeline
+                    explore_result = await run_explore_pipeline(days_back=60)
+                    # Count NEW documents per source — the old sum over all int
+                    # values picked up total_embedded (historically the whole
+                    # corpus), reporting "N ingested" when nothing new arrived.
+                    total_docs = sum(
+                        (explore_result.get("new_documents") or {}).values()
+                    )
+                    run.explore_docs_ingested = total_docs
+                    logger.info("Explore pipeline ingested %d documents", total_docs)
+                    progress.complete("explore_documents", detail=f"{total_docs} ingested")
         except Exception:
             # Discard any partial writes this phase staged on the shared
             # session before the next phase's commit persists them (the
@@ -109,11 +114,15 @@ async def run_supplementary_pipeline() -> dict:
             progress.skip("justice_scorecards", detail="weekly cadence")
         else:
             try:
-                from app.pipeline.justice_pipeline import run_justice_pipeline
-                justice_result = await run_justice_pipeline(db)
-                run.justices_scored = justice_result.get("justices", 0)
-                logger.info("Justice pipeline scored %d justices", run.justices_scored)
-                progress.complete("justice_scorecards", detail=f"{run.justices_scored} scored")
+                async with lease.job_async(lease.JUSTICE_PIPELINE, who="Supplementary pipeline's justice step") as held:
+                    if not held:
+                        progress.skip("justice_scorecards", detail=f"skipped: {held.why}")
+                    else:
+                        from app.pipeline.justice_pipeline import run_justice_pipeline
+                        justice_result = await run_justice_pipeline(db)
+                        run.justices_scored = justice_result.get("justices", 0)
+                        logger.info("Justice pipeline scored %d justices", run.justices_scored)
+                        progress.complete("justice_scorecards", detail=f"{run.justices_scored} scored")
             except Exception:
                 db.rollback()  # drop partial justice upserts before the next commit
                 logger.exception("Justice pipeline failed — continuing")
@@ -191,11 +200,15 @@ async def run_supplementary_pipeline() -> dict:
         logger.info("--- Supplementary: PRESIDENTS ---")
         progress.begin("president_scorecards")
         try:
-            from app.pipeline.president_pipeline import run_president_pipeline
-            president_result = await run_president_pipeline(db)
-            run.presidents_updated = president_result.get("updated", 0)
-            logger.info("President pipeline updated %d presidents", run.presidents_updated)
-            progress.complete("president_scorecards", detail=f"{run.presidents_updated} updated")
+            async with lease.job_async(lease.PRESIDENT_PIPELINE, who="Supplementary pipeline's president step") as held:
+                if not held:
+                    progress.skip("president_scorecards", detail=f"skipped: {held.why}")
+                else:
+                    from app.pipeline.president_pipeline import run_president_pipeline
+                    president_result = await run_president_pipeline(db)
+                    run.presidents_updated = president_result.get("updated", 0)
+                    logger.info("President pipeline updated %d presidents", run.presidents_updated)
+                    progress.complete("president_scorecards", detail=f"{run.presidents_updated} updated")
         except Exception:
             db.rollback()  # drop partial president updates before the next commit
             logger.exception("President pipeline failed — continuing")
@@ -232,5 +245,5 @@ async def run_supplementary_pipeline() -> dict:
             logger.exception("Failed to record supplementary pipeline failure")
         return {"status": PipelineStatus.FAILED, "error": summary}
     finally:
-        _tracker.stop()
+        _tracker.stop(_run_token)
         db.close()

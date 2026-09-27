@@ -33,6 +33,7 @@ from typing import Any
 
 import httpx
 
+from app.atomic_write import write_text_atomic
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -148,8 +149,7 @@ async def refresh_link_verification(client: httpx.AsyncClient) -> dict[str, int]
 
     try:
         os.makedirs(os.path.dirname(_VOLUME_PATH), exist_ok=True)
-        with open(_VOLUME_PATH, "w", encoding="utf-8") as fh:
-            json.dump(data, fh, indent=2)
+        write_text_atomic(_VOLUME_PATH, json.dumps(data, indent=2))
         invalidate_cache()
     except Exception:
         logger.exception("Could not persist verified ballot lookup links")

@@ -125,6 +125,15 @@ class PaginatedVotesSchema(CamelModel):
     counts: VoteCountsSchema
 
 
+def is_open_ended(low: float | None, high: float | None) -> bool:
+    """The disclosure forms' open-ended top bracket ("Over $50,000,000"),
+    which states a floor and no ceiling. Stored as high == low — no real
+    bracket on these forms has equal bounds (ptr_common.parse_amount_range).
+    The one definition of that rule: trades, holdings, and every sum over
+    holdings use it."""
+    return low is not None and low > 0 and high == low
+
+
 # Statutory disclosure deadline under the STOCK Act (2012) — see issue #45.
 STOCK_ACT_DISCLOSURE_DEADLINE_DAYS = 45
 
@@ -137,10 +146,10 @@ def _stated_owner(value: object) -> object:
     return value if value in _OWNERS else "unknown"
 
 
-# Whose asset a disclosed trade is. "unknown": the form's owner value wasn't
-# one the parser recognizes — never guessed to be the member's. A stored
-# value outside the set (a row written by another image's parser) reads the
-# same way, rather than failing the member's whole response.
+# Whose asset a disclosed trade or holding is. "unknown": the form's owner
+# value wasn't one the parser recognizes — never guessed to be the member's.
+# A stored value outside the set (a row written by another image's parser)
+# reads the same way, rather than failing the member's whole response.
 DisclosureOwner = Annotated[_Owner, BeforeValidator(_stated_owner)]
 
 
@@ -172,7 +181,7 @@ class StockTradeSchema(CamelModel):
         # Derived, not stored — see StockTrade model comment on
         # days_to_disclose for why this isn't a separate DB column.
         self.late = self.days_to_disclose > STOCK_ACT_DISCLOSURE_DEADLINE_DAYS
-        self.amount_open_ended = self.amount_low > 0 and self.amount_high == self.amount_low
+        self.amount_open_ended = is_open_ended(self.amount_low, self.amount_high)
         return self
 
 
@@ -183,6 +192,97 @@ class PaginatedStockTradesSchema(CamelModel):
     per_page: int
     total_pages: int
     late_count: int
+
+
+class HoldingSchema(CamelModel):
+    """One asset from a member's latest annual financial disclosure. The
+    value is the disclosed bracket, never an exact figure: value_low/high
+    are None when the filing states no bracket ("Undetermined"), 0/0 when
+    the asset was held at no value at year end, and equal when the filing
+    used an open-ended top bracket — see value_open_ended."""
+    asset_name: str
+    account: str | None = None
+    ticker: str | None = None
+    asset_type: str
+    category: str
+    category_label: str
+    owner: DisclosureOwner = "self"
+    value_text: str
+    value_low: float | None = None
+    value_high: float | None = None
+    # Same encoding and rendering rule as StockTradeSchema.amount_open_ended.
+    value_open_ended: bool = False
+
+    @model_validator(mode="after")
+    def _compute_open_ended(self) -> "HoldingSchema":
+        self.value_open_ended = is_open_ended(self.value_low, self.value_high)
+        return self
+
+
+class HoldingCategorySchema(CamelModel):
+    """One slice of the holdings breakdown.
+
+    `weight` is what the slice is sized by: the sum of each valued holding's
+    bracket midpoint (the floor, for an open-ended top bracket). The forms
+    disclose ranges, not values, so the midpoint is a stated convention for
+    drawing proportions — value_low/value_high are the disclosed sums a
+    reader should quote."""
+    category: str
+    label: str
+    color: str
+    count: int
+    # Of `count`, those with no stated bracket: listed under the category,
+    # but not in value_low/value_high/weight.
+    unvalued_count: int = 0
+    # Of `count`, those whose disclosed value was "None" — held at no value
+    # at year end (sold or closed). Stated, but zero, so they draw nothing.
+    zero_value_count: int = 0
+    value_low: float
+    value_high: float
+    open_ended: bool
+    weight: float
+    share: float
+
+
+class HoldingsSchema(CamelModel):
+    # False when no annual report for this member has been ingested yet
+    # (a newly seated member, or before the first ingest run) — every other
+    # field is then at its default.
+    available: bool = True
+    # "2025 annual report", "new-filer report as of 2026-03-24" — what the
+    # holdings describe, for the page to say in words.
+    report_label: str = ""
+    # The date the holdings describe: a year end for an annual report, the
+    # stated date for a Senate new-filer report; None for a paper filing.
+    as_of_date: str | None = None
+    filed_date: str | None = None
+    source_url: str = ""
+    # False: the report exists but couldn't be read (a scanned paper
+    # filing). The scorecard links to it rather than showing an empty
+    # breakdown that would read as "holds nothing".
+    parsed: bool = False
+    # When not parsed: "scanned" (paper filing) or "unrecognized".
+    unreadable_reason: Literal["scanned", "unrecognized"] | None = None
+    # A Senate filing made on or after this report's date that states no year it can be
+    # ranked by — a paper filing, or a title without one ("annual report
+    # filed 2026-05-14") — named so the page doesn't imply this report is
+    # the latest filed.
+    later_filing_label: str | None = None
+    later_filing_url: str | None = None
+    holdings_count: int = 0
+    # Holdings the form gave no bracket for ("Undetermined") — listed, but
+    # in no slice.
+    unvalued_count: int = 0
+    total_low: float = 0.0
+    total_high: float = 0.0
+    total_open_ended: bool = False
+    categories: list[HoldingCategorySchema] = Field(default_factory=list)
+    category_filter: str | None = None
+    holdings: list[HoldingSchema] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    per_page: int = 15
+    total_pages: int = 1
 
 
 class CommitteeSchema(CamelModel):

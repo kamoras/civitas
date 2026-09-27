@@ -66,16 +66,16 @@ locate revision" and crash-loop the rollback — but only when that revision
 is a *later number* than the image's own head, which is why revisions are
 numbered sequentially (`0002`, `0003`, ...). Any other unknown revision
 still fails loudly. That guard only protects a rollback *to an image that
-has it*, so it ships in a release of its own, deployed before the first
-revision that relies on it (`0005`). `0002`–`0004` predate it — a rollback
+has it*: it shipped in a release of its own, deployed before the first
+revision that relied on it (`0005`). `0002`–`0004` predate it — a rollback
 across one of those is not covered.
 
-The same release carries the tolerance for a trade owner of `unknown`,
+The same release carried the tolerance for a trade owner of `unknown`,
 which `0006` writes, on both sides: the schema's (`schemas.DisclosureOwner`)
 — an image without it fails validation on such a row — and the frontend's
 owner type and "OWNER NOT STATED" label, since Swarm rolls services back
 one at a time and a rolled-back frontend can be served by the new backend.
-Both have to be running before `0006` can be.
+Both had to be running before `0006` could be.
 
 So every release must leave a schema the image before it can still read:
 
@@ -92,7 +92,9 @@ column: presidents.gdp_growth_adjusted` on the migrated copy.
 
 ### Pending contract (the release after v6.13)
 
-Write these as revision `0002` once v6.13 is the running image:
+Write these as the next free revision (`0007` or later — `0005` added the
+financial-holdings tables, `0006` versioned the trade parser) once v6.13 is
+the running image:
 
 | Change | Why it waits |
 |---|---|

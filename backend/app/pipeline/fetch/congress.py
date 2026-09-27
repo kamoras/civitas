@@ -10,6 +10,7 @@ from lxml import etree
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.pipeline.analyze.bill_stage import became_law_action
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S, fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
@@ -181,7 +182,7 @@ async def fetch_significant_bills(
                 latest_action = (b.get("latestAction") or {}).get("text", "")
 
                 # Prioritize bills that became law or had Senate votes
-                is_enacted = "became public law" in latest_action.lower()
+                is_enacted = became_law_action(latest_action)
                 has_senate_action = any(
                     kw in latest_action.lower()
                     for kw in ("passed senate", "senate agreed", "signed by president")

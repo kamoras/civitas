@@ -10,6 +10,7 @@ House/stock trades already have, instead of piggybacking on Senate's
 own PipelineRun row.
 """
 
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
@@ -20,11 +21,26 @@ from app.pipeline import supplementary_pipeline
 from app.time_utils import utcnow
 
 
+@asynccontextmanager
+async def _granted(_tier, **_kw):
+    from app.pipeline.lease import Granted
+
+    yield Granted(None)
+
+
+@pytest.fixture(autouse=True)
+def _job_leases_granted():
+    """These tests stub the pipelines' work; the leases each step holds are
+    tested in test_database_reset.TestLease."""
+    with patch("app.pipeline.lease.job_async", _granted):
+        yield
+
+
 @pytest.fixture(autouse=True)
 def _reset_tracker():
-    supplementary_pipeline._tracker.stop()
+    supplementary_pipeline._tracker.clear()
     yield
-    supplementary_pipeline._tracker.stop()
+    supplementary_pipeline._tracker.clear()
 
 
 def _run(db_session, explore_result=None, justice_result=None, president_result=None,
@@ -266,3 +282,25 @@ class TestSupplementaryPipelineLock:
         assert result["status"] == "completed"
         cleared = db_session.query(SupplementaryPipelineRun).filter(SupplementaryPipelineRun.id == stale_id).one()
         assert cleared.status == PipelineStatus.STALE
+
+
+def test_a_step_whose_lease_is_held_elsewhere_is_skipped(db_session):
+    """A manual re-embed (or a reset) holding the explore lease: the nightly
+    explore step doesn't run beside it, and the other steps still do."""
+    import json
+
+    from app.pipeline import lease
+
+    @asynccontextmanager
+    async def explore_held(tier, **_kw):
+        yield lease.Granted("it is running elsewhere" if tier == lease.EXPLORE else None)
+
+    with patch("app.pipeline.lease.job_async", explore_held), \
+         patch("app.pipeline.explore_pipeline.run_explore_pipeline", new_callable=AsyncMock) as explore:
+        _run(db_session)
+    explore.assert_not_called()
+    run = db_session.query(SupplementaryPipelineRun).one()
+    steps = {step["key"]: step["status"] for step in json.loads(run.progress_detail)}
+    assert steps["explore_documents"] == "skipped" and steps["president_scorecards"] == "done"
+    detail = {step["key"]: step.get("detail") for step in json.loads(run.progress_detail)}
+    assert detail["explore_documents"] == "skipped: it is running elsewhere"
