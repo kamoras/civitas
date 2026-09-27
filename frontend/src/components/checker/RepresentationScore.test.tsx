@@ -10,13 +10,13 @@ const votingRecord: VotingRecord = {
   partyLoyaltyPct: 0, recentVoteCount: 0, keyVoteCount: 0,
 };
 
-function renderWith(votePart?: string) {
+function renderWith(votePart?: string, record: VotingRecord = votingRecord) {
   const breakdown = {
     fundingIndependence: 50, promisePersistence: 50, constituentAlignment: 50,
     fundingDiversity: 50, legislativeEffectiveness: 50, overall: 50,
     confidence: votePart ? { constituentAlignment: "medium", constituentAlignmentVotePart: votePart } : undefined,
   } as Senator["representationScore"];
-  return render(<RepresentationScore breakdown={breakdown} votingRecord={votingRecord} />);
+  return render(<RepresentationScore breakdown={breakdown} votingRecord={record} />);
 }
 
 describe("RepresentationScore constituent basis line", () => {
@@ -28,6 +28,14 @@ describe("RepresentationScore constituent basis line", () => {
   it("states the party's typical score for too few votes when a party norm exists", () => {
     renderWith("typical:few-votes");
     expect(screen.getByText(/too few party-line votes, vote part set to the party's typical score/)).toBeInTheDocument();
+  });
+
+  it("says a member with no votes gets the party's typical score when one was measured", () => {
+    const empty = { ...votingRecord, totalVotes: 0 };
+    renderWith("typical:few-votes", empty);
+    expect(screen.getByText("no voting record · vote part set to the party's typical score")).toBeInTheDocument();
+    renderWith("neutral:few-votes", empty);
+    expect(screen.getByText("no voting record · defaults to 50")).toBeInTheDocument();
   });
 
   it("states a neutral vote part when there is no party norm", () => {

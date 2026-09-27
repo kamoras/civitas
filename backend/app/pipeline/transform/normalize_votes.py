@@ -21,8 +21,10 @@ logger = logging.getLogger(__name__)
 # case — a Yea on a motion that carried over the leader's own party's
 # opposition — and any rejected or carried question, not only cloture: the
 # roll call can't tell a leader's switch from a decisive vote of conscience
-# on the same side, and in the 119th Congress every such vote checked was a
-# switch on cloture. Scoped to the majority leader only:
+# on the same side. The evidence is the Nay case: in the 119th Congress every
+# off-party vote by either majority leader was a Nay on a rejected motion
+# (all but one on cloture). No mirror-case vote occurred; that half follows
+# from the rule itself, not from observed votes. Scoped to the majority leader only:
 # it is the leader's job to make that motion, and the Speaker and the
 # minority leader have no such practice (the Speaker voted Aye on the same
 # failed House rule the Majority Leader voted No on). Exact titles as

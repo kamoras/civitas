@@ -590,9 +590,22 @@ class TestVotePartStatus:
             {"state": "SW", "party": "D", "votingRecord": rec, **kw})["constituentAlignmentVotePart"]
 
     def test_few_votes(self):
-        # A party norm exists: the party's typical score. None: neutral 50.
-        assert self.status(record(1, total=2)) == "typical:few-votes"
+        # A measured typical score: that. None (conftest's pinned reference
+        # carries none, as the bundled prior doesn't): neutral 50.
+        ref = {"senate": {"statistic": score_calculator.CONSTITUENT_REFERENCE_STATISTIC, "n": 50, "expected": {
+            "D": {"a": 0.10, "b": 0.0, "scale": 0.3, "typical": 85.0}}}}
+        assert self.status(record(1, total=2), constituentReference=ref) == "typical:few-votes"
+        assert self.status(record(1, total=2)) == "neutral:few-votes"
         assert self.status(record(1, total=2), party="I") == "neutral:few-votes"
+
+    def test_an_unmeasured_prior_is_never_called_typical(self):
+        # The bundled prior has no population: its thin records are neutral
+        # 50 and say so, whatever a "typical" key might hold.
+        prior = {"senate": {"statistic": score_calculator.CONSTITUENT_REFERENCE_STATISTIC, "n": None, "expected": {
+            "D": {"a": 0.10, "b": 0.0, "typical": 85.0}}, "deviation_p90": 0.3}}
+        assert self.status(record(1, total=2), constituentReference=prior) == "neutral:few-votes"
+        core = _constituent_alignment_core(record(7, total=10), [], {}, state="SW", party="D", reference=prior)
+        assert core["score"] == 25 and "pulled toward a neutral 50" in core["components"][0]["detail"]
 
     def test_no_expectation(self):
         assert self.status(record(1, total=10), party="I") == "neutral:no-expectation"

@@ -190,7 +190,11 @@ export default function AboutPage() {
               shrinkage estimation, which keeps small samples from producing extreme estimates
               <Cite id="19">Efron &amp; Morris 1975</Cite>, but it is a simpler version: the pull
               is set by a fixed count of observations, not estimated from the data the way their
-              estimator is.
+              estimator is. Two scores differ. Constituent Alignment&apos;s vote part pulls a thin
+              record toward what a typical member of the same party scores instead, because its
+              scale tops out at the seat&apos;s norm and 50 would sit below nearly every member.
+              Legislative Effectiveness isn&apos;t pulled at all, because a member&apos;s bills are
+              their whole record rather than a sample.
             </P>
             <P>
               The Action Center extends this mission to daily civic engagement. It automatically

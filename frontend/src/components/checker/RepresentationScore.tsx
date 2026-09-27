@@ -149,9 +149,16 @@ export default function RepresentationScore({
   // How Constituent Alignment's vote part was scored, as the scorer
   // recorded it (calculate_confidence) — stated, not re-derived here.
   const votingBasis: string | undefined = (() => {
-    if (!votingRecord || votingRecord.totalVotes === 0) return "no voting record · defaults to 50";
-    const tracked = `${votingRecord.totalVotes} votes tracked`;
     const status = breakdown.confidence?.constituentAlignmentVotePart;
+    const none = !votingRecord || votingRecord.totalVotes === 0;
+    // A record with no votes is scored like any too-thin one: the party's
+    // typical score when one was measured, else a neutral 50.
+    if (none) {
+      return status === "typical:few-votes"
+        ? "no voting record · vote part set to the party's typical score"
+        : "no voting record · defaults to 50";
+    }
+    const tracked = `${votingRecord.totalVotes} votes tracked`;
     if (status === "typical:few-votes") return `${tracked} · too few party-line votes, vote part set to the party's typical score`;
     if (status === "neutral:few-votes") return `${tracked} · too few party-line votes, vote part neutral 50`;
     if (status === "neutral:no-expectation") return `${tracked} · no party norm to compare with, vote part neutral 50`;

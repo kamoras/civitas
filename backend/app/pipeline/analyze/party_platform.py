@@ -1073,9 +1073,11 @@ def _alignments_from_votes(voting_record: dict) -> list[dict]:
         vote = v.get("vote", "")
         if vote not in ("Yea", "Nay"):
             continue
-        # The majority leader's procedural Nay on a failing motion their own
-        # party backed (normalize_votes.MAJORITY_LEADER_TITLES) records no
-        # position on the bill, so it is no evidence of lean either.
+        # The majority leader's procedural switch to the prevailing side
+        # against their own party — a Nay on a failing motion it backed, or a
+        # Yea on one carrying over its opposition (normalize_votes.
+        # MAJORITY_LEADER_TITLES) — records no position on the bill, so it
+        # is no evidence of lean either.
         if v.get("reconsiderSwitch"):
             continue
 

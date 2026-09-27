@@ -695,8 +695,11 @@ def calculate_confidence(senator: dict) -> dict[str, str]:
 
 def _constituent_vote_part_status(senator: dict) -> str:
     """How Constituent Alignment's vote part was scored, for the scorecard to
-    state rather than re-derive: "neutral:few-votes" (under
-    CONSTITUENT_MIN_VOTES), "neutral:no-expectation" (no usable reference
+    state rather than re-derive: "typical:few-votes" (under
+    CONSTITUENT_MIN_VOTES, scored at the party's measured typical score),
+    "neutral:few-votes" (under CONSTITUENT_MIN_VOTES with no measured
+    typical — the bundled prior, or no reference for the party: neutral
+    50), "neutral:no-expectation" (no usable reference
     for the member's party), "shrunk:<share kept>" (under
     CONSTITUENT_FULL_CONFIDENCE_VOTES) or "full". Read from the scoring
     function itself (_constituent_alignment_core), so the branch that
@@ -1687,7 +1690,7 @@ def beyond_saturation(residual: float, scale: float) -> bool:
     return abs(residual) > scale
 
 
-def seat_relative_vote_score(residual: float, scale: float, n_votes: int, typical: float = 50.0) -> float:
+def seat_relative_vote_score(residual: float, scale: float, n_votes: int, typical: float | None = None) -> float:
     """Constituent Alignment's seat-relative vote component: the peaked
     shape (_vote_shape), shrunk linearly toward `typical` until the member
     has CONSTITUENT_FULL_CONFIDENCE_VOTES party-labeled votes (AGENTS.md
@@ -1696,9 +1699,11 @@ def seat_relative_vote_score(residual: float, scale: float, n_votes: int, typica
     of the party scores (the reference's per-party "typical", measured each
     run): since v6.16 the shape tops out at the expectation, so 50 is a
     below-average score, and shrinking a thin record toward it ranked every
-    newcomer under their peers for having few votes. 50 only for the
-    bundled prior, which has no population to measure. The one
-    implementation the score and the ground-truth gate both call."""
+    newcomer under their peers for having few votes. None (the bundled
+    prior, which has no population to measure) shrinks toward a neutral 50.
+    The one implementation the score and the ground-truth gate both call."""
+    if typical is None:
+        typical = 50.0
     confidence = min(n_votes / CONSTITUENT_FULL_CONFIDENCE_VOTES, 1.0)
     return typical + (_vote_shape(residual, scale) - typical) * confidence
 
@@ -1715,7 +1720,7 @@ def _seat_vote_expectation(
     effective_party: str | None,
     district: int | None,
     reference: dict | None,
-) -> tuple[float, float | None, float | None, bool]:
+) -> tuple[float, float | None, float | None, bool, float | None]:
     """(seat alignment, expected break rate, the member's party's residual
     scale, whether the reference was measured, the party's typical vote
     score) for a member; expected, scale and typical are
@@ -1733,7 +1738,9 @@ def _seat_vote_expectation(
     measured = ref.get("n") is not None
     if fit is None or not scale:
         return alignment, None, None, measured, None
-    typical = float(fit.get("typical", 50.0))
+    # Only a measured reference has a population to take "typical" from;
+    # the bundled prior's thin records shrink toward a neutral 50 instead.
+    typical = float(fit["typical"]) if measured and fit.get("typical") is not None else None
     return alignment, _expected_break_rate(fit, alignment), float(scale), measured, typical
 
 
@@ -1745,7 +1752,7 @@ def seat_break_residual(
     effective_party: str | None = None,
     district: int | None = None,
     reference: dict | None = None,
-) -> tuple[float, float] | None:
+) -> tuple[float, float, float | None] | None:
     """(the member's seat_residual, their party's scale, their party's
     typical vote score), or None without a measured expectation for the
     member's party — the numbers the seat-relative vote score is a function
@@ -1905,7 +1912,7 @@ def _constituent_alignment_core(
 
     break_rate, n_party = party_break_rate(voting_record)
     if break_rate is None:
-        if expected is not None:
+        if typical is not None:
             vote_part_status = "typical:few-votes"
             # No record to read: the party's typical score, not 50, which
             # since v6.16 sits below nearly every member (see
@@ -1963,9 +1970,13 @@ def _constituent_alignment_core(
             f"broke with party on {break_rate:.1%} of {n_party} party-labeled votes; {norm} — {gap}"
         )
         if n_party < CONSTITUENT_FULL_CONFIDENCE_VOTES:
+            target = (
+                f"{typical:.0f}, the typical score for a {eval_party} member of this chamber"
+                if typical is not None else "a neutral 50"
+            )
             party_alignment_detail += (
-                f"; only {n_party} votes, so the score is pulled toward {typical:.0f}, the typical "
-                f"score for a {eval_party} member of this chamber, until {CONSTITUENT_FULL_CONFIDENCE_VOTES}"
+                f"; only {n_party} votes, so the score is pulled toward {target}, "
+                f"until {CONSTITUENT_FULL_CONFIDENCE_VOTES}"
             )
 
     congruence_weight = POSITION_CONGRUENCE_WEIGHT if congruence_score is not None else 0.0
