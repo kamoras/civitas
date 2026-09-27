@@ -81,6 +81,14 @@ real policy story; a false positive is caught downstream by extraction — a
 cluster that yields no verbatim, adjacently-asserted claim produces no issue at
 all. The asymmetry favours recall.
 
+**A claim is one contiguous span of its source.** The rendered sentence runs
+from the actor through the predicate in the source's own words, including any
+words between them (dropping them turned "OpenAI agent made" into "OpenAI
+made"). Headline and summary are joined with the headline closed as a sentence
+(`post_composer.headline_source`); a bare newline made every claim that ended
+at the headline's end look cut off, and on 2026-09-27 left 5 claims from 40
+articles instead of 14.
+
 **Self-calibrating cluster merge.** A fixed similarity threshold either
 fragments one story across many clusters or collapses everything into one
 mega-cluster, depending on the day's news. Starting at 0.20 and stepping up to

@@ -417,7 +417,15 @@ Every hour at :15
        │         appear verbatim, that the source asserts one OF the other
        │         (adjacency — two true fragments can otherwise be assembled
        │         into one false sentence), that the span runs to the end of
-       │         its clause, and only then renders "actor predicate."
+       │         its clause, and only then renders the source's own words
+       │         from actor through predicate — any words between them
+       │         included, so "OpenAI agent made" never becomes "OpenAI
+       │         made". Each article is read as headline + summary with
+       │         the headline closed as its own sentence: joined by a bare
+       │         newline, a claim ending at the headline's end read as cut
+       │         off, and 2026-09-27's measured yield was 5 claims from 40
+       │         articles (14 with the break marked), so most clusters
+       │         missed the two-claim bar and nothing published for days.
        │         Title = the top article's real headline. Summary = the
        │         single best claim. Facts = the supporting claims, each
        │         carrying the outlet it came from.
