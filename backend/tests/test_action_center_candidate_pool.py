@@ -53,7 +53,7 @@ def refresh(monkeypatch):
     monkeypatch.setattr(bluesky_engagement, "engage_with_news_posts", lambda *a, **k: None)
     articles = [a for c in CLUSTERS for a in c]
     monkeypatch.setattr(ac, "fetch_news_articles", lambda: articles)
-    monkeypatch.setattr(ac, "_filter_policy_relevant", lambda arts, db: arts)
+    monkeypatch.setattr(ac, "_filter_policy_relevant", lambda arts, db: [(a, None) for a in arts])
     monkeypatch.setattr(ac, "fetch_trending_topics", lambda: [])
     monkeypatch.setattr(ac, "_cluster_articles", lambda arts: CLUSTERS)
     monkeypatch.setattr(ac, "_rank_clusters", lambda cl, tr, db: (cl, [1.0 - i / 10 for i in range(len(cl))]))

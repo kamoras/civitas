@@ -47,6 +47,7 @@ from app.pipeline.analyze.action_center import (
     _is_exact_content_duplicate,
     _issue_signature,
     _largest_coherent_subgroup,
+    _center_titles,
     _mentions_full_name,
     _signatures_match,
     _surname_owned_by_other_name,
@@ -90,6 +91,32 @@ def _block_sim_matrix(group_sizes: list[int], within: float = 0.9, across: float
         start += size
     np.fill_diagonal(m, 1.0)
     return m
+
+
+class TestCenterTitles:
+    """Per-cluster checks must center on the day's mean, as pass 1 does.
+    Centering a coherent cluster on its own mean subtracted the topic its
+    articles shared, and live runs kept 1 of 5 same-story articles."""
+
+    def _day(self):
+        rng = np.random.default_rng(0)
+        generic = rng.normal(size=32) * 3          # every headline shares this
+        topics = rng.normal(size=(4, 32))
+        embs = np.array([generic + topics[t] + rng.normal(size=32) * 0.3
+                         for t in range(4) for _ in range(5)])
+        return embs, embs[:5]                       # the day; one topic's cluster
+
+    def test_a_coherent_cluster_keeps_every_article_on_the_days_mean(self):
+        day, cluster = self._day()
+        vecs = _center_titles(cluster, day.mean(axis=0))
+        centroid = vecs.mean(axis=0) / np.linalg.norm(vecs.mean(axis=0))
+        assert (vecs @ centroid).min() > 0.25
+
+    def test_its_own_mean_is_what_broke_it(self):
+        day, cluster = self._day()
+        vecs = _center_titles(cluster, cluster.mean(axis=0))
+        centroid = vecs.mean(axis=0) / np.linalg.norm(vecs.mean(axis=0))
+        assert (vecs @ centroid).min() < 0.25
 
 
 class TestLargestCoherentSubgroup:
