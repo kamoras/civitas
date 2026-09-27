@@ -20,7 +20,7 @@ import threading
 from functools import lru_cache
 import time
 import uuid
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -2770,10 +2770,16 @@ def generate_period_summaries(today_str: str, db: "Session") -> None:
     current_week_num = today.isocalendar()[1]
 
     # --- Week summaries ---
-    # For each distinct ISO week in the DB that has ended (Sunday < today), ensure a WeekSummary exists
-    entries_this_year = (
+    # For each distinct ISO week in the DB that has ended (Sunday < today), ensure a WeekSummary exists.
+    # From the start of LAST year, not this one: December is complete only
+    # once January has begun, and the week spanning New Year belongs to
+    # both. Read from January 1st alone, December never got a month summary
+    # and that week's was written from its January days only. Periods
+    # already summarized are skipped below, so the wider read costs no LLM
+    # call.
+    recent_entries = (
         db.query(TimelineEntry)
-        .filter(TimelineEntry.date >= f"{current_year}-01-01",
+        .filter(TimelineEntry.date >= f"{current_year - 1}-01-01",
                 TimelineEntry.date <= today_str)
         .order_by(TimelineEntry.date)
         .all()
@@ -2785,7 +2791,7 @@ def generate_period_summaries(today_str: str, db: "Session") -> None:
     # number collided the year-end week with January's row of the same
     # number — the year-end week was then silently never summarized.
     weeks: dict[tuple[int, int], list] = {}
-    for e in entries_this_year:
+    for e in recent_entries:
         d = datetime.strptime(e.date, "%Y-%m-%d").date()
         iso = d.isocalendar()
         weeks.setdefault((iso[0], iso[1]), []).append(e)
@@ -2835,24 +2841,23 @@ def generate_period_summaries(today_str: str, db: "Session") -> None:
         logger.info("Generated week-in-review for %s W%d", wyear, wnum)
 
     # --- Month summaries ---
-    # For each completed month (not current month) in current year
-    months_done: dict[int, list] = {}
-    for e in entries_this_year:
-        mnum = int(e.date[5:7])
-        months_done.setdefault(mnum, []).append(e)
+    # For each completed month (not the current one), this year or last
+    months_done: dict[tuple[int, int], list] = {}
+    for e in recent_entries:
+        months_done.setdefault((int(e.date[:4]), int(e.date[5:7])), []).append(e)
 
-    for mnum, month_entries in months_done.items():
-        if mnum >= current_month:
+    for (myear, mnum), month_entries in months_done.items():
+        if (myear, mnum) >= (current_year, current_month):
             continue  # current month not complete
         existing = (
             db.query(MonthSummary)
-            .filter(MonthSummary.year == current_year, MonthSummary.month == mnum)
+            .filter(MonthSummary.year == myear, MonthSummary.month == mnum)
             .first()
         )
         if existing:
             continue
 
-        month_name = datetime(current_year, mnum, 1).strftime("%B %Y")
+        month_name = date(myear, mnum, 1).strftime("%B %Y")
         top_areas: dict[str, int] = {}
         for e in month_entries:
             for area in _json.loads(e.policy_areas or "[]"):
@@ -2862,18 +2867,18 @@ def generate_period_summaries(today_str: str, db: "Session") -> None:
         llm = _generate_period_summary(
             label=month_name,
             entries=month_entries,
-            cache_key={"period": "month", "year": current_year, "month": mnum},
+            cache_key={"period": "month", "year": myear, "month": mnum},
             db=db,
         )
         db.add(MonthSummary(
-            year=current_year,
+            year=myear,
             month=mnum,
             summary=llm["summary"],
             top_policy_areas=_json.dumps(llm["topAreas"] or computed_areas),
             entry_count=len(month_entries),
         ))
         db.commit()
-        logger.info("Generated month-in-review for %s %d", current_year, mnum)
+        logger.info("Generated month-in-review for %s %d", myear, mnum)
 
     # --- Year summaries ---
     # For each year < current_year that has timeline entries
