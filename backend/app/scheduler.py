@@ -374,15 +374,8 @@ def _hourly_bill_status_refresh() -> None:
     """
     def _run():
         try:
-            from app.pipeline.bill_refresh import bill_refresh_age, is_bill_refresh_running, refresh_bill_statuses
+            from app.pipeline.bill_refresh import refresh_bill_statuses
 
-            if is_bill_refresh_running():
-                age = bill_refresh_age()
-                if not _is_stale(age, lease.HUNG_AFTER[lease.BILL_REFRESH]):
-                    logger.info("Bill status refresh skipped — previous refresh still running")
-                    return
-                logger.warning("Previous bill status refresh has been running for %s — "
-                               "treating as hung and proceeding anyway", age)
             from app.database import SessionLocal
             from app.models import PipelineRun, PipelineStatus
             db = SessionLocal()
@@ -397,9 +390,16 @@ def _hourly_bill_status_refresh() -> None:
                 logger.info("Bill status refresh skipped — house pipeline is running")
                 return
 
+            # Cut off while its lease still holds (lease.HUNG_AFTER), never
+            # left running beside the next: two passes at once would let the
+            # older one's snapshot overwrite the newer one's bill rows.
+            limit = lease.HUNG_AFTER[lease.BILL_REFRESH] - lease.stale_after(lease.BILL_REFRESH)
             loop = asyncio.new_event_loop()
             try:
-                summary = loop.run_until_complete(refresh_bill_statuses())
+                summary = loop.run_until_complete(asyncio.wait_for(refresh_bill_statuses(), limit.total_seconds()))
+            except TimeoutError:
+                logger.warning("Bill status refresh cut off after %s — the next tick starts afresh", limit)
+                return
             finally:
                 loop.close()
             logger.info("Bill status refresh: %s", summary)
@@ -445,16 +445,18 @@ def _election_coverage_refresh() -> None:
         # mid-flight (degraded LLM, slow network) — overlapping passes
         # double-ingest and double-post. Same shape as
         # _hourly_action_refresh's guard above.
-        if is_coverage_refresh_running():
-            age = coverage_refresh_age()
-            if not _is_stale(age, lease.HUNG_AFTER[lease.COVERAGE_REFRESH]):
-                logger.info("Election coverage refresh skipped — previous refresh still running")
-                return
+        # Checked and started in one step (try_start): the nightly
+        # election pipeline's coverage phase can reach the same check.
+        was_running, age = is_coverage_refresh_running(), coverage_refresh_age()
+        _run_token = coverage_tracker().try_start(hung_after=lease.HUNG_AFTER[lease.COVERAGE_REFRESH])
+        if _run_token is None:
+            logger.info("Election coverage refresh skipped — previous refresh still running")
+            return
+        if was_running:
             logger.warning(
                 "Previous election coverage refresh has been running for %s — "
                 "treating as hung and proceeding anyway", age,
             )
-        _run_token = coverage_tracker().start()
         try:
             from app.database import SessionLocal
             from app.pipeline.analyze.election_bluesky import post_race_coverage_updates
@@ -515,13 +517,13 @@ def _election_ballot_sync() -> None:
                 "Election pipeline has been running for %s — treating as hung "
                 "and proceeding with the ballot sync anyway", age,
             )
-        if is_ballot_sync_running():
-            age = ballot_sync_age()
-            if not _is_stale(age, lease.HUNG_AFTER[lease.BALLOT_SYNC]):
-                logger.info("Ballot sync skipped — the previous one is still running")
-                return
+        was_running, age = is_ballot_sync_running(), ballot_sync_age()
+        _run_token = ballot_tracker().try_start(hung_after=lease.HUNG_AFTER[lease.BALLOT_SYNC])
+        if _run_token is None:
+            logger.info("Ballot sync skipped — the previous one is still running")
+            return
+        if was_running:
             logger.warning("Previous ballot sync has been running for %s — proceeding anyway", age)
-        _run_token = ballot_tracker().start()
         loop = asyncio.new_event_loop()
         try:
             result = loop.run_until_complete(run_ballot_sync())

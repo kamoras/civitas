@@ -52,7 +52,7 @@ from app.pipeline.fetch.state_candidates import (
 )
 from app.pipeline.fetch.state_election_dates import senate_election_known
 from app.pipeline.progress_tracker import ProgressTracker
-from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
+from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock_why
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -794,13 +794,13 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
     fundraising. Returns a summary dict with counts."""
     cycle = cycle if cycle is not None else current_election_cycle()
     db = SessionLocal()
-    _run_token = 0  # no run of ours for the finally to stop until start() below
+    _run_token = None  # no run of ours for the finally to stop until start() below
 
-    run = acquire_pipeline_lock(db, ElectionPipelineRun, STALE_PIPELINE_TIMEOUT)
+    run, refused = acquire_pipeline_lock_why(db, ElectionPipelineRun, STALE_PIPELINE_TIMEOUT)
     if run is None:
         logger.warning("Election pipeline already running in another process — skipping")
         db.close()
-        return {"status": "skipped", "reason": "already_running"}
+        return {"status": "skipped", "reason": refused}
 
     _run_token = _tracker.start()
     start_time = time.time()
@@ -947,10 +947,12 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
             from app.pipeline.analyze.election_coverage import (
                 coverage_tracker,
                 ingest_race_coverage,
-                is_coverage_refresh_running,
             )
 
-            if is_coverage_refresh_running():
+            # Checked and started in one step: the 15-minute refresh can
+            # reach the same check at the same moment.
+            _coverage_token = coverage_tracker().try_start()
+            if _coverage_token is None:
                 logger.info(
                     "Election coverage/posting phases skipped — a coverage "
                     "refresh is already running",
@@ -958,7 +960,6 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                 progress.complete("coverage_ingestion", detail="skipped (refresh running)")
                 progress.complete("bluesky_posting", detail="skipped (refresh running)")
             else:
-                _coverage_token = coverage_tracker().start()
                 try:
                     run.current_phase = "coverage"
                     db.commit()

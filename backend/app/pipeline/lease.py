@@ -85,8 +85,9 @@ def stale_after(tier: str) -> timedelta:
 # hung holder, whose process lives on, would renew it forever and hold its
 # job, and every data reset, off until a restart. Where the job has its own
 # check that proceeds past a run it calls hung (scheduler.py reads these for
-# the refreshes), this is that check's age; where it has none, the lapse is
-# the hung-run rule: the next attempt takes the lease over.
+# the refreshes), this is that check's age; the bill refresh is cut off
+# inside it instead; where a job has neither, the lapse is the hung-run
+# rule: the next attempt takes the lease over.
 def _pipeline_timeout() -> timedelta:
     from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT
 
@@ -268,7 +269,7 @@ def holding(db: Session, tier: str, *, yield_to: str | None = None, take_over: b
 
 # Why a lease couldn't be taken (refusal_code), and how a skip message says it.
 REFUSED_BY_RESET, REFUSED_HELD, REFUSED_BUSY = "data_reset", "held_elsewhere", "busy"
-_REFUSALS = {
+REFUSAL_TEXT = {
     REFUSED_BY_RESET: "a data reset is running",
     REFUSED_HELD: "it is running elsewhere",
     REFUSED_BUSY: "the database was busy",
@@ -286,23 +287,35 @@ def refusal_code(db: Session, tier: str) -> str:
 
 def refusal(db: Session, tier: str) -> str:
     """refusal_code, as a skip message says it."""
-    return _REFUSALS[refusal_code(db, tier)]
+    return REFUSAL_TEXT[refusal_code(db, tier)]
+
+
+class Granted:
+    """What job() and job_async() yield: true while the lease is held; when
+    it isn't, `why` says so (refusal)."""
+
+    def __init__(self, why: str | None) -> None:
+        self.why = why
+
+    def __bool__(self) -> bool:
+        return self.why is None
 
 
 @contextmanager
-def job(tier: str) -> Iterator[bool]:
+def job(tier: str) -> Iterator[Granted]:
     """A background job's lease, on its own session, yielding to the data
-    reset: yields True while held, False — hold nothing, skip the work —
-    when a reset is running, another process runs the same job, or the
-    database stayed busy."""
+    reset: yields a Granted, true while held, false — hold nothing, skip the
+    work — when a reset is running, another process runs the same job, or
+    the database stayed busy (its `why`)."""
     from app.database import SessionLocal
 
     db = SessionLocal()
     try:
         with holding(db, tier, yield_to=DATA_RESET) as token:
-            if token is None:
-                logger.info("%s skipped: %s", TIERS[tier], refusal(db, tier))
-            yield token is not None
+            granted = Granted(None if token is not None else refusal(db, tier))
+            if not granted:
+                logger.info("%s skipped: %s", TIERS[tier], granted.why)
+            yield granted
     finally:
         db.close()
 
@@ -350,7 +363,7 @@ def _let_go_and_close(db: Session, held_lease: "_Held | None") -> None:
 
 
 @asynccontextmanager
-async def job_async(tier: str) -> AsyncIterator[bool]:
+async def job_async(tier: str) -> AsyncIterator[Granted]:
     """job() for async code: the same lease, with its session and all its
     database work in worker threads, off the event loop, which serves every
     request. Cancellation can't strand anything: the take and the release
@@ -365,8 +378,9 @@ async def job_async(tier: str) -> AsyncIterator[bool]:
         taking.abandon()
         raise
     try:
-        if held_lease is None:
-            logger.info("%s skipped: %s", TIERS[tier], refused)
-        yield held_lease is not None
+        granted = Granted(refused if held_lease is None else None)
+        if not granted:
+            logger.info("%s skipped: %s", TIERS[tier], granted.why)
+        yield granted
     finally:
         await asyncio.shield(asyncio.to_thread(_let_go_and_close, db, held_lease))

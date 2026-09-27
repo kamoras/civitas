@@ -17,7 +17,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app import scheduler as scheduler_module
-from app.pipeline.election_pipeline import is_ballot_sync_running
+from app.pipeline.analyze.election_coverage import coverage_tracker
+from app.pipeline.election_pipeline import ballot_tracker, is_ballot_sync_running
 
 
 @pytest.fixture(autouse=True)
@@ -26,10 +27,27 @@ def _job_leases_granted():
     themselves are tested in test_database_reset.TestLease."""
     @contextmanager
     def granted(_tier, **_kw):
-        yield True
+        from app.pipeline.lease import Granted
+
+        yield Granted(None)
 
     with patch("app.pipeline.lease.job", granted):
         yield
+
+
+@contextmanager
+def _tracker_running(tracker, running: bool, age):
+    """Put a real PipelineRunTracker in the state a test describes: a run
+    going for `age` (the code checks and starts in one step, try_start)."""
+    import time
+
+    token = tracker.start() if running else None
+    if token is not None and age is not None:
+        tracker._runs[token] = time.time() - age.total_seconds()
+    try:
+        yield
+    finally:
+        tracker.stop(token)
 
 
 class _SyncThread:
@@ -283,14 +301,7 @@ class TestElectionCoverageRefresh:
              patch("app.api.action.is_election_season", return_value=in_season), \
              patch("app.scheduler.is_election_pipeline_running", return_value=pipeline_running), \
              patch("app.scheduler.election_pipeline_age", return_value=pipeline_age), \
-             patch(
-                 "app.pipeline.analyze.election_coverage.is_coverage_refresh_running",
-                 return_value=coverage_running,
-             ), \
-             patch(
-                 "app.pipeline.analyze.election_coverage.coverage_refresh_age",
-                 return_value=coverage_age,
-             ), \
+             _tracker_running(coverage_tracker(), coverage_running, coverage_age), \
              patch("app.database.SessionLocal") as mock_session_local, \
              patch(
                  "app.pipeline.analyze.election_coverage.ingest_race_coverage",
@@ -388,8 +399,7 @@ class TestElectionBallotSync:
              patch("app.api.action.is_election_season", return_value=in_season), \
              patch("app.scheduler.is_election_pipeline_running", return_value=pipeline_running), \
              patch("app.scheduler.election_pipeline_age", return_value=pipeline_age), \
-             patch("app.scheduler.is_ballot_sync_running", return_value=sync_running), \
-             patch("app.scheduler.ballot_sync_age", return_value=sync_age), \
+             _tracker_running(ballot_tracker(), sync_running, sync_age), \
              patch("app.scheduler.run_ballot_sync", sync), \
              patch("app.scheduler.logger") as mock_logger:
             scheduler_module._election_ballot_sync()
@@ -446,7 +456,7 @@ def test_a_leased_job_does_not_run_without_its_lease():
 
     @contextmanager
     def refused(_tier, **_kw):
-        yield False
+        yield lease.Granted("a data reset is running")
 
     ran = []
     with patch("app.background.threading.Thread", _SyncThread), patch("app.pipeline.lease.job", refused):
@@ -470,3 +480,30 @@ def test_a_skipped_nightly_run_alert_names_what_held_it_off(reason, cause):
          patch("app.ops_alerts.check_state_pvi_staleness"):
         scheduler._nightly_pipeline()
     assert cause in alert.call_args.args[1]
+
+
+def test_a_hung_bill_refresh_is_cut_off_inside_its_lease(monkeypatch):
+    """Never run beside the next pass (its older snapshot would overwrite the
+    newer one's rows): cut off while its lease still holds."""
+    import asyncio
+    from datetime import timedelta
+
+    from app import scheduler
+    from app.pipeline import lease
+
+    monkeypatch.setitem(lease.HUNG_AFTER, lease.BILL_REFRESH, lease.stale_after(lease.BILL_REFRESH) + timedelta(seconds=0.05))
+    cancelled = []
+
+    async def hangs():
+        try:
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            cancelled.append(True)
+            raise
+
+    with patch("app.background.threading.Thread", _SyncThread), \
+         patch("app.pipeline.bill_refresh.refresh_bill_statuses", hangs), \
+         patch("app.database.SessionLocal", return_value=MagicMock(**{"query.return_value.filter.return_value.first.return_value": None})), \
+         patch("app.scheduler.is_house_pipeline_running", return_value=False):
+        scheduler._hourly_bill_status_refresh()
+    assert cancelled == [True]

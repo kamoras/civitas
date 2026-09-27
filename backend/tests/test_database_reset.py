@@ -263,7 +263,7 @@ class TestLease:
         monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
         lease.acquire(db_session, lease.DATA_RESET)
         with lease.job(lease.BALLOT_SYNC) as held:
-            assert held is False
+            assert not held and held.why == "a data reset is running"
         assert not lease.held(db_session, lease.BALLOT_SYNC)
 
     def test_every_lease_is_one_the_reset_names(self):
@@ -408,3 +408,29 @@ def test_a_senate_run_held_off_says_why(db_session, monkeypatch):
     lease.acquire(db_session, lease.DATA_RESET)
     result = asyncio.run(senate_pipeline.run_senate_pipeline())
     assert result == {"status": "skipped", "reason": lease.REFUSED_BY_RESET}
+
+
+def test_a_newer_run_finishing_first_leaves_the_hung_one_marked():
+    from app.pipeline.run_tracker import PipelineRunTracker
+
+    tracker = PipelineRunTracker()
+    hung = tracker.start()
+    newer = tracker.start()
+    tracker.stop(newer)
+    assert tracker.is_running  # the hung run is still going
+    tracker.stop(hung)
+    assert not tracker.is_running and tracker.age is None
+
+
+def test_try_start_refuses_a_fresh_run_and_passes_a_hung_one():
+    import time
+    from datetime import timedelta
+
+    from app.pipeline.run_tracker import PipelineRunTracker
+
+    tracker = PipelineRunTracker()
+    first = tracker.start()
+    assert tracker.try_start() is None
+    assert tracker.try_start(hung_after=timedelta(hours=2)) is None
+    tracker._runs[first] = time.time() - 3 * 3600  # three hours in: hung
+    assert tracker.try_start(hung_after=timedelta(hours=2)) is not None

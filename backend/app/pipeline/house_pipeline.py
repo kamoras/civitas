@@ -27,7 +27,7 @@ from app.pipeline.member_lifecycle import (
     reconcile_roster,
 )
 from app.pipeline.progress_tracker import ProgressTracker
-from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
+from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock_why
 from app.services.representative_service import upsert_representative
 
 from app.pipeline.fetch.congress import (
@@ -121,17 +121,17 @@ def recent_not_covered_by_key_bills(
 async def run_house_pipeline() -> dict:
     """Run the full House representative pipeline."""
     db = SessionLocal()
-    _run_token = 0  # no run of ours for the finally to stop until start() below
+    _run_token = None  # no run of ours for the finally to stop until start() below
 
     # Acquire the run lock BEFORE any global/DB mutation — same reasoning
     # as senate_pipeline.py's _acquire_pipeline_lock call. Without it, a row
     # orphaned by a killed process (a deploy restarting the container
     # mid-run) stays "running" forever, blocking every future House run.
-    house_run = acquire_pipeline_lock(db, HousePipelineRun, STALE_PIPELINE_TIMEOUT)
+    house_run, refused = acquire_pipeline_lock_why(db, HousePipelineRun, STALE_PIPELINE_TIMEOUT)
     if house_run is None:
         logger.warning("House pipeline already running in another process — skipping")
         db.close()
-        return {"status": "skipped", "reason": "already_running"}
+        return {"status": "skipped", "reason": refused}
 
     _run_token = _tracker.start()
     start_time = time.time()

@@ -118,19 +118,19 @@ def _mark_orphaned_senate_runs():
         # Conditional on the row still RUNNING: a run that finished between
         # the reads above (its lease let go after its row was final) keeps
         # the status it wrote.
-        marked = db.query(PipelineRun).filter(
-            PipelineRun.id.in_([run.id for run in orphaned]), PipelineRun.status == PipelineStatus.RUNNING,
-        ).update({
-            "status": PipelineStatus.STALE,
-            "completed_at": utcnow(),
-            "error_message": "Marked stale: app restarted while pipeline was running",
-        }, synchronize_session=False)
-        db.commit()
-        if marked:
-            for run in orphaned:
+        for run in orphaned:
+            marked = db.query(PipelineRun).filter(
+                PipelineRun.id == run.id, PipelineRun.status == PipelineStatus.RUNNING,
+            ).update({
+                "status": PipelineStatus.STALE,
+                "completed_at": utcnow(),
+                "error_message": "Marked stale: app restarted while pipeline was running",
+            }, synchronize_session=False)
+            if marked:
                 logging.getLogger("app.main").warning(
                     "Invalidated orphaned pipeline run #%d (started %s)", run.id, run.started_at,
                 )
+        db.commit()
     except Exception as e:
         logging.getLogger("app.main").warning("Orphan pipeline cleanup failed: %s", e)
     finally:

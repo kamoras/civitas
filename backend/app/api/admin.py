@@ -1307,10 +1307,7 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
     with writing("Explore re-embed"):
         async with lease.job_async(lease.EXPLORE) as held:
             if not held:
-                raise HTTPException(
-                    status_code=409,
-                    detail="The explore tables are held: a data reset or an explore ingest is running, or the database is busy",
-                )
+                raise HTTPException(status_code=409, detail=f"Explore re-embed not started: {held.why}")
             try:
                 clear_explore()
             except Exception:

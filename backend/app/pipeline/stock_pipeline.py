@@ -57,7 +57,7 @@ from app.pipeline.fetch.senate_ptr import (
     senate_filing_id,
 )
 from app.pipeline.progress_tracker import ProgressTracker
-from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
+from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock_why
 from app.pipeline.transform.industry_classifier import classify_batch_with_learning
 from app.time_utils import utcnow
 
@@ -471,7 +471,7 @@ async def run_stock_trades_pipeline() -> dict:
     filings does not prevent the others from being ingested.
     """
     db: Session = SessionLocal()
-    _run_token = 0  # no run of ours for the finally to stop until start() below
+    _run_token = None  # no run of ours for the finally to stop until start() below
     try:
         if _other_pipeline_running(db):
             logger.info("Stock trades pipeline skipped — a member pipeline is currently running")
@@ -483,10 +483,10 @@ async def run_stock_trades_pipeline() -> dict:
         # every future Stock run via _other_pipeline_running's check above
         # (which any OTHER pipeline's own stuck row would also trip) and
         # this one (a stuck STOCK row blocking Stock's own next attempt).
-        run = acquire_pipeline_lock(db, StockTradesPipelineRun, STALE_PIPELINE_TIMEOUT)
+        run, refused = acquire_pipeline_lock_why(db, StockTradesPipelineRun, STALE_PIPELINE_TIMEOUT)
         if run is None:
             logger.info("Stock trades pipeline already running in another process — skipping")
-            return {"status": "skipped", "reason": "already_running"}
+            return {"status": "skipped", "reason": refused}
 
         _run_token = _tracker.start()
         start_time = time.time()

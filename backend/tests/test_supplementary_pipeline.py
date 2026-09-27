@@ -23,7 +23,9 @@ from app.time_utils import utcnow
 
 @asynccontextmanager
 async def _granted(_tier):
-    yield True
+    from app.pipeline.lease import Granted
+
+    yield Granted(None)
 
 
 @pytest.fixture(autouse=True)
@@ -36,9 +38,9 @@ def _job_leases_granted():
 
 @pytest.fixture(autouse=True)
 def _reset_tracker():
-    supplementary_pipeline._tracker.stop()
+    supplementary_pipeline._tracker.clear()
     yield
-    supplementary_pipeline._tracker.stop()
+    supplementary_pipeline._tracker.clear()
 
 
 def _run(db_session, explore_result=None, justice_result=None, president_result=None,
@@ -274,7 +276,7 @@ def test_a_step_whose_lease_is_held_elsewhere_is_skipped(db_session):
 
     @asynccontextmanager
     async def explore_held(tier):
-        yield tier != lease.EXPLORE
+        yield lease.Granted("it is running elsewhere" if tier == lease.EXPLORE else None)
 
     with patch("app.pipeline.lease.job_async", explore_held), \
          patch("app.pipeline.explore_pipeline.run_explore_pipeline", new_callable=AsyncMock) as explore:
@@ -283,3 +285,5 @@ def test_a_step_whose_lease_is_held_elsewhere_is_skipped(db_session):
     run = db_session.query(SupplementaryPipelineRun).one()
     steps = {step["key"]: step["status"] for step in json.loads(run.progress_detail)}
     assert steps["explore_documents"] == "skipped" and steps["president_scorecards"] == "done"
+    detail = {step["key"]: step.get("detail") for step in json.loads(run.progress_detail)}
+    assert detail["explore_documents"] == "skipped: it is running elsewhere"

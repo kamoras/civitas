@@ -399,7 +399,7 @@ def _record_score_snapshots(db: Session) -> None:
     logger.info("Recorded score snapshots for %d senators on %s", len(senators), today)
 
 
-def _acquire_pipeline_lock(db: Session) -> PipelineRun | None:
+def _acquire_pipeline_lock(db: Session) -> "tuple[PipelineRun | None, str | None]":
     """Atomically create a new locked run, or return None if one is running.
 
     Uses the shared SQLite database so the lock works across blue/green
@@ -413,9 +413,9 @@ def _acquire_pipeline_lock(db: Session) -> PipelineRun | None:
     Thin wrapper over run_tracker.acquire_pipeline_lock, shared by
     House/Stock/Supplementary too so none of them need their own copy.
     """
-    from app.pipeline.run_tracker import acquire_pipeline_lock
+    from app.pipeline.run_tracker import acquire_pipeline_lock_why
 
-    return acquire_pipeline_lock(db, PipelineRun, timedelta(seconds=STALE_PIPELINE_TIMEOUT_S))
+    return acquire_pipeline_lock_why(db, PipelineRun, timedelta(seconds=STALE_PIPELINE_TIMEOUT_S))
 
 
 # Hashed paths that cannot change how anything is classified or scored, so
@@ -774,7 +774,10 @@ def _take_senate_run_lease(stack) -> str | None:
         why = lease.refusal_code(lease_db, lease.SENATE_RUN)
         if why != lease.REFUSED_BUSY:
             break
-    logger.warning("Senate run not started: %s", lease.refusal(lease_db, lease.SENATE_RUN))
+    logger.warning(
+        "Senate run not started: %s", lease.REFUSAL_TEXT[why]
+        + (f", {_SENATE_LEASE_ATTEMPTS} times" if why == lease.REFUSED_BUSY else ""),
+    )
     return why
 
 
@@ -804,7 +807,9 @@ async def run_senate_pipeline(
     run_lease = ExitStack()
     try:
         refused = _take_senate_run_lease(run_lease)
-        pipeline_run = _acquire_pipeline_lock(db) if refused is None else None
+        pipeline_run = None
+        if refused is None:
+            pipeline_run, refused = _acquire_pipeline_lock(db)
     except BaseException:
         # Before the run's own try: let go of the lease (and its heartbeat)
         # here, or it would be renewed for as long as the process lives.
@@ -817,7 +822,7 @@ async def run_senate_pipeline(
         run_lease.close()
         # Why, for the nightly chain's skip alert: a data reset, a busy
         # database, or a run already going.
-        return {"status": "skipped", "reason": refused if refused is not None else "already_running"}
+        return {"status": "skipped", "reason": refused}
 
     try:
         reset_stats()

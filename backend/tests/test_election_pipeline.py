@@ -551,7 +551,7 @@ class TestBallotSync:
         # Two passes writing the same Candidate rows at once is what this
         # prevents; the sync in flight is doing the same step anyway.
         tracker = election_pipeline.ballot_tracker()
-        tracker.start()
+        token = tracker.start()
         try:
             with (
                 patch("app.pipeline.election_pipeline.SessionLocal", return_value=db_session),
@@ -561,5 +561,5 @@ class TestBallotSync:
             ):
                 asyncio.run(election_pipeline.run_election_pipeline(2026))
         finally:
-            tracker.stop()
+            tracker.stop(token)
         nightly_sync.assert_not_called()

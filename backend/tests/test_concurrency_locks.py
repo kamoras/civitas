@@ -191,11 +191,12 @@ class TestAcquirePipelineLock:
     def test_acquires_when_free_and_blocks_second_caller(self, db_session):
         from app.pipeline.senate_pipeline import _acquire_pipeline_lock
 
-        run = _acquire_pipeline_lock(db_session)
+        run, _ = _acquire_pipeline_lock(db_session)
         assert run is not None
         assert run.status == PipelineStatus.RUNNING
-        # Second caller sees the running row and yields (early-return path).
-        assert _acquire_pipeline_lock(db_session) is None
+        # Second caller sees the running row and yields (early-return path),
+        # saying why.
+        assert _acquire_pipeline_lock(db_session) == (None, "already_running")
 
     def test_integrity_error_on_commit_yields_gracefully(self, db_session, monkeypatch):
         # The race window the DB constraint closes: another container
@@ -215,7 +216,7 @@ class TestAcquirePipelineLock:
             return real_commit()
 
         monkeypatch.setattr(db_session, "commit", racing_commit)
-        assert senate_pipeline._acquire_pipeline_lock(db_session) is None
+        assert senate_pipeline._acquire_pipeline_lock(db_session)[0] is None
 
 
 class TestAcquirePipelineLockGeneric:

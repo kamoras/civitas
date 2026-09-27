@@ -17,7 +17,7 @@ from app.database import SessionLocal
 from app.models import Justice, PipelineStatus, SupplementaryPipelineRun
 from app.pipeline import lease
 from app.pipeline.progress_tracker import ProgressTracker
-from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
+from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock_why
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ async def run_supplementary_pipeline() -> dict:
     """Ingest explore documents, refresh SCOTUS justice scorecards
     (weekly cadence), and update president scorecards."""
     db = SessionLocal()
-    _run_token = 0  # no run of ours for the finally to stop until start() below
+    _run_token = None  # no run of ours for the finally to stop until start() below
 
     # Same reasoning as senate_pipeline.py's own lock: until 2026-07-23
     # this was an unconditional insert with no lock at all, so a row
@@ -55,11 +55,11 @@ async def run_supplementary_pipeline() -> dict:
     # supplementary run. Confirmed live: this left supplementary data
     # (explore docs, SCOTUS, presidents) stale for 1+ day after a
     # since-fixed deploy-race incident.
-    run = acquire_pipeline_lock(db, SupplementaryPipelineRun, STALE_PIPELINE_TIMEOUT)
+    run, refused = acquire_pipeline_lock_why(db, SupplementaryPipelineRun, STALE_PIPELINE_TIMEOUT)
     if run is None:
         logger.warning("Supplementary pipeline already running in another process — skipping")
         db.close()
-        return {"status": "skipped", "reason": "already_running"}
+        return {"status": "skipped", "reason": refused}
 
     _run_token = _tracker.start()
     start_time = time.time()
@@ -76,7 +76,7 @@ async def run_supplementary_pipeline() -> dict:
         try:
             async with lease.job_async(lease.EXPLORE) as held:
                 if not held:
-                    progress.skip("explore_documents", detail="held by a data reset or a run elsewhere")
+                    progress.skip("explore_documents", detail=f"skipped: {held.why}")
                 else:
                     from app.pipeline.explore_pipeline import run_explore_pipeline
                     explore_result = await run_explore_pipeline(days_back=60)
@@ -117,7 +117,7 @@ async def run_supplementary_pipeline() -> dict:
             try:
                 async with lease.job_async(lease.JUSTICE_PIPELINE) as held:
                     if not held:
-                        progress.skip("justice_scorecards", detail="held by a data reset or a run elsewhere")
+                        progress.skip("justice_scorecards", detail=f"skipped: {held.why}")
                     else:
                         from app.pipeline.justice_pipeline import run_justice_pipeline
                         justice_result = await run_justice_pipeline(db)
@@ -200,7 +200,7 @@ async def run_supplementary_pipeline() -> dict:
         try:
             async with lease.job_async(lease.PRESIDENT_PIPELINE) as held:
                 if not held:
-                    progress.skip("president_scorecards", detail="held by a data reset or a run elsewhere")
+                    progress.skip("president_scorecards", detail=f"skipped: {held.why}")
                 else:
                     from app.pipeline.president_pipeline import run_president_pipeline
                     president_result = await run_president_pipeline(db)

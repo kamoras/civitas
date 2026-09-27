@@ -67,10 +67,6 @@ def is_bill_refresh_running() -> bool:
     return _tracker.is_running
 
 
-def bill_refresh_age():
-    """Wall-clock age of the in-process refresh, or None when idle."""
-    return _tracker.age
-
 
 def _window_start(db: Session, now: datetime) -> datetime:
     stored = api_cache_get(
@@ -213,10 +209,11 @@ async def _apply_updates(
 async def refresh_bill_statuses(db: Session | None = None) -> dict:
     """Run one incremental refresh cycle. Pass `db` for tests; production
     opens (and closes) its own session."""
-    # The caller decides whether a refresh still running is hung
-    # (scheduler._hourly_bill_status_refresh); one it proceeds past keeps
-    # running beside this one, as the other hung-run overrides allow.
-    _run_token = _tracker.start()
+    # One pass at a time, checked and started in one step. A hung pass is
+    # cut off by the scheduler (asyncio.wait_for), never run beside.
+    _run_token = _tracker.try_start()
+    if _run_token is None:
+        return {"status": "skipped", "reason": "previous refresh still running"}
     try:
         owns_session = db is None
         if owns_session:
@@ -229,12 +226,8 @@ async def refresh_bill_statuses(db: Session | None = None) -> dict:
                 recent = await _fetch_recently_updated(client, since)
                 summary = await _apply_updates(db, client, recent)
             # Only advance the window marker after a full successful pass, so
-            # a crashed cycle is retried over the same window next hour — and
-            # only forward: a hung pass the scheduler proceeded past can
-            # finish after a newer one.
-            stored = api_cache_get(db, _LAST_RUN_TIER, LAST_RUN_CACHE_KEY, max_age_hours=24 * 365)
-            if not stored or stored.get("lastRun", "") < now.isoformat():
-                api_cache_set(db, _LAST_RUN_TIER, LAST_RUN_CACHE_KEY, {"lastRun": now.isoformat()})
+            # a crashed cycle is retried over the same window next hour.
+            api_cache_set(db, _LAST_RUN_TIER, LAST_RUN_CACHE_KEY, {"lastRun": now.isoformat()})
         finally:
             if owns_session:
                 db.close()
