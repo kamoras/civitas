@@ -21,7 +21,7 @@ from app.pipeline.election_pipeline import (
 )
 from app.pipeline.analyze.action_center import get_action_refresh_state, refresh_action_issues
 from app.time_utils import utcnow
-from app.background import start_writer
+from app.background import WritesHeld, start_writer
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,26 @@ def _is_stale(age: timedelta | None, threshold: timedelta) -> bool:
     caller proceeds instead of waiting on it indefinitely. Shared by every
     running-process guard in `_hourly_action_refresh` below."""
     return age is not None and age > threshold
+
+
+def _start_job(target, *, name: str, alert: bool = False) -> None:
+    """Start a scheduled job's thread. While the admin data reset holds the
+    database the job doesn't run this time: logged, and for the nightly
+    chain — whose skip leaves the wiped database unbuilt for a day — an ops
+    alert, as for any other skipped nightly run."""
+    try:
+        start_writer(target, name=name)
+    except WritesHeld as held:
+        logger.warning("%s", held)
+        if alert:
+            from app.ops_alerts import send_ops_alert
+
+            send_ops_alert(
+                "Nightly pipeline skipped: data reset in progress",
+                f"{held}. Nothing ran tonight; trigger the pipeline once the reset has finished, or the "
+                "database stays empty until tomorrow night's run.",
+                dedupe_key=f"nightly-skipped-reset-{utcnow():%Y-%m-%d}",
+            )
 
 
 def _nightly_pipeline() -> None:
@@ -140,7 +160,7 @@ def _nightly_pipeline() -> None:
         finally:
             loop.close()
 
-    start_writer(_run, name="nightly-pipeline")
+    _start_job(_run, name="nightly-pipeline", alert=True)
 
 
 def _hourly_action_refresh() -> None:
@@ -287,7 +307,7 @@ def _hourly_action_refresh() -> None:
         except Exception:
             logger.exception("Action center refresh failed")
 
-    start_writer(_run, name="action-refresh")
+    _start_job(_run, name="action-refresh")
 
 
 def _hourly_bill_status_refresh() -> None:
@@ -331,7 +351,7 @@ def _hourly_bill_status_refresh() -> None:
         except Exception:
             logger.exception("Bill status refresh failed")
 
-    start_writer(_run, name="bill-status-refresh")
+    _start_job(_run, name="bill-status-refresh")
 
 
 def _election_coverage_refresh() -> None:
@@ -408,7 +428,7 @@ def _election_coverage_refresh() -> None:
         finally:
             coverage_tracker().stop()
 
-    start_writer(_run, name="election-coverage-refresh")
+    _start_job(_run, name="election-coverage-refresh")
 
 
 def _election_ballot_sync() -> None:
@@ -460,7 +480,7 @@ def _election_ballot_sync() -> None:
             loop.close()
             ballot_tracker().stop()
 
-    start_writer(_run, name="election-ballot-sync")
+    _start_job(_run, name="election-ballot-sync")
 
 
 def start_scheduler() -> None:
@@ -532,7 +552,7 @@ def start_scheduler() -> None:
     from app.ops_alerts import check_pipeline_overrun, check_pipeline_staleness
     scheduler.add_job(
         # Writers too (the alert history lives in api_cache).
-        lambda: start_writer(check_pipeline_overrun, name="pipeline-watchdog"),
+        lambda: _start_job(check_pipeline_overrun, name="pipeline-watchdog"),
         CronTrigger(minute="5,35"),
         id="pipeline_watchdog",
         replace_existing=True,
@@ -544,7 +564,7 @@ def start_scheduler() -> None:
     # rather than half-hourly since it is measured in days, and it
     # dedupes per pipeline per day regardless.
     scheduler.add_job(
-        lambda: start_writer(check_pipeline_staleness, name="pipeline-staleness-watchdog"),
+        lambda: _start_job(check_pipeline_staleness, name="pipeline-staleness-watchdog"),
         CronTrigger(minute="20"),
         id="pipeline_staleness_watchdog",
         replace_existing=True,

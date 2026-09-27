@@ -371,11 +371,12 @@ def ocr_extract_rows(pdf: object) -> list[TradeRow]:
     return rows
 
 
-def parse_pdf_bytes(pdf_bytes: bytes) -> tuple[list[TradeRow], str]:
+def parse_pdf_bytes(pdf_bytes: bytes, *, blank_owner: str = "self") -> tuple[list[TradeRow], str]:
     """Parse a PTR PDF's bytes into (rows, confidence).
 
     Tries the text layer first (tables via pdfplumber); falls back to OCR
     only if no text layer exists at all (scanned/paper filings).
+    `blank_owner`: see parse_table_rows.
     """
     import io
 
@@ -388,7 +389,7 @@ def parse_pdf_bytes(pdf_bytes: bytes) -> tuple[list[TradeRow], str]:
         if has_text:
             for page in pdf.pages:
                 for table in page.extract_tables() or []:
-                    rows.extend(parse_table_rows(table))
+                    rows.extend(parse_table_rows(table, blank_owner=blank_owner))
         if not rows:
             confidence = "ocr"
             rows = ocr_extract_rows(pdf)

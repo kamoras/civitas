@@ -412,7 +412,9 @@ async def fetch_and_parse_ptr(
             pdf_resp = await _request_with_retry(client, "GET", f"{EFD_BASE}{pdf_link.group(1)}")
             if pdf_resp is not None:
                 try:
-                    rows, confidence = parse_pdf_bytes(pdf_resp.content)
+                    # A blank owner is not stated on the Senate's forms, as
+                    # on its electronic tables.
+                    rows, confidence = parse_pdf_bytes(pdf_resp.content, blank_owner="unknown")
                 except Exception as e:
                     logger.error("Failed to parse Senate paper PTR %s: %s", filing["report_url"], e)
     else:

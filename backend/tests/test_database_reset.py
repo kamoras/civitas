@@ -8,6 +8,8 @@ the 2026-07 migration cleanup).
 
 from unittest.mock import patch
 
+import pytest
+
 from app import models  # noqa: F401 — registers all Base subclasses before db_session's create_all()
 from app.database import reset_all_data
 
@@ -76,15 +78,18 @@ class TestResetAllDataTables:
 
 
 class TestResetGuard:
+    @pytest.fixture(autouse=True)
+    def _one_session(self, db_session, monkeypatch):
+        monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
+
     async def _refused(self, db_session):
-        import pytest
         from fastapi import HTTPException
 
         from app.api.admin import admin_reset_data
 
         with patch("app.database.reset_all_data") as reset:
             with pytest.raises(HTTPException) as refused:
-                await admin_reset_data(db=db_session)
+                await admin_reset_data()
         reset.assert_not_called()
         assert refused.value.status_code == 409
         # The locks it took on the idle pipelines are given back.
@@ -112,7 +117,7 @@ class TestResetGuard:
 
     async def test_holds_every_writer_off_for_the_wipe_and_lets_go_after(self, db_session):
         from app.api.admin import admin_reset_data
-        from app.background import start_writer
+        from app.background import WritesHeld, start_writer
         from app.pipeline.analyze.action_center import _acquire_refresh_lock
         from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
 
@@ -121,26 +126,54 @@ class TestResetGuard:
         def wipe():
             during["senate_lock_free"] = acquire_pipeline_lock(db_session, models.PipelineRun, STALE_PIPELINE_TIMEOUT) is not None
             during["lease_free"] = _acquire_refresh_lock(db_session) is not None
-            during["writer_started"] = start_writer(lambda: None, name="test-late") is not None
+            try:
+                start_writer(lambda: None, name="test-late")
+                during["writer_started"] = True
+            except WritesHeld:
+                during["writer_started"] = False
             return {"senators": 2}
 
         with patch("app.database.reset_all_data", side_effect=wipe):
-            result = await admin_reset_data(db=db_session)
+            result = await admin_reset_data()
         assert result["rowsDeleted"] == 2
         assert during == {"senate_lock_free": False, "lease_free": False, "writer_started": False}
         assert db_session.query(models.PipelineRun).count() == 0
         assert _acquire_refresh_lock(db_session) is not None
 
 
-def test_startup_clears_the_run_locks_a_dead_reset_held(db_session, monkeypatch):
-    from app.api.admin import RESET_HOLD_MARKER
-    from app.main import _invalidate_orphaned_pipelines
+class _Unclosable:
+    """The test's one session, handed to code that closes what it opens."""
+
+    def __init__(self, session):
+        self._session = session
+
+    def close(self):
+        pass
+
+    def __getattr__(self, name):
+        return getattr(self._session, name)
+
+
+def test_a_dead_resets_run_lock_goes_stale_within_the_hour(db_session):
+    from datetime import timedelta
+
+    from app.pipeline.run_tracker import RESET_HOLD_MARKER, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
     from app.time_utils import utcnow
 
-    db_session.add(models.HousePipelineRun(status="running", started_at=utcnow(), error_message=RESET_HOLD_MARKER))
-    db_session.add(models.StockTradesPipelineRun(status="running", started_at=utcnow()))  # a real run: not the reset's
+    db_session.add(models.HousePipelineRun(
+        status="running", started_at=utcnow() - timedelta(hours=2), error_message=RESET_HOLD_MARKER,
+    ))
     db_session.commit()
-    monkeypatch.setattr("app.database.SessionLocal", lambda: db_session)
+    assert acquire_pipeline_lock(db_session, models.HousePipelineRun, STALE_PIPELINE_TIMEOUT) is not None
+
+
+def test_startup_leaves_a_live_resets_senate_lock_alone(db_session, monkeypatch):
+    from app.main import _invalidate_orphaned_pipelines
+    from app.pipeline.run_tracker import RESET_HOLD_MARKER
+    from app.time_utils import utcnow
+
+    db_session.add(models.PipelineRun(status="running", started_at=utcnow(), error_message=RESET_HOLD_MARKER))
+    db_session.commit()
+    monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
     _invalidate_orphaned_pipelines()
-    assert db_session.query(models.HousePipelineRun).count() == 0
-    assert db_session.query(models.StockTradesPipelineRun).count() == 1
+    assert db_session.query(models.PipelineRun).one().status == "running"

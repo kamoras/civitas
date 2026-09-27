@@ -43,7 +43,8 @@ def test_exclusive_is_refused_while_anything_writes():
 def test_nothing_starts_while_exclusive_is_held():
     ran = []
     with exclusive("test-reset"):
-        assert start_writer(lambda: ran.append(1), name="test-late") is None
+        with pytest.raises(WritesHeld):
+            start_writer(lambda: ran.append(1), name="test-late")
         with pytest.raises(WritesHeld):
             with writing("test-late"):
                 pass

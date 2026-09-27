@@ -23,6 +23,26 @@ _RunModel = TypeVar("_RunModel")
 STALE_PIPELINE_TIMEOUT = timedelta(hours=12)
 
 
+# The run table of every pipeline with one, which the admin data reset holds
+# (api/admin.py) so no pipeline in any process starts during its wipe.
+def run_tables() -> dict[str, type]:
+    from app.models import (
+        ElectionPipelineRun, HousePipelineRun, PipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun,
+    )
+
+    return {
+        "Senate": PipelineRun, "Supplementary": SupplementaryPipelineRun, "House": HousePipelineRun,
+        "Stock trades": StockTradesPipelineRun, "Election": ElectionPipelineRun,
+    }
+
+
+# Written on a run row the reset holds. Such a row goes stale after
+# RESET_HOLD_STALE, not the 12h a real run gets, so a reset whose process
+# died doesn't keep the nightly chain out for the rest of the day.
+RESET_HOLD_MARKER = "Held by the admin data reset"
+RESET_HOLD_STALE = timedelta(hours=1)
+
+
 def run_in_progress(db: Session, model: type[_RunModel], stale_timeout: timedelta = STALE_PIPELINE_TIMEOUT) -> bool:
     """Whether a `model` run is RUNNING and young enough to be real. A row
     older than `stale_timeout` is one a killed process left behind (the
@@ -68,6 +88,10 @@ def acquire_pipeline_lock(db: Session, model: type[_RunModel], stale_timeout: ti
     running = db.query(model).filter(model.status == PipelineStatus.RUNNING).first()
     if running:
         age = utcnow() - running.started_at
+        if running.error_message == RESET_HOLD_MARKER:
+            # The admin data reset holds this lock for seconds to minutes; one
+            # held longer belongs to a reset whose process died.
+            stale_timeout = RESET_HOLD_STALE
         if age > stale_timeout:
             running.status = PipelineStatus.STALE
             running.completed_at = utcnow()

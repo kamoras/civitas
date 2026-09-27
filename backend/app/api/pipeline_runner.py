@@ -15,8 +15,6 @@ import asyncio
 import logging
 from collections.abc import Awaitable
 from typing import Callable
-from fastapi import HTTPException
-
 from app.background import start_writer
 
 logger = logging.getLogger(__name__)
@@ -33,8 +31,8 @@ def run_pipeline_in_thread(
 
     Any exception — including ``BaseException`` (SystemExit/KeyboardInterrupt) —
     is logged under ``error_label`` and never propagated out of the thread, so a
-    failed run can't take the process down. Raises a 409 instead of starting
-    while the admin data reset holds the database (app.background).
+    failed run can't take the process down. Raises WritesHeld (a 409) instead
+    of starting while the admin data reset holds the database.
     """
     def _run() -> None:
         loop = asyncio.new_event_loop()
@@ -45,6 +43,4 @@ def run_pipeline_in_thread(
         finally:
             loop.close()
 
-    if start_writer(_run, name=name) is None:
-        # The database is held for the admin data reset.
-        raise HTTPException(status_code=409, detail="A data reset is running — try again when it finishes")
+    start_writer(_run, name=name)

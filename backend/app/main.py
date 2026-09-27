@@ -81,15 +81,14 @@ def _invalidate_orphaned_pipelines() -> None:
 
     db = SessionLocal()
     try:
-        # Run locks the admin data reset held when this process died.
-        from app.api.admin import RESET_HOLD_MARKER, _reset_locks
+        from app.pipeline.run_tracker import RESET_HOLD_MARKER
 
-        for model in _reset_locks().values():
-            db.query(model).filter(
-                model.status == PipelineStatus.RUNNING, model.error_message == RESET_HOLD_MARKER,
-            ).delete(synchronize_session=False)
-        db.commit()
-        orphaned = db.query(PipelineRun).filter(PipelineRun.status == PipelineStatus.RUNNING).all()
+        # Not a data reset's hold: that may be another process's, mid-wipe,
+        # and a dead reset's goes stale on its own (acquire_pipeline_lock).
+        orphaned = db.query(PipelineRun).filter(
+            PipelineRun.status == PipelineStatus.RUNNING,
+            PipelineRun.error_message.is_distinct_from(RESET_HOLD_MARKER),
+        ).all()
         for run in orphaned:
             run.status = PipelineStatus.STALE
             run.completed_at = utcnow()

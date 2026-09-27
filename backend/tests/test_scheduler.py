@@ -407,3 +407,17 @@ class TestElectionBallotSync:
     def test_the_tracker_is_released_after_a_run(self):
         self._run(error=RuntimeError("boom"))
         assert is_ballot_sync_running() is False
+
+
+def test_a_nightly_chain_refused_by_a_data_reset_alerts():
+    """A reset holding the database refuses the chain; the skip leaves the
+    wiped database unbuilt for a day, so it is never silent."""
+    from app import scheduler
+    from app.background import exclusive
+
+    ran = []
+    with exclusive("test-reset"), patch("app.ops_alerts.send_ops_alert") as alert:
+        scheduler._start_job(lambda: ran.append(1), name="nightly-pipeline", alert=True)
+        scheduler._start_job(lambda: ran.append(1), name="action-refresh")
+    assert ran == []
+    assert alert.call_count == 1 and "data reset" in alert.call_args.args[0]

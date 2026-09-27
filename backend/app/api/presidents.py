@@ -4,7 +4,7 @@ import asyncio
 import logging
 import secrets
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -46,10 +46,7 @@ def weights():
 
 
 @router.post("/pipeline/trigger")
-async def trigger_pipeline(
-    background_tasks: BackgroundTasks,
-    authorization: str | None = Header(default=None),
-):
+async def trigger_pipeline(authorization: str | None = Header(default=None)):
     """Trigger a president data pipeline run (fetches live data from APIs)."""
     if not settings.PIPELINE_TRIGGER_TOKEN:
         raise HTTPException(status_code=503, detail="Pipeline trigger token not configured")
@@ -57,20 +54,18 @@ async def trigger_pipeline(
     if not authorization or not secrets.compare_digest(authorization, expected):
         raise HTTPException(status_code=403, detail="Invalid token")
 
-    background_tasks.add_task(_run_pipeline_background)
+    from app.background import start_writer
+
+    start_writer(_run_pipeline_background, name="president-pipeline")
     return {"status": "started", "message": "President pipeline triggered"}
 
 
 def _run_pipeline_background():
-    from app.background import WritesHeld, writing
     from app.pipeline.president_pipeline import run_president_pipeline
 
     db = SessionLocal()
     try:
-        with writing("President pipeline"):
-            asyncio.run(run_president_pipeline(db))
-    except WritesHeld as held:
-        logger.info("%s", held)
+        asyncio.run(run_president_pipeline(db))
     except Exception as e:
         logger.error("President pipeline failed: %s", e, exc_info=True)
     finally:

@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import secrets
+import threading
 from datetime import datetime
 from typing import Annotated
 
@@ -117,6 +118,14 @@ def _clear_stuck_runs(db: Session, model, is_running: bool, pipeline_label: str)
             status_code=409, detail=f"{pipeline_label} pipeline is actively running — stop it first"
         )
 
+    from app.pipeline.run_tracker import RESET_HOLD_MARKER
+
+    held = db.query(model).filter(
+        model.status == PipelineStatus.RUNNING, model.error_message == RESET_HOLD_MARKER,
+    ).first()
+    if held is not None:
+        # Not a stuck run: a data reset holding the lock for its wipe.
+        raise HTTPException(status_code=409, detail="A data reset holds this pipeline's lock — wait for it to finish")
     stuck = db.query(model).filter(model.status == PipelineStatus.RUNNING).all()
     if not stuck:
         return {"cleared": 0, "message": "No stuck runs found"}
@@ -1431,24 +1440,68 @@ async def admin_clear_stuck_election(db: Session = Depends(get_db)):
     return _clear_stuck_runs(db, ElectionPipelineRun, is_election_pipeline_running(), "Election")
 
 
-# Written on a run row the reset holds, so a process that dies mid-reset
-# leaves rows startup recognizes and clears (main._invalidate_orphaned_pipelines).
-RESET_HOLD_MARKER = "Held by the admin data reset"
+def _reset_holding_every_writer() -> dict:
+    """reset_all_data, with every writer held off from before it starts to
+    after it ends. One synchronous function, run in a worker thread: the
+    request awaiting it can be cancelled (a client that disconnects), the
+    thread can't, so the holds are released only when the wipe is done.
 
+    - In this process, app.background.exclusive(): granted only while no
+      writer thread or task is registered, and while held none starts.
+    - In any process — a rollout's other task included — each pipeline's
+      run lock (marked as the reset's, run_tracker.RESET_HOLD_MARKER) and
+      the Action Center refresh's lease, kept alive by the refresh's own
+      heartbeat: the locks those jobs take themselves.
 
-def _reset_locks() -> dict[str, type]:
-    from app.models import (
-        ElectionPipelineRun, HousePipelineRun, PipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun,
+    Raises WritersBusy, naming them, if anything holds one already.
+    """
+    from app.background import WritersBusy, exclusive
+    from app.database import SessionLocal, engine, reset_all_data
+    from app.pipeline.analyze.action_center import (
+        _acquire_refresh_lock, _keep_refresh_lock, _release_refresh_lock,
+    )
+    from app.pipeline.run_tracker import (
+        RESET_HOLD_MARKER, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock, run_tables,
     )
 
-    return {
-        "Senate run": PipelineRun, "Supplementary run": SupplementaryPipelineRun, "House run": HousePipelineRun,
-        "Stock trades run": StockTradesPipelineRun, "Election run": ElectionPipelineRun,
-    }
+    with exclusive("Another data reset"):
+        db = SessionLocal()
+        held, busy, lease = [], [], None
+        stop_beat = threading.Event()
+        try:
+            for label, model in run_tables().items():
+                run = acquire_pipeline_lock(db, model, STALE_PIPELINE_TIMEOUT)
+                if run is None:
+                    busy.append(f"{label} run")
+                else:
+                    run.error_message = RESET_HOLD_MARKER
+                    db.commit()
+                    held.append(run)
+            lease = _acquire_refresh_lock(db)
+            if lease is None:
+                busy.append("Action Center refresh")
+            if busy:
+                raise WritersBusy(busy)
+            threading.Thread(
+                target=_keep_refresh_lock, args=(engine, lease, stop_beat), daemon=True, name="reset-lease-beat",
+            ).start()
+            return reset_all_data()
+        finally:
+            stop_beat.set()
+            try:
+                for run in held:
+                    db.delete(run)
+                db.commit()
+            except Exception:
+                logger.exception("Data reset: could not release its run locks (they go stale within the hour)")
+                db.rollback()
+            if lease is not None:
+                _release_refresh_lock(db, lease)
+            db.close()
 
 
 @router.post("/data/reset", dependencies=[Depends(require_admin)])
-async def admin_reset_data(db: Session = Depends(get_db)):
+async def admin_reset_data():
     """Wipe what the pipelines derive from their sources, for a clean start.
 
     Clears senators, votes, donors, the learning store, caches and the
@@ -1456,50 +1509,16 @@ async def admin_reset_data(db: Session = Depends(get_db)):
     run can rebuild (the Action Center's, run history). The next pipeline
     runs rebuild the rest from scratch with the latest code.
 
-    Every writer is held off for the whole wipe, not only checked before it:
-
-    - In this process, app.background.exclusive(): granted only while no
-      writer thread or task is registered, and while held none starts.
-    - In any process — a rollout's other task included — the run lock of
-      each pipeline and the Action Center refresh's lease, the locks those
-      jobs take themselves.
-
-    Anything already running refuses the reset (409, naming it). One gap is
+    Every writer is held off for the whole wipe (_reset_holding_every_writer);
+    anything already writing refuses the reset (409, naming it). One gap is
     left: the bill, ballot and coverage refreshes take no database lock, so
     in a rollout's other task they aren't held off; they only update rows
     the next pipeline run rewrites.
     """
-    from app.background import WritersBusy, exclusive
-    from app.database import reset_all_data
-    from app.pipeline.analyze.action_center import _acquire_refresh_lock, _release_refresh_lock
-    from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
+    from app.background import WritersBusy
 
     try:
-        with exclusive("Another data reset"):
-            held, running = [], []
-            for label, model in _reset_locks().items():
-                run = acquire_pipeline_lock(db, model, STALE_PIPELINE_TIMEOUT)
-                if run is None:
-                    running.append(label)
-                else:
-                    run.error_message = RESET_HOLD_MARKER
-                    held.append(run)
-            db.commit()
-            lease = _acquire_refresh_lock(db)
-            if lease is None:
-                running.append("Action Center refresh")
-            try:
-                if running:
-                    raise WritersBusy(running)
-                # Off the event loop: the holds above, not a blocked loop,
-                # are what keep writers out.
-                summary = await asyncio.to_thread(reset_all_data)
-            finally:
-                for run in held:
-                    db.delete(run)
-                db.commit()
-                if lease is not None:
-                    _release_refresh_lock(db, lease)
+        summary = await asyncio.to_thread(_reset_holding_every_writer)
     except WritersBusy as busy:
         raise HTTPException(status_code=409, detail=f"Cannot reset while running: {busy}") from None
     total_rows = sum(v for k, v in summary.items() if isinstance(v, int))

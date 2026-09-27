@@ -6,7 +6,7 @@ import logging
 import secrets
 import time
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -400,10 +400,7 @@ async def get_explore_document_summary(
 
 
 @router.post("/pipeline/trigger")
-async def trigger_explore_pipeline(
-    background_tasks: BackgroundTasks,
-    authorization: str | None = Header(default=None),
-):
+async def trigger_explore_pipeline(authorization: str | None = Header(default=None)):
     """Trigger the explore document ingestion pipeline."""
     if not settings.PIPELINE_TRIGGER_TOKEN:
         raise HTTPException(status_code=503, detail="Pipeline trigger token not configured")
@@ -411,20 +408,16 @@ async def trigger_explore_pipeline(
     if not authorization or not secrets.compare_digest(authorization, expected):
         raise HTTPException(status_code=403, detail="Invalid token")
 
-    background_tasks.add_task(_run_explore_pipeline)
+    from app.api.pipeline_runner import run_pipeline_in_thread
+
+    run_pipeline_in_thread(_run_explore_pipeline, name="explore-pipeline", error_label="Explore pipeline run failed")
     return {"status": "started"}
 
 
 async def _run_explore_pipeline():
-    from app.background import WritesHeld, writing
     from app.pipeline.explore_pipeline import run_explore_pipeline
     try:
-        # Registered for the admin data reset: the pipeline hands its writes
-        # to threads while this awaits.
-        with writing("Explore pipeline"):
-            result = await run_explore_pipeline(days_back=60)
+        result = await run_explore_pipeline(days_back=60)
         logger.info("Explore pipeline result: %s", result)
-    except WritesHeld as held:
-        logger.info("%s", held)
     except Exception as e:
         logger.error("Explore pipeline background task failed: %s", e)

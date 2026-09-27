@@ -11,12 +11,9 @@ adds a job and forgets it.
 """
 
 import itertools
-import logging
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-
-logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
 _running: dict[int, str] = {}
@@ -61,15 +58,13 @@ def writing(name: str) -> Iterator[None]:
         _unregister(token)
 
 
-def start_writer(target: Callable[..., object], *, name: str, args: tuple = ()) -> threading.Thread | None:
+def start_writer(target: Callable[..., object], *, name: str, args: tuple = ()) -> threading.Thread:
     """Start a daemon thread running `target(*args)`, registered as a
-    database writer from before it starts until it returns. While
-    exclusive() is held nothing starts: logged, and None returned."""
-    try:
-        token = _register(name)
-    except WritesHeld as held:
-        logger.info("%s", held)
-        return None
+    database writer from before it starts until it returns. Raises
+    WritesHeld, starting nothing, while exclusive() is held — which an
+    endpoint answers with a 409 (main's handler) and the scheduler logs,
+    or alerts on (scheduler._start_job)."""
+    token = _register(name)
 
     def _run() -> None:
         try:
