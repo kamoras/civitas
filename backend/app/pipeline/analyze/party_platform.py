@@ -900,7 +900,9 @@ def analyze_partisan_depth(
     vr = voting_record or {}
     all_v = (vr.get("keyVotes") or []) + (vr.get("recentVotes") or [])
     partisan_vote_count = sum(
-        1 for v in all_v if isinstance(v, dict) and v.get("vote") in ("Yea", "Nay")
+        1 for v in all_v
+        if isinstance(v, dict) and v.get("vote") in ("Yea", "Nay")
+        and not v.get("reconsiderSwitch")
     )
     ideology_lean = (ideology_score - 0.5) * 2.0 if ideology_score is not None else None
 
@@ -1070,6 +1072,11 @@ def _alignments_from_votes(voting_record: dict) -> list[dict]:
             continue
         vote = v.get("vote", "")
         if vote not in ("Yea", "Nay"):
+            continue
+        # The majority leader's procedural Nay on a failing motion their own
+        # party backed (normalize_votes.MAJORITY_LEADER_TITLES) records no
+        # position on the bill, so it is no evidence of lean either.
+        if v.get("reconsiderSwitch"):
             continue
 
         multi_areas = v.get("policyAreas") or []

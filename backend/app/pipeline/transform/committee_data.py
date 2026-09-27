@@ -5,8 +5,8 @@ own API exposes neither (confirmed 2026-07: member records carry no
 committee/leadership fields, and committee-detail records list bills/
 reports/nominations but never a member roster). Refreshed automatically
 by app/pipeline/fetch/committee_leadership.py (weekly, or immediately if
-missing) to /data/committee_membership.json and /data/leadership_roles.json
-on the persistent writable volume — same fully-automated, no-manual-step
+missing) to /data/committee_membership.json, /data/leadership_roles.json
+and /data/leadership_tenures.json on the persistent writable volume — same fully-automated, no-manual-step
 pattern as member_ideal_points.json.
 
 The bundled app/data/*.json files (git-tracked, updated only by manually
@@ -27,6 +27,7 @@ _DATA_DIR = pathlib.Path(__file__).resolve().parent.parent.parent / "data"
 
 _committee_membership_cache: dict[str, list[dict]] | None = None
 _leadership_roles_cache: dict[str, str] | None = None
+_leadership_tenures_cache: dict[str, list[dict]] | None = None
 
 
 def _load_json_cache(filename: str, json_key: str, missing_data_context: str) -> dict:
@@ -71,8 +72,32 @@ def load_leadership_roles() -> dict[str, str]:
     return _leadership_roles_cache
 
 
+def load_leadership_tenures() -> dict[str, list[dict]]:
+    """bioguide_id -> [{title, chamber, start, end}, ...]: every leadership
+    role held, with its dates (end None = still held). Built by
+    committee_leadership.build_leadership_tenures from the same source as
+    load_leadership_roles, which keeps only the current title.
+    """
+    global _leadership_tenures_cache
+    if _leadership_tenures_cache is None:
+        _leadership_tenures_cache = _load_json_cache(
+            "leadership_tenures.json", "tenures",
+            "leadership tenure checks fall back to current titles",
+        )
+    return _leadership_tenures_cache
+
+
+def leadership_tenures_on_volume() -> bool:
+    """Whether the persistent volume has its own leadership_tenures.json.
+    The file was added after leadership_roles.json, so a volume that
+    already had roles still needs one refresh to get it rather than
+    serving the bundled fallback until the weekly cadence comes round."""
+    return (_PERSISTENT_DATA_DIR / "leadership_tenures.json").exists()
+
+
 def clear_committee_data_cache() -> None:
     """Clear cached lookups (call between pipeline runs if data was refreshed)."""
-    global _committee_membership_cache, _leadership_roles_cache
+    global _committee_membership_cache, _leadership_roles_cache, _leadership_tenures_cache
     _committee_membership_cache = None
     _leadership_roles_cache = None
+    _leadership_tenures_cache = None

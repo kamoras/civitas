@@ -386,6 +386,15 @@ audit found that pinned every House member's score near 87–89.) Content
 alignment still drives bills with no roll call and the per-area partisan
 depth breakdown.
 
+One procedural exception, read from the chamber's own result field and
+never from vote counts: a **majority leader's** Nay on a motion the chamber
+recorded as rejected, which their own party supported, is not a break. The
+leader switches to the prevailing side so that they can move to reconsider (Senate
+Rule XIII; House Rule XIX cl. 2). It is scored as no party signal
+(`MAJORITY_LEADER_TITLES` in `normalize_votes.py`), and only for votes cast
+during the member's tenure in that office (`leadership_tenures.json`). The
+Speaker and the minority leader are never exempted.
+
 Partisan depth (how strongly a member of either chamber leans D or R) is computed primarily
 from the senator's actual voting record: for each policy area, the ratio of
 Yea/Nay votes on D-leaning vs R-leaning bills determines the area's alignment.

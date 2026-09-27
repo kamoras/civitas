@@ -25,6 +25,12 @@ _rate_limiter = RateLimiter(settings.CONGRESS_RPS)
 # (fewer, further-apart requests) than the sequential one-by-one search
 # that follows once a valid upper bound is found.
 _ROLL_CALL_PROBE_TIMEOUT_S = 15.0
+
+# Bumped whenever parse_senate_vote_xml / parse_house_vote_xml start
+# returning a new field, so the cached parsed roll calls (72h TTL, see
+# cache.py) are re-fetched and re-parsed instead of serving dicts that lack
+# it. v2 (2026-09): the chamber's own result ("result" / "rejected").
+ROLL_CALL_PARSE_VERSION = 2
 _ROLL_CALL_NARROW_SEARCH_TIMEOUT_S = 10.0
 _ROLL_CALL_NARROW_SEARCH_WINDOW = 50
 
@@ -559,7 +565,7 @@ async def fetch_roll_call_vote(
     function's own docstring, a mismatched pair silently defeats the
     short-TTL safety net for empty results.
     """
-    cache_key = f"rollcall-senate-{congress}-{session_number}-{roll_call_number}"
+    cache_key = f"rollcall-senate-{congress}-{session_number}-{roll_call_number}-v{ROLL_CALL_PARSE_VERSION}"
     cached = api_cache_get(db, "congress", cache_key, max_age_hours=max_age_hours)
     if cached is not None:
         return cached
@@ -605,6 +611,46 @@ def _root_text(root, xpath: str) -> str:
     return ""
 
 
+# The chambers' own result vocabulary, as printed in Senate.gov's
+# <vote_result> and clerk.house.gov's <vote-result>. This is parsing a
+# documented data format (principle 1's data-format exception), not a
+# classification: each phrase states outright which side of the question
+# prevailed. Matched as a suffix because the Senate prefixes the question
+# ("Cloture on the Motion to Proceed Rejected", "Bill Passed"). The
+# nay-prevailed phrases are checked first because several of them end in a
+# yea-prevailed phrase ("Not Agreed to", "Veto Sustained" — where the
+# question was whether to override). Anything else — a House Speaker
+# election's winner, a quorum call, a phrase not seen before — is unknown.
+_NAY_PREVAILED_RESULTS = (
+    "not agreed to", "not sustained", "not well taken", "not guilty",
+    "not invoked", "veto sustained", "rejected", "failed", "defeated",
+)
+_YEA_PREVAILED_RESULTS = (
+    "agreed to", "passed", "confirmed", "adopted", "sustained",
+    "well taken", "guilty", "invoked", "veto overridden",
+)
+
+
+def roll_call_rejected(result: str | None) -> bool | None:
+    """Whether the question voted on was rejected (the Nay side prevailed),
+    read from the chamber's own result field: True if rejected, False if it
+    carried, None when the result is missing or not recognized.
+
+    Deliberately never derived from the yea/nay counts: the threshold is
+    not a simple majority of those voting (cloture needs three-fifths of
+    senators duly chosen and sworn, a veto override two-thirds, a
+    suspension two-thirds), so counts alone can't say what happened.
+    """
+    text = " ".join((result or "").split()).lower()
+    if not text:
+        return None
+    if text.endswith(_NAY_PREVAILED_RESULTS):
+        return True
+    if text.endswith(_YEA_PREVAILED_RESULTS):
+        return False
+    return None
+
+
 def parse_senate_vote_xml(
     xml_text: str, congress: int, session: int, roll_number: int
 ) -> dict | None:
@@ -645,6 +691,14 @@ def parse_senate_vote_xml(
     question = _root_text(root, "//vote_question_text") or _root_text(root, "//question")
     document_title = _root_text(root, "//document/document_title")
     document_name = _root_text(root, "//document/document_name")
+    # <vote_result> is the bare outcome ("Cloture on the Motion to Proceed
+    # Rejected"); <vote_result_text> repeats it with the tally and the
+    # threshold appended ("... Rejected (49-45, 3/5 majority required)"),
+    # which is the fallback when the bare field is absent.
+    result_text = _root_text(root, "//vote_result_text")
+    result = _root_text(root, "//vote_result") or re.sub(
+        r"\s*\([^()]*\)\s*$", "", result_text,
+    )
 
     return {
         "congress": congress,
@@ -655,6 +709,10 @@ def parse_senate_vote_xml(
         "question": question,
         "documentTitle": document_title or vote_title,
         "documentName": document_name,
+        "result": result,
+        "resultText": result_text,
+        "majorityRequirement": _root_text(root, "//majority_requirement"),
+        "rejected": roll_call_rejected(result),
         "members": members,
     }
 
@@ -679,7 +737,7 @@ async def fetch_recent_roll_calls(
     a much shorter one than the nightly scoring caller. Forwarded to each
     underlying fetch_roll_call_vote call too.
     """
-    cache_key = f"recent-rollcalls-{congress}-{session_number}-{count}"
+    cache_key = f"recent-rollcalls-{congress}-{session_number}-{count}-v{ROLL_CALL_PARSE_VERSION}"
     cached = api_cache_get(db, "congress", cache_key, max_age_hours=max_age_hours)
     if cached is not None:
         return cached
@@ -738,7 +796,7 @@ async def fetch_house_roll_call_vote(
     early-signal poller needs a much shorter one than the nightly
     scoring caller.
     """
-    cache_key = f"rollcall-house-{year}-{roll_call_number}"
+    cache_key = f"rollcall-house-{year}-{roll_call_number}-v{ROLL_CALL_PARSE_VERSION}"
     cached = api_cache_get(db, "congress", cache_key, max_age_hours=max_age_hours)
     if cached is not None:
         return cached
@@ -791,6 +849,7 @@ def parse_house_vote_xml(
     question = _meta_text("vote-question")
     legis_num = _meta_text("legis-num")
     vote_desc = _meta_text("vote-desc")
+    vote_result = _meta_text("vote-result")
     # e.g. "22-Jul-2026" — confirmed live against a real vote XML. Was
     # never parsed at all before (voteDate hardcoded to ""), which early-
     # signal reporting needs a real date for (ActionIssue.date). Left as
@@ -838,6 +897,8 @@ def parse_house_vote_xml(
         "question": question,
         "documentTitle": vote_desc or legis_num,
         "documentName": legis_num,
+        "result": vote_result,
+        "rejected": roll_call_rejected(vote_result),
         "members": members,
         "chamber": "House",
     }
@@ -860,7 +921,7 @@ async def fetch_recent_house_roll_calls(
     early-signal poller needs a much shorter one than the nightly scoring
     caller. Forwarded to each underlying fetch_house_roll_call_vote call too.
     """
-    cache_key = f"recent-house-rollcalls-{year}-{count}"
+    cache_key = f"recent-house-rollcalls-{year}-{count}-v{ROLL_CALL_PARSE_VERSION}"
     cached = api_cache_get(db, "congress", cache_key, max_age_hours=max_age_hours)
     if cached is not None:
         return cached
