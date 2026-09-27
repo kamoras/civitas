@@ -194,9 +194,21 @@ def vote_detail(db: Session, rc: RollCall, links: MemberLinks | None = None) -> 
     }
 
 
+_FULL_NAME_RE = re.compile(r"^(?:Sen\.|Rep\.|Del\.|Resident Commissioner)\s+([^,]+),\s+(.+?)\s*\[")
+
+
+def display_name(p: dict) -> str:
+    """"Ted Cruz" for Congress.gov's "Sen. Cruz, Ted [R-TX]": the page
+    shows party and state beside the name already."""
+    if p.get("firstName") and p.get("lastName"):
+        return " ".join(x for x in (p["firstName"], p.get("middleName"), p["lastName"]) if x)
+    m = _FULL_NAME_RE.match(p.get("fullName") or "")
+    return f"{m.group(2)} {m.group(1)}" if m else (p.get("fullName") or "")
+
+
 def _person(p: dict, links: MemberLinks) -> dict:
     return {
-        "name": p.get("fullName") or "", "party": p.get("party") or "", "state": p.get("state") or "",
+        "name": display_name(p), "party": p.get("party") or "", "state": p.get("state") or "",
         "district": p.get("district"), "bioguideId": p.get("bioguideId"),
         "isOriginalCosponsor": p.get("isOriginalCosponsor"), "sponsorshipDate": p.get("sponsorshipDate"),
         "page": links.page(bioguide=p.get("bioguideId")),

@@ -107,7 +107,7 @@ export function buildRecordEntries(
       date: b.latestActionDate,
       title: b.title,
       detail: clamp(b.latestAction, 78),
-      href: `/bills/${encodeURIComponent(b.billId)}`,
+      href: `/congress/bills/${encodeURIComponent(b.billId)}`,
       tone: "text-signal-cyan",
     })),
   ];

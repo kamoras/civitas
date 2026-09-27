@@ -143,3 +143,12 @@ class TestRoutes:
         r = client.get("/api/congress/votes/senate/119/2/243")
         assert r.status_code == 200 and len(r.json()["members"]) == 4
         assert client.get("/api/congress/votes/senate/119/2/9").status_code == 404
+
+
+@pytest.mark.parametrize("person,name", [
+    ({"fullName": "Sen. Cruz, Ted [R-TX]"}, "Ted Cruz"),
+    ({"fullName": "Rep. Van Orden, Derrick [R-WI-3]"}, "Derrick Van Orden"),
+    ({"firstName": "Christopher", "middleName": "A.", "lastName": "Coons", "fullName": "Sen. Coons, Christopher A. [D-DE]"}, "Christopher A. Coons"),
+])
+def test_display_name(person, name):
+    assert br.display_name(person) == name

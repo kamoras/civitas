@@ -50,6 +50,12 @@ call with every member's position at `/api/congress/votes/…`. A bill's full
 record for its page, any bill, at `/api/bills/{id}/record`
 (`app/services/bill_record.py`).
 
+**Pages.** `/congress` (latest day), `/congress/{date}`, `/congress/week/{date}`,
+`/congress/month/{YYYY-MM}` render these reports on the server
+(`frontend/src/components/congress/`); `/congress/bills` is the in-motion list
+and `/congress/bills/{id}` any bill's page, whose vote panel loads one roll
+call's members at a time. `/bills` and `/bills/:id` redirect permanently.
+
 **Bill ids** are the site's (`S.3257`, `HCONRES.89`) whichever spelling the
 source used: the Record's "H. Con. Res. 89", the House roll call's
 "H CON RES 89", the Senate log's "H.Con.Res. 89".
