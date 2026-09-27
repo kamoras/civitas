@@ -224,16 +224,44 @@ def test_a_shared_file_is_written_where_reads_find_it(workdir, monkeypatch):
     assert not primary.exists() and published == []  # not misfiled, not cache-only
 
 
-def test_a_calendar_that_stops_listing_a_senate_race_does_not_delete_it(workdir, monkeypatch):
-    """Merged like any save: the FEC relabelling an election-day special
-    (which the calendar skips) mustn't retract a real race."""
+def test_a_senate_race_the_calendar_stops_listing_is_retracted(workdir, monkeypatch):
+    """A complete calendar lists every Senate general (special ones too), so
+    one it no longer lists is gone — a merge would keep a phantom race."""
     from app.pipeline.fetch import state_election_dates as dates
 
     monkeypatch.setattr(dates, "_PATHS", (str(workdir / "dates.json"),))
     monkeypatch.setattr(dates, "_cache", None)
-    dates.save_calendar(2028, {"OH": {"primary": "2028-03-14", "senate": "2028-11-07"}}, "2027-12-01")
-    dates.save_calendar(2028, {"OH": {"primary": "2028-03-14"}}, "2027-12-08")
+    dates.save("OH", 2028, {"primary": "2028-03-14"})
+    dates.save_calendar(2028, {"NY": {"senate": "2028-11-07"}, "OH": {"senate": "2028-11-07"}}, "2027-12-01")
+    assert dates.senate_election_known("NY", 2028) is True
+    dates.save_calendar(2028, {"OH": {"senate": "2028-11-07"}}, "2027-12-08")  # the FEC corrected NY
+    assert dates.senate_election_known("NY", 2028) is False
     assert dates.senate_election_known("OH", 2028) is True
+    assert dates.primary_date("OH", 2028) == "2028-03-14"  # per-state fields untouched
+
+
+def test_an_election_day_senate_special_counts_however_the_fec_labels_it(monkeypatch):
+    import asyncio
+
+    from app.pipeline.fetch import fec
+    from app.pipeline.fetch import state_election_dates as dates
+
+    rows = [
+        {"election_state": "OH", "election_date": "2028-11-07", "office_sought": "S",
+         "election_type_full": "Special General Election"},
+        {"election_state": "OH", "election_date": "2028-05-02", "office_sought": "S",
+         "election_type_full": "Special Primary Election"},
+        {"election_state": "OH", "election_date": "2028-03-14", "office_sought": "H",
+         "election_type_full": "Primary Election"},
+    ]
+
+    async def fetch(_client, _url):
+        return {"results": rows, "pagination": {"pages": 1}}
+
+    monkeypatch.setattr(fec, "_fetch_with_retry", fetch)
+    assert asyncio.run(dates.fetch_fec_calendar(None, 2028)) == {
+        "OH": {"senate": "2028-11-07", "primary": "2028-03-14"},  # the special primary is still no primary
+    }
 
 
 def test_a_calendar_missing_a_page_is_not_a_calendar(monkeypatch):

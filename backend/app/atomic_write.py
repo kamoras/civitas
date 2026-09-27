@@ -125,6 +125,24 @@ def _lock(fd: int, path: str, wait: float) -> None:
             time.sleep(0.02)
 
 
+def shared_file_path(paths: Iterable[str]) -> str | None:
+    """The one file of a shared data file's candidate `paths` that both its
+    loader and its writers use: the first that exists, or — before it
+    exists anywhere — the first whose directory does (the data volume in
+    production, the checkout's data/ in development). Chosen by existence
+    alone, never by a read or write succeeding, so a file that can't be
+    read or written is a failure on that file, not a quiet switch to
+    another that the next process wouldn't look at."""
+    paths = list(paths)
+    for path in paths:
+        if os.path.exists(path):
+            return path
+    for path in paths:
+        if os.path.isdir(os.path.dirname(os.path.abspath(path))):
+            return path
+    return None
+
+
 def update_shared_file(
     paths: Iterable[str],
     change: Callable[[dict[str, Any]], dict[str, Any]],
@@ -135,43 +153,26 @@ def update_shared_file(
     wait: float | None = None,
     **dump_kwargs: Any,
 ) -> bool:
-    """`change` a shared data file that has a module cache, returning
-    whether the change was recorded. The file is the one reads use — the
-    first of `paths` that holds a readable JSON object, as the loaders
-    take it — or, when none does yet, the first that can be written;
-    `publish(data)` updates the cache under its lock. A failure on the
-    file reads use (another writer holding it past `wait`, DATA_FILE_WAIT_S
-    by default; a full disk) records nothing, anywhere: never another path,
-    which reads wouldn't find, and never the cache alone, which the next
-    process wouldn't have. The file and the cache agree; the caller says
-    what the loss costs."""
-    paths = list(paths)
-    wait = DATA_FILE_WAIT_S if wait is None else wait
-    read = _read_path(paths)
-    for path in [read] if read else paths:
-        try:
-            update_json_file(path, change, missing=missing, written=publish, wait=wait, **dump_kwargs)
-            return True
-        except LockTimeout:
-            logger.warning("%s not recorded — %s stayed locked by another writer", what, path)
-            return False
-        except OSError:
-            if read:
-                logger.warning("%s not recorded — %s couldn't be written", what, path, exc_info=True)
-                return False
-            continue  # nothing to read yet: the next place it can be written
-    logger.warning("%s not recorded — nowhere writable (%s)", what, ", ".join(paths))
+    """`change` a shared data file that has a module cache — the file
+    shared_file_path picks, as its loader does — returning whether the
+    change was recorded; `publish(data)` updates the cache under the file's
+    lock. A failure (another writer holding it past `wait`,
+    DATA_FILE_WAIT_S by default; a full disk) records nothing, anywhere:
+    never another path, and never the cache alone, which the next process
+    wouldn't have. The file and the cache agree; the caller says what the
+    loss costs."""
+    path = shared_file_path(paths)
+    if path is None:
+        logger.warning("%s not recorded — no data directory among %s", what, ", ".join(paths))
+        return False
+    try:
+        update_json_file(
+            path, change, missing=missing, written=publish,
+            wait=DATA_FILE_WAIT_S if wait is None else wait, **dump_kwargs,
+        )
+        return True
+    except LockTimeout:
+        logger.warning("%s not recorded — %s stayed locked by another writer", what, path)
+    except OSError:
+        logger.warning("%s not recorded — %s couldn't be written", what, path, exc_info=True)
     return False
-
-
-def _read_path(paths: list[str]) -> str | None:
-    """The first of `paths` holding a readable JSON object: the file a
-    loader that skips missing and unreadable ones reads."""
-    for path in paths:
-        try:
-            with open(path, encoding="utf-8") as fh:
-                if isinstance(json.load(fh), dict):
-                    return path
-        except (OSError, ValueError):
-            continue
-    return None

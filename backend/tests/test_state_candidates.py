@@ -229,77 +229,86 @@ class TestForgetsBrokenDiscoveries:
     helps if the dead one goes away."""
 
     @staticmethod
-    def _setup(monkeypatch, saved, *, network_up):
-        """ZZ's discovered source has stopped fetching; AA is a working
-        hand-verified state (sorted first) when the network is up."""
+    def _setup(monkeypatch, saved, *, fetches):
+        """ZZ holds a discovered source; `fetches` says whether it does now."""
         async def nothing_found(client, state, cycle, rules=None):
             return None
 
-        async def broken(client, cycle, state, source):
-            return None
-
-        async def working(client, cycle, state, source):
-            return [] if network_up else None
+        async def source(client, cycle, state, src):
+            return [] if fetches() else None
 
         async def no_filings(client, state, cycle):
-            return None
-
-        async def no_dates(*_a):
             return None
 
         async def no_calendar(client, cycle):
             return {}
 
+        def record(st, src):
+            if src is None:
+                saved.pop(st, None)
+            else:
+                saved[st] = src
+            return True
+
         monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
         monkeypatch.setattr(sc, "discover_source", nothing_found)
         monkeypatch.setattr(sc, "discover_filings", no_filings)
-        monkeypatch.setattr(sc, "_refresh_dates", no_dates)
-        monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"AA": ["a.gov"], "ZZ": ["example.gov"]})
-        monkeypatch.setattr(sc, "STRATEGIES", {"tabular": broken, "hand": working})
-        monkeypatch.setattr(sc, "_sources_file", lambda: {"states": {"AA": {"strategy": "hand", "filings": {"x": 1}}}})
-        monkeypatch.setattr(sc, "discovered_states", lambda: {"ZZ"})
+        monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"ZZ": ["example.gov"]})
+        monkeypatch.setattr(sc, "STRATEGIES", {"tabular": source})
+        monkeypatch.setattr(sc, "discovered_states", lambda: set(saved))
         monkeypatch.setattr(sc, "source_for_state", lambda st: saved.get(st))
-        monkeypatch.setattr(sc, "save_discovered", lambda st, src: saved.pop(st) and True)
+        monkeypatch.setattr(sc, "_discovered_source", lambda st: saved.get(st))
+        monkeypatch.setattr(sc, "save_discovered", record)
+
+    @staticmethod
+    def _on(monkeypatch, day):
+        from datetime import datetime
+
+        monkeypatch.setattr(sc, "utcnow", lambda: datetime(2026, 9, day, 3))
 
     @pytest.mark.asyncio
-    async def test_a_discovered_source_that_stopped_fetching_is_forgotten(
-        self, db_session, monkeypatch,
-    ):
+    async def test_a_source_failing_two_sweeps_apart_is_forgotten(self, db_session, monkeypatch):
+        """One night's failure is as likely the network as the source: it is
+        marked failing and kept in use, and forgotten only if it is still
+        failing two weekly sweeps later."""
         saved = {"ZZ": {"strategy": "tabular"}}
-        self._setup(monkeypatch, saved, network_up=True)
-        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
-        assert outcomes["ZZ"] == "forgotten"
+        self._setup(monkeypatch, saved, fetches=lambda: False)
+        self._on(monkeypatch, 1)
+        assert (await sc.crawl_for_new_sources(db_session, None, 2026))["ZZ"] == "failing"
+        assert saved["ZZ"]["failing_since"] == "2026-09-01"
+        self._on(monkeypatch, 8)
+        assert (await sc.crawl_for_new_sources(db_session, None, 2026))["ZZ"] == "failing"
+        self._on(monkeypatch, 15)
+        assert (await sc.crawl_for_new_sources(db_session, None, 2026))["ZZ"] == "forgotten"
         assert saved == {}
 
-        # A forget that wasn't recorded (a lock race) leaves the broken
-        # source in use: it isn't reported as forgotten.
-        saved["ZZ"] = {"strategy": "tabular"}
-        monkeypatch.setattr(sc, "save_discovered", lambda st, src: False)
-        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
-        assert outcomes["ZZ"] == "error"
-
     @pytest.mark.asyncio
-    async def test_an_outage_forgets_nothing(self, db_session, monkeypatch):
-        """Every fetch failing is the network, not the sources."""
+    async def test_a_source_that_recovers_is_unmarked(self, db_session, monkeypatch):
+        """An outage (early or late in the sweep) or a blip forgets nothing."""
+        up = {"now": False}
         saved = {"ZZ": {"strategy": "tabular"}}
-        self._setup(monkeypatch, saved, network_up=False)
-        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
-        assert outcomes["ZZ"] == "unreachable"
-        assert "ZZ" in saved
+        self._setup(monkeypatch, saved, fetches=lambda: up["now"])
+        self._on(monkeypatch, 1)
+        await sc.crawl_for_new_sources(db_session, None, 2026)
+        up["now"] = True
+        self._on(monkeypatch, 8)
+        assert (await sc.crawl_for_new_sources(db_session, None, 2026))["ZZ"] == "kept"
+        assert saved["ZZ"] == {"strategy": "tabular"}
 
     @pytest.mark.asyncio
-    async def test_a_source_broken_before_anything_was_reached_waits_for_the_sweep(
-        self, db_session, monkeypatch,
-    ):
-        """Seen before the network was shown up, it is forgotten at the end
-        once a later state proves it is."""
-        saved = {"AA": {"strategy": "tabular"}, "ZZ": {"strategy": "hand"}}
-        self._setup(monkeypatch, saved, network_up=True)
-        monkeypatch.setattr(sc, "_sources_file", lambda: {"states": {}})
-        monkeypatch.setattr(sc, "discovered_states", lambda: {"AA", "ZZ"})
-        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
-        assert outcomes == {"AA": "forgotten", "ZZ": "kept"}
-        assert "AA" not in saved and "ZZ" in saved
+    async def test_a_forget_that_wasnt_recorded_is_not_reported_forgotten(self, db_session, monkeypatch):
+        saved = {"ZZ": {"strategy": "tabular", "failing_since": "2026-09-01"}}
+        self._setup(monkeypatch, saved, fetches=lambda: False)
+        self._on(monkeypatch, 15)
+        monkeypatch.setattr(sc, "save_discovered", lambda st, src: False)  # a lost lock race
+        assert (await sc.crawl_for_new_sources(db_session, None, 2026))["ZZ"] == "error"
+
+    @pytest.mark.asyncio
+    async def test_a_filing_list_alone_has_no_results_source_to_fail(self, db_session, monkeypatch):
+        saved = {"ZZ": {"filings": {"primary": "https://x.gov/list.csv"}}}
+        self._setup(monkeypatch, saved, fetches=lambda: False)
+        assert (await sc.crawl_for_new_sources(db_session, None, 2026))["ZZ"] == "kept"
+        assert "ZZ" in saved
 
     @pytest.mark.asyncio
     async def test_one_that_still_fetches_survives_a_crawl_that_missed_it(
