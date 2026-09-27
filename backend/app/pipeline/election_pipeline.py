@@ -782,6 +782,9 @@ def _prune_stale_coverage(db: Session) -> int:
 # week since it last ran, and a night the ballot guards refused it (or it
 # failed) is made up the next night rather than the next week.
 _CRAWL_TIER, _CRAWL_KEY = "election", "source-crawl-completed"
+# The last state a crawl in progress finished: the next attempt resumes
+# after it, so a crawl cut off at its time limit still reaches every state.
+_CRAWL_CURSOR_KEY = "source-crawl-cursor"
 # A little under a week: the nightly run's start time drifts by minutes.
 _CRAWL_EVERY_HOURS = 7 * 24 - 12
 
@@ -800,32 +803,39 @@ async def _weekly_source_crawl(db: Session, client, cycle: int) -> dict[str, str
     cuts it off at max_hold. Best-effort — a failure, a refusal or a
     cut-off is logged, costs the night's sync nothing, and is retried the
     next night."""
+    adopted: dict[str, str] = {}  # as each state finishes, so a cut-off still reports them
+
+    def finished(state: str, outcome: str) -> None:
+        if outcome.startswith("adopted"):
+            adopted[state] = outcome
+        api_cache_set(db, _CRAWL_TIER, _CRAWL_CURSOR_KEY, {"after": state})
+
     try:
         if api_cache_get(db, _CRAWL_TIER, _CRAWL_KEY, max_age_hours=_CRAWL_EVERY_HOURS) is not None:
             return {}
+        cursor = api_cache_get(db, _CRAWL_TIER, _CRAWL_CURSOR_KEY) or {}
         async with lease.bounded_job_async(lease.SOURCE_CRAWL, who="Election pipeline's source crawl") as granted:
             if not granted:
                 return {}
-            # Begun from a different state each night, so a crawl cut off
-            # partway covers the rest over the next nights' retries.
-            leads = await crawl_for_new_sources(db, client, cycle, start=utcnow().toordinal())
-            # Inside the lease: a data reset that wipes the marker can't
-            # start between the crawl and this write.
+            await crawl_for_new_sources(db, client, cycle, resume_after=cursor.get("after"), on_state=finished)
+            # Inside the lease: a data reset that wipes these can't start
+            # between the crawl and the writes.
+            api_cache_set(db, _CRAWL_TIER, _CRAWL_CURSOR_KEY, {"after": None})
             api_cache_set(db, _CRAWL_TIER, _CRAWL_KEY, {"completedAt": utcnow().isoformat()})
-        adopted = {s: r for s, r in leads.items() if r.startswith("adopted")}
         logger.info(
             "Source crawl: %d state(s) adopted%s",
             len(adopted), f" — {adopted}" if adopted else "",
         )
-        return adopted
     except lease.CutOff as cut:
         db.rollback()
-        logger.warning("%s — the crawl resumes from another state tomorrow; the sync goes ahead", cut)
-        return {}
+        logger.warning(
+            "%s — %d adopted before it; the crawl resumes where it stopped tomorrow, and the sync goes ahead",
+            cut, len(adopted),
+        )
     except Exception:
         db.rollback()
-        logger.exception("Source crawl failed — the sync goes ahead, and the crawl is retried tomorrow")
-        return {}
+        logger.exception("Source crawl failed — the sync goes ahead, and the crawl resumes tomorrow")
+    return adopted
 
 
 def _adopted_detail(adopted: dict[str, str]) -> str:

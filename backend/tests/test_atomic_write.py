@@ -144,3 +144,22 @@ def test_the_written_copy_is_published_before_the_lock_is_let_go(workdir):
 
     update_json_file(target, lambda known: {**known, "a": 1}, written=publish)
     assert locked_while_published == [True]
+
+
+def test_a_data_writer_that_loses_a_lock_race_keeps_its_change_in_memory(workdir, monkeypatch):
+    """Not an error for the sync or the crawl, and never written to the
+    fallback path: this process keeps the date, the next run writes it."""
+    import fcntl
+
+    from app import atomic_write
+    from app.pipeline.fetch import state_election_dates as dates
+
+    primary, fallback = workdir / "dates.json", workdir / "fallback" / "dates.json"
+    monkeypatch.setattr(dates, "_PATHS", (str(primary), str(fallback)))
+    monkeypatch.setattr(dates, "_cache", None)
+    monkeypatch.setattr(atomic_write, "LOCK_WAIT_S", 0.05)
+    with open(f"{primary}.lock", "a") as held:
+        fcntl.flock(held.fileno(), fcntl.LOCK_EX)
+        dates.save("MN", 2026, {"primary": "2026-08-11"})
+    assert dates.primary_date("MN", 2026) == "2026-08-11"
+    assert not primary.exists() and not fallback.exists()

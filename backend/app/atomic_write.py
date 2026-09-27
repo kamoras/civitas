@@ -35,7 +35,9 @@ class LockTimeout(Exception):
     """Another writer held a file's lock past LOCK_WAIT_S. Not an OSError:
     callers take OSError to mean "this path isn't writable, try the next",
     and a change written to a fallback path because of a lock race would be
-    lost the next time the primary is read. The update failed; say so."""
+    lost the next time the primary is read. The update didn't happen; the
+    caller decides what that costs (the data files' writers keep the change
+    in memory and let the next run write it)."""
 
 
 def write_text_atomic(path: str | os.PathLike, text: str) -> None:

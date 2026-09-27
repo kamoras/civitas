@@ -693,6 +693,9 @@ async def _sponsored_bill_actions(client, db: Session, sp: dict) -> list[dict]:
     ) or []
 
 
+_PROGRESS_EVERY = 50
+
+
 async def _classify_sponsored_stages(db: Session, senator_prepared: list[dict], progress=None) -> None:
     """Every sponsored bill's stage — and, with its action history to hand,
     its is_law as every writer reads it (is_enacted), agreeing with the
@@ -721,7 +724,9 @@ async def _classify_sponsored_stages(db: Session, senator_prepared: list[dict], 
                 # isLaw/latestAction for this bill. One unreachable
                 # bill must not abort every senator's scoring.
                 stage_failures += 1
-            if progress is not None:
+            # Every _PROGRESS_EVERY bills, not each: an update commits the
+            # run row, and a warm cache makes each bill a fast cache hit.
+            if progress is not None and (done % _PROGRESS_EVERY == 0 or done == len(bills)):
                 progress.update("classify_sponsored_stages", done=done)
     if stage_failures:
         logger.warning(
@@ -1387,9 +1392,10 @@ async def run_senate_pipeline(
 
         if fetch_only:
             logger.info("=== FETCH COMPLETE (fetch-only mode) ===")
-            for sk in ("classify_bills", "classify_recent", "embed_bills",
-                        "classify_donors", "prepare_senators", "analyze_senators",
-                        "finalize"):
+            # Every step after the fetch phase, from the step list itself, so
+            # a step added later isn't left pending in a completed run.
+            step_keys = [key for key, _phase, _label in PIPELINE_STEPS]
+            for sk in step_keys[step_keys.index("fetch_platforms") + 1:]:
                 progress.skip(sk, detail="fetch-only mode")
             elapsed = time.time() - start_time
             pipeline_run.status = PipelineStatus.COMPLETED

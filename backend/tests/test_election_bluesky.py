@@ -357,6 +357,24 @@ class TestPostRaceCoverageUpdates:
         db_session.expire_all()
         assert db_session.get(RaceCoverageItem, item.id).bsky_posted is False  # no slot, no cooldown held
 
+    def test_a_pass_whose_budget_is_spent_leaves_the_rest_unconsidered(self, db_session, monkeypatch):
+        """They wait for the next run rather than being burned unposted."""
+        _creds(monkeypatch)
+        _stub_relevance(monkeypatch)
+        monkeypatch.setattr(election_bluesky, "MAX_POSTS_PER_DAY", 1)
+        for i in range(3):
+            race_id = f"2026-SEN-R{i}"
+            _race(db_session, race_id=race_id, state="GA")
+            _candidate(db_session, cand_id=f"C{i}", race_id=race_id)
+            _item(db_session, race_id=race_id, url=f"https://apnews.com/b{i}", matched_candidate_id=f"C{i}")
+        db_session.commit()
+
+        with patch.object(election_bluesky, "_generate_post_text", return_value="A grounded sentence."), \
+             patch.object(election_bluesky, "_publish", return_value=True):
+            assert election_bluesky.post_race_coverage_updates(db_session) == 1
+        db_session.expire_all()
+        assert db_session.query(RaceCoverageItem).filter(RaceCoverageItem.bsky_posted_at.is_(None)).count() == 2
+
     def test_no_item_is_started_past_the_deadline(self, db_session, monkeypatch):
         import time
 

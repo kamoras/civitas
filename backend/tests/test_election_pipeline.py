@@ -604,6 +604,15 @@ class TestBallotSync:
 
         from app.pipeline import lease
 
+        def crawl(error):
+            async def sweep(db, client, cycle, *, resume_after=None, on_state=None):
+                if error is not None:
+                    raise error
+                for state, outcome in {"NM": "adopted results", "WY": "none"}.items():
+                    on_state(state, outcome)
+                return {}
+            return sweep
+
         def run(*, refused=False, crawl_error=None):
             @asynccontextmanager
             async def leases(tier, **_kw):
@@ -616,15 +625,14 @@ class TestBallotSync:
                 patch("app.pipeline.election_pipeline.fetch_all_candidates", return_value=[]),
                 _mock_downstream_pipeline_phases(),
                 patch(
-                    "app.pipeline.election_pipeline.crawl_for_new_sources",
-                    return_value={"NM": "adopted results", "WY": "none"}, side_effect=crawl_error,
-                ) as crawl,
+                    "app.pipeline.election_pipeline.crawl_for_new_sources", side_effect=crawl(crawl_error),
+                ) as crawl_mock,
                 patch("app.pipeline.election_pipeline.sync_confirmed_candidates", return_value={}) as sync,
             ):
                 asyncio.run(election_pipeline.run_election_pipeline(2026))
             run_row = db_session.query(ElectionPipelineRun).order_by(ElectionPipelineRun.id.desc()).first()
             step = next(s for s in json.loads(run_row.progress_detail) if s.get("key") == "confirmed_candidates")
-            return crawl.call_count, sync.call_count, step
+            return crawl_mock.call_count, sync.call_count, step
 
         crawled, synced, step = run(crawl_error=RuntimeError("a source site is down"))
         assert crawled == 1 and synced > 0 and step["status"] == "done"  # the sync went ahead

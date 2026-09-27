@@ -42,6 +42,7 @@ accurate as before this sync ran, never worse.
 import logging
 import re
 import unicodedata
+from collections.abc import Callable
 
 import httpx
 from sqlalchemy.orm import Session
@@ -535,7 +536,9 @@ def _prune_ballot_only(
 
 
 async def crawl_for_new_sources(
-    db: Session, client: httpx.AsyncClient, cycle: int, *, start: int = 0,
+    db: Session, client: httpx.AsyncClient, cycle: int, *,
+    resume_after: str | None = None,
+    on_state: Callable[[str, str], None] | None = None,
 ) -> dict:
     """Look for a usable results source in every state that doesn't have a
     hand-verified one, and keep the ones that prove out. Returns per-state
@@ -557,99 +560,108 @@ async def crawl_for_new_sources(
     lost by waiting — a source adopted the week after certification is
     still months before the general.
 
-    `start` rotates where the sweep begins (the caller varies it night to
-    night): a crawl cut off partway is retried from somewhere else, so no
-    state is always the one it never reaches.
+    `resume_after` begins the sweep at the state after it (wrapping), and
+    `on_state(state, outcome)` hears each state as it finishes: a crawl cut
+    off partway is resumed where it stopped, and what it adopted before the
+    cut is still reported.
     """
     hand_verified = (_sources_file().get("states") or {})
     outcomes: dict[str, str] = {}
     states = sorted(ELECTION_DOMAINS)
-    first = start % len(states) if states else 0
+    first = next((i for i, st in enumerate(states) if resume_after and st > resume_after), 0)
     for state in states[first:] + states[:first]:
-        hand = hand_verified.get(state)
-        # A hand-verified state is left alone while its source works. When
-        # it STOPS working — a state moves hosts between cycles, which is
-        # the whole reason locations aren't trusted to stay put — it gets
-        # crawled like any other, so a replacement can be found without
-        # anyone editing a URL. Its LAW still comes from the hand-written
-        # entry; only the location is rediscovered.
-        if hand:
-            strategy = STRATEGIES.get(hand.get("strategy"))
-            still_works = await strategy(client, cycle, state, hand) if strategy else None
-            if still_works is not None:
-                # A primary date moves once a cycle, so it is read on the
-                # weekly pass rather than nightly — off the same feed the
-                # state's results already come from, never a stored
-                # calendar anybody has to maintain.
-                await _refresh_dates(client, cycle, state, hand)
-                if not hand.get("filings"):
-                    outcomes[state] = await _adopt_filings(db, client, cycle, state, hand)
-                # google_civic is a national fallback for a state with no
-                # real per-district vendor at all — unlike every other
-                # hand-verified strategy, it must never shadow discovery
-                # the way a working per-state source rightly does, or
-                # this state's only path to a REAL vendor being found
-                # (Clarity, Enhanced Voting, ...) is permanently blocked
-                # for the rest of the cycle. Falls through to the same
-                # discover_source() probe an unregistered state gets — a
-                # find still can't auto-override the hand-verified civic
-                # entry (see save_discovered/source_for_state
-                # precedence), it just lands in the discovered-sources
-                # file, visible for a human to hand-promote.
-                if hand.get("strategy") != "google_civic":
-                    continue
-            else:
-                logger.warning(
-                    "Hand-verified source for %s is not fetching — looking for a "
-                    "replacement location", state,
-                )
-        rules = {
-            k: v for k, v in (hand or {}).items()
-            if k in ("runoff_threshold_pct", "advance_count")
-        }
+        failed = False  # a state the crawl raised out of (a cut-off) isn't finished
         try:
-            found = await discover_source(client, state, cycle, rules)
-        except Exception:
-            logger.exception("Source discovery raised for %s", state)
-            outcomes[state] = "error"
-            continue
-        if not found:
-            outcomes[state] = await _forget_if_broken(client, cycle, state)
-            # A state with no usable RESULTS source can still publish a
-            # filing list, and before its primary that is the only answer
-            # there is — so it is looked for either way.
-            if outcomes[state] in ("none", "forgotten"):
-                filings = await _adopt_filings(db, client, cycle, state, {})
-                if filings != "none":
-                    outcomes[state] = filings
-            continue
+            hand = hand_verified.get(state)
+            # A hand-verified state is left alone while its source works. When
+            # it STOPS working — a state moves hosts between cycles, which is
+            # the whole reason locations aren't trusted to stay put — it gets
+            # crawled like any other, so a replacement can be found without
+            # anyone editing a URL. Its LAW still comes from the hand-written
+            # entry; only the location is rediscovered.
+            if hand:
+                strategy = STRATEGIES.get(hand.get("strategy"))
+                still_works = await strategy(client, cycle, state, hand) if strategy else None
+                if still_works is not None:
+                    # A primary date moves once a cycle, so it is read on the
+                    # weekly pass rather than nightly — off the same feed the
+                    # state's results already come from, never a stored
+                    # calendar anybody has to maintain.
+                    await _refresh_dates(client, cycle, state, hand)
+                    if not hand.get("filings"):
+                        outcomes[state] = await _adopt_filings(db, client, cycle, state, hand)
+                    # google_civic is a national fallback for a state with no
+                    # real per-district vendor at all — unlike every other
+                    # hand-verified strategy, it must never shadow discovery
+                    # the way a working per-state source rightly does, or
+                    # this state's only path to a REAL vendor being found
+                    # (Clarity, Enhanced Voting, ...) is permanently blocked
+                    # for the rest of the cycle. Falls through to the same
+                    # discover_source() probe an unregistered state gets — a
+                    # find still can't auto-override the hand-verified civic
+                    # entry (see save_discovered/source_for_state
+                    # precedence), it just lands in the discovered-sources
+                    # file, visible for a human to hand-promote.
+                    if hand.get("strategy") != "google_civic":
+                        continue
+                else:
+                    logger.warning(
+                        "Hand-verified source for %s is not fetching — looking for a "
+                        "replacement location", state,
+                    )
+            rules = {
+                k: v for k, v in (hand or {}).items()
+                if k in ("runoff_threshold_pct", "advance_count")
+            }
+            try:
+                found = await discover_source(client, state, cycle, rules)
+            except Exception:
+                logger.exception("Source discovery raised for %s", state)
+                outcomes[state] = "error"
+                continue
+            if not found:
+                outcomes[state] = await _forget_if_broken(client, cycle, state)
+                # A state with no usable RESULTS source can still publish a
+                # filing list, and before its primary that is the only answer
+                # there is — so it is looked for either way.
+                if outcomes[state] in ("none", "forgotten"):
+                    filings = await _adopt_filings(db, client, cycle, state, {})
+                    if filings != "none":
+                        outcomes[state] = filings
+                continue
 
-        strategy = STRATEGIES.get(found.get("strategy"))
-        records = await strategy(client, cycle, state, found) if strategy else None
-        if records is None:
-            outcomes[state] = "unusable"
-            continue
-        matched = sum(
-            1 for record in records
-            if _confirmed_match(db, cycle, state, record) is not None
-        )
-        if not matched:
-            logger.info(
-                "Not adopting a source for %s: it names %d nominee(s), %d of whom are "
-                "candidates on file for those races — %s",
-                state, len(records), matched, found.get("_evidence"),
+            strategy = STRATEGIES.get(found.get("strategy"))
+            records = await strategy(client, cycle, state, found) if strategy else None
+            if records is None:
+                outcomes[state] = "unusable"
+                continue
+            matched = sum(
+                1 for record in records
+                if _confirmed_match(db, cycle, state, record) is not None
             )
-            outcomes[state] = "unproven" if not records else "rejected"
-            continue
-        save_discovered(state, {k: v for k, v in found.items() if not k.startswith("_")}
-                        | {"source_name": found.get("_evidence", "discovered"),
-                           "description": f"Found automatically on {utcnow().date().isoformat()}: "
-                                          f"{found.get('_evidence')}. Nomination rules are NOT "
-                                          f"inferred — a state needing a runoff threshold, a "
-                                          f"convention rule or top-two counting still needs a "
-                                          f"hand-verified entry, which overrides this one."})
-        outcomes[state] = f"adopted ({matched}/{len(records)} matched)"
-        logger.info("Adopted a discovered source for %s: %s", state, found.get("_evidence"))
+            if not matched:
+                logger.info(
+                    "Not adopting a source for %s: it names %d nominee(s), %d of whom are "
+                    "candidates on file for those races — %s",
+                    state, len(records), matched, found.get("_evidence"),
+                )
+                outcomes[state] = "unproven" if not records else "rejected"
+                continue
+            save_discovered(state, {k: v for k, v in found.items() if not k.startswith("_")}
+                            | {"source_name": found.get("_evidence", "discovered"),
+                               "description": f"Found automatically on {utcnow().date().isoformat()}: "
+                                              f"{found.get('_evidence')}. Nomination rules are NOT "
+                                              f"inferred — a state needing a runoff threshold, a "
+                                              f"convention rule or top-two counting still needs a "
+                                              f"hand-verified entry, which overrides this one."})
+            outcomes[state] = f"adopted ({matched}/{len(records)} matched)"
+            logger.info("Adopted a discovered source for %s: %s", state, found.get("_evidence"))
+        except BaseException:
+            failed = True
+            raise
+        finally:
+            if on_state is not None and not failed:
+                on_state(state, outcomes.get(state, "unchanged"))
     return outcomes
 
 

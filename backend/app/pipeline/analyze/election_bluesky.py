@@ -271,13 +271,19 @@ def _races_posted_recently(db: Session) -> set[str]:
     return {r[0] for r in rows}
 
 
-def _reserve_post(db: Session, item: RaceCoverageItem) -> bool:
+_REFUSED_RACE, _REFUSED_BUDGET = "race", "budget"
+
+
+def _reserve_post(db: Session, item: RaceCoverageItem) -> str | None:
     """Mark `item` published before publishing it — only if its race is out
     of cooldown and the day's budget has room, checked in the same
     conditional update, so passes running at once can't both post about one
     race or both take the day's last slot (_races_posted_recently and
     _posts_in_last_day, read once per pass, are only what it plans from).
-    At most once: a failed publish is released (_release_post)."""
+    At most once: a failed publish is released (_release_post). None when
+    reserved; else why not (_REFUSED_RACE or _REFUSED_BUDGET), read in the
+    same transaction as the refused update, so a release by another pass
+    in between can't change the answer."""
     other = aliased(RaceCoverageItem)
     now = utcnow()
     race_recent = (
@@ -304,8 +310,13 @@ def _reserve_post(db: Session, item: RaceCoverageItem) -> bool:
         )
         .update({"bsky_posted": True}, synchronize_session=False)
     )
+    why = None
+    if reserved != 1:
+        # Still inside the update's write transaction: nothing has changed.
+        budget_spent = db.query(posted_today).scalar() >= MAX_POSTS_PER_DAY
+        why = _REFUSED_BUDGET if budget_spent else _REFUSED_RACE
     db.commit()
-    return reserved == 1
+    return why
 
 
 def _release_post(db: Session, item: RaceCoverageItem) -> None:
@@ -386,10 +397,17 @@ def post_race_coverage_updates(db: Session, *, deadline: float | None = None) ->
     cooled_down = _races_posted_recently(db)
 
     posted = 0
+    # Races another pass holds a reservation for: their items are left
+    # unconsidered, as that reservation may yet be released.
+    held_elsewhere: set[str] = set()
     for item in candidates:
         if deadline is not None and time.monotonic() >= deadline:
             logger.warning("Election coverage posting stopped at its deadline — the rest wait for the next run")
             break
+        if posted >= budget:
+            break  # the rest wait for the next run, unconsidered
+        if item.race_id in held_elsewhere:
+            continue
         race = races_by_id.get(item.race_id)
         # Considered either way — and COMMITTED before any publish attempt:
         # a crash between publish and commit must not re-post the same item
@@ -406,8 +424,6 @@ def post_race_coverage_updates(db: Session, *, deadline: float | None = None) ->
         if not claimed:
             continue
         if race is None:
-            continue
-        if posted >= budget:
             continue
         if item.race_id in cooled_down:
             logger.info(
@@ -432,14 +448,15 @@ def post_race_coverage_updates(db: Session, *, deadline: float | None = None) ->
         # post this (another pass holds the race, or the day's last slot)
         # spends nothing finding that out. Nor does the item: it goes back
         # unconsidered, as another pass's reservation may yet be released —
-        # and when it's the budget, so do the rest (this pass stops).
-        if not _reserve_post(db, item):
+        # the race's other items with it, and on the budget, the rest.
+        refused = _reserve_post(db, item)
+        if refused is not None:
             _unclaim(db, item)
-            if _posts_in_last_day(db) >= MAX_POSTS_PER_DAY:
+            if refused == _REFUSED_BUDGET:
                 logger.info("Election coverage posting stopped — other passes hold the day's budget")
                 break
-            logger.info("Skipping post for race %s — another pass holds it", race.id)
-            cooled_down.add(item.race_id)
+            logger.info("Skipping race %s this run — another pass holds a post for it", race.id)
+            held_elsewhere.add(item.race_id)
             continue
         published = False
         try:

@@ -48,7 +48,7 @@ from typing import Any
 
 import httpx
 
-from app.atomic_write import update_json_file
+from app.atomic_write import LockTimeout, update_json_file
 
 logger = logging.getLogger(__name__)
 
@@ -142,9 +142,16 @@ def save(state: str, cycle: int, dates: dict) -> None:
                 path, merge, missing=lambda: dict(_load()), written=publish, indent=2, sort_keys=True,
             )
             return
+        except LockTimeout:
+            # Another writer held the file far past a write's length. Not
+            # the next path (where the next read won't look): this process
+            # keeps the date, and the next run's read writes it again.
+            logger.warning("Election dates for %s not persisted this time — the file stayed locked", state)
+            break
         except OSError:
             continue
-    logger.warning("Nowhere writable to record election dates for %s", state)
+    else:
+        logger.warning("Nowhere writable to record election dates for %s", state)
     _cache = merge(dict(_load()))
 
 
