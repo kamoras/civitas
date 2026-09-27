@@ -151,11 +151,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
                 return <p key={i}>{para}</p>;
               })}
             </article>
-          ) : (
-            <div className="mb-12 py-10 border border-white/[0.07] text-center text-ink-min text-sm">
-              Full story not yet available. Check back soon.
-            </div>
-          )}
+          ) : null}
 
           {/* Key facts */}
           {issue.facts?.length > 0 && (

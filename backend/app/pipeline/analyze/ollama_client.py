@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 _max_retries = 3
 
 # HTTP timeout scales with requested output length so a long generation
-# (e.g. a full_story call at max_tokens=2048) doesn't get killed mid-response
+# (a high max_tokens) doesn't get killed mid-response
 # by a timeout sized for a short one, while a short call doesn't wait the
 # full ceiling on a hung connection. ~6 tokens/sec is a conservative
 # generation-rate estimate for the Pi's CPU inference; 60s covers fixed

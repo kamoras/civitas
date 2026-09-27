@@ -444,6 +444,15 @@ Every hour at :15
        │         also brings new information (a name, figure, or development).
        │         Otherwise the rank updates silently and nothing is posted.
        │         Brand new story → create new row.
+       │         Full story (issue page): built here, while the cluster's
+       │         articles exist. Each article is asked once more about its
+       │         summary alone (with the headline in view the model always
+       │         picks the headline); every verified claim, headline and
+       │         body, is listed under the outlet that made it. Nothing is
+       │         written. None when it would only repeat summary + facts.
+       │         It replaced ~800 chars of model prose that published a
+       │         relationship no source stated (issue 748), a wrong office
+       │         (750) and filler (751); stored prose was cleared (0004).
        ▼
   7. ENRICH ──── sqlite-vec semantic search → link related bills/senators
        │         Resolve bill IDs mentioned in article text

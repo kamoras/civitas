@@ -143,7 +143,7 @@ erDiagram
         json related_officials "a 'named in coverage' match is a publish gate"
         json related_explore_ids "2+ is a publish gate"
         json related_monitor_slugs
-        text full_story "cached long-form text, cleared when the story shifts"
+        text full_story "verified claims grouped by outlet, rebuilt when the story shifts"
         datetime bsky_posted_at "null = awaiting the poster, NOT never posted"
         int bsky_posted_rank "rank at the time of that post"
         text bsky_last_post_text "what was published; near-duplicate gate + retention key"
