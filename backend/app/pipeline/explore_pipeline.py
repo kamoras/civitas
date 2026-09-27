@@ -43,6 +43,7 @@ from app.pipeline.fetch.fr_rulemaking import (
     _fetch_body_text as _fetch_rulemaking_body_text,
 )
 from app.pipeline.fetch.supreme_court import fetch_scotus_cases
+from app.pipeline.transform.normalize_members import STATE_NAME_TO_CODE, strip_accents
 from app.pipeline.analyze.document_authority import update_document_authority
 from app.pipeline.explore_ranking import calibrate_and_store
 from app.pipeline.lexical_index import rebuild_index
@@ -78,24 +79,66 @@ def _crec_url(date_str: str, chamber: str) -> str:
     return f"https://www.congress.gov/congressional-record/{date_str.replace('-', '/')}/{section}"
 
 
-def _senator_lookup(db: Session) -> dict[str, str]:
-    """Build a map of UPPERCASE last name -> senator ID for linking."""
-    lookup: dict[str, str] = {}
-    for s in db.query(Senator.id, Senator.name).all():
-        parts = s.name.split()
-        if parts:
-            lookup[parts[-1].upper()] = s.id
-    return lookup
+_NAME_SUFFIXES = frozenset({"JR", "SR", "II", "III", "IV"})
 
 
-def _rep_lookup(db: Session) -> dict[str, str]:
-    """Build a map of UPPERCASE last name -> representative ID for linking."""
-    lookup: dict[str, str] = {}
-    for r in db.query(Representative.id, Representative.name).all():
-        parts = r.name.split()
-        if parts:
-            lookup[parts[-1].upper()] = r.id
-    return lookup
+def _surname_keys(name: str) -> set[str]:
+    """The ways the Record may print a member's surname: the last word, and
+    the last two for a two-word surname ("VAN HOLLEN", "BLUNT ROCHESTER"),
+    accents dropped ("LUJAN") and suffixes ignored ("Robert P., Jr. Casey")."""
+    words = [w for w in strip_accents(name).upper().replace(",", " ").replace(".", " ").split()
+             if w not in _NAME_SUFFIXES]
+    if not words:
+        return set()
+    return {words[-1], " ".join(words[-2:])}
+
+
+class _SpeakerLookup:
+    """A Record speaker ("SCOTT", "SCOTT of Florida") -> member id, or None.
+
+    A surname is linked only when it names exactly one member: sitting
+    members first, then anyone still on file. It used to be a dict of last
+    name -> id built over every row, so of two members sharing a surname
+    the later row won, a departed member could take a sitting one's
+    speeches, and "Jr." or "Van Hollen" never matched at all.
+    """
+
+    def __init__(self, rows):
+        self._current: dict[tuple[str, str | None], set[str]] = {}
+        self._anyone: dict[tuple[str, str | None], set[str]] = {}
+        for member_id, name, state, is_current in rows:
+            for key in _surname_keys(name or ""):
+                for index in ((key, None), (key, state)):
+                    self._anyone.setdefault(index, set()).add(member_id)
+                    if is_current:
+                        self._current.setdefault(index, set()).add(member_id)
+
+    def get(self, speaker: str) -> str | None:
+        surname, _, state_name = speaker.partition(" of ")
+        state = STATE_NAME_TO_CODE.get(state_name.strip()) if state_name else None
+        if state_name and state is None:
+            return None
+        key = (strip_accents(surname).upper().strip(), state)
+        for index in (self._current, self._anyone):
+            ids = index.get(key)
+            if ids:
+                return next(iter(ids)) if len(ids) == 1 else None
+        return None
+
+
+def _senator_lookup(db: Session) -> _SpeakerLookup:
+    return _SpeakerLookup(db.query(Senator.id, Senator.name, Senator.state, Senator.is_current).all())
+
+
+def _rep_lookup(db: Session) -> _SpeakerLookup:
+    return _SpeakerLookup(
+        db.query(Representative.id, Representative.name, Representative.state, Representative.is_current).all()
+    )
+
+
+def _speaker_surname(speaker: str) -> str:
+    """"SCOTT of Florida" -> "Scott", for the document's politician name."""
+    return speaker.partition(" of ")[0].title()
 
 
 def _justice_lookup(db: Session) -> dict[str, str]:
@@ -390,12 +433,12 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
                         db.add(ExploreDocument(
                             doc_type="Senate Floor Speech",
                             source="Congressional Record (GovInfo)",
-                            title=remark.get("title", f"Sen. {speaker.title()} — Floor Remarks"),
+                            title=remark.get("title", f"Sen. {_speaker_surname(speaker)} — Floor Remarks"),
                             summary=remark["text"][:300],
                             body=remark["text"],
                             date=remark["date"],
                             url=_crec_url(remark["date"], "Senate"),
-                            politician_name=speaker.title(),
+                            politician_name=_speaker_surname(speaker),
                             politician_id=senator_id,
                             chamber="Senate",
                             external_id=ext_id,
@@ -425,16 +468,16 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
                     if exists:
                         continue
 
-                    rep_id = rep_map.get(speaker.upper())
+                    rep_id = rep_map.get(speaker)
                     db.add(ExploreDocument(
                         doc_type="House Floor Speech",
                         source="Congressional Record (GovInfo)",
-                        title=remark.get("title", f"Rep. {speaker.title()} — Floor Remarks"),
+                        title=remark.get("title", f"Rep. {_speaker_surname(speaker)} — Floor Remarks"),
                         summary=remark["text"][:300],
                         body=remark["text"],
                         date=remark["date"],
                         url=_crec_url(remark["date"], "House"),
-                        politician_name=speaker.title(),
+                        politician_name=_speaker_surname(speaker),
                         politician_id=rep_id,
                         chamber="House",
                         external_id=ext_id,

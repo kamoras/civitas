@@ -201,9 +201,23 @@ async def fetch_granule_text(
 
 # ── Parsing ──────────────────────────────────────────────────────
 
-_SPEAKER_RE = re.compile(
-    r"(?:Mr|Mrs|Ms)\.\s+([A-Z][A-Z\-\' ]{1,25})\."
+# "Mr. CRUZ.", "Ms. BLUNT ROCHESTER.", "Mr. McGOVERN.", and, where the
+# chamber has two members of that surname, "Mr. SCOTT of Florida." — the
+# Record names the state exactly then. The earlier pattern stopped at the
+# lowercase "of" and "Mc", so every member sharing a surname, and every
+# Mc/De/La name, had no floor speeches at all. A name may open with a
+# capital and up to two lowercase letters (Mc, De, La, Des) before its
+# capitals.
+SPEAKER_RE = re.compile(
+    r"(?:Mr|Mrs|Ms|Miss)\.\s+([A-Z][a-z]{0,2}[A-Z][A-Z\-\' ]{0,25}?)"
+    r"(?:\s+of\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*))?\."
 )
+
+
+def speaker_of(match: re.Match) -> tuple[str, str]:
+    """(name as printed, "NAME" or "NAME of State") for a SPEAKER_RE match."""
+    name = match.group(1).strip().rstrip(".")
+    return name, f"{name} of {match.group(2)}" if match.group(2) else name
 
 _SKIP_SPEAKERS = frozenset({
     "PRESIDENT", "PRESIDING OFFICER", "CHAIR", "CHAIRMAN",
@@ -215,17 +229,18 @@ def parse_speaking_turns(text: str) -> list[dict]:
     """Split Congressional Record text into speaker-attributed segments.
 
     Each turn is identified by the standard ``Mr. LASTNAME.`` pattern.
-    Returns list of dicts with ``speaker`` (uppercase last name) and
+    Returns list of dicts with ``speaker`` (uppercase last name, followed
+    by " of State" where the Record gives one) and
     ``text`` (first 400 chars of the segment).
     """
-    markers = list(_SPEAKER_RE.finditer(text))
+    markers = list(SPEAKER_RE.finditer(text))
     if not markers:
         return []
 
     turns: list[dict] = []
     for i, m in enumerate(markers):
-        speaker = m.group(1).strip().rstrip(".")
-        if speaker in _SKIP_SPEAKERS:
+        name, speaker = speaker_of(m)
+        if name in _SKIP_SPEAKERS:
             continue
 
         start = m.end()
@@ -263,7 +278,7 @@ async def fetch_floor_remarks(
         max_granules_per_day: Cap on granule fetches per daily package
             to keep API request volume manageable.
     """
-    cache_key = f"floor-remarks-{days_back}d-v1"
+    cache_key = f"floor-remarks-{days_back}d-v2"  # v2: "NAME of State" speakers
     cached = api_cache_get(db, "govinfo", cache_key)
     if cached is not None:
         return cached

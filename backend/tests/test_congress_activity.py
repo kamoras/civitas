@@ -223,6 +223,44 @@ class TestSyncDigest:
         house = db_session.query(CongressDay).filter_by(chamber="house", date="2026-09-24").one()
         assert house.is_final and house.adjourned_at == "2:33 p.m."
 
+    def test_a_chamber_missing_from_the_digest_did_not_meet(self, db_session, monkeypatch):
+        listing = json.dumps({"granules": [
+            {"granuleId": "CREC-2026-09-21-pt1-PgD921", "granuleClass": "DAILYDIGEST", "title": "Daily Digest/Senate"},
+        ]}).encode()
+        monkeypatch.setattr(ca, "_get", _fake_get({
+            "api.govinfo.gov/packages/CREC-2026-09-21/granules": listing,
+            "PgD921.htm": (FIX / "daily_digest" / "CREC-2026-09-21-pt1-PgD921.htm").read_bytes(),
+        }))
+        assert _run(ca.sync_digest(None, db_session, date(2026, 9, 21))) == "ok"
+        house = db_session.query(CongressDay).filter_by(chamber="house", date="2026-09-21").one()
+        assert (house.in_session, house.is_final, house.source) == (False, True, "digest")
+
+        # Final for both chambers, so the recent-days pass leaves the day alone.
+        asked = []
+
+        async def fake_digest(client, db, day):
+            asked.append(day)
+            return "absent"
+
+        monkeypatch.setattr(ca, "sync_digest", fake_digest)
+        monkeypatch.setattr(ca, "_DIGEST_BACKFILL_BATCH", 0)
+        _run(ca.sync_digests(None, db_session, date(2026, 9, 22)))
+        assert date(2026, 9, 21) not in asked and date(2026, 9, 20) in asked
+
+    def test_a_floor_log_that_says_a_chamber_met_is_not_overwritten(self, db_session, monkeypatch):
+        db_session.add(CongressDay(chamber="house", date="2026-09-21", in_session=True, source="floor_log"))
+        db_session.commit()
+        listing = json.dumps({"granules": [
+            {"granuleId": "CREC-2026-09-21-pt1-PgD921", "granuleClass": "DAILYDIGEST", "title": "Daily Digest/Senate"},
+        ]}).encode()
+        monkeypatch.setattr(ca, "_get", _fake_get({
+            "api.govinfo.gov/packages/CREC-2026-09-21/granules": listing,
+            "PgD921.htm": (FIX / "daily_digest" / "CREC-2026-09-21-pt1-PgD921.htm").read_bytes(),
+        }))
+        _run(ca.sync_digest(None, db_session, date(2026, 9, 21)))
+        house = db_session.query(CongressDay).filter_by(chamber="house", date="2026-09-21").one()
+        assert (house.in_session, house.is_final, house.source) == (True, False, "floor_log")
+
     def test_no_record_that_day_is_absent(self, db_session, monkeypatch):
         monkeypatch.setattr(ca, "_get", _fake_get({"api.govinfo.gov": ca._ABSENT}))
         assert _run(ca.sync_digest(None, db_session, date(2026, 9, 26))) == "absent"
@@ -296,6 +334,31 @@ class TestSyncRollCalls:
         monkeypatch.setattr(ca, "_get", _fake_get({"clerk.house.gov": None}))
         assert _run(ca.sync_roll_calls(None, db_session, "house", 119, 2)) == (0, "failed")
 
+    def test_a_late_file_passed_over_is_fetched_on_a_later_run(self, db_session, monkeypatch):
+        vote = (FIX / "roll_calls" / "house_2026_roll309.xml").read_bytes()  # dated 2026-09-16
+        monkeypatch.setattr(ca, "eastern_today", lambda: date(2026, 9, 20))
+        monkeypatch.setattr(ca, "_get", _fake_get({
+            "roll001.xml": vote, "roll002.xml": ca._ABSENT, "roll003.xml": vote, "clerk.house.gov": ca._ABSENT,
+        }))
+        _run(ca.sync_roll_calls(None, db_session, "house", 119, 2))
+        # Number 2 is posted after the first run moved past it.
+        monkeypatch.setattr(ca, "_get", _fake_get({
+            "roll001.xml": vote, "roll002.xml": vote, "roll003.xml": vote, "clerk.house.gov": ca._ABSENT,
+        }))
+        stored, status = _run(ca.sync_roll_calls(None, db_session, "house", 119, 2))
+        assert (stored, status) == (1, "ok")
+        assert sorted(n for (n,) in db_session.query(RollCall.number)) == [1, 2, 3]
+
+    def test_a_long_standing_gap_is_no_longer_asked_for(self, db_session, monkeypatch):
+        vote = (FIX / "roll_calls" / "house_2026_roll309.xml").read_bytes()
+        monkeypatch.setattr(ca, "_get", _fake_get({
+            "roll001.xml": vote, "roll002.xml": ca._ABSENT, "roll003.xml": vote, "clerk.house.gov": ca._ABSENT,
+        }))
+        monkeypatch.setattr(ca, "eastern_today", lambda: date(2026, 9, 20))
+        _run(ca.sync_roll_calls(None, db_session, "house", 119, 2))
+        assert ca._gaps_to_retry(db_session, "house", 119, 2, date(2026, 9, 20)) == [2]
+        assert ca._gaps_to_retry(db_session, "house", 119, 2, date(2026, 10, 1)) == []
+
 
 class _Resp:
     def __init__(self, status, url, history=()):
@@ -328,6 +391,31 @@ def test_a_senate_vote_on_an_amendment_belongs_to_its_bill(db_session, monkeypat
     monkeypatch.setattr(ca, "_get", _fake_get({"_00001.xml": vote, "vote1192": ca._ABSENT}))
     asyncio.run(ca.sync_roll_calls(None, db_session, "senate", 119, 2))
     assert db_session.query(RollCall).one().bill_id == "S.4668"
+
+
+def test_a_house_suspension_needs_two_thirds():
+    from app.pipeline.fetch.congress import parse_house_vote_xml
+
+    text = (FIX / "roll_calls" / "house_2026_roll309.xml").read_text()
+    assert parse_house_vote_xml(text, 2026, 309)["majorityRequirement"] == "1/2"
+    suspension = text.replace("<vote-type>YEA-AND-NAY</vote-type>", "<vote-type>2/3 YEA-AND-NAY</vote-type>")
+    assert parse_house_vote_xml(suspension, 2026, 309)["majorityRequirement"] == "2/3"
+
+
+def test_house_votes_stored_without_a_requirement_are_repaired_once(db_session, monkeypatch):
+    text = (FIX / "roll_calls" / "house_2026_roll309.xml").read_text()
+    suspension = text.replace("<vote-type>YEA-AND-NAY</vote-type>", "<vote-type>2/3 YEA-AND-NAY</vote-type>")
+    db_session.add(RollCall(chamber="house", congress=119, session=2, number=309, date="2026-09-16",
+                            source_url="https://clerk.house.gov/evs/2026/roll309.xml", majority_requirement=""))
+    db_session.add(RollCall(chamber="senate", congress=119, session=2, number=1, date="2026-09-16",
+                            source_url="https://www.senate.gov/x.xml", majority_requirement=""))
+    db_session.commit()
+    monkeypatch.setattr(ca, "_get", _fake_get({"roll309.xml": suspension.encode()}))
+    assert _run(ca.repair_house_requirements(None, db_session)) == (1, "ok")
+    assert db_session.query(RollCall).filter_by(chamber="house").one().majority_requirement == "2/3"
+    # Nothing left to repair: no request is made.
+    monkeypatch.setattr(ca, "_get", _fake_get({}))
+    assert _run(ca.repair_house_requirements(None, db_session)) == (0, "ok")
 
 
 def test_a_run_reads_the_newest_first(monkeypatch):

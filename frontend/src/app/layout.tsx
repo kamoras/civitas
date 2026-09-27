@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Archivo, Press_Start_2P, Share_Tech_Mono } from "next/font/google";
 import ConfigProvider from "@/components/providers/ConfigProvider";
 import LoadTimingBeacon from "@/components/LoadTimingBeacon";
+import NavigationBeacon from "@/components/NavigationBeacon";
 import { HOME_DESCRIPTION, HOME_TITLE, SITE_NAME, SITE_URL } from "@/lib/site";
 import "./globals.css";
 
@@ -106,6 +107,7 @@ export default function RootLayout({
           <div className="crt-overlay" aria-hidden="true" />
           {children}
           <LoadTimingBeacon />
+          <NavigationBeacon />
         </ConfigProvider>
       </body>
     </html>

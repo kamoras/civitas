@@ -32,6 +32,7 @@ from app.config_definitions import JUSTICE_SCORE_WEIGHTS
 from app.database import get_db
 from app.issue_ids import to_public_id
 from app.models import ActionIssue, ExploreDocument, Justice, President, Representative, Senator
+from app.ordinals import ordinal
 from app.pipeline.analyze.president_scorer import compute_president_overall_score
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.services.senator_service import STATE_NAMES
@@ -216,7 +217,7 @@ def list_politicians(
                 "state": None,
                 "stateName": None,
                 "district": None,
-                "role": f"President ({p.number}{_ordinal_suffix(p.number)})",
+                "role": f"President ({ordinal(p.number)})",
                 "thumbnailUrl": None,
                 "hasScorecard": overall is not None,
                 "overallScore": overall,
@@ -249,23 +250,23 @@ def list_politicians(
     return _cached_json(results)
 
 
-def _ordinal_suffix(n: int) -> str:
-    if 11 <= (n % 100) <= 13:
-        return "th"
-    return {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
-
-
 # ---------------------------------------------------------------------------
 # Profile endpoint
 # ---------------------------------------------------------------------------
 
 def _detect_branch(pid: str, db: Session) -> tuple[str, object] | None:
-    row = db.query(Senator).filter(Senator.id == pid).first()
-    if row:
-        return ("senate", row)
-    row = db.query(Representative).filter(Representative.id == pid).first()
-    if row:
-        return ("house", row)
+    # Both chambers' ids are the member's "last-first" name, so one id can be
+    # a departed row in one chamber and a serving member in the other (a
+    # representative who went on to the Senate, or back): the serving one is
+    # who the page is about.
+    senator = db.query(Senator).filter(Senator.id == pid).first()
+    rep = db.query(Representative).filter(Representative.id == pid).first()
+    if rep and rep.is_current and not (senator and senator.is_current):
+        return ("house", rep)
+    if senator:
+        return ("senate", senator)
+    if rep:
+        return ("house", rep)
     row = db.query(President).filter(President.id == pid).first()
     if row:
         return ("president", row)

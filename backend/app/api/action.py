@@ -3,13 +3,14 @@
 import asyncio
 import json
 import logging
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, field_validator
 from sqlalchemy.exc import OperationalError, TimeoutError as SATimeoutError
 from sqlalchemy.orm import Session, selectinload
 
-from datetime import date
+from datetime import date, timedelta
 
 from app.api.admin import require_admin
 from app.api.rate_limit import WriteRateLimit
@@ -17,6 +18,7 @@ from app.database import get_db, get_visits_db
 from app.election_calendar import next_election_day, seats_up_for_year
 from app.fact_diff import new_facts_since
 from app.issue_ids import from_public_id, to_public_id
+from app.ordinals import ordinal
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.time_utils import comment_period_today, utcnow
 from app.trending import compute_trending_issue_ids
@@ -690,6 +692,17 @@ _ALIASES: dict[str, str] = {
 }
 
 
+def _whole_word(name: str) -> re.Pattern:
+    # Whole words: as a substring, "India" matched every Indiana story,
+    # "Iran" matched "Iranian" (an alias of its own) and "UK" any word
+    # spelled in capitals that contains it.
+    return re.compile(rf"(?<!\w){re.escape(name)}(?!\w)")
+
+
+_COUNTRY_PATTERNS = {name: _whole_word(name) for name in _COUNTRIES}
+_ALIAS_PATTERNS = {alias: _whole_word(alias) for alias in _ALIASES}
+
+
 def _extract_country_mentions(articles: list) -> list[dict]:
     """Group articles by country mentions using simple name matching."""
     from collections import defaultdict
@@ -697,8 +710,8 @@ def _extract_country_mentions(articles: list) -> list[dict]:
 
     for article in articles:
         text = f"{article.title} {article.summary}"
-        for name, coords in _COUNTRIES.items():
-            if name in text:
+        for name, pattern in _COUNTRY_PATTERNS.items():
+            if pattern.search(text):
                 country_articles[name].append({
                     "title": article.title,
                     "url": article.url,
@@ -708,7 +721,7 @@ def _extract_country_mentions(articles: list) -> list[dict]:
         for alias, canonical in _ALIASES.items():
             # A country matched via both its name and an alias (e.g. "Russia"
             # and "Moscow") is de-duplicated by title in the pass below.
-            if alias in text:
+            if _ALIAS_PATTERNS[alias].search(text):
                 country_articles[canonical].append({
                     "title": article.title,
                     "url": article.url,
@@ -1145,11 +1158,11 @@ def _upcoming_civic_events(year: int, today: date) -> list[dict]:
             "linkLabel": "View races & state info",
         })
 
-    scotus_term_start = date(year, 10, 7)
-    if scotus_term_start.weekday() == 5:
-        scotus_term_start = date(year, 10, 9)
-    elif scotus_term_start.weekday() == 6:
-        scotus_term_start = date(year, 10, 8)
+    # The first Monday in October (28 U.S.C. § 2). This was October 7th
+    # moved off a weekend, which is the first Monday only when the 7th is one:
+    # 2026's term was dated Wednesday the 7th, not Monday the 5th.
+    october_first = date(year, 10, 1)
+    scotus_term_start = october_first + timedelta(days=(0 - october_first.weekday()) % 7)
     if scotus_term_start >= today and scotus_term_start.year == year:
         events.append({
             "date": scotus_term_start.isoformat(),
@@ -1157,7 +1170,7 @@ def _upcoming_civic_events(year: int, today: date) -> list[dict]:
             "description": "The Supreme Court begins its new term on the first Monday in October,"
                            " hearing oral arguments and issuing opinions through June.",
             "category": "scotus",
-            "link": "/scorecard?branch=scotus",
+            "link": "/politicians?branch=scotus",
             "linkLabel": "View justice scorecards",
         })
 
@@ -1168,7 +1181,7 @@ def _upcoming_civic_events(year: int, today: date) -> list[dict]:
         if jan3 >= today:
             events.append({
                 "date": jan3.isoformat(),
-                "title": f"{_ordinal(year)} Congress Convenes",
+                "title": f"{ordinal((year - 1789) // 2 + 1)} Congress Convenes",
                 "description": "New session of Congress begins. Newly elected members are sworn in"
                                " and leadership elections take place.",
                 "category": "congress",
@@ -1186,17 +1199,11 @@ def _upcoming_civic_events(year: int, today: date) -> list[dict]:
                 "title": "Presidential Inauguration Day",
                 "description": "The president-elect is sworn into office at the U.S. Capitol.",
                 "category": "executive",
-                "link": "/scorecard?branch=president",
+                "link": "/politicians?branch=president",
                 "linkLabel": "View presidential scorecards",
             })
 
     return sorted(events, key=lambda e: e["date"])
-
-
-def _ordinal(year: int) -> str:
-    n = (year - 1789) // 2 + 1
-    suffix = "th" if 11 <= n % 100 <= 13 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
-    return f"{n}{suffix}"
 
 
 @router.get("/timeline")
@@ -1240,7 +1247,6 @@ async def get_timeline(
     year_summary_row = db.query(YearSummary).filter(YearSummary.year == year).first()
 
     # Group entries by month and week
-    from datetime import timedelta
     entries_by_month: dict[int, list] = {}
     theme_counts: dict[str, int] = {}
     for e in entries:

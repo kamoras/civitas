@@ -74,6 +74,29 @@ def nominations_in(text: str) -> int:
     return 1
 
 
+_FRACTION_RE = re.compile(r"^\s*(\d+)\s*/\s*(\d+)")
+# Senate Rule XXII: cloture takes three-fifths of the senators duly chosen
+# and sworn, not of those voting — 60 with no vacancy.
+_SENATE_SEATS = 100
+
+
+def votes_from_threshold(rc: RollCall) -> float:
+    """How far the yeas were from what the vote needed, in votes.
+
+    The margin between yeas and nays is only that for a simple majority.
+    Cloture that fails 59-41 is a single vote short of 60, and a
+    suspension carried 290-140 two-thirds votes clear by 3; ranked by
+    yeas minus nays those read as lopsided (18 and 150) and never make a
+    "closest votes" list they belong at the top of."""
+    m = _FRACTION_RE.match(rc.majority_requirement or "")
+    num, den = (int(m.group(1)), int(m.group(2))) if m and int(m.group(2)) else (1, 2)
+    if rc.chamber == "senate" and (num, den) == (3, 5):
+        needed = _SENATE_SEATS * num / den
+    else:
+        needed = (rc.yeas + rc.nays) * num / den
+    return abs(rc.yeas - needed)
+
+
 def _plural(n: int, one: str, many: str | None = None) -> str:
     return f"{n} {one if n == 1 else (many or one + 's')}"
 
@@ -335,7 +358,7 @@ def period_report(db: Session, start: date, end: date) -> dict:
     one = [_event(e) for e in passed
            if not is_resolution(e.bill_id) and e.bill_id and not passed_both_chambers(e.bill_id, e.chamber)]
     decided = [v for v in p["votes"] if v.yeas + v.nays > 0]
-    closest = sorted(decided, key=lambda v: (abs(v.yeas - v.nays), v.date, v.number))[:3]
+    closest = sorted(decided, key=lambda v: (votes_from_threshold(v), v.date, v.number))[:3]
 
     days = []
     d = start

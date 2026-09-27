@@ -109,8 +109,9 @@ def _purge_expired(db: Session, now: float) -> None:
     db.execute(delete(ThrottleClaim).where(ThrottleClaim.expires_at < now))
 
 
-def hit(bucket: str, key: str, *, limit: int, period: float) -> Decision:
-    """Count one request against `limit` per `period` seconds for `key`.
+def hit(bucket: str, key: str, *, limit: int, period: float, cost: int = 1) -> Decision:
+    """Count `cost` units (one request, by default) against `limit` per
+    `period` seconds for `key`.
 
     A refused request is not counted, so a client that keeps retrying
     through a 429 is let back in as its earlier requests age out, as with
@@ -125,10 +126,10 @@ def hit(bucket: str, key: str, *, limit: int, period: float) -> Decision:
         db = _sessions()()
         current = db.execute(
             sqlite_insert(ThrottleWindow)
-            .values(bucket=bucket, key=key, window=window, count=1, expires_at=(window + 2) * period)
+            .values(bucket=bucket, key=key, window=window, count=cost, expires_at=(window + 2) * period)
             .on_conflict_do_update(
                 index_elements=["bucket", "key", "window"],
-                set_={"count": ThrottleWindow.count + 1},
+                set_={"count": ThrottleWindow.count + cost},
             )
             .returning(ThrottleWindow.count)
         ).scalar_one()
@@ -149,7 +150,7 @@ def hit(bucket: str, key: str, *, limit: int, period: float) -> Decision:
                     ThrottleWindow.key == key,
                     ThrottleWindow.window == window,
                 )
-                .values(count=ThrottleWindow.count - 1)
+                .values(count=ThrottleWindow.count - cost)
             )
         _purge_expired(db, now)
         db.commit()
@@ -188,6 +189,22 @@ def claim(bucket: str, key: str, *, period: float) -> bool:
         _rollback(db)
         logger.warning("Throttle %r unavailable — allowing the claim", bucket, exc_info=True)
         return True
+    finally:
+        if db is not None:
+            db.close()
+
+
+def clear(*buckets: str) -> None:
+    """Forget everything counted in `buckets` (tests reset limits this way)."""
+    db = None
+    try:
+        db = _sessions()()
+        db.execute(delete(ThrottleWindow).where(ThrottleWindow.bucket.in_(buckets)))
+        db.execute(delete(ThrottleClaim).where(ThrottleClaim.bucket.in_(buckets)))
+        db.commit()
+    except SQLAlchemyError:
+        _rollback(db)
+        logger.warning("Throttle clear failed", exc_info=True)
     finally:
         if db is not None:
             db.close()

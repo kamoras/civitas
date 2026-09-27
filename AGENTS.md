@@ -979,10 +979,8 @@ the pending list).
     database. Keys come from `rate_limit.client_key`: an HMAC of the IP
     under the day's visit salt, tagged by purpose — never an IP, and never
     the visitor hash `SiteVisit` stores, so no throttle row joins to a visit.
-    Every row expires. Background jobs that change data outside a pipeline
-    run hold a lease, and releasing it moves the HTTP data version
-    (`lease.DATA_CHANGED_TIER`); a route whose response changes with
-    requests themselves goes in `cache_headers._NO_VALIDATOR_ROUTES`.
+    Every row expires. The hourly upstream-lookup budget
+    (`rate_limit.spend_upstream`) is one shared count the same way.
   - A module cache of a file the pipeline rewrites must notice the rewrite
     from the API process: keep a `file_cache.files_stamp` of it and reload
     when it moves. Clearing the cache from the writer only clears the

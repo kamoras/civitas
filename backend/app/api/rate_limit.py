@@ -1,9 +1,11 @@
-"""Shared per-IP rate limiting for mutation endpoints (POST/DELETE).
+"""Shared per-IP rate limiting for mutation endpoints (POST/DELETE), and
+for the public routes that spend the shared api.data.gov key.
 
 Separate from public.py's read-only limiter so write endpoints can use a
-tighter limit without coupling to the read-path code. Counted in the shared
-throttle store (api/throttle.py), so the limit is per client, not per client
-per API worker process.
+tighter limit without coupling to the read-path code. Every limit here is
+counted in the throttle store every API worker process shares
+(api/throttle.py), so it holds per client — not per client per worker —
+and the hourly upstream budget holds for the whole backend.
 """
 
 import asyncio
@@ -84,18 +86,80 @@ async def client_key(request: Request, purpose: str, scope: str = "") -> str:
     return hmac.new(salt, message, hashlib.sha256).hexdigest()[:32]
 
 
+class _PerClientLimit:
+    """At most `limit` requests per `period` seconds per client."""
+
+    def __init__(self, bucket: str, limit: int, period: float, what: str):
+        self.bucket, self.limit, self.period, self.what = bucket, limit, period, what
+
+    async def check(self, request: Request) -> None:
+        key = await client_key(request, self.bucket)
+        decision = await asyncio.to_thread(
+            throttle.hit, self.bucket, key, limit=self.limit, period=self.period,
+        )
+        if not decision.allowed:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit exceeded — {self.limit} {self.what} per minute per IP.",
+                headers={"Retry-After": str(int(self.period))},
+            )
+
+
+_write_limiter = _PerClientLimit("write", _WRITE_LIMIT, _WRITE_PERIOD, "requests")
+
+
 async def write_rate_limit(request: Request) -> None:
     """FastAPI dependency: 20 mutation requests/minute per IP."""
-    key = await client_key(request, "write")
-    decision = await asyncio.to_thread(
-        throttle.hit, "write", key, limit=_WRITE_LIMIT, period=_WRITE_PERIOD,
-    )
-    if not decision.allowed:
-        raise HTTPException(
-            status_code=429,
-            detail=f"Rate limit exceeded — {_WRITE_LIMIT} requests per minute per IP.",
-            headers={"Retry-After": "60"},
-        )
+    await _write_limiter.check(request)
 
 
 WriteRateLimit = Annotated[None, Depends(write_rate_limit)]
+
+
+# ── Public routes that fetch from the shared api.data.gov key ─────
+#
+# A few read routes answer from an upstream API on a cache miss: a bill's
+# record (Congress.gov, up to five calls) and a rulemaking's public comments
+# (Regulations.gov). Both spend the api.data.gov key the nightly pipeline
+# runs on — the Congress.gov fetch at 1.2 requests/s is already most of that
+# API's hourly allowance — through the same process-wide rate limiter. Left
+# open, one client walking bill numbers could spend the key's hour and stall
+# the pipeline behind it. So these routes are held to a per-IP rate, and all
+# of their upstream calls together to a fixed share of each hour; past it
+# they answer 503 with Retry-After while cached answers keep serving.
+_UPSTREAM_ROUTE_LIMIT = 10          # requests per minute per IP
+_UPSTREAM_CALLS_PER_HOUR = 200      # upstream calls, all public routes together
+_UPSTREAM_BUCKET = "upstream-budget"
+_upstream_route_limiter = _PerClientLimit("upstream-lookups", _UPSTREAM_ROUTE_LIMIT, 60.0, "lookups")
+
+
+async def upstream_route_limit(request: Request) -> None:
+    """FastAPI dependency for routes that may fetch upstream."""
+    await _upstream_route_limiter.check(request)
+
+
+UpstreamRouteLimit = Annotated[None, Depends(upstream_route_limit)]
+
+
+def spend_upstream(calls: int) -> None:
+    """Charge `calls` upstream requests to this hour's public budget, or
+    raise 503 when they don't fit. Call only for cache misses.
+
+    One budget for the whole backend, in the shared throttle store: kept per
+    process, each API worker would spend its own full hour of the key."""
+    if calls <= 0:
+        return
+    decision = throttle.hit(
+        _UPSTREAM_BUCKET, "all", limit=_UPSTREAM_CALLS_PER_HOUR, period=3600.0, cost=calls,
+    )
+    if not decision.allowed:
+        raise HTTPException(
+            status_code=503,
+            detail="Live lookups are paused for a few minutes; try again shortly.",
+            headers={"Retry-After": "600"},
+        )
+
+
+def reset_upstream_budget() -> None:
+    """For tests: clear the budget and the lookups limit."""
+    throttle.clear(_UPSTREAM_BUCKET, _upstream_route_limiter.bucket)

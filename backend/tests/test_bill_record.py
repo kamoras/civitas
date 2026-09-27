@@ -50,6 +50,13 @@ def _answers(fail: set[str] = frozenset(), missing: bool = False):
     return fake, calls
 
 
+@pytest.fixture(autouse=True)
+def _fresh_limits(throttle_store):
+    """The route's per-IP window and upstream budget live in the throttle
+    store every API worker shares; a store per test starts them fresh."""
+    yield
+
+
 @pytest.fixture
 def senate(db_session):
     db_session.add(Senator(id="ted-cruz", bioguide_id="C001098", name="Ted Cruz", state="TX", party="R"))
@@ -106,6 +113,41 @@ def test_no_such_bill(senate, monkeypatch):
     assert asyncio.run(br.fetch_bill_record(None, senate, 119, "S.99999"))["not_found"] is True
 
 
+def test_a_missing_bill_is_cached_so_asking_again_costs_nothing(senate, monkeypatch):
+    # Probing wrong ids used to go to Congress.gov every time.
+    fake, calls = _answers(missing=True)
+    monkeypatch.setattr(br, "_congress_get", fake)
+    asyncio.run(br.fetch_bill_record(None, senate, 119, "S.99999"))
+    n = len(calls)
+    assert asyncio.run(br.fetch_bill_record(None, senate, 119, "S.99999"))["not_found"] is True
+    assert len(calls) == n
+
+
+def test_only_cache_misses_are_charged_before_anything_is_fetched(senate, monkeypatch):
+    fake, calls = _answers()
+    monkeypatch.setattr(br, "_congress_get", fake)
+    charged = []
+    asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668", spend=charged.append))
+    asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668", spend=charged.append))
+    assert charged == [5, 0]
+
+    def refuse(n):
+        raise RuntimeError("budget spent")
+    monkeypatch.setattr(br, "_congress_get", fake)
+    n = len(calls)
+    with pytest.raises(RuntimeError):
+        asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4669", spend=refuse))
+    assert len(calls) == n  # refused before any request went out
+
+
+def test_congress_gov_url_ordinal(senate):
+    # "93th" / "101th" were dead links.
+    assert br.shape_record(senate, 101, "HR.1", {})["congressGovUrl"] == (
+        "https://www.congress.gov/bill/101st-congress/house-bill/1")
+    assert br.shape_record(senate, 93, "S.2", {})["congressGovUrl"] == (
+        "https://www.congress.gov/bill/93rd-congress/senate-bill/2")
+
+
 def test_vote_detail_links_senators_by_name_and_state(senate):
     rc = senate.query(RollCall).one()
     v = br.vote_detail(senate, rc)
@@ -138,6 +180,23 @@ class TestRoutes:
 
     def test_not_a_bill_id(self, client):
         assert client.get("/api/bills/PN.12/record").status_code == 404
+
+    def test_a_congress_that_has_not_convened_is_refused(self, client):
+        assert client.get("/api/bills/S.1/record?congress=200").status_code == 404
+
+    def test_upstream_budget_and_per_ip_limit(self, client, monkeypatch):
+        from app.api import rate_limit
+
+        rate_limit.reset_upstream_budget()
+        monkeypatch.setattr(rate_limit, "_UPSTREAM_CALLS_PER_HOUR", 7)
+        assert client.get("/api/bills/S.4668/record?congress=119").status_code == 200  # 5 calls
+        r = client.get("/api/bills/S.4669/record?congress=119")  # 5 more don't fit
+        assert r.status_code == 503 and r.headers["Retry-After"]
+        # A cached answer still serves once the budget is spent.
+        assert client.get("/api/bills/S.4668/record?congress=119").status_code == 200
+        codes = [client.get("/api/bills/S.4668/record?congress=119").status_code for _ in range(10)]
+        assert 429 in codes
+        rate_limit.reset_upstream_budget()
 
     def test_vote(self, client):
         r = client.get("/api/congress/votes/senate/119/2/243")

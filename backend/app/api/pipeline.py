@@ -1,11 +1,10 @@
 import logging
-import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from sqlalchemy.orm import Session
 
+from app.api.auth import check_pipeline_token
 from app.api.pipeline_runner import run_pipeline_in_thread
-from app.config import settings
 from app.database import get_db
 from app.models import PipelineRun
 from app.pipeline.senate_pipeline import run_senate_pipeline
@@ -75,12 +74,7 @@ async def trigger_pipeline(
     db: Session = Depends(get_db),
 ) -> dict:
     """Trigger a pipeline run. Requires Bearer token matching PIPELINE_TRIGGER_TOKEN."""
-    if not settings.PIPELINE_TRIGGER_TOKEN:
-        raise HTTPException(status_code=503, detail="Pipeline trigger token not configured")
-
-    expected = f"Bearer {settings.PIPELINE_TRIGGER_TOKEN}"
-    if not authorization or not secrets.compare_digest(authorization, expected):
-        raise HTTPException(status_code=401, detail="Invalid or missing authorization token")
+    check_pipeline_token(authorization)
 
     if _is_pipeline_running(db):
         raise HTTPException(status_code=409, detail="Pipeline is already running")

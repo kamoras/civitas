@@ -271,34 +271,11 @@ def beat(db: Session, tier: str, token: str) -> bool:
     return renewed == 1
 
 
-# When a lease holder last finished: every job that writes outside a
-# pipeline run holds a lease, so this is when data last changed outside one.
-# Part of the HTTP data version (api/cache_headers.py), so responses those
-# jobs change stop revalidating as current. An api_cache row, so a data
-# reset's wipe clears it — and changes the version, which is right.
-DATA_CHANGED_TIER = "data-version"
-DATA_CHANGED_KEY = "changed-at"
-
-
 def release(db: Session, tier: str, token: str) -> None:
     """Never raises: a release that fails leaves the row to go stale, and a
-    holder's own error (lease.holding) stays the one that surfaces.
-
-    Records the release as a data change (DATA_CHANGED_TIER) in the same
-    commit — whether or not the holder wrote anything; a needless change
-    only costs caches one refetch."""
-    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-
-    from app.models import ApiCache
-
+    holder's own error (lease.holding) stays the one that surfaces."""
     try:
         _own_row(db, tier, token).delete()
-        now = utcnow()
-        db.execute(
-            sqlite_insert(ApiCache)
-            .values(tier=DATA_CHANGED_TIER, cache_key=DATA_CHANGED_KEY, data_json="{}", cached_at=now)
-            .on_conflict_do_update(index_elements=["tier", "cache_key"], set_={"cached_at": now})
-        )
         db.commit()
     except Exception:
         logger.exception("Failed to release the %s lease (it will expire as stale)", tier)
