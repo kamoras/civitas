@@ -65,7 +65,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/action`, changeFrequency: "hourly", priority: 0.9 },
     { url: `${SITE_URL}/politicians`, changeFrequency: "daily", priority: 0.9 },
     { url: `${SITE_URL}/elections`, changeFrequency: "daily", priority: 0.9 },
-    { url: `${SITE_URL}/bills`, changeFrequency: "hourly", priority: 0.8 },
+    { url: `${SITE_URL}/congress`, changeFrequency: "hourly", priority: 0.8 },
+    { url: `${SITE_URL}/congress/bills`, changeFrequency: "hourly", priority: 0.8 },
     { url: `${SITE_URL}/leaderboard`, changeFrequency: "daily", priority: 0.8 },
     { url: `${SITE_URL}/compare`, changeFrequency: "weekly", priority: 0.6 },
     { url: `${SITE_URL}/explore`, changeFrequency: "daily", priority: 0.6 },
@@ -88,7 +89,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...staticRoutes,
     ...states,
     ...entries(index.politicians, (id) => `/politicians/${id}`, "weekly", 0.8),
-    ...entries(index.bills, (id) => `/bills/${id}`, "weekly", 0.5),
+    ...entries(index.bills, (id) => `/congress/bills/${id}`, "weekly", 0.5),
     ...entries(index.issues, (id) => `/issue/${id}`, "weekly", 0.5),
   ];
 }

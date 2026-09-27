@@ -203,7 +203,7 @@ class TestRelatedBillInternalLinks:
 
         resp = _build_issue_response(issue, db_session)
 
-        assert resp["relatedBills"][0]["internalUrl"] == "/bills/HR.22"
+        assert resp["relatedBills"][0]["internalUrl"] == "/congress/bills/HR.22"
         # stored congress.gov URL stays available verbatim as the fact-check fallback
         assert resp["relatedBills"][0]["url"] == (
             "https://www.congress.gov/bill/119th-congress/house-bill/22"
@@ -250,7 +250,7 @@ class TestRelatedBillInternalLinks:
 
         resp = _build_issue_response(issue, db_session)
 
-        assert resp["relatedBills"][0]["internalUrl"] == "/bills/HR.22"
+        assert resp["relatedBills"][0]["internalUrl"] == "/congress/bills/HR.22"
 
     def test_non_current_sponsor_blocks_internal_link(self, db_session):
         """get_bill_detail only resolves bills sponsored by current members —
