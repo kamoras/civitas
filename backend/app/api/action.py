@@ -490,14 +490,15 @@ class PulseVoteRequest(BaseModel):
         return v
 
 
-# Keyed on an HMAC of the IP and the issue under the day's visit salt
-# (rate_limit.client_key), never the IP itself: a raw address held for a day
-# is exactly the per-visitor identifier §8 of AGENTS.md rules out, and the
-# salt is deleted when the UTC day ends, so yesterday's keys cannot be
-# turned back into addresses. A new salt also means a new key, which makes
-# the dedup "one stance per issue per UTC day" — what the 429 says. Held in
-# the throttle store every API worker process shares (api/throttle.py): a
-# per-process record let a second vote through on the other worker.
+# Keyed on an HMAC of the IP and the issue under the throttle store's own
+# salt for the day (throttle.client_key), never the IP itself: a raw address
+# held for a day is exactly the per-visitor identifier §8 of AGENTS.md rules
+# out, and the salt is replaced when the UTC day ends, so yesterday's keys
+# cannot be turned back into addresses. A new salt also means a new key,
+# which makes the dedup "one stance per issue per UTC day" — what the 429
+# says. Held in the store every API worker process shares, in RAM
+# (api/throttle.py): a per-process record let a second vote through on the
+# other worker.
 _PULSE_BUCKET = "pulse"
 _PULSE_DEDUP_WINDOW = 60.0 * 60 * 24
 

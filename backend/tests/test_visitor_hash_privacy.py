@@ -55,8 +55,8 @@ class TestDailySalt:
 
     def test_unavailable_store_degrades_without_caching(self, monkeypatch):
         # One fallback per process per day, never cached as the shared
-        # salt (retried next call). A fresh salt per call made every visit a
-        # new unique and every rate-limit key new — switching the limits off.
+        # salt (retried next call). A fresh salt per call made every visit
+        # during the outage a new unique visitor.
         monkeypatch.setattr(visits, "_salt_cache", None)
         monkeypatch.setattr(visits, "_fallback_salt", None)
 

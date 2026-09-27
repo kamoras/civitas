@@ -195,7 +195,37 @@ class TestFailsOpen:
         throttle.clear("b")
 
     def test_client_key(self):
-        assert throttle.client_key("203.0.113.1", "write") == "unavailable"
+        assert throttle.client_key("203.0.113.1", "write") is None
+
+
+@pytest.mark.usefixtures("throttle_store")
+class TestNoKey:
+    """A request whose key couldn't be made is let through, not counted
+    under one key every such client would share."""
+
+    def test_hit_and_claim_let_it_through(self):
+        for _ in range(5):
+            assert throttle.hit("write", None, limit=1, period=60).allowed
+            assert throttle.claim("pulse", None, period=86400)
+        throttle.release("pulse", None)
+
+    def test_the_store_is_not_touched(self, throttle_store):
+        import os
+
+        throttle.hit("write", None, limit=1, period=60)
+        throttle.claim("pulse", None, period=86400)
+        assert not os.path.exists(throttle_store)
+
+
+def test_the_salt_is_read_once_a_day_per_process(throttle_store, monkeypatch):
+    # Every key would otherwise take the store's write lock a second time.
+    throttle.client_key("203.0.113.1", "write")
+    began = []
+    real_enter = throttle._Txn.__enter__
+    monkeypatch.setattr(throttle._Txn, "__enter__", lambda self: (began.append(1), real_enter(self))[1])
+    for _ in range(5):
+        throttle.client_key("203.0.113.1", "write")
+    assert began == []
 
 
 def test_a_held_write_lock_is_waited_on_briefly(throttle_store, monkeypatch):

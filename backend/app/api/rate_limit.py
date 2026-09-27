@@ -67,10 +67,11 @@ def client_ip(request: Request) -> str:
     return peer or "unknown"
 
 
-async def client_key(request: Request, purpose: str, scope: str = "") -> str:
+async def client_key(request: Request, purpose: str, scope: str = "") -> str | None:
     """The key a per-client limit counts this request's client under — an
     HMAC of client_ip under the throttle store's own salt for the day
-    (throttle.client_key). Never the IP, never joinable to a visit."""
+    (throttle.client_key). Never the IP, never joinable to a visit; None
+    when the store can't be read, which the limits treat as "don't limit"."""
     return await asyncio.to_thread(throttle.client_key, client_ip(request), purpose, scope)
 
 

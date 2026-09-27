@@ -14,6 +14,12 @@ from app.background import WritesElsewhere, running_writers, start_writer, writi
 from app.config import settings
 
 
+@pytest.fixture(autouse=True)
+def _role_lock_path(tmp_path, monkeypatch):
+    """Not the container's real lock in /dev/shm."""
+    monkeypatch.setattr(main_module, "_ROLE_LOCK_PATH", str(tmp_path / "pipeline.lock"))
+
+
 @pytest.fixture()
 def role(monkeypatch):
     def set_role(value: str) -> None:
@@ -22,38 +28,40 @@ def role(monkeypatch):
     return set_role
 
 
+@pytest.fixture()
+def started(monkeypatch):
+    ran: list[str] = []
+
+    def record(name):
+        def _record(*_args, **_kwargs):
+            ran.append(name)
+        return _record
+
+    async def _idle():
+        ran.append("visit-consumer")
+
+    async def _bootstrap():
+        ran.append("explore-bootstrap")
+
+    class _Loop:
+        def run_in_executor(self, _executor, fn):
+            ran.append(fn.__name__)
+
+    monkeypatch.setattr(main_module, "init_db", record("init-db"))
+    monkeypatch.setattr(main_module, "_invalidate_orphaned_pipelines", record("sweep"))
+    monkeypatch.setattr(main_module, "start_scheduler", record("scheduler"))
+    monkeypatch.setattr(main_module, "stop_scheduler", lambda: None)
+    monkeypatch.setattr(main_module, "_start_pipeline_side_startup_jobs", record("startup-jobs"))
+    monkeypatch.setattr(main_module, "_bootstrap_explore", _bootstrap)
+    monkeypatch.setattr("app.services.bill_service.warm_bill_collection_cache", record("bill-cache"))
+    monkeypatch.setattr("app.api.visits.run_visit_consumer", _idle)
+    monkeypatch.setattr(main_module.asyncio, "get_running_loop", lambda: _Loop())
+    return ran
+
+
+
 class TestStartup:
     """Each role's lifespan starts its own half and nothing of the other's."""
-
-    @pytest.fixture()
-    def started(self, monkeypatch):
-        ran: list[str] = []
-
-        def record(name):
-            def _record(*_args, **_kwargs):
-                ran.append(name)
-            return _record
-
-        async def _idle():
-            ran.append("visit-consumer")
-
-        async def _bootstrap():
-            ran.append("explore-bootstrap")
-
-        class _Loop:
-            def run_in_executor(self, _executor, fn):
-                ran.append(fn.__name__)
-
-        monkeypatch.setattr(main_module, "init_db", record("init-db"))
-        monkeypatch.setattr(main_module, "_invalidate_orphaned_pipelines", record("sweep"))
-        monkeypatch.setattr(main_module, "start_scheduler", record("scheduler"))
-        monkeypatch.setattr(main_module, "stop_scheduler", lambda: None)
-        monkeypatch.setattr(main_module, "_start_pipeline_side_startup_jobs", record("startup-jobs"))
-        monkeypatch.setattr(main_module, "_bootstrap_explore", _bootstrap)
-        monkeypatch.setattr("app.services.bill_service.warm_bill_collection_cache", record("bill-cache"))
-        monkeypatch.setattr("app.api.visits.run_visit_consumer", _idle)
-        monkeypatch.setattr(main_module.asyncio, "get_running_loop", lambda: _Loop())
-        return ran
 
     async def _run(self, started) -> set[str]:
         async with main_module.lifespan(main_module.app):
@@ -234,44 +242,68 @@ class TestKeywordBackfill:
         assert started == [True, True] and self._pending(engine)
 
 
-@pytest.mark.parametrize("value", ["worker", "all"])
-async def test_the_pipeline_side_refuses_to_run_as_several_workers(role, monkeypatch, value):
-    role(value)
-    monkeypatch.setattr(main_module, "_cmdline", lambda pid: [])
-    monkeypatch.setenv("WEB_CONCURRENCY", "2")
-    monkeypatch.setattr(main_module, "init_db", lambda: None)
-    with pytest.raises(RuntimeError, match="single worker"):
-        async with main_module.lifespan(main_module.app):
-            pass
+class TestOnePipelineProcess:
+    """The pipeline side takes a per-container lock; a second process
+    (a second uvicorn worker, however it was launched) refuses to start."""
 
-
-class TestConfiguredWorkers:
-    """An explicit --workers wins over WEB_CONCURRENCY, as in uvicorn — a
-    compose `command:` override must not slip past the guard."""
-
-    def _cmdlines(self, monkeypatch, own, parent):
+    @pytest.mark.parametrize("value", ["worker", "all"])
+    async def test_a_second_pipeline_process_refuses_to_start(self, role, monkeypatch, value):
         import os
 
-        monkeypatch.setattr(main_module, "_cmdline", lambda pid: own if pid == os.getpid() else parent)
+        role(value)
+        monkeypatch.setattr(main_module, "init_db", lambda: None)
+        held = main_module._take_pipeline_role_lock()  # the first process
+        try:
+            with pytest.raises(RuntimeError, match="single process"):
+                async with main_module.lifespan(main_module.app):
+                    pass
+        finally:
+            os.close(held)
 
-    def test_the_supervisors_flag(self, monkeypatch):
-        self._cmdlines(monkeypatch, ["python", "-c", "spawn"], ["uvicorn", "app.main:app", "--workers", "2"])
-        monkeypatch.setenv("WEB_CONCURRENCY", "1")
-        assert main_module._configured_workers() == 2
+    def test_the_lock_is_free_again_once_released(self):
+        import os
 
-    def test_the_equals_form(self, monkeypatch):
-        self._cmdlines(monkeypatch, [], ["uvicorn", "app.main:app", "--workers=3"])
-        assert main_module._configured_workers() == 3
+        os.close(main_module._take_pipeline_role_lock())
+        os.close(main_module._take_pipeline_role_lock())
 
-    def test_an_explicit_single_worker_beats_the_env(self, monkeypatch):
-        self._cmdlines(monkeypatch, ["uvicorn", "app.main:app", "--workers", "1"], [])
-        monkeypatch.setenv("WEB_CONCURRENCY", "4")
-        assert main_module._configured_workers() == 1
+    async def test_the_lifespan_releases_it(self, role, started):
+        import os
 
-    def test_the_env_otherwise(self, monkeypatch):
-        self._cmdlines(monkeypatch, ["uvicorn", "app.main:app", "--reload"], ["sh"])
-        monkeypatch.setenv("WEB_CONCURRENCY", "2")
-        assert main_module._configured_workers() == 2
+        role("worker")
+        async with main_module.lifespan(main_module.app):
+            pass
+        os.close(main_module._take_pipeline_role_lock())
 
-    def test_this_process_reads_its_real_command_line(self):
-        assert isinstance(main_module._cmdline(__import__("os").getpid()), list)
+    async def test_api_processes_take_no_lock(self, role, started):
+        import os
+
+        role("api")
+        held = main_module._take_pipeline_role_lock()
+        try:
+            async with main_module.lifespan(main_module.app):
+                pass
+        finally:
+            os.close(held)
+        assert "scheduler" not in started
+
+
+def test_the_heartbeat_is_not_a_registered_writer(monkeypatch):
+    # A data reset refuses while any writer is registered; a timestamp
+    # write must not be what holds it off.
+    from app import scheduler
+    from app.background import running_writers
+
+    seen = []
+    monkeypatch.setattr(scheduler, "_record_next_run", lambda: seen.append(running_writers()))
+    scheduler._heartbeat()
+    assert seen == [[]]
+
+
+def test_a_failed_heartbeat_is_only_logged(monkeypatch):
+    from app import scheduler
+
+    def boom():
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(scheduler, "_record_next_run", boom)
+    scheduler._heartbeat()

@@ -286,8 +286,8 @@ async def _daily_salt(date: str) -> bytes:
         # uniques may overlap the other worker's, but nothing reversible is
         # ever stored. The shared salt is retried on the next call (this
         # isn't cached as it). One fallback per process per day, not one per
-        # call: a fresh salt each time made every visit a new unique and
-        # every rate-limit key new, which switched the limits off.
+        # call: a fresh salt each time made every visit during the outage a
+        # new unique visitor, inflating the day's count.
         logger.warning("Visit salt unavailable — using this process's fallback salt", exc_info=True)
         return _fallback_salt_for(date)
     _salt_cache = (date, salt)

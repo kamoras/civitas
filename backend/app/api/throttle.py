@@ -105,10 +105,11 @@ _last_purge = 0.0
 def use_path(path: str) -> None:
     """Point the store at `path` (tests; the path is otherwise fixed),
     closing every connection to the previous one."""
-    global _path, _generation
+    global _path, _generation, _salt_cache
     with _conns_lock:
         _path = path
         _generation += 1
+        _salt_cache = None
         for conn in _conns:
             conn.close()
         _conns.clear()
@@ -159,29 +160,50 @@ def _purge_expired(conn: sqlite3.Connection, now: float) -> None:
     conn.execute("DELETE FROM claims WHERE expires_at < ?", (now,))
 
 
-def client_key(ip: str, purpose: str, scope: str = "") -> str:
+# (date, salt) as last read from the store, per process. Only a new day
+# costs a write transaction; every other key is made without one.
+_salt_cache: tuple[str, bytes] | None = None
+_salt_lock = threading.Lock()
+
+
+def _salt_for(today: str) -> bytes:
+    global _salt_cache
+    with _salt_lock:
+        if _salt_cache is not None and _salt_cache[0] == today:
+            return _salt_cache[1]
+    with _Txn() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO salts (date, salt) VALUES (?, ?)", (today, secrets.token_bytes(32)),
+        )
+        conn.execute("DELETE FROM salts WHERE date != ?", (today,))
+        salt = conn.execute("SELECT salt FROM salts WHERE date = ?", (today,)).fetchone()[0]
+    with _salt_lock:
+        _salt_cache = (today, salt)
+    return salt
+
+
+def client_key(ip: str, purpose: str, scope: str = "") -> str | None:
     """The key a per-client limit counts `ip` under, for `purpose` (and
     `scope` within it: the issue a pulse vote is on). Keyed by a salt that
     exists for the current UTC day only; the previous day's is deleted when
-    the first key of a new day is made."""
+    the first key of a new day is made.
+
+    None when the store can't be read: hit and claim then let the request
+    through, as they would on their own failure — never one shared key,
+    which would count every affected client as one."""
     today = datetime.now(timezone.utc).date().isoformat()
     try:
-        with _Txn() as conn:
-            conn.execute(
-                "INSERT OR IGNORE INTO salts (date, salt) VALUES (?, ?)", (today, secrets.token_bytes(32)),
-            )
-            conn.execute("DELETE FROM salts WHERE date != ?", (today,))
-            salt = conn.execute("SELECT salt FROM salts WHERE date = ?", (today,)).fetchone()[0]
+        salt = _salt_for(today)
     except sqlite3.Error:
-        # hit/claim fail open on the same store, so the key isn't used.
-        logger.warning("Throttle salt unavailable", exc_info=True)
-        return "unavailable"
+        logger.warning("Throttle salt unavailable — not limiting this request", exc_info=True)
+        return None
     return hmac.new(salt, f"{purpose}\x00{ip}\x00{scope}".encode(), hashlib.sha256).hexdigest()[:32]
 
 
-def hit(bucket: str, key: str, *, limit: int, period: float, cost: int = 1) -> Decision:
+def hit(bucket: str, key: str | None, *, limit: int, period: float, cost: int = 1) -> Decision:
     """Count `cost` units (one request, by default) against `limit` per
-    `period` seconds for `key`.
+    `period` seconds for `key` — or, for a None key (client_key failed),
+    let it through uncounted.
 
     A refused request is not counted, so a client that keeps retrying
     through a 429 is let back in as its earlier requests age out, as with
@@ -191,6 +213,8 @@ def hit(bucket: str, key: str, *, limit: int, period: float, cost: int = 1) -> D
     window = int(now // period)
     elapsed = (now - window * period) / period
     reset_at = int((window + 1) * period)
+    if key is None:
+        return Decision(True, limit, reset_at)
     try:
         with _Txn() as conn:
             current = conn.execute(
@@ -218,9 +242,11 @@ def hit(bucket: str, key: str, *, limit: int, period: float, cost: int = 1) -> D
     return Decision(allowed, remaining, reset_at)
 
 
-def claim(bucket: str, key: str, *, period: float) -> bool:
+def claim(bucket: str, key: str | None, *, period: float) -> bool:
     """Claim `key` unless it was claimed less than `period` seconds ago.
-    True when this caller got it."""
+    True when this caller got it — and for a None key (client_key failed)."""
+    if key is None:
+        return True
     now = time.time()
     try:
         with _Txn() as conn:
@@ -238,9 +264,11 @@ def claim(bucket: str, key: str, *, period: float) -> bool:
     return won
 
 
-def release(bucket: str, key: str) -> None:
+def release(bucket: str, key: str | None) -> None:
     """Give back a claim whose work didn't happen (the issue voted on didn't
     exist), so it doesn't hold the next attempt off."""
+    if key is None:
+        return
     try:
         with _Txn() as conn:
             conn.execute("DELETE FROM claims WHERE bucket = ? AND key = ?", (bucket, key))

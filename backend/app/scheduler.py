@@ -641,15 +641,21 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    # Not through _start_job: a timestamp write isn't a data writer, and
+    # registering one would make an admin data reset refuse while it runs
+    # (and skip it for the length of a reset). APScheduler runs a plain
+    # function on a worker thread; the first beat goes out at once.
+    from datetime import datetime, timezone
+
     scheduler.add_job(
-        lambda: _start_job(_record_next_run, name="scheduler-heartbeat"),
+        _heartbeat,
         CronTrigger(minute=f"*/{_HEARTBEAT_MINUTES}"),
         id="scheduler_heartbeat",
         replace_existing=True,
+        next_run_time=datetime.now(timezone.utc),
     )
 
     scheduler.start()
-    _start_job(_record_next_run, name="scheduler-heartbeat")
     logger.info(
         "Scheduler started with cron: %s (+ hourly action refresh at :15, bill status refresh at :45)",
         settings.PIPELINE_CRON_SCHEDULE,
@@ -698,6 +704,13 @@ def _record_next_run() -> None:
             .on_conflict_do_update(index_elements=["tier", "cache_key"], set_={"data_json": data, "cached_at": now})
         )
         db.commit()
+
+
+def _heartbeat() -> None:
+    try:
+        _record_next_run()
+    except Exception:
+        logger.warning("Scheduler heartbeat not recorded", exc_info=True)
 
 
 def get_next_run_time() -> str | None:

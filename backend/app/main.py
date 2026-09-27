@@ -147,42 +147,35 @@ def _start_pipeline_side_startup_jobs() -> None:
     start_writer(_startup_rescore, name="startup-rescore")
 
 
-def _cmdline(pid: int) -> list[str]:
+# The pipeline side must be one process per container: the admin status
+# endpoint reports run flags held in its memory (and check-and-deploy.sh's
+# busy check reads them), the data reset's writer registry is per process,
+# and each process would run its own scheduler. Rather than infer the worker
+# count from how uvicorn was launched, each such process takes this lock and
+# a second one refuses to start. /dev/shm is per container, so a rolling
+# update's old and new tasks never contend for it.
+_ROLE_LOCK_PATH = os.path.join(
+    "/dev/shm" if os.path.isdir("/dev/shm") else __import__("tempfile").gettempdir(),
+    "civitas_pipeline_process.lock",
+)
+
+
+def _take_pipeline_role_lock() -> int:
+    """The lock's file descriptor, held for the process's life; raises when
+    another process in this container already runs the pipeline side."""
+    import fcntl
+
+    fd = os.open(_ROLE_LOCK_PATH, os.O_RDWR | os.O_CREAT, 0o666)
     try:
-        with open(f"/proc/{pid}/cmdline", "rb") as fh:
-            return [arg.decode(errors="replace") for arg in fh.read().split(b"\0") if arg]
-    except OSError:
-        return []
-
-
-def _workers_flag(args: list[str]) -> int | None:
-    for i, arg in enumerate(args):
-        value = None
-        if arg == "--workers" and i + 1 < len(args):
-            value = args[i + 1]
-        elif arg.startswith("--workers="):
-            value = arg.split("=", 1)[1]
-        if value is not None:
-            try:
-                return int(value)
-            except ValueError:
-                return None
-    return None
-
-
-def _configured_workers() -> int:
-    """How many worker processes uvicorn runs this app in: an explicit
-    --workers on this process's command line or its parent's (the uvicorn
-    supervisor, for a spawned worker) wins, as it does in uvicorn;
-    WEB_CONCURRENCY otherwise."""
-    for pid in (os.getpid(), os.getppid()):
-        flag = _workers_flag(_cmdline(pid))
-        if flag is not None:
-            return flag
-    try:
-        return int(os.environ.get("WEB_CONCURRENCY") or 1)
-    except ValueError:
-        return 1
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        os.close(fd)
+        raise RuntimeError(
+            f"PROCESS_ROLE={settings.PROCESS_ROLE}: another process in this container already runs the "
+            "pipeline side, which must be a single process — run one worker (WEB_CONCURRENCY=1); "
+            "only PROCESS_ROLE=api scales out"
+        ) from None
+    return fd
 
 
 PROCESS_STARTED_AT: str | None = None
@@ -198,15 +191,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     serves_reads = role in ("all", "api")
     runs_pipelines = role in ("all", "worker")
     logging.getLogger("app.main").info("Backend process role: %s", role)
-    if runs_pipelines and _configured_workers() > 1:
-        # The pipeline side keeps state only its own process can see — the
-        # in-memory run flags the admin status endpoint (and through it
-        # check-and-deploy.sh's busy check) reports, the data reset's
-        # writer registry — and would run one scheduler per worker.
-        raise RuntimeError(
-            f"PROCESS_ROLE={role} must run as a single worker process "
-            f"(uvicorn is running {_configured_workers()}); only PROCESS_ROLE=api scales out"
-        )
+    role_lock = _take_pipeline_role_lock() if runs_pipelines else None
 
     if runs_pipelines:
         # Only the process that runs pipelines may sweep their rows: the
@@ -240,6 +225,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if bootstrap_task is not None:
         bootstrap_task.cancel()
     stop_scheduler()
+    if role_lock is not None:
+        os.close(role_lock)
 
 
 app = FastAPI(
