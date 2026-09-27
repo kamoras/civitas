@@ -1,24 +1,31 @@
 """External benchmark validation: Civitas scores vs independent records.
 
 Checks the stored scores against measures computed from data Civitas does not
-score from, using the same constructs the scores claim to measure (v6.15):
+score from, using the same constructs the scores claim to measure (v6.16):
 
   Constituent Alignment (both chambers, Voteview):
-    1. Seat-relative break deviation — each member's break rate on
+    1. Seat-relative break residual — how far each member's break rate on
        Voteview party-unity votes (majority of one party against the other)
-       minus the break rate same-party members show at the same seat lean,
-       with the expectation measured from Voteview's own votes by the same
-       compute_constituent_reference the pipeline uses, put through the
-       score's own vote shape (score_calculator.seat_relative_vote_score —
-       since v6.15 it peaks at the saturation deviation) at that
-       reference's own saturation point. The peak is Voteview's
-       SATURATION_QUANTILE, not the pipeline's: the two vote sets differ in
-       scale, and the same quantile rule is the like-for-like comparison.
+       sits from the rate same-party members show at the same seat lean, in
+       standard deviations per vote, with the expectation measured from
+       Voteview's own votes by the same compute_constituent_reference the
+       pipeline uses, put through the score's own vote shape
+       (score_calculator.seat_relative_vote_score — since v6.16 it peaks at
+       the expectation) at that reference's own scale. The scale is
+       Voteview's SATURATION_QUANTILE, not the pipeline's: the two vote sets
+       differ, and the same quantile rule is the like-for-like comparison.
        CA should correlate positively (it is the 70% vote component's
        construct on an independent vote record).
-    2. Nokken-Poole seat-relative extremity — the member's congress-specific
-       position minus the per-party fit on seat lean (build_chamber_ideal_
-       points, as the pipeline). CA should correlate negatively.
+    2. Constituent Alignment recomputed from Voteview — that vote shape and
+       the position-congruence score of each member's Nokken-Poole
+       seat-relative extremity (the congress-specific position minus the
+       per-party fit on seat lean, build_chamber_ideal_points as the
+       pipeline, through score_calculator.position_congruence_score), at the
+       scorer's own weights. CA should correlate positively. It replaced a
+       check that CA falls as extremity rises (v6.16): with the vote part
+       peaked at the seat's expectation, the heaviest breakers — often the
+       most center-ward members — score low overall, so total CA no longer
+       moves one way with position.
   Legislative Effectiveness (optional, --les-csv):
     3. The Center for Effective Lawmaking's Legislative Effectiveness Score
        (thelawmakers.org) — the benchmark our LE adapts. Supply their file as
@@ -30,7 +37,7 @@ Run after algorithm changes, inside the backend container:
     docker exec "$(docker ps -q -f name=civitas_backend)" python3 scripts/benchmark_validation.py --chamber both
 
 Baselines: the v4.1/v4.2 figures this script used to print compared the
-pre-v6.13 design (raw break rate; DW-NOMINATE). v6.15 has no baseline yet —
+pre-v6.13 design (raw break rate; DW-NOMINATE). v6.16 has no baseline yet —
 record the first production run's correlations here, then investigate any
 later run where a correlation drops by more than ~0.15 or changes sign.
 """
@@ -116,13 +123,13 @@ def seat_relative_vote_shape(rows: list[dict]) -> dict[str, float]:
     break rate minus the same-party expectation at that seat lean (measured
     from these rows by the pipeline's own compute_constituent_reference),
     through score_calculator.seat_relative_vote_score at that reference's
-    saturation deviation (party-unity votes are unweighted, so each
+    scale (party-unity votes are unweighted, so each
     member's evidence is their vote count). rows: {bioguide, party, state, district,
     break_rate, n_votes}."""
     from app.pipeline.analyze.score_calculator import (
         _signed_state_alignment,
         compute_constituent_reference,
-        seat_break_deviation,
+        seat_break_residual,
         seat_relative_vote_score,
     )
 
@@ -137,7 +144,7 @@ def seat_relative_vote_shape(rows: list[dict]) -> dict[str, float]:
         p = caucus(r["party"])
         if p in ("D", "R"):  # rows are already full-confidence (run_chamber)
             alignment = _signed_state_alignment(r["state"], r["party"], effective_party=p, district=r.get("district"))
-            inputs.append((p, alignment, r["break_rate"]))
+            inputs.append((p, alignment, r["break_rate"], r["n_votes"]))
     ref = compute_constituent_reference(inputs)
     if ref is None:
         return {}
@@ -148,22 +155,31 @@ def seat_relative_vote_shape(rows: list[dict]) -> dict[str, float]:
             continue
         # The score's own expectation lookup, handed this reference for
         # whichever chamber the row belongs to.
-        dev = seat_break_deviation(
-            r["break_rate"], r["state"], r["party"], effective_party=p, district=r.get("district"),
+        dev = seat_break_residual(
+            r["break_rate"], r["n_votes"], r["state"], r["party"], effective_party=p, district=r.get("district"),
             reference={"senate": ref, "house": ref},
         )
         if dev is not None:
             out[r["bioguide"]] = seat_relative_vote_score(*dev, r["n_votes"])
     return out
 
-def seat_relative_extremity(member_rows: list[dict], chamber: str) -> dict[str, float]:
-    """bioguide -> Nokken-Poole (or DW-NOMINATE) position minus the per-party
-    fit on seat lean, signed toward the party flank — the pipeline's own
-    build_chamber_ideal_points."""
-    from app.pipeline.analyze.score_calculator import _district_pvi, _seat_pvi, _state_pvi
+def position_congruence(member_rows: list[dict], chamber: str) -> dict[str, float]:
+    """bioguide -> the position-congruence score of the member's Nokken-Poole
+    (or DW-NOMINATE) position minus the per-party fit on seat lean, signed
+    toward the party flank — the pipeline's own build_chamber_ideal_points
+    and score_calculator.position_congruence_score at that fit's saturation."""
+    from app.pipeline.analyze.score_calculator import (
+        _district_pvi,
+        _seat_pvi,
+        _state_pvi,
+        position_congruence_score,
+    )
     from app.pipeline.fetch.voteview import PARTY_CODES, build_chamber_ideal_points
 
     data, _ = build_chamber_ideal_points(member_rows, chamber, _state_pvi(), _district_pvi())
+    saturation = data.get("extremity_p90")
+    if not saturation:
+        return {}
     out = {}
     for row in member_rows:
         bio = (row.get("bioguide_id") or "").strip()
@@ -179,7 +195,7 @@ def seat_relative_extremity(member_rows: list[dict], chamber: str) -> dict[str, 
                 district = None
         expected = fit["a"] + fit["b"] * _seat_pvi(row.get("state_abbrev", ""), district)
         residual = data["members"][bio] - expected
-        out[bio] = -residual if party == "D" else residual
+        out[bio] = position_congruence_score(-residual if party == "D" else residual, float(saturation))
     return out
 
 
@@ -202,7 +218,10 @@ def load_les(path: str, id_col: str, score_col: str) -> dict[str, float]:
 
 
 def run_chamber(chamber: str, congress: int, les: dict[str, float] | None, les_key: str) -> list[str]:
-    from app.pipeline.analyze.score_calculator import CONSTITUENT_FULL_CONFIDENCE_VOTES
+    from app.pipeline.analyze.score_calculator import (
+        CONSTITUENT_FULL_CONFIDENCE_VOTES,
+        POSITION_CONGRUENCE_WEIGHT,
+    )
 
     letter, voteview_chamber, table = CHAMBERS[chamber]
     print(f"\n=== {voteview_chamber} {congress} ===")
@@ -223,7 +242,14 @@ def run_chamber(chamber: str, congress: int, les: dict[str, float] | None, les_k
         if breaks.get(icpsr) and breaks[icpsr][1] >= CONSTITUENT_FULL_CONFIDENCE_VOTES
     ]
     vote_shape = seat_relative_vote_shape(rows)
-    extremity = seat_relative_extremity(member_rows, chamber)
+    congruence = position_congruence(member_rows, chamber)
+    # The score's own combination: position at its weight where an ideal
+    # point exists, the vote shape alone where one doesn't.
+    recomputed = {
+        b: v * (1 - POSITION_CONGRUENCE_WEIGHT) + congruence[b] * POSITION_CONGRUENCE_WEIGHT
+        if b in congruence else v
+        for b, v in vote_shape.items()
+    }
 
     conn = sqlite3.connect(DB, uri=True)
     conn.row_factory = sqlite3.Row
@@ -250,7 +276,7 @@ def run_chamber(chamber: str, congress: int, les: dict[str, float] | None, les_k
             problems.append(f"{chamber}: {label} r={r:+.3f}, expected the opposite sign")
 
     report("CA vs seat-relative vote shape (Voteview)", vote_shape, "ca", +1)
-    report("CA vs Nokken-Poole seat-relative extremity", extremity, "ca", -1)
+    report("CA vs Constituent Alignment recomputed from Voteview", recomputed, "ca", +1)
     if les is not None:
         key_of = {m["bioguide"]: m["icpsr"] for m in members.values()}
         les_by_bio = {b: les[key_of[b] if les_key == "icpsr" else b] for b in key_of

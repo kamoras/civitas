@@ -30,8 +30,8 @@ Three families of checks, all population-level:
    fall as the PAC share of receipts rises and rise with small-donor
    share; Constituent Alignment must track its vote component recomputed
    from the stored party-labeled votes (constituent_metrics — since v6.15
-   that component peaks at the saturation deviation, so raw break rate
-   alone no longer ranks it). "The most PAC-free members must score high on FI" is exactly
+   that component is not monotonic in break rate, and since v6.16 it peaks
+   at the seat's expectation, so raw break rate alone doesn't rank it). "The most PAC-free members must score high on FI" is exactly
    what the old Sanders/Warren rows asserted, computed fresh each run
    for whoever currently holds that profile.
 
@@ -73,7 +73,7 @@ from app.pipeline.analyze.score_calculator import (
     SATURATION_QUANTILE,
     beyond_saturation,
     party_break_rate,
-    seat_break_deviation,
+    seat_break_residual,
     seat_relative_vote_score,
 )
 
@@ -181,8 +181,8 @@ def constituent_metrics(
     """The Constituent Alignment inputs a member record carries:
     seat_relative_vote (the vote component recomputed from the raw votes by
     the scorer's own seat_relative_vote_score; None below MIN_LABELED_VOTES
-    or without a measured expectation) and beyond_saturation (|deviation|
-    past the saturation deviation on either side; None below
+    or without a measured expectation) and beyond_saturation (|residual|
+    past the party's scale on either side; None below
     CONSTITUENT_FULL_CONFIDENCE_VOTES — the reference's saturation point is
     measured only on full-confidence records). ``break_rate`` and
     ``labeled_votes`` are party_break_rate's. Shared by the pipeline gate
@@ -196,8 +196,8 @@ def constituent_metrics(
     out = {"seat_relative_vote": None, "beyond_saturation": None}
     if break_rate is None or labeled_votes < MIN_LABELED_VOTES:
         return out
-    dev = seat_break_deviation(
-        break_rate, state, party, effective_party=effective_party,
+    dev = seat_break_residual(
+        break_rate, labeled_votes, state, party, effective_party=effective_party,
         district=district, reference=reference,
     )
     if dev is not None:
@@ -214,9 +214,9 @@ _BEYOND_SATURATION_TOLERANCE = round(2 * (1 - SATURATION_QUANTILE), 9)
 
 
 def _beyond_saturation_share(members: list[dict]) -> tuple[float, int] | None:
-    """Share of full-confidence members whose |deviation| from their seat's
-    expectation exceeds the saturation deviation, on either side. The
-    reference defines that deviation as the SATURATION_QUANTILE of |deviation|
+    """Share of full-confidence members whose |residual| from their seat's
+    expectation exceeds their party's scale, on either side. The reference
+    defines each party's scale as the SATURATION_QUANTILE of its |residual|
     over the full-confidence members it was measured on, so ~1 -
     SATURATION_QUANTILE of them are beyond it; the probe allows twice
     that, because the gate reads current members' stored votes — members
@@ -312,8 +312,8 @@ def evaluate_derived_checks(
         if share > _BEYOND_SATURATION_TOLERANCE:
             rationale = (
                 f"{share:.0%} of full-confidence {entity_label} sit beyond Constituent "
-                "Alignment's saturation deviation (either side); the reference defines "
-                f"it as the {SATURATION_QUANTILE:.0%} quantile of |deviation| (about "
+                "Alignment's scale (either side); the reference defines each "
+                f"party's as the {SATURATION_QUANTILE:.0%} quantile of its |residual| (about "
                 f"{1 - SATURATION_QUANTILE:.0%} beyond it) and the gate allows up to "
                 f"{_BEYOND_SATURATION_TOLERANCE:.0%} — "
                 "the constituent reference and the votes disagree"

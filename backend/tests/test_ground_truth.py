@@ -70,17 +70,26 @@ def _add_votes(db, senator_id, breaks, total):
         ))
 
 
+def _vote_iv(breaks, total=200, state="NY", party="D"):
+    """The Constituent Alignment a correct pipeline would store for a member
+    of this seat — by default a NY Democrat (conftest: ~6.7% expected, so the
+    vote score peaks near 13 of 200 breaks): the vote component recomputed
+    from these votes, which is what the gate compares stored scores with."""
+    from app.pipeline.analyze.ground_truth import constituent_metrics
+
+    return constituent_metrics(breaks / total, total, state, party)["seat_relative_vote"]
+
+
 def _healthy_population(db, n=40, votes_per_member=200):
     """A population whose scores rank-track their raw data by construction:
-    FI falls as PAC share rises and rises with small-donor share; IV rises
-    with the observed break rate, which stays below Constituent Alignment's
-    saturation deviation (0-19.5% against a ~7% expectation and 20-point
-    saturation), where the score is meant to rise."""
+    FI falls as PAC share rises and rises with small-donor share; IV is the
+    vote score the stored votes give (0-19.5% breaks against a ~6.7%
+    expectation: rising to the peak, then falling)."""
     for i in range(n):
         s = _add_senator(
             db, f"s{i}",
             fi=95 - 1.5 * i,
-            iv=25 + 1.5 * i,
+            iv=_vote_iv(i, votes_per_member),
             total_raised=1_000_000,
             total_from_pacs=1_000_000 * i / 50,
             small_donor_pct=40 - 0.8 * i,
@@ -103,7 +112,7 @@ class TestDerivedConsistency:
             s = _add_senator(
                 db_session, f"s{i}",
                 fi=20 + 1.5 * i,
-                iv=25 + 1.5 * i,
+                iv=_vote_iv(i),
                 total_raised=1_000_000,
                 total_from_pacs=1_000_000 * i / 50,
                 small_donor_pct=40 - 0.8 * i,
@@ -118,16 +127,15 @@ class TestDerivedConsistency:
         )
         assert not any(f["dimension"] == "IV" for f in failures)
 
-    def test_top_crossers_scored_low_flagged(self, db_session):
-        # The old gate's core purpose, derived: whoever currently crosses
-        # party most must not land at the bottom of IV. Scores track break
-        # rate for everyone except the five most frequent crossers. Break
-        # rates stay under 20%, below the saturation deviation, where the
-        # score should still be rising.
+    def test_members_at_their_seats_norm_scored_low_flagged(self, db_session):
+        # v6.16: whoever breaks about as often as their seat's same-party
+        # members must not land at the bottom of IV. Scores follow the votes
+        # for everyone except the six members nearest the expectation
+        # (11-16 breaks of 200, around the ~6.7% norm).
         for i in range(40):
             s = _add_senator(
                 db_session, f"s{i}",
-                iv=10 if i >= 35 else 30 + i,
+                iv=5 if 11 <= i <= 16 else _vote_iv(i),
                 fi=95 - 1.5 * i,
                 total_raised=1_000_000,
                 total_from_pacs=1_000_000 * i / 50,
@@ -143,16 +151,14 @@ class TestDerivedConsistency:
         )
 
     @staticmethod
-    def _peaked_population(db, past_iv):
-        """50 members below saturation (0-24.5% breaks, ~7% expected, 20-point
-        saturation) scored rising with break rate, and 10 past it (35-80%)
-        scored by past_iv(k), k = 0..9 in rising break-rate order."""
+    def _peaked_population(db, iv_of):
+        """60 members from never breaking to far past the norm (0-49 breaks
+        of 200 plus ten at 70-160), stored IV given by iv_of(breaks)."""
         for i in range(60):
-            below = i < 50
-            breaks = i if below else 70 + 10 * (i - 50)
+            breaks = i if i < 50 else 70 + 10 * (i - 50)
             s = _add_senator(
                 db, f"s{i}",
-                iv=25 + 1.5 * i if below else past_iv(i - 50),
+                iv=iv_of(breaks),
                 fi=95 - 1.5 * i,
                 total_raised=1_000_000,
                 total_from_pacs=1_000_000 * i / 60,
@@ -162,38 +168,38 @@ class TestDerivedConsistency:
         db.commit()
 
     def test_peaked_scores_pass(self, db_session):
-        # v6.15: rising to saturation, falling past it — the design.
-        self._peaked_population(db_session, past_iv=lambda k: 95 - 9 * k)
+        # v6.16: highest at the seat's norm, falling both ways — the design.
+        self._peaked_population(db_session, iv_of=_vote_iv)
         report = check_ground_truth(db_session)
         assert report["failures"] == []
 
-    def test_scores_still_rising_past_saturation_flagged(self, db_session):
-        # A regression back to "more breaking always scores higher" past
-        # saturation puts the chamber's heaviest breakers at the top of IV
-        # while their vote score recomputed from the votes puts them at the bottom.
-        self._peaked_population(db_session, past_iv=lambda k: 90 + k)
+    def test_more_breaking_always_scoring_higher_flagged(self, db_session):
+        # A regression to "more breaking scores higher" puts the chamber's
+        # heaviest breakers at the top of IV while their vote score
+        # recomputed from the votes puts them at the bottom.
+        self._peaked_population(db_session, iv_of=lambda b: min(100, 20 + b))
         failures = check_ground_truth(db_session)["failures"]
         assert any(
             f["dimension"] == "IV" and "lowest-expected decile" in f["senator"]
             for f in failures
         )
 
-    def test_senate_sized_chamber_catches_a_regression_past_saturation(self, db_session):
-        # A real Senate has only a handful of members past saturation — too
-        # few for a check of their own. The recomputed vote score keeps them in the
-        # whole-chamber check: 94 below saturation scored rising, 6 far past
-        # it wrongly scored 100.
+    def test_senate_sized_chamber_catches_heavy_breakers_scored_high(self, db_session):
+        # A real Senate has only a handful of very heavy breakers. The
+        # recomputed vote score keeps them in the whole-chamber check: 94
+        # scored by their votes, 6 far past the norm wrongly scored 100.
         for i in range(100):
-            below = i < 94
+            ordinary = i < 94
+            breaks = i // 5 if ordinary else 120 + 10 * (i - 94)
             s = _add_senator(
                 db_session, f"s{i}",
-                iv=5 + i if below else 100,
+                iv=_vote_iv(breaks) if ordinary else 100,
                 fi=95 - 0.9 * i,
                 total_raised=1_000_000,
                 total_from_pacs=1_000_000 * i / 100,
                 small_donor_pct=40 - 0.4 * i,
             )
-            _add_votes(db_session, s.id, breaks=i // 5 if below else 120 + 10 * (i - 94), total=200)
+            _add_votes(db_session, s.id, breaks=breaks, total=200)
         db_session.commit()
 
         failures = check_ground_truth(db_session)["failures"]
@@ -266,7 +272,7 @@ class TestDerivedConsistency:
         # The persisted reference is healthy; the run's own reference (passed
         # in) puts nearly everyone past saturation, and the gate must read
         # the one it is given.
-        self._peaked_population(db_session, past_iv=lambda k: 95 - 9 * k)
+        self._peaked_population(db_session, iv_of=_vote_iv)
         assert check_ground_truth(db_session)["failures"] == []
         run_ref = {c: {"expected": {"D": {"a": 0.0, "b": 0.0}}, "deviation_p90": 0.001,
                        "statistic": CONSTITUENT_REFERENCE_STATISTIC}
@@ -282,7 +288,7 @@ class TestDerivedConsistency:
         # than letting that check fall under its minimum and skip quietly.
         from app.pipeline.analyze import population_reference
 
-        self._peaked_population(db_session, past_iv=lambda k: 95 - 9 * k)
+        self._peaked_population(db_session, iv_of=_vote_iv)
         broken = {c: {"expected": {"D": {"a": 0.0, "b": 0.0}}, "deviation_p90": 0.001,
                        "statistic": CONSTITUENT_REFERENCE_STATISTIC}
                   for c in ("senate", "house")}
@@ -301,7 +307,7 @@ class TestDerivedConsistency:
         # stays out of it.
         from app.pipeline.analyze import population_reference
 
-        self._peaked_population(db_session, past_iv=lambda k: 95 - 9 * k)
+        self._peaked_population(db_session, iv_of=_vote_iv)
         broken = {c: {"expected": {"D": {"a": 0.0, "b": 0.0}}, "deviation_p90": 0.001,
                        "statistic": CONSTITUENT_REFERENCE_STATISTIC}
                   for c in ("senate", "house")}
@@ -356,7 +362,7 @@ class TestDerivedConsistency:
             s = Senator(
                 id=f"new{i}", name=f"Freshman {i}", state="OH", party="R",
                 score_funding_independence=95 - 1.5 * i,
-                score_constituent_alignment=25 + 1.5 * i,
+                score_constituent_alignment=_vote_iv(i, state="OH", party="R"),
                 total_raised=2_000_000,
                 total_from_pacs=2_000_000 * i / 50,
                 small_donor_percentage=40 - 0.8 * i,

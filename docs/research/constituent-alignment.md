@@ -1,10 +1,12 @@
 # Constituent Alignment: what the evidence supports
 
-This note records how Constituent Alignment's v6.13 design was chosen. Before
-v6.13, several of its rules rested on arguments that were never tested: the
-claim that party loyalty is "unreadable", and discounts for safe seats. Each
-rule below was kept or changed based on how well it predicts real election
-results.
+This note records how Constituent Alignment's design was chosen, from v6.13
+on. Before v6.13, several of its rules rested on arguments that were never
+tested: the claim that party loyalty is "unreadable", and discounts for safe
+seats. Each rule below was kept or changed based on how well it predicts real
+election results. Section 10 (v6.16) is the one place the evidence points two
+ways, the member's own party's voters one way and the whole electorate the
+other, and says which the score follows and why.
 
 Every number here is printed by
 [`backend/scripts/research_constituent_alignment.py`](../../backend/scripts/research_constituent_alignment.py),
@@ -340,6 +342,103 @@ This is a design weight, chosen on where the Senate and primary evidence
 point. The House 2004 fit is the cost: ΔR² falls from 0.0354 to 0.0285, and
 the score still carries a clear signal there (t=4.4).
 
+### 10. Peaked at the seat's norm, measured in standard deviations (v6.16)
+
+**The problem.** Two senators in the live 119th Senate showed the v6.15
+shape measuring the wrong thing.
+
+- **Gary Peters** broke on 3.5% of 172 votes against an expected 7.1%, and
+  scored 41. Most swing-seat Democrats break 2–5%; a few heavy breakers
+  (Fetterman 22%, Shaheen 18%, Kaine 16%) pulled the least-squares
+  expectation up to 7.1%, so the typical member sat below it. Under v6.15,
+  33 of 47 Democrats and 46 of 53 Republicans scored under 50.
+- **Bill Cassidy** broke on 5.5% against an expected 1.5%, and scored 90.
+  The v6.15 scale was percentage points, 4.9 of them for the whole chamber.
+  Four extra points on a 1.5% expectation is breaking more than three times
+  as often as the seat's norm, yet it counted the same as four points on 7%.
+
+**Changed (v6.16):**
+
+- **Standard deviations per vote, not points.** A member's gap is the
+  Pearson residual (rate − p) / √(p(1 − p)), p the seat's expected rate
+  (`seat_residual`). The binomial spread is small where the expected rate is
+  small, so the same few points count for more there. Per vote rather than a
+  z-score, so the same behavior reads the same in March and in December. The
+  loyal side is naturally bounded (no member breaks fewer than zero times),
+  while breaking can run many standard deviations high. p is kept half a
+  vote of the member's record from 0 and 1, the usual continuity correction.
+- **A fractional-logit expectation.** A least-squares line predicted 0% for
+  the safest seats, where no residual exists (on the 119th Senate it gave
+  Vermont and Maryland Democrats 0%). The logit fit (Papke & Wooldridge
+  1996) stays inside (0, 1) and keeps each party's average rate. It is
+  fitted by Newton's method with step-halving: plain iteratively reweighted
+  least squares diverged to coefficients in the billions on the 118th
+  Senate's Democrats.
+- **100 at the expectation.** The score asks whether a member does what
+  their seat elected them to do, so breaking about as often as comparable
+  same-party members is the top of the scale. It falls linearly to 0 at 1.5
+  scales above the expectation and 3 below (`CROSSING_ZERO_GAPS`,
+  `LOYAL_ZERO_GAPS`), loyalty the gentler side as in v6.15.
+- **One scale per party.** Each party's scale is the 90th percentile of its
+  own members' |residual|. On one pooled scale the more cohesive party in a
+  given Congress scores higher simply for sitting closer to its own norm.
+
+**What the evidence says.** Same members, same outcomes and controls as
+sections 4 and 8. Coefficient per score point, t, and the R² the score adds
+to the controls:
+
+| Outcome | v6.15 score | v6.16 shape, v6.15 points | **v6.16 (shipped)** |
+|---|---|---|---|
+| House 2004 general, vote share | +0.088 (4.4), ΔR² 0.0285 | −0.032 (−2.4), 0.0079 | **−0.032 (−2.5), 0.0085** |
+| Senate generals 1990–2024, vote share | +0.035 (1.2), 0.0036 | −0.039 (−2.5), 0.0087 | **−0.038 (−2.6), 0.0101** |
+| House primaries 1990–2010, contested, primary share | −0.015 (−0.5), 0.0003 | +0.058 (2.4), 0.0080 | **+0.053 (2.4), 0.0081** |
+| drew a primary challenger | +0.000 (0.6) | −0.001 (−1.6) | **−0.001 (−1.7)** |
+| lost the primary | −0.000 (−1.2) | −0.000 (−1.1) | **−0.000 (−0.8)** |
+
+The two audiences disagree, and the shape decides which one the score
+follows. The member's own party's primary voters reward exactly this shape:
+incumbents who score higher on it win a larger share of a contested primary
+(and draw challengers slightly less often, though that is not significant). The whole electorate does the
+opposite: in Senate general elections and the 2004 House elections, members
+who break more than their seat's norm did somewhat better, and heavy breakers
+were not punished (section 8: flat past saturation in the Senate).
+
+The change of unit is not what moves these numbers; the shape is. The
+middle column applies v6.16's shape to v6.15's point scale and lands in the
+same place.
+
+**The choice.** v6.16 follows the member's own party's voters. The score
+measures whether a member does what they were elected to do, under a party
+label as well as by a seat, not what maximizes their general-election vote
+share. This is a stated choice with evidence on both sides, not a finding
+that settles it. The general-election result is reported here and on the
+site's About page.
+
+**Zero points.** Where the score reaches 0 on each side, in scales:
+
+| Crossing / loyal | House 2004 | Senate 1990–2024 | House primaries |
+|---|---|---|---|
+| 1.0 / 1.0 | 0.000 (0.0) | −0.026 (−2.1) | +0.027 (1.5) |
+| 1.0 / 3.0 | −0.034 (−3.3) | −0.031 (−2.4) | +0.037 (2.1) |
+| **1.5 / 3.0 (shipped)** | **−0.032 (−2.5)** | **−0.038 (−2.6)** | **+0.053 (2.4)** |
+| 1.5 / 6.0 | −0.041 (−3.4) | −0.037 (−2.5) | +0.051 (2.4) |
+| 2.0 / 4.0 | −0.037 (−2.6) | −0.046 (−2.6) | +0.070 (2.6) |
+| 3.0 / 6.0 | −0.051 (−2.5) | −0.060 (−2.6) | +0.100 (2.7) |
+
+Wider zero points strengthen both associations together, so the data does
+not pick one. 1.5 / 3 keeps loyalty at half the cost of excess breaking, and
+puts the heaviest breakers of today's Senate (Fetterman, Murkowski, Paul) at
+or near 0.
+
+**Party balance.** Across every Senate from the 101st to the 119th, the
+parties' average vote scores differ by 1.6 points on average under v6.16,
+against 1.8 under v6.15 and 2.2 under v6.13, and which party is higher
+changes from one Congress to the next. On one scale pooled across both
+parties the average gap was 7.7 points, and 22.3 in the worst Congress,
+the sign following whichever party was more unified. That is why the scale
+is per party. Averages sit around 73–80: most members are close to their
+seat's norm.
+
 ## What the evidence does not settle
 
 - **The association fades over time.** Per election, the position coefficient
@@ -351,10 +450,11 @@ the score still carries a clear signal there (t=4.4).
 - **Loyalty was tested in one election.** Only the 108th House roll calls were
   available here. Carson et al. (2010) find the same pattern across many more
   congresses, but this replication is one year.
-- **The decline past saturation rests on House primaries.** No Senate
-  primary returns were tested (the Pettigrew, Owen & Wanless data are House
-  only), and in Senate general elections the slope past saturation is flat,
-  not negative. Senators are scored on the same shape by extension.
+- **The shape follows primary voters, not the general electorate.** Since
+  v6.16 the score peaks at the seat's norm, which predicts own-party primary
+  vote share and runs against general-election vote share (section 10). No
+  Senate primary returns were tested (the Pettigrew, Owen & Wanless data are
+  House only). Senators are scored on the same shape by extension.
 - **The Senate loyal side does not replicate.** With every Senate election
   from 1990 to 2024 (N=461, section 8), the crossing side holds (2.34 up to
   saturation, t=1.9) but the loyal side does not (−0.59, t=−0.5), and the

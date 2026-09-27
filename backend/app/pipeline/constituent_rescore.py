@@ -1,8 +1,9 @@
 """Bring stored Constituent Alignment onto the current reference at startup.
 
 A release that changes the statistic Constituent Alignment's reference is
-measured on (v6.15: the unweighted break rate over full-confidence members,
-stamped CONSTITUENT_REFERENCE_STATISTIC) leaves two things behind until the
+measured on (stamped CONSTITUENT_REFERENCE_STATISTIC — v6.15's unweighted
+break rate over full-confidence members, v6.16's logit expectation and
+per-party residual scale) leaves two things behind until the
 next nightly run: the persisted /data/constituent_reference.json, which
 CONSTITUENT_REFERENCE.load() then skips in favour of the bundled prior, and
 every member's stored score. The API's "show the math" breakdown recomputes

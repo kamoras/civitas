@@ -1,4 +1,4 @@
-"""Reproduce the evidence behind Constituent Alignment's v6.13 design.
+"""Reproduce the evidence behind Constituent Alignment's design (v6.13-v6.16).
 
 Every number in docs/research/constituent-alignment.md comes from this
 script. It tests each candidate design choice the way the studies behind
@@ -30,8 +30,12 @@ Data (public, fetched at pinned commits into --cache):
 
 The shipped expectation and vote shape are the scorer's own functions
 (score_calculator.compute_constituent_reference, _expected_break_rate,
-_peaked_vote_shape), so the evidence always describes the formula that
-ships. Run it with the backend's environment plus the research-only
+seat_residual, _vote_shape), so the evidence always describes the formula
+that ships (section 10 of the note). Sections 8-9 were measured on v6.15's
+method — a least-squares expectation and a percentage-point scale, peaking
+one scale above the expectation — which this script keeps as a labelled
+local copy (v615_expectation, v615_score) so those numbers still reproduce
+and v6.16 can be compared against it like for like. Run it with the backend's environment plus the research-only
 dependencies (not in requirements.txt):
     pip install pandas statsmodels rdata pyreadr
 Run:
@@ -92,7 +96,10 @@ def fetch(cache: pathlib.Path) -> dict[str, pathlib.Path]:
         path = cache / name
         if not path.exists():
             print(f"fetching {url}")
-            urllib.request.urlretrieve(url, path)
+            # Harvard Dataverse answers Python's default User-Agent with 403.
+            req = urllib.request.Request(url, headers={"User-Agent": "civitas-research/1.0"})
+            with urllib.request.urlopen(req) as resp:
+                path.write_bytes(resp.read())
         paths[name] = path
     return paths
 
@@ -340,14 +347,15 @@ def loyalty_tests(m, p):
     # Is there such a thing as breaking too much? A score peaked at the
     # expectation (falling off both ways), the shipped v6.15 shape (rising
     # to the saturation point, falling past it), and the crossing-side slope
-    # past saturation. From here on the expectation and saturation point are
-    # the scorer's own (shipped_expectation -> compute_constituent_reference),
-    # not the kinked_fit the v6.13 sections above used.
-    shipped = shipped_expectation(M[["id", "party", "alignment", "brk", "n"]].reset_index(drop=True))
+    # past saturation. From here on the expectation and scale are v6.15's
+    # (v615_expectation, the method sections 8-9 measured) alongside the
+    # scorer's own v6.16 ones (shipped_expectation), not the kinked_fit the
+    # v6.13 sections above used.
+    shipped = both_expectations(M[["id", "party", "alignment", "brk", "n"]].reset_index(drop=True))
     if shipped is None:
         print("breaking far above expectation: the scorer would not measure a reference here — skipped")
         return hr
-    S = S.merge(shipped[["id", "dev", "p90"]].rename(columns={"dev": "dev14"}), on="id")
+    S = S.merge(shipped[["id", "dev", "p90", "res", "scale"]].rename(columns={"dev": "dev14"}), on="id")
     b0 = smf.ols(base, S).fit()
     dev, p90 = S.dev14, shipped.p90.iloc[0]
     S["dev_party"] = dev / dev.std()
@@ -376,6 +384,8 @@ def loyalty_tests(m, p):
     S["sc"] = 50.0 + (v615_score(dev, p90, S.n) - 50.0) * (dev >= 0)
     r = smf.ols(f"{base} + sc", S).fit(cov_type="HC1")
     print(f"  loyalty held at 50: {r.params['sc']:.3f}/pt (t={r.tvalues['sc']:.1f}) dR2={r.rsquared - b0.rsquared:.4f}")
+    S = S.assign(dev=S.dev14, p90=p90)
+    compare_v616(S, "y", base.split("~", 1)[1].strip(), lambda f: smf.ols(f, S).fit(cov_type="HC1"))
     return hr
 
 
@@ -456,15 +466,33 @@ def senate_test(p):
 # whole seat (general election, every Senate election 1990-2024) and the
 # member's own party (House primaries 1990-2010).
 
-def v615_score(dev, p90, n, loyal_scale=None):
-    """The shipped vote component: score_calculator._peaked_vote_shape (with
-    the shipped LOYAL_SIDE_SCALE unless one is given for the sweep), shrunk
-    toward 50 by vote count exactly as seat_relative_vote_score does."""
+def _shrink(shape, n):
+    """seat_relative_vote_score's pull toward 50 below full confidence."""
+    n = np.broadcast_to(np.asarray(n, float), np.shape(shape))
+    return 50 + (np.asarray(shape) - 50) * np.minimum(n / score_calculator.CONSTITUENT_FULL_CONFIDENCE_VOTES, 1)
+
+
+def v615_score(dev, p90, n, loyal_scale=4.0):
+    """v6.15's vote component, kept here (it is no longer the scorer's) for
+    sections 8-9 and the comparison: 50 at the expectation, 0 at loyal_scale
+    percentage-point scales below it, 100 at one scale above, back to 0 at
+    three."""
     dev = np.asarray(dev, float)
-    p90 = np.broadcast_to(np.asarray(p90, float), dev.shape)  # one per chamber-congress, or a scalar
-    n = np.broadcast_to(np.asarray(n, float), dev.shape)
-    shape = np.array([score_calculator._peaked_vote_shape(d, s, loyal_scale) for d, s in zip(dev, p90)])
-    return 50 + (shape - 50) * np.minimum(n / score_calculator.CONSTITUENT_FULL_CONFIDENCE_VOTES, 1)
+    x = dev / np.broadcast_to(np.asarray(p90, float), dev.shape)  # one per chamber-congress, or a scalar
+    shape = np.where(x < 0, 50 + 50 * np.maximum(x / loyal_scale, -1),
+                     np.where(x <= 1, 50 + 50 * x, np.maximum(0, 100 - 50 * (x - 1))))
+    return _shrink(shape, n)
+
+
+def v616_score(res, scale, n, crossing_zero=None, loyal_zero=None):
+    """The shipped vote component: score_calculator._vote_shape on the
+    member's residual (standard deviations per vote) at the chamber's scale,
+    with the shipped zero points unless the sweep gives others, shrunk
+    toward 50 by vote count exactly as seat_relative_vote_score does."""
+    res = np.asarray(res, float)
+    scale = np.broadcast_to(np.asarray(scale, float), res.shape)
+    shape = np.array([score_calculator._vote_shape(r, s, crossing_zero, loyal_zero) for r, s in zip(res, scale)])
+    return _shrink(shape, n)
 
 
 def ascii_upper(s: pd.Series) -> pd.Series:
@@ -505,23 +533,64 @@ def voteview_breaks(p, chamber_prefix, c):
     return M[M.brk.notna()]
 
 
+def v615_expectation(M):
+    """v6.15's reference, kept for sections 8-9: per-party least squares of
+    break rate on seat alignment (kinked when enough seats lean away) over
+    members with a full-confidence vote count, and the 90th percentile of
+    |break rate - expected| in percentage points. Each member's expected
+    rate (exp), deviation (dev) and that scale (p90); None when either party
+    has too few members to fit."""
+    full = M[M.n >= score_calculator.CONSTITUENT_FULL_CONFIDENCE_VOTES]
+    fits, devs = {}, []
+    for party in ("D", "R"):
+        g = full[full.party == party]
+        if len(g) < score_calculator._MIN_CONSTITUENT_REFERENCE_PARTY:
+            return None
+        kinked = int((g.alignment < 0).sum()) >= score_calculator._MIN_OPPOSED_SEATS_FOR_KINK
+        cols = [np.ones(len(g)), g.alignment.values] + ([np.minimum(g.alignment.values, 0)] if kinked else [])
+        coef, *_ = np.linalg.lstsq(np.column_stack(cols), g.brk.values, rcond=None)
+        fits[party] = {"a": coef[0], "b": coef[1], "b_opposed": coef[2] if kinked else 0.0}
+        devs += list(np.abs(g.brk.values - [score_calculator._expected_break_rate(fits[party], a) for a in g.alignment]))
+    M = M.copy()
+    M["exp"] = [score_calculator._expected_break_rate(fits[p], a) for p, a in zip(M.party, M.alignment)]
+    M["dev"] = M.brk - M.exp
+    M["p90"] = float(np.quantile(devs, score_calculator.SATURATION_QUANTILE))
+    return M
+
+
 def shipped_expectation(M):
     """The shipped reference, from the scorer itself: compute_constituent_
     reference over members with a full-confidence vote count (the filter
-    constituent_reference_inputs applies), then each member's expected
-    rate and deviation. None when the scorer would not measure one (too
-    few full-confidence members per party)."""
+    constituent_reference_inputs applies), then each member's expected rate
+    (exp16), residual in standard deviations per vote (res) and their
+    party's scale. None when the scorer would not measure one (too few
+    full-confidence members per party)."""
     full = M[M.n >= score_calculator.CONSTITUENT_FULL_CONFIDENCE_VOTES]
     ref = score_calculator.compute_constituent_reference(
-        list(zip(full.party, full.alignment, full.brk)))
+        list(zip(full.party, full.alignment, full.brk, full.n)))
     if ref is None:
         return None
     M = M.copy()
-    M["exp"] = [score_calculator._expected_break_rate(ref["expected"][p], a)
-                for p, a in zip(M.party, M.alignment)]
-    M["dev"] = M.brk - M.exp
-    M["p90"] = ref["deviation_p90"]
+    M["exp16"] = [score_calculator._expected_break_rate(ref["expected"][p], a)
+                  for p, a in zip(M.party, M.alignment)]
+    M["res"] = [score_calculator.seat_residual(b, e, int(n)) for b, e, n in zip(M.brk, M.exp16, M.n)]
+    M["scale"] = [ref["expected"][p]["scale"] for p in M.party]
+    # The alternative section 10 rejects: one scale pooled across both
+    # parties' full-confidence members.
+    full_res = M[M.n >= score_calculator.CONSTITUENT_FULL_CONFIDENCE_VOTES].res.abs()
+    M["scale_pooled"] = float(np.quantile(full_res, score_calculator.SATURATION_QUANTILE))
     return M
+
+
+def both_expectations(M):
+    """v6.15's columns (exp, dev, p90) and v6.16's (exp16, res, scale) on the
+    same members, or None unless both methods measure a reference."""
+    old, new = v615_expectation(M), shipped_expectation(M)
+    if old is None or new is None:
+        return None
+    return old.assign(exp16=new.exp16.values, res=new.res.values, scale=new.scale.values,
+                      scale_pooled=new.scale_pooled.values)
+
 
 def overbreak_terms(S):
     S = S.reset_index(drop=True)
@@ -545,6 +614,27 @@ def print_overbreak(S, y, base):
           f"(t={r3.tvalues['pos2']:.1f}, n={int((S.pos2 > 0).sum())})")
 
 
+def compare_v616(S, y, base, fit):
+    """Section 10: v6.15's score against v6.16's on the same members and the
+    same outcome — and, to separate the two changes, v6.16's shape read on
+    v6.15's percentage-point scale — then v6.16's zero points swept. Each
+    row: coefficient per score point, t, and the R^2 the score adds to the
+    controls (scale-free, so rows compare)."""
+    b0 = fit(f"{y} ~ {base}")
+    print(" v6.15 vs v6.16 (section 10):")
+    for label, sc in (("v6.15 score (points, peak one scale above)", v615_score(S.dev, S.p90, S.n)),
+                      ("v6.16 shape on v6.15's point scale", v616_score(S.dev, S.p90, S.n)),
+                      ("v6.16 score (SD per vote, shipped)", v616_score(S.res, S.scale, S.n))):
+        S["sc"] = sc
+        r = fit(f"{y} ~ {base} + sc")
+        print(f"  {label:44s} {r.params['sc']:7.3f}/pt (t={r.tvalues['sc']:.1f}) dR2={r.rsquared - b0.rsquared:.4f}")
+    print("  v6.16 zero points (crossing / loyal, in scales):")
+    for cz, lz in ((1.0, 1.0), (1.0, 3.0), (1.5, 3.0), (1.5, 6.0), (2.0, 4.0), (3.0, 6.0)):
+        S["sc"] = v616_score(S.res, S.scale, S.n, cz, lz)
+        r = fit(f"{y} ~ {base} + sc")
+        print(f"   {cz:.1f} / {lz:.1f}: {r.params['sc']:.3f}/pt (t={r.tvalues['sc']:.1f}) dR2={r.rsquared - b0.rsquared:.4f}")
+
+
 def senate_general_test(p):
     pres = pd.read_csv(p["president_1976_2024.csv"])
     sen = pd.read_csv(p["senate_1976_2024.csv"])
@@ -564,13 +654,15 @@ def senate_general_test(p):
         M["sign"] = np.where(M.party == "R", 1.0, -1.0)
         M["alignment"] = ((M.presR - nat[py]) * 100 * M.sign / 15).clip(-1, 1)
         M["x"] = np.where(M.party == "R", M.presR, 1 - M.presR) * 100
-        M = shipped_expectation(M)
+        M = both_expectations(M)
         if M is None:
             continue
         v14, v13 = v615_score(M.dev, M.p90, M.n), 50 + 50 * (M.dev / M.p90).clip(-1, 1)
+        v16, pooled = v616_score(M.res, M.scale, M.n), v616_score(M.res, M.scale_pooled, M.n)
         party_means.append({"senate": c, **{
             f"{party} {v}": round(float(x[(M.party == party).values].mean()), 1)
-            for party in ("D", "R") for v, x in (("v6.13", v13.values), ("v6.15", v14))}})
+            for party in ("D", "R")
+            for v, x in (("v6.13", v13.values), ("v6.15", v14), ("v6.16", v16), ("pooled", pooled))}})
         M["year"] = yr
         c2 = cands[cands.year == yr]
         for i, r in M.iterrows():
@@ -589,16 +681,21 @@ def senate_general_test(p):
         print(f" {label} (N={len(d)}):")
         print_overbreak(overbreak_terms(d), "own", "x + I(x**2) + C(fe)")
     P = pd.DataFrame(party_means)
-    P["gap v6.13"], P["gap v6.15"] = P["D v6.13"] - P["R v6.13"], P["D v6.15"] - P["R v6.15"]
+    for v in ("v6.13", "v6.15", "v6.16", "pooled"):
+        P[f"gap {v}"] = P[f"D {v}"] - P[f"R {v}"]
     print(" mean vote score by party, every Senate (D minus R = gap):")
     print(P.round(1).to_string(index=False))
-    print(f"  mean |gap|: v6.13 {P['gap v6.13'].abs().mean():.1f}, v6.15 {P['gap v6.15'].abs().mean():.1f}")
+    print(f"  mean |gap|: v6.13 {P['gap v6.13'].abs().mean():.1f}, v6.15 {P['gap v6.15'].abs().mean():.1f}, "
+          f"v6.16 {P['gap v6.16'].abs().mean():.1f} (one pooled scale instead: "
+          f"{P['gap pooled'].abs().mean():.1f}, largest {P['gap pooled'].abs().max():.1f})")
     print(" loyal-side scale (gaps below the expectation where the score reaches 0):")
     b0 = smf.ols("own ~ x + I(x**2) + C(fe)", S).fit()
     for k in (1, 2, 4, 8):
         S["sc"] = v615_score(S.dev, S.p90, S.n, k)
         r = smf.ols("own ~ x + I(x**2) + C(fe) + sc", S).fit(cov_type="cluster", cov_kwds={"groups": S.gid})
         print(f"  {k}x: {r.params['sc']:.3f}/pt (t={r.tvalues['sc']:.1f}) dR2={r.rsquared - b0.rsquared:.4f}")
+    compare_v616(S, "own", "x + I(x**2) + C(fe)",
+                 lambda f: smf.ols(f, S).fit(cov_type="cluster", cov_kwds={"groups": S.gid}))
 
 
 def house_primary_test(p):
@@ -619,7 +716,7 @@ def house_primary_test(p):
         M = M.drop_duplicates("icpsr", keep=False)
         py = max(y for y in nat.index if y < yr)
         M["alignment"] = ((M.prez - np.where(M.party == "R", nat[py], 1 - nat[py]) * 100) / 15).clip(-1, 1)
-        M = shipped_expectation(M[M.prez.notna()].reset_index(drop=True))
+        M = both_expectations(M[M.prez.notna()].reset_index(drop=True))
         if M is None:
             continue
         M["fe"] = f"{yr}" + M.party
@@ -637,6 +734,10 @@ def house_primary_test(p):
     print_overbreak(Cd, "pshare", "alignment + C(fe)")
     Cd["bin"] = pd.cut(Cd.dz, [-99, -1, 0, 1, 2, 99])
     print(Cd.groupby("bin", observed=True).pshare.agg(["size", "mean"]).round(1).to_string())
+    for y, D in (("pshare", Cd), ("challenged", A), ("lost", A)):
+        print(f" {y}:")
+        compare_v616(D, y, "alignment + C(fe)",
+                     lambda f, D=D: smf.ols(f, D).fit(cov_type="cluster", cov_kwds={"groups": D.gid}))
 
 
 def main():
