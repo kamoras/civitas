@@ -126,6 +126,30 @@ sys.exit(0 if any(d.get(k) for k in
     _busy_reason="a pipeline is running"
     return 0
   fi
+  # The hourly action refresh is waited for too, but only while it is
+  # young. A deploy kills it (it runs in a thread, so SIGTERM skips its
+  # cleanup), and at ~20 minutes a run it occupies a third of every hour:
+  # on a day of steady deploys (22 on 2026-09-26) most refreshes died and
+  # nothing published. The age cap keeps the 2026-07-27 failure out: an
+  # is_running flag wedged true must not hold deploys for hours.
+  # ACTION_REFRESH_WAIT_MIN is twice the longest run measured
+  # (1205s, 2026-09-27).
+  if echo "$status" | ACTION_REFRESH_WAIT_MIN=40 python3 -c '
+import json, os, sys
+from datetime import datetime, timedelta, timezone
+try:
+    ar = json.load(sys.stdin).get("actionRefresh") or {}
+    started = datetime.fromisoformat(ar["startedAt"])
+except (ValueError, KeyError, TypeError):
+    sys.exit(1)
+if started.tzinfo is None:
+    started = started.replace(tzinfo=timezone.utc)
+age = datetime.now(timezone.utc) - started
+sys.exit(0 if ar.get("isRunning") and age < timedelta(minutes=int(os.environ["ACTION_REFRESH_WAIT_MIN"])) else 1)
+'; then
+    _busy_reason="the action refresh is running"
+    return 0
+  fi
   return 1
 }
 
