@@ -53,9 +53,23 @@ a markup, being ordered reported, discharged, or placed on a calendar
 (which only happens once committee has already reported the bill out).
 """
 
+import re
+
 from app.config_definitions import BillStage
 
 _FALLBACK_STAGE = BillStage.INTRODUCED
+
+# What a "Floor" action says when the bill itself is being taken up on the
+# floor rather than passed, received or presented (those carry mapped
+# codes). "Floor" alone is too coarse to act on, so the text has to name
+# floor consideration: the Senate's "Considered by Senate", "Cloture on
+# the measure ... invoked", "Motion to proceed ...", "Measure laid before
+# Senate", and the House's consideration under a rule or suspension.
+_FLOOR_CONSIDERATION_RE = re.compile(
+    r"\b(considered|cloture|motion to proceed|laid before|suspend the rules"
+    r"|under the provisions of rule|failed of passage|motion to recommit)\b",
+    re.IGNORECASE,
+)
 
 # Empirically observed (type, actionCode) -> stage, keyed by actionCode
 # alone (actionCode is unique across types in practice). See module
@@ -123,6 +137,8 @@ def _stage_from_type_and_text(action_type: str | None, text: str) -> BillStage |
         # ENTIRE action history was "Introduced in Senate" followed by
         # exactly this, nothing else, ever.
         return BillStage.REFERRED if "referred" in text_lower else BillStage.INTRODUCED
+    if action_type == "Floor" and _FLOOR_CONSIDERATION_RE.search(text):
+        return BillStage.ON_FLOOR
     if action_type in ("Committee", "Calendars"):
         # Unlike IntroReferral above, a bare automatic referral is never
         # typed "Committee" or "Calendars" in practice (confirmed against
@@ -143,11 +159,12 @@ _STAGE_RANK: dict[BillStage, int] = {
     BillStage.INTRODUCED: 1,
     BillStage.REFERRED: 2,
     BillStage.IN_COMMITTEE: 3,
-    BillStage.PASSED_CHAMBER: 4,
-    BillStage.IN_OTHER_CHAMBER: 5,
-    BillStage.TO_PRESIDENT: 6,
-    BillStage.VETOED: 7,
-    BillStage.ENACTED: 8,
+    BillStage.ON_FLOOR: 4,
+    BillStage.PASSED_CHAMBER: 5,
+    BillStage.IN_OTHER_CHAMBER: 6,
+    BillStage.TO_PRESIDENT: 7,
+    BillStage.VETOED: 8,
+    BillStage.ENACTED: 9,
 }
 
 
@@ -219,7 +236,9 @@ def classify_bill_stage_from_actions(actions: list[dict], is_law: bool = False) 
             continue
         if stage == BillStage.PASSED_CHAMBER:
             passed_seen = True
-        elif passed_seen and stage in (BillStage.INTRODUCED, BillStage.REFERRED, BillStage.IN_COMMITTEE):
+        elif passed_seen and stage in (
+            BillStage.INTRODUCED, BillStage.REFERRED, BillStage.IN_COMMITTEE, BillStage.ON_FLOOR,
+        ):
             stage = BillStage.IN_OTHER_CHAMBER
         if best is None or _STAGE_RANK[stage] > _STAGE_RANK[best]:
             best = stage
