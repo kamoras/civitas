@@ -511,18 +511,19 @@ export default function SenatorCard({
             />
           </CollapsibleSection>
 
+          {/* The sections that load their own pages are keyed by member:
+              navigating between two profiles can reuse this card, and each
+              section's data, page and selection belong to the member they
+              were loaded for. The keys are prefixed per section: siblings
+              must not share one, or React can leave the previous member's
+              section mounted beside the new one. */}
           <VotingRecord
+            key={`votes-${chamber}-${senator.id}`}
             senatorId={senator.id}
             votingRecord={senator.votingRecord}
             chamber={chamber}
           />
 
-          {/* Both disclosure sections are keyed by member: navigating
-              between two profiles can reuse this card, and each section's
-              data, page and selection belong to the member they were
-              loaded for. The keys are prefixed per section: siblings must
-              not share one, or React can leave the previous member's
-              section mounted beside the new one. */}
           <Holdings key={`holdings-${chamber}-${senator.id}`} memberId={senator.id} chamber={chamber} />
 
           <StockTrades key={`trades-${chamber}-${senator.id}`} politicianId={senator.id} filer={chamber} />

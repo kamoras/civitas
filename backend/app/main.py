@@ -51,10 +51,14 @@ async def _bootstrap_explore() -> None:
             _logger = logging.getLogger("app.main")
             _logger.info("Explore document store is empty — running initial ingestion")
             from app.pipeline.explore_pipeline import run_explore_pipeline
+            from app.pipeline import lease
+
             # Registered for the admin data reset: the pipeline hands its
-            # writes to threads while this awaits.
-            with writing("Explore bootstrap"):
-                await run_explore_pipeline(days_back=60)
+            # writes to threads while this awaits. And a lease, so a reset in
+            # another process sees it too.
+            with writing("Explore bootstrap"), lease.job(lease.EXPLORE) as held:
+                if held:
+                    await run_explore_pipeline(days_back=60)
     except WritesHeld as held:
         logging.getLogger("app.main").info("%s", held)
     except Exception as e:
@@ -71,22 +75,37 @@ def _preload_embedding_model() -> None:
 
 
 def _invalidate_orphaned_pipelines() -> None:
-    """Mark any 'running' pipeline rows as stale on startup.
+    """Mark a 'running' Senate row stale when no live run holds it.
 
-    If the app is starting, no pipeline thread from this process can be
-    active -- any 'running' row is left over from a prior crash or deploy.
+    A dead process's run leaves the row behind; but during a rollout's
+    overlap the other task may be running it for real. The run holds a
+    lease (lease.SENATE_RUN) for its duration, so: no live lease, the row is
+    an orphan; a live one, keep checking until it isn't — the other task
+    finishes the run, or dies and its lease goes stale — and decide then.
     """
+    from app.pipeline import lease
+
+    if _mark_orphaned_senate_runs() is lease.SENATE_RUN:
+        def _watch() -> None:
+            import time
+
+            while _mark_orphaned_senate_runs() is lease.SENATE_RUN:
+                time.sleep(lease.BEAT_S)
+
+        start_writer(_watch, name="orphaned-senate-run-watch")
+
+
+def _mark_orphaned_senate_runs():
+    """One check: marks orphaned rows stale and returns None, or returns
+    lease.SENATE_RUN while a live run holds that lease."""
     from app.database import SessionLocal
     from app.models import PipelineRun, PipelineStatus
+    from app.pipeline import lease
 
     db = SessionLocal()
     try:
-        from app.pipeline import lease
-
         if lease.held(db, lease.SENATE_RUN):
-            # A live Senate run holds it — another process's, during a
-            # rollout's overlap: not an orphan.
-            return
+            return lease.SENATE_RUN
         orphaned = db.query(PipelineRun).filter(PipelineRun.status == PipelineStatus.RUNNING).all()
         for run in orphaned:
             run.status = PipelineStatus.STALE
@@ -102,6 +121,7 @@ def _invalidate_orphaned_pipelines() -> None:
         logging.getLogger("app.main").warning("Orphan pipeline cleanup failed: %s", e)
     finally:
         db.close()
+    return None
 
 
 PROCESS_STARTED_AT: str | None = None

@@ -203,17 +203,26 @@ class TestYieldingToAReset:
         assert db_session.query(models.ApiCache).filter_by(tier=lease.ACTION_REFRESH).count() == 0
 
 
-def test_startup_leaves_a_senate_run_live_in_another_process_alone(db_session, monkeypatch):
-    from app.main import _invalidate_orphaned_pipelines
+def test_startup_waits_out_a_senate_run_live_in_another_process(db_session, monkeypatch):
+    """A live run's row is left alone, and watched: once its lease is no
+    longer live — the other task finished, or died — the row is decided."""
+    from app import main
     from app.pipeline import lease
     from app.time_utils import utcnow
 
     db_session.add(models.PipelineRun(status="running", started_at=utcnow()))
     db_session.commit()
-    assert lease.acquire(db_session, lease.SENATE_RUN) is not None  # its run, beating elsewhere
+    token = lease.acquire(db_session, lease.SENATE_RUN)  # its run, beating elsewhere
     monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
-    _invalidate_orphaned_pipelines()
-    assert db_session.query(models.PipelineRun).one().status == "running"
+    watchers = []
+    monkeypatch.setattr(main, "start_writer", lambda target, name: watchers.append(target))
+
+    main._invalidate_orphaned_pipelines()
+    assert db_session.query(models.PipelineRun).one().status == "running" and len(watchers) == 1
+
+    lease.release(db_session, lease.SENATE_RUN, token)  # the other task died
+    watchers[0]()
+    assert db_session.query(models.PipelineRun).one().status == "stale"
 
 
 def test_startup_clears_a_senate_run_nobody_holds(db_session, monkeypatch):
@@ -225,3 +234,40 @@ def test_startup_clears_a_senate_run_nobody_holds(db_session, monkeypatch):
     monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
     _invalidate_orphaned_pipelines()
     assert db_session.query(models.PipelineRun).one().status == "stale"
+
+
+class TestLease:
+    def test_a_holder_of_the_lock_it_stands_for_takes_the_lease_over(self, db_session):
+        from app.pipeline import lease
+
+        assert lease.acquire(db_session, lease.SENATE_RUN) is not None       # a dead run's, still fresh
+        assert lease.acquire(db_session, lease.SENATE_RUN) is None
+        assert lease.acquire(db_session, lease.SENATE_RUN, take_over=True) is not None
+
+    def test_the_resets_lease_outlasts_an_unbeaten_wipe(self, db_session):
+        from datetime import timedelta
+
+        from app.pipeline import lease
+        from app.time_utils import utcnow
+
+        lease.acquire(db_session, lease.DATA_RESET)
+        lease.acquire(db_session, lease.BILL_REFRESH)
+        db_session.query(models.ApiCache).update({"cached_at": utcnow() - timedelta(minutes=30)})
+        db_session.commit()
+        assert lease.held(db_session, lease.DATA_RESET)
+        assert not lease.held(db_session, lease.BILL_REFRESH)
+
+    def test_a_job_yields_to_a_reset_and_holds_nothing(self, db_session, monkeypatch):
+        from app.pipeline import lease
+
+        monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
+        lease.acquire(db_session, lease.DATA_RESET)
+        with lease.job(lease.BALLOT_SYNC) as held:
+            assert held is False
+        assert not lease.held(db_session, lease.BALLOT_SYNC)
+
+    def test_every_lease_is_one_the_reset_names(self):
+        from app.pipeline import lease
+
+        tiers = {v for k, v in vars(lease).items() if k.isupper() and isinstance(v, str) and v.endswith("-lock")}
+        assert tiers == set(lease.TIERS)

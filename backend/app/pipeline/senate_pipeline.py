@@ -775,16 +775,10 @@ async def run_senate_pipeline(
         logger.warning("Pipeline already running in another process — skipping")
         db.close()
         return {"status": "skipped", "reason": "already_running"}
-    # Held for the run, on its own session, so a process starting up can tell
-    # this run from one a dead process left (main._invalidate_orphaned_pipelines).
+
     from contextlib import ExitStack
 
-    from app.pipeline import lease
-
     run_lease = ExitStack()
-    lease_db = SessionLocal()
-    run_lease.callback(lease_db.close)
-    run_lease.enter_context(lease.holding(lease_db, lease.SENATE_RUN))
 
     reset_stats()
     reset_client()
@@ -818,6 +812,15 @@ async def run_senate_pipeline(
     progress = ProgressTracker(pipeline_run, PIPELINE_STEPS, db, start_time)
 
     try:
+        # Held for the run, on its own session, so a process can tell this run
+        # from one a dead process left (main._invalidate_orphaned_pipelines).
+        # Taken over outright: this run holds the Senate run lock, so any
+        # other holder of the lease is a dead run's.
+        from app.pipeline import lease
+
+        lease_db = SessionLocal()
+        run_lease.callback(lease_db.close)
+        run_lease.enter_context(lease.holding(lease_db, lease.SENATE_RUN, take_over=True))
         logger.info("=== CIVITAS DATA PIPELINE ===")
         if senator_filter:
             logger.info("Single senator: %s", senator_filter)

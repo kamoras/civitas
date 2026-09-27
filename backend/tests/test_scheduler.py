@@ -11,10 +11,25 @@ threading.Thread) so the guard's decision can be asserted directly.
 
 from datetime import timedelta
 from app.time_utils import utcnow
+from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from app import scheduler as scheduler_module
 from app.pipeline.election_pipeline import is_ballot_sync_running
+
+
+@pytest.fixture(autouse=True)
+def _job_leases_granted():
+    """These tests stub the database, which a lease lives in; the leases
+    themselves are tested in test_database_reset.TestLease."""
+    @contextmanager
+    def granted(_tier):
+        yield True
+
+    with patch("app.pipeline.lease.job", granted):
+        yield
 
 
 class _SyncThread:
@@ -421,3 +436,19 @@ def test_a_nightly_chain_refused_by_a_data_reset_alerts():
         scheduler._start_job(lambda: ran.append(1), name="action-refresh")
     assert ran == []
     assert alert.call_count == 1 and "data reset" in alert.call_args.args[0]
+
+
+def test_a_leased_job_does_not_run_without_its_lease():
+    """A lockless job holds a lease so a reset in another process sees it;
+    refused one (a reset running, or the job running elsewhere), it skips."""
+    from app import scheduler
+    from app.pipeline import lease
+
+    @contextmanager
+    def refused(_tier):
+        yield False
+
+    ran = []
+    with patch("app.background.threading.Thread", _SyncThread), patch("app.pipeline.lease.job", refused):
+        scheduler._start_job(lambda: ran.append(1), name="bill-status-refresh", lease_tier=lease.BILL_REFRESH)
+    assert ran == []

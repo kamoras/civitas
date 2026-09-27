@@ -22,6 +22,7 @@ from app.pipeline.election_pipeline import (
 from app.pipeline.analyze.action_center import get_action_refresh_state, refresh_action_issues
 from app.time_utils import utcnow
 from app.background import WritesHeld, start_writer
+from app.pipeline import lease
 
 logger = logging.getLogger(__name__)
 
@@ -36,11 +37,23 @@ def _is_stale(age: timedelta | None, threshold: timedelta) -> bool:
     return age is not None and age > threshold
 
 
-def _start_job(target, *, name: str, alert: bool = False) -> None:
+def _start_job(target, *, name: str, alert: bool = False, lease_tier: str | None = None) -> None:
     """Start a scheduled job's thread. While the admin data reset holds the
     database the job doesn't run this time: logged, and for the nightly
     chain — whose skip leaves the wiped database unbuilt for a day — an ops
-    alert, as for any other skipped nightly run."""
+    alert, as for any other skipped nightly run.
+
+    `lease_tier`: a job that takes no run lock of its own holds this lease
+    (lease.job) while it runs, so a reset in another process sees it, and it
+    sees the reset."""
+    if lease_tier is not None:
+        job = target
+
+        def target() -> None:
+            with lease.job(lease_tier) as held:
+                if held:
+                    job()
+
     try:
         start_writer(target, name=name)
     except WritesHeld as held:
@@ -351,7 +364,7 @@ def _hourly_bill_status_refresh() -> None:
         except Exception:
             logger.exception("Bill status refresh failed")
 
-    _start_job(_run, name="bill-status-refresh")
+    _start_job(_run, name="bill-status-refresh", lease_tier=lease.BILL_REFRESH)
 
 
 def _election_coverage_refresh() -> None:
@@ -428,7 +441,7 @@ def _election_coverage_refresh() -> None:
         finally:
             coverage_tracker().stop()
 
-    _start_job(_run, name="election-coverage-refresh")
+    _start_job(_run, name="election-coverage-refresh", lease_tier=lease.COVERAGE_REFRESH)
 
 
 def _election_ballot_sync() -> None:
@@ -480,7 +493,7 @@ def _election_ballot_sync() -> None:
             loop.close()
             ballot_tracker().stop()
 
-    _start_job(_run, name="election-ballot-sync")
+    _start_job(_run, name="election-ballot-sync", lease_tier=lease.BALLOT_SYNC)
 
 
 def start_scheduler() -> None:

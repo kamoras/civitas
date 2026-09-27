@@ -61,11 +61,14 @@ async def trigger_pipeline(authorization: str | None = Header(default=None)):
 
 
 def _run_pipeline_background():
+    from app.pipeline import lease
     from app.pipeline.president_pipeline import run_president_pipeline
 
     db = SessionLocal()
     try:
-        asyncio.run(run_president_pipeline(db))
+        with lease.job(lease.PRESIDENT_PIPELINE) as held:
+            if held:
+                asyncio.run(run_president_pipeline(db))
     except Exception as e:
         logger.error("President pipeline failed: %s", e, exc_info=True)
     finally:

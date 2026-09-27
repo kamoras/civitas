@@ -1299,9 +1299,14 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
         embed_explore_documents,
     )
 
+    from app.pipeline import lease
+
     # Registered for the admin data reset: the awaits below free the loop
-    # while threads write the explore tables.
-    with writing("Explore re-embed"):
+    # while threads write the explore tables. And a lease, so a reset or an
+    # explore ingest in another process sees it too.
+    with writing("Explore re-embed"), lease.job(lease.EXPLORE) as held:
+        if not held:
+            raise HTTPException(status_code=409, detail="A data reset or an explore ingest is running")
         try:
             clear_explore()
         except Exception:
@@ -1451,9 +1456,9 @@ def _reset_holding_every_writer() -> dict:
       writer thread or task is registered, and while held none starts.
     - In any process — a rollout's other task included — the reset's lease
       (lease.DATA_RESET), which a pipeline's run lock and every other lease
-      (the refresh, the startup rescore) check. The reset commits it first and then checks
+      (lease.TIERS: each job without a run lock holds one) check. The reset commits it first and then checks
       theirs, so between a pipeline or refresh and the reset one always sees
-      the other. It is beaten throughout: the wipe commits table by table.
+      the other.
 
     Raises WritersBusy, naming them, if anything is writing already.
     """
@@ -1490,10 +1495,7 @@ async def admin_reset_data():
     runs rebuild the rest from scratch with the latest code.
 
     Every writer is held off for the whole wipe (_reset_holding_every_writer);
-    anything already writing refuses the reset (409, naming it). One gap is
-    left: the bill, ballot and coverage refreshes take no database lock, so
-    in a rollout's other task they aren't held off; they only update rows
-    the next pipeline run rewrites.
+    anything already writing refuses the reset (409, naming it).
     """
     from app.background import WritersBusy
 

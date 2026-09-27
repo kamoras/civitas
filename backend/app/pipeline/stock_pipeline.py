@@ -319,6 +319,9 @@ class _StoredSource:
 # one that never reads again costs a request a month.
 _REREAD_RETRY_HOURS = 24 * 30
 _REREAD_TIER = "ptr_reread"
+# This many failures in a row with nothing read is the source being down:
+# the source's re-read stops for the night and marks none of them.
+_REREAD_OUTAGE_AFTER = 5
 
 
 async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
@@ -327,7 +330,9 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
     misread), newest first within each, until PTR_REREAD_BUDGET is spent.
     Every stored row names its filing's URL, so this needs no search or
     index, whose windows reach back only weeks. A filing that doesn't read
-    keeps its rows and waits _REREAD_RETRY_HOURS. Returns filings re-read."""
+    keeps its rows and waits _REREAD_RETRY_HOURS — unless its source read
+    nothing at all that night, which is the source being down, not the
+    filing. Returns filings re-read."""
     sources = [
         _StoredSource("Senate", StockTrade, "senator_id", lambda _fid, url, filed: fetch_senate_ptr(
             client, db, {"report_url": url, "is_paper": "/view/paper/" in url, "stored_filed_date": filed},
@@ -356,10 +361,11 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
         if stale and source.label == "Senate" and await senate_accept_terms(client) is None:
             logger.warning("Senate PTR re-read skipped: no eFD session")
             continue
+        read, failed = 0, []
         for position, (filing_id, url, filed) in enumerate(stale):
             if time.monotonic() >= deadline:
                 logger.info("PTR re-read: time budget spent — %d %s filings wait", len(stale) - position, source.label)
-                return reread
+                break
             failed_key = f"failed-{source.label}-{filing_id}"
             if api_cache_get(db, _REREAD_TIER, failed_key, max_age_hours=_REREAD_RETRY_HOURS) is not None:
                 continue
@@ -372,7 +378,9 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
                 db.rollback()
                 rows = []
             if not rows:
-                api_cache_set(db, _REREAD_TIER, failed_key, {"url": url}, normal_ttl_hours=_REREAD_RETRY_HOURS)
+                failed.append((failed_key, url))
+                if not read and len(failed) >= _REREAD_OUTAGE_AFTER:
+                    break
                 continue
             stored = db.query(model).filter(model.filing_id == filing_id)
             filer = getattr(stored.first(), source.owner_key)
@@ -380,7 +388,18 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
             for row in rows:
                 db.add(_trade(model, row=row, **{source.owner_key: filer}))
             db.commit()
-            reread += 1
+            read += 1
+        reread += read
+        if failed and not read:
+            # Nothing read and nothing but failures: the source, not these
+            # filings. Tried again tomorrow, not in a month.
+            logger.warning("PTR re-read: %s looks unavailable (%d filings failed, none read) — retried next run",
+                           source.label, len(failed))
+        else:
+            for failed_key, url in failed:
+                api_cache_set(db, _REREAD_TIER, failed_key, {"url": url}, normal_ttl_hours=_REREAD_RETRY_HOURS)
+        if time.monotonic() >= deadline:
+            break
     return reread
 
 

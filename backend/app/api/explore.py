@@ -415,9 +415,13 @@ async def trigger_explore_pipeline(authorization: str | None = Header(default=No
 
 
 async def _run_explore_pipeline():
+    from app.pipeline import lease
     from app.pipeline.explore_pipeline import run_explore_pipeline
     try:
-        result = await run_explore_pipeline(days_back=60)
+        with lease.job(lease.EXPLORE) as held:
+            if not held:
+                return
+            result = await run_explore_pipeline(days_back=60)
         logger.info("Explore pipeline result: %s", result)
     except Exception as e:
         logger.error("Explore pipeline background task failed: %s", e)

@@ -391,14 +391,32 @@ class TestRereadTrades:
         assert (by_filing["b"].owner, by_filing["b"].parser_version) == ("self", 1)
 
     async def test_a_filing_that_did_not_read_waits_instead_of_starving_the_rest(self, db_session):
-        self._stored(db_session, "b", "https://efdsearch.senate.gov/search/view/ptr/b/")
+        base = "https://efdsearch.senate.gov/search/view/ptr"
+        self._stored(db_session, "a", f"{base}/a/")
+        self._stored(db_session, "b", f"{base}/b/")
 
         async def fetch(_client, _db, filing):
-            raise RuntimeError("eFD hiccup")
+            if filing["report_url"].endswith("/b/"):
+                raise RuntimeError("this filing's page is broken")
+            return [self._row("a", filing["report_url"])]
 
-        await self._reread(db_session, fetch)            # fails, and is remembered
+        await self._reread(db_session, fetch)            # a reads, b fails and is remembered
         _, mock_fetch = await self._reread(db_session, fetch)
         mock_fetch.assert_not_called()
+
+    async def test_a_source_that_reads_nothing_is_down_not_its_filings(self, db_session):
+        base = "https://efdsearch.senate.gov/search/view/ptr"
+        for n in range(stock_pipeline._REREAD_OUTAGE_AFTER + 2):
+            self._stored(db_session, f"f{n}", f"{base}/f{n}/")
+
+        async def fetch(_client, _db, filing):
+            return []
+
+        _, first = await self._reread(db_session, fetch)
+        # It stopped once the failures showed an outage, and marked none.
+        assert first.call_count == stock_pipeline._REREAD_OUTAGE_AFTER
+        _, second = await self._reread(db_session, fetch)
+        assert second.call_count == stock_pipeline._REREAD_OUTAGE_AFTER
 
     async def test_a_paper_filing_is_fetched_as_one(self, db_session):
         self._stored(db_session, "p", "https://efdsearch.senate.gov/search/view/paper/p/")

@@ -61,11 +61,14 @@ async def trigger_pipeline(authorization: str | None = Header(default=None)):
 
 
 def _run_pipeline_background():
+    from app.pipeline import lease
     from app.pipeline.justice_pipeline import run_justice_pipeline
 
     db = SessionLocal()
     try:
-        asyncio.run(run_justice_pipeline(db))
+        with lease.job(lease.JUSTICE_PIPELINE) as held:
+            if held:
+                asyncio.run(run_justice_pipeline(db))
     except Exception as e:
         logger.error("Justice pipeline failed: %s", e, exc_info=True)
     finally:

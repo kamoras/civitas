@@ -1055,13 +1055,12 @@ def reset_all_data() -> dict:
 
                 wipe = wipe.where(table.c.tier.notin_(lease.TIERS))
             summary[table.name] = db.execute(wipe).rowcount
-            # One table at a time: the write lock is let go between tables,
-            # so the reset's own lease heartbeat gets through.
-            db.commit()
         # A kept issue's links to Explore documents name them by rowid, and
         # SQLite hands the rebuilt documents the same rowids again: left, the
         # links would point at unrelated documents.
         db.execute(text("UPDATE action_issues SET related_explore_ids = '[]'"))
+        # One transaction: a failure partway leaves nothing half-wiped. (The
+        # reset's lease outlasts it unbeaten — lease.stale_after.)
         db.commit()
     finally:
         db.close()
