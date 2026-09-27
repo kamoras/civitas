@@ -80,13 +80,13 @@ def stale_after(tier: str) -> timedelta:
     return timedelta(seconds=_STALE_S_BY_TIER.get(tier, STALE_S))
 
 
-# How long each lease may be held. A holder stops renewing its lease a stale
-# window short of this, so the lease has lapsed by then; without a bound a
-# hung holder, whose process lives on, would renew it forever and hold its
-# job, and every data reset, off until a restart. Where the job has its own
-# check that proceeds past a run it calls hung (scheduler.py reads these for
-# the refreshes), this is that check's age; the bill refresh is cut off
-# inside it instead; where a job has neither, the lapse is the hung-run
+# How long each lease may be held. A holder renews its lease for max_hold (a
+# stale window short of this), so the lease has lapsed by then; without a
+# bound a hung holder, whose process lives on, would renew it forever and
+# hold its job, and every data reset, off until a restart. A job with its
+# own check that proceeds past a run it calls hung does so at max_hold too
+# (scheduler.py), so the check and the lease agree; the bill refresh is cut
+# off within it instead; where a job has neither, the lapse is the hung-run
 # rule: the next attempt takes the lease over.
 def _pipeline_timeout() -> timedelta:
     from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT

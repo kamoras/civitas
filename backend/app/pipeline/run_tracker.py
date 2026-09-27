@@ -54,13 +54,14 @@ ALREADY_RUNNING = "already_running"
 MEMBER_PIPELINE_RUNNING = "member_pipeline_running"
 
 
-def skip_reason_text(reason: str | None) -> str:
+def skip_reason_text(reason: str | None, tier: str | None = None) -> str:
     """A pipeline skip's reason code, as its log and the nightly alert say
-    it — a lease refusal in lease.refusal_text's words."""
+    it — a lease refusal in lease.refusal_text's words, naming `tier`'s job
+    when it holds the lease."""
     from app.pipeline import lease
 
     if reason in (lease.REFUSED_BY_RESET, lease.REFUSED_BUSY, lease.REFUSED_HELD):
-        return lease.refusal_text(reason)
+        return lease.refusal_text(reason, tier)
     return {
         ALREADY_RUNNING: "a previous run of it was still active",
         MEMBER_PIPELINE_RUNNING: "a member pipeline (Senate or House) was running",

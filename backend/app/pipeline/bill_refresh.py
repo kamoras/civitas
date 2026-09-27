@@ -27,6 +27,7 @@ import logging
 from datetime import datetime, timedelta
 
 import httpx
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -146,6 +147,9 @@ async def _apply_updates(
     actions_cache: dict[str, list[dict]] = {}
     bill_ids = list(recent)
 
+    # Every write waits for the end of the pass and is applied in one go:
+    # none holds SQLite's write lock across the fetches between them.
+    writes: list[tuple[type, int, str, dict]] = []
     for model in (SponsoredBill, RepSponsoredBill):
         rows = []
         for i in range(0, len(bill_ids), 500):  # stay under SQLite's bind-parameter limit
@@ -165,6 +169,10 @@ async def _apply_updates(
             matched += 1
             if new_text == row.latest_action and new_date == row.latest_action_date:
                 continue  # updateDate churn without a new action — nothing to do
+            if new_date and row.latest_action_date and new_date < row.latest_action_date:
+                # The listing can lag what the nightly pipeline stored from the
+                # bill itself: an older action never replaces a newer one.
+                continue
 
             # is_law is monotone: never un-set it, and the latest-action
             # text is the same "hard fact from the API" the pipelines use.
@@ -182,16 +190,23 @@ async def _apply_updates(
                     continue
                 actions = await _fetch_fresh_actions(db, client, congress, bill_type, number)
                 actions_cache[actions_key] = actions
+            values = {"latest_action": new_text, "latest_action_date": new_date, "is_law": is_law}
             if actions or is_law:
-                row.stage = str(classify_bill_stage_from_actions(actions, is_law))
+                values["stage"] = str(classify_bill_stage_from_actions(actions, is_law))
             # else: keep the stored stage — a failed/empty actions fetch
             # must not regress a real stage to the INTRODUCED fallback.
+            writes.append((model, row.id, new_date, values))
 
-            row.latest_action = new_text
-            row.latest_action_date = new_date
-            row.is_law = is_law
-            changed += 1
-
+    for model, row_id, new_date, values in writes:
+        rows_written = db.query(model).filter(model.id == row_id)
+        if new_date:
+            # Again at write time: the row may have moved on since it was
+            # read (the nightly pipeline rewrites these). A row deleted since
+            # simply matches nothing.
+            rows_written = rows_written.filter(
+                or_(model.latest_action_date.is_(None), model.latest_action_date <= new_date),
+            )
+        changed += rows_written.update(values, synchronize_session=False)
     db.commit()
     if skipped_at_cap:
         logger.warning(

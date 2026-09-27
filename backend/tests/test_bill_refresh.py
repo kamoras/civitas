@@ -90,6 +90,32 @@ class TestApplyUpdates:
         assert bill.latest_action_date == "2026-07-20"
         assert bill.stage == "PASSED_CHAMBER"
 
+    def test_an_older_listed_action_never_replaces_a_newer_stored_one(self, db_session, actions_stub):
+        """The listing can lag what the nightly pipeline stored from the bill
+        itself: its older action must not win."""
+        bill = _make_senate_bill(db_session, latest_action="Became Public Law.", latest_action_date="2026-07-25")
+        recent = {"S.100": _feed_item("S.100", "Passed Senate with an amendment.", "2026-07-20")}
+
+        summary = asyncio.run(bill_refresh._apply_updates(db_session, None, recent))
+
+        assert summary["changed"] == 0
+        assert (bill.latest_action, bill.latest_action_date) == ("Became Public Law.", "2026-07-25")
+        assert actions_stub.calls == []  # not even fetched
+
+    def test_a_row_deleted_mid_pass_is_skipped_not_a_crash(self, db_session, actions_stub, monkeypatch):
+        """A pipeline can rewrite a member's bills while a pass holds them."""
+        bill = _make_senate_bill(db_session)
+        db_session.commit()
+        actions_stub.result = [{"actionCode": "17000", "type": "Floor", "text": "Passed Senate."}]
+
+        async def deleted_meanwhile(db, client, congress, bill_type, number):
+            db.query(SponsoredBill).filter(SponsoredBill.id == bill.id).delete()
+            return actions_stub.result
+
+        monkeypatch.setattr(bill_refresh, "_fetch_fresh_actions", deleted_meanwhile)
+        recent = {"S.100": _feed_item("S.100", "Passed Senate with an amendment.", "2026-07-20")}
+        assert asyncio.run(bill_refresh._apply_updates(db_session, None, recent))["changed"] == 0
+
     def test_updates_house_rows_too(self, db_session, actions_stub):
         bill = _make_house_bill(db_session)
         actions_stub.result = [{"actionCode": "H15001", "type": "Committee", "text": "Markup held."}]

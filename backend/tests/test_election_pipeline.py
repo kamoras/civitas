@@ -7,6 +7,8 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta
 from unittest.mock import patch
 
+import pytest
+
 from app.config import settings
 from app.models import (
     Candidate,
@@ -18,6 +20,22 @@ from app.models import (
 )
 from app.pipeline import election_pipeline
 from app.time_utils import utcnow
+
+
+@pytest.fixture(autouse=True)
+def _job_leases_granted():
+    """These tests stub the database a lease lives in; the leases the
+    nightly steps hold are tested in test_database_reset.TestLease."""
+    from contextlib import asynccontextmanager
+
+    from app.pipeline.lease import Granted
+
+    @asynccontextmanager
+    async def granted(_tier):
+        yield Granted(None)
+
+    with patch("app.pipeline.lease.job_async", granted):
+        yield
 
 
 @contextmanager
@@ -546,6 +564,34 @@ class TestBallotSync:
             "status": "ok", "confirmed": 6, "statesOk": ["AK"], "statesFailed": ["NY"],
             "filings": {"NC": 3},
         }
+
+    def test_the_nightly_ballot_and_coverage_steps_yield_their_leases(self, db_session):
+        """A ballot sync or coverage refresh in another process holds its
+        lease: the nightly steps step aside rather than write beside it."""
+        from contextlib import asynccontextmanager
+
+        from app.pipeline import lease
+
+        def run(refused_tiers):
+            @asynccontextmanager
+            async def leases(tier):
+                yield lease.Granted(lease.refusal_text(lease.REFUSED_HELD, tier) if tier in refused_tiers else None)
+
+            with (
+                patch("app.pipeline.lease.job_async", leases),
+                patch("app.pipeline.election_pipeline.SessionLocal", return_value=db_session),
+                patch("app.pipeline.election_pipeline.fetch_all_candidates", return_value=[]),
+                _mock_downstream_pipeline_phases(),
+                patch("app.pipeline.election_pipeline.sync_confirmed_candidates", return_value={}) as nightly_sync,
+                patch("app.pipeline.analyze.election_coverage.ingest_race_coverage", return_value=0) as ingest,
+            ):
+                asyncio.run(election_pipeline.run_election_pipeline())
+            return nightly_sync.call_count, ingest.call_count
+
+        free = run(refused_tiers=())
+        assert free[1] == 1 and free[0] > 0, free  # the steps are reached when their leases are free
+        assert run(refused_tiers=(lease.BALLOT_SYNC, lease.COVERAGE_REFRESH)) == (0, 0)
+        assert not election_pipeline.ballot_tracker().is_running
 
     def test_the_nightly_ballot_phase_steps_aside_while_a_sync_is_running(self, db_session):
         # Two passes writing the same Candidate rows at once is what this

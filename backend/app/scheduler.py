@@ -46,8 +46,8 @@ def _start_job(target, *, name: str, alert: bool = False, lease_tier: str | None
 
     `lease_tier`: a job that takes no run lock of its own holds this lease
     (lease.job) while it runs, so a reset in another process sees it, and it
-    sees the reset; it lapses by the tier's lease.HUNG_AFTER, the age at
-    which the job's own checks proceed past a run they call hung."""
+    sees the reset. A holder renews it for lease.max_hold, and the job's own
+    hung-run checks proceed past a run at that same age, so the two agree."""
     if lease_tier is not None:
         job = target
 
@@ -214,7 +214,7 @@ def _hourly_action_refresh() -> None:
             if state.get("is_running"):
                 started = state.get("started_at")
                 age = utcnow() - started if started else None
-                if _is_stale(age, lease.HUNG_AFTER[lease.ACTION_REFRESH]):
+                if _is_stale(age, lease.max_hold(lease.ACTION_REFRESH)):
                     # Same reasoning as the stale-PipelineRun checks below: a
                     # refresh this old (normal is minutes, worst case with a
                     # degraded LLM is ~1-2h) is wedged, not just slow. This

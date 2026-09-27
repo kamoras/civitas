@@ -122,9 +122,13 @@ class TestActionRefreshOverlapGuard:
         mock_refresh = _run_hourly_refresh(state)
         mock_refresh.assert_called_once()
 
-    def test_does_not_skip_at_exactly_the_4_hour_boundary_edge(self):
-        # Just under 4h: still treated as a legitimately running refresh.
-        state = {"is_running": True, "started_at": utcnow() - timedelta(hours=3, minutes=59)}
+    def test_does_not_skip_just_under_the_hung_edge(self):
+        # Just under the edge — where the refresh's lease stops being
+        # renewed (lease.max_hold), so the two agree — still running.
+        from app.pipeline import lease
+
+        edge = lease.max_hold(lease.ACTION_REFRESH)
+        state = {"is_running": True, "started_at": utcnow() - edge + timedelta(minutes=1)}
         mock_refresh = _run_hourly_refresh(state)
         mock_refresh.assert_not_called()
 

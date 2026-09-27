@@ -775,11 +775,7 @@ def _take_senate_run_lease(stack) -> str | None:
         why = lease.refusal_code(lease_db, lease.SENATE_RUN)
         if why != lease.REFUSED_BUSY:
             break
-    logger.warning(
-        "Senate run not started: %s", lease.refusal_text(why, lease.SENATE_RUN)
-        + (f", {_SENATE_LEASE_ATTEMPTS} times" if why == lease.REFUSED_BUSY else ""),
-    )
-    return why
+    return why  # logged by the caller, with the run lock's refusals
 
 
 async def run_senate_pipeline(
@@ -818,9 +814,10 @@ async def run_senate_pipeline(
         db.close()
         raise
     if pipeline_run is None:
+        from app.pipeline import lease
         from app.pipeline.run_tracker import skip_reason_text
 
-        logger.warning("Senate pipeline not started: %s", skip_reason_text(refused))
+        logger.warning("Senate pipeline not started: %s", skip_reason_text(refused, lease.SENATE_RUN))
         db.close()
         run_lease.close()
         # Why, for the nightly chain's skip alert: a data reset, a busy

@@ -76,13 +76,8 @@ BLUESKY_SEARCH_BATCH = 50
 _coverage_tracker = PipelineRunTracker()
 
 
-def is_coverage_refresh_running() -> bool:
-    return _coverage_tracker.is_running
 
 
-def coverage_refresh_age():
-    """Wall-clock age of the in-process coverage refresh, or None when idle."""
-    return _coverage_tracker.age
 
 
 def coverage_tracker() -> PipelineRunTracker:
