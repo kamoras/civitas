@@ -173,6 +173,27 @@ class TestApplyUpdates:
         row = db_session.get(SponsoredBill, bill.id)
         assert (row.latest_action, row.is_law, row.stage) == ("Became Public Law No: 119-52.", True, "ENACTED")
 
+    @pytest.mark.parametrize("text, date", [
+        # Cites a Public Law without becoming one.
+        ("Motion to waive pursuant to section 904 of Public Law 93-344 agreed to.", "2026-09-22"),
+        # Becomes law, but lags the stored action, or has no date to order by.
+        ("Became Public Law No: 119-52.", "2026-09-19"),
+        ("Became Public Law No: 119-52.", ""),
+    ])
+    def test_only_a_law_it_can_order_is_recorded(self, db_session, actions_stub, text, date):
+        bill = _make_senate_bill(
+            db_session, stage="PASSED_CHAMBER", latest_action="Passed House.", latest_action_date="2026-09-20",
+        )
+        actions_stub.result = [{"actionCode": "17000", "type": "Floor", "text": "Passed Senate."}]
+        recent = {"S.100": _feed_item("S.100", text, date)}
+
+        asyncio.run(bill_refresh._apply_updates(db_session, None, recent))
+        db_session.expire_all()
+        row = db_session.get(SponsoredBill, bill.id)
+        assert row.is_law is False and row.stage != "ENACTED"
+        if date <= "2026-09-20":
+            assert (row.latest_action, row.latest_action_date) == ("Passed House.", "2026-09-20")
+
     def test_a_reused_row_id_is_not_written_as_another_bill(self, db_session, actions_stub, monkeypatch):
         """The nightly pipeline rewrites rows by delete and insert; SQLite
         can give the deleted row's id to another bill."""

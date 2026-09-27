@@ -579,3 +579,35 @@ def test_a_hung_bill_refresh_is_cut_off_inside_its_lease(monkeypatch):
          patch("app.scheduler.is_house_pipeline_running", return_value=False):
         scheduler._hourly_bill_status_refresh()
     assert cancelled == [True]
+
+
+@pytest.mark.parametrize("job, tier, target", [
+    ("_election_ballot_sync", "BALLOT_SYNC", "app.scheduler.run_ballot_sync"),
+    ("_election_coverage_refresh", "COVERAGE_REFRESH", "app.pipeline.analyze.election_coverage.ingest_race_coverage"),
+])
+def test_an_election_season_job_is_cut_off_where_its_guards_stop_holding(monkeypatch, job, tier, target):
+    """Past max_hold its tracker and lease give way to the next pass; the
+    job must not still be running beside it."""
+    import asyncio
+
+    from app import scheduler
+    from app.pipeline import lease
+
+    tier = getattr(lease, tier)
+    monkeypatch.setitem(lease.HUNG_AFTER, tier, lease.stale_after(tier) + timedelta(seconds=0.05))
+    cancelled = []
+
+    async def hangs(*_args, **_kw):
+        try:
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            cancelled.append(True)
+            raise
+
+    with patch("app.background.threading.Thread", _SyncThread), \
+         patch("app.api.action.is_election_season", return_value=True), \
+         patch("app.scheduler.is_election_pipeline_running", return_value=False), \
+         patch("app.database.SessionLocal", return_value=MagicMock()), \
+         patch(target, hangs):
+        getattr(scheduler, job)()
+    assert cancelled == [True]

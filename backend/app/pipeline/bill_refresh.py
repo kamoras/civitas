@@ -27,7 +27,7 @@ import logging
 from datetime import datetime, timedelta
 
 import httpx
-from sqlalchemy import case, or_
+from sqlalchemy import and_, case, or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -140,14 +140,16 @@ def _supersedes(new_date: str, stored_date: str | None, makes_law: bool = False)
     one on the same day — the listing can lag a later action that day the
     nightly pipeline stored from the bill itself, and a date can't say which
     came first (the nightly run settles it) — and not an undated one over a
-    dated row, which it can't be ordered against. Except the action that
-    makes a bill not yet recorded as law one (`makes_law`): becoming law
-    ends a bill's history, so nothing stored before it is later — and
-    Congress.gov dates it the day the President signed, often the same day
-    as the stored signing action."""
-    if not stored_date or makes_law:
+    dated row, which it can't be ordered against. Except that the action
+    making a bill not yet recorded as law one (`makes_law`) may replace one
+    on its own day: becoming law ends a bill's history, so nothing stored
+    that day came after it — and Congress.gov dates it the day the President
+    signed, often the day of the stored signing action."""
+    if not stored_date:
         return True
-    return bool(new_date) and new_date > stored_date
+    if not new_date:
+        return False
+    return new_date > stored_date or (makes_law and new_date == stored_date)
 
 
 async def _apply_updates(
@@ -188,8 +190,10 @@ async def _apply_updates(
             if new_text == row.latest_action and new_date == row.latest_action_date:
                 continue  # updateDate churn without a new action — nothing to do
             # The latest-action text is the same "hard fact from the API"
-            # the pipelines use for is_law.
-            becomes_law = "public law" in new_text.lower()
+            # the pipelines use for is_law, read the same way
+            # (fetch/congress.py, house_pipeline.py) — not any mention of a
+            # Public Law, which plenty of other actions cite.
+            becomes_law = "became public law" in new_text.lower()
             if not _supersedes(new_date, row.latest_action_date, becomes_law and not row.is_law):
                 # The listing can lag what the nightly pipeline stored from the
                 # bill itself: an action not dated after the stored one never
@@ -233,12 +237,16 @@ async def _apply_updates(
         # one — the bill_id is what says it is still the same bill's row. A
         # row deleted since simply matches nothing.
         undated = or_(model.latest_action_date.is_(None), model.latest_action_date == "")
-        later = or_(undated, model.latest_action_date < new_date) if new_date else undated
-        rows_written = db.query(model).filter(
-            model.id == row_id,
-            model.bill_id == bill_id,
-            or_(later, ~model.is_law) if becomes_law else later,
-        )
+        if not new_date:
+            superseded = undated
+        elif becomes_law:
+            superseded = or_(
+                undated, model.latest_action_date < new_date,
+                and_(model.latest_action_date == new_date, ~model.is_law),
+            )
+        else:
+            superseded = or_(undated, model.latest_action_date < new_date)
+        rows_written = db.query(model).filter(model.id == row_id, model.bill_id == bill_id, superseded)
         changed += rows_written.update(values, synchronize_session=False)
     db.commit()
     if skipped_at_cap:

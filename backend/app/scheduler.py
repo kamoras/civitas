@@ -438,9 +438,15 @@ def _election_coverage_refresh() -> None:
                     finally:
                         db.close()
 
+                # Cut off where its guards stop holding (lease.max_hold):
+                # past that a second pass may start beside it.
+                limit = lease.max_hold(lease.COVERAGE_REFRESH)
                 loop = asyncio.new_event_loop()
                 try:
-                    loop.run_until_complete(_refresh())
+                    loop.run_until_complete(asyncio.wait_for(_refresh(), limit.total_seconds()))
+                except TimeoutError:
+                    logger.warning("Election coverage refresh cut off after %s — the next tick starts afresh", limit)
+                    return
                 finally:
                     loop.close()
         except Exception:
@@ -486,9 +492,15 @@ def _election_ballot_sync() -> None:
             with lease.tracked_job(lease.BALLOT_SYNC, ballot_tracker(), who="Ballot sync") as granted:
                 if not granted:
                     return
+                # Cut off where its guards stop holding (lease.max_hold):
+                # past that a second pass may start beside it.
+                limit = lease.max_hold(lease.BALLOT_SYNC)
                 loop = asyncio.new_event_loop()
                 try:
-                    result = loop.run_until_complete(run_ballot_sync())
+                    result = loop.run_until_complete(asyncio.wait_for(run_ballot_sync(), limit.total_seconds()))
+                except TimeoutError:
+                    logger.warning("Election-season ballot sync cut off after %s — the next run starts afresh", limit)
+                    return
                 finally:
                     loop.close()
             logger.info(

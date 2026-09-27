@@ -319,6 +319,52 @@ class TestLease:
         assert lease.beat(db_session, lease.COVERAGE_REFRESH, mine)  # still the running job's
         tracker.stop(token)
 
+    def test_a_refused_lease_leaves_the_tracker_alone(self, db_session, monkeypatch):
+        """The lease comes before the tracker's start: a tick refused by it
+        holds nothing an in-process entry point would be refused by, and a
+        hung run's tracker is replaced only by the lease's next holder."""
+        import time
+        from datetime import timedelta
+
+        from app.pipeline import lease
+        from app.pipeline.run_tracker import PipelineRunTracker
+
+        monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
+        tracker = PipelineRunTracker()
+        lease.acquire(db_session, lease.BALLOT_SYNC)  # a sync in another process
+        with lease.tracked_job(lease.BALLOT_SYNC, tracker) as held:
+            assert not held and not tracker.is_running
+
+        token, _ = tracker.try_start()  # a hung run here, its lease not yet lapsed
+        tracker._started_at = time.time() - (lease.max_hold(lease.BALLOT_SYNC) + timedelta(minutes=1)).total_seconds()
+        with lease.tracked_job(lease.BALLOT_SYNC, tracker) as held:
+            assert not held
+        assert tracker.is_running  # still the hung run's, not cleared
+        tracker.stop(token)
+
+    def test_a_tracked_async_body_is_cut_off_where_its_guards_stop_holding(self, db_session, monkeypatch):
+        import asyncio
+        from datetime import timedelta
+
+        from app.pipeline import lease
+        from app.pipeline.run_tracker import PipelineRunTracker
+
+        monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
+        monkeypatch.setitem(
+            lease.HUNG_AFTER, lease.COVERAGE_REFRESH,
+            lease.stale_after(lease.COVERAGE_REFRESH) + timedelta(seconds=0.05),
+        )
+        tracker = PipelineRunTracker()
+
+        async def hangs():
+            async with lease.tracked_job_async(lease.COVERAGE_REFRESH, tracker) as held:
+                assert held
+                await asyncio.sleep(10)
+
+        with pytest.raises(TimeoutError):
+            asyncio.run(hangs())
+        assert not tracker.is_running and not lease.held(db_session, lease.COVERAGE_REFRESH)
+
     def test_a_refusal_names_the_holder_as_it_named_itself(self, db_session):
         from app.pipeline import lease
 
@@ -327,7 +373,7 @@ class TestLease:
             "Election pipeline's confirmed-candidate phase is already running (this process or another)"
         )
         lease.acquire(db_session, lease.BILL_REFRESH)
-        assert lease.holder_label(db_session, lease.BILL_REFRESH) == lease.TIERS[lease.BILL_REFRESH]
+        assert lease.holder(db_session, lease.BILL_REFRESH) == lease.TIERS[lease.BILL_REFRESH]
 
     def test_every_lease_is_one_the_reset_names(self):
         from app.pipeline import lease

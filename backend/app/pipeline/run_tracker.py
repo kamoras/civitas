@@ -226,6 +226,14 @@ class PipelineRunTracker:
                 return None, None
             return self._begin(holder), age
 
+    def busy(self, hung_after: timedelta | None = None) -> bool:
+        """Whether try_start(hung_after) would refuse now — a check that
+        holds nothing (a run can start after it; try_start is the step)."""
+        with self._lock:
+            if self._started_at is None:
+                return False
+            return hung_after is None or time.time() - self._started_at < hung_after.total_seconds()
+
     def stop(self, run: int | None) -> None:
         """Mark the run `run` stopped; a no-op unless it is the run going
         (None, a replaced run's token)."""

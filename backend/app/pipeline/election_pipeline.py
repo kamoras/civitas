@@ -777,31 +777,39 @@ def _prune_stale_coverage(db: Session) -> int:
     return deleted
 
 
-def _crawl_day() -> bool:
-    """Sunday (UTC): the day the nightly run crawls for new ballot sources."""
-    return utcnow().weekday() == 6
+async def _weekly_source_crawl(db: Session, client, cycle: int) -> dict[str, str]:
+    """Sundays (UTC): crawl for new ballot sources; the states it adopted.
+    Weekly, not nightly: this sweeps every state that has no hand-verified
+    source, and what it looks for — a state standing up a results portal, a
+    new cycle's file appearing — moves on the scale of weeks, not hours.
+    Same self-gating shape as ops_alerts' weekly checks. Runs BEFORE the
+    sync so anything it proves out contributes the same night — and outside
+    the sync's guards, as it writes no Candidate row (only the discovered-
+    source and election-date files), so a sync in flight doesn't cost a
+    week's crawl."""
+    if utcnow().weekday() != 6:
+        return {}
+    leads = await crawl_for_new_sources(db, client, cycle)
+    adopted = {s: r for s, r in leads.items() if r.startswith("adopted")}
+    logger.info(
+        "Source crawl: %d state(s) adopted%s",
+        len(adopted), f" — {adopted}" if adopted else "",
+    )
+    return adopted
+
+
+def _adopted_detail(adopted: dict[str, str]) -> str:
+    """The crawl's part of the phase's dashboard detail (see
+    _confirmed_candidates_phase)."""
+    if not adopted:
+        return ""
+    return f"; crawler adopted {len(adopted)} this week: {', '.join(sorted(adopted))}"
 
 
 async def _confirmed_candidates_phase(db: Session, client, cycle: int) -> str:
-    """The nightly run's confirmed-candidate phase — the weekly source crawl,
-    then the ballot sync — run holding the ballot sync's guards; returns the
-    dashboard's detail line."""
-    # Weekly, not nightly: this sweeps every state that has no
-    # hand-verified source, and what it looks for — a state
-    # standing up a results portal, a new cycle's file
-    # appearing — moves on the scale of weeks, not hours. Same
-    # self-gating shape as ops_alerts' weekly checks. Runs
-    # BEFORE the sync so anything it proves out contributes the
-    # same night.
-    adopted: dict[str, str] = {}
-    if _crawl_day():
-        leads = await crawl_for_new_sources(db, client, cycle)
-        adopted = {s: r for s, r in leads.items() if r.startswith("adopted")}
-        logger.info(
-            "Source crawl: %d state(s) adopted%s",
-            len(adopted), f" — {adopted}" if adopted else "",
-        )
-
+    """The nightly run's ballot sync, run holding the ballot sync's guards;
+    returns the dashboard's detail line (the crawl's part is added by the
+    caller, _adopted_detail)."""
     confirm_result, filing_result = await _sync_ballots(db, client, cycle)
     confirmed_total = sum(r["confirmed"] for r in confirm_result.values())
     logger.info("Confirmed candidates: %s", confirm_result)
@@ -830,8 +838,6 @@ async def _confirmed_candidates_phase(db: Session, client, cycle: int) -> str:
     )
     if non_federal:
         detail += f"; {non_federal} state-office nominees"
-    if adopted:
-        detail += f"; crawler adopted {len(adopted)} this week: {', '.join(sorted(adopted))}"
     return detail
 
 
@@ -891,30 +897,31 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
             db.commit()
             logger.info("--- Election: CONFIRMED CANDIDATES ---")
             progress.begin("confirmed_candidates")
+            confirmed_open = True  # until the phase is marked done or skipped
             try:
+                adopted = await _weekly_source_crawl(db, client, cycle)
                 # The election-season ballot sync may be mid-pass; two
                 # passes writing the same Candidate rows at once is the one
                 # thing to avoid, and that pass is doing this step anyway.
                 # Holding the sync's tracker and lease (lease.tracked_job,
                 # as the scheduled sync does), so a sync in this process or
-                # another can't start beside this pass — the source crawl
-                # included, which writes the source table the sync reads.
+                # another can't start beside this pass.
                 async with lease.tracked_job_async(
                     lease.BALLOT_SYNC, _ballot_tracker, who="Election pipeline's confirmed-candidate phase",
                 ) as granted:
                     if not granted:
-                        # A Sunday's source crawl waits a week with it —
-                        # nothing is lost by adopting a source a week later
-                        # (crawl_for_new_sources); the detail says so.
-                        crawl = "; this week's source crawl with it" if _crawl_day() else ""
-                        progress.skip("confirmed_candidates", detail=f"skipped: {granted.why}{crawl}")
+                        progress.skip(
+                            "confirmed_candidates", detail=f"skipped: {granted.why}{_adopted_detail(adopted)}",
+                        )
                     else:
                         detail = await _confirmed_candidates_phase(db, client, cycle)
-                        progress.complete("confirmed_candidates", detail=detail)
+                        progress.complete("confirmed_candidates", detail=detail + _adopted_detail(adopted))
+                    confirmed_open = False
             except Exception:
                 db.rollback()
                 logger.exception("Confirmed-candidate sync failed — continuing")
-                progress.fail("confirmed_candidates")
+                if confirmed_open:
+                    progress.fail("confirmed_candidates")
 
             run.current_phase = "measures"
             db.commit()

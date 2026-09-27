@@ -593,6 +593,39 @@ class TestBallotSync:
         assert run(refused_tiers=(lease.BALLOT_SYNC, lease.COVERAGE_REFRESH)) == (0, 0)
         assert not election_pipeline.ballot_tracker().is_running
 
+    def test_a_sunday_crawl_runs_and_is_reported_when_the_sync_steps_aside(self, db_session):
+        """The crawl writes no Candidate row, so it runs outside the ballot
+        sync's guards: a sync in flight doesn't cost a week's crawl, and the
+        skipped phase's detail still reports what it adopted."""
+        import json
+        from contextlib import asynccontextmanager
+
+        from app.pipeline import lease
+
+        @asynccontextmanager
+        async def leases(tier, **_kw):
+            yield lease.Granted("Ballot sync is already running" if tier == lease.BALLOT_SYNC else None)
+
+        with (
+            patch("app.pipeline.lease.job_async", leases),
+            patch("app.pipeline.election_pipeline.SessionLocal", return_value=db_session),
+            patch("app.pipeline.election_pipeline.fetch_all_candidates", return_value=[]),
+            _mock_downstream_pipeline_phases(),
+            patch("app.pipeline.election_pipeline.utcnow", return_value=datetime(2026, 9, 27, 3)),  # a Sunday
+            patch(
+                "app.pipeline.election_pipeline.crawl_for_new_sources",
+                return_value={"NM": "adopted results", "WY": "none"},
+            ) as crawl,
+            patch("app.pipeline.election_pipeline.sync_confirmed_candidates") as nightly_sync,
+        ):
+            asyncio.run(election_pipeline.run_election_pipeline(2026))
+        crawl.assert_called_once()
+        nightly_sync.assert_not_called()
+        run = db_session.query(ElectionPipelineRun).order_by(ElectionPipelineRun.id.desc()).first()
+        step = next(s for s in json.loads(run.progress_detail) if "crawler" in (s.get("detail") or ""))
+        assert step["status"] == "skipped"
+        assert step["detail"] == "skipped: Ballot sync is already running; crawler adopted 1 this week: NM"
+
     def test_a_lease_that_cannot_be_taken_fails_only_its_phases(self, db_session):
         """Taking a step's lease can raise (the database): that fails the
         coverage/posting phases, and the run goes on to its snapshot and
