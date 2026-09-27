@@ -156,7 +156,12 @@ def _build(db: Session, disclosure: FinancialDisclosure, page: int, per_page: in
         ))
     elif category:
         listed = listed.filter(FinancialHolding.category == category)
-    total = listed.count()
+    # The cached breakdown already counted these (its OTHER takes unknown
+    # categories, as the filter above does): no COUNT query per page.
+    total = (
+        breakdown.holdings_count if not category
+        else next((c.count for c in breakdown.categories if c.category == category), 0)
+    )
     total_pages, page = paginate_bounds(total, page, per_page)
     # Largest first, by the same midpoint the chart uses; a holding with no
     # stated bracket sorts last rather than being dropped.

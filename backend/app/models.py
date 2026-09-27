@@ -557,15 +557,17 @@ class FinancialDisclosure(Base):
     filed_date: Mapped[str | None] = mapped_column(String, nullable=True)
     # The date the holdings describe (YYYY-MM-DD): the year end for an
     # annual report, the stated date for a Senate new-filer report, NULL
-    # for a Senate paper filing (it states none). With `amended` and
-    # filed_date, it is the report's rank among the member's filings
-    # (holdings_pipeline._rank), kept so a later run can compare against it
-    # even when the stored filing is missing from that run's index.
+    # for a Senate paper filing (it states none). With `amended`, `seq`,
+    # filed_date and filing_id it is the report's rank among the member's
+    # filings (holdings_pipeline._rank), kept so a later run can compare
+    # against it even when the stored filing is missing from that run's
+    # index.
     as_of_date: Mapped[str | None] = mapped_column(String, nullable=True)
     amended: Mapped[bool] = mapped_column(Boolean, default=False)
-    # Orders filings that tie on everything else — two amendments of one
-    # report filed the same day: the Senate title's amendment number, or
-    # the House's document id (issued in filing order).
+    # The House document id (ordering amendments before the filing date,
+    # which the index can inherit from the original) or the Senate title's
+    # amendment number (breaking a same-day tie only) — see
+    # holdings_pipeline._rank.
     seq: Mapped[int] = mapped_column(Integer, default=0)
     # The newest Senate filing made after this report whose date can't be
     # known — a paper filing (its page is page images) or one whose title

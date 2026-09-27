@@ -72,9 +72,14 @@ def is_senator_filing(filing: dict) -> bool:
     """True when the search row was filed in the senator's own capacity.
 
     The office cell reads "Baldwin, Tammy (Senator)" (electronic) or
-    "Senator" (paper); candidates read "Candidate (Candidate)". A candidate
-    sharing a sitting senator's surname would otherwise be matched to the
-    senator by name.
+    "Senator" (paper); candidates read "Candidate (Candidate)", and a
+    departed member "(Former Senator)". A candidate sharing a sitting
+    senator's surname would otherwise be matched to the senator by name.
+
+    This reads eFD's own filer-type vocabulary — the label its search form
+    filters by (SENATOR_FILER_TYPE) — the way fd_common reads a form's
+    asset-type codes: a data-format convention, not a classification of
+    free text (AGENTS.md principle 1's documented exception).
     """
     office = (filing.get("office") or "").lower()
     return "senator" in office and "former" not in office

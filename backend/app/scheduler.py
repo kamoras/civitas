@@ -219,8 +219,8 @@ def _hourly_action_refresh() -> None:
                     return
             if is_supplementary_pipeline_running():
                 supp_age = supplementary_pipeline_age()
-                # 8h, not stock's 2h: on its weekly SCOTUS-refresh day this
-                # pipeline includes the uncached per-case Oyez crawl, which
+                # 8h, not stock's shorter stock_trades_overrun_budget(): on
+                # its weekly SCOTUS-refresh day this pipeline includes the uncached per-case Oyez crawl, which
                 # can run 5h+ — a tight threshold would misfire as "hung"
                 # on a run that's just legitimately slow that day.
                 if _is_stale(supp_age, timedelta(hours=8)):
@@ -259,8 +259,8 @@ def _hourly_action_refresh() -> None:
                     )
                     send_ops_alert(
                         "Stock trades pipeline overrun",
-                        f"The stock trades pipeline has been running for {stock_age} "
-                        "(normal is under 2h) and is likely hung. The action center "
+                        f"The stock trades pipeline has been running for {stock_age}, past its "
+                        f"{stock_trades_overrun_budget()} budget, and is likely hung. The action center "
                         "is no longer waiting for it.",
                         dedupe_key=f"stock-overrun-{utcnow():%Y-%m-%d}",
                     )

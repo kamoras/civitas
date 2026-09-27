@@ -81,12 +81,14 @@ _YEARS_BACK = 2
 MIN_ATTEMPTS_FOR_OUTAGE = 5
 
 
-# (as-of date, precedence, seq, filed date, filing id) — newest first
-# when sorted descending.
-Rank = tuple[str, int, int, str, str]
+# (as-of date, precedence, seq or 0, filed date, 0 or seq, filing id) —
+# newest first when sorted descending; see _rank.
+Rank = tuple[str, int, int, str, int, str]
 
 
-def _rank(as_of: str | None, amended: bool, filed_date: str | None, seq: int, filing_id: str) -> Rank:
+def _rank(
+    as_of: str | None, amended: bool, filed_date: str | None, seq: int, filing_id: str, seq_before_date: bool,
+) -> Rank:
     """Where a report ranks among a member's filings. The date its holdings
     describe decides first — a year end, or a new-filer report's stated
     date, so an annual report outranks a same-year new-filer snapshot
@@ -94,15 +96,19 @@ def _rank(as_of: str | None, amended: bool, filed_date: str | None, seq: int, fi
     the original — always filed after it, so this holds even when a filing
     date didn't parse.
 
-    Among amendments, seq decides before the filing date: the Senate
-    title's amendment number, or the House document id. The House index
+    Among amendments, the House document id (seq) decides before the
+    filing date (seq_before_date): the House index
     often gives an amendment its original's filing date (2025: Chu, Johnson
     and five others list both on one day), while its document ids rise with
     filing order — every pair of 8-digit electronic ids with different
     filing dates in the 2025–26 indexes (31 of 31); the only exceptions
     mixed a 7-digit paper id with an 8-digit electronic one, where the id
-    only keeps the choice stable. The filing id last makes any remaining
-    tie resolve the same way every run, whatever order a search returns.
+    only keeps the choice stable. A Senate amendment's seq is the number in
+    its title, and there the filing date — reliable in the eFD search —
+    decides first: an unnumbered amendment has no number to compare, so the
+    number only breaks a same-day tie. The filing id last makes any
+    remaining tie resolve the same way every run, whatever order a search
+    returns.
 
     A report whose date isn't known (a Senate paper filing, or a title
     that states none) ranks below every dated one, and among those an
@@ -113,7 +119,8 @@ def _rank(as_of: str | None, amended: bool, filed_date: str | None, seq: int, fi
         precedence = 1 if amended else 0
     else:
         precedence = 0 if amended else 1
-    return (as_of or "", precedence, seq, filed_date or "", filing_id)
+    first, second = (seq, 0) if seq_before_date else (0, seq)
+    return (as_of or "", precedence, first, filed_date or "", second, filing_id)
 
 
 @dataclass
@@ -127,10 +134,11 @@ class _Stored:
     report_label: str
     as_of_date: str | None
     seq: int
+    seq_before_date: bool
 
     @property
     def rank(self) -> Rank:
-        return _rank(self.as_of_date, self.amended, self.filed_date, self.seq, self.filing_id)
+        return _rank(self.as_of_date, self.amended, self.filed_date, self.seq, self.filing_id, self.seq_before_date)
 
     def rank_fields(self) -> dict:
         """What the stored row knows that decides its rank and its label."""
@@ -140,7 +148,7 @@ class _Stored:
         }
 
 
-def _stored_reports(db: Session, column) -> dict[str, _Stored]:
+def _stored_reports(db: Session, column, seq_before_date: bool) -> dict[str, _Stored]:
     rows = (
         db.query(
             column, FinancialDisclosure.filing_id, FinancialDisclosure.parser_version,
@@ -152,7 +160,7 @@ def _stored_reports(db: Session, column) -> dict[str, _Stored]:
         .filter(column.isnot(None))
         .group_by(FinancialDisclosure.id)
     )
-    return {owner_id: _Stored(*rest) for owner_id, *rest in rows.all()}
+    return {owner_id: _Stored(*rest, seq_before_date) for owner_id, *rest in rows.all()}
 
 
 def _is_current(stored: _Stored | None, filing_id: str, parser_version: int) -> bool:
@@ -235,8 +243,11 @@ def _replace_disclosure(
     # tonight's search may not have the row to rebuild it from.
     carried = next((row for row in old if _filed_after(row.later_filing_filed, filed_date)), None)
     if old_ids:
-        # "fetch": anything already loaded is dropped from the session too,
-        # so a reused id can't collide with a stale object.
+        # "fetch", not False: the session can hold these rows as objects
+        # (_note_later_filing loads disclosures; so can a caller), and SQLite
+        # reuses a deleted row's id — a stale object left in the identity map
+        # would collide with the new row (SQLAlchemy warns "Identity map
+        # already had an identity", seen when this was False).
         db.query(FinancialHolding).filter(FinancialHolding.disclosure_id.in_(old_ids)).delete(
             synchronize_session="fetch",
         )
@@ -444,6 +455,7 @@ class _Chamber:
     # the stored row can't disagree.
     fields: Callable[[dict], dict]
     date_key: str  # the filing row's filing-date key
+    seq_before_date: bool  # see _rank
     still_loads: Callable[[str], Awaitable[bool]]
 
 
@@ -451,7 +463,7 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
     """Store each member's newest report from their candidate filings.
     Returns holdings stored."""
     owner_column = getattr(FinancialDisclosure, chamber.owner_key)
-    stored = _stored_reports(db, owner_column)
+    stored = _stored_reports(db, owner_column, chamber.seq_before_date)
     health = _SourceHealth(chamber.source)
     deadline = time.monotonic() + FETCH_BUDGET.total_seconds()
     inserted = 0
@@ -462,7 +474,8 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
         out_of_time = False
         fields = {chamber.filing_id(f): chamber.fields(f) for f in per_member[member_id]}
         ranks = {
-            fid: _rank(v["as_of_date"], v["amended"], v["filed_date"], v["seq"], fid) for fid, v in fields.items()
+            fid: _rank(v["as_of_date"], v["amended"], v["filed_date"], v["seq"], fid, chamber.seq_before_date)
+            for fid, v in fields.items()
         }
         if mine is not None and mine.filing_id in fields:
             own = next(f for f in per_member[member_id] if chamber.filing_id(f) == mine.filing_id)
@@ -478,6 +491,7 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
             fields[mine.filing_id] = merged
             ranks[mine.filing_id] = _rank(
                 merged["as_of_date"], merged["amended"], merged["filed_date"], merged["seq"], mine.filing_id,
+                chamber.seq_before_date,
             )
             repair = {k: merged[k] for k, v in mine.rank_fields().items() if merged[k] != v}
             if repair:
@@ -604,6 +618,7 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
         fetch=lambda f, deadline: fetch_house_annual(client, db, f, deadline=deadline),
         owner=_house_owner,
         date_key="filing_date",
+        seq_before_date=True,
         fields=lambda f: {
             "report_label": _house_report_label(f),
             "filed_date": f.get("filing_date") or None,
@@ -704,8 +719,8 @@ def _senate_fields(filing: dict) -> dict:
         "source_url": filing["report_url"],
         "as_of_date": as_of,
         "amended": amended,
-        # "(Amendment 2)" after "(Amendment 1)"; an unnumbered one (paper)
-        # has no number to compare, and the filing date decides.
+        # "(Amendment 2)" after "(Amendment 1)" — a same-day tiebreak only
+        # (see _rank); an unnumbered one has none.
         "seq": int(m.group(1)) if (m := _AMENDMENT_NO_RE.search(title)) else 0,
     }
 
@@ -800,6 +815,7 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
         fetch=lambda f, deadline: _fetch_senate(client, db, f, deadline),
         owner=lambda f, report: _MEMBERS,  # the search is filtered to senators' own filings
         date_key="filed_date",
+        seq_before_date=False,
         fields=_senate_fields,
         still_loads=lambda url: _senate_probe(client, url),
     )
@@ -831,13 +847,15 @@ async def run_holdings_phases(
     deliberately don't decide the stock-trades run's status (see
     stock_pipeline), so without it a holdings outage would go unseen.
     """
+    # Keyed by step, so the pairing can't drift with HOLDINGS_STEPS' order.
+    phases = {
+        "house_holdings": ("House holdings", ingest_house_holdings),
+        "senate_holdings": ("Senate holdings", ingest_senate_holdings),
+    }
     counts = {step: 0 for step, _, _ in HOLDINGS_STEPS}
     errors: list[str] = []
-    for (step, _, _), label, ingest in zip(
-        HOLDINGS_STEPS,
-        ("House holdings", "Senate holdings"),
-        (ingest_house_holdings, ingest_senate_holdings),
-    ):
+    for step, _, _ in HOLDINGS_STEPS:
+        label, ingest = phases[step]
         progress.begin(step)
         try:
             counts[step] = await ingest(db, client)

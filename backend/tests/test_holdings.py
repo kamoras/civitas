@@ -581,7 +581,7 @@ class TestSenateRankingByStatedYear:
         electronic = _senate_filing("e", title="Annual Report for CY 2024", filed="2025-05-11")
         paper = _senate_filing("p", title="Annual Report", filed="2025-12-01", paper=True)
         rank = lambda f: holdings_pipeline._rank(  # noqa: E731
-            holdings_pipeline._senate_as_of(f), False, f["filed_date"], 0, f["report_url"],
+            holdings_pipeline._senate_as_of(f), False, f["filed_date"], 0, f["report_url"], False,
         )
         assert rank(electronic) > rank(paper)
 
@@ -1587,3 +1587,33 @@ class TestAmendmentOrderSignals:
         first = db_session.query(FinancialDisclosure).one().filing_id
         await _ingest_senate(db_session, [y, x], {})
         assert db_session.query(FinancialDisclosure).one().filing_id == first
+
+
+class TestSenateAmendmentDates:
+    async def test_a_later_unnumbered_amendment_beats_an_earlier_numbered_one(self, db_session, senator):
+        numbered = _senate_filing("a1", title="Annual Report for CY 2025 (Amendment 1)", filed="2026-06-01")
+        unnumbered = _senate_filing("a", title="Annual Report for CY 2025 (Amendment)", filed="2026-08-01")
+        await _ingest_senate(db_session, [numbered, unnumbered], {"a1": [_row()], "a": [_row()]})
+        assert db_session.query(FinancialDisclosure).one().filing_id == "a"
+
+
+class TestPhaseTable:
+    async def test_each_step_runs_its_own_ingest_whatever_the_order(self):
+        from unittest.mock import MagicMock
+
+        calls = []
+
+        async def house(_db, _client):
+            calls.append("house")
+            return 1
+
+        async def senate(_db, _client):
+            calls.append("senate")
+            return 2
+
+        steps = list(reversed(holdings_pipeline.HOLDINGS_STEPS))
+        with patch.object(holdings_pipeline, "HOLDINGS_STEPS", steps), \
+             patch.object(holdings_pipeline, "ingest_house_holdings", house), \
+             patch.object(holdings_pipeline, "ingest_senate_holdings", senate):
+            counts, errors = await holdings_pipeline.run_holdings_phases(MagicMock(), None, MagicMock())
+        assert (calls, counts, errors) == (["senate", "house"], {"senate_holdings": 2, "house_holdings": 1}, [])
