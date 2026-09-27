@@ -224,6 +224,17 @@ class TestSenateAssetsTable:
         assert income.asset_type == "Mutual Funds — Mutual Fund"
         assert income.owner == "joint"
 
+    def test_a_deeply_nested_asset_names_every_enclosing_account(self):
+        page = _SENATE_PAGE.replace(
+            '<tr><td>2.2</td>',
+            '<tr><td>2.1.1</td><td><strong>Index Sleeve</strong></td><td>Mutual Funds<div class="muted">Mutual Fund'
+            '</div></td><td>Joint</td><td>$1,001 - $15,000</td><td></td><td></td></tr><tr><td>2.2</td>',
+        )
+        by_name = {h.asset_name: h for h in parse_assets_table(page)}
+        assert "Income Portfolio" not in by_name  # now itself a container
+        assert by_name["Index Sleeve"].account == "CollegeInvest Fund ⇒ Income Portfolio"
+        assert by_name["Old Portfolio"].account == "CollegeInvest Fund"
+
     def test_values_types_and_owners(self):
         by_name = {h.asset_name: h for h in parse_assets_table(_SENATE_PAGE)}
         assert (by_name["Truist"].category, by_name["Truist"].owner) == ("CASH", "spouse")

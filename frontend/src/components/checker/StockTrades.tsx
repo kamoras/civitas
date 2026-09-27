@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect } from "react";
 import { PaginatedStockTrades, StockTrade } from "@/types/senator";
 import { fetchPresidentStockTrades, fetchRepStockTrades, fetchSenatorStockTrades } from "@/lib/api";
 import CollapsibleSection from "../shared/CollapsibleSection";
 import Pagination from "../shared/Pagination";
 import MetricTooltip from "./MetricTooltip";
 import { formatBracket, OWNER_LABEL } from "@/lib/disclosures";
+import { useLatestRequest } from "@/hooks/useLatestRequest";
 
 const TRADES_PER_PAGE = 15;
 
@@ -124,29 +125,13 @@ const ABOUT_DATA = {
 } as const;
 
 export default function StockTrades({ politicianId, filer = "senate" }: StockTradesProps) {
-  const [data, setData] = useState<PaginatedStockTrades | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // Only the newest request may land: two quick page clicks can resolve
-  // out of order, and the older page must not overwrite the newer one.
-  const requestSeq = useRef(0);
+  const { data, loading, error, request } = useLatestRequest<PaginatedStockTrades, null>(
+    null, "Failed to load stock trades",
+  );
 
   const fetchPage = useCallback(
-    async (p: number) => {
-      const seq = ++requestSeq.current;
-      setLoading(true);
-      setError(null);
-      try {
-        const result = await FETCHER[filer](politicianId, { page: p, perPage: TRADES_PER_PAGE });
-        if (seq === requestSeq.current) setData(result);
-      } catch (e) {
-        if (seq === requestSeq.current) setError(e instanceof Error ? e.message : "Failed to load stock trades");
-      } finally {
-        if (seq === requestSeq.current) setLoading(false);
-      }
-    },
-    [politicianId, filer]
+    (p: number) => request(null, () => FETCHER[filer](politicianId, { page: p, perPage: TRADES_PER_PAGE })),
+    [request, politicianId, filer]
   );
 
   useEffect(() => {

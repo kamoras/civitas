@@ -18,6 +18,7 @@ means one cache.
 import threading
 from collections import OrderedDict
 from dataclasses import dataclass
+from typing import get_args
 from datetime import datetime
 
 from sqlalchemy import case, func, or_
@@ -44,6 +45,12 @@ def _category_key(category: str | None) -> str:
     return category if category in HOLDING_CATEGORIES else "OTHER"
 
 
+# HoldingSchema.owner's values. A stored value outside them (a row written by
+# another image's parser) reads as not stated, rather than failing the whole
+# member's response.
+_OWNERS = set(get_args(HoldingSchema.model_fields["owner"].annotation))
+
+
 def _to_schema(h: FinancialHolding) -> HoldingSchema:
     category = _category_key(h.category)
     return HoldingSchema(
@@ -53,7 +60,7 @@ def _to_schema(h: FinancialHolding) -> HoldingSchema:
         asset_type=h.asset_type,
         category=category,
         category_label=HOLDING_CATEGORIES[category]["label"],
-        owner=h.owner,
+        owner=h.owner if h.owner in _OWNERS else "unknown",
         value_text=h.value_text,
         value_low=h.value_low,
         value_high=h.value_high,

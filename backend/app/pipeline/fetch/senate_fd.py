@@ -241,16 +241,20 @@ def parse_assets_table(page) -> list[HoldingRow] | None:
         )))
 
     names = {number: row.asset_name for number, row in raw}
+    # An account whose underlying assets are itemized ("3" with "3.1",
+    # "3.2" ...) is a container: counting its own row as well would
+    # double-count whatever value it states.
+    containers = {number.rsplit(".", 1)[0] for number, _ in raw if "." in number}
     holdings: list[HoldingRow] = []
     for number, row in raw:
-        # An account whose underlying assets are itemized ("3" with "3.1",
-        # "3.2" ...) is a container: counting its own row as well would
-        # double-count whatever value it states.
-        if number and any(other.startswith(number + ".") for other, _ in raw):
+        if number in containers:
             continue
-        parent = number.rsplit(".", 1)[0] if "." in number else None
-        if parent:
-            row.account = names.get(parent)
+        # Every enclosing account, outermost first ("IRA ⇒ Brokerage"), as
+        # the House form writes a nested asset's accounts.
+        parts = number.split(".")
+        chain = [names.get(".".join(parts[:i])) for i in range(1, len(parts))]
+        if any(chain):
+            row.account = " ⇒ ".join(name for name in chain if name)
         holdings.append(row)
     return holdings
 

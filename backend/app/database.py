@@ -1027,6 +1027,10 @@ def reset_all_data() -> dict:
             models.RepCampaignPromise,
             models.RepSponsoredBill,
             models.RepStockTrade,
+            # Annual-report holdings, child then parent, before the members
+            # they belong to.
+            models.FinancialHolding,
+            models.FinancialDisclosure,
             # Before models.President below — the delete order here is
             # child-then-parent throughout, and a president row's cascade
             # would otherwise take these with it uncounted.

@@ -1,6 +1,7 @@
 """Tests for holdings_pipeline (which report is kept per member) and the
 holdings read path (holdings_service + the two API routes)."""
 
+import time
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -324,6 +325,10 @@ class TestHoldingsService:
         result = get_senator_holdings(db_session, "S1")
         assert result.available is False
         assert result.categories == [] and result.holdings == []
+
+    def test_a_stored_owner_the_schema_lacks_reads_as_not_stated(self, db_session, senator):
+        _store(db_session, [_h("Trust asset", "OTHER", 1001.0, 15000.0, owner="trust")], senator_id="S1")
+        assert get_senator_holdings(db_session, "S1").holdings[0].owner == "unknown"
 
     def test_breakdown_shares_and_disclosed_sums(self, db_session, senator):
         _store(db_session, [
@@ -1741,15 +1746,44 @@ class TestDuplicateRows:
         from app.pipeline.fetch import senate_ptr
 
         by_id: dict = {}
-        unparsed: set = set()
+        unparsed: dict = {}
         page = [{"url": "a"}, {"url": "b"}, {"url": None, "n": 1}]
         with patch.object(senate_ptr, "_parse_search_row",
                           side_effect=lambda r: {"report_url": f"https://e/view/annual/{r['url']}/"} if r["url"] else None):
             senate_ptr._collect_rows(by_id, unparsed, page)
             senate_ptr._collect_rows(by_id, unparsed, [{"url": "b"}, {"url": "c"}, {"url": None, "n": 1}])
-        assert (sorted(by_id), len(unparsed)) == (["a", "b", "c"], 1)
+        assert (sorted(by_id), sum(unparsed.values())) == (["a", "b", "c"], 1)
+
+    def test_identical_unparsed_rows_on_one_page_are_two_rows(self):
+        from app.pipeline.fetch import senate_ptr
+
+        by_id: dict = {}
+        unparsed: dict = {}
+        bad = {"url": None}
+        with patch.object(senate_ptr, "_parse_search_row", return_value=None):
+            senate_ptr._collect_rows(by_id, unparsed, [bad, dict(bad)])
+            senate_ptr._collect_rows(by_id, unparsed, [dict(bad)])  # a repeat on the next page
+        assert sum(unparsed.values()) == 2
 
     async def test_a_house_document_listed_twice_is_fetched_once(self, db_session, rep):
         filing = _house_filing("10078188")
         _, fetch = await _ingest_house(db_session, {2025: [filing, dict(filing)]}, {})
         assert fetch.call_count == 1
+
+
+class TestUntilDeadline:
+    async def test_the_steps_own_timeout_is_an_error_not_a_cut_off(self):
+        from app.pipeline.fetch.fd_common import until_deadline
+
+        async def step():
+            raise TimeoutError("socket read timed out")
+
+        with pytest.raises(TimeoutError, match="socket read"):
+            await until_deadline(step(), time.monotonic() + 60)
+
+    async def test_a_step_past_the_deadline_is_cut_off(self):
+        import asyncio
+
+        from app.pipeline.fetch.fd_common import until_deadline
+
+        assert await until_deadline(asyncio.sleep(5, result="late"), time.monotonic() + 0.01) is None

@@ -30,3 +30,19 @@ class TestResetAllDataVectorStoreSummary:
             summary = reset_all_data()
         assert summary["vector_db_error"] == "reset failed — see server logs"
         assert "vector_db_collections" not in summary
+
+
+class TestResetAllDataTables:
+    def test_clears_annual_report_holdings(self, db_session, monkeypatch):
+        db_session.add(models.Senator(id="S1", name="A Senator", state="TX", party="R"))
+        disclosure = models.FinancialDisclosure(
+            senator_id="S1", filing_id="f", report_label="2025 annual report", source_url="u", parsed=True,
+        )
+        disclosure.holdings.append(models.FinancialHolding(asset_name="Apple", category="STOCKS", value_text="x"))
+        db_session.add(disclosure)
+        db_session.commit()
+        monkeypatch.setattr("app.database.SessionLocal", lambda: db_session)
+        with patch("app.pipeline.vector_store.reset_vector_db"):
+            reset_all_data()
+        assert db_session.query(models.FinancialDisclosure).count() == 0
+        assert db_session.query(models.FinancialHolding).count() == 0

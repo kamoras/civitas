@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Holding, HoldingCategory, Holdings as HoldingsData } from "@/types/senator";
 import { fetchRepHoldings, fetchSenatorHoldings } from "@/lib/api";
 import { formatCurrency } from "@/lib/formatting";
@@ -8,6 +8,7 @@ import CollapsibleSection from "../shared/CollapsibleSection";
 import Pagination from "../shared/Pagination";
 import MetricTooltip from "./MetricTooltip";
 import { asOfPhrase, formatBracket, OWNER_LABEL } from "@/lib/disclosures";
+import { useLatestRequest } from "@/hooks/useLatestRequest";
 
 const HOLDINGS_PER_PAGE = 15;
 
@@ -234,46 +235,19 @@ interface HoldingsProps {
 }
 
 export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps) {
-  const [data, setData] = useState<HoldingsData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
-  // Only the newest request may land: a slow page-1 response arriving after
-  // a later category click would otherwise overwrite the filtered list.
-  const requestSeq = useRef(0);
-
-  // The category most recently asked for — what a click toggles against,
-  // so a second click on a row whose request is still in flight clears it
-  // rather than asking for it again. Reset to the shown category if that
-  // request fails.
-  const [requested, setRequested] = useState<string | null>(null);
-  // The category of the data on screen, for that failure path (which can't
-  // see a render's `data`).
-  const shown = useRef<string | null>(null);
+  // `requested` is the category most recently asked for — what a click
+  // toggles against, so a second click on a row whose request is still in
+  // flight clears it rather than asking for it again.
+  const { data, loading, error, requested, request } = useLatestRequest<HoldingsData, string | null>(
+    null, "Failed to load holdings",
+  );
 
   const load = useCallback(
-    async (page: number, cat: string | null) => {
-      const seq = ++requestSeq.current;
-      setRequested(cat);
-      setLoading(true);
-      setError(null);
-      try {
-        const result = await FETCHER[chamber](memberId, { page, perPage: HOLDINGS_PER_PAGE, category: cat });
-        if (seq === requestSeq.current) {
-          setData(result);
-          shown.current = result.categoryFilter;
-        }
-      } catch (e) {
-        if (seq === requestSeq.current) {
-          setError(e instanceof Error ? e.message : "Failed to load holdings");
-          setRequested(shown.current);
-        }
-      } finally {
-        if (seq === requestSeq.current) setLoading(false);
-      }
-    },
-    [memberId, chamber]
+    (page: number, cat: string | null) =>
+      request(cat, () => FETCHER[chamber](memberId, { page, perPage: HOLDINGS_PER_PAGE, category: cat })),
+    [request, memberId, chamber]
   );
 
   useEffect(() => {

@@ -321,7 +321,11 @@ class _Outcome:
 
     Only live requests count — a parse-cache hit or a paper filing that is
     never fetched proves nothing about the source (AnnualReport.live).
-    `attempted`: a live request was made. `fetched`: one returned a report.
+    `attempted`: a live request was made. `fetched`: one returned a report
+    the parser finished with. A crashed read doesn't count: a garbled answer
+    from a failing source crashes the parser too, and one must not hide an
+    outage. When the source was in fact serving, the live probe of stored
+    reports (_SourceHealth.check) finds it up and the phase passes.
     """
 
     def __init__(self) -> None:
@@ -440,9 +444,7 @@ async def _within(step: Awaitable[T], budget: timedelta, what: str) -> T:
     started = time.monotonic()
     result = await until_deadline(step, started + budget.total_seconds())
     if result is None:  # the steps it bounds return collections, never None
-        if time.monotonic() - started >= budget.total_seconds():
-            raise RuntimeError(f"{what} took longer than {budget}")
-        raise RuntimeError(f"{what} timed out")
+        raise RuntimeError(f"{what} took longer than {budget}")
     return result
 
 

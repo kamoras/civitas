@@ -301,7 +301,7 @@ async def _page_through(page, responses: list) -> tuple[list[dict], int, int]:
     parsed filings, how many distinct rows were seen (parsed or not), and
     recordsTotal."""
     by_id: dict[str, dict] = {}
-    unparsed: set[str] = set()
+    unparsed: dict[str, int] = {}
     total = 0
     for _ in range(_MAX_PAGES):
         try:
@@ -312,7 +312,7 @@ async def _page_through(page, responses: list) -> tuple[list[dict], int, int]:
 
         total = payload.get("recordsTotal", 0)
         _collect_rows(by_id, unparsed, payload.get("data", []))
-        if len(by_id) + len(unparsed) >= total:
+        if len(by_id) + sum(unparsed.values()) >= total:
             break
 
         next_el = page.get_by_text("Next", exact=True)
@@ -322,20 +322,25 @@ async def _page_through(page, responses: list) -> tuple[list[dict], int, int]:
         await _click(next_el)
         if not await _wait_until(lambda: len(responses) > before):
             break
-    return list(by_id.values()), len(by_id) + len(unparsed), total
+    return list(by_id.values()), len(by_id) + sum(unparsed.values()), total
 
 
-def _collect_rows(by_id: dict[str, dict], unparsed: set[str], rows: list) -> None:
-    """Add a results page's rows to `by_id`, keyed by filing, and the rows
-    that don't parse to `unparsed`, keyed by their content — a row can
+def _collect_rows(by_id: dict[str, dict], unparsed: dict[str, int], rows: list) -> None:
+    """Add a results page's rows to `by_id`, keyed by filing, and count the
+    rows that don't parse in `unparsed`, keyed by their content — a row can
     reappear on a later page (see _scrape_via_page), and counted twice it
-    would end paging before every row was seen. The first sighting is kept."""
+    would end paging before every row was seen. So each distinct content
+    counts as often as one page shows it, not once per page: two identical
+    rows on one page are two rows. The first sighting of a filing is kept."""
+    on_page: dict[str, int] = {}
     for row in rows:
         parsed = _parse_search_row(row)
         if parsed is None:
-            unparsed.add(repr(row))
+            on_page[repr(row)] = on_page.get(repr(row), 0) + 1
         else:
             by_id.setdefault(senate_filing_id(parsed["report_url"]), parsed)
+    for key, count in on_page.items():
+        unparsed[key] = max(unparsed.get(key, 0), count)
 
 
 def senate_filing_id(report_url: str) -> str:

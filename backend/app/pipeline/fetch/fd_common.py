@@ -337,14 +337,17 @@ _CRASH_MEMORY_HOURS = 72
 async def until_deadline(step, deadline: float | None):
     """Await `step`, cut off at `deadline` (time.monotonic()) — None when it
     was cut off, or when it returned None. The one rule for how a holdings
-    fetch in flight at the budget's end is stopped; no deadline, no limit."""
+    fetch in flight at the budget's end is stopped; no deadline, no limit.
+    A TimeoutError the step raises itself is its own error, not a cut-off,
+    and propagates like any other."""
     if deadline is None:
         return await step
+    limit = asyncio.timeout(max(deadline - time.monotonic(), 0.001))
     try:
-        return await asyncio.wait_for(step, max(deadline - time.monotonic(), 0.001))
+        async with limit:
+            return await step
     except TimeoutError:
-        if time.monotonic() >= deadline:
-            logger.info("Holdings: a request in flight was cut off at the time budget")
-        else:
-            logger.warning("Holdings: a request timed out before the time budget")
+        if not limit.expired():
+            raise
+        logger.info("Holdings: a request in flight was cut off at the time budget")
         return None

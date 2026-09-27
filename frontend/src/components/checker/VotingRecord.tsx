@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   KeyVote,
   PaginatedVotes,
@@ -13,6 +13,7 @@ import CollapsibleSection from "../shared/CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
 import { PARTY_BADGE, policyAreaBadgeClass } from "@/lib/partyStyles";
 import Pagination from "@/components/shared/Pagination";
+import { useLatestRequest } from "@/hooks/useLatestRequest";
 
 const VOTES_PER_PAGE = 15;
 
@@ -262,41 +263,18 @@ function PaginatedVoteList({
   voteCount: number;
   chamber?: "senate" | "house";
 }) {
-  const [filter, setFilter] = useState<VoteFilterType>("all");
-  const [data, setData] = useState<PaginatedVotes | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // Only the latest request may update the list: a slow response to an
-  // earlier filter or page click must not replace a later one's.
-  const requestSeq = useRef(0);
-  // The filter of the votes on screen; `filter` is the one last asked for.
-  const [shownFilter, setShownFilter] = useState<VoteFilterType>("all");
+  // `filter` is the one last asked for, `shownFilter` the one the votes on
+  // screen were fetched with.
+  const {
+    data, loading, error, requested: filter, shown: shownFilter, request,
+  } = useLatestRequest<PaginatedVotes, VoteFilterType>("all", "Failed to load votes");
 
   const fetchVotes = useCallback(
-    async (p: number, f: VoteFilterType) => {
-      const seq = ++requestSeq.current;
-      setFilter(f);
-      setLoading(true);
-      setError(null);
-      try {
-        const fetcher = chamber === "house" ? fetchRepVotes : fetchSenatorVotes;
-        const result = await fetcher(senatorId, {
-          category,
-          page: p,
-          perPage: VOTES_PER_PAGE,
-          filter: f,
-        });
-        if (seq !== requestSeq.current) return;
-        setShownFilter(f);
-        setData(result);
-      } catch (e) {
-        if (seq !== requestSeq.current) return;
-        setError(e instanceof Error ? e.message : "Failed to load votes");
-      } finally {
-        if (seq === requestSeq.current) setLoading(false);
-      }
+    (p: number, f: VoteFilterType) => {
+      const fetcher = chamber === "house" ? fetchRepVotes : fetchSenatorVotes;
+      request(f, () => fetcher(senatorId, { category, page: p, perPage: VOTES_PER_PAGE, filter: f }));
     },
-    [senatorId, category, chamber]
+    [request, senatorId, category, chamber]
   );
 
   useEffect(() => {
@@ -334,9 +312,6 @@ function PaginatedVoteList({
   if (!data) return null;
 
   const counts: VoteCounts = data.counts;
-  // While a request is out the buttons show what was asked for; once it
-  // settles, what is on screen (a failed change leaves the old list).
-  const activeFilter = loading ? filter : shownFilter;
 
   return (
     <div className={loading ? "opacity-60 transition-opacity" : ""}>
@@ -344,26 +319,26 @@ function PaginatedVoteList({
         <div className="flex items-center gap-1.5 mb-3 flex-wrap">
           <VoteFilter
             label="ALL"
-            active={activeFilter === "all"}
+            active={filter === "all"}
             count={counts.all}
             onClick={() => handleFilterChange("all")}
           />
           <VoteFilter
             label="YEA"
-            active={activeFilter === "yea"}
+            active={filter === "yea"}
             count={counts.yea}
             onClick={() => handleFilterChange("yea")}
           />
           <VoteFilter
             label="NAY"
-            active={activeFilter === "nay"}
+            active={filter === "nay"}
             count={counts.nay}
             onClick={() => handleFilterChange("nay")}
           />
           {counts.againstParty > 0 && (
             <VoteFilter
               label="AGAINST PARTY"
-              active={activeFilter === "against-party"}
+              active={filter === "against-party"}
               count={counts.againstParty}
               onClick={() => handleFilterChange("against-party")}
             />
