@@ -1642,3 +1642,29 @@ class TestNoteAndPhaseEdges:
              patch.object(holdings_pipeline, "_alert"):
             counts, errors = await holdings_pipeline.run_holdings_phases(MagicMock(), None, MagicMock())
         assert counts["house_holdings"] == 1 and len(errors) == 1 and "president_holdings" in errors[0]
+
+
+class TestIndexAndMatchEdges:
+    async def test_last_years_index_failing_to_load_fails_the_phase(self, db_session, rep):
+        async def index(_client, _db, year):
+            return None if year == 2025 else [_house_filing("OLD", year=2024)]
+
+        with patch.object(holdings_pipeline, "fetch_annual_filing_index", side_effect=index), \
+             patch.object(holdings_pipeline, "utcnow") as now:
+            now.return_value.year = 2026
+            with pytest.raises(RuntimeError, match="2025 could not be loaded"):
+                await holdings_pipeline.ingest_house_holdings(db_session, None)
+        assert db_session.query(FinancialDisclosure).count() == 0
+
+    async def test_a_predecessors_filing_is_not_a_new_members(self, db_session):
+        db_session.add(Representative(id="R1", name="Jane Doe", state="TX", district=1, party="R", is_current=True))
+        db_session.commit()
+        index = {2024: [_house_filing("JOHN", year=2024, first="John")]}
+        count, fetch = await _ingest_house(db_session, index, {"JOHN": AnnualReport("Member", [_row()])})
+        assert (count, fetch.call_count) == (0, 0)
+
+    async def test_an_undated_filing_the_same_day_is_named(self, db_session, senator):
+        e2025 = _senate_filing("e2025", filed="2026-05-15")
+        paper = _senate_filing("p", title="Annual Report (Amendment)", filed="2026-05-15", office="Senator", paper=True)
+        await _ingest_senate(db_session, [e2025, paper], {"e2025": [_row()]})
+        assert db_session.query(FinancialDisclosure).one().later_filing_url == paper["report_url"]

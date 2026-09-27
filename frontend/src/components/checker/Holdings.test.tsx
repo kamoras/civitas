@@ -165,7 +165,7 @@ describe("Holdings", () => {
       laterFilingLabel: "annual report filed 2026-08-12", laterFilingUrl: "https://efd.example/paper/x/",
     }));
     render(<Holdings memberId="S1" />);
-    expect(await screen.findByText(/Also filed after this report: the annual report filed 2026-08-12/))
+    expect(await screen.findByText(/Also filed, on or after this report.s filing date: the annual report filed 2026-08-12/))
       .toBeInTheDocument();
     expect(screen.getByRole("link", { name: /VIEW THAT FILING/ })).toHaveAttribute("href", "https://efd.example/paper/x/");
   });

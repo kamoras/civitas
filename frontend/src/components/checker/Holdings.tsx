@@ -30,14 +30,6 @@ function formatHoldingValue(h: Holding, when: string): string {
   return formatBracket(h.valueLow, h.valueHigh, h.valueOpenEnded);
 }
 
-/** A summed range, compact. If any holding in the sum used the open-ended
- * top bracket, the sum has no ceiling at all — its upper figure includes a
- * placeholder — so only the floor is shown, as "$X+" (the rule every
- * disclosure figure follows; see formatBracket). */
-function formatRangeCompact(low: number, high: number, openEnded: boolean): string {
-  return formatBracket(low, high, openEnded, formatCurrency);
-}
-
 function formatShare(share: number): string {
   if (share > 0 && share < 0.01) return "<1%";
   return `${Math.round(share * 100)}%`;
@@ -147,7 +139,7 @@ function HoldingsDonut({
             <span className="text-ink-hi text-xl font-mono">{formatShare(focus.share)}</span>
             <span className="text-ink text-xs leading-tight">{focus.label}</span>
             <span className="text-ink-min text-[11px] font-mono mt-0.5">
-              {formatRangeCompact(focus.valueLow, focus.valueHigh, focus.openEnded)}
+              {formatBracket(focus.valueLow, focus.valueHigh, focus.openEnded, formatCurrency)}
             </span>
           </>
         ) : (
@@ -167,7 +159,7 @@ function HoldingsDonut({
  * ("Undetermined"). The two are different disclosures and are named apart. */
 function legendDetail(c: HoldingCategory, when: string): string {
   const parts = [`${c.count} asset${c.count !== 1 ? "s" : ""}`];
-  parts.push(c.weight > 0 ? formatRangeCompact(c.valueLow, c.valueHigh, c.openEnded) : "not charted");
+  parts.push(c.weight > 0 ? formatBracket(c.valueLow, c.valueHigh, c.openEnded, formatCurrency) : "not charted");
   if (c.zeroValueCount > 0) parts.push(`${c.zeroValueCount} none ${when}`);
   if (c.unvaluedCount > 0) parts.push(`${c.unvaluedCount} no value stated`);
   return parts.join(" · ");
@@ -382,7 +374,7 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
           />
         </div>
         <p className="text-xs text-ink-min mt-3">
-          Disclosed value {formatRangeCompact(data.totalLow, data.totalHigh, data.totalOpenEnded)} across{" "}
+          Disclosed value {formatBracket(data.totalLow, data.totalHigh, data.totalOpenEnded, formatCurrency)} across{" "}
           {data.holdingsCount} asset{data.holdingsCount !== 1 ? "s" : ""}
           {data.unvaluedCount > 0 && ` (${data.unvaluedCount} with no stated value, not charted)`} ·{" "}
           {reportLabel}
@@ -414,7 +406,8 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
           {chart}
           {data.laterFilingUrl && (
             <p className="text-xs text-ink-lo mt-2">
-              Also filed after this report: the {data.laterFilingLabel ?? "later filing"}. It states no
+              Also filed, on or after this report&apos;s filing date: the{" "}
+              {data.laterFilingLabel ?? "later filing"}. It states no
               date its holdings describe that can be read here, so it can&apos;t be placed against this
               one, and this section stays with the {reportLabel}.{" "}
               <a

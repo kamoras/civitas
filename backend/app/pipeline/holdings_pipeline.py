@@ -593,6 +593,10 @@ async def _house_candidates(db: Session, client: httpx.AsyncClient) -> dict[str,
     indexed = 0
     for year in range(current_year - 1, current_year - 1 - _YEARS_BACK, -1):
         filings = await fetch_annual_filing_index(client, db, year)
+        if filings is None:
+            # Not an empty year: without it, a member's older report would
+            # pass for their newest — and nothing fetched would look wrong.
+            raise RuntimeError(f"House annual-report index for {year} could not be loaded")
         indexed += len(filings)
         for filing in filings:
             if (rep_id := match(filing["last"], filing["first"], filing["state_district"])) is not None:
@@ -668,9 +672,9 @@ def _write_notes(db: Session, per_senator: dict[str, list[dict]]) -> None:
         db.rollback()
         _alert(
             "Senate holdings notes not updated",
-            "Tonight's Senate holdings phase stored its reports but could not update the notes that "
-            "name an undated filing made after a senator's shown report, so some may be stale or missing "
-            "— see the server logs for the cause.",
+            "Tonight's Senate holdings phase could not update the notes that name an undated filing "
+            "made after a senator's shown report, so some may be stale or missing — see the server "
+            "logs for the cause. (Any reports it stored before then are kept.)",
             dedupe_key=f"senate-holdings-notes-{utcnow():%Y-%m-%d}",
         )
 
@@ -694,7 +698,10 @@ def _note_later_filing(db: Session, per_senator: dict[str, list[dict]]) -> None:
             f for f in per_senator[disclosure.senator_id]
             if not _senate_as_of(f)
             and senate_filing_id(f["report_url"]) != disclosure.filing_id
-            and _filed_after(f.get("filed_date"), disclosure.filed_date)
+            # On the same day counts: an undated amendment filed alongside
+            # the dated report may be the later of the two.
+            and (_filed_after(f.get("filed_date"), disclosure.filed_date)
+                 or (f.get("filed_date") and f.get("filed_date") == disclosure.filed_date))
         ]
         # Filing date, then report URL: two filed the same day resolve the
         # same way every run, whatever order the search returned them in.
@@ -858,10 +865,11 @@ async def run_holdings_phases(
     counts = {step: 0 for step, _, _ in HOLDINGS_STEPS}
     errors: list[str] = []
     for step, _, _ in HOLDINGS_STEPS:
-        label = phases.get(step, (step, None))[0]
+        label, ingest = phases.get(step, (step, None))
         progress.begin(step)
         try:
-            ingest = phases[step][1]  # inside the try: a step with no ingest fails as one phase
+            if ingest is None:
+                raise RuntimeError(f"no ingest registered for holdings step {step!r}")
             counts[step] = await ingest(db, client)
             progress.complete(step, detail=f"{counts[step]} holdings")
         except Exception:

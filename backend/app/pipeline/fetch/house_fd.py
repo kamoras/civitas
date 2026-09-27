@@ -272,8 +272,9 @@ def parse_annual_pdf(pdf_bytes: bytes) -> AnnualReport:
 
 async def fetch_annual_filing_index(
     client: httpx.AsyncClient, db: Session, year: int,
-) -> list[dict]:
-    """Annual reports (and amendments) for calendar year `year`."""
+) -> list[dict] | None:
+    """Annual reports (and amendments) for calendar year `year`; None when
+    the index couldn't be loaded."""
     return await fetch_filing_index(client, db, year, filing_types=ANNUAL_FILING_TYPES, pdf_dir="financial-pdfs")
 
 

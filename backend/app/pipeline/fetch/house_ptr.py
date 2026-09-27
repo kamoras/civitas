@@ -45,13 +45,15 @@ async def fetch_ptr_filing_index(
     The index itself never carries transaction-level data — see module
     docstring.
     """
-    return await fetch_filing_index(client, db, year, filing_types={"P"}, pdf_dir="ptr-pdfs")
+    # An index that couldn't be loaded means no PTRs this run; the next run
+    # asks again.
+    return await fetch_filing_index(client, db, year, filing_types={"P"}, pdf_dir="ptr-pdfs") or []
 
 
 async def fetch_filing_index(
     client: httpx.AsyncClient, db: Session, year: int, *,
     filing_types: set[str], pdf_dir: str,
-) -> list[dict]:
+) -> list[dict] | None:
     """The yearly index filtered to `filing_types`, with each filing's PDF
     link built under `pdf_dir`. Shared by the PTR ingest ("P" filings under
     ptr-pdfs/) and the annual holdings ingest (house_fd.py: annual reports
@@ -60,17 +62,22 @@ async def fetch_filing_index(
     The whole index is cached once per year and filtered on read, so the
     two ingests — which both want last year's — share one download of the
     multi-megabyte ZIP instead of each fetching it through the Clerk's
-    1 req/s limit.
+    1 req/s limit. None when the index couldn't be loaded — not the same
+    thing as a year with no filings of these types.
     """
+    entries = await _fetch_index_entries(client, db, year)
+    if entries is None:
+        return None
     return [
         {**entry, "pdf_url": f"{CLERK_BASE}/{pdf_dir}/{year}/{entry['doc_id']}.pdf"}
-        for entry in await _fetch_index_entries(client, db, year)
+        for entry in entries
         if entry["filing_type"] in filing_types
     ]
 
 
-async def _fetch_index_entries(client: httpx.AsyncClient, db: Session, year: int) -> list[dict]:
-    """Every filing in the yearly index, whatever its type."""
+async def _fetch_index_entries(client: httpx.AsyncClient, db: Session, year: int) -> list[dict] | None:
+    """Every filing in the yearly index, whatever its type; None when it
+    couldn't be downloaded or read (not cached, so the next run retries)."""
     cache_key = f"fd-index-{year}"
     cached = api_cache_get(db, "house_ptr", cache_key)
     if cached is not None:
@@ -85,7 +92,7 @@ async def _fetch_index_entries(client: httpx.AsyncClient, db: Session, year: int
         headers=None, rate_limit_backoff_multiplier=2.0, retry_on_4xx=False,
     )
     if zip_bytes is None:
-        return []
+        return None
 
     entries: list[dict] = []
     try:
@@ -93,13 +100,11 @@ async def _fetch_index_entries(client: httpx.AsyncClient, db: Session, year: int
             xml_name = next((n for n in zf.namelist() if n.lower().endswith(".xml")), None)
             if xml_name is None:
                 logger.error("House FD %d ZIP contained no XML index", year)
-                api_cache_set(db, "house_ptr", cache_key, [])
-                return []
+                return None
             root = ElementTree.fromstring(zf.read(xml_name))
     except (zipfile.BadZipFile, ElementTree.ParseError) as e:
         logger.error("Failed to parse House FD %d index: %s", year, e)
-        api_cache_set(db, "house_ptr", cache_key, [])
-        return []
+        return None
 
     for member in root.findall("Member"):
         doc_id = (member.findtext("DocID") or "").strip()
