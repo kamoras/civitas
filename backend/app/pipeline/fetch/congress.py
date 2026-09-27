@@ -19,6 +19,15 @@ logger = logging.getLogger(__name__)
 
 CONGRESS_API_BASE = "https://api.congress.gov/v3"
 
+
+def congress_gov_bill_url(congress: int, url_type: str, number: str | int) -> str:
+    """A bill's public congress.gov page. `url_type` is congress.gov's own
+    ("house-bill", "senate-joint-resolution"...); the congress is written as
+    an ordinal ("119th-congress"), and a wrong suffix 404s."""
+    from app.ordinals import ordinal
+
+    return f"https://www.congress.gov/bill/{ordinal(congress)}-congress/{url_type}/{number}"
+
 _rate_limiter = RateLimiter(settings.CONGRESS_RPS)
 
 # Roll-call-number probe search, shared by the Senate and House "recent

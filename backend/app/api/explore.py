@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.public import RateLimit
-from app.api.rate_limit import WriteRateLimit
+from app.api.rate_limit import UpstreamRouteLimit, WriteRateLimit, spend_upstream
 from app.config import settings
 from app.database import get_db
 from app.models import ExploreDocument
@@ -204,6 +204,7 @@ async def get_explore_document(doc_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{doc_id}/comments")
 async def get_document_comments(
+    _rl: UpstreamRouteLimit,
     doc_id: int,
     page: int = Query(1, ge=1, le=100),
     page_size: int = Query(25, ge=1, le=25),
@@ -226,6 +227,8 @@ async def get_document_comments(
         comment_url=doc.comment_url,
         page_size=page_size,
         page_number=page,
+        db=db,
+        spend=spend_upstream,
     )
     return JSONResponse(content=result)
 
@@ -283,10 +286,10 @@ async def post_document_comment(
         if doc.comments_close_on < comment_period_today():
             raise HTTPException(status_code=400, detail="The comment period for this document has closed")
 
-    from app.pipeline.fetch.regulations_gov import submit_comment, _extract_document_object_id
+    from app.pipeline.fetch.regulations_gov import submit_comment, _extract_document_id
 
     if dry_run:
-        reg_doc_id = _extract_document_object_id(doc.comment_url)
+        reg_doc_id = _extract_document_id(doc.comment_url)
         return JSONResponse(content={
             "success": True,
             "dryRun": True,

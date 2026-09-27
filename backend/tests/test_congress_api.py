@@ -131,3 +131,19 @@ class TestRoutes:
 
     def test_fixtures_exist(self):
         assert (FIX / "daily_digest").is_dir()
+
+
+class TestDateBounds:
+    """Week and month arithmetic ran off the calendar at year 1 and 9999 and
+    answered 500; years before the 1st Congress (1789) can't have a record."""
+
+    @pytest.mark.parametrize("url", [
+        "/api/congress/week/0001-01-01", "/api/congress/week/9999-12-31",
+        "/api/congress/month/0000-01", "/api/congress/month/9999-12",
+        "/api/congress/day/1788-12-31", "/api/congress/month/1000-05",
+    ])
+    def test_out_of_range_is_422(self, client, url):
+        assert client.get(url).status_code == 422
+
+    def test_first_congress_is_in_range(self, client):
+        assert client.get("/api/congress/month/1789-03").status_code == 200

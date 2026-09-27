@@ -18,6 +18,7 @@ from app.database import get_db, get_visits_db
 from app.election_calendar import next_election_day, seats_up_for_year
 from app.fact_diff import new_facts_since
 from app.issue_ids import from_public_id, to_public_id
+from app.ordinals import ordinal
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.time_utils import comment_period_today, utcnow
 from app.trending import compute_trending_issue_ids
@@ -1171,7 +1172,7 @@ def _upcoming_civic_events(year: int, today: date) -> list[dict]:
         if jan3 >= today:
             events.append({
                 "date": jan3.isoformat(),
-                "title": f"{_ordinal(year)} Congress Convenes",
+                "title": f"{ordinal((year - 1789) // 2 + 1)} Congress Convenes",
                 "description": "New session of Congress begins. Newly elected members are sworn in"
                                " and leadership elections take place.",
                 "category": "congress",
@@ -1194,12 +1195,6 @@ def _upcoming_civic_events(year: int, today: date) -> list[dict]:
             })
 
     return sorted(events, key=lambda e: e["date"])
-
-
-def _ordinal(year: int) -> str:
-    n = (year - 1789) // 2 + 1
-    suffix = "th" if 11 <= n % 100 <= 13 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
-    return f"{n}{suffix}"
 
 
 @router.get("/timeline")

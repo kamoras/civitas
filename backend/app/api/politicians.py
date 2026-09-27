@@ -32,6 +32,7 @@ from app.config_definitions import JUSTICE_SCORE_WEIGHTS
 from app.database import get_db
 from app.issue_ids import to_public_id
 from app.models import ActionIssue, ExploreDocument, Justice, President, Representative, Senator
+from app.ordinals import ordinal
 from app.pipeline.analyze.president_scorer import compute_president_overall_score
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.services.senator_service import STATE_NAMES
@@ -216,7 +217,7 @@ def list_politicians(
                 "state": None,
                 "stateName": None,
                 "district": None,
-                "role": f"President ({p.number}{_ordinal_suffix(p.number)})",
+                "role": f"President ({ordinal(p.number)})",
                 "thumbnailUrl": None,
                 "hasScorecard": overall is not None,
                 "overallScore": overall,
@@ -247,12 +248,6 @@ def list_politicians(
             })
 
     return _cached_json(results)
-
-
-def _ordinal_suffix(n: int) -> str:
-    if 11 <= (n % 100) <= 13:
-        return "th"
-    return {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
 
 
 # ---------------------------------------------------------------------------

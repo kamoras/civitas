@@ -2686,16 +2686,19 @@ class TestCongressGovUrlBuilding:
     a wrong suffix or wrong congress number is a dead link."""
 
     def test_ordinal_suffixes(self):
-        from app.pipeline.analyze.action_center import _congress_ordinal
+        from app.ordinals import ordinal
 
-        assert _congress_ordinal(119) == "119th"
-        assert _congress_ordinal(101) == "101st"
-        assert _congress_ordinal(102) == "102nd"
-        assert _congress_ordinal(103) == "103rd"
-        assert _congress_ordinal(111) == "111th"
-        assert _congress_ordinal(112) == "112th"
-        assert _congress_ordinal(113) == "113th"
-        assert _congress_ordinal(104) == "104th"
+        assert ordinal(119) == "119th"
+        assert ordinal(101) == "101st"
+        assert ordinal(102) == "102nd"
+        assert ordinal(103) == "103rd"
+        assert ordinal(111) == "111th"
+        assert ordinal(112) == "112th"
+        assert ordinal(113) == "113th"
+        assert ordinal(104) == "104th"
+        assert ordinal(93) == "93rd"
+        assert ordinal(121) == "121st"
+        assert ordinal(20) == "20th"
 
     def test_bill_record_uses_records_own_congress(self):
         from app.pipeline.analyze.action_center import _bill_record_to_result

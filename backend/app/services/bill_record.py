@@ -14,6 +14,7 @@ never reads as a bill with no actions or no cosponsors.
 import html as html_lib
 import re
 import unicodedata
+from collections.abc import Callable
 
 import httpx
 from sqlalchemy.orm import Session
@@ -21,7 +22,7 @@ from sqlalchemy.orm import Session
 from app.models import RollCall, RollCallPosition, Representative, Senator
 from app.config import settings
 from app.pipeline.cache import api_cache_get, api_cache_set
-from app.pipeline.fetch.congress import CONGRESS_API_BASE, _rate_limiter
+from app.pipeline.fetch.congress import CONGRESS_API_BASE, _rate_limiter, congress_gov_bill_url
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.services.congress_service import bill_days, bill_label
 
@@ -72,21 +73,36 @@ async def _congress_get(client: httpx.AsyncClient, url: str):
         return None
 
 
-async def fetch_bill_record(client: httpx.AsyncClient, db: Session, congress: int, bill_id: str) -> dict:
+async def fetch_bill_record(
+    client: httpx.AsyncClient, db: Session, congress: int, bill_id: str,
+    spend: Callable[[int], None] | None = None,
+) -> dict:
     """{bill, summaries, actions, cosponsors, text, unavailable: [...],
-    not_found}: not_found when Congress.gov has no such bill."""
+    not_found}: not_found when Congress.gov has no such bill.
+
+    `spend(n)` is charged, before any request goes out, with the number of
+    parts not already cached (the public route's upstream budget; it raises
+    to refuse). A bill Congress.gov has no record of is cached too, so the
+    same wrong id asked again costs nothing upstream."""
     type_path, number = parse_bill_id(bill_id)
     out: dict = {"unavailable": [], "not_found": False}
+    keys = {part: f"bill-record-{part}-{congress}-{type_path}-{number}" for part in _PARTS}
+    cached = {part: api_cache_get(db, _CACHE_TIER, key, max_age_hours=_CACHE_HOURS) for part, key in keys.items()}
+    if (cached["bill"] or {}).get("not_found"):
+        out["not_found"] = True
+        return out
+    if spend is not None:
+        spend(sum(1 for part in _PARTS if cached[part] is None))
     for part, suffix in _PARTS.items():
-        key = f"bill-record-{part}-{congress}-{type_path}-{number}"
-        cached = api_cache_get(db, _CACHE_TIER, key, max_age_hours=_CACHE_HOURS)
-        if cached is not None:
-            out[part] = cached.get("value")
+        key = keys[part]
+        if cached[part] is not None:
+            out[part] = cached[part].get("value")
             continue
         data = await _congress_get(client, f"{CONGRESS_API_BASE}/bill/{congress}/{type_path}/{number}{suffix}")
         if data is NOT_FOUND:
             if part == "bill":
                 out["not_found"] = True
+                api_cache_set(db, _CACHE_TIER, key, {"not_found": True}, normal_ttl_hours=_CACHE_HOURS)
                 return out
             data = {}
         if data is None:
@@ -252,9 +268,8 @@ def shape_record(db: Session, congress: int, bill_id: str, raw: dict) -> dict:
         ],
         "votes": vote_summaries,
         "days": bill_days(db, bill_id),
-        "congressGovUrl": (
-            f"https://www.congress.gov/bill/{congress}th-congress/"
-            f"{_CONGRESS_GOV_TYPE.get(parse_bill_id(bill_id)[0], 'bill')}/{parse_bill_id(bill_id)[1]}"
+        "congressGovUrl": congress_gov_bill_url(
+            congress, _CONGRESS_GOV_TYPE.get(parse_bill_id(bill_id)[0], "bill"), parse_bill_id(bill_id)[1],
         ),
         "unavailable": raw.get("unavailable") or [],
     }

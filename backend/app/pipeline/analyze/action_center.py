@@ -2422,21 +2422,10 @@ def _find_related_explore_docs(
 CONGRESS_API_BASE = "https://api.congress.gov/v3"
 
 
-def _congress_ordinal(congress: int) -> str:
-    """Ordinal form ("119th", "101st", "112th") — congress.gov bill URLs
-    embed it, and a wrong suffix (e.g. "101th") 404s."""
-    if 11 <= congress % 100 <= 13:
-        suffix = "th"
-    else:
-        suffix = {1: "st", 2: "nd", 3: "rd"}.get(congress % 10, "th")
-    return f"{congress}{suffix}"
-
-
 def _congress_gov_bill_url(congress: int, url_type: str, number: str | int) -> str:
-    return (
-        f"https://www.congress.gov/bill/"
-        f"{_congress_ordinal(congress)}-congress/{url_type}/{number}"
-    )
+    from app.pipeline.fetch.congress import congress_gov_bill_url
+
+    return congress_gov_bill_url(congress, url_type, number)
 
 
 def _resolve_bills(raw_bills: list, article_texts: list[str]) -> list[dict]:
