@@ -37,7 +37,9 @@ def _is_stale(age: timedelta | None, threshold: timedelta) -> bool:
     return age is not None and age > threshold
 
 
-def _start_job(target, *, name: str, alert: bool = False, lease_tier: str | None = None) -> None:
+def _start_job(
+    target, *, name: str, alert: bool = False, lease_tier: str | None = None, lease_max_hold: timedelta | None = None,
+) -> None:
     """Start a scheduled job's thread. While the admin data reset holds the
     database the job doesn't run this time: logged, and for the nightly
     chain — whose skip leaves the wiped database unbuilt for a day — an ops
@@ -45,12 +47,14 @@ def _start_job(target, *, name: str, alert: bool = False, lease_tier: str | None
 
     `lease_tier`: a job that takes no run lock of its own holds this lease
     (lease.job) while it runs, so a reset in another process sees it, and it
-    sees the reset."""
+    sees the reset. `lease_max_hold`: the age at which the job's own checks
+    treat a run still going as hung and start another anyway — the lease
+    stops being renewed there too, or it would keep that from happening."""
     if lease_tier is not None:
         job = target
 
         def target() -> None:
-            with lease.job(lease_tier) as held:
+            with lease.job(lease_tier, max_hold=lease_max_hold) as held:
                 if held:
                     job()
 
@@ -364,7 +368,7 @@ def _hourly_bill_status_refresh() -> None:
         except Exception:
             logger.exception("Bill status refresh failed")
 
-    _start_job(_run, name="bill-status-refresh", lease_tier=lease.BILL_REFRESH)
+    _start_job(_run, name="bill-status-refresh", lease_tier=lease.BILL_REFRESH, lease_max_hold=timedelta(hours=2))
 
 
 def _election_coverage_refresh() -> None:
@@ -441,7 +445,7 @@ def _election_coverage_refresh() -> None:
         finally:
             coverage_tracker().stop()
 
-    _start_job(_run, name="election-coverage-refresh", lease_tier=lease.COVERAGE_REFRESH)
+    _start_job(_run, name="election-coverage-refresh", lease_tier=lease.COVERAGE_REFRESH, lease_max_hold=timedelta(hours=2))
 
 
 def _election_ballot_sync() -> None:
@@ -493,7 +497,7 @@ def _election_ballot_sync() -> None:
             loop.close()
             ballot_tracker().stop()
 
-    _start_job(_run, name="election-ballot-sync", lease_tier=lease.BALLOT_SYNC)
+    _start_job(_run, name="election-ballot-sync", lease_tier=lease.BALLOT_SYNC, lease_max_hold=timedelta(hours=2))
 
 
 def start_scheduler() -> None:

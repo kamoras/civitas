@@ -25,7 +25,7 @@ def _job_leases_granted():
     """These tests stub the database, which a lease lives in; the leases
     themselves are tested in test_database_reset.TestLease."""
     @contextmanager
-    def granted(_tier):
+    def granted(_tier, **_kw):
         yield True
 
     with patch("app.pipeline.lease.job", granted):
@@ -445,7 +445,7 @@ def test_a_leased_job_does_not_run_without_its_lease():
     from app.pipeline import lease
 
     @contextmanager
-    def refused(_tier):
+    def refused(_tier, **_kw):
         yield False
 
     ran = []

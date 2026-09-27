@@ -749,6 +749,27 @@ def split_key_and_recent_votes(
     return key, recent
 
 
+# A busy database (another writer past SQLite's busy timeout) delays the
+# Senate run's lease; this many tries, each waiting that timeout out.
+_SENATE_LEASE_ATTEMPTS = 5
+
+
+def _hold_senate_run_lease(stack) -> None:
+    """Hold lease.SENATE_RUN for the run, on its own session, until `stack`
+    closes. Taken over outright: the run holds the Senate run lock, so any
+    other holder of the lease is a dead run's. A run that can't take it
+    fails rather than run unleased — unleased, a process starting up would
+    take it for a dead run's and free its lock."""
+    from app.pipeline import lease
+
+    lease_db = SessionLocal()
+    stack.callback(lease_db.close)
+    for _ in range(_SENATE_LEASE_ATTEMPTS):
+        if stack.enter_context(lease.holding(lease_db, lease.SENATE_RUN, take_over=True)) is not None:
+            return
+    raise RuntimeError("Could not take the Senate run lease: the database stayed busy")
+
+
 async def run_senate_pipeline(
     senator_filter: str | None = None,
     fetch_only: bool = False,
@@ -780,47 +801,42 @@ async def run_senate_pipeline(
 
     run_lease = ExitStack()
 
-    reset_stats()
-    reset_client()
-    reset_fec_run_state()
-
-    # Clear in-memory caches from prior runs to bound memory usage.
-    clear_alignment_cache()
-    clear_bill_embedding_cache()
-    clear_reference_cache()
-    clear_platform_cache()
-    from app.pipeline.transform.industry_classifier import clear_industry_embedding_cache
-    clear_industry_embedding_cache()
-
-    # Purge all analysis-derived data from prior runs so updated
-    # algorithms always produce fresh results. Preserves the API cache
-    # (raw Congress.gov / FEC / GovInfo responses) since those reflect
-    # source data, not our processing logic.
-    _clear_analysis_artifacts(db)
-
-    # Verify embedding model version — invalidate stored embeddings on change
-    if not check_model_version():
-        invalidate_on_model_change(db_session=db)
-    else:
-        _write_model_version()
-
-    # Build party platform centroids from seeds + accumulated bill data.
-    # This implements Bayesian self-training: seed descriptions act as a
-    # prior, and real bill data from previous runs updates the posterior.
-    initialize_platform_embeddings(db)
-
-    progress = ProgressTracker(pipeline_run, PIPELINE_STEPS, db, start_time)
-
     try:
-        # Held for the run, on its own session, so a process can tell this run
-        # from one a dead process left (main._invalidate_orphaned_pipelines).
-        # Taken over outright: this run holds the Senate run lock, so any
-        # other holder of the lease is a dead run's.
-        from app.pipeline import lease
+        # Held for the run, first, so a process can tell this run from one a
+        # dead process left (main._invalidate_orphaned_pipelines).
+        _hold_senate_run_lease(run_lease)
 
-        lease_db = SessionLocal()
-        run_lease.callback(lease_db.close)
-        run_lease.enter_context(lease.holding(lease_db, lease.SENATE_RUN, take_over=True))
+        reset_stats()
+        reset_client()
+        reset_fec_run_state()
+
+        # Clear in-memory caches from prior runs to bound memory usage.
+        clear_alignment_cache()
+        clear_bill_embedding_cache()
+        clear_reference_cache()
+        clear_platform_cache()
+        from app.pipeline.transform.industry_classifier import clear_industry_embedding_cache
+        clear_industry_embedding_cache()
+
+        # Purge all analysis-derived data from prior runs so updated
+        # algorithms always produce fresh results. Preserves the API cache
+        # (raw Congress.gov / FEC / GovInfo responses) since those reflect
+        # source data, not our processing logic.
+        _clear_analysis_artifacts(db)
+
+        # Verify embedding model version — invalidate stored embeddings on change
+        if not check_model_version():
+            invalidate_on_model_change(db_session=db)
+        else:
+            _write_model_version()
+
+        # Build party platform centroids from seeds + accumulated bill data.
+        # This implements Bayesian self-training: seed descriptions act as a
+        # prior, and real bill data from previous runs updates the posterior.
+        initialize_platform_embeddings(db)
+
+        progress = ProgressTracker(pipeline_run, PIPELINE_STEPS, db, start_time)
+
         logger.info("=== CIVITAS DATA PIPELINE ===")
         if senator_filter:
             logger.info("Single senator: %s", senator_filter)

@@ -1304,39 +1304,43 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
     # Registered for the admin data reset: the awaits below free the loop
     # while threads write the explore tables. And a lease, so a reset or an
     # explore ingest in another process sees it too.
-    with writing("Explore re-embed"), lease.job(lease.EXPLORE) as held:
-        if not held:
-            raise HTTPException(status_code=409, detail="A data reset or an explore ingest is running")
-        try:
-            clear_explore()
-        except Exception:
-            pass
+    with writing("Explore re-embed"):
+        async with lease.job_async(lease.EXPLORE) as held:
+            if not held:
+                raise HTTPException(
+                    status_code=409,
+                    detail="The explore tables are held: a data reset or an explore ingest is running, or the database is busy",
+                )
+            try:
+                clear_explore()
+            except Exception:
+                pass
 
-        all_docs = db.query(ExploreDocument).all()
-        doc_dicts = [
-            {
-                "id": d.id,
-                "title": d.title,
-                "summary": d.summary,
-                "body": d.body,
-                "doc_type": d.doc_type,
-                "source": d.source,
-                "date": d.date,
-                "politician_name": d.politician_name,
-                "politician_id": d.politician_id,
-                "chamber": d.chamber,
-            }
-            for d in all_docs
-        ]
+            all_docs = db.query(ExploreDocument).all()
+            doc_dicts = [
+                {
+                    "id": d.id,
+                    "title": d.title,
+                    "summary": d.summary,
+                    "body": d.body,
+                    "doc_type": d.doc_type,
+                    "source": d.source,
+                    "date": d.date,
+                    "politician_name": d.politician_name,
+                    "politician_id": d.politician_id,
+                    "chamber": d.chamber,
+                }
+                for d in all_docs
+            ]
 
-        def _run():
-            count = embed_explore_documents(doc_dicts)
-            _write_model_version()
-            return count
+            def _run():
+                count = embed_explore_documents(doc_dicts)
+                _write_model_version()
+                return count
 
-        count = await asyncio.to_thread(_run)
-        indexed = await asyncio.to_thread(rebuild_index, db)
-        authority = await asyncio.to_thread(update_document_authority, db)
+            count = await asyncio.to_thread(_run)
+            indexed = await asyncio.to_thread(rebuild_index, db)
+            authority = await asyncio.to_thread(update_document_authority, db)
     return {"embedded": count, "keywordIndexed": indexed, "authority": authority}
 
 

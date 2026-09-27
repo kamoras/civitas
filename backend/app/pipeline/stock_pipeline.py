@@ -319,8 +319,8 @@ class _StoredSource:
 # one that never reads again costs a request a month.
 _REREAD_RETRY_HOURS = 24 * 30
 _REREAD_TIER = "ptr_reread"
-# This many failures in a row with nothing read is the source being down:
-# the source's re-read stops for the night and marks none of them.
+# This many failures in a row with nothing read looks like the source being
+# down: its re-read stops for the night (they wait a day, not a month).
 _REREAD_OUTAGE_AFTER = 5
 
 
@@ -330,8 +330,8 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
     misread), newest first within each, until PTR_REREAD_BUDGET is spent.
     Every stored row names its filing's URL, so this needs no search or
     index, whose windows reach back only weeks. A filing that doesn't read
-    keeps its rows and waits _REREAD_RETRY_HOURS — unless its source read
-    nothing at all that night, which is the source being down, not the
+    keeps its rows and waits _REREAD_RETRY_HOURS — or a day, when its source
+    read nothing that night, which may be the source being down, not the
     filing. Returns filings re-read."""
     sources = [
         _StoredSource("Senate", StockTrade, "senator_id", lambda _fid, url, filed: fetch_senate_ptr(
@@ -367,7 +367,8 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
                 logger.info("PTR re-read: time budget spent — %d %s filings wait", len(stale) - position, source.label)
                 break
             failed_key = f"failed-{source.label}-{filing_id}"
-            if api_cache_get(db, _REREAD_TIER, failed_key, max_age_hours=_REREAD_RETRY_HOURS) is not None:
+            marker = api_cache_get(db, _REREAD_TIER, failed_key, max_age_hours=_REREAD_RETRY_HOURS)
+            if marker is not None and marker.get("retry_after", "") > utcnow().isoformat():
                 continue
             try:
                 rows = await source.fetch(filing_id, url, filed)
@@ -390,14 +391,19 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
             db.commit()
             read += 1
         reread += read
+        # A failure beside filings that read is the filing's: it waits a
+        # month. On a night nothing read it may be the source's, down: the
+        # filings wait a day — long enough that dead links at the head of
+        # the order let the next night reach the filings behind them.
+        wait = timedelta(hours=_REREAD_RETRY_HOURS) if read else timedelta(days=1)
         if failed and not read:
-            # Nothing read and nothing but failures: the source, not these
-            # filings. Tried again tomorrow, not in a month.
-            logger.warning("PTR re-read: %s looks unavailable (%d filings failed, none read) — retried next run",
+            logger.warning("PTR re-read: %s read nothing (%d failed) — they wait a day, not a month",
                            source.label, len(failed))
-        else:
-            for failed_key, url in failed:
-                api_cache_set(db, _REREAD_TIER, failed_key, {"url": url}, normal_ttl_hours=_REREAD_RETRY_HOURS)
+        for failed_key, url in failed:
+            api_cache_set(
+                db, _REREAD_TIER, failed_key, {"url": url, "retry_after": (utcnow() + wait).isoformat()},
+                normal_ttl_hours=_REREAD_RETRY_HOURS,
+            )
         if time.monotonic() >= deadline:
             break
     return reread

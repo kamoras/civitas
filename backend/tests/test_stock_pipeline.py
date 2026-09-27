@@ -404,7 +404,11 @@ class TestRereadTrades:
         _, mock_fetch = await self._reread(db_session, fetch)
         mock_fetch.assert_not_called()
 
-    async def test_a_source_that_reads_nothing_is_down_not_its_filings(self, db_session):
+    async def test_a_night_that_reads_nothing_costs_a_day_not_a_month(self, db_session):
+        """An outage, or dead links at the head of the order: either way the
+        next night reaches past them, and they are tried again tomorrow."""
+        from datetime import timedelta
+
         base = "https://efdsearch.senate.gov/search/view/ptr"
         for n in range(stock_pipeline._REREAD_OUTAGE_AFTER + 2):
             self._stored(db_session, f"f{n}", f"{base}/f{n}/")
@@ -413,10 +417,12 @@ class TestRereadTrades:
             return []
 
         _, first = await self._reread(db_session, fetch)
-        # It stopped once the failures showed an outage, and marked none.
-        assert first.call_count == stock_pipeline._REREAD_OUTAGE_AFTER
+        assert first.call_count == stock_pipeline._REREAD_OUTAGE_AFTER  # stopped: looks down
         _, second = await self._reread(db_session, fetch)
-        assert second.call_count == stock_pipeline._REREAD_OUTAGE_AFTER
+        assert second.call_count == 2  # the next night reaches the ones behind them
+        with patch.object(stock_pipeline, "utcnow", return_value=stock_pipeline.utcnow() + timedelta(days=1, minutes=1)):
+            _, third = await self._reread(db_session, fetch)
+        assert third.call_count == stock_pipeline._REREAD_OUTAGE_AFTER  # a day on, tried again
 
     async def test_a_paper_filing_is_fetched_as_one(self, db_session):
         self._stored(db_session, "p", "https://efdsearch.senate.gov/search/view/paper/p/")

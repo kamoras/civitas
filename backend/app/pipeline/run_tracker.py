@@ -87,8 +87,12 @@ def acquire_pipeline_lock(db: Session, model: type[_RunModel], stale_timeout: ti
             running.error_message = f"Marked stale: exceeded {stale_timeout} timeout"
             try:
                 db.commit()
-            except OperationalError:
+            except OperationalError as error:
                 db.rollback()
+                from app.pipeline import lease
+
+                if not lease.is_locked(error):
+                    raise
                 logger.warning("%s not started: the database is locked by another writer", model.__name__)
                 return None
             logger.warning(
@@ -107,7 +111,7 @@ def acquire_pipeline_lock(db: Session, model: type[_RunModel], stale_timeout: ti
             # Checked inside the insert's own transaction (see
             # lease.DATA_RESET): backing out is a rollback, no second write.
             db.rollback()
-            logger.warning("%s not started: an admin data reset is running", model.__name__)
+            _alert_held_off_by_reset(model.__name__)
             return None
         db.commit()
     except IntegrityError:
@@ -116,13 +120,34 @@ def acquire_pipeline_lock(db: Session, model: type[_RunModel], stale_timeout: ti
         db.rollback()
         logger.info("%s lock held by another container — skipping this run", model.__name__)
         return None
-    except OperationalError:
+    except OperationalError as error:
+        db.rollback()
+        if not lease.is_locked(error):
+            raise
         # The database stayed locked past the busy timeout — a writer (the
         # admin data reset's wipe, say) holding it. Not this run's to wait on.
-        db.rollback()
         logger.warning("%s not started: the database is locked by another writer", model.__name__)
         return None
     return run
+
+
+def _alert_held_off_by_reset(run_name: str) -> None:
+    """A pipeline didn't start because a data reset holds the database. Said
+    out loud: a reset whose process died holds pipelines off until its lease
+    lapses (lease.stale_after), and that must not look like a quiet night."""
+    logger.warning("%s not started: an admin data reset is running", run_name)
+    try:
+        from app.ops_alerts import send_ops_alert
+
+        send_ops_alert(
+            "Pipeline held off by a data reset",
+            f"{run_name} did not start: an admin data reset holds the database. If no reset is "
+            "running, one died mid-wipe and its lease lapses within the half hour; trigger the "
+            "pipeline after that.",
+            dedupe_key=f"held-off-by-reset-{run_name}-{utcnow():%Y-%m-%d}",
+        )
+    except Exception:
+        logger.exception("Could not send the held-off-by-reset alert")
 
 
 class PipelineRunTracker:

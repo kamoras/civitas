@@ -56,9 +56,10 @@ async def _bootstrap_explore() -> None:
             # Registered for the admin data reset: the pipeline hands its
             # writes to threads while this awaits. And a lease, so a reset in
             # another process sees it too.
-            with writing("Explore bootstrap"), lease.job(lease.EXPLORE) as held:
-                if held:
-                    await run_explore_pipeline(days_back=60)
+            with writing("Explore bootstrap"):
+                async with lease.job_async(lease.EXPLORE) as held:
+                    if held:
+                        await run_explore_pipeline(days_back=60)
     except WritesHeld as held:
         logging.getLogger("app.main").info("%s", held)
     except Exception as e:

@@ -17,8 +17,8 @@ import json
 import logging
 import threading
 import uuid
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from datetime import timedelta
 
 from sqlalchemy.exc import IntegrityError, OperationalError
@@ -70,8 +70,10 @@ TIERS = {
 BEAT_S = 60
 STALE_S = 10 * 60
 # The reset's wipe is one transaction: its own heartbeat can't write until
-# it commits, so its lease must outlast the wipe unbeaten.
-_STALE_S_BY_TIER = {DATA_RESET: 60 * 60}
+# it commits, so its lease must outlast the wipe unbeaten — a few table
+# deletes, well inside this. A reset whose process died holds writers off
+# this long, and each it holds off says so (run_tracker.acquire_pipeline_lock).
+_STALE_S_BY_TIER = {DATA_RESET: 30 * 60}
 
 
 def stale_after(tier: str) -> timedelta:
@@ -105,10 +107,19 @@ def acquire(db: Session, tier: str, *, yield_to: str | None = None, take_over: b
     except IntegrityError:
         db.rollback()
         return None
-    except OperationalError:
+    except OperationalError as error:
         db.rollback()
+        if not is_locked(error):
+            raise
         logger.warning("The %s lease wasn't taken: the database is locked by another writer", tier)
         return None
+
+
+def is_locked(error: OperationalError) -> bool:
+    """SQLite's busy timeout ran out: another writer held the database.
+    Any other OperationalError (a missing table, a corrupt file) is not
+    'busy' and must not be treated as one."""
+    return "locked" in str(error.orig).lower()
 
 
 def held(db: Session, tier: str) -> bool:
@@ -147,11 +158,18 @@ def release(db: Session, tier: str, token: str) -> None:
         db.rollback()
 
 
-def _keep(bind, tier: str, token: str, stop: threading.Event, beat_s: float) -> None:
+def _keep(bind, tier: str, token: str, stop: threading.Event, beat_s: float, until: float | None) -> None:
     """Heartbeat thread: beats on its own session (a Session is not
-    thread-safe) until stopped. A failed beat is only logged — the lease
-    has ten beats of slack."""
+    thread-safe) until stopped, or until `until` (time.monotonic()) — past
+    which a holder still running is presumed hung, and its lease lapses so
+    the job's own hung-run handling can take over. A failed beat is only
+    logged — the lease has ten beats of slack."""
+    import time
+
     while not stop.wait(beat_s):
+        if until is not None and time.monotonic() >= until:
+            logger.warning("The %s lease's holder has run past its limit — letting the lease lapse", tier)
+            return
         db = Session(bind=bind)
         try:
             if not beat(db, tier, token):
@@ -167,23 +185,32 @@ def _keep(bind, tier: str, token: str, stop: threading.Event, beat_s: float) -> 
             db.close()
 
 
+def _start_beating(db: Session, tier: str, token: str, max_hold: timedelta | None):
+    import time
+
+    stop = threading.Event()
+    until = time.monotonic() + max_hold.total_seconds() if max_hold is not None else None
+    heartbeat = threading.Thread(
+        target=_keep, args=(db.get_bind(), tier, token, stop, BEAT_S, until), name=f"{tier}-beat", daemon=True,
+    )
+    heartbeat.start()
+    return stop, heartbeat
+
+
 @contextmanager
 def holding(
     db: Session, tier: str, *, yield_to: str | None = None, take_over: bool = False,
+    max_hold: timedelta | None = None,
 ) -> Iterator[str | None]:
-    """Hold the lease for the enclosed work, beating it throughout; yields
-    the token, or None (and holds nothing) when acquire refused. The
-    heartbeat is stopped and joined before the release, so no beat in
-    flight meets a row that is already gone."""
+    """Hold the lease for the enclosed work, beating it throughout (up to
+    `max_hold`, see _keep); yields the token, or None (and holds nothing)
+    when acquire refused. The heartbeat is stopped and joined before the
+    release, so no beat in flight meets a row that is already gone."""
     token = acquire(db, tier, yield_to=yield_to, take_over=take_over)
     if token is None:
         yield None
         return
-    stop = threading.Event()
-    heartbeat = threading.Thread(
-        target=_keep, args=(db.get_bind(), tier, token, stop, BEAT_S), name=f"{tier}-beat", daemon=True,
-    )
-    heartbeat.start()
+    stop, heartbeat = _start_beating(db, tier, token, max_hold)
     try:
         yield token
     finally:
@@ -192,19 +219,53 @@ def holding(
         release(db, tier, token)
 
 
+def _refusal(db: Session, tier: str) -> str:
+    if held(db, DATA_RESET):
+        return "a data reset is running"
+    if held(db, tier):
+        return "it is running elsewhere"
+    return "the database was busy"
+
+
 @contextmanager
-def job(tier: str) -> Iterator[bool]:
+def job(tier: str, *, max_hold: timedelta | None = None) -> Iterator[bool]:
     """A background job's lease, on its own session, yielding to the data
     reset: yields True while held, False — hold nothing, skip the work —
-    when a reset is running or another process runs the same job."""
+    when a reset is running, another process runs the same job, or the
+    database stayed busy. `max_hold`: see _keep."""
     from app.database import SessionLocal
 
     db = SessionLocal()
     try:
-        with holding(db, tier, yield_to=DATA_RESET) as token:
+        with holding(db, tier, yield_to=DATA_RESET, max_hold=max_hold) as token:
             if token is None:
-                logger.info("%s skipped: %s", TIERS[tier],
-                            "a data reset is running" if held(db, DATA_RESET) else "it is running elsewhere")
+                logger.info("%s skipped: %s", TIERS[tier], _refusal(db, tier))
             yield token is not None
+    finally:
+        db.close()
+
+
+@asynccontextmanager
+async def job_async(tier: str) -> AsyncIterator[bool]:
+    """job() for async code: the database work runs in a thread, off the
+    event loop, which serves every request."""
+    import asyncio
+
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        token = await asyncio.to_thread(acquire, db, tier, yield_to=DATA_RESET)
+        if token is None:
+            logger.info("%s skipped: %s", TIERS[tier], await asyncio.to_thread(_refusal, db, tier))
+            yield False
+            return
+        stop, heartbeat = _start_beating(db, tier, token, None)
+        try:
+            yield True
+        finally:
+            stop.set()
+            await asyncio.to_thread(heartbeat.join)
+            await asyncio.to_thread(release, db, tier, token)
     finally:
         db.close()

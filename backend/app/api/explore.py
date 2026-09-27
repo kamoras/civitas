@@ -418,7 +418,7 @@ async def _run_explore_pipeline():
     from app.pipeline import lease
     from app.pipeline.explore_pipeline import run_explore_pipeline
     try:
-        with lease.job(lease.EXPLORE) as held:
+        async with lease.job_async(lease.EXPLORE) as held:
             if not held:
                 return
             result = await run_explore_pipeline(days_back=60)

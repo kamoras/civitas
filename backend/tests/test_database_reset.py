@@ -252,7 +252,7 @@ class TestLease:
 
         lease.acquire(db_session, lease.DATA_RESET)
         lease.acquire(db_session, lease.BILL_REFRESH)
-        db_session.query(models.ApiCache).update({"cached_at": utcnow() - timedelta(minutes=30)})
+        db_session.query(models.ApiCache).update({"cached_at": utcnow() - timedelta(minutes=20)})
         db_session.commit()
         assert lease.held(db_session, lease.DATA_RESET)
         assert not lease.held(db_session, lease.BILL_REFRESH)
@@ -271,3 +271,33 @@ class TestLease:
 
         tiers = {v for k, v in vars(lease).items() if k.isupper() and isinstance(v, str) and v.endswith("-lock")}
         assert tiers == set(lease.TIERS)
+
+    def test_only_a_locked_database_is_busy(self, db_session, monkeypatch):
+        from sqlalchemy.exc import OperationalError
+
+        from app.pipeline import lease
+
+        def fail(message):
+            def flush():
+                raise OperationalError("INSERT", {}, Exception(message))
+            return flush
+
+        monkeypatch.setattr(db_session, "flush", fail("database is locked"))
+        assert lease.acquire(db_session, lease.BILL_REFRESH) is None
+        monkeypatch.setattr(db_session, "flush", fail("no such table: api_cache"))
+        with pytest.raises(OperationalError):
+            lease.acquire(db_session, lease.BILL_REFRESH)
+
+    def test_a_senate_run_that_cannot_take_its_lease_fails_rather_than_run_unleased(self, monkeypatch):
+        from contextlib import ExitStack, contextmanager
+
+        from app.pipeline import lease, senate_pipeline
+
+        @contextmanager
+        def busy(*_a, **_k):
+            yield None
+
+        monkeypatch.setattr(lease, "holding", busy)
+        monkeypatch.setattr(senate_pipeline, "SessionLocal", lambda: _Unclosable(None))
+        with ExitStack() as stack, pytest.raises(RuntimeError, match="Senate run lease"):
+            senate_pipeline._hold_senate_run_lease(stack)
