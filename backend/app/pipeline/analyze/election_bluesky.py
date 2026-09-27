@@ -36,7 +36,8 @@ import time
 import logging
 from datetime import timedelta
 
-from sqlalchemy.orm import Session
+from sqlalchemy import func, or_, select
+from sqlalchemy.orm import Session, aliased
 
 from app.config import settings
 from app.models import Candidate, Race, RaceCoverageItem
@@ -270,6 +271,51 @@ def _races_posted_recently(db: Session) -> set[str]:
     return {r[0] for r in rows}
 
 
+def _reserve_post(db: Session, item: RaceCoverageItem) -> bool:
+    """Mark `item` published before publishing it — only if its race is out
+    of cooldown and the day's budget has room, checked in the same
+    conditional update, so passes running at once can't both post about one
+    race or both take the day's last slot (_races_posted_recently and
+    _posts_in_last_day, read once per pass, are only what it plans from).
+    At most once: a failed publish is released (_release_post)."""
+    other = aliased(RaceCoverageItem)
+    now = utcnow()
+    race_recent = (
+        select(other.id)
+        .where(
+            other.race_id == item.race_id,
+            other.bsky_posted.is_(True),
+            other.bsky_posted_at >= now - timedelta(hours=RACE_COOLDOWN_HOURS),
+        )
+        .exists()
+    )
+    posted_today = (
+        select(func.count(other.id))
+        .where(other.bsky_posted.is_(True), other.bsky_posted_at >= now - timedelta(hours=24))
+        .scalar_subquery()
+    )
+    reserved = (
+        db.query(RaceCoverageItem)
+        .filter(
+            RaceCoverageItem.id == item.id,
+            or_(RaceCoverageItem.bsky_posted.is_(False), RaceCoverageItem.bsky_posted.is_(None)),
+            ~race_recent,
+            posted_today < MAX_POSTS_PER_DAY,
+        )
+        .update({"bsky_posted": True}, synchronize_session=False)
+    )
+    db.commit()
+    return reserved == 1
+
+
+def _release_post(db: Session, item: RaceCoverageItem) -> None:
+    """A reserved post that didn't publish: it counts toward nothing."""
+    db.query(RaceCoverageItem).filter(RaceCoverageItem.id == item.id).update(
+        {"bsky_posted": False}, synchronize_session=False,
+    )
+    db.commit()
+
+
 def _drain_stale_unconsidered(db: Session) -> int:
     """Mark never-considered items older than CONSIDER_MAX_AGE_HOURS as
     considered-without-posting so the eligible pool stays bounded."""
@@ -376,10 +422,13 @@ def post_race_coverage_updates(db: Session, *, deadline: float | None = None) ->
         if not text:
             continue
 
+        if not _reserve_post(db, item):
+            logger.info("Skipping post for race %s — another pass posted for it, or the day's budget ran out", race.id)
+            continue
         if _publish(text, race):
-            item.bsky_posted = True
-            db.commit()
             cooled_down.add(item.race_id)
             posted += 1
+        else:
+            _release_post(db, item)
 
     return posted

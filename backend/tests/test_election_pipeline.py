@@ -593,11 +593,12 @@ class TestBallotSync:
         assert run(refused_tiers=(lease.BALLOT_SYNC, lease.COVERAGE_REFRESH)) == (0, 0)
         assert not election_pipeline.ballot_tracker().is_running
 
-    def test_the_source_crawl_runs_weekly_under_the_ballot_guards(self, db_session):
-        """The crawl rewrites the source and date files the sync reads and
-        writes, so it runs under the sync's guards — and "weekly" is a week
-        since it last completed, so a night it was held off, or failed,
-        costs a night, not a week; a failed crawl costs the sync nothing."""
+    def test_the_source_crawl_runs_weekly_beside_the_ballot_guards(self, db_session):
+        """The crawl writes no Candidate row, and the files it shares with
+        the sync have their own lock, so it runs outside the sync's guards
+        and budget: a sync in flight doesn't cost the crawl. "Weekly" is a
+        week since it last completed, so a failed crawl costs a night — and
+        costs the sync nothing."""
         import json
         from contextlib import asynccontextmanager
 
@@ -625,12 +626,11 @@ class TestBallotSync:
             step = next(s for s in json.loads(run_row.progress_detail) if s.get("key") == "confirmed_candidates")
             return crawl.call_count, sync.call_count, step
 
-        crawled, _, step = run(refused=True)
-        assert crawled == 0 and step["status"] == "skipped"
         crawled, synced, step = run(crawl_error=RuntimeError("a source site is down"))
         assert crawled == 1 and synced > 0 and step["status"] == "done"  # the sync went ahead
-        crawled, _, step = run()
-        assert crawled == 1 and step["detail"].endswith("; crawler adopted 1 this week: NM")
+        crawled, synced, step = run(refused=True)
+        assert crawled == 1 and synced == 0 and step["status"] == "skipped"  # retried the next night
+        assert step["detail"] == "skipped: Ballot sync is already running; crawler adopted 1 this week: NM"
         crawled, _, _ = run()
         assert crawled == 0  # done for the week
 

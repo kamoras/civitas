@@ -1,10 +1,11 @@
 """app.atomic_write: a file is replaced whole, never seen partial."""
 
+import json
 import os
 
 import pytest
 
-from app.atomic_write import write_text_atomic
+from app.atomic_write import update_json_file, write_text_atomic
 
 
 @pytest.fixture()
@@ -51,3 +52,45 @@ def test_the_target_is_never_truncated_in_place(workdir, monkeypatch):
     monkeypatch.setattr(os, "fsync", fsync)
     write_text_atomic(target, '{"new": true}')
     assert seen == ['{"old": true}']
+
+
+def test_keeps_the_files_mode(workdir):
+    """mkstemp's 0600 must not become the data file's mode."""
+    target = workdir / "dates.json"
+    target.write_text("{}")
+    target.chmod(0o644)
+    write_text_atomic(target, '{"new": true}')
+    assert oct(target.stat().st_mode & 0o777) == "0o644"
+    fresh = workdir / "fresh.json"
+    write_text_atomic(fresh, "{}")
+    assert oct(fresh.stat().st_mode & 0o777) == "0o644"
+
+
+def test_concurrent_updates_keep_every_change(workdir):
+    """Two writers' read-modify-writes (the crawl and a sync, in threads or
+    processes) interleave without losing either's key."""
+    import threading
+    import time
+
+    target = workdir / "dates.json"
+    target.write_text("{}")
+    in_first = threading.Event()
+
+    def slow_add(known):
+        known["first"] = 1
+        in_first.set()
+        time.sleep(0.2)  # the second writer arrives mid-update
+        return known
+
+    first = threading.Thread(target=update_json_file, args=(target, slow_add))
+    first.start()
+    in_first.wait()
+    update_json_file(target, lambda known: {**known, "second": 2})
+    first.join()
+    assert json.loads(target.read_text()) == {"first": 1, "second": 2}
+
+
+def test_a_missing_file_starts_from_what_the_caller_knows(workdir):
+    target = workdir / "sub" / "dates.json"
+    written = update_json_file(target, lambda known: {**known, "new": 1}, missing=lambda: {"bundled": 1})
+    assert written == {"bundled": 1, "new": 1} == json.loads(target.read_text())

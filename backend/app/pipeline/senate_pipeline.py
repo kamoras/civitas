@@ -38,7 +38,7 @@ from app.models import (
 )
 
 # Fetch modules
-from app.pipeline.analyze.bill_stage import is_public_law_action
+from app.pipeline.analyze.bill_stage import is_enacted, is_public_law_action
 from app.pipeline.fetch.congress import (
     extract_official_title,
     fetch_bill,
@@ -994,13 +994,13 @@ async def run_senate_pipeline(
                     official_title = extract_official_title(titles)
                     crs_policy_area = (bill.get("policyArea") or {}).get("name", "")
                     # actions[0] is the most recent (Congress.gov returns
-                    # newest-first) — same is_public_law_action check
-                    # used for sponsored bills below, so a significant
+                    # newest-first) — the same is_law reading (is_enacted)
+                    # as sponsored bills below, so a significant
                     # bill's cosponsorship-edge weight (sponsorship_analysis.
                     # _cosponsorship_edge_weight) reflects the same notion
                     # of "advanced" everywhere in the pipeline.
                     latest_action_text = (actions or [{}])[0].get("text", "") if actions else ""
-                    is_law = is_public_law_action(latest_action_text)
+                    is_law = is_enacted(latest_action_text, actions)
 
                     bills_data.append(
                         {
@@ -1807,9 +1807,11 @@ async def run_senate_pipeline(
             for prepared in senator_prepared:
                 for sp in prepared.get("sponsoredBills", []):
                     try:
-                        sp["stage"] = classify_bill_stage_from_actions(
-                            await _sponsored_bill_actions(client, db, sp), sp.get("isLaw", False),
-                        )
+                        sp_actions = await _sponsored_bill_actions(client, db, sp)
+                        # With the history to hand, is_law as every writer
+                        # reads it (is_enacted) — agreeing with the stage.
+                        sp["isLaw"] = sp.get("isLaw", False) or is_enacted(sp.get("latestAction"), sp_actions)
+                        sp["stage"] = classify_bill_stage_from_actions(sp_actions, sp["isLaw"])
                     except Exception:
                         # Leave stage unset: _les_bill_stage falls back to
                         # isLaw/latestAction for this bill. One unreachable

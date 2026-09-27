@@ -22,7 +22,7 @@ import logging
 import os
 from typing import Any
 
-from app.atomic_write import write_text_atomic
+from app.atomic_write import update_json_file
 
 logger = logging.getLogger(__name__)
 
@@ -78,22 +78,26 @@ def _load_discovered() -> dict[str, Any]:
 def save_discovered(state: str, source: dict[str, Any] | None) -> None:
     """Record (or, with None, forget) what the crawler proved for `state`.
     Never touches the hand-verified file."""
-    discovered = dict(_load_discovered())
-    if source is None:
-        discovered.pop(state.upper(), None)
-    else:
-        discovered[state.upper()] = source
+    global _discovered_cache
+
+    def record(discovered: dict[str, Any]) -> dict[str, Any]:
+        if source is None:
+            discovered.pop(state.upper(), None)
+        else:
+            discovered[state.upper()] = source
+        return discovered
+
+    # Into the file as it stands now, under its lock (update_json_file).
     for path in _DISCOVERED_PATHS:
         try:
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            write_text_atomic(path, json.dumps(discovered, indent=2, sort_keys=True))
-            break
+            _discovered_cache = update_json_file(
+                path, record, missing=lambda: dict(_load_discovered()), indent=2, sort_keys=True,
+            )
+            return
         except OSError:
             continue
-    else:
-        logger.warning("Nowhere writable to record discovered source for %s", state)
-    global _discovered_cache
-    _discovered_cache = discovered
+    logger.warning("Nowhere writable to record discovered source for %s", state)
+    _discovered_cache = record(dict(_load_discovered()))
 
 
 def discovered_states() -> set[str]:

@@ -48,7 +48,7 @@ from typing import Any
 
 import httpx
 
-from app.atomic_write import write_text_atomic
+from app.atomic_write import update_json_file
 
 logger = logging.getLogger(__name__)
 
@@ -124,19 +124,22 @@ def save(state: str, cycle: int, dates: dict) -> None:
     replaces, so a per-state read that knows only the primary doesn't drop
     the runoff the national calendar supplied, or vice versa."""
     global _cache
-    known = dict(_load())
     key = f"{cycle}-{state.upper()}"
-    known[key] = {**known.get(key, {}), **{k: v for k, v in dates.items() if v}}
+
+    def merge(known: dict[str, Any]) -> dict[str, Any]:
+        known[key] = {**known.get(key, {}), **{k: v for k, v in dates.items() if v}}
+        return known
+
+    # Merged into the file as it stands now, under its lock: the source
+    # crawl and a ballot sync both write here (update_json_file).
     for path in _PATHS:
         try:
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            write_text_atomic(path, json.dumps(known, indent=2, sort_keys=True))
-            break
+            _cache = update_json_file(path, merge, missing=lambda: dict(_load()), indent=2, sort_keys=True)
+            return
         except OSError:
             continue
-    else:
-        logger.warning("Nowhere writable to record election dates for %s", state)
-    _cache = known
+    logger.warning("Nowhere writable to record election dates for %s", state)
+    _cache = merge(dict(_load()))
 
 
 async def fetch_fec_calendar(client: httpx.AsyncClient, cycle: int) -> dict[str, dict]:

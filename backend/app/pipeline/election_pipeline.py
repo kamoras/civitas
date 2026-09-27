@@ -792,25 +792,27 @@ async def _weekly_source_crawl(db: Session, client, cycle: int) -> dict[str, str
     every state that has no hand-verified source, and what it looks for — a
     state standing up a results portal, a new cycle's file appearing —
     moves on the scale of weeks, not hours. Runs BEFORE the sync so anything
-    it proves out contributes the same night, under the same guards: it
-    rewrites the discovered-source and election-date files the sync reads
-    and writes. Best-effort — a failure is logged, and costs the night's
-    sync nothing."""
-    if api_cache_get(db, _CRAWL_TIER, _CRAWL_KEY, max_age_hours=_CRAWL_EVERY_HOURS) is not None:
-        return {}
+    it proves out contributes the same night, but outside the sync's guards
+    and their time budget: it writes no Candidate row, and the discovered-
+    source and election-date files it shares with the sync are updated
+    under their own lock (atomic_write.update_json_file). Best-effort — a
+    failure is logged, costs the night's sync nothing, and is retried the
+    next night."""
     try:
+        if api_cache_get(db, _CRAWL_TIER, _CRAWL_KEY, max_age_hours=_CRAWL_EVERY_HOURS) is not None:
+            return {}
         leads = await crawl_for_new_sources(db, client, cycle)
+        adopted = {s: r for s, r in leads.items() if r.startswith("adopted")}
+        logger.info(
+            "Source crawl: %d state(s) adopted%s",
+            len(adopted), f" — {adopted}" if adopted else "",
+        )
+        api_cache_set(db, _CRAWL_TIER, _CRAWL_KEY, {"completedAt": utcnow().isoformat()})
+        return adopted
     except Exception:
         db.rollback()
         logger.exception("Source crawl failed — the sync goes ahead, and the crawl is retried tomorrow")
         return {}
-    adopted = {s: r for s, r in leads.items() if r.startswith("adopted")}
-    logger.info(
-        "Source crawl: %d state(s) adopted%s",
-        len(adopted), f" — {adopted}" if adopted else "",
-    )
-    api_cache_set(db, _CRAWL_TIER, _CRAWL_KEY, {"completedAt": utcnow().isoformat()})
-    return adopted
 
 
 def _adopted_detail(adopted: dict[str, str]) -> str:
@@ -821,10 +823,8 @@ def _adopted_detail(adopted: dict[str, str]) -> str:
 
 
 async def _confirmed_candidates_phase(db: Session, client, cycle: int) -> str:
-    """The nightly run's confirmed-candidate phase — the weekly source crawl,
-    then the ballot sync — run holding the ballot sync's guards; returns the
-    dashboard's detail line."""
-    adopted = await _weekly_source_crawl(db, client, cycle)
+    """The nightly run's ballot sync, run holding the ballot sync's guards;
+    returns the dashboard's detail line."""
     confirm_result, filing_result = await _sync_ballots(db, client, cycle)
     confirmed_total = sum(r["confirmed"] for r in confirm_result.values())
     logger.info("Confirmed candidates: %s", confirm_result)
@@ -853,7 +853,7 @@ async def _confirmed_candidates_phase(db: Session, client, cycle: int) -> str:
     )
     if non_federal:
         detail += f"; {non_federal} state-office nominees"
-    return detail + _adopted_detail(adopted)
+    return detail
 
 
 async def run_election_pipeline(cycle: int | None = None) -> dict:
@@ -914,20 +914,23 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
             progress.begin("confirmed_candidates")
             confirmed_open = True  # until the phase is marked done or skipped
             try:
+                adopted = await _weekly_source_crawl(db, client, cycle)
                 # The election-season ballot sync may be mid-pass; two
-                # passes writing the same Candidate rows (and source files)
-                # at once is the one thing to avoid, and that pass is doing
-                # this step anyway. Holding the sync's tracker and lease
-                # (lease.tracked_job, as the scheduled sync does), so a sync
-                # in this process or another can't start beside this pass.
+                # passes writing the same Candidate rows at once is the one
+                # thing to avoid, and that pass is doing this step anyway.
+                # Holding the sync's tracker and lease (lease.tracked_job, as
+                # the scheduled sync does), so a sync in this process or
+                # another can't start beside this pass.
                 async with lease.tracked_job_async(
                     lease.BALLOT_SYNC, _ballot_tracker, who="Election pipeline's confirmed-candidate phase",
                 ) as granted:
                     if not granted:
-                        progress.skip("confirmed_candidates", detail=f"skipped: {granted.why}")
+                        progress.skip(
+                            "confirmed_candidates", detail=f"skipped: {granted.why}{_adopted_detail(adopted)}",
+                        )
                     else:
                         detail = await _confirmed_candidates_phase(db, client, cycle)
-                        progress.complete("confirmed_candidates", detail=detail)
+                        progress.complete("confirmed_candidates", detail=detail + _adopted_detail(adopted))
                     confirmed_open = False
             except lease.CutOff as cut:
                 db.rollback()
@@ -1021,6 +1024,13 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                         logger.info("--- Election: BLUESKY POSTING ---")
                         progress.begin("bluesky_posting")
                         try:
+                            if time.monotonic() >= coverage_deadline:
+                                # The calibration and the posting loop don't
+                                # await, so the cut-off can't stop them; not
+                                # starting them past the deadline keeps them
+                                # inside the guards (each is minutes at most,
+                                # within the lease's stale window).
+                                raise lease.CutOff("Election pipeline's posting phase reached its deadline")
                             # Re-derive the relevance cut from the corpus this
                             # run just ingested, before it gates that corpus —
                             # same order and same stale-beats-nothing failure
@@ -1032,6 +1042,9 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                             posted = post_race_coverage_updates(db, deadline=coverage_deadline)
                             logger.info("Posted %d race coverage updates", posted)
                             progress.complete("bluesky_posting", detail=f"{posted} posted")
+                        except lease.CutOff as cut:
+                            logger.warning("%s — its items wait for the next run", cut)
+                            progress.skip("bluesky_posting", detail="skipped: reached its deadline")
                         except Exception:
                             db.rollback()
                             logger.exception("Bluesky posting failed — continuing")

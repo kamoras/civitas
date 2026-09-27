@@ -3829,7 +3829,7 @@ def refresh_action_issues(db: Session | None = None) -> int:
     try:
         with lease.holding(db, lease.ACTION_REFRESH, yield_to=lease.DATA_RESET) as token:
             if token is None:
-                code, why = lease.refusal_and_code(db, lease.ACTION_REFRESH)
+                code, why = lease.code_and_refusal(db, lease.ACTION_REFRESH)
                 # A reset (or a dead one's lease) holding the refresh off is
                 # worth a warning; another container's refresh is routine.
                 logger.log(

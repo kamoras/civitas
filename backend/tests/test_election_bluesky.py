@@ -305,6 +305,37 @@ class TestPostRaceCoverageUpdates:
         mock_publish.assert_not_called()
         assert item.bsky_posted is False
 
+    def test_another_pass_posting_for_the_race_meanwhile_holds_this_one_off(self, db_session, monkeypatch):
+        """The cooldown and the daily budget are checked again in the same
+        update that reserves the post, not only when the pass read them."""
+        _creds(monkeypatch)
+        _stub_relevance(monkeypatch)
+        _race(db_session)
+        _candidate(db_session)
+        _item(db_session, url="https://apnews.com/mine")
+        db_session.commit()
+
+        other = sessionmaker(bind=db_session.get_bind())()
+
+        def posted_meanwhile(*_args):
+            # While this pass composes its post (past its cooldown read),
+            # another pass publishes a different item about the same race.
+            other.add(RaceCoverageItem(
+                race_id="2026-SEN-GA", source_type="news", source_name="AP News", title="Other story",
+                url="https://apnews.com/theirs", summary="s", matched_candidate_id="S6GA001",
+                match_basis="full_name", bsky_posted=True, bsky_posted_at=election_bluesky.utcnow(),
+            ))
+            other.commit()
+            return "A grounded sentence."
+
+        with patch.object(election_bluesky, "_generate_post_text", side_effect=posted_meanwhile), \
+             patch.object(election_bluesky, "_publish", return_value=True) as mock_publish:
+            posted = election_bluesky.post_race_coverage_updates(db_session)
+        other.close()
+
+        assert posted == 0
+        mock_publish.assert_not_called()
+
     def test_no_item_is_started_past_the_deadline(self, db_session, monkeypatch):
         import time
 

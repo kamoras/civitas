@@ -331,10 +331,10 @@ def refusal_text(code: str, tier: str | None = None, who: str | None = None) -> 
 
 def refusal(db: Session, tier: str) -> str:
     """refusal_code, as a skip message says it, naming the holder."""
-    return refusal_and_code(db, tier)[1]
+    return code_and_refusal(db, tier)[1]
 
 
-def refusal_and_code(db: Session, tier: str) -> tuple[str, str]:
+def code_and_refusal(db: Session, tier: str) -> tuple[str, str]:
     """(refusal_code, refusal) from one read, for a caller that acts on the
     code too."""
     code, who = _refused(db, tier)

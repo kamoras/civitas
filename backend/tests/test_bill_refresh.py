@@ -374,3 +374,15 @@ def test_one_reading_of_becoming_law(text, is_law):
     from app.pipeline.analyze.bill_stage import is_public_law_action
 
     assert is_public_law_action(text) is is_law
+
+
+def test_with_its_history_is_law_agrees_with_the_stage():
+    """Signed by the President before a law number is assigned: the stage is
+    ENACTED from the structured action codes, and so is is_law."""
+    from app.pipeline.analyze.bill_stage import classify_bill_stage_from_actions, is_enacted
+
+    signed = [{"actionCode": "E30000", "type": "President", "text": "Signed by President."}]
+    assert str(classify_bill_stage_from_actions(signed)) == "ENACTED"
+    assert is_enacted("Signed by President.", signed) is True
+    assert is_enacted("Signed by President.") is False  # no history: the text alone
+    assert is_enacted("Passed Senate.", [{"actionCode": "17000", "type": "Floor", "text": "Passed Senate."}]) is False

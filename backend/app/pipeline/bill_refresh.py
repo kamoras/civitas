@@ -33,7 +33,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.http_client import make_async_client
 from app.models import RepSponsoredBill, SponsoredBill
-from app.pipeline.analyze.bill_stage import classify_bill_stage_from_actions, is_public_law_action
+from app.pipeline.analyze.bill_stage import classify_bill_stage_from_actions, is_enacted, is_public_law_action
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.congress import CONGRESS_API_BASE, _fetch_with_retry
 from app.pipeline.run_tracker import PipelineRunTracker
@@ -189,16 +189,15 @@ async def _apply_updates(
             matched += 1
             if new_text == row.latest_action and new_date == row.latest_action_date:
                 continue  # updateDate churn without a new action — nothing to do
-            # The latest-action text is the same "hard fact from the API"
-            # the pipelines use for is_law, read the same way.
+            # The latest action alone decides whether a same-day action may
+            # replace the stored one (_supersedes); is_law itself is read
+            # below, from the history too, as every writer reads it.
             becomes_law = is_public_law_action(new_text)
             if not _supersedes(new_date, row.latest_action_date, becomes_law and not row.is_law):
                 # The listing can lag what the nightly pipeline stored from the
                 # bill itself: an action not dated after the stored one never
                 # replaces it (see _supersedes).
                 continue
-            # is_law is monotone: never un-set it.
-            is_law = row.is_law or becomes_law
 
             congress = item.get("congress") or row.congress
             bill_type = (item.get("type") or row.bill_type or "").lower()
@@ -212,8 +211,11 @@ async def _apply_updates(
                     continue
                 actions = await _fetch_fresh_actions(db, client, congress, bill_type, number)
                 actions_cache[actions_key] = actions
+            enacted = is_enacted(new_text, actions)
+            # is_law is monotone: never un-set it.
+            is_law = row.is_law or enacted
             values: dict = {"latest_action": new_text, "latest_action_date": new_date}
-            if becomes_law:
+            if enacted:
                 # Only ever set, never cleared — and so monotone at write
                 # time too, whatever the row holds by then.
                 values["is_law"] = True
@@ -263,8 +265,8 @@ async def _apply_updates(
 async def refresh_bill_statuses(db: Session | None = None) -> dict:
     """Run one incremental refresh cycle. Pass `db` for tests; production
     opens (and closes) its own session. The scheduler runs one pass at a
-    time (lease.tracked_job over bill_tracker()) and cuts a hung one off
-    (asyncio.wait_for) at its next await — which always comes: every step
+    time (lease.run_tracked over bill_tracker()) and cuts a hung one off
+    (lease.CutOff) at its next await — which always comes: every step
     between awaits is bounded (a request times out, SQLite gives up after
     its busy timeout) — so no second pass ever runs beside it."""
     owns_session = db is None
