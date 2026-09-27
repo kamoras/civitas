@@ -1,4 +1,5 @@
 import asyncio
+import os
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 
@@ -14,7 +15,7 @@ from app.api.cache_headers import DataVersionCacheMiddleware
 from app.api.router import api_router
 from app.database import init_db
 from app.scheduler import start_scheduler, stop_scheduler
-from app.background import WritesHeld, start_writer, writing
+from app.background import WritesElsewhere, WritesHeld, start_writer, writing
 
 # Configure logging level from PIPELINE_LOG_LEVEL env setting
 _level_name = (settings.PIPELINE_LOG_LEVEL or "info").upper()
@@ -65,13 +66,19 @@ async def _bootstrap_explore() -> None:
         logging.getLogger("app.main").warning("Explore bootstrap failed: %s", e)
 
 
-def _preload_embedding_model() -> None:
-    """Load the sentence-transformers model eagerly so the first search is fast."""
-    try:
-        from app.pipeline.vector_store import get_embedding_model
-        get_embedding_model()
-    except Exception as e:
-        logging.getLogger("app.main").warning("Embedding model preload failed: %s", e)
+def _preload_embedding_models() -> None:
+    """Load both sentence-transformers models eagerly so the first request
+    that needs one doesn't pay the load: Explore search encodes queries
+    with the similarity model (vector_store.search_explore), /api/qa with
+    the primary one. Only the primary used to be preloaded, so the first
+    search after every restart still loaded its model inline."""
+    from app.pipeline.vector_store import get_embedding_model, get_similarity_model
+
+    for load in (get_similarity_model, get_embedding_model):
+        try:
+            load()
+        except Exception as e:
+            logging.getLogger("app.main").warning("Embedding model preload failed: %s", e)
 
 
 def _invalidate_orphaned_pipelines() -> None:
@@ -93,28 +100,9 @@ def _invalidate_orphaned_pipelines() -> None:
     sweep_orphaned_runs()
 
 
-PROCESS_STARTED_AT: str | None = None
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    global PROCESS_STARTED_AT
-    from datetime import datetime, timezone
-    PROCESS_STARTED_AT = datetime.now(timezone.utc).isoformat()
-    init_db()
-    _invalidate_orphaned_pipelines()
-    start_scheduler()
-    # Pre-build the bills-in-flight collection cache on a background thread
-    # so the first /api/bills request after a deploy is a cache hit instead
-    # of paying the ~1.5s cold rebuild (see bill_service.py).
-    from app.services.bill_service import warm_bill_collection_cache
-    warm_bill_collection_cache()
-    loop = asyncio.get_running_loop()
-    loop.run_in_executor(None, _preload_embedding_model)
-    # Held for the lifespan: the event loop keeps only a weak reference to a
-    # task, so an unreferenced one can be garbage-collected mid-ingestion.
-    bootstrap_task = asyncio.create_task(_bootstrap_explore())
-
+def _start_pipeline_side_startup_jobs() -> None:
+    """The startup work that writes: run where pipelines run, never in the
+    read-only API process."""
     # Rebuild the sqlite-vec explore index when missing or built by a
     # different model (the 2026-07 chroma->sqlite-vec migration path, and
     # any future index-model change). Spawns its own daemon thread;
@@ -158,13 +146,61 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     start_writer(_startup_rescore, name="startup-rescore")
 
+
+PROCESS_STARTED_AT: str | None = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    global PROCESS_STARTED_AT
+    from datetime import datetime, timezone
+    PROCESS_STARTED_AT = datetime.now(timezone.utc).isoformat()
+    init_db()
+    role = settings.PROCESS_ROLE
+    serves_reads = role in ("all", "api")
+    runs_pipelines = role in ("all", "worker")
+    logging.getLogger("app.main").info("Backend process role: %s", role)
+    if runs_pipelines and int(os.environ.get("WEB_CONCURRENCY") or 1) > 1:
+        # The pipeline side keeps state only its own process can see — the
+        # in-memory run flags the admin status endpoint (and through it
+        # check-and-deploy.sh's busy check) reports, the data reset's
+        # writer registry — and would run one scheduler per worker.
+        raise RuntimeError(
+            f"PROCESS_ROLE={role} must run as a single worker process "
+            f"(WEB_CONCURRENCY={os.environ['WEB_CONCURRENCY']}); only PROCESS_ROLE=api scales out"
+        )
+
+    if runs_pipelines:
+        # Only the process that runs pipelines may sweep their rows: the
+        # API process sweeping on its own restart would mark a run live in
+        # the pipeline process as dead.
+        _invalidate_orphaned_pipelines()
+        start_scheduler()
+    if serves_reads:
+        # Pre-build the bills-in-flight collection cache on a background
+        # thread so the first /api/bills request after a deploy is a cache
+        # hit instead of paying the ~1.5s cold rebuild (see bill_service.py).
+        from app.services.bill_service import warm_bill_collection_cache
+        warm_bill_collection_cache()
+        loop = asyncio.get_running_loop()
+        loop.run_in_executor(None, _preload_embedding_models)
+
+    bootstrap_task = None
+    if runs_pipelines:
+        # Held for the lifespan: the event loop keeps only a weak reference
+        # to a task, so an unreferenced one can be garbage-collected
+        # mid-ingestion.
+        bootstrap_task = asyncio.create_task(_bootstrap_explore())
+        _start_pipeline_side_startup_jobs()
+
     from app.api.visits import run_visit_consumer
     visit_consumer_task = asyncio.create_task(run_visit_consumer())
 
     yield
 
     visit_consumer_task.cancel()
-    bootstrap_task.cancel()
+    if bootstrap_task is not None:
+        bootstrap_task.cancel()
     stop_scheduler()
 
 
@@ -182,6 +218,14 @@ async def _writes_held(_request, held: WritesHeld) -> JSONResponse:
     """An endpoint's writer refused while the admin data reset holds the
     database (app.background.writing)."""
     return JSONResponse(status_code=409, content={"detail": str(held)})
+
+
+@app.exception_handler(WritesElsewhere)
+async def _writes_elsewhere(_request, refused: WritesElsewhere) -> JSONResponse:
+    """A trigger reached the read-only API process: nginx routes every
+    trigger to the pipeline service, so this one is missing from that list
+    (nginx/civitas.conf, "Background work")."""
+    return JSONResponse(status_code=503, content={"detail": str(refused)})
 
 
 app.add_middleware(GZipMiddleware, minimum_size=500)

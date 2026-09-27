@@ -45,8 +45,9 @@ if [[ "$LOCAL" == "$REMOTE" ]]; then
   exit 0   # nothing new
 fi
 
-# Deploying restarts the backend service, which kills any pipeline run in
-# progress (observed 2026-07: a deploy landed 11 minutes into a manually-
+# Deploying restarts the pipeline service (docker-compose.swarm.yml; it was
+# the backend service until the API and pipeline were split into two), which
+# kills any pipeline run in progress (observed 2026-07: a deploy landed 11 minutes into a manually-
 # triggered House pipeline run, which then failed with "Cleared by admin
 # (container restart)" — that particular case was an intentional deploy-
 # over, but an *unintended* collision with the nightly scheduled run is
@@ -64,10 +65,10 @@ fi
 # as "no pipeline running" and deploys anyway: exactly the three restarts
 # (18:47, 19:01, 19:16 UTC that day) that killed the House run, each one
 # lining up second-for-second with an ordinary "deploy OK" log entry.
-# civitas_nginx is the only one of these three services still `deploy`-
-# published under Swarm (host port 8081 — see docker-compose.swarm.yml),
-# and it proxies /api/* straight through to backend on the overlay network,
-# so it reaches the same endpoint. Also fail closed now: an unreachable
+# civitas_nginx is the only service still `deploy`-published under Swarm
+# (host port 8081 — see docker-compose.swarm.yml), and it proxies
+# /api/admin/ to the pipeline service on the overlay network — the process
+# whose memory holds the run flags this reads. Also fail closed now: an unreachable
 # admin API is ambiguous, not evidence nothing is running, so a curl error
 # defers the same as a confirmed-running pipeline instead of deploying
 # through it blind.
@@ -236,7 +237,7 @@ if [[ "$deploy_ok" == "1" ]]; then
 fi
 
 if [[ "$deploy_ok" == "1" ]]; then
-  for svc in civitas_backend civitas_frontend civitas_nginx; do
+  for svc in civitas_backend civitas_pipeline civitas_frontend civitas_nginx; do
     wait_for_rollout "$svc" 180 || deploy_ok=0
   done
 fi

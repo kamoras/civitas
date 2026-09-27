@@ -52,6 +52,23 @@ def db_session():
     engine.dispose()
 
 
+@pytest.fixture()
+def throttle_store(monkeypatch):
+    """An isolated store for api/throttle.py. Its tables live in the visits
+    database, which in tests is an unshared `:memory:` engine (a fresh,
+    table-less database per connection) — so without this every limit
+    fails open and nothing a test asserts about one is being exercised."""
+    from app.api import throttle
+
+    engine = create_engine(
+        "sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool,
+    )
+    VisitsBase.metadata.create_all(bind=engine)
+    monkeypatch.setattr(throttle, "_session_factory", sessionmaker(bind=engine, autoflush=False))
+    yield engine
+    engine.dispose()
+
+
 # Explore search's ranking parameters are generated data — measured against
 # whatever corpus the pipeline last ingested (see
 # app/pipeline/calibrate_ranking.py). Tests of the ranking *mechanism* must

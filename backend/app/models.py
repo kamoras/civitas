@@ -1762,6 +1762,34 @@ class VisitSalt(VisitsBase):
     salt: Mapped[str] = mapped_column(String(64), nullable=False)  # hex
 
 
+class ThrottleWindow(VisitsBase):
+    """Requests counted per fixed window, for the per-client rate limits
+    that must hold across every API worker process (api/throttle.py).
+
+    `key` is never an IP address: per-client limits key on the same
+    daily-salted HMAC visit counting uses (SiteVisit.visitor_hash), and rows
+    are deleted two windows after they close.
+    """
+    __tablename__ = "throttle_windows"
+
+    bucket: Mapped[str] = mapped_column(String(32), primary_key=True)
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    window: Mapped[int] = mapped_column(Integer, primary_key=True)  # epoch seconds // period
+    count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class ThrottleClaim(VisitsBase):
+    """The last time something was claimed, for once-per-period rules that
+    must hold across every API worker process (api/throttle.claim): one
+    pulse vote per issue per visitor per day, one summary generation per
+    document per cooldown. Same keying rule as ThrottleWindow."""
+    __tablename__ = "throttle_claims"
+
+    bucket: Mapped[str] = mapped_column(String(32), primary_key=True)
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    claimed_at: Mapped[float] = mapped_column(Float, nullable=False)  # epoch seconds
+
+
 class VisitsMigration(VisitsBase):
     """One-time data migrations applied to the visits database."""
     __tablename__ = "visits_migrations"

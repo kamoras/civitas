@@ -4,7 +4,6 @@ import asyncio
 import json
 import logging
 import secrets
-import time
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -313,7 +312,9 @@ async def post_document_comment(
     return JSONResponse(content=result, status_code=status_code)
 
 
-_summary_timestamps: dict[int, float] = {}
+# One generation per document per cooldown, across every API worker process
+# (api/throttle.py) — a per-process record let each worker start its own.
+_SUMMARY_BUCKET = "explore-summary"
 _SUMMARY_COOLDOWN = 30.0
 _SUMMARY_CACHE_KEY_VERSION = 4  # bump alongside explore_document_summary_prompt's promptVersion
 
@@ -341,16 +342,10 @@ async def get_explore_document_summary(
     once the full text is parsed (also what a cache hit returns
     immediately, as a single event, with no intermediate deltas).
     """
-    now = time.monotonic()
-    last = _summary_timestamps.get(doc_id, 0)
-    if now - last < _SUMMARY_COOLDOWN:
-        raise HTTPException(status_code=429, detail="Please wait before requesting another summary")
-    _summary_timestamps[doc_id] = now
+    from app.api import throttle
 
-    if len(_summary_timestamps) > 500:
-        cutoff = now - _SUMMARY_COOLDOWN * 2
-        for k in [k for k, ts in _summary_timestamps.items() if ts < cutoff]:
-            del _summary_timestamps[k]
+    if not await asyncio.to_thread(throttle.claim, _SUMMARY_BUCKET, str(doc_id), period=_SUMMARY_COOLDOWN):
+        raise HTTPException(status_code=429, detail="Please wait before requesting another summary")
 
     from app.pipeline.analyze.ollama_client import get_cached_llm_result, set_cached_llm_result, stream_llm
     from app.pipeline.analyze.prompts import explore_document_summary_prompt, parse_explore_document_summary

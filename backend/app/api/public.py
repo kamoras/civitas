@@ -7,16 +7,14 @@ Docs: /docs
 """
 
 import asyncio
-import threading
-from collections import defaultdict, deque
-from time import time
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
-from app.api.rate_limit import client_ip
+from app.api import throttle
+from app.api.rate_limit import client_key
 from app.api.response_helpers import (
     CACHE_TTL_CONFIG_S,
     CACHE_TTL_DETAIL_S,
@@ -34,59 +32,29 @@ from fastapi import Request
 router = APIRouter()
 
 # ---------------------------------------------------------------------------
-# Rate limiting — simple per-IP sliding window, no external dependencies
+# Rate limiting — per client, counted in the throttle store every API worker
+# process shares (api/throttle.py)
 # ---------------------------------------------------------------------------
 
 _RATE_LIMIT = 60
 _RATE_PERIOD = 60.0
 
-_rl_lock = threading.Lock()
-_rl_window: dict[str, deque] = defaultdict(deque)
 
-
-# Evict fully-idle IPs every N requests so the per-IP map can't grow
-# unboundedly on an unauthenticated endpoint (same pattern as
-# rate_limit.py's limiter, which already does this).
-_RL_EVICT_EVERY = 2000
-_rl_request_count = 0
-
-
-def _check_rate_limit(ip: str) -> tuple[bool, int, int]:
-    """Return (allowed, remaining, reset_epoch)."""
-    global _rl_request_count
-    now = time()
-    cutoff = now - _RATE_PERIOD
-    reset_at = int(now + _RATE_PERIOD)
-    with _rl_lock:
-        _rl_request_count += 1
-        if _rl_request_count % _RL_EVICT_EVERY == 0:
-            stale = [
-                k for k, q in _rl_window.items() if not q or q[-1] < cutoff
-            ]
-            for k in stale:
-                del _rl_window[k]
-        dq = _rl_window[ip]
-        while dq and dq[0] < cutoff:
-            dq.popleft()
-        if len(dq) >= _RATE_LIMIT:
-            return False, 0, reset_at
-        dq.append(now)
-        return True, _RATE_LIMIT - len(dq), reset_at
-
-
-def _rate_limit_dep(request: Request) -> None:
-    ip = client_ip(request)
-    allowed, remaining, reset_at = _check_rate_limit(ip)
-    request.state.rl_remaining = remaining
-    request.state.rl_reset = reset_at
-    if not allowed:
+async def _rate_limit_dep(request: Request) -> None:
+    key = await client_key(request)
+    decision = await asyncio.to_thread(
+        throttle.hit, "public-api", key, limit=_RATE_LIMIT, period=_RATE_PERIOD,
+    )
+    request.state.rl_remaining = decision.remaining
+    request.state.rl_reset = decision.reset_at
+    if not decision.allowed:
         raise HTTPException(
             status_code=429,
             detail=f"Rate limit exceeded — {_RATE_LIMIT} requests per minute per IP.",
             headers={
                 "X-RateLimit-Limit": str(_RATE_LIMIT),
                 "X-RateLimit-Remaining": "0",
-                "X-RateLimit-Reset": str(reset_at),
+                "X-RateLimit-Reset": str(decision.reset_at),
                 "Retry-After": "60",
                 "Access-Control-Allow-Origin": "*",
             },

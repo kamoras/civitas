@@ -11,6 +11,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 
@@ -24,6 +25,7 @@ from app.schemas import (
     PolicyAreaDetail,
     RelatedIssueSchema,
 )
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +42,20 @@ logger = logging.getLogger(__name__)
 # (hourly bill-status refresh, action-center refresh, nightly pipeline)
 # call warm_bill_collection_cache() to swap in fresh data sooner.
 _COLLECT_CACHE_TTL_SECONDS = 120
-_collect_cache: tuple[float, list["_Row"]] | None = None
+# (monotonic time built, wall-clock time the build started, rows)
+_collect_cache: tuple[float, datetime, list["_Row"]] | None = None
 _refresh_state_lock = threading.Lock()
 _refresh_in_progress = False
+
+# Writers run in the pipeline process (settings.PROCESS_ROLE), and the cache
+# they want refreshed lives in each API worker process, so a writer's
+# warm_bill_collection_cache() can't swap data in directly. It records when
+# the data changed instead (an api_cache row), and each API process looks at
+# that at most this often, rebuilding when the change is newer than its copy.
+_CHANGED_TIER = "bill-collection"
+_CHANGED_KEY = "changed-at"
+_CHANGED_CHECK_SECONDS = 10.0
+_last_changed_check = 0.0
 
 
 def _bioguide_photo(bioguide_id: str | None) -> str | None:
@@ -183,9 +196,10 @@ def _refresh_cache_in_background() -> None:
         global _collect_cache, _refresh_in_progress
         try:
             from app.database import session_scope
+            started = utcnow()
             with session_scope() as db:
                 rows = _build_rows(db)
-            _collect_cache = (time.monotonic(), rows)
+            _collect_cache = (time.monotonic(), started, rows)
         except Exception:
             logger.exception("Background bill-collection rebuild failed — serving the previous snapshot")
         finally:
@@ -204,27 +218,77 @@ def warm_bill_collection_cache() -> None:
     feed the "hot" sort), and the nightly pipeline. Unlike
     clear_bill_collection_cache this never leaves the cache empty, so no
     request ever pays the cold-rebuild cost because data got fresher.
+
+    In the pipeline process, which serves no reads, it records the change
+    for the API processes to pick up instead (_changed_since).
     """
+    if settings.PROCESS_ROLE == "worker":
+        _record_change()
+        return
     _refresh_cache_in_background()
+
+
+def _record_change() -> None:
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+    from app.database import session_scope
+    from app.models import ApiCache
+
+    try:
+        with session_scope() as db:
+            now = utcnow()
+            db.execute(
+                sqlite_insert(ApiCache)
+                .values(tier=_CHANGED_TIER, cache_key=_CHANGED_KEY, data_json="{}", cached_at=now)
+                .on_conflict_do_update(index_elements=["tier", "cache_key"], set_={"cached_at": now})
+            )
+            db.commit()
+    except Exception:
+        # The API processes still rebuild on their TTL.
+        logger.warning("Could not record a bill-collection change", exc_info=True)
+
+
+def _changed_since(db: Session, built_at: datetime) -> bool:
+    """Whether a writer in another process changed the data after `built_at`
+    (checked at most every _CHANGED_CHECK_SECONDS)."""
+    global _last_changed_check
+    now = time.monotonic()
+    if now - _last_changed_check < _CHANGED_CHECK_SECONDS:
+        return False
+    _last_changed_check = now
+    from app.models import ApiCache
+
+    try:
+        changed_at = (
+            db.query(ApiCache.cached_at)
+            .filter(ApiCache.tier == _CHANGED_TIER, ApiCache.cache_key == _CHANGED_KEY)
+            .scalar()
+        )
+    except Exception:
+        logger.warning("Could not read the bill-collection change marker", exc_info=True)
+        return False
+    return changed_at is not None and changed_at >= built_at
 
 
 def _collect_bills(db: Session) -> list[_Row]:
     global _collect_cache
     cached = _collect_cache
     if cached is not None:
-        if (time.monotonic() - cached[0]) >= _COLLECT_CACHE_TTL_SECONDS:
+        built, built_at, rows = cached
+        if (time.monotonic() - built) >= _COLLECT_CACHE_TTL_SECONDS or _changed_since(db, built_at):
             # Stale-while-revalidate: answer from the stale snapshot now,
             # rebuild behind the scenes for the next caller.
             _refresh_cache_in_background()
         # A fresh list every call — callers (get_bills_in_flight) sort this
         # in place, and when no filter is active that's the very list we'd
         # be handing back out of the cache on the next call too.
-        return list(cached[1])
+        return list(rows)
 
     # Cold start (first request before the startup warm finishes, or right
     # after clear_bill_collection_cache): nothing to serve, build inline.
+    started = utcnow()
     rows = _build_rows(db)
-    _collect_cache = (time.monotonic(), rows)
+    _collect_cache = (time.monotonic(), started, rows)
     return list(rows)
 
 

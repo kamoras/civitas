@@ -17,12 +17,12 @@ TEST-NET documentation ranges (198.51.100/24, 203.0.113/24) as private,
 so those are not valid stand-ins for a public peer here.
 """
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
 
-from app.api.rate_limit import client_ip, write_rate_limit, _window
+from app.api.rate_limit import client_ip, client_key, write_rate_limit
 
 
 def _make_request(peer_ip: str, forwarded_for: str | None = None) -> MagicMock:
@@ -65,38 +65,84 @@ class TestClientIp:
         assert client_ip(req) == "unknown"
 
 
-class TestWriteRateLimit:
-    def setup_method(self):
-        _window.clear()
+@pytest.fixture()
+def _fixed_salt():
+    with patch("app.api.visits._daily_salt", AsyncMock(return_value=b"s" * 32)):
+        yield
 
-    def test_allows_under_limit(self):
+
+@pytest.mark.usefixtures("throttle_store", "_fixed_salt")
+class TestWriteRateLimit:
+    async def test_allows_under_limit(self):
         req = _make_request("8.8.4.1")
         for _ in range(20):
-            write_rate_limit(req)  # should not raise
+            await write_rate_limit(req)  # should not raise
 
-    def test_blocks_over_limit(self):
+    async def test_blocks_over_limit(self):
         req = _make_request("8.8.4.2")
         for _ in range(20):
-            write_rate_limit(req)
+            await write_rate_limit(req)
         with pytest.raises(HTTPException) as exc:
-            write_rate_limit(req)
+            await write_rate_limit(req)
         assert exc.value.status_code == 429
 
-    def test_limit_is_per_ip(self):
+    async def test_limit_is_per_ip(self):
         req_a = _make_request("8.8.4.3")
         req_b = _make_request("8.8.4.4")
         for _ in range(20):
-            write_rate_limit(req_a)
-        write_rate_limit(req_b)  # different IP, should not raise
+            await write_rate_limit(req_a)
+        await write_rate_limit(req_b)  # different IP, should not raise
 
-    def test_spoofed_forwarded_header_does_not_bypass_limit(self):
+    async def test_spoofed_forwarded_header_does_not_bypass_limit(self):
         # Same untrusted public peer, different claimed X-Forwarded-For
         # each request — a public peer is never trusted, so all 25
         # requests bucket under the peer and the limit still triggers.
         for i in range(25):
             req = _make_request("8.8.4.5", forwarded_for=f"1.2.3.{i}")
             if i < 20:
-                write_rate_limit(req)
+                await write_rate_limit(req)
             else:
                 with pytest.raises(HTTPException):
-                    write_rate_limit(req)
+                    await write_rate_limit(req)
+
+    async def test_the_ip_itself_is_never_stored(self, throttle_store):
+        from sqlalchemy import text
+
+        await write_rate_limit(_make_request("8.8.4.7"))
+        with throttle_store.connect() as conn:
+            keys = [row[0] for row in conn.execute(text("SELECT key FROM throttle_windows"))]
+        assert keys and all("8.8.4.7" not in k for k in keys)
+        assert keys == [await client_key(_make_request("8.8.4.7"))]
+
+
+@pytest.mark.usefixtures("throttle_store", "_fixed_salt")
+class TestPublicApiRateLimit:
+    async def test_counts_down_then_refuses_with_headers(self):
+        from types import SimpleNamespace
+
+        from app.api.public import _RATE_LIMIT, _rate_limit_dep
+
+        req = _make_request("8.8.4.8")
+        req.state = SimpleNamespace()
+        await _rate_limit_dep(req)
+        assert req.state.rl_remaining == _RATE_LIMIT - 1
+        assert req.state.rl_reset > 0
+        for _ in range(_RATE_LIMIT - 1):
+            await _rate_limit_dep(req)
+        assert req.state.rl_remaining == 0
+        with pytest.raises(HTTPException) as exc:
+            await _rate_limit_dep(req)
+        assert exc.value.status_code == 429
+        assert exc.value.headers["X-RateLimit-Remaining"] == "0"
+        assert exc.value.headers["X-RateLimit-Reset"] == str(req.state.rl_reset)
+
+    async def test_writes_do_not_use_up_the_read_limit(self):
+        from types import SimpleNamespace
+
+        from app.api.public import _rate_limit_dep
+
+        req = _make_request("8.8.4.9")
+        req.state = SimpleNamespace()
+        for _ in range(20):
+            await write_rate_limit(req)
+        await _rate_limit_dep(req)  # a separate bucket

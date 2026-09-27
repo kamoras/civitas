@@ -14,19 +14,16 @@ from unittest.mock import patch
 
 import pytest
 
-import app.api.explore as explore_module
 from app.api.explore import get_explore_document_summary
 from app.models import ExploreDocument
 
 
 @pytest.fixture(autouse=True)
-def _reset_summary_cooldown():
-    """_summary_timestamps is module-level state keyed by doc_id — each
-    test's in-memory db restarts autoincrement at 1, so without this a
-    cooldown set by one test's doc #1 leaks into the next test's doc #1."""
-    explore_module._summary_timestamps.clear()
-    yield
-    explore_module._summary_timestamps.clear()
+def _summary_cooldown_store(throttle_store):
+    """The cooldown is keyed by doc_id, and each test's in-memory db
+    restarts autoincrement at 1 — a store per test keeps a cooldown set by
+    one test's doc #1 out of the next test's doc #1."""
+    yield throttle_store
 
 
 def _make_doc(db_session, **overrides) -> ExploreDocument:

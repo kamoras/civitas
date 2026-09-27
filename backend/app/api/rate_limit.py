@@ -1,24 +1,21 @@
 """Shared per-IP rate limiting for mutation endpoints (POST/DELETE).
 
 Separate from public.py's read-only limiter so write endpoints can use a
-tighter limit without coupling to the read-path code.
+tighter limit without coupling to the read-path code. Counted in the shared
+throttle store (api/throttle.py), so the limit is per client, not per client
+per API worker process.
 """
 
+import asyncio
 import ipaddress
-import threading
-from collections import deque
-from time import time
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
 
+from app.api import throttle
+
 _WRITE_LIMIT = 20        # requests
 _WRITE_PERIOD = 60.0     # per 60 seconds
-
-_lock = threading.Lock()
-_window: dict[str, deque] = {}
-_req_count = 0
-_EVICT_EVERY = 2000
 
 
 def _is_trusted_proxy_peer(peer: str | None) -> bool:
@@ -68,32 +65,28 @@ def client_ip(request: Request) -> str:
     return peer or "unknown"
 
 
-def write_rate_limit(request: Request) -> None:
+async def client_key(request: Request) -> str:
+    """The key per-client limits count under: the day's salted visitor hash
+    of client_ip (api/visits.py), so no limiter stores an IP address."""
+    from app.api.visits import _daily_salt, _visitor_hash
+    from app.time_utils import utcnow
+
+    salt = await _daily_salt(utcnow().date().isoformat())
+    return _visitor_hash(client_ip(request), salt)
+
+
+async def write_rate_limit(request: Request) -> None:
     """FastAPI dependency: 20 mutation requests/minute per IP."""
-    global _req_count
-    ip = client_ip(request)
-    now = time()
-    cutoff = now - _WRITE_PERIOD
-    with _lock:
-        dq = _window.get(ip)
-        if dq is None:
-            dq = deque()
-            _window[ip] = dq
-        while dq and dq[0] < cutoff:
-            dq.popleft()
-        if len(dq) >= _WRITE_LIMIT:
-            raise HTTPException(
-                status_code=429,
-                detail=f"Rate limit exceeded — {_WRITE_LIMIT} requests per minute per IP.",
-                headers={"Retry-After": "60"},
-            )
-        dq.append(now)
-        _req_count += 1
-        if _req_count >= _EVICT_EVERY:
-            _req_count = 0
-            stale = [k for k, v in _window.items() if not v or v[-1] < cutoff]
-            for k in stale:
-                del _window[k]
+    key = await client_key(request)
+    decision = await asyncio.to_thread(
+        throttle.hit, "write", key, limit=_WRITE_LIMIT, period=_WRITE_PERIOD,
+    )
+    if not decision.allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit exceeded — {_WRITE_LIMIT} requests per minute per IP.",
+            headers={"Retry-After": "60"},
+        )
 
 
 WriteRateLimit = Annotated[None, Depends(write_rate_limit)]

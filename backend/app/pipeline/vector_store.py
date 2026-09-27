@@ -45,6 +45,7 @@ import threading
 from sentence_transformers import SentenceTransformer
 from app.atomic_write import write_text_atomic
 from app.background import start_writer
+from app.database import SQLITE_BUSY_TIMEOUT_S
 
 logger = logging.getLogger(__name__)
 
@@ -184,7 +185,16 @@ def get_vec_conn() -> sqlite3.Connection:
             import sqlite_vec
 
             logger.info("Opening vector store: %s", _VECTOR_DB_PATH)
-            conn = sqlite3.connect(_VECTOR_DB_PATH, check_same_thread=False)
+            conn = sqlite3.connect(
+                _VECTOR_DB_PATH, check_same_thread=False, timeout=SQLITE_BUSY_TIMEOUT_S,
+            )
+            # WAL, as the main database has: the pipeline process writes
+            # this file while the API processes search it (PROCESS_ROLE),
+            # and under the default rollback journal a long write holds
+            # every reader off until it commits. Persistent in the file, so
+            # setting it on every open is a no-op after the first.
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
             conn.enable_load_extension(True)
             sqlite_vec.load(conn)
             conn.enable_load_extension(False)

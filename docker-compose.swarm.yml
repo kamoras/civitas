@@ -47,6 +47,18 @@
 #   owner not to change it) via `mode: host`, which is fine here since
 #   8081 is meant to be reachable from the LAN/internet already.
 
+#
+# - `backend` is the read-only API (PROCESS_ROLE=api, two uvicorn worker
+#   processes) and `pipeline` runs everything that writes in the
+#   background: the scheduler, startup jobs and every triggered run
+#   (PROCESS_ROLE=worker, one process). Same image. More containers add no
+#   hardware; the split is so a pipeline can't hold the Python interpreter
+#   lock page requests wait on, can't take the site down with it when it
+#   runs out of memory, and gets its own memory limit. nginx sends
+#   /api/admin/ and the trigger endpoints to `pipeline` (nginx/civitas.conf,
+#   "Background work"); the API process refuses any it is sent (503).
+#   Plain `docker compose up` keeps a single PROCESS_ROLE=all backend.
+
 networks:
   default:
     driver: overlay
@@ -84,9 +96,62 @@ services:
 
   backend:
     ports: !reset []
+    environment:
+      - PROCESS_ROLE=api
+      # Read-only work scales across processes: each worker has its own
+      # interpreter lock. Each also holds its own copy of the two small
+      # embedding models (Explore search, /api/qa). Raise only after
+      # checking memory under load (`docker stats`).
+      - WEB_CONCURRENCY=2
     deploy:
       update_config:
         order: start-first
+        failure_action: rollback
+        delay: 5s
+        monitor: 20s
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+  pipeline:
+    image: civitas-backend:${IMAGE_TAG:-latest}
+    env_file: .env
+    environment:
+      - DATABASE_URL=sqlite:////data/civitas.db
+      - LLM_BACKEND=llama-server
+      - LLAMA_SERVER_URL=http://llama-server:8070
+      - PROCESS_ROLE=worker
+      # One process, always: the admin status endpoint reports run flags
+      # held in this process's memory (the app refuses to start otherwise).
+      - WEB_CONCURRENCY=1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - app_data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          # What the single backend container had when it ran both halves.
+          memory: 4G
+      # stop-first, unlike backend: two pipeline processes overlapping
+      # would load a second set of models for nothing and run two
+      # schedulers (safe — every job takes a lease — but pointless).
+      # check-and-deploy.sh doesn't deploy while a run is in progress, so
+      # the gap costs only a few seconds of admin endpoints.
+      update_config:
+        order: stop-first
         failure_action: rollback
         delay: 5s
         monitor: 20s

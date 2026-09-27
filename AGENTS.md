@@ -50,7 +50,7 @@ locally on a single self-hosted device with zero cloud AI calls.
 ## Architecture
 
 - **Frontend**: Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS — port 3000 (not published to the host under Swarm — see Deployment)
-- **Backend**: FastAPI (Python 3.13), SQLAlchemy ORM, SQLite — port 8000 (same)
+- **Backend**: FastAPI (Python 3.13), SQLAlchemy ORM, SQLite — port 8000 (same). In production, two services from one image: the read-only API and the pipeline (see "Performance conventions" under Backend conventions)
 - **LLM**: LFM2.5-1.2B-Instruct via llama.cpp (`ghcr.io/ggml-org/llama.cpp:server`, in-stack, overlay-network only) or Ollama (not bundled — bring your own, port 11434)
 - **Embeddings**: sentence-transformers, two models in-process — Snowflake Arctic-XS
   (classification) and all-MiniLM-L6-v2 (search index + similarity gates)
@@ -921,6 +921,8 @@ the pending list).
 | API routes | `backend/app/api/` (senators, representatives, presidents, justices, admin, explore, action, health) |
 | Frontend pages | `frontend/src/app/` (action [issues/monitors/timeline/elections/branches/globe], elections [state index, states/[ST] ballot, [raceId] detail], scorecard, leaderboard, explore, about, admin) |
 | Frontend API client (incl. paginated vote fetching) | `frontend/src/lib/api.ts` |
+| Per-client rate limits + once-per-period rules shared by every API worker | `backend/app/api/throttle.py` |
+| Process roles (read-only API vs pipeline) | `backend/app/config.py` (`PROCESS_ROLE`), `backend/app/main.py` (lifespan), `backend/app/background.py`, `docker-compose.swarm.yml`, `nginx/civitas.conf` |
 | Admin dashboard (tabbed sub-dashboards, SVG line charts, chart palette) | `frontend/src/app/admin/page.tsx` (shell + tabs), `frontend/src/components/admin/` |
 | Page-load timing beacon + histogram | `frontend/src/components/LoadTimingBeacon.tsx`, `backend/app/api/visits.py` (`track_timing`), `GET /api/admin/load-times` |
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
@@ -935,7 +937,7 @@ the pending list).
 
 - Python 3.13+, type hints throughout
 - FastAPI for HTTP, SQLAlchemy 2.0 ORM (mapped_column style), Pydantic v2 for schemas
-- `async def` for API routes and fetch functions; the nightly pipeline itself runs synchronously in a background thread
+- `async def` for API routes and fetch functions; the nightly pipeline itself runs synchronously in a background thread of the pipeline process
 - Logging via `logging.getLogger(__name__)` — structured, no print statements
 - All pipeline modules use dependency injection for DB sessions
 - Never store secrets in source code — all credentials come from `.env` via `pydantic-settings`
@@ -954,14 +956,38 @@ the pending list).
     `await asyncio.to_thread()` to keep the event loop non-blocking
   - Set `Cache-Control` headers on relatively static endpoints (config,
     leaderboards, action issues) to enable browser and nginx proxy caching
-  - Backend runs **one** uvicorn worker (`backend/Dockerfile`'s `CMD`); it
-    always has. The write rate limiter, the pulse dedup and the summary
-    cooldown are in-process state that assumes this. Two backend
-    *processes* still meet during a Swarm start-first rollout, when the
-    old and new tasks overlap on the same database, which is what the
-    `init_db` lock and the `IF NOT EXISTS` DDL guard against
-  - Nginx applies rate limiting (`limit_req_zone`) and proxy caching for
-    Action Center endpoints
+  - **Two backend services in production, one image** (`settings.PROCESS_ROLE`,
+    2026-09). `backend` is the read-only API (`PROCESS_ROLE=api`, two uvicorn
+    workers via `WEB_CONCURRENCY`); `pipeline` runs the scheduler, the startup
+    jobs and every triggered run (`PROCESS_ROLE=worker`, always one process —
+    its admin status reads run flags from its own memory, and it refuses to
+    start as several). Plain `docker compose up` runs one `PROCESS_ROLE=all`
+    backend doing both. More containers add no hardware: the point is that a
+    pipeline can't hold the interpreter lock page requests wait on, or take
+    the site down when it runs out of memory.
+  - **Anything that starts background work belongs to the pipeline process.**
+    `app.background.start_writer`/`writing` refuse in the API role (a 503),
+    and nginx sends `/api/admin/` and every trigger endpoint to `pipeline`
+    ("Background work" in `nginx/civitas.conf`). A new POST route must be
+    either routed there or listed in `tests/test_nginx_routing.py`'s
+    `SERVED_BY_API` — that test fails otherwise.
+  - **No per-client state in module globals.** With several API workers each
+    has its own copy, so a limit stretches to its value times the worker
+    count and a once-per-day dedup lets a second vote through on the other
+    worker. Rate limits and once-per-period rules go through
+    `app/api/throttle.py` (`hit`, `claim`), whose tables live in the visits
+    database and are keyed by the day's salted visitor hash, never an IP.
+    Caches of data every client sees alike (`bill_service`'s collection
+    cache, the data-version memo) are fine per process.
+  - Two backend *processes* also meet during a Swarm start-first rollout,
+    when the old and new tasks overlap on the same database, which is what
+    the `init_db` lock and the `IF NOT EXISTS` DDL guard against
+  - Nginx rate-limits every API route (`limit_req_zone`) and caches every
+    response the backend marks cacheable, for as long as its
+    `Cache-Control` says (`api/cache_headers.py`) — no per-route cache block
+    needed. Only `/api/config` sets its own lifetime there, and
+    `/api/public/` is deliberately uncached (its responses carry the
+    caller's own rate-limit counts)
 
 ### Frontend (TypeScript)
 

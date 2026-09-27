@@ -524,16 +524,13 @@ def _congress_activity_sync() -> None:
     _start_job(_run, name="congress-activity-sync")
 
 
-def start_scheduler() -> None:
-    """Parse the cron schedule from settings and start the scheduler.
-
-    Multiple containers can safely run the scheduler because the pipeline
-    orchestrator uses a database-level lock to prevent concurrent runs.
-    """
+def _nightly_trigger() -> CronTrigger | None:
+    """The nightly chain's trigger, from PIPELINE_CRON_SCHEDULE; None (and
+    logged) when the setting isn't a five-field cron expression."""
     cron_parts = settings.PIPELINE_CRON_SCHEDULE.split()
     if len(cron_parts) != 5:
         logger.error("Invalid PIPELINE_CRON_SCHEDULE: %s", settings.PIPELINE_CRON_SCHEDULE)
-        return
+        return None
 
     minute, hour, day, month, day_of_week = cron_parts
 
@@ -541,7 +538,7 @@ def start_scheduler() -> None:
     # the container happens to have — the docs promise "3 AM UTC" and the
     # same-day dedupe keys/date labels elsewhere assume the run date
     # doesn't float with container configuration.
-    trigger = CronTrigger(
+    return CronTrigger(
         minute=minute,
         hour=hour,
         day=day,
@@ -549,6 +546,17 @@ def start_scheduler() -> None:
         day_of_week=day_of_week,
         timezone="UTC",
     )
+
+
+def start_scheduler() -> None:
+    """Parse the cron schedule from settings and start the scheduler.
+
+    Multiple containers can safely run the scheduler because the pipeline
+    orchestrator uses a database-level lock to prevent concurrent runs.
+    """
+    trigger = _nightly_trigger()
+    if trigger is None:
+        return
 
     scheduler.add_job(_nightly_pipeline, trigger, id="pipeline_run", replace_existing=True)
 
@@ -647,8 +655,21 @@ def stop_scheduler() -> None:
 
 
 def get_next_run_time() -> str | None:
-    """Return the next scheduled run time as an ISO string, or None."""
+    """Return the next scheduled run time as an ISO string, or None.
+
+    Read off the live job where this process runs the scheduler, and
+    computed from the same schedule where it doesn't — the read-only API
+    process (settings.PROCESS_ROLE), which serves /api/pipeline/status.
+    """
     job = scheduler.get_job("pipeline_run")
     if job and job.next_run_time:
         return job.next_run_time.isoformat()
-    return None
+    if scheduler.running:
+        return None
+    trigger = _nightly_trigger()
+    if trigger is None:
+        return None
+    from datetime import datetime, timezone
+
+    next_fire = trigger.get_next_fire_time(None, datetime.now(timezone.utc))
+    return next_fire.isoformat() if next_fire else None

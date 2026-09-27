@@ -217,3 +217,34 @@ class TestIndexIdentity:
         measured = float(vs._get_meta(conn, "explore_chunks_per_doc"))
         actual = conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0]
         assert measured == pytest.approx(actual)
+
+
+class TestSharedAcrossProcesses:
+    """The pipeline process writes this file while the API processes search
+    it (settings.PROCESS_ROLE), so a write must not hold reads off."""
+
+    def test_the_index_is_in_wal_mode(self, vector_index):
+        conn = vector_index.get_vec_conn()
+        assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+
+    def test_a_search_is_not_held_off_by_another_process_writing(self, vector_index, monkeypatch):
+        import sqlite3
+
+        monkeypatch.setattr(vector_index, "SQLITE_BUSY_TIMEOUT_S", 0.5)
+        vector_index.embed_explore_documents([_doc(1, "Wellfield rule", NEEDLE)])
+        writer = sqlite3.connect(vector_index._VECTOR_DB_PATH, timeout=0.5)
+        try:
+            # The pipeline process mid-write: under the default rollback
+            # journal this lock blocks every reader, and the search below
+            # would fail "database is locked".
+            writer.execute("BEGIN EXCLUSIVE")
+            writer.execute("INSERT INTO vec_meta (key, value) VALUES ('x', 'y')")
+            reader = sqlite3.connect(vector_index._VECTOR_DB_PATH, timeout=0.5)
+            try:
+                assert reader.execute("SELECT COUNT(*) FROM vec_meta").fetchone() is not None
+            finally:
+                reader.close()
+            assert vector_index.search_explore_documents("wellfield contamination", n_results=3)
+        finally:
+            writer.rollback()
+            writer.close()

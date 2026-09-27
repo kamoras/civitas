@@ -3,7 +3,6 @@
 import asyncio
 import json
 import logging
-import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, field_validator
@@ -13,7 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 from datetime import date
 
 from app.api.admin import require_admin
-from app.api.rate_limit import WriteRateLimit, client_ip
+from app.api.rate_limit import WriteRateLimit
 from app.database import get_db, get_visits_db
 from app.election_calendar import next_election_day, seats_up_for_year
 from app.fact_diff import new_facts_since
@@ -494,8 +493,10 @@ class PulseVoteRequest(BaseModel):
 # exactly the per-visitor identifier §8 of AGENTS.md rules out, and the
 # salt is deleted when the UTC day ends, so yesterday's keys cannot be
 # turned back into addresses. A new salt also means a new key, which makes
-# the dedup "one stance per issue per UTC day" — what the 429 says.
-_pulse_voted: dict[tuple[str, int], float] = {}
+# the dedup "one stance per issue per UTC day" — what the 429 says. Held in
+# the throttle store every API worker process shares (api/throttle.py): a
+# per-process record let a second vote through on the other worker.
+_PULSE_BUCKET = "pulse"
 _PULSE_DEDUP_WINDOW = 60.0 * 60 * 24
 
 
@@ -515,35 +516,31 @@ async def record_pulse_vote(
     which a generic rate limit alone wouldn't (2026-07 audit found this
     endpoint had neither).
     """
-    from app.api.visits import _daily_salt, _visitor_hash
+    from app.api import throttle
+    from app.api.rate_limit import client_key
 
-    salt = await _daily_salt(utcnow().date().isoformat())
-    now = time.monotonic()
-    key = (_visitor_hash(client_ip(request), salt), body.issue_id)
-    last = _pulse_voted.get(key)
-    if last is not None and now - last < _PULSE_DEDUP_WINDOW:
+    key = f"{await client_key(request)}:{body.issue_id}"
+    if not await asyncio.to_thread(throttle.claim, _PULSE_BUCKET, key, period=_PULSE_DEDUP_WINDOW):
         raise HTTPException(
             status_code=429,
             detail="You've already registered a stance on this issue today.",
         )
 
-    issue = db.query(ActionIssue).filter(ActionIssue.id == body.issue_id).first()
-    if not issue:
-        raise HTTPException(status_code=404, detail="Issue not found")
+    try:
+        issue = db.query(ActionIssue).filter(ActionIssue.id == body.issue_id).first()
+        if not issue:
+            raise HTTPException(status_code=404, detail="Issue not found")
 
-    if body.stance == "concerned":
-        issue.concerned_count = (issue.concerned_count or 0) + 1
-    else:
-        issue.not_priority_count = (issue.not_priority_count or 0) + 1
-    db.commit()
-    db.refresh(issue)
-
-    _pulse_voted[key] = now
-    if len(_pulse_voted) > 20_000:
-        cutoff = now - _PULSE_DEDUP_WINDOW
-        stale = [k for k, v in _pulse_voted.items() if v < cutoff]
-        for k in stale:
-            del _pulse_voted[k]
+        if body.stance == "concerned":
+            issue.concerned_count = (issue.concerned_count or 0) + 1
+        else:
+            issue.not_priority_count = (issue.not_priority_count or 0) + 1
+        db.commit()
+        db.refresh(issue)
+    except BaseException:
+        # No vote was recorded: the claim mustn't hold the visitor off.
+        await asyncio.to_thread(throttle.release, _PULSE_BUCKET, key)
+        raise
 
     return {
         "issueId": issue.id,

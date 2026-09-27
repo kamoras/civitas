@@ -7,16 +7,13 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi import HTTPException
 
-import app.api.action as action_module
 from app.api.action import PulseVoteRequest, record_pulse_vote
 from app.models import ActionIssue
 
 
 @pytest.fixture(autouse=True)
-def _reset_dedup():
-    action_module._pulse_voted.clear()
-    yield
-    action_module._pulse_voted.clear()
+def _store(throttle_store):
+    yield throttle_store
 
 
 def _request(ip: str):
@@ -54,11 +51,24 @@ async def test_other_visitors_are_unaffected(db_session):
     assert second["concernedCount"] == 2
 
 
-async def test_the_ip_itself_is_never_held(db_session):
+async def test_the_ip_itself_is_never_held(db_session, throttle_store):
+    from sqlalchemy import text
+
     issue_id = _issue(db_session)
     await _vote(db_session, "203.0.113.7", issue_id)
-    held = " ".join(str(k) for k in action_module._pulse_voted)
-    assert "203.0.113.7" not in held
+    with throttle_store.connect() as conn:
+        held = [row[0] for row in conn.execute(text("SELECT key FROM throttle_claims"))]
+    assert held and all("203.0.113.7" not in key for key in held)
+
+
+async def test_a_vote_on_a_missing_issue_does_not_use_up_the_day(db_session):
+    issue_id = _issue(db_session)
+    with pytest.raises(HTTPException) as exc:
+        await _vote(db_session, "203.0.113.7", issue_id + 1)
+    assert exc.value.status_code == 404
+    with pytest.raises(HTTPException) as again:
+        await _vote(db_session, "203.0.113.7", issue_id + 1)
+    assert again.value.status_code == 404  # not 429
 
 
 async def test_a_new_day_salt_allows_a_new_vote(db_session):

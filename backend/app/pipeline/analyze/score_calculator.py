@@ -474,6 +474,22 @@ def clamp(value: float, min_val: int = 0, max_val: int = 100) -> int:
 
 
 _district_pvi_cache: dict[str, int] | None = None
+# The live file's mtime when _district_pvi_cache was loaded. The Supplementary
+# run rewrites /data/district_pvi.json in the pipeline process, and the
+# elections API reads it in the API processes (settings.PROCESS_ROLE) — the
+# writer's reset of _district_pvi_cache only reaches its own process, so the
+# readers notice the new file by its mtime instead (as
+# population_reference.load does).
+_district_pvi_mtime: float | None = None
+
+
+def _live_pvi_mtime(filename: str) -> float | None:
+    import pathlib
+
+    try:
+        return (pathlib.Path(_PVI_PERSISTENT_DIR) / filename).stat().st_mtime
+    except OSError:
+        return None
 
 
 def _district_pvi() -> dict[str, int]:
@@ -490,8 +506,10 @@ def _district_pvi() -> dict[str, int]:
     ~20% of the time, when the seat actually elected exactly that
     platform.
     """
-    global _district_pvi_cache
-    if _district_pvi_cache is None:
+    global _district_pvi_cache, _district_pvi_mtime
+    mtime = _live_pvi_mtime("district_pvi.json")
+    if _district_pvi_cache is None or mtime != _district_pvi_mtime:
+        _district_pvi_mtime = mtime
         raw = _read_pvi_json("district_pvi.json")
         if raw.get("districts"):
             _district_pvi_cache = {k: int(v) for k, v in raw["districts"].items()}
