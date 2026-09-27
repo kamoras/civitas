@@ -1966,7 +1966,7 @@ export default function AboutPage() {
               </h3>
               <Row
                 label="Congress.gov API"
-                value="Bill text, voting records, member data, sponsored legislation, and bill sponsor party affiliation — both chambers"
+                value="Bill text, voting records, member data, sponsored legislation, and bill sponsor party affiliation; for any bill's page, its CRS summary, sponsors, cosponsors, full action history and text versions — both chambers"
               />
               <Row
                 label="FEC API (fec.gov)"
