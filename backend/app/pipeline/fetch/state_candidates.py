@@ -473,6 +473,7 @@ def _apply_ballot(
             match.confirmed_general = True
             db.commit()
         _note_ballot_name(db, match, record)
+        _drop_replaced_placeholder(db, race, record)
         listed[race.id].add(match.id)
         confirmed += 1
     if keep_unlisted and prune:
@@ -529,6 +530,30 @@ def _unconfirm_off_ballot(db: Session, listed: dict[str, set[str]]) -> int:
     if changed:
         db.commit()
     return changed
+
+
+def _drop_replaced_placeholder(db: Session, race: Race, record: dict) -> None:
+    """A record that now matches an FEC candidate replaces any ballot-only
+    row this race holds for the same person (they filed since). Part of
+    _prune_ballot_only's job, but not a judgement about who is on the
+    ballot, so it runs whatever source is answering — else the person is
+    shown twice while a weaker source answers."""
+    party = PARTY_CODE_MAP.get(record.get("party") or "")
+    # Same party only: a surname alone would take a Green Smith for the
+    # Republican Smith who just matched.
+    placeholders = [
+        c for c in db.query(Candidate)
+        .filter(Candidate.race_id == race.id, Candidate.id.startswith(BALLOT_ONLY_ID_PREFIX))
+        .all()
+        if party and c.party == party
+    ]
+    if not placeholders:
+        return
+    same = _match_candidate(placeholders, record["last_name"], record["party"], record.get("display_name"))
+    if same is not None:
+        db.delete(same)
+        db.commit()
+        logger.info("%s: dropped ballot-only %s, now an FEC candidate", race.id, same.id)
 
 
 def _may_prune(configured: dict, answering: dict) -> bool:
@@ -1400,9 +1425,13 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
             )
             rest = [r for r in records if _race_id_for(cycle, state, r["office"], r["district"]) not in covered]
             if rest:
+                # Primary results beside a certified list never prune: a
+                # race the list didn't answer for tonight (an empty or
+                # partial read) may hold its certified third-party rows,
+                # which results can't list (_may_prune).
                 more = _apply_ballot(
                     db, cycle, state, rest, keep_unlisted=not ballot_is_elsewhere, authoritative=False,
-                    scope=races_here - covered,
+                    scope=races_here - covered, prune=_may_prune(configured, {}),
                 )
                 applied = {k: applied[k] + more[k] for k in applied}
             _record_ballot_basis(

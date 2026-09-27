@@ -612,6 +612,54 @@ class TestAWeakerSourceNeverPrunesTheCertifiedBallot:
         await sc.sync_confirmed_candidates(db_session, None, 2026)
         assert self._ids(db_session) == night1
 
+    @pytest.mark.asyncio
+    async def test_a_certified_list_that_answers_empty_or_partial(self, db_session, monkeypatch, tmp_path):
+        """A general list returning [] (Google dropping the election) or
+        missing a race leaves those races to primary results, which must
+        not prune the certified rows there."""
+        from unittest.mock import AsyncMock
+
+        src = self._setup(monkeypatch, tmp_path, "CO")
+        _race(db_session, "2026-SEN-CO", "CO", office="S")
+        _candidate(db_session, "A", "2026-SEN-CO", "HICK, JOHN", party="DEM")
+        db_session.commit()
+        rec = [{"office": "S", "district": None, "party": "D", "last_name": "HICK", "display_name": "John Hick"}]
+        green = {"office": "S", "district": None, "party": "G", "last_name": "GREENE", "display_name": "Gina Greene"}
+        monkeypatch.setitem(sc.STRATEGIES, src["strategy"], AsyncMock(return_value=rec))
+        monkeypatch.setitem(sc.STRATEGIES, src["general_list"]["strategy"], AsyncMock(return_value=rec + [green]))
+        await sc.sync_confirmed_candidates(db_session, None, 2026)
+        night1 = self._ids(db_session)
+        monkeypatch.setitem(sc.STRATEGIES, src["general_list"]["strategy"], AsyncMock(return_value=[]))
+        await sc.sync_confirmed_candidates(db_session, None, 2026)
+        assert self._ids(db_session) == night1
+
+    @pytest.mark.asyncio
+    async def test_a_placeholder_an_fec_row_replaced_goes_whoever_answers(
+        self, db_session, monkeypatch, tmp_path,
+    ):
+        """Not pruning must not show one person twice: a certified
+        candidate who has since filed with the FEC is matched by the weaker
+        source, and their placeholder goes — a same-surname candidate of
+        another party stays."""
+        from unittest.mock import AsyncMock
+
+        self._setup(monkeypatch, tmp_path, "TX", {"TX": {
+            "strategy": "tabular", "source_name": "a results file",
+            "description": "Found automatically on 2026-10-01: x"}})
+        _race(db_session, "2026-SEN-TX", "TX", office="S")
+        db_session.commit()
+        allred = {"office": "S", "district": None, "party": "D", "last_name": "ALLRED", "display_name": "Colin Allred"}
+        green = {"office": "S", "district": None, "party": "G", "last_name": "ALLRED", "display_name": "Gail Allred"}
+        monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(return_value=[allred, green]))
+        await sc.sync_confirmed_candidates(db_session, None, 2026)
+        assert len([i for i in self._ids(db_session) if i.startswith("ballot:")]) == 2
+        _candidate(db_session, "S0TX", "2026-SEN-TX", "ALLRED, COLIN", party="DEM")
+        db_session.commit()
+        monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(return_value=None))
+        monkeypatch.setitem(sc.STRATEGIES, "tabular", AsyncMock(return_value=[allred]))
+        await sc.sync_confirmed_candidates(db_session, None, 2026)
+        assert self._ids(db_session) == ["S0TX", "ballot:2026-SEN-TX:gail-allred"]
+
     def test_a_state_with_no_certified_source_still_prunes(self):
         assert sc._may_prune({"strategy": "clarity"}, {"strategy": "clarity"}) is True
         assert sc._may_prune({"general_ballot_complete": True}, {"strategy": "tabular"}) is False
