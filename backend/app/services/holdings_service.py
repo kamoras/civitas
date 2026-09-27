@@ -180,7 +180,6 @@ def _build(db: Session, disclosure: FinancialDisclosure, page: int, per_page: in
     return HoldingsSchema(
         available=True,
         report_label=disclosure.report_label,
-        # Ordered: when it was written (a repair rewrites it too), then the row.
         as_of_date=disclosure.as_of_date,
         filed_date=disclosure.filed_date,
         source_url=disclosure.source_url,

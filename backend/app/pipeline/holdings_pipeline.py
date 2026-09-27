@@ -36,6 +36,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models import FinancialDisclosure, FinancialHolding
+from app.ops_alerts import send_ops_alert
 from app.pipeline.fetch.fd_common import UNREADABLE_SCANNED, AnnualReport, until_deadline
 from app.pipeline.fetch.house_fd import PARSER_VERSION as HOUSE_PARSER_VERSION
 from app.pipeline.fetch.house_fd import fetch_and_parse_annual as fetch_house_annual, fetch_annual_filing_index
@@ -66,15 +67,6 @@ from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
-
-def _alert(subject: str, body: str, *, dedupe_key: str) -> None:
-    """Best-effort ops alert — lazily imported and never allowed to raise,
-    the same pattern member_lifecycle.py uses for mid-pipeline alerting."""
-    try:
-        from app.ops_alerts import send_ops_alert
-        send_ops_alert(subject, body, dedupe_key=dedupe_key)
-    except Exception:
-        logger.exception("Failed to send ops alert: %s", subject)
 
 T = TypeVar("T")
 
@@ -647,7 +639,19 @@ async def _house_candidates(db: Session, client: httpx.AsyncClient) -> dict[str,
         # is a failed or changed index, not a quiet year — fail the phase so
         # the run records it, instead of leaving every stored report to age.
         raise RuntimeError("House annual-report index returned no filings for either year")
-    return per_rep
+    return {rep_id: _annual_amendments_only(filings) for rep_id, filings in per_rep.items()}
+
+
+def _annual_amendments_only(filings: list[dict]) -> list[dict]:
+    """A member's filings without the amendments that can't be of an annual
+    report. The index's "A" is any amendment — of a candidate or new-filer
+    report too — and neither the index nor the amendment's cover says which
+    report it amends. An annual report's amendment is indexed in the same
+    year as the annual report it amends: every member-status or unreadable
+    amendment in the 2025 index (23 of 119; the rest are candidates') has
+    its filer's annual report beside it (checked 2026-09-27)."""
+    annual_years = {f["year"] for f in filings if f.get("filing_type") == "O"}
+    return [f for f in filings if f.get("filing_type") != "A" or f["year"] in annual_years]
 
 
 async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
@@ -713,7 +717,7 @@ def _write_notes(db: Session, per_senator: dict[str, list[dict]]) -> None:
     except Exception:
         logger.exception("Senate holdings: later-filing notes not updated")
         db.rollback()
-        _alert(
+        send_ops_alert(
             "Senate holdings notes not updated",
             "Tonight's Senate holdings phase could not update the notes that name an undated filing "
             "made on or after a senator's shown report, so some may be stale or missing — see the server "
@@ -926,7 +930,7 @@ async def run_holdings_phases(
             # Every failed phase alerts: the holdings phases don't decide
             # the run's status, so the run row alone would let one chamber's
             # holdings age silently for as long as it keeps failing.
-            _alert(
+            send_ops_alert(
                 f"{label} ingest failed",
                 f"The {label} phase of tonight's stock-trades run failed. Reports it stored "
                 "before failing are kept (each member is committed as it's done); every "

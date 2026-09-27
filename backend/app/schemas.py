@@ -239,10 +239,6 @@ class HoldingsSchema(CamelModel):
     # "2025 annual report", "new-filer report as of 2026-03-24" — what the
     # holdings describe, for the page to say in words.
     report_label: str = ""
-    # Changes whenever what the pages show could — a new or re-read report,
-    # or a repaired label or date — and sorts in the order they happened
-    # (the write time first). Pages of one version belong together; the
-    # client keeps the newest and drops the rest.
     # The date the holdings describe: a year end for an annual report, the
     # stated date for a Senate new-filer report; None for a paper filing.
     as_of_date: str | None = None

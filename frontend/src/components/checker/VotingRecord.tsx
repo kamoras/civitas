@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   KeyVote,
   PaginatedVotes,
@@ -266,9 +266,16 @@ function PaginatedVoteList({
   const [data, setData] = useState<PaginatedVotes | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Only the latest request may update the list: a slow response to an
+  // earlier filter or page click must not replace a later one's.
+  const requestSeq = useRef(0);
+  // The filter of the votes on screen; `filter` is the one last asked for.
+  const [shownFilter, setShownFilter] = useState<VoteFilterType>("all");
 
   const fetchVotes = useCallback(
     async (p: number, f: VoteFilterType) => {
+      const seq = ++requestSeq.current;
+      setFilter(f);
       setLoading(true);
       setError(null);
       try {
@@ -279,11 +286,14 @@ function PaginatedVoteList({
           perPage: VOTES_PER_PAGE,
           filter: f,
         });
+        if (seq !== requestSeq.current) return;
+        setShownFilter(f);
         setData(result);
       } catch (e) {
+        if (seq !== requestSeq.current) return;
         setError(e instanceof Error ? e.message : "Failed to load votes");
       } finally {
-        setLoading(false);
+        if (seq === requestSeq.current) setLoading(false);
       }
     },
     [senatorId, category, chamber]
@@ -296,12 +306,11 @@ function PaginatedVoteList({
   }, [fetchVotes, voteCount]);
 
   const handleFilterChange = (f: VoteFilterType) => {
-    setFilter(f);
     fetchVotes(1, f);
   };
 
   const handlePageChange = (p: number) => {
-    fetchVotes(p, filter);
+    fetchVotes(p, shownFilter);
   };
 
   if (voteCount === 0) return null;
@@ -314,7 +323,7 @@ function PaginatedVoteList({
     );
   }
 
-  if (error) {
+  if (error && !data) {
     return (
       <div className="panel p-4 text-center" role="alert">
         <span className="text-signal-red text-sm">{error}</span>
@@ -325,6 +334,9 @@ function PaginatedVoteList({
   if (!data) return null;
 
   const counts: VoteCounts = data.counts;
+  // While a request is out the buttons show what was asked for; once it
+  // settles, what is on screen (a failed change leaves the old list).
+  const activeFilter = loading ? filter : shownFilter;
 
   return (
     <div className={loading ? "opacity-60 transition-opacity" : ""}>
@@ -332,26 +344,26 @@ function PaginatedVoteList({
         <div className="flex items-center gap-1.5 mb-3 flex-wrap">
           <VoteFilter
             label="ALL"
-            active={filter === "all"}
+            active={activeFilter === "all"}
             count={counts.all}
             onClick={() => handleFilterChange("all")}
           />
           <VoteFilter
             label="YEA"
-            active={filter === "yea"}
+            active={activeFilter === "yea"}
             count={counts.yea}
             onClick={() => handleFilterChange("yea")}
           />
           <VoteFilter
             label="NAY"
-            active={filter === "nay"}
+            active={activeFilter === "nay"}
             count={counts.nay}
             onClick={() => handleFilterChange("nay")}
           />
           {counts.againstParty > 0 && (
             <VoteFilter
               label="AGAINST PARTY"
-              active={filter === "against-party"}
+              active={activeFilter === "against-party"}
               count={counts.againstParty}
               onClick={() => handleFilterChange("against-party")}
             />
@@ -362,13 +374,27 @@ function PaginatedVoteList({
         </div>
       )}
 
+      {error && (
+        // A failed filter or page change keeps the last votes that loaded.
+        <p className="text-signal-red text-sm mb-2" role="alert">
+          {error}
+        </p>
+      )}
+
       <div className="space-y-2">
         {data.votes.map((vote) => (
           <VoteCard key={`${category}-${vote.billId}`} vote={vote} expandable />
         ))}
       </div>
 
-      <Pagination numbered page={data.page} totalPages={data.totalPages} onPageChange={handlePageChange} />
+      <Pagination
+        numbered
+        page={data.page}
+        totalPages={data.totalPages}
+        onPageChange={handlePageChange}
+        // The pages of a list a filter change is replacing.
+        disabled={loading && filter !== shownFilter}
+      />
     </div>
   );
 }

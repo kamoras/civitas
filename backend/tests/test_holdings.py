@@ -1506,7 +1506,7 @@ class TestStoredAndTonightMerge:
 
     async def test_a_note_failure_alerts(self, db_session, senator):
         with patch.object(holdings_pipeline, "_note_later_filing", side_effect=RuntimeError("locked")), \
-             patch.object(holdings_pipeline, "_alert") as alert:
+             patch.object(holdings_pipeline, "send_ops_alert") as alert:
             await _ingest_senate(db_session, [_senate_filing("e2025")], {"e2025": [_row()]})
         alert.assert_called_once()
 
@@ -1560,7 +1560,8 @@ class TestSameDayAmendments:
             "A2": {**_house_filing("1003", filing_date="2026-06-01"), "filing_type": "A", "prefix": "Hon."},
         }
         reports = {"1002": AnnualReport("Member", [_row()]), "1003": AnnualReport("Member", [_row(), _row()])}
-        await _ingest_house(db_session, {2025: [filings[k] for k in order]}, reports)
+        original = _house_filing("1001", filing_date="2026-05-01")
+        await _ingest_house(db_session, {2025: [original, *(filings[k] for k in order)]}, reports)
         assert db_session.query(FinancialDisclosure).one().filing_id == "1003"
 
     async def test_senate_amendment_numbers_break_a_same_day_tie(self, db_session, senator):
@@ -1570,6 +1571,20 @@ class TestSameDayAmendments:
         assert db_session.query(FinancialDisclosure).one().filing_id == "a2"
 
 
+class TestHouseAmendmentsOfOtherReports:
+    async def test_an_amendment_without_that_years_annual_report_is_not_one(self, db_session, rep):
+        """The index's "A" also amends new-filer and candidate reports; an
+        annual report's amendment has the annual report beside it."""
+        amend = {**_house_filing("NEWFILER-A", filing_date="2026-08-01"), "filing_type": "A", "prefix": "Hon."}
+        older = _house_filing("OLD", year=2024, filing_date="2025-05-01")
+        _, fetch = await _ingest_house(
+            db_session, {2025: [amend], 2024: [older]},
+            {"NEWFILER-A": AnnualReport("Member", [_row()]), "OLD": AnnualReport("Member", [_row()])},
+        )
+        assert db_session.query(FinancialDisclosure).one().filing_id == "OLD"
+        assert [c.args[2]["doc_id"] for c in fetch.call_args_list] == ["OLD"]
+
+
 class TestAmendmentOrderSignals:
     async def test_the_house_document_id_outranks_an_inherited_filing_date(self, db_session, rep):
         """The index can give an amendment its original's filing date, or
@@ -1577,7 +1592,7 @@ class TestAmendmentOrderSignals:
         a1 = {**_house_filing("10078299", filing_date="2026-06-01"), "filing_type": "A", "prefix": "Hon."}
         a2 = {**_house_filing("10078402", filing_date=""), "filing_type": "A", "prefix": "Hon."}
         reports = {"10078299": AnnualReport("Member", [_row()]), "10078402": AnnualReport("Member", [_row()])}
-        await _ingest_house(db_session, {2025: [a1, a2]}, reports)
+        await _ingest_house(db_session, {2025: [_house_filing("10078100"), a1, a2]}, reports)
         assert db_session.query(FinancialDisclosure).one().filing_id == "10078402"
 
     async def test_an_unresolvable_tie_resolves_the_same_way_every_run(self, db_session, senator):
@@ -1639,7 +1654,7 @@ class TestNoteAndPhaseEdges:
         with patch.object(holdings_pipeline, "HOLDINGS_STEPS", steps), \
              patch.object(holdings_pipeline, "ingest_house_holdings", house), \
              patch.object(holdings_pipeline, "ingest_senate_holdings", house), \
-             patch.object(holdings_pipeline, "_alert"):
+             patch.object(holdings_pipeline, "send_ops_alert"):
             counts, errors = await holdings_pipeline.run_holdings_phases(MagicMock(), None, MagicMock())
         assert counts["house_holdings"] == 1 and len(errors) == 1 and "president_holdings" in errors[0]
 
