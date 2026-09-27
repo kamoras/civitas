@@ -59,14 +59,16 @@ from app.pipeline.fetch.fec import (
     fetch_aggregated_contributors,
     fetch_candidate_committees,
     fetch_candidate_financials,
+    committee_master_cycles,
+    fetch_committee_master,
     fetch_committee_receipts,
-    fetch_committee_type,
     fetch_pac_receipts,
     find_candidate,
+    resolve_committee_meta,
     reset_run_state as reset_fec_run_state,
 )
 from app.pipeline.fetch.govinfo import fetch_bill_text
-from app.pipeline.fetch.lda import enrich_lobbying_matches_with_lda
+from app.pipeline.fetch.lda import alert_if_lda_down, enrich_lobbying_matches_with_lda
 from app.pipeline.member_lifecycle import (
     CHAMBER_SENATE,
     purge_departed_members,
@@ -299,6 +301,8 @@ def upsert_senator(db: Session, data: dict) -> None:
                 senator_vote_aligned=match_data.get("senatorVoteAligned"),
                 is_consensus_vote=match_data.get("isConsensusVote"),
                 description=match_data.get("description") or "",
+                lobbied_bills=json.dumps(match_data.get("lobbiedBills") or []),
+                lobbying_checked=match_data.get("lobbyingChecked"),
             )
         )
 
@@ -1408,9 +1412,15 @@ async def run_senate_pipeline(
                     if r.get("entity_type") == "COM" and r.get("contributor_id"):
                         pac_committee_ids.add(r["contributor_id"])
             logger.info("Resolving committee type for %d unique contributing PACs...", len(pac_committee_ids))
-            committee_type_map: dict[str, str | None] = {}
-            for cid in pac_committee_ids:
-                committee_type_map[cid] = await fetch_committee_type(client, db, cid)
+            # The FEC's bulk committee master answers type, designation and
+            # connected organization for nearly every PAC in one download per
+            # cycle; the per-committee API covers only what it lacks.
+            committee_master = await fetch_committee_master(
+                client, db, committee_master_cycles(),
+            )
+            committee_type_map, committee_meta_map = await resolve_committee_meta(
+                client, db, pac_committee_ids, committee_master,
+            )
 
         if fetch_only:
             logger.info("=== FETCH COMPLETE (fetch-only mode) ===")
@@ -1584,6 +1594,7 @@ async def run_senate_pipeline(
                         ai_classifications=ai_classifications,
                         db_session=db,
                         committee_type_map=committee_type_map,
+                        committee_meta_map=committee_meta_map,
                     )
                 else:
                     funding = senator.get("funding", {})
@@ -1894,6 +1905,7 @@ async def run_senate_pipeline(
             db,
         )
 
+        lda_totals: dict[str, int] = {}
         for senator_idx in range(len(senator_prepared)):
             prepared = senator_prepared[senator_idx]
             senator = prepared["senator"]
@@ -1943,9 +1955,12 @@ async def run_senate_pipeline(
                 # federal lobbying by the matched organization, not a
                 # placeholder. Cached per org+year, so only the first
                 # pipeline run pays the fetch.
-                await enrich_lobbying_matches_with_lda(
+                lda_stats = await enrich_lobbying_matches_with_lda(
                     lobbying_matches, db, utcnow().year - 1,
+                    votes=(voting_record.get("keyVotes") or []) + (voting_record.get("recentVotes") or []),
                 )
+                for k, v in lda_stats.items():
+                    lda_totals[k] = lda_totals.get(k, 0) + v
 
                 bio_id_for_score = senator.get("bioguideId", "")
                 temp_senator = {
@@ -2116,6 +2131,8 @@ async def run_senate_pipeline(
                 pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
                 db.commit()
                 progress.update("analyze_senators", done=senator_idx + 1)
+
+        alert_if_lda_down(lda_totals, "senate")
 
         progress.complete(
             "analyze_senators",

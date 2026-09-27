@@ -494,6 +494,56 @@ async def fetch_bill_summaries(
     return results
 
 
+# Every measure type Congress.gov lists, in its URL spelling.
+BILL_TYPES = ("hr", "s", "hjres", "sjres", "hconres", "sconres", "hres", "sres")
+# A congress's bill list grows by a few hundred a week; a week-old copy only
+# lacks the newest bills, which nobody has voted on yet.
+CONGRESS_BILL_TITLES_CACHE_HOURS = 24 * 7
+
+
+async def fetch_congress_bill_titles(
+    client: httpx.AsyncClient, db: Session, congress: int,
+) -> dict[str, str]:
+    """{site bill id ("HR.1492"): its current title} for every bill and
+    resolution of a congress — about 65 paged list requests for a whole
+    congress, cached a week. The pool lobbied_bills_for compares a filing's
+    wording against, so a named number is kept only when its own bill fits
+    the wording at least as well as any other bill does.
+
+    A type whose listing fails is left out and the result is not cached, so
+    the next run retries instead of keeping a partial pool for a week.
+    """
+    cache_key = f"congress-bill-titles-v1-{congress}"
+    cached = api_cache_get(db, "congress", cache_key, max_age_hours=CONGRESS_BILL_TITLES_CACHE_HOURS)
+    if cached is not None:
+        return cached
+
+    titles: dict[str, str] = {}
+    complete = True
+    for bill_type in BILL_TYPES:
+        offset = 0
+        while True:
+            data = await _fetch_with_retry(
+                client,
+                f"{CONGRESS_API_BASE}/bill/{congress}/{bill_type}?limit=250&offset={offset}",
+            )
+            if data is None:
+                complete = False
+                break
+            page = data.get("bills") or []
+            for b in page:
+                if b.get("number") and b.get("title"):
+                    titles[f"{bill_type.upper()}.{b['number']}"] = b["title"]
+            if len(page) < 250:
+                break
+            offset += 250
+    if complete:
+        api_cache_set(
+            db, "congress", cache_key, titles, normal_ttl_hours=CONGRESS_BILL_TITLES_CACHE_HOURS,
+        )
+    return titles
+
+
 async def fetch_bill_titles(
     client: httpx.AsyncClient,
     db: Session,

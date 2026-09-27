@@ -24,6 +24,18 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.17",
+    date: "2026-09-28",
+    title: "Funding: party, candidate and leadership committees are political money, not an industry",
+    tldr: "Money from a party committee, a candidate's campaign, a joint-fundraising committee or a leadership PAC no longer counts toward any industry. The FEC's own registration of each committee decides it, not the committee's name. Funding Independence moves by under two points for anyone; donor-vote connections built on such money are gone.",
+    changes: [
+      "Why: industries were assigned to committees by their names, and some names read like an industry. The NRSC (the Senate Republicans' campaign committee) was filed under GUNS for 19 senators, $919,000 in all, and headed Lindsey Graham's gun-industry donor-vote connection. Leadership PACs with names like Pineapple PAC, Giddy Up PAC and Velvet Hammer PAC were filed under lobbyists, finance and labor unions. Across the September 2026 Senate, 57 of 101 senators had some of this money counted as an industry's.",
+      "Now: every contributing committee is looked up in the FEC's committee master file. Committee types H, S and P (candidate campaigns) and X, Y and Z (party committees), and designations A, P and J (authorized by a candidate, principal campaign committee, joint fundraiser) and D (leadership PAC), are political money. That is the FEC's classification, read from the filing; no name is interpreted.",
+      "Effect on the September 2026 Senate, recomputed from the live breakdowns: Funding Independence falls by up to 1.7 points (Bill Hagerty, Mike Lee, Chuck Grassley) where political money had made industry funding look more spread out, and moves by under 0.2 points for everyone else.",
+      "Unscored, same release: donor-vote connections now show the organization's registered lobbying again (the registry moved to lda.gov, and every lookup since had failed and read as $0), look a PAC's sponsor up under the company's own name, and link any bill the member voted on that the organization's own lobbying filing names.",
+    ],
+  },
+  {
     version: "v6.16",
     date: "2026-09-27",
     title: "Constituent Alignment: highest when a member breaks with their party about as often as their seat's norm",

@@ -287,7 +287,37 @@ export default function AboutPage() {
                   the Senate) is scored neutrally rather than penalized. It is a residual we cannot
                   attribute at all, not evidence of concentration in one source — the same
                   &quot;missing data defaults to neutral&quot; principle applied everywhere else on
-                  this page.
+                  this page. Money from a party, candidate, joint-fundraising or leadership
+                  committee is political money, not an industry&apos;s: the FEC&apos;s own
+                  registration of each committee decides that, not its name.
+                </P>
+                <P>
+                  Democratic and Republican members raise money differently on average — in the
+                  July 2026 Senate data (then measured as shares of total receipts) Democrats took
+                  roughly half the PAC share of Republicans (median ~10% vs ~17%) and twice the
+                  small-donor share (~24% vs ~12%) — so average scores differ by party too. The
+                  formula has no party term; the gap is the fundraising. Industry concentration is
+                  scored the same whether the industry is the state&apos;s economic base or not:
+                  local economic weight plausibly gives an industry more leverage over a member,
+                  not less, so exempting home industries would weaken the measure where capture
+                  would matter most.
+                </P>
+              </div>
+
+              <div>
+                <Label>Donor-vote connections (informational)</Label>
+                <P>
+                  Not scored. An industry that makes up at least a quarter of a member&apos;s
+                  classifiable donor money is matched to the member&apos;s votes on legislation in
+                  that industry&apos;s policy area. For the industry&apos;s largest donor we look up
+                  the organization in the Lobbying Disclosure Act registry (lda.gov) — under the
+                  sponsoring company&apos;s name when the donor is its PAC — and show its registered
+                  lobbying spend and any bill the member voted on that its own filings name,
+                  linked to the filing. Filings cite bills by number and often name earlier
+                  congresses&apos; bills, so a number counts only when the filer&apos;s wording
+                  around it also matches that bill&apos;s title in the current congress. A filing
+                  records that an organization lobbied on a bill, not which way, so none of this
+                  says whether a vote went the donor&apos;s way, and none of it shows influence.
                 </P>
               </div>
 
@@ -531,23 +561,6 @@ export default function AboutPage() {
               name the specific reason why, so it can be revisited if that changes.
             </P>
             <Gist>
-              Democratic and Republican senators finance their campaigns differently on average, so
-              Funding Independence scores differ by party on average too — not because the formula
-              treats parties differently, but because the underlying fundraising behavior really is
-              different.
-            </Gist>
-            <P>
-              <em className="text-ink">
-                Scores correlate with funding style, and funding style correlates with party.
-              </em>{" "}
-              In the July 2026 data (measured as shares of total receipts, before shares moved to
-              contributions in v6.13), Democratic senators took roughly half the PAC share of
-              Republican senators (median ~10% vs ~17%) and raised about twice the small-donor
-              share (~24% vs ~12%). Because Funding Independence measures those behaviors directly, average scores
-              differ by party. The formulas are identical for everyone and contain no party term;
-              the gap reflects measured funding behavior, not editorial judgment.
-            </P>
-            <Gist>
               a bigger campaign naturally looks more &quot;independent&quot; by percentage even with
               the same PAC dollars, simply because the total got bigger. We also check absolute PAC
               dollars, but no single number fully separates &quot;independent&quot; from
@@ -570,47 +583,6 @@ export default function AboutPage() {
               cover a member&apos;s most recent completed election — the campaign that won them
               their current seat, six years of fundraising for a senator and two for a House
               member — so cross-chamber comparisons weigh different spans of time.
-            </P>
-            <Gist>
-              when we flag a donor whose industry overlaps with a vote, that shows where money and
-              legislative activity intersect — it is not proof the donation influenced the vote.
-            </Gist>
-            <P>
-              <em className="text-ink">
-                Donor-vote connections are semantic overlaps, not lobbying records.
-              </em>{" "}
-              They aggregate employee and PAC money associated with an organization and match it to
-              vote topics by embedding similarity. They indicate where money and votes intersect;
-              they do not establish influence.
-            </P>
-            <Gist>
-              a senator whose donors cluster in one industry scores the same whether that industry
-              is their state&apos;s home industry or an out-of-state special interest. That&apos;s
-              deliberate, not an oversight — see below for why.
-            </Gist>
-            <P>
-              <em className="text-ink">
-                Concentrated industry funding is scored as capture risk even when it plausibly
-                reflects a state&apos;s real economic base.
-              </em>{" "}
-              A senator whose donations concentrate in, say, the auto industry in Michigan or
-              agriculture in Kansas scores the same on Funding Independence&apos;s
-              industry-concentration component as one captured by an unrelated out-of-state interest
-              — this platform does not check whether a donor industry is also a major local
-              employer. That is a deliberate choice, not an oversight: we considered and rejected a
-              &quot;this industry matters to the state&quot; exemption for the same reason the v4.2
-              donor-industry voting exemption was removed (see the
-              <a href="/changelog" className="underline underline-offset-2 hover:text-phos">
-                {" "}
-                scoring changelog
-              </a>
-              ) — local economic dominance plausibly gives an industry <em>more</em> leverage over a
-              senator, not less, so exempting it would weaken the signal exactly where large-scale
-              capture is most consequential. No public dataset can separate &quot;this funding
-              reflects genuine local interest&quot; from &quot;this funding is capture that happens
-              to correlate with local economic weight&quot; — concentration is scored as risk, full
-              stop, following the same industrial-organization logic (Rhoades 1993) the HHI metric
-              is built on.
             </P>
             <Gist>
               we estimate what a senator&apos;s state &quot;expects&quot; from how the state votes

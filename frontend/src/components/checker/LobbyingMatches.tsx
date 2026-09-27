@@ -12,59 +12,101 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
   return (
     <div>
       <div className="text-xs text-ink-lo mb-3">
-        Cases where money associated with an organization (employee donations plus PAC
-        contributions, aggregated across recent cycles) overlaps topically with legislation the
-        senator voted on. Overlap is detected by semantic similarity, not lobbying-registry records,
-        and does not prove influence — it highlights where money and votes intersect.
+        Industries that make up a large share of this member&apos;s classifiable donor money,
+        matched to votes on legislation in that industry&apos;s policy area. Where the
+        organization&apos;s own lobbying filings (Lobbying Disclosure Act reports) name a bill the
+        member voted on, the filing is linked. A filing records that the organization lobbied on
+        a bill, not which way; none of this shows that money changed a vote.
       </div>
       <div className="space-y-4">
-        {matches.map((match, i) => (
-          <div key={i} className="panel p-4 border-l-2 border-l-signal-cyan/40">
-            <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <span className="text-signal-cyan text-sm font-bold">{match.lobbyistOrg}</span>
-              <span className="text-xs px-1.5 py-0.5 border border-white/[0.07] text-ink-min">
-                {match.industry.replace(/_/g, " ")}
-              </span>
-            </div>
-
-            <div className="text-xs font-mono text-ink-lo mb-3 space-y-1">
-              <div>ASSOCIATED CONTRIBUTIONS: {formatCurrency(match.donationToSenator)}</div>
-              <div className="flex items-center gap-1 flex-wrap">
-                <span>TOPICALLY RELATED BILLS:</span>
-                {match.billsInfluenced.map((b, j) => {
-                  const url = billUrl(b);
-                  return url ? (
-                    <a
-                      key={j}
-                      href={safeHref(url) || "#"}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-ink-lo hover:text-phos underline underline-offset-2 transition-colors"
-                    >
-                      {b}
-                    </a>
-                  ) : (
-                    <span key={j}>{b}</span>
-                  );
-                })}
+        {matches.map((match, i) => {
+          const lobbied = match.lobbiedBills ?? [];
+          const lobbiedIds = new Set(lobbied.map((b) => b.billId));
+          const topical = match.billsInfluenced.filter((b) => !lobbiedIds.has(b));
+          return (
+            <div key={i} className="panel p-4 border-l-2 border-l-signal-cyan/40">
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                <span className="text-signal-cyan text-sm font-bold">{match.lobbyistOrg}</span>
+                <span className="text-xs px-1.5 py-0.5 border border-white/[0.07] text-ink-min">
+                  {match.industry.replace(/_/g, " ")}
+                </span>
               </div>
-              {match.senatorVoteAligned !== null && match.senatorVoteAligned !== undefined && (
-                <div>
-                  VOTED IN DONOR&apos;S INTEREST:{" "}
-                  <span
-                    className={
-                      match.senatorVoteAligned ? "text-signal-magenta font-bold" : "text-ink"
-                    }
-                  >
-                    {match.senatorVoteAligned ? "YES" : "NO"}
-                  </span>
-                </div>
-              )}
-            </div>
 
-            <p className="text-base text-ink">{match.description}</p>
-          </div>
-        ))}
+              <div className="text-xs font-mono text-ink-lo mb-3 space-y-1">
+                <div>ASSOCIATED CONTRIBUTIONS: {formatCurrency(match.donationToSenator)}</div>
+                {match.lobbyingChecked === false && (
+                  <div>LOBBYING REGISTRY: lookup failed on the last run, spend unknown</div>
+                )}
+                {lobbied.length > 0 && (
+                  <div>
+                    <div>NAMED IN THIS ORGANIZATION&apos;S LOBBYING FILINGS:</div>
+                    <ul className="mt-1 space-y-1 pl-3">
+                      {lobbied.map((b) => {
+                        const bill = billUrl(b.billId);
+                        const filing = b.filingUrl ? safeHref(b.filingUrl) : null;
+                        return (
+                          <li key={b.billId}>
+                            {bill ? (
+                              <a
+                                href={safeHref(bill) || "#"}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-ink hover:text-phos underline underline-offset-2 transition-colors"
+                              >
+                                {b.billId}
+                              </a>
+                            ) : (
+                              <span className="text-ink">{b.billId}</span>
+                            )}
+                            {b.vote && <> · voted {b.vote}</>}
+                            {filing && (
+                              <>
+                                {" · "}
+                                <a
+                                  href={filing}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="hover:text-phos underline underline-offset-2 transition-colors"
+                                >
+                                  {b.filingYear ? `${b.filingYear} filing` : "filing"}
+                                  {b.registrant ? ` by ${b.registrant}` : ""}
+                                </a>
+                                {b.filingCount > 1 && ` (+${b.filingCount - 1} more)`}
+                              </>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+                {topical.length > 0 && (
+                  <div className="flex items-center gap-1 flex-wrap">
+                    <span>TOPICALLY RELATED BILLS:</span>
+                    {topical.map((b, j) => {
+                      const url = billUrl(b);
+                      return url ? (
+                        <a
+                          key={j}
+                          href={safeHref(url) || "#"}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-ink-lo hover:text-phos underline underline-offset-2 transition-colors"
+                        >
+                          {b}
+                        </a>
+                      ) : (
+                        <span key={j}>{b}</span>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <p className="text-base text-ink">{match.description}</p>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

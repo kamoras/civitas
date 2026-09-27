@@ -56,27 +56,22 @@ export function generateCommentary(senator: Senator): string[] {
     }
   }
 
-  // Lobbying matches
-  if (lobbyingMatches.length > 0) {
-    const aligned = lobbyingMatches.filter((m) => m.senatorVoteAligned);
-    const withResult = lobbyingMatches.filter(
-      (m) => m.senatorVoteAligned !== null && m.senatorVoteAligned !== undefined
+  // Donor-vote connections: bills named in the donors' own lobbying filings
+  const lobbiedBills = lobbyingMatches.reduce((n, m) => n + (m.lobbiedBills?.length ?? 0), 0);
+  if (lobbiedBills > 0) {
+    comments.push(
+      `${lobbiedBills} bill${lobbiedBills !== 1 ? "s" : ""} ${senator.name} voted on ${lobbiedBills !== 1 ? "are" : "is"} named in the lobbying filings of an organization among their largest donor industries. A filing records that the organization lobbied on a bill, not which way, and none of this shows influence.`
     );
-    if (aligned.length > 0 && withResult.length > 0) {
-      comments.push(
-        `In ${aligned.length} of ${withResult.length} evaluable donor-vote overlaps, ${senator.name} voted in the same direction as the donor's industry interests. This is a correlation — not evidence of influence — but worth noting.`
-      );
-    }
   }
 
   // Overall score
   if (score >= 70) {
     comments.push(
-      `Representation score: ${score}/100. The data suggests strong constituent alignment — this senator scores well across funding independence, donor diversity, and platform adherence.`
+      `Representation score: ${score}/100 — one of the higher scores in our dataset. The breakdown shows how funding independence, constituent alignment and legislative effectiveness each contribute.`
     );
   } else if (score <= 30) {
     comments.push(
-      `Representation score: ${score}/100 — one of the lower scores in our dataset, indicating limited independence from PAC funding and industry-aligned voting patterns.`
+      `Representation score: ${score}/100 — one of the lower scores in our dataset. The breakdown shows which of funding independence, constituent alignment and legislative effectiveness pulls it down.`
     );
   }
 

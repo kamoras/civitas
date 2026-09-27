@@ -13,7 +13,7 @@ industry classifier.
 
 import logging
 
-from app.pipeline.fetch.fec import select_recent_elections
+from app.pipeline.fetch.fec import is_political_committee, select_recent_elections
 from app.pipeline.transform.candidate_names import is_candidate_self_donor
 from app.pipeline.transform.industry_classifier import classify_with_learning
 from app.pipeline.analyze.donor_classifier_ai import (
@@ -101,6 +101,7 @@ def normalize_finance(
     ai_classifications: dict[str, dict] | None = None,
     db_session=None,
     committee_type_map: dict[str, str | None] | None = None,
+    committee_meta_map: dict[str, dict] | None = None,
 ) -> dict:
     """Normalize FEC financial data into the Senator funding shape.
 
@@ -114,6 +115,12 @@ def normalize_finance(
         committee_type_map: Optional contributor_id -> FEC committee_type code,
             pre-resolved by the caller (see fec.fetch_committee_type). Passed
             through to build_top_donors for the PAC-utilization signal.
+        committee_meta_map: Optional contributor_id -> the FEC committee
+            master's {"type", "designation", "connectedOrg"} (see
+            fec.fetch_committee_master). A committee the FEC registers as a
+            party, candidate, joint-fundraising or leadership committee is
+            political money (industry POLITICAL) whatever its name reads
+            like, and a PAC's connected organization names who sponsors it.
 
     Returns:
         Normalized funding object matching Senator.funding type.
@@ -145,6 +152,7 @@ def normalize_finance(
         ai_classifications=ai_classifications,
         db_session=db_session,
         committee_type_map=committee_type_map,
+        committee_meta_map=committee_meta_map,
     )
 
     # Build industry breakdown: individuals get explicit buckets, PACs get industry-classified
@@ -158,6 +166,7 @@ def normalize_finance(
         ai_classifications=ai_classifications,
         db_session=db_session,
         candidate_name=candidate_name,
+        committee_meta_map=committee_meta_map,
     )
 
     computed_pac_total = sum(
@@ -194,6 +203,7 @@ def build_top_donors(
     ai_classifications: dict[str, dict] | None = None,
     db_session=None,
     committee_type_map: dict[str, str | None] | None = None,
+    committee_meta_map: dict[str, dict] | None = None,
 ) -> list[dict]:
     """Build top donors list prioritizing PAC/corporate money.
 
@@ -210,6 +220,7 @@ def build_top_donors(
     donor_map: dict[str, dict] = {}
     ai_classifications = ai_classifications or {}
     committee_type_map = committee_type_map or {}
+    committee_meta_map = committee_meta_map or {}
 
     # Pre-compute embedding-based skip sets for employers and memo texts.
     # This replaces hardcoded SKIP_EMPLOYERS and keyword-based memo filtering
@@ -289,9 +300,21 @@ def build_top_donors(
         # gate used to decide which contributor_ids get looked up upstream
         # (see senate_pipeline.py / house_pipeline.py).
         if r.get("entity_type") == "COM" and r.get("contributor_id"):
+            meta = committee_meta_map.get(r["contributor_id"])
             ctype = committee_type_map.get(r["contributor_id"])
+            if ctype is None and meta:
+                ctype = meta.get("type")
             if ctype is not None:
                 existing["committeeType"] = ctype
+            if meta and meta.get("connectedOrg"):
+                existing["connectedOrg"] = meta["connectedOrg"]
+            # Tier 1 (FEC structured metadata) outranks the name classifier:
+            # the NRSC's name embeds near nothing political enough, and it
+            # was headlining a senator's "gun industry" donor-vote match.
+            if is_political_committee(meta) and existing.get("type") not in (
+                "Self-Funded", "CandidateAffiliated", "SKIP",
+            ):
+                existing["industry"] = "POLITICAL"
         donor_map[name_upper] = existing
 
     # 2. Individual contributions grouped by employer
@@ -355,6 +378,7 @@ def build_top_donors(
             "type": d["type"],
             "industry": d.get("industry", "OTHER"),
             "committeeType": d.get("committeeType"),
+            "connectedOrg": d.get("connectedOrg"),
         }
         for d in sorted_donors
         if d["total"] > 0 and len(d["name"].strip()) >= 3
@@ -389,6 +413,7 @@ def _build_industry_breakdown(
     ai_classifications: dict[str, dict] | None = None,
     db_session=None,
     candidate_name: str = "",
+    committee_meta_map: dict[str, dict] | None = None,
 ) -> list[dict]:
     """Build a funding breakdown showing all sources by industry.
 
@@ -447,7 +472,14 @@ def _build_industry_breakdown(
             continue
 
         amount = r.get("contribution_receipt_amount", 0) or 0
-        industry = _get_industry(org, org_upper)
+        meta = (
+            (committee_meta_map or {}).get(r.get("contributor_id") or "")
+            if r.get("entity_type") == "COM" else None
+        )
+        # Same tier-1 rule as build_top_donors: the FEC's registration, not
+        # the name, decides that a party/candidate/leadership committee's
+        # money is political rather than an industry's.
+        industry = "POLITICAL" if is_political_committee(meta) else _get_industry(org, org_upper)
 
         existing = industry_totals.get(industry, {"industry": industry, "name": industry, "total": 0})
         existing["total"] += amount

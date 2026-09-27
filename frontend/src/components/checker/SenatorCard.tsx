@@ -544,18 +544,16 @@ export default function SenatorCard({
               title="DONOR-VOTE CONNECTIONS"
               titleColor="text-signal-magenta"
               summary={(() => {
-                const aligned = senator.lobbyingMatches.filter(
-                  (m) => m.senatorVoteAligned === true
-                ).length;
-                const withAlignment = senator.lobbyingMatches.filter(
-                  (m) => m.senatorVoteAligned !== null
-                ).length;
                 const base = `${senator.lobbyingMatches.length} donor-vote overlap${senator.lobbyingMatches.length !== 1 ? "s" : ""}`;
-                return withAlignment > 0
-                  ? `${base} · ${aligned} voted same direction as donor interest`
+                const named = senator.lobbyingMatches.reduce(
+                  (n, m) => n + (m.lobbiedBills?.length ?? 0),
+                  0
+                );
+                return named > 0
+                  ? `${base} · ${named} bill${named !== 1 ? "s" : ""} named in the donors' own lobbying filings`
                   : base;
               })()}
-              source="fec.gov/data"
+              source="fec.gov/data · lda.gov"
             >
               <LobbyingMatches matches={senator.lobbyingMatches} />
             </CollapsibleSection>

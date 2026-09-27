@@ -291,6 +291,18 @@ class CommitteeSchema(CamelModel):
     title: str | None = None  # "Chairman" / "Ranking Member", else None
 
 
+class LobbiedBillSchema(CamelModel):
+    """A bill the member voted on that the donor org's own LDA filing
+    names (fetch/lda.lobbied_bills_for)."""
+    bill_id: str
+    bill_name: str = ""
+    vote: str | None = None
+    filing_year: int | None = None
+    filing_url: str | None = None
+    registrant: str | None = None
+    filing_count: int = 1
+
+
 class LobbyingMatchSchema(CamelModel):
     lobbyist_org: str
     industry: str
@@ -299,6 +311,9 @@ class LobbyingMatchSchema(CamelModel):
     bills_influenced: list[str]
     senator_vote_aligned: bool | None = None
     description: str
+    lobbied_bills: list[LobbiedBillSchema] = []
+    # False: the LDA lookup failed, so lobbying_spend is unknown, not zero.
+    lobbying_checked: bool | None = None
 
 
 class PolicyAlignmentSchema(CamelModel):

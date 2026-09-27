@@ -173,6 +173,17 @@ export interface KeyVote {
   voteCategory: "recent" | "key";
 }
 
+/** A bill the member voted on that the donor org's own LDA filing names. */
+export interface LobbiedBill {
+  billId: string;
+  billName: string;
+  vote: string | null;
+  filingYear: number | null;
+  filingUrl: string | null;
+  registrant: string | null;
+  filingCount: number;
+}
+
 export interface LobbyingMatch {
   lobbyistOrg: string;
   industry: string;
@@ -181,6 +192,10 @@ export interface LobbyingMatch {
   billsInfluenced: string[];
   senatorVoteAligned: boolean | null;
   description: string;
+  /** Absent from responses served before these fields existed. */
+  lobbiedBills?: LobbiedBill[];
+  /** false: the registry lookup failed, so lobbyingSpend is unknown, not $0. */
+  lobbyingChecked?: boolean | null;
 }
 
 export interface PolicyAlignment {

@@ -51,13 +51,15 @@ from app.pipeline.fetch.fec import (
     fetch_aggregated_contributors,
     fetch_candidate_committees,
     fetch_candidate_financials,
+    committee_master_cycles,
+    fetch_committee_master,
     fetch_committee_receipts,
-    fetch_committee_type,
     fetch_pac_receipts,
     find_candidate,
+    resolve_committee_meta,
     reset_run_state as reset_fec_run_state,
 )
-from app.pipeline.fetch.lda import enrich_lobbying_matches_with_lda
+from app.pipeline.fetch.lda import alert_if_lda_down, enrich_lobbying_matches_with_lda
 from app.pipeline.run_checks import persist_ground_truth_failures, run_calibration_check
 from app.pipeline.transform.normalize_members import normalize_house_members
 from app.pipeline.transform.committee_data import load_leadership_tenures
@@ -148,6 +150,9 @@ async def run_house_pipeline() -> dict:
         logger.info("=== HOUSE PIPELINE START ===")
 
         async with make_async_client() as client:
+            # FEC committee master, loaded on first use (see the FEC step).
+            committee_master: dict[str, dict] | None = None
+
             # ── PHASE 1: FETCH MEMBERS ──
             logger.info("--- House Phase 1: FETCH MEMBERS ---")
             progress.begin("fetch_members")
@@ -614,6 +619,7 @@ async def run_house_pipeline() -> dict:
             )
 
             prepared_reps: list[tuple[dict, str]] = []
+            lda_totals: dict[str, int] = {}
             for idx, rep in enumerate(reps):
                 try:
                     bio_id = rep.get("bioguideId", "")
@@ -738,28 +744,31 @@ async def run_house_pipeline() -> dict:
                                 raw_pac_receipts.extend(await fetch_pac_receipts(client, db, comm_id, cycles=recent_cycles))
                                 aggregated.extend(await fetch_aggregated_contributors(client, db, comm_id, cycles=recent_cycles))
 
-                        # Resolve PAC committee types (multicandidate vs not) for
-                        # the PAC-utilization signal in
-                        # score_calculator._funding_independence_core.
-                        # fetch_committee_type's own long-TTL cache (see
-                        # fec.py) already makes repeat lookups across
-                        # representatives for the same popular PAC cheap —
-                        # no separate global pre-pass needed the way
-                        # senate_pipeline.py's single fetch-then-normalize
-                        # phase structure allows.
+                        # Resolve PAC committee type, designation and
+                        # connected organization: the PAC-utilization signal
+                        # in score_calculator._funding_independence_core, and
+                        # the tier-1 political-committee rule and lobbying
+                        # client name in normalize_finance. The FEC's bulk
+                        # committee master (loaded once, on the first member
+                        # with receipts) answers almost every PAC; the
+                        # per-committee API covers only what it lacks.
+                        if committee_master is None:
+                            committee_master = await fetch_committee_master(
+                                client, db, committee_master_cycles(),
+                            )
                         pac_committee_ids = {
                             r["contributor_id"] for r in raw_pac_receipts
                             if r.get("entity_type") == "COM" and r.get("contributor_id")
                         }
-                        committee_type_map = {
-                            cid: await fetch_committee_type(client, db, cid)
-                            for cid in pac_committee_ids
-                        }
+                        committee_type_map, committee_meta_map = await resolve_committee_meta(
+                            client, db, pac_committee_ids, committee_master,
+                        )
 
                         finance_data = normalize_finance(
                             fec_candidate, financials, raw_receipts, raw_pac_receipts,
                             aggregated, db_session=db,
                             committee_type_map=committee_type_map,
+                            committee_meta_map=committee_meta_map,
                         )
                         rep["funding"] = finance_data
                     else:
@@ -794,9 +803,12 @@ async def run_house_pipeline() -> dict:
                         all_votes,
                         rep["funding"].get("industryBreakdown", []),
                     )
-                    await enrich_lobbying_matches_with_lda(
+                    lda_stats = await enrich_lobbying_matches_with_lda(
                         lobbying_matches, db, utcnow().year - 1,
+                        votes=all_votes,
                     )
+                    for k, v in lda_stats.items():
+                        lda_totals[k] = lda_totals.get(k, 0) + v
                     rep["lobbyingMatches"] = lobbying_matches
                     prepared_reps.append((rep, bio_id))
 
@@ -805,6 +817,8 @@ async def run_house_pipeline() -> dict:
                     db.rollback()
                     logger.error("Failed to prepare rep %s: %s", rep.get("name", "?"), e)
                     fail_count += 1
+
+            alert_if_lda_down(lda_totals, "house")
 
             # Scoring is a second pass so each chamber-relative reference is
             # measured from the whole population BEFORE anyone is scored
