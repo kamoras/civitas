@@ -128,7 +128,9 @@ export interface PolicyAreaDetail {
 export interface StockTrade {
   ticker: string | null;
   assetName: string;
-  owner: "self" | "spouse" | "joint" | "dependent";
+  // "unknown": the form didn't state whose it is in a way the parser
+  // recognizes — never guessed to be the member's.
+  owner: "self" | "spouse" | "joint" | "dependent" | "unknown";
   transactionType: "purchase" | "sale_full" | "sale_partial" | "exchange";
   transactionDate: string;
   disclosureDate: string;
