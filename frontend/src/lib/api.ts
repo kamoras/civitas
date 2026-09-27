@@ -1158,8 +1158,9 @@ export interface ActionRefreshState {
 
 export interface AdminPipelineStatus {
   isRunning: boolean;
-  // A RUNNING Senate row no lease speaks for (no run is known to be behind
-  // it): shown as stuck, and the one case clear-stuck-senate accepts.
+  // A RUNNING Senate row no live lease speaks for — past the 12h age rule,
+  // proven dead by its own lapsed lease, or named by no lease: shown as
+  // stuck, and the one case clear-stuck-senate accepts.
   senateRowClearable?: boolean;
   houseIsRunning?: boolean;
   stockTradesIsRunning?: boolean;
@@ -1184,7 +1185,7 @@ export interface AdminPipelineStatus {
 }
 
 /** Whether a Senate run is going, as every admin view shows it: the status's
- * isRunning, except for a row no lease speaks for (senateRowClearable),
+ * isRunning, except for a row no live lease speaks for (senateRowClearable),
  * which is shown as stuck rather than running. */
 export function senateIsRunning(status: AdminPipelineStatus | null | undefined): boolean {
   return !!status?.isRunning && !status?.senateRowClearable;

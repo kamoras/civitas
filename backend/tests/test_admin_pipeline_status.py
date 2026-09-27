@@ -128,3 +128,34 @@ async def test_status_reports_a_data_reset_so_deploys_wait_it_out(db_session):
     assert (await admin_pipeline_status(db=db_session))["dataResetIsRunning"] is False
     lease.acquire(db_session, lease.DATA_RESET)
     assert (await admin_pipeline_status(db=db_session))["dataResetIsRunning"] is True
+
+
+@pytest.mark.asyncio
+async def test_status_reads_every_running_flag_before_its_first_query(db_session, monkeypatch):
+    """A run commits its final status, then drops its flag. Read after the
+    rows (whose snapshot the first query fixes), a run finishing in between
+    shows a dropped flag beside a still-RUNNING row — which the dashboard
+    announces as a run that ended without an outcome."""
+    from sqlalchemy import event
+
+    from app.api.admin import admin_pipeline_status
+
+    order: list[str] = []
+    for module, name in [
+        ("app.pipeline.house_pipeline", "is_house_pipeline_running"),
+        ("app.pipeline.stock_pipeline", "is_stock_pipeline_running"),
+        ("app.pipeline.supplementary_pipeline", "is_supplementary_pipeline_running"),
+        ("app.pipeline.election_pipeline", "is_election_pipeline_running"),
+    ]:
+        monkeypatch.setattr(f"{module}.{name}", lambda name=name: order.append(name) or False)
+
+    def on_query(*_args):
+        order.append("query")
+
+    engine = db_session.get_bind()
+    event.listen(engine, "before_cursor_execute", on_query)
+    try:
+        await admin_pipeline_status(db=db_session)
+    finally:
+        event.remove(engine, "before_cursor_execute", on_query)
+    assert order.index("query") == 4 and all(o.startswith("is_") for o in order[:4])

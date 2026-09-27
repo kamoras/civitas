@@ -771,6 +771,16 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
     )
     from app.pipeline.run_tracker import senate_run_state
 
+    # The in-process flags first, before any query: a run commits its final
+    # status and only then drops its flag, so a flag read as down always
+    # finds the row final. Read after the rows (whose snapshot the first
+    # query fixes), a run finishing in between would show as stopped with
+    # its row still RUNNING — announced as ending without an outcome.
+    house_running = is_house_pipeline_running()
+    stock_running = is_stock_pipeline_running()
+    supplementary_running = is_supplementary_pipeline_running()
+    election_running = is_election_pipeline_running()
+
     # One read of the Senate row and lease for both fields below.
     _row, is_running, senate_clearable = senate_run_state(db)
 
@@ -806,10 +816,10 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
         # (run_tracker.senate_run_state): the dashboard shows it as stuck and
         # offers clear-stuck-senate, which accepts exactly then.
         "senateRowClearable": senate_clearable,
-        "houseIsRunning": is_house_pipeline_running(),
-        "stockTradesIsRunning": is_stock_pipeline_running(),
-        "supplementaryIsRunning": is_supplementary_pipeline_running(),
-        "electionIsRunning": is_election_pipeline_running(),
+        "houseIsRunning": house_running,
+        "stockTradesIsRunning": stock_running,
+        "supplementaryIsRunning": supplementary_running,
+        "electionIsRunning": election_running,
         # An admin data reset in any process; check-and-deploy.sh waits it
         # out like a pipeline run, since killing it mid-wipe leaves the
         # indexes describing rows that are gone.
