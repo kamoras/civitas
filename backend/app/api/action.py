@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import re
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -694,6 +695,17 @@ _ALIASES: dict[str, str] = {
 }
 
 
+def _whole_word(name: str) -> re.Pattern:
+    # Whole words: as a substring, "India" matched every Indiana story,
+    # "Iran" matched "Iranian" (an alias of its own) and "UK" any word
+    # spelled in capitals that contains it.
+    return re.compile(rf"(?<!\w){re.escape(name)}(?!\w)")
+
+
+_COUNTRY_PATTERNS = {name: _whole_word(name) for name in _COUNTRIES}
+_ALIAS_PATTERNS = {alias: _whole_word(alias) for alias in _ALIASES}
+
+
 def _extract_country_mentions(articles: list) -> list[dict]:
     """Group articles by country mentions using simple name matching."""
     from collections import defaultdict
@@ -701,8 +713,8 @@ def _extract_country_mentions(articles: list) -> list[dict]:
 
     for article in articles:
         text = f"{article.title} {article.summary}"
-        for name, coords in _COUNTRIES.items():
-            if name in text:
+        for name, pattern in _COUNTRY_PATTERNS.items():
+            if pattern.search(text):
                 country_articles[name].append({
                     "title": article.title,
                     "url": article.url,
@@ -712,7 +724,7 @@ def _extract_country_mentions(articles: list) -> list[dict]:
         for alias, canonical in _ALIASES.items():
             # A country matched via both its name and an alias (e.g. "Russia"
             # and "Moscow") is de-duplicated by title in the pass below.
-            if alias in text:
+            if _ALIAS_PATTERNS[alias].search(text):
                 country_articles[canonical].append({
                     "title": article.title,
                     "url": article.url,
