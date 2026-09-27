@@ -12,9 +12,13 @@ the weighted sum below:
   1. Funding Independence       — PAC share, small-donor share, top-donor
                                   concentration, industry concentration (v6.13;
                                   v6.5 folded in the former Funding Diversity)
-  2. Constituent Alignment      — voting behavior vs what the seat's electorate
-                                  expects (PVI-relative)
-  3. Legislative Effectiveness  — bill passage, cosponsorship leadership, volume
+  2. Constituent Alignment      — break rate vs same-party members of
+                                  similarly-leaning seats, in standard
+                                  deviations per vote, plus roll-call position
+                                  vs the seat's norm (v6.16)
+  3. Legislative Effectiveness  — stage-normalized Volden & Wiseman LES
+                                  (v6.14), cosponsorship leadership,
+                                  bipartisan coalition attraction
 
 North star (owner, 2026-07): scores measure how well members REPRESENT
 their constituents — not independence as an intrinsic virtue. Party-line
@@ -1968,9 +1972,17 @@ def _constituent_alignment_core(
             side, reach = (
                 ("more loyal", LOYAL_ZERO_GAPS) if residual < 0 else ("more independent", CROSSING_ZERO_GAPS)
             )
+            # Name where the zero comes from: a multiple of the party's own
+            # 90th-percentile gap, not a number from nowhere.
+            basis = (
+                f"the gap beyond which the most out-of-pattern tenth of {eval_party} members "
+                "of this chamber sit"
+                if measured else "the preset scale"
+            )
             gap = (
                 f"{abs(residual):.2f} standard deviations per vote {side} than that "
-                f"(100 at the expectation, 0 at {reach * scale:.2f} standard deviations per vote {side})"
+                f"(100 at the expectation, 0 at {reach * scale:.2f} {side}: "
+                f"{reach:g} × {scale:.2f}, {basis})"
             )
         party_alignment_detail = (
             f"broke with party on {break_rate:.1%} of {n_party} party-labeled votes; {norm} — {gap}"

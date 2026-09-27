@@ -128,24 +128,18 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
           {paragraphs ? (
             <article className="space-y-5 text-sm text-ink leading-relaxed mb-12">
               {paragraphs.map((para, i) => {
-                // Detect markdown-style headers (# or ## Heading)
-                if (para.startsWith("# ") || para.startsWith("## ")) {
+                // claims.build_story's only structure: "## Outlet" above
+                // that outlet's verbatim claims. Everything else is a
+                // source's own words and renders as written — no other
+                // markdown is interpreted, since a quote is not markup.
+                if (para.startsWith("## ")) {
                   return (
                     <h2
                       key={i}
                       className="text-base text-ink-hi font-bold mt-8 first:mt-0 border-l-2 border-white/15 pl-3"
                     >
-                      {para.replace(/^#+\s+/, "")}
+                      {para.slice(3)}
                     </h2>
-                  );
-                }
-                // Bold paragraph: starts and ends with **
-                if (para.startsWith("**") && para.endsWith("**") && para.length > 4) {
-                  const stripped = para.slice(2, -2);
-                  return (
-                    <p key={i} className="text-ink-hi font-medium">
-                      {stripped}
-                    </p>
                   );
                 }
                 return <p key={i}>{para}</p>;

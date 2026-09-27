@@ -594,19 +594,18 @@ def test_a_lease_proves_only_the_row_it_names(db_session):
     assert live_run(db_session, models.PipelineRun) is not None
 
 
-def test_startup_and_the_hourly_tidy_mark_only_proven_dead_runs(db_session, monkeypatch):
+def test_the_hourly_tidy_marks_only_proven_dead_runs(db_session, monkeypatch):
     from datetime import timedelta
 
     from app.time_utils import utcnow
 
-    from app import main
     from app.pipeline.run_tracker import tidy_dead_runs
 
     from tests.conftest import start_senate_run_then_stop_beating
 
     monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
     start_senate_run_then_stop_beating(db_session, beat_ago=timedelta(minutes=20))
-    main._invalidate_orphaned_pipelines()
+    assert tidy_dead_runs() == 0
     db_session.expire_all()
     assert db_session.query(models.PipelineRun).one().status == "running"  # maybe a stalled live run
     db_session.query(models.ApiCache).update({"cached_at": utcnow() - timedelta(hours=2)})
@@ -615,6 +614,56 @@ def test_startup_and_the_hourly_tidy_mark_only_proven_dead_runs(db_session, monk
     db_session.expire_all()
     run = db_session.query(models.PipelineRun).one()
     assert run.status == "stale" and run.error_message == DEAD_RUN_MESSAGE
+
+
+def test_startup_spares_only_a_senate_run_still_beating_elsewhere(db_session, monkeypatch):
+    """A restart killed every run of this process; only a Senate run whose
+    lease still beats is live — in the other task, during a rollout. A swept
+    Senate row's lease goes with it, so the next run isn't held off."""
+    from contextlib import ExitStack
+
+    from app import main
+    from app.pipeline import lease, senate_pipeline
+
+    from tests.conftest import start_senate_run_then_stop_beating
+
+    monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
+    live = start_senate_run_then_stop_beating(db_session)  # beating now
+    main._invalidate_orphaned_pipelines()
+    db_session.expire_all()
+    assert db_session.get(models.PipelineRun, live.id).status == "running"
+
+    db_session.query(models.ApiCache).update({"cached_at": utcnow_minus(minutes=5)})
+    db_session.commit()
+    main._invalidate_orphaned_pipelines()
+    db_session.expire_all()
+    assert db_session.get(models.PipelineRun, live.id).status == "stale"
+    assert lease.lease_record(db_session, lease.SENATE_RUN) is None
+    with ExitStack() as stack, pytest.MonkeyPatch.context() as mp:
+        mp.setattr(senate_pipeline, "SessionLocal", lambda: _Unclosable(db_session))
+        refused, token = senate_pipeline._take_senate_run_lease(stack)
+        assert refused is None and token is not None
+
+
+def test_startup_sweeps_nothing_while_a_reset_holds_the_database(db_session, monkeypatch):
+    from app import main
+    from app.pipeline import lease
+
+    monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
+    db_session.add(models.HousePipelineRun(status="running"))
+    db_session.commit()
+    lease.acquire(db_session, lease.DATA_RESET)
+    main._invalidate_orphaned_pipelines()
+    db_session.expire_all()
+    assert db_session.query(models.HousePipelineRun).one().status == "running"
+
+
+def utcnow_minus(**kw):
+    from datetime import timedelta
+
+    from app.time_utils import utcnow
+
+    return utcnow() - timedelta(**kw)
 
 
 def test_the_next_senate_run_acts_on_the_proof_as_it_replaces_it(db_session):

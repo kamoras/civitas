@@ -9,8 +9,9 @@ The pipeline resets bsky_posted_at=None when a topic gets new articles
 (primary_article_date advanced), so the poster never needs to evaluate
 whether to re-post — that decision is already made upstream.
 
-When the newest article driving an issue is from a prior day, the LLM is
-instructed to make the timing clear in the post text.
+The post is the issue's verified lede, verbatim (or its real headline), not
+model prose — see _compose_new_post. When the newest article driving an
+issue is from a prior day, the post opens with "Yesterday:" or "On <date>:".
 
 Credentials: BSKY_HANDLE + BSKY_APP_PASSWORD in .env. If not set, this
 module does nothing (allows running without a Bluesky account configured).
@@ -28,27 +29,12 @@ from app.config import settings
 from app.issue_ids import to_public_id
 from app.models import ActionIssue
 from app.pipeline.analyze import action_metrics
-from app.pipeline.analyze.bluesky_utils import publish_post, strip_hashtags, strip_hashtags_and_truncate
-from app.pipeline.analyze.grounding import (
-    grounding_violations,
-    hedge_and_editorializing_violations,
-    log_intensifier_usage,
-)
-from app.pipeline.analyze.ollama_client import call_llm
+from app.pipeline.analyze.bluesky_utils import publish_post, strip_hashtags
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
 MAX_POST_CHARS = 240     # leaves room for the appended URL (~40 chars → total ~280)
-
-_SYSTEM_PROMPT = (
-    "You are a civic journalist writing brief, factual updates for the Civitas "
-    "transparency platform. Civitas aggregates U.S. government data — voting "
-    "records, campaign finance, floor speeches — into public scorecards. "
-    "Your posts are non-partisan, data-grounded, and written for citizens who "
-    "want to understand what their representatives are actually doing."
-)
-
 
 # A repost whose body shares at least this fraction of its words with an
 # already-published post is treated as a near-duplicate and suppressed. Set
@@ -91,149 +77,69 @@ def _is_near_duplicate(candidate: str, prior_texts: list[str]) -> bool:
     return False
 
 
-def _build_source_context(source_names_json: str) -> str:
-    names = json.loads(source_names_json or "[]")
-    if not names:
-        return "No sources listed."
-    return ", ".join(names[:8])
-
-
-def _build_facts_context(facts_json: str) -> str:
-    facts = json.loads(facts_json or "[]")
-    if not facts:
+def _staleness_prefix(article_date: str | None, today: str) -> str:
+    """"Yesterday: " or "On July 24: " when the newest article predates
+    today, so a reader doesn't take a past event for a live one; "" when it
+    is today's (or the date is unreadable). Only the one phrasing that is
+    true is ever used — "yesterday" two days on is a wrong fact."""
+    if not article_date or article_date >= today:
         return ""
-    return "\n".join(f"- {f}" for f in facts[:4])
+    try:
+        event = datetime.strptime(article_date, "%Y-%m-%d")
+        days = (datetime.strptime(today, "%Y-%m-%d") - event).days
+    except ValueError:
+        return ""
+    if days == 1:
+        return "Yesterday: "
+    return f"On {event:%B} {event.day}: "
 
 
-def _generate_new_post(issue, today: str) -> str | None:
-    """Ask the LLM to write a Bluesky post for this issue.
+def _facts(raw) -> list[str]:
+    try:
+        facts = json.loads(raw or "[]")
+    except (TypeError, ValueError):
+        return []
+    return [f.strip() for f in facts if isinstance(f, str) and f.strip()] if isinstance(facts, list) else []
 
-    When the newest article driving the issue predates today, the LLM is
-    instructed to frame the post so readers know the event isn't happening
-    right now (e.g. "Yesterday: ..." or "On June 27: ...").
+
+def _new_facts(issue) -> list[str]:
+    """Facts added since the last post, in order. A repost is released
+    upstream only when the facts gained new information (a name, a figure,
+    a development) over `bsky_posted_facts`, the facts as of that post — so
+    one of these is what the repost has to say. The lede often hasn't
+    changed, and reposting it would only be suppressed as a duplicate."""
+    if issue.bsky_posted_facts is None:
+        return []
+    posted = set(_facts(issue.bsky_posted_facts))
+    return [f for f in _facts(issue.facts) if f not in posted]
+
+
+def _compose_new_post(issue, today: str) -> str | None:
+    """The post for this issue: a verified claim, verbatim, or None.
+
+    Not written by a model. The lede (issue.summary) is a claim
+    claims.build_lede took word for word from a source and post_composer
+    verified is asserted of its actor; the fallback is the top article's
+    real headline (issue.title). Model prose written from those same verified
+    facts is what published a relationship no source stated (issues 748,
+    750, 751) past the shared grounding checks, which is why the full story
+    stopped being written (claims.build_story) — and a post is the most
+    public surface of all. The only words added are the date prefix.
+
+    A repost leads with the first fact the last post didn't carry — also a
+    verbatim claim (claims.build_facts) — since new information is what
+    released it. A claim too long for a post falls through to the next
+    candidate, ending at the headline, rather than being cut: truncating a
+    claim can drop the qualifier that makes it true. None when nothing
+    fits, counted so the gap is visible.
     """
-    facts_text = _build_facts_context(issue.facts)
-    sources_text = _build_source_context(issue.source_names)
-
-    article_date = getattr(issue, "primary_article_date", None) or today
-    is_stale = article_date < today
-
-    staleness_instruction = ""
-    if is_stale:
-        # Only ever offer ONE phrasing, whichever is actually accurate —
-        # giving the model a choice between "Yesterday: ..." and the ISO
-        # date let it pick the more awkward, robotic-sounding one even
-        # when exactly one day had passed (2026-07 live case: "On
-        # 2026-07-24" published the day after, when "Yesterday:" was both
-        # available and correct). Beyond one day, "yesterday" would be
-        # factually wrong, so the date phrasing is the only option there.
-        try:
-            days_ago = (
-                datetime.strptime(today, "%Y-%m-%d") - datetime.strptime(article_date, "%Y-%m-%d")
-            ).days
-        except ValueError:
-            days_ago = None
-        if days_ago == 1:
-            date_phrasing = "Open the post with 'Yesterday: ...'."
-        else:
-            date_phrasing = f"Open the post with 'On {article_date}: ...'."
-        staleness_instruction = (
-            f"\nIMPORTANT: The events described occurred on {article_date}, not today ({today}). "
-            f"{date_phrasing} Readers must not be misled into thinking this is happening right now."
-        )
-
-    user_prompt = f"""Write a Bluesky post summarizing this civic news issue.
-
-Title: {issue.title}
-Summary: {issue.summary or '(none)'}
-Key facts:
-{facts_text or '(none)'}
-Sources: {sources_text}{staleness_instruction}
-
-RULES — violating any rule means your response is unusable:
-1. Use ONLY information from the Title, Summary, and Key facts above. \
-Do not add details, statistics, or claims not stated there.
-2. If the title or summary says something was dropped, ended, or resolved — \
-write it as dropped/ended/resolved. Never contradict the title.
-3. STRICT MAXIMUM: {MAX_POST_CHARS} characters total.
-4. Write 1-3 complete sentences ending with proper punctuation.
-5. No hashtags, no exclamation points, no editorializing, no "breaking news".
-6. Neutral and non-partisan.
-7. Report directly — never write "sources say," "reports indicate," "coverage \
-shows," or similar. State facts as facts, not as something reports/coverage/
-sources are saying.
-8. Do not evaluate whether an action was warranted or justified, and do not \
-speculate about its political purpose or effect.
-9. Write about what actually happened or was said — not about "the coverage," \
-"the discussion," or "the reporting" itself. Use specific names and numbers \
-from the Key facts rather than vaguer substitutes.
-10. Lead with the concrete outcome or decision, not the buildup to it — put \
-the number or result first if the Key facts include one (a vote tally, a \
-dollar figure, a ruling), and let any consequence or stakes trail as a \
-second clause in the same sentence rather than a separate sentence.
-11. If you need to name where a claim comes from, make the source the \
-grammatical subject ("The FEC says..." not "According to the FEC...") — it \
-costs no extra words and reads less like a citation.
-12. Never substitute a vague intensifier ("significant," "sweeping," \
-"major") for a specific number already given in the Key facts.
-
-Return JSON: {{"post": "<your post text>"}}"""
-
-    # Everything the model was shown, plus the article date it was told to
-    # reference — the grounding universe for the generated post.
-    source_material = f"{issue.title}\n{issue.summary or ''}\n{facts_text}\n{article_date} {today}"
-
-    retry_note = ""
-    for attempt in range(2):
-        result = call_llm(
-            prompt_version="bsky_new_post_v3",
-            system_prompt=_SYSTEM_PROMPT,
-            user_prompt=user_prompt + retry_note,
-            # Public-facing surface: story-tier model when configured
-            # (settings.OLLAMA_STORY_MODEL — two-tier design, 2026-07).
-            model=settings.OLLAMA_STORY_MODEL or None,
-            cache_key=None,  # never cache — these are time-sensitive
-            db_session=None,
-            max_tokens=256,
-            num_ctx=2048,
-        )
-        if not result or not isinstance(result.get("post"), str):
-            return None
-        post = strip_hashtags_and_truncate(result["post"], MAX_POST_CHARS)
-
-        # Posts publish publicly under the platform's name — verify rules
-        # mechanically instead of trusting them. Any number or titled-official
-        # reference the source material doesn't contain is a hallucination;
-        # hedging attribution ("sources show") and editorializing ("was
-        # warranted") are prompt-only rules the local model doesn't reliably
-        # follow, same as _generate_full_story in action_center.py.
-        reasons = grounding_violations(post, source_material) + hedge_and_editorializing_violations(post)
-        if not reasons:
-            log_intensifier_usage("bsky_post", post, source_material)
-            return post
-
-        action_metrics.increment("bsky_post_grounding_rejections")
-        logger.warning(
-            "Bluesky post failed grounding for issue %s (attempt %d): %s | post: %s",
-            issue.id, attempt + 1, "; ".join(reasons), post[:160],
-        )
-        retry_note = (
-            "\n\nYour previous attempt was rejected because it included "
-            f"{'; '.join(reasons)}. Rewrite using only the Title, Summary, and "
-            "Key facts, report events directly instead of through phrases "
-            "like 'sources show' or 'reports indicate,' do not describe any "
-            "election, race, campaign, or challenge for office unless the Key "
-            "facts say so, do not call any official 'former' unless the Key "
-            "facts do, do not attach a party label (Republican/Democrat/GOP/"
-            "(R-)/(D-)) to anyone unless the Key facts state their party, "
-            "do not evaluate whether any action was warranted "
-            "or justified, and name the specific office-holder (e.g. the "
-            "President's actual name) instead of a vague indefinite phrase "
-            "like 'a president' or 'a Speaker' — there is only one of each "
-            "at a time, so an indefinite article reads as wrong, not neutral."
-        )
-
-    return None  # ungrounded twice — skip; the next refresh cycle retries
+    prefix = _staleness_prefix(getattr(issue, "primary_article_date", None), today)
+    for body in (*_new_facts(issue), issue.summary, issue.title):
+        text = strip_hashtags((body or "").strip())
+        if text and len(prefix) + len(text) <= MAX_POST_CHARS:
+            return prefix + text
+    action_metrics.increment("bsky_posts_skipped_too_long")
+    return None
 
 
 def _publish(text: str, issue) -> bool:
@@ -283,7 +189,7 @@ def process_issues_for_bluesky(issues: list, db: Session) -> int:
         if issue.bsky_posted_at is not None:
             continue  # pipeline didn't flag this issue for posting
 
-        text = _generate_new_post(issue, today)
+        text = _compose_new_post(issue, today)
         if not text:
             continue
 

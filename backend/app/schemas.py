@@ -339,6 +339,9 @@ class SponsoredBillSchema(CamelModel):
     bill_type: str = ""
     is_law: bool = False
     stage: str = ""
+    # Content read as commemorative (analyze/commemorative.py): Legislative
+    # Effectiveness weights it 1x, not 5x, like Volden & Wiseman.
+    commemorative: bool = False
 
 
 class BillInFlightSchema(CamelModel):

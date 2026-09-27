@@ -15,8 +15,7 @@ CNN-SSRS/Marist/Verasight/Pew/etc. in place of the discontinued Gallup
 feed, rather than going stale).
 
 No API or CSV/JSON export exists — this scrapes the rendered HTML table,
-same risk class as the Wikipedia-fallback scrape already in congress.py's
-fetch_senator_platform_text. Table markup is real but not perfectly
+so a redesign of UCSB's pages breaks it without warning. Table markup is real but not perfectly
 uniform across the ~90 years of pages this project maintains: some rows
 wrap cell values in a <p> tag, others put text directly in the <td> —
 .text_content() handles both. A trailing all-blank row (template

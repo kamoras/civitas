@@ -183,6 +183,7 @@ def build_rep_response(rep: Representative, _db: Session = None) -> Representati
                 "billType": sb.bill_type or "",
                 "isLaw": sb.is_law or False,
                 "stage": sb.stage or "",
+                "commemorative": bool(sb.commemorative),
             }
             for sb in sorted(rep.sponsored_bills, key=lambda x: x.introduced_date or "", reverse=True)
         ],

@@ -75,21 +75,22 @@ def _preload_embedding_model() -> None:
 
 
 def _invalidate_orphaned_pipelines() -> None:
-    """Mark stale the RUNNING rows whose runs are proven dead
-    (run_tracker.tidy_dead_runs) — a Senate run whose lease went an hour
-    without a beat. (Rows past the 12h age rule are cleared by their run
-    lock as the next run starts.)
+    """Mark stale the 'running' pipeline rows a restart left behind, for
+    every pipeline (run_tracker.sweep_orphaned_runs).
 
-    Not every leftover row: during a rollout's overlap the other task may be
-    running it for real, and a lease that has only just lapsed may be a live
-    run stalled behind a writer. Until a row is proven dead every reader
-    gives it the benefit of the doubt (run_tracker.live_run); the scheduler
-    repeats this hourly, so a row a crash left just before this start is
-    tidied once the proof arrives.
+    Pipelines run in threads of the backend process, so a restart kills
+    them without letting them record it: any 'running' row is left over
+    from a prior crash or deploy. (check-and-deploy.sh does not deploy
+    while one runs, which is what keeps a start-first rollout's overlap
+    from sweeping a live run.) Every table, not just the Senate's: an
+    unswept row reads as "running" on the admin dashboard and blocks a
+    manual trigger until STALE_PIPELINE_TIMEOUT ages it out. The one
+    exception is a Senate row whose lease is still beating — a run live in
+    the other task, the one case that can be seen.
     """
-    from app.pipeline.run_tracker import tidy_dead_runs
+    from app.pipeline.run_tracker import sweep_orphaned_runs
 
-    tidy_dead_runs()
+    sweep_orphaned_runs()
 
 
 PROCESS_STARTED_AT: str | None = None

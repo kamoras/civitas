@@ -77,7 +77,30 @@ def test_the_constructs_correlate_in_the_expected_direction(senate, capsys):
 def test_les_is_checked_when_supplied(senate, tmp_path):
     les = tmp_path / "les.csv"
     les.write_text("ICPSR,LES\n" + "\n".join(f"{i},{1.0 + (i % 7) * 0.1}" for i in range(100)))
-    problems = bv.run_chamber("senate", 119, bv.load_les(str(les), "icpsr", "les"), "icpsr")
+    problems = bv.run_chamber("senate", 119, bv.load_les(str(les), "icpsr", "les", 119), "icpsr")
     # Stored LE is flat (50 for everyone), so the correlation is 0 — reported
     # as a wrong-sign problem rather than silently passing.
     assert any("LE vs CEL" in p for p in problems)
+
+
+def test_les_reads_only_the_checked_congress(tmp_path):
+    """CEL's file has a row per member-congress. Unfiltered, each member's
+    last row would win, so an old congress's score stood in for this one's."""
+    les = tmp_path / "cel.csv"
+    les.write_text(
+        "Congress number,ICPSR number according to Poole and Rosenthal,LES 1.0,LES 2.0\n"
+        "117,14226,0.5,0.6\n"
+        "118,14226.0,1.5,1.6\n"
+        "118,20001,,\n"
+        "116,14226,9.0,9.0\n"
+    )
+    assert bv.load_les(str(les), "icpsr", "les 1.0", 118) == {"14226": 1.5}
+    with pytest.raises(SystemExit, match="119th"):
+        bv.load_les(str(les), "icpsr", "les 1.0", 119)
+
+
+def test_les_without_a_congress_column_rejects_duplicate_members(tmp_path):
+    les = tmp_path / "les.csv"
+    les.write_text("icpsr,les\n1,0.5\n1,0.7\n")
+    with pytest.raises(SystemExit, match="more than one row"):
+        bv.load_les(str(les), "icpsr", "les", 118)

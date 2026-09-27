@@ -27,7 +27,7 @@ from app.api.response_helpers import (
 )
 from app.config_definitions import SCORE_WEIGHTS
 from app.database import get_db
-from app.models import ExploreDocument, ScoreSnapshot
+from app.models import ScoreSnapshot
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from fastapi import Request
 
@@ -166,7 +166,7 @@ def api_index(request: Request) -> JSONResponse:
                 "GET /api/public/v1/representatives": "Representatives — ?party=D|R|I &state=XX &page=N &per_page=N",
                 "GET /api/public/v1/representatives/{id}": "Full representative profile",
                 "GET /api/public/v1/representatives/{id}/history": "Historical score snapshots",
-                "GET /api/public/v1/search": "Semantic search — ?q=text &chamber=senate|house &doc_type=X &politician_id=X &limit=N",
+                "GET /api/public/v1/search": "Hybrid (semantic + keyword) search over government documents — ?q=text &chamber=senate|house &doc_type=X &politician_id=X &limit=N",
             },
             "docs": "/docs",
             "source": "https://github.com/kamoras/civitas",
@@ -435,58 +435,44 @@ async def search(
     limit: int = Query(20, ge=1, le=50, description="Max results"),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
-    """Semantic search over government activity documents — floor speeches,
+    """Search over government activity documents — floor speeches,
     presidential actions, Supreme Court opinions, and Federal Register
-    rulemaking (not bill text or lobbying records)."""
+    rulemaking (not bill text or lobbying records).
+
+    The same hybrid engine as the site's Explore page (semantic kNN + BM25F
+    keyword, fused with recency and citation authority), so a query for an
+    identifier — "Executive Order 14110", a docket number — finds it here
+    too; the embedding alone can't tell two such numbers apart."""
     from app.api.explore import VALID_DOC_TYPES, _CHAMBER_CANONICAL
-    from app.pipeline.vector_store import search_explore_documents
+    from app.pipeline.lexical_index import HIGHLIGHT_END, HIGHLIGHT_START
+    from app.services.explore_search import hybrid_search
 
     if doc_type is not None and doc_type not in VALID_DOC_TYPES:
         raise HTTPException(
             status_code=422,
             detail=f"Unknown doc_type. Valid values: {sorted(VALID_DOC_TYPES)}",
         )
-    # Normalize chamber to the stored casing (ChromaDB equality is
-    # case-sensitive) so a lowercase filter actually matches.
+    # Normalize chamber to the stored casing so a lowercase filter matches.
     canonical_chamber = _CHAMBER_CANONICAL.get(chamber.lower()) if chamber else None
 
-    results = await asyncio.to_thread(
-        search_explore_documents,
-        query=q,
-        n_results=limit,
+    outcome = await asyncio.to_thread(
+        hybrid_search,
+        db,
+        q,
+        limit=limit,
         doc_type=doc_type,
         chamber=canonical_chamber,
         politician_id=politician_id,
     )
-    if results is None:
+    if not outcome["indexReady"]:
         return _pub_json(
             {"query": q, "results": [], "count": 0, "indexEmpty": True},
             request, max_age=0,
         )
 
-    doc_ids = [r["id"] for r in results if r.get("id")]
-    doc_map: dict = {}
-    if doc_ids:
-        docs = (
-            db.query(
-                ExploreDocument.id,
-                ExploreDocument.url,
-                ExploreDocument.summary,
-                ExploreDocument.agency_name,
-                ExploreDocument.politician_id,
-            )
-            .filter(ExploreDocument.id.in_(doc_ids))
-            .all()
-        )
-        doc_map = {d.id: d for d in docs}
-        for result in results:
-            doc = doc_map.get(result.get("id"))
-            if doc:
-                result["url"] = doc.url or ""
-                result["summary"] = doc.summary or result.get("snippet", "")
-                result["agencyName"] = doc.agency_name or ""
-
-    # Drop hits with no surviving DB row (partial-reset orphans).
-    results = [r for r in results if r.get("id") in doc_map]
-
-    return _pub_json({"query": q, "results": results[:limit], "count": len(results[:limit])}, request, max_age=CACHE_TTL_SEARCH_S)
+    results = outcome["results"]
+    for result in results:
+        # The keyword channel marks matched terms with control characters
+        # for the site's renderer; a public client gets plain text.
+        result["snippet"] = (result.get("snippet") or "").replace(HIGHLIGHT_START, "").replace(HIGHLIGHT_END, "")
+    return _pub_json({"query": q, "results": results, "count": len(results)}, request, max_age=CACHE_TTL_SEARCH_S)

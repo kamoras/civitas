@@ -152,6 +152,59 @@ def tidy_dead_runs() -> int:
         db.close()
 
 
+# A Senate lease beaten this recently at startup belongs to a run live in
+# the other task (a rollout's overlap), not one this restart killed: a live
+# run beats every lease.BEAT_S.
+_STARTUP_LIVE_BEAT = timedelta(seconds=180)
+RESTART_MESSAGE = "Marked stale: app restarted while pipeline was running"
+
+
+def sweep_orphaned_runs() -> int:
+    """At startup, mark stale every pipeline's RUNNING row — its run was a
+    thread of a process that is gone — except a Senate row whose lease
+    still beats (_STARTUP_LIVE_BEAT). A swept Senate row's lease goes with
+    it, in the same transaction, so the next Senate run isn't held off for
+    the lease's hour-long stale window. Backs out while a data reset holds
+    the database. Returns how many rows were marked; logs, never raises."""
+    from app.database import SessionLocal
+    from app.models import ApiCache, PipelineRun, PipelineStatus
+    from app.pipeline import lease
+
+    db = SessionLocal()
+    try:
+        swept = 0
+        for model in run_tables().values():
+            for row in db.query(model).filter(model.status == PipelineStatus.RUNNING).all():
+                if model is PipelineRun:
+                    record = lease.lease_record(db, lease.SENATE_RUN)
+                    if record is not None and record[1] == row.id:
+                        if utcnow() - record[0] < _STARTUP_LIVE_BEAT:
+                            logger.info("Senate run #%d is beating elsewhere — not swept", row.id)
+                            continue
+                        # Exactly the row read: a beat landing meanwhile keeps it.
+                        db.query(ApiCache).filter(
+                            ApiCache.tier == lease.SENATE_RUN, ApiCache.cache_key == "lock",
+                            ApiCache.cached_at == record[0],
+                        ).delete(synchronize_session=False)
+                marked = db.query(model).filter(model.id == row.id, model.status == PipelineStatus.RUNNING).update({
+                    "status": PipelineStatus.STALE, "completed_at": utcnow(), "error_message": RESTART_MESSAGE,
+                }, synchronize_session=False)
+                if marked:
+                    swept += marked
+                    logger.warning("Invalidated orphaned %s #%d (started %s)", model.__name__, row.id, row.started_at)
+        if swept and lease.held(db, lease.DATA_RESET):
+            db.rollback()  # a reset holds the database (lease.DATA_RESET)
+            return 0
+        db.commit()
+        return swept
+    except Exception:
+        db.rollback()
+        logger.exception("Orphan pipeline sweep failed")
+        return 0
+    finally:
+        db.close()
+
+
 def run_in_progress(db: Session, model: type[_RunModel], stale_timeout: timedelta = STALE_PIPELINE_TIMEOUT) -> bool:
     """Whether a `model` run is live (live_run)."""
     return live_run(db, model, stale_timeout) is not None

@@ -1,7 +1,8 @@
 # Data model
 
-45 tables in one SQLite file (`/data/civitas.db`), plus a separate sqlite-vec
-file (`/data/vectors.db`) holding the `vec_explore` and `vec_bills` vector
+49 tables in one SQLite file (`/data/civitas.db`), 6 visit-counting tables in
+their own (`visits.db`, so a page view never waits on the pipeline's write
+lock), plus a separate sqlite-vec file (`/data/vectors.db`) holding the `vec_explore` and `vec_bills` vector
 tables — split out for writer-lock isolation, not just tidiness. Shown here in clusters; infrastructure tables are listed rather
 than drawn.
 
