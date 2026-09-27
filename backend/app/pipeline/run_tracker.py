@@ -50,6 +50,24 @@ def run_in_progress(db: Session, model: type[_RunModel], stale_timeout: timedelt
 # A refusal because the lock's own holder is live (acquire_pipeline_lock_why);
 # the others are lease.refusal_code's.
 ALREADY_RUNNING = "already_running"
+# The stock pipeline's own: it waits for the member pipelines.
+MEMBER_PIPELINE_RUNNING = "member_pipeline_running"
+
+
+def skip_reason_text(reason: str | None) -> str:
+    """A pipeline skip's reason code, as its log and the nightly alert say it."""
+    from app.pipeline import lease
+
+    return {
+        ALREADY_RUNNING: "a previous run of it was still active",
+        MEMBER_PIPELINE_RUNNING: "a member pipeline (Senate or House) was running",
+        lease.REFUSED_BY_RESET: (
+            "an admin data reset holds the database — if none is running, one died mid-wipe and "
+            "its lease lapses within the half hour"
+        ),
+        lease.REFUSED_BUSY: "the database stayed locked by another writer",
+        lease.REFUSED_HELD: "another process holds its lease",
+    }.get(reason or "", f"it was skipped ({reason or 'no reason given'})")
 
 
 def acquire_pipeline_lock_why(
@@ -169,10 +187,12 @@ class PipelineRunTracker:
     so it has no tracker instance.
 
     A pipeline runs in at most one background thread at a time (its DB-row
-    lock sees to that), but a scheduled job's hung-run override can start a
-    run beside one still going, so the tracker keeps every run it started
-    until that run's stop(): running while any is, aged by the oldest. All
-    of it under one lock; try_start checks and starts in one step.
+    lock sees to that), so start() forgets any run before it: one the lock
+    let it past was stale. A scheduled job without a DB lock uses try_start,
+    which refuses while a run younger than its hung horizon is going, and
+    otherwise forgets the hung ones it proceeds past. A run forgotten that
+    way is not waited on again, and its late stop() is a no-op; the runs
+    kept are the ones that describe what is running now. All under one lock.
     """
 
     def __init__(self) -> None:
@@ -180,25 +200,28 @@ class PipelineRunTracker:
         self._next = 0
         self._lock = threading.Lock()
 
+    def _begin(self) -> int:
+        self._runs.clear()
+        self._next += 1
+        self._runs[self._next] = time.time()
+        return self._next
+
     def start(self) -> int:
-        """Mark a run started; returns its token for stop()."""
+        """Mark a run started, forgetting any before it; returns its token
+        for stop()."""
         with self._lock:
-            self._next += 1
-            self._runs[self._next] = time.time()
-            return self._next
+            return self._begin()
 
     def try_start(self, hung_after: timedelta | None = None) -> int | None:
         """start() unless a run is going — or, with `hung_after`, unless one
-        is going that is younger than that (older is presumed hung). The
-        check and the start are one step: two callers can't both pass."""
+        younger than that is (older ones are presumed hung and forgotten).
+        The check and the start are one step: two callers can't both pass."""
         with self._lock:
             if self._runs:
-                oldest = min(self._runs.values())
-                if hung_after is None or time.time() - oldest < hung_after.total_seconds():
+                youngest = max(self._runs.values())
+                if hung_after is None or time.time() - youngest < hung_after.total_seconds():
                     return None
-            self._next += 1
-            self._runs[self._next] = time.time()
-            return self._next
+            return self._begin()
 
     def stop(self, run: int | None) -> None:
         """Mark the run `run` stopped. A token that isn't running (None,
@@ -218,8 +241,8 @@ class PipelineRunTracker:
 
     @property
     def age(self) -> timedelta | None:
-        """Wall-clock age of the oldest run going, or None when idle."""
+        """Wall-clock age of the run going, or None when idle."""
         with self._lock:
             if not self._runs:
                 return None
-            return timedelta(seconds=time.time() - min(self._runs.values()))
+            return timedelta(seconds=time.time() - max(self._runs.values()))

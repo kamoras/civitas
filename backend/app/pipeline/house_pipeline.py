@@ -27,7 +27,7 @@ from app.pipeline.member_lifecycle import (
     reconcile_roster,
 )
 from app.pipeline.progress_tracker import ProgressTracker
-from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock_why
+from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock_why, skip_reason_text
 from app.services.representative_service import upsert_representative
 
 from app.pipeline.fetch.congress import (
@@ -129,7 +129,7 @@ async def run_house_pipeline() -> dict:
     # mid-run) stays "running" forever, blocking every future House run.
     house_run, refused = acquire_pipeline_lock_why(db, HousePipelineRun, STALE_PIPELINE_TIMEOUT)
     if house_run is None:
-        logger.warning("House pipeline already running in another process — skipping")
+        logger.warning("House pipeline not started: %s", skip_reason_text(refused))
         db.close()
         return {"status": "skipped", "reason": refused}
 

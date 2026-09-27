@@ -17,7 +17,7 @@ from app.database import SessionLocal
 from app.models import Justice, PipelineStatus, SupplementaryPipelineRun
 from app.pipeline import lease
 from app.pipeline.progress_tracker import ProgressTracker
-from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock_why
+from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock_why, skip_reason_text
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -57,7 +57,7 @@ async def run_supplementary_pipeline() -> dict:
     # since-fixed deploy-race incident.
     run, refused = acquire_pipeline_lock_why(db, SupplementaryPipelineRun, STALE_PIPELINE_TIMEOUT)
     if run is None:
-        logger.warning("Supplementary pipeline already running in another process — skipping")
+        logger.warning("Supplementary pipeline not started: %s", skip_reason_text(refused))
         db.close()
         return {"status": "skipped", "reason": refused}
 

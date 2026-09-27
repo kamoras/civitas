@@ -57,7 +57,7 @@ from app.pipeline.fetch.senate_ptr import (
     senate_filing_id,
 )
 from app.pipeline.progress_tracker import ProgressTracker
-from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock_why
+from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, MEMBER_PIPELINE_RUNNING, acquire_pipeline_lock_why, skip_reason_text
 from app.pipeline.transform.industry_classifier import classify_batch_with_learning
 from app.time_utils import utcnow
 
@@ -475,7 +475,7 @@ async def run_stock_trades_pipeline() -> dict:
     try:
         if _other_pipeline_running(db):
             logger.info("Stock trades pipeline skipped — a member pipeline is currently running")
-            return {"status": "skipped", "reason": "member_pipeline_running"}
+            return {"status": "skipped", "reason": MEMBER_PIPELINE_RUNNING}
 
         # Same reasoning as senate_pipeline.py's own lock: until 2026-07-23
         # this was an unconditional insert with no lock at all, so a row
@@ -485,7 +485,7 @@ async def run_stock_trades_pipeline() -> dict:
         # this one (a stuck STOCK row blocking Stock's own next attempt).
         run, refused = acquire_pipeline_lock_why(db, StockTradesPipelineRun, STALE_PIPELINE_TIMEOUT)
         if run is None:
-            logger.info("Stock trades pipeline already running in another process — skipping")
+            logger.warning("Stock trades pipeline not started: %s", skip_reason_text(refused))
             return {"status": "skipped", "reason": refused}
 
         _run_token = _tracker.start()

@@ -38,10 +38,6 @@ def _is_stale(age: timedelta | None, threshold: timedelta) -> bool:
     return age is not None and age > threshold
 
 
-_RESET_CAUSE = ("an admin data reset holds the database — if none is running, one died mid-wipe "
-                "and its lease lapses within the half hour")
-
-
 def _start_job(target, *, name: str, alert: bool = False, lease_tier: str | None = None) -> None:
     """Start a scheduled job's thread. While the admin data reset holds the
     database the job doesn't run this time: logged, and for the nightly
@@ -128,24 +124,11 @@ def _nightly_pipeline() -> None:
         return True
 
     def _skip_cause(reason: str | None) -> str:
-        """What held the run off, from the skip's own reason where it gives
-        one (lease.refusal_code), else whether a data reset holds the
-        database now."""
-        if reason == lease.REFUSED_BY_RESET:
-            return _RESET_CAUSE
-        if reason == lease.REFUSED_BUSY:
-            return "the database stayed locked by another writer"
-        from app.database import SessionLocal
+        """What held the run off: the skip's own reason (every pipeline's
+        lock refusal carries one — run_tracker.acquire_pipeline_lock_why)."""
+        from app.pipeline.run_tracker import skip_reason_text
 
-        db = SessionLocal()
-        try:
-            if lease.held(db, lease.DATA_RESET):
-                return _RESET_CAUSE
-        except Exception:
-            logger.exception("Could not check for a data reset")
-        finally:
-            db.close()
-        return "a previous run of it was still active"
+        return skip_reason_text(reason)
 
     def _run():
         # Loud, deduped alerts before another night's scoring. Each is a

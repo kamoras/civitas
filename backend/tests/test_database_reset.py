@@ -364,16 +364,18 @@ class TestLease:
         assert not lease.held(db_session, lease.SENATE_RUN)
 
 
-def test_a_hung_runs_late_stop_leaves_the_newer_run_running():
+def test_a_run_proceeded_past_is_forgotten_and_its_late_stop_is_a_no_op():
+    """The tracker describes what is running now: a run a newer one was
+    started past (a stale DB lock, a hung-run override) no longer counts."""
     from app.pipeline.run_tracker import PipelineRunTracker
 
     tracker = PipelineRunTracker()
     hung = tracker.start()
-    newer = tracker.start()  # a hung-run override started past it
-    tracker.stop(hung)       # the hung one finally returns
+    newer = tracker.start()
+    tracker.stop(hung)  # the hung one finally returns
     assert tracker.is_running
     tracker.stop(newer)
-    assert not tracker.is_running
+    assert not tracker.is_running and tracker.age is None
 
 
 def test_a_run_finishing_during_the_orphan_check_keeps_its_status(db_session, monkeypatch):
@@ -410,18 +412,6 @@ def test_a_senate_run_held_off_says_why(db_session, monkeypatch):
     assert result == {"status": "skipped", "reason": lease.REFUSED_BY_RESET}
 
 
-def test_a_newer_run_finishing_first_leaves_the_hung_one_marked():
-    from app.pipeline.run_tracker import PipelineRunTracker
-
-    tracker = PipelineRunTracker()
-    hung = tracker.start()
-    newer = tracker.start()
-    tracker.stop(newer)
-    assert tracker.is_running  # the hung run is still going
-    tracker.stop(hung)
-    assert not tracker.is_running and tracker.age is None
-
-
 def test_try_start_refuses_a_fresh_run_and_passes_a_hung_one():
     import time
     from datetime import timedelta
@@ -433,4 +423,11 @@ def test_try_start_refuses_a_fresh_run_and_passes_a_hung_one():
     assert tracker.try_start() is None
     assert tracker.try_start(hung_after=timedelta(hours=2)) is None
     tracker._runs[first] = time.time() - 3 * 3600  # three hours in: hung
-    assert tracker.try_start(hung_after=timedelta(hours=2)) is not None
+    second = tracker.try_start(hung_after=timedelta(hours=2))
+    assert second is not None
+    # The hung run is forgotten: what's going is the new one, and while it
+    # is young the guard holds again.
+    assert tracker.age < timedelta(minutes=1)
+    assert tracker.try_start(hung_after=timedelta(hours=2)) is None
+    tracker.stop(second)
+    assert not tracker.is_running

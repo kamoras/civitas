@@ -3834,7 +3834,7 @@ def refresh_action_issues(db: Session | None = None) -> int:
                 # worth a warning; another container's refresh is routine.
                 logger.log(
                     logging.WARNING if why == lease.REFUSED_BY_RESET else logging.INFO,
-                    "Action refresh skipped: %s", lease.REFUSAL_TEXT[why],
+                    "Action refresh skipped: %s", lease.refusal_text(why, lease.ACTION_REFRESH),
                 )
                 return 0
             try:

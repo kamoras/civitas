@@ -52,7 +52,7 @@ from app.pipeline.fetch.state_candidates import (
 )
 from app.pipeline.fetch.state_election_dates import senate_election_known
 from app.pipeline.progress_tracker import ProgressTracker
-from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock_why
+from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock_why, skip_reason_text
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -798,7 +798,7 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
 
     run, refused = acquire_pipeline_lock_why(db, ElectionPipelineRun, STALE_PIPELINE_TIMEOUT)
     if run is None:
-        logger.warning("Election pipeline already running in another process — skipping")
+        logger.warning("Election pipeline not started: %s", skip_reason_text(refused))
         db.close()
         return {"status": "skipped", "reason": refused}
 
@@ -864,10 +864,16 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                 # The election-season ballot sync may be mid-pass; two
                 # passes writing the same Candidate rows at once is the one
                 # thing to avoid, and that pass is doing this step anyway.
-                if is_ballot_sync_running():
+                # Registered in the sync's own tracker, checked and started in
+                # one step, so a sync can't start beside this pass either.
+                _ballot_token = _ballot_tracker.try_start()
+                if _ballot_token is None:
                     progress.complete("confirmed_candidates", detail="skipped (ballot sync running)")
                     raise _BallotSyncRunning
-                confirm_result, filing_result = await _sync_ballots(db, client, cycle)
+                try:
+                    confirm_result, filing_result = await _sync_ballots(db, client, cycle)
+                finally:
+                    _ballot_tracker.stop(_ballot_token)
                 confirmed_total = sum(r["confirmed"] for r in confirm_result.values())
                 logger.info("Confirmed candidates: %s", confirm_result)
                 if filing_result:

@@ -267,13 +267,8 @@ def holding(db: Session, tier: str, *, yield_to: str | None = None, take_over: b
         _let_go(held_lease)
 
 
-# Why a lease couldn't be taken (refusal_code), and how a skip message says it.
+# Why a lease couldn't be taken (refusal_code).
 REFUSED_BY_RESET, REFUSED_HELD, REFUSED_BUSY = "data_reset", "held_elsewhere", "busy"
-REFUSAL_TEXT = {
-    REFUSED_BY_RESET: "a data reset is running",
-    REFUSED_HELD: "it is running elsewhere",
-    REFUSED_BUSY: "the database was busy",
-}
 
 
 def refusal_code(db: Session, tier: str) -> str:
@@ -285,9 +280,19 @@ def refusal_code(db: Session, tier: str) -> str:
     return REFUSED_BUSY
 
 
+def refusal_text(code: str, tier: str) -> str:
+    """A refusal_code for `tier`, as a skip message says it — naming the
+    holder when it is another run of the tier's job."""
+    return {
+        REFUSED_BY_RESET: "a data reset is running",
+        REFUSED_HELD: f"{TIERS[tier]} is already running (this process or another)",
+        REFUSED_BUSY: "the database was busy",
+    }[code]
+
+
 def refusal(db: Session, tier: str) -> str:
     """refusal_code, as a skip message says it."""
-    return REFUSAL_TEXT[refusal_code(db, tier)]
+    return refusal_text(refusal_code(db, tier), tier)
 
 
 class Granted:

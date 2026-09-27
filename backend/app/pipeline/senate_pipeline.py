@@ -400,7 +400,8 @@ def _record_score_snapshots(db: Session) -> None:
 
 
 def _acquire_pipeline_lock(db: Session) -> "tuple[PipelineRun | None, str | None]":
-    """Atomically create a new locked run, or return None if one is running.
+    """Atomically create a new locked run: (run, None), or (None, why) —
+    run_tracker.acquire_pipeline_lock_why.
 
     Uses the shared SQLite database so the lock works across blue/green
     containers. Atomicity is enforced by the database itself: a partial
@@ -775,7 +776,7 @@ def _take_senate_run_lease(stack) -> str | None:
         if why != lease.REFUSED_BUSY:
             break
     logger.warning(
-        "Senate run not started: %s", lease.REFUSAL_TEXT[why]
+        "Senate run not started: %s", lease.refusal_text(why, lease.SENATE_RUN)
         + (f", {_SENATE_LEASE_ATTEMPTS} times" if why == lease.REFUSED_BUSY else ""),
     )
     return why
