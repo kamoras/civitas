@@ -806,14 +806,22 @@ async def _weekly_source_crawl(db: Session, client, cycle: int) -> dict[str, str
         async with lease.bounded_job_async(lease.SOURCE_CRAWL, who="Election pipeline's source crawl") as granted:
             if not granted:
                 return {}
-            leads = await crawl_for_new_sources(db, client, cycle)
+            # Begun from a different state each night, so a crawl cut off
+            # partway covers the rest over the next nights' retries.
+            leads = await crawl_for_new_sources(db, client, cycle, start=utcnow().toordinal())
+            # Inside the lease: a data reset that wipes the marker can't
+            # start between the crawl and this write.
+            api_cache_set(db, _CRAWL_TIER, _CRAWL_KEY, {"completedAt": utcnow().isoformat()})
         adopted = {s: r for s, r in leads.items() if r.startswith("adopted")}
         logger.info(
             "Source crawl: %d state(s) adopted%s",
             len(adopted), f" — {adopted}" if adopted else "",
         )
-        api_cache_set(db, _CRAWL_TIER, _CRAWL_KEY, {"completedAt": utcnow().isoformat()})
         return adopted
+    except lease.CutOff as cut:
+        db.rollback()
+        logger.warning("%s — the crawl resumes from another state tomorrow; the sync goes ahead", cut)
+        return {}
     except Exception:
         db.rollback()
         logger.exception("Source crawl failed — the sync goes ahead, and the crawl is retried tomorrow")

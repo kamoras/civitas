@@ -31,6 +31,13 @@ from typing import Any
 LOCK_WAIT_S = 5.0
 
 
+class LockTimeout(Exception):
+    """Another writer held a file's lock past LOCK_WAIT_S. Not an OSError:
+    callers take OSError to mean "this path isn't writable, try the next",
+    and a change written to a fallback path because of a lock race would be
+    lost the next time the primary is read. The update failed; say so."""
+
+
 def write_text_atomic(path: str | os.PathLike, text: str) -> None:
     """Write `text` to `path` (UTF-8), replacing it in one step, keeping
     the file's mode (a new one gets the umask's, as open() would give).
@@ -73,8 +80,8 @@ def update_json_file(
     before the lock is released — for a module cache, so writers publish
     their copies in the order they wrote them. `end` follows the JSON (a
     trailing newline). Returns what was written.
-    Raises OSError when the file can't be written, or when another writer
-    holds the lock past LOCK_WAIT_S."""
+    Raises OSError when the file can't be written, LockTimeout when another
+    writer holds the lock past LOCK_WAIT_S."""
     path = os.fspath(path)
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with open(f"{path}.lock", "a") as lock:
@@ -101,5 +108,5 @@ def _lock(fd: int, path: str) -> None:
             return
         except BlockingIOError:
             if time.monotonic() >= give_up:
-                raise OSError(f"{path} stayed locked by another writer for {LOCK_WAIT_S}s") from None
+                raise LockTimeout(f"{path} stayed locked by another writer for {LOCK_WAIT_S}s") from None
             time.sleep(0.02)

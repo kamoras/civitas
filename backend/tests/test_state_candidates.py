@@ -61,6 +61,23 @@ class TestCrawlAdoption:
         return saved
 
     @pytest.mark.asyncio
+    async def test_the_sweep_begins_where_the_caller_says(self, db_session, monkeypatch):
+        """A crawl cut off partway is retried from another state, so no
+        state is always the one it never reaches."""
+        self._patch(monkeypatch, records=[])
+        monkeypatch.setattr(sc, "ELECTION_DOMAINS", {st: ["x.gov"] for st in ("AA", "BB", "CC")})
+        order = []
+
+        async def discover(client, state, cycle, rules=None):
+            order.append(state)
+            return None
+
+        monkeypatch.setattr(sc, "discover_source", discover)
+        monkeypatch.setattr(sc, "_forget_if_broken", lambda *a: _none())
+        await sc.crawl_for_new_sources(db_session, None, 2026, start=4)
+        assert order == ["BB", "CC", "AA"]
+
+    @pytest.mark.asyncio
     async def test_adopts_a_source_whose_nominees_are_real_candidates(
         self, db_session, monkeypatch,
     ):
@@ -456,3 +473,7 @@ class TestSyncConfirmedCandidates:
         results = await sc.sync_confirmed_candidates(db_session, None, 2026)
 
         assert results["TX"]["status"] == "fetch_failed"
+
+
+async def _none():
+    return "none"

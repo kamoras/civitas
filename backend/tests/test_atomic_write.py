@@ -109,8 +109,10 @@ def test_a_file_not_holding_an_object_starts_from_what_the_caller_knows(workdir,
     }
 
 
-def test_a_writer_holding_the_lock_too_long_is_an_oserror(workdir, monkeypatch):
-    """Callers fall back on OSError; an event loop isn't stalled for long."""
+def test_a_writer_holding_the_lock_too_long_is_a_lock_timeout(workdir, monkeypatch):
+    """Not an OSError, which callers take as "try the next path" — that
+    would write the change where the next read won't look. An event loop
+    isn't stalled for long either."""
     import fcntl
 
     from app import atomic_write
@@ -119,8 +121,9 @@ def test_a_writer_holding_the_lock_too_long_is_an_oserror(workdir, monkeypatch):
     target = workdir / "dates.json"
     with open(f"{target}.lock", "a") as held:
         fcntl.flock(held.fileno(), fcntl.LOCK_EX)
-        with pytest.raises(OSError, match="stayed locked"):
+        with pytest.raises(atomic_write.LockTimeout, match="stayed locked"):
             update_json_file(target, lambda known: known)
+    assert not issubclass(atomic_write.LockTimeout, OSError)
 
 
 def test_the_written_copy_is_published_before_the_lock_is_let_go(workdir):

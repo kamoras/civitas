@@ -316,6 +316,15 @@ def _release_post(db: Session, item: RaceCoverageItem) -> None:
     db.commit()
 
 
+def _unclaim(db: Session, item: RaceCoverageItem) -> None:
+    """Hand back a claimed item nothing was attempted for (its reservation
+    was refused): the next run considers it again."""
+    db.query(RaceCoverageItem).filter(RaceCoverageItem.id == item.id).update(
+        {"bsky_posted_at": None}, synchronize_session=False,
+    )
+    db.commit()
+
+
 def _drain_stale_unconsidered(db: Session) -> int:
     """Mark never-considered items older than CONSIDER_MAX_AGE_HOURS as
     considered-without-posting so the eligible pool stays bounded."""
@@ -420,21 +429,27 @@ def post_race_coverage_updates(db: Session, *, deadline: float | None = None) ->
             continue
 
         # Reserved before the LLM is asked for anything: a pass that can't
-        # post this (another pass took the race, or the day's last slot)
-        # spends nothing finding that out.
+        # post this (another pass holds the race, or the day's last slot)
+        # spends nothing finding that out. Nor does the item: it goes back
+        # unconsidered, as another pass's reservation may yet be released —
+        # and when it's the budget, so do the rest (this pass stops).
         if not _reserve_post(db, item):
+            _unclaim(db, item)
             if _posts_in_last_day(db) >= MAX_POSTS_PER_DAY:
-                logger.info("Election coverage posting stopped — another pass used the day's budget")
-                budget = posted  # the rest are only marked considered
-            else:
-                logger.info("Skipping post for race %s — another pass posted for it", race.id)
-                cooled_down.add(item.race_id)
+                logger.info("Election coverage posting stopped — other passes hold the day's budget")
+                break
+            logger.info("Skipping post for race %s — another pass holds it", race.id)
+            cooled_down.add(item.race_id)
             continue
-        text = _generate_post_text(item, race, roster_fact)
-        if text and _publish(text, race):
+        published = False
+        try:
+            text = _generate_post_text(item, race, roster_fact)
+            published = bool(text) and _publish(text, race)
+        finally:
+            if not published:
+                _release_post(db, item)
+        if published:
             cooled_down.add(item.race_id)
             posted += 1
-        else:
-            _release_post(db, item)
 
     return posted

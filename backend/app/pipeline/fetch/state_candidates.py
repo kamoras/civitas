@@ -535,7 +535,7 @@ def _prune_ballot_only(
 
 
 async def crawl_for_new_sources(
-    db: Session, client: httpx.AsyncClient, cycle: int,
+    db: Session, client: httpx.AsyncClient, cycle: int, *, start: int = 0,
 ) -> dict:
     """Look for a usable results source in every state that doesn't have a
     hand-verified one, and keep the ones that prove out. Returns per-state
@@ -556,10 +556,16 @@ async def crawl_for_new_sources(
     crawl picks it up once its nominees are real and checkable. Nothing is
     lost by waiting — a source adopted the week after certification is
     still months before the general.
+
+    `start` rotates where the sweep begins (the caller varies it night to
+    night): a crawl cut off partway is retried from somewhere else, so no
+    state is always the one it never reaches.
     """
     hand_verified = (_sources_file().get("states") or {})
     outcomes: dict[str, str] = {}
-    for state in sorted(ELECTION_DOMAINS):
+    states = sorted(ELECTION_DOMAINS)
+    first = start % len(states) if states else 0
+    for state in states[first:] + states[:first]:
         hand = hand_verified.get(state)
         # A hand-verified state is left alone while its source works. When
         # it STOPS working — a state moves hosts between cycles, which is

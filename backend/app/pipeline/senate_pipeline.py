@@ -38,7 +38,7 @@ from app.models import (
 )
 
 # Fetch modules
-from app.pipeline.analyze.bill_stage import is_enacted, became_law_action
+from app.pipeline.analyze.bill_stage import became_law_action, classify_bill_stage_from_actions, is_enacted
 from app.pipeline.fetch.congress import (
     extract_official_title,
     fetch_bill,
@@ -142,6 +142,7 @@ PIPELINE_STEPS = [
     ("embed_bills",          "analyze",   "Embed bills in vector DB"),
     ("classify_donors",      "analyze",   "Classify donors"),
     ("prepare_senators",     "analyze",   "Prepare senator data"),
+    ("classify_sponsored_stages", "analyze", "Classify sponsored-bill stages"),
     ("fetch_sponsored_cosponsors", "fetch", "Fetch cosponsors for sponsored bills"),
     ("sponsorship_analysis", "analyze",   "Sponsorship leadership & ideology (SVD/PageRank)"),
     ("analyze_senators",     "analyze",   "Analyze senators"),
@@ -692,7 +693,7 @@ async def _sponsored_bill_actions(client, db: Session, sp: dict) -> list[dict]:
     ) or []
 
 
-async def _classify_sponsored_stages(db: Session, senator_prepared: list[dict]) -> None:
+async def _classify_sponsored_stages(db: Session, senator_prepared: list[dict], progress=None) -> None:
     """Every sponsored bill's stage — and, with its action history to hand,
     its is_law as every writer reads it (is_enacted), agreeing with the
     stage — before anything reads either. Legislative Effectiveness credits
@@ -702,26 +703,34 @@ async def _classify_sponsored_stages(db: Session, senator_prepared: list[dict]) 
     used to be classified after calculate_scores had already run, so Senate
     LE was scored on the latestAction keyword fallback — which misses a bill
     that passed the Senate once its latest action is a House referral —
-    while the House (house_pipeline phase 4b) classified first."""
-    from app.pipeline.analyze.bill_stage import classify_bill_stage_from_actions
-
+    while the House (house_pipeline phase 4b) classified first. One
+    action-history read per bill (cached by fetch_bill_actions): its own
+    progress step, as it can run a while on a cold cache."""
+    bills = [sp for prepared in senator_prepared for sp in prepared.get("sponsoredBills", [])]
+    if progress is not None:
+        progress.begin("classify_sponsored_stages", total=len(bills))
     stage_failures = 0
     async with make_async_client() as client:
-        for prepared in senator_prepared:
-            for sp in prepared.get("sponsoredBills", []):
-                try:
-                    sp_actions = await _sponsored_bill_actions(client, db, sp)
-                    sp["isLaw"] = sp.get("isLaw", False) or is_enacted(sp.get("latestAction"), sp_actions)
-                    sp["stage"] = classify_bill_stage_from_actions(sp_actions, sp["isLaw"])
-                except Exception:
-                    # Leave stage unset: _les_bill_stage falls back to
-                    # isLaw/latestAction for this bill. One unreachable
-                    # bill must not abort every senator's scoring.
-                    stage_failures += 1
+        for done, sp in enumerate(bills, 1):
+            try:
+                sp_actions = await _sponsored_bill_actions(client, db, sp)
+                sp["isLaw"] = sp.get("isLaw", False) or is_enacted(sp.get("latestAction"), sp_actions)
+                sp["stage"] = classify_bill_stage_from_actions(sp_actions, sp["isLaw"])
+            except Exception:
+                # Leave stage unset: _les_bill_stage falls back to
+                # isLaw/latestAction for this bill. One unreachable
+                # bill must not abort every senator's scoring.
+                stage_failures += 1
+            if progress is not None:
+                progress.update("classify_sponsored_stages", done=done)
     if stage_failures:
         logger.warning(
             "Bill-stage classification failed for %d sponsored bills — "
             "those use the latestAction fallback", stage_failures,
+        )
+    if progress is not None:
+        progress.complete(
+            "classify_sponsored_stages", detail=f"{len(bills) - stage_failures} classified, {stage_failures} failed",
         )
 
 
@@ -1674,7 +1683,7 @@ async def run_senate_pipeline(
 
         # Every sponsored bill's is_law and stage, before anything reads
         # them: the cosponsorship graph below (edge weights), then scoring.
-        await _classify_sponsored_stages(db, senator_prepared)
+        await _classify_sponsored_stages(db, senator_prepared, progress)
 
         # 3f. Enrich cosponsorship data with senators' own sponsored bills
         # The significant-bills cosponsorship matrix (33 bills) is too sparse

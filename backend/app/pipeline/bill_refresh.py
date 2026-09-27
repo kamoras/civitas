@@ -33,7 +33,12 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.http_client import make_async_client
 from app.models import RepSponsoredBill, SponsoredBill
-from app.pipeline.analyze.bill_stage import classify_bill_stage_from_actions, is_enacted, became_law_action
+from app.pipeline.analyze.bill_stage import (
+    LAW_ACTION_PHRASES,
+    became_law_action,
+    classify_bill_stage_from_actions,
+    is_enacted,
+)
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.congress import CONGRESS_API_BASE, _fetch_with_retry
 from app.pipeline.run_tracker import PipelineRunTracker
@@ -249,7 +254,7 @@ async def _apply_updates(
                 undated, model.latest_action_date < new_date,
                 and_(
                     model.latest_action_date == new_date,
-                    ~stored.contains("became public law"), ~stored.contains("became private law"),
+                    *(~stored.contains(phrase) for phrase in LAW_ACTION_PHRASES),  # became_law_action's
                 ),
             )
         else:

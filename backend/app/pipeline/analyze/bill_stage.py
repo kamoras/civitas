@@ -151,6 +151,11 @@ _STAGE_RANK: dict[BillStage, int] = {
 }
 
 
+# How Congress.gov words the action that makes a bill law. One copy: the
+# bill refresh's write-time SQL guard matches the same phrases.
+LAW_ACTION_PHRASES = ("became public law", "became private law")
+
+
 def became_law_action(text: str | None) -> bool:
     """Whether a latest-action text records the bill becoming law —
     Congress.gov's "Became Public Law No: ..." or "Became Private Law No:
@@ -160,7 +165,7 @@ def became_law_action(text: str | None) -> bool:
     section 904 of Public Law 93-344"). The reading for a writer with no
     action history to hand; one with it uses is_enacted."""
     lowered = (text or "").lower()
-    return "became public law" in lowered or "became private law" in lowered
+    return any(phrase in lowered for phrase in LAW_ACTION_PHRASES)
 
 
 def is_enacted(latest_text: str | None, actions: list[dict] | None = None) -> bool:

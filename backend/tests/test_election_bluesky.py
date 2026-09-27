@@ -10,6 +10,7 @@ process_issues_for_bluesky tests.
 from datetime import timedelta
 from unittest.mock import patch
 
+import pytest
 from sqlalchemy.orm import sessionmaker
 
 from app.models import Candidate, Race, RaceCoverageItem
@@ -336,9 +337,25 @@ class TestPostRaceCoverageUpdates:
             posted = election_bluesky.post_race_coverage_updates(db_session)
         other.close()
         gen.assert_not_called()  # refused before the LLM was asked
-
         assert posted == 0
         mock_publish.assert_not_called()
+        db_session.expire_all()
+        mine = db_session.query(RaceCoverageItem).filter_by(url="https://apnews.com/mine").one()
+        assert mine.bsky_posted_at is None and not mine.bsky_posted  # back for the next run
+
+    def test_a_failure_composing_the_post_releases_its_reservation(self, db_session, monkeypatch):
+        _creds(monkeypatch)
+        _stub_relevance(monkeypatch)
+        _race(db_session)
+        _candidate(db_session)
+        item = _item(db_session)
+        db_session.commit()
+
+        with patch.object(election_bluesky, "_generate_post_text", side_effect=RuntimeError("compose broke")), \
+             pytest.raises(RuntimeError, match="compose broke"):
+            election_bluesky.post_race_coverage_updates(db_session)
+        db_session.expire_all()
+        assert db_session.get(RaceCoverageItem, item.id).bsky_posted is False  # no slot, no cooldown held
 
     def test_no_item_is_started_past_the_deadline(self, db_session, monkeypatch):
         import time
