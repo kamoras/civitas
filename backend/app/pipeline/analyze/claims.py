@@ -101,9 +101,31 @@ def extract_claims(
     re-ranked here, which keeps the one ordering decision in the caller
     that already owns ranking.
     """
+    return dedupe_claims(_extract(
+        articles, ask,
+        lambda a: headline_source(getattr(a, "title", ""), getattr(a, "summary", "")),
+    ))
+
+
+def extract_body_claims(
+    articles: list,
+    ask: Callable[[str], dict | None],
+) -> list[Claim]:
+    """A second claim per article, located in its summary alone.
+
+    Asked about headline and summary together, the model points at the
+    headline nearly every time (all 14 claims in a 40-article live sample,
+    2026-09-27), so an article's body never contributes. The full story
+    is what that body is for; hiding the headline is how it is reached,
+    with the same prompt and the same verification.
+    """
+    return _extract(articles, ask, lambda a: (getattr(a, "summary", "") or "").strip())
+
+
+def _extract(articles: list, ask: Callable[[str], dict | None], source_of) -> list[Claim]:
     claims: list[Claim] = []
     for article in articles:
-        source = headline_source(getattr(article, "title", ""), getattr(article, "summary", ""))
+        source = source_of(article)
         if not source:
             continue
         try:
@@ -126,7 +148,7 @@ def extract_claims(
             source_name=getattr(article, "source_name", "") or "",
             source_url=getattr(article, "url", "") or "",
         ))
-    return dedupe_claims(claims)
+    return claims
 
 
 def on_topic(claims: list[Claim], articles: list) -> list[Claim]:
@@ -214,3 +236,26 @@ def build_lede(claims: list[Claim]) -> str:
     Quickly to Lower Prices".
     """
     return claims[0].text if claims else ""
+
+
+def build_story(claims: list[Claim], shown: list[str]) -> str | None:
+    """The full story: every verified claim, grouped under the outlet
+    that made it, or None when it would only repeat what the issue page
+    already shows (`shown`: its summary and facts).
+
+    No sentence here is written. Each is a verbatim span `compose`
+    verified, and the only structure added is the outlet heading
+    ("## NPR"), which the issue page renders as a subheading. It replaced
+    a model writing 800 characters of prose from the same facts, which
+    published a relationship the sources never stated (issue 748), gave
+    a House member the wrong office (750) and filled a third with
+    nothing (751) — each past the shared grounding checks.
+    """
+    if not any(c.text not in shown for c in claims):
+        return None
+    by_outlet: dict[str, list[str]] = {}
+    for claim in claims:
+        by_outlet.setdefault(claim.source_name or "Other reporting", []).append(claim.text)
+    return "\n\n".join(
+        f"## {outlet}\n\n{' '.join(texts)}" for outlet, texts in by_outlet.items()
+    )

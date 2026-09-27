@@ -179,10 +179,8 @@ def _draft_developing_issue(vote: dict, db: Session) -> tuple[str, str, list[str
     """Generate a hedged, grounded (title, summary, facts) from a vote
     record, or None if two attempts both fail grounding.
 
-    Same two-attempt retry shape as _retry_until_grounded, but this
-    domain's correction prompt and validators are its own — the vote
-    record is the only source, so `_fix_impossible_senate_vote_counts`/
-    `_validate_politician_roles` (news-cluster-specific) don't apply.
+    Two attempts, each checked against the vote record, which is the only
+    source this draft has.
     """
     source_text = _vote_source_text(vote)
     chamber_name, member_noun = _chamber_labels(vote)

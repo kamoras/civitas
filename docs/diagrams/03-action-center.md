@@ -82,6 +82,14 @@ real policy story; a false positive is caught downstream by extraction — a
 cluster that yields no verbatim, adjacently-asserted claim produces no issue at
 all. The asymmetry favours recall.
 
+**The full story is claims, not prose.** Built in the rank loop while the
+cluster's articles are in hand: each article is asked a second time about its
+summary alone, and every verified claim is listed under its outlet
+(`claims.build_story`). A model used to write it from the facts, and published a
+relationship no source stated (issue 748), a House member called a senator (750)
+and filler (751). Migration 0004 cleared the stored prose; those issues show no
+story.
+
 **A claim is one contiguous span of its source.** The rendered sentence runs
 from the actor through the predicate in the source's own words, including any
 words between them (dropping them turned "OpenAI agent made" into "OpenAI

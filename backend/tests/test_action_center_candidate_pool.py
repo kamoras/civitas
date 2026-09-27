@@ -43,7 +43,7 @@ def refresh(monkeypatch):
         "check_roll_call_signals", "check_federal_register_signals", "expire_stale_developing_issues",
         "_run_periodic_bluesky_posts", "generate_period_summaries",
         "_update_national_monitors", "_save_timeline_entry",
-        "_prune_stale_api_cache", "_generate_full_story", "_cleanup_old_unposted_issues",
+        "_prune_stale_api_cache", "_build_full_story", "_cleanup_old_unposted_issues",
         "_record_generation_sample", "_log_summary_source_consistency", "log_intensifier_usage",
     ):
         monkeypatch.setattr(ac, name, lambda *a, **k: None)
@@ -110,3 +110,19 @@ def test_a_failed_top_cluster_falls_through_and_the_run_stops_at_max_issues(db_s
         .first()
     )
     assert json.loads(row.data_json)["counts"]["clusters_attempted"] == 5
+
+
+def test_each_published_issue_gets_its_story_in_the_same_run(db_session, refresh, monkeypatch):
+    """The story is built where the cluster's articles still exist: a
+    later stage has only the stored row, which holds no article text."""
+    built = []
+
+    def story(filtered, claims, summary, facts, source, locate):
+        built.append(_cluster_number(filtered))
+        return f"## Outlet\n\nStory for {_cluster_number(filtered)}."
+
+    monkeypatch.setattr(action_center, "_build_full_story", story)
+    action_center._run_refresh(db_session)
+    issues = db_session.query(ActionIssue).order_by(ActionIssue.rank).all()
+    assert built == [3, 5]
+    assert [i.full_story for i in issues] == ["## Outlet\n\nStory for 3.", "## Outlet\n\nStory for 5."]
