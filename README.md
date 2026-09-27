@@ -508,7 +508,7 @@ An independent pipeline (`app/pipeline/election_pipeline.py`) with no data depen
 3. BALLOT ───────── statewide ballot measures per state (Vote Smart), + a liveness
    MEASURES           check on the official-ballot links the site hands users
 4. COVERAGE ─────── RSS matched to races by candidate name with mandatory
-   INGESTION          corroboration; 9 national feeds + 41 per-state newsrooms;
+   INGESTION          corroboration; 8 national feeds + 41 per-state newsrooms;
                       tighter cadence in election season. The open Bluesky
                       name search is DISABLED — see below.
 5. BLUESKY ──────── one grounded, source-backed sentence per notable coverage item
@@ -529,7 +529,7 @@ Current coverage: **50 states configured across 31 strategies** (28 as a state's
 
 **The certified ballot beats primary results wherever a state publishes it.** Louisiana, South Carolina and Missouri sat on `google_civic` until 2026-09-26, and all three publish their November ballot directly: Louisiana's results portal stages the general election's candidate list (`voterportal`), South Carolina's candidate-tracking system lists it by office (`vrems`), and Missouri's Secretary of State certifies it to the counties as a PDF (`certified_pdf` — a list of names, so none of the name-to-vote misalignment that makes results PDFs unsafe). Maine moved too, for a sharper reason: its results reader was right about the June primary and wrong about the ballot. Graham Platner won the Democratic Senate primary, withdrew in July, and the party nominated Troy Jackson by convention — invisible to primary results, and Platner was still on the page. Maine's certified General Candidate List is now read instead (`certified_table`, a config-driven reader for any state that publishes its list as a spreadsheet). South Carolina had the same shape: Lindsey Graham won the June Republican primary outright, then a special primary and runoff nominated Darline Graham.
 
-**A certified ballot is authoritative; primary results are not.** `confirmed_general` is never cleared for a primary-results state, because a nominee does not stop being one when a later fetch hiccups. For a state whose source *is* its certified ballot (`general_ballot_complete`: TX, NC, SD, LA, SC, MO; and every state with a `general_list`: AK, CO, DE, FL, HI, IA, KY, MD, ME, MT, NE, NJ, NM, TN, VA, WY), anyone confirmed in a race the list covers but not on it is unconfirmed on the next successful fetch — that is what removes a withdrawn nominee instead of showing them beside their replacement. A race the list does not cover keeps what it had, and a failed fetch changes nothing. Those states also get no "unopposed" FEC filers added back, since a party missing from a certified ballot has nobody on it.
+**A certified ballot is authoritative; primary results are not.** `confirmed_general` is never cleared for a primary-results state, because a nominee does not stop being one when a later fetch hiccups. For a state whose source *is* its certified ballot (`general_ballot_complete`: TX, NC, SD, LA, SC, MO; and every state with a `general_list`: AK, AL, AR, CO, CT, DE, FL, HI, IA, IL, KY, MD, ME, MT, ND, NE, NJ, NM, TN, UT, VA, WY — for AL, AR, CT and UT that list is Google Civic's, which covers only the races it returns), anyone confirmed in a race the list covers but not on it is unconfirmed on the next successful fetch — that is what removes a withdrawn nominee instead of showing them beside their replacement. A race the list does not cover keeps what it had, and a failed fetch changes nothing. Those states also get no "unopposed" FEC filers added back, since a party missing from a certified ballot has nobody on it.
 
 **Everyone on the ballot is shown, FEC filing or not.** A candidate a state lists who never filed with the FEC (often a minor-party or independent candidate under the reporting threshold) used to match nothing and vanish — 7 of Louisiana's 41 federal ballot candidates. They now get a ballot-only row (`Candidate.fec_filed` is False; the id is `ballot:` + race + name, never an FEC id) built from the state's printed name, shown with "no FEC filing" instead of money and without an FEC link. It is removed when the state stops listing them or when they file and match a real FEC record. A bare surname or a results file's non-candidate row ("Write-in", "Scattering") never becomes one. To make this possible every strategy now carries the printed name (`display_name`) alongside the surname, through one shared builder (`federal_record`).
 
@@ -1171,16 +1171,18 @@ backend/frontend (see `docker-compose.swarm.yml`): a brief restart gap is
 an acceptable trade for not running two model copies in memory at once on
 the Pi, since it isn't on any live user-facing request path. The backend
 connects to it via `http://llama-server:8070` (overlay-network service
-DNS). If llama-server is unavailable, all LLM calls fall through to a
-timeout error and the pipeline records a per-member failure without
-aborting the run.
+DNS). If llama-server is unavailable, LLM calls fail with a timeout and each
+caller degrades on its own: the member pipelines never call it, the
+Action Center publishes no issue from a cluster it can't read (never an
+unverified one), and a justice profile falls back to a template built from
+its statistics.
 
 ### Health Check
 
-`GET /health` returns:
+`GET /api/health` returns:
 ```json
 {
-  "status": "ok",
+  "status": "ok" | "degraded",
   "database": "ok" | "unavailable",
   "ollama": "ok" | "unavailable",
   "lastPipelineRun": "2026-07-12T03:00:00"
@@ -1237,7 +1239,7 @@ civitas/
 │   │   ├── api/              # FastAPI route handlers
 │   │   │   ├── senators.py, representatives.py, presidents.py, justices.py
 │   │   │   ├── action.py     # Action center issues, monitors, timeline
-│   │   │   ├── explore.py    # Semantic document search
+│   │   │   ├── explore.py    # Hybrid (semantic + keyword) document search
 │   │   │   ├── public.py     # Open read-only API (rate-limited, no auth)
 │   │   │   └── admin.py      # Pipeline control panel
 │   │   ├── services/         # Business logic (senator_service, representative_service)
@@ -1248,13 +1250,13 @@ civitas/
 │   │   │   ├── analyze/      # Scoring, classification, action center, Bluesky
 │   │   │   │   ├── bill_analyzer.py          # Embedding-based bill classification + stance
 │   │   │   │   ├── bill_learning.py          # Adaptive kNN reference corpus
-│   │   │   │   ├── party_platform.py         # Content-based party alignment + partisan depth
+│   │   │   │   ├── party_platform.py         # Party alignment (roll-call split, content fallback) + partisan depth
 │   │   │   │   ├── nn_classifier.py          # kNN donor classifier + category normalization
 │   │   │   │   ├── donor_classifier_ai.py    # Tiered donor classification + batch skip
 │   │   │   │   ├── sponsorship_analysis.py   # PageRank leadership + SVD ideology
 │   │   │   │   ├── policy_alignment.py       # Industry↔policy area mapping
 │   │   │   │   ├── cross_reference.py        # Per-senator lobbying/key-vote analysis
-│   │   │   │   ├── action_center.py          # News clustering, LLM summarization,
+│   │   │   │   ├── action_center.py          # News clustering, verbatim claims,
 │   │   │   │   │                             #   national monitors, timeline
 │   │   │   │   ├── score_calculator.py       # Deterministic scoring formulas
 │   │   │   │   ├── ollama_client.py          # LLM backend abstraction
@@ -1268,15 +1270,19 @@ civitas/
 │   │   │   │                 #   ANALYZE -> ASSEMBLE+SAVE orchestration per chamber
 │   │   │   ├── stock_pipeline.py  # STOCK Act trade-disclosure ingestion (sibling
 │   │   │   │                 #   phase, runs after the member pipelines)
+│   │   │   ├── supplementary_pipeline.py  # Explore docs, justices, PVI, presidents
+│   │   │   ├── election_pipeline.py  # Candidates, FEC financials, ballots, coverage
 │   │   │   └── president_pipeline.py, justice_pipeline.py, explore_pipeline.py
 │   │   ├── scheduler.py      # Nightly cron entrypoint — calls the pipelines above
 │   │   ├── models.py         # SQLAlchemy ORM (Senator, Representative, KeyVote,
 │   │   │                     #   Justice, ActionIssue, NationalMonitor,
 │   │   │                     #   TimelineEntry, ScoreSnapshot, etc.)
 │   │   ├── schemas.py        # Pydantic response schemas
-│   │   ├── database.py       # DB engine, session management, lightweight migrations
+│   │   ├── database.py       # DB engine, session management, init_db (runs Alembic)
 │   │   ├── config.py         # Pydantic settings from .env
 │   │   └── config_definitions.py  # Score weights, industry codes, policy areas
+│   ├── migrations/           # Alembic revisions (see its README)
+│   ├── scripts/              # Calibration, research and audit scripts
 │   ├── tests/                # pytest test suite
 │   ├── requirements.txt
 │   └── Dockerfile
@@ -1290,7 +1296,7 @@ civitas/
 │   │   │                     #    scorecards all render into this one page)
 │   │   ├── bills/            # Bills-in-motion — grouped by stage, sortable
 │   │   ├── compare/          # Side-by-side senator/representative comparison
-│   │   ├── explore/          # Semantic search over government documents
+│   │   ├── explore/          # Hybrid search over government documents
 │   │   ├── elections/        # State index, per-state ballot pages (federal contests
 │   │   │                     #   + statewide measures), race/candidate detail
 │   │   ├── leaderboard/      # Rankings across all branches (House paginated)
@@ -1323,7 +1329,7 @@ See `.env.example` for all options. Key variables:
 | `LLAMA_MODELS_DIR` | No | Host directory bind-mounted into llama-server at `/models` (default: `./llama-models`) |
 | `LLAMA_MODEL_FILE` | No | `.gguf` filename inside `LLAMA_MODELS_DIR` (default: `lfm2.5-1.2b-instruct-q4_k_m.gguf`) |
 | `OLLAMA_MODEL` | No | Model name for cache keys and Ollama (default: `LiquidAI/lfm2.5-1.2b-instruct`) |
-| `DATABASE_URL` | No | SQLite path (default: `sqlite:///data/civitas.db`) |
+| `DATABASE_URL` | No | SQLite path. `docker-compose.yml` sets `sqlite:////data/civitas.db` (the `/data` volume); the code default `sqlite:///data/civitas.db` is relative to the working directory, for running outside Docker |
 | `PIPELINE_CRON_SCHEDULE` | No | Cron schedule for nightly pipeline (default: `0 3 * * *`) |
 | `PIPELINE_CACHE_TTL_HOURS` | No | API response cache TTL (default: `72`) |
 | `VOTESMART_API_KEY` | No | Vote Smart API key — enables statewide ballot measures on the state ballot pages. Unset means the sync is skipped and every state reports "not yet covered", never "no measures" |
@@ -1357,18 +1363,23 @@ Key references:
 - Brin, S. & Page, L. (1998). The Anatomy of a Large-Scale Hypertextual Web Search Engine. *Proc. WWW 1998*.
 - Canes-Wrone, B., Brady, D. & Cogan, J. (2002). Out of Step, Out of Office. *APSR*, 96(1), 127-140.
 - Carson, J. et al. (2010). The Electoral Costs of Party Loyalty. *AJPS*, 54(3), 598-616.
+- Cormack, G., Clarke, C. & Büttcher, S. (2009). Reciprocal Rank Fusion Outperforms Condorcet and Individual Rank Learning Methods. *SIGIR 2009*.
 - Clinton, J., Jackman, S. & Rivers, D. (2004). The Statistical Analysis of Roll Call Data. *APSR*, 98(2), 355-370.
 - Cover, T. & Hart, P. (1967). Nearest Neighbor Pattern Classification. *IEEE Trans. Info Theory*, 13(1), 21-27.
 - Efron, B. & Morris, C. (1975). Data Analysis Using Stein's Estimator. *JASA*, 70(350), 311-319.
 - Grimmer, J. & Stewart, B. (2013). Text as Data. *Political Analysis*, 21(3), 267-297.
+- Harbridge-Yong, L., Volden, C. & Wiseman, A. (2023). The Bipartisan Path to Effective Lawmaking. *Journal of Politics*, 85(3).
 - Laver, M., Benoit, K. & Garry, J. (2003). Extracting Policy Positions from Political Texts. *APSR*, 97(2).
 - Lewis, P. et al. (2020). Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks. *NeurIPS 2020*.
+- Miller, W. & Stokes, D. (1963). Constituency Influence in Congress. *APSR*, 57(1), 45-56.
 - Nokken, T. & Poole, K. (2004). Congressional Party Defection in American History. *Legislative Studies Quarterly*, 29(4), 545-568.
+- Papke, L. & Wooldridge, J. (1996). Econometric Methods for Fractional Response Variables. *Journal of Applied Econometrics*, 11(6), 619-632.
 - Poole, K. & Rosenthal, H. (1985). A Spatial Model for Legislative Roll Call Analysis. *AJPS*, 29(2), 357-384.
 - Reimers, N. & Gurevych, I. (2019). Sentence-BERT. *EMNLP 2019*, 3982-3992.
 - Snell, J. et al. (2017). Prototypical Networks for Few-Shot Learning. *NeurIPS 2017*, 4077-4087.
 - Stratmann, T. (2005). Some Talk: Money in Politics. *Public Choice*, 124(1-2), 135-156.
 - Tauberer, J. (2012). *Open Government Data*. GovTrack.us ideology/leadership methodology.
+- Volden, C. & Wiseman, A. (2014). *Legislative Effectiveness in the United States Congress: The Lawmakers*. Cambridge UP.
 
 ## License
 

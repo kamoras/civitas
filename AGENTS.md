@@ -796,7 +796,7 @@ See `.env.example` for all options. Key variables:
 | `ADMIN_TOKEN` | Yes | Bearer token for admin panel |
 | `LLM_BACKEND` | No | `llama-server` (default) or `ollama` |
 | `LLAMA_SERVER_URL` | No | llama.cpp server URL |
-| `DATABASE_URL` | No | SQLite path (default: `sqlite:////data/civitas.db`) |
+| `DATABASE_URL` | No | SQLite path (`docker-compose.yml` sets `sqlite:////data/civitas.db`, the volume; the code default is the relative `sqlite:///data/civitas.db`) |
 
 **On the production Pi, `.env` is a hand-edited, Pi-local file** (see
 "CI/CD" below for why — no GitHub Actions job ever touches the Pi
