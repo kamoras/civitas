@@ -329,11 +329,14 @@ def _recent_congresses_only(bills: list[dict]) -> list[dict]:
 
 async def fetch_member_sponsored(
     client: httpx.AsyncClient, db: Session, bioguide_id: str
-) -> list[dict]:
+) -> list[dict] | None:
     """Fetch a member's sponsored legislation with pagination.
 
     Returns only bills from the current congress; see _recent_congresses_only
-    for why.
+    for why. Returns None when the request fails and no earlier response is
+    cached: an empty list means the member sponsored nothing, and a failed
+    request used to return one too — scoring the member as "0 substantive
+    bills, confirmed inactivity" for that run.
     """
     cache_key = f"member-sponsored-v2-{bioguide_id}"
     cached = api_cache_get(db, "congress", cache_key)
@@ -351,7 +354,16 @@ async def fetch_member_sponsored(
             f"{CONGRESS_API_BASE}/member/{bioguide_id}"
             f"/sponsored-legislation?limit={page_size}&offset={offset}",
         )
-        page = (data or {}).get("sponsoredLegislation", [])
+        if data is None:
+            # Past its TTL, the last good response is still a better answer
+            # than none — sponsorship changes slowly.
+            stale = api_cache_get(db, "congress", cache_key, max_age_hours=_STALE_SPONSORED_MAX_HOURS)
+            if stale:
+                logger.warning("Sponsored legislation for %s failed — using the cached list", bioguide_id)
+                return _recent_congresses_only(stale)
+            logger.warning("Sponsored legislation for %s failed and nothing is cached", bioguide_id)
+            return None
+        page = data.get("sponsoredLegislation", [])
         all_results.extend(page)
         if len(page) < page_size:
             break
@@ -359,6 +371,11 @@ async def fetch_member_sponsored(
 
     api_cache_set(db, "congress", cache_key, all_results)
     return _recent_congresses_only(all_results)
+
+
+# How old a cached sponsored-legislation list may be and still stand in for a
+# failed request: one congress.
+_STALE_SPONSORED_MAX_HOURS = 24 * 365 * 2
 
 
 async def fetch_bill(

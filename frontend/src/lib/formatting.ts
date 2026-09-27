@@ -215,3 +215,27 @@ export function describeDaysLeft(closeDate: string, asOf: number): string {
   if (diff === 1) return "1 day left";
   return `${diff} days left`;
 }
+
+/**
+ * An overall score as it is shown everywhere: a whole number. Sub-scores are
+ * integers; the decimals an overall picks up from the weights (.33/.33/.34)
+ * carry no information, and showing them ranked members apart on differences
+ * no measurement here can resolve. Ranks and ties are taken on this value.
+ */
+export function displayScore(score: number): number {
+  return Math.round(score);
+}
+
+/**
+ * Standard competition ranks ("1224") for a list already in display order:
+ * equal keys share the rank of the first of them, and the next distinct key
+ * skips past the tie. Numbering by position gave two members with the same
+ * score different ranks, decided by the alphabetical tiebreak.
+ */
+export function competitionRanks<T>(items: readonly T[], key: (item: T) => unknown, offset = 0): number[] {
+  const ranks: number[] = [];
+  items.forEach((item, i) => {
+    ranks.push(i > 0 && key(item) === key(items[i - 1]) ? ranks[i - 1] : offset + i + 1);
+  });
+  return ranks;
+}

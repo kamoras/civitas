@@ -325,7 +325,7 @@ Classification decisions — what industry a donor belongs to, which direction a
 | Tier | Technique | Speed | Used For |
 |------|-----------|-------|----------|
 | 1 | FEC metadata / learning store exact match | Instant | Donor types, previously classified bills and donors |
-| 2 | Sentence-transformer embeddings (cosine similarity) | Fast | Bill policy areas, industry, party alignment, donor types, stance direction, procedural detection, skip entity detection, employer filtering, memo transfer detection |
+| 2 | Sentence-transformer embeddings (cosine similarity) | Fast | Bill policy areas, industry, party alignment, donor types, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection |
 | 2b | SVD / PageRank on cosponsorship matrix | Fast | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
 | 3 | k-Nearest Neighbor in embedding space | Fast | Remaining unclassified donors (~5%), bill classification from reference corpus |
 | 4 | LLM (LFM2.5-1.2B-Instruct via llama.cpp) | Slow | Action Center issue synthesis, justice profile summaries |
@@ -338,6 +338,7 @@ Key embedding-based classification features:
 - **Semantic category normalization** maps stale/unknown category labels to valid industries via embedding similarity, replacing a hardcoded alias table.
 - **Stance direction** is derived primarily from embedding similarity against pro/anti/neutral action prototypes — see the disclosed exception below.
 - **Procedural bill detection** uses embedding similarity against a procedural prototype instead of substring matching.
+- **Commemorative bill detection** (`analyze/commemorative.py`) gives Legislative Effectiveness Volden & Wiseman's 1x tier for bills like post-office namings and Gold Medals: the margin between commemorative and substantive prototypes on the similarity model, over a threshold calibrated against V&W's own per-member commemorative counts (`scripts/calibrate_commemorative.py`, written to `app/data/commemorative_calibration.json`).
 
 ### Disclosed exceptions
 
@@ -767,7 +768,7 @@ The exact formulas are actively iterated (v1 → v6.13 as of this writing, each 
 
 - **Funding Independence**: PAC dependency (share scaled by how close contributing PACs run to their legal caps, chamber-specific multiplier), state-relative small-donor share, relative top-donor concentration, and inverse-HHI industry concentration (folded in from the former Funding Diversity dimension). v6.13 removed outside spending and source breadth after testing both against FEC data: outside spending tracks race competitiveness, and breadth was the small-donor share counted again (see `docs/research/funding-independence.md`).
 - **Constituent Alignment** (keyed `constituentAlignment`; it was `independentVoting` until 2026-09, and the public API still emits that key as a deprecated alias — the dimension was rebuilt in v4.2): how a member's voting compares to what their *seat* elected them to do. Party-line voting in a safe seat that elected that platform scores as representation, not as a failure of independence — the delegate model of representation (Miller & Stokes 1963), not independence as an intrinsic virtue. The member's break rate is scored against the break rate same-party members show at the same seat lean, measured from the chamber every run (`compute_constituent_reference`); the member's Nokken-Poole roll-call position (Voteview) is scored against a seat-conditional per-party expectation (Canes-Wrone, Brady & Cogan 2002's district-relative extremity). Both are symmetric and apply the same way in safe and competitive seats — v6.13 decided each of those choices by testing them against House re-election results (see `docs/research/constituent-alignment.md`). Ideal points are ingested automatically every pipeline run (`app/pipeline/fetch/voteview.py`, ingestion-gated) — no manual step.
-- **Legislative Effectiveness**: significance-weighted, cumulative-stage bill credit (Volden & Wiseman 2014-based, benchmarked against the sponsor's chamber and majority/minority baseline, not an absolute threshold — the chamber's reference is re-measured from its current members every pipeline run), cosponsorship-network leadership (PageRank, tenure-confidence-scaled), and bipartisan coalition attraction (v6.11, moved from Constituent Alignment — the receive-only share of cross-party cosponsors a member attracts to their own bills, the construct Harbridge-Yong, Volden & Wiseman 2023 show predicts lawmaking success).
+- **Legislative Effectiveness**: Volden & Wiseman's (2014) Legislative Effectiveness Score — each bill counted at every stage it reaches, divided by the chamber's total at that stage, so advancing a bill counts for far more than introducing one (v6.14; `docs/research/les-stage-weighting.md` checks it against their published scores) — benchmarked against the median member of the sponsor's majority/minority status in their chamber, re-measured from its current members every pipeline run, cosponsorship-network leadership (PageRank, tenure-confidence-scaled), and bipartisan coalition attraction (v6.11, moved from Constituent Alignment — the receive-only share of cross-party cosponsors a member attracts to their own bills, the construct Harbridge-Yong, Volden & Wiseman 2023 show predicts lawmaking success).
 
 ### Senate & House Scores
 
@@ -777,7 +778,7 @@ Each senator and House representative carries five sub-scores (0-100, higher = b
 |--------|--------|------------------|---------------|
 | **Funding Independence** | 33% | PAC dependency + small-donor share + top-donor concentration + industry concentration | Stratmann 2005; Parmigiani 2025 |
 | **Constituent Alignment** | 33% | Break rate vs. same-party members in same-lean seats + roll-call position congruence (Nokken-Poole vs. seat-conditional norm) | Carson et al. 2010; Canes-Wrone, Brady & Cogan 2002; Nokken & Poole 2004 |
-| **Legislative Effectiveness** | 34% | Significance-weighted stage credit (majority-status-benchmarked) + cosponsorship leadership (PageRank) + bipartisan coalition attraction | Volden & Wiseman 2014; Harbridge-Yong, Volden & Wiseman 2023 |
+| **Legislative Effectiveness** | 34% | Stage-normalized Volden & Wiseman LES (majority-status-benchmarked) + cosponsorship leadership (PageRank) + bipartisan coalition attraction | Volden & Wiseman 2014; Harbridge-Yong, Volden & Wiseman 2023 |
 | Promise Persistence | unweighted (v6.0) | Campaign commitments kept vs. broken + vote participation | Naurin 2011; Martin 2011 |
 | Funding Diversity | unweighted (v6.5, folded into FI) | Donor traceability + industry diversity (inverse HHI) | Rhoades 1993; Parmigiani 2025 |
 

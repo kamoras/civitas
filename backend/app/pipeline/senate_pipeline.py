@@ -113,6 +113,8 @@ from app.pipeline.live_references import (
     live_funding_reference,
     live_les_reference,
 )
+from app.pipeline.partisan_depth_store import finalize_stored_partisan_depth
+from app.pipeline.sponsorship_backfill import backfill_withheld_sponsorship_scores
 
 # Assemble modules
 from app.pipeline.assemble.senator_builder import build_senator
@@ -150,54 +152,6 @@ MAX_SIGNIFICANT_BILLS = 100
 RECENT_RC_COUNT_PER_SESSION = 100
 RECENT_RC_SESSIONS = 2
 MIN_CONGRESS_FOR_BILL_TITLES = 116
-
-
-def _backfill_withheld_sponsorship_scores(
-    db: Session,
-    bio_ids: set[str],
-    leadership_scores: dict, ideology_scores: dict,
-    bipartisanship_scores: dict, attracted_bipartisanship_scores: dict,
-) -> None:
-    """Fill any bio_id missing from this run's freshly-computed sponsorship
-    score dicts with that senator's last-stored value, in place — see the
-    call site's comment for why a bare `.get(bio_id)` on these dicts is
-    unsafe on a withheld run."""
-    missing = {
-        bio_id for bio_id in bio_ids
-        if bio_id not in leadership_scores or bio_id not in ideology_scores
-        or bio_id not in bipartisanship_scores or bio_id not in attracted_bipartisanship_scores
-    }
-    if not missing:
-        return
-
-    prior = {
-        row.bioguide_id: row
-        for row in db.query(
-            Senator.bioguide_id, Senator.leadership_score, Senator.ideology_score,
-            Senator.bipartisanship_score, Senator.attracted_bipartisanship_score,
-        ).filter(Senator.bioguide_id.in_(missing)).all()
-    }
-
-    backfilled = 0
-    for bio_id in missing:
-        row = prior.get(bio_id)
-        if row is None:
-            continue
-        for computed, value in (
-            (leadership_scores, row.leadership_score),
-            (ideology_scores, row.ideology_score),
-            (bipartisanship_scores, row.bipartisanship_score),
-            (attracted_bipartisanship_scores, row.attracted_bipartisanship_score),
-        ):
-            if bio_id not in computed and value is not None:
-                computed[bio_id] = value
-                backfilled += 1
-
-    if backfilled:
-        logger.warning(
-            "Sponsorship analysis: %d score(s) withheld this run, backfilled from last stored value",
-            backfilled,
-        )
 
 
 def upsert_senator(db: Session, data: dict) -> None:
@@ -354,10 +308,12 @@ def upsert_senator(db: Session, data: dict) -> None:
             )
         )
 
-    # Add sponsored bills
-    db.query(SponsoredBill).filter(
-        SponsoredBill.senator_id == senator_id
-    ).delete()
+    # Add sponsored bills — unless this run couldn't fetch them, in which
+    # case the empty list is not a record and the stored bills stay.
+    if not data.get("sponsoredBillsUnavailable"):
+        db.query(SponsoredBill).filter(
+            SponsoredBill.senator_id == senator_id
+        ).delete()
     for sp_data in data.get("sponsoredBills", []):
         db.add(
             SponsoredBill(
@@ -374,6 +330,7 @@ def upsert_senator(db: Session, data: dict) -> None:
                 bill_type=sp_data.get("billType") or "",
                 is_law=sp_data.get("isLaw") or False,
                 stage=sp_data.get("stage") or "",
+                commemorative=bool(sp_data.get("commemorative")),
             )
         )
 
@@ -385,7 +342,7 @@ def upsert_senator(db: Session, data: dict) -> None:
     # Save sponsorship analysis scores (PageRank leadership + SVD ideology).
     # Only overwrite when this run actually produced a value — the pipeline
     # already backfills a withheld dict from the last stored value before
-    # this point (_backfill_withheld_sponsorship_scores), but this is a
+    # this point (sponsorship_backfill.backfill_withheld_sponsorship_scores), but this is a
     # second, independent guard: storage must never wipe a real score to
     # None just because the value it was handed this run happens to be
     # None, same principle as president_pipeline.py's `live` dict.
@@ -698,30 +655,6 @@ async def _sponsored_bill_actions(client, db: Session, sp: dict) -> list[dict]:
     return await fetch_bill_actions(
         client, db, sp["congress"], sp["billType"].lower(), int(bill_number),
     ) or []
-
-
-def _finalize_stored_partisan_depth(db: Session) -> None:
-    """Relabel every current senator's stored partisan-depth profile against
-    the whole chamber (party_platform.finalize_partisan_depth). Reads from
-    the database, not this run's results, so a single-senator filtered run
-    is still compared with everyone. Never aborts the run: the per-senator
-    provisional labels stay if this fails."""
-    from app.pipeline.analyze.party_platform import finalize_partisan_depth
-
-    try:
-        rows = db.query(Senator).filter(Senator.is_current.is_(True), Senator.partisan_depth.isnot(None)).all()
-        profiles = []
-        for row in rows:
-            profile = json.loads(row.partisan_depth)
-            profile.setdefault("evalParty", row.party)
-            profiles.append((row, profile))
-        finalize_partisan_depth([p for _, p in profiles])
-        for row, profile in profiles:
-            row.partisan_depth = json.dumps(profile)
-        db.commit()
-    except Exception:
-        db.rollback()
-        logger.warning("Partisan-depth finalization failed — provisional labels kept", exc_info=True)
 
 
 def _recent_not_covered_by_key_bills(
@@ -1155,11 +1088,16 @@ async def run_senate_pipeline(
             logger.info("Fetching sponsored legislation...")
             progress.begin("fetch_sponsored", total=len(senators))
             sponsored_map: dict[str, list[dict]] = {}
+            # Members whose request failed with nothing cached: scored
+            # neutral on Legislative Effectiveness, never as zero bills.
+            sponsored_unavailable: set[str] = set()
             for sp_idx, senator in enumerate(senators):
                 bio_id = senator.get("bioguideId", "")
                 if bio_id:
                     raw_sponsored = await fetch_member_sponsored(client, db, bio_id)
-                    if raw_sponsored:
+                    if raw_sponsored is None:
+                        sponsored_unavailable.add(bio_id)
+                    elif raw_sponsored:
                         sponsored_map[bio_id] = raw_sponsored
                 progress.update("fetch_sponsored", done=sp_idx + 1)
             total_sponsored = sum(len(v) for v in sponsored_map.values())
@@ -1740,8 +1678,8 @@ async def run_senate_pipeline(
         # (this dimension's score, the partisan-depth analysis, the
         # persisted raw stat, and the label-threshold computation next)
         # gets the same fix for free.
-        _backfill_withheld_sponsorship_scores(
-            db, senator_bio_ids,
+        backfill_withheld_sponsorship_scores(
+            db, Senator, senator_bio_ids,
             leadership_scores, ideology_scores,
             bipartisanship_scores, attracted_bipartisanship_scores,
         )
@@ -1805,6 +1743,11 @@ async def run_senate_pipeline(
                     "Bill-stage classification failed for %d sponsored bills — "
                     "those use the latestAction fallback", stage_failures,
                 )
+
+            # Commemorative bills (V&W's 1x tier) — before the LES reference
+            # is measured, since its stage totals are significance-weighted.
+            from app.pipeline.analyze.commemorative import mark_commemorative
+            mark_commemorative([sp for p in senator_prepared for sp in p.get("sponsoredBills", [])])
 
             funding_reference = live_funding_reference(
                 "senate", [p.get("funding") or {} for p in senator_prepared],
@@ -1889,6 +1832,7 @@ async def run_senate_pipeline(
                         "bipartisanshipScore": bipartisanship_scores.get(bio_id_for_score),
                         "attractedBipartisanshipScore": attracted_bipartisanship_scores.get(bio_id_for_score),
                         "sponsoredBills": prepared.get("sponsoredBills", []),
+                        "sponsoredBillsUnavailable": bio_id_for_score in sponsored_unavailable,
                         "ideologyScore": ideology_scores.get(bio_id_for_score),
                         "lesReference": les_reference,
                         "fundingReference": funding_reference,
@@ -1986,6 +1930,7 @@ async def run_senate_pipeline(
                                     sp["policyArea"] = areas[0]["area"]
                         classified_sponsored.append(sp)
                     result["sponsoredBills"] = classified_sponsored
+                    result["sponsoredBillsUnavailable"] = bio_id_for_score in sponsored_unavailable
                     if classified_sponsored:
                         logger.info(
                             "    sponsored bills: %d (%d became law)",
@@ -2058,7 +2003,7 @@ async def run_senate_pipeline(
         pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
         db.commit()
 
-        _finalize_stored_partisan_depth(db)
+        finalize_stored_partisan_depth(db, Senator)
         _record_score_snapshots(db)
 
         run_calibration_check("senator")

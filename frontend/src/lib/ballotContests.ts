@@ -212,3 +212,23 @@ export function contestForHash(
   const key = hash.match(/^#ballot-(.+)$/)?.[1];
   return key && contests.some((c) => c.key === key) ? { key, houseRaceId: null } : null;
 }
+
+/**
+ * How many contests a voter in this state marks on the ballot: each Senate
+ * race, one House race (a voter is in one district), each statewide office,
+ * one seat per state legislative chamber, each court, and each measure.
+ * The page's sections are not contests — "News coverage", the local-contests
+ * pointer and the "not loaded yet" placeholders used to be counted as ones,
+ * so a state with two federal races and nothing else loaded read "5 contests".
+ */
+export function countBallotContests(contests: BallotContest[], ballot: StateBallot): number {
+  let n = 0;
+  for (const c of contests) {
+    if (c.kind === "senate" || c.kind === "house") n += 1;
+    else if (c.kind === "statewide") n += ballot.statewideRaces.length;
+    else if (c.kind === "stateleg") n += ballot.stateLegRaces.length;
+    else if (c.kind === "judicial") n += ballot.judicialRaces.length;
+    else if (c.kind === "measures") n += ballot.measures.length;
+  }
+  return n;
+}

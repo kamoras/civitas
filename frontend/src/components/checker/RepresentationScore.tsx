@@ -1,5 +1,6 @@
 "use client";
 
+import { displayScore } from "@/lib/formatting";
 import { fundingShareBase, pacSharePct } from "@/lib/funding";
 import { Senator, VotingRecord, SponsoredBill } from "@/types/senator";
 import { getScoreLabel, getScoreColor, getScoreBgColor, asciiScoreBar } from "@/lib/representation";
@@ -140,7 +141,7 @@ export default function RepresentationScore({
   chamber,
 }: RepresentationScoreProps) {
   const entityType = chamber === "house" ? "representative" : "senator";
-  const overall = breakdown.overall;
+  const overall = displayScore(breakdown.overall);
   const label = getScoreLabel(overall);
   const colorClass = getScoreColor(overall);
   const grade = getScoreGrade(overall);
