@@ -1,4 +1,4 @@
-"""Constituent Alignment (v6.14): measured, no safe-seat scaling, peaked.
+"""Constituent Alignment (v6.15): measured, no safe-seat scaling, peaked.
 
 Each design choice here was decided by testing it against U.S. House
 re-election results (docs/research/constituent-alignment.md):
@@ -8,7 +8,7 @@ re-election results (docs/research/constituent-alignment.md):
 - Below-expected loyalty scores below neutral (it was held at 50).
 - Neither component is scaled by seat safety (both were).
 - Position is congress-specific Nokken-Poole, not career DW-NOMINATE.
-- Breaking past the saturation deviation lowers the score again (v6.14):
+- Breaking past the saturation deviation lowers the score again (v6.15):
   own-party primary voters punish it and the whole seat stops rewarding it.
 
 conftest pins the reference: expected break rate 10% in a swing seat, 5% in
@@ -67,7 +67,7 @@ class TestSeatRelativeVotes:
         assert score(record(20)) == 75
 
     def test_extra_loyalty_costs_less_than_extra_disloyalty(self):
-        # v6.14: at equal distance from the seat's norm, loyalty is penalized
+        # v6.15: at equal distance from the seat's norm, loyalty is penalized
         # less than disloyalty past the peak (20-point gap, on the shape).
         from app.pipeline.analyze.score_calculator import _peaked_vote_shape
 
@@ -127,7 +127,7 @@ class TestSeatRelativeVotes:
 
     def test_a_reference_measured_on_another_statistic_is_not_used(self):
         # A v6.13 reference left on the /data volume (content-weighted rate,
-        # thin records included) must not set v6.14's saturation point: the
+        # thin records included) must not set v6.15's saturation point: the
         # score falls back to the bundled prior (conftest: 20-point
         # saturation, 10% swing-seat expectation).
         import json
@@ -195,7 +195,7 @@ class TestSeatRelativeVotes:
         assert "no measured expectation" in core["components"][0]["detail"]
 
     def test_each_party_labeled_roll_call_counts_once_unweighted(self):
-        # v6.14: partyAlignmentWeight is the bill's content lean, not how
+        # v6.15: partyAlignmentWeight is the bill's content lean, not how
         # the roll call split; weighting by it made a content-bipartisan
         # bill (0.0, read as 1.0) outweigh a 0.01-lean one a hundredfold.
         rec = {"keyVotes": [

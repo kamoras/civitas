@@ -1,4 +1,4 @@
-"""scripts/benchmark_validation.py checks v6.14's constructs against
+"""scripts/benchmark_validation.py checks v6.15's constructs against
 Voteview — run end to end here on a synthetic Senate, since Voteview isn't
 reachable from CI."""
 

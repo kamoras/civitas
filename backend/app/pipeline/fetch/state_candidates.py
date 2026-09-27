@@ -76,6 +76,7 @@ from app.pipeline.fetch.state_candidates_common import (
     BALLOT_BASIS_TIER,
     PARTY_CODE_MAP,
     ballot_basis_key,
+    clean_display_name,
     JUDICIAL_COURT_LABELS,
     JUDICIAL_MARKER_TIER,
     JUDICIAL_MARKER_TTL_HOURS,
@@ -93,6 +94,7 @@ from app.pipeline.fetch.state_candidates_certified_pdf import fetch_confirmed_ca
 from app.pipeline.fetch.state_candidates_certified_table import fetch_confirmed_candidates as _fetch_certified_table
 from app.pipeline.fetch.state_candidates_civic import fetch_confirmed_candidates as _fetch_civic
 from app.pipeline.fetch.state_candidates_ct import fetch_confirmed_candidates as _fetch_ct
+from app.pipeline.fetch.state_candidates_grouped_list_pdf import fetch_confirmed_candidates as _fetch_grouped_list_pdf
 from app.pipeline.fetch.state_candidates_clarity import fetch_confirmed_candidates as _fetch_clarity
 from app.pipeline.fetch.state_candidates_dos_canlist import fetch_confirmed_candidates as _fetch_dos_canlist
 from app.pipeline.fetch.state_candidates_enhanced_voting import (
@@ -151,6 +153,7 @@ STRATEGIES = {
     "vrems": _fetch_vrems,
     "certified_pdf": _fetch_certified_pdf,
     "certified_table": _fetch_certified_table,
+    "grouped_list_pdf": _fetch_grouped_list_pdf,
     "canvass_summary_pdf": _fetch_canvass_summary_pdf,
     "dos_canlist": _fetch_dos_canlist,
     "google_civic": _fetch_civic,
@@ -408,7 +411,7 @@ def _has_general_filings(source: dict) -> bool:
 
 def _apply_ballot(
     db: Session, cycle: int, state: str, records: list[dict],
-    *, keep_unlisted: bool, authoritative: bool,
+    *, keep_unlisted: bool, authoritative: bool, scope: set[str] | None = None,
 ) -> dict:
     """Confirm a state's federal records against its races.
 
@@ -444,10 +447,11 @@ def _apply_ballot(
         if not match.confirmed_general:
             match.confirmed_general = True
             db.commit()
+        _note_ballot_name(db, match, record)
         listed[race.id].add(match.id)
         confirmed += 1
     if keep_unlisted:
-        _prune_ballot_only(db, cycle, state, ballot_only)
+        _prune_ballot_only(db, cycle, state, ballot_only, scope)
     withdrawn = _unconfirm_off_ballot(db, listed) if authoritative else 0
     return {
         "confirmed": confirmed, "unmatched": unmatched,
@@ -455,14 +459,19 @@ def _apply_ballot(
     }
 
 
-def _record_ballot_basis(db: Session, cycle: int, state: str, source: dict) -> None:
+def _record_ballot_basis(
+    db: Session, cycle: int, state: str, source: dict, races: set[str] | None = None,
+) -> None:
     """Say which source answered for this state tonight — see
     BALLOT_BASIS_TIER. Read by the API to decide "confirmed" (the whole
-    ballot) versus "nominees" (primary results) per state."""
+    ballot) versus "nominees" (primary results), per race: `complete`
+    means every federal race here, `races` names the ones a certified
+    list covered when it did not cover them all."""
     api_cache_set(
         db, BALLOT_BASIS_TIER, ballot_basis_key(state, cycle),
         {
             "complete": bool(source.get("general_ballot_complete")),
+            "races": sorted(races or ()),
             "sourceName": str(source.get("source_name") or ""),
             "checkedAt": utcnow().isoformat() + "Z",
         },
@@ -497,12 +506,15 @@ def _unconfirm_off_ballot(db: Session, listed: dict[str, set[str]]) -> int:
     return changed
 
 
-def _prune_ballot_only(db: Session, cycle: int, state: str, kept: set[str]) -> None:
+def _prune_ballot_only(
+    db: Session, cycle: int, state: str, kept: set[str], scope: set[str] | None = None,
+) -> None:
     """Drop ballot-only rows this state's source no longer lists: the
     candidate withdrew, or filed with the FEC and now matches a real row.
     Only reached after a successful fetch — a source that failed says
-    nothing about who is on the ballot."""
-    stale = (
+    nothing about who is on the ballot. `scope` limits it to the races
+    that source speaks for, when two sources split a state's races."""
+    query = (
         db.query(Candidate)
         .join(Race, Candidate.race_id == Race.id)
         .filter(
@@ -510,8 +522,10 @@ def _prune_ballot_only(db: Session, cycle: int, state: str, kept: set[str]) -> N
             Race.cycle_year == cycle,
             Candidate.id.startswith(BALLOT_ONLY_ID_PREFIX),
         )
-        .all()
     )
+    if scope is not None:
+        query = query.filter(Race.id.in_(scope))
+    stale = query.all()
     removed = [c for c in stale if c.id not in kept]
     for cand in removed:
         db.delete(cand)
@@ -724,6 +738,26 @@ async def _forget_if_broken(client: httpx.AsyncClient, cycle: int, state: str) -
     )
     save_discovered(state, None)
     return "forgotten"
+
+
+# A comma after these is part of the name ("Olszewski, Jr."), not a
+# "Last, First" printing.
+_SUFFIX_AFTER_COMMA_RE = re.compile(r",\s*(?:Jr|Sr|II|III|IV|V)\.?$", re.IGNORECASE)
+
+
+def _note_ballot_name(db: Session, cand: Candidate, record: dict) -> None:
+    """Keep the name the state prints for a candidate it matched. A
+    "Last, First" printing is left out rather than reordered: a comma does
+    not reliably mark where the surname ends, and the FEC name already
+    reads that way."""
+    printed = clean_display_name(record.get("display_name") or "")
+    if len(printed.split()) < 2:
+        return
+    if "," in printed and not _SUFFIX_AFTER_COMMA_RE.search(printed):
+        return
+    if cand.ballot_name != printed:
+        cand.ballot_name = printed
+        db.commit()
 
 
 def _confirmed_match(db: Session, cycle: int, state: str, record: dict):
@@ -1079,17 +1113,36 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
         # from that list (sync_ballot_filings), which is what may speak for
         # candidates this results file cannot see or has gone stale on.
         # Here, it only confirms who the results name.
+        ballot_is_elsewhere = _has_general_filings(source)
         if general_records is not None:
-            # The certified ballot answered: it alone decides the federal
-            # races. Primary results above still supplied the state
-            # offices, which the list may not cover.
+            # The certified ballot answered: it alone decides every federal
+            # race it covers. Races it does not cover — a national source
+            # that only knows the districts it has a verified address for —
+            # keep what primary results say, non-authoritatively, exactly
+            # as if the list did not exist for them. Primary results above
+            # still supplied the state offices, which the list may not cover.
             general_federal = [r for r in general_records if r["office"] in ("S", "H")]
+            covered = {_race_id_for(cycle, state, r["office"], r["district"]) for r in general_federal}
+            races_here = {
+                rid for (rid,) in db.query(Race.id).filter(Race.state == state, Race.cycle_year == cycle)
+            }
             applied = _apply_ballot(
                 db, cycle, state, general_federal, keep_unlisted=True, authoritative=True,
+                scope=covered,
             )
-            _record_ballot_basis(db, cycle, state, {**general, "general_ballot_complete": True})
+            rest = [r for r in records if _race_id_for(cycle, state, r["office"], r["district"]) not in covered]
+            if rest:
+                more = _apply_ballot(
+                    db, cycle, state, rest, keep_unlisted=not ballot_is_elsewhere, authoritative=False,
+                    scope=races_here - covered,
+                )
+                applied = {k: applied[k] + more[k] for k in applied}
+            _record_ballot_basis(
+                db, cycle, state,
+                {**general, "general_ballot_complete": bool(races_here) and races_here <= covered},
+                races=covered & races_here,
+            )
         else:
-            ballot_is_elsewhere = _has_general_filings(source)
             applied = _apply_ballot(
                 db, cycle, state, records,
                 keep_unlisted=not ballot_is_elsewhere,
@@ -1150,6 +1203,7 @@ async def sync_ballot_filings(db: Session, client: httpx.AsyncClient, cycle: int
             if not match.on_primary_ballot:
                 match.on_primary_ballot = True
                 db.commit()
+            _note_ballot_name(db, match, record)
             counts["primary"] += 1
         applied = {"ballotOnly": 0, "unconfirmed": 0}
         if found["general"]:

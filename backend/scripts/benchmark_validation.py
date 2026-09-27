@@ -1,7 +1,7 @@
 """External benchmark validation: Civitas scores vs independent records.
 
 Checks the stored scores against measures computed from data Civitas does not
-score from, using the same constructs the scores claim to measure (v6.14):
+score from, using the same constructs the scores claim to measure (v6.15):
 
   Constituent Alignment (both chambers, Voteview):
     1. Seat-relative break deviation — each member's break rate on
@@ -10,7 +10,7 @@ score from, using the same constructs the scores claim to measure (v6.14):
        with the expectation measured from Voteview's own votes by the same
        compute_constituent_reference the pipeline uses, put through the
        score's own vote shape (score_calculator.seat_relative_vote_score —
-       since v6.14 it peaks at the saturation deviation) at that
+       since v6.15 it peaks at the saturation deviation) at that
        reference's own saturation point. The peak is Voteview's
        SATURATION_QUANTILE, not the pipeline's: the two vote sets differ in
        scale, and the same quantile rule is the like-for-like comparison.
@@ -30,7 +30,7 @@ Run after algorithm changes, inside the backend container:
     docker exec "$(docker ps -q -f name=civitas_backend)" python3 scripts/benchmark_validation.py --chamber both
 
 Baselines: the v4.1/v4.2 figures this script used to print compared the
-pre-v6.13 design (raw break rate; DW-NOMINATE). v6.14 has no baseline yet —
+pre-v6.13 design (raw break rate; DW-NOMINATE). v6.15 has no baseline yet —
 record the first production run's correlations here, then investigate any
 later run where a correlation drops by more than ~0.15 or changes sign.
 """

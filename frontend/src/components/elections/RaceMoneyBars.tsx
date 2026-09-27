@@ -3,6 +3,7 @@ import type { BallotCandidate } from "@/types/election";
 import { cashOnHandDisplay, formatCurrency } from "@/lib/formatting";
 import { getScoreColor } from "@/lib/representation";
 import { getPartyMeta } from "@/components/elections/CandidateCard";
+import { candidateName } from "@/lib/elections";
 
 /**
  * A race as a comparison, not a list.
@@ -54,7 +55,7 @@ export default function RaceMoneyBars({
               <p className="min-w-0 font-display text-sm text-ink-hi">
                 <span className={`font-mono text-xs ${pm.color}`}>{pm.label}</span>
                 <span className="mx-1.5 text-ink-min">·</span>
-                <span className="break-words">{c.name}</span>
+                <span className="break-words">{candidateName(c)}</span>
                 {incumbent && (
                   <span className="ml-2 bg-ink-hi/90 px-1.5 py-0.5 font-mono text-[10px] text-surface-base">
                     INCUMBENT

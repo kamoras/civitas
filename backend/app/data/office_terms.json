@@ -1,0 +1,76 @@
+{
+  "_about": "Term length, in years, of each state office the ballot page shows. Listed explicitly per state and office, never defaulted: a state or office missing here shows no term at all, because terms differ (New Hampshire and Vermont elect governors for two years, Georgia's Public Service Commission serves six) and a guessed term is a wrong fact on a ballot page. Keys match the API's: statewide office codes (a district-seated body like 'public_service_commission-3' uses its bare code), legislative chambers 'upper'/'lower', and judicial courts. A term here is the office's regular term; a seat filled for the rest of an unexpired term runs shorter, which is why the page words it as the office's term ('4-year terms'), not the winner's. Checked 2026-09-26 against each state's constitution and Ballotpedia's office pages; the less common ones are cited in _sources.",
+  "_sources": {
+    "state legislatures": "Two-year state senates: AZ, CT, GA, ID, ME, MA, NH, NY, NC, RI, SD, VT; four-year state houses: AL, LA, MD, MS, ND. AR, DE, FL and MN senates run a 2-4-4 cycle (one two-year term each decade after redistricting); 2026 elects four-year terms in all four (MN: four-year terms in years ending in 2 and 6).",
+    "GA public_service_commission": "Six-year staggered terms (Ballotpedia, Georgia Public Service Commission; 2026 elects District 3 to a full term after its 2025 special).",
+    "ND public_service_commission": "Six-year staggered terms since the 1926 constitutional amendment (ND PSC history).",
+    "ND tax_commissioner": "Four-year term, elected at midterms (Ballotpedia, North Dakota Tax Commissioner).",
+    "CO state_board_of_education": "Nine members, six-year staggered terms (Ballotpedia, Colorado State Board of Education).",
+    "CO university_regent": "University of Colorado Regents: nine members, six-year staggered terms (Colo. Const. art. IX §12).",
+    "UT state_board_of_education": "Fifteen members, four-year staggered terms (Ballotpedia, Utah State Board of Education).",
+    "NC judicial": "Court of Appeals and Superior Court eight years, District Court four (N.C. Const. art. IV).",
+    "FL judicial": "Circuit judges six years (The Florida Bar, judicial elections FAQ).",
+    "WA judicial": "Supreme Court justices six years (Wash. Const. art. IV §3)."
+  },
+  "statewide": {
+    "AK": {"governor": 4},
+    "AR": {"governor": 4, "state_lands_commissioner": 4},
+    "CA": {
+      "governor": 4, "lt_governor": 4, "attorney_general": 4, "secretary_of_state": 4,
+      "treasurer": 4, "controller": 4, "insurance_commissioner": 4, "school_superintendent": 4,
+      "board_of_equalization": 4
+    },
+    "CO": {
+      "governor": 4, "attorney_general": 4, "secretary_of_state": 4, "treasurer": 4,
+      "state_board_of_education": 6, "university_regent": 6
+    },
+    "DE": {"attorney_general": 4, "treasurer": 4},
+    "FL": {"governor": 4, "agriculture_commissioner": 4, "chief_financial_officer": 4},
+    "GA": {
+      "governor": 4, "lt_governor": 4, "attorney_general": 4, "secretary_of_state": 4,
+      "insurance_commissioner": 4, "agriculture_commissioner": 4, "labor_commissioner": 4,
+      "school_superintendent": 4, "public_service_commission": 6
+    },
+    "ID": {
+      "governor": 4, "lt_governor": 4, "attorney_general": 4, "secretary_of_state": 4,
+      "treasurer": 4, "controller": 4, "school_superintendent": 4
+    },
+    "IA": {
+      "governor": 4, "attorney_general": 4, "secretary_of_state": 4, "treasurer": 4,
+      "auditor": 4, "agriculture_commissioner": 4
+    },
+    "MD": {"governor": 4, "attorney_general": 4, "comptroller": 4},
+    "MN": {"governor": 4, "attorney_general": 4, "secretary_of_state": 4, "auditor": 4},
+    "NE": {"governor": 4, "attorney_general": 4, "secretary_of_state": 4, "treasurer": 4, "auditor": 4},
+    "ND": {
+      "attorney_general": 4, "secretary_of_state": 4, "agriculture_commissioner": 4,
+      "public_service_commission": 6, "tax_commissioner": 4
+    },
+    "RI": {"governor": 4, "lt_governor": 4, "attorney_general": 4, "secretary_of_state": 4, "treasurer": 4},
+    "UT": {"state_board_of_education": 4}
+  },
+  "legislature": {
+    "AK": {"upper": 4, "lower": 2},
+    "AR": {"upper": 4, "lower": 2},
+    "CA": {"upper": 4, "lower": 2},
+    "CO": {"upper": 4, "lower": 2},
+    "DE": {"upper": 4, "lower": 2},
+    "FL": {"upper": 4, "lower": 2},
+    "GA": {"upper": 2, "lower": 2},
+    "ID": {"upper": 2, "lower": 2},
+    "IA": {"upper": 4, "lower": 2},
+    "MD": {"upper": 4, "lower": 4},
+    "MN": {"upper": 4, "lower": 2},
+    "NC": {"upper": 2, "lower": 2},
+    "ND": {"upper": 4, "lower": 4},
+    "RI": {"upper": 2, "lower": 2},
+    "UT": {"upper": 4, "lower": 2},
+    "WA": {"upper": 4, "lower": 2},
+    "WV": {"upper": 4, "lower": 2}
+  },
+  "judicial": {
+    "FL": {"circuit": 6},
+    "NC": {"appeals": 8, "superior": 8, "district": 4},
+    "WA": {"supreme": 6}
+  }
+}

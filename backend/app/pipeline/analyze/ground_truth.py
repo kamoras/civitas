@@ -29,7 +29,7 @@ Three families of checks, all population-level:
    and an upstream raw metric it must track: Funding Independence must
    fall as the PAC share of receipts rises and rise with small-donor
    share; Constituent Alignment must track its vote component recomputed
-   from the stored party-labeled votes (constituent_metrics — since v6.14
+   from the stored party-labeled votes (constituent_metrics — since v6.15
    that component peaks at the saturation deviation, so raw break rate
    alone no longer ranks it). "The most PAC-free members must score high on FI" is exactly
    what the old Sanders/Warren rows asserted, computed fresh each run

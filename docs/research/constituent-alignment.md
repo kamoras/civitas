@@ -117,7 +117,7 @@ in the test. The effect is similar in safe seats (1.52, t=2.8) and other seats
 **Changed:** the expected break rate is now measured from the chamber every
 run, per party, with a bend at a swing seat (`compute_constituent_reference`).
 Scoring is symmetric around it, and the scale is the chamber's
-90th-percentile deviation. (Since v6.14 the score turns back down past that
+90th-percentile deviation. (Since v6.15 the score turns back down past that
 deviation on the crossing side, and the loyal side reaches 0 only at four
 times it; see sections 8 and 9.)
 
@@ -260,7 +260,7 @@ treating more defection as better representation beyond the seat's
 expectation. Where "too much" begins has no published estimate. The only
 measured turning point is this section's saturation point.
 
-**Changed (v6.14):** the score represents both audiences: the seat that
+**Changed (v6.15):** the score represents both audiences: the seat that
 elected the member and the party label it elected them under. The
 seat-relative vote score still peaks at the saturation deviation, which the
 chamber measures every run. Past it, the score falls at the same rate it rose
@@ -304,7 +304,7 @@ disloyalty. Two gaps more loyal gave 0, while two gaps more disloyal gave 50.
   (Carson et al. 2010).
 
 **The test.** The loyal side's scale, in gaps below the expectation at which
-the score reaches 0, with the rest of the v6.14 shape fixed:
+the score reaches 0, with the rest of the v6.15 shape fixed:
 
 | Loyal side reaches 0 at | House 2004 ΔR² (t) | Senate 1990–2024 ΔR² (t) |
 |---|---|---|
@@ -318,7 +318,7 @@ The House prefers a steep loyal side. The Senate prefers a flat one, weakly:
 nothing there is significant. Holding loyalty at 50 loses clearly in the
 House, so loyalty stays scored.
 
-**Changed (v6.14):** `LOYAL_SIDE_SCALE = 4`. At equal distance from the norm,
+**Changed (v6.15):** `LOYAL_SIDE_SCALE = 4`. At equal distance from the norm,
 extra loyalty now costs less than extra disloyalty past the peak. Two gaps
 more loyal scores 25; two gaps more disloyal scores 50 and three gaps scores
 0. On 2025 votes, 4 senators fall below 25 instead of 28 (Ossoff 36, Smith
@@ -327,7 +327,7 @@ more loyal scores 25; two gaps more disloyal scores 50 and three gaps scores
 **Party balance.** The gentler loyal side and the over-break decline make
 the shape lopsided, so each party's average no longer sits at exactly 50.
 Across every Senate from the 101st to the 119th, the parties' average vote
-scores differed by 1.8 points on average under v6.14, against 2.2 under
+scores differed by 1.8 points on average under v6.15, against 2.2 under
 v6.13. The sign changed from one Congress to the next, so the shape shows no
 systematic lean toward either party. Averages now sit around 52–55.
 
@@ -358,7 +358,7 @@ the score still carries a clear signal there (t=4.4).
 - **The Senate loyal side does not replicate.** With every Senate election
   from 1990 to 2024 (N=461, section 8), the crossing side holds (2.34 up to
   saturation, t=1.9) but the loyal side does not (−0.59, t=−0.5), and the
-  whole association is weak after 2008. That is one reason v6.14 flattened
+  whole association is weak after 2008. That is one reason v6.15 flattened
   the loyal side (section 9).
 - **The 70/30 weighting is not fitted.** In 2004 the vote component had the
   larger independent association, which supports it keeping the majority
@@ -371,7 +371,7 @@ the score still carries a clear signal there (t=4.4).
   Clinton 2006).
 - **The live statistic differs from this test's.** The pipeline measures
   break rates on Civitas's own key and recent roll calls, not on CQ
-  party-unity votes. Since v6.14 it counts each party-labeled roll call once,
+  party-unity votes. Since v6.15 it counts each party-labeled roll call once,
   unweighted, as this test does. It used to weight votes by the bill's
   content lean. The expectation is measured on that same statistic every
   run, so scores stay internally consistent, but the magnitudes above do not

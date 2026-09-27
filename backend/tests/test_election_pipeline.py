@@ -46,15 +46,11 @@ def _mock_downstream_pipeline_phases():
     with (
         patch("app.pipeline.election_pipeline._refresh_financials", return_value=0),
         patch("app.pipeline.election_pipeline._sync_ballot_measures", return_value={"skipped": True}),
-        # These three are imported locally inside run_election_pipeline
-        # (from app.pipeline.fetch.state_candidates import ...) rather
-        # than at module scope, so patching election_pipeline's own
-        # namespace wouldn't touch them — the local import re-reads the
-        # name from the source module every call, which is exactly what
-        # needs patching.
-        patch("app.pipeline.fetch.state_candidates.crawl_for_new_sources", return_value={}),
-        patch("app.pipeline.fetch.state_candidates.sync_confirmed_candidates", return_value={}),
-        patch("app.pipeline.fetch.state_candidates.sync_ballot_filings", return_value={}),
+        # Imported at election_pipeline's module scope, so its own
+        # namespace is what gets patched.
+        patch("app.pipeline.election_pipeline.crawl_for_new_sources", return_value={}),
+        patch("app.pipeline.election_pipeline.sync_confirmed_candidates", return_value={}),
+        patch("app.pipeline.election_pipeline.sync_ballot_filings", return_value={}),
         patch("app.pipeline.fetch.ballot_lookup.refresh_link_verification", return_value={"failed": 0}),
         patch("app.pipeline.analyze.election_coverage.ingest_race_coverage", return_value=0),
         patch("app.pipeline.analyze.election_bluesky.post_race_coverage_updates", return_value=0),
@@ -122,11 +118,11 @@ class TestElectionPipelineLock:
             patch("app.pipeline.election_pipeline._refresh_financials", return_value=0),
             patch("app.pipeline.election_pipeline._sync_ballot_measures", return_value={"skipped": True}),
             patch(
-                "app.pipeline.fetch.state_candidates.sync_confirmed_candidates",
+                "app.pipeline.election_pipeline.sync_confirmed_candidates",
                 side_effect=RuntimeError("confirmed-candidates phase mocked to fail"),
             ),
-            patch("app.pipeline.fetch.state_candidates.crawl_for_new_sources", return_value={}),
-            patch("app.pipeline.fetch.state_candidates.sync_ballot_filings", return_value={}),
+            patch("app.pipeline.election_pipeline.crawl_for_new_sources", return_value={}),
+            patch("app.pipeline.election_pipeline.sync_ballot_filings", return_value={}),
             patch("app.pipeline.fetch.ballot_lookup.refresh_link_verification", return_value={"failed": 0}),
             patch(
                 "app.pipeline.analyze.election_coverage.ingest_race_coverage", return_value=3,
@@ -532,3 +528,38 @@ class TestPruneStaleCoverage:
         assert deleted == 1
         remaining = db_session.query(RaceCoverageItem).one()
         assert remaining.url == "https://apnews.com/recent"
+
+
+class TestBallotSync:
+    def test_summarises_which_states_answered(self, db_session):
+        confirm = {
+            "AK": {"status": "ok", "confirmed": 6},
+            "NY": {"status": "failed", "confirmed": 0},
+        }
+        with (
+            patch("app.pipeline.election_pipeline.SessionLocal", return_value=db_session),
+            patch("app.pipeline.election_pipeline.sync_confirmed_candidates", return_value=confirm),
+            patch("app.pipeline.election_pipeline.sync_ballot_filings", return_value={"NC": 3}),
+        ):
+            result = asyncio.run(election_pipeline.run_ballot_sync(2026))
+        assert result == {
+            "status": "ok", "confirmed": 6, "statesOk": ["AK"], "statesFailed": ["NY"],
+            "filings": {"NC": 3},
+        }
+
+    def test_the_nightly_ballot_phase_steps_aside_while_a_sync_is_running(self, db_session):
+        # Two passes writing the same Candidate rows at once is what this
+        # prevents; the sync in flight is doing the same step anyway.
+        tracker = election_pipeline.ballot_tracker()
+        tracker.start()
+        try:
+            with (
+                patch("app.pipeline.election_pipeline.SessionLocal", return_value=db_session),
+                patch("app.pipeline.election_pipeline.fetch_all_candidates", return_value=[]),
+                _mock_downstream_pipeline_phases(),
+                patch("app.pipeline.election_pipeline.sync_confirmed_candidates") as nightly_sync,
+            ):
+                asyncio.run(election_pipeline.run_election_pipeline(2026))
+        finally:
+            tracker.stop()
+        nightly_sync.assert_not_called()

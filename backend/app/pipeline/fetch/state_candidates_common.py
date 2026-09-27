@@ -112,9 +112,10 @@ _WHOLE_VALUE_PARTIES = {"D": "D", "R": "R", "L": "L", "G": "G", "C": "C", "CT": 
 _NAME_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
 
 # Ballot annotations that are never part of a legal name: a parenthetical
-# (Georgia's "(I)" incumbency marker) or a bare asterisk (Rhode Island's
-# party-endorsement marker). See surname().
-_ANNOTATION_RE = re.compile(r"\([^)]*\)|\*")
+# (Georgia's "(I)" incumbency marker), a bare asterisk (Rhode Island's
+# party-endorsement marker) or the word itself (Alaska's "Sullivan, Dan S.
+# Incumbent", Florida's "*Incumbent"). See surname().
+_ANNOTATION_RE = re.compile(r"\([^)]*\)|\*|(?i:\bincumbent\b)")
 
 
 def parse_office(contest_name: str) -> tuple[str, int | None] | None:
@@ -820,7 +821,7 @@ def office_from_columns(row: dict, spec: dict | None) -> tuple[str, int | None] 
 # "Declined to Select".
 _INDEPENDENT_ABBR = frozenset({"IND", "INDEPENDENT", "UNA", "NPA", "NOP", "NP", "NOPTY", "PETITION", "DTS"})
 _INDEPENDENT_RE = re.compile(
-    r"\b(independent|unaffiliated|no\s+party(\s+affiliation)?|non[\s-]?partisan|by\s+petition)\b",
+    r"\b(independent|unaffiliated|undeclared|no\s+party(\s+affiliation)?|non[\s-]?partisan|by\s+petition)\b",
     re.IGNORECASE,
 )
 
@@ -875,7 +876,9 @@ async def discover_certification_link(
     page = await fetch_text_with_retry(client, rate_limiter, page_url, f"{label} certification page")
     if page is None:
         return None
-    links = {m.group(1) for m in re.finditer(link_regex.replace("{year}", str(year)), page)}
+    # {yy}: Alaska names its elections "26genr".
+    link_regex = link_regex.replace("{year}", str(year)).replace("{yy}", f"{year % 100:02d}")
+    links = {m.group(1) for m in re.finditer(link_regex, page)}
     if len(links) != 1:
         logger.info("%s certification page links %d %d certifications", label, len(links), year)
         return None

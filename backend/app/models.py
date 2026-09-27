@@ -279,6 +279,10 @@ class SponsoredBill(Base):
     bill_type: Mapped[str] = mapped_column(String, default="")
     is_law: Mapped[bool] = mapped_column(Boolean, default=False)
     stage: Mapped[str] = mapped_column(String, default="", index=True)  # see config_definitions.BILL_STAGES
+    # Volden & Wiseman's commemorative tier (a post-office naming, a Gold
+    # Medal): weighted 1x in Legislative Effectiveness, not 5x. Set by the
+    # pipeline (analyze/commemorative.py); stored so scoring never loads a model.
+    commemorative: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
 
     senator: Mapped["Senator"] = relationship(back_populates="sponsored_bills")
 
@@ -501,6 +505,10 @@ class RepSponsoredBill(Base):
     bill_type: Mapped[str] = mapped_column(String, default="")
     is_law: Mapped[bool] = mapped_column(Boolean, default=False)
     stage: Mapped[str] = mapped_column(String, default="", index=True)  # see config_definitions.BILL_STAGES
+    # Volden & Wiseman's commemorative tier (a post-office naming, a Gold
+    # Medal): weighted 1x in Legislative Effectiveness, not 5x. Set by the
+    # pipeline (analyze/commemorative.py); stored so scoring never loads a model.
+    commemorative: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
 
     representative: Mapped["Representative"] = relationship(back_populates="sponsored_bills")
 
@@ -751,6 +759,13 @@ class Candidate(Base):
     # ballot says nothing about surviving it, so once a state confirms
     # nominees, those win (see _confirmed_or_all).
     on_primary_ballot: Mapped[bool] = mapped_column(Boolean, default=False)
+    # The name as the state prints it on its ballot ("Roy Cooper"), from
+    # whichever state source last matched this candidate. `name` stays the
+    # FEC's own ("COOPER, ROY") — it is what the roster sync keys on and
+    # what every non-ballot page shows. Null until a state source names
+    # them, and never set from a "Last, First" printing (see
+    # state_candidates._note_ballot_name).
+    ballot_name: Mapped[str | None] = mapped_column(String, nullable=True)
     # Watermark for the rotating per-candidate Bluesky coverage search
     # (election_coverage.py) — same bounded-batch design as
     # last_financials_sync for the FEC totals refresh.

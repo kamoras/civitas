@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  candidateName,
   districtAreaLabel,
   formatPvi,
   isActiveCandidate,
@@ -102,7 +103,7 @@ describe("isActiveCandidate", () => {
     id: "H6GA07123",
     name: "Test Candidate",
     party: "DEM",
-    confirmed: true,
+    confirmed: false,
     incumbentChallenge: null,
     candidateStatus: null,
     hasRaisedFunds: false,
@@ -115,6 +116,12 @@ describe("isActiveCandidate", () => {
     expect(isActiveCandidate({ ...base, candidateStatus: "C" })).toBe(true);
     expect(isActiveCandidate({ ...base, hasRaisedFunds: true })).toBe(true);
     expect(isActiveCandidate({ ...base, incumbentChallenge: "I" })).toBe(true);
+  });
+
+  it("counts a candidate the state certified, even with no FEC activity", () => {
+    // North Carolina's Libertarian Senate nominee: on the certified ballot,
+    // no funds, not a statutory candidate.
+    expect(isActiveCandidate({ ...base, confirmed: true, candidateStatus: "N" })).toBe(true);
   });
 
   it("treats paper/prior-cycle filers as inactive", () => {
@@ -134,7 +141,9 @@ describe("tierCandidates", () => {
       id: "id",
       name: "name",
       party: "DEM",
-      confirmed: true,
+      // tierCandidates only runs on "filers"/"primary" races, where nobody
+      // is state-confirmed.
+      confirmed: false,
       incumbentChallenge: "C",
       candidateStatus: "C",
       hasRaisedFunds: true,
@@ -372,5 +381,21 @@ describe("matchesDistrictQuery", () => {
     const noCounties = { ...race, areas: null };
     expect(matchesDistrictQuery(noCounties, "providence")).toBe(false);
     expect(matchesDistrictQuery(noCounties, "amo")).toBe(true);
+  });
+});
+
+describe("candidateName", () => {
+  it("prefers the name the state prints on its ballot", () => {
+    expect(candidateName({ name: "COOPER, ROY", ballotName: "Roy Cooper" })).toBe("Roy Cooper");
+  });
+
+  it("falls back to the FEC name until a state source names the candidate", () => {
+    expect(candidateName({ name: "COOPER, ROY", ballotName: null })).toBe("COOPER, ROY");
+    expect(candidateName({ name: "COOPER, ROY" })).toBe("COOPER, ROY");
+  });
+
+  it("lets a reader find a district by the printed name too", () => {
+    const race = { district: 1, areas: [], candidates: [{ name: "COOPER, ROY", ballotName: "Roy Cooper" }] };
+    expect(matchesDistrictQuery(race, "roy cooper")).toBe(true);
   });
 });

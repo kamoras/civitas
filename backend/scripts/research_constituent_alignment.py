@@ -338,7 +338,7 @@ def loyalty_tests(m, p):
           f"(t={r.tvalues['pos:flank']:.1f}); n={int(((S.flank == 1) & (S.pos > 0)).sum())}")
 
     # Is there such a thing as breaking too much? A score peaked at the
-    # expectation (falling off both ways), the shipped v6.14 shape (rising
+    # expectation (falling off both ways), the shipped v6.15 shape (rising
     # to the saturation point, falling past it), and the crossing-side slope
     # past saturation. From here on the expectation and saturation point are
     # the scorer's own (shipped_expectation -> compute_constituent_reference),
@@ -354,11 +354,11 @@ def loyalty_tests(m, p):
     S["neg"] = S.dev_party.clip(upper=0)
     S["absdev"] = S.dev_party.abs()
     S["peaked"] = 100 - 100 * (dev.abs() / p90).clip(0, 1)
-    S["v614"] = v614_score(dev, p90, S.n)
+    S["v615"] = v615_score(dev, p90, S.n)
     S["v613"] = 50 + 50 * (dev / p90).clip(-1, 1)  # same chamber p90: like for like
     print("breaking far above expectation:")
     for k, label in (("absdev", "folded |deviation| (per SD)"), ("peaked", "peaked score (per point)"),
-                     ("v613", "v6.13 score, chamber p90 (per pt)"), ("v614", "v6.14 score (per point)")):
+                     ("v613", "v6.13 score, chamber p90 (per pt)"), ("v615", "v6.15 score (per point)")):
         r = smf.ols(f"{base} + {k}", S).fit(cov_type="HC1")
         print(f"  {label:30s} {r.params[k]:7.3f} (t={r.tvalues[k]:.1f}) dR2={r.rsquared - b0.rsquared:.4f}")
     r = smf.ols(f"{base} + dev_party + I(dev_party**2)", S).fit(cov_type="HC1")
@@ -370,10 +370,10 @@ def loyalty_tests(m, p):
           f"beyond it {r.params['pos2']:.2f} (t={r.tvalues['pos2']:.1f}, n={int((S.pos2 > 0).sum())})")
     print("loyal-side scale (gaps below the expectation where the score reaches 0):")
     for k in (1, 2, 4, 8):
-        S["sc"] = v614_score(dev, p90, S.n, k)
+        S["sc"] = v615_score(dev, p90, S.n, k)
         r = smf.ols(f"{base} + sc", S).fit(cov_type="HC1")
         print(f"  {k}x: {r.params['sc']:.3f}/pt (t={r.tvalues['sc']:.1f}) dR2={r.rsquared - b0.rsquared:.4f}")
-    S["sc"] = 50.0 + (v614_score(dev, p90, S.n) - 50.0) * (dev >= 0)
+    S["sc"] = 50.0 + (v615_score(dev, p90, S.n) - 50.0) * (dev >= 0)
     r = smf.ols(f"{base} + sc", S).fit(cov_type="HC1")
     print(f"  loyalty held at 50: {r.params['sc']:.3f}/pt (t={r.tvalues['sc']:.1f}) dR2={r.rsquared - b0.rsquared:.4f}")
     return hr
@@ -456,7 +456,7 @@ def senate_test(p):
 # whole seat (general election, every Senate election 1990-2024) and the
 # member's own party (House primaries 1990-2010).
 
-def v614_score(dev, p90, n, loyal_scale=None):
+def v615_score(dev, p90, n, loyal_scale=None):
     """The shipped vote component: score_calculator._peaked_vote_shape (with
     the shipped LOYAL_SIDE_SCALE unless one is given for the sweep), shrunk
     toward 50 by vote count exactly as seat_relative_vote_score does."""
@@ -567,10 +567,10 @@ def senate_general_test(p):
         M = shipped_expectation(M)
         if M is None:
             continue
-        v14, v13 = v614_score(M.dev, M.p90, M.n), 50 + 50 * (M.dev / M.p90).clip(-1, 1)
+        v14, v13 = v615_score(M.dev, M.p90, M.n), 50 + 50 * (M.dev / M.p90).clip(-1, 1)
         party_means.append({"senate": c, **{
             f"{party} {v}": round(float(x[(M.party == party).values].mean()), 1)
-            for party in ("D", "R") for v, x in (("v6.13", v13.values), ("v6.14", v14))}})
+            for party in ("D", "R") for v, x in (("v6.13", v13.values), ("v6.15", v14))}})
         M["year"] = yr
         c2 = cands[cands.year == yr]
         for i, r in M.iterrows():
@@ -589,14 +589,14 @@ def senate_general_test(p):
         print(f" {label} (N={len(d)}):")
         print_overbreak(overbreak_terms(d), "own", "x + I(x**2) + C(fe)")
     P = pd.DataFrame(party_means)
-    P["gap v6.13"], P["gap v6.14"] = P["D v6.13"] - P["R v6.13"], P["D v6.14"] - P["R v6.14"]
+    P["gap v6.13"], P["gap v6.15"] = P["D v6.13"] - P["R v6.13"], P["D v6.15"] - P["R v6.15"]
     print(" mean vote score by party, every Senate (D minus R = gap):")
     print(P.round(1).to_string(index=False))
-    print(f"  mean |gap|: v6.13 {P['gap v6.13'].abs().mean():.1f}, v6.14 {P['gap v6.14'].abs().mean():.1f}")
+    print(f"  mean |gap|: v6.13 {P['gap v6.13'].abs().mean():.1f}, v6.15 {P['gap v6.15'].abs().mean():.1f}")
     print(" loyal-side scale (gaps below the expectation where the score reaches 0):")
     b0 = smf.ols("own ~ x + I(x**2) + C(fe)", S).fit()
     for k in (1, 2, 4, 8):
-        S["sc"] = v614_score(S.dev, S.p90, S.n, k)
+        S["sc"] = v615_score(S.dev, S.p90, S.n, k)
         r = smf.ols("own ~ x + I(x**2) + C(fe) + sc", S).fit(cov_type="cluster", cov_kwds={"groups": S.gid})
         print(f"  {k}x: {r.params['sc']:.3f}/pt (t={r.tvalues['sc']:.1f}) dR2={r.rsquared - b0.rsquared:.4f}")
 

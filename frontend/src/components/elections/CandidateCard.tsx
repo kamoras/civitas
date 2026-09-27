@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { BallotCandidate } from "@/types/election";
-import { DEM_AFFILIATE_PARTIES } from "@/lib/elections";
+import { DEM_AFFILIATE_PARTIES, candidateName } from "@/lib/elections";
 import { cashOnHandDisplay, formatCurrency } from "@/lib/formatting";
 import { getScoreColor } from "@/lib/representation";
 
@@ -28,6 +28,8 @@ export const PARTY_META: Record<string, { label: string; color: string; rule: st
   NPA: { label: "NO PARTY AFFILIATION", color: "text-ink-lo", rule: "bg-ink-min" },
   NNE: { label: "NO PARTY AFFILIATION", color: "text-ink-lo", rule: "bg-ink-min" },
   UNK: { label: "UNAFFILIATED/UNKNOWN", color: "text-ink-lo", rule: "bg-ink-min" },
+  // FEC's code for a declared write-in: on the state's list, not printed on the ballot.
+  W: { label: "WRITE-IN", color: "text-ink-lo", rule: "bg-ink-min" },
 };
 
 export function getPartyMeta(party: string) {
@@ -69,7 +71,7 @@ export default function CandidateCard({
         <div>
           <h3 className="font-display text-lg font-semibold leading-tight text-ink-hi">
             {candidate.fecFiled === false ? (
-              candidate.name
+              candidateName(candidate)
             ) : (
               <a
                 href={`https://www.fec.gov/data/candidate/${encodeURIComponent(candidate.id)}/`}
@@ -77,7 +79,7 @@ export default function CandidateCard({
                 rel="noopener noreferrer"
                 className="transition-colors hover:text-phos"
               >
-                {candidate.name}{" "}
+                {candidateName(candidate)}{" "}
                 <span aria-hidden="true" className="font-mono text-xs text-phos-mid">
                   ↗
                 </span>

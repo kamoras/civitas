@@ -162,7 +162,7 @@ class TestDerivedConsistency:
         db.commit()
 
     def test_peaked_scores_pass(self, db_session):
-        # v6.14: rising to saturation, falling past it — the design.
+        # v6.15: rising to saturation, falling past it — the design.
         self._peaked_population(db_session, past_iv=lambda k: 95 - 9 * k)
         report = check_ground_truth(db_session)
         assert report["failures"] == []

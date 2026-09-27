@@ -7,7 +7,7 @@ import LineChart from "./charts/LineChart";
 import { SERIES } from "./charts/palette";
 import { niceTicks } from "./charts/scale";
 import { formatBytes, formatRate, formatTime, formatUptime, parseUTC } from "./format";
-import type { HostSample } from "./useHostHistory";
+import { formatPct, type HostSample } from "./useHostHistory";
 import { Panel, StatusDot, UsageBar } from "./widgets";
 
 // --- Uptime Tracker ---
@@ -148,7 +148,7 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
         : stats.cpuTempC >= 65
           ? "text-signal-amber"
           : "text-ink-hi";
-  const loadPct = stats.loadAvg ? Math.round((stats.loadAvg[0] / stats.cpuCount) * 100) : 0;
+  const cpuPct = net?.cpuPct ?? null;
   const rx = net?.rxRate ?? null;
   const tx = net?.txRate ?? null;
 
@@ -156,15 +156,22 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
     <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
       <div>
         <div className="flex items-center justify-between mb-1">
-          <span className="text-ink-lo text-xs font-mono tracking-wider">CPU LOAD</span>
+          <span className="text-ink-lo text-xs font-mono tracking-wider">CPU</span>
           <span className="text-ink-hi text-xs font-mono tabular-nums">
-            {stats.loadAvg ? `${stats.loadAvg[0].toFixed(2)} / ${stats.cpuCount}` : "—"}
+            {cpuPct != null ? formatPct(cpuPct) : "—"}
           </span>
         </div>
-        <UsageBar pct={loadPct} ariaLabel="CPU load percentage" />
+        <UsageBar
+          pct={cpuPct ?? 0}
+          ariaLabel="CPU utilisation"
+          valueText={cpuPct != null ? formatPct(cpuPct) : "no reading yet"}
+        />
+        {/* Load average is a different quantity (runnable tasks, smoothed
+            over 1/5/15 min), so it's shown as the number it is — not as a
+            percentage, where an idle multi-core host rounds to 0%. */}
         <div className="text-xs text-ink-min font-mono mt-1 tabular-nums">
           {stats.loadAvg
-            ? `${stats.loadAvg[0].toFixed(1)} · ${stats.loadAvg[1].toFixed(1)} · ${stats.loadAvg[2].toFixed(1)}`
+            ? `load ${stats.loadAvg[0].toFixed(2)} · ${stats.loadAvg[1].toFixed(2)} · ${stats.loadAvg[2].toFixed(2)} (${stats.cpuCount} cores)`
             : ""}
         </div>
       </div>
@@ -173,7 +180,11 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
           <span className="text-ink-lo text-xs font-mono tracking-wider">MEMORY</span>
           <span className="text-ink-hi text-xs font-mono tabular-nums">{stats.memUsedPct}%</span>
         </div>
-        <UsageBar pct={stats.memUsedPct} ariaLabel="Memory usage percentage" />
+        <UsageBar
+          pct={stats.memUsedPct}
+          ariaLabel="Memory usage"
+          valueText={`${stats.memUsedPct}%`}
+        />
         <div className="text-xs text-ink-min font-mono mt-1 tabular-nums">
           {formatBytes(stats.memUsedBytes)} / {formatBytes(stats.memTotalBytes)}
         </div>
@@ -187,7 +198,8 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
           pct={stats.diskUsedPct}
           warnAt={80}
           critAt={95}
-          ariaLabel="Disk usage percentage"
+          ariaLabel="Disk usage"
+          valueText={`${stats.diskUsedPct}%`}
         />
         <div className="text-xs text-ink-min font-mono mt-1 tabular-nums">
           {formatBytes(stats.diskFreeBytes)} free
@@ -206,6 +218,7 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
             warnAt={76}
             critAt={94}
             ariaLabel="CPU temperature"
+            valueText={`${stats.cpuTempC}°C`}
           />
         )}
         <div className="text-xs text-ink-min font-mono mt-1">
@@ -300,15 +313,15 @@ export function SystemDashboard({
         </p>
         <div className="mt-3 grid grid-cols-1 gap-6 lg:grid-cols-2">
           <LineChart
-            title="CPU LOAD & MEMORY"
+            title="CPU & MEMORY"
             subtitle="% of capacity"
             xLabels={labels}
             series={[
               {
                 key: "cpu",
-                label: "CPU load (1m avg / cores)",
+                label: "CPU used",
                 color: SERIES[0],
-                values: history.map((h) => h.loadPct),
+                values: history.map((h) => h.cpuPct),
               },
               {
                 key: "mem",
@@ -317,7 +330,8 @@ export function SystemDashboard({
                 values: history.map((h) => h.memPct),
               },
             ]}
-            formatValue={(v) => `${Math.round(v)}%`}
+            formatValue={formatPct}
+            formatTick={(v) => `${v}%`}
             height={130}
             emptyMessage="Collecting readings…"
           />

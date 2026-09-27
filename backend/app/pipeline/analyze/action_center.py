@@ -413,9 +413,19 @@ def _record_generation_sample(
     a positive example. Best-effort: a failure here must never break
     issue generation itself, since this table only feeds a future
     training run, not anything the site serves today.
+
+    Written and committed on its own short-lived session, never flushed
+    into the caller's. The caller is the refresh loop, whose next commit
+    comes only after every remaining cluster's embedding and LLM work: a
+    flush there opened SQLite's single write transaction and held it for
+    ~15 minutes a run (2026-09-27), so every other writer — the refresh
+    lock's own heartbeat, the election coverage refresh — waited out its
+    30s busy timeout and failed. The heartbeat failing is what let the
+    lease go stale while its holder was still running.
     """
+    sample_db = Session(bind=db.get_bind())
     try:
-        db.add(LlmGenerationSample(
+        sample_db.add(LlmGenerationSample(
             task=task,
             rank=rank,
             attempt=attempt,
@@ -424,9 +434,12 @@ def _record_generation_sample(
             passed=passed,
             violations=json.dumps(violations) if violations else None,
         ))
-        db.flush()
+        sample_db.commit()
     except Exception:
         logger.exception("Failed to record LLM generation sample (task=%s, rank=%d)", task, rank)
+        sample_db.rollback()
+    finally:
+        sample_db.close()
 
 
 
@@ -3539,7 +3552,7 @@ def _merge_similar_monitors(monitors: list[NationalMonitor], model, db: Session)
     """Pairwise-compare a monitor list and merge any that are similar
     enough. Above _MONITOR_AUTO_MERGE_SIM, monitors merge outright;
     between that and _MONITOR_MERGE_SIM, an LLM call verifies first.
-    Returns True if anything merged, so the caller knows to db.flush().
+    Returns True if anything merged, so the caller knows to commit.
 
     _update_national_monitors calls this twice — once for monitors that
     existed before today's new ones are created, once again afterward to
@@ -3681,6 +3694,11 @@ def _update_national_monitors(today: str, db: Session) -> None:
     and to detect new recurring topics from past days' issues.
     Every monitor update traces to a specific source article — no LLM-generated
     facts, only condensed summaries of sourced articles.
+
+    Every write here is committed, never just flushed, before the next LLM
+    call: a flush opens SQLite's one write transaction, and holding it
+    across a model call starves every other writer for the call's length —
+    the refresh lock's heartbeat included (see _record_generation_sample).
     """
     try:
         from app.pipeline.vector_store import get_embedding_model
@@ -3714,7 +3732,7 @@ def _update_national_monitors(today: str, db: Session) -> None:
     # Step 1: Merge any existing monitors that are too similar to each other.
     _set_refresh_state(stage_detail="1/4 dedup")
     if _merge_similar_monitors(existing_monitors, model, db):
-        db.flush()
+        db.commit()
         existing_monitors = db.query(NationalMonitor).all()
 
     # Step 2: Match today's issues to existing monitors and add updates
@@ -3869,7 +3887,7 @@ def _update_national_monitors(today: str, db: Session) -> None:
             # Ensure unique slug. `int(time.time()) % 1000` (previous
             # suffix) wasn't actually unique: two monitors created in the
             # same wall-clock second — plausible in this tight loop — got
-            # the same suffix and the second's db.flush() below raised
+            # the same suffix and the second's write below raised
             # UNIQUE constraint failed: national_monitors.slug, which
             # propagated out of _run_refresh uncaught (see 2026-07-27 fix
             # in refresh_action_issues). uuid4 makes the collision
@@ -3888,7 +3906,7 @@ def _update_national_monitors(today: str, db: Session) -> None:
                 last_article_date=today,
             )
             db.add(monitor)
-            db.flush()
+            db.commit()
 
             seen_sources: set[str] = set()
             source_urls = json.loads(issue.source_urls or "[]")
@@ -3924,7 +3942,7 @@ def _update_national_monitors(today: str, db: Session) -> None:
     # Step 3b: Re-merge after creating new monitors.
     all_monitors = db.query(NationalMonitor).all()
     if _merge_similar_monitors(all_monitors, model, db):
-        db.flush()
+        db.commit()
 
     # Step 4: Lifecycle management — watching, closing, and cleaning up
     _set_refresh_state(stage_detail="4/4 lifecycle")
@@ -4069,22 +4087,35 @@ or
 
 
 
-# How long a held refresh lock is honored before being treated as
-# abandoned (a crashed container never deletes its lock row). Generous
-# vs. the observed refresh duration; matches the pre-existing 4-hour
-# stale-override convention for the in-process guard.
-_REFRESH_LOCK_STALE_S = 4 * 3600
+# The refresh lock is a lease, not a flag: its holder rewrites cached_at
+# every _REFRESH_LOCK_BEAT_S while it runs, and a row that has gone
+# _REFRESH_LOCK_STALE_S without a beat belongs to a dead holder, whoever it
+# was. It used to be honored for a flat 4 hours from acquisition, and a
+# refresh runs in a thread, so a deploy's SIGTERM kills it without its
+# `finally` and leaves the row behind: every hourly run for the next four
+# hours then skipped with "held by another container" — on a day of
+# steady deploys (2026-09-26: 22 between 15:08 and 22:50 UTC) that meant
+# no refresh at all, and no new issue, for the whole day. Ten missed beats
+# rides out a SQLite writer holding the database for minutes, while a
+# killed holder costs at most one skipped hour.
+_REFRESH_LOCK_BEAT_S = 60
+_REFRESH_LOCK_STALE_S = 10 * 60
 
 
-def _acquire_refresh_lock(db: Session) -> bool:
+def _acquire_refresh_lock(db: Session) -> str | None:
     """Cross-container refresh lock (2026-07): the
     hourly refresh previously had only a process-local guard, so during a
     blue/green deploy overlap two containers could both run it —
     duplicate Bluesky posts and contended SQLite writes. The lock is a
     plain INSERT into api_cache, whose (tier, cache_key) PRIMARY KEY
     makes the second acquirer's insert fail atomically — no
-    check-then-insert race, no schema changes. A crashed holder's row is
-    taken over once it exceeds _REFRESH_LOCK_STALE_S.
+    check-then-insert race, no schema changes. A row whose holder stopped
+    beating (_beat_refresh_lock) is taken over.
+
+    Returns the holder's token — heartbeat and release touch only the row
+    carrying it, so a holder that stalled past the window and lost the
+    lease can never refresh or delete its successor's — or None when the
+    lock is held.
     """
     from sqlalchemy.exc import IntegrityError
 
@@ -4099,26 +4130,56 @@ def _acquire_refresh_lock(db: Session) -> bool:
     ).delete()
     db.commit()
 
+    token = uuid.uuid4().hex
     try:
         db.add(ApiCache(
             tier="action-refresh-lock", cache_key="lock",
-            data_json="{}", cached_at=now,
+            data_json=json.dumps({"holder": token}), cached_at=now,
         ))
         db.commit()
-        return True
+        return token
     except IntegrityError:
         db.rollback()
-        return False
+        return None
 
 
-def _release_refresh_lock(db: Session) -> None:
+def _own_lock_row(db: Session, token: str):
     from app.models import ApiCache
 
+    return db.query(ApiCache).filter(
+        ApiCache.tier == "action-refresh-lock",
+        ApiCache.cache_key == "lock",
+        ApiCache.data_json == json.dumps({"holder": token}),
+    )
+
+
+def _beat_refresh_lock(db: Session, token: str) -> bool:
+    """Renew the lease. False once the row is no longer this holder's."""
+    renewed = _own_lock_row(db, token).update({"cached_at": utcnow()})
+    db.commit()
+    return renewed == 1
+
+
+def _keep_refresh_lock(bind, token: str, stop: threading.Event) -> None:
+    """Heartbeat thread: beats on its own session (a Session is not
+    thread-safe) until the refresh finishes. A failed beat is only logged —
+    the lease has ten beats of slack."""
+    while not stop.wait(_REFRESH_LOCK_BEAT_S):
+        db = Session(bind=bind)
+        try:
+            if not _beat_refresh_lock(db, token):
+                logger.warning("Action refresh lock was taken over — this refresh is no longer exclusive")
+                return
+        except Exception:
+            logger.exception("Action refresh lock heartbeat failed")
+            db.rollback()
+        finally:
+            db.close()
+
+
+def _release_refresh_lock(db: Session, token: str) -> None:
     try:
-        db.query(ApiCache).filter(
-            ApiCache.tier == "action-refresh-lock",
-            ApiCache.cache_key == "lock",
-        ).delete()
+        _own_lock_row(db, token).delete()
         db.commit()
     except Exception:
         logger.exception("Failed to release action refresh lock (will expire as stale)")
@@ -4132,9 +4193,16 @@ def refresh_action_issues(db: Session | None = None) -> int:
         db = SessionLocal()
 
     try:
-        if not _acquire_refresh_lock(db):
+        token = _acquire_refresh_lock(db)
+        if token is None:
             logger.info("Action refresh lock held by another container — skipping this run")
             return 0
+        stop = threading.Event()
+        heartbeat = threading.Thread(
+            target=_keep_refresh_lock, args=(db.get_bind(), token, stop),
+            name="action-refresh-lock", daemon=True,
+        )
+        heartbeat.start()
         try:
             return _run_refresh(db)
         except Exception:
@@ -4151,7 +4219,9 @@ def refresh_action_issues(db: Session | None = None) -> int:
             _set_refresh_state(is_running=False, stage=None)
             raise
         finally:
-            _release_refresh_lock(db)
+            stop.set()
+            heartbeat.join()
+            _release_refresh_lock(db, token)
     finally:
         if own_session:
             db.close()

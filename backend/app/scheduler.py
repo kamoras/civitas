@@ -18,6 +18,7 @@ from app.pipeline.stock_pipeline import (
 )
 from app.pipeline.election_pipeline import (
     run_election_pipeline, is_election_pipeline_running, election_pipeline_age,
+    run_ballot_sync, is_ballot_sync_running, ballot_sync_age, ballot_tracker,
 )
 from app.pipeline.analyze.action_center import get_action_refresh_state, refresh_action_issues
 from app.time_utils import utcnow
@@ -396,6 +397,58 @@ def _election_coverage_refresh() -> None:
     threading.Thread(target=_run, daemon=True, name="election-coverage-refresh").start()
 
 
+def _election_ballot_sync() -> None:
+    """Every state's ballot list, between nightly runs, in election season.
+
+    The nightly election pipeline runs LAST in the chain (Senate ->
+    Supplementary -> House -> Stock -> Election), and a skip or crash
+    anywhere upstream ends the chain for the night — ballots would go a
+    day stale for reasons unrelated to elections, in exactly the weeks
+    voters are reading them. This runs only the ballot step
+    (run_ballot_sync) on its own clock, so a withdrawal or replacement
+    reaches the page within hours. It reads state election offices'
+    published lists only — a few requests per state at one per second — so
+    the cadence is cheap; the roster and financial refresh stay nightly.
+    A no-op outside is_election_season's window, like the coverage refresh.
+    """
+    from app.api.action import is_election_season
+
+    if not is_election_season():
+        return
+
+    def _run():
+        if is_election_pipeline_running():
+            age = election_pipeline_age()
+            if not _is_stale(age, timedelta(hours=6)):
+                logger.info("Ballot sync skipped — the nightly election pipeline is running")
+                return
+            logger.warning(
+                "Election pipeline has been running for %s — treating as hung "
+                "and proceeding with the ballot sync anyway", age,
+            )
+        if is_ballot_sync_running():
+            age = ballot_sync_age()
+            if not _is_stale(age, timedelta(hours=2)):
+                logger.info("Ballot sync skipped — the previous one is still running")
+                return
+            logger.warning("Previous ballot sync has been running for %s — proceeding anyway", age)
+        ballot_tracker().start()
+        loop = asyncio.new_event_loop()
+        try:
+            result = loop.run_until_complete(run_ballot_sync())
+            logger.info(
+                "Election-season ballot sync: %d confirmed, %d states ok, failed: %s",
+                result["confirmed"], len(result["statesOk"]), result["statesFailed"] or "none",
+            )
+        except Exception:
+            logger.exception("Election-season ballot sync failed")
+        finally:
+            loop.close()
+            ballot_tracker().stop()
+
+    threading.Thread(target=_run, daemon=True, name="election-ballot-sync").start()
+
+
 def start_scheduler() -> None:
     """Parse the cron schedule from settings and start the scheduler.
 
@@ -447,6 +500,17 @@ def start_scheduler() -> None:
         _election_coverage_refresh,
         CronTrigger(minute="*/15"),
         id="election_coverage_refresh",
+        replace_existing=True,
+    )
+
+    # Election-season ballot sync — every 6 hours at :50 (clear of the :45
+    # bill refresh and the 03:00 nightly start), a no-op outside the season
+    # window like the coverage refresh above. Six hours because certified
+    # lists change by withdrawals and replacements, days apart, not minutes.
+    scheduler.add_job(
+        _election_ballot_sync,
+        CronTrigger(hour="*/6", minute="50", timezone="UTC"),
+        id="election_ballot_sync",
         replace_existing=True,
     )
 

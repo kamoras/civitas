@@ -469,7 +469,7 @@ async def test_a_fallback_answer_is_labelled_nominees_not_confirmed(db_session, 
 
     # CO's entry claims a complete ballot, but tonight its fallback (primary
     # results) answered, so the page must say "nominees".
-    assert elections_api._ballot_complete(db_session, "CO", 2026) is False
+    assert elections_api._race_complete(elections_api._ballot_marker(db_session, "CO", 2026), "CO", "2026-SEN-CO") is False
 
 
 # --- certified_table options Tennessee needed ---
@@ -478,7 +478,8 @@ from app.pipeline.fetch.state_candidates_certified_table import (  # noqa: E402
     fetch_confirmed_candidates as fetch_certified_table,
     parse_certified_rows,
 )
-from app.pipeline.fetch.state_candidates_common import parse_office  # noqa: E402
+from app.pipeline.fetch.state_candidates_common import discover_certification_link, parse_office  # noqa: E402
+from app.pipeline.rate_limiter import RateLimiter  # noqa: E402
 
 
 def test_united_states_house_is_a_federal_label():
@@ -538,7 +539,9 @@ async def test_a_certified_general_list_decides_federal_races_over_primary_resul
 
     flags = {c.id: c.confirmed_general for c in db_session.query(Candidate)}
     assert flags == {"S6ME1": False, "S6ME2": True}
-    assert elections_api._ballot_complete(db_session, "ME", 2026) is True
+    # The page shows the name as the state printed it.
+    assert db_session.get(Candidate, "S6ME2").ballot_name == "Troy D. Jackson"
+    assert elections_api._race_complete(elections_api._ballot_marker(db_session, "ME", 2026), "ME", "2026-SEN-ME") is True
 
 
 # --- Florida's candidate list ---
@@ -574,6 +577,7 @@ def test_florida_list_keeps_the_ballot_and_carries_the_district_forward():
     # Defeated, withdrawn and declared write-ins are not on the ballot.
 
 
+from app.pipeline.fetch.state_candidates_certified_table import _rows as _rows_of_certified_table  # noqa: E402
 from app.pipeline.fetch.state_candidates_certified_table import pdf_table_rows  # noqa: E402
 
 
@@ -727,3 +731,303 @@ async def test_a_list_behind_the_pages_own_export_button():
     assert {(r["district"], r["display_name"], r["last_name"], r["party"]) for r in got} == {
         (1, "Nathan M. BERNING", "BERNING", "I"), (2, "Teresa LEGER FERNANDEZ", "LEGER FERNANDEZ", "D"),
     }
+
+
+import io  # noqa: E402
+import zipfile  # noqa: E402
+
+from app.pipeline.fetch.state_candidates_tabular import _xlsx_rows  # noqa: E402
+
+
+def test_xlsx_with_inline_strings_and_no_shared_string_table():
+    # Delaware's candidate list writes every cell as an inline string and
+    # ships no xl/sharedStrings.xml; the shared reader used to refuse it.
+    def c(ref, text):
+        return f'<c r="{ref}" t="inlineStr"><is><t>{text}</t></is></c>'
+    sheet = ('<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+             f'<row r="1">{c("A1", "Office")}{c("B1", "BallotName")}</row>'
+             f'<row r="2">{c("A2", "U.S. Senator")}{c("B2", "Chris Coons")}</row>'
+             '</sheetData></worksheet>')
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("xl/worksheets/sheet1.xml", sheet)
+    assert _xlsx_rows(buf.getvalue()) == [{"Office": "U.S. Senator", "BallotName": "Chris Coons"}]
+
+
+@pytest.mark.asyncio
+async def test_every_linked_office_page_is_read_and_write_ins_are_not():
+    # Kentucky: one page per office, linked from an index. A year with no
+    # Senate race has no Senate page, so every page found is read rather
+    # than requiring a fixed set; each must name this year's general.
+    index = ('<a href="Default.aspx?id=3">US Senator (4)</a> <a href="Default.aspx?id=4">US Representative (21)</a>'
+             '<a href="Default.aspx?id=11">State Senator (30)</a>')
+    header = ("<title>Election: {year} General Election</title><table><tr><th>Name / Running Mate</th>"
+              "<th>Office</th><th>District/Division</th><th>Party</th></tr>")
+    pages = {
+        "3": header + "<tr><td>Andy Barr</td><td>US Senator</td><td></td><td>Republican Party</td></tr></table>",
+        "4": header + ("<tr><td>Gerardo Serrano</td><td>US Representative</td><td>5th</td><td>Independent</td></tr>"
+                       "<tr><td>Billy Ray Wilson</td><td>US Representative</td><td>5th</td><td>Write-In</td></tr>"
+                       "</table>"),
+    }
+
+    def handler(request):
+        page_id = request.url.params.get("id")
+        if page_id is None:
+            return httpx.Response(200, text=index)
+        return httpx.Response(200, text=pages[page_id].replace("{year}", "2026"))
+
+    source = {
+        "discovery": {"page_url": "https://sos.test/CandidateFilings/",
+                      "link_regex": 'href="(Default\\.aspx\\?id=\\d+)"[^>]*>US (?:Senator|Representative)\\b',
+                      "every_link": True, "year_regex": "Election: {year} General Election"},
+        "format": {"office_column": "Office", "office_parse": True, "district_column": "District/Division",
+                   "party_column": "Party", "name_columns": ["Name / Running Mate"],
+                   "exclude": {"Party": "Write-In"}},
+    }
+    async with _client(handler) as client:
+        got = await fetch_certified_table(client, 2026, "KY", source)
+        assert await fetch_certified_table(client, 2028, "KY", source) is None
+    assert {(r["office"], r["district"], r["display_name"], r["party"]) for r in got} == {
+        ("S", None, "Andy Barr", "R"), ("H", 5, "Gerardo Serrano", "I"),
+    }
+
+
+def test_tables_under_office_headings_with_the_party_in_the_name():
+    # Alaska: one table per office under an <h4>, the registration printed
+    # in the name cell, write-ins listed but not printed on the ballot.
+    page = ("<h4>UNITED STATES SENATOR</h4><table><tr><th>Candidate Name on Ballot</th><th>Contact</th></tr>"
+            "<tr><td>Heikes, Gerald L. (Registered Republican) (Certified)</td><td>x</td></tr>"
+            "<tr><td>Sullivan, Daniel J. Jr. (Registered Republican) (Certified)</td><td>x</td></tr>"
+            "<tr><td>Sullivan, Dan S. (Registered Republican) (Certified) Incumbent</td><td>x</td></tr>"
+            "<tr><td>Certified Write-In Hill, Sidney (Undeclared) (Certified)</td><td>x</td></tr></table>"
+            "<h4>UNITED STATES REPRESENTATIVE</h4><table><tr><th>Candidate Name on Ballot</th><th>Contact</th></tr>"
+            "<tr><td>Hill, Bill (Nonpartisan) (Certified)</td><td>x</td></tr></table>"
+            "<h4>SENATE DISTRICT A</h4><table><tr><th>Candidate Name on Ballot</th><th>Contact</th></tr>"
+            "<tr><td>Stedman, Bert K. (Registered Republican) (Certified)</td><td>x</td></tr></table>")
+    fmt = {"html_headings": True, "office_column": "heading_4", "office_parse": True,
+           "party_column": "Candidate Name on Ballot", "party_regex": "\\((?:Registered\\s+)?([^)]+)\\)",
+           "name_columns": ["Candidate Name on Ballot"], "name_last_first": True,
+           "exclude_regex": {"Candidate Name on Ballot": "^Certified Write-In"}}
+    rows = _rows_of_certified_table(page.encode(), "https://ak.test/candidates", fmt)
+    got = [(r["office"], r["display_name"], r["last_name"], r["party"], r["party_label"])
+           for r in parse_certified_rows(rows, fmt)]
+    assert got == [
+        ("S", "Gerald L. Heikes", "Heikes", "R", "Republican"),
+        ("S", "Daniel J. Sullivan Jr.", "Sullivan", "R", "Republican"),
+        ("S", "Dan S. Sullivan", "Sullivan", "R", "Republican"),
+        ("H", "Bill Hill", "Hill", "I", "Nonpartisan"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_two_digit_year_in_a_link():
+    # Alaska names its elections "26genr"; last cycle's link may still be up.
+    page = '<a href="https://ak.test/c/?election=24genr">2024</a> <a href="https://ak.test/c/?election=26genr">2026</a>'
+    async with _client(lambda request: httpx.Response(200, text=page)) as client:
+        url = await discover_certification_link(
+            client, RateLimiter(rps=1000), "https://ak.test/c/", 'href="(https://ak\\.test/c/\\?election={yy}genr)"',
+            2026, "AK",
+        )
+    assert url == "https://ak.test/c/?election=26genr"
+
+
+@pytest.mark.asyncio
+async def test_a_partial_certified_list_decides_only_the_races_it_covers(db_session, monkeypatch):
+    # A national source knows only the districts it has a verified address
+    # for. It decides those races; primary results still fill the rest, and
+    # the page may call only the covered races "confirmed".
+    async def no_calendar(client, cycle):
+        return {}
+    monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+    monkeypatch.setattr(sc, "configured_states", lambda: {"ME"})
+    monkeypatch.setitem(sc.STRATEGIES, "me_results", AsyncMock(return_value=[
+        _rec("S", None, "D", "Platner", "Graham Platner"),
+        _rec("H", 2, "R", "LePage", "Paul LePage"),
+    ]))
+    monkeypatch.setitem(sc.STRATEGIES, "certified_table", AsyncMock(return_value=[
+        _rec("S", None, "D", "Jackson", "Troy D. Jackson"),
+        _rec("S", None, "I", "Indie", "Jordan Indie"),  # on the list, never filed with the FEC
+    ]))
+    _race(db_session, "2026-SEN-ME", "ME")
+    _race(db_session, "2026-HOUSE-ME-2", "ME", office="H", district=2)
+    _db_cand(db_session, "S6ME1", "2026-SEN-ME", "PLATNER, GRAHAM", "DEM")
+    _db_cand(db_session, "S6ME2", "2026-SEN-ME", "JACKSON, TROY", "DEM")
+    _db_cand(db_session, "H6ME2", "2026-HOUSE-ME-2", "LEPAGE, PAUL", "REP")
+    db_session.commit()
+
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+    flags = {c.id: c.confirmed_general for c in db_session.query(Candidate)}
+    assert flags["S6ME1"] is False and flags["S6ME2"] is True
+    assert flags["H6ME2"] is True  # the uncovered race still gets its nominee
+    # The list's ballot-only candidate survives the second (primary-results) pass.
+    assert any(cid.startswith("ballot:2026-SEN-ME:") for cid in flags)
+    marker = elections_api._ballot_marker(db_session, "ME", 2026)
+    assert marker["complete"] is False and marker["races"] == ["2026-SEN-ME"]
+    assert elections_api._race_complete(marker, "ME", "2026-SEN-ME") is True
+    assert elections_api._race_complete(marker, "ME", "2026-HOUSE-ME-2") is False
+
+
+def test_the_states_printed_name_is_kept_but_never_a_last_first_one(db_session):
+    _race(db_session, "2026-HOUSE-MD-2", "MD", office="H", district=2)
+    _db_cand(db_session, "H4MD02", "2026-HOUSE-MD-2", "OLSZEWSKI, JOHN ANTHONY JR.", "DEM")
+    _db_cand(db_session, "H4MD99", "2026-HOUSE-MD-2", "WALLACE, DAVID DRAIN II", "REP")
+    db_session.commit()
+    olszewski, wallace = (db_session.get(Candidate, cid) for cid in ("H4MD02", "H4MD99"))
+
+    sc._note_ballot_name(db_session, olszewski, {"display_name": 'John "Johnny O" Olszewski, Jr.'})
+    sc._note_ballot_name(db_session, wallace, {"display_name": "WALLACE, DAVE"})
+
+    # A comma before a suffix is part of the name; before a given name it
+    # marks a "Last, First" printing, which is left to the FEC name.
+    assert olszewski.ballot_name == 'John "Johnny O" Olszewski, Jr.'
+    assert wallace.ballot_name is None
+
+
+from app.pipeline.fetch.state_candidates_grouped_list_pdf import (  # noqa: E402
+    fetch_confirmed_candidates as fetch_grouped_list,
+    parse_grouped_list,
+)
+
+
+def _w(x, text, top):
+    return {"x0": x, "x1": x + 8 * len(text), "top": top, "bottom": top + 8, "text": text}
+
+
+def _line(top, *cells):
+    return [_w(x, t, top) for x, t in cells]
+
+
+def test_grouped_list_reads_candidates_under_office_headings():
+    # Illinois's list in miniature: a page header with text left of the
+    # name column (not a candidate), an independent struck from the ballot
+    # on the line below, and a district that runs onto the next page.
+    fmt = {"name_x": 150, "date_x": 440, "removed_regex": r"\b(REMOVED|WITHDRAWN)\b"}
+    page1 = [
+        *_line(10, (32, "9/26/2026"), (74, "5:21PM"), (248, "WEBSITE"), (293, "CANDIDATE"), (350, "LIST")),
+        *_line(40, (252, "4TH"), (272, "CONGRESS")),
+        *_line(55, (18, "DEMOCRATIC"), (155, "Patty"), (185, "Garcia"), (448, "11/3/2025")),
+        *_line(70, (18, "INDEPENDENT"), (155, "Mayra"), (185, "Macias"), (448, "5/26/2026")),
+        *_line(80, (155, "8445"), (185, "S"), (195, "Kostner"), (300, "REMOVED"), (360, "7/21/2026")),
+    ]
+    page2 = [
+        *_line(10, (32, "9/26/2026"), (74, "5:21PM"), (248, "WEBSITE"), (293, "CANDIDATE"), (350, "LIST")),
+        *_line(55, (18, "INDEPENDENT"), (155, "Chris"), (185, "Getty"), (448, "5/18/2026")),
+    ]
+    got = [(r["district"], r["display_name"], r["party"]) for r in parse_grouped_list([page1, page2], fmt)]
+    assert got == [(4, "Patty Garcia", "D"), (4, "Chris Getty", "I")]
+
+
+def _tiny_pdf(items) -> bytes:
+    """A one-page PDF with each (x, y, text) printed where it says — enough
+    for pdfplumber, so a PDF source's whole fetch path runs in a test."""
+    stream = "".join(f"BT /F1 10 Tf {x} {y} Td ({t}) Tj ET\n" for x, y, t in items).encode()
+    objs = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R"
+        b" /Resources << /Font << /F1 5 0 R >> >> >>",
+        b"<< /Length %d >>\nstream\n" % len(stream) + stream + b"endstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    out = io.BytesIO()
+    out.write(b"%PDF-1.4\n")
+    offsets = []
+    for i, obj in enumerate(objs, 1):
+        offsets.append(out.tell())
+        out.write(b"%d 0 obj\n" % i + obj + b"\nendobj\n")
+    xref = out.tell()
+    out.write(b"xref\n0 %d\n0000000000 65535 f \n" % (len(objs) + 1))
+    for offset in offsets:
+        out.write(b"%010d 00000 n \n" % offset)
+    out.write(b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objs) + 1, xref))
+    return out.getvalue()
+
+
+_IL_SOURCE = {
+    "discovery": {
+        "page_url": "https://board.test/",
+        "id_regex": 'ElectionID=([^"&]+)"[^>]*>\\s*Next Election',
+        "year_regex": "General Election - 11/\\s*\\d{1,2}/{year}",
+        "url_templates": ["https://board.test/list.pdf?ElectionID={id}&g=house"],
+    },
+    "format": {"name_x": 150, "date_x": 440, "removed_regex": r"\b(REMOVED|WITHDRAWN)\b"},
+}
+
+
+@pytest.mark.asyncio
+async def test_grouped_list_fetch_finds_the_election_and_checks_its_year():
+    home = '<a href="Info.aspx?ElectionID=abc%3d">\n  Next Election</a>'
+    pdf = _tiny_pdf([
+        (230, 760, "General Election - 11/ 3/2026"), (252, 740, "4TH CONGRESS"),
+        (18, 720, "DEMOCRATIC"), (155, 720, "Patty Garcia"), (448, 720, "11/3/2025"),
+    ])
+    fetched = []
+
+    def handler(request):
+        if request.url.path == "/list.pdf":
+            fetched.append(str(request.url))
+            return httpx.Response(200, content=pdf)
+        return httpx.Response(200, text=home)
+
+    async with _client(handler) as client:
+        got = await fetch_grouped_list(client, 2026, "IL", _IL_SOURCE)
+        # Last cycle's (or a primary's) list never confirms anyone this cycle.
+        assert await fetch_grouped_list(client, 2028, "IL", _IL_SOURCE) is None
+    assert fetched[0].endswith("ElectionID=abc%3d&g=house")
+    assert [(r["office"], r["district"], r["display_name"]) for r in got] == [("H", 4, "Patty Garcia")]
+
+
+@pytest.mark.asyncio
+async def test_grouped_list_fetch_refuses_what_it_cannot_trust():
+    async def run(handler, source=_IL_SOURCE):
+        async with _client(handler) as client:
+            return await fetch_grouped_list(client, 2026, "IL", source)
+
+    # No election id on the home page, or two of them.
+    assert await run(lambda r: httpx.Response(200, text="no link")) is None
+    # A page instead of the PDF (an error page answering 200).
+    assert await run(lambda r: httpx.Response(
+        200, text='<a href="x?ElectionID=a">Next Election</a>' if r.url.path == "/" else "<html>error</html>",
+    )) is None
+    # Configuration missing a key is reported, not guessed.
+    assert await run(lambda r: httpx.Response(200), {"discovery": {}, "format": {}}) is None
+@pytest.mark.asyncio
+async def test_a_list_rendered_per_contest_chosen_from_a_dropdown():
+    # North Dakota: candidates render only once a contest is chosen and
+    # searched; the contest's value is a per-election id, so it is chosen
+    # by its visible text, and an office not on this year's ballot (no
+    # Senate race) is skipped rather than failing the list.
+    page = ('<html><h1>{year} General Election Contest/Candidate List</h1><form>'
+            '<input type="hidden" name="__VIEWSTATE" value="vs">'
+            '<select name="contest"><option value="0">All</option>'
+            '<option value="22055">Representative in Congress</option></select>'
+            '<input type="submit" name="search" value="Search"></form></html>')
+    table = ("<table><tr><th>Contest</th><th>First Name</th><th>Last Name</th><th>Party</th></tr>"
+             "<tr><td>Representative in Congress</td><td>Helene</td><td>Neville</td><td>independent nomination</td></tr>"
+             "</table>")
+    posted = []
+
+    def handler(request):
+        if request.url.host == "sos.test":
+            return httpx.Response(200, text='<a href="https://vip.test/candidatelist.aspx?eid=348">list</a>')
+        if request.method == "POST":
+            posted.append(request.content.decode())
+            return httpx.Response(200, text=table)
+        return httpx.Response(200, text=page.replace("{year}", "2026"))
+
+    def source(options):
+        return {
+            "discovery": {"page_url": "https://sos.test/elections",
+                          "link_regex": 'href="(https://vip\\.test/candidatelist\\.aspx\\?eid=\\d+)"',
+                          "year_regex": "{year} General Election Contest/Candidate List",
+                          "form_button": "search", "form_select": {"contest": options}},
+            "format": {"office_column": "Contest", "office_parse": True, "party_column": "Party",
+                       "surname_column": "Last Name", "name_columns": ["First Name", "Last Name"]},
+        }
+
+    async with _client(handler) as client:
+        got = await fetch_certified_table(client, 2026, "ND", source(["Representative in Congress", "United States Senator"]))
+        assert await fetch_certified_table(client, 2026, "ND", source(["United States Senator"])) is None
+    assert posted == ["__VIEWSTATE=vs&contest=22055&search=Search"]
+    assert [(r["office"], r["display_name"], r["party"]) for r in got] == [("H", "Helene Neville", "I")]

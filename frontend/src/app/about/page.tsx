@@ -404,23 +404,25 @@ export default function AboutPage() {
               <div>
                 <Label>Legislative Effectiveness (34%)</Label>
                 <Gist>
-                  measures whether a member is actually getting legislative work done — introducing
-                  bills that matter, moving them through Congress, and building a network of
-                  cosponsors other members trust. Introducing a substantive bill earns real credit
-                  even before it passes, matching how political scientists actually measure
-                  legislative productivity.
+                  measures whether a member is actually getting legislative work done — moving
+                  bills through Congress, and building a network of cosponsors other members trust.
+                  It follows the effectiveness score political scientists use, where a bill that
+                  becomes law counts for far more than one that is only introduced.
                 </Gist>
                 <P>
-                  Measures whether a member is producing tangible legislative outcomes, following
-                  Volden &amp; Wiseman&apos;s (2014)
-                  <Cite id="34">Volden &amp; Wiseman 2014</Cite> real published methodology: each
-                  sponsored bill is weighted by significance (5x for substantive bills —
-                  S./H.R./joint resolutions; 1x for commemorative simple/concurrent resolutions) and
-                  credited cumulatively across every stage it reaches — introducing a bill earns
-                  real credit on its own, not just bills that go on to pass a chamber or become law.
-                  Three components: bill significance &amp; advancement (60%) — this cumulative
-                  stage-credit per congress served, compared against an expected credit for a
-                  sponsor of the same status in the same chamber. That expectation is measured
+                  Measures whether a member is producing tangible legislative outcomes with Volden
+                  &amp; Wiseman&apos;s (2014)
+                  <Cite id="34">Volden &amp; Wiseman 2014</Cite> Legislative Effectiveness Score.
+                  Each sponsored bill counts, by significance (5x for bills and joint resolutions,
+                  1x for simple and concurrent resolutions), at every stage it reaches: introduced,
+                  committee action, passed its chamber, became law. At each stage the member&apos;s
+                  count is divided by the chamber&apos;s total at that stage, and the stages are
+                  added up so that the average member scores 1.0. Few bills get far, so the later
+                  stages have small totals, and a bill that becomes law counts for about as much as
+                  47 introductions in the House and 67 in the Senate.
+                  Three components: bill significance &amp; advancement (60%) — that score per
+                  congress served, compared against the typical sponsor of the same status in the
+                  same chamber. That expectation is measured
                   fresh on every run from the chamber itself — the median credit this congress
                   among members of the same status (majority or minority), with the chamber&apos;s
                   current majority party read from its roster — so a
@@ -441,18 +443,32 @@ export default function AboutPage() {
                   exactly the prior 70/30.
                 </P>
                 <P>
-                  Because introduction itself earns credit, a member who sponsors many substantive
-                  bills can score well even before any of them advance further — this is Volden
-                  &amp; Wiseman&apos;s real design, not a bug: their published methodology counts a
-                  bill&apos;s contribution at every stage it reaches, and most sponsored bills never
-                  advance at all (a July 2026 measurement of our corpus found Senate majority
+                  Until v6.14 (September 2026) this part skipped the division by each stage&apos;s
+                  total and credited significance &times; stages reached, which made a law worth
+                  four introductions. Checked against Volden &amp; Wiseman&apos;s own published
+                  scores for the 110th&ndash;118th Congresses, that version ranked members at a rank
+                  correlation of 0.71 (House) and 0.76 (Senate) and mostly tracked how many bills a
+                  member introduced; the current one ranks them at 0.90 and 0.96. Commemorative
+                  bills (a post-office renaming, a Congressional Gold Medal) count 1x like simple
+                  resolutions: they are recognised from the title by an embedding classifier
+                  calibrated against Volden &amp; Wiseman&apos;s own commemorative counts
+                  (<code>backend/scripts/calibrate_commemorative.py</code>; exact per-member counts
+                  for 87% of the 118th House, about 1 false flag per 1,000 bills). Two differences
+                  remain and are disclosed: their top &ldquo;substantive and significant&rdquo; tier
+                  (10x) comes from CQ Almanac coverage, which has no source here; and committee
+                  action is one stage rather than two. Members with few bills are not pulled toward 50 — their record
+                  is every bill they sponsored, fully observed — and a member with no substantive
+                  bills after half a year in office scores as a record of zero, so inaction never
+                  outscores an attempt. The reproduction is{" "}
+                  <code>backend/scripts/research_les_stage_weighting.py</code>. Most sponsored
+                  bills never advance (a July 2026 measurement of our corpus found Senate majority
                   sponsors advancing bills at 3.6% vs. 2.4% for minority sponsors; House 6.4% vs.
                   2.4%). Each member is therefore compared with the typical member of the same
                   status — majority or minority — in their chamber, as in Volden &amp;
                   Wiseman&apos;s own benchmarks, so whichever party is out of power isn&apos;t
                   judged against the majority&apos;s record. Until September 2026 the expectation
                   was instead the chamber median scaled by the ratio of the two advancement rates.
-                  Most credit comes from introducing bills, which majority status doesn&apos;t
+                  Most credit then came from introducing bills, which majority status doesn&apos;t
                   change, so that ratio over-corrected: it put minority members well above neutral
                   and majority members well below (the House&apos;s gap between the parties reached
                   18 points on production data). This part of the score now centers each status on
@@ -1018,10 +1034,17 @@ export default function AboutPage() {
           {/* ── State ballots ── */}
           <Section title="STATE BALLOTS &amp; BALLOT MEASURES" id="state-ballots">
             <P>
-              Each state has a ballot page at <span className="text-signal-cyan">/elections/states/&lt;ST&gt;</span> showing
-              the federal contests on that state&apos;s ballot and its statewide ballot
-              measures. Every candidate race links through to full candidate detail —
-              FEC fundraising totals, filing status, and live news coverage.
+              Each state has a ballot page at <span className="text-signal-cyan">/elections/states/&lt;ST&gt;</span>, laid
+              out as a research tool rather than a mock ballot. On a computer it shows the
+              ballot in three columns — federal offices, state offices, then measures and
+              local contests — each contest set the way a printed ballot sets it, and any
+              contest&apos;s research opens beside it: money raised, a sitting member&apos;s
+              voting record, and news coverage. On a phone it lists every contest and opens
+              one per screen, with next and previous. It never marks a choice. Candidates appear
+              under the name their state prints on its ballot once a state source names them. Every contest
+              says the term it is for — two years for the U.S. House, six for the Senate, and for the
+              state offices we cover, each one&apos;s own term from its state&apos;s constitution or
+              statute. Where we have not confirmed a state office&apos;s term, none is shown.
             </P>
 
             <div className="space-y-4 mt-4">
@@ -1038,12 +1061,14 @@ export default function AboutPage() {
                   statewide ballot measures, and statewide offices.
                 </P>
                 <P>
-                  So these pages cover the statewide slice and say so plainly, at the top
-                  of the page rather than in a footnote. Your U.S. House district, state
-                  legislative districts, county and city offices, judicial questions, and
-                  local measures are not shown, and each page links you to your own
-                  election office for the rest. We could show a true personal ballot only
-                  by asking for your home address and sending it to a third-party service —
+                  So these pages cover what can be shown statewide and say plainly what
+                  they leave out. Where a contest depends on where you live — your U.S.
+                  House district, and your state legislative seats where covered — you
+                  find yours on a map, by county or by town, never by typing an address.
+                  County and city offices, retention questions and local measures are
+                  listed as not shown, and each page links you to your own election
+                  office for the rest. We could show a true personal ballot only by
+                  asking for your home address and sending it to a third-party service —
                   which is exactly what this platform is built not to do.
                 </P>
               </div>
@@ -1105,10 +1130,16 @@ export default function AboutPage() {
                   is treated as the final word: anyone not on it is taken off the page.
                 </P>
                 <P>
+                  Declared write-in candidates are not printed on the ballot, so they are
+                  never shown as on it. Texas lists its write-ins in the same list as its
+                  nominees, and until 27 September 2026 this page showed four of them
+                  as Senate candidates.
+                </P>
+                <P>
                   Everyone on a certified ballot is shown, including candidates who never
                   filed with the FEC — they appear with &ldquo;no FEC filing&rdquo; instead
                   of fundraising figures. Colorado, Virginia, Tennessee, Florida, New Jersey, Maryland,
-                  Iowa, Nebraska, New Mexico, Wyoming and Hawaii now read their certified candidate lists too (Tennessee&apos;s
+                  Iowa, Nebraska, New Mexico, Wyoming, Hawaii, Delaware, Kentucky, Alaska, Montana, Illinois and North Dakota now read their certified candidate lists too (Tennessee&apos;s
                   federal races alone list 36 independents; Florida&apos;s filled five districts its
                   results file never mentioned; Iowa&apos;s replaced a retiring senator the page still
                   showed), and Wisconsin its official primary canvass, a plain
@@ -1116,7 +1147,9 @@ export default function AboutPage() {
                   primary results stand in, and the page says &ldquo;nominees&rdquo; rather
                   than claiming the whole ballot. Utah and Alabama publish their certified lists
                   only as scanned images, which we do not read: one misread name would take a
-                  real nominee off the page. The remaining five states sit behind bot
+                  real nominee off the page. For the races those states, Arkansas and Connecticut
+                  leave unseen — districts whose primary was uncontested — Google&apos;s election
+                  index fills in once it publishes the general election, and only for those races. The remaining five states sit behind bot
                   challenges on their election sites, or in Oklahoma&apos;s case an API that
                   requires logging in. We do not work around either.
                 </P>
@@ -1327,6 +1360,17 @@ export default function AboutPage() {
                   fails the checks, the next-ranked story is tried rather than the run ending
                   empty. Before that change, two failing top stories could leave the Action Center
                   silent for a day while the news carried on.
+                </P>
+                <P>
+                  Only one refresh runs at a time, even while a deploy briefly runs two copies of the
+                  site. The run that holds that turn renews its claim every minute, and a claim that
+                  goes ten minutes unrenewed is released. A claim used to last four hours whether or
+                  not its run was still alive, so a deploy that stopped a refresh partway through
+                  silenced the next four. On 26 September 2026, a day of steady deploys, that kept
+                  every refresh from running and no issue was published. The renewal itself then
+                  failed for most of each run, because the refresh held the database&rsquo;s single write
+                  slot open across its model calls; it now saves each write before the next call, so
+                  the renewal and every other writer get a turn.
                 </P>
                 <P>
                   The cost is silence. A cluster with no attributable assertion produces no issue at
@@ -2124,7 +2168,14 @@ export default function AboutPage() {
                 label="Containers"
                 value="Docker Swarm (single node) — zero-downtime start-first rolling updates behind an in-stack nginx reverse proxy, with automatic rollback on a failed health check"
               />
-              <Row label="Pipeline Schedule" value="Nightly at 3:00 AM via APScheduler" />
+              <Row
+                label="Accessibility Checks"
+                value="axe-core runs over the state ballot page and each of its research panels on every change; Lighthouse audits colour contrast and page loads"
+              />
+              <Row
+                label="Pipeline Schedule"
+                value="Nightly at 3:00 AM via APScheduler; in the 60 days before an election, ballot lists every 6 hours and race coverage every 15 minutes"
+              />
               <Row label="Data Caching" value="72-hour TTL with persistent SQLite cache" />
               <Row
                 label="Learning Store"

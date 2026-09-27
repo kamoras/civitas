@@ -134,6 +134,11 @@ async def fetch_with_retry(
     dropping a caller's other query params — hence this two-URL split
     instead. See congress.py/congressional_record.py for callers.)
 
+    Redirects are followed unless the caller says otherwise. A moved page
+    answers 301 with an empty body, and returning that as success made a
+    source whose landing page moved read as a page with nothing on it
+    (Alaska's /candidates/ -> /election-candidates/, 2026-09-26).
+
     Returns the raw Response on success (any status < 400), or None if
     retries are exhausted or a non-retried 4xx is hit. Callers extract
     .json() / .content / .text as needed for their source.
@@ -157,6 +162,7 @@ async def fetch_with_retry(
     await rate_limiter.acquire()
     actual_url = request_url or url
     label = log_label or url
+    request_kwargs.setdefault("follow_redirects", True)
     for attempt in range(1, retries + 1):
         try:
             logger.debug("%s: %s (attempt %d)", label, url, attempt)

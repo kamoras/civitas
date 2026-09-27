@@ -398,6 +398,9 @@ async def run_house_pipeline() -> dict:
                     if not bio_id:
                         continue
                     sponsored = await fetch_member_sponsored(client, db, bio_id)
+                    # None: the request failed with nothing cached — scored
+                    # neutral on Legislative Effectiveness, not as zero bills.
+                    r["sponsoredBillsUnavailable"] = sponsored is None
                     sp_list = []
                     for sp in (sponsored or []):
                         if sp.get("congress", 0) >= min_congress:
@@ -556,6 +559,22 @@ async def run_house_pipeline() -> dict:
                     phase4b_err,
                 )
                 progress.fail("sponsorship", detail="failed — continuing with empty scores")
+
+            # Commemorative bills (V&W's 1x tier) — before the LES reference
+            # is measured, since its stage totals are significance-weighted.
+            from app.pipeline.analyze.commemorative import mark_commemorative
+            mark_commemorative([sp for r in reps for sp in r.get("sponsoredBills") or []])
+
+            # A withheld or failed analysis leaves members out of these
+            # dicts; score them with last run's values, as the Senate does.
+            from app.models import Representative
+            from app.pipeline.sponsorship_backfill import backfill_withheld_sponsorship_scores
+
+            backfill_withheld_sponsorship_scores(
+                db, Representative, {r["bioguideId"] for r in reps if r.get("bioguideId")},
+                leadership_scores, ideology_scores,
+                bipartisanship_scores, attracted_bipartisanship_scores,
+            )
 
             # ── PHASE 5: FEC DATA + SCORING ──
             logger.info("--- House Phase 5: FEC DATA + SCORING ---")
@@ -732,9 +751,11 @@ async def run_house_pipeline() -> dict:
                         }
 
                     # Sponsored bills are already populated in Phase 4b.
-                    # If not (e.g., bioguideId was missing), provide empty list.
+                    # If not (no bioguideId, or Phase 4b failed before this
+                    # member), nothing is known about them — not zero bills.
                     if "sponsoredBills" not in rep:
                         rep["sponsoredBills"] = []
+                        rep["sponsoredBillsUnavailable"] = True
 
                     vr = rep.get("votingRecord") or {}
                     all_votes = (vr.get("keyVotes") or []) + (vr.get("recentVotes") or [])
@@ -807,6 +828,17 @@ async def run_house_pipeline() -> dict:
                     )
                     rep["representationScore"] = scores
 
+                    # Partisan depth from the voting record and the
+                    # cosponsorship ideology prior, as for senators
+                    # (campaign promises no longer exist); relabelled
+                    # against the whole chamber once the run finishes.
+                    from app.pipeline.analyze.party_platform import analyze_partisan_depth
+                    rep["partisanDepth"] = analyze_partisan_depth(
+                        [], rep.get("party", ""),
+                        voting_record=rep.get("votingRecord") or {},
+                        ideology_score=i_score,
+                    )
+
                     # Set bioguideId for persistence
                     rep["bioguideId"] = bio_id
 
@@ -868,6 +900,11 @@ async def run_house_pipeline() -> dict:
                 logger.exception("House ground truth check failed (non-fatal)")
 
             progress.complete("snapshots")
+
+            from app.models import Representative
+            from app.pipeline.partisan_depth_store import finalize_stored_partisan_depth
+
+            finalize_stored_partisan_depth(db, Representative)
 
             elapsed = time.time() - start_time
             logger.info("=== HOUSE PIPELINE COMPLETE ===")

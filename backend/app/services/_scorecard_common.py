@@ -63,6 +63,12 @@ def build_score_breakdown_entity(entity: Any, *, lobbying_donation_attr: str) ->
             "congress": sb.congress,
             "isLaw": sb.is_law,
             "latestAction": sb.latest_action,
+            # The pipeline scores on this (bill_stage.py, from Congress.gov's
+            # action codes). Without it the breakdown fell back to inferring
+            # stages from latestAction prose and could credit a different
+            # stage than the stored score did.
+            "stage": sb.stage,
+            "commemorative": sb.commemorative,
         }
         for sb in entity.sponsored_bills
     ]

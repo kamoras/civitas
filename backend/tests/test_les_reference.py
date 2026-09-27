@@ -88,7 +88,11 @@ class TestComputeReference:
         members = [(_bills(n), "R" if n % 2 else "D") for n in range(10, 50)]
         ref = compute_les_reference(members, congress=119, majority="R")
         assert ref["congress"] == 119 and ref["majority"] == "R" and ref["n"] == 40
-        assert ref["median_credit"] == 147.5  # median of 10..49 bills x 5 credit
+        # Introduced-only bills: stage 1 is the only nonzero total (5 x
+        # sum(10..49) = 5,900), so credit is 5n / 5,900 x 40/4; the median
+        # member sponsors 29.5.
+        assert ref["median_credit"] == round(5 * 29.5 / 5900 * 40 / 4, 4)
+        assert ref["stage_totals"] == [5900.0, 0.0, 0.0, 0.0] and ref["n_members"] == 40
         assert ref["stdev_credit"] > 0 and 0 < ref["avg_baseline"] < 1
 
     def test_members_without_substantive_bills_are_not_in_the_distribution(self):
@@ -117,17 +121,18 @@ class TestComputeReference:
 class TestChamberSpecificSaturation:
     def test_saturation_is_one_and_a_half_of_the_chambers_own_stdev(self, pinned_les_reference):
         ref = copy.deepcopy(pinned_les_reference)
-        # Put a House member exactly one House saturation (1.5 x 88.12)
-        # above an expected bar of 129: 132.18 extra credit ~= 26 more
-        # introduced-only hr bills (5 credit each) than the median member.
-        ref["house"]["avg_baseline"] = _advancement_baseline("hr", 119, None)
-        bills = _bills(26 + 26, "hr")  # 52 x 5 = 260 ~= 129 + 132
-        score, _ = _les_component_score(bills, None, None, ref)
-        assert score > 97  # saturated under the House's own spread
-        # Under the old pooled saturation (199.87) the same gap was ~2/3.
-        ref["house"]["stdev_credit"] = 199.87 / 1.5
-        pooled, _ = _les_component_score(bills, None, None, ref)
-        assert pooled < 85
+        house = ref["house"]
+        # A majority member whose credit sits one House saturation (1.5 x
+        # the House's own stdev) above the majority median is saturated.
+        target = house["status_median"]["majority"] + 1.5 * house["stdev_credit"]
+        n = int(target * 4 / house["n_members"] * house["stage_totals"][0] / 5) + 1
+        bills = _bills(n, "hr")  # introduced-only: credit = 5n / T1 x N/4
+        score, _ = _les_component_score(bills, "R", None, ref)
+        assert score > 99
+        # Measured against a spread twice as wide, the same gap is half.
+        house["stdev_credit"] *= 2
+        wide, _ = _les_component_score(bills, "R", None, ref)
+        assert 70 < wide < 80
 
 
 class TestReferenceFiles:
@@ -149,7 +154,7 @@ class TestReferenceFiles:
         # The API worker that didn't run the pipeline must not keep serving
         # the previous run's reference from its cache.
         write_les_reference("senate", pinned_les_reference["senate"])
-        assert load_les_reference()["senate"]["median_credit"] == 289.0
+        assert load_les_reference()["senate"]["median_credit"] == pinned_les_reference["senate"]["median_credit"]
         path = LES_REFERENCE.live_path
         data = json.loads(open(path).read())
         data["senate"]["median_credit"] = 7.0
