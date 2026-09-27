@@ -102,6 +102,63 @@ class TestApplyUpdates:
         assert (bill.latest_action, bill.latest_action_date) == ("Became Public Law.", "2026-07-25")
         assert actions_stub.calls == []  # not even fetched
 
+    def test_a_same_day_listed_action_never_replaces_the_stored_one(self, db_session, actions_stub):
+        """A date can't order two actions on one day, and the listing can lag
+        a later one that day the nightly pipeline stored; that run settles it."""
+        bill = _make_senate_bill(db_session, latest_action="Passed Senate.", latest_action_date="2026-07-20")
+        recent = {"S.100": _feed_item("S.100", "Motion to proceed agreed to.", "2026-07-20")}
+
+        summary = asyncio.run(bill_refresh._apply_updates(db_session, None, recent))
+
+        assert summary["changed"] == 0
+        assert bill.latest_action == "Passed Senate."
+
+    def test_an_undated_listed_action_never_replaces_a_dated_one(self, db_session, actions_stub):
+        bill = _make_senate_bill(db_session, latest_action="Passed Senate.", latest_action_date="2026-07-20")
+        recent = {"S.100": _feed_item("S.100", "Something undated.", "")}
+
+        assert asyncio.run(bill_refresh._apply_updates(db_session, None, recent))["changed"] == 0
+        assert (bill.latest_action, bill.latest_action_date) == ("Passed Senate.", "2026-07-20")
+
+    def test_a_row_with_no_date_takes_the_listed_action(self, db_session, actions_stub):
+        bill = _make_senate_bill(db_session, latest_action="", latest_action_date="")
+        actions_stub.result = []
+        recent = {"S.100": _feed_item("S.100", "Passed Senate.", "2026-07-20")}
+
+        assert asyncio.run(bill_refresh._apply_updates(db_session, None, recent))["changed"] == 1
+        assert (bill.latest_action, bill.latest_action_date) == ("Passed Senate.", "2026-07-20")
+
+    def test_a_row_that_moved_on_mid_pass_is_left_alone(self, db_session, actions_stub, monkeypatch):
+        """The write rechecks the date: a pipeline that stored a same-day or
+        newer action while the pass fetched keeps it — and a law it recorded
+        stays a law, whatever the pass wrote."""
+        bill = _make_senate_bill(db_session)
+        db_session.commit()
+
+        def fetch_after(update):
+            async def _fetch(db, client, congress, bill_type, number):
+                db.query(SponsoredBill).filter(SponsoredBill.id == bill.id).update(update)
+                return [{"actionCode": "17000", "type": "Floor", "text": "Passed Senate."}]
+            return _fetch
+
+        recent = {"S.100": _feed_item("S.100", "Passed Senate with an amendment.", "2026-07-20")}
+        monkeypatch.setattr(bill_refresh, "_fetch_fresh_actions", fetch_after(
+            {"latest_action": "Became Public Law.", "latest_action_date": "2026-07-20", "is_law": True},
+        ))
+        assert asyncio.run(bill_refresh._apply_updates(db_session, None, recent))["changed"] == 0
+
+        # Law recorded mid-pass under an older date: the pass's newer action
+        # lands, and is_law stays set.
+        db_session.query(SponsoredBill).update(
+            {"latest_action": "Read twice.", "latest_action_date": "2026-07-01", "is_law": False},
+        )
+        db_session.commit()
+        monkeypatch.setattr(bill_refresh, "_fetch_fresh_actions", fetch_after({"is_law": True}))
+        assert asyncio.run(bill_refresh._apply_updates(db_session, None, recent))["changed"] == 1
+        db_session.expire_all()
+        row = db_session.get(SponsoredBill, bill.id)
+        assert (row.latest_action_date, row.is_law) == ("2026-07-20", True)
+
     def test_a_row_deleted_mid_pass_is_skipped_not_a_crash(self, db_session, actions_stub, monkeypatch):
         """A pipeline can rewrite a member's bills while a pass holds them."""
         bill = _make_senate_bill(db_session)

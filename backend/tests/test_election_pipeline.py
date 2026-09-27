@@ -31,7 +31,7 @@ def _job_leases_granted():
     from app.pipeline.lease import Granted
 
     @asynccontextmanager
-    async def granted(_tier):
+    async def granted(_tier, **_kw):
         yield Granted(None)
 
     with patch("app.pipeline.lease.job_async", granted):
@@ -574,7 +574,7 @@ class TestBallotSync:
 
         def run(refused_tiers):
             @asynccontextmanager
-            async def leases(tier):
+            async def leases(tier, **_kw):
                 yield lease.Granted(lease.refusal_text(lease.REFUSED_HELD, tier) if tier in refused_tiers else None)
 
             with (
@@ -592,6 +592,35 @@ class TestBallotSync:
         assert free[1] == 1 and free[0] > 0, free  # the steps are reached when their leases are free
         assert run(refused_tiers=(lease.BALLOT_SYNC, lease.COVERAGE_REFRESH)) == (0, 0)
         assert not election_pipeline.ballot_tracker().is_running
+
+    def test_a_lease_that_cannot_be_taken_fails_only_its_phases(self, db_session):
+        """Taking a step's lease can raise (the database): that fails the
+        coverage/posting phases, and the run goes on to its snapshot and
+        completes."""
+        from contextlib import asynccontextmanager
+
+        from app.pipeline import lease
+
+        @asynccontextmanager
+        async def leases(tier, **_kw):
+            if tier == lease.COVERAGE_REFRESH:
+                raise RuntimeError("database mocked off")
+            yield lease.Granted(None)
+
+        with (
+            patch("app.pipeline.lease.job_async", leases),
+            patch("app.pipeline.election_pipeline.SessionLocal", return_value=db_session),
+            patch("app.pipeline.election_pipeline.fetch_all_candidates", return_value=[]),
+            _mock_downstream_pipeline_phases(),
+            patch("app.pipeline.election_pipeline._snapshot_candidates", return_value=0) as snapshot,
+        ):
+            asyncio.run(election_pipeline.run_election_pipeline())
+        snapshot.assert_called_once()
+        run = db_session.query(ElectionPipelineRun).order_by(ElectionPipelineRun.id.desc()).first()
+        assert run.status == "completed"
+        from app.pipeline.analyze.election_coverage import coverage_tracker
+
+        assert not coverage_tracker().is_running
 
     def test_the_nightly_ballot_phase_steps_aside_while_a_sync_is_running(self, db_session):
         # Two passes writing the same Candidate rows at once is what this

@@ -68,7 +68,6 @@ def is_bill_refresh_running() -> bool:
     return _tracker.is_running
 
 
-
 def _window_start(db: Session, now: datetime) -> datetime:
     stored = api_cache_get(
         db, _LAST_RUN_TIER, LAST_RUN_CACHE_KEY,
@@ -132,6 +131,18 @@ async def _fetch_fresh_actions(
     return results
 
 
+def _supersedes(new_date: str, stored_date: str | None) -> bool:
+    """Whether a listing's latest action may replace the stored one: only
+    one dated strictly after it, or anything over a row with no date. Not
+    one on the same day — the listing can lag a later action that day the
+    nightly pipeline stored from the bill itself, and a date can't say which
+    came first (the nightly run settles it) — and not an undated one over a
+    dated row, which it can't be ordered against."""
+    if not stored_date:
+        return True
+    return bool(new_date) and new_date > stored_date
+
+
 async def _apply_updates(
     db: Session, client: httpx.AsyncClient, recent: dict[str, dict],
 ) -> dict:
@@ -169,9 +180,10 @@ async def _apply_updates(
             matched += 1
             if new_text == row.latest_action and new_date == row.latest_action_date:
                 continue  # updateDate churn without a new action — nothing to do
-            if new_date and row.latest_action_date and new_date < row.latest_action_date:
+            if not _supersedes(new_date, row.latest_action_date):
                 # The listing can lag what the nightly pipeline stored from the
-                # bill itself: an older action never replaces a newer one.
+                # bill itself: an action not dated after the stored one never
+                # replaces it (see _supersedes).
                 continue
 
             # is_law is monotone: never un-set it, and the latest-action
@@ -190,7 +202,11 @@ async def _apply_updates(
                     continue
                 actions = await _fetch_fresh_actions(db, client, congress, bill_type, number)
                 actions_cache[actions_key] = actions
-            values = {"latest_action": new_text, "latest_action_date": new_date, "is_law": is_law}
+            values: dict = {"latest_action": new_text, "latest_action_date": new_date}
+            if is_law:
+                # Only ever set, never cleared — and so monotone at write
+                # time too, whatever the row holds by then.
+                values["is_law"] = True
             if actions or is_law:
                 values["stage"] = str(classify_bill_stage_from_actions(actions, is_law))
             # else: keep the stored stage — a failed/empty actions fetch
@@ -198,14 +214,14 @@ async def _apply_updates(
             writes.append((model, row.id, new_date, values))
 
     for model, row_id, new_date, values in writes:
-        rows_written = db.query(model).filter(model.id == row_id)
-        if new_date:
-            # Again at write time: the row may have moved on since it was
-            # read (the nightly pipeline rewrites these). A row deleted since
-            # simply matches nothing.
-            rows_written = rows_written.filter(
-                or_(model.latest_action_date.is_(None), model.latest_action_date <= new_date),
-            )
+        # _supersedes again at write time: the row may have moved on since it
+        # was read (the nightly pipeline rewrites these). A row deleted since
+        # simply matches nothing.
+        undated = or_(model.latest_action_date.is_(None), model.latest_action_date == "")
+        rows_written = db.query(model).filter(
+            model.id == row_id,
+            or_(undated, model.latest_action_date < new_date) if new_date else undated,
+        )
         changed += rows_written.update(values, synchronize_session=False)
     db.commit()
     if skipped_at_cap:

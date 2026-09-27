@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from contextlib import ExitStack
 from datetime import timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -38,37 +37,16 @@ def _is_stale(age: timedelta | None, threshold: timedelta) -> bool:
     return age is not None and age > threshold
 
 
-def _start_job(target, *, name: str, alert: bool = False, lease_tier: str | None = None) -> None:
+def _start_job(target, *, name: str, alert: bool = False) -> None:
     """Start a scheduled job's thread. While the admin data reset holds the
     database the job doesn't run this time: logged, and for the nightly
     chain — whose skip leaves the wiped database unbuilt for a day — an ops
     alert, as for any other skipped nightly run.
 
-    `lease_tier`: a job that takes no run lock of its own holds this lease
-    (lease.job) while it runs, so a reset in another process sees it, and it
-    sees the reset. A holder renews it for lease.max_hold, and the job's own
-    hung-run checks proceed past a run at that same age, so the two agree."""
-    if lease_tier is not None:
-        job = target
-
-        def target() -> None:
-            stack = ExitStack()
-            try:
-                held = stack.enter_context(lease.job(lease_tier))
-            except Exception:
-                logger.exception("%s: its lease could not be taken", name)
-                return
-            try:
-                if held:
-                    job()
-            except Exception:
-                logger.exception("%s failed", name)
-            finally:
-                try:
-                    stack.close()
-                except Exception:
-                    logger.exception("%s: its lease could not be released", name)
-
+    A job that takes no run lock of its own holds its lease (lease.job or
+    lease.tracked_job) while it runs, so a reset in another process sees it,
+    and it sees the reset — taken inside the job, past its own checks, so a
+    tick that bails holds nothing another entry point would skip over."""
     try:
         start_writer(target, name=name)
     except WritesHeld as held:
@@ -373,23 +351,30 @@ def _hourly_bill_status_refresh() -> None:
                 logger.info("Bill status refresh skipped — house pipeline is running")
                 return
 
-            # Cut off while its lease still holds (lease.HUNG_AFTER), never
-            # left running beside the next: two passes at once would let the
-            # older one's snapshot overwrite the newer one's bill rows.
-            limit = lease.max_hold(lease.BILL_REFRESH)
-            loop = asyncio.new_event_loop()
-            try:
-                summary = loop.run_until_complete(asyncio.wait_for(refresh_bill_statuses(), limit.total_seconds()))
-            except TimeoutError:
-                logger.warning("Bill status refresh cut off after %s — the next tick starts afresh", limit)
-                return
-            finally:
-                loop.close()
+            # Its lease, so a reset or a refresh in another process sees it,
+            # taken only past the checks above: a tick that bails holds
+            # nothing. Cut off while the lease still holds (lease.max_hold),
+            # never left running beside the next: two passes at once would
+            # let the older one's snapshot overwrite the newer one's rows.
+            with lease.job(lease.BILL_REFRESH) as granted:
+                if not granted:
+                    return
+                limit = lease.max_hold(lease.BILL_REFRESH)
+                loop = asyncio.new_event_loop()
+                try:
+                    summary = loop.run_until_complete(
+                        asyncio.wait_for(refresh_bill_statuses(), limit.total_seconds()),
+                    )
+                except TimeoutError:
+                    logger.warning("Bill status refresh cut off after %s — the next tick starts afresh", limit)
+                    return
+                finally:
+                    loop.close()
             logger.info("Bill status refresh: %s", summary)
         except Exception:
             logger.exception("Bill status refresh failed")
 
-    _start_job(_run, name="bill-status-refresh", lease_tier=lease.BILL_REFRESH)
+    _start_job(_run, name="bill-status-refresh")
 
 
 def _election_coverage_refresh() -> None:
@@ -424,50 +409,43 @@ def _election_coverage_refresh() -> None:
             )
         # Self-overlap guard: the PREVIOUS 15-minute refresh may still be
         # mid-flight (degraded LLM, slow network) — overlapping passes
-        # double-ingest and double-post. Same shape as
-        # _hourly_action_refresh's guard above.
-        # Checked and started in one step (try_start): the nightly
-        # election pipeline's coverage phase can reach the same check.
-        # Presumed hung where its lease stops being renewed (lease.max_hold),
-        # so this and the lease agree on when to proceed past it.
-        _run_token, past = coverage_tracker().try_start(hung_after=lease.max_hold(lease.COVERAGE_REFRESH))
-        if _run_token is None:
-            logger.info("Election coverage refresh skipped — previous refresh still running")
-            return
-        if past is not None:
-            logger.warning(
-                "Previous election coverage refresh has been running for %s — "
-                "treating as hung and proceeding anyway", past,
-            )
+        # double-ingest and double-post; so may the nightly election
+        # pipeline's coverage phase. Its lease and tracker
+        # (lease.tracked_job), taken only now, past the check above: a tick
+        # that bails must not hold them, or the nightly phase reaching them
+        # at that moment would skip.
         try:
-            from app.database import SessionLocal
-            from app.pipeline.analyze.election_bluesky import post_race_coverage_updates
-            from app.pipeline.analyze.election_coverage import ingest_race_coverage
+            with lease.tracked_job(
+                lease.COVERAGE_REFRESH, coverage_tracker(), who="Election coverage refresh",
+            ) as granted:
+                if not granted:
+                    return
+                from app.database import SessionLocal
+                from app.pipeline.analyze.election_bluesky import post_race_coverage_updates
+                from app.pipeline.analyze.election_coverage import ingest_race_coverage
 
-            async def _refresh():
-                db = SessionLocal()
+                async def _refresh():
+                    db = SessionLocal()
+                    try:
+                        async with make_async_client() as client:
+                            ingested = await ingest_race_coverage(db, client)
+                        posted = post_race_coverage_updates(db)
+                        logger.info(
+                            "Election-season coverage refresh: %d ingested, %d posted",
+                            ingested, posted,
+                        )
+                    finally:
+                        db.close()
+
+                loop = asyncio.new_event_loop()
                 try:
-                    async with make_async_client() as client:
-                        ingested = await ingest_race_coverage(db, client)
-                    posted = post_race_coverage_updates(db)
-                    logger.info(
-                        "Election-season coverage refresh: %d ingested, %d posted",
-                        ingested, posted,
-                    )
+                    loop.run_until_complete(_refresh())
                 finally:
-                    db.close()
-
-            loop = asyncio.new_event_loop()
-            try:
-                loop.run_until_complete(_refresh())
-            finally:
-                loop.close()
+                    loop.close()
         except Exception:
             logger.exception("Election coverage refresh failed")
-        finally:
-            coverage_tracker().stop(_run_token)
 
-    _start_job(_run, name="election-coverage-refresh", lease_tier=lease.COVERAGE_REFRESH)
+    _start_job(_run, name="election-coverage-refresh")
 
 
 def _election_ballot_sync() -> None:
@@ -499,26 +477,27 @@ def _election_ballot_sync() -> None:
                 "Election pipeline has been running for %s — treating as hung "
                 "and proceeding with the ballot sync anyway", age,
             )
-        _run_token, past = ballot_tracker().try_start(hung_after=lease.max_hold(lease.BALLOT_SYNC))
-        if _run_token is None:
-            logger.info("Ballot sync skipped — the previous one is still running")
-            return
-        if past is not None:
-            logger.warning("Previous ballot sync has been running for %s — proceeding anyway", past)
-        loop = asyncio.new_event_loop()
+        # Its lease and tracker (lease.tracked_job), shared with the nightly
+        # pipeline's ballot step, taken only now, past the check above: a
+        # tick that bails must not hold them, or the nightly step reaching
+        # them at that moment would skip.
         try:
-            result = loop.run_until_complete(run_ballot_sync())
+            with lease.tracked_job(lease.BALLOT_SYNC, ballot_tracker(), who="Ballot sync") as granted:
+                if not granted:
+                    return
+                loop = asyncio.new_event_loop()
+                try:
+                    result = loop.run_until_complete(run_ballot_sync())
+                finally:
+                    loop.close()
             logger.info(
                 "Election-season ballot sync: %d confirmed, %d states ok, failed: %s",
                 result["confirmed"], len(result["statesOk"]), result["statesFailed"] or "none",
             )
         except Exception:
             logger.exception("Election-season ballot sync failed")
-        finally:
-            loop.close()
-            ballot_tracker().stop(_run_token)
 
-    _start_job(_run, name="election-ballot-sync", lease_tier=lease.BALLOT_SYNC)
+    _start_job(_run, name="election-ballot-sync")
 
 
 def start_scheduler() -> None:

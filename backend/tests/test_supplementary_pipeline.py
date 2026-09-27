@@ -22,7 +22,7 @@ from app.time_utils import utcnow
 
 
 @asynccontextmanager
-async def _granted(_tier):
+async def _granted(_tier, **_kw):
     from app.pipeline.lease import Granted
 
     yield Granted(None)
@@ -275,7 +275,7 @@ def test_a_step_whose_lease_is_held_elsewhere_is_skipped(db_session):
     from app.pipeline import lease
 
     @asynccontextmanager
-    async def explore_held(tier):
+    async def explore_held(tier, **_kw):
         yield lease.Granted("it is running elsewhere" if tier == lease.EXPLORE else None)
 
     with patch("app.pipeline.lease.job_async", explore_held), \

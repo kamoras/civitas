@@ -85,7 +85,7 @@ def stale_after(tier: str) -> timedelta:
 # bound a hung holder, whose process lives on, would renew it forever and
 # hold its job, and every data reset, off until a restart. A job with its
 # own check that proceeds past a run it calls hung does so at max_hold too
-# (scheduler.py), so the check and the lease agree; the bill refresh is cut
+# (tracked_job, scheduler.py), so the check and the lease agree; the bill refresh is cut
 # off within it instead; where a job has neither, the lapse is the hung-run
 # rule: the next attempt takes the lease over.
 def _pipeline_timeout() -> timedelta:
@@ -255,8 +255,8 @@ def _let_go(held_lease: _Held) -> None:
 
 @contextmanager
 def holding(db: Session, tier: str, *, yield_to: str | None = None, take_over: bool = False) -> Iterator[str | None]:
-    """Hold the lease for the enclosed work, beating it throughout (up to
-    its tier's HUNG_AFTER, see _keep); yields the token, or None (and holds
+    """Hold the lease for the enclosed work, beating it throughout (for its
+    tier's max_hold, see _keep); yields the token, or None (and holds
     nothing) when acquire refused."""
     held_lease = _take(db, tier, yield_to, take_over)
     if held_lease is None:
@@ -310,20 +310,25 @@ class Granted:
         return self.why is None
 
 
+def _log_skip(tier: str, who: str | None, granted: Granted) -> None:
+    if not granted:
+        logger.info("%s skipped: %s", who or TIERS[tier], granted.why)
+
+
 @contextmanager
-def job(tier: str) -> Iterator[Granted]:
+def job(tier: str, *, who: str | None = None) -> Iterator[Granted]:
     """A background job's lease, on its own session, yielding to the data
     reset: yields a Granted, true while held, false — hold nothing, skip the
     work — when a reset is running, another process runs the same job, or
-    the database stayed busy (its `why`)."""
+    the database stayed busy (its `why`). A refusal is logged as `who`'s
+    skip (the tier's job, by default)."""
     from app.database import SessionLocal
 
     db = SessionLocal()
     try:
         with holding(db, tier, yield_to=DATA_RESET) as token:
             granted = Granted(None if token is not None else refusal(db, tier))
-            if not granted:
-                logger.info("%s skipped: %s", TIERS[tier], granted.why)
+            _log_skip(tier, who, granted)
             yield granted
     finally:
         db.close()
@@ -372,7 +377,7 @@ def _let_go_and_close(db: Session, held_lease: "_Held | None") -> None:
 
 
 @asynccontextmanager
-async def job_async(tier: str) -> AsyncIterator[Granted]:
+async def job_async(tier: str, *, who: str | None = None) -> AsyncIterator[Granted]:
     """job() for async code: the same lease, with its session and all its
     database work in worker threads, off the event loop, which serves every
     request. Cancellation can't strand anything: the take and the release
@@ -388,8 +393,53 @@ async def job_async(tier: str) -> AsyncIterator[Granted]:
         raise
     try:
         granted = Granted(refused if held_lease is None else None)
-        if not granted:
-            logger.info("%s skipped: %s", TIERS[tier], granted.why)
+        _log_skip(tier, who, granted)
         yield granted
     finally:
         await asyncio.shield(asyncio.to_thread(_let_go_and_close, db, held_lease))
+
+
+# A job run from more than one entry point in this process (a scheduled
+# job, and a step of a nightly pipeline) is guarded twice: by its lease,
+# against a run in another process, and by an in-process tracker
+# (run_tracker.PipelineRunTracker) that the entry points share. Every entry
+# point takes the two in this order — lease, then tracker — and presumes a
+# tracked run hung at the lease's max_hold, where its lease stops being
+# renewed, so the two guards agree on when to proceed past it.
+
+
+@contextmanager
+def _tracked(tier: str, tracker, who: str | None, granted: Granted) -> Iterator[Granted]:
+    if not granted:
+        yield granted
+        return
+    token, past = tracker.try_start(hung_after=max_hold(tier))
+    if token is None:
+        refused = Granted(f"{TIERS[tier]} is already running in this process")
+        _log_skip(tier, who, refused)
+        yield refused
+        return
+    if past is not None:
+        logger.warning(
+            "%s: the %s in this process has been running for %s — presumed hung, proceeding",
+            who or TIERS[tier], TIERS[tier], past,
+        )
+    try:
+        yield granted
+    finally:
+        tracker.stop(token)
+
+
+@contextmanager
+def tracked_job(tier: str, tracker, *, who: str | None = None) -> Iterator[Granted]:
+    """job(), then `tracker` (see above): true while both are held."""
+    with job(tier, who=who) as granted, _tracked(tier, tracker, who, granted) as both:
+        yield both
+
+
+@asynccontextmanager
+async def tracked_job_async(tier: str, tracker, *, who: str | None = None) -> AsyncIterator[Granted]:
+    """job_async(), then `tracker` (see above): true while both are held."""
+    async with job_async(tier, who=who) as granted:
+        with _tracked(tier, tracker, who, granted) as both:
+            yield both

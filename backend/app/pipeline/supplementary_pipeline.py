@@ -74,7 +74,7 @@ async def run_supplementary_pipeline() -> dict:
         logger.info("--- Supplementary: EXPLORE DOCUMENTS ---")
         progress.begin("explore_documents")
         try:
-            async with lease.job_async(lease.EXPLORE) as held:
+            async with lease.job_async(lease.EXPLORE, who="Supplementary pipeline's explore step") as held:
                 if not held:
                     progress.skip("explore_documents", detail=f"skipped: {held.why}")
                 else:
@@ -115,7 +115,7 @@ async def run_supplementary_pipeline() -> dict:
             progress.skip("justice_scorecards", detail="weekly cadence")
         else:
             try:
-                async with lease.job_async(lease.JUSTICE_PIPELINE) as held:
+                async with lease.job_async(lease.JUSTICE_PIPELINE, who="Supplementary pipeline's justice step") as held:
                     if not held:
                         progress.skip("justice_scorecards", detail=f"skipped: {held.why}")
                     else:
@@ -198,7 +198,7 @@ async def run_supplementary_pipeline() -> dict:
         logger.info("--- Supplementary: PRESIDENTS ---")
         progress.begin("president_scorecards")
         try:
-            async with lease.job_async(lease.PRESIDENT_PIPELINE) as held:
+            async with lease.job_async(lease.PRESIDENT_PIPELINE, who="Supplementary pipeline's president step") as held:
                 if not held:
                     progress.skip("president_scorecards", detail=f"skipped: {held.why}")
                 else:

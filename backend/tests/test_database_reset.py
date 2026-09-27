@@ -266,6 +266,38 @@ class TestLease:
             assert not held and held.why.startswith("an admin data reset holds the database")
         assert not lease.held(db_session, lease.BALLOT_SYNC)
 
+    def test_a_tracked_job_takes_its_lease_then_its_tracker(self, db_session, monkeypatch, caplog):
+        """lease.tracked_job: the lease (another process), then the tracker
+        this process's entry points share; refused by either, it holds
+        neither, and the skip is logged as the caller's."""
+        import asyncio
+        import logging
+
+        from app.pipeline import lease
+        from app.pipeline.run_tracker import PipelineRunTracker
+
+        monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
+        tracker = PipelineRunTracker()
+
+        with lease.tracked_job(lease.BALLOT_SYNC, tracker) as held:
+            assert held and tracker.is_running and lease.held(db_session, lease.BALLOT_SYNC)
+        assert not tracker.is_running and not lease.held(db_session, lease.BALLOT_SYNC)
+
+        token = tracker.start()  # a run going in this process
+        with caplog.at_level(logging.INFO, logger="app.pipeline.lease"), \
+                lease.tracked_job(lease.BALLOT_SYNC, tracker, who="The nightly step") as held:
+            assert not held and "already running in this process" in held.why
+        assert "The nightly step skipped" in caplog.text
+        assert tracker.is_running and not lease.held(db_session, lease.BALLOT_SYNC)
+        tracker.stop(token)
+
+        async def nightly():
+            async with lease.tracked_job_async(lease.BALLOT_SYNC, tracker) as held:
+                return bool(held), tracker.is_running
+
+        lease.acquire(db_session, lease.BALLOT_SYNC)  # a sync in another process
+        assert asyncio.run(nightly()) == (False, False)
+
     def test_every_lease_is_one_the_reset_names(self):
         from app.pipeline import lease
 

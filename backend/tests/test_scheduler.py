@@ -452,20 +452,88 @@ def test_a_nightly_chain_refused_by_a_data_reset_alerts():
     assert alert.call_count == 1 and "data reset" in alert.call_args.args[0]
 
 
-def test_a_leased_job_does_not_run_without_its_lease():
-    """A lockless job holds a lease so a reset in another process sees it;
-    refused one (a reset running, or the job running elsewhere), it skips."""
-    from app import scheduler
-    from app.pipeline import lease
-
+def _refused_leases(taken):
     @contextmanager
-    def refused(_tier, **_kw):
+    def refused(tier, **_kw):
+        from app.pipeline import lease
+
+        taken.append(tier)
         yield lease.Granted("a data reset is running")
 
-    ran = []
-    with patch("app.background.threading.Thread", _SyncThread), patch("app.pipeline.lease.job", refused):
-        scheduler._start_job(lambda: ran.append(1), name="bill-status-refresh", lease_tier=lease.BILL_REFRESH)
-    assert ran == []
+    return refused
+
+
+class TestLeasedJobs:
+    """A lockless job holds a lease so a reset in another process sees it;
+    refused one (a reset running, or the job running elsewhere), it skips.
+    It takes the lease only past its own checks: a tick that bails must hold
+    nothing, or the nightly election pipeline's step reaching the same lease
+    at that moment would skip (lease.tracked_job)."""
+
+    def _patches(self, taken, *, pipeline_running=False):
+        from contextlib import ExitStack
+
+        stack = ExitStack()
+        for target, kw in [
+            ("app.background.threading.Thread", {"new": _SyncThread}),
+            ("app.pipeline.lease.job", {"new": _refused_leases(taken)}),
+            ("app.api.action.is_election_season", {"return_value": True}),
+            ("app.scheduler.is_election_pipeline_running", {"return_value": pipeline_running}),
+            ("app.scheduler.election_pipeline_age", {"return_value": timedelta(minutes=5)}),
+            ("app.scheduler.is_house_pipeline_running", {"return_value": False}),
+            ("app.database.SessionLocal", {"return_value": MagicMock(
+                **{"query.return_value.filter.return_value.first.return_value": None},
+            )}),
+        ]:
+            stack.enter_context(patch(target, **kw))
+        return stack
+
+    def test_bill_refresh_skips_without_its_lease(self):
+        from app import scheduler
+        from app.pipeline import lease
+
+        taken = []
+        refresh = AsyncMock()
+        with self._patches(taken), patch("app.pipeline.bill_refresh.refresh_bill_statuses", refresh):
+            scheduler._hourly_bill_status_refresh()
+        assert taken == [lease.BILL_REFRESH]
+        refresh.assert_not_called()
+
+    def test_coverage_refresh_skips_without_its_lease(self):
+        from app import scheduler
+        from app.pipeline import lease
+
+        taken = []
+        ingest = AsyncMock()
+        with self._patches(taken), \
+             patch("app.pipeline.analyze.election_coverage.ingest_race_coverage", ingest):
+            scheduler._election_coverage_refresh()
+        assert taken == [lease.COVERAGE_REFRESH]
+        ingest.assert_not_called()
+        assert not coverage_tracker().is_running
+
+    def test_ballot_sync_skips_without_its_lease(self):
+        from app import scheduler
+        from app.pipeline import lease
+
+        taken = []
+        sync = AsyncMock()
+        with self._patches(taken), patch("app.scheduler.run_ballot_sync", sync):
+            scheduler._election_ballot_sync()
+        assert taken == [lease.BALLOT_SYNC]
+        sync.assert_not_called()
+        assert not is_ballot_sync_running()
+
+    def test_a_tick_that_steps_aside_takes_no_lease(self):
+        from app import scheduler
+
+        taken = []
+        with self._patches(taken, pipeline_running=True), \
+             patch("app.scheduler.run_ballot_sync", AsyncMock()), \
+             patch("app.pipeline.analyze.election_coverage.ingest_race_coverage", AsyncMock()):
+            scheduler._election_coverage_refresh()
+            scheduler._election_ballot_sync()
+        assert taken == []
 
 
 @pytest.mark.parametrize("reason, cause", [
