@@ -86,6 +86,22 @@ def congress_for_year(year: int) -> int:
     return 1 + (year - 1789) // 2
 
 
+def congress_of_date(date_str: str) -> int | None:
+    """The Congress in session on a YYYY-MM-DD date. A new Congress convenes
+    on January 3 of each odd year (20th Amendment), so Jan 1-2 of an odd
+    year still belong to the previous one. None for an unparseable date."""
+    from datetime import date
+
+    try:
+        d = date.fromisoformat(date_str)
+    except ValueError:
+        return None
+    congress = congress_for_year(d.year)
+    if d.year % 2 == 1 and (d.month, d.day) < (1, 3):
+        congress -= 1
+    return congress
+
+
 def expected_current_congress(now=None) -> int:
     """The Congress that should be current given the wall clock.
 

@@ -790,13 +790,13 @@ async def run_house_pipeline() -> dict:
             # (the Senate pipeline already works this way). The PAC-share
             # median needs every rep's funding, which the pass above fetches.
             from app.pipeline.live_references import (
-                live_constituent_reference,
+                live_constituent_reference_measured,
                 live_funding_reference,
             )
             funding_reference = live_funding_reference(
                 "house", [r.get("funding") or {} for r, _ in prepared_reps],
             )
-            constituent_reference = live_constituent_reference(
+            constituent_reference, constituent_reference_measured = live_constituent_reference_measured(
                 "house", [r for r, _ in prepared_reps],
             )
 
@@ -823,7 +823,9 @@ async def run_house_pipeline() -> dict:
                         **rep, "lesReference": les_reference, "fundingReference": funding_reference,
                         "constituentReference": constituent_reference,
                     })
-                    scores["confidence"] = calculate_confidence(rep)
+                    scores["confidence"] = calculate_confidence(
+                        {**rep, "constituentReference": constituent_reference},
+                    )
                     rep["representationScore"] = scores
 
                     # Partisan depth from the voting record and the
@@ -875,7 +877,10 @@ async def run_house_pipeline() -> dict:
                     check_ground_truth,
                     check_score_distribution,
                 )
-                gt_failures = check_ground_truth(db, model=Representative).get("failures", [])
+                gt_failures = check_ground_truth(
+                    db, model=Representative, constituent_reference=constituent_reference,
+                    reference_measured=constituent_reference_measured,
+                ).get("failures", [])
                 gt_failures += check_score_distribution(db, model=Representative)
                 lines = "\n".join(
                     f"- {f.get('senator', '?')} {f.get('dimension', '?')}="

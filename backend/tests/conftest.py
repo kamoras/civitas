@@ -151,9 +151,12 @@ TEST_PRESIDENT_REFERENCE = {
 # arithmetic is readable: expected break rate 10% in a swing seat
 # (alignment 0), 5% in a maximally safe one (+1), 30% in a maximally
 # opposed one (-1); saturation at a 20-point deviation.
+from app.pipeline.analyze.score_calculator import CONSTITUENT_REFERENCE_STATISTIC  # noqa: E402
+
 _TEST_EXPECTED = {"a": 0.10, "b": -0.05, "b_opposed": -0.15, "n": 50}
 TEST_CONSTITUENT_REFERENCE = {
-    chamber: {"expected": {"D": _TEST_EXPECTED, "R": _TEST_EXPECTED}, "deviation_p90": 0.20, "n": 100}
+    chamber: {"expected": {"D": _TEST_EXPECTED, "R": _TEST_EXPECTED}, "deviation_p90": 0.20, "n": 100,
+              "statistic": CONSTITUENT_REFERENCE_STATISTIC}
     for chamber in ("senate", "house")
 }
 

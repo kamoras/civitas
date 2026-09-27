@@ -250,7 +250,7 @@ def get_representative_score_breakdown(db: Session, rep_id: str) -> dict | None:
     Mirrors get_senator_score_breakdown in senator_service.py — see that
     function's docstring for why this reads directly from ORM relationships
     rather than build_rep_response()'s display-oriented dict (which only
-    has vote counts, not per-vote votedWithParty/partyAlignmentWeight).
+    has vote counts, not per-vote votedWithParty).
     """
     from app.pipeline.analyze.score_calculator import explain_scores
     from app.services._scorecard_common import build_score_breakdown_entity

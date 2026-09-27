@@ -53,5 +53,34 @@ def test_references_are_measured_in_memory(monkeypatch):
     assert all(p["lesReference"] is payloads[0]["lesReference"] for p in payloads)
 
 
+def test_payload_carries_the_commemorative_flag(tmp_path, monkeypatch):
+    # Without it the preview weighted a post-office naming 5x, like a
+    # substantive bill, and diverged from the pipeline's LES (v6.14).
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from app.database import Base
+    from app.models import Senator, SponsoredBill
+
+    path = tmp_path / "db.sqlite"
+    engine = create_engine(f"sqlite:///{path}")
+    Base.metadata.create_all(engine)
+    with Session(engine) as db:
+        db.add(Senator(id="s1", name="Test Senator", state="VA", party="D"))
+        db.add(SponsoredBill(senator_id="s1", bill_id="s-1", title="Post office naming",
+                             bill_type="s", congress=119, stage="INTRODUCED", commemorative=True))
+        db.commit()
+    engine.dispose()
+
+    monkeypatch.setattr(rescore, "corrected_funding", lambda *a, **k: None)
+    conn = sqlite3.connect(path)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM senators")
+    payload = rescore.build_payload(cur, dict(cur.fetchone()), None, None)
+
+    assert [b["commemorative"] for b in payload["sponsoredBills"]] == [True]
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

@@ -294,7 +294,8 @@ export default function AboutPage() {
                   seats actually do. Voting with your party is the norm in a safe seat, so it only
                   counts against a member when they are more loyal than their own party&apos;s
                   members in comparable seats — and breaking more often than them counts in their
-                  favor. Every part of this design was tested against how voters actually respond.
+                  favor, up to a point. Breaking far more than that counts against them again.
+                  Every part of this design was tested against how voters actually respond.
                 </Gist>
                 <P>
                   Measures how far a member&apos;s voting sits from what their seat asks of it — not
@@ -304,21 +305,31 @@ export default function AboutPage() {
                   the chamber itself every time the pipeline runs, not set by hand: a separate line
                   per party, allowed to bend at a swing seat, so a Republican in a Biden-won seat is
                   compared with how Republicans in seats like that really vote. Matching the
-                  expectation scores 50. Breaking more often scores above, breaking less often
-                  scores below, and the scale is set by how widely the chamber varies (the most
-                  out-of-pattern tenth of members reach the ends).
+                  expectation scores 50. Breaking more often scores above, reaching 100 at the gap
+                  the chamber&apos;s most out-of-pattern tenth of members show; past that gap the
+                  score falls at the same rate it rose, back to 50 at twice the gap and 0 at three
+                  times. Breaking less often scores below, more gently: 0 only at four times the
+                  gap, so being more loyal than the norm costs less than breaking far too often. Each party-line roll call counts
+                  once. With fewer than 20 of them the result is pulled toward 50 in proportion, so
+                  a single break in a thin record can&apos;t reach either end.
                 </P>
                 <P>
                   What the ends mean: a 0 or 100 is a relative position, not a verdict. A 0 means
-                  the member breaks with their party far less often than members of their own party
-                  in seats that lean the same way; a 100 means far more often. Because the
+                  the member breaks with their party very much less often than members of their own
+                  party in seats that lean the same way, or far more often still than the
+                  chamber&apos;s most out-of-pattern members; a 100 means as far above the expectation as those
+                  members, and no further. Because the
                   expectation is fitted separately for each party, a member is only ever compared
-                  with their own party&apos;s members, and both parties&apos; average scores sit
-                  near 50. Which members reach an end in a given update depends on the chamber that
-                  year, and a handful can by chance come mostly from one party.
+                  with their own party&apos;s members. Averages sit a little above 50, because
+                  being more loyal than the norm costs less than breaking far too often. Neither
+                  party is favored by design: across every Senate from 1989 to today the two
+                  parties&apos; averages differed by about 2 points, and which party was higher
+                  changed from one Congress to the next. In a given Congress the gap follows who
+                  breaks far past the norm, which can by chance be mostly one party&apos;s
+                  members.
                 </P>
                 <P>
-                  Why symmetric, and why no special treatment for safe seats: through v6.12 a member
+                  Why loyalty is scored too, and why no special treatment for safe seats: through v6.12 a member
                   more loyal than expected was held at neutral, on the argument that loyalty is
                   &quot;unreadable&quot;, and credit for breaking or for a centrist position shrank
                   in safe seats. We tested both choices against 2,545 U.S. House re-election results
@@ -333,10 +344,17 @@ export default function AboutPage() {
                   safe seats as in competitive ones, for voting and for position alike, so neither
                   gets a safe-seat discount now. Members who break from the flank side of their
                   party (Kirkland &amp; Slapin 2017) did not fare worse for it, so their breaks are
-                  not discounted either. The full study, including where the evidence is weak (the
-                  association fades in the 2008 and 2010 elections as House races nationalized, and
-                  the Senate sample is too small to confirm or reject it), is in the project
-                  repository at docs/research/constituent-alignment.md. Confirmation votes on
+                  not discounted either. Why the score turns down past that gap: a member is
+                  elected by a seat and under a party label, so both were tested. Across every
+                  Senate general election from 1990 to 2024, voters in the whole state stopped
+                  rewarding extra breaks at that point; in House primaries from 1990 to 2010, the
+                  member&apos;s own party&apos;s voters gave challenged incumbents about 3 points
+                  less of the primary vote for each further standard deviation of breaking. How
+                  steeply the score falls is a design choice (it mirrors the rise), since no study
+                  estimates it. The full study, including where the evidence is weak (the
+                  association fades after 2008 as elections nationalized, and the Senate does not
+                  confirm the House result for loyalty), is in the project repository at
+                  docs/research/constituent-alignment.md. Confirmation votes on
                   nominations make up a large share of recent Senate roll calls and count at full
                   weight — they are genuine, whipped party-line tests.
                 </P>

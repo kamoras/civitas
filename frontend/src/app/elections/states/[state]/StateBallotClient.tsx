@@ -1004,7 +1004,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
       case "measures":
         return <MeasuresSection ballot={ballot} lookupHref={lookupHref} />;
       case "local":
-        return <TownDetail state={ballot.state} towns={towns} pageElectionDate={ballot.electionDate} />;
+        return <TownDetail key={ballot.state} state={ballot.state} towns={towns} pageElectionDate={ballot.electionDate} />;
       case "news":
         return <CoverageFeed items={ballot.coverage} />;
     }

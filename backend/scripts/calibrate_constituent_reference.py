@@ -24,6 +24,7 @@ import pathlib
 
 from app.database import SessionLocal
 from app.models import Representative, Senator
+from app.pipeline.analyze.population_reference import CONSTITUENT_REFERENCE
 from app.pipeline.analyze.score_calculator import (
     compute_constituent_reference,
     constituent_reference_inputs,
@@ -45,9 +46,13 @@ def main() -> None:
         "_source": (
             "Pre-first-run fallback only: the pipeline recomputes this per chamber every run "
             "(score_calculator.compute_constituent_reference) and writes "
-            "/data/constituent_reference.json, which takes precedence. Measured from the "
-            "current members' stored votes by backend/scripts/calibrate_constituent_reference.py."
+            "/data/constituent_reference.json, which takes precedence. Each chamber's entry is "
+            "either measured from the current members' stored votes by "
+            "backend/scripts/calibrate_constituent_reference.py or kept from the previous file; "
+            "_provenance says which. A kept hand-set prior carries the current statistic stamp "
+            "on purpose (it is not a measurement of any statistic, so it stays usable)."
         ),
+        "_provenance": {},
     }
     db = SessionLocal()
     try:
@@ -57,14 +62,36 @@ def main() -> None:
         }
     finally:
         db.close()
+    measured_now = False
     for chamber, members in chambers.items():
         ref = compute_constituent_reference(constituent_reference_inputs(members))
         if ref is None:
-            print(f"{chamber}: too few members with party-labeled votes; left unchanged")
-            out[chamber] = existing.get(chamber)
+            kept = existing.get(chamber)
+            if not CONSTITUENT_REFERENCE.usable(kept):
+                # Keep the other chamber's fresh measurement; leave this one
+                # out rather than write an entry load() would skip anyway.
+                print(
+                    f"WARNING {chamber}: too few full-confidence members to measure, and the "
+                    f"previous entry isn't usable (missing, or measured on "
+                    f"{(kept or {}).get('statistic')!r}, not {CONSTITUENT_REFERENCE.statistic!r}); "
+                    "left out — before its first measured run this chamber scores neutral"
+                )
+                out["_provenance"][chamber] = "missing: no usable entry to keep"
+                continue
+            print(f"{chamber}: too few full-confidence members; kept the previous entry")
+            out[chamber] = kept
+            out["_provenance"][chamber] = (existing.get("_provenance") or {}).get(
+                chamber, f"kept from the file as of {existing.get('_as_of', 'unknown')}"
+            )
             continue
         out[chamber] = ref
+        out["_provenance"][chamber] = f"measured {out['_as_of']}"
+        measured_now = True
         print(f"{chamber}: {ref}")
+    if not measured_now:
+        # Nothing was measured: keep the file's own date and description.
+        out["_as_of"] = existing.get("_as_of", out["_as_of"])
+        out["_source"] = existing.get("_source", out["_source"])
     OUT.write_text(json.dumps(out, indent=1, sort_keys=True) + "\n")
     print(f"wrote {OUT}")
 

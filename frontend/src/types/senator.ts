@@ -28,8 +28,22 @@ export interface Senator {
     legislativeEffectiveness: number;
     /** Backend-computed weighted overall — never recompute this client-side. */
     overall: number;
-    /** Per-dimension data-sufficiency, keyed by the score fields above. */
-    confidence?: Record<string, "high" | "medium" | "low">;
+    /** Per-dimension data-sufficiency, keyed by the score fields above, plus
+     * how Constituent Alignment's vote part was scored
+     * (score_calculator.calculate_confidence). */
+    confidence?: Partial<
+      Record<
+        | "fundingIndependence"
+        | "promisePersistence"
+        | "constituentAlignment"
+        | "fundingDiversity"
+        | "legislativeEffectiveness",
+        "high" | "medium" | "low"
+      >
+    > & {
+      /** "neutral:few-votes" | "neutral:no-expectation" | "shrunk:<share kept>" | "full" */
+      constituentAlignmentVotePart?: string;
+    };
   };
   funding: {
     totalRaised: number;

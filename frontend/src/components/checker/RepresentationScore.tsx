@@ -146,10 +146,20 @@ export default function RepresentationScore({
   const colorClass = getScoreColor(overall);
   const grade = getScoreGrade(overall);
 
-  const votingBasis: string | undefined =
-    !votingRecord || votingRecord.totalVotes === 0
-      ? "no voting record · defaults to 50"
-      : `${votingRecord.totalVotes} votes tracked`;
+  // How Constituent Alignment's vote part was scored, as the scorer
+  // recorded it (calculate_confidence) — stated, not re-derived here.
+  const votingBasis: string | undefined = (() => {
+    if (!votingRecord || votingRecord.totalVotes === 0) return "no voting record · defaults to 50";
+    const tracked = `${votingRecord.totalVotes} votes tracked`;
+    const status = breakdown.confidence?.constituentAlignmentVotePart;
+    if (status === "neutral:few-votes") return `${tracked} · too few party-line votes, vote part neutral 50`;
+    if (status === "neutral:no-expectation") return `${tracked} · no party norm to compare with, vote part neutral 50`;
+    if (status?.startsWith("shrunk:")) {
+      const kept = Math.round(parseFloat(status.slice("shrunk:".length)) * 100);
+      if (Number.isFinite(kept)) return `${tracked} · few party-line votes, vote part keeps ${kept}% of its distance from 50`;
+    }
+    return tracked;
+  })();
 
   // Surface the FI sub-components so the score is an auditable claim,
   // not a black-box number (matches the methodology on /about).
@@ -172,12 +182,14 @@ export default function RepresentationScore({
   })();
 
   const nBills = sponsoredBills?.length ?? 0;
+  // States the record only. Since v6.14 a small record is not shrunk toward
+  // 50, and zero bills scores 0 or neutral depending on tenure and whether
+  // the bill list downloaded — facts this component doesn't have; the
+  // breakdown's own detail says which applied.
   const effectivenessBasis: string =
     nBills === 0
-      ? "no bill data · defaults to 50"
-      : nBills < 10
-        ? `${nBills} bill${nBills !== 1 ? "s" : ""} sponsored · score shrunk toward 50`
-        : `${nBills} bills sponsored`;
+      ? "no sponsored bills on record"
+      : `${nBills} bill${nBills !== 1 ? "s" : ""} sponsored`;
 
   const scoreBasis: Partial<Record<ScoreKey, string | undefined>> = {
     constituentAlignment: votingBasis,
