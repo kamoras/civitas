@@ -604,14 +604,14 @@ class TestBallotSync:
 
         from app.pipeline import lease
 
-        def crawl(error):
+        def crawl(error, outcomes):
             async def sweep(db, client, cycle):
                 if error is not None:
                     raise error
-                return {"NM": "adopted results", "WY": "none"}
+                return outcomes or {"NM": "adopted results", "WY": "none"}
             return sweep
 
-        def run(*, refused=False, crawl_error=None):
+        def run(*, refused=False, crawl_error=None, crawl_outcomes=None):
             @asynccontextmanager
             async def leases(tier, **_kw):
                 held = refused and tier == lease.BALLOT_SYNC
@@ -623,7 +623,7 @@ class TestBallotSync:
                 patch("app.pipeline.election_pipeline.fetch_all_candidates", return_value=[]),
                 _mock_downstream_pipeline_phases(),
                 patch(
-                    "app.pipeline.election_pipeline.crawl_for_new_sources", side_effect=crawl(crawl_error),
+                    "app.pipeline.election_pipeline.crawl_for_new_sources", side_effect=crawl(crawl_error, crawl_outcomes),
                 ) as crawl_mock,
                 patch("app.pipeline.election_pipeline.sync_confirmed_candidates", return_value={}) as sync,
             ):
@@ -632,6 +632,8 @@ class TestBallotSync:
             step = next(s for s in json.loads(run_row.progress_detail) if s.get("key") == "confirmed_candidates")
             return crawl_mock.call_count, sync.call_count, step
 
+        crawled, synced, step = run(crawl_outcomes={"NM": "error", "WY": "error"})
+        assert crawled == 1 and synced > 0  # every state failed: not a week's crawl done
         crawled, synced, step = run(crawl_error=RuntimeError("a source site is down"))
         assert crawled == 1 and synced > 0 and step["status"] == "done"  # the sync went ahead
         crawled, synced, step = run(refused=True)

@@ -57,7 +57,7 @@ class TestCrawlAdoption:
         monkeypatch.setattr(sc, "discover_filings", no_filings)
         monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"ZZ": ["example.gov"]})
         monkeypatch.setattr(sc, "STRATEGIES", {"tabular": fake_fetch})
-        monkeypatch.setattr(sc, "save_discovered", lambda st, src: saved.update({st: src}) or True)
+        monkeypatch.setattr(sc, "save_discovered", lambda st, src: saved.update({st: src}) is None)
         return saved
 
     @pytest.mark.asyncio
@@ -253,10 +253,17 @@ class TestForgetsBrokenDiscoveries:
         monkeypatch.setattr(sc, "STRATEGIES", {"tabular": broken})
         monkeypatch.setattr(sc, "discovered_states", lambda: {"ZZ"})
         monkeypatch.setattr(sc, "source_for_state", lambda st: saved.get(st))
-        monkeypatch.setattr(sc, "save_discovered", lambda st, src: saved.pop(st))
+        monkeypatch.setattr(sc, "save_discovered", lambda st, src: saved.pop(st) and True)
         outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
         assert outcomes["ZZ"] == "forgotten"
         assert saved == {}
+
+        # A forget that wasn't recorded (a lock race) leaves the broken
+        # source in use: it isn't reported as forgotten.
+        saved["ZZ"] = {"strategy": "tabular"}
+        monkeypatch.setattr(sc, "save_discovered", lambda st, src: False)
+        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert outcomes["ZZ"] == "error"
 
     @pytest.mark.asyncio
     async def test_one_that_still_fetches_survives_a_crawl_that_missed_it(
@@ -285,7 +292,7 @@ class TestForgetsBrokenDiscoveries:
         monkeypatch.setattr(sc, "STRATEGIES", {"tabular": working})
         monkeypatch.setattr(sc, "discovered_states", lambda: {"ZZ"})
         monkeypatch.setattr(sc, "source_for_state", lambda st: saved.get(st))
-        monkeypatch.setattr(sc, "save_discovered", lambda st, src: saved.pop(st))
+        monkeypatch.setattr(sc, "save_discovered", lambda st, src: saved.pop(st) and True)
         outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
         assert outcomes["ZZ"] == "kept"
         assert "ZZ" in saved

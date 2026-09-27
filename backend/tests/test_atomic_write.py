@@ -5,7 +5,7 @@ import os
 
 import pytest
 
-from app.atomic_write import update_json_file, write_text_atomic
+from app.atomic_write import update_json_file, update_shared_file, write_text_atomic
 
 
 @pytest.fixture()
@@ -158,7 +158,7 @@ def test_a_date_that_loses_a_lock_race_is_dropped_not_misfiled(workdir, monkeypa
     primary, fallback = workdir / "dates.json", workdir / "fallback" / "dates.json"
     monkeypatch.setattr(dates, "_PATHS", (str(primary), str(fallback)))
     monkeypatch.setattr(dates, "_cache", None)
-    monkeypatch.setattr(atomic_write, "LOCK_WAIT_S", 0.05)
+    monkeypatch.setattr(atomic_write, "DATA_FILE_WAIT_S", 0.05)
     with open(f"{primary}.lock", "a") as held:
         fcntl.flock(held.fileno(), fcntl.LOCK_EX)
         dates.save("MN", 2026, {"primary": "2026-08-11"})
@@ -182,7 +182,7 @@ def test_the_calendar_and_its_read_marker_land_together(workdir, monkeypatch):
     primary = workdir / "dates.json"
     monkeypatch.setattr(dates, "_PATHS", (str(primary),))
     monkeypatch.setattr(dates, "_cache", None)
-    monkeypatch.setattr(atomic_write, "LOCK_WAIT_S", 0.05)
+    monkeypatch.setattr(atomic_write, "DATA_FILE_WAIT_S", 0.05)
     calendar = {"OH": {"primary": "2028-03-14", "senate": True}, "MN": {"primary": "2028-08-08"}}
     with open(f"{primary}.lock", "a") as held:
         fcntl.flock(held.fileno(), fcntl.LOCK_EX)
@@ -192,3 +192,66 @@ def test_the_calendar_and_its_read_marker_land_together(workdir, monkeypatch):
     assert dates.senate_election_known("OH", 2028) is True
     assert dates.senate_election_known("MN", 2028) is False
     assert dates.primary_date("MN", 2028) == "2028-08-08"
+
+
+
+def test_a_shared_file_is_written_where_reads_find_it(workdir, monkeypatch):
+    """The first path that exists — never a later one on a write failure,
+    and never the cache alone when nothing can be written."""
+    primary, fallback = workdir / "p" / "dates.json", workdir / "f" / "dates.json"
+    fallback.parent.mkdir()
+    fallback.write_text('{"old": 1}')  # only the fallback exists: reads find it first
+    published = []
+    assert update_shared_file(
+        [str(primary), str(fallback)], lambda known: {**known, "new": 1},
+        missing=dict, publish=published.append, what="test",
+    )
+    assert json.loads(fallback.read_text()) == {"old": 1, "new": 1} and not primary.exists()
+
+    import errno
+
+    from app import atomic_write
+
+    def disk_full(*_args):
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(atomic_write, "write_text_atomic", disk_full)  # the file reads find can't be written
+    published.clear()
+    assert not update_shared_file(
+        [str(primary), str(fallback)], lambda known: {**known, "newer": 1},
+        missing=dict, publish=published.append, what="test",
+    )
+    assert not primary.exists() and published == []  # not misfiled, not cache-only
+
+
+def test_a_senate_race_the_calendar_no_longer_lists_is_retracted(workdir, monkeypatch):
+    from app.pipeline.fetch import state_election_dates as dates
+
+    monkeypatch.setattr(dates, "_PATHS", (str(workdir / "dates.json"),))
+    monkeypatch.setattr(dates, "_cache", None)
+    dates.save_calendar(2028, {"OH": {"primary": "2028-03-14", "senate": "2028-11-07"}}, "2027-12-01")
+    assert dates.senate_election_known("OH", 2028) is True
+    dates.save_calendar(2028, {"OH": {"primary": "2028-03-14"}}, "2027-12-08")  # the FEC corrected it
+    assert dates.senate_election_known("OH", 2028) is False
+    assert dates.primary_date("OH", 2028) == "2028-03-14"
+
+
+def test_a_calendar_missing_a_page_is_not_a_calendar(monkeypatch):
+    """Recorded as read, a partial calendar would vouch that the states on
+    its missing pages hold no Senate race."""
+    import asyncio
+
+    from app.pipeline.fetch import fec
+    from app.pipeline.fetch import state_election_dates as dates
+
+    pages = iter([
+        {"results": [{"election_state": "OH", "election_date": "2028-03-14", "office_sought": "S",
+                      "election_type_full": "Primary Election"}], "pagination": {"pages": 2}},
+        None,  # page 2 failed after its retries
+    ])
+
+    async def fetch(_client, _url):
+        return next(pages)
+
+    monkeypatch.setattr(fec, "_fetch_with_retry", fetch)
+    assert asyncio.run(dates.fetch_fec_calendar(None, 2028)) == {}

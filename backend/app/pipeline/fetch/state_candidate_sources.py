@@ -22,7 +22,7 @@ import logging
 import os
 from typing import Any
 
-from app.atomic_write import update_first_writable
+from app.atomic_write import update_shared_file
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +78,7 @@ def _load_discovered() -> dict[str, Any]:
 def save_discovered(state: str, source: dict[str, Any] | None) -> bool:
     """Record (or, with None, forget) what the crawler proved for `state`.
     Never touches the hand-verified file. False when it wasn't recorded
-    (atomic_write.update_first_writable)."""
+    (atomic_write.update_shared_file)."""
     def record(discovered: dict[str, Any]) -> dict[str, Any]:
         if source is None:
             discovered.pop(state.upper(), None)
@@ -91,7 +91,7 @@ def save_discovered(state: str, source: dict[str, Any] | None) -> bool:
         _discovered_cache = discovered
 
     # Into the file as it stands now, under its lock.
-    return update_first_writable(
+    return update_shared_file(
         _DISCOVERED_PATHS, record, missing=lambda: dict(_load_discovered()), publish=publish,
         what=f"the discovered source for {state}", indent=2, sort_keys=True,
     )

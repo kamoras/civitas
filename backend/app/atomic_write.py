@@ -28,14 +28,16 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# How long update_json_file waits for another writer's lock. A holder keeps
-# it for one read and one write of a small file — milliseconds — so a wait
+# How long update_json_file waits for another writer's lock, by default. A
+# holder keeps it for one read and one write — milliseconds, though an fsync
+# on the Pi's SD card under a pipeline's I/O can take seconds — so a wait
 # this long means a stuck writer, not a busy one. The writers are pipeline
 # steps, each on its own thread and event loop (never the API's), so a wait
-# delays only the pipeline that waits; a loop of saves behind a stuck
-# writer costs this much per save, which is why the batchable ones (the
-# FEC calendar) are written in one update.
-LOCK_WAIT_S = 2.0
+# delays only the pipeline that waits. A loop of saves (the crawl, a state
+# each) passes a shorter one (DATA_FILE_WAIT_S): behind a stuck writer it
+# pays that per save.
+LOCK_WAIT_S = 10.0
+DATA_FILE_WAIT_S = 2.0
 
 
 class LockTimeout(Exception):
@@ -79,6 +81,7 @@ def update_json_file(
     missing: Callable[[], dict[str, Any]] = dict,
     written: Callable[[dict[str, Any]], None] | None = None,
     end: str = "",
+    wait: float | None = None,
     **dump_kwargs: Any,
 ) -> dict[str, Any]:
     """Read `path`'s JSON object, `update` it, and write it back whole —
@@ -87,13 +90,14 @@ def update_json_file(
     that doesn't exist or doesn't hold a JSON object. `written(data)` runs
     before the lock is released — for a module cache, so writers publish
     their copies in the order they wrote them. `end` follows the JSON (a
-    trailing newline). Returns what was written.
+    trailing newline). `wait` bounds the lock wait (LOCK_WAIT_S by default).
+    Returns what was written.
     Raises OSError when the file can't be written, LockTimeout when another
     writer holds the lock past LOCK_WAIT_S."""
     path = os.fspath(path)
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with open(f"{path}.lock", "a") as lock:
-        _lock(lock.fileno(), path)  # released when the file closes
+        _lock(lock.fileno(), path, LOCK_WAIT_S if wait is None else wait)  # released when the file closes
         try:
             with open(path, encoding="utf-8") as fh:
                 current = json.load(fh)
@@ -108,19 +112,19 @@ def update_json_file(
         return updated
 
 
-def _lock(fd: int, path: str) -> None:
-    give_up = time.monotonic() + LOCK_WAIT_S
+def _lock(fd: int, path: str, wait: float) -> None:
+    give_up = time.monotonic() + wait
     while True:
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             return
         except BlockingIOError:
             if time.monotonic() >= give_up:
-                raise LockTimeout(f"{path} stayed locked by another writer for {LOCK_WAIT_S}s") from None
+                raise LockTimeout(f"{path} stayed locked by another writer for {wait}s") from None
             time.sleep(0.02)
 
 
-def update_first_writable(
+def update_shared_file(
     paths: Iterable[str],
     change: Callable[[dict[str, Any]], dict[str, Any]],
     *,
@@ -129,22 +133,28 @@ def update_first_writable(
     what: str,
     **dump_kwargs: Any,
 ) -> bool:
-    """`change` a shared data file with a module cache: the first writable
-    of `paths` (update_json_file), `publish(data)` updating the cache under
-    the file's lock. True when the change took effect — written, or, with
-    nowhere writable at all, applied to the cache alone. False when another
-    writer held the file past LOCK_WAIT_S: nothing is recorded (the file
-    and the cache agree), and nothing goes to a later path, where the next
-    read wouldn't look. The caller says what that costs."""
-    for path in paths:
+    """`change` a shared data file that has a module cache, returning
+    whether the change was recorded. The file is the first of `paths` that
+    exists — the one reads find first — or, when none does yet, the first
+    that can be created; `publish(data)` updates the cache under its lock.
+    A failure on that file (another writer holding it past
+    DATA_FILE_WAIT_S, a full disk) records nothing, anywhere: never a later
+    path, which reads wouldn't find, and never the cache alone, which the
+    next process wouldn't have. The file and the cache agree; the caller
+    says what the loss costs."""
+    paths = list(paths)
+    existing = [path for path in paths if os.path.exists(path)]
+    for path in existing[:1] or paths:
         try:
-            update_json_file(path, change, missing=missing, written=publish, **dump_kwargs)
+            update_json_file(path, change, missing=missing, written=publish, wait=DATA_FILE_WAIT_S, **dump_kwargs)
             return True
         except LockTimeout:
             logger.warning("%s not recorded — %s stayed locked by another writer", what, path)
             return False
         except OSError:
-            continue
-    logger.warning("Nowhere writable to record %s", what)
-    publish(change(dict(missing())))
-    return True
+            if existing:
+                logger.warning("%s not recorded — %s couldn't be written", what, path, exc_info=True)
+                return False
+            continue  # not created yet: the next place it can be
+    logger.warning("%s not recorded — nowhere writable (%s)", what, ", ".join(paths))
+    return False
