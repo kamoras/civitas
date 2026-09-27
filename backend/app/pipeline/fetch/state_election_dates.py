@@ -49,13 +49,13 @@ from typing import Any
 
 import httpx
 
-from app.atomic_write import update_shared_file
+from app.atomic_write import LOCK_WAIT_S, update_shared_file
 
 logger = logging.getLogger(__name__)
 
-# Three pages covers a cycle's ~240 federal election dates with headroom;
-# a fourth would mean the endpoint's shape changed, which should stop
-# rather than page forever.
+# Three pages covers a cycle's ~240 federal election dates; the cap leaves
+# room to grow. A listing past it means the endpoint's shape changed: it
+# isn't paged through, and the calendar isn't recorded (fetch_fec_calendar).
 _FEC_MAX_PAGES = 6
 
 _PATHS = (
@@ -129,28 +129,20 @@ def save_calendar(cycle: int, calendar: dict[str, dict], read_on: str) -> bool:
     state, and that it was read, in one update: every state's dates and the
     "read" marker land together or not at all, so the marker never vouches
     for a state whose dates weren't recorded (senate_election_known would
-    read that state's missing Senate race as "none"). The calendar is the
-    only source of the Senate date, so it replaces it outright — a Senate
-    election the FEC no longer lists is retracted, not kept by the merge
-    that the per-state fields get."""
+    read that state's missing Senate race as "none"). Merged like every
+    other save: a date is never retracted by a calendar that stops listing
+    it (the FEC relabelling an election-day special, say), which would
+    delete a real race."""
     changes = [_merged(state, cycle, dates) for state, dates in calendar.items()]
     changes.append(_merged(_CALENDAR_KEY, cycle, {"read": read_on}))
-    senate = {f"{cycle}-{state.upper()}": dates.get("senate") for state, dates in calendar.items()}
-    prefix = f"{cycle}-"
 
     def merge_all(known: dict[str, Any]) -> dict[str, Any]:
         for change in changes:
             known = change(known)
-        for key, entry in list(known.items()):
-            if key.startswith(prefix) and key != f"{prefix}{_CALENDAR_KEY}" and isinstance(entry, dict):
-                # A new dict, never an edit: entries can be the cache's own.
-                entry = {k: v for k, v in entry.items() if k != "senate"}
-                if senate.get(key):
-                    entry["senate"] = senate[key]
-                known[key] = entry
         return known
 
-    return _update(merge_all, f"the {cycle} election calendar")
+    # Once a run, so the longer wait (atomic_write.LOCK_WAIT_S).
+    return _update(merge_all, f"the {cycle} election calendar", wait=LOCK_WAIT_S)
 
 
 def _merged(state: str, cycle: int, dates: dict) -> Callable[[dict[str, Any]], dict[str, Any]]:
@@ -168,11 +160,12 @@ def _publish(known: dict[str, Any]) -> None:
     _cache = known
 
 
-def _update(change: Callable[[dict[str, Any]], dict[str, Any]], what: str) -> bool:
+def _update(change: Callable[[dict[str, Any]], dict[str, Any]], what: str, wait: float | None = None) -> bool:
     # Merged into the file as it stands now, under its lock: the source
     # crawl and a ballot sync both write here.
     return update_shared_file(
-        _PATHS, change, missing=lambda: dict(_load()), publish=_publish, what=what, indent=2, sort_keys=True,
+        _PATHS, change, missing=lambda: dict(_load()), publish=_publish, what=what, wait=wait,
+        indent=2, sort_keys=True,
     )
 
 
@@ -200,13 +193,16 @@ async def fetch_fec_calendar(client: httpx.AsyncClient, cycle: int) -> dict[str,
         )
         if not payload:
             return {}  # a failed page: all or nothing
+        pages = (payload.get("pagination") or {}).get("pages", 1)
+        if pages > _FEC_MAX_PAGES:
+            # Decided on the first page: none of it would be recorded.
+            logger.warning("FEC election calendar runs to %d pages (cap %d) — not recording a partial one",
+                           pages, _FEC_MAX_PAGES)
+            return {}
         rows += payload.get("results") or []
-        if page >= (payload.get("pagination") or {}).get("pages", 1):
+        if page >= pages:
             break
         page += 1
-    else:
-        logger.warning("FEC election calendar runs past %d pages — not recording a partial one", _FEC_MAX_PAGES)
-        return {}
 
     calendar: dict[str, dict] = {}
     for row in sorted(rows, key=lambda r: r.get("election_date") or ""):

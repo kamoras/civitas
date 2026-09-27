@@ -224,16 +224,16 @@ def test_a_shared_file_is_written_where_reads_find_it(workdir, monkeypatch):
     assert not primary.exists() and published == []  # not misfiled, not cache-only
 
 
-def test_a_senate_race_the_calendar_no_longer_lists_is_retracted(workdir, monkeypatch):
+def test_a_calendar_that_stops_listing_a_senate_race_does_not_delete_it(workdir, monkeypatch):
+    """Merged like any save: the FEC relabelling an election-day special
+    (which the calendar skips) mustn't retract a real race."""
     from app.pipeline.fetch import state_election_dates as dates
 
     monkeypatch.setattr(dates, "_PATHS", (str(workdir / "dates.json"),))
     monkeypatch.setattr(dates, "_cache", None)
     dates.save_calendar(2028, {"OH": {"primary": "2028-03-14", "senate": "2028-11-07"}}, "2027-12-01")
+    dates.save_calendar(2028, {"OH": {"primary": "2028-03-14"}}, "2027-12-08")
     assert dates.senate_election_known("OH", 2028) is True
-    dates.save_calendar(2028, {"OH": {"primary": "2028-03-14"}}, "2027-12-08")  # the FEC corrected it
-    assert dates.senate_election_known("OH", 2028) is False
-    assert dates.primary_date("OH", 2028) == "2028-03-14"
 
 
 def test_a_calendar_missing_a_page_is_not_a_calendar(monkeypatch):

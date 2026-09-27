@@ -808,18 +808,12 @@ async def _weekly_source_crawl(db: Session, client, cycle: int) -> dict[str, str
         if not _crawl_due(db):
             return {}
         leads = await crawl_for_new_sources(db, client, cycle)
-        if leads and all(outcome == "error" for outcome in leads.values()):
-            # Every state failed — the network, not the states: not a week's
-            # crawl done. (A few states failing is: they wait for next week.)
-            logger.warning("Source crawl: every state failed — it runs again tomorrow")
-        else:
-            api_cache_set(db, _CRAWL_TIER, _CRAWL_KEY, {"completedAt": utcnow().isoformat()})
+        api_cache_set(db, _CRAWL_TIER, _CRAWL_KEY, {"completedAt": utcnow().isoformat()})
     except Exception:
         db.rollback()
         logger.exception("Source crawl failed — the sync goes ahead, and the crawl runs again tomorrow")
         return {}
-    # A results source ("adopted ...") or a filing list ("filings adopted ...").
-    adopted = {s: r for s, r in leads.items() if "adopted" in r}
+    adopted = {s: r for s, r in leads.items() if r.startswith("adopted")}
     logger.info(
         "Source crawl: %d state(s) adopted%s",
         len(adopted), f" — {adopted}" if adopted else "",

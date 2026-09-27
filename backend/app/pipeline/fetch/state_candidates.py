@@ -560,9 +560,17 @@ async def crawl_for_new_sources(
     One state's failure (an adapter raising on a changed page) is that
     state's "error", not the sweep's end: every other state is still
     crawled, and it is crawled again on the next weekly sweep.
+
+    A discovered source is forgotten only once this crawl has reached some
+    source: during an outage every fetch fails, and without that check the
+    crawl forgot every discovered source it tried. One that fails before
+    anything has been reached waits for the end of the sweep, and is
+    forgotten then only if something was.
     """
     hand_verified = (_sources_file().get("states") or {})
     outcomes: dict[str, str] = {}
+    reachable = False  # has any fetch this crawl succeeded (the network is up)?
+    deferred: list[str] = []  # broken sources seen before anything was reached
     for state in sorted(ELECTION_DOMAINS):
         try:
             hand = hand_verified.get(state)
@@ -576,6 +584,7 @@ async def crawl_for_new_sources(
                 strategy = STRATEGIES.get(hand.get("strategy"))
                 still_works = await strategy(client, cycle, state, hand) if strategy else None
                 if still_works is not None:
+                    reachable = True
                     # A primary date moves once a cycle, so it is read on the
                     # weekly pass rather than nightly — off the same feed the
                     # state's results already come from, never a stored
@@ -613,7 +622,12 @@ async def crawl_for_new_sources(
                 outcomes[state] = "error"
                 continue
             if not found:
-                outcomes[state] = await _forget_if_broken(client, cycle, state)
+                outcomes[state] = await _forget_if_broken(client, cycle, state, forget=reachable)
+                if outcomes[state] == "kept":
+                    reachable = True
+                elif outcomes[state] == "broken":
+                    deferred.append(state)
+                    continue
                 # A state with no usable RESULTS source can still publish a
                 # filing list, and before its primary that is the only answer
                 # there is — so it is looked for either way.
@@ -623,6 +637,7 @@ async def crawl_for_new_sources(
                         outcomes[state] = filings
                 continue
 
+            reachable = True  # discovery found a working page
             strategy = STRATEGIES.get(found.get("strategy"))
             records = await strategy(client, cycle, state, found) if strategy else None
             if records is None:
@@ -657,6 +672,17 @@ async def crawl_for_new_sources(
         except Exception:
             logger.exception("Source crawl failed for %s — moving on to the next state", state)
             outcomes[state] = "error"
+    if deferred:
+        if reachable:
+            for state in deferred:
+                outcomes[state] = _forget(state, source_for_state(state) or {})
+        else:
+            logger.warning(
+                "Source crawl reached no source at all — the network, not the sources: "
+                "forgetting none of %s", ", ".join(deferred),
+            )
+            for state in deferred:
+                outcomes[state] = "unreachable"
     return outcomes
 
 
@@ -729,7 +755,7 @@ def _discovered_source(state: str) -> dict | None:
     return _load_discovered().get(state.upper())
 
 
-async def _forget_if_broken(client: httpx.AsyncClient, cycle: int, state: str) -> str:
+async def _forget_if_broken(client: httpx.AsyncClient, cycle: int, state: str, *, forget: bool = True) -> str:
     """Drop a previously discovered source that has stopped working.
 
     The other half of self-healing: finding a state's new location is only
@@ -737,7 +763,9 @@ async def _forget_if_broken(client: httpx.AsyncClient, cycle: int, state: str) -
     even when this week's crawl didn't re-find it (a page can be down for
     an hour), so only one that actually fails is forgotten — and the state
     then falls back to showing every FEC filer, which is where it was
-    before anything was discovered.
+    before anything was discovered. With `forget` False (nothing reached
+    yet this crawl — maybe an outage), a failing source is only reported
+    "broken", for the caller to decide.
     """
     if state not in discovered_states():
         return "none"
@@ -746,6 +774,12 @@ async def _forget_if_broken(client: httpx.AsyncClient, cycle: int, state: str) -
     records = await strategy(client, cycle, state, source) if strategy else None
     if records is not None:
         return "kept"
+    if not forget:
+        return "broken"
+    return _forget(state, source)
+
+
+def _forget(state: str, source: dict) -> str:
     logger.warning(
         "Forgetting the discovered source for %s — it no longer fetches: %s",
         state, source.get("source_name"),

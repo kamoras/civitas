@@ -632,8 +632,6 @@ class TestBallotSync:
             step = next(s for s in json.loads(run_row.progress_detail) if s.get("key") == "confirmed_candidates")
             return crawl_mock.call_count, sync.call_count, step
 
-        crawled, synced, step = run(crawl_outcomes={"NM": "error", "WY": "error"})
-        assert crawled == 1 and synced > 0  # every state failed: not a week's crawl done
         crawled, synced, step = run(crawl_error=RuntimeError("a source site is down"))
         assert crawled == 1 and synced > 0 and step["status"] == "done"  # the sync went ahead
         crawled, synced, step = run(refused=True)

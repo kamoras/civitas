@@ -41,7 +41,8 @@ DATA_FILE_WAIT_S = 2.0
 
 
 class LockTimeout(Exception):
-    """Another writer held a file's lock past LOCK_WAIT_S. Not an OSError:
+    """Another writer held a file's lock past the caller's wait
+    (update_json_file's `wait`). Not an OSError:
     callers take OSError to mean "this path isn't writable, try the next",
     and a change written to a fallback path because of a lock race would be
     lost the next time the primary is read. The update didn't happen; the
@@ -93,7 +94,7 @@ def update_json_file(
     trailing newline). `wait` bounds the lock wait (LOCK_WAIT_S by default).
     Returns what was written.
     Raises OSError when the file can't be written, LockTimeout when another
-    writer holds the lock past LOCK_WAIT_S."""
+    writer holds the lock past `wait`."""
     path = os.fspath(path)
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with open(f"{path}.lock", "a") as lock:
@@ -131,30 +132,46 @@ def update_shared_file(
     missing: Callable[[], dict[str, Any]],
     publish: Callable[[dict[str, Any]], None],
     what: str,
+    wait: float | None = None,
     **dump_kwargs: Any,
 ) -> bool:
     """`change` a shared data file that has a module cache, returning
-    whether the change was recorded. The file is the first of `paths` that
-    exists — the one reads find first — or, when none does yet, the first
-    that can be created; `publish(data)` updates the cache under its lock.
-    A failure on that file (another writer holding it past
-    DATA_FILE_WAIT_S, a full disk) records nothing, anywhere: never a later
-    path, which reads wouldn't find, and never the cache alone, which the
-    next process wouldn't have. The file and the cache agree; the caller
-    says what the loss costs."""
+    whether the change was recorded. The file is the one reads use — the
+    first of `paths` that holds a readable JSON object, as the loaders
+    take it — or, when none does yet, the first that can be written;
+    `publish(data)` updates the cache under its lock. A failure on the
+    file reads use (another writer holding it past `wait`, DATA_FILE_WAIT_S
+    by default; a full disk) records nothing, anywhere: never another path,
+    which reads wouldn't find, and never the cache alone, which the next
+    process wouldn't have. The file and the cache agree; the caller says
+    what the loss costs."""
     paths = list(paths)
-    existing = [path for path in paths if os.path.exists(path)]
-    for path in existing[:1] or paths:
+    wait = DATA_FILE_WAIT_S if wait is None else wait
+    read = _read_path(paths)
+    for path in [read] if read else paths:
         try:
-            update_json_file(path, change, missing=missing, written=publish, wait=DATA_FILE_WAIT_S, **dump_kwargs)
+            update_json_file(path, change, missing=missing, written=publish, wait=wait, **dump_kwargs)
             return True
         except LockTimeout:
             logger.warning("%s not recorded — %s stayed locked by another writer", what, path)
             return False
         except OSError:
-            if existing:
+            if read:
                 logger.warning("%s not recorded — %s couldn't be written", what, path, exc_info=True)
                 return False
-            continue  # not created yet: the next place it can be
+            continue  # nothing to read yet: the next place it can be written
     logger.warning("%s not recorded — nowhere writable (%s)", what, ", ".join(paths))
     return False
+
+
+def _read_path(paths: list[str]) -> str | None:
+    """The first of `paths` holding a readable JSON object: the file a
+    loader that skips missing and unreadable ones reads."""
+    for path in paths:
+        try:
+            with open(path, encoding="utf-8") as fh:
+                if isinstance(json.load(fh), dict):
+                    return path
+        except (OSError, ValueError):
+            continue
+    return None
