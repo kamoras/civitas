@@ -660,6 +660,31 @@ class TestAWeakerSourceNeverPrunesTheCertifiedBallot:
         await sc.sync_confirmed_candidates(db_session, None, 2026)
         assert self._ids(db_session) == ["S0TX", "ballot:2026-SEN-TX:gail-allred"]
 
+    @pytest.mark.parametrize("order", ["mary_first", "john_first"])
+    def test_a_same_surname_same_party_candidate_is_not_taken_for_another(self, db_session, order):
+        """A top-four race can list Mary Smith (no FEC row) beside John
+        Smith (FEC-filed): John's match must never drop Mary's row."""
+        _race(db_session, "2026-SEN-AK", "AK", office="S")
+        _candidate(db_session, "S1", "2026-SEN-AK", "SMITH, JOHN", party="REP")
+        _candidate(db_session, "S2", "2026-SEN-AK", "SMITH, ROBERT", party="REP")
+        db_session.commit()
+        mary = {"office": "S", "district": None, "party": "R", "last_name": "SMITH", "display_name": "Mary Smith"}
+        john = {"office": "S", "district": None, "party": "R", "last_name": "SMITH", "display_name": "John Smith"}
+        records = [mary, john] if order == "mary_first" else [john, mary]
+        sc._apply_ballot(db_session, 2026, "AK", records, keep_unlisted=True, authoritative=True)
+        assert "ballot:2026-SEN-AK:mary-smith" in self._ids(db_session)
+        sc._apply_ballot(db_session, 2026, "AK", [john], keep_unlisted=True, authoritative=False, prune=False)
+        assert "ballot:2026-SEN-AK:mary-smith" in self._ids(db_session)
+
+    def test_one_person_spelled_two_ways_keeps_one_row(self, db_session):
+        _race(db_session, "2026-HOUSE-CO-1", "CO", office="H", district=1)
+        db_session.commit()
+        for name in ("Jane Q. Doe", "Jane Doe", "Jane Q. Doe"):
+            sc._apply_ballot(db_session, 2026, "CO", [
+                {"office": "H", "district": 1, "party": "G", "last_name": "DOE", "display_name": name},
+            ], keep_unlisted=True, authoritative=False, prune=False)
+        assert len([i for i in self._ids(db_session) if i.startswith("ballot:")]) == 1
+
     def test_a_state_with_no_certified_source_still_prunes(self):
         assert sc._may_prune({"strategy": "clarity"}, {"strategy": "clarity"}) is True
         assert sc._may_prune({"general_ballot_complete": True}, {"strategy": "tabular"}) is False

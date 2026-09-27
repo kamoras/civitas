@@ -393,6 +393,13 @@ def _keep_ballot_only(db: Session, race: Race, record: dict) -> str | None:
     cid = f"{BALLOT_ONLY_ID_PREFIX}{race.id}:{slug}"
     cand = db.query(Candidate).filter(Candidate.id == cid).first()
     if cand is None:
+        # The same person another source spelled differently ("Jane Q. Doe"
+        # and "Jane Doe") keeps one row; minting a second showed them twice
+        # wherever nothing prunes (_may_prune).
+        cand = _placeholder_for(db, race, record)
+        if cand is not None:
+            cid = cand.id
+    if cand is None:
         cand = Candidate(id=cid, race_id=race.id)
         db.add(cand)
     cand.name = _fec_style_name(display, record["last_name"])
@@ -473,7 +480,7 @@ def _apply_ballot(
             match.confirmed_general = True
             db.commit()
         _note_ballot_name(db, match, record)
-        _drop_replaced_placeholder(db, race, record)
+        _drop_replaced_placeholder(db, race, record, ballot_only)
         listed[race.id].add(match.id)
         confirmed += 1
     if keep_unlisted and prune:
@@ -532,25 +539,42 @@ def _unconfirm_off_ballot(db: Session, listed: dict[str, set[str]]) -> int:
     return changed
 
 
-def _drop_replaced_placeholder(db: Session, race: Race, record: dict) -> None:
-    """A record that now matches an FEC candidate replaces any ballot-only
-    row this race holds for the same person (they filed since). Part of
-    _prune_ballot_only's job, but not a judgement about who is on the
-    ballot, so it runs whatever source is answering — else the person is
-    shown twice while a weaker source answers."""
+def _placeholder_for(db: Session, race: Race, record: dict) -> Candidate | None:
+    """This race's ballot-only row for the same PERSON as `record`, if one
+    exists: same party, same surname and same given name. Nothing looser —
+    a surname and party alone would take Mary Smith's row for John Smith's
+    (a top-four race can list both). None when the record has no given
+    name to prove it with."""
+    display = (record.get("display_name") or "").strip()
     party = PARTY_CODE_MAP.get(record.get("party") or "")
-    # Same party only: a surname alone would take a Green Smith for the
-    # Republican Smith who just matched.
-    placeholders = [
-        c for c in db.query(Candidate)
+    if not display or not party:
+        return None
+    wanted = _fec_style_name(display, record["last_name"])
+    surname, given = _candidate_surname(wanted), _first_name_key(wanted)
+    if not given:
+        return None
+    for cand in (
+        db.query(Candidate)
         .filter(Candidate.race_id == race.id, Candidate.id.startswith(BALLOT_ONLY_ID_PREFIX))
         .all()
-        if party and c.party == party
-    ]
-    if not placeholders:
-        return
-    same = _match_candidate(placeholders, record["last_name"], record["party"], record.get("display_name"))
-    if same is not None:
+    ):
+        if (cand.party == party and _candidate_surname(cand.name or "") == surname
+                and _first_name_key(cand.name or "") == given):
+            return cand
+    return None
+
+
+def _drop_replaced_placeholder(
+    db: Session, race: Race, record: dict, keep: set[str] = frozenset(),
+) -> None:
+    """A record that now matches an FEC candidate replaces this race's
+    ballot-only row for the same person (they filed since). Part of
+    _prune_ballot_only's job, but not a judgement about who is on the
+    ballot, so it runs whatever source is answering — else the person is
+    shown twice while a weaker source answers. A row this pass itself kept
+    (`keep`) is someone else's, by construction."""
+    same = _placeholder_for(db, race, record)
+    if same is not None and same.id not in keep:
         db.delete(same)
         db.commit()
         logger.info("%s: dropped ballot-only %s, now an FEC candidate", race.id, same.id)
