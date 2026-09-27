@@ -22,7 +22,7 @@ import logging
 import os
 from typing import Any
 
-from app.atomic_write import shared_file_path, update_shared_file
+from app.atomic_write import load_shared_file, update_shared_file
 
 logger = logging.getLogger(__name__)
 
@@ -62,18 +62,8 @@ def _load_discovered() -> dict[str, Any]:
     global _discovered_cache
     if _discovered_cache is not None:
         return _discovered_cache
-    # The one file writers use too (atomic_write.shared_file_path).
-    path = shared_file_path(_DISCOVERED_PATHS)
-    _discovered_cache = {}
-    if path is not None:
-        try:
-            with open(path, encoding="utf-8") as fh:
-                loaded = json.load(fh)
-            _discovered_cache = loaded if isinstance(loaded, dict) else {}
-        except FileNotFoundError:
-            pass
-        except Exception:
-            logger.exception("Failed to read discovered sources file %s", path)
+    # Assigned once read: a reader on another thread never sees it half-set.
+    _discovered_cache = load_shared_file(_DISCOVERED_PATHS, "discovered sources")
     return _discovered_cache
 
 

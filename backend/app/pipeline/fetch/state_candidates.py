@@ -730,12 +730,15 @@ def _discovered_source(state: str) -> dict | None:
     return _load_discovered().get(state.upper())
 
 
-# How long a discovered source must keep failing, across weekly crawls,
-# before it is forgotten: a failure on one crawl night is as likely the
-# network (an outage, a blip, a host down for an hour) as the source, and
-# forgetting a working source costs its state a week of confirmed
-# candidates. Two sweeps apart, a failure is the source's.
-_FORGET_AFTER = timedelta(days=13)
+# A discovered results source is forgotten on its second weekly crawl in a
+# row that finds it failing, not its first: a failure on one crawl night is
+# as likely the network (an outage, a blip, a host down for an hour) as the
+# source, and forgetting a working source costs its state a week of
+# confirmed candidates. The mark of the first failure (failing_since) counts
+# as "the week before" between these ages; an older one is stale — the
+# source worked for weeks since — and starts the count again.
+_SECOND_FAILURE_AFTER = timedelta(days=6)
+_STALE_FAILURE_AFTER = timedelta(days=20)
 
 
 async def _forget_if_broken(client: httpx.AsyncClient, cycle: int, state: str) -> str:
@@ -743,43 +746,61 @@ async def _forget_if_broken(client: httpx.AsyncClient, cycle: int, state: str) -
 
     The other half of self-healing: finding a state's new location is only
     useful if the dead one goes away. A source that still fetches is kept
-    even when this week's crawl didn't re-find it, and one that fails is
-    marked failing (and kept in use) until it has failed for _FORGET_AFTER —
-    so no single night's outage, early or late in the sweep, forgets a
-    working source; one that recovers is simply unmarked. Only then is it
-    forgotten, and the state falls back to showing every FEC filer, which is
-    where it was before anything was discovered. An entry holding only a
-    filing list has no results source to fail.
+    even when this week's crawl didn't re-find it (and any failing mark on
+    it is cleared). A results source that fails is marked failing, and kept
+    in use, the first week, and forgotten the next if it fails again
+    (_SECOND_FAILURE_AFTER) — so one night's outage forgets nothing. An
+    entry with no results source it can fetch — a filing list alone, or a
+    strategy that no longer exists — is forgotten at once, as before: the
+    caller then re-proves any filing list, which is how one is re-verified
+    each week. Forgotten, the state falls back to showing every FEC filer,
+    which is where it was before anything was discovered.
     """
     if state not in discovered_states():
         return "none"
     effective = source_for_state(state) or {}
     strategy = STRATEGIES.get(effective.get("strategy"))
-    if strategy is None:
-        return "kept"  # a filing list alone: nothing to fetch results from
-    records = await strategy(client, cycle, state, effective)
-    source = _discovered_source(state) or {}  # the stored entry the mark lives on
-    since = source.get("failing_since")
+    records = await strategy(client, cycle, state, effective) if strategy else None
+    stored = _discovered_source(state)  # read now: another writer may have changed it meanwhile
+    if stored is None:
+        return "none"  # gone meanwhile: nothing to keep, mark or forget
+    since = _failing_since(stored)
     if records is not None:
-        if since and not save_discovered(state, {k: v for k, v in source.items() if k != "failing_since"}):
+        if since is not None and not save_discovered(
+            state, {k: v for k, v in stored.items() if k != "failing_since"},
+        ):
             return "error"
         return "kept"
     today = utcnow().date()
-    if not since:
-        if not save_discovered(state, {**source, "failing_since": today.isoformat()}):
-            return "error"
-        logger.warning("The discovered source for %s isn't fetching — kept, and forgotten if it still isn't "
-                       "in %d days: %s", state, _FORGET_AFTER.days, source.get("source_name"))
-        return "failing"
-    if today - date.fromisoformat(since) < _FORGET_AFTER:
+    first_failure = since is None or not (
+        _SECOND_FAILURE_AFTER <= today - since <= _STALE_FAILURE_AFTER
+    )
+    if strategy is not None and first_failure:
+        if since is None or today - since > _STALE_FAILURE_AFTER or today < since:
+            if not save_discovered(state, {**stored, "failing_since": today.isoformat()}):
+                return "error"
+            logger.warning(
+                "The discovered source for %s isn't fetching — kept, and forgotten if next week's "
+                "crawl finds it failing too: %s", state, effective.get("source_name"),
+            )
         return "failing"
     logger.warning(
-        "Forgetting the discovered source for %s — it hasn't fetched since %s: %s",
-        state, since, source.get("source_name"),
+        "Forgetting the discovered source for %s — %s: %s", state,
+        f"failing since {since}" if strategy else "no results source it can fetch",
+        effective.get("source_name"),
     )
     if not save_discovered(state, None):
         return "error"  # still in use: not "forgotten"
     return "forgotten"
+
+
+def _failing_since(stored: dict) -> "date | None":
+    """The stored failing mark, or None — a malformed one included (it
+    starts the count again rather than wedging the state)."""
+    try:
+        return date.fromisoformat(stored["failing_since"])
+    except (KeyError, TypeError, ValueError):
+        return None
 
 
 # A comma after these is part of the name ("Olszewski, Jr."), not a

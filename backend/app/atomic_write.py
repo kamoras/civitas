@@ -127,20 +127,45 @@ def _lock(fd: int, path: str, wait: float) -> None:
 
 def shared_file_path(paths: Iterable[str]) -> str | None:
     """The one file of a shared data file's candidate `paths` that both its
-    loader and its writers use: the first that exists, or — before it
-    exists anywhere — the first whose directory does (the data volume in
-    production, the checkout's data/ in development). Chosen by existence
-    alone, never by a read or write succeeding, so a file that can't be
-    read or written is a failure on that file, not a quiet switch to
-    another that the next process wouldn't look at."""
+    loader (load_shared_file) and its writers (update_shared_file) use: the
+    first that exists; before it exists anywhere, the first in a directory
+    that exists and is writable (the data volume in production); failing
+    that, the last, its directory created (the checkout's data/ in
+    development). Chosen before any read or write, never by one failing, so
+    a file that can't be read or written is a failure on that file, not a
+    quiet switch to another that the next process wouldn't look at."""
     paths = list(paths)
     for path in paths:
         if os.path.exists(path):
             return path
     for path in paths:
-        if os.path.isdir(os.path.dirname(os.path.abspath(path))):
+        directory = os.path.dirname(os.path.abspath(path))
+        if os.path.isdir(directory) and os.access(directory, os.W_OK):
             return path
-    return None
+    if not paths:
+        return None
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(paths[-1])), exist_ok=True)
+    except OSError:
+        return None
+    return paths[-1]
+
+
+def load_shared_file(paths: Iterable[str], what: str) -> dict[str, Any]:
+    """A shared data file's contents ({} when it doesn't exist yet, or can't
+    be read — logged), from the file shared_file_path picks."""
+    path = shared_file_path(paths)
+    if path is None:
+        return {}
+    try:
+        with open(path, encoding="utf-8") as fh:
+            loaded = json.load(fh)
+    except FileNotFoundError:
+        return {}
+    except Exception:
+        logger.exception("Failed to read %s from %s", what, path)
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
 
 
 def update_shared_file(

@@ -40,7 +40,6 @@ Read weekly rather than nightly (see crawl_for_new_sources): a date moves
 once a cycle, and there is nothing to gain from asking every night.
 """
 
-import json
 import logging
 import os
 import re
@@ -49,7 +48,7 @@ from typing import Any
 
 import httpx
 
-from app.atomic_write import LOCK_WAIT_S, shared_file_path, update_shared_file
+from app.atomic_write import LOCK_WAIT_S, load_shared_file, update_shared_file
 
 logger = logging.getLogger(__name__)
 
@@ -70,18 +69,8 @@ def _load() -> dict[str, Any]:
     global _cache
     if _cache is not None:
         return _cache
-    # The one file writers use too (atomic_write.shared_file_path).
-    path = shared_file_path(_PATHS)
-    _cache = {}
-    if path is not None:
-        try:
-            with open(path, encoding="utf-8") as fh:
-                loaded = json.load(fh)
-            _cache = loaded if isinstance(loaded, dict) else {}
-        except FileNotFoundError:
-            pass
-        except Exception:
-            logger.exception("Failed to read election dates file %s", path)
+    # Assigned once read: a reader on another thread never sees it half-set.
+    _cache = load_shared_file(_PATHS, "election dates")
     return _cache
 
 
@@ -131,30 +120,21 @@ def save_calendar(cycle: int, calendar: dict[str, dict], read_on: str) -> bool:
     state, and that it was read, in one update: every state's dates and the
     "read" marker land together or not at all, so the marker never vouches
     for a state whose dates weren't recorded (senate_election_known would
-    read that state's missing Senate race as "none"). The calendar is the
-    only source of the Senate date and lists every Senate general, regular
-    or special (fetch_fec_calendar), so it replaces that date outright: a
-    Senate election the FEC stops listing is retracted, where a merge would
-    keep vouching for it — the phantom race senate_election_known exists to
-    prevent. The per-state fields (primary, runoff) merge as in save()."""
-    changes = [_merged(state, cycle, {k: v for k, v in dates.items() if k != "senate"})
-               for state, dates in calendar.items()]
+    read that state's missing Senate race as "none").
+
+    Merged like every other save: a Senate date the calendar stops listing
+    is kept, not retracted. Deliberately — a missing Senate date deletes the
+    state's Senate race and its candidates (the roster sync's prune), and a
+    calendar can stop listing a real one: the FEC relabelling an election-
+    day special, or a row shifting between pages mid-read. A race the FEC
+    listed in error stays until someone removes it, which is visible and
+    costs nothing; a real race wrongly retracted is data loss."""
+    changes = [_merged(state, cycle, dates) for state, dates in calendar.items()]
     changes.append(_merged(_CALENDAR_KEY, cycle, {"read": read_on}))
-    senate = {f"{cycle}-{state.upper()}": dates["senate"] for state, dates in calendar.items() if dates.get("senate")}
-    prefix, marker = f"{cycle}-", f"{cycle}-{_CALENDAR_KEY}"
 
     def merge_all(known: dict[str, Any]) -> dict[str, Any]:
         for change in changes:
             known = change(known)
-        for key in {k for k in known if k.startswith(prefix) and k != marker} | set(senate):
-            # A new dict, never an edit: entries can be the cache's own.
-            entry = {k: v for k, v in (known.get(key) or {}).items() if k != "senate"}
-            if key in senate:
-                entry["senate"] = senate[key]
-            if entry:
-                known[key] = entry
-            else:
-                known.pop(key, None)
         return known
 
     # Once a run, so the longer wait (atomic_write.LOCK_WAIT_S).
@@ -224,19 +204,15 @@ async def fetch_fec_calendar(client: httpx.AsyncClient, cycle: int) -> dict[str,
     for row in sorted(rows, key=lambda r: r.get("election_date") or ""):
         kind = (row.get("election_type_full") or "").lower()
         state, held = row.get("election_state"), row.get("election_date")
-        if not state or not held or row.get("office_sought") not in ("H", "S"):
+        if not state or not held or "special" in kind:
             continue
-        if row.get("office_sought") == "S" and kind in ("general election", "special general election"):
-            # A regular seat or a special filled on election day (FL and
-            # OH in 2026, listed as a plain "General Election"; the FEC may
-            # label one "Special General Election") — either way, a Senate
-            # race on this ballot. Every Senate general is read, so a
-            # complete calendar can say a state has none (save_calendar).
-            calendar.setdefault(state.upper(), {}).setdefault("senate", held)
-            continue
-        if "special" in kind:
+        if row.get("office_sought") not in ("H", "S"):
             continue
         entry = calendar.setdefault(state.upper(), {})
+        if row.get("office_sought") == "S" and kind == "general election":
+            # A regular seat or a special filled on election day (FL and
+            # OH in 2026) — either way, a Senate race on this ballot.
+            entry.setdefault("senate", held)
         if kind == "primary election":
             entry.setdefault("primary", held)
         elif "runoff" in kind and "general" not in kind:
