@@ -18,7 +18,7 @@ import {
 import type { StateInfo, RepStateInfo } from "@/lib/api";
 import type { Senator } from "@/types/senator";
 import { getScoreColor, asciiScoreBar } from "@/lib/representation";
-import { formatCurrency } from "@/lib/formatting";
+import { displayScore, formatCurrency } from "@/lib/formatting";
 import { useUserState } from "@/hooks/useUserState";
 import { PARTY_COLORS } from "@/lib/partyStyles";
 import { BOXED_CONTROL } from "@/lib/controlStyles";
@@ -192,8 +192,8 @@ function ComparisonTable({
   leftChamber: Chamber;
   rightChamber: Chamber;
 }) {
-  const leftOverall = left.representationScore.overall;
-  const rightOverall = right.representationScore.overall;
+  const leftOverall = displayScore(left.representationScore.overall);
+  const rightOverall = displayScore(right.representationScore.overall);
   const leftColorClass = getScoreColor(leftOverall);
   const rightColorClass = getScoreColor(rightOverall);
   const leftPacPct = Math.round(pacSharePct(left.funding.totalFromPACs, left.funding));

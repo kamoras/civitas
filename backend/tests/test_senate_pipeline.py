@@ -2,9 +2,9 @@
 
 from app.config import settings
 from app.models import Senator
+from app.pipeline.sponsorship_backfill import backfill_withheld_sponsorship_scores
 from app.pipeline.senate_pipeline import (
     PIPELINE_STEPS,
-    _backfill_withheld_sponsorship_scores,
     _build_current_term_sponsored_for_cosponsor,
     _build_donor_entries,
 )
@@ -197,8 +197,8 @@ class TestBackfillWithheldSponsorshipScores:
         bipartisanship_scores = {"S001": 0.5, "S002": 0.5}
         attracted_bipartisanship_scores = {"S001": 0.5, "S002": 0.5}
 
-        _backfill_withheld_sponsorship_scores(
-            db_session, {"S001", "S002"},
+        backfill_withheld_sponsorship_scores(
+            db_session, Senator, {"S001", "S002"},
             leadership_scores, ideology_scores,
             bipartisanship_scores, attracted_bipartisanship_scores,
         )
@@ -212,8 +212,8 @@ class TestBackfillWithheldSponsorshipScores:
         self._make_senator(db_session, "S001", ideology_score=None)
 
         ideology_scores: dict = {}
-        _backfill_withheld_sponsorship_scores(
-            db_session, {"S001"},
+        backfill_withheld_sponsorship_scores(
+            db_session, Senator, {"S001"},
             {"S001": 0.4}, ideology_scores, {"S001": 0.5}, {"S001": 0.5},
         )
         assert "S001" not in ideology_scores
@@ -222,6 +222,25 @@ class TestBackfillWithheldSponsorshipScores:
         # Every dict already has every bio_id — no DB query should even
         # matter here; values pass through untouched.
         scores = {"S001": 0.4}
-        _backfill_withheld_sponsorship_scores(
-            db_session, {"S001"}, dict(scores), dict(scores), dict(scores), dict(scores),
+        backfill_withheld_sponsorship_scores(
+            db_session, Senator, {"S001"}, dict(scores), dict(scores), dict(scores), dict(scores),
         )
+
+
+def test_house_representatives_are_backfilled_too(db_session):
+    """The House pipeline used to score every member without their stored
+    sponsorship values on a withheld run; the shared helper takes either
+    chamber's model."""
+    from app.models import Representative
+
+    db_session.add(Representative(
+        id="R-X1", bioguide_id="R001", name="Rep X", state="CT", district=1, party="D",
+        leadership_score=0.3, ideology_score=-0.4, bipartisanship_score=0.6,
+        attracted_bipartisanship_score=0.55,
+    ))
+    db_session.commit()
+    leadership, ideology, bip, attracted = {}, {}, {}, {}
+    backfill_withheld_sponsorship_scores(db_session, Representative, {"R001"}, leadership, ideology, bip, attracted)
+    assert (leadership, ideology, bip, attracted) == (
+        {"R001": 0.3}, {"R001": -0.4}, {"R001": 0.6}, {"R001": 0.55},
+    )

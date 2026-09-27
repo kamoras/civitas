@@ -1,6 +1,6 @@
 import { pacSharePct } from "@/lib/funding";
 import { Senator } from "@/types/senator";
-import { formatCurrency } from "@/lib/formatting";
+import { displayScore, formatCurrency } from "@/lib/formatting";
 import { safeHref } from "@/lib/formatting";
 import { fecCommitteeSearchUrl, currentCongressLabel } from "@/lib/sources";
 import { getScoreColor } from "@/lib/representation";
@@ -184,9 +184,9 @@ export default function SenatorCard({
                 </Title>
                 <div className="shrink-0 text-center border border-white/[0.07] bg-surface-base px-3 py-2">
                   <div
-                    className={`font-mono text-xl font-bold ${getScoreColor(senator.representationScore.overall)}`}
+                    className={`font-mono text-xl font-bold ${getScoreColor(displayScore(senator.representationScore.overall))}`}
                   >
-                    {senator.representationScore.overall.toFixed(0)}
+                    {displayScore(senator.representationScore.overall)}
                   </div>
                   <div className="font-mono text-xs text-ink-min tracking-widest mt-0.5">
                     OVERALL
@@ -356,7 +356,7 @@ export default function SenatorCard({
                 <div
                   className={`text-sm sm:text-lg font-mono whitespace-nowrap ${getScoreColor(Math.min(senator.funding.smallDonorPercentage / 40, 1) * 100)}`}
                 >
-                  {senator.funding.smallDonorPercentage}%
+                  {Math.round(senator.funding.smallDonorPercentage)}%
                 </div>
                 <div className="text-xs text-ink-min">
                   <MetricTooltip text="Percentage of funds from individual donations under $200. Higher = more grassroots support from everyday people vs. large donors.">
@@ -366,7 +366,7 @@ export default function SenatorCard({
               </div>
             </div>
             <div className="text-xs text-ink-lo mt-2 text-right">
-              Source: fec.gov/data &amp; opensecrets.org/members-of-congress
+              Source: fec.gov/data
             </div>
             <div className="text-xs text-ink-min mt-1 text-right">
               Campaign finance data: FEC filings · May lag 4–8 weeks
@@ -414,7 +414,7 @@ export default function SenatorCard({
           <CollapsibleSection
             title="TOP CORPORATE &amp; PAC DONORS"
             summary={<DonorsSummary senator={senator} />}
-            source="fec.gov/data &amp; opensecrets.org"
+            source="fec.gov/data"
           >
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -502,7 +502,7 @@ export default function SenatorCard({
           <CollapsibleSection
             title="FOLLOW THE MONEY"
             summary={<IndustrySummary senator={senator} />}
-            source="opensecrets.org/industries"
+            source="fec.gov/data · industries classified by Civitas"
           >
             <IndustryBreakdown
               industries={senator.funding.industryBreakdown}

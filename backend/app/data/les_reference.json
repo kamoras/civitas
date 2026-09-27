@@ -1,6 +1,6 @@
 {
  "_as_of": "2026-07-23",
- "_source": "Pre-first-run fallback only: the pipeline recomputes this per chamber every run (score_calculator.compute_les_reference) and writes /data/les_reference.json, which takes precedence. Values are the 2026-07-23 production audit (pipeline run #99, first full run after bill-stage reclassification), previously hand-copied into score_calculator.py as _LES_POPULATION_MEDIAN_*/_LES_AVG_BASELINE_*; regenerate with backend/scripts/calibrate_les_credit_scale.py. advancement_rates are the 2026-07 corpus rates (Senate 3.6%/2.4% over 24,294 bills, House 6.4%/2.4% over 13,510) previously hand-typed in _advancement_baseline; the pipeline re-measures them each run as the share of sponsored bills past committee referral.",
+ "_source": "Pre-first-run fallback only: the pipeline recomputes this per chamber every run (score_calculator.compute_les_reference) and writes /data/les_reference.json, which takes precedence. These values predate v6.14's stage-normalized credit and carry no stage_totals, so a fresh install scores the Volden & Wiseman component neutral until its first pipeline run; regenerate on the new scale with backend/scripts/calibrate_les_credit_scale.py against a production database. advancement_rates are the 2026-07 corpus rates (Senate 3.6%/2.4% over 24,294 bills, House 6.4%/2.4% over 13,510).",
  "house": {
   "advancement_rates": {
    "majority": 0.064,

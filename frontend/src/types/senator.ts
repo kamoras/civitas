@@ -199,6 +199,9 @@ export interface ScoreTrend {
 
 export interface LeaderboardEntry {
   id: string;
+  /** House only: competition rank over the whole chamber in the requested
+   * sort (the list is paginated, so the page can't compute it). */
+  rank?: number;
   name: string;
   state: string;
   district?: number;

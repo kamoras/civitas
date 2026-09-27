@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   commentDaysLeft,
+  competitionRanks,
+  displayScore,
   commentPeriodToday,
   describeDaysLeft,
   isCommentPeriodOpen,
@@ -251,5 +253,26 @@ describe("comment deadlines are Eastern calendar dates", () => {
   it("treats a missing deadline as closed", () => {
     expect(isCommentPeriodOpen(null, lastEvening)).toBe(false);
     expect(isCommentPeriodOpen("", lastEvening)).toBe(false);
+  });
+});
+
+describe("displayScore and competitionRanks", () => {
+  it("shows overall scores as whole numbers", () => {
+    expect(displayScore(56.8)).toBe(57);
+    expect(displayScore(61.82)).toBe(62);
+  });
+
+  it("gives tied members the same rank and skips past the tie", () => {
+    const rows = [{ s: 70 }, { s: 53 }, { s: 53 }, { s: 40 }];
+    expect(competitionRanks(rows, (r) => r.s)).toEqual([1, 2, 2, 4]);
+  });
+
+  it("ranks ties on the displayed value", () => {
+    const rows = [53.25, 53.49, 52.84].map((s) => ({ s }));
+    expect(competitionRanks(rows, (r) => displayScore(r.s))).toEqual([1, 1, 1]);
+  });
+
+  it("continues numbering across pages", () => {
+    expect(competitionRanks([{ s: 5 }, { s: 4 }], (r) => r.s, 50)).toEqual([51, 52]);
   });
 });

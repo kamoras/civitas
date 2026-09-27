@@ -124,6 +124,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception:
         logging.getLogger(__name__).exception("Explore index check failed (non-fatal)")
 
+    # A release that rescales Legislative Effectiveness leaves the stored
+    # scores and reference on the old scale until the nightly run; bring
+    # them over now so pages and their breakdowns agree (les_rescore.py).
+    from app.database import SessionLocal as _les_session
+    from app.pipeline.les_rescore import start_les_rescore
+    start_les_rescore(_les_session)
+
     from app.api.visits import run_visit_consumer
     visit_consumer_task = asyncio.create_task(run_visit_consumer())
 

@@ -16,7 +16,7 @@ import ContestBox from "@/components/elections/ballot/ContestBox";
 import BallotRaceRows from "@/components/elections/ballot/BallotRaceRows";
 import ContestDrawer from "@/components/elections/ballot/ContestDrawer";
 import RaceResearch from "@/components/elections/ballot/RaceResearch";
-import { buildBallotContests, contestForHash, type BallotContest } from "@/lib/ballotContests";
+import { buildBallotContests, contestForHash, countBallotContests, type BallotContest } from "@/lib/ballotContests";
 import {
   candidateName,
   districtAreaLabel,
@@ -1034,7 +1034,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                 Everyone on {stateName}&apos;s ballot, and who is behind them
               </h1>
               <p className="mt-1.5 text-sm text-ink-lo">
-                {contests.length} contests · {federalCandidates.length} federal candidates
+                {countBallotContests(contests, ballot)} contests · {federalCandidates.length} federal candidates
                 {thirdParty > 0 && `, ${thirdParty} outside the two major parties`}
                 {withRecords > 0 && ` · ${withRecords} with a congressional voting record`}
                 {ballot.statePvi !== null && (
