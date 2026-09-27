@@ -18,7 +18,7 @@ import pytest
 
 from app import scheduler as scheduler_module
 from app.pipeline.analyze.election_coverage import coverage_tracker
-from app.pipeline.election_pipeline import ballot_tracker, is_ballot_sync_running
+from app.pipeline.election_pipeline import ballot_tracker
 
 
 @pytest.fixture(autouse=True)
@@ -435,7 +435,7 @@ class TestElectionBallotSync:
 
     def test_the_tracker_is_released_after_a_run(self):
         self._run(error=RuntimeError("boom"))
-        assert is_ballot_sync_running() is False
+        assert ballot_tracker().is_running is False
 
 
 def test_a_nightly_chain_refused_by_a_data_reset_alerts():
@@ -522,7 +522,7 @@ class TestLeasedJobs:
             scheduler._election_ballot_sync()
         assert taken == [lease.BALLOT_SYNC]
         sync.assert_not_called()
-        assert not is_ballot_sync_running()
+        assert not ballot_tracker().is_running
 
     def test_a_tick_that_steps_aside_takes_no_lease(self):
         from app import scheduler

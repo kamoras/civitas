@@ -266,9 +266,9 @@ class TestLease:
             assert not held and held.why.startswith("an admin data reset holds the database")
         assert not lease.held(db_session, lease.BALLOT_SYNC)
 
-    def test_a_tracked_job_takes_its_lease_then_its_tracker(self, db_session, monkeypatch, caplog):
-        """lease.tracked_job: the lease (another process), then the tracker
-        this process's entry points share; refused by either, it holds
+    def test_a_tracked_job_takes_its_tracker_then_its_lease(self, db_session, monkeypatch, caplog):
+        """lease.tracked_job: the tracker this process's entry points share,
+        then the lease (another process); refused by either, it holds
         neither, and the skip is logged as the caller's."""
         import asyncio
         import logging
@@ -283,20 +283,51 @@ class TestLease:
             assert held and tracker.is_running and lease.held(db_session, lease.BALLOT_SYNC)
         assert not tracker.is_running and not lease.held(db_session, lease.BALLOT_SYNC)
 
-        token = tracker.start()  # a run going in this process
+        token, _ = tracker.try_start(holder="The scheduled sync")  # a run going in this process
         with caplog.at_level(logging.INFO, logger="app.pipeline.lease"), \
                 lease.tracked_job(lease.BALLOT_SYNC, tracker, who="The nightly step") as held:
-            assert not held and "already running in this process" in held.why
+            assert not held and held.why == "The scheduled sync is already running in this process"
         assert "The nightly step skipped" in caplog.text
         assert tracker.is_running and not lease.held(db_session, lease.BALLOT_SYNC)
         tracker.stop(token)
 
         async def nightly():
             async with lease.tracked_job_async(lease.BALLOT_SYNC, tracker) as held:
-                return bool(held), tracker.is_running
+                return bool(held)
 
         lease.acquire(db_session, lease.BALLOT_SYNC)  # a sync in another process
-        assert asyncio.run(nightly()) == (False, False)
+        assert asyncio.run(nightly()) is False
+        assert not tracker.is_running
+
+    def test_a_run_going_in_this_process_keeps_its_lease_row(self, db_session, monkeypatch):
+        """Its beats held up past the stale window, its row could be taken
+        over; the tracker refuses first, so nothing touches it."""
+        from datetime import timedelta
+
+        from app.pipeline import lease
+        from app.pipeline.run_tracker import PipelineRunTracker
+        from app.time_utils import utcnow
+
+        monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
+        tracker = PipelineRunTracker()
+        token, _ = tracker.try_start()
+        mine = lease.acquire(db_session, lease.COVERAGE_REFRESH)
+        db_session.query(models.ApiCache).update({"cached_at": utcnow() - timedelta(minutes=15)})
+        db_session.commit()
+        with lease.tracked_job(lease.COVERAGE_REFRESH, tracker) as held:
+            assert not held
+        assert lease.beat(db_session, lease.COVERAGE_REFRESH, mine)  # still the running job's
+        tracker.stop(token)
+
+    def test_a_refusal_names_the_holder_as_it_named_itself(self, db_session):
+        from app.pipeline import lease
+
+        lease.acquire(db_session, lease.BALLOT_SYNC, who="Election pipeline's confirmed-candidate phase")
+        assert lease.refusal(db_session, lease.BALLOT_SYNC) == (
+            "Election pipeline's confirmed-candidate phase is already running (this process or another)"
+        )
+        lease.acquire(db_session, lease.BILL_REFRESH)
+        assert lease.holder_label(db_session, lease.BILL_REFRESH) == lease.TIERS[lease.BILL_REFRESH]
 
     def test_every_lease_is_one_the_reset_names(self):
         from app.pipeline import lease

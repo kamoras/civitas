@@ -157,7 +157,43 @@ class TestApplyUpdates:
         assert asyncio.run(bill_refresh._apply_updates(db_session, None, recent))["changed"] == 1
         db_session.expire_all()
         row = db_session.get(SponsoredBill, bill.id)
-        assert (row.latest_action_date, row.is_law) == ("2026-07-20", True)
+        assert (row.latest_action_date, row.is_law, row.stage) == ("2026-07-20", True, "ENACTED")
+
+    def test_becoming_law_on_the_stored_actions_day_is_recorded(self, db_session, actions_stub):
+        """Congress.gov dates the public-law action the day it was signed —
+        often the stored signing action's day — and it ends the history."""
+        bill = _make_senate_bill(
+            db_session, stage="TO_PRESIDENT", latest_action="Signed by President.", latest_action_date="2026-09-20",
+        )
+        actions_stub.result = []
+        recent = {"S.100": _feed_item("S.100", "Became Public Law No: 119-52.", "2026-09-20")}
+
+        assert asyncio.run(bill_refresh._apply_updates(db_session, None, recent))["changed"] == 1
+        db_session.expire_all()
+        row = db_session.get(SponsoredBill, bill.id)
+        assert (row.latest_action, row.is_law, row.stage) == ("Became Public Law No: 119-52.", True, "ENACTED")
+
+    def test_a_reused_row_id_is_not_written_as_another_bill(self, db_session, actions_stub, monkeypatch):
+        """The nightly pipeline rewrites rows by delete and insert; SQLite
+        can give the deleted row's id to another bill."""
+        bill = _make_senate_bill(db_session)
+        row_id = bill.id
+        db_session.commit()
+
+        async def reinserted(db, client, congress, bill_type, number):
+            db.query(SponsoredBill).filter(SponsoredBill.id == row_id).delete()
+            db.add(SponsoredBill(
+                id=row_id, senator_id="s1", bill_id="S.250", title="Another bill", stage="REFERRED",
+                congress=CURRENT, latest_action="Read twice.", latest_action_date="2026-07-01", bill_type="S",
+            ))
+            db.flush()
+            return [{"actionCode": "17000", "type": "Floor", "text": "Passed Senate."}]
+
+        monkeypatch.setattr(bill_refresh, "_fetch_fresh_actions", reinserted)
+        recent = {"S.100": _feed_item("S.100", "Passed Senate.", "2026-07-20")}
+        assert asyncio.run(bill_refresh._apply_updates(db_session, None, recent))["changed"] == 0
+        db_session.expire_all()
+        assert db_session.get(SponsoredBill, row_id).latest_action == "Read twice."
 
     def test_a_row_deleted_mid_pass_is_skipped_not_a_crash(self, db_session, actions_stub, monkeypatch):
         """A pipeline can rewrite a member's bills while a pass holds them."""
@@ -301,4 +337,3 @@ class TestRefreshBillStatuses:
         from app.pipeline.cache import api_cache_get
         marker = api_cache_get(db_session, "congress", bill_refresh.LAST_RUN_CACHE_KEY)
         assert marker and marker.get("lastRun")
-        assert not bill_refresh.is_bill_refresh_running()

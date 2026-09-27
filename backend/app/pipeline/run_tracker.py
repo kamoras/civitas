@@ -195,11 +195,13 @@ class PipelineRunTracker:
     def __init__(self) -> None:
         self._token = 0
         self._started_at: float | None = None  # time.time() of the run going, None when idle
+        self._holder: str | None = None  # who started it, for a refusal to name
         self._lock = threading.Lock()
 
-    def _begin(self) -> int:
+    def _begin(self, holder: str | None = None) -> int:
         self._token += 1
         self._started_at = time.time()
+        self._holder = holder
         return self._token
 
     def start(self) -> int:
@@ -208,7 +210,9 @@ class PipelineRunTracker:
         with self._lock:
             return self._begin()
 
-    def try_start(self, hung_after: timedelta | None = None) -> "tuple[int | None, timedelta | None]":
+    def try_start(
+        self, hung_after: timedelta | None = None, holder: str | None = None,
+    ) -> "tuple[int | None, timedelta | None]":
         """start() unless a run is going — or, with `hung_after`, unless one
         younger than that is. Returns (token, None); (None, None) when
         refused; or (token, age) when it replaced a run it presumed hung,
@@ -216,11 +220,11 @@ class PipelineRunTracker:
         callers can't both pass."""
         with self._lock:
             if self._started_at is None:
-                return self._begin(), None
+                return self._begin(holder), None
             age = timedelta(seconds=time.time() - self._started_at)
             if hung_after is None or age < hung_after:
                 return None, None
-            return self._begin(), age
+            return self._begin(holder), age
 
     def stop(self, run: int | None) -> None:
         """Mark the run `run` stopped; a no-op unless it is the run going
@@ -233,6 +237,13 @@ class PipelineRunTracker:
         """Forget the run going — for tests that reset shared module state."""
         with self._lock:
             self._started_at = None
+
+    @property
+    def holder(self) -> str | None:
+        """Who started the run going (try_start's `holder`), None when idle
+        or unnamed."""
+        with self._lock:
+            return self._holder if self._started_at is not None else None
 
     @property
     def is_running(self) -> bool:

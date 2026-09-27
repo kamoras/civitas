@@ -1476,8 +1476,11 @@ def _reset_holding_every_writer() -> dict:
                     raise WritersBusy(["Another data reset"])
                 busy = [f"{label} run" for label, model in run_tables().items() if run_in_progress(db, model)]
                 busy += [
-                    holder for tier, holder in lease.TIERS.items()
-                    if tier != lease.DATA_RESET and lease.held(db, tier) and holder not in busy
+                    holder for holder in (
+                        lease.holder_label(db, tier) for tier in lease.TIERS
+                        if tier != lease.DATA_RESET and lease.held(db, tier)
+                    )
+                    if holder not in busy
                 ]
                 if busy:
                     raise WritersBusy(busy)

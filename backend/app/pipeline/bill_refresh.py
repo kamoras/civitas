@@ -27,7 +27,7 @@ import logging
 from datetime import datetime, timedelta
 
 import httpx
-from sqlalchemy import or_
+from sqlalchemy import case, or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -63,9 +63,12 @@ _MAX_ACTION_FETCHES = 500
 
 _tracker = PipelineRunTracker()
 
+_ENACTED = str(classify_bill_stage_from_actions([], is_law=True))
 
-def is_bill_refresh_running() -> bool:
-    return _tracker.is_running
+
+def bill_tracker() -> PipelineRunTracker:
+    """The in-process guard the scheduled refresh runs under (lease.tracked_job)."""
+    return _tracker
 
 
 def _window_start(db: Session, now: datetime) -> datetime:
@@ -131,14 +134,18 @@ async def _fetch_fresh_actions(
     return results
 
 
-def _supersedes(new_date: str, stored_date: str | None) -> bool:
+def _supersedes(new_date: str, stored_date: str | None, makes_law: bool = False) -> bool:
     """Whether a listing's latest action may replace the stored one: only
     one dated strictly after it, or anything over a row with no date. Not
     one on the same day — the listing can lag a later action that day the
     nightly pipeline stored from the bill itself, and a date can't say which
     came first (the nightly run settles it) — and not an undated one over a
-    dated row, which it can't be ordered against."""
-    if not stored_date:
+    dated row, which it can't be ordered against. Except the action that
+    makes a bill not yet recorded as law one (`makes_law`): becoming law
+    ends a bill's history, so nothing stored before it is later — and
+    Congress.gov dates it the day the President signed, often the same day
+    as the stored signing action."""
+    if not stored_date or makes_law:
         return True
     return bool(new_date) and new_date > stored_date
 
@@ -160,7 +167,7 @@ async def _apply_updates(
 
     # Every write waits for the end of the pass and is applied in one go:
     # none holds SQLite's write lock across the fetches between them.
-    writes: list[tuple[type, int, str, dict]] = []
+    writes: list[tuple[type, int, str, str, bool, dict]] = []
     for model in (SponsoredBill, RepSponsoredBill):
         rows = []
         for i in range(0, len(bill_ids), 500):  # stay under SQLite's bind-parameter limit
@@ -180,15 +187,16 @@ async def _apply_updates(
             matched += 1
             if new_text == row.latest_action and new_date == row.latest_action_date:
                 continue  # updateDate churn without a new action — nothing to do
-            if not _supersedes(new_date, row.latest_action_date):
+            # The latest-action text is the same "hard fact from the API"
+            # the pipelines use for is_law.
+            becomes_law = "public law" in new_text.lower()
+            if not _supersedes(new_date, row.latest_action_date, becomes_law and not row.is_law):
                 # The listing can lag what the nightly pipeline stored from the
                 # bill itself: an action not dated after the stored one never
                 # replaces it (see _supersedes).
                 continue
-
-            # is_law is monotone: never un-set it, and the latest-action
-            # text is the same "hard fact from the API" the pipelines use.
-            is_law = row.is_law or "public law" in new_text.lower()
+            # is_law is monotone: never un-set it.
+            is_law = row.is_law or becomes_law
 
             congress = item.get("congress") or row.congress
             bill_type = (item.get("type") or row.bill_type or "").lower()
@@ -203,24 +211,33 @@ async def _apply_updates(
                 actions = await _fetch_fresh_actions(db, client, congress, bill_type, number)
                 actions_cache[actions_key] = actions
             values: dict = {"latest_action": new_text, "latest_action_date": new_date}
-            if is_law:
+            if becomes_law:
                 # Only ever set, never cleared — and so monotone at write
                 # time too, whatever the row holds by then.
                 values["is_law"] = True
             if actions or is_law:
-                values["stage"] = str(classify_bill_stage_from_actions(actions, is_law))
+                # A law recorded since the row was read (is_law at write
+                # time) keeps its stage whatever the actions said.
+                values["stage"] = case(
+                    (model.is_law, _ENACTED),
+                    else_=str(classify_bill_stage_from_actions(actions, is_law)),
+                )
             # else: keep the stored stage — a failed/empty actions fetch
             # must not regress a real stage to the INTRODUCED fallback.
-            writes.append((model, row.id, new_date, values))
+            writes.append((model, row.id, row.bill_id, new_date, becomes_law, values))
 
-    for model, row_id, new_date, values in writes:
+    for model, row_id, bill_id, new_date, becomes_law, values in writes:
         # _supersedes again at write time: the row may have moved on since it
-        # was read (the nightly pipeline rewrites these). A row deleted since
-        # simply matches nothing.
+        # was read (the nightly pipeline rewrites these). It rewrites them by
+        # delete and insert, and SQLite can hand a deleted row's id to a new
+        # one — the bill_id is what says it is still the same bill's row. A
+        # row deleted since simply matches nothing.
         undated = or_(model.latest_action_date.is_(None), model.latest_action_date == "")
+        later = or_(undated, model.latest_action_date < new_date) if new_date else undated
         rows_written = db.query(model).filter(
             model.id == row_id,
-            or_(undated, model.latest_action_date < new_date) if new_date else undated,
+            model.bill_id == bill_id,
+            or_(later, ~model.is_law) if becomes_law else later,
         )
         changed += rows_written.update(values, synchronize_session=False)
     db.commit()
@@ -239,40 +256,33 @@ async def _apply_updates(
 
 async def refresh_bill_statuses(db: Session | None = None) -> dict:
     """Run one incremental refresh cycle. Pass `db` for tests; production
-    opens (and closes) its own session."""
-    # One pass at a time, checked and started in one step. A hung pass is
-    # cut off by the scheduler (asyncio.wait_for) at its next await — which
-    # always comes: every step between awaits is bounded (a request times
-    # out, SQLite gives up after its busy timeout) — so its finally frees
-    # this for the next pass, and no second pass ever runs beside it.
-    _run_token, _ = _tracker.try_start()
-    if _run_token is None:
-        return {"status": "skipped", "reason": "previous refresh still running"}
+    opens (and closes) its own session. The scheduler runs one pass at a
+    time (lease.tracked_job over bill_tracker()) and cuts a hung one off
+    (asyncio.wait_for) at its next await — which always comes: every step
+    between awaits is bounded (a request times out, SQLite gives up after
+    its busy timeout) — so no second pass ever runs beside it."""
+    owns_session = db is None
+    if owns_session:
+        from app.database import SessionLocal
+        db = SessionLocal()
     try:
-        owns_session = db is None
-        if owns_session:
-            from app.database import SessionLocal
-            db = SessionLocal()
-        try:
-            now = utcnow()
-            since = _window_start(db, now)
-            async with make_async_client() as client:
-                recent = await _fetch_recently_updated(client, since)
-                summary = await _apply_updates(db, client, recent)
-            # Only advance the window marker after a full successful pass, so
-            # a crashed cycle is retried over the same window next hour.
-            api_cache_set(db, _LAST_RUN_TIER, LAST_RUN_CACHE_KEY, {"lastRun": now.isoformat()})
-        finally:
-            if owns_session:
-                db.close()
-
-        if summary["changed"]:
-            from app.services.bill_service import warm_bill_collection_cache
-            warm_bill_collection_cache()
-
-        summary["status"] = "completed"
-        summary["window_start"] = since.isoformat()
-        summary["recently_updated"] = len(recent)
-        return summary
+        now = utcnow()
+        since = _window_start(db, now)
+        async with make_async_client() as client:
+            recent = await _fetch_recently_updated(client, since)
+            summary = await _apply_updates(db, client, recent)
+        # Only advance the window marker after a full successful pass, so
+        # a crashed cycle is retried over the same window next hour.
+        api_cache_set(db, _LAST_RUN_TIER, LAST_RUN_CACHE_KEY, {"lastRun": now.isoformat()})
     finally:
-        _tracker.stop(_run_token)
+        if owns_session:
+            db.close()
+
+    if summary["changed"]:
+        from app.services.bill_service import warm_bill_collection_cache
+        warm_bill_collection_cache()
+
+    summary["status"] = "completed"
+    summary["window_start"] = since.isoformat()
+    summary["recently_updated"] = len(recent)
+    return summary

@@ -335,7 +335,7 @@ def _hourly_bill_status_refresh() -> None:
     """
     def _run():
         try:
-            from app.pipeline.bill_refresh import refresh_bill_statuses
+            from app.pipeline.bill_refresh import bill_tracker, refresh_bill_statuses
 
             from app.database import SessionLocal
             from app.models import PipelineRun, PipelineStatus
@@ -351,12 +351,13 @@ def _hourly_bill_status_refresh() -> None:
                 logger.info("Bill status refresh skipped — house pipeline is running")
                 return
 
-            # Its lease, so a reset or a refresh in another process sees it,
+            # Its tracker and lease (lease.tracked_job), so a pass in this
+            # process, a reset or a refresh in another process sees it,
             # taken only past the checks above: a tick that bails holds
             # nothing. Cut off while the lease still holds (lease.max_hold),
             # never left running beside the next: two passes at once would
             # let the older one's snapshot overwrite the newer one's rows.
-            with lease.job(lease.BILL_REFRESH) as granted:
+            with lease.tracked_job(lease.BILL_REFRESH, bill_tracker(), who="Bill status refresh") as granted:
                 if not granted:
                     return
                 limit = lease.max_hold(lease.BILL_REFRESH)

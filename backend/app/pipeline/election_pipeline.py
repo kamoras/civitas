@@ -114,10 +114,6 @@ def election_pipeline_age():
 _ballot_tracker = PipelineRunTracker()
 
 
-def is_ballot_sync_running() -> bool:
-    return _ballot_tracker.is_running
-
-
 def ballot_tracker() -> PipelineRunTracker:
     return _ballot_tracker
 
@@ -781,8 +777,62 @@ def _prune_stale_coverage(db: Session) -> int:
     return deleted
 
 
-class _BallotSyncRunning(Exception):
-    """The nightly ballot phase stepping aside for a ballot sync in flight."""
+def _crawl_day() -> bool:
+    """Sunday (UTC): the day the nightly run crawls for new ballot sources."""
+    return utcnow().weekday() == 6
+
+
+async def _confirmed_candidates_phase(db: Session, client, cycle: int) -> str:
+    """The nightly run's confirmed-candidate phase — the weekly source crawl,
+    then the ballot sync — run holding the ballot sync's guards; returns the
+    dashboard's detail line."""
+    # Weekly, not nightly: this sweeps every state that has no
+    # hand-verified source, and what it looks for — a state
+    # standing up a results portal, a new cycle's file
+    # appearing — moves on the scale of weeks, not hours. Same
+    # self-gating shape as ops_alerts' weekly checks. Runs
+    # BEFORE the sync so anything it proves out contributes the
+    # same night.
+    adopted: dict[str, str] = {}
+    if _crawl_day():
+        leads = await crawl_for_new_sources(db, client, cycle)
+        adopted = {s: r for s, r in leads.items() if r.startswith("adopted")}
+        logger.info(
+            "Source crawl: %d state(s) adopted%s",
+            len(adopted), f" — {adopted}" if adopted else "",
+        )
+
+    confirm_result, filing_result = await _sync_ballots(db, client, cycle)
+    confirmed_total = sum(r["confirmed"] for r in confirm_result.values())
+    logger.info("Confirmed candidates: %s", confirm_result)
+    if filing_result:
+        logger.info("Ballot filings: %s", filing_result)
+
+    # The admin dashboard's only window into this phase beyond
+    # a bare total — which states are actually configured, and
+    # whether this week's crawl (Sundays only) found anything
+    # new — was previously log-only (2026-09 gap: an admin
+    # reading the dashboard had no way to tell "16 states
+    # confirmed" from "every state failed but one").
+    configured_states = sorted(
+        s for s, r in confirm_result.items() if r["status"] == "ok"
+    )
+    detail = f"{confirmed_total} confirmed across {len(configured_states)} states"
+    # Non-federal nominees are stored, not "confirmed"
+    # against an FEC row, so they are invisible in the count
+    # above — and there can be a lot of them (Rhode Island
+    # alone stores 9 executive and 133 legislative). Reporting
+    # only the federal number would let a run that did most of
+    # its work off-ballot look like a quiet one, which is the
+    # same misreading this detail line was added to prevent.
+    non_federal = sum(
+        r.get("statewide", 0) + r.get("stateLeg", 0) for r in confirm_result.values()
+    )
+    if non_federal:
+        detail += f"; {non_federal} state-office nominees"
+    if adopted:
+        detail += f"; crawler adopted {len(adopted)} this week: {', '.join(sorted(adopted))}"
+    return detail
 
 
 async def run_election_pipeline(cycle: int | None = None) -> dict:
@@ -842,67 +892,25 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
             logger.info("--- Election: CONFIRMED CANDIDATES ---")
             progress.begin("confirmed_candidates")
             try:
-                # Weekly, not nightly: this sweeps every state that has no
-                # hand-verified source, and what it looks for — a state
-                # standing up a results portal, a new cycle's file
-                # appearing — moves on the scale of weeks, not hours. Same
-                # self-gating shape as ops_alerts' weekly checks. Runs
-                # BEFORE the sync so anything it proves out contributes the
-                # same night.
-                adopted: dict[str, str] = {}
-                if utcnow().weekday() == 6:
-                    leads = await crawl_for_new_sources(db, client, cycle)
-                    adopted = {s: r for s, r in leads.items() if r.startswith("adopted")}
-                    logger.info(
-                        "Source crawl: %d state(s) adopted%s",
-                        len(adopted), f" — {adopted}" if adopted else "",
-                    )
-
                 # The election-season ballot sync may be mid-pass; two
                 # passes writing the same Candidate rows at once is the one
                 # thing to avoid, and that pass is doing this step anyway.
-                # Holding the sync's lease and tracker (lease.tracked_job,
+                # Holding the sync's tracker and lease (lease.tracked_job,
                 # as the scheduled sync does), so a sync in this process or
-                # another can't start beside this pass.
+                # another can't start beside this pass — the source crawl
+                # included, which writes the source table the sync reads.
                 async with lease.tracked_job_async(
                     lease.BALLOT_SYNC, _ballot_tracker, who="Election pipeline's confirmed-candidate phase",
                 ) as granted:
                     if not granted:
-                        progress.skip("confirmed_candidates", detail=f"skipped: {granted.why}")
-                        raise _BallotSyncRunning(granted.why)
-                    confirm_result, filing_result = await _sync_ballots(db, client, cycle)
-                confirmed_total = sum(r["confirmed"] for r in confirm_result.values())
-                logger.info("Confirmed candidates: %s", confirm_result)
-                if filing_result:
-                    logger.info("Ballot filings: %s", filing_result)
-
-                # The admin dashboard's only window into this phase beyond
-                # a bare total — which states are actually configured, and
-                # whether this week's crawl (Sundays only) found anything
-                # new — was previously log-only (2026-09 gap: an admin
-                # reading the dashboard had no way to tell "16 states
-                # confirmed" from "every state failed but one").
-                configured_states = sorted(
-                    s for s, r in confirm_result.items() if r["status"] == "ok"
-                )
-                detail = f"{confirmed_total} confirmed across {len(configured_states)} states"
-                # Non-federal nominees are stored, not "confirmed"
-                # against an FEC row, so they are invisible in the count
-                # above — and there can be a lot of them (Rhode Island
-                # alone stores 9 executive and 133 legislative). Reporting
-                # only the federal number would let a run that did most of
-                # its work off-ballot look like a quiet one, which is the
-                # same misreading this detail line was added to prevent.
-                non_federal = sum(
-                    r.get("statewide", 0) + r.get("stateLeg", 0) for r in confirm_result.values()
-                )
-                if non_federal:
-                    detail += f"; {non_federal} state-office nominees"
-                if adopted:
-                    detail += f"; crawler adopted {len(adopted)} this week: {', '.join(sorted(adopted))}"
-                progress.complete("confirmed_candidates", detail=detail)
-            except _BallotSyncRunning:
-                pass  # logged and marked skipped where it was refused
+                        # A Sunday's source crawl waits a week with it —
+                        # nothing is lost by adopting a source a week later
+                        # (crawl_for_new_sources); the detail says so.
+                        crawl = "; this week's source crawl with it" if _crawl_day() else ""
+                        progress.skip("confirmed_candidates", detail=f"skipped: {granted.why}{crawl}")
+                    else:
+                        detail = await _confirmed_candidates_phase(db, client, cycle)
+                        progress.complete("confirmed_candidates", detail=detail)
             except Exception:
                 db.rollback()
                 logger.exception("Confirmed-candidate sync failed — continuing")
@@ -949,19 +957,22 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
             # beside this pass; if one is mid-flight, these two phases are
             # skipped and the in-season cadence re-covers them within 15
             # minutes. A failure here (taking the guards included) fails
-            # these phases, not the rest of the run.
+            # whichever of these phases hadn't finished, not the rest of
+            # the run.
             from app.pipeline.analyze.election_coverage import (
                 coverage_tracker,
                 ingest_race_coverage,
             )
 
+            coverage_open = ["coverage_ingestion", "bluesky_posting"]  # phases not yet finished
             try:
                 async with lease.tracked_job_async(
                     lease.COVERAGE_REFRESH, coverage_tracker(), who="Election pipeline's coverage/posting phases",
                 ) as granted:
                     if not granted:
-                        progress.skip("coverage_ingestion", detail=f"skipped: {granted.why}")
-                        progress.skip("bluesky_posting", detail=f"skipped: {granted.why}")
+                        for phase in coverage_open:
+                            progress.skip(phase, detail=f"skipped: {granted.why}")
+                        coverage_open.clear()
                     else:
                         run.current_phase = "coverage"
                         db.commit()
@@ -976,6 +987,7 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                             db.rollback()
                             logger.exception("Coverage ingestion failed — continuing")
                             progress.fail("coverage_ingestion")
+                        coverage_open.remove("coverage_ingestion")
 
                         run.current_phase = "posting"
                         db.commit()
@@ -997,11 +1009,12 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                             db.rollback()
                             logger.exception("Bluesky posting failed — continuing")
                             progress.fail("bluesky_posting")
+                        coverage_open.remove("bluesky_posting")
             except Exception:
                 db.rollback()
                 logger.exception("Election coverage/posting phases failed — continuing")
-                progress.fail("coverage_ingestion")
-                progress.fail("bluesky_posting")
+                for phase in coverage_open:
+                    progress.fail(phase)
 
             run.current_phase = "snapshot"
             db.commit()

@@ -116,14 +116,19 @@ def max_hold(tier: str) -> timedelta:
     return HUNG_AFTER[tier] - stale_after(tier)
 
 
-def acquire(db: Session, tier: str, *, yield_to: str | None = None, take_over: bool = False) -> str | None:
+def acquire(
+    db: Session, tier: str, *, yield_to: str | None = None, take_over: bool = False, who: str | None = None,
+) -> str | None:
     """Take the lease; the holder's token, or None when it is held — or, with
     `yield_to`, when that lease is held once this one's row is in (checked
     before committing, so yielding just rolls back; see DATA_RESET), or when
     the database stays locked past the busy timeout (a writer holding it:
     busy, not a failure). `take_over` replaces a live holder's row: for a
     caller that already holds the lock the lease stands for, whose previous
-    holder must therefore be dead."""
+    holder must therefore be dead. `who` names the holder to anyone it
+    refuses (holder_label): the tier's job, by default — a job some other
+    run also does a step of (the nightly election run's ballot step) says so.
+    """
     from app.models import ApiCache
 
     now = utcnow()
@@ -133,7 +138,8 @@ def acquire(db: Session, tier: str, *, yield_to: str | None = None, take_over: b
         if not take_over:
             stale = stale.filter(ApiCache.cached_at < now - stale_after(tier))
         stale.delete()
-        db.add(ApiCache(tier=tier, cache_key="lock", data_json=json.dumps({"holder": token}), cached_at=now))
+        row = {"holder": token, "who": who or TIERS[tier]}
+        db.add(ApiCache(tier=tier, cache_key="lock", data_json=json.dumps(row), cached_at=now))
         db.flush()
         if yield_to is not None and held(db, yield_to):
             db.rollback()
@@ -158,23 +164,40 @@ def is_locked(error: OperationalError) -> bool:
     return "locked" in str(error.orig).lower()
 
 
-def held(db: Session, tier: str) -> bool:
-    """Whether a live holder has the lease — one that has beaten within its
-    tier's stale window."""
+def _live_row(db: Session, tier: str):
     from app.models import ApiCache
 
     return db.query(ApiCache).filter(
         ApiCache.tier == tier, ApiCache.cache_key == "lock",
         ApiCache.cached_at >= utcnow() - stale_after(tier),
-    ).first() is not None
+    ).first()
+
+
+def held(db: Session, tier: str) -> bool:
+    """Whether a live holder has the lease — one that has beaten within its
+    tier's stale window."""
+    return _live_row(db, tier) is not None
+
+
+def holder_label(db: Session, tier: str) -> str:
+    """Who holds `tier`'s lease, as its holder named itself (acquire's
+    `who`); the tier's job when no live holder says."""
+    row = _live_row(db, tier)
+    try:
+        who = json.loads(row.data_json).get("who") if row is not None else None
+    except (TypeError, ValueError, AttributeError):
+        who = None
+    return who or TIERS[tier]
 
 
 def _own_row(db: Session, tier: str, token: str):
+    from sqlalchemy import func
+
     from app.models import ApiCache
 
     return db.query(ApiCache).filter(
         ApiCache.tier == tier, ApiCache.cache_key == "lock",
-        ApiCache.data_json == json.dumps({"holder": token}),
+        func.json_extract(ApiCache.data_json, "$.holder") == token,
     )
 
 
@@ -240,8 +263,8 @@ class _Held:
         self.heartbeat.start()
 
 
-def _take(db: Session, tier: str, yield_to: str | None, take_over: bool) -> _Held | None:
-    token = acquire(db, tier, yield_to=yield_to, take_over=take_over)
+def _take(db: Session, tier: str, yield_to: str | None, take_over: bool, who: str | None = None) -> _Held | None:
+    token = acquire(db, tier, yield_to=yield_to, take_over=take_over, who=who)
     return _Held(db, tier, token) if token is not None else None
 
 
@@ -254,11 +277,13 @@ def _let_go(held_lease: _Held) -> None:
 
 
 @contextmanager
-def holding(db: Session, tier: str, *, yield_to: str | None = None, take_over: bool = False) -> Iterator[str | None]:
+def holding(
+    db: Session, tier: str, *, yield_to: str | None = None, take_over: bool = False, who: str | None = None,
+) -> Iterator[str | None]:
     """Hold the lease for the enclosed work, beating it throughout (for its
     tier's max_hold, see _keep); yields the token, or None (and holds
     nothing) when acquire refused."""
-    held_lease = _take(db, tier, yield_to, take_over)
+    held_lease = _take(db, tier, yield_to, take_over, who)
     if held_lease is None:
         yield None
         return
@@ -281,22 +306,25 @@ def refusal_code(db: Session, tier: str) -> str:
     return REFUSED_BUSY
 
 
-def refusal_text(code: str, tier: str | None = None) -> str:
+def refusal_text(code: str, tier: str | None = None, holder: str | None = None) -> str:
     """A refusal_code, as a skip message says it — naming the holder, when
-    it is another run of `tier`'s job."""
+    it is another run of `tier`'s job: `holder` (holder_label), or the
+    tier's job."""
+    holder = holder or (TIERS[tier] if tier else "another run of it")
     return {
         REFUSED_BY_RESET: (
             "an admin data reset holds the database — if none is running, one died mid-wipe and "
             "its lease lapses within the half hour"
         ),
-        REFUSED_HELD: f"{TIERS[tier] if tier else 'another run of it'} is already running (this process or another)",
+        REFUSED_HELD: f"{holder} is already running (this process or another)",
         REFUSED_BUSY: "the database stayed locked by another writer",
     }[code]
 
 
 def refusal(db: Session, tier: str) -> str:
-    """refusal_code, as a skip message says it."""
-    return refusal_text(refusal_code(db, tier), tier)
+    """refusal_code, as a skip message says it, naming the holder."""
+    code = refusal_code(db, tier)
+    return refusal_text(code, tier, holder_label(db, tier) if code == REFUSED_HELD else None)
 
 
 class Granted:
@@ -326,7 +354,7 @@ def job(tier: str, *, who: str | None = None) -> Iterator[Granted]:
 
     db = SessionLocal()
     try:
-        with holding(db, tier, yield_to=DATA_RESET) as token:
+        with holding(db, tier, yield_to=DATA_RESET, who=who) as token:
             granted = Granted(None if token is not None else refusal(db, tier))
             _log_skip(tier, who, granted)
             yield granted
@@ -339,8 +367,8 @@ class _Taking:
     takes and the caller that may stop waiting for it: whichever of the two
     finishes second lets go of what was taken, so it is never stranded."""
 
-    def __init__(self, tier: str) -> None:
-        self.tier = tier
+    def __init__(self, tier: str, who: str | None) -> None:
+        self.tier, self.who = tier, who
         self.lock = threading.Lock()
         self.abandoned = False
         self.result: "tuple[Session, _Held | None, str | None] | None" = None
@@ -350,7 +378,7 @@ class _Taking:
 
         db = SessionLocal()
         try:
-            held_lease = _take(db, self.tier, DATA_RESET, False)
+            held_lease = _take(db, self.tier, DATA_RESET, False, self.who)
             result = (db, held_lease, None if held_lease is not None else refusal(db, self.tier))
         except BaseException:
             db.close()
@@ -385,7 +413,7 @@ async def job_async(tier: str, *, who: str | None = None) -> AsyncIterator[Grant
     and a take the caller stopped waiting for is let go of (_Taking)."""
     import asyncio
 
-    taking = _Taking(tier)
+    taking = _Taking(tier, who)
     try:
         db, held_lease, refused = await asyncio.shield(asyncio.to_thread(taking.take))
     except asyncio.CancelledError:
@@ -400,46 +428,52 @@ async def job_async(tier: str, *, who: str | None = None) -> AsyncIterator[Grant
 
 
 # A job run from more than one entry point in this process (a scheduled
-# job, and a step of a nightly pipeline) is guarded twice: by its lease,
-# against a run in another process, and by an in-process tracker
-# (run_tracker.PipelineRunTracker) that the entry points share. Every entry
-# point takes the two in this order — lease, then tracker — and presumes a
-# tracked run hung at the lease's max_hold, where its lease stops being
-# renewed, so the two guards agree on when to proceed past it.
+# job, and a step of a nightly pipeline) is guarded twice: by an in-process
+# tracker (run_tracker.PipelineRunTracker) that the entry points share, and
+# by its lease, against a run in another process. Every entry point takes
+# the tracker first — a run going in this process refuses before anything
+# touches its lease row, which acquire would replace were its beats held up,
+# ending that run's lease for good — then the lease; and presumes a tracked
+# run hung at the lease's max_hold, where its lease stops being renewed, so
+# the two guards agree on when to proceed past it.
 
 
 @contextmanager
-def _tracked(tier: str, tracker, who: str | None, granted: Granted) -> Iterator[Granted]:
-    if not granted:
-        yield granted
-        return
-    token, past = tracker.try_start(hung_after=max_hold(tier))
+def _slot(tier: str, tracker, who: str | None) -> Iterator[Granted]:
+    token, past = tracker.try_start(hung_after=max_hold(tier), holder=who or TIERS[tier])
     if token is None:
-        refused = Granted(f"{TIERS[tier]} is already running in this process")
+        refused = Granted(f"{tracker.holder or TIERS[tier]} is already running in this process")
         _log_skip(tier, who, refused)
         yield refused
         return
     if past is not None:
         logger.warning(
-            "%s: the %s in this process has been running for %s — presumed hung, proceeding",
-            who or TIERS[tier], TIERS[tier], past,
+            "%s: the run going in this process has been running for %s — presumed hung, proceeding",
+            who or TIERS[tier], past,
         )
     try:
-        yield granted
+        yield Granted(None)
     finally:
         tracker.stop(token)
 
 
 @contextmanager
 def tracked_job(tier: str, tracker, *, who: str | None = None) -> Iterator[Granted]:
-    """job(), then `tracker` (see above): true while both are held."""
-    with job(tier, who=who) as granted, _tracked(tier, tracker, who, granted) as both:
-        yield both
+    """`tracker`, then job() (see above): true while both are held."""
+    with _slot(tier, tracker, who) as slot:
+        if not slot:
+            yield slot
+            return
+        with job(tier, who=who) as granted:
+            yield granted
 
 
 @asynccontextmanager
 async def tracked_job_async(tier: str, tracker, *, who: str | None = None) -> AsyncIterator[Granted]:
-    """job_async(), then `tracker` (see above): true while both are held."""
-    async with job_async(tier, who=who) as granted:
-        with _tracked(tier, tracker, who, granted) as both:
-            yield both
+    """`tracker`, then job_async() (see above): true while both are held."""
+    with _slot(tier, tracker, who) as slot:
+        if not slot:
+            yield slot
+            return
+        async with job_async(tier, who=who) as granted:
+            yield granted
