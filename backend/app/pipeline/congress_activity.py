@@ -26,6 +26,7 @@ from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import httpx
+from lxml import etree
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -306,8 +307,19 @@ def _senate_vote_date(text: str) -> str | None:
         return None
 
 
+def _senate_amended_bill(xml_text: str) -> str | None:
+    """The bill a Senate vote on an amendment concerns. Such a vote's
+    <document> is the amendment with no number ("S.Amdt."), and the bill is
+    in <amendment_to_document_number> ("S. 4668")."""
+    try:
+        root = etree.fromstring(xml_text.encode("utf-8"))
+    except etree.XMLSyntaxError:
+        return None
+    return floor_logs.bill_id_from_number(root.findtext(".//amendment/amendment_to_document_number"))
+
+
 def _store_roll_call(db: Session, chamber: str, congress: int, session: int, number: int,
-                     parsed: dict, url: str) -> None:
+                     parsed: dict, url: str, bill_id: str | None = None) -> None:
     counts = floor_logs.tally(parsed["members"])
     vote_date = parsed.get("voteDate") or ""
     if chamber == "senate":
@@ -317,7 +329,7 @@ def _store_roll_call(db: Session, chamber: str, congress: int, session: int, num
         question=parsed.get("question") or "", title=parsed.get("documentTitle") or parsed.get("voteTitle") or "",
         result=(parsed.get("result") or "")[:120], rejected=parsed.get("rejected"),
         majority_requirement=(parsed.get("majorityRequirement") or "")[:10],
-        bill_id=floor_logs.bill_id_from_number(parsed.get("documentName")),
+        bill_id=floor_logs.bill_id_from_number(parsed.get("documentName")) or bill_id,
         source_url=url, **counts,
     )
     db.add(row)
@@ -367,7 +379,8 @@ async def sync_roll_calls(client: httpx.AsyncClient, db: Session, chamber: str,
             logger.warning("%s roll call(s) %d-%d missing before %d (%d-%d)", chamber,
                            number - misses, number - 1, number, congress, session)
             misses = 0
-        _store_roll_call(db, chamber, congress, session, number, parsed, url)
+        amended = _senate_amended_bill(text) if chamber == "senate" else None
+        _store_roll_call(db, chamber, congress, session, number, parsed, url, bill_id=amended)
         stored += 1
         number += 1
     return stored, "ok"

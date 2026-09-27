@@ -485,24 +485,30 @@ def _congress_activity_sync() -> None:
     def _run():
         if is_congress_sync_running():
             age = congress_sync_age()
-            if not _is_stale(age, timedelta(hours=2)):
+            if not _is_stale(age, lease.max_hold(lease.CONGRESS_SYNC)):
                 logger.info("Congress sync skipped — the previous one is still running")
                 return
             logger.warning("Previous Congress sync has been running for %s — proceeding anyway", age)
-        loop = asyncio.new_event_loop()
-        try:
-            result = loop.run_until_complete(run_congress_sync())
-            logger.info(
-                "Congress sync: roll calls %s; floor logs %s; digests %s",
-                {k: v["stored"] for k, v in result["rollCalls"].items()},
-                result["floorLogs"], result["digests"],
-            )
-        except Exception:
-            logger.exception("Congress sync failed")
-        finally:
-            loop.close()
+        # Its lease, taken past the check above, so a tick that bails holds
+        # nothing, and a data reset in any process sees the sync (and the
+        # sync sees the reset).
+        with lease.job(lease.CONGRESS_SYNC, who="Congress sync") as held:
+            if not held:
+                return
+            loop = asyncio.new_event_loop()
+            try:
+                result = loop.run_until_complete(run_congress_sync())
+                logger.info(
+                    "Congress sync: roll calls %s; floor logs %s; digests %s",
+                    {k: v["stored"] for k, v in result["rollCalls"].items()},
+                    result["floorLogs"], result["digests"],
+                )
+            except Exception:
+                logger.exception("Congress sync failed")
+            finally:
+                loop.close()
 
-    threading.Thread(target=_run, daemon=True, name="congress-activity-sync").start()
+    _start_job(_run, name="congress-activity-sync")
 
 
 def start_scheduler() -> None:

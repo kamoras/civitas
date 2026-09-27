@@ -319,3 +319,12 @@ def test_a_redirect_is_absent_only_when_it_lands_on_another_kind_of_page(monkeyp
     monkeypatch.setattr(ca, "fetch_with_retry", fake_fetch)
     body = asyncio.run(ca._get(None, requested, label="t"))
     assert (body is ca._ABSENT) is absent
+
+
+def test_a_senate_vote_on_an_amendment_belongs_to_its_bill(db_session, monkeypatch):
+    # Vote 242 (2026-09-24) adopted Amendment 6776 to S. 4668: the XML's
+    # <document> is the bare "S.Amdt."; the bill is the amendment's target.
+    vote = (FIX / "roll_calls" / "vote_119_2_00242.xml").read_bytes()
+    monkeypatch.setattr(ca, "_get", _fake_get({"_00001.xml": vote, "vote1192": ca._ABSENT}))
+    asyncio.run(ca.sync_roll_calls(None, db_session, "senate", 119, 2))
+    assert db_session.query(RollCall).one().bill_id == "S.4668"
