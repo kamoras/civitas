@@ -6,6 +6,7 @@ import logging
 import os
 import secrets
 from datetime import datetime
+from collections.abc import Callable
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -105,31 +106,41 @@ def _history_entry(run, pipeline_type: str, extra: dict) -> dict:
     }
 
 
-def _clear_stuck_runs(db: Session, model, is_running: bool, pipeline_label: str) -> dict:
+def _clear_stuck_runs(db: Session, model, is_running: Callable[[], bool], pipeline_label: str) -> dict:
     """Mark any stuck (status=running) run of `model` as failed.
 
     Shared by the pipelines' "clear stuck run" admin endpoints —
     use when the in-memory flag says idle but the DB record still shows
     running (e.g. after a container restart mid-run).
+
+    The rows are read before the flag, and only those rows are cleared,
+    each still RUNNING: a run raises its flag before its row commits
+    (run_tracker.acquire_tracked_run), so a row read here whose run is
+    going in this process finds the flag up, and a run starting after the
+    read keeps its row.
     """
-    if is_running:
+    stuck = [
+        (run.id, run.started_at)
+        for run in db.query(model).filter(model.status == PipelineStatus.RUNNING).all()
+    ]
+    if is_running():
         raise HTTPException(
             status_code=409, detail=f"{pipeline_label} pipeline is actively running — stop it first"
         )
-
-    stuck = db.query(model).filter(model.status == PipelineStatus.RUNNING).all()
     if not stuck:
         return {"cleared": 0, "message": "No stuck runs found"}
 
     now = utcnow()
-    for run in stuck:
-        run.status = PipelineStatus.FAILED
-        run.error_message = "Cleared by admin (container restart)"
-        run.completed_at = now
-        if run.started_at:
-            run.elapsed_seconds = round((now - run.started_at).total_seconds(), 1)
+    cleared = 0
+    for run_id, started_at in stuck:
+        cleared += db.query(model).filter(model.id == run_id, model.status == PipelineStatus.RUNNING).update({
+            "status": PipelineStatus.FAILED,
+            "error_message": "Cleared by admin (container restart)",
+            "completed_at": now,
+            "elapsed_seconds": round((now - started_at).total_seconds(), 1) if started_at else None,
+        }, synchronize_session=False)
     db.commit()
-    return {"cleared": len(stuck), "message": f"Marked {len(stuck)} run(s) as failed"}
+    return {"cleared": cleared, "message": f"Marked {cleared} run(s) as failed"}
 
 
 @router.post("/auth")
@@ -1432,7 +1443,7 @@ async def admin_clear_stuck_house(db: Session = Depends(get_db)):
     from app.models import HousePipelineRun
     from app.pipeline.house_pipeline import is_house_pipeline_running
 
-    return _clear_stuck_runs(db, HousePipelineRun, is_house_pipeline_running(), "House")
+    return _clear_stuck_runs(db, HousePipelineRun, is_house_pipeline_running, "House")
 
 
 @router.post("/pipeline/clear-stuck-stock-trades", dependencies=[Depends(require_admin)])
@@ -1445,7 +1456,7 @@ async def admin_clear_stuck_stock_trades(db: Session = Depends(get_db)):
     from app.models import StockTradesPipelineRun
     from app.pipeline.stock_pipeline import is_stock_pipeline_running
 
-    return _clear_stuck_runs(db, StockTradesPipelineRun, is_stock_pipeline_running(), "Stock trades")
+    return _clear_stuck_runs(db, StockTradesPipelineRun, is_stock_pipeline_running, "Stock trades")
 
 
 @router.post("/pipeline/trigger-supplementary", dependencies=[Depends(require_admin)])
@@ -1474,7 +1485,7 @@ async def admin_clear_stuck_supplementary(db: Session = Depends(get_db)):
     from app.models import SupplementaryPipelineRun
     from app.pipeline.supplementary_pipeline import is_supplementary_pipeline_running
 
-    return _clear_stuck_runs(db, SupplementaryPipelineRun, is_supplementary_pipeline_running(), "Supplementary")
+    return _clear_stuck_runs(db, SupplementaryPipelineRun, is_supplementary_pipeline_running, "Supplementary")
 
 
 @router.post("/pipeline/trigger-election", dependencies=[Depends(require_admin)])
@@ -1504,7 +1515,7 @@ async def admin_clear_stuck_election(db: Session = Depends(get_db)):
     from app.models import ElectionPipelineRun
     from app.pipeline.election_pipeline import is_election_pipeline_running
 
-    return _clear_stuck_runs(db, ElectionPipelineRun, is_election_pipeline_running(), "Election")
+    return _clear_stuck_runs(db, ElectionPipelineRun, is_election_pipeline_running, "Election")
 
 
 def _data_reset_running(db: Session) -> bool:
