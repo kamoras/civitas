@@ -105,15 +105,7 @@ def _history_entry(run, pipeline_type: str, extra: dict) -> dict:
     }
 
 
-def _senate_row_clearable(db: Session) -> bool:
-    from app.pipeline.run_tracker import senate_row_unaccounted
-
-    return senate_row_unaccounted(db)
-
-
-def _clear_stuck_runs(
-    db: Session, model, is_running: bool, pipeline_label: str, refused: str | None = None,
-) -> dict:
+def _clear_stuck_runs(db: Session, model, is_running: bool, pipeline_label: str) -> dict:
     """Mark any stuck (status=running) run of `model` as failed.
 
     Shared by the pipelines' "clear stuck run" admin endpoints —
@@ -122,7 +114,7 @@ def _clear_stuck_runs(
     """
     if is_running:
         raise HTTPException(
-            status_code=409, detail=refused or f"{pipeline_label} pipeline is actively running — stop it first"
+            status_code=409, detail=f"{pipeline_label} pipeline is actively running — stop it first"
         )
 
     stuck = db.query(model).filter(model.status == PipelineStatus.RUNNING).all()
@@ -770,7 +762,6 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
     """Live pipeline status for polling during a run."""
     db.expire_all()
 
-    from app.api.pipeline import _is_pipeline_running
     from app.pipeline.house_pipeline import is_house_pipeline_running
     from app.pipeline.stock_pipeline import is_stock_pipeline_running
     from app.pipeline.supplementary_pipeline import is_supplementary_pipeline_running
@@ -778,7 +769,10 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
     from app.models import (
         ElectionPipelineRun, HousePipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun,
     )
-    is_running = _is_pipeline_running(db)
+    from app.pipeline.run_tracker import senate_run_state
+
+    # One read of the Senate row and lease for both fields below.
+    _row, is_running, senate_clearable = senate_run_state(db)
 
     last_run = (
         db.query(PipelineRun)
@@ -808,10 +802,10 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
 
     result: dict = {
         "isRunning": is_running,
-        # A RUNNING Senate row no lease speaks for
-        # (run_tracker.senate_row_unaccounted): the dashboard shows it as
-        # stuck and offers clear-stuck-senate, which accepts exactly then.
-        "senateRowClearable": _senate_row_clearable(db),
+        # A RUNNING Senate row no live lease speaks for
+        # (run_tracker.senate_run_state): the dashboard shows it as stuck and
+        # offers clear-stuck-senate, which accepts exactly then.
+        "senateRowClearable": senate_clearable,
         "houseIsRunning": is_house_pipeline_running(),
         "stockTradesIsRunning": is_stock_pipeline_running(),
         "supplementaryIsRunning": is_supplementary_pipeline_running(),
@@ -1372,21 +1366,37 @@ async def admin_trigger_house_pipeline():
 async def admin_clear_stuck_senate(db: Session = Depends(get_db)):
     """Mark any stuck (status=running) Senate pipeline run as failed.
 
-    For a row no lease speaks for (run_tracker.senate_row_unaccounted):
-    one from a release without leases, or one left RUNNING after its run's
-    lease was let go. Refused for a row its run's lease names and hasn't
-    proved dead — that may be a live run whose beats are stalled, and the
-    proof (an hour after its last beat) clears it.
+    For a row no live lease speaks for (run_tracker.senate_run_state):
+    past the age rule, proven dead, or named by no lease — one from a
+    release without leases, or one left RUNNING after its lease was let go.
+    Refused for a row its run's lease names while held: that may be a live
+    run whose heartbeat stalled; if it died, the hourly tidy or the next
+    Senate run marks it stale within about two hours of its last beat.
+    Only the row checked is cleared (a run starting meanwhile keeps its own).
     """
     from app.models import PipelineRun
+    from app.pipeline.run_tracker import senate_run_state
 
-    return _clear_stuck_runs(
-        db, PipelineRun, not _senate_row_clearable(db), "Senate",
-        refused=(
-            "The Senate run's lease still speaks for this row — it may be a live run whose heartbeat is "
-            "stalled. If it has died, its row is cleared an hour after its last beat."
-        ),
-    )
+    row_id, _running, clearable = senate_run_state(db)
+    if row_id is None:
+        return {"cleared": 0, "message": "No stuck runs found"}
+    if not clearable:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "The Senate run's lease still speaks for this row — it may be a live run whose heartbeat "
+                "is stalled. If it has died, it is marked stale within about two hours of its last beat."
+            ),
+        )
+    now = utcnow()
+    cleared = db.query(PipelineRun).filter(
+        PipelineRun.id == row_id, PipelineRun.status == PipelineStatus.RUNNING,
+    ).update({
+        "status": PipelineStatus.FAILED, "error_message": "Cleared by admin (container restart)",
+        "completed_at": now,
+    }, synchronize_session=False)
+    db.commit()
+    return {"cleared": cleared, "message": f"Marked {cleared} run(s) as failed"}
 
 
 @router.post("/pipeline/clear-stuck-house", dependencies=[Depends(require_admin)])

@@ -163,7 +163,7 @@ export interface WatchedPipeline {
 export interface FinishedRun {
   key: string;
   label: string;
-  status: "completed" | "partial" | "failed";
+  status: "completed" | "partial" | "failed" | "stuck";
   elapsedSeconds: number | null | undefined;
 }
 
@@ -171,7 +171,9 @@ export interface FinishedRun {
  * Every pipeline that was running at the previous poll and is not now — all
  * of them, since two can finish between polls (a manual House run ending
  * alongside the nightly chain). A run that ends "partial" is reported as
- * partial, never folded into success.
+ * partial, never folded into success; one that stopped while its row still
+ * reads running (a crashed process, a Senate run whose lease died) recorded no
+ * outcome at all, and is reported as stuck rather than completed.
  */
 export function finishedSince(
   wasRunning: Record<string, boolean>,
@@ -182,7 +184,14 @@ export function finishedSince(
     .map((p) => ({
       key: p.key,
       label: p.label,
-      status: p.status === "failed" ? "failed" : p.status === "partial" ? "partial" : "completed",
+      status:
+        p.status === "failed"
+          ? "failed"
+          : p.status === "partial"
+            ? "partial"
+            : p.status === "completed"
+              ? "completed"
+              : "stuck",
       elapsedSeconds: p.elapsedSeconds,
     }));
 }

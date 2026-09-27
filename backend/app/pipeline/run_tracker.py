@@ -1,7 +1,7 @@
 import logging
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import timedelta
 from collections.abc import Callable
 from typing import TypeVar
 
@@ -44,34 +44,29 @@ def _run_lease(model: type) -> "str | None":
     return lease.SENATE_RUN if model is PipelineRun else None
 
 
-# How long a run's lease must have gone without a beat to prove the run
-# dead. The lease lapses after ten missed beats (lease.STALE_S), which is
-# enough to let a new holder in, but a live run's beats can stall that long
-# behind a writer holding SQLite: calling it dead then would let a deploy,
-# a data reset or a second run proceed under it. An hour without one is
-# death, not contention; short of that, the run's row gets the benefit of
-# the doubt (STALE_PIPELINE_TIMEOUT).
-DEAD_AFTER = timedelta(hours=1)
+# Why a run's row was marked stale on its lease's proof (_proven_dead).
+DEAD_RUN_MESSAGE = "Marked stale: its run's lease lapsed — no beat for its whole stale window"
 
 
-def lease_proves_dead(beat: "datetime | None") -> bool:
-    """Whether a run lease's last beat proves its run dead — an hour
-    without one (DEAD_AFTER). No lease row proves nothing."""
-    return beat is not None and utcnow() - beat >= DEAD_AFTER
+def _lease_on(db: Session, model: type, row_id: int) -> str:
+    """What `model`'s run lease says about row `row_id`: "live" (it names
+    the row and is held), "dead" (it names the row and has lapsed — for the
+    Senate run, an hour without a beat: lease.stale_after), or "none" (no
+    lease, or one naming another run or none, says nothing about it)."""
+    from app.pipeline import lease
+
+    tier = _run_lease(model)
+    record = lease.lease_record(db, tier) if tier is not None else None
+    if record is None or record[1] != row_id:
+        return "none"
+    return "live" if lease.held(db, tier) else "dead"
 
 
 def _proven_dead(db: Session, model: type, row) -> bool:
     """Whether `row` (RUNNING) is proven dead by its run's lease: the lease
-    row names this run (lease.tag, written with the row) and has gone
-    DEAD_AFTER without a beat. A lease naming another run, or none, says
-    nothing about this row — it keeps the age rule."""
-    from app.pipeline import lease
-
-    tier = _run_lease(model)
-    if tier is None:
-        return False
-    record = lease.lease_record(db, tier)
-    return record is not None and record[1] == row.id and lease_proves_dead(record[0])
+    row names this run (lease.tag, written with the row) and has lapsed.
+    Anything else keeps the age rule."""
+    return _lease_on(db, model, row.id) == "dead"
 
 
 def live_run(db: Session, model: type[_RunModel], stale_timeout: timedelta = STALE_PIPELINE_TIMEOUT) -> "_RunModel | None":
@@ -94,26 +89,29 @@ def live_run(db: Session, model: type[_RunModel], stale_timeout: timedelta = STA
     return running
 
 
-def senate_row_unaccounted(db: Session) -> bool:
-    """Whether a RUNNING Senate row exists that no lease speaks for — none
-    names it, or the one that does proves it dead — so no run is known to
-    be behind it. What an operator may clear (clear-stuck-senate); a row a
-    lease names and hasn't yet proved dead may be a live run whose beats
-    stalled, and is left to the proof."""
+def senate_run_state(db: Session) -> "tuple[int | None, bool, bool]":
+    """One read of the Senate run's row and lease, for everything an admin
+    sees: (the RUNNING row's id or None, whether it counts as running —
+    live_run's answer — and whether an operator may clear it:
+    clear-stuck-senate). Clearable is a row no live lease speaks for: past
+    the age rule, proven dead, or named by no lease (a run from a release
+    without leases, or one left RUNNING after its lease was let go). A row
+    its lease names while held may be a live run whose beats stalled."""
     from app.models import PipelineRun, PipelineStatus
-    from app.pipeline import lease
 
-    row = db.query(PipelineRun.id).filter(PipelineRun.status == PipelineStatus.RUNNING).first()
+    row = db.query(PipelineRun).filter(PipelineRun.status == PipelineStatus.RUNNING).first()
     if row is None:
-        return False
-    record = lease.lease_record(db, lease.SENATE_RUN)
-    return record is None or record[1] != row[0] or lease_proves_dead(record[0])
+        return None, False, False
+    past_age = utcnow() - row.started_at >= STALE_PIPELINE_TIMEOUT
+    said = _lease_on(db, PipelineRun, row.id)
+    return row.id, not past_age and said != "dead", past_age or said != "live"
 
 
 def mark_proven_dead_stale(db: Session, model: type) -> int:
     """Mark stale `model`'s RUNNING rows its lease proves dead
-    (_proven_dead), conditional on still RUNNING; commits. Returns how many.
-    Raises what the database raises."""
+    (_proven_dead), conditional on still RUNNING; commits unless a data
+    reset holds the database. Returns how many. Raises what the database
+    raises."""
     from app.models import PipelineStatus
     from app.pipeline import lease
 
@@ -123,10 +121,9 @@ def mark_proven_dead_stale(db: Session, model: type) -> int:
             marked += db.query(model).filter(model.id == row.id, model.status == PipelineStatus.RUNNING).update({
                 "status": PipelineStatus.STALE,
                 "completed_at": utcnow(),
-                "error_message": f"Marked stale: its run's lease went {DEAD_AFTER} without a beat",
+                "error_message": DEAD_RUN_MESSAGE,
             }, synchronize_session=False)
-            logger.warning("Marking the dead %s run #%d stale — its lease went %s without a beat",
-                           model.__name__, row.id, DEAD_AFTER)
+            logger.warning("Marking the dead %s run #%d stale — its lease lapsed", model.__name__, row.id)
     if marked and lease.held(db, lease.DATA_RESET):
         # Checked in the write's own transaction, before committing
         # (lease.DATA_RESET): a reset holds the database, so back out.
@@ -165,9 +162,6 @@ def run_in_progress(db: Session, model: type[_RunModel], stale_timeout: timedelt
 ALREADY_RUNNING = "already_running"
 # The stock pipeline's own: it waits for the member pipelines.
 MEMBER_PIPELINE_RUNNING = "member_pipeline_running"
-# The Senate run's lease lapsed without yet proving its run dead
-# (senate_pipeline._take_senate_run_lease).
-LEASE_LAPSED = "lease_lapsed"
 
 
 def skip_reason_text(reason: str | None, tier: str | None = None) -> str:
@@ -180,10 +174,6 @@ def skip_reason_text(reason: str | None, tier: str | None = None) -> str:
         return lease.refusal_text(reason, tier)
     return {
         ALREADY_RUNNING: "a previous run of it was still active",
-        LEASE_LAPSED: (
-            "its previous run's lease lapsed without proving that run dead — it may be a live run stalled "
-            "behind another writer; proven dead an hour after its last beat, its row is cleared"
-        ),
         MEMBER_PIPELINE_RUNNING: "a member pipeline (Senate or House) was running",
     }.get(reason or "", f"it was skipped ({reason or 'no reason given'})")
 

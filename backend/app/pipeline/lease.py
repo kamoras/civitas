@@ -73,7 +73,13 @@ STALE_S = 10 * 60
 # it commits, so its lease must outlast the wipe unbeaten — a few table
 # deletes, well inside this. A reset whose process died holds writers off
 # this long, and each it holds off says so (run_tracker.acquire_pipeline_lock_why).
-_STALE_S_BY_TIER = {DATA_RESET: 30 * 60}
+#
+# The Senate run's lease also proves its run dead when it lapses
+# (run_tracker._proven_dead): a live run's beats can stall behind a writer
+# for minutes, and calling it dead then would let a deploy, a data reset or
+# a second run proceed under it — so its window is an hour, and a lease
+# that has missed ten beats still counts as held until then.
+_STALE_S_BY_TIER = {DATA_RESET: 30 * 60, SENATE_RUN: 60 * 60}
 
 
 def stale_after(tier: str) -> timedelta:
@@ -119,7 +125,7 @@ def max_hold(tier: str) -> timedelta:
 
 def acquire(
     db: Session, tier: str, *, yield_to: str | None = None, who: str | None = None,
-    may_replace: Callable[[datetime, dict], bool] | None = None,
+    on_replace: Callable[[Session, dict], None] | None = None,
 ) -> str | None:
     """Take the lease; the holder's token, or None when it is held — or, with
     `yield_to`, when that lease is held once this one's row is in (checked
@@ -129,9 +135,9 @@ def acquire(
     a live one never is. `who` names the holder to anyone it
     refuses (lease.holder): the tier's job, by default — a job some other
     run also does a step of (the nightly election run's ballot step) says so.
-    `may_replace(last_beat, row)` decides whether a stale row may be
-    replaced; the delete then removes exactly the row it judged, so a beat
-    landing in between leaves it (the take fails, as for a live holder).
+    `on_replace(db, row)` runs, in the take's own transaction, for a stale
+    row it replaces — for the caller to act on what that row said (a dead
+    run to mark) in the same commit that removes it, or not at all.
     """
     from app.models import ApiCache
 
@@ -141,16 +147,16 @@ def acquire(
         stale = db.query(ApiCache).filter(
             ApiCache.tier == tier, ApiCache.cache_key == "lock", ApiCache.cached_at < now - stale_after(tier),
         )
-        if may_replace is not None:
+        if on_replace is not None:
             found = stale.first()
             if found is not None:
                 try:
                     data = json.loads(found.data_json)
                 except (TypeError, ValueError):
                     data = {}
-                if not may_replace(found.cached_at, data if isinstance(data, dict) else {}):
-                    db.rollback()
-                    return None
+                on_replace(db, data if isinstance(data, dict) else {})
+                # Exactly the row just read: a beat landing in between leaves
+                # it, and the insert below fails as for a live holder.
                 stale = stale.filter(ApiCache.cached_at == found.cached_at, ApiCache.data_json == found.data_json)
         stale.delete()
         row = {"holder": token, "who": who or TIERS[tier]}
@@ -320,9 +326,9 @@ class _Held:
 
 
 def _take(
-    db: Session, tier: str, yield_to: str | None, who: str | None = None, may_replace=None,
+    db: Session, tier: str, yield_to: str | None, who: str | None = None, on_replace=None,
 ) -> _Held | None:
-    token = acquire(db, tier, yield_to=yield_to, who=who, may_replace=may_replace)
+    token = acquire(db, tier, yield_to=yield_to, who=who, on_replace=on_replace)
     return _Held(db, tier, token) if token is not None else None
 
 
@@ -336,12 +342,12 @@ def _let_go(held_lease: _Held) -> None:
 
 @contextmanager
 def holding(
-    db: Session, tier: str, *, yield_to: str | None = None, who: str | None = None, may_replace=None,
+    db: Session, tier: str, *, yield_to: str | None = None, who: str | None = None, on_replace=None,
 ) -> Iterator[str | None]:
     """Hold the lease for the enclosed work, beating it throughout (for its
     tier's max_hold, see _keep); yields the token, or None (and holds
     nothing) when acquire refused."""
-    held_lease = _take(db, tier, yield_to, who, may_replace)
+    held_lease = _take(db, tier, yield_to, who, on_replace)
     if held_lease is None:
         yield None
         return
