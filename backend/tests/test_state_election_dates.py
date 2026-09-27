@@ -11,8 +11,10 @@ import pytest
 from app.pipeline.fetch import state_election_dates as dates
 
 
-def _payload(results, pages=1):
-    return {"results": results, "pagination": {"pages": pages}}
+def _payload(results, pages=1, count=None):
+    return {"results": results, "pagination": {
+        "pages": pages, "count": len(results) * pages if count is None else count,
+    }}
 
 
 @pytest.fixture
@@ -97,6 +99,25 @@ class TestFecCalendar:
         monkeypatch.setattr("app.pipeline.fetch.fec._fetch_with_retry", fake_fetch)
         _calendar, complete = await dates.fetch_fec_calendar(None, 2026)
         assert complete is False
+
+    async def test_a_read_short_of_the_endpoints_own_count_is_incomplete(self, monkeypatch):
+        """A page with no pagination, or rows missing from a page that
+        came back fine, can't say what is absent — and a complete read
+        retracts Senate elections."""
+        row = {"election_state": "AZ", "election_date": "2026-11-03",
+               "election_type_full": "General election", "office_sought": "S"}
+
+        async def no_pagination(client, url):
+            return {"results": [row]}
+
+        monkeypatch.setattr("app.pipeline.fetch.fec._fetch_with_retry", no_pagination)
+        assert (await dates.fetch_fec_calendar(None, 2026))[1] is False
+
+        async def short(client, url):
+            return _payload([row], count=240)
+
+        monkeypatch.setattr("app.pipeline.fetch.fec._fetch_with_retry", short)
+        assert (await dates.fetch_fec_calendar(None, 2026))[1] is False
 
 
 @pytest.mark.asyncio
@@ -213,4 +234,18 @@ class TestCalendarRetraction:
         dates.save_calendar(2026, {"GA": {"senate": "2026-11-03", "runoff": "2026-06-16"}},
                             complete=True, read_on="d1")
         dates.save_calendar(2026, {}, complete=True, read_on="d2")
-        assert dates.all_dates()["2026-GA"] == {"primary": "2026-05-19", "runoff": "2026-06-16"}
+        assert dates.all_dates()["2026-GA"] == {
+            "primary": "2026-05-19", "runoff": "2026-06-16", "state_feed": True,
+        }
+
+    def test_a_legacy_calendar_date_stops_shadowing_the_calendar(self, dates_file):
+        """The calendar used to write the state's own keys. Such a value,
+        left on disk, would otherwise pass for the state's own claim
+        forever and hide every later FEC correction."""
+        import json
+        dates_file.write_text(json.dumps({"2026-OK": {"primary": "2026-06-16", "runoff": "2026-08-25"}}))
+        dates.save_calendar(2026, {"OK": {"primary": "2026-06-23"}}, complete=False, read_on="d1")
+        assert dates.primary_date("OK", 2026) == "2026-06-16"  # a partial read changes nothing old
+        dates.save_calendar(2026, {"OK": {"primary": "2026-06-23"}}, complete=True, read_on="d2")
+        assert dates.primary_date("OK", 2026) == "2026-06-23"
+        assert dates.all_dates()["2026-OK"] == {"fec_primary": "2026-06-23"}

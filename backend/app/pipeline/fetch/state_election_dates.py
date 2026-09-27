@@ -66,8 +66,12 @@ _cache: dict[str, Any] | None = None
 # own keys, so neither overwrites the other: "primary"/"runoff" from the
 # state's own feed, "fec_primary"/"fec_runoff"/"senate" from the national
 # calendar. The state is the authority on its own election and wins where
-# both answer; a disagreement is logged, not averaged away.
-_FEC_KEYS = ("fec_primary", "fec_runoff", "senate")
+# both answer; a disagreement is logged, not averaged away. "state_feed"
+# marks an entry whose primary/runoff a state's feed wrote: before the two
+# were kept apart, the calendar wrote those keys too, and a complete read
+# drops such a legacy value (primary_date falls back to fec_primary; a
+# state with its own feed rewrites its date within a week).
+_STATE_FEED = "state_feed"
 
 
 def _path() -> str:
@@ -167,8 +171,11 @@ def save(state: str, cycle: int, dates: dict) -> None:
     key = f"{cycle}-{state.upper()}"
     stated = {k: v for k, v in dates.items() if v and k in ("primary", "runoff")}
 
+    if not stated:
+        return
+
     def change(known: dict) -> dict:
-        known[key] = {**(known.get(key) or {}), **stated}
+        known[key] = {**(known.get(key) or {}), **stated, _STATE_FEED: True}
         _disagreement(state.upper(), known[key])
         return known
 
@@ -201,6 +208,9 @@ def save_calendar(cycle: int, calendar: dict[str, dict], *, complete: bool, read
                 "senate": listed.get("senate"),
             }
             entry = dict(known.get(key) or {})
+            if complete and not entry.get(_STATE_FEED):
+                entry.pop("primary", None)
+                entry.pop("runoff", None)
             for field, value in fec.items():
                 if value:
                     entry[field] = value
@@ -245,8 +255,18 @@ async def fetch_fec_calendar(
             logger.warning("FEC election-date calendar page %d failed — read incomplete", page)
             break
         rows += payload.get("results") or []
-        if page >= (payload.get("pagination") or {}).get("pages", 1):
-            complete = bool(rows)
+        pagination = payload.get("pagination") or {}
+        if page >= pagination.get("pages", 1):
+            # Complete only as the endpoint itself counts it: a page with
+            # no pagination, or one that came back short, can't say what
+            # is absent — and a complete read retracts (save_calendar).
+            count = pagination.get("count")
+            complete = bool(rows) and isinstance(count, int) and len(rows) == count
+            if not complete:
+                logger.warning(
+                    "FEC election-date calendar read %d row(s) of %s — read incomplete",
+                    len(rows), count,
+                )
             break
         page += 1
     else:

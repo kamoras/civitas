@@ -552,6 +552,9 @@ _CRAWL_EVERY = timedelta(days=7)
 # on it left the state dark until a later crawl could re-prove it.
 _FORGET_AFTER = timedelta(days=14)
 _CRAWL_RECORD_TTL_HOURS = 24 * 400
+# How an adopted results source's description begins — what tells the
+# crawler's own find from anything else in the discovered file.
+_FOUND_AUTOMATICALLY = "Found automatically"
 
 
 def _crawl_record(db: Session, cycle: int, state: str) -> dict:
@@ -679,7 +682,8 @@ async def _crawl_state(
         outcome = await _forget_if_broken(client, cycle, state, record, now)
         # A state with no usable RESULTS source can still publish a
         # filing list, and before its primary that is the only answer
-        # there is — so it is looked for either way.
+        # there is — so it is looked for either way (and a stored one is
+        # re-found each week, so a list that moves is followed).
         if outcome != "kept":
             filings = await _adopt_filings(db, client, cycle, state, hand or {})
             if filings != "none":
@@ -706,7 +710,7 @@ async def _crawl_state(
     kept = {k: v for k, v in (_discovered_source(state) or {}).items() if k == "filings"}
     save_discovered(state, kept | {k: v for k, v in found.items() if not k.startswith("_")}
                     | {"source_name": found.get("_evidence", "discovered"),
-                       "description": f"Found automatically on {now.date().isoformat()}: "
+                       "description": f"{_FOUND_AUTOMATICALLY} on {now.date().isoformat()}: "
                                       f"{found.get('_evidence')}. Nomination rules are NOT "
                                       f"inferred — a state needing a runoff threshold, a "
                                       f"convention rule or top-two counting still needs a "
@@ -766,13 +770,15 @@ async def _adopt_filings(
     # Only what was found here goes in the discovered file: for a
     # hand-verified state, a copy of its entry would shadow later edits to
     # it and serve as a stale "spare" source (sync_confirmed_candidates).
-    # An earlier version stored exactly such a copy; whatever of it merely
-    # repeats the hand-verified entry is dropped as it is rewritten.
-    hand = (_sources_file().get("states") or {}).get(state) or {}
-    stored = {
-        k: v for k, v in (_discovered_source(state) or {}).items()
-        if k == "filings" or hand.get(k) != v
-    }
+    # An earlier version stored exactly such a copy; one is dropped as it
+    # is rewritten. A results source the crawler itself found and adopted
+    # (a replacement for a broken hand-verified one, which carries the
+    # hand entry's rules) says so in its description, and is kept whole.
+    existing = _discovered_source(state) or {}
+    if str(existing.get("description") or "").startswith(_FOUND_AUTOMATICALLY):
+        stored = dict(existing)
+    else:
+        stored = {}
     stored["filings"] = candidate_source["filings"]
     stored.setdefault("source_name", filings["_evidence"])
     save_discovered(state, stored)
@@ -827,8 +833,9 @@ async def _forget_if_broken(
     source = _discovered_source(state) or {}
     strategy = STRATEGIES.get(source.get("strategy"))
     if strategy is None:
-        # A filing list alone — no results source to test.
-        return "kept"
+        # A filing list alone — no results source to test. The caller looks
+        # for the filing list again, which keeps it current if it moves.
+        return "filings only"
     records = await strategy(client, cycle, state, source)
     if records is not None:
         record.pop("failingSince", None)

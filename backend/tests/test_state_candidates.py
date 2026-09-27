@@ -50,7 +50,7 @@ class TestCrawlAdoption:
             return None
 
         async def no_calendar(client, cycle):
-            return {}
+            return {}, False
 
         monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
         monkeypatch.setattr(sc, "discover_source", fake_discover)
@@ -167,11 +167,11 @@ class TestCrawlAdoption:
             return None
 
         async def no_calendar(client, cycle):
-            return {}
+            return {}, False
 
         monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
         async def no_calendar(client, cycle):
-            return {}
+            return {}, False
 
         monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
         monkeypatch.setattr(sc, "discover_source", fake_discover)
@@ -269,15 +269,24 @@ class TestForgetsBrokenDiscoveries:
     @pytest.mark.asyncio
     async def test_a_filing_list_alone_is_not_a_broken_results_source(self, db_session, monkeypatch):
         """An entry with a filing list and no results source was forgotten
-        on every crawl, because it had nothing to fetch."""
+        on every crawl, because it had nothing to fetch. It is kept — and
+        its filing list is still looked for each week, so one that moves
+        is followed."""
         saved = {"ZZ": {"filings": {"url": "x"}, "source_name": "filings"}}
 
         async def never_called(client, cycle, state, source):
             raise AssertionError("no results source to test")
 
         forgotten = self._patch(monkeypatch, saved, never_called)
+        looked = []
+
+        async def filings(client, state, cycle):
+            looked.append(state)
+            return None
+
+        monkeypatch.setattr(sc, "discover_filings", filings)
         outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
-        assert outcomes["ZZ"] == "kept" and forgotten == []
+        assert outcomes["ZZ"] == "filings only" and forgotten == [] and looked == ["ZZ"]
 
 
 class TestForgettingKeepsTheFilingList:
@@ -409,6 +418,32 @@ class TestFilingsForHandVerifiedStates:
         assert outcome.startswith("filings adopted")
         assert saved["TX"] == {"filings": {"url": "x"}, "source_name": "TX filings"}
 
+    @pytest.mark.asyncio
+    async def test_a_replacement_the_crawler_found_is_kept_whole(self, db_session, monkeypatch):
+        """A results source adopted for a broken hand-verified state carries
+        that state's rules — it is not a copy to strip."""
+        _race(db_session, "2026-HOUSE-TX-3", "TX", "H", 3)
+        _candidate(db_session, "c1", "2026-HOUSE-TX-3", "FLOOD, MIKE", party="REP")
+        db_session.commit()
+        hand = sc._sources_file()["states"]["TX"]
+        found = {"strategy": hand["strategy"], "runoff_threshold_pct": 50.0,
+                 "source_name": "a new host", "description": "Found automatically on 2026-09-01: x"}
+        saved = {}
+
+        async def filings(client, state, cycle):
+            return {"url": "x", "_evidence": "TX filings"}
+
+        async def ballot(client, cycle, state, source):
+            return {"primary": [{"office": "H", "district": 3, "party": "R", "last_name": "Flood"}],
+                    "general": [], "primary_date": None}
+
+        monkeypatch.setattr(sc, "discover_filings", filings)
+        monkeypatch.setattr(sc, "fetch_ballot_candidates", ballot)
+        monkeypatch.setattr(sc, "_discovered_source", lambda st: dict(found))
+        monkeypatch.setattr(sc, "save_discovered", lambda st, src: saved.update({st: src}))
+        await sc._adopt_filings(db_session, None, 2026, "TX", hand)
+        assert saved["TX"] == found | {"filings": {"url": "x"}}
+
 
 class TestIsConfigured:
     def test_true_for_a_registered_state_with_a_real_strategy(self):
@@ -536,7 +571,7 @@ class TestSyncConfirmedCandidates:
         """The nightly sync refreshes the national calendar first; these
         tests are about matching, not about the FEC."""
         async def none(client, cycle):
-            return {}
+            return {}, False
 
         monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", none)
 
