@@ -409,12 +409,22 @@ def _keep_ballot_only(db: Session, race: Race, record: dict) -> str | None:
 
 
 def _has_general_filings(state: str) -> bool:
-    """Whether this state has a filing list, whose general-election rows
-    then speak for its November ballot (North Carolina's do). By state,
-    not by the source in hand: a hand-verified state's list may be one the
-    crawler found (filings_for_state), and asking only its entry let the
-    results pass prune what the filing pass had just put on the ballot."""
-    return bool(filings_for_state(state))
+    """Whether this state's filing list speaks for its November ballot
+    (North Carolina's does) — its general rows, not the results pass,
+    deciding who is listed. For a hand-verified state only a list in its
+    own entry does: one the crawler found is unverified, and must not take
+    that authority from a certified ballot (TX, LA, ...) — its general rows
+    aren't applied at all (_filings_speak_for_november)."""
+    return bool(filings_for_state(state)) and _filings_speak_for_november(state)
+
+
+def _filings_speak_for_november(state: str) -> bool:
+    """Whether `state`'s filing list's general rows are applied. A
+    hand-verified state's are only if the list is its own; a crawler-found
+    list there contributes its primary rows alone. (Before, such a list was
+    not read at all.)"""
+    hand = (_sources_file().get("states") or {}).get(state.upper())
+    return not hand or bool(hand.get("filings"))
 
 
 def _apply_ballot(
@@ -1240,6 +1250,10 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
                 records = await STRATEGIES.get(spare.get("strategy"), _no_strategy)(
                     client, cycle, state, spare,
                 )
+                if records is not None:
+                    # Its records are the spare's: never the broken entry's
+                    # authority (general_ballot_complete) or attribution.
+                    source = spare
         if records is None and general_records is None:
             results[state] = {"confirmed": 0, "unmatched": 0, "status": "fetch_failed"}
             continue
@@ -1365,7 +1379,13 @@ async def sync_ballot_filings(db: Session, client: httpx.AsyncClient, cycle: int
             _note_ballot_name(db, match, record)
             counts["primary"] += 1
         applied = {"ballotOnly": 0, "unconfirmed": 0}
-        if found["general"]:
+        if found["general"] and not _filings_speak_for_november(state):
+            logger.info(
+                "%s: %d general row(s) on a crawler-found filing list not applied — "
+                "the state's verified source speaks for November",
+                state, len(found["general"]),
+            )
+        elif found["general"]:
             applied = _apply_ballot(
                 db, cycle, state, found["general"], keep_unlisted=True,
                 authoritative=bool(source.get("general_ballot_complete")),

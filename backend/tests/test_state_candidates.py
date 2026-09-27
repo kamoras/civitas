@@ -423,23 +423,98 @@ class TestEveryCrawlLooksForAFilingList:
 
 
 class TestFilingsForHandVerifiedStates:
-    def test_a_crawler_found_list_puts_the_ballot_elsewhere(self, tmp_path, monkeypatch):
-        """The results pass asked only the hand entry whether a filing list
-        speaks for the November ballot, so for a hand-verified state whose
-        list the crawler found it pruned the ballot-only candidates the
-        filing pass had just added."""
+    def test_a_crawler_found_list_never_takes_a_verified_states_november_authority(
+        self, tmp_path, monkeypatch,
+    ):
+        """For a hand-verified state only a list in its own entry speaks for
+        November (NC's); one the crawler found is unverified and must not
+        strip a certified ballot's authority. Elsewhere a found list does."""
         import json
 
         from app.pipeline.fetch import state_candidate_sources as sources
 
         path = tmp_path / "discovered.json"
+        path.write_text(json.dumps({"TX": {"filings": {"url": "x"}}, "ZZ": {"filings": {"url": "y"}}}))
+        monkeypatch.setattr(sources, "_DISCOVERED_PATH", str(path))
+        monkeypatch.setattr(sources, "_discovered_cache", None)
+        assert sc._has_general_filings("TX") is False
+        assert sc._has_general_filings("ZZ") is True
+        assert sc._has_general_filings("NC") is True  # its own list
+
+    @pytest.mark.asyncio
+    async def test_a_verified_ballot_keeps_unconfirming_with_a_found_list_on_file(
+        self, db_session, monkeypatch, tmp_path,
+    ):
+        """TX's certified ballot drops a withdrawn nominee and records its
+        basis whether or not the crawler has found TX a (primary-only)
+        filing list; that list's general rows are not applied."""
+        import json
+        from unittest.mock import AsyncMock
+
+        from app.pipeline.fetch import state_candidate_sources as sources
+
+        async def no_calendar(client, cycle):
+            return {}, False
+
+        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+        monkeypatch.setattr(sc, "configured_states", lambda: {"TX"})
+        path = tmp_path / "d.json"
         path.write_text(json.dumps({"TX": {"filings": {"url": "x"}}}))
         monkeypatch.setattr(sources, "_DISCOVERED_PATH", str(path))
         monkeypatch.setattr(sources, "_discovered_cache", None)
-        assert sc._has_general_filings("TX") is True
-        path.write_text("{}")
+        _race(db_session, "2026-SEN-TX", "TX", office="S")
+        _candidate(db_session, "A", "2026-SEN-TX", "PAXTON, KEN", party="REP", confirmed_general=True)
+        _candidate(db_session, "B", "2026-SEN-TX", "WITHDRAWN, BOB", party="REP", confirmed_general=True)
+        db_session.commit()
+        monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(return_value=[
+            {"office": "S", "district": None, "party": "R", "last_name": "PAXTON"}]))
+        recorded = []
+        monkeypatch.setattr(sc, "_record_ballot_basis", lambda db, c, st, src, **k: recorded.append(st))
+        await sc.sync_confirmed_candidates(db_session, None, 2026)
+        assert db_session.get(Candidate, "B").confirmed_general is False
+        assert recorded == ["TX"]
+
+        async def a_list_naming_bob(client, year, state, source):
+            return {"primary": [], "primary_date": None, "general": [
+                {"office": "S", "district": None, "party": "R", "last_name": "WITHDRAWN"}]}
+
+        monkeypatch.setattr(sc, "fetch_ballot_candidates", a_list_naming_bob)
+        await sc.sync_ballot_filings(db_session, None, 2026)
+        assert db_session.get(Candidate, "B").confirmed_general is False  # its general rows not applied
+
+    @pytest.mark.asyncio
+    async def test_a_spare_source_answers_with_its_own_authority(self, db_session, monkeypatch, tmp_path):
+        """When TX's certified ballot is down and a discovered results file
+        answers, that file isn't the certified ballot: it must not un-confirm
+        a third-party nominee the ballot confirmed, nor be recorded as it."""
+        import json
+        from unittest.mock import AsyncMock
+
+        from app.pipeline.fetch import state_candidate_sources as sources
+
+        async def no_calendar(client, cycle):
+            return {}, False
+
+        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+        monkeypatch.setattr(sc, "configured_states", lambda: {"TX"})
+        path = tmp_path / "d.json"
+        path.write_text(json.dumps({"TX": {"strategy": "tabular", "source_name": "a results file",
+                                           "description": "Found automatically on 2026-10-01: x"}}))
+        monkeypatch.setattr(sources, "_DISCOVERED_PATH", str(path))
         monkeypatch.setattr(sources, "_discovered_cache", None)
-        assert sc._has_general_filings("TX") is False
+        _race(db_session, "2026-SEN-TX", "TX", office="S")
+        _candidate(db_session, "A", "2026-SEN-TX", "PAXTON, KEN", party="REP", confirmed_general=True)
+        _candidate(db_session, "L", "2026-SEN-TX", "LIBBY, LARRY", party="LIB", confirmed_general=True)
+        db_session.commit()
+        monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(return_value=None))
+        monkeypatch.setitem(sc.STRATEGIES, "tabular", AsyncMock(return_value=[
+            {"office": "S", "district": None, "party": "R", "last_name": "PAXTON"}]))
+        recorded = []
+        monkeypatch.setattr(sc, "_record_ballot_basis",
+                            lambda db, c, st, src, **k: recorded.append(src.get("source_name")))
+        await sc.sync_confirmed_candidates(db_session, None, 2026)
+        assert db_session.get(Candidate, "L").confirmed_general is True
+        assert "Texas Secretary of State" not in " ".join(filter(None, recorded))
 
     def test_a_filing_list_found_for_a_hand_verified_state_is_read(self, tmp_path, monkeypatch):
         """The hand-verified entry won whole, so a filing list the crawler
