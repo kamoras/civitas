@@ -92,8 +92,6 @@ class TestResetGuard:
                 await admin_reset_data()
         reset.assert_not_called()
         assert refused.value.status_code == 409
-        # The locks it took on the idle pipelines are given back.
-        assert db_session.query(models.PipelineRun).count() == 0
         return refused.value.detail
 
     async def test_refuses_while_a_pipeline_run_is_live_in_any_process(self, db_session):
@@ -115,17 +113,26 @@ class TestResetGuard:
         assert _acquire_refresh_lock(db_session) is not None
         assert "Action Center refresh" in await self._refused(db_session)
 
-    async def test_holds_every_writer_off_for_the_wipe_and_lets_go_after(self, db_session):
+    async def test_refuses_while_another_process_resets(self, db_session):
+        from app.pipeline import lease
+
+        assert lease.acquire(db_session, lease.DATA_RESET) is not None
+        assert "Another data reset" in await self._refused(db_session)
+
+    async def test_holds_every_writer_off_for_the_wipe_and_lets_go_after(self, db_session, monkeypatch):
         from app.api.admin import admin_reset_data
         from app.background import WritesHeld, start_writer
-        from app.pipeline.analyze.action_center import _acquire_refresh_lock
+        from app.pipeline import lease
+        from app.pipeline.analyze import action_center
         from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
 
+        monkeypatch.setattr(action_center, "_run_refresh", lambda db: 7)
         during = {}
 
         def wipe():
-            during["senate_lock_free"] = acquire_pipeline_lock(db_session, models.PipelineRun, STALE_PIPELINE_TIMEOUT) is not None
-            during["lease_free"] = _acquire_refresh_lock(db_session) is not None
+            # What another process's pipeline or refresh meets mid-wipe.
+            during["pipeline_started"] = acquire_pipeline_lock(db_session, models.HousePipelineRun, STALE_PIPELINE_TIMEOUT) is not None
+            during["refresh_ran"] = action_center.refresh_action_issues(db_session) == 7
             try:
                 start_writer(lambda: None, name="test-late")
                 during["writer_started"] = True
@@ -136,9 +143,10 @@ class TestResetGuard:
         with patch("app.database.reset_all_data", side_effect=wipe):
             result = await admin_reset_data()
         assert result["rowsDeleted"] == 2
-        assert during == {"senate_lock_free": False, "lease_free": False, "writer_started": False}
-        assert db_session.query(models.PipelineRun).count() == 0
-        assert _acquire_refresh_lock(db_session) is not None
+        assert during == {"pipeline_started": False, "refresh_ran": False, "writer_started": False}
+        # The backed-out pipeline left no run row, and the reset let go.
+        assert db_session.query(models.HousePipelineRun).count() == 0
+        assert not lease.held(db_session, lease.DATA_RESET)
 
 
 class _Unclosable:
@@ -152,28 +160,3 @@ class _Unclosable:
 
     def __getattr__(self, name):
         return getattr(self._session, name)
-
-
-def test_a_dead_resets_run_lock_goes_stale_within_the_hour(db_session):
-    from datetime import timedelta
-
-    from app.pipeline.run_tracker import RESET_HOLD_MARKER, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
-    from app.time_utils import utcnow
-
-    db_session.add(models.HousePipelineRun(
-        status="running", started_at=utcnow() - timedelta(hours=2), error_message=RESET_HOLD_MARKER,
-    ))
-    db_session.commit()
-    assert acquire_pipeline_lock(db_session, models.HousePipelineRun, STALE_PIPELINE_TIMEOUT) is not None
-
-
-def test_startup_leaves_a_live_resets_senate_lock_alone(db_session, monkeypatch):
-    from app.main import _invalidate_orphaned_pipelines
-    from app.pipeline.run_tracker import RESET_HOLD_MARKER
-    from app.time_utils import utcnow
-
-    db_session.add(models.PipelineRun(status="running", started_at=utcnow(), error_message=RESET_HOLD_MARKER))
-    db_session.commit()
-    monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
-    _invalidate_orphaned_pipelines()
-    assert db_session.query(models.PipelineRun).one().status == "running"

@@ -23,8 +23,8 @@ _RunModel = TypeVar("_RunModel")
 STALE_PIPELINE_TIMEOUT = timedelta(hours=12)
 
 
-# The run table of every pipeline with one, which the admin data reset holds
-# (api/admin.py) so no pipeline in any process starts during its wipe.
+# The run table of every pipeline with one: the admin data reset (api/admin.py)
+# refuses while any has a live run.
 def run_tables() -> dict[str, type]:
     from app.models import (
         ElectionPipelineRun, HousePipelineRun, PipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun,
@@ -34,13 +34,6 @@ def run_tables() -> dict[str, type]:
         "Senate": PipelineRun, "Supplementary": SupplementaryPipelineRun, "House": HousePipelineRun,
         "Stock trades": StockTradesPipelineRun, "Election": ElectionPipelineRun,
     }
-
-
-# Written on a run row the reset holds. Such a row goes stale after
-# RESET_HOLD_STALE, not the 12h a real run gets, so a reset whose process
-# died doesn't keep the nightly chain out for the rest of the day.
-RESET_HOLD_MARKER = "Held by the admin data reset"
-RESET_HOLD_STALE = timedelta(hours=1)
 
 
 def run_in_progress(db: Session, model: type[_RunModel], stale_timeout: timedelta = STALE_PIPELINE_TIMEOUT) -> bool:
@@ -88,10 +81,6 @@ def acquire_pipeline_lock(db: Session, model: type[_RunModel], stale_timeout: ti
     running = db.query(model).filter(model.status == PipelineStatus.RUNNING).first()
     if running:
         age = utcnow() - running.started_at
-        if running.error_message == RESET_HOLD_MARKER:
-            # The admin data reset holds this lock for seconds to minutes; one
-            # held longer belongs to a reset whose process died.
-            stale_timeout = RESET_HOLD_STALE
         if age > stale_timeout:
             running.status = PipelineStatus.STALE
             running.completed_at = utcnow()
@@ -112,6 +101,14 @@ def acquire_pipeline_lock(db: Session, model: type[_RunModel], stale_timeout: ti
         # and our commit — it holds the lock.
         db.rollback()
         logger.info("%s lock held by another container — skipping this run", model.__name__)
+        return None
+    from app.pipeline import lease
+
+    if lease.held(db, lease.DATA_RESET):
+        # Checked after the run row is in, never before (see lease.DATA_RESET).
+        db.delete(run)
+        db.commit()
+        logger.warning("%s not started: an admin data reset is running", model.__name__)
         return None
     return run
 

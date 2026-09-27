@@ -1048,10 +1048,10 @@ def reset_all_data() -> dict:
                 continue
             wipe = table.delete()
             if table.name == "api_cache":
-                # The Action Center refresh's lease, which the reset itself
-                # holds while it runs (api/admin.py) — deleted, a refresh
-                # could start mid-wipe.
-                wipe = wipe.where(table.c.tier != "action-refresh-lock")
+                # The leases (app.pipeline.lease): the reset's own, which is
+                # what holds other processes' writers off while it runs, and
+                # a refresh's, which is live if one is.
+                wipe = wipe.where(table.c.tier.notin_(["data-reset-lock", "action-refresh-lock"]))
             summary[table.name] = db.execute(wipe).rowcount
         # A kept issue's links to Explore documents name them by rowid, and
         # SQLite hands the rebuilt documents the same rowids again: left, the

@@ -81,14 +81,7 @@ def _invalidate_orphaned_pipelines() -> None:
 
     db = SessionLocal()
     try:
-        from app.pipeline.run_tracker import RESET_HOLD_MARKER
-
-        # Not a data reset's hold: that may be another process's, mid-wipe,
-        # and a dead reset's goes stale on its own (acquire_pipeline_lock).
-        orphaned = db.query(PipelineRun).filter(
-            PipelineRun.status == PipelineStatus.RUNNING,
-            PipelineRun.error_message.is_distinct_from(RESET_HOLD_MARKER),
-        ).all()
+        orphaned = db.query(PipelineRun).filter(PipelineRun.status == PipelineStatus.RUNNING).all()
         for run in orphaned:
             run.status = PipelineStatus.STALE
             run.completed_at = utcnow()

@@ -5,7 +5,6 @@ import json
 import logging
 import os
 import secrets
-import threading
 from datetime import datetime
 from typing import Annotated
 
@@ -118,14 +117,6 @@ def _clear_stuck_runs(db: Session, model, is_running: bool, pipeline_label: str)
             status_code=409, detail=f"{pipeline_label} pipeline is actively running — stop it first"
         )
 
-    from app.pipeline.run_tracker import RESET_HOLD_MARKER
-
-    held = db.query(model).filter(
-        model.status == PipelineStatus.RUNNING, model.error_message == RESET_HOLD_MARKER,
-    ).first()
-    if held is not None:
-        # Not a stuck run: a data reset holding the lock for its wipe.
-        raise HTTPException(status_code=409, detail="A data reset holds this pipeline's lock — wait for it to finish")
     stuck = db.query(model).filter(model.status == PipelineStatus.RUNNING).all()
     if not stuck:
         return {"cleared": 0, "message": "No stuck runs found"}
@@ -1448,55 +1439,31 @@ def _reset_holding_every_writer() -> dict:
 
     - In this process, app.background.exclusive(): granted only while no
       writer thread or task is registered, and while held none starts.
-    - In any process — a rollout's other task included — each pipeline's
-      run lock (marked as the reset's, run_tracker.RESET_HOLD_MARKER) and
-      the Action Center refresh's lease, kept alive by the refresh's own
-      heartbeat: the locks those jobs take themselves.
+    - In any process — a rollout's other task included — the reset's lease
+      (lease.DATA_RESET), which a pipeline's run lock and the refresh lease
+      check once taken. The reset takes it first and then checks theirs, so
+      between a pipeline or refresh and the reset one always sees the other.
 
-    Raises WritersBusy, naming them, if anything holds one already.
+    Raises WritersBusy, naming them, if anything is writing already.
     """
     from app.background import WritersBusy, exclusive
-    from app.database import SessionLocal, engine, reset_all_data
-    from app.pipeline.analyze.action_center import (
-        _acquire_refresh_lock, _keep_refresh_lock, _release_refresh_lock,
-    )
-    from app.pipeline.run_tracker import (
-        RESET_HOLD_MARKER, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock, run_tables,
-    )
+    from app.database import SessionLocal, reset_all_data
+    from app.pipeline import lease
+    from app.pipeline.run_tracker import run_in_progress, run_tables
 
     with exclusive("Another data reset"):
         db = SessionLocal()
-        held, busy, lease = [], [], None
-        stop_beat = threading.Event()
         try:
-            for label, model in run_tables().items():
-                run = acquire_pipeline_lock(db, model, STALE_PIPELINE_TIMEOUT)
-                if run is None:
-                    busy.append(f"{label} run")
-                else:
-                    run.error_message = RESET_HOLD_MARKER
-                    db.commit()
-                    held.append(run)
-            lease = _acquire_refresh_lock(db)
-            if lease is None:
-                busy.append("Action Center refresh")
-            if busy:
-                raise WritersBusy(busy)
-            threading.Thread(
-                target=_keep_refresh_lock, args=(engine, lease, stop_beat), daemon=True, name="reset-lease-beat",
-            ).start()
-            return reset_all_data()
+            with lease.holding(db, lease.DATA_RESET) as token:
+                if token is None:
+                    raise WritersBusy(["Another data reset"])
+                busy = [f"{label} run" for label, model in run_tables().items() if run_in_progress(db, model)]
+                if lease.held(db, "action-refresh-lock"):
+                    busy.append("Action Center refresh")
+                if busy:
+                    raise WritersBusy(busy)
+                return reset_all_data()
         finally:
-            stop_beat.set()
-            try:
-                for run in held:
-                    db.delete(run)
-                db.commit()
-            except Exception:
-                logger.exception("Data reset: could not release its run locks (they go stale within the hour)")
-                db.rollback()
-            if lease is not None:
-                _release_refresh_lock(db, lease)
             db.close()
 
 
