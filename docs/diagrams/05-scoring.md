@@ -66,7 +66,7 @@ sum changed.
 |---|---|---|
 | Legislative Leadership | PageRank on the cosponsorship graph | **Not** purely informational — this is the same score feeding LE at 25% |
 | Ideology Score | SVD on the cosponsorship matrix (2nd singular vector) | Purely informational |
-| Partisan Depth | Content-based voting analysis, SVD ideology as a prior (linear blend) | Purely informational |
+| Partisan Depth | Yea/Nay on D- vs R-leaning bills per area, SVD ideology as a prior while votes are few; label = tercile within own party | Purely informational |
 
 ## Presidents
 

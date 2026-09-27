@@ -10,13 +10,13 @@ flowchart TB
         CONG["Congress.gov<br/>bills · votes · members<br/>1.2 RPS"]
         FEC["FEC API<br/>contributions · committees<br/>0.25 RPS"]
         GOVINFO["GovInfo<br/>bill text · Congressional Record<br/>1.0 RPS"]
-        SENGOV["Senate.gov<br/>platform text · roll calls<br/>scraped, no API"]
+        SENGOV["Senate.gov · House Clerk<br/>roll-call vote XML<br/>no API"]
         OYEZ["Oyez / supremecourt.gov<br/>SCOTUS votes · opinions"]
         ECON["BLS · BEA / FRED · MeasuringWorth<br/>employment · GDP"]
         FEDREG["Federal Register<br/>orders · rulemaking"]
         UCSB["UCSB American Presidency Project<br/>roster · approval · margins"]
         PTR["House Clerk · Senate eFD · OGE · SEC<br/>STOCK Act disclosures"]
-        VOTEVIEW["Voteview<br/>DW-NOMINATE ideal points"]
+        VOTEVIEW["Voteview<br/>Nokken-Poole ideal points"]
         RSS["RSS — AP · NPR · PBS · BBC<br/>The Hill · Politico · Roll Call<br/>8 feeds, 7 newsrooms<br/>+ 41 per-state newsrooms (elections)"]
         SOCIAL["Google Trends · Bluesky"]
         VSMART["Vote Smart<br/>statewide ballot measures<br/>optional, keyed"]
@@ -24,19 +24,19 @@ flowchart TB
     end
 
     subgraph PIPE["Pipelines — APScheduler"]
-        NIGHTLY["Nightly, 03:00 UTC<br/>senate → house → stock<br/>4-6h cold · 45-90m warm"]
+        NIGHTLY["Nightly chain, 03:00 UTC<br/>senate → supplementary → house<br/>→ stock → election<br/>4-6h cold · 45-90m warm"]
         HOURLY["Hourly at :15<br/>Action Center refresh"]
-        SUPP["Supplementary<br/>presidents · justices · explore"]
+        SUPP["Supplementary (in the chain)<br/>explore · justices (weekly) · PVI · presidents"]
         ELECT["Election pipeline<br/>races · candidates · ballot measures · coverage"]
     end
 
     subgraph STORE["Persistence — /data volume"]
-        SQLITE[("SQLite civitas.db<br/>44 tables")]
+        SQLITE[("SQLite civitas.db<br/>49 tables · visits.db 6")]
         VECDB[("sqlite-vec vectors.db<br/>vec_explore + vec_bills<br/>384-dim, cosine")]
     end
 
     subgraph SERVE["Serving"]
-        API["FastAPI :8000<br/>/api/... · /api/public/v1 · /health"]
+        API["FastAPI :8000<br/>/api/... · /api/public/v1 · /api/health"]
         WEB["Next.js 16 :3000<br/>App Router, RSC"]
         NGINX["nginx :8081<br/>reverse proxy + cache"]
     end
@@ -53,7 +53,7 @@ flowchart TB
 
     PIPE -->|writes| SQLITE
     PIPE -->|upserts embeddings| VECDB
-    PIPE -.->|~100-400 calls/run| LLAMA
+    PIPE -.->|Action Center · Bluesky · justice profiles<br/>member pipelines: none| LLAMA
     PIPE -.->|~50,000 ops/run| EMBED
     HOURLY -->|posts| BSKY
 
@@ -70,8 +70,9 @@ flowchart TB
 ## Reading the diagram
 
 **Solid edges are data flow; dotted edges are inference calls.** The ratio is
-the point: roughly 50,000 embedding operations per run against 100–400 LLM
-calls. Civitas is a semantic classification and retrieval system that uses a
+the point: roughly 50,000 embedding operations per nightly run, and no LLM
+call at all from the member pipelines; the model writes only Action Center
+and Bluesky text and justice profiles. Civitas is a semantic classification and retrieval system that uses a
 language model only at the final synthesis step, not an LLM application.
 
 **The two models live in different places.** The embedding model runs
@@ -86,15 +87,16 @@ overlay network only — Swarm's host-mode publishing cannot restrict to
 `127.0.0.1`, so rather than accept LAN-wide exposure they aren't published at
 all. See [08 — Deployment](08-deployment.md).
 
-**If llama.cpp is unavailable**, LLM calls fall through to a timeout and the
-pipeline records a per-member failure without aborting the run. Scores still
-compute — they are deterministic and take no LLM input.
+**If llama.cpp is unavailable**, LLM calls fail with a timeout and each
+caller degrades on its own: the Action Center publishes nothing from a cluster
+it can't read, and a justice profile falls back to a template. Scores are
+unaffected — they are deterministic and take no LLM input.
 
 ## Source map
 
 | Component | Code |
 |---|---|
-| Pipeline orchestration | `backend/app/pipeline/{senate,house,president,justice,explore,election,stock}_pipeline.py` |
+| Pipeline orchestration | `backend/app/pipeline/{senate,supplementary,house,president,justice,explore,election,stock}_pipeline.py` |
 | Scheduler | `backend/app/scheduler.py` |
 | LLM client | `backend/app/pipeline/analyze/ollama_client.py` |
 | Embeddings + sqlite-vec | `backend/app/pipeline/vector_store.py` |

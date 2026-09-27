@@ -578,7 +578,8 @@ What this rules in and out:
   documents why three obvious sources give wrong answers — and doing it
   is the price of not asking.
 - **In, server-side only:** the Census geocoder and Google Civic's
-  `voterInfoQuery`, called from the pipeline with **our own** fixed,
+  `voterInfoQuery`, called from the pipeline (and, for the town selector,
+  from the API, cached 12 hours) with **our own** fixed,
   publicly-known building addresses (`town_directory.json`,
   `state_candidate_sources.json`'s `house_addresses`) to resolve which
   district a *known* place sits in. Every visitor who picks the same town

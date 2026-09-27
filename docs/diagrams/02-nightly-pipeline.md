@@ -1,44 +1,39 @@
 # Nightly pipeline
 
-Runs at 03:00 UTC by default (`PIPELINE_CRON_SCHEDULE`). Processes all 100
-senators and 435 representatives, then a stock-disclosure pass.
+Runs at 03:00 UTC by default (`PIPELINE_CRON_SCHEDULE`) as a chain of five
+pipelines, each started only if the one before it finished
+(`scheduler._nightly_pipeline`): **Senate → Supplementary → House → Stock
+trades → Election.** A failure partway down means nothing after it runs, and
+leaves no run row behind to look wrong; `ops_alerts.check_pipeline_staleness`
+is what notices.
 
 ```mermaid
 flowchart TB
-    START(["APScheduler cron tick"]) --> LOCK{"PipelineRun<br/>status = running?"}
+    START(["APScheduler cron tick"]) --> LOCK{"a running row in<br/>this pipeline's run table?"}
     LOCK -->|yes, fresh| SKIP(["Skip this tick"])
-    LOCK -->|yes, stale > 8h| MARK["Mark stale, proceed"]
+    LOCK -->|yes, older than 12h| MARK["Mark stale, proceed"]
     LOCK -->|no| FP
     MARK --> FP
 
     FP{"SHA-256 of pipeline/ ASTs (minus fetch/)<br/>+ config_definitions<br/>== last run's hash?"}
-    FP -->|changed| CLEAR["Clear AnalysisCache<br/>+ LearnedClassification<br/>ApiCache untouched"]
+    FP -->|changed| CLEAR["Clear AnalysisCache<br/>+ LearnedClassification<br/>+ vec_bills reference corpus<br/>ApiCache untouched"]
     FP -->|same| P1
     CLEAR --> P1
 
-    P1["<b>1. FETCH</b><br/>Congress · FEC · GovInfo · Senate.gov<br/>Voteview ideal points<br/>raw responses stored verbatim in ApiCache"]
-    P2["<b>2. TRANSFORM</b><br/>FEC dedup by committee ID + amendment<br/>bill title normalisation<br/>employer name canonicalisation<br/>memo-text earmark separation"]
-    P2B["<b>2b. ROSTER LIFECYCLE</b><br/>in DB but off the roster → seat vacant<br/>back on the roster → restored<br/>gone > 180 days → deleted with child rows<br/><i>skipped if the roster looks truncated</i><br/><i>presidents and justices never touched</i>"]
-    P1 --> P2 --> P2B --> P3
-
-    subgraph P3["3. ANALYZE — fully deterministic, no LLM call, per member"]
-        direction LR
-        LIB["<b>Embedding + scoring</b><br/>batches of 64<br/><br/>bill titles → policy areas<br/>employers → industries<br/>donor↔bill cosine conflicts<br/>key-vote selection<br/>speech → party alignment<br/>compute + persist scorecard"]
+    subgraph SENATE["Senate pipeline"]
+        P1["<b>1. FETCH</b><br/>Congress.gov members · bills · actions<br/>Senate.gov roll calls · FEC<br/>raw responses stored verbatim in ApiCache"]
+        P2["<b>2. TRANSFORM</b><br/>FEC dedup by committee ID + amendment<br/>bill title normalisation<br/>employer name canonicalisation<br/>memo-text earmark separation"]
+        P2B["<b>2b. ROSTER LIFECYCLE</b><br/>in DB but off the roster → seat vacant<br/>back on the roster → restored<br/>gone > 180 days → deleted with child rows<br/><i>skipped if the roster looks truncated</i><br/><i>presidents and justices never touched</i>"]
+        P3["<b>3. ANALYZE</b> — deterministic, no LLM call<br/>bill titles → policy area · stance · commemorative<br/>donors → type · industry<br/>party alignment: the roll call's split, else content<br/>PageRank leadership · SVD ideology<br/>donor–vote connections · key votes<br/>scores against references measured this run"]
+        P7["<b>7. FINALIZE</b><br/>persist scores, key votes, donor–vote matches,<br/>sponsored bills<br/>append ScoreSnapshot per member<br/>ground-truth gate · PipelineRun timings"]
+        P1 --> P2 --> P2B --> P3 --> P7
     end
 
-    P3 --> P4["<b>4. EXPLORE</b><br/>embed speeches, presidential actions,<br/>SCOTUS opinions, FR rulemaking<br/>→ sqlite-vec upsert"]
-    P3 --> P5["<b>5. JUSTICES</b><br/>Oyez votes → consistency,<br/>independence"]
-    P3 --> P6["<b>6. PRESIDENTS</b><br/>BLS · BEA/FRED · MeasuringWorth<br/>UCSB approval · C-SPAN survey"]
-
-    P4 --> P7
-    P5 --> P7
-    P6 --> P7
-
-    P7["<b>7. FINALIZE</b><br/>persist scores, key votes, lobbying matches,<br/>promises, sponsored bills<br/>append ScoreSnapshot per member<br/>record PipelineRun timings + errors"]
-
-    P7 --> HOUSE["<b>House pipeline</b><br/>~6 phases, 435 members<br/>reuses the EXPLORE pipeline<br/>no LLM for promise analysis"]
-    HOUSE --> STOCK["<b>Stock pipeline</b><br/>STOCK Act PTR ingestion<br/>House Clerk + Senate eFD + OGE 278-T"]
-    STOCK --> DONE(["PipelineRun status = completed"])
+    P7 --> SUPP["<b>Supplementary pipeline</b><br/>EXPLORE: speeches, presidential actions,<br/>SCOTUS opinions, FR rulemaking → sqlite-vec + FTS5<br/>JUSTICES (weekly, Sunday) · committee leadership<br/>district PVI · PRESIDENTS"]
+    SUPP --> HOUSE["<b>House pipeline</b><br/>the same phases for 435 members<br/>no LLM call"]
+    HOUSE --> STOCK["<b>Stock trades pipeline</b><br/>STOCK Act PTR ingestion<br/>House Clerk + Senate eFD + OGE 278-T"]
+    STOCK --> ELECT["<b>Election pipeline</b><br/>roster → financials → ballots → coverage"]
+    ELECT --> DONE(["every run row completed"])
 ```
 
 ## Why ANALYZE runs one member at a time
@@ -69,15 +64,23 @@ rejects it up front.
 
 ## The SQLite mutex
 
-Concurrency control is a row in `pipeline_runs` (`status == "running"`), not a
-process-level lock. That choice is what makes rolling deploys safe: a new
-container starting mid-run finds the in-progress row and marks it `stale`
-rather than blocking or double-running. See `backend/app/scheduler.py`.
+Concurrency control is a row in each pipeline's run table with
+`status == "running"`, not a process-level lock: a partial UNIQUE index lets
+only one process insert it, so the two backend processes that overlap during a
+Swarm rollout can't both start the same pipeline
+(`run_tracker.acquire_pipeline_lock`). Pipelines are threads of the backend,
+so a restart kills them without letting them record it; on startup the backend
+marks every pipeline's leftover `running` row `stale`
+(`main._invalidate_orphaned_pipelines`), and a row older than 12 hours is
+cleared at the next acquisition. `check-and-deploy.sh` does not deploy while
+any pipeline runs.
 
 ## The fingerprint gate
 
-At start, a SHA-256 over every file in `pipeline/analyze/` is compared to the
-hash stored on the last `PipelineRun`. If the analysis code changed, derived
+At start, a SHA-256 over every analysis-relevant file — all of `app/pipeline/`
+except `fetch/`, plus `config_definitions.py`, each hashed as its
+docstring-stripped AST so comment edits don't count — is compared to the hash
+stored on the last `PipelineRun`. If the analysis code changed, derived
 artifacts are cleared so updated logic can't serve results computed by the old
 logic.
 
@@ -88,7 +91,7 @@ become wrong because analysis code changed. See [06 — Caching](06-caching.md).
 
 | Stage | Code |
 |---|---|
-| Orchestration | `backend/app/pipeline/senate_pipeline.py`, `house_pipeline.py` |
+| Orchestration | `backend/app/scheduler.py` (the chain), `backend/app/pipeline/senate_pipeline.py`, `supplementary_pipeline.py`, `house_pipeline.py`, `stock_pipeline.py`, `election_pipeline.py` |
 | Fetch clients | `backend/app/pipeline/fetch/` |
 | Transform | `backend/app/pipeline/transform/` |
 | Roster lifecycle | `backend/app/pipeline/member_lifecycle.py` |
