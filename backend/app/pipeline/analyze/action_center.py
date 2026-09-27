@@ -1384,6 +1384,17 @@ _CLUSTER_SPLIT_MIN_SUBGROUP_SIZE = 2
 _CLUSTER_SPLIT_MIN_SUBGROUP_SHARE = 0.25
 
 
+def _center_titles(embeddings: np.ndarray, mean: np.ndarray) -> np.ndarray:
+    """Unit title vectors with the day's generic-headline direction removed.
+
+    `mean` must be the whole day's, as pass 1 computes it — never a single
+    cluster's (see the coherence filter in _run_refresh for what that did).
+    """
+    centered = embeddings - mean
+    norms = np.linalg.norm(centered, axis=1, keepdims=True)
+    return centered / np.where(norms < 1e-9, 1.0, norms)
+
+
 def _largest_coherent_subgroup(sim_matrix: np.ndarray, threshold: float) -> list[int]:
     """Indices of the largest sub-cluster in ``sim_matrix``, or all indices
     if it doesn't meaningfully split.
@@ -1443,10 +1454,7 @@ def _cluster_articles(
     # "generic news article" component and makes topic-specific dimensions dominate.
     titles = [a.title for a, _ in items]
     title_embeddings = _embed_texts(titles)
-    mean_emb = title_embeddings.mean(axis=0, keepdims=True)
-    centered = title_embeddings - mean_emb
-    norms = np.linalg.norm(centered, axis=1, keepdims=True)
-    centered_embs = centered / np.where(norms < 1e-9, 1.0, norms)
+    centered_embs = _center_titles(title_embeddings, title_embeddings.mean(axis=0))
     title_sim = centered_embs @ centered_embs.T
 
     pass1 = _agglomerative_cluster(title_sim, CLUSTER_TITLE_THRESHOLD)
@@ -4115,6 +4123,10 @@ def _run_refresh(db: Session) -> int:
     # 4. Cluster by topic
     _set_refresh_state(stage="cluster")
     clusters = _cluster_articles(relevant)
+    # The day's mean title embedding: the "generic news headline" direction
+    # pass 1 subtracted. Every per-cluster check below measures in that
+    # same space (see the coherence filter for why not the cluster's own).
+    day_title_mean = _embed_texts([a.title for a, _ in relevant]).mean(axis=0)
 
     # 5. Rank clusters using coverage breadth + trending relevance
     _set_refresh_state(stage="rank")
@@ -4168,12 +4180,20 @@ def _run_refresh(db: Session) -> int:
         # similarity is useless here because every news headline sits in the
         # same high-similarity region; centering removes that bias so only
         # articles that share the cluster's specific topic score highly.
+        #
+        # Centered on the DAY's mean, never the cluster's own. Subtracting a
+        # coherent cluster's own mean subtracts the very topic its articles
+        # share, leaving near-zero-sum residuals: the centroid of those is
+        # whichever article is noisiest, which then scores 1.00 against it
+        # while its siblings score negative. Live logs showed exactly that
+        # ("1/5 articles on-topic (sims: 1.00, -0.11, -0.15, -0.25, -0.27)"),
+        # and the split below broke one Missouri-map cluster into fragments
+        # and kept two of eight same-story articles. Measured on the
+        # 2026-09-27 feed (9 clusters of 3+): the filter kept 28 articles
+        # cluster-centered, 48 day-centered, and every coherent cluster's
+        # articles scored 0.47-0.91 instead of one high and the rest negative.
         cluster_titles = [a.title for a in cluster]
-        raw_embs = _embed_texts(cluster_titles)
-        mean_emb = raw_embs.mean(axis=0)
-        centered = raw_embs - mean_emb
-        norms = np.linalg.norm(centered, axis=1, keepdims=True)
-        centered_normed = centered / np.where(norms < 1e-9, 1.0, norms)
+        centered_normed = _center_titles(_embed_texts(cluster_titles), day_title_mean)
 
         # Split off a second genuine topic before the centroid-distance filter
         # below, which can't detect a roughly-balanced two-topic cluster (see
@@ -4201,11 +4221,13 @@ def _run_refresh(db: Session) -> int:
         # dimension (e.g. "Trump administration") — they all score positive.
         # 0.25 requires a meaningful alignment with the cluster's specific topic.
         #
-        # MEASURED AND KEPT (7,045 observations over 1,039 persisted runs).
-        # The distribution is sharply bimodal: 4,294 observations sit below
-        # 0.20 — the clearly-unrelated mass — and the rest spread broadly
-        # from 0.2 to 0.9. 0.25 sits exactly at that boundary, which is
-        # what this constant was supposed to be and now demonstrably is.
+        # MEASURED (7,045 observations over 1,039 persisted runs) — but in
+        # the cluster-centered space fixed above (2026-09-27), whose "4,294
+        # observations below 0.20" were largely that centering's artifact,
+        # not unrelated articles. Day-centered, same-topic articles score
+        # 0.47-0.91, so 0.25 still separates them from a stray; the
+        # source_coherence_*_sim_bucket counters now record the new space
+        # and are what a re-measurement reads.
         #
         # Otsu's method on the same histogram returns 0.35, and that is
         # NOT adopted: Otsu assumes two comparable classes and is pulled

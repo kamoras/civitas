@@ -171,3 +171,18 @@ def test_0006_stops_guessing_ocr_owners_and_versions_senate_trades(patched_engin
         rows = conn.execute(text("SELECT parse_confidence, owner, parser_version FROM stock_trades ORDER BY id")).all()
     # OCR rows now read exactly as version 2 reads them, so they are current.
     assert [tuple(r) for r in rows] == [("ocr", "unknown", 2), ("text", "self", 1), ("ocr", "spouse", 2)]
+
+
+def test_an_owner_this_image_does_not_know_reads_as_unknown():
+    """0006 writes owner 'unknown'; an image reading a row some other
+    image's parser wrote must not fail the member's whole response on it."""
+    from app.schemas import StockTradeSchema
+
+    fields = dict(
+        asset_name="A", transaction_type="purchase", transaction_date="2026-01-01",
+        disclosure_date="2026-01-02", days_to_disclose=1, amount_low=1, amount_high=2,
+        industry="X", source_url="",
+    )
+    assert StockTradeSchema(owner="unknown", **fields).owner == "unknown"
+    assert StockTradeSchema(owner="trust", **fields).owner == "unknown"
+    assert StockTradeSchema(owner="spouse", **fields).owner == "spouse"

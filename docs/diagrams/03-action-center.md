@@ -90,6 +90,13 @@ relationship no source stated (issue 748), a House member called a senator (750)
 and filler (751). Migration 0004 cleared the stored prose; those issues show no
 story.
 
+**Every title comparison uses the day's mean, not a cluster's.** Pass 1 removes
+the day's average headline vector so topic dimensions dominate. The per-cluster
+split and coherence filter re-centered on the cluster's own mean, which removes
+the shared topic itself; one article then scored 1.00 and its same-story
+siblings scored negative. Both now use `_center_titles` with the day's mean
+(2026-09-27 feed: 48 articles kept vs 28).
+
 **A claim is one contiguous span of its source.** The rendered sentence runs
 from the actor through the predicate in the source's own words, including any
 words between them (dropping them turned "OpenAI agent made" into "OpenAI
