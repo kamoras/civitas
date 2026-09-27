@@ -628,7 +628,7 @@ def test_the_bill_refresh_waits_for_a_senate_run_only_while_it_may_be_live(db_se
         def close(self):
             pass
 
-    db_session.add(models.PipelineRun(status="running", started_at=utcnow()))
+    db_session.add(models.PipelineRun(status="running", started_at=utcnow() - timedelta(hours=3)))
     db_session.commit()
     if beat_ago is not None:
         lease.acquire(db_session, lease.SENATE_RUN)

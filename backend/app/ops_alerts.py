@@ -297,9 +297,9 @@ def check_pipeline_overrun() -> None:
     default_budget = timedelta(hours=settings.PIPELINE_OVERRUN_ALERT_HOURS)
     db = SessionLocal()
     try:
-        # Live runs only (run_tracker.live_run), however old: a Senate row
-        # whose lease no live run holds is a dead run's, not an overrunning
-        # one — check_pipeline_staleness reports a run that never finished.
+        # Runs that may be live (run_tracker.live_run), however old: a row
+        # proven dead is a dead run's, not an overrunning one —
+        # check_pipeline_staleness reports a run that never finished.
         checks = [
             (label, live_run(db, model, timedelta.max), budget)
             for label, model, budget in (

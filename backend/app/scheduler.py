@@ -476,20 +476,6 @@ def _election_ballot_sync() -> None:
     _start_job(_run, name="election-ballot-sync")
 
 
-def _tidy_dead_runs() -> None:
-    from app.database import SessionLocal
-    from app.pipeline.run_tracker import mark_dead_runs_stale
-
-    db = SessionLocal()
-    try:
-        mark_dead_runs_stale(db)
-    except Exception:
-        db.rollback()
-        logger.exception("Dead-run tidy failed — it runs again next hour")
-    finally:
-        db.close()
-
-
 def start_scheduler() -> None:
     """Parse the cron schedule from settings and start the scheduler.
 
@@ -577,11 +563,13 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
-    # A Senate run a crash or a rollout left RUNNING, once its lease proves
-    # it dead (run_tracker.mark_dead_runs_stale): run history stops showing
-    # it as running. Readers already see through it (run_tracker.live_run).
+    # A run a crash or a rollout left RUNNING, once it is proven dead
+    # (run_tracker.tidy_dead_runs): run history stops showing it as running.
+    # Readers already see through it (run_tracker.live_run).
+    from app.pipeline.run_tracker import tidy_dead_runs
+
     scheduler.add_job(
-        lambda: _start_job(_tidy_dead_runs, name="dead-run-tidy"),
+        lambda: _start_job(tidy_dead_runs, name="dead-run-tidy"),
         CronTrigger(minute="25"),
         id="dead_run_tidy",
         replace_existing=True,

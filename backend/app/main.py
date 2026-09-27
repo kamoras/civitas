@@ -75,27 +75,20 @@ def _preload_embedding_model() -> None:
 
 
 def _invalidate_orphaned_pipelines() -> None:
-    """Mark stale a 'running' Senate row whose run is proven dead
-    (run_tracker.mark_dead_runs_stale) — its lease an hour without a beat.
+    """Mark stale the RUNNING rows whose runs are proven dead
+    (run_tracker.tidy_dead_runs) — past the age rule, or a Senate run whose
+    lease went an hour without a beat.
 
     Not every leftover row: during a rollout's overlap the other task may be
     running it for real, and a lease that has only just lapsed may be a live
     run stalled behind a writer. Until a row is proven dead every reader
     gives it the benefit of the doubt (run_tracker.live_run); the scheduler
-    repeats this hourly (scheduler._tidy_dead_runs), so one a crash left just
-    before this start is tidied once the proof arrives.
+    repeats this hourly, so a row a crash left just before this start is
+    tidied once the proof arrives.
     """
-    from app.database import SessionLocal
-    from app.pipeline.run_tracker import mark_dead_runs_stale
+    from app.pipeline.run_tracker import tidy_dead_runs
 
-    db = SessionLocal()
-    try:
-        mark_dead_runs_stale(db)
-    except Exception as e:
-        db.rollback()
-        logging.getLogger("app.main").warning("Orphan pipeline cleanup failed: %s — the hourly tidy retries", e)
-    finally:
-        db.close()
+    tidy_dead_runs()
 
 
 PROCESS_STARTED_AT: str | None = None

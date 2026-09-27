@@ -550,7 +550,7 @@ def test_a_senate_row_is_dead_only_on_its_leases_proof(db_session):
     from app.pipeline.run_tracker import live_run
     from app.time_utils import utcnow
 
-    db_session.add(models.PipelineRun(status="running", started_at=utcnow()))
+    db_session.add(models.PipelineRun(status="running", started_at=utcnow() - timedelta(hours=3)))
     db_session.commit()
     assert live_run(db_session, models.PipelineRun) is not None and _is_pipeline_running(db_session)
     _lease_beat_ago(db_session, timedelta(minutes=20))  # lapsed, not proven
@@ -562,44 +562,65 @@ def test_a_senate_row_is_dead_only_on_its_leases_proof(db_session):
 def test_startup_and_the_hourly_tidy_mark_only_proven_dead_runs(db_session, monkeypatch):
     from datetime import timedelta
 
-    from app import main, scheduler
+    from app import main
+    from app.pipeline.run_tracker import tidy_dead_runs
     from app.time_utils import utcnow
 
-    db_session.add(models.PipelineRun(status="running", started_at=utcnow()))
+    db_session.add(models.PipelineRun(status="running", started_at=utcnow() - timedelta(hours=3)))
+    db_session.add(models.HousePipelineRun(status="running", started_at=utcnow() - timedelta(hours=13)))
     db_session.commit()
     monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
     _lease_beat_ago(db_session, timedelta(minutes=20))
     main._invalidate_orphaned_pipelines()
-    assert db_session.query(models.PipelineRun).one().status == "running"  # maybe a stalled live run
-    _lease_beat_ago(db_session, timedelta(hours=2))
-    scheduler._tidy_dead_runs()
     db_session.expire_all()
-    run = db_session.query(models.PipelineRun).one()
-    assert run.status == "stale" and "without a beat" in run.error_message
+    assert db_session.query(models.PipelineRun).one().status == "running"  # maybe a stalled live run
+    assert db_session.query(models.HousePipelineRun).one().status == "stale"  # past the age rule
+    _lease_beat_ago(db_session, timedelta(hours=2))
+    assert tidy_dead_runs() == 1
+    db_session.expire_all()
+    assert db_session.query(models.PipelineRun).one().status == "stale"
+
+
+def test_a_leases_proof_covers_only_rows_started_by_its_last_beat(db_session, monkeypatch):
+    """A row a later run inserted — after the dead lease's last beat — isn't
+    the dead run's, and nothing marks it on that proof."""
+    from datetime import timedelta
+
+    from app.pipeline.run_tracker import live_run, tidy_dead_runs
+    from app.time_utils import utcnow
+
+    _lease_beat_ago(db_session, timedelta(hours=2))
+    db_session.add(models.PipelineRun(status="running", started_at=utcnow() - timedelta(minutes=5)))
+    db_session.commit()
+    monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
+    assert live_run(db_session, models.PipelineRun) is not None
+    assert tidy_dead_runs() == 0
 
 
 def test_the_next_senate_run_clears_a_proven_dead_runs_row(db_session):
-    """Read before it takes the lease over: its own fresh lease can't vouch
-    for the dead row, and a lease only just lapsed doesn't prove anything."""
+    """Its evidence read before the lease is taken over (a new run's own
+    lease can't vouch for the dead row), and a lapsed lease that proves
+    nothing yet isn't taken over at all (that would delete the evidence)."""
     from contextlib import ExitStack
     from datetime import timedelta
 
-    from app.pipeline import senate_pipeline
+    from app.pipeline import lease, senate_pipeline
     from app.time_utils import utcnow
 
-    db_session.add(models.PipelineRun(status="running", started_at=utcnow()))
+    db_session.add(models.PipelineRun(status="running", started_at=utcnow() - timedelta(hours=3)))
     db_session.commit()
     _lease_beat_ago(db_session, timedelta(minutes=20))
     with ExitStack() as stack, pytest.MonkeyPatch.context() as mp:
         mp.setattr(senate_pipeline, "SessionLocal", lambda: _Unclosable(db_session))
-        refused, predecessor_dead = senate_pipeline._take_senate_run_lease(stack)
-        assert refused is None and predecessor_dead is False
-        assert senate_pipeline._acquire_pipeline_lock(db_session, predecessor_dead=predecessor_dead)[1] == "already_running"
+        assert senate_pipeline._take_senate_run_lease(stack) == (lease.REFUSED_HELD, None)
+    assert lease.last_beat(db_session, lease.SENATE_RUN) is not None  # the evidence kept
+
     _lease_beat_ago(db_session, timedelta(hours=2))
+    beat = lease.last_beat(db_session, lease.SENATE_RUN)
     with ExitStack() as stack, pytest.MonkeyPatch.context() as mp:
         mp.setattr(senate_pipeline, "SessionLocal", lambda: _Unclosable(db_session))
-        refused, predecessor_dead = senate_pipeline._take_senate_run_lease(stack)
-        assert refused is None and predecessor_dead is True
-        run, refused = senate_pipeline._acquire_pipeline_lock(db_session, predecessor_dead=predecessor_dead)
+        refused, dead_since = senate_pipeline._take_senate_run_lease(stack)
+        assert refused is None and dead_since == beat
+        run, refused = senate_pipeline._acquire_pipeline_lock(db_session, dead_since=dead_since)
         assert refused is None and run is not None
     assert sorted(r.status for r in db_session.query(models.PipelineRun).all()) == ["running", "stale"]

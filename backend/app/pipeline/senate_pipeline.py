@@ -16,7 +16,7 @@ Uses SQLAlchemy sessions for persistence and PipelineRun records to track progre
 import json
 import logging
 import time
-from datetime import timedelta
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 
@@ -400,14 +400,15 @@ def _record_score_snapshots(db: Session) -> None:
     logger.info("Recorded score snapshots for %d senators on %s", len(senators), today)
 
 
-def _acquire_pipeline_lock(db: Session, *, predecessor_dead: bool = False) -> "tuple[PipelineRun | None, str | None]":
+def _acquire_pipeline_lock(db: Session, *, dead_since: "datetime | None" = None) -> "tuple[PipelineRun | None, str | None]":
     """Atomically create a new locked run: (run, None), or (None, why) —
     run_tracker.acquire_pipeline_lock_why.
 
-    `predecessor_dead`: the lease this run took over proved the run before
-    it dead (run_tracker.lease_proves_dead, read before taking it), so a
-    RUNNING row left behind is cleared now rather than refusing every run
-    until it ages past the stale timeout.
+    `dead_since`: the last beat of the lease this run took over, when it
+    proved the run that held it dead (read before taking it). A RUNNING row
+    that run could have written — started no later — is cleared now rather
+    than refusing every run until it ages past the stale timeout; a later
+    one (a run the proof says nothing about) is not.
 
     Uses the shared SQLite database so the lock works across blue/green
     containers. Atomicity is enforced by the database itself: a partial
@@ -424,11 +425,10 @@ def _acquire_pipeline_lock(db: Session, *, predecessor_dead: bool = False) -> "t
 
     from app.pipeline.run_tracker import DEAD_AFTER, STALE_PIPELINE_TIMEOUT
 
-    if predecessor_dead:
-        return acquire_pipeline_lock_why(
-            db, PipelineRun, timedelta(0), stale_because=f"its run's lease went {DEAD_AFTER} without a beat",
-        )
-    return acquire_pipeline_lock_why(db, PipelineRun, STALE_PIPELINE_TIMEOUT)
+    return acquire_pipeline_lock_why(
+        db, PipelineRun, STALE_PIPELINE_TIMEOUT, dead_if_started_by=dead_since,
+        stale_because=f"its run's lease went {DEAD_AFTER} without a beat" if dead_since else None,
+    )
 
 
 # Hashed paths that cannot change how anything is classified or scored, so
@@ -813,16 +813,18 @@ def split_key_and_recent_votes(
 _SENATE_LEASE_ATTEMPTS = 5
 
 
-def _take_senate_run_lease(stack) -> "tuple[str | None, bool]":
+def _take_senate_run_lease(stack) -> "tuple[str | None, datetime | None]":
     """Hold lease.SENATE_RUN on its own session until `stack` closes: (None,
-    whether its last beat before this take proved the previous run dead —
-    run_tracker.lease_proves_dead) once held, or (the lease.refusal_code why
-    it can't be had, False). Taken before
-    the Senate run lock, and held until after the run's row is final, so a
-    RUNNING row always has a live lease beside it while its run lives —
-    which is how a process starting up tells a live run from one a dead
-    process left (main._invalidate_orphaned_pipelines). Held by another, a
-    Senate run (or a reset) is live and this one doesn't start; a busy
+    the previous holder's last beat when it proved that run dead —
+    run_tracker.lease_proves_dead — else None) once held, or (the
+    lease.refusal_code why it can't be had, None). Taken before the Senate
+    run lock, and held until after the run's row is final, so a live run's
+    lease is renewed beside its RUNNING row, and a dead run's lease row,
+    left behind, is the evidence that proves it dead an hour on
+    (run_tracker.live_run). So a lease that has lapsed but proves nothing
+    yet — a live run stalled behind a writer, or one just killed — is not
+    taken over: that would delete the evidence. Held by another, a Senate
+    run (or a reset) may be live and this one doesn't start; a busy
     database is waited out a few times first."""
     from app.pipeline import lease
 
@@ -832,14 +834,21 @@ def _take_senate_run_lease(stack) -> "tuple[str | None, bool]":
     stack.callback(lease_db.close)
     why = lease.REFUSED_BUSY
     for _ in range(_SENATE_LEASE_ATTEMPTS):
-        # The evidence about the run before, read before taking over its row.
+        # The evidence about the run before, read before anything replaces it.
         prior_beat = lease.last_beat(lease_db, lease.SENATE_RUN)
+        dead = lease_proves_dead(prior_beat)
+        if prior_beat is not None and not dead and not lease.held(lease_db, lease.SENATE_RUN):
+            logger.warning(
+                "The Senate run's lease lapsed %s ago without proving its run dead — "
+                "not taking it over yet", utcnow() - prior_beat,
+            )
+            return lease.REFUSED_HELD, None
         if stack.enter_context(lease.holding(lease_db, lease.SENATE_RUN, yield_to=lease.DATA_RESET)) is not None:
-            return None, lease_proves_dead(prior_beat)
+            return None, prior_beat if dead else None
         why = lease.refusal_code(lease_db, lease.SENATE_RUN)
         if why != lease.REFUSED_BUSY:
             break
-    return why, False  # logged by the caller, with the run lock's refusals
+    return why, None  # logged by the caller, with the run lock's refusals
 
 
 async def run_senate_pipeline(
@@ -867,10 +876,10 @@ async def run_senate_pipeline(
 
     run_lease = ExitStack()
     try:
-        refused, predecessor_dead = _take_senate_run_lease(run_lease)
+        refused, dead_since = _take_senate_run_lease(run_lease)
         pipeline_run = None
         if refused is None:
-            pipeline_run, refused = _acquire_pipeline_lock(db, predecessor_dead=predecessor_dead)
+            pipeline_run, refused = _acquire_pipeline_lock(db, dead_since=dead_since)
     except BaseException:
         # Before the run's own try: let go of the lease (and its heartbeat)
         # here, or it would be renewed for as long as the process lives.

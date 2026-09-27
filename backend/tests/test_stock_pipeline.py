@@ -212,7 +212,7 @@ class TestOtherPipelineRunningStaleness:
         from app.models import ApiCache
         from app.pipeline import lease
 
-        db_session.add(PipelineRun(started_at=utcnow() - timedelta(minutes=5), status=PipelineStatus.RUNNING))
+        db_session.add(PipelineRun(started_at=utcnow() - timedelta(hours=3), status=PipelineStatus.RUNNING))
         db_session.commit()
         assert stock_pipeline._other_pipeline_running(db_session) is True  # no proof it's dead
         lease.acquire(db_session, lease.SENATE_RUN)
