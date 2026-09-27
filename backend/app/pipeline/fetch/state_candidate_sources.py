@@ -22,7 +22,7 @@ import logging
 import os
 from typing import Any
 
-from app.atomic_write import write_text_atomic
+from app.atomic_write import LockTimeout, NotSaved, runtime_data_path, update_json_file
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +31,14 @@ _BUNDLED_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
 _VOLUME_PATH = "/data/state_candidate_sources.json"
 
 # Written at runtime, so it lives where the app can actually write: the
-# Docker volume, or the same local data/ directory the dev database sits in.
-_DISCOVERED_PATHS = (
-    "/data/state_sources_discovered.json",
-    os.path.join(os.getcwd(), "data", "state_sources_discovered.json"),
-)
+# Docker volume, or the same local data/ directory the dev database sits in
+# (runtime_data_path). Set by tests.
+_DISCOVERED_FILE = "state_sources_discovered.json"
+_DISCOVERED_PATH: str | None = None
+
+# What a discovered entry's RESULTS source consists of — everything but its
+# filing list, which is found and proved separately and outlives it.
+_FILINGS_KEYS = ("filings",)
 
 _cache: dict[str, Any] | None = None
 _discovered_cache: dict[str, Any] | None = None
@@ -58,44 +61,87 @@ def _load() -> dict[str, Any]:
     return _cache
 
 
+def _discovered_path() -> str:
+    return _DISCOVERED_PATH or runtime_data_path(_DISCOVERED_FILE)
+
+
 def _load_discovered() -> dict[str, Any]:
     global _discovered_cache
     if _discovered_cache is not None:
         return _discovered_cache
-    for path in _DISCOVERED_PATHS:
-        try:
-            with open(path, encoding="utf-8") as fh:
-                _discovered_cache = json.load(fh) or {}
-                return _discovered_cache
-        except FileNotFoundError:
-            continue
-        except Exception:
-            logger.exception("Failed to read discovered sources file %s", path)
-    _discovered_cache = {}
+    path = _discovered_path()
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except FileNotFoundError:
+        data = {}
+    except ValueError:
+        logger.exception("Discovered sources file %s is not valid JSON", path)
+        data = {}
+    except OSError:
+        # Not cached: unreadable is not empty, and the next read retries.
+        # (Writes re-read the file under their lock, so this can never be
+        # written back as the whole file.)
+        logger.exception("Failed to read discovered sources file %s", path)
+        return {}
+    _discovered_cache = data if isinstance(data, dict) else {}
     return _discovered_cache
+
+
+def _update_discovered(change) -> None:
+    """Apply `change` to the discovered file as it is on disk now, under its
+    lock, so neither the crawl nor a sync in another process loses the
+    other's write. Raises NotSaved."""
+    global _discovered_cache
+    path = _discovered_path()
+    try:
+        _discovered_cache = update_json_file(path, change, indent=2, sort_keys=True)
+    except (OSError, LockTimeout) as error:
+        raise NotSaved(f"discovered sources not saved to {path}: {error}") from error
 
 
 def save_discovered(state: str, source: dict[str, Any] | None) -> None:
     """Record (or, with None, forget) what the crawler proved for `state`.
-    Never touches the hand-verified file."""
-    discovered = dict(_load_discovered())
-    if source is None:
-        discovered.pop(state.upper(), None)
-    else:
-        discovered[state.upper()] = source
-    for path in _DISCOVERED_PATHS:
-        try:
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            # Replaced whole, never truncated in place for a reader to find
-            # empty (atomic_write).
-            write_text_atomic(path, json.dumps(discovered, indent=2, sort_keys=True))
-            break
-        except OSError:
-            continue
-    else:
-        logger.warning("Nowhere writable to record discovered source for %s", state)
-    global _discovered_cache
-    _discovered_cache = discovered
+    Never touches the hand-verified file. Raises NotSaved."""
+    st = state.upper()
+
+    def change(discovered: dict) -> dict:
+        if source is None:
+            discovered.pop(st, None)
+        else:
+            discovered[st] = source
+        return discovered
+
+    _update_discovered(change)
+
+
+def forget_results_source(state: str) -> None:
+    """Drop a discovered RESULTS source that stopped working, keeping the
+    state's filing list, which was proved on its own and fails on its own.
+    Raises NotSaved."""
+    st = state.upper()
+
+    def change(discovered: dict) -> dict:
+        entry = discovered.get(st) or {}
+        kept = {k: entry[k] for k in _FILINGS_KEYS if k in entry}
+        if kept:
+            discovered[st] = kept
+        else:
+            discovered.pop(st, None)
+        return discovered
+
+    _update_discovered(change)
+
+
+def filings_for_state(state: str) -> dict[str, Any] | None:
+    """`state`'s candidate filing list: the hand-verified entry's, else the
+    one the crawler proved. Separate from source_for_state, where a
+    hand-verified entry wins whole — a filing list found for a
+    hand-verified state (which has none of its own) was otherwise never
+    read."""
+    st = state.upper()
+    hand = (_load().get("states") or {}).get(st) or {}
+    return hand.get("filings") or (_load_discovered().get(st) or {}).get("filings")
 
 
 def discovered_states() -> set[str]:
@@ -129,5 +175,5 @@ def states_with_filings() -> set[str]:
     """Every state with a candidate FILING list registered — a state can
     have one without having a results source yet, which is the normal
     situation before its primary."""
-    entries = {**_load_discovered(), **(_load().get("states") or {})}
-    return {state for state, entry in entries.items() if entry.get("filings")}
+    states = set(_load_discovered()) | set(_load().get("states") or {})
+    return {state for state in states if filings_for_state(state)}

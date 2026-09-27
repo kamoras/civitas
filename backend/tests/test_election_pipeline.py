@@ -593,10 +593,10 @@ class TestBallotSync:
         assert run(refused_tiers=(lease.BALLOT_SYNC, lease.COVERAGE_REFRESH)) == (0, 0)
         assert not election_pipeline.ballot_tracker().is_running
 
-    def test_a_sunday_crawl_runs_and_is_reported_when_the_sync_steps_aside(self, db_session):
-        """The crawl runs before, and outside, the ballot sync's guards (as it
-        always has): a sync in flight costs the sync step, not the week's
-        crawl, and the skipped phase's detail still reports what it adopted."""
+    def test_the_crawl_runs_nightly_and_is_reported_when_the_sync_steps_aside(self, db_session):
+        """The crawl runs before, and outside, the ballot sync's guards: a
+        sync in flight costs the sync step, not the crawl, and the skipped
+        phase's detail still reports what the crawl changed or failed at."""
         import json
         from contextlib import asynccontextmanager
 
@@ -611,10 +611,10 @@ class TestBallotSync:
             patch("app.pipeline.election_pipeline.SessionLocal", return_value=db_session),
             patch("app.pipeline.election_pipeline.fetch_all_candidates", return_value=[]),
             _mock_downstream_pipeline_phases(),
-            patch("app.pipeline.election_pipeline.utcnow", return_value=datetime(2026, 9, 27, 3)),  # a Sunday
+            patch("app.pipeline.election_pipeline.utcnow", return_value=datetime(2026, 9, 29, 3)),  # a Tuesday
             patch(
                 "app.pipeline.election_pipeline.crawl_for_new_sources",
-                return_value={"NM": "adopted results", "WY": "none"},
+                return_value={"NM": "adopted results", "WY": "none", "ZZ": "error"},
             ) as crawl,
             patch("app.pipeline.election_pipeline.sync_confirmed_candidates") as nightly_sync,
         ):
@@ -624,7 +624,31 @@ class TestBallotSync:
         run = db_session.query(ElectionPipelineRun).order_by(ElectionPipelineRun.id.desc()).first()
         step = next(s for s in json.loads(run.progress_detail) if s.get("key") == "confirmed_candidates")
         assert step["status"] == "skipped"
-        assert step["detail"] == "skipped: Ballot sync is already running; crawler adopted 1 this week: NM"
+        assert step["detail"] == "skipped: Ballot sync is already running; crawl: NM adopted results, ZZ error"
+
+    def test_a_crawl_that_raises_does_not_cost_the_sync(self, db_session):
+        import json
+        from contextlib import asynccontextmanager
+
+        from app.pipeline import lease
+
+        @asynccontextmanager
+        async def leases(tier, **_kw):
+            yield lease.Granted(None)
+
+        with (
+            patch("app.pipeline.lease.job_async", leases),
+            patch("app.pipeline.election_pipeline.SessionLocal", return_value=db_session),
+            patch("app.pipeline.election_pipeline.fetch_all_candidates", return_value=[]),
+            _mock_downstream_pipeline_phases(),
+            patch("app.pipeline.election_pipeline.crawl_for_new_sources", side_effect=RuntimeError("boom")),
+            patch("app.pipeline.election_pipeline._confirmed_candidates_phase", return_value="synced") as phase,
+        ):
+            asyncio.run(election_pipeline.run_election_pipeline(2026))
+        phase.assert_called_once()
+        run = db_session.query(ElectionPipelineRun).order_by(ElectionPipelineRun.id.desc()).first()
+        step = next(s for s in json.loads(run.progress_detail) if s.get("key") == "confirmed_candidates")
+        assert step["status"] == "done" and step["detail"] == "synced"
 
     def test_a_lease_that_cannot_be_taken_fails_only_its_phases(self, db_session):
         """Taking a step's lease can raise (the database): that fails the

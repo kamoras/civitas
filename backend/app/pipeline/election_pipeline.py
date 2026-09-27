@@ -777,12 +777,13 @@ def _prune_stale_coverage(db: Session) -> int:
     return deleted
 
 
-def _adopted_detail(adopted: dict[str, str]) -> str:
-    """The crawl's part of the phase's dashboard detail — whether this
-    week's crawl (Sundays only) found anything new."""
-    if not adopted:
+def _adopted_detail(changes: dict[str, str]) -> str:
+    """The crawl's part of the phase's dashboard detail: what tonight's
+    crawl changed or failed at — a source adopted or forgotten, a state
+    whose crawl raised or couldn't save."""
+    if not changes:
         return ""
-    return f"; crawler adopted {len(adopted)} this week: {', '.join(sorted(adopted))}"
+    return "; crawl: " + ", ".join(f"{s} {changes[s]}" for s in sorted(changes))
 
 
 async def _confirmed_candidates_phase(db: Session, client, cycle: int) -> str:
@@ -796,8 +797,8 @@ async def _confirmed_candidates_phase(db: Session, client, cycle: int) -> str:
 
     # The admin dashboard's only window into this phase beyond
     # a bare total — which states are actually configured, and
-    # whether this week's crawl (Sundays only) found anything
-    # new — was previously log-only (2026-09 gap: an admin
+    # whether tonight's crawl found anything new — was
+    # previously log-only (2026-09 gap: an admin
     # reading the dashboard had no way to tell "16 states
     # confirmed" from "every state failed but one").
     configured_states = sorted(
@@ -876,21 +877,25 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
             progress.begin("confirmed_candidates")
             confirmed_open = True  # until the phase is marked done or skipped
             try:
-                # Weekly, not nightly: this sweeps every state that has no
-                # hand-verified source, and what it looks for — a state
-                # standing up a results portal, a new cycle's file
-                # appearing — moves on the scale of weeks, not hours. Same
-                # self-gating shape as ops_alerts' weekly checks. Runs
-                # BEFORE the sync so anything it proves out contributes the
-                # same night.
+                # Each state is crawled weekly — what the crawl looks for,
+                # a state standing up a results portal or a new cycle's file
+                # appearing, moves on the scale of weeks — but the crawl
+                # runs nightly over whichever states are due, so one that
+                # failed is retried the next night (crawl_for_new_sources).
+                # Runs BEFORE the sync so anything it proves out contributes
+                # the same night, and in its own try: a crawl that raises
+                # must not cost that night's sync.
                 adopted: dict[str, str] = {}
-                if utcnow().weekday() == 6:
+                try:
                     leads = await crawl_for_new_sources(db, client, cycle)
-                    adopted = {s: r for s, r in leads.items() if r.startswith("adopted")}
-                    logger.info(
-                        "Source crawl: %d state(s) adopted%s",
-                        len(adopted), f" — {adopted}" if adopted else "",
-                    )
+                    adopted = {
+                        s: r for s, r in leads.items()
+                        if r.startswith(("adopted", "forgotten", "error", "save failed"))
+                    }
+                    logger.info("Source crawl: %s", leads or "no state due")
+                except Exception:
+                    db.rollback()
+                    logger.exception("Source crawl failed — the sync runs anyway")
                 # The election-season ballot sync may be mid-pass; two
                 # passes writing the same Candidate rows at once is the one
                 # thing to avoid, and that pass is doing this step anyway.
