@@ -43,7 +43,7 @@ def _tracker_running(tracker, running: bool, age):
 
     token = tracker.start() if running else None
     if token is not None and age is not None:
-        tracker._runs[token] = time.time() - age.total_seconds()
+        tracker._started_at = time.time() - age.total_seconds()
     try:
         yield
     finally:

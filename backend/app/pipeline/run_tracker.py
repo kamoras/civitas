@@ -55,18 +55,15 @@ MEMBER_PIPELINE_RUNNING = "member_pipeline_running"
 
 
 def skip_reason_text(reason: str | None) -> str:
-    """A pipeline skip's reason code, as its log and the nightly alert say it."""
+    """A pipeline skip's reason code, as its log and the nightly alert say
+    it — a lease refusal in lease.refusal_text's words."""
     from app.pipeline import lease
 
+    if reason in (lease.REFUSED_BY_RESET, lease.REFUSED_BUSY, lease.REFUSED_HELD):
+        return lease.refusal_text(reason)
     return {
         ALREADY_RUNNING: "a previous run of it was still active",
         MEMBER_PIPELINE_RUNNING: "a member pipeline (Senate or House) was running",
-        lease.REFUSED_BY_RESET: (
-            "an admin data reset holds the database — if none is running, one died mid-wipe and "
-            "its lease lapses within the half hour"
-        ),
-        lease.REFUSED_BUSY: "the database stayed locked by another writer",
-        lease.REFUSED_HELD: "another process holds its lease",
     }.get(reason or "", f"it was skipped ({reason or 'no reason given'})")
 
 
@@ -187,62 +184,64 @@ class PipelineRunTracker:
     so it has no tracker instance.
 
     A pipeline runs in at most one background thread at a time (its DB-row
-    lock sees to that), so start() forgets any run before it: one the lock
+    lock sees to that), so start() replaces any run before it: one the lock
     let it past was stale. A scheduled job without a DB lock uses try_start,
-    which refuses while a run younger than its hung horizon is going, and
-    otherwise forgets the hung ones it proceeds past. A run forgotten that
-    way is not waited on again, and its late stop() is a no-op; the runs
-    kept are the ones that describe what is running now. All under one lock.
+    which refuses while a run younger than its hung horizon is going and
+    otherwise replaces the hung one. A replaced run is not waited on again,
+    and its late stop() is a no-op. One slot, under one lock.
     """
 
     def __init__(self) -> None:
-        self._runs: dict[int, float] = {}  # token -> started (time.time())
-        self._next = 0
+        self._token = 0
+        self._started_at: float | None = None  # time.time() of the run going, None when idle
         self._lock = threading.Lock()
 
     def _begin(self) -> int:
-        self._runs.clear()
-        self._next += 1
-        self._runs[self._next] = time.time()
-        return self._next
+        self._token += 1
+        self._started_at = time.time()
+        return self._token
 
     def start(self) -> int:
-        """Mark a run started, forgetting any before it; returns its token
+        """Mark a run started, replacing any before it; returns its token
         for stop()."""
         with self._lock:
             return self._begin()
 
-    def try_start(self, hung_after: timedelta | None = None) -> int | None:
+    def try_start(self, hung_after: timedelta | None = None) -> "tuple[int | None, timedelta | None]":
         """start() unless a run is going — or, with `hung_after`, unless one
-        younger than that is (older ones are presumed hung and forgotten).
-        The check and the start are one step: two callers can't both pass."""
+        younger than that is. Returns (token, None); (None, None) when
+        refused; or (token, age) when it replaced a run it presumed hung,
+        `age` being that run's. The check and the start are one step: two
+        callers can't both pass."""
         with self._lock:
-            if self._runs:
-                youngest = max(self._runs.values())
-                if hung_after is None or time.time() - youngest < hung_after.total_seconds():
-                    return None
-            return self._begin()
+            if self._started_at is None:
+                return self._begin(), None
+            age = timedelta(seconds=time.time() - self._started_at)
+            if hung_after is None or age < hung_after:
+                return None, None
+            return self._begin(), age
 
     def stop(self, run: int | None) -> None:
-        """Mark the run `run` stopped. A token that isn't running (None,
-        or one already stopped) is a no-op: other runs stay marked."""
+        """Mark the run `run` stopped; a no-op unless it is the run going
+        (None, a replaced run's token)."""
         with self._lock:
-            self._runs.pop(run, None)
+            if run is not None and run == self._token:
+                self._started_at = None
 
     def clear(self) -> None:
-        """Forget every run — for tests that reset shared module state."""
+        """Forget the run going — for tests that reset shared module state."""
         with self._lock:
-            self._runs.clear()
+            self._started_at = None
 
     @property
     def is_running(self) -> bool:
         with self._lock:
-            return bool(self._runs)
+            return self._started_at is not None
 
     @property
     def age(self) -> timedelta | None:
         """Wall-clock age of the run going, or None when idle."""
         with self._lock:
-            if not self._runs:
+            if self._started_at is None:
                 return None
-            return timedelta(seconds=time.time() - max(self._runs.values()))
+            return timedelta(seconds=time.time() - self._started_at)

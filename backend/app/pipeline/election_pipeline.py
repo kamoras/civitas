@@ -52,6 +52,7 @@ from app.pipeline.fetch.state_candidates import (
 )
 from app.pipeline.fetch.state_election_dates import senate_election_known
 from app.pipeline.progress_tracker import ProgressTracker
+from app.pipeline import lease
 from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock_why, skip_reason_text
 from app.time_utils import utcnow
 
@@ -864,14 +865,19 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                 # The election-season ballot sync may be mid-pass; two
                 # passes writing the same Candidate rows at once is the one
                 # thing to avoid, and that pass is doing this step anyway.
-                # Registered in the sync's own tracker, checked and started in
-                # one step, so a sync can't start beside this pass either.
-                _ballot_token = _ballot_tracker.try_start()
+                # Registered in the sync's own tracker (checked and started in
+                # one step) and holding its lease, so a sync in this process
+                # or another can't start beside this pass either.
+                _ballot_token, _ = _ballot_tracker.try_start()
                 if _ballot_token is None:
                     progress.complete("confirmed_candidates", detail="skipped (ballot sync running)")
                     raise _BallotSyncRunning
                 try:
-                    confirm_result, filing_result = await _sync_ballots(db, client, cycle)
+                    async with lease.job_async(lease.BALLOT_SYNC) as granted:
+                        if not granted:
+                            progress.complete("confirmed_candidates", detail=f"skipped: {granted.why}")
+                            raise _BallotSyncRunning
+                        confirm_result, filing_result = await _sync_ballots(db, client, cycle)
                 finally:
                     _ballot_tracker.stop(_ballot_token)
                 confirmed_total = sum(r["confirmed"] for r in confirm_result.values())
@@ -957,7 +963,7 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
 
             # Checked and started in one step: the 15-minute refresh can
             # reach the same check at the same moment.
-            _coverage_token = coverage_tracker().try_start()
+            _coverage_token, _ = coverage_tracker().try_start()
             if _coverage_token is None:
                 logger.info(
                     "Election coverage/posting phases skipped — a coverage "

@@ -818,7 +818,9 @@ async def run_senate_pipeline(
         db.close()
         raise
     if pipeline_run is None:
-        logger.warning("Senate pipeline not started — skipping")
+        from app.pipeline.run_tracker import skip_reason_text
+
+        logger.warning("Senate pipeline not started: %s", skip_reason_text(refused))
         db.close()
         run_lease.close()
         # Why, for the nightly chain's skip alert: a data reset, a busy

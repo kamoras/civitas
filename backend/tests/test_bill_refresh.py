@@ -90,18 +90,6 @@ class TestApplyUpdates:
         assert bill.latest_action_date == "2026-07-20"
         assert bill.stage == "PASSED_CHAMBER"
 
-    def test_an_older_snapshot_never_overwrites_a_newer_action(self, db_session, actions_stub):
-        """A hung pass proceeded past can finish after a newer one: its
-        older action must not replace what the newer pass wrote."""
-        bill = _make_senate_bill(db_session, latest_action="Became Public Law.", latest_action_date="2026-07-25")
-        actions_stub.result = [{"actionCode": "17000", "type": "Floor", "text": "Passed Senate."}]
-        recent = {"S.100": _feed_item("S.100", "Passed Senate with an amendment.", "2026-07-20")}
-
-        summary = asyncio.run(bill_refresh._apply_updates(db_session, None, recent))
-
-        assert summary["changed"] == 0
-        assert (bill.latest_action, bill.latest_action_date) == ("Became Public Law.", "2026-07-25")
-
     def test_updates_house_rows_too(self, db_session, actions_stub):
         bill = _make_house_bill(db_session)
         actions_stub.result = [{"actionCode": "H15001", "type": "Committee", "text": "Markup held."}]

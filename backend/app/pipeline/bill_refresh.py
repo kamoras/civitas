@@ -27,7 +27,6 @@ import logging
 from datetime import datetime, timedelta
 
 import httpx
-from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -183,20 +182,15 @@ async def _apply_updates(
                     continue
                 actions = await _fetch_fresh_actions(db, client, congress, bill_type, number)
                 actions_cache[actions_key] = actions
-            values = {"latest_action": new_text, "latest_action_date": new_date, "is_law": is_law}
             if actions or is_law:
-                values["stage"] = str(classify_bill_stage_from_actions(actions, is_law))
+                row.stage = str(classify_bill_stage_from_actions(actions, is_law))
             # else: keep the stored stage — a failed/empty actions fetch
             # must not regress a real stage to the INTRODUCED fallback.
 
-            # Written only over an action no newer than this one: a pass that
-            # hung and was proceeded past (refresh_bill_statuses) must not
-            # put its older snapshot over a newer pass's.
-            written = db.query(model).filter(
-                model.id == row.id,
-                or_(model.latest_action_date.is_(None), model.latest_action_date <= new_date),
-            ).update(values, synchronize_session=False)
-            changed += written
+            row.latest_action = new_text
+            row.latest_action_date = new_date
+            row.is_law = is_law
+            changed += 1
 
     db.commit()
     if skipped_at_cap:
@@ -216,18 +210,13 @@ async def refresh_bill_statuses(db: Session | None = None) -> dict:
     """Run one incremental refresh cycle. Pass `db` for tests; production
     opens (and closes) its own session."""
     # One pass at a time, checked and started in one step. A hung pass is
-    # cut off by the scheduler (asyncio.wait_for, at its next await); one
-    # wedged where that can't reach it is proceeded past once it is older
-    # than its hung horizon — and its late writes can't move anything
-    # backwards (the forward-only marker below, _apply_updates' row guard).
-    from app.pipeline import lease
-
-    was_running, age = _tracker.is_running, _tracker.age
-    _run_token = _tracker.try_start(hung_after=lease.HUNG_AFTER[lease.BILL_REFRESH])
+    # cut off by the scheduler (asyncio.wait_for) at its next await — which
+    # always comes: every step between awaits is bounded (a request times
+    # out, SQLite gives up after its busy timeout) — so its finally frees
+    # this for the next pass, and no second pass ever runs beside it.
+    _run_token, _ = _tracker.try_start()
     if _run_token is None:
         return {"status": "skipped", "reason": "previous refresh still running"}
-    if was_running:
-        logger.warning("Previous bill status refresh has been running for %s — treating as hung and proceeding", age)
     try:
         owns_session = db is None
         if owns_session:
@@ -240,12 +229,8 @@ async def refresh_bill_statuses(db: Session | None = None) -> dict:
                 recent = await _fetch_recently_updated(client, since)
                 summary = await _apply_updates(db, client, recent)
             # Only advance the window marker after a full successful pass, so
-            # a crashed cycle is retried over the same window next hour — and
-            # only forward: a hung pass proceeded past can finish after a
-            # newer one.
-            stored = api_cache_get(db, _LAST_RUN_TIER, LAST_RUN_CACHE_KEY, max_age_hours=24 * 365)
-            if not stored or stored.get("lastRun", "") < now.isoformat():
-                api_cache_set(db, _LAST_RUN_TIER, LAST_RUN_CACHE_KEY, {"lastRun": now.isoformat()})
+            # a crashed cycle is retried over the same window next hour.
+            api_cache_set(db, _LAST_RUN_TIER, LAST_RUN_CACHE_KEY, {"lastRun": now.isoformat()})
         finally:
             if owns_session:
                 db.close()

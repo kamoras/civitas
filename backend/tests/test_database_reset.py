@@ -263,7 +263,7 @@ class TestLease:
         monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
         lease.acquire(db_session, lease.DATA_RESET)
         with lease.job(lease.BALLOT_SYNC) as held:
-            assert not held and held.why == "a data reset is running"
+            assert not held and held.why.startswith("an admin data reset holds the database")
         assert not lease.held(db_session, lease.BALLOT_SYNC)
 
     def test_every_lease_is_one_the_reset_names(self):
@@ -305,7 +305,7 @@ class TestLease:
         from app.pipeline import lease
 
         assert set(lease.HUNG_AFTER) == set(lease.TIERS)
-        assert all(lease._max_hold(tier).total_seconds() > 0 for tier in lease.TIERS)
+        assert all(lease.max_hold(tier).total_seconds() > 0 for tier in lease.TIERS)
 
     def test_a_hung_holders_lease_stops_being_renewed(self, db_session, monkeypatch):
         import time
@@ -419,15 +419,14 @@ def test_try_start_refuses_a_fresh_run_and_passes_a_hung_one():
     from app.pipeline.run_tracker import PipelineRunTracker
 
     tracker = PipelineRunTracker()
-    first = tracker.start()
-    assert tracker.try_start() is None
-    assert tracker.try_start(hung_after=timedelta(hours=2)) is None
-    tracker._runs[first] = time.time() - 3 * 3600  # three hours in: hung
-    second = tracker.try_start(hung_after=timedelta(hours=2))
-    assert second is not None
-    # The hung run is forgotten: what's going is the new one, and while it
-    # is young the guard holds again.
+    tracker.start()
+    assert tracker.try_start() == (None, None)
+    assert tracker.try_start(hung_after=timedelta(hours=2)) == (None, None)
+    tracker._started_at = time.time() - 3 * 3600  # three hours in: hung
+    second, past = tracker.try_start(hung_after=timedelta(hours=2))
+    assert second is not None and past > timedelta(hours=2)  # says what it proceeded past
+    # What's going is the new run, and while it is young the guard holds.
     assert tracker.age < timedelta(minutes=1)
-    assert tracker.try_start(hung_after=timedelta(hours=2)) is None
+    assert tracker.try_start(hung_after=timedelta(hours=2)) == (None, None)
     tracker.stop(second)
     assert not tracker.is_running

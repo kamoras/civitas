@@ -111,7 +111,8 @@ HUNG_AFTER = {
 }
 
 
-def _max_hold(tier: str) -> timedelta:
+def max_hold(tier: str) -> timedelta:
+    """How long a holder renews the lease: HUNG_AFTER less the stale window."""
     return HUNG_AFTER[tier] - stale_after(tier)
 
 
@@ -231,7 +232,7 @@ class _Held:
 
         self.db, self.tier, self.token = db, tier, token
         self.stop = threading.Event()
-        until = time.monotonic() + _max_hold(tier).total_seconds()
+        until = time.monotonic() + max_hold(tier).total_seconds()
         self.heartbeat = threading.Thread(
             target=_keep, args=(db.get_bind(), tier, token, self.stop, BEAT_S, until),
             name=f"{tier}-beat", daemon=True,
@@ -280,13 +281,16 @@ def refusal_code(db: Session, tier: str) -> str:
     return REFUSED_BUSY
 
 
-def refusal_text(code: str, tier: str) -> str:
-    """A refusal_code for `tier`, as a skip message says it — naming the
-    holder when it is another run of the tier's job."""
+def refusal_text(code: str, tier: str | None = None) -> str:
+    """A refusal_code, as a skip message says it — naming the holder, when
+    it is another run of `tier`'s job."""
     return {
-        REFUSED_BY_RESET: "a data reset is running",
-        REFUSED_HELD: f"{TIERS[tier]} is already running (this process or another)",
-        REFUSED_BUSY: "the database was busy",
+        REFUSED_BY_RESET: (
+            "an admin data reset holds the database — if none is running, one died mid-wipe and "
+            "its lease lapses within the half hour"
+        ),
+        REFUSED_HELD: f"{TIERS[tier] if tier else 'another run of it'} is already running (this process or another)",
+        REFUSED_BUSY: "the database stayed locked by another writer",
     }[code]
 
 
