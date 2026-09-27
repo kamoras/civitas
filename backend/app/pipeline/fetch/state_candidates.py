@@ -658,8 +658,7 @@ async def _crawl_state(
     outcome = "none"
     looked_for_filings = False
     if hand:
-        strategy = STRATEGIES.get(hand.get("strategy"))
-        still_works = await strategy(client, cycle, state, hand) if strategy else None
+        still_works = await _fetch(client, cycle, state, hand, "Hand-verified source")
         if still_works is not None:
             # A primary date moves once a cycle, so it is read on the
             # weekly pass rather than nightly — off the same feed the
@@ -717,8 +716,7 @@ async def _crawl_results_source(
     if not found:
         return await _forget_if_broken(client, cycle, state, record, now)
 
-    strategy = STRATEGIES.get(found.get("strategy"))
-    records = await strategy(client, cycle, state, found) if strategy else None
+    records = await _fetch(client, cycle, state, found, "Discovered candidate source")
     if records is None:
         return "unusable"
     matched = sum(
@@ -830,8 +828,22 @@ async def _refresh_dates(
         election_dates.save(state, cycle, dates)
 
 
-async def _no_strategy(*_args, **_kwargs) -> None:
-    return None
+async def _fetch(
+    client: httpx.AsyncClient, cycle: int, state: str, source: dict, what: str,
+) -> list[dict] | None:
+    """Run `source`'s strategy, a raise counted as not fetching (None): one
+    source that breaks by raising (a host serving HTML where a spreadsheet
+    was) must not end a pass over every state, nor keep its own state out
+    of the "not fetching" handling — replacement, retirement — a source
+    that returns nothing gets."""
+    strategy = STRATEGIES.get(source.get("strategy"))
+    if strategy is None:
+        return None
+    try:
+        return await strategy(client, cycle, state, source)
+    except Exception:
+        logger.exception("%s fetch raised for %s", what, state)
+        return None
 
 
 def _discovered_source(state: str) -> dict | None:
@@ -858,12 +870,11 @@ async def _forget_if_broken(
     if state not in discovered_states():
         return "none"
     source = _discovered_source(state) or {}
-    strategy = STRATEGIES.get(source.get("strategy"))
-    if strategy is None:
+    if STRATEGIES.get(source.get("strategy")) is None:
         # A filing list alone — no results source to test. The caller looks
         # for the filing list again, which keeps it current if it moves.
         return "filings only"
-    records = await strategy(client, cycle, state, source)
+    records = await _fetch(client, cycle, state, source, "Discovered source")
     if records is not None:
         record.pop("failingSince", None)
         return "kept"
@@ -1247,9 +1258,7 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
             spare = _discovered_source(state)
             if spare and spare != source:
                 logger.info("Falling back to the discovered source for %s", state)
-                records = await STRATEGIES.get(spare.get("strategy"), _no_strategy)(
-                    client, cycle, state, spare,
-                )
+                records = await _fetch(client, cycle, state, spare, "Discovered spare source")
                 if records is not None:
                     # Its records are the spare's: never the broken entry's
                     # authority (general_ballot_complete) or attribution.
@@ -1379,7 +1388,13 @@ async def sync_ballot_filings(db: Session, client: httpx.AsyncClient, cycle: int
             _note_ballot_name(db, match, record)
             counts["primary"] += 1
         applied = {"ballotOnly": 0, "unconfirmed": 0}
-        if found["general"] and not _filings_speak_for_november(state):
+        if not found["general"] and _filings_speak_for_november(state):
+            # The list speaks for November but names nobody for it yet (a
+            # primary-season list): until it does, the ballot is not known
+            # whole, whatever the state's entry claims for later — and
+            # nothing else records a basis for this state.
+            _record_ballot_basis(db, cycle, state, {**source, "general_ballot_complete": False})
+        elif found["general"] and not _filings_speak_for_november(state):
             logger.info(
                 "%s: %d general row(s) on a crawler-found filing list not applied — "
                 "the state's verified source speaks for November",

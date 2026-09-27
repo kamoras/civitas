@@ -399,6 +399,100 @@ class TestCrawlFailuresAreContained:
         assert outcomes["AA"] == "save failed" and alerts == ["AA: disk full"]
 
 
+class TestARaisingSourceIsNotFetching:
+    """A source that breaks by raising, rather than returning nothing, got
+    none of the handling a non-fetching one gets — and in the sync ended
+    the pass over every state after it."""
+
+    @pytest.mark.asyncio
+    async def test_a_spare_that_raises_does_not_end_the_sync(self, db_session, monkeypatch, tmp_path):
+        import json
+        from unittest.mock import AsyncMock
+
+        from app.pipeline.fetch import state_candidate_sources as sources
+
+        async def no_calendar(client, cycle):
+            return {}, False
+
+        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+        monkeypatch.setattr(sc, "configured_states", lambda: {"TX", "WY"})
+        path = tmp_path / "d.json"
+        path.write_text(json.dumps({"TX": {"strategy": "tabular", "source_name": "x"}}))
+        monkeypatch.setattr(sources, "_DISCOVERED_PATH", str(path))
+        monkeypatch.setattr(sources, "_discovered_cache", None)
+        monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(return_value=None))
+        monkeypatch.setitem(sc.STRATEGIES, "tabular", AsyncMock(side_effect=ValueError("not a spreadsheet")))
+        wy = sources.source_for_state("WY")
+        monkeypatch.setitem(sc.STRATEGIES, wy["strategy"], AsyncMock(return_value=[]))
+        if wy.get("general_list"):
+            monkeypatch.setitem(sc.STRATEGIES, wy["general_list"]["strategy"], AsyncMock(return_value=[]))
+        results = await sc.sync_confirmed_candidates(db_session, None, 2026)
+        assert results["TX"]["status"] == "fetch_failed" and results["WY"]["status"] == "ok"
+
+    @pytest.mark.asyncio
+    async def test_in_the_crawl_it_takes_the_not_fetching_paths(self, db_session, monkeypatch):
+        """A discovered source that raises enters the failing/forget clock,
+        and the state is still searched for a filing list."""
+        async def raises(client, cycle, state, source):
+            raise ValueError("html where a spreadsheet was")
+
+        saved = {"ZZ": {"strategy": "tabular"}}
+        forgotten = TestForgetsBrokenDiscoveries._patch(monkeypatch, saved, raises)
+        looked = []
+
+        async def filings(client, state, cycle):
+            looked.append(state)
+            return None
+
+        monkeypatch.setattr(sc, "discover_filings", filings)
+        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert outcomes["ZZ"].startswith("failing since") and looked == ["ZZ"] and forgotten == []
+
+    @pytest.mark.asyncio
+    async def test_a_hand_verified_source_that_raises_is_crawled_for_a_replacement(
+        self, db_session, monkeypatch,
+    ):
+        searched = []
+
+        async def discover(client, state, cycle, rules=None):
+            searched.append(state)
+            return None
+
+        async def raises(client, cycle, state, source):
+            raise ValueError("html where a spreadsheet was")
+
+        async def no_filings(client, state, cycle):
+            return None
+
+        monkeypatch.setattr(sc, "discover_source", discover)
+        monkeypatch.setattr(sc, "discover_filings", no_filings)
+        monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"TX": ["sos.texas.gov"]})
+        monkeypatch.setattr(sc, "STRATEGIES", {"tx_civix": raises})
+        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert searched == ["TX"] and outcomes["TX"] != "error"
+
+
+class TestAPrimarySeasonListSaysTheBallotIsNotYetWhole:
+    @pytest.mark.asyncio
+    async def test_nc_records_an_incomplete_basis_until_its_list_names_november(
+        self, db_session, monkeypatch,
+    ):
+        """NC's list speaks for its November ballot, so nothing else records
+        its basis — and without one the page fell back to the entry's
+        general_ballot_complete and called primary nominees the whole ballot."""
+        recorded = []
+
+        async def primary_only(client, year, state, source):
+            return {"primary": [], "general": [], "primary_date": None}
+
+        monkeypatch.setattr(sc, "states_with_filings", lambda: {"NC"})
+        monkeypatch.setattr(sc, "fetch_ballot_candidates", primary_only)
+        monkeypatch.setattr(sc, "_record_ballot_basis",
+                            lambda db, c, st, src, **k: recorded.append((st, src.get("general_ballot_complete"))))
+        await sc.sync_ballot_filings(db_session, None, 2026)
+        assert recorded == [("NC", False)]
+
+
 class TestEveryCrawlLooksForAFilingList:
     @pytest.mark.asyncio
     async def test_a_state_whose_results_source_was_found_is_searched_too(self, db_session, monkeypatch):
