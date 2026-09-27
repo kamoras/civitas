@@ -418,9 +418,8 @@ def _acquire_pipeline_lock(db: Session, *, lease_token: str | None = None) -> "t
     from app.pipeline import lease
     from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock_why
 
-    def tag(run: PipelineRun) -> None:
-        if lease_token is not None:
-            lease.tag(db, lease.SENATE_RUN, lease_token, run.id)
+    def tag(run: PipelineRun) -> bool:
+        return lease_token is None or lease.tag(db, lease.SENATE_RUN, lease_token, run.id)
 
     return acquire_pipeline_lock_why(db, PipelineRun, STALE_PIPELINE_TIMEOUT, on_insert=tag)
 
@@ -820,9 +819,12 @@ def _take_senate_run_lease(stack) -> "tuple[str | None, str | None]":
     its run dead has that run's row marked stale first (if that write fails,
     this run doesn't start, and the evidence stays). One that has lapsed but
     proves nothing yet — a live run stalled behind a writer, or one just
-    killed — is not taken over while a Senate row is RUNNING (LEASE_LAPSED).
+    killed — is not taken over while the run it names is RUNNING
+    (LEASE_LAPSED).
     Held by another, a Senate run (or a reset) may be live and this one
     doesn't start; a busy database is waited out a few times first."""
+    from sqlalchemy.exc import OperationalError
+
     from app.models import PipelineStatus
     from app.pipeline import lease
     from app.pipeline.run_tracker import LEASE_LAPSED, lease_proves_dead, mark_proven_dead_stale
@@ -831,20 +833,25 @@ def _take_senate_run_lease(stack) -> "tuple[str | None, str | None]":
     stack.callback(lease_db.close)
     why = lease.REFUSED_BUSY
     for _ in range(_SENATE_LEASE_ATTEMPTS):
+        if lease.held(lease_db, lease.DATA_RESET):
+            return lease.REFUSED_BY_RESET, None  # before writing anything (lease.DATA_RESET)
         record = lease.lease_record(lease_db, lease.SENATE_RUN)
         if record is not None and not lease.held(lease_db, lease.SENATE_RUN):
-            beat, _run = record
+            beat, named = record
             if lease_proves_dead(beat):
                 try:
                     mark_proven_dead_stale(lease_db, PipelineRun)
-                except Exception:
+                except OperationalError as error:
                     lease_db.rollback()
-                    logger.warning("Couldn't mark the dead Senate run stale — not taking its lease yet", exc_info=True)
-                    return lease.REFUSED_BUSY, None
-            elif lease_db.query(PipelineRun.id).filter(PipelineRun.status == PipelineStatus.RUNNING).first():
+                    if not lease.is_locked(error):
+                        raise
+                    continue  # busy: waited out like the lease's own take; the evidence stays
+            elif named is not None and lease_db.query(PipelineRun.id).filter(
+                PipelineRun.id == named, PipelineRun.status == PipelineStatus.RUNNING,
+            ).first():
                 logger.warning(
-                    "The Senate run's lease lapsed %s ago without proving its run dead — "
-                    "not taking it over yet", utcnow() - beat,
+                    "The Senate run's lease lapsed %s ago without proving run #%d dead — "
+                    "not taking it over yet", utcnow() - beat, named,
                 )
                 return LEASE_LAPSED, None
         token = stack.enter_context(lease.holding(lease_db, lease.SENATE_RUN, yield_to=lease.DATA_RESET))

@@ -640,3 +640,81 @@ def test_a_lapsed_lease_with_no_run_to_protect_is_taken(db_session):
         mp.setattr(senate_pipeline, "SessionLocal", lambda: _Unclosable(db_session))
         refused, token = senate_pipeline._take_senate_run_lease(stack)
         assert refused is None and token is not None
+
+
+def test_clear_stuck_senate_is_refused_only_while_the_lease_beats(db_session):
+    """The operator's override for a row nothing has proved dead yet; the
+    dashboard offers it exactly when the endpoint would take it."""
+    import asyncio
+    from datetime import timedelta
+
+    from fastapi import HTTPException
+
+    from app.api import admin
+    from app.time_utils import utcnow
+
+    from tests.conftest import start_senate_run_then_stop_beating
+
+    run = start_senate_run_then_stop_beating(db_session)
+    assert admin._senate_lease_beating(db_session)
+    with pytest.raises(HTTPException) as refused:
+        asyncio.run(admin.admin_clear_stuck_senate(db=db_session))
+    assert refused.value.status_code == 409
+
+    db_session.query(models.ApiCache).update({"cached_at": utcnow() - timedelta(minutes=20)})
+    db_session.commit()
+    assert not admin._senate_lease_beating(db_session)
+    assert asyncio.run(admin.admin_clear_stuck_senate(db=db_session))["cleared"] == 1
+    db_session.expire_all()
+    assert db_session.get(models.PipelineRun, run.id).status == "failed"
+
+
+def test_a_senate_attempt_during_a_reset_says_so_before_writing_anything(db_session):
+    from contextlib import ExitStack
+    from datetime import timedelta
+
+    from app.pipeline import lease, senate_pipeline
+    from app.time_utils import utcnow
+
+    from tests.conftest import start_senate_run_then_stop_beating
+
+    dead = start_senate_run_then_stop_beating(db_session, beat_ago=timedelta(hours=2))
+    lease.acquire(db_session, lease.DATA_RESET)
+    with ExitStack() as stack, pytest.MonkeyPatch.context() as mp:
+        mp.setattr(senate_pipeline, "SessionLocal", lambda: _Unclosable(db_session))
+        assert senate_pipeline._take_senate_run_lease(stack) == (lease.REFUSED_BY_RESET, None)
+    db_session.expire_all()
+    assert db_session.get(models.PipelineRun, dead.id).status == "running"  # not marked during the reset
+    assert utcnow() - lease.lease_record(db_session, lease.SENATE_RUN)[0] > timedelta(hours=1)
+
+
+def test_a_lapsed_lease_holds_off_only_for_the_run_it_names(db_session):
+    """A RUNNING row the lease doesn't name (a pre-lease run, say) is the age
+    rule's to decide, at the lock — not a reason to refuse outright."""
+    from contextlib import ExitStack
+    from datetime import timedelta
+
+    from app.pipeline import lease, senate_pipeline
+    from app.pipeline.run_tracker import ALREADY_RUNNING
+    from app.time_utils import utcnow
+
+    db_session.add(models.PipelineRun(status="running", started_at=utcnow() - timedelta(hours=1)))
+    db_session.commit()
+    lease.acquire(db_session, lease.SENATE_RUN)  # untagged, lapsed
+    db_session.query(models.ApiCache).update({"cached_at": utcnow() - timedelta(minutes=20)})
+    db_session.commit()
+    with ExitStack() as stack, pytest.MonkeyPatch.context() as mp:
+        mp.setattr(senate_pipeline, "SessionLocal", lambda: _Unclosable(db_session))
+        refused, token = senate_pipeline._take_senate_run_lease(stack)
+        assert refused is None
+        assert senate_pipeline._acquire_pipeline_lock(db_session, lease_token=token) == (None, ALREADY_RUNNING)
+
+
+def test_a_run_whose_lease_was_lost_before_its_row_does_not_start(db_session):
+    """Tagging finds no row of its token: the run must not start unnamed."""
+    from app.pipeline import lease, senate_pipeline
+
+    assert senate_pipeline._acquire_pipeline_lock(db_session, lease_token="not-a-holder") == (
+        None, lease.REFUSED_HELD,
+    )
+    assert db_session.query(models.PipelineRun).count() == 0

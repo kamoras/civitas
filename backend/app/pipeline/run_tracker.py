@@ -168,7 +168,7 @@ def skip_reason_text(reason: str | None, tier: str | None = None) -> str:
 
 def acquire_pipeline_lock_why(
     db: Session, model: type[_RunModel], stale_timeout: timedelta, *,
-    on_insert: Callable[[_RunModel], None] | None = None,
+    on_insert: Callable[[_RunModel], bool] | None = None,
 ) -> "tuple[_RunModel | None, str | None]":
     """Atomically create a new locked run of `model`, auto-clearing a
     stale leftover RUNNING row first. Returns (run, None), or (None, why):
@@ -224,8 +224,12 @@ def acquire_pipeline_lock_why(
         run = model(started_at=utcnow(), status=PipelineStatus.RUNNING)
         db.add(run)
         db.flush()
-        if on_insert is not None:
-            on_insert(run)  # in the row's own transaction (a run lease's tag)
+        # In the row's own transaction (a run lease's tag); refused, the
+        # run doesn't start — its lease was lost meanwhile.
+        if on_insert is not None and not on_insert(run):
+            db.rollback()
+            logger.warning("%s not started: its lease was taken over before its row was written", model.__name__)
+            return None, lease.REFUSED_HELD
         if lease.held(db, lease.DATA_RESET):
             # Checked inside the insert's own transaction (see
             # lease.DATA_RESET): backing out is a rollback, no second write.

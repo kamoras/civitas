@@ -76,8 +76,9 @@ def _preload_embedding_model() -> None:
 
 def _invalidate_orphaned_pipelines() -> None:
     """Mark stale the RUNNING rows whose runs are proven dead
-    (run_tracker.tidy_dead_runs) — past the age rule, or a Senate run whose
-    lease went an hour without a beat.
+    (run_tracker.tidy_dead_runs) — a Senate run whose lease went an hour
+    without a beat. (Rows past the 12h age rule are cleared by their run
+    lock as the next run starts.)
 
     Not every leftover row: during a rollout's overlap the other task may be
     running it for real, and a lease that has only just lapsed may be a live

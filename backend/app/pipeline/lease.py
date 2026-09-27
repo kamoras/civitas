@@ -187,13 +187,6 @@ def holder(db: Session, tier: str) -> str | None:
     return who or TIERS[tier]
 
 
-def last_beat(db: Session, tier: str) -> "datetime | None":
-    """When `tier`'s lease row was last taken or renewed — live or stale —
-    or None when there is no row (never taken, or let go)."""
-    record = lease_record(db, tier)
-    return record[0] if record else None
-
-
 def lease_record(db: Session, tier: str) -> "tuple[datetime, int | None] | None":
     """`tier`'s lease row, live or stale: (last beat, the run it names —
     tag() — or None), or None when there is no row."""
@@ -211,18 +204,20 @@ def lease_record(db: Session, tier: str) -> "tuple[datetime, int | None] | None"
     return row[0], run if isinstance(run, int) else None
 
 
-def tag(db: Session, tier: str, token: str, run_id: int) -> None:
+def tag(db: Session, tier: str, token: str, run_id: int) -> bool:
     """Name, on the lease row `token` holds, the run it covers — flushed on
     `db`, for the caller to commit with that run's row, so the lease never
     covers a run without saying which: when its beats stop, the proof of
-    death is about exactly that run (run_tracker._proven_dead)."""
+    death is about exactly that run (run_tracker._proven_dead). False when
+    the row is no longer `token`'s (taken over meanwhile): the run must not
+    start unnamed."""
     from sqlalchemy import func
 
     from app.models import ApiCache
 
-    _own_row(db, tier, token).update(
+    return _own_row(db, tier, token).update(
         {"data_json": func.json_set(ApiCache.data_json, "$.run", run_id)}, synchronize_session=False,
-    )
+    ) == 1
 
 
 def held(db: Session, tier: str) -> bool:

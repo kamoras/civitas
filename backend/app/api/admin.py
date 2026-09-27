@@ -105,6 +105,12 @@ def _history_entry(run, pipeline_type: str, extra: dict) -> dict:
     }
 
 
+def _senate_lease_beating(db: Session) -> bool:
+    from app.pipeline import lease
+
+    return lease.held(db, lease.SENATE_RUN)
+
+
 def _clear_stuck_runs(db: Session, model, is_running: bool, pipeline_label: str) -> dict:
     """Mark any stuck (status=running) run of `model` as failed.
 
@@ -800,6 +806,12 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
 
     result: dict = {
         "isRunning": is_running,
+        # Whether a Senate run's lease is beating right now. A RUNNING Senate
+        # row without one may be a dead run nothing has proved dead yet
+        # (run_tracker.live_run still counts it): the dashboard offers
+        # clear-stuck-senate then, the operator's call — the endpoint
+        # refuses exactly while this is true.
+        "senateLeaseBeating": _senate_lease_beating(db),
         "houseIsRunning": is_house_pipeline_running(),
         "stockTradesIsRunning": is_stock_pipeline_running(),
         "supplementaryIsRunning": is_supplementary_pipeline_running(),
@@ -1360,14 +1372,16 @@ async def admin_trigger_house_pipeline():
 async def admin_clear_stuck_senate(db: Session = Depends(get_db)):
     """Mark any stuck (status=running) Senate pipeline run as failed.
 
-    The operator's override for a row no lease can prove dead yet
-    (run_tracker.live_run gives it the benefit of the doubt): refused while
-    a Senate run's lease is live — a run is beating right now.
+    The operator's override for a row nothing has proved dead yet
+    (run_tracker.live_run gives it the benefit of the doubt for an hour
+    after its lease's last beat): refused while a Senate run's lease is
+    beating. Short of that it is the operator's call that the run is dead —
+    a run whose beats are only stalled behind a writer would go on beside
+    the next one — as with every other pipeline's clear.
     """
     from app.models import PipelineRun
-    from app.pipeline import lease
 
-    return _clear_stuck_runs(db, PipelineRun, lease.held(db, lease.SENATE_RUN), "Senate")
+    return _clear_stuck_runs(db, PipelineRun, _senate_lease_beating(db), "Senate")
 
 
 @router.post("/pipeline/clear-stuck-house", dependencies=[Depends(require_admin)])

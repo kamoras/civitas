@@ -1158,6 +1158,10 @@ export interface ActionRefreshState {
 
 export interface AdminPipelineStatus {
   isRunning: boolean;
+  // A Senate run's lease is beating now. A RUNNING Senate row without it may
+  // be a dead run nothing has proved dead yet — clear-stuck-senate is
+  // offered then, and refused while this is true.
+  senateLeaseBeating?: boolean;
   houseIsRunning?: boolean;
   stockTradesIsRunning?: boolean;
   supplementaryIsRunning?: boolean;
