@@ -322,9 +322,11 @@ def parse_committee_meetings(text: str) -> list[dict]:
 
 # ── Next meeting ──────────────────────────────────────────────────
 
+# One quantifier per stretch of whitespace: nesting them ("(?:\s*\n)*\s*")
+# backtracks exponentially on a long run of blank lines (CodeQL py/redos).
 _NEXT_RE = re.compile(
-    r"Next Meeting of the (SENATE|HOUSE OF REPRESENTATIVES)\s*\n\s*(.+?)\s*\n"
-    r"(?:\s*\n)*\s*(?:Senate|House) Chamber\s*\n(.*?)(?=\n\s*\n|\n\s*Next Meeting|\n_{5,}|\Z)",
+    r"Next Meeting of the (SENATE|HOUSE OF REPRESENTATIVES)[ \t]*\n[ \t]*([^\n]+?)[ \t]*\n"
+    r"\s*?(?:Senate|House) Chamber[ \t]*\n(.*?)(?=\n[ \t]*\n|\n[ \t]*Next Meeting|\n_{5,}|\Z)",
     re.S,
 )
 
