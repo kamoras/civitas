@@ -17,6 +17,7 @@ Credentials: BSKY_HANDLE + BSKY_APP_PASSWORD in .env. If not set, this
 module does nothing (allows running without a Bluesky account configured).
 """
 
+import json
 import logging
 import re
 from datetime import datetime, timedelta
@@ -93,8 +94,28 @@ def _staleness_prefix(article_date: str | None, today: str) -> str:
     return f"On {event:%B} {event.day}: "
 
 
+def _facts(raw) -> list[str]:
+    try:
+        facts = json.loads(raw or "[]")
+    except (TypeError, ValueError):
+        return []
+    return [f.strip() for f in facts if isinstance(f, str) and f.strip()] if isinstance(facts, list) else []
+
+
+def _new_facts(issue) -> list[str]:
+    """Facts added since the last post, in order. A repost is released
+    upstream only when the facts gained new information (a name, a figure,
+    a development) over `bsky_posted_facts`, the facts as of that post — so
+    one of these is what the repost has to say. The lede often hasn't
+    changed, and reposting it would only be suppressed as a duplicate."""
+    if issue.bsky_posted_facts is None:
+        return []
+    posted = set(_facts(issue.bsky_posted_facts))
+    return [f for f in _facts(issue.facts) if f not in posted]
+
+
 def _compose_new_post(issue, today: str) -> str | None:
-    """The post for this issue: its lede, verbatim, or None.
+    """The post for this issue: a verified claim, verbatim, or None.
 
     Not written by a model. The lede (issue.summary) is a claim
     claims.build_lede took word for word from a source and post_composer
@@ -105,12 +126,15 @@ def _compose_new_post(issue, today: str) -> str | None:
     stopped being written (claims.build_story) — and a post is the most
     public surface of all. The only words added are the date prefix.
 
-    A lede too long for a post falls back to the headline rather than being
-    cut: truncating a claim can drop the qualifier that makes it true. None
-    when neither fits, counted so the gap is visible.
+    A repost leads with the first fact the last post didn't carry — also a
+    verbatim claim (claims.build_facts) — since new information is what
+    released it. A claim too long for a post falls through to the next
+    candidate, ending at the headline, rather than being cut: truncating a
+    claim can drop the qualifier that makes it true. None when nothing
+    fits, counted so the gap is visible.
     """
     prefix = _staleness_prefix(getattr(issue, "primary_article_date", None), today)
-    for body in (issue.summary, issue.title):
+    for body in (*_new_facts(issue), issue.summary, issue.title):
         text = strip_hashtags((body or "").strip())
         if text and len(prefix) + len(text) <= MAX_POST_CHARS:
             return prefix + text

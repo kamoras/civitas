@@ -441,6 +441,41 @@ class TestComposeNewPost:
         assert text == "The Senate passed the bill."
 
 
+    def test_a_repost_leads_with_the_fact_the_last_post_lacked(self):
+        # The repost gate released this because the facts gained something;
+        # the lede is unchanged, and posting it again would only be
+        # suppressed as a near-duplicate — the update would never post.
+        import json as _json
+
+        from app.pipeline.analyze import bluesky_poster
+
+        issue = self._issue(
+            facts=_json.dumps(["The EU fined three companies this year.", "The Commission said it would appeal."]),
+            bsky_posted_facts=_json.dumps(["The EU fined three companies this year."]),
+            bsky_last_post_text="Trump said EU fines against major tech companies should be reversed.",
+        )
+        assert bluesky_poster._compose_new_post(issue, "2026-07-24") == "The Commission said it would appeal."
+
+    def test_a_first_post_ignores_facts_and_uses_the_lede(self):
+        import json as _json
+
+        from app.pipeline.analyze import bluesky_poster
+
+        issue = self._issue(facts=_json.dumps(["The Commission said it would appeal."]), bsky_posted_facts=None)
+        assert bluesky_poster._compose_new_post(issue, "2026-07-24") == (
+            "Trump said EU fines against major tech companies should be reversed."
+        )
+
+    def test_a_repost_with_no_new_fact_falls_back_to_the_lede(self):
+        import json as _json
+
+        from app.pipeline.analyze import bluesky_poster
+
+        facts = _json.dumps(["The EU fined three companies this year."])
+        issue = self._issue(facts=facts, bsky_posted_facts=facts)
+        assert bluesky_poster._compose_new_post(issue, "2026-07-24").startswith("Trump said EU fines")
+
+
 class TestStalenessPhrasing:
     """2026-07 live case: a post opened with 'On 2026-07-24' the day after
     the event, when 'Yesterday:' was both available and accurate. Only the
