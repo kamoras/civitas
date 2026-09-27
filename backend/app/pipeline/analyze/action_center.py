@@ -3864,6 +3864,19 @@ def _acquire_refresh_lock(db: Session) -> str | None:
         return None
 
 
+def refresh_lock_held(db: Session) -> bool:
+    """Whether a live holder has the refresh lock — one that has beaten
+    within _REFRESH_LOCK_STALE_S."""
+    from app.models import ApiCache
+
+    cutoff = utcnow() - timedelta(seconds=_REFRESH_LOCK_STALE_S)
+    return db.query(ApiCache).filter(
+        ApiCache.tier == "action-refresh-lock",
+        ApiCache.cache_key == "lock",
+        ApiCache.cached_at >= cutoff,
+    ).first() is not None
+
+
 def _own_lock_row(db: Session, token: str):
     from app.models import ApiCache
 

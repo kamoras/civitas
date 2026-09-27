@@ -26,6 +26,7 @@ from app.config import settings
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import fetch_bytes_with_retry
 from app.pipeline.fetch.ptr_common import TradeRow, normalize_date, parse_pdf_bytes
+from app.pipeline.fetch.ptr_common import PARSER_VERSION as PTR_PARSER_VERSION
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -164,7 +165,7 @@ async def fetch_and_parse_ptr(
     empty list if the PDF can't be fetched or no transaction table is
     found — never fabricates a row.
     """
-    cache_key = f"ptr-parsed-{filing['doc_id']}"
+    cache_key = f"ptr-parsed-v{PTR_PARSER_VERSION}-{filing['doc_id']}"
     cached = api_cache_get(db, "house_ptr", cache_key, max_age_hours=24 * 30)
     if cached is not None:
         return [TradeRow(**row) for row in cached]

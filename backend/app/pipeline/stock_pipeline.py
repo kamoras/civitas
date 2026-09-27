@@ -24,6 +24,7 @@ import time
 from datetime import datetime, timedelta
 
 import httpx
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
@@ -37,9 +38,10 @@ from app.pipeline.fetch.president_ptr import (
     fetch_and_parse_ptr as fetch_president_ptr,
     fetch_ptr_filing_index as fetch_president_ptr_index,
 )
+from app.pipeline.fetch.ptr_common import PARSER_VERSION as PTR_PARSER_VERSION
 from app.pipeline.fetch.ptr_common import TradeRow
 from app.pipeline.fetch.sec_tickers import resolve_tickers
-from app.holdings_schedule import HOLDINGS_STEPS
+from app.holdings_schedule import HOLDINGS_STEPS, PTR_REREAD_BUDGET
 from app.pipeline.holdings_pipeline import run_holdings_phases
 from app.pipeline.filer_matching import FilerMatcher, current_representatives, current_senators
 from app.pipeline.filer_matching import match_representative as _match_representative
@@ -87,7 +89,7 @@ SENATE_REVISIT_DAYS = 90
 # dashboard detect a "stuck" run (DB row still says "running" but this
 # tracker says not-running after a restart) rather than only the DB row,
 # which a crashed/killed process can never update to "failed" itself.
-_tracker = PipelineRunTracker()
+_tracker = PipelineRunTracker("Stock trades")
 
 
 def is_stock_pipeline_running() -> bool:
@@ -299,11 +301,65 @@ async def _ingest_senate(db: Session, client: httpx.AsyncClient) -> int:
                 source_url=row.source_url,
                 filing_id=row.filing_id,
                 parse_confidence=row.parse_confidence,
+                parser_version=PTR_PARSER_VERSION,
             ))
             inserted += 1
         existing_filing_ids.add(filing_id)
     db.commit()
+    await _reread_senate(db, client)
     return inserted
+
+
+async def _reread_senate(db: Session, client: httpx.AsyncClient) -> int:
+    """Read stored electronic Senate filings again when an older
+    ptr_common.PARSER_VERSION read them, replacing their rows. Their report
+    pages are stored, so this needs no search, whose window reaches back
+    only a few weeks. A filing that doesn't read keeps its rows. Paper
+    filings are not re-read: their OCR rows name no owner either way.
+    Returns filings re-read."""
+    stale = (
+        db.query(StockTrade.filing_id, func.min(StockTrade.source_url), func.max(StockTrade.disclosure_date))
+        .filter(StockTrade.parser_version < PTR_PARSER_VERSION, StockTrade.source_url.like("%/view/ptr/%"))
+        .group_by(StockTrade.filing_id)
+        .order_by(func.max(StockTrade.disclosure_date).desc())
+        .all()
+    )
+    deadline = time.monotonic() + PTR_REREAD_BUDGET.total_seconds()
+    reread = 0
+    for filing_id, report_url, filed_date in stale:
+        if time.monotonic() >= deadline:
+            logger.info("Senate PTR re-read: time budget spent — %d filings wait for the next run", len(stale) - reread)
+            break
+        # An electronic filing's disclosure date is its filed date (the
+        # table has no notification column; see fetch_senate_ptr).
+        rows = await fetch_senate_ptr(client, db, {"report_url": report_url, "filed_date": filed_date})
+        if not rows:
+            continue
+        old = db.query(StockTrade).filter(StockTrade.filing_id == filing_id)
+        senator_id = old.first().senator_id
+        await _classify_rows_industry(db, client, rows)
+        old.delete(synchronize_session="fetch")
+        for row in rows:
+            db.add(StockTrade(
+                senator_id=senator_id,
+                ticker=row.ticker,
+                asset_name=row.asset_name,
+                owner=row.owner,
+                transaction_type=row.transaction_type,
+                transaction_date=row.transaction_date,
+                disclosure_date=row.disclosure_date,
+                days_to_disclose=_compute_days_to_disclose(row.transaction_date, row.disclosure_date),
+                amount_low=row.amount_low,
+                amount_high=row.amount_high,
+                industry=row.industry or "UNCLASSIFIED",
+                source_url=row.source_url,
+                filing_id=row.filing_id,
+                parse_confidence=row.parse_confidence,
+                parser_version=PTR_PARSER_VERSION,
+            ))
+        db.commit()
+        reread += 1
+    return reread
 
 
 async def _ingest_president(db: Session, client: httpx.AsyncClient) -> int:

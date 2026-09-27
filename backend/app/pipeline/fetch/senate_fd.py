@@ -37,7 +37,7 @@ from app.pipeline.fetch.fd_common import (
     senate_category,
     ticker_for,
 )
-from app.pipeline.fetch.ptr_common import OWNER_WORDS
+from app.pipeline.fetch.ptr_common import owner_from_cell
 from app.pipeline.fetch.senate_ptr import (
     ANNUAL_REPORT_TYPE,
     SENATOR_FILER_TYPE,
@@ -214,14 +214,9 @@ def parse_assets_table(page) -> list[HoldingRow] | None:
         type_cell = cells[c_type]
         asset_type = _own_text(type_cell)
         subtype = " ".join(" ".join(div.text_content() for div in type_cell.xpath("./div")).split())
-        owner_text = " ".join(cells[c_owner].text_content().split()).lower()
-        owner = OWNER_WORDS.get(owner_text)
-        if owner is None:
-            # Never default to the filer: an unrecognized value may well be a
-            # spouse's or child's asset. Shown as owner not stated, and
-            # logged so the table can be extended from the real value.
-            logger.info("Unrecognized Senate asset owner %r", owner_text)
-            owner = "unknown"
+        # eFD prints the owner as a word on every row ("Self" included), so
+        # a blank one is not the filer's by convention, as on the House form.
+        owner = owner_from_cell(cells[c_owner].text_content(), blank="unknown")
         value_text = " ".join(cells[c_value].text_content().split())
         low, high = parse_holding_value(value_text)
         raw.append((number, HoldingRow(

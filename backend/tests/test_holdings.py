@@ -1320,12 +1320,12 @@ class TestFilerAttribution:
         assert db_session.query(FinancialDisclosure).one().filing_id == "AMEND"
 
 
-def test_the_stock_runs_overrun_budget_allows_for_the_holdings_phases():
-    from app.holdings_schedule import HOLDINGS_STEPS, PHASE_CEILING
+def test_the_stock_runs_overrun_budget_allows_for_its_time_boxed_steps():
+    from app.holdings_schedule import HOLDINGS_STEPS, PHASE_CEILING, PTR_REREAD_BUDGET
     from app.ops_alerts import stock_trades_overrun_budget
 
     assert stock_trades_overrun_budget() == (
-        holdings_pipeline.timedelta(hours=2) + len(HOLDINGS_STEPS) * PHASE_CEILING
+        holdings_pipeline.timedelta(hours=2) + PTR_REREAD_BUDGET + len(HOLDINGS_STEPS) * PHASE_CEILING
     )
 
 

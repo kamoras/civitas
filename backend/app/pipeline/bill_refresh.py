@@ -35,6 +35,7 @@ from app.models import RepSponsoredBill, SponsoredBill
 from app.pipeline.analyze.bill_stage import classify_bill_stage_from_actions
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.congress import CONGRESS_API_BASE, _fetch_with_retry
+from app.pipeline.run_tracker import PipelineRunTracker
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -59,11 +60,11 @@ _MAX_LIST_PAGES = 8  # up to 2,000 most-recently-updated bills per cycle
 # Anything past the cap is caught by later cycles or the nightly rebuild.
 _MAX_ACTION_FETCHES = 500
 
-_running_since: datetime | None = None
+_tracker = PipelineRunTracker("Bill refresh")
 
 
 def is_bill_refresh_running() -> bool:
-    return _running_since is not None
+    return _tracker.is_running
 
 
 def _window_start(db: Session, now: datetime) -> datetime:
@@ -207,10 +208,9 @@ async def _apply_updates(
 async def refresh_bill_statuses(db: Session | None = None) -> dict:
     """Run one incremental refresh cycle. Pass `db` for tests; production
     opens (and closes) its own session."""
-    global _running_since
-    if _running_since is not None:
+    if _tracker.is_running:
         return {"status": "skipped", "reason": "previous refresh still running"}
-    _running_since = utcnow()
+    _tracker.start()
     try:
         owns_session = db is None
         if owns_session:
@@ -238,4 +238,4 @@ async def refresh_bill_statuses(db: Session | None = None) -> dict:
         summary["recently_updated"] = len(recent)
         return summary
     finally:
-        _running_since = None
+        _tracker.stop()

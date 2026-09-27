@@ -114,6 +114,17 @@ def test_owner_from_cell_reads_codes_and_words_and_never_guesses_the_filer():
         "spouse", "joint", "dependent", "dependent", "self",
     ]
     assert owner_from_cell("Trust") == "unknown"
+    # No owner column states no owner; what a blank cell means is the form's.
+    assert owner_from_cell(None) == "unknown"
+    assert owner_from_cell("  ", blank="unknown") == "unknown"
+
+
+def test_parse_table_rows_without_an_owner_column_states_no_owner():
+    table = [
+        ["Asset", "Transaction Type", "Date", "Notification Date", "Amount"],
+        ["Apple Inc. (AAPL)", "Purchase", "1/2/2026", "2/1/2026", "$1,001 - $15,000"],
+    ]
+    assert parse_table_rows(table)[0].owner == "unknown"
 
 
 def test_parse_table_rows_reads_a_senate_owner_word():

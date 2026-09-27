@@ -298,7 +298,7 @@ class StockTrade(Base):
     senator_id: Mapped[str] = mapped_column(String, ForeignKey("senators.id", ondelete="CASCADE"), nullable=False, index=True)
     ticker: Mapped[str | None] = mapped_column(String, nullable=True)  # not all disclosed assets are tickered equities
     asset_name: Mapped[str] = mapped_column(String, nullable=False)
-    owner: Mapped[str] = mapped_column(String, default="self")  # self | spouse | joint | dependent
+    owner: Mapped[str] = mapped_column(String, default="self")  # self | spouse | joint | dependent | unknown
     transaction_type: Mapped[str] = mapped_column(String, nullable=False)  # purchase | sale_full | sale_partial | exchange
     transaction_date: Mapped[str] = mapped_column(String, nullable=False)
     disclosure_date: Mapped[str] = mapped_column(String, nullable=False)
@@ -314,6 +314,10 @@ class StockTrade(Base):
     # reliable — see grounding.py's precedent of never silently trusting
     # unverified extracted content.
     parse_confidence: Mapped[str] = mapped_column(String, default="text")
+    # ptr_common.PARSER_VERSION that read the filing; an electronic filing
+    # read by an older one is read again (stock_pipeline._reread_senate).
+    # Rows stored before versions existed are 1.
+    parser_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
 
     senator: Mapped["Senator"] = relationship(back_populates="stock_trades")
 
@@ -617,7 +621,7 @@ class FinancialHolding(Base):
     ticker: Mapped[str | None] = mapped_column(String, nullable=True)
     asset_type: Mapped[str] = mapped_column(String, default="")  # as filed: House code or Senate label
     category: Mapped[str] = mapped_column(String, default="OTHER", index=True)  # config_definitions.HOLDING_CATEGORIES
-    owner: Mapped[str] = mapped_column(String, default="self")  # self | spouse | joint | dependent
+    owner: Mapped[str] = mapped_column(String, default="self")  # self | spouse | joint | dependent | unknown
     value_text: Mapped[str] = mapped_column(String, default="")
     value_low: Mapped[float | None] = mapped_column(Float, nullable=True)
     value_high: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -737,7 +741,7 @@ class PresidentTrade(Base):
     president_id: Mapped[str] = mapped_column(String, ForeignKey("presidents.id", ondelete="CASCADE"), nullable=False, index=True)
     ticker: Mapped[str | None] = mapped_column(String, nullable=True)  # crypto and bond lines carry none
     asset_name: Mapped[str] = mapped_column(String, nullable=False)
-    owner: Mapped[str] = mapped_column(String, default="self")  # self | spouse | joint | dependent
+    owner: Mapped[str] = mapped_column(String, default="self")  # self | spouse | joint | dependent | unknown
     transaction_type: Mapped[str] = mapped_column(String, nullable=False)  # purchase | sale_full | sale_partial | exchange
     transaction_date: Mapped[str] = mapped_column(String, nullable=False)
     disclosure_date: Mapped[str] = mapped_column(String, nullable=False)

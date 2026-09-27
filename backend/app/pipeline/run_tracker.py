@@ -117,9 +117,20 @@ class PipelineRunTracker:
     so this only ever has one writer.
     """
 
-    def __init__(self) -> None:
+    # Every tracker, so what must not run alongside every writer (the admin
+    # data reset) can ask them all instead of keeping its own list.
+    _all: "list[PipelineRunTracker]" = []
+
+    def __init__(self, name: str) -> None:
+        self.name = name
         self._running: bool = False
         self._started_at: float | None = None
+        PipelineRunTracker._all.append(self)
+
+    @classmethod
+    def running(cls) -> list[str]:
+        """The names of every tracked job running in this process."""
+        return [tracker.name for tracker in cls._all if tracker.is_running]
 
     def start(self) -> None:
         self._running = True

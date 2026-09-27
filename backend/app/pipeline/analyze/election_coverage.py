@@ -73,7 +73,7 @@ BLUESKY_SEARCH_BATCH = 50
 # interleave (2026-07 review B3: duplicate rows and duplicate public
 # posts; same pattern as _hourly_action_refresh's guard after the
 # 2026-07-13 pileup incident).
-_coverage_tracker = PipelineRunTracker()
+_coverage_tracker = PipelineRunTracker("Coverage refresh")
 
 
 def is_coverage_refresh_running() -> bool:

@@ -334,3 +334,49 @@ class TestClassifyRowsIndustryUntickered:
             await _classify_rows_industry(db_session, AsyncMock(), rows)
 
         assert rows[0].industry is None  # stays the model default (UNCLASSIFIED at the DB layer)
+
+
+class TestRereadSenate:
+    """Stored electronic Senate trades an older PTR parser read are read
+    again from their stored report pages; a filing that doesn't read keeps
+    its rows, and paper filings are left alone."""
+
+    def _stored(self, db_session, filing_id, url, version=1, owner="self"):
+        from app.models import Senator, StockTrade
+
+        if db_session.get(Senator, "S1") is None:
+            db_session.add(Senator(id="S1", name="Jane Doe", state="TX", party="R"))
+        db_session.add(StockTrade(
+            senator_id="S1", asset_name="Apple Inc.", owner=owner, transaction_type="purchase",
+            transaction_date="2026-01-02", disclosure_date="2026-01-20", amount_low=1001.0, amount_high=15000.0,
+            source_url=url, filing_id=filing_id, parser_version=version,
+        ))
+        db_session.commit()
+
+    async def test_rereads_old_electronic_filings_and_keeps_what_does_not_read(self, db_session):
+        from app.models import StockTrade
+        from app.pipeline.fetch.ptr_common import PARSER_VERSION, TradeRow
+
+        base = "https://efdsearch.senate.gov/search/view"
+        self._stored(db_session, "a", f"{base}/ptr/a/")
+        self._stored(db_session, "b", f"{base}/ptr/b/")                        # won't load tonight
+        self._stored(db_session, "p", f"{base}/paper/p/")                      # paper: not re-read
+        self._stored(db_session, "c", f"{base}/ptr/c/", version=PARSER_VERSION)  # already current
+
+        async def fetch(_client, _db, filing):
+            if filing["report_url"].endswith("/a/"):
+                assert filing["filed_date"] == "2026-01-20"
+                return [TradeRow(ticker="AAPL", asset_name="Apple Inc.", owner="spouse", transaction_type="purchase",
+                                 transaction_date="2026-01-02", disclosure_date="2026-01-20",
+                                 amount_low=1001.0, amount_high=15000.0, source_url=filing["report_url"], filing_id="a")]
+            return []
+
+        with patch.object(stock_pipeline, "fetch_senate_ptr", side_effect=fetch) as mock_fetch, \
+             patch.object(stock_pipeline, "_classify_rows_industry", new_callable=AsyncMock):
+            assert await stock_pipeline._reread_senate(db_session, None) == 1
+
+        assert sorted(c.args[2]["report_url"][-2] for c in mock_fetch.call_args_list) == ["a", "b"]
+        by_filing = {t.filing_id: t for t in db_session.query(StockTrade).all()}
+        assert (by_filing["a"].owner, by_filing["a"].parser_version, by_filing["a"].senator_id) == ("spouse", PARSER_VERSION, "S1")
+        assert (by_filing["b"].owner, by_filing["b"].parser_version) == ("self", 1)
+        assert by_filing["p"].parser_version == 1

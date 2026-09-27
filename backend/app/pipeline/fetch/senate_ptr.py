@@ -49,6 +49,7 @@ from app.config import settings
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.fetch.ptr_common import TradeRow, normalize_date, parse_pdf_bytes, parse_table_rows
+from app.pipeline.fetch.ptr_common import PARSER_VERSION as PTR_PARSER_VERSION
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -380,7 +381,7 @@ async def fetch_and_parse_ptr(
     confidently parse.
     """
     filing_id = senate_filing_id(filing["report_url"])
-    cache_key = f"ptr-parsed-{filing_id}"
+    cache_key = f"ptr-parsed-v{PTR_PARSER_VERSION}-{filing_id}"
     cached = api_cache_get(db, "senate_ptr", cache_key, max_age_hours=24 * 30)
     if cached is not None:
         return [TradeRow(**row) for row in cached]
@@ -405,7 +406,8 @@ async def fetch_and_parse_ptr(
             doc = lxml_html.fromstring(resp.text)
             for table_el in doc.xpath("//table"):
                 table_rows = _html_table_to_rows(table_el)
-                rows.extend(parse_table_rows(table_rows))
+                # eFD prints every owner as a word, "Self" included.
+                rows.extend(parse_table_rows(table_rows, blank_owner="unknown"))
         except Exception as e:
             logger.error("Failed to parse Senate PTR HTML %s: %s", filing["report_url"], e)
 

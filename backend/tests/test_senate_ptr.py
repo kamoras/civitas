@@ -15,6 +15,7 @@ import json
 import pytest
 
 from app.pipeline.fetch import senate_ptr
+from app.pipeline.fetch.ptr_common import PARSER_VERSION as PTR_PARSER_VERSION
 
 
 def _search_row(first, last, path="/search/view/ptr/abc123/", filed="7/1/2026", office="Senator"):
@@ -307,7 +308,7 @@ class TestFiledDateBecomesDisclosureDate:
         assert rows[0].disclosure_date == "2026-07-01"
         # The cached copy must carry the corrected date too — it feeds
         # the 30-day replay path.
-        cached_rows = json.loads(json.dumps(stored["ptr-parsed-abc123"]))
+        cached_rows = json.loads(json.dumps(stored[f"ptr-parsed-v{PTR_PARSER_VERSION}-abc123"]))
         assert cached_rows[0]["disclosure_date"] == "2026-07-01"
 
 

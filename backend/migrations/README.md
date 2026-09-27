@@ -70,6 +70,11 @@ has it*: it shipped in a release of its own, deployed before the first
 revision that relied on it (`0005`). `0002`–`0004` predate it — a rollback
 across one of those is not covered.
 
+The same release carried the schema's tolerance for a trade owner of
+`unknown` (`schemas.DisclosureOwner`), which `0006` writes: an image
+without it fails validation on such a row, so it too had to be running
+before `0006` could be.
+
 So every release must leave a schema the image before it can still read:
 
 - **Expand** (any release): add tables, add nullable or defaulted columns, add
@@ -85,8 +90,9 @@ column: presidents.gdp_growth_adjusted` on the migrated copy.
 
 ### Pending contract (the release after v6.13)
 
-Write these as the next free revision (`0006` or later — `0005` added the
-financial-holdings tables) once v6.13 is the running image:
+Write these as the next free revision (`0007` or later — `0005` added the
+financial-holdings tables, `0006` versioned the trade parser) once v6.13 is
+the running image:
 
 | Change | Why it waits |
 |---|---|

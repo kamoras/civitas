@@ -1047,6 +1047,10 @@ def reset_all_data() -> dict:
             if table.name in RESET_KEEPS:
                 continue
             summary[table.name] = db.execute(table.delete()).rowcount
+        # A kept issue's links to Explore documents name them by rowid, and
+        # SQLite hands the rebuilt documents the same rowids again: left, the
+        # links would point at unrelated documents.
+        db.execute(text("UPDATE action_issues SET related_explore_ids = '[]'"))
         db.commit()
     finally:
         db.close()

@@ -42,6 +42,12 @@ class TradeRow:
     filing_id: str = ""
     industry: str | None = None
 
+# Bump whenever a parser here reads the same filing differently. Stored
+# electronic Senate trades read by an older version are read again
+# (stock_pipeline._reread_senate). 2: owners printed as words, and an owner
+# the form doesn't state is "unknown" rather than the filer.
+PARSER_VERSION = 2
+
 # PTR owner codes -> our owner vocabulary (StockTrade.owner / RepStockTrade.owner).
 OWNER_CODES = {"SP": "spouse", "DC": "dependent", "JT": "joint"}
 # The Senate's eFD tables print the owner as a word instead (every value
@@ -52,14 +58,17 @@ OWNER_WORDS = {
 }
 
 
-def owner_from_cell(cell: str) -> str:
-    """Our owner value for a form's owner cell. Blank is the filer's own —
-    the forms leave the column empty for the filer. A value that is neither
-    a code nor a word the forms print is "unknown", never assumed to be the
-    filer's: it may well be a spouse's or child's."""
+def owner_from_cell(cell: str | None, *, blank: str = "self") -> str:
+    """Our owner value for a form's owner cell; None when the table has no
+    owner column at all, which states no owner ("unknown"). A blank cell is
+    `blank`: the House's forms leave the column empty for the filer. A value
+    that is neither a code nor a word the forms print is "unknown" too,
+    never assumed to be the filer's — it may well be a spouse's or child's."""
+    if cell is None:
+        return "unknown"
     text = " ".join(cell.split())
     if not text:
-        return "self"
+        return blank
     owner = OWNER_CODES.get(text.upper()) or OWNER_WORDS.get(text.lower())
     if owner is None:
         logger.info("Unrecognized disclosure owner value %r", text)
@@ -156,12 +165,14 @@ def parse_amount_range(text: str) -> tuple[float, float] | None:
         return None
 
 
-def parse_table_rows(table: list[list[str | None]]) -> list[TradeRow]:
+def parse_table_rows(table: list[list[str | None]], *, blank_owner: str = "self") -> list[TradeRow]:
     """Parse a header + data-rows table (from pdfplumber or an HTML table)
     into transaction dicts. Locates columns by header text rather than
     fixed position, since column order isn't perfectly consistent across
     years/chambers, and skips (never guesses) any row it can't confidently
     parse — a fabricated ticker/amount is worse than a missing row.
+    `blank_owner` is what the form means by an empty owner cell (see
+    owner_from_cell).
     """
     if not table:
         return []
@@ -215,14 +226,14 @@ def parse_table_rows(table: list[list[str | None]]) -> list[TradeRow]:
             logger.debug("Skipping unparseable PTR row: %r", raw_row)
             continue
 
-        owner_cell = (raw_row[col_owner] or "").strip().upper() if col_owner is not None else ""
+        owner_cell = (raw_row[col_owner] or "") if col_owner is not None else None
         notify_cell = (raw_row[col_notify] or "").strip() if col_notify is not None else ""
         notify_date = normalize_date(notify_cell) or txn_date
 
         rows.append(TradeRow(
             ticker=extract_ticker(asset_cell),
             asset_name=asset_cell,
-            owner=owner_from_cell(owner_cell),
+            owner=owner_from_cell(owner_cell, blank=blank_owner),
             transaction_type=txn_type,
             transaction_date=txn_date,
             disclosure_date=notify_date,

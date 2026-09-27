@@ -150,3 +150,23 @@ def test_an_unknown_revision_that_is_not_a_later_one_still_fails_loudly(patched_
 
     with pytest.raises(CommandError):
         database._run_migrations()
+
+
+def test_0006_stops_guessing_ocr_owners_and_versions_senate_trades(patched_engine):
+    database._run_migrations("0005")
+    with patched_engine.begin() as conn:
+        # No senators row needed: SQLite runs here without foreign-key enforcement.
+        for n, (confidence, owner) in enumerate([("ocr", "self"), ("text", "self"), ("ocr", "spouse")]):
+            conn.execute(text(
+                "INSERT INTO stock_trades (senator_id, asset_name, owner, transaction_type, transaction_date, "
+                "disclosure_date, days_to_disclose, amount_low, amount_high, industry, source_url, filing_id, "
+                "parse_confidence) "
+                f"VALUES ('S1', 'A', '{owner}', 'purchase', '2026-01-01', '2026-01-02', 1, 0, 0, 'X', '', "
+                f"'f{n}', '{confidence}')"
+            ))
+
+    database._run_migrations("0006")
+
+    with patched_engine.connect() as conn:
+        rows = conn.execute(text("SELECT parse_confidence, owner, parser_version FROM stock_trades ORDER BY id")).all()
+    assert [tuple(r) for r in rows] == [("ocr", "unknown", 1), ("text", "self", 1), ("ocr", "spouse", 1)]

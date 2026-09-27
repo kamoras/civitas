@@ -46,7 +46,7 @@ from app.pipeline.fetch.fd_common import (
     until_deadline,
 )
 from app.pipeline.fetch.house_ptr import download_pdf, fetch_filing_index
-from app.pipeline.fetch.ptr_common import OWNER_CODES
+from app.pipeline.fetch.ptr_common import owner_from_cell
 
 logger = logging.getLogger(__name__)
 
@@ -109,17 +109,7 @@ class _OpenRow:
             return None
         value_text = " ".join(self.value).strip()
         low, high = parse_holding_value(value_text)
-        owner_code = " ".join(self.owner).strip().upper()
-        # A blank owner cell is the filer's own asset (the form's
-        # convention); SP/DC/JT are the form's codes. Anything else is not
-        # guessed to be the member's.
-        if not owner_code:
-            owner = "self"
-        elif owner_code in OWNER_CODES:
-            owner = OWNER_CODES[owner_code]
-        else:
-            logger.info("Unrecognized House owner code %r", owner_code)
-            owner = "unknown"
+        owner = owner_from_cell(" ".join(self.owner))
         return HoldingRow(
             asset_name=name,
             asset_type=code or "",

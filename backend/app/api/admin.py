@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import secrets
+import threading
 from datetime import datetime
 from typing import Annotated
 
@@ -1427,27 +1428,24 @@ async def admin_clear_stuck_election(db: Session = Depends(get_db)):
     return _clear_stuck_runs(db, ElectionPipelineRun, is_election_pipeline_running(), "Election")
 
 
-def _running_writers(db: Session) -> list[str]:
-    """Every job that writes what a reset deletes and is running now."""
-    from app.api.pipeline import _is_pipeline_running
-    from app.pipeline.analyze.election_coverage import is_coverage_refresh_running
-    from app.pipeline.bill_refresh import is_bill_refresh_running
-    from app.pipeline.election_pipeline import is_ballot_sync_running, is_election_pipeline_running
-    from app.pipeline.house_pipeline import is_house_pipeline_running
-    from app.pipeline.stock_pipeline import is_stock_pipeline_running
-    from app.pipeline.supplementary_pipeline import is_supplementary_pipeline_running
+# Background threads started at boot that write tables a reset deletes.
+_STARTUP_WRITER_THREADS = {"explore-reindex", "explore-fts-backfill", "startup-rescore"}
 
-    checks = {
-        "Senate": lambda: _is_pipeline_running(db),
-        "Supplementary": is_supplementary_pipeline_running,
-        "House": is_house_pipeline_running,
-        "Stock trades": is_stock_pipeline_running,
-        "Election": is_election_pipeline_running,
-        "Ballot sync": is_ballot_sync_running,
-        "Bill refresh": is_bill_refresh_running,
-        "Coverage refresh": is_coverage_refresh_running,
-    }
-    return [name for name, running in checks.items() if running()]
+
+def _running_writers(db: Session) -> list[str]:
+    """Every job that writes what a reset deletes and is running now: the
+    Senate run (tracked by its DB row), every PipelineRunTracker job, the
+    Action Center refresh (by its lease) and the boot-time threads."""
+    from app.api.pipeline import _is_pipeline_running
+    from app.pipeline.analyze.action_center import refresh_lock_held
+    from app.pipeline.run_tracker import PipelineRunTracker
+
+    running = ["Senate"] if _is_pipeline_running(db) else []
+    running += PipelineRunTracker.running()
+    if refresh_lock_held(db):
+        running.append("Action Center refresh")
+    running += sorted(t.name for t in threading.enumerate() if t.name in _STARTUP_WRITER_THREADS)
+    return running
 
 
 @router.post("/data/reset", dependencies=[Depends(require_admin)])
@@ -1468,8 +1466,11 @@ async def admin_reset_data(db: Session = Depends(get_db)):
 
     from app.database import reset_all_data
 
-    # A wipe of every table: off the event loop, which serves every visitor.
-    summary = await asyncio.to_thread(reset_all_data)
+    # Run on the event loop, deliberately: the scheduler (AsyncIOScheduler)
+    # and every API trigger start their jobs from this loop, so holding it
+    # is what keeps a new writer from starting mid-wipe after the check
+    # above. A rare admin action; visitors wait out the few seconds.
+    summary = reset_all_data()
     total_rows = sum(v for k, v in summary.items() if isinstance(v, int))
     return {
         "status": "reset_complete",
