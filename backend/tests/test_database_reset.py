@@ -94,24 +94,32 @@ class TestResetGuard:
         assert refused.value.status_code == 409
         return refused.value.detail
 
+    async def _refused_and_released(self, db_session):
+        from app.pipeline import lease
+
+        detail = await self._refused(db_session)
+        # A refused reset lets its own lease go at once.
+        assert not lease.held(db_session, lease.DATA_RESET)
+        return detail
+
     async def test_refuses_while_a_pipeline_run_is_live_in_any_process(self, db_session):
         from app.time_utils import utcnow
 
         db_session.add(models.HousePipelineRun(status="running", started_at=utcnow()))
         db_session.commit()
-        assert "House run" in await self._refused(db_session)
+        assert "House run" in await self._refused_and_released(db_session)
 
     async def test_refuses_while_a_writer_in_this_process_runs(self, db_session):
         from app.background import writing
 
         with writing("bill-status-refresh"):
-            assert "bill-status-refresh" in await self._refused(db_session)
+            assert "bill-status-refresh" in await self._refused_and_released(db_session)
 
     async def test_refuses_while_the_action_center_refresh_holds_its_lease(self, db_session):
-        from app.pipeline.analyze.action_center import _acquire_refresh_lock
+        from app.pipeline import lease
 
-        assert _acquire_refresh_lock(db_session) is not None
-        assert "Action Center refresh" in await self._refused(db_session)
+        assert lease.acquire(db_session, lease.ACTION_REFRESH) is not None
+        assert "Action Center refresh" in await self._refused_and_released(db_session)
 
     async def test_refuses_while_another_process_resets(self, db_session):
         from app.pipeline import lease
@@ -160,3 +168,60 @@ class _Unclosable:
 
     def __getattr__(self, name):
         return getattr(self._session, name)
+
+
+class TestYieldingToAReset:
+    """Another process's pipeline or refresh, meeting a reset: it checks the
+    reset's lease inside its own lock's insert, so backing out writes
+    nothing."""
+
+    def test_a_pipeline_backs_out_leaving_no_run_row(self, db_session):
+        from app.pipeline import lease
+        from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
+
+        assert lease.acquire(db_session, lease.DATA_RESET) is not None
+        assert acquire_pipeline_lock(db_session, models.HousePipelineRun, STALE_PIPELINE_TIMEOUT) is None
+        assert db_session.query(models.HousePipelineRun).count() == 0
+
+    def test_a_locked_database_is_busy_not_a_crash(self, db_session, monkeypatch):
+        from sqlalchemy.exc import OperationalError
+
+        from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
+
+        def locked():
+            raise OperationalError("INSERT", {}, Exception("database is locked"))
+
+        monkeypatch.setattr(db_session, "flush", locked)
+        assert acquire_pipeline_lock(db_session, models.HousePipelineRun, STALE_PIPELINE_TIMEOUT) is None
+
+    def test_a_lease_yields_without_committing_its_row(self, db_session):
+        from app.pipeline import lease
+
+        assert lease.acquire(db_session, lease.DATA_RESET) is not None
+        with lease.holding(db_session, lease.ACTION_REFRESH, yield_to=lease.DATA_RESET) as token:
+            assert token is None
+        assert db_session.query(models.ApiCache).filter_by(tier=lease.ACTION_REFRESH).count() == 0
+
+
+def test_startup_leaves_a_senate_run_live_in_another_process_alone(db_session, monkeypatch):
+    from app.main import _invalidate_orphaned_pipelines
+    from app.pipeline import lease
+    from app.time_utils import utcnow
+
+    db_session.add(models.PipelineRun(status="running", started_at=utcnow()))
+    db_session.commit()
+    assert lease.acquire(db_session, lease.SENATE_RUN) is not None  # its run, beating elsewhere
+    monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
+    _invalidate_orphaned_pipelines()
+    assert db_session.query(models.PipelineRun).one().status == "running"
+
+
+def test_startup_clears_a_senate_run_nobody_holds(db_session, monkeypatch):
+    from app.main import _invalidate_orphaned_pipelines
+    from app.time_utils import utcnow
+
+    db_session.add(models.PipelineRun(status="running", started_at=utcnow()))
+    db_session.commit()
+    monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
+    _invalidate_orphaned_pipelines()
+    assert db_session.query(models.PipelineRun).one().status == "stale"

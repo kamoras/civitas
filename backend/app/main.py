@@ -81,6 +81,12 @@ def _invalidate_orphaned_pipelines() -> None:
 
     db = SessionLocal()
     try:
+        from app.pipeline import lease
+
+        if lease.held(db, lease.SENATE_RUN):
+            # A live Senate run holds it — another process's, during a
+            # rollout's overlap: not an orphan.
+            return
         orphaned = db.query(PipelineRun).filter(PipelineRun.status == PipelineStatus.RUNNING).all()
         for run in orphaned:
             run.status = PipelineStatus.STALE
@@ -141,8 +147,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from app.pipeline.les_rescore import rescore_stale_legislative_effectiveness
 
     def _startup_rescore() -> None:
-        rescore_stale_legislative_effectiveness(_rescore_session)
-        rescore_stale_constituent_alignment(_rescore_session)
+        from app.pipeline import lease
+
+        # A lease, so an admin data reset in another process sees this run
+        # and this run sees the reset (lease.DATA_RESET).
+        db = _rescore_session()
+        try:
+            with lease.holding(db, lease.STARTUP_RESCORE, yield_to=lease.DATA_RESET) as token:
+                if token is None:
+                    logging.getLogger("app.main").info("Startup rescore skipped: a data reset or another rescore holds the database")
+                    return
+                rescore_stale_legislative_effectiveness(_rescore_session)
+                rescore_stale_constituent_alignment(_rescore_session)
+        except Exception:
+            # Each rescore logs its own failures; this is the lease's.
+            logging.getLogger("app.main").exception("Startup rescore failed")
+        finally:
+            db.close()
 
     start_writer(_startup_rescore, name="startup-rescore")
 

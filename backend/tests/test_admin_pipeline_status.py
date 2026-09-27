@@ -116,3 +116,15 @@ async def test_history_includes_election_pipeline_type(db_session):
     assert entry["candidatesSynced"] == 6917
     assert entry["financialsRefreshed"] == 500
     assert entry["coverageItemsIngested"] == 42
+
+
+@pytest.mark.asyncio
+async def test_status_reports_a_data_reset_so_deploys_wait_it_out(db_session):
+    """check-and-deploy.sh reads dataResetIsRunning with the pipeline flags:
+    killing a reset mid-wipe leaves indexes describing rows that are gone."""
+    from app.api.admin import admin_pipeline_status
+    from app.pipeline import lease
+
+    assert (await admin_pipeline_status(db=db_session))["dataResetIsRunning"] is False
+    lease.acquire(db_session, lease.DATA_RESET)
+    assert (await admin_pipeline_status(db=db_session))["dataResetIsRunning"] is True

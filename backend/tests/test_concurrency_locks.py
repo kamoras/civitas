@@ -14,13 +14,22 @@ from datetime import timedelta
 from sqlalchemy import text
 
 from app.models import ApiCache, PipelineRun, PipelineStatus
-from app.pipeline.analyze.action_center import (
-    _REFRESH_LOCK_STALE_S,
-    _acquire_refresh_lock,
-    _beat_refresh_lock,
-    _release_refresh_lock,
-)
+from app.pipeline import lease
 from app.time_utils import utcnow
+
+_REFRESH_LOCK_STALE_S = lease.STALE_S
+
+
+def _acquire_refresh_lock(db):
+    return lease.acquire(db, lease.ACTION_REFRESH)
+
+
+def _beat_refresh_lock(db, token):
+    return lease.beat(db, lease.ACTION_REFRESH, token)
+
+
+def _release_refresh_lock(db, token):
+    lease.release(db, lease.ACTION_REFRESH, token)
 
 
 def _create_partial_unique_index(session) -> None:
@@ -336,7 +345,7 @@ class TestRefreshActionIssuesLockWrapper:
 
         from app.pipeline.analyze import action_center
 
-        monkeypatch.setattr(action_center, "_REFRESH_LOCK_BEAT_S", 0.02)
+        monkeypatch.setattr(lease, "BEAT_S", 0.02)
         seen = []
 
         def run(db):

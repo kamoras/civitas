@@ -804,6 +804,10 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
         "stockTradesIsRunning": is_stock_pipeline_running(),
         "supplementaryIsRunning": is_supplementary_pipeline_running(),
         "electionIsRunning": is_election_pipeline_running(),
+        # An admin data reset in any process; check-and-deploy.sh waits it
+        # out like a pipeline run, since killing it mid-wipe leaves the
+        # indexes describing rows that are gone.
+        "dataResetIsRunning": _data_reset_running(db),
     }
 
     if last_supplementary_run:
@@ -1431,6 +1435,12 @@ async def admin_clear_stuck_election(db: Session = Depends(get_db)):
     return _clear_stuck_runs(db, ElectionPipelineRun, is_election_pipeline_running(), "Election")
 
 
+def _data_reset_running(db: Session) -> bool:
+    from app.pipeline import lease
+
+    return lease.held(db, lease.DATA_RESET)
+
+
 def _reset_holding_every_writer() -> dict:
     """reset_all_data, with every writer held off from before it starts to
     after it ends. One synchronous function, run in a worker thread: the
@@ -1440,9 +1450,10 @@ def _reset_holding_every_writer() -> dict:
     - In this process, app.background.exclusive(): granted only while no
       writer thread or task is registered, and while held none starts.
     - In any process — a rollout's other task included — the reset's lease
-      (lease.DATA_RESET), which a pipeline's run lock and the refresh lease
-      check once taken. The reset takes it first and then checks theirs, so
-      between a pipeline or refresh and the reset one always sees the other.
+      (lease.DATA_RESET), which a pipeline's run lock and every other lease
+      (the refresh, the startup rescore) check. The reset commits it first and then checks
+      theirs, so between a pipeline or refresh and the reset one always sees
+      the other. It is beaten throughout: the wipe commits table by table.
 
     Raises WritersBusy, naming them, if anything is writing already.
     """
@@ -1458,8 +1469,10 @@ def _reset_holding_every_writer() -> dict:
                 if token is None:
                     raise WritersBusy(["Another data reset"])
                 busy = [f"{label} run" for label, model in run_tables().items() if run_in_progress(db, model)]
-                if lease.held(db, "action-refresh-lock"):
-                    busy.append("Action Center refresh")
+                busy += [
+                    holder for tier, holder in lease.TIERS.items()
+                    if tier != lease.DATA_RESET and lease.held(db, tier) and holder not in busy
+                ]
                 if busy:
                     raise WritersBusy(busy)
                 return reset_all_data()

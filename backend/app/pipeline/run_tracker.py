@@ -3,7 +3,7 @@ import time
 from datetime import timedelta
 from typing import TypeVar
 
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.time_utils import utcnow
@@ -85,16 +85,30 @@ def acquire_pipeline_lock(db: Session, model: type[_RunModel], stale_timeout: ti
             running.status = PipelineStatus.STALE
             running.completed_at = utcnow()
             running.error_message = f"Marked stale: exceeded {stale_timeout} timeout"
-            db.commit()
+            try:
+                db.commit()
+            except OperationalError:
+                db.rollback()
+                logger.warning("%s not started: the database is locked by another writer", model.__name__)
+                return None
             logger.warning(
                 "Cleaned up stale %s run #%d (age: %s)", model.__name__, running.id, age,
             )
         else:
             return None
 
+    from app.pipeline import lease
+
     run = model(started_at=utcnow(), status=PipelineStatus.RUNNING)
     db.add(run)
     try:
+        db.flush()
+        if lease.held(db, lease.DATA_RESET):
+            # Checked inside the insert's own transaction (see
+            # lease.DATA_RESET): backing out is a rollback, no second write.
+            db.rollback()
+            logger.warning("%s not started: an admin data reset is running", model.__name__)
+            return None
         db.commit()
     except IntegrityError:
         # Another container inserted its running row between our check
@@ -102,13 +116,11 @@ def acquire_pipeline_lock(db: Session, model: type[_RunModel], stale_timeout: ti
         db.rollback()
         logger.info("%s lock held by another container — skipping this run", model.__name__)
         return None
-    from app.pipeline import lease
-
-    if lease.held(db, lease.DATA_RESET):
-        # Checked after the run row is in, never before (see lease.DATA_RESET).
-        db.delete(run)
-        db.commit()
-        logger.warning("%s not started: an admin data reset is running", model.__name__)
+    except OperationalError:
+        # The database stayed locked past the busy timeout — a writer (the
+        # admin data reset's wipe, say) holding it. Not this run's to wait on.
+        db.rollback()
+        logger.warning("%s not started: the database is locked by another writer", model.__name__)
         return None
     return run
 

@@ -1050,9 +1050,14 @@ def reset_all_data() -> dict:
             if table.name == "api_cache":
                 # The leases (app.pipeline.lease): the reset's own, which is
                 # what holds other processes' writers off while it runs, and
-                # a refresh's, which is live if one is.
-                wipe = wipe.where(table.c.tier.notin_(["data-reset-lock", "action-refresh-lock"]))
+                # any other that may be live.
+                from app.pipeline import lease
+
+                wipe = wipe.where(table.c.tier.notin_(lease.TIERS))
             summary[table.name] = db.execute(wipe).rowcount
+            # One table at a time: the write lock is let go between tables,
+            # so the reset's own lease heartbeat gets through.
+            db.commit()
         # A kept issue's links to Explore documents name them by rowid, and
         # SQLite hands the rebuilt documents the same rowids again: left, the
         # links would point at unrelated documents.

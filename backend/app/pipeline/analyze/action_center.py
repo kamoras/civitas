@@ -3809,46 +3809,15 @@ def _cleanup_monitor_lifecycle(today: str, db: Session) -> None:
 
 
 
-# The refresh lock is a lease, not a flag: its holder rewrites cached_at
-# every _REFRESH_LOCK_BEAT_S while it runs, and a row that has gone
-# _REFRESH_LOCK_STALE_S without a beat belongs to a dead holder, whoever it
-# was. It used to be honored for a flat 4 hours from acquisition, and a
-# refresh runs in a thread, so a deploy's SIGTERM kills it without its
-# `finally` and leaves the row behind: every hourly run for the next four
-# hours then skipped with "held by another container" — on a day of
-# steady deploys (2026-09-26: 22 between 15:08 and 22:50 UTC) that meant
-# no refresh at all, and no new issue, for the whole day. Ten missed beats
-# rides out a SQLite writer holding the database for minutes, while a
-# killed holder costs at most one skipped hour.
-_REFRESH_LOCK_TIER = "action-refresh-lock"
-_REFRESH_LOCK_BEAT_S = lease.BEAT_S
-_REFRESH_LOCK_STALE_S = lease.STALE_S
-
-
-def _acquire_refresh_lock(db: Session) -> str | None:
-    """Cross-container refresh lock (2026-07): the hourly refresh previously
-    had only a process-local guard, so during a blue/green deploy overlap
-    two containers could both run it — duplicate Bluesky posts and
-    contended SQLite writes. A lease (app.pipeline.lease)."""
-    return lease.acquire(db, _REFRESH_LOCK_TIER)
-
-
-def refresh_lock_held(db: Session) -> bool:
-    return lease.held(db, _REFRESH_LOCK_TIER)
-
-
-def _beat_refresh_lock(db: Session, token: str) -> bool:
-    return lease.beat(db, _REFRESH_LOCK_TIER, token)
-
-
-def _release_refresh_lock(db: Session, token: str) -> None:
-    lease.release(db, _REFRESH_LOCK_TIER, token)
-
-
-def hold_refresh_lock(db: Session):
-    """The refresh lock for the enclosed work (lease.holding): yields the
-    token, or None when another holder has it."""
-    return lease.holding(db, _REFRESH_LOCK_TIER, beat_s=_REFRESH_LOCK_BEAT_S)
+# The refresh lock is a lease (app.pipeline.lease), not a flag. It used to be
+# honored for a flat 4 hours from acquisition, and a refresh runs in a
+# thread, so a deploy's SIGTERM kills it without its `finally` and leaves the
+# row behind: every hourly run for the next four hours then skipped with
+# "held by another container" — on a day of steady deploys (2026-09-26: 22
+# between 15:08 and 22:50 UTC) that meant no refresh at all, and no new
+# issue, for the whole day. It was added (2026-07) because a process-local
+# guard let two containers both run the refresh during a blue/green overlap:
+# duplicate Bluesky posts and contended SQLite writes.
 
 
 def refresh_action_issues(db: Session | None = None) -> int:
@@ -3858,13 +3827,12 @@ def refresh_action_issues(db: Session | None = None) -> int:
         db = SessionLocal()
 
     try:
-        with hold_refresh_lock(db) as token:
+        with lease.holding(db, lease.ACTION_REFRESH, yield_to=lease.DATA_RESET) as token:
             if token is None:
-                logger.info("Action refresh lock held by another container — skipping this run")
-                return 0
-            if lease.held(db, lease.DATA_RESET):
-                # Checked after taking the refresh lock (see lease.DATA_RESET).
-                logger.warning("Action refresh skipped: an admin data reset is running")
+                if lease.held(db, lease.DATA_RESET):
+                    logger.warning("Action refresh skipped: an admin data reset is running")
+                else:
+                    logger.info("Action refresh lock held by another container — skipping this run")
                 return 0
             try:
                 return _run_refresh(db)
