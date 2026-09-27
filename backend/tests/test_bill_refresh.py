@@ -358,3 +358,19 @@ class TestRefreshBillStatuses:
         from app.pipeline.cache import api_cache_get
         marker = api_cache_get(db_session, "congress", bill_refresh.LAST_RUN_CACHE_KEY)
         assert marker and marker.get("lastRun")
+
+
+@pytest.mark.parametrize("text, is_law", [
+    ("Became Public Law No: 119-52.", True),
+    ("became public law no: 119-52.", True),
+    ("Motion to waive pursuant to section 904 of Public Law 93-344 agreed to.", False),
+    ("Signed by President.", False),
+    ("", False),
+    (None, False),
+])
+def test_one_reading_of_becoming_law(text, is_law):
+    """Every writer of a bill row (Senate and House pipelines, the bill
+    fetch, this refresh) reads is_law the same way."""
+    from app.pipeline.analyze.bill_stage import is_public_law_action
+
+    assert is_public_law_action(text) is is_law

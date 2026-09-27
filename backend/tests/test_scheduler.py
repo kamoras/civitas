@@ -38,7 +38,7 @@ def _job_leases_granted():
 @contextmanager
 def _tracker_running(tracker, running: bool, age):
     """Put a real PipelineRunTracker in the state a test describes: a run
-    going for `age` (the code checks and starts in one step, try_start)."""
+    going for `age`."""
     import time
 
     token = tracker.start() if running else None

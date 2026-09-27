@@ -43,6 +43,7 @@ import struct
 import threading
 
 from sentence_transformers import SentenceTransformer
+from app.atomic_write import write_text_atomic
 from app.background import start_writer
 
 logger = logging.getLogger(__name__)
@@ -263,8 +264,7 @@ def check_model_version() -> bool:
 def _write_model_version() -> None:
     try:
         os.makedirs(os.path.dirname(_VERSION_FILE), exist_ok=True)
-        with open(_VERSION_FILE, "w") as f:
-            f.write(EMBEDDING_MODEL_VERSION)
+        write_text_atomic(_VERSION_FILE, EMBEDDING_MODEL_VERSION)
     except OSError:
         logger.warning("Could not write model version file %s", _VERSION_FILE)
 

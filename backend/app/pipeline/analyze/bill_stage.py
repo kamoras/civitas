@@ -151,6 +151,15 @@ _STAGE_RANK: dict[BillStage, int] = {
 }
 
 
+def is_public_law_action(text: str | None) -> bool:
+    """Whether a latest-action text records the bill becoming law —
+    Congress.gov's "Became Public Law No: ..." — the one reading of is_law
+    every writer of a bill row uses. Not any mention of "Public Law": plenty
+    of ordinary actions cite one (a motion "pursuant to section 904 of
+    Public Law 93-344")."""
+    return "became public law" in (text or "").lower()
+
+
 def classify_bill_stage_from_actions(actions: list[dict], is_law: bool = False) -> BillStage:
     """Classify a bill's stage as the FURTHEST stage reached across its
     full Congress.gov action history.

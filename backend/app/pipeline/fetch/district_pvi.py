@@ -23,6 +23,7 @@ import urllib.parse
 
 import httpx
 
+from app.atomic_write import write_text_atomic
 from app.http_client import make_async_client
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
@@ -198,7 +199,7 @@ async def refresh_district_pvi(client: httpx.AsyncClient | None = None) -> bool:
 
         from datetime import date
         path = pathlib.Path(_PVI_PATH)
-        path.write_text(json.dumps(
+        write_text_atomic(path, json.dumps(
             {
                 "_source": (
                     "Wikipedia district infoboxes (Cook PVI). Refreshed "

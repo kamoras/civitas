@@ -38,6 +38,7 @@ from app.models import (
 )
 
 # Fetch modules
+from app.pipeline.analyze.bill_stage import is_public_law_action
 from app.pipeline.fetch.congress import (
     extract_official_title,
     fetch_bill,
@@ -993,16 +994,13 @@ async def run_senate_pipeline(
                     official_title = extract_official_title(titles)
                     crs_policy_area = (bill.get("policyArea") or {}).get("name", "")
                     # actions[0] is the most recent (Congress.gov returns
-                    # newest-first) — same "becameLaw"/"Public Law" check
+                    # newest-first) — same is_public_law_action check
                     # used for sponsored bills below, so a significant
                     # bill's cosponsorship-edge weight (sponsorship_analysis.
                     # _cosponsorship_edge_weight) reflects the same notion
                     # of "advanced" everywhere in the pipeline.
                     latest_action_text = (actions or [{}])[0].get("text", "") if actions else ""
-                    is_law = (
-                        "becamelaw" in latest_action_text.lower()
-                        or "public law" in latest_action_text.lower()
-                    )
+                    is_law = is_public_law_action(latest_action_text)
 
                     bills_data.append(
                         {
@@ -1608,9 +1606,7 @@ async def run_senate_pipeline(
                     bill_id = f"{bill_type}.{bill_number}" if bill_type and bill_number else ""
                     latest = sp.get("latestAction") or {}
                     pa = sp.get("policyArea") or {}
-                    became_law = "becameLaw" in (latest.get("text") or "").lower() or (
-                        "Public Law" in (latest.get("text") or "")
-                    )
+                    became_law = is_public_law_action(latest.get("text"))
                     senator_sponsored.append({
                         "billId": bill_id,
                         "title": title,

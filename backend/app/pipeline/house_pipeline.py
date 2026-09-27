@@ -21,6 +21,7 @@ from app.config import settings
 from app.database import SessionLocal
 from app.http_client import make_async_client
 from app.models import HousePipelineRun, PipelineStatus, Representative, ScoreSnapshot
+from app.pipeline.analyze.bill_stage import is_public_law_action
 from app.pipeline.member_lifecycle import (
     CHAMBER_HOUSE,
     purge_departed_members,
@@ -412,7 +413,7 @@ async def run_house_pipeline() -> dict:
                             sp_key = f"{sp_type}.{sp_num}"
                             sp_title = sp.get("title", "")
                             latest_action_text = (sp.get("latestAction") or {}).get("text", "")
-                            is_law = "became public law" in latest_action_text.lower()
+                            is_law = is_public_law_action(latest_action_text)
                             sp_congress = sp.get("congress", 0)
                             bill_actions = await fetch_bill_actions(
                                 client, db, sp_congress, sp_type.lower(), int(sp_num),

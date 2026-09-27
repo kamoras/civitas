@@ -53,6 +53,7 @@ from app.pipeline.fetch.state_candidates import (
 from app.pipeline.fetch.state_election_dates import senate_election_known
 from app.pipeline.progress_tracker import ProgressTracker
 from app.pipeline import lease
+from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock_why, skip_reason_text
 from app.time_utils import utcnow
 
@@ -777,39 +778,53 @@ def _prune_stale_coverage(db: Session) -> int:
     return deleted
 
 
+# When the last source crawl completed, in api_cache — so "weekly" is a
+# week since it last ran, and a night the ballot guards refused it (or it
+# failed) is made up the next night rather than the next week.
+_CRAWL_TIER, _CRAWL_KEY = "election", "source-crawl-completed"
+# A little under a week: the nightly run's start time drifts by minutes.
+_CRAWL_EVERY_HOURS = 7 * 24 - 12
+
+
 async def _weekly_source_crawl(db: Session, client, cycle: int) -> dict[str, str]:
-    """Sundays (UTC): crawl for new ballot sources; the states it adopted.
-    Weekly, not nightly: this sweeps every state that has no hand-verified
-    source, and what it looks for — a state standing up a results portal, a
-    new cycle's file appearing — moves on the scale of weeks, not hours.
-    Same self-gating shape as ops_alerts' weekly checks. Runs BEFORE the
-    sync so anything it proves out contributes the same night — and outside
-    the sync's guards, as it writes no Candidate row (only the discovered-
-    source and election-date files), so a sync in flight doesn't cost a
-    week's crawl."""
-    if utcnow().weekday() != 6:
+    """Crawl for new ballot sources, when a week has passed since the last
+    crawl completed; the states it adopted. Weekly, not nightly: this sweeps
+    every state that has no hand-verified source, and what it looks for — a
+    state standing up a results portal, a new cycle's file appearing —
+    moves on the scale of weeks, not hours. Runs BEFORE the sync so anything
+    it proves out contributes the same night, under the same guards: it
+    rewrites the discovered-source and election-date files the sync reads
+    and writes. Best-effort — a failure is logged, and costs the night's
+    sync nothing."""
+    if api_cache_get(db, _CRAWL_TIER, _CRAWL_KEY, max_age_hours=_CRAWL_EVERY_HOURS) is not None:
         return {}
-    leads = await crawl_for_new_sources(db, client, cycle)
+    try:
+        leads = await crawl_for_new_sources(db, client, cycle)
+    except Exception:
+        db.rollback()
+        logger.exception("Source crawl failed — the sync goes ahead, and the crawl is retried tomorrow")
+        return {}
     adopted = {s: r for s, r in leads.items() if r.startswith("adopted")}
     logger.info(
         "Source crawl: %d state(s) adopted%s",
         len(adopted), f" — {adopted}" if adopted else "",
     )
+    api_cache_set(db, _CRAWL_TIER, _CRAWL_KEY, {"completedAt": utcnow().isoformat()})
     return adopted
 
 
 def _adopted_detail(adopted: dict[str, str]) -> str:
-    """The crawl's part of the phase's dashboard detail (see
-    _confirmed_candidates_phase)."""
+    """The crawl's part of the phase's dashboard detail."""
     if not adopted:
         return ""
     return f"; crawler adopted {len(adopted)} this week: {', '.join(sorted(adopted))}"
 
 
 async def _confirmed_candidates_phase(db: Session, client, cycle: int) -> str:
-    """The nightly run's ballot sync, run holding the ballot sync's guards;
-    returns the dashboard's detail line (the crawl's part is added by the
-    caller, _adopted_detail)."""
+    """The nightly run's confirmed-candidate phase — the weekly source crawl,
+    then the ballot sync — run holding the ballot sync's guards; returns the
+    dashboard's detail line."""
+    adopted = await _weekly_source_crawl(db, client, cycle)
     confirm_result, filing_result = await _sync_ballots(db, client, cycle)
     confirmed_total = sum(r["confirmed"] for r in confirm_result.values())
     logger.info("Confirmed candidates: %s", confirm_result)
@@ -838,7 +853,7 @@ async def _confirmed_candidates_phase(db: Session, client, cycle: int) -> str:
     )
     if non_federal:
         detail += f"; {non_federal} state-office nominees"
-    return detail
+    return detail + _adopted_detail(adopted)
 
 
 async def run_election_pipeline(cycle: int | None = None) -> dict:
@@ -899,24 +914,26 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
             progress.begin("confirmed_candidates")
             confirmed_open = True  # until the phase is marked done or skipped
             try:
-                adopted = await _weekly_source_crawl(db, client, cycle)
                 # The election-season ballot sync may be mid-pass; two
-                # passes writing the same Candidate rows at once is the one
-                # thing to avoid, and that pass is doing this step anyway.
-                # Holding the sync's tracker and lease (lease.tracked_job,
-                # as the scheduled sync does), so a sync in this process or
-                # another can't start beside this pass.
+                # passes writing the same Candidate rows (and source files)
+                # at once is the one thing to avoid, and that pass is doing
+                # this step anyway. Holding the sync's tracker and lease
+                # (lease.tracked_job, as the scheduled sync does), so a sync
+                # in this process or another can't start beside this pass.
                 async with lease.tracked_job_async(
                     lease.BALLOT_SYNC, _ballot_tracker, who="Election pipeline's confirmed-candidate phase",
                 ) as granted:
                     if not granted:
-                        progress.skip(
-                            "confirmed_candidates", detail=f"skipped: {granted.why}{_adopted_detail(adopted)}",
-                        )
+                        progress.skip("confirmed_candidates", detail=f"skipped: {granted.why}")
                     else:
                         detail = await _confirmed_candidates_phase(db, client, cycle)
-                        progress.complete("confirmed_candidates", detail=detail + _adopted_detail(adopted))
+                        progress.complete("confirmed_candidates", detail=detail)
                     confirmed_open = False
+            except lease.CutOff as cut:
+                db.rollback()
+                logger.warning("Confirmed-candidate phase: %s — continuing", cut)
+                if confirmed_open:
+                    progress.fail("confirmed_candidates")
             except Exception:
                 db.rollback()
                 logger.exception("Confirmed-candidate sync failed — continuing")
@@ -981,6 +998,9 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                             progress.skip(phase, detail=f"skipped: {granted.why}")
                         coverage_open.clear()
                     else:
+                        # The cut-off fires only at an await; the posting
+                        # loop, which doesn't await, stops here itself.
+                        coverage_deadline = lease.deadline(lease.COVERAGE_REFRESH)
                         run.current_phase = "coverage"
                         db.commit()
                         logger.info("--- Election: COVERAGE INGESTION ---")
@@ -1009,7 +1029,7 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                             race_relevance.calibrate_and_store(db)
 
                             from app.pipeline.analyze.election_bluesky import post_race_coverage_updates
-                            posted = post_race_coverage_updates(db)
+                            posted = post_race_coverage_updates(db, deadline=coverage_deadline)
                             logger.info("Posted %d race coverage updates", posted)
                             progress.complete("bluesky_posting", detail=f"{posted} posted")
                         except Exception:
@@ -1017,6 +1037,11 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                             logger.exception("Bluesky posting failed — continuing")
                             progress.fail("bluesky_posting")
                         coverage_open.remove("bluesky_posting")
+            except lease.CutOff as cut:
+                db.rollback()
+                logger.warning("Election coverage/posting phases: %s — continuing", cut)
+                for phase in coverage_open:
+                    progress.fail(phase)
             except Exception:
                 db.rollback()
                 logger.exception("Election coverage/posting phases failed — continuing")

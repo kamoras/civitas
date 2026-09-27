@@ -30,6 +30,7 @@ import pathlib
 import httpx
 import yaml
 
+from app.atomic_write import write_text_atomic
 from app.http_client import make_async_client
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
@@ -135,7 +136,7 @@ def ingestion_gates(
 
 def _write_json(path: str, key: str, data: dict) -> None:
     p = pathlib.Path(path)
-    p.write_text(json.dumps({"_source": SOURCE_DESC, key: data}, indent=1, sort_keys=True) + "\n")
+    write_text_atomic(p, json.dumps({"_source": SOURCE_DESC, key: data}, indent=1, sort_keys=True) + "\n")
 
 
 async def refresh_committee_leadership_data(client: httpx.AsyncClient | None = None) -> bool:

@@ -85,9 +85,10 @@ def stale_after(tier: str) -> timedelta:
 # bound a hung holder, whose process lives on, would renew it forever and
 # hold its job, and every data reset, off until a restart. A job with its
 # own check that proceeds past a run it calls hung does so at max_hold too
-# (tracked_job, scheduler.py), so the check and the lease agree; the bill refresh is cut
-# off within it instead; where a job has neither, the lapse is the hung-run
-# rule: the next attempt takes the lease over.
+# (tracked_job, scheduler.py), so the check and the lease agree — and a
+# tracked job's work is cut off there (_bounded, deadline), so it never runs
+# beside the one that proceeds; where a job has neither, the lapse is the
+# hung-run rule: the next attempt takes the lease over.
 def _pipeline_timeout() -> timedelta:
     from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT
 
@@ -330,8 +331,14 @@ def refusal_text(code: str, tier: str | None = None, who: str | None = None) -> 
 
 def refusal(db: Session, tier: str) -> str:
     """refusal_code, as a skip message says it, naming the holder."""
+    return refusal_and_code(db, tier)[1]
+
+
+def refusal_and_code(db: Session, tier: str) -> tuple[str, str]:
+    """(refusal_code, refusal) from one read, for a caller that acts on the
+    code too."""
     code, who = _refused(db, tier)
-    return refusal_text(code, tier, who)
+    return code, refusal_text(code, tier, who)
 
 
 class Granted:
@@ -443,13 +450,30 @@ async def job_async(tier: str, *, who: str | None = None) -> AsyncIterator[Grant
 #      refuses before anything touches its lease row — which acquire would
 #      replace were that run's beats held up, ending its lease for good.
 #   2. Takes the lease.
-#   3. Starts the tracker (checked and started in one step, try_start).
-# So a refused entry point holds nothing another would be refused by, and
-# the tracker is only ever replaced by a holder of the lease. A tracked run
-# is presumed hung at the lease's max_hold, where its lease stops being
-# renewed, so the two guards agree on when to proceed past it — and so the
-# work must end by then: tracked_job_async cuts its body off there
-# (TimeoutError), and a synchronous caller of tracked_job bounds its own.
+#   3. Starts the tracker. Only a holder of the lease starts it, so nothing
+#      can have started it since the check; a run it replaces is one the
+#      check presumed hung.
+# So a refused entry point holds nothing another would be refused by. A
+# tracked run is presumed hung at the lease's max_hold, where its lease
+# stops being renewed, so the two guards agree on when to proceed past it —
+# and so the work ends by then: tracked_job_async and run_tracked cut it off
+# at its next await (CutOff), and a synchronous stretch between awaits that
+# could run long checks deadline() itself.
+
+
+class CutOff(Exception):
+    """A tracked job's work stopped at max_hold, where its guards stop
+    holding. Not a TimeoutError: a request inside the work raising one is a
+    failure, and is reported as that."""
+
+
+def deadline(tier: str) -> float:
+    """time.monotonic() at which work started now under `tier`'s guards
+    must stop: for a synchronous stretch the cut-off can't interrupt (it
+    fires only at an await)."""
+    import time
+
+    return time.monotonic() + max_hold(tier).total_seconds()
 
 
 def _tracker_refusal(tier: str, tracker, who: str | None) -> Granted | None:
@@ -461,27 +485,24 @@ def _tracker_refusal(tier: str, tracker, who: str | None) -> Granted | None:
 
 
 @contextmanager
-def _slot(tier: str, tracker, who: str | None) -> Iterator[Granted]:
-    token, past = tracker.try_start(hung_after=max_hold(tier), holder=who or TIERS[tier])
-    if token is None:  # a run started here since the check
-        refused = Granted(f"{tracker.holder or TIERS[tier]} is already running in this process")
-        _log_skip(tier, who, refused)
-        yield refused
-        return
+def _slot(tier: str, tracker, who: str | None) -> Iterator[None]:
+    past = tracker.age
+    token = tracker.start(holder=who or TIERS[tier])
     if past is not None:
         logger.warning(
             "%s: the run going in this process has been running for %s — presumed hung, proceeding",
             who or TIERS[tier], past,
         )
     try:
-        yield Granted(None)
+        yield
     finally:
         tracker.stop(token)
 
 
 @contextmanager
 def tracked_job(tier: str, tracker, *, who: str | None = None) -> Iterator[Granted]:
-    """`tracker` and job() (see above): true while both are held."""
+    """`tracker` and job() (see above): true while both are held. The caller
+    bounds its own work (run_tracked does)."""
     refused = _tracker_refusal(tier, tracker, who)
     if refused is not None:
         yield refused
@@ -490,16 +511,29 @@ def tracked_job(tier: str, tracker, *, who: str | None = None) -> Iterator[Grant
         if not granted:
             yield granted
             return
-        with _slot(tier, tracker, who) as slot:
-            yield slot
+        with _slot(tier, tracker, who):
+            yield granted
+
+
+@asynccontextmanager
+async def _bounded(tier: str, who: str | None) -> AsyncIterator[None]:
+    """Cut the enclosed work off at max_hold (CutOff)."""
+    import asyncio
+
+    limit = max_hold(tier)
+    try:
+        async with asyncio.timeout(limit.total_seconds()) as scope:
+            yield
+    except TimeoutError:
+        if scope.expired():
+            raise CutOff(f"{who or TIERS[tier]} cut off after {limit}, where its guards stop holding") from None
+        raise
 
 
 @asynccontextmanager
 async def tracked_job_async(tier: str, tracker, *, who: str | None = None) -> AsyncIterator[Granted]:
     """`tracker` and job_async() (see above): true while both are held, and
-    the body cut off (TimeoutError) at max_hold, when they stop holding."""
-    import asyncio
-
+    the body cut off (CutOff) at max_hold, when they stop holding."""
     refused = _tracker_refusal(tier, tracker, who)
     if refused is not None:
         yield refused
@@ -508,9 +542,30 @@ async def tracked_job_async(tier: str, tracker, *, who: str | None = None) -> As
         if not granted:
             yield granted
             return
-        with _slot(tier, tracker, who) as slot:
-            if not slot:
-                yield slot
-                return
-            async with asyncio.timeout(max_hold(tier).total_seconds()):
-                yield slot
+        with _slot(tier, tracker, who):
+            async with _bounded(tier, who):
+                yield granted
+
+
+def run_tracked(tier: str, tracker, work, *, who: str | None = None):
+    """A scheduled job's whole run, from a thread: under tracked_job, the
+    coroutine `work()` on an event loop of its own, cut off at max_hold.
+    Returns what it returned; None when refused (logged) or cut off (logged
+    as a warning). Its failures raise."""
+    import asyncio
+
+    async def bounded():
+        async with _bounded(tier, who):
+            return await work()
+
+    with tracked_job(tier, tracker, who=who) as granted:
+        if not granted:
+            return None
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(bounded())
+        except CutOff as cut:
+            logger.warning("%s — the next run starts afresh", cut)
+            return None
+        finally:
+            loop.close()

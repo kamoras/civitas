@@ -164,6 +164,7 @@ import logging
 import math
 import statistics
 
+from app.atomic_write import write_text_atomic
 from app.config_definitions import (
     CONSTITUENT_FULL_CONFIDENCE_VOTES,
     CONSTITUENT_MIN_VOTES,
@@ -418,7 +419,7 @@ def write_member_ideal_points(chamber: str, data: dict) -> None:
         existing["_source"] = SOURCE_DESC
         existing["_method"] = METHOD_DESC
         existing[chamber] = data
-        path.write_text(json.dumps(existing, indent=1, sort_keys=True) + "\n")
+        write_text_atomic(path, json.dumps(existing, indent=1, sort_keys=True) + "\n")
         _member_ideal_points_cache = None  # force reload next _member_ideal_points() call
     except Exception:
         logger.warning(

@@ -593,38 +593,46 @@ class TestBallotSync:
         assert run(refused_tiers=(lease.BALLOT_SYNC, lease.COVERAGE_REFRESH)) == (0, 0)
         assert not election_pipeline.ballot_tracker().is_running
 
-    def test_a_sunday_crawl_runs_and_is_reported_when_the_sync_steps_aside(self, db_session):
-        """The crawl writes no Candidate row, so it runs outside the ballot
-        sync's guards: a sync in flight doesn't cost a week's crawl, and the
-        skipped phase's detail still reports what it adopted."""
+    def test_the_source_crawl_runs_weekly_under_the_ballot_guards(self, db_session):
+        """The crawl rewrites the source and date files the sync reads and
+        writes, so it runs under the sync's guards — and "weekly" is a week
+        since it last completed, so a night it was held off, or failed,
+        costs a night, not a week; a failed crawl costs the sync nothing."""
         import json
         from contextlib import asynccontextmanager
 
         from app.pipeline import lease
 
-        @asynccontextmanager
-        async def leases(tier, **_kw):
-            yield lease.Granted("Ballot sync is already running" if tier == lease.BALLOT_SYNC else None)
+        def run(*, refused=False, crawl_error=None):
+            @asynccontextmanager
+            async def leases(tier, **_kw):
+                held = refused and tier == lease.BALLOT_SYNC
+                yield lease.Granted("Ballot sync is already running" if held else None)
 
-        with (
-            patch("app.pipeline.lease.job_async", leases),
-            patch("app.pipeline.election_pipeline.SessionLocal", return_value=db_session),
-            patch("app.pipeline.election_pipeline.fetch_all_candidates", return_value=[]),
-            _mock_downstream_pipeline_phases(),
-            patch("app.pipeline.election_pipeline.utcnow", return_value=datetime(2026, 9, 27, 3)),  # a Sunday
-            patch(
-                "app.pipeline.election_pipeline.crawl_for_new_sources",
-                return_value={"NM": "adopted results", "WY": "none"},
-            ) as crawl,
-            patch("app.pipeline.election_pipeline.sync_confirmed_candidates") as nightly_sync,
-        ):
-            asyncio.run(election_pipeline.run_election_pipeline(2026))
-        crawl.assert_called_once()
-        nightly_sync.assert_not_called()
-        run = db_session.query(ElectionPipelineRun).order_by(ElectionPipelineRun.id.desc()).first()
-        step = next(s for s in json.loads(run.progress_detail) if "crawler" in (s.get("detail") or ""))
-        assert step["status"] == "skipped"
-        assert step["detail"] == "skipped: Ballot sync is already running; crawler adopted 1 this week: NM"
+            with (
+                patch("app.pipeline.lease.job_async", leases),
+                patch("app.pipeline.election_pipeline.SessionLocal", return_value=db_session),
+                patch("app.pipeline.election_pipeline.fetch_all_candidates", return_value=[]),
+                _mock_downstream_pipeline_phases(),
+                patch(
+                    "app.pipeline.election_pipeline.crawl_for_new_sources",
+                    return_value={"NM": "adopted results", "WY": "none"}, side_effect=crawl_error,
+                ) as crawl,
+                patch("app.pipeline.election_pipeline.sync_confirmed_candidates", return_value={}) as sync,
+            ):
+                asyncio.run(election_pipeline.run_election_pipeline(2026))
+            run_row = db_session.query(ElectionPipelineRun).order_by(ElectionPipelineRun.id.desc()).first()
+            step = next(s for s in json.loads(run_row.progress_detail) if s.get("key") == "confirmed_candidates")
+            return crawl.call_count, sync.call_count, step
+
+        crawled, _, step = run(refused=True)
+        assert crawled == 0 and step["status"] == "skipped"
+        crawled, synced, step = run(crawl_error=RuntimeError("a source site is down"))
+        assert crawled == 1 and synced > 0 and step["status"] == "done"  # the sync went ahead
+        crawled, _, step = run()
+        assert crawled == 1 and step["detail"].endswith("; crawler adopted 1 this week: NM")
+        crawled, _, _ = run()
+        assert crawled == 0  # done for the week
 
     def test_a_lease_that_cannot_be_taken_fails_only_its_phases(self, db_session):
         """Taking a step's lease can raise (the database): that fails the

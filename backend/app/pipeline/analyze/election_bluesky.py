@@ -32,6 +32,7 @@ conservative at the 15-minute election-season cadence, 96 runs/day):
   - one post per race per RACE_COOLDOWN_HOURS.
 """
 
+import time
 import logging
 from datetime import timedelta
 
@@ -286,12 +287,17 @@ def _drain_stale_unconsidered(db: Session) -> int:
     return drained
 
 
-def post_race_coverage_updates(db: Session) -> int:
+def post_race_coverage_updates(db: Session, *, deadline: float | None = None) -> int:
     """Post a capped, prioritized batch of not-yet-considered coverage
     items to Bluesky. No-op if Bluesky credentials aren't configured.
     Every considered item (posted or not) is marked bsky_posted_at so the
     next run doesn't re-evaluate it; actually-published items additionally
     set bsky_posted (the daily budget counts only those).
+
+    `deadline` (time.monotonic()) is where the caller's guards stop holding
+    (lease.deadline): no item is started past it. This loop never awaits, so
+    nothing else can stop it there; each item is bounded (the LLM and
+    Bluesky calls time out), so it ends within one item of the deadline.
     """
     if not getattr(settings, "BSKY_HANDLE", "") or not getattr(settings, "BSKY_APP_PASSWORD", ""):
         return 0
@@ -326,13 +332,24 @@ def post_race_coverage_updates(db: Session) -> int:
 
     posted = 0
     for item in candidates:
+        if deadline is not None and time.monotonic() >= deadline:
+            logger.warning("Election coverage posting stopped at its deadline — the rest wait for the next run")
+            break
         race = races_by_id.get(item.race_id)
         # Considered either way — and COMMITTED before any publish attempt:
         # a crash between publish and commit must not re-post the same item
         # on the next run (at-most-once beats at-least-once for a public
-        # account; 2026-07 review B3).
-        item.bsky_posted_at = utcnow()
+        # account; 2026-07 review B3). Claimed, not just marked: only the
+        # pass whose update finds it still unconsidered goes on, so two
+        # passes that read the same batch can't both post it.
+        claimed = (
+            db.query(RaceCoverageItem)
+            .filter(RaceCoverageItem.id == item.id, RaceCoverageItem.bsky_posted_at.is_(None))
+            .update({"bsky_posted_at": utcnow()}, synchronize_session=False)
+        )
         db.commit()
+        if not claimed:
+            continue
         if race is None:
             continue
         if posted >= budget:

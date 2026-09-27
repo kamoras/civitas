@@ -22,6 +22,8 @@ import logging
 import os
 from typing import Any
 
+from app.atomic_write import write_text_atomic
+
 logger = logging.getLogger(__name__)
 
 _BUNDLED_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
@@ -84,8 +86,7 @@ def save_discovered(state: str, source: dict[str, Any] | None) -> None:
     for path in _DISCOVERED_PATHS:
         try:
             os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, "w", encoding="utf-8") as fh:
-                json.dump(discovered, fh, indent=2, sort_keys=True)
+            write_text_atomic(path, json.dumps(discovered, indent=2, sort_keys=True))
             break
         except OSError:
             continue

@@ -186,10 +186,11 @@ class PipelineRunTracker:
 
     A pipeline runs in at most one background thread at a time (its DB-row
     lock sees to that), so start() replaces any run before it: one the lock
-    let it past was stale. A scheduled job without a DB lock uses try_start,
-    which refuses while a run younger than its hung horizon is going and
-    otherwise replaces the hung one. A replaced run is not waited on again,
-    and its late stop() is a no-op. One slot, under one lock.
+    let it past was stale. A job without a DB lock runs under its lease
+    instead (lease.tracked_job): it checks busy(), takes the lease, and only
+    then start()s — so it too starts only past any run but a hung one. A
+    replaced run is not waited on again, and its late stop() is a no-op.
+    One slot, under one lock.
     """
 
     def __init__(self) -> None:
@@ -204,31 +205,15 @@ class PipelineRunTracker:
         self._holder = holder
         return self._token
 
-    def start(self) -> int:
+    def start(self, holder: str | None = None) -> int:
         """Mark a run started, replacing any before it; returns its token
-        for stop()."""
+        for stop(). `holder` names it to a refusal (see holder)."""
         with self._lock:
-            return self._begin()
-
-    def try_start(
-        self, hung_after: timedelta | None = None, holder: str | None = None,
-    ) -> "tuple[int | None, timedelta | None]":
-        """start() unless a run is going — or, with `hung_after`, unless one
-        younger than that is. Returns (token, None); (None, None) when
-        refused; or (token, age) when it replaced a run it presumed hung,
-        `age` being that run's. The check and the start are one step: two
-        callers can't both pass."""
-        with self._lock:
-            if self._started_at is None:
-                return self._begin(holder), None
-            age = timedelta(seconds=time.time() - self._started_at)
-            if hung_after is None or age < hung_after:
-                return None, None
-            return self._begin(holder), age
+            return self._begin(holder)
 
     def busy(self, hung_after: timedelta | None = None) -> bool:
-        """Whether try_start(hung_after) would refuse now — a check that
-        holds nothing (a run can start after it; try_start is the step)."""
+        """Whether a run is going — with `hung_after`, one younger than that
+        (an older one is presumed hung). A check that holds nothing."""
         with self._lock:
             if self._started_at is None:
                 return False
@@ -248,8 +233,8 @@ class PipelineRunTracker:
 
     @property
     def holder(self) -> str | None:
-        """Who started the run going (try_start's `holder`), None when idle
-        or unnamed."""
+        """Who started the run going (start's `holder`), None when idle or
+        unnamed."""
         with self._lock:
             return self._holder if self._started_at is not None else None
 

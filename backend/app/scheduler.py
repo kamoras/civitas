@@ -351,27 +351,17 @@ def _hourly_bill_status_refresh() -> None:
                 logger.info("Bill status refresh skipped — house pipeline is running")
                 return
 
-            # Its tracker and lease (lease.tracked_job), so a pass in this
-            # process, a reset or a refresh in another process sees it,
+            # Under its tracker and lease (lease.run_tracked), so a pass in
+            # this process, a reset or a refresh in another process sees it,
             # taken only past the checks above: a tick that bails holds
-            # nothing. Cut off while the lease still holds (lease.max_hold),
-            # never left running beside the next: two passes at once would
-            # let the older one's snapshot overwrite the newer one's rows.
-            with lease.tracked_job(lease.BILL_REFRESH, bill_tracker(), who="Bill status refresh") as granted:
-                if not granted:
-                    return
-                limit = lease.max_hold(lease.BILL_REFRESH)
-                loop = asyncio.new_event_loop()
-                try:
-                    summary = loop.run_until_complete(
-                        asyncio.wait_for(refresh_bill_statuses(), limit.total_seconds()),
-                    )
-                except TimeoutError:
-                    logger.warning("Bill status refresh cut off after %s — the next tick starts afresh", limit)
-                    return
-                finally:
-                    loop.close()
-            logger.info("Bill status refresh: %s", summary)
+            # nothing. Cut off where they stop holding, never left running
+            # beside the next: two passes at once would let the older one's
+            # snapshot overwrite the newer one's rows.
+            summary = lease.run_tracked(
+                lease.BILL_REFRESH, bill_tracker(), refresh_bill_statuses, who="Bill status refresh",
+            )
+            if summary is not None:
+                logger.info("Bill status refresh: %s", summary)
         except Exception:
             logger.exception("Bill status refresh failed")
 
@@ -411,44 +401,33 @@ def _election_coverage_refresh() -> None:
         # Self-overlap guard: the PREVIOUS 15-minute refresh may still be
         # mid-flight (degraded LLM, slow network) — overlapping passes
         # double-ingest and double-post; so may the nightly election
-        # pipeline's coverage phase. Its lease and tracker
-        # (lease.tracked_job), taken only now, past the check above: a tick
+        # pipeline's coverage phase. Under its tracker and lease
+        # (lease.run_tracked), taken only now, past the check above: a tick
         # that bails must not hold them, or the nightly phase reaching them
-        # at that moment would skip.
+        # at that moment would skip. Cut off where they stop holding; the
+        # posting loop, which doesn't await, stops at the same deadline.
+        from app.database import SessionLocal
+        from app.pipeline.analyze.election_bluesky import post_race_coverage_updates
+        from app.pipeline.analyze.election_coverage import ingest_race_coverage
+
+        async def _refresh():
+            deadline = lease.deadline(lease.COVERAGE_REFRESH)
+            db = SessionLocal()
+            try:
+                async with make_async_client() as client:
+                    ingested = await ingest_race_coverage(db, client)
+                posted = post_race_coverage_updates(db, deadline=deadline)
+                logger.info(
+                    "Election-season coverage refresh: %d ingested, %d posted",
+                    ingested, posted,
+                )
+            finally:
+                db.close()
+
         try:
-            with lease.tracked_job(
-                lease.COVERAGE_REFRESH, coverage_tracker(), who="Election coverage refresh",
-            ) as granted:
-                if not granted:
-                    return
-                from app.database import SessionLocal
-                from app.pipeline.analyze.election_bluesky import post_race_coverage_updates
-                from app.pipeline.analyze.election_coverage import ingest_race_coverage
-
-                async def _refresh():
-                    db = SessionLocal()
-                    try:
-                        async with make_async_client() as client:
-                            ingested = await ingest_race_coverage(db, client)
-                        posted = post_race_coverage_updates(db)
-                        logger.info(
-                            "Election-season coverage refresh: %d ingested, %d posted",
-                            ingested, posted,
-                        )
-                    finally:
-                        db.close()
-
-                # Cut off where its guards stop holding (lease.max_hold):
-                # past that a second pass may start beside it.
-                limit = lease.max_hold(lease.COVERAGE_REFRESH)
-                loop = asyncio.new_event_loop()
-                try:
-                    loop.run_until_complete(asyncio.wait_for(_refresh(), limit.total_seconds()))
-                except TimeoutError:
-                    logger.warning("Election coverage refresh cut off after %s — the next tick starts afresh", limit)
-                    return
-                finally:
-                    loop.close()
+            lease.run_tracked(
+                lease.COVERAGE_REFRESH, coverage_tracker(), _refresh, who="Election coverage refresh",
+            )
         except Exception:
             logger.exception("Election coverage refresh failed")
 
@@ -484,25 +463,15 @@ def _election_ballot_sync() -> None:
                 "Election pipeline has been running for %s — treating as hung "
                 "and proceeding with the ballot sync anyway", age,
             )
-        # Its lease and tracker (lease.tracked_job), shared with the nightly
-        # pipeline's ballot step, taken only now, past the check above: a
-        # tick that bails must not hold them, or the nightly step reaching
-        # them at that moment would skip.
+        # Under its tracker and lease (lease.run_tracked), shared with the
+        # nightly pipeline's ballot step, taken only now, past the check
+        # above: a tick that bails must not hold them, or the nightly step
+        # reaching them at that moment would skip. Cut off where they stop
+        # holding.
         try:
-            with lease.tracked_job(lease.BALLOT_SYNC, ballot_tracker(), who="Ballot sync") as granted:
-                if not granted:
-                    return
-                # Cut off where its guards stop holding (lease.max_hold):
-                # past that a second pass may start beside it.
-                limit = lease.max_hold(lease.BALLOT_SYNC)
-                loop = asyncio.new_event_loop()
-                try:
-                    result = loop.run_until_complete(asyncio.wait_for(run_ballot_sync(), limit.total_seconds()))
-                except TimeoutError:
-                    logger.warning("Election-season ballot sync cut off after %s — the next run starts afresh", limit)
-                    return
-                finally:
-                    loop.close()
+            result = lease.run_tracked(lease.BALLOT_SYNC, ballot_tracker(), run_ballot_sync, who="Ballot sync")
+            if result is None:
+                return
             logger.info(
                 "Election-season ballot sync: %d confirmed, %d states ok, failed: %s",
                 result["confirmed"], len(result["statesOk"]), result["statesFailed"] or "none",

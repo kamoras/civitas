@@ -273,6 +273,54 @@ class TestPostRaceCoverageUpdates:
         assert posted == 1
         mock_publish.assert_called_once()
 
+    def test_an_item_another_pass_claimed_is_not_posted_again(self, db_session, monkeypatch):
+        """Two passes that read the same batch: only the one whose claim
+        finds the item still unconsidered posts it."""
+        _creds(monkeypatch)
+        _stub_relevance(monkeypatch)
+        _race(db_session)
+        _candidate(db_session)
+        item = _item(db_session)
+        db_session.commit()
+
+        other = sessionmaker(bind=db_session.get_bind())()
+        real_cooled = election_bluesky._races_posted_recently
+        claimed_elsewhere = []
+
+        def claim_meanwhile(db):
+            # Runs just after this pass read its batch: the other pass
+            # claims the item now.
+            other.query(RaceCoverageItem).update({"bsky_posted_at": election_bluesky.utcnow()})
+            other.commit()
+            claimed_elsewhere.append(True)
+            return real_cooled(db)
+
+        monkeypatch.setattr(election_bluesky, "_races_posted_recently", claim_meanwhile)
+        with patch.object(election_bluesky, "_generate_post_text", return_value="A grounded sentence."), \
+             patch.object(election_bluesky, "_publish", return_value=True) as mock_publish:
+            posted = election_bluesky.post_race_coverage_updates(db_session)
+        other.close()
+
+        assert claimed_elsewhere and posted == 0
+        mock_publish.assert_not_called()
+        assert item.bsky_posted is False
+
+    def test_no_item_is_started_past_the_deadline(self, db_session, monkeypatch):
+        import time
+
+        _creds(monkeypatch)
+        _stub_relevance(monkeypatch)
+        _race(db_session)
+        _candidate(db_session)
+        item = _item(db_session)
+        db_session.commit()
+
+        with patch.object(election_bluesky, "_publish", return_value=True) as mock_publish:
+            posted = election_bluesky.post_race_coverage_updates(db_session, deadline=time.monotonic() - 1)
+        assert posted == 0
+        mock_publish.assert_not_called()
+        assert item.bsky_posted_at is None  # left for the next run
+
     def test_considered_marker_committed_before_publish(self, db_session, monkeypatch):
         """At-most-once for a public account: the considered marker must be
         durable BEFORE the publish attempt, so a failed/crashed publish can

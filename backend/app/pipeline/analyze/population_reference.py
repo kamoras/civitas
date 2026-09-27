@@ -23,6 +23,7 @@ import json
 import logging
 import pathlib
 
+from app.atomic_write import write_text_atomic
 from app.config_definitions import CONSTITUENT_REFERENCE_STATISTIC
 from app.time_utils import utcnow
 
@@ -118,7 +119,7 @@ class ChamberReference:
         try:
             existing = _read_json(self.live_path)
             existing[chamber] = {**reference, "computed_at": utcnow().isoformat(timespec="seconds")}
-            self.live_path.write_text(json.dumps(existing, indent=2, sort_keys=True) + "\n")
+            write_text_atomic(self.live_path, json.dumps(existing, indent=2, sort_keys=True) + "\n")
             self._cache = None
         except Exception:
             logger.warning(

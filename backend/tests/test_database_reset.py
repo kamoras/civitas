@@ -283,7 +283,7 @@ class TestLease:
             assert held and tracker.is_running and lease.held(db_session, lease.BALLOT_SYNC)
         assert not tracker.is_running and not lease.held(db_session, lease.BALLOT_SYNC)
 
-        token, _ = tracker.try_start(holder="The scheduled sync")  # a run going in this process
+        token = tracker.start(holder="The scheduled sync")  # a run going in this process
         with caplog.at_level(logging.INFO, logger="app.pipeline.lease"), \
                 lease.tracked_job(lease.BALLOT_SYNC, tracker, who="The nightly step") as held:
             assert not held and held.why == "The scheduled sync is already running in this process"
@@ -310,7 +310,7 @@ class TestLease:
 
         monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
         tracker = PipelineRunTracker()
-        token, _ = tracker.try_start()
+        token = tracker.start()
         mine = lease.acquire(db_session, lease.COVERAGE_REFRESH)
         db_session.query(models.ApiCache).update({"cached_at": utcnow() - timedelta(minutes=15)})
         db_session.commit()
@@ -335,7 +335,7 @@ class TestLease:
         with lease.tracked_job(lease.BALLOT_SYNC, tracker) as held:
             assert not held and not tracker.is_running
 
-        token, _ = tracker.try_start()  # a hung run here, its lease not yet lapsed
+        token = tracker.start()  # a hung run here, its lease not yet lapsed
         tracker._started_at = time.time() - (lease.max_hold(lease.BALLOT_SYNC) + timedelta(minutes=1)).total_seconds()
         with lease.tracked_job(lease.BALLOT_SYNC, tracker) as held:
             assert not held
@@ -361,8 +361,16 @@ class TestLease:
                 assert held
                 await asyncio.sleep(10)
 
-        with pytest.raises(TimeoutError):
+        with pytest.raises(lease.CutOff):
             asyncio.run(hangs())
+
+        async def times_out_inside():  # a request's own timeout is its failure, not a cut-off
+            async with lease.tracked_job_async(lease.COVERAGE_REFRESH, tracker):
+                raise TimeoutError("a request timed out")
+
+        monkeypatch.setitem(lease.HUNG_AFTER, lease.COVERAGE_REFRESH, timedelta(hours=2))
+        with pytest.raises(TimeoutError, match="a request timed out"):
+            asyncio.run(times_out_inside())
         assert not tracker.is_running and not lease.held(db_session, lease.COVERAGE_REFRESH)
 
     def test_a_refusal_names_the_holder_as_it_named_itself(self, db_session):
@@ -521,21 +529,20 @@ def test_a_senate_run_held_off_says_why(db_session, monkeypatch):
     assert result == {"status": "skipped", "reason": lease.REFUSED_BY_RESET}
 
 
-def test_try_start_refuses_a_fresh_run_and_passes_a_hung_one():
+def test_busy_holds_off_a_fresh_run_not_a_hung_one():
     import time
     from datetime import timedelta
 
     from app.pipeline.run_tracker import PipelineRunTracker
 
     tracker = PipelineRunTracker()
-    tracker.start()
-    assert tracker.try_start() == (None, None)
-    assert tracker.try_start(hung_after=timedelta(hours=2)) == (None, None)
+    first = tracker.start(holder="The scheduled sync")
+    assert tracker.busy() and tracker.busy(hung_after=timedelta(hours=2))
+    assert tracker.holder == "The scheduled sync"
     tracker._started_at = time.time() - 3 * 3600  # three hours in: hung
-    second, past = tracker.try_start(hung_after=timedelta(hours=2))
-    assert second is not None and past > timedelta(hours=2)  # says what it proceeded past
-    # What's going is the new run, and while it is young the guard holds.
-    assert tracker.age < timedelta(minutes=1)
-    assert tracker.try_start(hung_after=timedelta(hours=2)) == (None, None)
+    assert tracker.busy() and not tracker.busy(hung_after=timedelta(hours=2))
+    second = tracker.start()  # replaces it
+    tracker.stop(first)  # the replaced run's late stop is a no-op
+    assert tracker.busy(hung_after=timedelta(hours=2)) and tracker.age < timedelta(minutes=1)
     tracker.stop(second)
-    assert not tracker.is_running
+    assert not tracker.is_running and tracker.holder is None
