@@ -91,20 +91,26 @@ def eastern_today() -> date:
     return datetime.now(_EASTERN).date()
 
 
+def _suffix(path: str) -> str:
+    name = path.rsplit("/", 1)[-1]
+    return name.rsplit(".", 1)[-1].lower() if "." in name else ""
+
+
 async def _get(client: httpx.AsyncClient, url: str, *, label: str, request_url: str | None = None):
     """The body, _ABSENT when the source has no such file, or None when
     the fetch failed. senate.gov answers a missing file with a redirect to
     an HTML page that answers 200 (a floor log for a day the Senate did not
     meet goes to file_not_found.htm, a roll call past the last one to
-    roll-call-vote-not-available.htm), and none of these files is ever
-    served through a redirect, so landing anywhere else means absent."""
+    roll-call-vote-not-available.htm). A redirect to another file of the
+    same kind is the file moved, not missing: clerk.house.gov sends
+    /FloorSummary/X.xml to /floor/X.xml."""
     resp = await fetch_with_retry(
         client, _rate_limiter, "GET", url, expected_statuses=(404,), log_label=label,
         request_url=request_url,
     )
     if resp is None:
         return None
-    if resp.status_code == 404 or (resp.history and resp.url.path != httpx.URL(url).path):
+    if resp.status_code == 404 or (resp.history and _suffix(resp.url.path) != _suffix(httpx.URL(url).path)):
         return _ABSENT
     return resp.content
 

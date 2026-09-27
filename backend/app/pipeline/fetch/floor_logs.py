@@ -5,7 +5,7 @@ publishes it the next day. During the day each chamber publishes its own
 floor log, and both are structured XML:
 
 - House: the Clerk's floor summary, one file per legislative day
-  (clerk.house.gov/FloorSummary/YYYYMMDD.xml). Every floor action is
+  (clerk.house.gov/floor/YYYYMMDD.xml; /FloorSummary/ redirects there). Every floor action is
   timestamped and coded (act-id H20100 "The House convened", H61000
   adjourned), with the bill it concerns in <action_item>.
 - Senate: the floor activity log behind senate.gov's "Senate Floor
@@ -56,7 +56,7 @@ def _text(el) -> str:
 # ── House ─────────────────────────────────────────────────────────
 
 def house_floor_url(day: date) -> str:
-    return f"https://clerk.house.gov/FloorSummary/{day:%Y%m%d}.xml"
+    return f"https://clerk.house.gov/floor/{day:%Y%m%d}.xml"
 
 
 def parse_house_floor(xml: bytes) -> dict | None:

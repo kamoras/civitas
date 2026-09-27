@@ -295,3 +295,27 @@ class TestSyncRollCalls:
     def test_a_failed_fetch_is_reported(self, db_session, monkeypatch):
         monkeypatch.setattr(ca, "_get", _fake_get({"clerk.house.gov": None}))
         assert _run(ca.sync_roll_calls(None, db_session, "house", 119, 2)) == (0, "failed")
+
+
+class _Resp:
+    def __init__(self, status, url, history=()):
+        import httpx
+        self.status_code, self.url, self.history, self.content = status, httpx.URL(url), list(history), b"<x/>"
+
+
+@pytest.mark.parametrize("requested,landed,redirected,absent", [
+    # senate.gov's "not found" pages
+    ("https://www.senate.gov/legislative/LIS/floor_activity/09_27_2026_Senate_Floor.xml",
+     "https://www.senate.gov/pagelayout/general/one_item_and_teasers/file_not_found.htm", True, True),
+    ("https://www.senate.gov/legislative/LIS/roll_call_votes/vote1192/vote_119_2_00999.xml",
+     "https://www.senate.gov/legislative/roll-call-vote-not-available.htm", True, True),
+    # clerk.house.gov moving a file that exists
+    ("https://clerk.house.gov/FloorSummary/20260924.xml", "https://clerk.house.gov/floor/20260924.xml", True, False),
+    ("https://clerk.house.gov/floor/20260924.xml", "https://clerk.house.gov/floor/20260924.xml", False, False),
+])
+def test_a_redirect_is_absent_only_when_it_lands_on_another_kind_of_page(monkeypatch, requested, landed, redirected, absent):
+    async def fake_fetch(*args, **kwargs):
+        return _Resp(200, landed, history=[object()] if redirected else [])
+    monkeypatch.setattr(ca, "fetch_with_retry", fake_fetch)
+    body = asyncio.run(ca._get(None, requested, label="t"))
+    assert (body is ca._ABSENT) is absent
