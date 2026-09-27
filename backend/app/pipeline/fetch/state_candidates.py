@@ -618,14 +618,15 @@ async def crawl_for_new_sources(
     try:
         await _crawl_due_states(db, client, cycle, hand_verified, outcomes, problems)
     finally:
-        problems += _RAISED.get() or []
+        # Reported even if the loop itself raised: what the states crawled
+        # before it found is not lost with it.
+        report_file_problems(
+            "Election source crawl failed for some states",
+            "These states' crawl raised or couldn't save (an \"error\" or \"save failed\" is "
+            "retried the next night; a raise inside a step was treated as not fetching).",
+            problems + (_RAISED.get() or []), "election-source-crawl",
+        )
         _RAISED.reset(raised_token)
-    report_file_problems(
-        "Election source crawl failed for some states",
-        "These states' crawl raised or couldn't save (an \"error\" or \"save failed\" is "
-        "retried the next night; a raise inside a step was treated as not fetching).",
-        problems, "election-source-crawl",
-    )
     return outcomes
 
 
@@ -673,7 +674,9 @@ async def _crawl_state(
     outcome = "none"
     looked_for_filings = False
     if hand:
-        still_works = await _fetch(client, cycle, state, hand, "Hand-verified source")
+        # Logged, not reported: the nightly sync fetches this same source
+        # and reports its raise already.
+        still_works = await _fetch(client, cycle, state, hand, "Hand-verified source", report=False)
         if still_works is not None:
             # A primary date moves once a cycle, so it is read on the
             # weekly pass rather than nightly — off the same feed the
@@ -882,6 +885,7 @@ def _report_raises(subject: str, key: str, extra: list[str] | None = None) -> No
 
 async def _fetch(
     client: httpx.AsyncClient, cycle: int, state: str, source: dict, what: str,
+    *, report: bool = True,
 ) -> list[dict] | None:
     """Run `source`'s strategy, a raise counted as not fetching (None) and
     reported (_note_raise): one source that breaks by raising (a host
@@ -894,7 +898,10 @@ async def _fetch(
     try:
         return await strategy(client, cycle, state, source)
     except Exception:
-        _note_raise(state, f"{what} fetch")
+        if report:
+            _note_raise(state, f"{what} fetch")
+        else:
+            logger.exception("%s fetch raised for %s", what, state)
         return None
 
 

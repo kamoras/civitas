@@ -523,6 +523,26 @@ class TestAdoptingAFilingListThatWontParse:
         assert raised == ["ZZ: Filing-list read raised Error: field larger than field limit"]
 
 
+class TestTheCrawlAlwaysReports:
+    @pytest.mark.asyncio
+    async def test_what_was_found_before_the_loop_raised_is_still_alerted(self, db_session, monkeypatch):
+        async def loop(db, client, cycle, hand_verified, outcomes, problems):
+            problems.append("AA: disk full")
+            try:
+                raise ValueError("inner")
+            except ValueError:
+                sc._note_raise("BB", "Source discovery")
+            raise RuntimeError("database is locked")
+
+        alerts = []
+        monkeypatch.setattr(sc, "_crawl_due_states", loop)
+        monkeypatch.setattr(sc, "report_file_problems",
+                            lambda subject, lead, problems, key: alerts.extend(problems))
+        with pytest.raises(RuntimeError):
+            await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert alerts == ["AA: disk full", "BB: Source discovery raised ValueError: inner"]
+
+
 class TestSyncRaisesAreReported:
     @pytest.mark.asyncio
     async def test_a_raising_source_in_the_sync_is_alerted(self, db_session, monkeypatch):
