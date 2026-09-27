@@ -275,12 +275,12 @@ export interface Holdings {
   /** The date the holdings describe (a year end for an annual report, the
    * stated date for a new-filer report); null for a paper filing. */
   asOfDate: string | null;
-  /** A Senate paper filing made after this report ("annual report filed
-   * 2026-05-14"). Paper filings state no year, so it can't be ranked
-   * against this one; the page names it instead of implying this report is
+  /** A Senate filing made after this report that states no year it can be
+   * ranked by (a paper filing, or a title without one) — "annual report
+   * filed 2026-05-14". The page names it instead of implying this report is
    * the latest filed. */
-  laterPaperLabel: string | null;
-  laterPaperUrl: string | null;
+  laterFilingLabel: string | null;
+  laterFilingUrl: string | null;
   holdingsCount: number;
   unvaluedCount: number;
   totalLow: number;

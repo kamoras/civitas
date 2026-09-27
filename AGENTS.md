@@ -729,9 +729,9 @@ midpoints and says so, and no net-worth figure is produced. Reports that can't
 be read are stored `parsed=False` with a reason (`scanned` paper filing,
 `unrecognized` layout) and linked, not OCR'd. A Senate paper filing states
 no year anywhere eFD shows it (its page is page images), so no year is
-claimed or inferred for it: it ranks below every dated report, and one filed
-after the report shown is named beside it ("also filed after this report, on
-paper") rather than guessed to be newer. Each fetch module's
+claimed or inferred for it: it ranks below every dated report, and an undated
+filing (paper, or a title with no year) filed after the report shown is named
+beside it ("also filed after this report") rather than guessed to be newer. Each fetch module's
 `PARSER_VERSION` keys its parse cache and is stored per report — bump it when a
 parser's output changes, and already-ingested reports are re-read (a re-read
 that can't read the report at all keeps the earlier holdings; one that reads

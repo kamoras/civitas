@@ -251,11 +251,12 @@ class HoldingsSchema(CamelModel):
     parsed: bool = False
     # When not parsed: "scanned" (paper filing) or "unrecognized".
     unreadable_reason: Literal["scanned", "unrecognized"] | None = None
-    # A Senate paper filing made after this report ("annual report filed
-    # 2026-05-14"), which states no year and so can't be ranked against it
-    # — named so the page doesn't imply this report is the latest filed.
-    later_paper_label: str | None = None
-    later_paper_url: str | None = None
+    # A Senate filing made after this report that states no year it can be
+    # ranked by — a paper filing, or a title without one ("annual report
+    # filed 2026-05-14") — named so the page doesn't imply this report is
+    # the latest filed.
+    later_filing_label: str | None = None
+    later_filing_url: str | None = None
     holdings_count: int = 0
     # Holdings the form gave no bracket for ("Undetermined") — listed, but
     # in no slice.

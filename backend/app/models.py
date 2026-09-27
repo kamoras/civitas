@@ -564,15 +564,15 @@ class FinancialDisclosure(Base):
     # even when the stored filing is missing from that run's index.
     as_of_date: Mapped[str | None] = mapped_column(String, nullable=True)
     amended: Mapped[bool] = mapped_column(Boolean, default=False)
-    # The newest Senate paper filing filed after this report, if any. A
-    # paper filing states no year anywhere eFD shows it (its page is page
-    # images), so it can't be ranked against a dated report; it is named
-    # here instead, as filed ("annual report filed 2026-05-14"), so the
-    # scorecard can say a later filing exists rather than imply this one is
-    # the latest.
-    later_paper_label: Mapped[str | None] = mapped_column(String, nullable=True)
-    later_paper_url: Mapped[str | None] = mapped_column(String, nullable=True)
-    later_paper_filed: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The newest Senate filing made after this report whose date can't be
+    # known — a paper filing (its page is page images) or one whose title
+    # states no year — and so can't be ranked against a dated report. It is
+    # named here instead, as filed ("annual report filed 2026-05-14"), so
+    # the scorecard can say a later filing exists rather than imply this one
+    # is the latest.
+    later_filing_label: Mapped[str | None] = mapped_column(String, nullable=True)
+    later_filing_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    later_filing_filed: Mapped[str | None] = mapped_column(String, nullable=True)
     source_url: Mapped[str] = mapped_column(String, default="")
     parsed: Mapped[bool] = mapped_column(Boolean, default=True)
     # When not parsed: "scanned" (paper filing) or "unrecognized"

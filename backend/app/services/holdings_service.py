@@ -181,8 +181,8 @@ def _build(db: Session, disclosure: FinancialDisclosure, page: int, per_page: in
         source_url=disclosure.source_url,
         parsed=disclosure.parsed,
         unreadable_reason=disclosure.unreadable_reason if not disclosure.parsed else None,
-        later_paper_label=disclosure.later_paper_label if disclosure.later_paper_url else None,
-        later_paper_url=disclosure.later_paper_url,
+        later_filing_label=disclosure.later_filing_label if disclosure.later_filing_url else None,
+        later_filing_url=disclosure.later_filing_url,
         holdings_count=breakdown.holdings_count,
         unvalued_count=breakdown.unvalued_count,
         total_low=breakdown.total_low,
@@ -202,7 +202,9 @@ def _latest_disclosure(db: Session, **owner_filter) -> FinancialDisclosure | Non
     return (
         db.query(FinancialDisclosure)
         .filter_by(**owner_filter)
-        .order_by(FinancialDisclosure.report_year.desc(), FinancialDisclosure.id.desc())
+        # The pipeline keeps one row per member (holdings_pipeline decides
+        # which report); the newest write, should two ever coexist.
+        .order_by(FinancialDisclosure.id.desc())
         .first()
     )
 

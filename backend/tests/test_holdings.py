@@ -597,14 +597,14 @@ class TestSenateRankingByStatedYear:
         paper = _senate_filing("p", title="Annual Report", filed="2026-05-14", office="Senator", paper=True)
         await _ingest_senate(db_session, [e2024, paper], {"e2024": [_row()]})
         stored = db_session.query(FinancialDisclosure).one()
-        assert (stored.filing_id, stored.later_paper_label, stored.later_paper_url) == (
+        assert (stored.filing_id, stored.later_filing_label, stored.later_filing_url) == (
             "e2024", "annual report filed 2026-05-14", paper["report_url"],
         )
         # A newer dated report, filed after the paper one, clears the note.
         e2025 = _senate_filing("e2025", title="Annual Report for CY 2025", filed="2026-08-01")
         await _ingest_senate(db_session, [e2024, paper, e2025], {"e2024": [_row()], "e2025": [_row()]})
         stored = db_session.query(FinancialDisclosure).one()
-        assert (stored.filing_id, stored.later_paper_url) == ("e2025", None)
+        assert (stored.filing_id, stored.later_filing_url) == ("e2025", None)
 
     async def test_a_search_that_misses_a_senator_keeps_their_note(self, db_session, senator):
         e2024 = _senate_filing("e2024", title="Annual Report for CY 2024", filed="2025-05-11")
@@ -612,7 +612,7 @@ class TestSenateRankingByStatedYear:
         await _ingest_senate(db_session, [e2024, paper], {"e2024": [_row()]})
         other = {**_senate_filing("o"), "last": "Other", "first": "Sam", "office": "Other, Sam (Senator)"}
         await _ingest_senate(db_session, [other], {})
-        assert db_session.query(FinancialDisclosure).one().later_paper_url == paper["report_url"]
+        assert db_session.query(FinancialDisclosure).one().later_filing_url == paper["report_url"]
 
 
 class TestUnreadableStatus:
@@ -1394,7 +1394,7 @@ class TestLaterPaperNoteEdges:
         db_session.commit()
         paper = _senate_filing("p", title="Annual Report (Amendment)", filed="2024-02-01", office="Senator", paper=True)
         await _ingest_senate(db_session, [_senate_filing("e2024", title="Annual Report for CY 2024", filed=""), paper], {})
-        assert db_session.query(FinancialDisclosure).one().later_paper_url is None
+        assert db_session.query(FinancialDisclosure).one().later_filing_url is None
 
     async def test_the_note_is_written_even_when_the_phase_fails(self, db_session, senator):
         e2024 = _senate_filing("e2024", title="Annual Report for CY 2024", filed="2025-05-11")
@@ -1411,7 +1411,7 @@ class TestLaterPaperNoteEdges:
             await _ingest_senate(db_session, [e2024, paper, *others],
                                  {"e2024": [_row()], **{f"x{i}": None for i in range(n)}})
         stored = db_session.query(FinancialDisclosure).filter_by(senator_id="S1").one()
-        assert stored.later_paper_url == paper["report_url"]
+        assert stored.later_filing_url == paper["report_url"]
 
 
 class TestPdfSniffing:
@@ -1459,7 +1459,7 @@ class TestRankRules:
         await _ingest_senate(db_session, [original, amendment], {})
         stored = db_session.query(FinancialDisclosure).one()
         assert stored.filing_id == "p1"
-        assert stored.later_paper_label == "annual report amendment filed 2026-02-01"
+        assert stored.later_filing_label == "annual report amendment filed 2026-02-01"
 
     async def test_a_missing_filing_date_is_filled_in_once_the_row_has_one(self, db_session, senator):
         undated = _senate_filing("e2025", filed="")
@@ -1474,7 +1474,7 @@ class TestRankRules:
         assert holdings_pipeline._senate_fields(f)["report_label"] == "new-filer report as of 2026-03-04"
 
     async def test_a_note_that_cant_be_written_doesnt_fail_the_phase(self, db_session, senator):
-        with patch.object(holdings_pipeline, "_note_later_paper", side_effect=RuntimeError("locked")):
+        with patch.object(holdings_pipeline, "_note_later_filing", side_effect=RuntimeError("locked")):
             assert await _ingest_senate(db_session, [_senate_filing("e2025")], {"e2025": [_row()]}) == 1
 
 
@@ -1501,7 +1501,7 @@ class TestStoredAndTonightMerge:
         assert (stored.as_of_date, stored.filed_date) == ("2025-12-31", "2026-05-11")
 
     async def test_a_note_failure_alerts(self, db_session, senator):
-        with patch.object(holdings_pipeline, "_note_later_paper", side_effect=RuntimeError("locked")), \
+        with patch.object(holdings_pipeline, "_note_later_filing", side_effect=RuntimeError("locked")), \
              patch.object(holdings_pipeline, "_alert") as alert:
             await _ingest_senate(db_session, [_senate_filing("e2025")], {"e2025": [_row()]})
         alert.assert_called_once()
@@ -1521,10 +1521,28 @@ class TestRepairIsUsedAndKept:
         stored = db_session.query(FinancialDisclosure).one()
         assert (stored.filing_id, stored.as_of_date, stored.report_year) == ("cy2025", "2025-12-31", 2025)
 
-    async def test_the_later_paper_note_survives_a_search_that_misses_it(self, db_session, senator):
+    async def test_the_later_filing_note_survives_a_search_that_misses_it(self, db_session, senator):
         e2025 = _senate_filing("e2025", filed="2026-05-11")
         paper = _senate_filing("p", title="Annual Report (Amendment)", filed="2026-08-12", office="Senator", paper=True)
         await _ingest_senate(db_session, [e2025, paper], {"e2025": [_row()]})
         await _ingest_senate(db_session, [e2025], {"e2025": [_row()]})  # the paper row's page failed to load
         stored = db_session.query(FinancialDisclosure).one()
-        assert (stored.later_paper_url, stored.later_paper_filed) == (paper["report_url"], "2026-08-12")
+        assert (stored.later_filing_url, stored.later_filing_filed) == (paper["report_url"], "2026-08-12")
+
+
+class TestLaterFilingNote:
+    async def test_the_note_survives_a_re_read_of_the_stored_report(self, db_session, senator):
+        e2025 = _senate_filing("e2025", filed="2026-05-11")
+        paper = _senate_filing("p", title="Annual Report (Amendment)", filed="2026-08-12", office="Senator", paper=True)
+        await _ingest_senate(db_session, [e2025, paper], {"e2025": [_row()]})
+        with patch.object(holdings_pipeline, "SENATE_PARSER_VERSION", 2):
+            await _ingest_senate(db_session, [e2025], {"e2025": [_row(), _row()]})  # re-read; paper row missed
+        stored = db_session.query(FinancialDisclosure).one()
+        assert (stored.parser_version, stored.later_filing_url) == (2, paper["report_url"])
+
+    async def test_an_electronic_filing_without_a_stated_year_is_named_too(self, db_session, senator):
+        e2025 = _senate_filing("e2025", filed="2026-05-11")
+        undated = _senate_filing("u", title="Annual Report for CY", filed="2026-08-12")
+        await _ingest_senate(db_session, [e2025, undated], {"e2025": [_row()], "u": [_row()]})
+        stored = db_session.query(FinancialDisclosure).one()
+        assert (stored.filing_id, stored.later_filing_label) == ("e2025", "annual report filed 2026-08-12")

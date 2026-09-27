@@ -219,7 +219,15 @@ def _replace_disclosure(
     # holding into the session to delete it row by row — hundreds per member
     # on a first run or a PARSER_VERSION bump, inside the phase's budget.
     # SQLite here runs without FK enforcement, so the holdings go explicitly.
-    old_ids = [row.id for row in db.query(FinancialDisclosure.id).filter_by(**owner_filter)]
+    old = db.query(
+        FinancialDisclosure.id, FinancialDisclosure.later_filing_label, FinancialDisclosure.later_filing_url,
+        FinancialDisclosure.later_filing_filed,
+    ).filter_by(**owner_filter).all()
+    old_ids = [row.id for row in old]
+    # A note naming a filing made after the old report stays while that
+    # filing is also after the new one (a re-read of the same report, say):
+    # tonight's search may not have the row to rebuild it from.
+    carried = next((row for row in old if _filed_after(row.later_filing_filed, filed_date)), None)
     if old_ids:
         # "fetch": anything already loaded is dropped from the session too,
         # so a reused id can't collide with a stale object.
@@ -237,6 +245,9 @@ def _replace_disclosure(
         filed_date=filed_date,
         as_of_date=as_of_date,
         amended=amended,
+        later_filing_label=carried.later_filing_label if carried else None,
+        later_filing_url=carried.later_filing_url if carried else None,
+        later_filing_filed=carried.later_filing_filed if carried else None,
         source_url=source_url,
         parsed=report.holdings is not None,
         unreadable_reason=report.unreadable_reason,
@@ -421,9 +432,10 @@ class _Chamber:
     filing_id: Callable[[dict], str]
     fetch: Callable[[dict, float], Awaitable[AnnualReport | None]]  # (filing, deadline)
     owner: Callable[[dict, AnnualReport], str]
-    # What gets stored for a filing: report_year, report_label, filed_date,
-    # source_url, as_of_date, amended. Its rank is computed from these same
-    # values (_rank), so the rank and the stored row can't disagree.
+    # What gets stored for a filing: report_label, filed_date, source_url,
+    # as_of_date, amended (report_year follows from as_of_date: _year_of).
+    # Its rank is computed from these same values (_rank), so the rank and
+    # the stored row can't disagree.
     fields: Callable[[dict], dict]
     date_key: str  # the filing row's filing-date key
     still_loads: Callable[[str], Awaitable[bool]]
@@ -458,17 +470,16 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
             fields[mine.filing_id] = merged
             ranks[mine.filing_id] = _rank(merged["as_of_date"], merged["amended"], merged["filed_date"])
             repair = {k: merged[k] for k, v in mine.rank_fields().items() if merged[k] != v}
-            if repair:
+            if repair or mine.report_year != _year_of(merged["as_of_date"]):
                 # Saved now, whatever happens to this member below, and used
                 # for every comparison: the stored report's rank is what it
                 # is, not what it was stored with.
+                repair["report_year"] = _year_of(merged["as_of_date"])
                 db.query(FinancialDisclosure).filter_by(
                     **{chamber.owner_key: member_id}, filing_id=mine.filing_id,
-                ).update({**repair, "report_year": _year_of(merged["as_of_date"])}, synchronize_session=False)
+                ).update(repair, synchronize_session=False)
                 db.commit()
-                mine = dataclasses.replace(
-                    mine, **repair, report_year=_year_of(merged["as_of_date"]),
-                )
+                mine = dataclasses.replace(mine, **repair)
         for filing in sorted(per_member[member_id], key=lambda f: ranks[chamber.filing_id(f)], reverse=True):
             filing_id = chamber.filing_id(filing)
             if _is_current(mine, filing_id, chamber.parser_version):
@@ -615,7 +626,7 @@ def _senate_as_of(filing: dict) -> str | None:
     below every dated report, this run's or the one stored (_rank): a
     senator's newest dated report stays, and a paper one is stored only for
     a senator with none. A paper filing made after the report shown is
-    named beside it instead (_note_later_paper): "filed later" is a fact;
+    named beside it instead (_note_later_filing): "filed later" is a fact;
     "newer" would be a guess."""
     title = filing.get("title") or ""
     if m := _CY_RE.search(title):
@@ -626,50 +637,52 @@ def _senate_as_of(filing: dict) -> str | None:
 
 
 def _write_notes(db: Session, per_senator: dict[str, list[dict]]) -> None:
-    """_note_later_paper, which is secondary: a note that can't be written
+    """_note_later_filing, which is secondary: a note that can't be written
     is logged, and neither fails a phase that stored its reports nor
     replaces the failure of one that didn't."""
     try:
-        _note_later_paper(db, per_senator)
+        _note_later_filing(db, per_senator)
     except Exception:
-        logger.exception("Senate holdings: later-paper notes not updated")
+        logger.exception("Senate holdings: later-filing notes not updated")
         db.rollback()
         _alert(
             "Senate holdings notes not updated",
             "Tonight's Senate holdings phase stored its reports but could not update the notes that "
-            "name a paper filing made after a senator's shown report, so some may be stale or missing "
+            "name an undated filing made after a senator's shown report, so some may be stale or missing "
             "— see the server logs for the cause.",
             dedupe_key=f"senate-holdings-notes-{utcnow():%Y-%m-%d}",
         )
 
 
-def _note_later_paper(db: Session, per_senator: dict[str, list[dict]]) -> None:
-    """Name, beside each senator's stored report, the newest paper filing
-    they made after it (see _senate_as_of). Only for senators this search
-    returned filings for, and a note is only ever replaced by a later paper
-    filing or dropped once the stored report is itself filed after it —
-    never cleared just because tonight's rows lack it, since a page of
-    search results that failed to load looks exactly like that."""
+def _filed_after(filed: str | None, reference: str | None) -> bool:
+    """Whether a filing date is known to be later than another. With either
+    missing, nothing can be said to be filed after anything."""
+    return bool(filed and reference and filed > reference)
+
+
+def _note_later_filing(db: Session, per_senator: dict[str, list[dict]]) -> None:
+    """Name, beside each senator's stored report, the newest undated filing
+    — no as-of date to rank by (see _senate_as_of): a paper filing, or a
+    title that states no year — they made after it. Only for senators this
+    search returned filings for, and a note is only ever replaced by a
+    later such filing or dropped once the stored report is itself filed
+    after it — never cleared just because tonight's rows lack it, since a
+    page of search results that failed to load looks exactly like that."""
     for disclosure in db.query(FinancialDisclosure).filter(FinancialDisclosure.senator_id.in_(list(per_senator))):
-        # With no filing date stored, nothing can be said to be filed after it.
         later = [
             f for f in per_senator[disclosure.senator_id]
-            if f.get("is_paper")
+            if not _senate_as_of(f)
             and senate_filing_id(f["report_url"]) != disclosure.filing_id
-            and disclosure.filed_date and f.get("filed_date")
-            and f["filed_date"] > disclosure.filed_date
+            and _filed_after(f.get("filed_date"), disclosure.filed_date)
         ]
         newest = max(later, key=lambda f: f["filed_date"], default=None)
         if newest is not None:
-            if not disclosure.later_paper_filed or newest["filed_date"] >= disclosure.later_paper_filed:
-                disclosure.later_paper_label = _senate_fields(newest)["report_label"]
-                disclosure.later_paper_url = newest["report_url"]
-                disclosure.later_paper_filed = newest["filed_date"]
-        elif disclosure.later_paper_url and not (
-            disclosure.filed_date and disclosure.later_paper_filed
-            and disclosure.later_paper_filed > disclosure.filed_date
-        ):
-            disclosure.later_paper_label = disclosure.later_paper_url = disclosure.later_paper_filed = None
+            if not _filed_after(disclosure.later_filing_filed, newest["filed_date"]):
+                disclosure.later_filing_label = _senate_fields(newest)["report_label"]
+                disclosure.later_filing_url = newest["report_url"]
+                disclosure.later_filing_filed = newest["filed_date"]
+        elif disclosure.later_filing_url and not _filed_after(disclosure.later_filing_filed, disclosure.filed_date):
+            disclosure.later_filing_label = disclosure.later_filing_url = disclosure.later_filing_filed = None
     db.commit()
 
 

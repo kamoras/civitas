@@ -411,18 +411,18 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
       alwaysVisible={
         <>
           {chart}
-          {data.laterPaperUrl && (
+          {data.laterFilingUrl && (
             <p className="text-xs text-ink-lo mt-2">
-              Also filed after this report, on paper: the {data.laterPaperLabel ?? "paper filing"}. A paper
-              filing is scanned page images and states no year that can be read here, so this section
-              stays with the {reportLabel}.{" "}
+              Also filed after this report: the {data.laterFilingLabel ?? "later filing"}. It states no
+              year that can be read here (a paper filing is scanned page images), so it can&apos;t be
+              placed against this one, and this section stays with the {reportLabel}.{" "}
               <a
-                href={data.laterPaperUrl}
+                href={data.laterFilingUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hover:text-phos transition-colors"
               >
-                VIEW PAPER FILING ↗
+                VIEW THAT FILING ↗
               </a>
             </p>
           )}
