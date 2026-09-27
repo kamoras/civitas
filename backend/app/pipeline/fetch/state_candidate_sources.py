@@ -88,10 +88,15 @@ def save_discovered(state: str, source: dict[str, Any] | None) -> None:
         return discovered
 
     # Into the file as it stands now, under its lock (update_json_file).
+    def publish(discovered: dict[str, Any]) -> None:
+        global _discovered_cache
+        _discovered_cache = discovered
+
     for path in _DISCOVERED_PATHS:
         try:
-            _discovered_cache = update_json_file(
-                path, record, missing=lambda: dict(_load_discovered()), indent=2, sort_keys=True,
+            update_json_file(
+                path, record, missing=lambda: dict(_load_discovered()), written=publish,
+                indent=2, sort_keys=True,
             )
             return
         except OSError:

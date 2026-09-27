@@ -23,7 +23,7 @@ import json
 import logging
 import pathlib
 
-from app.atomic_write import write_text_atomic
+from app.atomic_write import update_json_file
 from app.config_definitions import CONSTITUENT_REFERENCE_STATISTIC
 from app.time_utils import utcnow
 
@@ -112,14 +112,16 @@ class ChamberReference:
         return merged
 
     def write(self, chamber: str, reference: dict) -> None:
-        """Persist this run's reference for one chamber (read-merge-write:
-        each chamber's pipeline owns its own key). Never raises — the
+        """Persist this run's reference for one chamber (read-merge-write,
+        under the file's lock: each chamber's pipeline owns its own key, and
+        the two can write at once). Never raises — the
         pipeline has already scored with the in-memory reference; this file
         is for readers outside the run."""
         try:
-            existing = _read_json(self.live_path)
-            existing[chamber] = {**reference, "computed_at": utcnow().isoformat(timespec="seconds")}
-            write_text_atomic(self.live_path, json.dumps(existing, indent=2, sort_keys=True) + "\n")
+            entry = {**reference, "computed_at": utcnow().isoformat(timespec="seconds")}
+            update_json_file(
+                self.live_path, lambda existing: {**existing, chamber: entry}, indent=2, sort_keys=True, end="\n",
+            )
             self._cache = None
         except Exception:
             logger.warning(

@@ -27,13 +27,13 @@ import logging
 from datetime import datetime, timedelta
 
 import httpx
-from sqlalchemy import and_, case, or_
+from sqlalchemy import and_, case, func, or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.http_client import make_async_client
 from app.models import RepSponsoredBill, SponsoredBill
-from app.pipeline.analyze.bill_stage import classify_bill_stage_from_actions, is_enacted, is_public_law_action
+from app.pipeline.analyze.bill_stage import classify_bill_stage_from_actions, is_enacted, became_law_action
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.congress import CONGRESS_API_BASE, _fetch_with_retry
 from app.pipeline.run_tracker import PipelineRunTracker
@@ -140,11 +140,11 @@ def _supersedes(new_date: str, stored_date: str | None, makes_law: bool = False)
     one on the same day — the listing can lag a later action that day the
     nightly pipeline stored from the bill itself, and a date can't say which
     came first (the nightly run settles it) — and not an undated one over a
-    dated row, which it can't be ordered against. Except that the action
-    making a bill not yet recorded as law one (`makes_law`) may replace one
-    on its own day: becoming law ends a bill's history, so nothing stored
-    that day came after it — and Congress.gov dates it the day the President
-    signed, often the day of the stored signing action."""
+    dated row, which it can't be ordered against. Except that the "Became
+    Public/Private Law" action (`makes_law`) may replace any other action on
+    its own day: becoming law ends a bill's history, so nothing stored that
+    day came after it — and Congress.gov dates it the day the President
+    signed, often the day of the stored "Signed by President." action."""
     if not stored_date:
         return True
     if not new_date:
@@ -192,8 +192,11 @@ async def _apply_updates(
             # The latest action alone decides whether a same-day action may
             # replace the stored one (_supersedes); is_law itself is read
             # below, from the history too, as every writer reads it.
-            becomes_law = is_public_law_action(new_text)
-            if not _supersedes(new_date, row.latest_action_date, becomes_law and not row.is_law):
+            becomes_law = became_law_action(new_text)
+            # Not "and not row.is_law": a row read as law from its history
+            # ("Signed by President.") still takes the same-day law number.
+            makes_law = becomes_law and not became_law_action(row.latest_action)
+            if not _supersedes(new_date, row.latest_action_date, makes_law):
                 # The listing can lag what the nightly pipeline stored from the
                 # bill itself: an action not dated after the stored one never
                 # replaces it (see _supersedes).
@@ -228,9 +231,9 @@ async def _apply_updates(
                 )
             # else: keep the stored stage — a failed/empty actions fetch
             # must not regress a real stage to the INTRODUCED fallback.
-            writes.append((model, row.id, row.bill_id, new_date, becomes_law, values))
+            writes.append((model, row.id, row.bill_id, new_date, makes_law, values))
 
-    for model, row_id, bill_id, new_date, becomes_law, values in writes:
+    for model, row_id, bill_id, new_date, makes_law, values in writes:
         # _supersedes again at write time: the row may have moved on since it
         # was read (the nightly pipeline rewrites these). It rewrites them by
         # delete and insert, and SQLite can hand a deleted row's id to a new
@@ -239,10 +242,15 @@ async def _apply_updates(
         undated = or_(model.latest_action_date.is_(None), model.latest_action_date == "")
         if not new_date:
             superseded = undated
-        elif becomes_law:
+        elif makes_law:
+            # The same day, only over an action that isn't itself the law.
+            stored = func.lower(func.coalesce(model.latest_action, ""))
             superseded = or_(
                 undated, model.latest_action_date < new_date,
-                and_(model.latest_action_date == new_date, ~model.is_law),
+                and_(
+                    model.latest_action_date == new_date,
+                    ~stored.contains("became public law"), ~stored.contains("became private law"),
+                ),
             )
         else:
             superseded = or_(undated, model.latest_action_date < new_date)

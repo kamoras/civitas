@@ -418,14 +418,20 @@ def post_race_coverage_updates(db: Session, *, deadline: float | None = None) ->
         roster_fact = _roster_fact(item, race, db)
         if roster_fact is None:
             continue
-        text = _generate_post_text(item, race, roster_fact)
-        if not text:
-            continue
 
+        # Reserved before the LLM is asked for anything: a pass that can't
+        # post this (another pass took the race, or the day's last slot)
+        # spends nothing finding that out.
         if not _reserve_post(db, item):
-            logger.info("Skipping post for race %s — another pass posted for it, or the day's budget ran out", race.id)
+            if _posts_in_last_day(db) >= MAX_POSTS_PER_DAY:
+                logger.info("Election coverage posting stopped — another pass used the day's budget")
+                budget = posted  # the rest are only marked considered
+            else:
+                logger.info("Skipping post for race %s — another pass posted for it", race.id)
+                cooled_down.add(item.race_id)
             continue
-        if _publish(text, race):
+        text = _generate_post_text(item, race, roster_fact)
+        if text and _publish(text, race):
             cooled_down.add(item.race_id)
             posted += 1
         else:

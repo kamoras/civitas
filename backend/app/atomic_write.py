@@ -11,36 +11,42 @@ wipes the vector store. Written beside the target and renamed over it, the
 file is always the old version or the new one.
 
 A read-modify-write of a shared file (update_json_file) also holds an
-exclusive lock across the read and the write, so two writers — the nightly
-source crawl and a ballot sync, in one process or two — can't each write
-back a copy missing the other's change.
+exclusive lock across the read and the write, so two writers — the source
+crawl and a ballot sync, the Senate and House pipelines, in one process or
+two — can't each write back a copy missing the other's change.
 """
 
 import fcntl
 import json
 import os
 import stat
-import tempfile
+import time
+import uuid
 from collections.abc import Callable
 from typing import Any
 
+# How long update_json_file waits for another writer's lock. A holder keeps
+# it for one read and one write of a small file — milliseconds — and the
+# callers are often on an event loop, which a longer wait would stall.
+LOCK_WAIT_S = 5.0
+
 
 def write_text_atomic(path: str | os.PathLike, text: str) -> None:
-    """Write `text` to `path` (UTF-8), replacing it in one step, with the
-    mode it had (0644 for a new file). Raises OSError as a plain write
-    would; nothing is left behind on failure."""
-    directory = os.path.dirname(os.path.abspath(path))
-    try:
-        mode = stat.S_IMODE(os.stat(path).st_mode)
-    except FileNotFoundError:
-        mode = 0o644
-    fd, tmp = tempfile.mkstemp(dir=directory, prefix=f".{os.path.basename(path)}.", suffix=".tmp")
+    """Write `text` to `path` (UTF-8), replacing it in one step, keeping
+    the file's mode (a new one gets the umask's, as open() would give).
+    Raises OSError as a plain write would; nothing is left behind on
+    failure."""
+    path = os.fspath(path)
+    tmp = os.path.join(os.path.dirname(os.path.abspath(path)), f".{os.path.basename(path)}.{uuid.uuid4().hex}.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)  # umask applies, as for open(path, "w")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(text)
             fh.flush()
-            # mkstemp's 0600 would otherwise become the file's mode.
-            os.fchmod(fh.fileno(), mode)
+            try:
+                os.fchmod(fh.fileno(), stat.S_IMODE(os.stat(path).st_mode))
+            except FileNotFoundError:
+                pass
             os.fsync(fh.fileno())
         os.replace(tmp, path)
     except BaseException:
@@ -56,20 +62,44 @@ def update_json_file(
     update: Callable[[dict[str, Any]], dict[str, Any]],
     *,
     missing: Callable[[], dict[str, Any]] = dict,
+    written: Callable[[dict[str, Any]], None] | None = None,
+    end: str = "",
     **dump_kwargs: Any,
 ) -> dict[str, Any]:
     """Read `path`'s JSON object, `update` it, and write it back whole —
     under an exclusive lock (`path`.lock) held across all three, so no
     concurrent writer's change is lost. `missing()` stands in for a file
-    that doesn't exist or can't be parsed. Returns what was written."""
+    that doesn't exist or doesn't hold a JSON object. `written(data)` runs
+    before the lock is released — for a module cache, so writers publish
+    their copies in the order they wrote them. `end` follows the JSON (a
+    trailing newline). Returns what was written.
+    Raises OSError when the file can't be written, or when another writer
+    holds the lock past LOCK_WAIT_S."""
+    path = os.fspath(path)
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with open(f"{path}.lock", "a") as lock:
-        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)  # released when the file closes
+        _lock(lock.fileno(), path)  # released when the file closes
         try:
             with open(path, encoding="utf-8") as fh:
-                current = json.load(fh) or {}
+                current = json.load(fh)
         except (FileNotFoundError, ValueError):
+            current = None
+        if not isinstance(current, dict):
             current = missing()
         updated = update(dict(current))
-        write_text_atomic(path, json.dumps(updated, **dump_kwargs))
+        write_text_atomic(path, json.dumps(updated, **dump_kwargs) + end)
+        if written is not None:
+            written(updated)
         return updated
+
+
+def _lock(fd: int, path: str) -> None:
+    give_up = time.monotonic() + LOCK_WAIT_S
+    while True:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return
+        except BlockingIOError:
+            if time.monotonic() >= give_up:
+                raise OSError(f"{path} stayed locked by another writer for {LOCK_WAIT_S}s") from None
+            time.sleep(0.02)

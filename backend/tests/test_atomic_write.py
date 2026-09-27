@@ -61,9 +61,13 @@ def test_keeps_the_files_mode(workdir):
     target.chmod(0o644)
     write_text_atomic(target, '{"new": true}')
     assert oct(target.stat().st_mode & 0o777) == "0o644"
-    fresh = workdir / "fresh.json"
-    write_text_atomic(fresh, "{}")
-    assert oct(fresh.stat().st_mode & 0o777) == "0o644"
+    old_umask = os.umask(0o077)  # a new file gets the umask's mode, as open() would give it
+    try:
+        fresh = workdir / "fresh.json"
+        write_text_atomic(fresh, "{}")
+    finally:
+        os.umask(old_umask)
+    assert oct(fresh.stat().st_mode & 0o777) == "0o600"
 
 
 def test_concurrent_updates_keep_every_change(workdir):
@@ -94,3 +98,46 @@ def test_a_missing_file_starts_from_what_the_caller_knows(workdir):
     target = workdir / "sub" / "dates.json"
     written = update_json_file(target, lambda known: {**known, "new": 1}, missing=lambda: {"bundled": 1})
     assert written == {"bundled": 1, "new": 1} == json.loads(target.read_text())
+
+
+@pytest.mark.parametrize("content", ["[]", '"text"', "not json"])
+def test_a_file_not_holding_an_object_starts_from_what_the_caller_knows(workdir, content):
+    target = workdir / "dates.json"
+    target.write_text(content)
+    assert update_json_file(target, lambda known: {**known, "new": 1}, missing=lambda: {"seed": 1}) == {
+        "seed": 1, "new": 1,
+    }
+
+
+def test_a_writer_holding_the_lock_too_long_is_an_oserror(workdir, monkeypatch):
+    """Callers fall back on OSError; an event loop isn't stalled for long."""
+    import fcntl
+
+    from app import atomic_write
+
+    monkeypatch.setattr(atomic_write, "LOCK_WAIT_S", 0.1)
+    target = workdir / "dates.json"
+    with open(f"{target}.lock", "a") as held:
+        fcntl.flock(held.fileno(), fcntl.LOCK_EX)
+        with pytest.raises(OSError, match="stayed locked"):
+            update_json_file(target, lambda known: known)
+
+
+def test_the_written_copy_is_published_before_the_lock_is_let_go(workdir):
+    """So two writers in one process publish their copies (a module cache)
+    in the order they wrote them."""
+    import fcntl
+
+    target = workdir / "dates.json"
+    locked_while_published = []
+
+    def publish(_data):
+        with open(f"{target}.lock", "a") as probe:
+            try:
+                fcntl.flock(probe.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                locked_while_published.append(False)
+            except BlockingIOError:
+                locked_while_published.append(True)
+
+    update_json_file(target, lambda known: {**known, "a": 1}, written=publish)
+    assert locked_while_published == [True]

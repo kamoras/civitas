@@ -795,13 +795,18 @@ async def _weekly_source_crawl(db: Session, client, cycle: int) -> dict[str, str
     it proves out contributes the same night, but outside the sync's guards
     and their time budget: it writes no Candidate row, and the discovered-
     source and election-date files it shares with the sync are updated
-    under their own lock (atomic_write.update_json_file). Best-effort — a
-    failure is logged, costs the night's sync nothing, and is retried the
+    under their own lock (atomic_write.update_json_file). Under a lease of
+    its own instead (lease.SOURCE_CRAWL), which yields to a data reset and
+    cuts it off at max_hold. Best-effort — a failure, a refusal or a
+    cut-off is logged, costs the night's sync nothing, and is retried the
     next night."""
     try:
         if api_cache_get(db, _CRAWL_TIER, _CRAWL_KEY, max_age_hours=_CRAWL_EVERY_HOURS) is not None:
             return {}
-        leads = await crawl_for_new_sources(db, client, cycle)
+        async with lease.bounded_job_async(lease.SOURCE_CRAWL, who="Election pipeline's source crawl") as granted:
+            if not granted:
+                return {}
+            leads = await crawl_for_new_sources(db, client, cycle)
         adopted = {s: r for s, r in leads.items() if r.startswith("adopted")}
         logger.info(
             "Source crawl: %d state(s) adopted%s",

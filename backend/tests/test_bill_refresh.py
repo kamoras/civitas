@@ -159,11 +159,15 @@ class TestApplyUpdates:
         row = db_session.get(SponsoredBill, bill.id)
         assert (row.latest_action_date, row.is_law, row.stage) == ("2026-07-20", True, "ENACTED")
 
-    def test_becoming_law_on_the_stored_actions_day_is_recorded(self, db_session, actions_stub):
+    @pytest.mark.parametrize("already_law", [False, True])
+    def test_becoming_law_on_the_stored_actions_day_is_recorded(self, db_session, actions_stub, already_law):
         """Congress.gov dates the public-law action the day it was signed —
-        often the stored signing action's day — and it ends the history."""
+        often the stored signing action's day — and it ends the history. A
+        row already read as law from its history (signed, is_enacted) still
+        takes the law number."""
         bill = _make_senate_bill(
-            db_session, stage="TO_PRESIDENT", latest_action="Signed by President.", latest_action_date="2026-09-20",
+            db_session, stage="ENACTED" if already_law else "TO_PRESIDENT", is_law=already_law,
+            latest_action="Signed by President.", latest_action_date="2026-09-20",
         )
         actions_stub.result = []
         recent = {"S.100": _feed_item("S.100", "Became Public Law No: 119-52.", "2026-09-20")}
@@ -363,6 +367,7 @@ class TestRefreshBillStatuses:
 @pytest.mark.parametrize("text, is_law", [
     ("Became Public Law No: 119-52.", True),
     ("became public law no: 119-52.", True),
+    ("Became Private Law No: 119-3.", True),
     ("Motion to waive pursuant to section 904 of Public Law 93-344 agreed to.", False),
     ("Signed by President.", False),
     ("", False),
@@ -371,9 +376,9 @@ class TestRefreshBillStatuses:
 def test_one_reading_of_becoming_law(text, is_law):
     """Every writer of a bill row (Senate and House pipelines, the bill
     fetch, this refresh) reads is_law the same way."""
-    from app.pipeline.analyze.bill_stage import is_public_law_action
+    from app.pipeline.analyze.bill_stage import became_law_action
 
-    assert is_public_law_action(text) is is_law
+    assert became_law_action(text) is is_law
 
 
 def test_with_its_history_is_law_agrees_with_the_stage():
@@ -386,3 +391,25 @@ def test_with_its_history_is_law_agrees_with_the_stage():
     assert is_enacted("Signed by President.", signed) is True
     assert is_enacted("Signed by President.") is False  # no history: the text alone
     assert is_enacted("Passed Senate.", [{"actionCode": "17000", "type": "Floor", "text": "Passed Senate."}]) is False
+
+
+def test_the_senate_reads_is_law_from_the_history_before_the_graph(monkeypatch):
+    """_classify_sponsored_stages runs before the cosponsorship graph is
+    built (which reads isLaw), giving a signed bill is_law and ENACTED."""
+    from app.pipeline import senate_pipeline
+
+    async def actions(_client, _db, sp):
+        return [{"actionCode": "E30000", "type": "President", "text": "Signed by President."}]
+
+    monkeypatch.setattr(senate_pipeline, "_sponsored_bill_actions", actions)
+    sp = {"billId": "S.100", "billType": "S", "congress": CURRENT, "latestAction": "Signed by President.", "isLaw": False}
+    prepared = [{"senator": {"bioguideId": "A1", "party": "D"}, "sponsoredBills": [sp]}]
+    asyncio.run(senate_pipeline._classify_sponsored_stages(None, prepared))
+    assert sp["isLaw"] is True and str(sp["stage"]) == "ENACTED"
+    [entry] = senate_pipeline._build_current_term_sponsored_for_cosponsor(prepared)
+    assert entry["isLaw"] is True
+
+    source = open(senate_pipeline.__file__).read()
+    assert source.index("await _classify_sponsored_stages(") < source.index(
+        "sponsored_bills_for_cosponsor = _build_current_term_sponsored_for_cosponsor("
+    )

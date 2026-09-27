@@ -317,8 +317,10 @@ class TestPostRaceCoverageUpdates:
 
         other = sessionmaker(bind=db_session.get_bind())()
 
-        def posted_meanwhile(*_args):
-            # While this pass composes its post (past its cooldown read),
+        real_roster_fact = election_bluesky._roster_fact
+
+        def posted_meanwhile(*args):
+            # While this pass checks its item (past its cooldown read),
             # another pass publishes a different item about the same race.
             other.add(RaceCoverageItem(
                 race_id="2026-SEN-GA", source_type="news", source_name="AP News", title="Other story",
@@ -326,12 +328,14 @@ class TestPostRaceCoverageUpdates:
                 match_basis="full_name", bsky_posted=True, bsky_posted_at=election_bluesky.utcnow(),
             ))
             other.commit()
-            return "A grounded sentence."
+            return real_roster_fact(*args)
 
-        with patch.object(election_bluesky, "_generate_post_text", side_effect=posted_meanwhile), \
+        monkeypatch.setattr(election_bluesky, "_roster_fact", posted_meanwhile)
+        with patch.object(election_bluesky, "_generate_post_text", return_value="A grounded sentence.") as gen, \
              patch.object(election_bluesky, "_publish", return_value=True) as mock_publish:
             posted = election_bluesky.post_race_coverage_updates(db_session)
         other.close()
+        gen.assert_not_called()  # refused before the LLM was asked
 
         assert posted == 0
         mock_publish.assert_not_called()

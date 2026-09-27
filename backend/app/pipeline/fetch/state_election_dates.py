@@ -132,9 +132,15 @@ def save(state: str, cycle: int, dates: dict) -> None:
 
     # Merged into the file as it stands now, under its lock: the source
     # crawl and a ballot sync both write here (update_json_file).
+    def publish(known: dict[str, Any]) -> None:
+        global _cache
+        _cache = known
+
     for path in _PATHS:
         try:
-            _cache = update_json_file(path, merge, missing=lambda: dict(_load()), indent=2, sort_keys=True)
+            update_json_file(
+                path, merge, missing=lambda: dict(_load()), written=publish, indent=2, sort_keys=True,
+            )
             return
         except OSError:
             continue
