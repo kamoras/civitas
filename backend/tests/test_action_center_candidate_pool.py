@@ -72,7 +72,6 @@ def refresh(monkeypatch):
     monkeypatch.setattr(ac, "_embed_texts_sim", lambda texts: [
         np.eye(64)[title_ids.setdefault(t, len(title_ids))] for t in texts
     ])
-    monkeypatch.setattr(ac, "_largest_coherent_subgroup", lambda m, t: list(range(len(m))))
     monkeypatch.setattr(ac, "_resolve_url", lambda u: u)
 
     def extract(cluster, locate):
