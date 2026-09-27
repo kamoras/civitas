@@ -4069,22 +4069,35 @@ or
 
 
 
-# How long a held refresh lock is honored before being treated as
-# abandoned (a crashed container never deletes its lock row). Generous
-# vs. the observed refresh duration; matches the pre-existing 4-hour
-# stale-override convention for the in-process guard.
-_REFRESH_LOCK_STALE_S = 4 * 3600
+# The refresh lock is a lease, not a flag: its holder rewrites cached_at
+# every _REFRESH_LOCK_BEAT_S while it runs, and a row that has gone
+# _REFRESH_LOCK_STALE_S without a beat belongs to a dead holder, whoever it
+# was. It used to be honored for a flat 4 hours from acquisition, and a
+# refresh runs in a thread, so a deploy's SIGTERM kills it without its
+# `finally` and leaves the row behind: every hourly run for the next four
+# hours then skipped with "held by another container" — on a day of
+# steady deploys (2026-09-26: 22 between 15:08 and 22:50 UTC) that meant
+# no refresh at all, and no new issue, for the whole day. Ten missed beats
+# rides out a SQLite writer holding the database for minutes, while a
+# killed holder costs at most one skipped hour.
+_REFRESH_LOCK_BEAT_S = 60
+_REFRESH_LOCK_STALE_S = 10 * 60
 
 
-def _acquire_refresh_lock(db: Session) -> bool:
+def _acquire_refresh_lock(db: Session) -> str | None:
     """Cross-container refresh lock (2026-07): the
     hourly refresh previously had only a process-local guard, so during a
     blue/green deploy overlap two containers could both run it —
     duplicate Bluesky posts and contended SQLite writes. The lock is a
     plain INSERT into api_cache, whose (tier, cache_key) PRIMARY KEY
     makes the second acquirer's insert fail atomically — no
-    check-then-insert race, no schema changes. A crashed holder's row is
-    taken over once it exceeds _REFRESH_LOCK_STALE_S.
+    check-then-insert race, no schema changes. A row whose holder stopped
+    beating (_beat_refresh_lock) is taken over.
+
+    Returns the holder's token — heartbeat and release touch only the row
+    carrying it, so a holder that stalled past the window and lost the
+    lease can never refresh or delete its successor's — or None when the
+    lock is held.
     """
     from sqlalchemy.exc import IntegrityError
 
@@ -4099,26 +4112,56 @@ def _acquire_refresh_lock(db: Session) -> bool:
     ).delete()
     db.commit()
 
+    token = uuid.uuid4().hex
     try:
         db.add(ApiCache(
             tier="action-refresh-lock", cache_key="lock",
-            data_json="{}", cached_at=now,
+            data_json=json.dumps({"holder": token}), cached_at=now,
         ))
         db.commit()
-        return True
+        return token
     except IntegrityError:
         db.rollback()
-        return False
+        return None
 
 
-def _release_refresh_lock(db: Session) -> None:
+def _own_lock_row(db: Session, token: str):
     from app.models import ApiCache
 
+    return db.query(ApiCache).filter(
+        ApiCache.tier == "action-refresh-lock",
+        ApiCache.cache_key == "lock",
+        ApiCache.data_json == json.dumps({"holder": token}),
+    )
+
+
+def _beat_refresh_lock(db: Session, token: str) -> bool:
+    """Renew the lease. False once the row is no longer this holder's."""
+    renewed = _own_lock_row(db, token).update({"cached_at": utcnow()})
+    db.commit()
+    return renewed == 1
+
+
+def _keep_refresh_lock(bind, token: str, stop: threading.Event) -> None:
+    """Heartbeat thread: beats on its own session (a Session is not
+    thread-safe) until the refresh finishes. A failed beat is only logged —
+    the lease has ten beats of slack."""
+    while not stop.wait(_REFRESH_LOCK_BEAT_S):
+        db = Session(bind=bind)
+        try:
+            if not _beat_refresh_lock(db, token):
+                logger.warning("Action refresh lock was taken over — this refresh is no longer exclusive")
+                return
+        except Exception:
+            logger.exception("Action refresh lock heartbeat failed")
+            db.rollback()
+        finally:
+            db.close()
+
+
+def _release_refresh_lock(db: Session, token: str) -> None:
     try:
-        db.query(ApiCache).filter(
-            ApiCache.tier == "action-refresh-lock",
-            ApiCache.cache_key == "lock",
-        ).delete()
+        _own_lock_row(db, token).delete()
         db.commit()
     except Exception:
         logger.exception("Failed to release action refresh lock (will expire as stale)")
@@ -4132,9 +4175,16 @@ def refresh_action_issues(db: Session | None = None) -> int:
         db = SessionLocal()
 
     try:
-        if not _acquire_refresh_lock(db):
+        token = _acquire_refresh_lock(db)
+        if token is None:
             logger.info("Action refresh lock held by another container — skipping this run")
             return 0
+        stop = threading.Event()
+        heartbeat = threading.Thread(
+            target=_keep_refresh_lock, args=(db.get_bind(), token, stop),
+            name="action-refresh-lock", daemon=True,
+        )
+        heartbeat.start()
         try:
             return _run_refresh(db)
         except Exception:
@@ -4151,7 +4201,9 @@ def refresh_action_issues(db: Session | None = None) -> int:
             _set_refresh_state(is_running=False, stage=None)
             raise
         finally:
-            _release_refresh_lock(db)
+            stop.set()
+            heartbeat.join()
+            _release_refresh_lock(db, token)
     finally:
         if own_session:
             db.close()

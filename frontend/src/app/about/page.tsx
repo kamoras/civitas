@@ -1023,7 +1023,10 @@ export default function AboutPage() {
               contest&apos;s research opens beside it: money raised, a sitting member&apos;s
               voting record, and news coverage. On a phone it lists every contest and opens
               one per screen, with next and previous. It never marks a choice. Candidates appear
-              under the name their state prints on its ballot once a state source names them.
+              under the name their state prints on its ballot once a state source names them. Every contest
+              says the term it is for — two years for the U.S. House, six for the Senate, and for the
+              state offices we cover, each one&apos;s own term from its state&apos;s constitution or
+              statute. Where we have not confirmed a state office&apos;s term, none is shown.
             </P>
 
             <div className="space-y-4 mt-4">
@@ -1112,7 +1115,7 @@ export default function AboutPage() {
                   Everyone on a certified ballot is shown, including candidates who never
                   filed with the FEC — they appear with &ldquo;no FEC filing&rdquo; instead
                   of fundraising figures. Colorado, Virginia, Tennessee, Florida, New Jersey, Maryland,
-                  Iowa, Nebraska, New Mexico, Wyoming, Hawaii, Delaware, Kentucky, Alaska and Montana now read their certified candidate lists too (Tennessee&apos;s
+                  Iowa, Nebraska, New Mexico, Wyoming, Hawaii, Delaware, Kentucky, Alaska, Montana, Illinois and North Dakota now read their certified candidate lists too (Tennessee&apos;s
                   federal races alone list 36 independents; Florida&apos;s filled five districts its
                   results file never mentioned; Iowa&apos;s replaced a retiring senator the page still
                   showed), and Wisconsin its official primary canvass, a plain
@@ -1333,6 +1336,14 @@ export default function AboutPage() {
                   fails the checks, the next-ranked story is tried rather than the run ending
                   empty. Before that change, two failing top stories could leave the Action Center
                   silent for a day while the news carried on.
+                </P>
+                <P>
+                  Only one refresh runs at a time, even while a deploy briefly runs two copies of the
+                  site. The run that holds that turn renews its claim every minute, and a claim that
+                  goes ten minutes unrenewed is released. A claim used to last four hours whether or
+                  not its run was still alive, so a deploy that stopped a refresh partway through
+                  silenced the next four. On 26 September 2026, a day of steady deploys, that kept
+                  every refresh from running and no issue was published.
                 </P>
                 <P>
                   The cost is silence. A cluster with no attributable assertion produces no issue at
@@ -2129,6 +2140,10 @@ export default function AboutPage() {
               <Row
                 label="Containers"
                 value="Docker Swarm (single node) — zero-downtime start-first rolling updates behind an in-stack nginx reverse proxy, with automatic rollback on a failed health check"
+              />
+              <Row
+                label="Accessibility Checks"
+                value="axe-core runs over the state ballot page and each of its research panels on every change; Lighthouse audits colour contrast and page loads"
               />
               <Row
                 label="Pipeline Schedule"

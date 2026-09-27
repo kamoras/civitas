@@ -94,6 +94,7 @@ from app.pipeline.fetch.state_candidates_certified_pdf import fetch_confirmed_ca
 from app.pipeline.fetch.state_candidates_certified_table import fetch_confirmed_candidates as _fetch_certified_table
 from app.pipeline.fetch.state_candidates_civic import fetch_confirmed_candidates as _fetch_civic
 from app.pipeline.fetch.state_candidates_ct import fetch_confirmed_candidates as _fetch_ct
+from app.pipeline.fetch.state_candidates_grouped_list_pdf import fetch_confirmed_candidates as _fetch_grouped_list_pdf
 from app.pipeline.fetch.state_candidates_clarity import fetch_confirmed_candidates as _fetch_clarity
 from app.pipeline.fetch.state_candidates_dos_canlist import fetch_confirmed_candidates as _fetch_dos_canlist
 from app.pipeline.fetch.state_candidates_enhanced_voting import (
@@ -152,6 +153,7 @@ STRATEGIES = {
     "vrems": _fetch_vrems,
     "certified_pdf": _fetch_certified_pdf,
     "certified_table": _fetch_certified_table,
+    "grouped_list_pdf": _fetch_grouped_list_pdf,
     "canvass_summary_pdf": _fetch_canvass_summary_pdf,
     "dos_canlist": _fetch_dos_canlist,
     "google_civic": _fetch_civic,

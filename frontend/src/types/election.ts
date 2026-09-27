@@ -197,6 +197,10 @@ export interface StatewideRace {
   /** Human label the backend owns, so the two never disagree. */
   label: string;
   nominees: StatewideNominee[];
+  /** Years in one regular term of this office, from the backend's
+   * data/office_terms.json; null where that file does not list it (never a
+   * default). Optional: an older backend omits it. */
+  termYears?: number | null;
 }
 
 export interface StatewideNominee {
@@ -218,6 +222,10 @@ export interface StateLegChamber {
   /** Human label the backend owns — "State Senate" / "State House". */
   label: string;
   districts: StateLegDistrict[];
+  /** Years in one regular term of this office, from the backend's
+   * data/office_terms.json; null where that file does not list it (never a
+   * default). Optional: an older backend omits it. */
+  termYears?: number | null;
 }
 
 export interface JudicialCoverage {
@@ -238,6 +246,10 @@ export interface JudicialCourt {
   /** Human label the backend owns — "Court of Appeals" etc. */
   label: string;
   seats: JudicialSeat[];
+  /** Years in one regular term of this office, from the backend's
+   * data/office_terms.json; null where that file does not list it (never a
+   * default). Optional: an older backend omits it. */
+  termYears?: number | null;
 }
 
 export interface JudicialSeat {

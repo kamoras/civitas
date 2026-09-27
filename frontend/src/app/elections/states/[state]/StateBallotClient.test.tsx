@@ -648,3 +648,39 @@ describe("term lengths", () => {
     expect(within(box).queryByText(/6-year term/)).not.toBeInTheDocument();
   });
 });
+
+describe("state office terms", () => {
+  it("gives a state office's term where the backend has it, and nothing where it does not", () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          statewideCoverage: { status: "covered", sourceName: "GA SoS", checkedAt: null },
+          statewideRaces: [
+            { office: "governor", label: "Governor", nominees: [{ party: "DEM", name: "A Dem" }], termYears: 4 },
+            { office: "public_service_commission-3", label: "Public Service Commission, District 3", nominees: [{ party: "REP", name: "A Rep" }], termYears: 6 },
+            { office: "labor_commissioner", label: "Labor Commissioner", nominees: [{ party: "REP", name: "Another Rep" }], termYears: null },
+          ],
+        })}
+      />,
+    );
+    const box = screen.getByTestId("ballot-columns");
+    expect(within(box).getByText(/· 4-year terms/)).toBeInTheDocument();
+    expect(within(box).getByText(/· 6-year terms/)).toBeInTheDocument();
+    expect(within(box).getByText("Labor Commissioner").textContent).toBe("Labor Commissioner");
+  });
+
+  it("gives each legislative chamber's term", async () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          stateLegRaces: [
+            { chamber: "upper", label: "State Senate", termYears: 4,
+              districts: [{ district: "5", towns: ["Providence city"], nominees: [{ party: "DEM", name: "A Senator" }] }] },
+          ],
+        })}
+      />,
+    );
+    const drawer = await openContest(/State Senate/);
+    expect(drawer.getByText(/STATE SENATE — 1 SEAT CONTESTED/).textContent).toContain("4-YEAR TERMS");
+  });
+});
