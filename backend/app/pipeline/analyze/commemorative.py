@@ -41,7 +41,9 @@ SUBSTANTIVE_PROTOTYPES: tuple[str, ...] = (
 
 _CALIBRATION_PATH = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "commemorative_calibration.json"
 _calibration_cache: dict | None = None
-_prototype_cache: tuple[np.ndarray, np.ndarray] | None = None
+# Prototype embeddings per encoder (keyed by id): vectors from one model
+# are meaningless against another's.
+_prototype_cache: dict[int, tuple[np.ndarray, np.ndarray]] = {}
 
 
 def prototype_hash() -> str:
@@ -60,13 +62,12 @@ def calibration() -> dict:
 def commemorative_margins(titles: list[str], model) -> np.ndarray:
     """Best commemorative-prototype similarity minus substantive similarity,
     per title. `model` is a SentenceTransformer-compatible encoder."""
-    global _prototype_cache
-    if _prototype_cache is None:
-        _prototype_cache = (
+    if id(model) not in _prototype_cache:
+        _prototype_cache[id(model)] = (
             model.encode(list(COMMEMORATIVE_PROTOTYPES), normalize_embeddings=True, show_progress_bar=False),
             model.encode(list(SUBSTANTIVE_PROTOTYPES), normalize_embeddings=True, show_progress_bar=False),
         )
-    commem, subst = _prototype_cache
+    commem, subst = _prototype_cache[id(model)]
     emb = model.encode(list(titles), normalize_embeddings=True, show_progress_bar=False)
     return (emb @ commem.T).max(axis=1) - (emb @ subst.T).max(axis=1)
 

@@ -27,8 +27,7 @@ def test_calibration_matches_the_prototypes():
     assert 0.0 < cm.calibration()["threshold"] < 1.0
 
 
-def test_classifies_by_margin_over_threshold(monkeypatch):
-    monkeypatch.setattr(cm, "_prototype_cache", None)
+def test_classifies_by_margin_over_threshold():
     flags = cm.classify_commemorative(
         ["To designate the facility of the United States Postal Service as the Jane Doe Post Office",
          "To amend the Internal Revenue Code to extend a credit"],
@@ -111,3 +110,13 @@ def test_real_similarity_model_separates_known_titles():
         "To authorize appropriations for the Coast Guard for fiscal years 2025 and 2026.",
     ]
     assert cm.classify_commemorative(titles) == [True, True, False, False]
+
+
+def test_prototype_embeddings_are_kept_per_model():
+    """A second encoder must not reuse the first one's prototype vectors."""
+    class _Wide(_FakeModel):
+        def encode(self, texts, **kw):
+            return np.hstack([super().encode(texts, **kw), np.zeros((len(texts), 2))])
+
+    cm.commemorative_margins(["A post office"], _FakeModel())
+    assert cm.commemorative_margins(["A post office"], _Wide()).shape == (1,)
