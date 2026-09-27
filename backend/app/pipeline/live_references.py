@@ -104,9 +104,10 @@ def live_constituent_reference_measured(chamber: str, members: list[dict]) -> tu
     ref = compute_constituent_reference(constituent_reference_inputs(members))
     if ref is None:
         logger.warning(
-            "Too few %s members with party-labeled votes to measure the "
-            "Constituent Alignment expectation this run — scoring against the "
-            "last persisted one", chamber,
+            "Too few full-confidence %s members (party-labeled votes >= "
+            "CONSTITUENT_FULL_CONFIDENCE_VOTES, per party) to measure the "
+            "Constituent Alignment expectation this run — expected early in a "
+            "Congress; scoring against the last persisted one", chamber,
         )
         return CONSTITUENT_REFERENCE.load(), False
     logger.info("Constituent Alignment reference (%s): %s", chamber, ref)

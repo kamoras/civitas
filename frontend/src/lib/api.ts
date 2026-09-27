@@ -443,10 +443,6 @@ export interface AppConfig {
   platformCategories: Record<string, string>;
   policyAreas: string[];
   billStages: Record<string, BillStageInfo>;
-  /** Constituent Alignment's vote-count rules (config_definitions): below
-   * `minimum` party-line votes the vote part is a neutral 50; below
-   * `fullConfidence` it is pulled toward 50 in proportion. */
-  constituentVotes?: { minimum: number; fullConfidence: number };
 }
 
 const DEFAULT_CONFIG: AppConfig = {

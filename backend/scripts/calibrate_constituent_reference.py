@@ -68,11 +68,16 @@ def main() -> None:
         if ref is None:
             kept = existing.get(chamber)
             if not CONSTITUENT_REFERENCE.usable(kept):
-                raise SystemExit(
-                    f"{chamber}: too few full-confidence members to measure, and the previous "
-                    f"entry isn't usable (missing, or measured on {(kept or {}).get('statistic')!r}, "
-                    f"not {CONSTITUENT_REFERENCE.statistic!r}); nothing written"
+                # Keep the other chamber's fresh measurement; leave this one
+                # out rather than write an entry load() would skip anyway.
+                print(
+                    f"WARNING {chamber}: too few full-confidence members to measure, and the "
+                    f"previous entry isn't usable (missing, or measured on "
+                    f"{(kept or {}).get('statistic')!r}, not {CONSTITUENT_REFERENCE.statistic!r}); "
+                    "left out — before its first measured run this chamber scores neutral"
                 )
+                out["_provenance"][chamber] = "missing: no usable entry to keep"
+                continue
             print(f"{chamber}: too few full-confidence members; kept the previous entry")
             out[chamber] = kept
             out["_provenance"][chamber] = (existing.get("_provenance") or {}).get(

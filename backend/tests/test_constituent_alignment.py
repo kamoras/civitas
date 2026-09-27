@@ -412,15 +412,23 @@ def test_votes_without_an_identity_are_not_collapsed():
     assert len(dedupe_votes(votes)) == 3
 
 
-def test_config_serves_the_vote_count_rules_the_scorer_uses():
-    # The scorecard's basis line reads these; they must be the scorer's own.
-    import json
 
-    from app.api.senators import get_config
-    from app.config_definitions import CONSTITUENT_FULL_CONFIDENCE_VOTES, CONSTITUENT_MIN_VOTES
+class TestVotePartStatus:
+    """calculate_confidence records how the vote part was scored, so the
+    scorecard states it instead of re-deriving the rule."""
 
-    body = json.loads(get_config().body)
-    assert body["constituentVotes"] == {
-        "minimum": CONSTITUENT_MIN_VOTES, "fullConfidence": CONSTITUENT_FULL_CONFIDENCE_VOTES,
-    }
-    assert party_break_rate(record(1, total=CONSTITUENT_MIN_VOTES - 1))[0] is None
+    def status(self, rec, **kw):
+        return score_calculator.calculate_confidence(
+            {"state": "SW", "party": "D", "votingRecord": rec, **kw})["constituentAlignmentVotePart"]
+
+    def test_few_votes(self):
+        assert self.status(record(1, total=2)) == "neutral:few-votes"
+
+    def test_no_expectation(self):
+        assert self.status(record(1, total=10), party="I") == "neutral:no-expectation"
+
+    def test_shrunk_share(self):
+        assert self.status(record(1, total=12)) == "shrunk:0.60"
+
+    def test_full(self):
+        assert self.status(record(5, total=40)) == "full"

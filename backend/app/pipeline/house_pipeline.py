@@ -802,7 +802,9 @@ async def run_house_pipeline() -> dict:
                         **rep, "lesReference": les_reference, "fundingReference": funding_reference,
                         "constituentReference": constituent_reference,
                     })
-                    scores["confidence"] = calculate_confidence(rep)
+                    scores["confidence"] = calculate_confidence(
+                        {**rep, "constituentReference": constituent_reference},
+                    )
                     rep["representationScore"] = scores
 
                     # Set bioguideId for persistence

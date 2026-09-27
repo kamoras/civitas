@@ -34,8 +34,6 @@ def get_config() -> JSONResponse:
     """
     from app.config_definitions import (
         BILL_STAGES,
-        CONSTITUENT_FULL_CONFIDENCE_VOTES,
-        CONSTITUENT_MIN_VOTES,
         INDUSTRIES,
         PLATFORM_CATEGORIES,
         POLICY_AREAS,
@@ -50,12 +48,6 @@ def get_config() -> JSONResponse:
         "platformCategories": PLATFORM_CATEGORIES,
         "policyAreas": POLICY_AREAS,
         "billStages": BILL_STAGES,
-        # Constituent Alignment's vote-count rules, so the scorecard can say
-        # exactly when and how much a thin record is pulled toward 50.
-        "constituentVotes": {
-            "minimum": CONSTITUENT_MIN_VOTES,
-            "fullConfidence": CONSTITUENT_FULL_CONFIDENCE_VOTES,
-        },
     }, max_age=CACHE_TTL_CONFIG_S)
 
 

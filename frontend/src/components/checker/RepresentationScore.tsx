@@ -6,7 +6,6 @@ import { getScoreLabel, getScoreColor, getScoreBgColor, asciiScoreBar } from "@/
 import MetricTooltip from "./MetricTooltip";
 import ScoreBreakdownPanel from "@/components/shared/ScoreBreakdownPanel";
 import { SCORE_TERMS } from "@/lib/scoreTerms";
-import { useConfig } from "@/hooks/useConfig";
 import type { ScoreKey } from "@/lib/scoreTerms";
 
 interface RepresentationScoreProps {
@@ -140,29 +139,23 @@ export default function RepresentationScore({
   entityId,
   chamber,
 }: RepresentationScoreProps) {
-  const config = useConfig();
   const entityType = chamber === "house" ? "representative" : "senator";
   const overall = breakdown.overall;
   const label = getScoreLabel(overall);
   const colorClass = getScoreColor(overall);
   const grade = getScoreGrade(overall);
 
-  // Constituent Alignment's vote part reads the member's party-line votes:
-  // below the minimum it is a neutral 50, below full confidence it keeps
-  // only that fraction of its distance from 50 (the rules come from
-  // /api/config, so this line can't drift from the scorer).
+  // How Constituent Alignment's vote part was scored, as the scorer
+  // recorded it (calculate_confidence) — stated, not re-derived here.
   const votingBasis: string | undefined = (() => {
     if (!votingRecord || votingRecord.totalVotes === 0) return "no voting record · defaults to 50";
     const tracked = `${votingRecord.totalVotes} votes tracked`;
-    const rules = config?.constituentVotes;
-    if (!rules) return tracked;
-    const partyLine = (votingRecord.votedWithPartyCount ?? 0) + (votingRecord.votedAgainstPartyCount ?? 0);
-    if (partyLine < rules.minimum) {
-      return `${tracked} · ${partyLine} party-line, vote part neutral 50`;
-    }
-    if (partyLine < rules.fullConfidence) {
-      const kept = Math.round((partyLine / rules.fullConfidence) * 100);
-      return `${tracked} · ${partyLine} party-line, vote part keeps ${kept}% of its distance from 50`;
+    const status = breakdown.confidence?.constituentAlignmentVotePart;
+    if (status === "neutral:few-votes") return `${tracked} · too few party-line votes, vote part neutral 50`;
+    if (status === "neutral:no-expectation") return `${tracked} · no party norm to compare with, vote part neutral 50`;
+    if (status?.startsWith("shrunk:")) {
+      const kept = Math.round(parseFloat(status.slice("shrunk:".length)) * 100);
+      if (Number.isFinite(kept)) return `${tracked} · few party-line votes, vote part keeps ${kept}% of its distance from 50`;
     }
     return tracked;
   })();

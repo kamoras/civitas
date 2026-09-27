@@ -28,8 +28,11 @@ export interface Senator {
     legislativeEffectiveness: number;
     /** Backend-computed weighted overall — never recompute this client-side. */
     overall: number;
-    /** Per-dimension data-sufficiency, keyed by the score fields above. */
-    confidence?: Record<string, "high" | "medium" | "low">;
+    /** Per-dimension data-sufficiency ("high" | "medium" | "low"), keyed by
+     * the score fields above, plus constituentAlignmentVotePart: how the
+     * vote part was scored — "neutral:few-votes", "neutral:no-expectation",
+     * "shrunk:<share kept>" or "full" (score_calculator.calculate_confidence). */
+    confidence?: Record<string, string>;
   };
   funding: {
     totalRaised: number;

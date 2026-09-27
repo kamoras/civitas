@@ -659,7 +659,7 @@ def calculate_confidence(senator: dict) -> dict[str, str]:
     n_industries = len(funding.get("industryBreakdown") or [])
     # The same deduplicated count the score's shrinkage reads, so the
     # confidence grade and the breakdown's "only n votes" can't disagree.
-    _, n_party_votes = party_break_rate(voting_record)
+    rate, n_party_votes = party_break_rate(voting_record)
     n_evaluable = sum(
         1 for p in promises
         if isinstance(p, dict) and p.get("alignment") in (PromiseAlignment.KEPT, PromiseAlignment.PARTIAL, PromiseAlignment.BROKEN)
@@ -679,7 +679,29 @@ def calculate_confidence(senator: dict) -> dict[str, str]:
         "constituentAlignment": grade(n_party_votes, 5, CONSTITUENT_FULL_CONFIDENCE_VOTES),
         "fundingDiversity": grade(n_industries, 3, 6) if has_funding else "low",
         "legislativeEffectiveness": grade(len(bills), 2, 5),
+        "constituentAlignmentVotePart": _constituent_vote_part_status(senator, rate, n_party_votes),
     }
+
+
+def _constituent_vote_part_status(senator: dict, rate: float | None, n: int) -> str:
+    """How Constituent Alignment's vote part was scored, for the scorecard to
+    state rather than re-derive: "neutral:few-votes" (under
+    CONSTITUENT_MIN_VOTES), "neutral:no-expectation" (no usable reference
+    for the member's party), "shrunk:<share kept>" (under
+    CONSTITUENT_FULL_CONFIDENCE_VOTES) or "full"."""
+    if rate is None:
+        return "neutral:few-votes"
+    record = senator.get("votingRecord") or {}
+    _, expected, _, _ = _seat_vote_expectation(
+        senator.get("state", ""), senator.get("party", "I"),
+        record.get("effectiveParty", senator.get("party", "I")),
+        senator.get("district"), senator.get("constituentReference"),
+    )
+    if expected is None:
+        return "neutral:no-expectation"
+    if n < CONSTITUENT_FULL_CONFIDENCE_VOTES:
+        return f"shrunk:{n / CONSTITUENT_FULL_CONFIDENCE_VOTES:.2f}"
+    return "full"
 
 
 # Small-donor share (Funding Independence component 2) baseline.
@@ -1377,7 +1399,7 @@ _MIN_OPPOSED_SEATS_FOR_KINK = 5
 
 def party_break_rate(voting_record: dict) -> tuple[float | None, int]:
     """(share of party-labeled votes cast against the member's party, count
-    of those votes). None when fewer than 3 are usable. The one definition
+    of those votes). None when fewer than CONSTITUENT_MIN_VOTES are usable. The one definition
     both the per-run reference and the member's score read, so the
     expectation is measured on exactly the statistic it is compared with.
     Each roll call counts once (dedupe_votes), matching what the scorecard
