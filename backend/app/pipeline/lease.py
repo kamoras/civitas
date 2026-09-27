@@ -19,7 +19,7 @@ import threading
 import uuid
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
@@ -187,6 +187,15 @@ def holder(db: Session, tier: str) -> str | None:
     return who or TIERS[tier]
 
 
+def last_beat(db: Session, tier: str) -> "datetime | None":
+    """When `tier`'s lease row was last taken or renewed — live or stale —
+    or None when there is no row (never taken, or let go)."""
+    from app.models import ApiCache
+
+    row = db.query(ApiCache.cached_at).filter(ApiCache.tier == tier, ApiCache.cache_key == "lock").first()
+    return row[0] if row else None
+
+
 def held(db: Session, tier: str) -> bool:
     """Whether a live holder has the lease (holder)."""
     return holder(db, tier) is not None
@@ -211,12 +220,17 @@ def beat(db: Session, tier: str, token: str) -> bool:
 
 
 def release(db: Session, tier: str, token: str) -> None:
+    """Never raises: a release that fails leaves the row to go stale, and a
+    holder's own error (lease.holding) stays the one that surfaces."""
     try:
         _own_row(db, tier, token).delete()
         db.commit()
     except Exception:
         logger.exception("Failed to release the %s lease (it will expire as stale)", tier)
-        db.rollback()
+        try:
+            db.rollback()
+        except Exception:
+            logger.exception("Rolling back the failed %s lease release failed too", tier)
 
 
 def _keep(bind, tier: str, token: str, stop: threading.Event, beat_s: float, until: float | None) -> None:

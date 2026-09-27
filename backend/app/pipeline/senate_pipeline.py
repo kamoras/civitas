@@ -149,7 +149,6 @@ PIPELINE_STEPS = [
     ("finalize",             "finalize",  "Finalize & save"),
 ]
 
-STALE_PIPELINE_TIMEOUT_S = 43200  # 12 hours
 MAX_SIGNIFICANT_BILLS = 100
 RECENT_RC_COUNT_PER_SESSION = 100
 RECENT_RC_SESSIONS = 2
@@ -401,14 +400,14 @@ def _record_score_snapshots(db: Session) -> None:
     logger.info("Recorded score snapshots for %d senators on %s", len(senators), today)
 
 
-def _acquire_pipeline_lock(db: Session, *, lease_held: bool = False) -> "tuple[PipelineRun | None, str | None]":
+def _acquire_pipeline_lock(db: Session, *, predecessor_dead: bool = False) -> "tuple[PipelineRun | None, str | None]":
     """Atomically create a new locked run: (run, None), or (None, why) —
     run_tracker.acquire_pipeline_lock_why.
 
-    `lease_held`: the caller holds lease.SENATE_RUN, which every Senate run
-    holds for its duration — so no other run is live, and a RUNNING row is a
-    dead run's, cleared now rather than refusing every run until it ages
-    past the stale timeout (a process killed mid-run during a rollout).
+    `predecessor_dead`: the lease this run took over proved the run before
+    it dead (run_tracker.lease_proves_dead, read before taking it), so a
+    RUNNING row left behind is cleared now rather than refusing every run
+    until it ages past the stale timeout.
 
     Uses the shared SQLite database so the lock works across blue/green
     containers. Atomicity is enforced by the database itself: a partial
@@ -423,11 +422,13 @@ def _acquire_pipeline_lock(db: Session, *, lease_held: bool = False) -> "tuple[P
     """
     from app.pipeline.run_tracker import acquire_pipeline_lock_why
 
-    if lease_held:
+    from app.pipeline.run_tracker import DEAD_AFTER, STALE_PIPELINE_TIMEOUT
+
+    if predecessor_dead:
         return acquire_pipeline_lock_why(
-            db, PipelineRun, timedelta(0), stale_because="no live run held the Senate run's lease",
+            db, PipelineRun, timedelta(0), stale_because=f"its run's lease went {DEAD_AFTER} without a beat",
         )
-    return acquire_pipeline_lock_why(db, PipelineRun, timedelta(seconds=STALE_PIPELINE_TIMEOUT_S))
+    return acquire_pipeline_lock_why(db, PipelineRun, STALE_PIPELINE_TIMEOUT)
 
 
 # Hashed paths that cannot change how anything is classified or scored, so
@@ -812,9 +813,11 @@ def split_key_and_recent_votes(
 _SENATE_LEASE_ATTEMPTS = 5
 
 
-def _take_senate_run_lease(stack) -> str | None:
-    """Hold lease.SENATE_RUN on its own session until `stack` closes; None
-    once held, or the lease.refusal_code why it can't be had. Taken before
+def _take_senate_run_lease(stack) -> "tuple[str | None, bool]":
+    """Hold lease.SENATE_RUN on its own session until `stack` closes: (None,
+    whether its last beat before this take proved the previous run dead —
+    run_tracker.lease_proves_dead) once held, or (the lease.refusal_code why
+    it can't be had, False). Taken before
     the Senate run lock, and held until after the run's row is final, so a
     RUNNING row always has a live lease beside it while its run lives —
     which is how a process starting up tells a live run from one a dead
@@ -823,16 +826,20 @@ def _take_senate_run_lease(stack) -> str | None:
     database is waited out a few times first."""
     from app.pipeline import lease
 
+    from app.pipeline.run_tracker import lease_proves_dead
+
     lease_db = SessionLocal()
     stack.callback(lease_db.close)
     why = lease.REFUSED_BUSY
     for _ in range(_SENATE_LEASE_ATTEMPTS):
+        # The evidence about the run before, read before taking over its row.
+        prior_beat = lease.last_beat(lease_db, lease.SENATE_RUN)
         if stack.enter_context(lease.holding(lease_db, lease.SENATE_RUN, yield_to=lease.DATA_RESET)) is not None:
-            return None
+            return None, lease_proves_dead(prior_beat)
         why = lease.refusal_code(lease_db, lease.SENATE_RUN)
         if why != lease.REFUSED_BUSY:
             break
-    return why  # logged by the caller, with the run lock's refusals
+    return why, False  # logged by the caller, with the run lock's refusals
 
 
 async def run_senate_pipeline(
@@ -860,10 +867,10 @@ async def run_senate_pipeline(
 
     run_lease = ExitStack()
     try:
-        refused = _take_senate_run_lease(run_lease)
+        refused, predecessor_dead = _take_senate_run_lease(run_lease)
         pipeline_run = None
         if refused is None:
-            pipeline_run, refused = _acquire_pipeline_lock(db, lease_held=True)
+            pipeline_run, refused = _acquire_pipeline_lock(db, predecessor_dead=predecessor_dead)
     except BaseException:
         # Before the run's own try: let go of the lease (and its heartbeat)
         # here, or it would be renewed for as long as the process lives.

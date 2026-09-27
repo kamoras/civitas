@@ -14,7 +14,6 @@ from app.api.cache_headers import DataVersionCacheMiddleware
 from app.api.router import api_router
 from app.database import init_db
 from app.scheduler import start_scheduler, stop_scheduler
-from app.time_utils import utcnow
 from app.background import WritesHeld, start_writer, writing
 
 # Configure logging level from PIPELINE_LOG_LEVEL env setting
@@ -76,58 +75,25 @@ def _preload_embedding_model() -> None:
 
 
 def _invalidate_orphaned_pipelines() -> None:
-    """Mark a 'running' Senate row stale when no live run holds it.
+    """Mark stale a 'running' Senate row whose run is proven dead
+    (run_tracker.mark_dead_runs_stale) — its lease an hour without a beat.
 
-    A dead process's run leaves the row behind; but during a rollout's
-    overlap the other task may be running it for real. The run holds a
-    lease (lease.SENATE_RUN) for its duration, so: no live lease, the row is
-    an orphan, marked stale now. A live one is left alone. Nothing depends
-    on this tidy-up: every reader judges the row by its lease too
-    (run_tracker.live_run) — a row this leaves, or fails to mark, reads as
-    dead once its run's lease lapses — and the next Senate run clears it
-    (senate_pipeline._acquire_pipeline_lock's `lease_held`).
+    Not every leftover row: during a rollout's overlap the other task may be
+    running it for real, and a lease that has only just lapsed may be a live
+    run stalled behind a writer. Until a row is proven dead every reader
+    gives it the benefit of the doubt (run_tracker.live_run); the scheduler
+    repeats this hourly (scheduler._tidy_dead_runs), so one a crash left just
+    before this start is tidied once the proof arrives.
     """
-    _check_orphaned_senate_runs()
-
-
-def _check_orphaned_senate_runs() -> None:
-    """Marks orphaned rows stale (see _invalidate_orphaned_pipelines)."""
     from app.database import SessionLocal
-    from app.models import PipelineRun, PipelineStatus
-    from app.pipeline import lease
+    from app.pipeline.run_tracker import mark_dead_runs_stale
 
     db = SessionLocal()
     try:
-        # Rows first, then the lease: a run takes its lease before its row
-        # (senate_pipeline._take_senate_run_lease), so a row read here whose
-        # run is live has a lease the read below sees.
-        orphaned = db.query(PipelineRun.id, PipelineRun.started_at).filter(
-            PipelineRun.status == PipelineStatus.RUNNING,
-        ).all()
-        if not orphaned or lease.held(db, lease.SENATE_RUN):
-            return
-        # Conditional on the row still RUNNING: a run that finished between
-        # the reads above (its lease let go after its row was final) keeps
-        # the status it wrote.
-        marked = [
-            run for run in orphaned
-            if db.query(PipelineRun).filter(
-                PipelineRun.id == run.id, PipelineRun.status == PipelineStatus.RUNNING,
-            ).update({
-                "status": PipelineStatus.STALE,
-                "completed_at": utcnow(),
-                "error_message": "Marked stale: app restarted while pipeline was running",
-            }, synchronize_session=False)
-        ]
-        db.commit()
-        for run in marked:  # logged once committed
-            logging.getLogger("app.main").warning(
-                "Invalidated orphaned pipeline run #%d (started %s)", run.id, run.started_at,
-            )
+        mark_dead_runs_stale(db)
     except Exception as e:
-        logging.getLogger("app.main").warning(
-            "Orphan pipeline cleanup failed: %s — the row reads as dead once no lease is live", e,
-        )
+        db.rollback()
+        logging.getLogger("app.main").warning("Orphan pipeline cleanup failed: %s — the hourly tidy retries", e)
     finally:
         db.close()
 

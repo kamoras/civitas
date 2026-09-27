@@ -1,6 +1,5 @@
 import logging
 import secrets
-from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from sqlalchemy.orm import Session
@@ -16,20 +15,15 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# A RUNNING row older than this is treated as a crashed/stale run and ignored,
-# so a leftover row can't wedge the "is a pipeline already running?" guard.
-_STALE_RUN_AFTER = timedelta(hours=12)
-
-
 def _is_pipeline_running(db: Session) -> bool:
     """Check the shared database for a currently running pipeline.
 
-    A run older than ``_STALE_RUN_AFTER`` is considered stale and ignored,
-    and so is one whose lease no live run holds (run_tracker.live_run).
+    A leftover row a dead run left is ignored (run_tracker.live_run), so it
+    can't wedge the "is a pipeline already running?" guard.
     """
     from app.pipeline.run_tracker import run_in_progress
 
-    return run_in_progress(db, PipelineRun, _STALE_RUN_AFTER)
+    return run_in_progress(db, PipelineRun)
 
 
 @router.get("/pipeline/status", response_model=PipelineStatusSchema)

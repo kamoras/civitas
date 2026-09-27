@@ -611,3 +611,39 @@ def test_an_election_season_job_is_cut_off_where_its_guards_stop_holding(monkeyp
          patch(target, hangs):
         getattr(scheduler, job)()
     assert cancelled == [True]
+
+
+@pytest.mark.parametrize("beat_ago, waits", [(None, True), (timedelta(hours=2), False)])
+def test_the_bill_refresh_waits_for_a_senate_run_only_while_it_may_be_live(db_session, beat_ago, waits):
+    """Through run_tracker.live_run: a young RUNNING row gets the benefit of
+    the doubt; one its lease proves dead is proceeded past."""
+    from app import models, scheduler
+    from app.pipeline import lease
+    from app.time_utils import utcnow
+
+    class _Session:
+        def __getattr__(self, name):
+            return getattr(db_session, name)
+
+        def close(self):
+            pass
+
+    db_session.add(models.PipelineRun(status="running", started_at=utcnow()))
+    db_session.commit()
+    if beat_ago is not None:
+        lease.acquire(db_session, lease.SENATE_RUN)
+        db_session.query(models.ApiCache).update({"cached_at": utcnow() - beat_ago})
+        db_session.commit()
+    refresh = AsyncMock(return_value={})
+
+    @contextmanager
+    def granted(_tier, **_kw):
+        yield lease.Granted(None)
+
+    with patch("app.background.threading.Thread", _SyncThread), \
+         patch("app.database.SessionLocal", lambda: _Session()), \
+         patch("app.scheduler.is_house_pipeline_running", return_value=False), \
+         patch("app.pipeline.lease.job", granted), \
+         patch("app.pipeline.bill_refresh.refresh_bill_statuses", refresh):
+        scheduler._hourly_bill_status_refresh()
+    assert refresh.called is not waits
