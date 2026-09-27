@@ -111,7 +111,7 @@ def acquire_pipeline_lock(db: Session, model: type[_RunModel], stale_timeout: ti
             # Checked inside the insert's own transaction (see
             # lease.DATA_RESET): backing out is a rollback, no second write.
             db.rollback()
-            _alert_held_off_by_reset(model.__name__)
+            held_off_by_reset(db, model.__name__)
             return None
         db.commit()
     except IntegrityError:
@@ -131,19 +131,34 @@ def acquire_pipeline_lock(db: Session, model: type[_RunModel], stale_timeout: ti
     return run
 
 
-def _alert_held_off_by_reset(run_name: str) -> None:
-    """A pipeline didn't start because a data reset holds the database. Said
-    out loud: a reset whose process died holds pipelines off until its lease
-    lapses (lease.stale_after), and that must not look like a quiet night."""
+# A live reset's wipe is a few table deletes. A reset lease left unbeaten
+# longer than this is almost certainly a dead reset's, holding pipelines off
+# until it lapses (lease.stale_after) — which must not look like a quiet night.
+_DEAD_RESET_AFTER = timedelta(minutes=5)
+
+
+def held_off_by_reset(db: Session, run_name: str) -> None:
+    """A pipeline didn't start because a data reset holds the database:
+    logged, and alerted when the reset looks dead rather than mid-wipe (a
+    live one's alert would be noise, and its write would queue behind the
+    wipe)."""
+    from app.models import ApiCache
+    from app.pipeline import lease
+
     logger.warning("%s not started: an admin data reset is running", run_name)
+    beaten = db.query(ApiCache.cached_at).filter(
+        ApiCache.tier == lease.DATA_RESET, ApiCache.cache_key == "lock",
+    ).scalar()
+    if beaten is None or utcnow() - beaten < _DEAD_RESET_AFTER:
+        return
     try:
         from app.ops_alerts import send_ops_alert
 
         send_ops_alert(
-            "Pipeline held off by a data reset",
-            f"{run_name} did not start: an admin data reset holds the database. If no reset is "
-            "running, one died mid-wipe and its lease lapses within the half hour; trigger the "
-            "pipeline after that.",
+            "Pipeline held off by a stalled data reset",
+            f"{run_name} did not start: a data reset's lease, last renewed {beaten:%H:%M} UTC, still holds "
+            "the database. If no reset is running, one died mid-wipe and its lease lapses within the "
+            "half hour; trigger the pipeline after that.",
             dedupe_key=f"held-off-by-reset-{run_name}-{utcnow():%Y-%m-%d}",
         )
     except Exception:

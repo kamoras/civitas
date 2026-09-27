@@ -404,9 +404,10 @@ class TestRereadTrades:
         _, mock_fetch = await self._reread(db_session, fetch)
         mock_fetch.assert_not_called()
 
-    async def test_a_night_that_reads_nothing_costs_a_day_not_a_month(self, db_session):
+    async def test_a_night_that_reads_nothing_costs_a_night_not_a_month(self, db_session):
         """An outage, or dead links at the head of the order: either way the
-        next night reaches past them, and they are tried again tomorrow."""
+        next night reaches past them — whatever time it runs — and the one
+        after tries them again."""
         from datetime import timedelta
 
         base = "https://efdsearch.senate.gov/search/view/ptr"
@@ -416,13 +417,25 @@ class TestRereadTrades:
         async def fetch(_client, _db, filing):
             return []
 
+        def night(hours):
+            return patch.object(stock_pipeline, "utcnow", return_value=stock_pipeline.utcnow() + timedelta(hours=hours))
+
         _, first = await self._reread(db_session, fetch)
         assert first.call_count == stock_pipeline._REREAD_OUTAGE_AFTER  # stopped: looks down
-        _, second = await self._reread(db_session, fetch)
-        assert second.call_count == 2  # the next night reaches the ones behind them
-        with patch.object(stock_pipeline, "utcnow", return_value=stock_pipeline.utcnow() + timedelta(days=1, minutes=1)):
+        with night(24 + 6):  # the next night, run late
+            _, second = await self._reread(db_session, fetch)
+        assert second.call_count == 2  # it reaches the ones behind them
+        with night(48 - 6):  # the night after, run early
             _, third = await self._reread(db_session, fetch)
-        assert third.call_count == stock_pipeline._REREAD_OUTAGE_AFTER  # a day on, tried again
+        assert third.call_count == stock_pipeline._REREAD_OUTAGE_AFTER  # tried again
+
+    async def test_a_marker_from_before_retry_times_waits_its_month(self, db_session):
+        from app.pipeline.cache import api_cache_set
+
+        self._stored(db_session, "a", "https://efdsearch.senate.gov/search/view/ptr/a/")
+        api_cache_set(db_session, stock_pipeline._REREAD_TIER, "failed-Senate-a", {"url": "u"})
+        _, fetched = await self._reread(db_session, AsyncMock(return_value=[]))
+        fetched.assert_not_called()
 
     async def test_a_paper_filing_is_fetched_as_one(self, db_session):
         self._stored(db_session, "p", "https://efdsearch.senate.gov/search/view/paper/p/")

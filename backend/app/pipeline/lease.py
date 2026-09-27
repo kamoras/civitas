@@ -162,8 +162,8 @@ def _keep(bind, tier: str, token: str, stop: threading.Event, beat_s: float, unt
     """Heartbeat thread: beats on its own session (a Session is not
     thread-safe) until stopped, or until `until` (time.monotonic()) — past
     which a holder still running is presumed hung, and its lease lapses so
-    the job's own hung-run handling can take over. A failed beat is only
-    logged — the lease has ten beats of slack."""
+    the job's own hung-run handling can take over. A beat that meets a
+    locked database is only logged — the lease has ten beats of slack."""
     import time
 
     while not stop.wait(beat_s):
@@ -175,9 +175,12 @@ def _keep(bind, tier: str, token: str, stop: threading.Event, beat_s: float, unt
             if not beat(db, tier, token):
                 logger.warning("The %s lease was taken over — its holder is no longer exclusive", tier)
                 return
-        except OperationalError:
-            logger.warning("The %s lease's heartbeat waited out a locked database; the next beat retries", tier)
+        except OperationalError as error:
             db.rollback()
+            if is_locked(error):
+                logger.warning("The %s lease's heartbeat waited out a locked database; the next beat retries", tier)
+            else:
+                logger.exception("The %s lease's heartbeat failed", tier)
         except Exception:
             logger.exception("The %s lease's heartbeat failed", tier)
             db.rollback()
@@ -185,16 +188,33 @@ def _keep(bind, tier: str, token: str, stop: threading.Event, beat_s: float, unt
             db.close()
 
 
-def _start_beating(db: Session, tier: str, token: str, max_hold: timedelta | None):
-    import time
+class _Held:
+    """A taken lease and its heartbeat, from _take until _let_go."""
 
-    stop = threading.Event()
-    until = time.monotonic() + max_hold.total_seconds() if max_hold is not None else None
-    heartbeat = threading.Thread(
-        target=_keep, args=(db.get_bind(), tier, token, stop, BEAT_S, until), name=f"{tier}-beat", daemon=True,
-    )
-    heartbeat.start()
-    return stop, heartbeat
+    def __init__(self, db: Session, tier: str, token: str, max_hold: timedelta | None) -> None:
+        import time
+
+        self.db, self.tier, self.token = db, tier, token
+        self.stop = threading.Event()
+        until = time.monotonic() + max_hold.total_seconds() if max_hold is not None else None
+        self.heartbeat = threading.Thread(
+            target=_keep, args=(db.get_bind(), tier, token, self.stop, BEAT_S, until),
+            name=f"{tier}-beat", daemon=True,
+        )
+        self.heartbeat.start()
+
+
+def _take(db: Session, tier: str, yield_to: str | None, take_over: bool, max_hold: timedelta | None) -> _Held | None:
+    token = acquire(db, tier, yield_to=yield_to, take_over=take_over)
+    return _Held(db, tier, token, max_hold) if token is not None else None
+
+
+def _let_go(held_lease: _Held) -> None:
+    """Stop the heartbeat and join it before the release, so no beat in
+    flight meets a row that is already gone."""
+    held_lease.stop.set()
+    held_lease.heartbeat.join()
+    release(held_lease.db, held_lease.tier, held_lease.token)
 
 
 @contextmanager
@@ -204,19 +224,15 @@ def holding(
 ) -> Iterator[str | None]:
     """Hold the lease for the enclosed work, beating it throughout (up to
     `max_hold`, see _keep); yields the token, or None (and holds nothing)
-    when acquire refused. The heartbeat is stopped and joined before the
-    release, so no beat in flight meets a row that is already gone."""
-    token = acquire(db, tier, yield_to=yield_to, take_over=take_over)
-    if token is None:
+    when acquire refused."""
+    held_lease = _take(db, tier, yield_to, take_over, max_hold)
+    if held_lease is None:
         yield None
         return
-    stop, heartbeat = _start_beating(db, tier, token, max_hold)
     try:
-        yield token
+        yield held_lease.token
     finally:
-        stop.set()
-        heartbeat.join()
-        release(db, tier, token)
+        _let_go(held_lease)
 
 
 def _refusal(db: Session, tier: str) -> str:
@@ -246,26 +262,32 @@ def job(tier: str, *, max_hold: timedelta | None = None) -> Iterator[bool]:
 
 
 @asynccontextmanager
-async def job_async(tier: str) -> AsyncIterator[bool]:
-    """job() for async code: the database work runs in a thread, off the
-    event loop, which serves every request."""
+async def job_async(tier: str, *, max_hold: timedelta | None = None) -> AsyncIterator[bool]:
+    """job() for async code: the same lease, its database work in a thread,
+    off the event loop, which serves every request. A cancellation while the
+    lease is being taken waits for the taking to finish, and lets go of what
+    it took, before the session closes."""
     import asyncio
 
     from app.database import SessionLocal
 
     db = SessionLocal()
     try:
-        token = await asyncio.to_thread(acquire, db, tier, yield_to=DATA_RESET)
-        if token is None:
+        taking = asyncio.ensure_future(asyncio.to_thread(_take, db, tier, DATA_RESET, False, max_hold))
+        try:
+            held_lease = await asyncio.shield(taking)
+        except asyncio.CancelledError:
+            held_lease = await taking
+            if held_lease is not None:
+                await asyncio.to_thread(_let_go, held_lease)
+            raise
+        if held_lease is None:
             logger.info("%s skipped: %s", TIERS[tier], await asyncio.to_thread(_refusal, db, tier))
             yield False
             return
-        stop, heartbeat = _start_beating(db, tier, token, None)
         try:
             yield True
         finally:
-            stop.set()
-            await asyncio.to_thread(heartbeat.join)
-            await asyncio.to_thread(release, db, tier, token)
+            await asyncio.to_thread(_let_go, held_lease)
     finally:
         db.close()

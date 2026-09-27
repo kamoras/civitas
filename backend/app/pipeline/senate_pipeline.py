@@ -754,20 +754,30 @@ def split_key_and_recent_votes(
 _SENATE_LEASE_ATTEMPTS = 5
 
 
-def _hold_senate_run_lease(stack) -> None:
-    """Hold lease.SENATE_RUN for the run, on its own session, until `stack`
-    closes. Taken over outright: the run holds the Senate run lock, so any
-    other holder of the lease is a dead run's. A run that can't take it
-    fails rather than run unleased — unleased, a process starting up would
-    take it for a dead run's and free its lock."""
+def _take_senate_run_lease(stack) -> bool:
+    """Hold lease.SENATE_RUN on its own session until `stack` closes; False
+    when it can't be had. Taken before the Senate run lock, and held until
+    after the run's row is final, so a RUNNING row always has a live lease
+    beside it while its run lives — which is how a process starting up tells
+    a live run from one a dead process left (main._invalidate_orphaned_pipelines).
+    Held by another, a Senate run (or a reset) is live and this one doesn't
+    start; a busy database is waited out a few times first."""
     from app.pipeline import lease
 
     lease_db = SessionLocal()
     stack.callback(lease_db.close)
     for _ in range(_SENATE_LEASE_ATTEMPTS):
-        if stack.enter_context(lease.holding(lease_db, lease.SENATE_RUN, take_over=True)) is not None:
-            return
-    raise RuntimeError("Could not take the Senate run lease: the database stayed busy")
+        if stack.enter_context(lease.holding(lease_db, lease.SENATE_RUN, yield_to=lease.DATA_RESET)) is not None:
+            return True
+        if lease.held(lease_db, lease.DATA_RESET):
+            from app.pipeline.run_tracker import held_off_by_reset
+
+            held_off_by_reset(lease_db, "PipelineRun")
+            return False
+        if lease.held(lease_db, lease.SENATE_RUN):
+            return False
+    logger.warning("Senate run lease not taken: the database stayed busy")
+    return False
 
 
 async def run_senate_pipeline(
@@ -791,21 +801,17 @@ async def run_senate_pipeline(
     # next night's scheduled trigger fired while the run was finalizing:
     # it reset the shared LLM counters (the run recorded llm_calls=0) and
     # purged analysis artifacts mid-write before hitting the lock check.
-    pipeline_run = _acquire_pipeline_lock(db)
-    if pipeline_run is None:
-        logger.warning("Pipeline already running in another process — skipping")
-        db.close()
-        return {"status": "skipped", "reason": "already_running"}
-
     from contextlib import ExitStack
 
     run_lease = ExitStack()
+    pipeline_run = _acquire_pipeline_lock(db) if _take_senate_run_lease(run_lease) else None
+    if pipeline_run is None:
+        logger.warning("Pipeline already running in another process — skipping")
+        db.close()
+        run_lease.close()
+        return {"status": "skipped", "reason": "already_running"}
 
     try:
-        # Held for the run, first, so a process can tell this run from one a
-        # dead process left (main._invalidate_orphaned_pipelines).
-        _hold_senate_run_lease(run_lease)
-
         reset_stats()
         reset_client()
         reset_fec_run_state()

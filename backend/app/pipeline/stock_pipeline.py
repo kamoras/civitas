@@ -320,8 +320,12 @@ class _StoredSource:
 _REREAD_RETRY_HOURS = 24 * 30
 _REREAD_TIER = "ptr_reread"
 # This many failures in a row with nothing read looks like the source being
-# down: its re-read stops for the night (they wait a day, not a month).
+# down: its re-read stops for the night, and they sit out the next one.
 _REREAD_OUTAGE_AFTER = 5
+# Past the next night's run and short of the one after, whatever time each
+# starts: the nightly chain's stages run for hours, so the re-read's start
+# drifts by that much from night to night.
+_SIT_OUT_A_NIGHT = timedelta(hours=36)
 
 
 async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
@@ -330,9 +334,9 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
     misread), newest first within each, until PTR_REREAD_BUDGET is spent.
     Every stored row names its filing's URL, so this needs no search or
     index, whose windows reach back only weeks. A filing that doesn't read
-    keeps its rows and waits _REREAD_RETRY_HOURS — or a day, when its source
-    read nothing that night, which may be the source being down, not the
-    filing. Returns filings re-read."""
+    keeps its rows and waits _REREAD_RETRY_HOURS — or sits out a night, when
+    its source read nothing that night, which may be the source being down,
+    not the filing. Returns filings re-read."""
     sources = [
         _StoredSource("Senate", StockTrade, "senator_id", lambda _fid, url, filed: fetch_senate_ptr(
             client, db, {"report_url": url, "is_paper": "/view/paper/" in url, "stored_filed_date": filed},
@@ -368,7 +372,9 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
                 break
             failed_key = f"failed-{source.label}-{filing_id}"
             marker = api_cache_get(db, _REREAD_TIER, failed_key, max_age_hours=_REREAD_RETRY_HOURS)
-            if marker is not None and marker.get("retry_after", "") > utcnow().isoformat():
+            # A marker that names no time is one written before markers did,
+            # which waits out its month (the max_age above).
+            if marker is not None and marker.get("retry_after", "9999") > utcnow().isoformat():
                 continue
             try:
                 rows = await source.fetch(filing_id, url, filed)
@@ -393,11 +399,12 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
         reread += read
         # A failure beside filings that read is the filing's: it waits a
         # month. On a night nothing read it may be the source's, down: the
-        # filings wait a day — long enough that dead links at the head of
-        # the order let the next night reach the filings behind them.
-        wait = timedelta(hours=_REREAD_RETRY_HOURS) if read else timedelta(days=1)
+        # filings sit out the next night — whenever the chain reaches the
+        # re-read, dead links at the head of the order let it reach the
+        # filings behind them — and are tried the night after.
+        wait = timedelta(hours=_REREAD_RETRY_HOURS) if read else _SIT_OUT_A_NIGHT
         if failed and not read:
-            logger.warning("PTR re-read: %s read nothing (%d failed) — they wait a day, not a month",
+            logger.warning("PTR re-read: %s read nothing (%d failed) — they sit out a night, not a month",
                            source.label, len(failed))
         for failed_key, url in failed:
             api_cache_set(

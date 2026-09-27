@@ -38,7 +38,7 @@ def _is_stale(age: timedelta | None, threshold: timedelta) -> bool:
 
 
 def _start_job(
-    target, *, name: str, alert: bool = False, lease_tier: str | None = None, lease_max_hold: timedelta | None = None,
+    target, *, name: str, alert: bool = False, lease_tier: str | None = None, hung_after: timedelta | None = None,
 ) -> None:
     """Start a scheduled job's thread. While the admin data reset holds the
     database the job doesn't run this time: logged, and for the nightly
@@ -47,16 +47,22 @@ def _start_job(
 
     `lease_tier`: a job that takes no run lock of its own holds this lease
     (lease.job) while it runs, so a reset in another process sees it, and it
-    sees the reset. `lease_max_hold`: the age at which the job's own checks
-    treat a run still going as hung and start another anyway — the lease
-    stops being renewed there too, or it would keep that from happening."""
+    sees the reset. `hung_after`: the age at which the job's own checks
+    treat a run still going as hung and start another anyway. Its lease
+    stops being renewed early enough to have lapsed by then (lease.STALE_S
+    before), or it would keep that from happening."""
     if lease_tier is not None:
         job = target
+        max_hold = hung_after - timedelta(seconds=lease.STALE_S) if hung_after is not None else None
 
         def target() -> None:
-            with lease.job(lease_tier, max_hold=lease_max_hold) as held:
-                if held:
-                    job()
+            try:
+                with lease.job(lease_tier, max_hold=max_hold) as held:
+                    if held:
+                        job()
+            except Exception:
+                # The job logs its own failures; this is the lease's.
+                logger.exception("%s: its lease failed", name)
 
     try:
         start_writer(target, name=name)
@@ -368,7 +374,7 @@ def _hourly_bill_status_refresh() -> None:
         except Exception:
             logger.exception("Bill status refresh failed")
 
-    _start_job(_run, name="bill-status-refresh", lease_tier=lease.BILL_REFRESH, lease_max_hold=timedelta(hours=2))
+    _start_job(_run, name="bill-status-refresh", lease_tier=lease.BILL_REFRESH)
 
 
 def _election_coverage_refresh() -> None:
@@ -445,7 +451,7 @@ def _election_coverage_refresh() -> None:
         finally:
             coverage_tracker().stop()
 
-    _start_job(_run, name="election-coverage-refresh", lease_tier=lease.COVERAGE_REFRESH, lease_max_hold=timedelta(hours=2))
+    _start_job(_run, name="election-coverage-refresh", lease_tier=lease.COVERAGE_REFRESH, hung_after=timedelta(hours=2))
 
 
 def _election_ballot_sync() -> None:
@@ -497,7 +503,7 @@ def _election_ballot_sync() -> None:
             loop.close()
             ballot_tracker().stop()
 
-    _start_job(_run, name="election-ballot-sync", lease_tier=lease.BALLOT_SYNC, lease_max_hold=timedelta(hours=2))
+    _start_job(_run, name="election-ballot-sync", lease_tier=lease.BALLOT_SYNC, hung_after=timedelta(hours=2))
 
 
 def start_scheduler() -> None:

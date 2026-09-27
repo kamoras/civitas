@@ -288,16 +288,15 @@ class TestLease:
         with pytest.raises(OperationalError):
             lease.acquire(db_session, lease.BILL_REFRESH)
 
-    def test_a_senate_run_that_cannot_take_its_lease_fails_rather_than_run_unleased(self, monkeypatch):
-        from contextlib import ExitStack, contextmanager
+    def test_a_senate_run_takes_its_lease_before_its_lock(self, db_session, monkeypatch):
+        """No RUNNING row without a live lease beside it: held elsewhere, the
+        run doesn't start — and takes no lock."""
+        import asyncio
 
         from app.pipeline import lease, senate_pipeline
 
-        @contextmanager
-        def busy(*_a, **_k):
-            yield None
-
-        monkeypatch.setattr(lease, "holding", busy)
-        monkeypatch.setattr(senate_pipeline, "SessionLocal", lambda: _Unclosable(None))
-        with ExitStack() as stack, pytest.raises(RuntimeError, match="Senate run lease"):
-            senate_pipeline._hold_senate_run_lease(stack)
+        monkeypatch.setattr(senate_pipeline, "SessionLocal", lambda: _Unclosable(db_session))
+        assert lease.acquire(db_session, lease.SENATE_RUN) is not None  # a live run elsewhere
+        result = asyncio.run(senate_pipeline.run_senate_pipeline())
+        assert result["status"] == "skipped"
+        assert db_session.query(models.PipelineRun).count() == 0
