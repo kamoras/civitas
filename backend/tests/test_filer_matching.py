@@ -56,3 +56,20 @@ def test_a_senator_is_not_matched_to_a_filer_after_leaving_office(db_session):
     db_session.add(Senator(id="S1", name="Pat Former", state="XX", party="D", is_current=False))
     db_session.commit()
     assert current_senators(db_session) == []
+
+
+def test_filer_matcher_looks_each_filer_up_once(db_session):
+    from app.pipeline.filer_matching import FilerMatcher
+
+    _senators(db_session, "Tammy Baldwin")
+    calls = []
+
+    def match(roster, *key):
+        calls.append(key)
+        return match_senator(roster, *key)
+
+    matcher = FilerMatcher(current_senators(db_session), match)
+    assert matcher("Baldwin", "Tammy") == "S0"
+    assert matcher("Baldwin", "Tammy") == "S0"
+    assert matcher("Nobody", "Here") is None
+    assert calls == [("Baldwin", "Tammy"), ("Nobody", "Here")]

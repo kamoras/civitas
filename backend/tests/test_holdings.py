@@ -107,7 +107,7 @@ class TestIngestHouseHoldings:
 
         assert count == 2
         disclosure = db_session.query(FinancialDisclosure).one()
-        assert (disclosure.filing_id, disclosure.report_year, disclosure.parsed) == ("AMEND", 2025, True)
+        assert (disclosure.filing_id, _year(disclosure.as_of_date), disclosure.parsed) == ("AMEND", 2025, True)
         assert disclosure.representative_id == "R1"
         assert {h.category for h in disclosure.holdings} == {"STOCKS", "CASH"}
 
@@ -116,7 +116,7 @@ class TestIngestHouseHoldings:
             db_session, {2024: [_house_filing("OLD", year=2024)]}, {"OLD": AnnualReport("Member", [_row()])},
         )
         assert count == 1
-        assert db_session.query(FinancialDisclosure).one().report_year == 2024
+        assert _year(db_session.query(FinancialDisclosure).one().as_of_date) == 2024
 
     async def test_a_candidate_for_the_seat_is_not_the_member(self, db_session, rep):
         """Same surname and district, filed by someone running for the seat:
@@ -144,7 +144,7 @@ class TestIngestHouseHoldings:
 
     async def test_already_stored_report_is_not_refetched(self, db_session, rep):
         db_session.add(FinancialDisclosure(
-            representative_id="R1", filing_id="DONE", report_year=2025, as_of_date="2025-12-31", source_url="x",
+            representative_id="R1", filing_id="DONE", as_of_date="2025-12-31", source_url="x",
             parser_version=holdings_pipeline.HOUSE_PARSER_VERSION,
         ))
         db_session.commit()
@@ -156,7 +156,7 @@ class TestIngestHouseHoldings:
         """A parser fix must reach reports already ingested, not only members
         who happen to file something new."""
         db_session.add(FinancialDisclosure(
-            representative_id="R1", filing_id="DONE", report_year=2025, as_of_date="2025-12-31", source_url="x",
+            representative_id="R1", filing_id="DONE", as_of_date="2025-12-31", source_url="x",
             parser_version=holdings_pipeline.HOUSE_PARSER_VERSION - 1,
         ))
         db_session.commit()
@@ -172,7 +172,7 @@ class TestIngestHouseHoldings:
             await _ingest_house(db_session, {}, {})
 
     async def test_newer_report_replaces_the_stored_one(self, db_session, rep):
-        old = FinancialDisclosure(representative_id="R1", filing_id="OLD", report_year=2024, as_of_date="2024-12-31", source_url="x")
+        old = FinancialDisclosure(representative_id="R1", filing_id="OLD", as_of_date="2024-12-31", source_url="x")
         old.holdings.append(FinancialHolding(asset_name="Gone", category="STOCKS", value_low=1.0, value_high=2.0))
         db_session.add(old)
         db_session.commit()
@@ -183,7 +183,7 @@ class TestIngestHouseHoldings:
         assert [h.asset_name for h in db_session.query(FinancialHolding).all()] == ["Apple Inc. (AAPL)"]
 
     async def test_fetch_failure_keeps_the_stored_report(self, db_session, rep):
-        db_session.add(FinancialDisclosure(representative_id="R1", filing_id="OLD", report_year=2024, as_of_date="2024-12-31", source_url="x"))
+        db_session.add(FinancialDisclosure(representative_id="R1", filing_id="OLD", as_of_date="2024-12-31", source_url="x"))
         db_session.commit()
         await _ingest_house(db_session, {2025: [_house_filing("NEW")]}, {"NEW": None})
         assert db_session.query(FinancialDisclosure).one().filing_id == "OLD"
@@ -225,7 +225,7 @@ class TestIngestSenateHoldings:
         count = await _ingest_senate(db_session, filings, {"cy2025": [_row()], "cy2024amend": [_row(), _row()]})
         assert count == 1
         disclosure = db_session.query(FinancialDisclosure).one()
-        assert (disclosure.filing_id, disclosure.report_year, disclosure.senator_id) == ("cy2025", 2025, "S1")
+        assert (disclosure.filing_id, _year(disclosure.as_of_date), disclosure.senator_id) == ("cy2025", 2025, "S1")
 
     async def test_candidate_and_non_annual_reports_are_ignored(self, db_session, senator):
         filings = [
@@ -242,7 +242,7 @@ class TestIngestSenateHoldings:
         disclosure = db_session.query(FinancialDisclosure).one()
         assert (disclosure.parsed, disclosure.unreadable_reason) == (False, "scanned")
         # A paper filing's year isn't stated, so none is claimed.
-        assert disclosure.report_year is None
+        assert _year(disclosure.as_of_date) is None
         assert disclosure.report_label == "annual report filed 2026-08-13"
         assert "/paper/" in disclosure.source_url
 
@@ -277,7 +277,7 @@ class TestIngestSenateHoldings:
 
     async def test_stored_current_report_is_not_refetched(self, db_session, senator):
         db_session.add(FinancialDisclosure(
-            senator_id="S1", filing_id="cy2025", report_year=2025, as_of_date="2025-12-31", source_url="x",
+            senator_id="S1", filing_id="cy2025", as_of_date="2025-12-31", source_url="x",
             parser_version=holdings_pipeline.SENATE_PARSER_VERSION,
         ))
         db_session.commit()
@@ -290,7 +290,7 @@ class TestIngestSenateHoldings:
 
     def test_report_year(self):
         def year(f):
-            return holdings_pipeline._year_of(holdings_pipeline._senate_as_of(f))
+            return _year(holdings_pipeline._senate_as_of(f))
 
         assert year({"title": "Annual Report for CY 2025 (Amendment 1)"}) == 2025
         assert year({"title": "New Filer Report for 03/24/2026"}) == 2026
@@ -299,8 +299,12 @@ class TestIngestSenateHoldings:
         assert year({"title": "Annual Report (Amendment)", "filed_date": "2026-02-19"}) is None
 
 
+def _year(as_of):
+    return int(as_of[:4]) if as_of else None
+
+
 def _store(db_session, holdings, parsed=True, **owner):
-    d = FinancialDisclosure(filing_id="F1", report_year=2025, as_of_date="2025-12-31", filed_date="2026-05-15",
+    d = FinancialDisclosure(filing_id="F1", as_of_date="2025-12-31", filed_date="2026-05-15",
                             source_url="https://example.com/f.pdf", parsed=parsed, **owner)
     for h in holdings:
         d.holdings.append(h)
@@ -433,7 +437,7 @@ class TestTransientParseFailures:
         assert db_session.query(FinancialDisclosure).one().parsed is True
 
     async def test_a_crash_never_replaces_a_readable_stored_report(self, db_session, rep):
-        db_session.add(FinancialDisclosure(representative_id="R1", filing_id="OLD", report_year=2024, as_of_date="2024-12-31", source_url="x"))
+        db_session.add(FinancialDisclosure(representative_id="R1", filing_id="OLD", as_of_date="2024-12-31", source_url="x"))
         db_session.commit()
         crashed = AnnualReport(None, None, "unrecognized", final=False)
         await _ingest_house(db_session, {2025: [_house_filing("NEW")]}, {"NEW": crashed})
@@ -445,7 +449,7 @@ class TestNeverRollBack:
         """Last year's index failed to load, so only the year-before report
         turned up: the stored newer report must survive."""
         db_session.add(FinancialDisclosure(
-            representative_id="R1", filing_id="CY2025", report_year=2025, as_of_date="2025-12-31", filed_date="2026-05-01",
+            representative_id="R1", filing_id="CY2025", as_of_date="2025-12-31", filed_date="2026-05-01",
             source_url="x", parser_version=holdings_pipeline.HOUSE_PARSER_VERSION,
         ))
         db_session.commit()
@@ -459,7 +463,7 @@ class TestNeverRollBack:
 
     async def test_senate_partial_search_keeps_the_newer_stored_report(self, db_session, senator):
         db_session.add(FinancialDisclosure(
-            senator_id="S1", filing_id="cy2025", report_year=2025, as_of_date="2025-12-31", filed_date="2026-05-11",
+            senator_id="S1", filing_id="cy2025", as_of_date="2025-12-31", filed_date="2026-05-11",
             source_url="x", parser_version=holdings_pipeline.SENATE_PARSER_VERSION,
         ))
         db_session.commit()
@@ -475,7 +479,7 @@ class TestTimeBudget:
         for rid, name, district in (("R1", "John Doe", 1), ("R2", "Mary Roe", 2)):
             db_session.add(Representative(id=rid, name=name, state="TX", district=district, party="R", is_current=True))
         db_session.add(FinancialDisclosure(
-            representative_id="R1", filing_id="OLD", report_year=2024, as_of_date="2024-12-31", filed_date="2025-05-01", source_url="x",
+            representative_id="R1", filing_id="OLD", as_of_date="2024-12-31", filed_date="2025-05-01", source_url="x",
             parser_version=holdings_pipeline.HOUSE_PARSER_VERSION,
         ))
         db_session.commit()
@@ -664,7 +668,7 @@ async def test_trade_and_holdings_ingests_share_one_index_download(db_session):
 class TestPaperAmendments:
     def test_a_paper_amendment_has_no_year_and_claims_none(self):
         amendment = _senate_filing("a", title="Annual Report (Amendment)", filed="2026-02-19", paper=True)
-        assert holdings_pipeline._year_of(holdings_pipeline._senate_as_of(amendment)) is None
+        assert _year(holdings_pipeline._senate_as_of(amendment)) is None
         assert holdings_pipeline._senate_fields(amendment)["report_label"] == "annual report amendment filed 2026-02-19"
 
     async def test_a_later_paper_amendment_never_replaces_a_dated_report(self, db_session, senator):
@@ -672,7 +676,7 @@ class TestPaperAmendments:
         a paper amendment in February 2026 — before any CY2025 report — that
         a filed-year-minus-one guess would have dated 2025 and put first."""
         db_session.add(FinancialDisclosure(
-            senator_id="S1", filing_id="e2024", report_year=2024, as_of_date="2024-12-31", filed_date="2025-05-11",
+            senator_id="S1", filing_id="e2024", as_of_date="2024-12-31", filed_date="2025-05-11",
             source_url="x", parser_version=holdings_pipeline.SENATE_PARSER_VERSION,
         ))
         db_session.commit()
@@ -688,7 +692,7 @@ class TestPaperAmendments:
                                   office="Senator", paper=True)]
         await _ingest_senate(db_session, filings, {})
         stored = db_session.query(FinancialDisclosure).one()
-        assert (stored.filing_id, stored.report_year, stored.parsed) == ("amend", None, False)
+        assert (stored.filing_id, _year(stored.as_of_date), stored.parsed) == ("amend", None, False)
 
 
 class TestHouseFetchFailureFallsThrough:
@@ -832,7 +836,7 @@ class TestLapsesAndOutages:
             db_session.add(Representative(id=f"R{i}", name=f"Person Name{i}", state="TX", district=i + 1,
                                           party="R", is_current=True))
             db_session.add(FinancialDisclosure(
-                representative_id=f"R{i}", filing_id=f"CUR{i}", report_year=2025, as_of_date="2025-12-31", filed_date="2026-05-01",
+                representative_id=f"R{i}", filing_id=f"CUR{i}", as_of_date="2025-12-31", filed_date="2026-05-01",
                 source_url="x", parser_version=holdings_pipeline.HOUSE_PARSER_VERSION,
             ))
             common = {"last": f"Name{i}", "first": "Person", "district": f"TX{i + 1:02d}"}
@@ -851,7 +855,7 @@ class TestReadabilityRules:
         """The paper copy was stored because the electronic one failed to
         load that run; filed earlier or not, the electronic report wins."""
         db_session.add(FinancialDisclosure(
-            senator_id="S1", filing_id="paper", report_year=None, filed_date="2026-08-12", source_url="x",
+            senator_id="S1", filing_id="paper", filed_date="2026-08-12", source_url="x",
             parsed=False, unreadable_reason="scanned", parser_version=holdings_pipeline.SENATE_PARSER_VERSION,
         ))
         db_session.commit()
@@ -1370,7 +1374,7 @@ class TestLapseAndDeadlineEdges:
             index[2025].append(_house_filing(f"D{i}", last=f"Name{i}", first="Person", district=f"TX{i + 1:02d}"))
             if i >= 3:
                 db_session.add(FinancialDisclosure(
-                    representative_id=f"R{i}", filing_id=f"D{i}", report_year=2025, as_of_date="2025-12-31",
+                    representative_id=f"R{i}", filing_id=f"D{i}", as_of_date="2025-12-31",
                     filed_date="2026-05-01", source_url="x",
                     parser_version=holdings_pipeline.HOUSE_PARSER_VERSION,
                 ))
@@ -1388,7 +1392,7 @@ class TestLapseAndDeadlineEdges:
 class TestLaterPaperNoteEdges:
     async def test_no_note_without_a_stored_filing_date(self, db_session, senator):
         db_session.add(FinancialDisclosure(
-            senator_id="S1", filing_id="e2024", report_year=2024, as_of_date="2024-12-31", filed_date=None, source_url="x",
+            senator_id="S1", filing_id="e2024", as_of_date="2024-12-31", filed_date=None, source_url="x",
             parser_version=holdings_pipeline.SENATE_PARSER_VERSION,
         ))
         db_session.commit()
@@ -1470,7 +1474,7 @@ class TestRankRules:
 
     def test_new_filer_dates_without_zero_padding(self):
         f = _senate_filing("n", title="New Filer Report for 3/4/2026")
-        assert holdings_pipeline._year_of(holdings_pipeline._senate_as_of(f)) == 2026
+        assert _year(holdings_pipeline._senate_as_of(f)) == 2026
         assert holdings_pipeline._senate_fields(f)["report_label"] == "new-filer report as of 2026-03-04"
 
     async def test_a_note_that_cant_be_written_doesnt_fail_the_phase(self, db_session, senator):
@@ -1488,7 +1492,7 @@ class TestStoredAndTonightMerge:
         assert db_session.query(FinancialDisclosure).one().as_of_date is None
         await _ingest_senate(db_session, [_senate_filing("cy2025", filed="2026-05-11")], {"cy2025": [_row()]})
         stored = db_session.query(FinancialDisclosure).one()
-        assert (stored.as_of_date, stored.report_year, stored.report_label) == ("2025-12-31", 2025, "2025 annual report")
+        assert (stored.as_of_date, _year(stored.as_of_date), stored.report_label) == ("2025-12-31", 2025, "2025 annual report")
         older = _senate_filing("cy2024", title="Annual Report for CY 2024", filed="2025-05-11")
         await _ingest_senate(db_session, [older], {"cy2024": [_row()]})
         assert db_session.query(FinancialDisclosure).one().filing_id == "cy2025"
@@ -1519,7 +1523,7 @@ class TestRepairIsUsedAndKept:
         with patch.object(holdings_pipeline, "SENATE_PARSER_VERSION", 2):
             await _ingest_senate(db_session, filings, {"cy2024": [_row()]})  # cy2025's re-read fails
         stored = db_session.query(FinancialDisclosure).one()
-        assert (stored.filing_id, stored.as_of_date, stored.report_year) == ("cy2025", "2025-12-31", 2025)
+        assert (stored.filing_id, stored.as_of_date, _year(stored.as_of_date)) == ("cy2025", "2025-12-31", 2025)
 
     async def test_the_later_filing_note_survives_a_search_that_misses_it(self, db_session, senator):
         e2025 = _senate_filing("e2025", filed="2026-05-11")
@@ -1546,3 +1550,21 @@ class TestLaterFilingNote:
         await _ingest_senate(db_session, [e2025, undated], {"e2025": [_row()], "u": [_row()]})
         stored = db_session.query(FinancialDisclosure).one()
         assert (stored.filing_id, stored.later_filing_label) == ("e2025", "annual report filed 2026-08-12")
+
+
+class TestSameDayAmendments:
+    @pytest.mark.parametrize("order", [("A1", "A2"), ("A2", "A1")])
+    async def test_the_later_document_wins_whatever_the_index_order(self, db_session, rep, order):
+        filings = {
+            "A1": {**_house_filing("1002", filing_date="2026-06-01"), "filing_type": "A", "prefix": "Hon."},
+            "A2": {**_house_filing("1003", filing_date="2026-06-01"), "filing_type": "A", "prefix": "Hon."},
+        }
+        reports = {"1002": AnnualReport("Member", [_row()]), "1003": AnnualReport("Member", [_row(), _row()])}
+        await _ingest_house(db_session, {2025: [filings[k] for k in order]}, reports)
+        assert db_session.query(FinancialDisclosure).one().filing_id == "1003"
+
+    async def test_senate_amendment_numbers_break_a_same_day_tie(self, db_session, senator):
+        first = _senate_filing("a1", title="Annual Report for CY 2025 (Amendment 1)", filed="2026-07-01")
+        second = _senate_filing("a2", title="Annual Report for CY 2025 (Amendment 2)", filed="2026-07-01")
+        await _ingest_senate(db_session, [second, first], {"a1": [_row()], "a2": [_row()]})
+        assert db_session.query(FinancialDisclosure).one().filing_id == "a2"

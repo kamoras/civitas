@@ -117,3 +117,21 @@ def match_representative(roster: list[Member], last: str, first: str, state_dist
         if (not state or r.state == state) and (district is None or r.district == district)
     ]
     return _pick(candidates, last, _first_names(first))
+
+
+class FilerMatcher:
+    """A matcher that looks each distinct filer up once: an index or search
+    lists the same filer on many filings. Called with the filer's key — the
+    arguments after the roster to match_senator/match_representative — it
+    returns the matched member's id or None."""
+
+    def __init__(self, roster: list[Member], match) -> None:
+        self._roster = roster
+        self._match = match
+        self._ids: dict[tuple, str | None] = {}
+
+    def __call__(self, *filer) -> str | None:
+        if filer not in self._ids:
+            found = self._match(self._roster, *filer)
+            self._ids[filer] = found.id if found is not None else None
+        return self._ids[filer]

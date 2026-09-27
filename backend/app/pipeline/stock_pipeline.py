@@ -41,7 +41,7 @@ from app.pipeline.fetch.ptr_common import TradeRow
 from app.pipeline.fetch.sec_tickers import resolve_tickers
 from app.holdings_schedule import HOLDINGS_STEPS
 from app.pipeline.holdings_pipeline import run_holdings_phases
-from app.pipeline.filer_matching import current_representatives, current_senators
+from app.pipeline.filer_matching import FilerMatcher, current_representatives, current_senators
 from app.pipeline.filer_matching import match_representative as _match_representative
 from app.pipeline.filer_matching import match_senator as _match_senator
 from app.pipeline.fetch.senate_fd import is_senator_filing
@@ -200,18 +200,14 @@ async def _ingest_house(db: Session, client: httpx.AsyncClient) -> int:
 
     current_year = utcnow().year
     inserted = 0
-    matched: dict[tuple, str | None] = {}
-    roster = current_representatives(db)
+    match = FilerMatcher(current_representatives(db), _match_representative)
     for year in (current_year - 1, current_year):
         filings = await fetch_ptr_filing_index(client, db, year)
         for filing in filings:
             if filing["doc_id"] in existing_rep_filing_ids:
                 continue
-            filer = (filing["last"], filing["first"], filing["state_district"])
-            if filer not in matched:  # one lookup per filer, not per filing
-                found = _match_representative(roster, *filer)
-                matched[filer] = found.id if found is not None else None
-            if matched[filer] is None:
+            rep_id = match(filing["last"], filing["first"], filing["state_district"])
+            if rep_id is None:
                 continue
             rows = await fetch_house_ptr(client, db, filing)
             if not rows:
@@ -220,7 +216,7 @@ async def _ingest_house(db: Session, client: httpx.AsyncClient) -> int:
             for row in rows:
                 days = _compute_days_to_disclose(row.transaction_date, row.disclosure_date)
                 db.add(RepStockTrade(
-                    representative_id=matched[filer],
+                    representative_id=rep_id,
                     ticker=row.ticker,
                     asset_name=row.asset_name,
                     owner=row.owner,
@@ -270,8 +266,7 @@ async def _ingest_senate(db: Session, client: httpx.AsyncClient) -> int:
 
     filings = await search_ptr_filings(since_date)
     inserted = 0
-    matched: dict[tuple, str | None] = {}  # one lookup per filer, not per filing
-    roster = current_senators(db)
+    match = FilerMatcher(current_senators(db), _match_senator)
     for filing in filings:
         filing_id = senate_filing_id(filing["report_url"])
         if filing_id in existing_filing_ids:
@@ -280,11 +275,8 @@ async def _ingest_senate(db: Session, client: httpx.AsyncClient) -> int:
             # A former senator's (or anyone else's) filing: never attributed
             # to a sitting senator who happens to share the surname.
             continue
-        filer = (filing["last"], filing["first"], filing.get("office"))
-        if filer not in matched:
-            found = _match_senator(roster, *filer)
-            matched[filer] = found.id if found is not None else None
-        if matched[filer] is None:
+        senator_id = match(filing["last"], filing["first"], filing.get("office"))
+        if senator_id is None:
             continue
         rows = await fetch_senate_ptr(client, db, filing)
         if not rows:
@@ -293,7 +285,7 @@ async def _ingest_senate(db: Session, client: httpx.AsyncClient) -> int:
         for row in rows:
             days = _compute_days_to_disclose(row.transaction_date, row.disclosure_date)
             db.add(StockTrade(
-                senator_id=matched[filer],
+                senator_id=senator_id,
                 ticker=row.ticker,
                 asset_name=row.asset_name,
                 owner=row.owner,

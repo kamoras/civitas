@@ -144,6 +144,15 @@ describe("Holdings", () => {
     expect(screen.queryByText(/year end/)).not.toBeInTheDocument();
   });
 
+  it("names the filing date once when the label already carries it", async () => {
+    fetchSenatorHoldings.mockResolvedValue(holdings({
+      reportLabel: "annual report filed 2026-05-14", asOfDate: null, filedDate: "2026-05-14",
+    }));
+    render(<Holdings memberId="S1" />);
+    const footer = await screen.findByText(/Disclosed value/);
+    expect(footer.textContent?.match(/2026-05-14/g)).toHaveLength(1);
+  });
+
   it("names an undated filing made after the charted report instead of implying this one is the latest", async () => {
     fetchSenatorHoldings.mockResolvedValue(holdings({
       laterFilingLabel: "annual report filed 2026-08-12", laterFilingUrl: "https://efd.example/paper/x/",

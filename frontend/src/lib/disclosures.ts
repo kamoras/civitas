@@ -29,9 +29,10 @@ export function formatBracket(
 }
 
 /** When a report's holdings were held, for sentences like "None at year
- * end": an annual report describes the year end; a Senate new-filer report
- * the date it states; a paper filing (no date known) is taken as the
- * annual report it almost always is. */
+ * end": an annual report describes the year end, a Senate new-filer report
+ * the date it states. A report whose date isn't known (a paper filing, or a
+ * title that states none) is described without claiming one. */
 export function asOfPhrase(asOfDate: string | null): string {
-  return !asOfDate || asOfDate.endsWith("-12-31") ? "at year end" : `on ${asOfDate}`;
+  if (!asOfDate) return "as of the report's date";
+  return asOfDate.endsWith("-12-31") ? "at year end" : `on ${asOfDate}`;
 }

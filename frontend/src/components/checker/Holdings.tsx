@@ -386,7 +386,8 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
           {data.holdingsCount} asset{data.holdingsCount !== 1 ? "s" : ""}
           {data.unvaluedCount > 0 && ` (${data.unvaluedCount} with no stated value, not charted)`} ·{" "}
           {reportLabel}
-          {data.filedDate && `, filed ${data.filedDate}`} ·{" "}
+          {/* An undated report's label already names its filing date. */}
+          {data.filedDate && !reportLabel.includes(data.filedDate) && `, filed ${data.filedDate}`} ·{" "}
           {about} · {sourceLink}
         </p>
       </div>
@@ -414,8 +415,8 @@ export default function Holdings({ memberId, chamber = "senate" }: HoldingsProps
           {data.laterFilingUrl && (
             <p className="text-xs text-ink-lo mt-2">
               Also filed after this report: the {data.laterFilingLabel ?? "later filing"}. It states no
-              year that can be read here (a paper filing is scanned page images), so it can&apos;t be
-              placed against this one, and this section stays with the {reportLabel}.{" "}
+              year that can be read here, so it can&apos;t be placed against this one, and this section
+              stays with the {reportLabel}.{" "}
               <a
                 href={data.laterFilingUrl}
                 target="_blank"

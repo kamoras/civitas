@@ -20,7 +20,7 @@ describe("formatBracket", () => {
 describe("asOfPhrase", () => {
   it("says year end for an annual report and the date for a new-filer snapshot", () => {
     expect(asOfPhrase("2025-12-31")).toBe("at year end");
-    expect(asOfPhrase(null)).toBe("at year end");
+    expect(asOfPhrase(null)).toBe("as of the report's date");
     expect(asOfPhrase("2026-03-24")).toBe("on 2026-03-24");
   });
 });

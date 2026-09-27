@@ -551,7 +551,6 @@ class FinancialDisclosure(Base):
     senator_id: Mapped[str | None] = mapped_column(String, ForeignKey("senators.id", ondelete="CASCADE"), nullable=True, index=True)
     representative_id: Mapped[str | None] = mapped_column(String, ForeignKey("representatives.id", ondelete="CASCADE"), nullable=True, index=True)
     filing_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
-    report_year: Mapped[int | None] = mapped_column(Integer, nullable=True)  # calendar year the holdings describe
     # What the report is, as the scorecard names it: "2025 annual report",
     # "2025 annual report (amended)", "new-filer report as of 2026-03-24".
     report_label: Mapped[str] = mapped_column(String, default="")
@@ -564,6 +563,10 @@ class FinancialDisclosure(Base):
     # even when the stored filing is missing from that run's index.
     as_of_date: Mapped[str | None] = mapped_column(String, nullable=True)
     amended: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Orders filings that tie on everything else — two amendments of one
+    # report filed the same day: the Senate title's amendment number, or
+    # the House's document id (issued in filing order).
+    seq: Mapped[int] = mapped_column(Integer, default=0)
     # The newest Senate filing made after this report whose date can't be
     # known — a paper filing (its page is page images) or one whose title
     # states no year — and so can't be ranked against a dated report. It is
