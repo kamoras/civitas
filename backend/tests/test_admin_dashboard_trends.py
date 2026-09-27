@@ -189,3 +189,26 @@ class TestTrackTimingPath:
         _drain(db_session)
         rows = db_session.query(PageLoadTiming).all()
         assert [(r.path, r.count) for r in rows] == [("/other", 2)]
+
+
+class TestProcStatCpu:
+    def test_busy_excludes_idle_and_iowait_and_total_excludes_guest(self):
+        from app.api.admin import _parse_proc_stat_cpu
+
+        text = "cpu  100 5 50 800 40 3 2 0 7 0\ncpu0 1 2 3 4 5 6 7 8 0 0\n"
+        busy, total = _parse_proc_stat_cpu(text)
+        # user+nice+system+irq+softirq+steal = 160; idle+iowait = 840.
+        assert (busy, total) == (160, 1000)
+
+    def test_short_or_missing_line_is_handled(self):
+        from app.api.admin import _parse_proc_stat_cpu
+
+        assert _parse_proc_stat_cpu("cpu  10 0 5 85\n") == (15, 100)
+        assert _parse_proc_stat_cpu("intr 12345\n") is None
+        assert _parse_proc_stat_cpu("cpu  x y z w\n") is None
+
+    def test_system_stats_reports_ticks(self):
+        from app.api.admin import _read_system_stats
+
+        stats = _read_system_stats()
+        assert stats["cpuTotalTicks"] is None or stats["cpuTotalTicks"] >= stats["cpuBusyTicks"] >= 0

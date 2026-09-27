@@ -3,6 +3,14 @@
 Runs hourly at :15, separate from the nightly pipeline because it operates on a
 different timescale and different data.
 
+One refresh runs at a time across containers: it holds a lease row in
+`api_cache`, renewed every minute by a heartbeat thread and taken over after ten
+minutes without a beat. A refresh killed by a deploy therefore costs at most the
+next hour, not four. A deploy waits for a refresh younger than 40 minutes
+(`check-and-deploy.sh`), so steady deploys do not kill run after run. No stage holds a write open across a model call: SQLite
+has one writer, and a flush left uncommitted through the cluster loop starved
+the heartbeat for fifteen minutes a run (2026-09-27).
+
 ```mermaid
 flowchart TB
     TICK(["Hourly at :15"]) --> FETCH
@@ -73,6 +81,22 @@ NPR, BBC and PBS. Clustering first, then ranking by source breadth, surfaces
 real policy story; a false positive is caught downstream by extraction — a
 cluster that yields no verbatim, adjacently-asserted claim produces no issue at
 all. The asymmetry favours recall.
+
+**The full story is claims, not prose.** Built in the rank loop while the
+cluster's articles are in hand: each article is asked a second time about its
+summary alone, and every verified claim is listed under its outlet
+(`claims.build_story`). A model used to write it from the facts, and published a
+relationship no source stated (issue 748), a House member called a senator (750)
+and filler (751). Migration 0004 cleared the stored prose; those issues show no
+story.
+
+**A claim is one contiguous span of its source.** The rendered sentence runs
+from the actor through the predicate in the source's own words, including any
+words between them (dropping them turned "OpenAI agent made" into "OpenAI
+made"). Headline and summary are joined with the headline closed as a sentence
+(`post_composer.headline_source`); a bare newline made every claim that ended
+at the headline's end look cut off, and on 2026-09-27 left 5 claims from 40
+articles instead of 14.
 
 **Self-calibrating cluster merge.** A fixed similarity threshold either
 fragments one story across many clusters or collapses everything into one

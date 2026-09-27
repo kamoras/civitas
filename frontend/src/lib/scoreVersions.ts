@@ -24,6 +24,35 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.15",
+    date: "2026-09-27",
+    title: "Constituent Alignment: breaking with your party far more than your seat calls for no longer scores as perfect",
+    tldr: "Breaking with your party more often than members in similar seats still raises Constituent Alignment, up to a point. Past the point where the most out-of-pattern tenth of members sit, breaking even more now lowers it again. Before, anyone past that point scored 100 however far they went. Voting with your party more than similar members is also penalized less steeply than before.",
+    changes: [
+      "The vote part of Constituent Alignment still scores 50 when a member breaks with their party as often as same-party members in similarly-leaning seats, below 50 for breaking less and above for breaking more. It still reaches 100 at the gap the chamber's most out-of-pattern tenth of members show. Past that gap it now falls at the same rate it rose: back to 50 at twice the gap and 0 at three times. It used to stay at 100.",
+      "Why: a member is elected both by their state or district and under a party label. Tested against every Senate general election from 1990 to 2024 (461 incumbents), voters across the whole state stopped rewarding extra breaks at that point. In House primaries from 1990 to 2010 (3,869 incumbents), the member's own party's voters gave challenged incumbents about 3 points less of the primary vote for each further standard deviation of breaking. The political science literature finds the same split. Where the decline starts is measured from the chamber every update; how steeply it falls (mirroring the rise) is a design choice, since no study estimates it. The full study is in docs/research/constituent-alignment.md.",
+      "The score explanation now says when a member is past that point.",
+      "Voting with your party more often than members in similar seats is penalized less than before, and less than breaking far too often. The score now reaches 0 only at four times the out-of-pattern gap below the norm, where it used to reach 0 at one. In today's closely divided Senate that gap is under 4 points, so a senator a few points more loyal than their seat's norm used to score 0 (28 of 101 senators scored under 25 on this part); now 4 do. Senate elections from 1990 to 2024 showed no vote-share cost for extra loyalty, and a member's own party's primary voters punished breaking too often, not loyalty. The one House election tested did find a cost, so loyalty still counts, just less steeply.",
+      "With fewer than 20 party-labeled votes, the vote part of Constituent Alignment is now pulled toward 50 in proportion (10 votes count half), the same way other scores treat thin data. With only a handful of votes, a single break used to be enough to send the score to either end. Records this thin also no longer help set the point where the score peaks.",
+      "Every party-line vote now counts once in the break rate. Votes used to be weighted by how partisan the bill's text read, even though whether a vote was a party-line vote comes from how the parties actually voted on it; a bill whose text read as bipartisan but that split the parties counted a hundred times more than one whose text leaned very slightly. The unweighted rate is also the one the study behind this score tested.",
+      "Senators' data-sufficiency badges were calculated but never saved, so they never appeared on senator scorecards, even though the v5.3 note below said they did. They are now saved and shown, along with a line on each scorecard saying whether the vote part was scored in full, pulled toward 50 for thin data, or held at a neutral 50.",
+    ],
+  },
+  {
+    version: "v6.14",
+    date: "2026-09-27",
+    title: "Legislative Effectiveness counts bills that move, not just bills introduced",
+    tldr: "Legislative Effectiveness was meant to follow the Volden & Wiseman effectiveness score used by political scientists, but it left out the step that makes a passed bill count for much more than an introduced one. It had effectively become a count of bills introduced. It now follows their method, and ranks members the way their published scores do.",
+    changes: [
+      "Volden & Wiseman's score divides a member's bills at each stage (introduced, committee action, passed the chamber, became law) by the chamber's total at that stage. Few bills get far, so a bill that becomes law counts for about 47 introductions in the House and 67 in the Senate. Civitas skipped that division, so a law counted for four introductions.",
+      "Checked against Volden & Wiseman's own published scores for the 110th to 118th Congresses, the old score ranked members at a rank correlation of 0.71 (House) and 0.76 (Senate) — mostly tracking how many bills a member introduced. The new one ranks them at 0.90 and 0.96. Majority and minority members' typical scores stay level, as before.",
+      "Members with few bills are no longer pulled toward 50. A member's record here is every bill they sponsored, all of it observed, so there is nothing uncertain to shrink; pulling two bills with one law toward the middle ranked that member below colleagues with twenty bills that went nowhere. The confidence grade still shows how many bills stand behind the number.",
+      "A member with no substantive bills after at least half a year in office scores as a record of zero on the same scale, so doing nothing never outscores trying. When a member's bill list could not be downloaded, the score stays neutral instead of treating the failed download as zero bills — it used to do the latter.",
+      "Commemorative bills — renaming a post office, awarding a Congressional Gold Medal — now count at one fifth of a substantive bill, as in Volden & Wiseman's method. They are recognised from the bill's title; checked against Volden & Wiseman's own counts for the 118th Congress, this gets a member's number of commemorative bills exactly right for 87% of House members (64% if none were ever flagged), and wrongly flags about 1 bill in 1,000.",
+      "Still different from Volden & Wiseman: their top tier (major legislation, counted 10x) comes from CQ Almanac coverage, which isn't available here; and committee action is one stage, not two. Both are disclosed in the methodology.",
+    ],
+  },
+  {
     version: "v6.13",
     date: "2026-09-24",
     title: "Each vote counts once; alignment rebuilt on election evidence; references measured from the current population",

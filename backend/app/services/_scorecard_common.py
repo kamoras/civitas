@@ -10,13 +10,11 @@ helpers).
 
 from typing import Any
 
+from app.pipeline.transform.normalize_votes import stored_vote
+
 
 def _vote_dict(v: Any) -> dict:
-    return {
-        "votedWithParty": v.voted_with_party,
-        "partyAlignmentWeight": v.party_alignment_weight,
-        "partyLeaning": v.party_leaning,
-    }
+    return stored_vote(v.id, v.bill_id, v.voted_with_party)
 
 
 def build_score_breakdown_entity(entity: Any, *, lobbying_donation_attr: str) -> dict:
@@ -65,6 +63,12 @@ def build_score_breakdown_entity(entity: Any, *, lobbying_donation_attr: str) ->
             "congress": sb.congress,
             "isLaw": sb.is_law,
             "latestAction": sb.latest_action,
+            # The pipeline scores on this (bill_stage.py, from Congress.gov's
+            # action codes). Without it the breakdown fell back to inferring
+            # stages from latestAction prose and could credit a different
+            # stage than the stored score did.
+            "stage": sb.stage,
+            "commemorative": sb.commemorative,
         }
         for sb in entity.sponsored_bills
     ]

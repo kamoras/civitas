@@ -5,25 +5,11 @@ from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
 from app.models import ScoreSnapshot
-from app.pipeline.fetch.congress import congress_for_year
+from app.pipeline.fetch.congress import congress_of_date
 from app.time_utils import utcnow
 
 TREND_LOOKBACK_DAYS = 7
 TREND_THRESHOLD = 0.5
-
-
-def _congress_of(date_str: str) -> int | None:
-    """The Congress in session on a YYYY-MM-DD date. A new Congress convenes
-    on January 3 of each odd year (20th Amendment), so Jan 1-2 of an odd
-    year still belong to the previous one."""
-    try:
-        d = date.fromisoformat(date_str)
-    except ValueError:
-        return None
-    congress = congress_for_year(d.year)
-    if d.year % 2 == 1 and (d.month, d.day) < (1, 3):
-        congress -= 1
-    return congress
 
 
 def _comparable(older: ScoreSnapshot, latest: ScoreSnapshot) -> bool:
@@ -35,7 +21,7 @@ def _comparable(older: ScoreSnapshot, latest: ScoreSnapshot) -> bool:
     week-over-week arrow ignored them and reported the jump as movement."""
     if older.algorithm_version and latest.algorithm_version and older.algorithm_version != latest.algorithm_version:
         return False
-    return _congress_of(older.date) == _congress_of(latest.date)
+    return congress_of_date(older.date) == congress_of_date(latest.date)
 
 
 def compute_score_trend_map(db: Session, entity_type: str) -> dict[str, dict]:

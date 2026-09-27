@@ -43,7 +43,7 @@ if "/app" not in sys.path:
     sys.path.append("/app")
 
 from app.pipeline.analyze.ground_truth import (  # noqa: E402
-    MIN_LABELED_VOTES,
+    constituent_metrics,
     evaluate_derived_checks,
 )
 from app.config import settings  # noqa: E402
@@ -59,9 +59,11 @@ from app.pipeline.analyze.score_calculator import (  # noqa: E402
     compute_les_reference,
     constituent_reference_inputs,
     derive_chamber_majority,
+    party_break_rate,
 )
 from app.pipeline.fetch.fec import select_recent_elections  # noqa: E402
 from app.pipeline.transform.normalize_finance import summarize_election_totals  # noqa: E402
+from app.pipeline.transform.normalize_votes import stored_vote  # noqa: E402
 from app.pipeline.transform.candidate_names import is_candidate_self_donor  # noqa: E402
 
 DB = "file:/data/civitas.db?mode=ro"
@@ -161,11 +163,14 @@ def build_payload(cur, s, search, fin):
         except Exception:
             areas = []
         key_votes.append({
-            "billId": r["bill_id"], "vote": r["vote"],
+            **stored_vote(
+                r["id"], r["bill_id"],
+                None if r["voted_with_party"] is None else bool(r["voted_with_party"]),
+            ),
+            "vote": r["vote"],
             "policyArea": r["policy_area"] or "PROCEDURAL",
             "policyAreas": areas,
             "partyAlignmentWeight": r["party_alignment_weight"] or 0.0,
-            "votedWithParty": None if r["voted_with_party"] is None else bool(r["voted_with_party"]),
             "stance": r["stance"] or "neutral",
         })
 
@@ -187,7 +192,10 @@ def build_payload(cur, s, search, fin):
          "congress": r["congress"],
          # The stored stage classification — without it, LE fell back to
          # latestAction keywords and diverged from the pipeline's score.
-         "stage": r["stage"] or None}
+         "stage": r["stage"] or None,
+         # Commemorative bills count 1x, not 5x (v6.14) — as les_rescore
+         # and the pipeline pass it.
+         "commemorative": bool(r["commemorative"])}
         for r in cur.fetchall()
     ]
 
@@ -215,12 +223,14 @@ def build_payload(cur, s, search, fin):
     }
 
 
-def attach_live_references(cur, senators, payloads) -> None:
+def attach_live_references(cur, senators, payloads) -> bool:
     """Measure this population's references the way the pipeline does
     (live_references), in memory: nothing is written to /data. Without
     this, calculate_scores falls back to the last persisted references,
     which can predate the current method (e.g. an LES reference with no
-    status_median), and the preview diverges from what a run would score."""
+    status_median), and the preview diverges from what a run would score.
+    Returns whether the Constituent Alignment reference was measured from
+    this population (the gate's saturation-share probe needs that)."""
     current = [p for s, p in zip(senators, payloads) if s.get("is_current", 1)]
     parties = [p["votingRecord"]["effectiveParty"] for p in current]
     cur.execute("SELECT party FROM presidents WHERE is_current = 1")
@@ -252,6 +262,7 @@ def attach_live_references(cur, senators, payloads) -> None:
         p["lesReference"] = les_ref
         p["fundingReference"] = funding_ref
         p["constituentReference"] = ca_ref
+    return ca is not None
 
 
 def main() -> int:
@@ -266,7 +277,7 @@ def main() -> int:
     senators = [dict(r) for r in cur.fetchall()]
 
     payloads = [build_payload(cur, s, search, fin) for s in senators]
-    attach_live_references(cur, senators, payloads)
+    ca_measured = attach_live_references(cur, senators, payloads)
 
     results = []
     for s, payload in zip(senators, payloads):
@@ -274,17 +285,14 @@ def main() -> int:
         funding = payload["funding"]
         raised = funding["totalRaised"] or 0
         base = funding["totalContributions"] or raised
-        labeled = [
-            v["votedWithParty"]
-            for v in payload["votingRecord"]["keyVotes"]
-            if v["votedWithParty"] is not None
-        ]
+        scored_rate, n_scored = party_break_rate(payload["votingRecord"])
         metrics = {
             "pac_ratio": funding["totalFromPACs"] / base if base > 0 else None,
             "small_donor_pct": funding["smallDonorPercentage"] if base > 0 else None,
-            "party_break_rate": (
-                labeled.count(False) / len(labeled)
-                if len(labeled) >= MIN_LABELED_VOTES else None
+            **constituent_metrics(
+                scored_rate, n_scored, s["state"], s["party"],
+                effective_party=payload["votingRecord"].get("effectiveParty"),
+                reference=payload.get("constituentReference"),
             ),
         }
         results.append({
@@ -292,9 +300,10 @@ def main() -> int:
             "raw": {
                 "total_raised": raised,
                 "total_from_pacs": funding["totalFromPACs"],
-                "labeled_votes": len(labeled),
+                "labeled_votes": n_scored,
             },
             "name": s["name"], "state": s["state"], "party": s["party"],
+            "is_current": bool(s.get("is_current", 1)),
             "raised": payload["funding"]["totalRaised"] or 0,
             "old": {
                 "fi": s["score_funding_independence"], "pp": s["score_promise_persistence"],
@@ -339,9 +348,11 @@ def main() -> int:
             "metrics": r["metrics"],
             "raw": r["raw"],
         }
-        for r in results
+        # The pipeline gate checks current members only; departed ones'
+        # votes are a prior congress's, judged against this one's reference.
+        for r in results if r["is_current"]
     ]
-    report = evaluate_derived_checks(members, "senators")
+    report = evaluate_derived_checks(members, "senators", reference_measured=ca_measured)
     for f in report["failures"]:
         print(f"  FAIL  {f['senator']} {f['dimension']}: {f['rationale']}")
     print(f"\n{len(report['failures'])} of {report['checked']} derived checks failed")

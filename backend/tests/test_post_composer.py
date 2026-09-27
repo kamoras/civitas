@@ -8,7 +8,7 @@ filter-the-output approach could not hold.
 
 import pytest
 
-from app.pipeline.analyze.post_composer import compose
+from app.pipeline.analyze.post_composer import compose, headline_source
 
 IRAN = (
     "Recent statements emphasize the need for an immediate conclusion to the Iran "
@@ -189,3 +189,48 @@ class TestASpanMustRunToTheEndOfItsClause:
         """Including one ending at a comma — a clause boundary is a
         boundary, not only a full stop."""
         assert compose(actor, predicate, source) is not None
+
+
+class TestHeadlineSource:
+    """A headline is a sentence of its own. Joined to its summary with a
+    bare newline it wasn't, and a claim ending at the headline's end read
+    as cut off mid-clause (11 of 40 live articles, 2026-09-27)."""
+
+    def test_claim_ending_at_the_headline_composes(self):
+        src = headline_source(
+            "Supreme Court rejects GOP-backed Missouri map",
+            "Democrats hailed the ruling on Saturday.",
+        )
+        assert compose("Supreme Court", "rejects GOP-backed Missouri map", src)
+
+    def test_actor_and_predicate_are_never_joined_across_the_headline(self):
+        src = headline_source("Talks collapse in Geneva", "negotiators walked out of the room")
+        assert compose("Geneva", "negotiators walked out of the room", src) is None
+
+    def test_existing_terminal_punctuation_is_kept(self):
+        assert headline_source("Is the outbreak slowing?", "Officials disagree.") == (
+            "Is the outbreak slowing?\nOfficials disagree."
+        )
+
+
+class TestTheGapIsRenderedNotDropped:
+    """Words between actor and predicate belong to the sentence. Dropping
+    them published who-did-what wrong: "OpenAI agent made unauthorized
+    attempts" composed as "OpenAI made unauthorized attempts" (live
+    extraction, 2026-09-27)."""
+
+    def test_a_gap_that_is_part_of_the_subject_is_kept(self):
+        src = "OpenAI agent made unauthorized attempts to access federal agencies' websites"
+        assert compose("OpenAI", "made unauthorized attempts to access federal agencies' websites", src) == (
+            "OpenAI agent made unauthorized attempts to access federal agencies' websites."
+        )
+
+    def test_a_possessive_keeps_its_owner(self):
+        src = "Trump's lawyer argued the case was moot."
+        assert compose("Trump", "argued the case was moot", src) == "Trump's lawyer argued the case was moot."
+
+    def test_a_time_phrase_is_kept_verbatim(self):
+        src = "Sen. Susan Collins on Tuesday rejected the nominee."
+        assert compose("Sen. Susan Collins", "rejected the nominee", src) == (
+            "Sen. Susan Collins on Tuesday rejected the nominee."
+        )

@@ -117,7 +117,9 @@ in the test. The effect is similar in safe seats (1.52, t=2.8) and other seats
 **Changed:** the expected break rate is now measured from the chamber every
 run, per party, with a bend at a swing seat (`compute_constituent_reference`).
 Scoring is symmetric around it, and the scale is the chamber's
-90th-percentile deviation.
+90th-percentile deviation. (Since v6.15 the score turns back down past that
+deviation on the crossing side, and the loyal side reaches 0 only at four
+times it; see sections 8 and 9.)
 
 ### 5. No discount for flank-side defectors
 
@@ -147,6 +149,197 @@ deviation is in the model (−0.12, t=−0.3; the two correlate at −0.58). The
 discount was **removed**, along with `party_ideology_bounds.json`, which only
 it read.
 
+### 8. Breaking far above expectation
+
+**The question.** The component rises with a member's break rate until it
+saturates at 100. A member who breaks with their party far more than the seat
+calls for may be as far from what their voters sent them to do as a member
+who never breaks. If so, the score should peak and then fall. The question
+came from John Fetterman, who scores 100. On Voteview's party-unity votes he
+broke with the Democratic majority on 1.2% of them in the 118th Senate and on
+20.4% in the 119th. 89 of his 159 breaks in the 119th were cloture or
+confirmation votes on nominations.
+
+"What voters sent them to do" depends on which voters. Fenno's (1978)
+concentric constituencies separate the member's whole seat from their own
+party's voters, so this section tests both.
+
+**The whole seat: Senate general elections 1990–2024.** Every Senate roll call
+from the 101st to the 118th Congress (Voteview) is joined to MIT Election
+Lab's 1976–2024 Senate returns. That gives 461 contested incumbents across 18
+elections, replacing the underpowered 47-member replication above. The
+expectation is fit per party and per congress, exactly as
+`compute_constituent_reference` does it (fit and saturation point on members
+with at least 20 party-labeled votes). Independents are scored with the party
+they vote with on party-unity roll calls, as the pipeline scores them with
+their caucus. Controls are a quadratic in the
+own-party presidential vote plus year × party effects. Standard errors are
+clustered by senator.
+
+| Measure (per SD of deviation) | Coefficient | t |
+|---|---|---|
+| Signed deviation (shipped direction) | 0.76 | 1.8 |
+| Folded \|deviation\| | 1.15 | 2.2 |
+| Squared term | 0.14 | 0.7 |
+| Crossing side, up to saturation | 2.34 | 1.9 |
+| Crossing side, past saturation (n=31) | 0.21 | 0.2 |
+
+The general electorate does not penalize heavy breaking. The slope past
+saturation is flat, and the folded term's positive sign comes from a loyal
+side that is not rewarded (−0.59, t=−0.5). The House 2004 test agrees:
+folded 0.26 (t=0.6), past saturation −0.33 (t=−0.3, n=19). Split by period,
+the whole association fades after 2008: signed deviation 1.02 (t=1.9) for
+1990–2008 and 0.37 (t=0.6) for 2010–2024. That fits the nationalization of
+Senate elections (Bonica & Cox 2018; Utych 2020).
+
+**The member's own party: House primaries 1990–2010.** House roll calls from
+the 101st to the 111th Congress are joined to Pettigrew, Owen & Wanless's
+House primary returns. That gives 3,869 incumbents: 27% faced a primary
+challenger and 38 lost.
+
+| Outcome | Folded \|deviation\| | Squared term | Past saturation |
+|---|---|---|---|
+| Drew a challenger | 0.02 (t=1.7) | 0.00 (t=1.4) | −0.00 (t=−0.1) |
+| Lost the primary | 0.01 (t=1.3) | 0.00 (t=1.3) | 0.01 (t=1.3) |
+| **Primary vote share, contested (N=1,044)** | **−1.99 (t=−2.4)** | **−0.37 (t=−2.4)** | **−3.02 (t=−2.0, n=79)** |
+
+Among incumbents who were challenged, primary vote share falls with distance
+from the expectation. The fall is concentrated past saturation: members more
+than 2 SD above expectation averaged 70.5% of the primary vote, against
+77.4% just below it. Being more loyal than expected costs nothing here (0.53,
+t=0.4). So a member's own party's voters do take something away for heavy
+defection, which is the pattern this section's question predicted. The
+effect is modest, and it rarely decides a nomination: challenges and losses
+barely move.
+
+**The literature.** No published study estimates where "too much" defection
+begins. Its findings sort by audience in the same way as the tests above:
+
+- **General electorates reward independence from the party, relative to the
+  seat.** See Canes-Wrone, Brady & Cogan 2002 and Carson et al. 2010, and in
+  the Senate Algara & Zamadics 2019. The reward is fading (Bonica & Cox
+  2018), often goes unnoticed (Donnelly 2019; Dancey & Sheagley 2018), and in
+  some tests is null (Dancey, Henderson & Sheagley 2024; Cowley & Umit 2023
+  for the UK).
+- **Co-partisans and primary voters reward loyalty.** Pyeatt (2015, *LSQ*)
+  finds incumbents "receive benefits in the primary from greater levels of
+  partisanship." Anderson, Butler & Harbridge-Yong (2020) find that primary
+  voters punish members for working with the opposition. Harbridge &
+  Malhotra (2011) find that strong partisans do not reward bipartisanship.
+  Mummolo, Peterson & Westwood (2021) find co-partisans stay loyal until a
+  candidate takes dissonant stances on four or more salient issues, the only
+  threshold estimate in the literature, though it measures disagreement on
+  issues, not a break rate. Hirano et al. (2010) and Boatright (2013) find
+  primary punishment is rarer than commonly assumed. The House primary test
+  above is consistent with both camps: a real cost in vote share, rarely a
+  lost seat.
+- **What voters reward is agreement, not defection as such.** See Ansolabehere
+  & Jones 2010, Ansolabehere & Kuriwaki 2022, and Hollibaugh, Rothenberg &
+  Rulison 2013. A break helps when it moves the member toward the voter and
+  should hurt when it moves the member past them. A break *count* cannot
+  tell those apart. Kirkland & Slapin (2017, 2018) show many frequent
+  defectors break from the party's flank, so defection is not the same as
+  moderation.
+- **Voters credit rebels with integrity without feeling better represented by
+  them.** See Campbell, Cowley, Vivyan & Wagner 2019 and the 2023 European
+  PSRM experiments. Rewarding that trait is not the same as measuring
+  representation.
+- **Normatively, the target depends on the model of representation.**
+  - Under the responsible-party model (APSA 1950) or Mansbridge's (2003)
+    promissory representation, defection is a failure of the mandate.
+  - Under the delegate model, only agreement with constituents counts.
+  - Under the trustee model, the break rate is irrelevant.
+  - Pitkin (1967) rejects both pure loyalty and pure independence as
+    representation.
+
+**What this settles and what it does not.** A score that keeps rising with
+defection is supported only from the general electorate's side, and only
+until 2008. From the member's own party's side, heavy defection has a
+measured cost past saturation, and nothing in the literature supports
+treating more defection as better representation beyond the seat's
+expectation. Where "too much" begins has no published estimate. The only
+measured turning point is this section's saturation point.
+
+**Changed (v6.15):** the score represents both audiences: the seat that
+elected the member and the party label it elected them under. The
+seat-relative vote score still peaks at the saturation deviation, which the
+chamber measures every run. Past it, the score falls at the same rate it rose
+(`OVER_BREAK_DECLINE = 1.0`), reaching 50 at twice the saturation deviation
+and 0 at three times. The decline rate is a design weight, not a fitted one.
+Mirroring the rise was chosen because the measured slopes are of similar size
+with opposite signs (+2.34 per SD rising in the Senate, −3.02 falling in House
+primaries), so the data gives no basis for an asymmetric shape.
+
+The decline alone costs almost none of the electoral signal the symmetric
+v6.13 score had. Both are measured on the same chamber-wide saturation point.
+With v6.13's loyal side, the peaked score predicts 2004 House vote share at
+ΔR² 0.0354 (t=4.9), against 0.0368 for the symmetric score. The shipped loyal
+side is gentler (section 9), which gives ΔR² 0.0285 (t=4.4).
+
+### 9. How hard to score loyalty
+
+**The problem.** In v6.13 the loyal side reached 0 one saturation deviation
+below the expectation, the same distance at which the crossing side reaches
+100. In today's polarized Senate that deviation is under 4 points. Using
+2025 Voteview party-unity votes:
+
+- Ossoff breaks on 4% of votes against an expected 8%, and scored 0.
+- Tina Smith breaks on 0% against an expected 6%, and scored 0.
+- 28 of 101 senators fell below 25 on the vote component, mostly for being
+  a few points more loyal than their seat's norm.
+
+At equal distance from the norm, loyalty also scored lower than excess
+disloyalty. Two gaps more loyal gave 0, while two gaps more disloyal gave 50.
+
+**What the evidence says, by audience:**
+
+- **General electorate, House 2004:** loyalty beyond the norm is penalized,
+  the strongest effect in the study (section 4).
+- **General electorate, Senate 1990–2024:** no effect (−0.59, t=−0.5), and
+  none at all since 2010.
+- **Own party's primary voters, House 1990–2010:** no effect (0.53, t=0.4).
+  These voters punish excess *disloyalty* past the peak instead (section 8).
+- **Literature:** primary voters reward loyalty (Pyeatt 2015; Anderson,
+  Butler & Harbridge-Yong 2020). General electorates reward independence
+  (Carson et al. 2010).
+
+**The test.** The loyal side's scale, in gaps below the expectation at which
+the score reaches 0, with the rest of the v6.15 shape fixed:
+
+| Loyal side reaches 0 at | House 2004 ΔR² (t) | Senate 1990–2024 ΔR² (t) |
+|---|---|---|
+| 1× (v6.13) | 0.0354 (4.9) | 0.0031 (1.2) |
+| 2× | 0.0326 (4.8) | 0.0036 (1.2) |
+| **4× (shipped)** | **0.0285 (4.4)** | **0.0036 (1.2)** |
+| 8× | 0.0254 (4.2) | 0.0036 (1.2) |
+| held at 50 | 0.0215 (3.9) | — |
+
+The House prefers a steep loyal side. The Senate prefers a flat one, weakly:
+nothing there is significant. Holding loyalty at 50 loses clearly in the
+House, so loyalty stays scored.
+
+**Changed (v6.15):** `LOYAL_SIDE_SCALE = 4`. At equal distance from the norm,
+extra loyalty now costs less than extra disloyalty past the peak. Two gaps
+more loyal scores 25; two gaps more disloyal scores 50 and three gaps scores
+0. On 2025 votes, 4 senators fall below 25 instead of 28 (Ossoff 36, Smith
+29).
+
+**Party balance.** The gentler loyal side and the over-break decline make
+the shape lopsided, so each party's average no longer sits at exactly 50.
+Across every Senate from the 101st to the 119th, the parties' average vote
+scores differed by 1.8 points on average under v6.15, against 2.2 under
+v6.13. The sign changed from one Congress to the next, so the shape shows no
+systematic lean toward either party. Averages now sit around 52–55.
+
+The 119th Senate has the widest gap in the series: 5.3 points, D higher.
+Its heaviest breakers past the peak (Murkowski, Collins, Paul) are mostly
+Republicans. In a given Congress, the gap follows who breaks far past the
+norm.
+
+This is a design weight, chosen on where the Senate and primary evidence
+point. The House 2004 fit is the cost: ΔR² falls from 0.0354 to 0.0285, and
+the score still carries a clear signal there (t=4.4).
+
 ## What the evidence does not settle
 
 - **The association fades over time.** Per election, the position coefficient
@@ -158,10 +351,15 @@ it read.
 - **Loyalty was tested in one election.** Only the 108th House roll calls were
   available here. Carson et al. (2010) find the same pattern across many more
   congresses, but this replication is one year.
-- **The Senate is underpowered.** The 2006 and 2010 Senate incumbents (N=47)
-  give a loyal-side slope of 3.07 (t=0.7), in the same direction but far from
-  significant. The Senate uses the same design by extension, not on Senate
-  evidence.
+- **The decline past saturation rests on House primaries.** No Senate
+  primary returns were tested (the Pettigrew, Owen & Wanless data are House
+  only), and in Senate general elections the slope past saturation is flat,
+  not negative. Senators are scored on the same shape by extension.
+- **The Senate loyal side does not replicate.** With every Senate election
+  from 1990 to 2024 (N=461, section 8), the crossing side holds (2.34 up to
+  saturation, t=1.9) but the loyal side does not (−0.59, t=−0.5), and the
+  whole association is weak after 2008. That is one reason v6.15 flattened
+  the loyal side (section 9).
 - **The 70/30 weighting is not fitted.** In 2004 the vote component had the
   larger independent association, which supports it keeping the majority
   weight. No multi-election estimate of the ratio exists to fit the weight
@@ -172,7 +370,9 @@ it read.
   and members also answer to their reelection constituency (Fenno 1978;
   Clinton 2006).
 - **The live statistic differs from this test's.** The pipeline measures
-  break rates on Civitas's own key and recent roll calls, weighted by party
-  alignment, not on CQ party-unity votes. The expectation is measured on that
-  same statistic every run, so scores stay internally consistent, but the
-  magnitudes above do not carry over one-for-one.
+  break rates on Civitas's own key and recent roll calls, not on CQ
+  party-unity votes. Since v6.15 it counts each party-labeled roll call once,
+  unweighted, as this test does. It used to weight votes by the bill's
+  content lean. The expectation is measured on that same statistic every
+  run, so scores stay internally consistent, but the magnitudes above do not
+  carry over one-for-one.

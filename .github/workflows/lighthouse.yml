@@ -1,11 +1,16 @@
 name: Lighthouse
 
-# Accessibility & SEO quality gate. Builds the frontend, boots it with no
-# backend reachable (so pages render their error/empty shells — the worst
-# case a real visitor can hit), and asserts every audited route still scores
-# 100 on both the accessibility and SEO categories. Performance and
-# best-practices are intentionally out of scope: they swing with CI machine
-# load and the absent backend, and would only add flake here.
+# Accessibility & SEO quality gate, run twice against one production build:
+#   1. with no backend reachable, so pages render their error/empty shells —
+#      the worst case a real visitor can hit;
+#   2. against a backend seeded with a small fictional dataset
+#      (backend/scripts/seed_ui_fixture.py), so the pages people actually
+#      read — score tables, profiles, document and ballot pages — are
+#      audited with content. Only (1) ran until 2026-09, so no page with
+#      data had ever been checked.
+# Every audited route must score 100 on accessibility and SEO in both.
+# Performance and best-practices are intentionally out of scope: they swing
+# with CI machine load and would only add flake here.
 
 on:
   push:
@@ -24,8 +29,8 @@ jobs:
     # No explicit timeout defaults to GitHub's 360-minute one — found while
     # auditing ci.yml (2026-07-25) that a hung step there rode that default
     # for 46 minutes before the runner disconnected on its own. Same fix
-    # here. Normal run: 2-3 minutes.
-    timeout-minutes: 15
+    # here. Normal run: ~8-10 minutes (two audits plus the backend install).
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: frontend
@@ -42,18 +47,58 @@ jobs:
       - run: npm ci
 
       - name: Build
+        # BACKEND_URL is baked into the rewrites and read again at runtime.
+        # Nothing listens there during the first audit, so it sees the
+        # same error shells as a build pointed at an unreachable host.
         run: npm run build
+        env:
+          BACKEND_URL: http://127.0.0.1:8000
 
-      - name: Run Lighthouse CI
+      - name: Lighthouse — error/empty shells (no backend)
         run: |
           npm install -g @lhci/cli@0.15.x
           lhci autorun
+        env:
+          BACKEND_URL: http://127.0.0.1:8000
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Seed and start the backend
+        working-directory: backend
+        env:
+          DATABASE_URL: sqlite:////tmp/civitas-ui.db
+          # Pages are audited, not search: no model download at startup.
+          HF_HUB_OFFLINE: "1"
+          # Never fire the nightly pipeline inside the job.
+          PIPELINE_CRON_SCHEDULE: "0 3 1 1 *"
+        run: |
+          pip install -r requirements.txt
+          python scripts/seed_ui_fixture.py
+          nohup uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/backend.log 2>&1 &
+          for i in $(seq 90); do
+            curl -sf http://127.0.0.1:8000/api/senators/leaderboard > /dev/null && exit 0
+            sleep 2
+          done
+          cat /tmp/backend.log
+          exit 1
+
+      - name: Lighthouse — pages with data
+        run: lhci autorun --config=.lighthouserc.populated.json
+        env:
+          BACKEND_URL: http://127.0.0.1:8000
 
       - name: Upload Lighthouse reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: lighthouse-reports
-          path: frontend/.lighthouseci
+          path: |
+            frontend/.lighthouseci
+            frontend/.lighthouseci-populated
+            /tmp/backend.log
           if-no-files-found: ignore
           retention-days: 14

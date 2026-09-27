@@ -88,18 +88,27 @@ def fixed_ranking():
 # a bundled fallback in app/data/). Tests must not inherit whichever of
 # those happens to be on disk — a dev machine's /data, or the next
 # regeneration of the bundled file, would silently change what they assert.
-# Pinned to the 2026-07-23 production audit values: test scaffolding, not a
-# proposal for production values.
+# Test scaffolding, not a proposal for production values: the v6.14
+# stage-normalized scale (a chamber averages 1.0), measured by
+# compute_les_reference over the 118th Congress's per-member stage counts in
+# Volden & Wiseman's published data (scripts/research_les_stage_weighting.py,
+# members_from_counts), majority members labelled R and relabelled congress
+# 119 to match the test bills. Advancement rates and average baselines are
+# the 2026-07-23 production audit figures.
 TEST_LES_REFERENCE = {
     "senate": {
-        "congress": 119, "majority": "R", "n": 101, "median_credit": 289.0,
-        "mean_credit": 324.95, "stdev_credit": 178.37, "avg_baseline": 0.0305,
+        "congress": 119, "majority": "R", "n": 102, "median_credit": 0.7119,
+        "mean_credit": 1.0, "stdev_credit": 1.2231, "avg_baseline": 0.0305,
         "advancement_rates": {"majority": 0.036, "minority": 0.024, "pooled": 0.030},
+        "stage_totals": [28855.0, 3695.0, 1415.0, 455.0], "n_members": 102,
+        "status_median": {"majority": 0.8159, "minority": 0.6108},
     },
     "house": {
-        "congress": 119, "majority": "R", "n": 427, "median_credit": 129.0,
-        "mean_credit": 143.8, "stdev_credit": 88.12, "avg_baseline": 0.0444,
+        "congress": 119, "majority": "R", "n": 446, "median_credit": 0.7261,
+        "mean_credit": 1.0045, "stdev_credit": 0.8982, "avg_baseline": 0.0444,
         "advancement_rates": {"majority": 0.064, "minority": 0.024, "pooled": 0.030},
+        "stage_totals": [51325.0, 7055.0, 3250.0, 870.0], "n_members": 448,
+        "status_median": {"majority": 1.1886, "minority": 0.4086},
     },
 }
 
@@ -142,9 +151,12 @@ TEST_PRESIDENT_REFERENCE = {
 # arithmetic is readable: expected break rate 10% in a swing seat
 # (alignment 0), 5% in a maximally safe one (+1), 30% in a maximally
 # opposed one (-1); saturation at a 20-point deviation.
+from app.pipeline.analyze.score_calculator import CONSTITUENT_REFERENCE_STATISTIC  # noqa: E402
+
 _TEST_EXPECTED = {"a": 0.10, "b": -0.05, "b_opposed": -0.15, "n": 50}
 TEST_CONSTITUENT_REFERENCE = {
-    chamber: {"expected": {"D": _TEST_EXPECTED, "R": _TEST_EXPECTED}, "deviation_p90": 0.20, "n": 100}
+    chamber: {"expected": {"D": _TEST_EXPECTED, "R": _TEST_EXPECTED}, "deviation_p90": 0.20, "n": 100,
+              "statistic": CONSTITUENT_REFERENCE_STATISTIC}
     for chamber in ("senate", "house")
 }
 

@@ -26,6 +26,20 @@ def vote_identity(vote: dict) -> str:
     return vote.get("rcKey") or vote.get("billId", "")
 
 
+def stored_vote(row_id: int, bill_id: str, voted_with_party: bool | None) -> dict:
+    """A stored key_votes / rep_key_votes row as the dict party_break_rate
+    reads — the one shape the ground-truth gate, the score-breakdown API and
+    rescore.py rebuild stored votes in.
+
+    Storage holds each roll call once (the Senate splits one deduped pool
+    into key and recent votes; the House drops recent roll calls a key bill
+    covers), but the roll call's rcKey is not stored and bill_id is not
+    unique per roll call (a Senate key bill's documentName covers its
+    cloture and passage votes). So the row is the identity: with billId
+    alone, dedupe_votes would merge those votes."""
+    return {"rcKey": f"row-{row_id}", "billId": bill_id, "votedWithParty": voted_with_party}
+
+
 def house_roll_call_id(rc: dict) -> str:
     """Unique id for one House roll call — the House analog of
     bill_analyzer.recent_roll_call_key, used as both billId and rcKey for

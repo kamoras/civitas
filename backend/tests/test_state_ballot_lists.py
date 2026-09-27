@@ -882,3 +882,152 @@ def test_the_states_printed_name_is_kept_but_never_a_last_first_one(db_session):
     # marks a "Last, First" printing, which is left to the FEC name.
     assert olszewski.ballot_name == 'John "Johnny O" Olszewski, Jr.'
     assert wallace.ballot_name is None
+
+
+from app.pipeline.fetch.state_candidates_grouped_list_pdf import (  # noqa: E402
+    fetch_confirmed_candidates as fetch_grouped_list,
+    parse_grouped_list,
+)
+
+
+def _w(x, text, top):
+    return {"x0": x, "x1": x + 8 * len(text), "top": top, "bottom": top + 8, "text": text}
+
+
+def _line(top, *cells):
+    return [_w(x, t, top) for x, t in cells]
+
+
+def test_grouped_list_reads_candidates_under_office_headings():
+    # Illinois's list in miniature: a page header with text left of the
+    # name column (not a candidate), an independent struck from the ballot
+    # on the line below, and a district that runs onto the next page.
+    fmt = {"name_x": 150, "date_x": 440, "removed_regex": r"\b(REMOVED|WITHDRAWN)\b"}
+    page1 = [
+        *_line(10, (32, "9/26/2026"), (74, "5:21PM"), (248, "WEBSITE"), (293, "CANDIDATE"), (350, "LIST")),
+        *_line(40, (252, "4TH"), (272, "CONGRESS")),
+        *_line(55, (18, "DEMOCRATIC"), (155, "Patty"), (185, "Garcia"), (448, "11/3/2025")),
+        *_line(70, (18, "INDEPENDENT"), (155, "Mayra"), (185, "Macias"), (448, "5/26/2026")),
+        *_line(80, (155, "8445"), (185, "S"), (195, "Kostner"), (300, "REMOVED"), (360, "7/21/2026")),
+    ]
+    page2 = [
+        *_line(10, (32, "9/26/2026"), (74, "5:21PM"), (248, "WEBSITE"), (293, "CANDIDATE"), (350, "LIST")),
+        *_line(55, (18, "INDEPENDENT"), (155, "Chris"), (185, "Getty"), (448, "5/18/2026")),
+    ]
+    got = [(r["district"], r["display_name"], r["party"]) for r in parse_grouped_list([page1, page2], fmt)]
+    assert got == [(4, "Patty Garcia", "D"), (4, "Chris Getty", "I")]
+
+
+def _tiny_pdf(items) -> bytes:
+    """A one-page PDF with each (x, y, text) printed where it says — enough
+    for pdfplumber, so a PDF source's whole fetch path runs in a test."""
+    stream = "".join(f"BT /F1 10 Tf {x} {y} Td ({t}) Tj ET\n" for x, y, t in items).encode()
+    objs = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R"
+        b" /Resources << /Font << /F1 5 0 R >> >> >>",
+        b"<< /Length %d >>\nstream\n" % len(stream) + stream + b"endstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    out = io.BytesIO()
+    out.write(b"%PDF-1.4\n")
+    offsets = []
+    for i, obj in enumerate(objs, 1):
+        offsets.append(out.tell())
+        out.write(b"%d 0 obj\n" % i + obj + b"\nendobj\n")
+    xref = out.tell()
+    out.write(b"xref\n0 %d\n0000000000 65535 f \n" % (len(objs) + 1))
+    for offset in offsets:
+        out.write(b"%010d 00000 n \n" % offset)
+    out.write(b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objs) + 1, xref))
+    return out.getvalue()
+
+
+_IL_SOURCE = {
+    "discovery": {
+        "page_url": "https://board.test/",
+        "id_regex": 'ElectionID=([^"&]+)"[^>]*>\\s*Next Election',
+        "year_regex": "General Election - 11/\\s*\\d{1,2}/{year}",
+        "url_templates": ["https://board.test/list.pdf?ElectionID={id}&g=house"],
+    },
+    "format": {"name_x": 150, "date_x": 440, "removed_regex": r"\b(REMOVED|WITHDRAWN)\b"},
+}
+
+
+@pytest.mark.asyncio
+async def test_grouped_list_fetch_finds_the_election_and_checks_its_year():
+    home = '<a href="Info.aspx?ElectionID=abc%3d">\n  Next Election</a>'
+    pdf = _tiny_pdf([
+        (230, 760, "General Election - 11/ 3/2026"), (252, 740, "4TH CONGRESS"),
+        (18, 720, "DEMOCRATIC"), (155, 720, "Patty Garcia"), (448, 720, "11/3/2025"),
+    ])
+    fetched = []
+
+    def handler(request):
+        if request.url.path == "/list.pdf":
+            fetched.append(str(request.url))
+            return httpx.Response(200, content=pdf)
+        return httpx.Response(200, text=home)
+
+    async with _client(handler) as client:
+        got = await fetch_grouped_list(client, 2026, "IL", _IL_SOURCE)
+        # Last cycle's (or a primary's) list never confirms anyone this cycle.
+        assert await fetch_grouped_list(client, 2028, "IL", _IL_SOURCE) is None
+    assert fetched[0].endswith("ElectionID=abc%3d&g=house")
+    assert [(r["office"], r["district"], r["display_name"]) for r in got] == [("H", 4, "Patty Garcia")]
+
+
+@pytest.mark.asyncio
+async def test_grouped_list_fetch_refuses_what_it_cannot_trust():
+    async def run(handler, source=_IL_SOURCE):
+        async with _client(handler) as client:
+            return await fetch_grouped_list(client, 2026, "IL", source)
+
+    # No election id on the home page, or two of them.
+    assert await run(lambda r: httpx.Response(200, text="no link")) is None
+    # A page instead of the PDF (an error page answering 200).
+    assert await run(lambda r: httpx.Response(
+        200, text='<a href="x?ElectionID=a">Next Election</a>' if r.url.path == "/" else "<html>error</html>",
+    )) is None
+    # Configuration missing a key is reported, not guessed.
+    assert await run(lambda r: httpx.Response(200), {"discovery": {}, "format": {}}) is None
+@pytest.mark.asyncio
+async def test_a_list_rendered_per_contest_chosen_from_a_dropdown():
+    # North Dakota: candidates render only once a contest is chosen and
+    # searched; the contest's value is a per-election id, so it is chosen
+    # by its visible text, and an office not on this year's ballot (no
+    # Senate race) is skipped rather than failing the list.
+    page = ('<html><h1>{year} General Election Contest/Candidate List</h1><form>'
+            '<input type="hidden" name="__VIEWSTATE" value="vs">'
+            '<select name="contest"><option value="0">All</option>'
+            '<option value="22055">Representative in Congress</option></select>'
+            '<input type="submit" name="search" value="Search"></form></html>')
+    table = ("<table><tr><th>Contest</th><th>First Name</th><th>Last Name</th><th>Party</th></tr>"
+             "<tr><td>Representative in Congress</td><td>Helene</td><td>Neville</td><td>independent nomination</td></tr>"
+             "</table>")
+    posted = []
+
+    def handler(request):
+        if request.url.host == "sos.test":
+            return httpx.Response(200, text='<a href="https://vip.test/candidatelist.aspx?eid=348">list</a>')
+        if request.method == "POST":
+            posted.append(request.content.decode())
+            return httpx.Response(200, text=table)
+        return httpx.Response(200, text=page.replace("{year}", "2026"))
+
+    def source(options):
+        return {
+            "discovery": {"page_url": "https://sos.test/elections",
+                          "link_regex": 'href="(https://vip\\.test/candidatelist\\.aspx\\?eid=\\d+)"',
+                          "year_regex": "{year} General Election Contest/Candidate List",
+                          "form_button": "search", "form_select": {"contest": options}},
+            "format": {"office_column": "Contest", "office_parse": True, "party_column": "Party",
+                       "surname_column": "Last Name", "name_columns": ["First Name", "Last Name"]},
+        }
+
+    async with _client(handler) as client:
+        got = await fetch_certified_table(client, 2026, "ND", source(["Representative in Congress", "United States Senator"]))
+        assert await fetch_certified_table(client, 2026, "ND", source(["United States Senator"])) is None
+    assert posted == ["__VIEWSTATE=vs&contest=22055&search=Search"]
+    assert [(r["office"], r["display_name"], r["party"]) for r in got] == [("H", "Helene Neville", "I")]

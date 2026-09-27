@@ -1,6 +1,7 @@
 """Service layer for House representative data — mirrors senator_service.py."""
 
 import json
+import math
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
@@ -249,7 +250,7 @@ def get_representative_score_breakdown(db: Session, rep_id: str) -> dict | None:
     Mirrors get_senator_score_breakdown in senator_service.py — see that
     function's docstring for why this reads directly from ORM relationships
     rather than build_rep_response()'s display-oriented dict (which only
-    has vote counts, not per-vote votedWithParty/partyAlignmentWeight).
+    has vote counts, not per-vote votedWithParty).
     """
     from app.pipeline.analyze.score_calculator import explain_scores
     from app.services._scorecard_common import build_score_breakdown_entity
@@ -287,15 +288,54 @@ def _compute_rep_trend_map(db: Session) -> dict[str, dict]:
     return compute_score_trend_map(db, "representative")
 
 
+# Sort keys the House leaderboard accepts, with each one's natural direction
+# (the frontend's defaultSortDir). The House is paginated, so it must be
+# sorted — and ranked — here, over the whole chamber: sorting one page of 50
+# in the browser ranked members only against that page and numbered them as
+# if House-wide.
+REP_LEADERBOARD_SORTS: dict[str, str] = {
+    "score": "desc", "pac_dollars": "desc", "pac_pct": "desc",
+    "ideology": "asc", "leadership": "desc",
+}
+
+
+def _half_up(x: float) -> float:
+    """Math.round's rounding (half away from zero for these non-negative
+    values). Python's round() rounds half to even, so 56.5 would rank as 56
+    here while the page shows 57."""
+    return float(math.floor(x + 0.5))
+
+
+def _rep_sort_value(r, sort: str) -> float | None:
+    """What the House is ordered by. Scores and PAC shares are compared as
+    displayed (whole numbers), so members who show the same value share a
+    rank, matching the Senate table's competitionRanks keys."""
+    if sort == "score":
+        return _half_up(compute_overall_score(r))
+    if sort == "pac_dollars":
+        return float(r.total_from_pacs or 0)
+    if sort == "pac_pct":
+        base = r.total_contributions or r.total_raised or 0
+        return _half_up((r.total_from_pacs or 0) / base * 100) if base > 0 else 0.0
+    if sort == "ideology":
+        return r.ideology_score
+    return r.leadership_score
+
+
 def get_rep_leaderboard(
     db: Session,
     page: int = 1,
     per_page: int = 50,
     party: str | None = None,
+    sort: str = "score",
+    direction: str | None = None,
 ) -> dict:
     """Currently-serving representatives ranked by score — departed members
     are excluded for the same reason as the Senate leaderboard (see
-    senator_service.get_leaderboard's docstring)."""
+    senator_service.get_leaderboard's docstring). Sorted by `sort` in
+    `direction` (default: the key's natural one) before paginating; members
+    with no value for the key sort last either way. Each entry's `rank` is
+    its standard competition rank ("1224") in that order over every page."""
     reps = db.query(Representative).filter(Representative.is_current == True).all()  # noqa: E712
 
     # Party-relative ideology label thresholds over the FULL cohort — before
@@ -320,10 +360,25 @@ def get_rep_leaderboard(
     # Name tiebreaker: overall scores tie often (int sub-scores), and
     # Python's sort is stable over an UNORDERED query result — without
     # a secondary key, tied members can swap ranks between requests.
-    reps.sort(key=lambda m: (-compute_overall_score(m), m.name))
-
     if party:
         reps = [r for r in reps if r.party == party.upper()]
+
+    sort = sort if sort in REP_LEADERBOARD_SORTS else "score"
+    descending = (direction or REP_LEADERBOARD_SORTS[sort]) == "desc"
+    values = {r.id: _rep_sort_value(r, sort) for r in reps}
+    known = [r for r in reps if values[r.id] is not None]
+    unknown = sorted((r for r in reps if values[r.id] is None), key=lambda m: m.name)
+    known.sort(key=lambda m: m.name)
+    known.sort(key=lambda m: values[m.id], reverse=descending)
+    reps = known + unknown
+
+    ranks: dict[str, int] = {}
+    for i, r in enumerate(reps):
+        prev = reps[i - 1] if i else None
+        # Members with no value (sorted last) share one rank, as the Senate
+        # table's competitionRanks does.
+        tied = prev is not None and values[r.id] == values[prev.id]
+        ranks[r.id] = ranks[prev.id] if tied else i + 1
 
     total = len(reps)
     total_pages, page = paginate_bounds(total, page, per_page)
@@ -332,6 +387,7 @@ def get_rep_leaderboard(
     entries = [
         {
             "id": r.id,
+            "rank": ranks[r.id],
             "name": r.name,
             "state": r.state,
             "district": r.district,
@@ -498,7 +554,10 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
             party_alignment=cp.get("partyAlignment"),
         ))
 
-    db.query(RepSponsoredBill).filter(RepSponsoredBill.representative_id == rid).delete()
+    # An unavailable list (the fetch failed, or Phase 4b never reached this
+    # member) is not a record of zero bills: keep what is stored.
+    if not rep_data.get("sponsoredBillsUnavailable"):
+        db.query(RepSponsoredBill).filter(RepSponsoredBill.representative_id == rid).delete()
     for sp_data in rep_data.get("sponsoredBills", []):
         db.add(RepSponsoredBill(
             representative_id=rid,
@@ -514,6 +573,7 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
             bill_type=sp_data.get("billType") or "",
             is_law=sp_data.get("isLaw") or False,
             stage=sp_data.get("stage") or "",
+            commemorative=bool(sp_data.get("commemorative")),
         ))
 
     partisan_depth_data = rep_data.get("partisanDepth")

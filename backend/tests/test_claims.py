@@ -6,7 +6,8 @@ Every test names the real published failure it makes unreachable.
 from dataclasses import dataclass
 
 from app.pipeline.analyze.claims import (
-    Claim, build_facts, build_lede, dedupe_claims, extract_claims, on_topic,
+    Claim, build_facts, build_lede, build_story, dedupe_claims, extract_body_claims,
+    extract_claims, on_topic,
 )
 
 
@@ -249,3 +250,44 @@ class TestExtractionUsesTheWholeCluster:
         assert len(extract_claims(arts, locate)) == 6
         # ...where a coherence-filtered subset of two yields two.
         assert len(extract_claims(arts[:2], locate)) == 2
+
+
+class TestExtractBodyClaims:
+    """Asked about headline + summary, the model points at the headline
+    (14 of 14 live claims, 2026-09-27). The body is reached by asking
+    about the summary alone, verified against the summary alone."""
+
+    def test_the_model_only_ever_sees_the_summary(self):
+        seen = []
+        art = _Article("Senate passes funding bill", "Collins opposed the NIH grant order on Friday.")
+
+        def ask(src):
+            seen.append(src)
+            return {"actor": "Collins", "predicate": "opposed the NIH grant order on Friday"}
+
+        claims = extract_body_claims([art], ask)
+        assert seen == ["Collins opposed the NIH grant order on Friday."]
+        assert [c.text for c in claims] == ["Collins opposed the NIH grant order on Friday."]
+
+    def test_a_span_from_the_headline_cannot_verify_against_the_body(self):
+        art = _Article("Senate passes funding bill 60-40", "Debate ran late into the night.")
+        claims = extract_body_claims([art], lambda src: {"actor": "Senate", "predicate": "passes funding bill 60-40"})
+        assert claims == []
+
+
+class TestBuildStory:
+    """The full story is verified claims under their outlet — nothing
+    written. It replaced model prose that published a relationship the
+    sources never stated (issue 748) and a wrong office (750)."""
+
+    def test_claims_are_grouped_under_the_outlet_that_made_them(self):
+        story = build_story(
+            [_claim("A did x.", "NPR"), _claim("B did y.", "PBS"), _claim("C did z.", "NPR")],
+            shown=["A did x."],
+        )
+        assert story == "## NPR\n\nA did x. C did z.\n\n## PBS\n\nB did y."
+
+    def test_nothing_beyond_the_issue_page_means_no_story(self):
+        """Summary and facts are already on the page. A story made of
+        only those would print them twice."""
+        assert build_story([_claim("A did x."), _claim("B did y.")], shown=["A did x.", "B did y."]) is None

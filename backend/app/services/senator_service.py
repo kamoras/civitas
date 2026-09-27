@@ -363,8 +363,7 @@ def get_senator_score_breakdown(db: Session, senator_id: str) -> dict | None:
     recentVotes, lobbyingMatches, sponsoredBills) directly from the ORM
     relationships — NOT from build_senator_response()'s SenatorSchema, which
     only exposes vote *counts* (totalVotes, votedWithPartyCount, ...), not
-    the per-vote votedWithParty/partyAlignmentWeight fields the scoring
-    formulas actually read.
+    the per-vote votedWithParty fields the scoring formulas actually read.
     """
     from app.pipeline.analyze.score_calculator import explain_scores
     from app.services._scorecard_common import build_score_breakdown_entity

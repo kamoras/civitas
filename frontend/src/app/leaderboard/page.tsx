@@ -23,7 +23,7 @@ import { getScoreColor, getScoreBgColor } from "@/lib/representation";
 import MetricTooltip from "@/components/checker/MetricTooltip";
 import { PARTY_BADGE } from "@/lib/partyStyles";
 import { BOXED_CONTROL, boxedControl } from "@/lib/controlStyles";
-import { formatCurrency } from "@/lib/formatting";
+import { competitionRanks, displayScore, formatCurrency } from "@/lib/formatting";
 import { PresidentCard } from "@/components/president/PresidentClient";
 import type { LeaderboardEntry, ScoreTrend } from "@/types/senator";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
@@ -107,7 +107,8 @@ function LeaderboardError({ message }: { message: string }) {
   );
 }
 
-function ScoreBar({ score }: { score: number }) {
+function ScoreBar({ score: raw }: { score: number }) {
+  const score = displayScore(raw);
   const color = getScoreBgColor(score);
 
   return (
@@ -320,6 +321,7 @@ function PresidentLeaderboard({
   const router = useRouter();
   if (loading) return <LeaderboardLoading label="LOADING PRESIDENTIAL DATA..." />;
   if (error) return <LeaderboardError message={error} />;
+  const ranks = competitionRanks(entries, (e) => displayScore(e.score.overall));
 
   return (
     <>
@@ -356,7 +358,7 @@ function PresidentLeaderboard({
             </thead>
             <tbody>
               {entries.map((entry, idx) => {
-                const rank = idx + 1;
+                const rank = ranks[idx];
                 const score = entry.score.overall;
                 return (
                   <tr
@@ -416,7 +418,7 @@ function PresidentLeaderboard({
         {/* Mobile cards */}
         <div className="md:hidden divide-y divide-white/[0.07]">
           {entries.map((entry, idx) => {
-            const rank = idx + 1;
+            const rank = ranks[idx];
             const score = entry.score.overall;
             return (
               <Link
@@ -497,6 +499,7 @@ function JusticeLeaderboard({
   const router = useRouter();
   if (loading) return <LeaderboardLoading label="LOADING SCOTUS DATA..." />;
   if (error) return <LeaderboardError message={error} />;
+  const ranks = competitionRanks(entries, (e) => displayScore(e.score.overall));
 
   return (
     <>
@@ -533,7 +536,7 @@ function JusticeLeaderboard({
             </thead>
             <tbody>
               {entries.map((entry, idx) => {
-                const rank = idx + 1;
+                const rank = ranks[idx];
                 const score = entry.score.overall;
                 const pp = apptParty(entry.appointingParty);
                 return (
@@ -604,7 +607,7 @@ function JusticeLeaderboard({
         {/* Mobile cards */}
         <div className="md:hidden divide-y divide-white/[0.07]">
           {entries.map((entry, idx) => {
-            const rank = idx + 1;
+            const rank = ranks[idx];
             const score = entry.score.overall;
             const pp = apptParty(entry.appointingParty);
             return (
@@ -679,6 +682,8 @@ function LeaderboardContent() {
   // double-invocation can't toggle the direction twice and cancel it out.
   const handleSort = useCallback(
     (key: SortKey) => {
+      // A new House order starts from its first page, not page N of it.
+      setHousePage(1);
       if (key === sortKey) {
         setSortDir((d) => (d === "asc" ? "desc" : "asc"));
       } else {
@@ -707,9 +712,16 @@ function LeaderboardContent() {
   const loading = senate.loading;
 
   const house = useAsyncData(
-    `house:${housePage}:${partyFilter}`,
+    `house:${housePage}:${partyFilter}:${sortKey}:${sortDir}`,
     branch === "house"
-      ? () => fetchRepLeaderboard(housePage, 50, partyFilter !== "ALL" ? partyFilter : undefined)
+      ? () =>
+          fetchRepLeaderboard(
+            housePage,
+            50,
+            partyFilter !== "ALL" ? partyFilter : undefined,
+            sortKey,
+            sortDir
+          )
       : null
   );
   const houseEntries = house.data?.entries ?? EMPTY_SENATE;
@@ -753,8 +765,12 @@ function LeaderboardContent() {
   const activeLoading = branch === "house" ? houseLoading : loading;
 
   const displayed = useMemo(() => {
+    // The House arrives sorted and ranked for the whole chamber (see
+    // fetchRepLeaderboard); re-sorting its one page here is what used to
+    // rank members only against the other 49 on it.
+    if (branch === "house") return activeEntries;
     let list = activeEntries;
-    if (branch !== "house" && partyFilter !== "ALL") {
+    if (partyFilter !== "ALL") {
       list = list.filter((e) => e.party === partyFilter);
     }
 
@@ -786,6 +802,23 @@ function LeaderboardContent() {
       return flip * (b.representationScore.overall - a.representationScore.overall);
     });
   }, [activeEntries, branch, partyFilter, sortKey, sortDir]);
+
+  // Competition ranks ("1224") on the value the active sort orders by —
+  // the displayed whole-number score for the default sort — so members who
+  // show the same value share a rank instead of being split alphabetically.
+  const ranks = useMemo(() => {
+    if (branch === "house") {
+      return displayed.map((e, i) => e.rank ?? (housePage - 1) * 50 + i + 1);
+    }
+    const key = (e: LeaderboardEntry): unknown => {
+      if (sortKey === "pac_dollars") return e.totalFromPacs ?? 0;
+      if (sortKey === "pac_pct") return Math.round(pacSharePct(e.totalFromPacs, e));
+      if (sortKey === "ideology") return e.ideologyScore;
+      if (sortKey === "leadership") return e.leadershipScore;
+      return displayScore(e.representationScore.overall);
+    };
+    return competitionRanks(displayed, key);
+  }, [branch, displayed, housePage, sortKey]);
 
   const counts = useMemo(() => {
     if (branch === "house") {
@@ -1002,8 +1035,7 @@ function LeaderboardContent() {
                       </thead>
                       <tbody>
                         {displayed.map((entry, idx) => {
-                          const rankOffset = branch === "house" ? (housePage - 1) * 50 : 0;
-                          const rank = rankOffset + idx + 1;
+                          const rank = ranks[idx];
                           const score = entry.representationScore.overall;
                           const pacPct = Math.round(pacSharePct(entry.totalFromPacs, entry));
                           const isTopTen = rank <= 10;
@@ -1083,8 +1115,7 @@ function LeaderboardContent() {
                   {/* Mobile cards */}
                   <div className="md:hidden divide-y divide-white/[0.07]">
                     {displayed.map((entry, idx) => {
-                      const mobileRankOffset = branch === "house" ? (housePage - 1) * 50 : 0;
-                      const rank = mobileRankOffset + idx + 1;
+                      const rank = ranks[idx];
                       const score = entry.representationScore.overall;
                       const pacPct = Math.round(pacSharePct(entry.totalFromPacs, entry));
                       return (

@@ -115,30 +115,6 @@ def ungrounded_statistics(generated: str, source: str) -> list[str]:
     return sorted(missing)
 
 
-_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
-
-
-def repeated_sentences(generated: str, min_words: int = 6) -> list[str]:
-    """Sentences of at least ``min_words`` that appear more than once.
-
-    Small local models asked to hit a word-count floor past the point
-    where the source material runs out sometimes loop: the same one or
-    two sentences reappear verbatim later in the text instead of the
-    model stopping (observed 2026-07: two consecutive full-story
-    generations each repeated their closing two sentences word-for-word).
-    Short sentences are excluded so legitimate short transitions
-    ("He said no.") don't false-positive.
-    """
-    seen: dict[str, int] = {}
-    for raw in _SENTENCE_SPLIT_RE.split(generated or ""):
-        sentence = " ".join(raw.split())  # normalize whitespace
-        if len(sentence.split()) < min_words:
-            continue
-        key = sentence.lower().rstrip(".!?")
-        seen[key] = seen.get(key, 0) + 1
-    return sorted(s for s, count in seen.items() if count > 1)
-
-
 def ungrounded_numbers(generated: str, source: str) -> list[str]:
     """Digit groups in ``generated`` that never appear in ``source``."""
     source_numbers = _number_tokens(source)

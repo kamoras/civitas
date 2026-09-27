@@ -16,11 +16,19 @@ export function UsageBar({
   warnAt = 75,
   critAt = 90,
   ariaLabel,
+  valueText,
 }: {
   pct: number;
   warnAt?: number;
   critAt?: number;
   ariaLabel: string;
+  /**
+   * What a screen reader announces instead of the rounded percentage: the
+   * value as displayed ("0.4%", "57°C"). Without it a 0.4% reading is read
+   * out as "0%", and a meter scaled against a ceiling (temperature over
+   * 85°C) announces a percentage that isn't the quantity at all.
+   */
+  valueText?: string;
 }) {
   const color = pct >= critAt ? "bg-signal-magenta" : pct >= warnAt ? "bg-signal-amber" : "bg-phos";
   const value = Math.min(Math.round(pct), 100);
@@ -32,6 +40,7 @@ export function UsageBar({
       aria-valuemin={0}
       aria-valuemax={100}
       aria-label={ariaLabel}
+      aria-valuetext={valueText}
     >
       <div
         className={`h-full ${color} transition-all duration-700`}

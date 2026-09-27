@@ -280,6 +280,10 @@ class SponsoredBill(Base):
     bill_type: Mapped[str] = mapped_column(String, default="")
     is_law: Mapped[bool] = mapped_column(Boolean, default=False)
     stage: Mapped[str] = mapped_column(String, default="", index=True)  # see config_definitions.BILL_STAGES
+    # Volden & Wiseman's commemorative tier (a post-office naming, a Gold
+    # Medal): weighted 1x in Legislative Effectiveness, not 5x. Set by the
+    # pipeline (analyze/commemorative.py); stored so scoring never loads a model.
+    commemorative: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
 
     senator: Mapped["Senator"] = relationship(back_populates="sponsored_bills")
 
@@ -503,6 +507,10 @@ class RepSponsoredBill(Base):
     bill_type: Mapped[str] = mapped_column(String, default="")
     is_law: Mapped[bool] = mapped_column(Boolean, default=False)
     stage: Mapped[str] = mapped_column(String, default="", index=True)  # see config_definitions.BILL_STAGES
+    # Volden & Wiseman's commemorative tier (a post-office naming, a Gold
+    # Medal): weighted 1x in Legislative Effectiveness, not 5x. Set by the
+    # pipeline (analyze/commemorative.py); stored so scoring never loads a model.
+    commemorative: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
 
     representative: Mapped["Representative"] = relationship(back_populates="sponsored_bills")
 

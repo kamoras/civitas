@@ -1,3 +1,4 @@
+import { displayScore } from "@/lib/formatting";
 import { ImageResponse } from "next/og";
 import { NextRequest } from "next/server";
 import { loadArchivoBold } from "@/lib/ogFonts";
@@ -269,7 +270,7 @@ async function politicianImage(profile: {
   const accent = PARTY_ACCENT[party] ?? "#F2EEE7";
   const standing = formatStanding(identity);
   const overallScore = profile?.overallScore ?? null;
-  const overall = overallScore != null ? overallScore.toFixed(1) : null;
+  const overall = overallScore != null ? String(displayScore(overallScore)) : null;
   const scoreLine = overall ? `Civitas score: ${overall}/100` : "";
   const section = identity?.role?.toUpperCase() ?? "PUBLIC RECORD";
   const footerLabel = scoreFooterLabel(profile?.branch);

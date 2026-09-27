@@ -20,8 +20,19 @@ Data (public, fetched at pinned commits into --cache):
     roll-call matrices (Armstrong et al., "Analyzing Spatial Models of
     Choice and Judgment", github.com/uniofessex/asmcjr)
   - 109th Senate roll calls (R package pscl, github.com/cran/pscl)
+  - Every Senate (101st-119th) and House (101st-111th) roll call from
+    Voteview (voteview.com, Lewis et al.) -- not versioned upstream, so
+    the newest congress can shift slightly between downloads
+  - MIT Election Data + Science Lab, U.S. Senate 1976-2024 and President
+    1976-2024 (Harvard Dataverse doi:10.7910/DVN/PEJ5QU, 10.7910/DVN/42MVDX)
+  - U.S. House primary elections 1956-2010 (Pettigrew, Owen & Wanless;
+    Harvard Dataverse doi:10.7910/DVN/26448)
 
-Research-only dependencies, not in requirements.txt:
+The shipped expectation and vote shape are the scorer's own functions
+(score_calculator.compute_constituent_reference, _expected_break_rate,
+_peaked_vote_shape), so the evidence always describes the formula that
+ships. Run it with the backend's environment plus the research-only
+dependencies (not in requirements.txt):
     pip install pandas statsmodels rdata pyreadr
 Run:
     python backend/scripts/research_constituent_alignment.py [--cache DIR]
@@ -29,6 +40,8 @@ Run:
 
 import argparse
 import pathlib
+import sys
+import unicodedata
 import urllib.request
 import warnings
 
@@ -40,7 +53,12 @@ import statsmodels.formula.api as smf
 
 warnings.filterwarnings("ignore")
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+from app.pipeline.analyze import score_calculator  # noqa: E402
+
 RAW = "https://raw.githubusercontent.com"
+DATAVERSE = "https://dataverse.harvard.edu/api/access/datafile"
+VOTEVIEW = "https://voteview.com/static/data/out"
 SOURCES = {
     "house.csv": f"{RAW}/MEDSL/constituency-returns/fe67c056502fc09ddb1ace2ff8f87c53233a744e/1976-2018-house.csv",
     "senate.csv": f"{RAW}/MEDSL/constituency-returns/fe67c056502fc09ddb1ace2ff8f87c53233a744e/1976-2018-senate.csv",
@@ -50,7 +68,17 @@ SOURCES = {
     "hr108.rda": f"{RAW}/uniofessex/asmcjr/52278b71a3accb8ba343d8350b802c24892e6508/data/hr108.rda",
     "hr111.rda": f"{RAW}/uniofessex/asmcjr/52278b71a3accb8ba343d8350b802c24892e6508/data/hr111.rda",
     "s109.rda": f"{RAW}/cran/pscl/8220d032b199d0a9ce625c6c48a0f714e07bc432/data/s109.rda",
+    "senate_1976_2024.csv": f"{DATAVERSE}/13887039?format=original",
+    "president_1976_2024.csv": f"{DATAVERSE}/13887042",
+    "house_primaries.dta": f"{DATAVERSE}/4271583?format=original",
 }
+SENATES, HOUSES = range(101, 120), range(101, 112)  # the 119th Senate: party means only (no election yet)
+for _c in SENATES:
+    for _k in ("votes", "members"):
+        SOURCES[f"S{_c}_{_k}.csv"] = f"{VOTEVIEW}/{_k}/S{_c}_{_k}.csv"
+for _c in HOUSES:
+    for _k in ("votes", "members"):
+        SOURCES[f"H{_c}_{_k}.csv"] = f"{VOTEVIEW}/{_k}/H{_c}_{_k}.csv"
 # Congress -> presidential year whose district results describe the same
 # district lines. The outcome is the election at the END of the congress.
 CONGRESSES = {103: 1992, 104: 1996, 105: 1996, 106: 2000, 108: 2004, 109: 2004, 110: 2008, 111: 2008}
@@ -241,7 +269,7 @@ def unity_breaks(obj):
         against = ((yea[i] & ~pmaj) | (nay[i] & pmaj)) & cast
         rows.append(dict(id=int(L.icpsrLegis[i]), state=L.state[i], party=L.party[i],
                          name=str(obj["legis.data"].index[i]).split(" (")[0].upper(),
-                         brk=against.sum() / max(cast.sum(), 1)))
+                         brk=against.sum() / max(cast.sum(), 1), n=int(cast.sum())))
     return pd.DataFrame(rows), int(unity.sum()), V.shape[1]
 
 
@@ -254,7 +282,7 @@ def kinked_fit(df):
 def loyalty_tests(m, p):
     hr = read_r(p["hr108.rda"], "hr108")
     R, n_unity, n_all = unity_breaks(hr)
-    M = m[m.cong == 108].merge(R[["id", "brk"]], on="id")
+    M = m[m.cong == 108].merge(R[["id", "brk", "n"]], on="id")
     print(f"\n== Loyalty: 108th House, {n_unity} party-unity roll calls of {n_all}; outcome 2004 ==")
 
     hand = np.where(M.alignment >= 0, .03 + .05 * (1 - M.alignment), .08 + .12 * (-M.alignment))
@@ -308,6 +336,46 @@ def loyalty_tests(m, p):
     r = smf.ols(f"{base} + neg + pos + pos:flank + flank", S).fit(cov_type="HC1")
     print(f"flank-side defectors (Kirkland & Slapin): extra slope {r.params['pos:flank']:.2f} "
           f"(t={r.tvalues['pos:flank']:.1f}); n={int(((S.flank == 1) & (S.pos > 0)).sum())}")
+
+    # Is there such a thing as breaking too much? A score peaked at the
+    # expectation (falling off both ways), the shipped v6.15 shape (rising
+    # to the saturation point, falling past it), and the crossing-side slope
+    # past saturation. From here on the expectation and saturation point are
+    # the scorer's own (shipped_expectation -> compute_constituent_reference),
+    # not the kinked_fit the v6.13 sections above used.
+    shipped = shipped_expectation(M[["id", "party", "alignment", "brk", "n"]].reset_index(drop=True))
+    if shipped is None:
+        print("breaking far above expectation: the scorer would not measure a reference here — skipped")
+        return hr
+    S = S.merge(shipped[["id", "dev", "p90"]].rename(columns={"dev": "dev14"}), on="id")
+    b0 = smf.ols(base, S).fit()
+    dev, p90 = S.dev14, shipped.p90.iloc[0]
+    S["dev_party"] = dev / dev.std()
+    S["neg"] = S.dev_party.clip(upper=0)
+    S["absdev"] = S.dev_party.abs()
+    S["peaked"] = 100 - 100 * (dev.abs() / p90).clip(0, 1)
+    S["v615"] = v615_score(dev, p90, S.n)
+    S["v613"] = 50 + 50 * (dev / p90).clip(-1, 1)  # same chamber p90: like for like
+    print("breaking far above expectation:")
+    for k, label in (("absdev", "folded |deviation| (per SD)"), ("peaked", "peaked score (per point)"),
+                     ("v613", "v6.13 score, chamber p90 (per pt)"), ("v615", "v6.15 score (per point)")):
+        r = smf.ols(f"{base} + {k}", S).fit(cov_type="HC1")
+        print(f"  {label:30s} {r.params[k]:7.3f} (t={r.tvalues[k]:.1f}) dR2={r.rsquared - b0.rsquared:.4f}")
+    r = smf.ols(f"{base} + dev_party + I(dev_party**2)", S).fit(cov_type="HC1")
+    print(f"  quadratic term {r.params['I(dev_party ** 2)']:.2f} (t={r.tvalues['I(dev_party ** 2)']:.1f})")
+    knot = p90 / dev.std()
+    S["pos1"], S["pos2"] = S.dev_party.clip(0, knot), (S.dev_party - knot).clip(lower=0)
+    r = smf.ols(f"{base} + neg + pos1 + pos2", S).fit(cov_type="HC1")
+    print(f"  crossing slope up to saturation {r.params['pos1']:.2f} (t={r.tvalues['pos1']:.1f}); "
+          f"beyond it {r.params['pos2']:.2f} (t={r.tvalues['pos2']:.1f}, n={int((S.pos2 > 0).sum())})")
+    print("loyal-side scale (gaps below the expectation where the score reaches 0):")
+    for k in (1, 2, 4, 8):
+        S["sc"] = v615_score(dev, p90, S.n, k)
+        r = smf.ols(f"{base} + sc", S).fit(cov_type="HC1")
+        print(f"  {k}x: {r.params['sc']:.3f}/pt (t={r.tvalues['sc']:.1f}) dR2={r.rsquared - b0.rsquared:.4f}")
+    S["sc"] = 50.0 + (v615_score(dev, p90, S.n) - 50.0) * (dev >= 0)
+    r = smf.ols(f"{base} + sc", S).fit(cov_type="HC1")
+    print(f"  loyalty held at 50: {r.params['sc']:.3f}/pt (t={r.tvalues['sc']:.1f}) dR2={r.rsquared - b0.rsquared:.4f}")
     return hr
 
 
@@ -377,6 +445,198 @@ def senate_test(p):
     print(f"deviation from measured expectation: {r.params['dev']:.2f} (t={r.tvalues['dev']:.1f}); "
           f"loyal side {rr.params['neg']:.2f} (t={rr.tvalues['neg']:.1f}), "
           f"crossing side {rr.params['pos']:.2f} (t={rr.tvalues['pos']:.1f})")
+    J["absdev"] = J.dev.abs()
+    r = smf.ols("own ~ x + C(yr)*C(party) + absdev", J).fit(cov_type="HC1")
+    print(f"folded |deviation|: {r.params['absdev']:.2f} (t={r.tvalues['absdev']:.1f})")
+
+
+# ------------------------------------- breaking far above expectation
+# Is there such a thing as breaking too much? Two audiences, because
+# "what voters sent them to do" depends on which voters (Fenno 1978): the
+# whole seat (general election, every Senate election 1990-2024) and the
+# member's own party (House primaries 1990-2010).
+
+def v615_score(dev, p90, n, loyal_scale=None):
+    """The shipped vote component: score_calculator._peaked_vote_shape (with
+    the shipped LOYAL_SIDE_SCALE unless one is given for the sweep), shrunk
+    toward 50 by vote count exactly as seat_relative_vote_score does."""
+    dev = np.asarray(dev, float)
+    p90 = np.broadcast_to(np.asarray(p90, float), dev.shape)  # one per chamber-congress, or a scalar
+    n = np.broadcast_to(np.asarray(n, float), dev.shape)
+    shape = np.array([score_calculator._peaked_vote_shape(d, s, loyal_scale) for d, s in zip(dev, p90)])
+    return 50 + (shape - 50) * np.minimum(n / score_calculator.CONSTITUENT_FULL_CONFIDENCE_VOTES, 1)
+
+
+def ascii_upper(s: pd.Series) -> pd.Series:
+    return s.map(lambda x: unicodedata.normalize("NFD", str(x)).encode("ascii", "ignore").decode().upper())
+
+
+def voteview_breaks(p, chamber_prefix, c):
+    """Per-member share of party-unity votes cast against their party's
+    majority, from Voteview's per-congress CSVs, plus the members. An
+    Independent is scored as the party they caucus with, as the pipeline
+    does (normalize_votes._infer_caucus_party): here, the party whose
+    majority they vote with more often on party-unity roll calls."""
+    V = pd.read_csv(p[f"{chamber_prefix}{c}_votes.csv"])
+    M = pd.read_csv(p[f"{chamber_prefix}{c}_members.csv"])
+    M = M[M.chamber != "President"]
+    M = M[~M.icpsr.duplicated(keep=False) & M.party_code.isin([100, 200, 328])].copy()  # drops party switchers
+    V = V.merge(M[["icpsr", "party_code"]], on="icpsr")
+    V["yea"], V["nay"] = V.cast_code.isin(YEA), V.cast_code.isin(NAY)
+    V = V[V.yea | V.nay]
+    share = V[V.party_code != 328].groupby(["rollnumber", "party_code"]).yea.mean().unstack()
+    split = share[((share[100] > .5) & (share[200] < .5)) | ((share[100] < .5) & (share[200] > .5))]
+    ind = V[(V.party_code == 328) & V.rollnumber.isin(split.index)]
+    with_d = (ind.yea == ind.rollnumber.map(split[100] > .5)).groupby(ind.icpsr).mean()
+    caucus = {i: (100 if d > .5 else 200) for i, d in with_d.items()}
+    M["party_code"] = [caucus.get(i, pc) if pc == 328 else pc for i, pc in zip(M.icpsr, M.party_code)]
+    M = M[M.party_code.isin([100, 200])]
+    V["party_code"] = [caucus.get(i, pc) if pc == 328 else pc for i, pc in zip(V.icpsr, V.party_code)]
+    V = V[V.party_code.isin([100, 200])]
+    share = V.groupby(["rollnumber", "party_code"]).yea.mean().unstack()
+    unity = share[((share[100] > .5) & (share[200] < .5)) | ((share[100] < .5) & (share[200] > .5))]
+    V = V[V.rollnumber.isin(unity.index)]
+    pmaj = V.rollnumber.map(unity[100] > .5).where(V.party_code == 100, V.rollnumber.map(unity[200] > .5))
+    V["against"] = V.yea != pmaj.astype(bool)
+    M["brk"] = M.icpsr.map(V.groupby("icpsr").against.mean())
+    M["n"] = M.icpsr.map(V.groupby("icpsr").size())
+    M["party"] = M.party_code.map({100: "D", 200: "R"})
+    M["last"] = ascii_upper(M.bioname).str.split(",").str[0].str.replace(r"[^A-Z ]", "", regex=True).str.strip().str.split().str[-1]
+    return M[M.brk.notna()]
+
+
+def shipped_expectation(M):
+    """The shipped reference, from the scorer itself: compute_constituent_
+    reference over members with a full-confidence vote count (the filter
+    constituent_reference_inputs applies), then each member's expected
+    rate and deviation. None when the scorer would not measure one (too
+    few full-confidence members per party)."""
+    full = M[M.n >= score_calculator.CONSTITUENT_FULL_CONFIDENCE_VOTES]
+    ref = score_calculator.compute_constituent_reference(
+        list(zip(full.party, full.alignment, full.brk)))
+    if ref is None:
+        return None
+    M = M.copy()
+    M["exp"] = [score_calculator._expected_break_rate(ref["expected"][p], a)
+                for p, a in zip(M.party, M.alignment)]
+    M["dev"] = M.brk - M.exp
+    M["p90"] = ref["deviation_p90"]
+    return M
+
+def overbreak_terms(S):
+    S = S.reset_index(drop=True)
+    S["gid"] = pd.factorize(S.icpsr)[0]
+    S["dz"] = S.dev / S.dev.std()
+    S["absdz"] = S.dz.abs()
+    knot = (S.p90 / S.dev.std()).median()
+    S["neg"], S["pos1"], S["pos2"] = S.dz.clip(upper=0), S.dz.clip(0, knot), (S.dz - knot).clip(lower=0)
+    return S
+
+
+def print_overbreak(S, y, base):
+    def fit(f):
+        return smf.ols(f"{y} ~ {base} + {f}", S).fit(cov_type="cluster", cov_kwds={"groups": S.gid})
+    r0, r1, r2, r3 = fit("dz"), fit("absdz"), fit("dz + I(dz**2)"), fit("neg + pos1 + pos2")
+    print(f"  signed deviation {r0.params['dz']:.2f} (t={r0.tvalues['dz']:.1f}); "
+          f"folded |deviation| {r1.params['absdz']:.2f} (t={r1.tvalues['absdz']:.1f}); "
+          f"squared term {r2.params['I(dz ** 2)']:.2f} (t={r2.tvalues['I(dz ** 2)']:.1f})")
+    print(f"  loyal side {r3.params['neg']:.2f} (t={r3.tvalues['neg']:.1f}); crossing up to saturation "
+          f"{r3.params['pos1']:.2f} (t={r3.tvalues['pos1']:.1f}); past saturation {r3.params['pos2']:.2f} "
+          f"(t={r3.tvalues['pos2']:.1f}, n={int((S.pos2 > 0).sum())})")
+
+
+def senate_general_test(p):
+    pres = pd.read_csv(p["president_1976_2024.csv"])
+    sen = pd.read_csv(p["senate_1976_2024.csv"])
+    st, nat = two_party_r(pres, ["year", "state_po"]), two_party_r(pres, "year")
+    g = sen[sen.stage.str.lower() == "gen"].copy()
+    g["pty"] = g.party_simplified.map({"DEMOCRAT": "D", "REPUBLICAN": "R"})
+    g = g[g.pty.notna()]
+    g["cl"] = last_name(ascii_upper(g.candidate))
+    g["race"] = g.special.astype(str)
+    tot = g.groupby(["year", "state_po", "race", "pty"]).candidatevotes.sum().unstack(fill_value=0)
+    cands = g.groupby(["year", "state_po", "race", "pty"]).cl.apply(set).reset_index()
+    rows, party_means = [], []
+    for c in SENATES:
+        yr, py = 1788 + 2 * c, max(y for y in nat.index if y <= 1786 + 2 * c)
+        M = voteview_breaks(p, "S", c)
+        M["presR"] = [st.get((py, s), np.nan) for s in M.state_abbrev]
+        M["sign"] = np.where(M.party == "R", 1.0, -1.0)
+        M["alignment"] = ((M.presR - nat[py]) * 100 * M.sign / 15).clip(-1, 1)
+        M["x"] = np.where(M.party == "R", M.presR, 1 - M.presR) * 100
+        M = shipped_expectation(M)
+        if M is None:
+            continue
+        v14, v13 = v615_score(M.dev, M.p90, M.n), 50 + 50 * (M.dev / M.p90).clip(-1, 1)
+        party_means.append({"senate": c, **{
+            f"{party} {v}": round(float(x[(M.party == party).values].mean()), 1)
+            for party in ("D", "R") for v, x in (("v6.13", v13.values), ("v6.15", v14))}})
+        M["year"] = yr
+        c2 = cands[cands.year == yr]
+        for i, r in M.iterrows():
+            hit = c2[(c2.state_po == r.state_abbrev) & (c2.pty == r.party) & c2.cl.map(lambda s, n=r["last"]: n in s)]
+            if len(hit) == 1:
+                t = tot.loc[(yr, r.state_abbrev, hit.race.iloc[0])]
+                M.loc[i, "own"] = (t[r.party] / (t.R + t.D) * 100) if t.R > 0 and t.D > 0 else np.nan
+        rows.append(M)
+    S = pd.concat(rows, ignore_index=True)
+    S = overbreak_terms(S[S.own.notna()])
+    S["fe"] = S.year.astype(str) + S.party
+    print(f"\n== Breaking far above expectation, Senate general elections 1990-2024: "
+          f"N = {len(S)} contested incumbents, {S.year.nunique()} elections ==")
+    print_overbreak(S, "own", "x + I(x**2) + C(fe)")
+    for label, d in (("1990-2008", S[S.year <= 2008]), ("2010-2024", S[S.year >= 2010])):
+        print(f" {label} (N={len(d)}):")
+        print_overbreak(overbreak_terms(d), "own", "x + I(x**2) + C(fe)")
+    P = pd.DataFrame(party_means)
+    P["gap v6.13"], P["gap v6.15"] = P["D v6.13"] - P["R v6.13"], P["D v6.15"] - P["R v6.15"]
+    print(" mean vote score by party, every Senate (D minus R = gap):")
+    print(P.round(1).to_string(index=False))
+    print(f"  mean |gap|: v6.13 {P['gap v6.13'].abs().mean():.1f}, v6.15 {P['gap v6.15'].abs().mean():.1f}")
+    print(" loyal-side scale (gaps below the expectation where the score reaches 0):")
+    b0 = smf.ols("own ~ x + I(x**2) + C(fe)", S).fit()
+    for k in (1, 2, 4, 8):
+        S["sc"] = v615_score(S.dev, S.p90, S.n, k)
+        r = smf.ols("own ~ x + I(x**2) + C(fe) + sc", S).fit(cov_type="cluster", cov_kwds={"groups": S.gid})
+        print(f"  {k}x: {r.params['sc']:.3f}/pt (t={r.tvalues['sc']:.1f}) dR2={r.rsquared - b0.rsquared:.4f}")
+
+
+def house_primary_test(p):
+    P = pd.read_stata(p["house_primaries.dta"])
+    P = P[(P.inc == 1) & P.year.between(1990, 2010) & (P.runoff == 0)].copy()
+    P["party"] = P.party.astype(int).map({0: "R", 1: "D"})
+    P["last"] = ascii_upper(P.candidate.astype(str).str.split("_").str[0]).str.replace(r"[^A-Z]", "", regex=True)
+    pres = pd.read_csv(p["president_1976_2024.csv"])
+    P = P.merge(pres[["state", "state_po"]].drop_duplicates(), left_on=P.state.astype(str).str.upper(), right_on="state")
+    nat = two_party_r(pres, "year")
+    rows = []
+    for c in HOUSES:
+        yr = 1788 + 2 * c
+        M = voteview_breaks(p, "H", c)
+        M["last"] = ascii_upper(M.bioname).str.split(",").str[0].str.replace(r"[^A-Z]", "", regex=True)
+        M = M.merge(P[P.year == yr][["state_po", "party", "last", "candnumber", "candpct", "winner", "prez"]],
+                    left_on=["state_abbrev", "party", "last"], right_on=["state_po", "party", "last"])
+        M = M.drop_duplicates("icpsr", keep=False)
+        py = max(y for y in nat.index if y < yr)
+        M["alignment"] = ((M.prez - np.where(M.party == "R", nat[py], 1 - nat[py]) * 100) / 15).clip(-1, 1)
+        M = shipped_expectation(M[M.prez.notna()].reset_index(drop=True))
+        if M is None:
+            continue
+        M["fe"] = f"{yr}" + M.party
+        rows.append(M)
+    A = overbreak_terms(pd.concat(rows, ignore_index=True))
+    A["challenged"], A["lost"], A["pshare"] = (A.candnumber > 1) * 1.0, (A.winner == 0) * 1.0, A.candpct * 100
+    print(f"\n== Breaking far above expectation, own-party voters: House primaries 1990-2010, "
+          f"N = {len(A)} incumbents, {A.challenged.mean():.0%} challenged, {int(A.lost.sum())} lost ==")
+    print(" drew a primary challenger (linear probability):")
+    print_overbreak(A, "challenged", "alignment + C(fe)")
+    print(" lost the primary (linear probability):")
+    print_overbreak(A, "lost", "alignment + C(fe)")
+    Cd = overbreak_terms(A[A.challenged == 1])
+    print(f" incumbent's primary vote share, contested primaries (N={len(Cd)}):")
+    print_overbreak(Cd, "pshare", "alignment + C(fe)")
+    Cd["bin"] = pd.cut(Cd.dz, [-99, -1, 0, 1, 2, 99])
+    print(Cd.groupby("bin", observed=True).pshare.agg(["size", "mean"]).round(1).to_string())
 
 
 def main():
@@ -388,6 +648,8 @@ def main():
     hr = loyalty_tests(m, paths)
     nokken_poole_test(m, hr)
     senate_test(paths)
+    senate_general_test(paths)
+    house_primary_test(paths)
 
 
 if __name__ == "__main__":

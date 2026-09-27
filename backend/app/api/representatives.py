@@ -36,9 +36,11 @@ def list_rep_leaderboard(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=100),
     party: str | None = Query(None, pattern=PARTY_QUERY_PATTERN),
+    sort: str = Query("score", pattern="^(score|pac_dollars|pac_pct|ideology|leadership)$"),
+    dir: str | None = Query(None, pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
-    data = get_rep_leaderboard(db, page=page, per_page=per_page, party=party)
+    data = get_rep_leaderboard(db, page=page, per_page=per_page, party=party, sort=sort, direction=dir)
     return _cached_json(data, max_age=CACHE_TTL_LIST_S)
 
 

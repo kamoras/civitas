@@ -30,8 +30,22 @@ export interface Senator {
     legislativeEffectiveness: number;
     /** Backend-computed weighted overall — never recompute this client-side. */
     overall: number;
-    /** Per-dimension data-sufficiency, keyed by the score fields above. */
-    confidence?: Record<string, "high" | "medium" | "low">;
+    /** Per-dimension data-sufficiency, keyed by the score fields above, plus
+     * how Constituent Alignment's vote part was scored
+     * (score_calculator.calculate_confidence). */
+    confidence?: Partial<
+      Record<
+        | "fundingIndependence"
+        | "promisePersistence"
+        | "constituentAlignment"
+        | "fundingDiversity"
+        | "legislativeEffectiveness",
+        "high" | "medium" | "low"
+      >
+    > & {
+      /** "neutral:few-votes" | "neutral:no-expectation" | "shrunk:<share kept>" | "full" */
+      constituentAlignmentVotePart?: string;
+    };
   };
   funding: {
     totalRaised: number;
@@ -201,6 +215,9 @@ export interface ScoreTrend {
 
 export interface LeaderboardEntry {
   id: string;
+  /** House only: competition rank over the whole chamber in the requested
+   * sort (the list is paginated, so the page can't compute it). */
+  rank?: number;
   name: string;
   state: string;
   district?: number;

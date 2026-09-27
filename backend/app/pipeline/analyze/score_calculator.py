@@ -84,7 +84,11 @@ Out of Office," APSR 96:1). This is the delegate model of representation
 with seat partisan lean standing in for issue-level constituent opinion.
 Both studies validate their measures by the incumbent's vote share; v6.13
 used that same test to choose this dimension's design
-(docs/research/constituent-alignment.md). Donor independence via lobbying
+(docs/research/constituent-alignment.md). Because the member was elected
+under a party label as well as by a seat (Fenno 1978's concentric
+constituencies), breaking far past what the seat calls for scores lower
+again (v6.15): own-party primary voters measurably punish it, and the
+whole seat stops rewarding it. Donor independence via lobbying
 matches follows Stratmann (2005) with the methodological caution from
 Ansolabehere, de Figueiredo & Snyder (2003, "Why Is There So Little
 Money in U.S. Politics?" JEP 17:1) that donation-vote correlations are
@@ -160,6 +164,12 @@ import logging
 import math
 import statistics
 
+from app.config_definitions import (
+    CONSTITUENT_FULL_CONFIDENCE_VOTES,
+    CONSTITUENT_MIN_VOTES,
+    CONSTITUENT_REFERENCE_STATISTIC,
+    SATURATION_QUANTILE,
+)
 from app.models import PromiseAlignment
 from app.pipeline.analyze.population_reference import (
     CONSTITUENT_REFERENCE,
@@ -175,7 +185,7 @@ logger = logging.getLogger(__name__)
 # public changelog) in sync, and add a decision record for the new version
 # under docs/methodology/member-score/ — that is where the reasons go, not
 # here.
-ALGORITHM_VERSION = "v6.13"
+ALGORITHM_VERSION = "v6.15"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -567,6 +577,8 @@ def calculate_scores(senator: dict) -> dict:
             years_in_office=senator.get("yearsInOffice"),
             attracted_bipartisanship=senator.get("attractedBipartisanshipScore"),
             les_reference=senator.get("lesReference"),
+            chamber="house" if senator.get("district") is not None else "senate",
+            bills_known=not senator.get("sponsoredBillsUnavailable"),
         ),
     }
 
@@ -588,22 +600,26 @@ def explain_scores(senator: dict) -> dict:
     voting_record = senator.get("votingRecord", {})
     funding = senator.get("funding", {})
     lobbying_matches = senator.get("lobbyingMatches", [])
+    constituent = _constituent_alignment_core(
+        voting_record,
+        lobbying_matches,
+        funding,
+        senator.get("state", ""),
+        senator.get("party", "I"),
+        district=senator.get("district"),
+        bioguide_id=senator.get("bioguideId"),
+        reference=senator.get("constituentReference"),
+    )
+    # The vote-part status is served with the stored confidence grades
+    # (calculate_confidence), not in the breakdown payload.
+    constituent.pop("vote_part_status", None)
 
     return {
         "fundingIndependence": _funding_independence_core(
             funding, senator.get("state", ""), senator.get("district"),
             senator.get("fundingReference"),
         ),
-        "constituentAlignment": _constituent_alignment_core(
-            voting_record,
-            lobbying_matches,
-            funding,
-            senator.get("state", ""),
-            senator.get("party", "I"),
-            district=senator.get("district"),
-            bioguide_id=senator.get("bioguideId"),
-            reference=senator.get("constituentReference"),
-        ),
+        "constituentAlignment": constituent,
         "fundingDiversity": _funding_diversity_core(funding),
         "legislativeEffectiveness": _legislative_effectiveness_core(
             senator.get("sponsoredBills", []),
@@ -612,8 +628,15 @@ def explain_scores(senator: dict) -> dict:
             years_in_office=senator.get("yearsInOffice"),
             attracted_bipartisanship=senator.get("attractedBipartisanshipScore"),
             les_reference=senator.get("lesReference"),
+            chamber="house" if senator.get("district") is not None else "senate",
+            bills_known=not senator.get("sponsoredBillsUnavailable"),
         ),
     }
+
+
+# CONSTITUENT_FULL_CONFIDENCE_VOTES, SATURATION_QUANTILE and
+# CONSTITUENT_REFERENCE_STATISTIC live in config_definitions (imported at
+# the top of this module) so population_reference can stamp at construction.
 
 
 def calculate_confidence(senator: dict) -> dict[str, str]:
@@ -642,13 +665,9 @@ def calculate_confidence(senator: dict) -> dict[str, str]:
     has_funding = funding_share_base(funding) > 0
     n_donors = len(funding.get("topDonors") or [])
     n_industries = len(funding.get("industryBreakdown") or [])
-    all_votes = (voting_record.get("keyVotes") or []) + (
-        voting_record.get("recentVotes") or []
-    )
-    n_party_votes = sum(
-        1 for v in all_votes
-        if isinstance(v, dict) and v.get("votedWithParty") is not None
-    )
+    # The same deduplicated count the score's shrinkage reads, so the
+    # confidence grade and the breakdown's "only n votes" can't disagree.
+    _, n_party_votes = party_break_rate(voting_record)
     n_evaluable = sum(
         1 for p in promises
         if isinstance(p, dict) and p.get("alignment") in (PromiseAlignment.KEPT, PromiseAlignment.PARTIAL, PromiseAlignment.BROKEN)
@@ -665,10 +684,28 @@ def calculate_confidence(senator: dict) -> dict[str, str]:
     return {
         "fundingIndependence": grade(n_donors, 3, 10) if has_funding else "low",
         "promisePersistence": grade(n_evaluable, 3, 8),
-        "constituentAlignment": grade(n_party_votes, 5, 20),
+        "constituentAlignment": grade(n_party_votes, 5, CONSTITUENT_FULL_CONFIDENCE_VOTES),
         "fundingDiversity": grade(n_industries, 3, 6) if has_funding else "low",
         "legislativeEffectiveness": grade(len(bills), 2, 5),
+        "constituentAlignmentVotePart": _constituent_vote_part_status(senator),
     }
+
+
+def _constituent_vote_part_status(senator: dict) -> str:
+    """How Constituent Alignment's vote part was scored, for the scorecard to
+    state rather than re-derive: "neutral:few-votes" (under
+    CONSTITUENT_MIN_VOTES), "neutral:no-expectation" (no usable reference
+    for the member's party), "shrunk:<share kept>" (under
+    CONSTITUENT_FULL_CONFIDENCE_VOTES) or "full". Read from the scoring
+    function itself (_constituent_alignment_core), so the branch that
+    scored the vote is the one that labels it — given the same member dict,
+    reference included, that calculate_scores received."""
+    return _constituent_alignment_core(
+        senator.get("votingRecord") or {}, [], {},
+        state=senator.get("state", ""), party=senator.get("party", "I"),
+        district=senator.get("district"), bioguide_id=senator.get("bioguideId"),
+        reference=senator.get("constituentReference"),
+    )["vote_part_status"]
 
 
 # Small-donor share (Funding Independence component 2) baseline.
@@ -984,7 +1021,7 @@ def _funding_independence_core(
     # multipliers 1.35 / 3.2 (AGENTS.md §3a); it is now measured every run
     # from the members being scored (compute_funding_reference), which also
     # keeps it on the same denominator as the ratio itself.
-    chamber = "house" if district is not None else "senate"
+    chamber = _chamber_of(district)
     ref = {
         **(FUNDING_REFERENCE.load().get(chamber) or {}),
         **((reference or {}).get(chamber) or {}),
@@ -1363,35 +1400,32 @@ _MIN_CONSTITUENT_REFERENCE_PARTY = 20
 _MIN_OPPOSED_SEATS_FOR_KINK = 5
 
 
+
 def party_break_rate(voting_record: dict) -> tuple[float | None, int]:
-    """(weighted share of party-labeled votes cast against the member's
-    party, count of those votes). None when fewer than 3 are usable. The
-    one definition both the per-run reference and the member's score read,
-    so the expectation is measured on exactly the statistic it is compared
-    with. Each roll call counts once (dedupe_votes), matching what the
-    scorecard shows."""
+    """(share of party-labeled votes cast against the member's party, count
+    of those votes). None when fewer than CONSTITUENT_MIN_VOTES are usable. The one definition
+    both the per-run reference and the member's score read, so the
+    expectation is measured on exactly the statistic it is compared with.
+    Each roll call counts once (dedupe_votes), matching what the scorecard
+    shows.
+
+    Unweighted since v6.15: a vote is party-labeled by how the parties
+    actually split on it (refine_with_vote_data), and each such roll call
+    is one observation of whether the member broke — the statistic the
+    research note validated (party-unity votes, unweighted). It used to be
+    weighted by partyAlignmentWeight, the bill's CONTENT lean, with 0.0
+    read as 1.0; a content-bipartisan bill that split on party lines then
+    counted a hundred times more than one with a 0.01 lean."""
     from app.pipeline.transform.normalize_votes import dedupe_votes
 
-    votes = dedupe_votes(
-        (voting_record.get("keyVotes") or []) + (voting_record.get("recentVotes") or [])
-    )
-    with_party = against = 0.0
-    n = 0
-    for v in votes:
-        wp = v.get("votedWithParty") if isinstance(v, dict) else None
-        if wp is None:
-            continue
-        weight = v.get("partyAlignmentWeight") or 0.0
-        weight = weight if weight > 0.0 else 1.0
-        if wp is True:
-            with_party += weight
-        else:
-            against += weight
-        n += 1
-    if n < 3 or with_party + against <= 0:
-        return None, n
-    return against / (with_party + against), n
-
+    votes = dedupe_votes([
+        v for v in (voting_record.get("keyVotes") or []) + (voting_record.get("recentVotes") or [])
+        if isinstance(v, dict)
+    ])
+    labeled = [v["votedWithParty"] for v in votes if v.get("votedWithParty") is not None]
+    if len(labeled) < CONSTITUENT_MIN_VOTES:
+        return None, len(labeled)
+    return sum(1 for wp in labeled if wp is not True) / len(labeled), len(labeled)
 
 def _expected_break_rate(fit: dict, alignment: float) -> float:
     rate = (
@@ -1419,9 +1453,11 @@ def compute_constituent_reference(members: list[tuple[str, float, float]]) -> di
     better than a pooled one (see the research note in
     docs/research/constituent-alignment.md).
 
-    deviation_p90 is the 90th percentile of |break rate - expected| across
-    both parties: the saturation scale, so the most out-of-pattern decile
-    spans the component's full range. Returns None unless BOTH parties have
+    deviation_p90 is the SATURATION_QUANTILE of |break rate - expected|
+    across both parties: the saturation scale. The vote score reaches 100
+    for breaking that far above the expectation and declines past it
+    (OVER_BREAK_DECLINE); it reaches 0 for loyalty LOYAL_SIDE_SCALE times
+    that far below it (v6.15). Returns None unless BOTH parties have
     enough members — one party scored against a measured expectation and
     the other against a fallback would not be comparable (the same
     both-or-neither rule as fetch/voteview.py's ingestion gates).
@@ -1447,23 +1483,30 @@ def compute_constituent_reference(members: list[tuple[str, float, float]]) -> di
         }
         fits[party] = fit
         deviations += [abs(r - _expected_break_rate(fit, a)) for a, r in rows]
-    p90 = float(np.quantile(deviations, 0.9))
+    p90 = float(np.quantile(deviations, SATURATION_QUANTILE))
     if p90 <= 0:
         return None
-    return {"expected": fits, "deviation_p90": round(p90, 5), "n": len(deviations)}
+    return {
+        "expected": fits, "deviation_p90": round(p90, 5), "n": len(deviations),
+        "statistic": CONSTITUENT_REFERENCE_STATISTIC,
+    }
 
 
 def constituent_reference_inputs(members: list[dict]) -> list[tuple[str, float, float]]:
     """(party, seat alignment, break rate) for each member dict (the shape
-    calculate_scores consumes: state, party, district, votingRecord) with a
-    measurable break rate — exactly the values _constituent_alignment_core
-    compares, so the reference and the scores can't disagree."""
+    calculate_scores consumes: state, party, district, votingRecord) whose
+    break rate rests on a full-confidence count of votes — exactly the values
+    _constituent_alignment_core compares, so the reference and the scores
+    can't disagree. Thinner records are left out: the score itself pulls
+    them toward 50 as too noisy to read at full scale, and their 0/33/67%
+    rates would otherwise set the saturation point everyone else is scored
+    against."""
     out = []
     for m in members:
         record = m.get("votingRecord") or {}
         party = record.get("effectiveParty") or m.get("party")
-        rate, _ = party_break_rate(record)
-        if party not in ("D", "R") or rate is None:
+        rate, n = party_break_rate(record)
+        if party not in ("D", "R") or rate is None or n < CONSTITUENT_FULL_CONFIDENCE_VOTES:
             continue
         alignment = _signed_state_alignment(
             m.get("state", ""), m.get("party", "I"),
@@ -1473,8 +1516,138 @@ def constituent_reference_inputs(members: list[dict]) -> list[tuple[str, float, 
     return out
 
 
+
+
 def _constituent_reference(chamber: str, reference: dict | None) -> dict:
-    return (reference or {}).get(chamber) or CONSTITUENT_REFERENCE.load().get(chamber) or {}
+    """The chamber's reference: the one passed in if it was measured on the
+    current statistic, else the stored one CONSTITUENT_REFERENCE.load()
+    resolves (persisted, then bundled, skipping stale entries). {} when
+    none is usable."""
+    passed = (reference or {}).get(chamber)
+    if CONSTITUENT_REFERENCE.usable(passed):
+        return passed
+    return CONSTITUENT_REFERENCE.load().get(chamber) or {}
+
+
+# How fast the seat-relative vote score falls once a member's break rate
+# passes the chamber's 90th-percentile deviation, as a multiple of the rate
+# it rose at below it. 1.0 mirrors the rise: 100 at saturation, back to 50
+# at twice the saturation deviation, 0 at three times. A design weight, not
+# a fitted one, chosen because the two measured slopes are of similar size
+# with opposite signs — the whole seat rewards crossing up to saturation
+# (Senate 1990-2024, +2.3 pts of vote share per SD) and the member's own
+# party's primary voters take share away past it (House 1990-2010, -3.0 per
+# SD), while the general electorate is flat past it. Research note section 8.
+OVER_BREAK_DECLINE = 1.0
+
+# How far below the seat's expected break rate, in saturation deviations,
+# loyalty has to reach before the vote score hits 0 (v6.15). A design
+# weight, not a fitted one: at equal distance from the seat's norm, extra
+# loyalty costs less than extra disloyalty past the peak (which reaches 0
+# at 3 deviations — OVER_BREAK_DECLINE), because that is where the evidence
+# points for the Senate and for a member's own party. In Senate elections
+# 1990-2024 loyalty beyond the seat's norm carried no vote-share cost at
+# any scale (t~1.2, flatter scales fitting slightly better); own-party
+# primary voters punished excess disloyalty (-3.0 pts/SD) and not
+# loyalty; the literature has primary voters rewarding loyalty (Pyeatt
+# 2015). Against it, the 2004 House test found loyalty the strongest
+# general-election cost, and its fit weakens as this flattens (dR2 0.0354
+# at 1, 0.0285 at 4). At 1 (v6.13) a senator a few points more loyal than
+# the seat's norm in today's Senate, whose whole saturation deviation is
+# under 4 points, scored 0 (Ossoff, Tina Smith), and 28 of 101 fell below
+# 25 on 2025 Voteview votes; at 4, 4 do.
+# Research note section 9.
+LOYAL_SIDE_SCALE = 4.0
+
+
+def _peaked_vote_shape(deviation: float, scale: float, loyal_scale: float | None = None) -> float:
+    """50 at the seat's expected break rate, falling to 0 for loyalty
+    loyal_scale (default LOYAL_SIDE_SCALE) saturation deviations below it,
+    rising to 100 at the saturation deviation above it, then declining
+    (OVER_BREAK_DECLINE) past it."""
+    scaled = deviation / scale
+    if scaled < 0:
+        loyal = LOYAL_SIDE_SCALE if loyal_scale is None else loyal_scale
+        return 50.0 + 50.0 * max(scaled / loyal, -1.0)
+    if not past_saturation(deviation, scale):
+        return 50.0 + 50.0 * scaled
+    return max(0.0, 100.0 - 50.0 * OVER_BREAK_DECLINE * (scaled - 1.0))
+
+
+def past_saturation(deviation: float, scale: float) -> bool:
+    """Whether a member's break rate sits past the saturation deviation
+    above their seat's expectation — where the vote score declines as the
+    rate rises. The one definition the score's shape and its breakdown
+    text read."""
+    return deviation > scale
+
+
+def beyond_saturation(deviation: float, scale: float) -> bool:
+    """Whether a member's break rate is more than the saturation deviation
+    from their seat's expectation on either side — the two-sided count the
+    reference's quantile (over |deviation|) describes, and so the one the
+    ground-truth gate's share probe checks against it."""
+    return abs(deviation) > scale
+
+
+def seat_relative_vote_score(deviation: float, scale: float, n_votes: int) -> float:
+    """Constituent Alignment's seat-relative vote component: the peaked
+    shape (_peaked_vote_shape), shrunk linearly toward 50 until the
+    member has CONSTITUENT_FULL_CONFIDENCE_VOTES party-labeled votes
+    (AGENTS.md principle 3) — with a handful of votes one break moves the
+    rate far enough to reach either end, or past saturation the floor. The
+    one implementation the score and the ground-truth gate both call."""
+    confidence = min(n_votes / CONSTITUENT_FULL_CONFIDENCE_VOTES, 1.0)
+    return 50.0 + (_peaked_vote_shape(deviation, scale) - 50.0) * confidence
+
+
+def _chamber_of(district: int | None) -> str:
+    """A member's chamber from the scoring inputs: House members carry a
+    district (0 for at-large), senators none."""
+    return "house" if district is not None else "senate"
+
+
+def _seat_vote_expectation(
+    state: str,
+    party: str,
+    effective_party: str | None,
+    district: int | None,
+    reference: dict | None,
+) -> tuple[float, float | None, float | None, bool]:
+    """(seat alignment, expected break rate, saturation deviation, whether
+    the reference was measured) for a member; expected and saturation are
+    None when the chamber has no usable expectation for their party, and
+    'measured' is False for the bundled preset prior (no member count).
+    The single derivation both the score (_constituent_alignment_core) and
+    the gate (seat_break_deviation) read, from one resolution of the
+    reference, so they can't disagree about who is past saturation."""
+    alignment = _signed_state_alignment(state, party, effective_party=effective_party, district=district)
+    ref = _constituent_reference(_chamber_of(district), reference)
+    fit = (ref.get("expected") or {}).get(effective_party or party)
+    scale = ref.get("deviation_p90")
+    measured = ref.get("n") is not None
+    if fit is None or not scale:
+        return alignment, None, None, measured
+    return alignment, _expected_break_rate(fit, alignment), float(scale), measured
+
+
+def seat_break_deviation(
+    break_rate: float,
+    state: str,
+    party: str,
+    effective_party: str | None = None,
+    district: int | None = None,
+    reference: dict | None = None,
+) -> tuple[float, float] | None:
+    """(break rate minus the seat's expected rate, the chamber's saturation
+    deviation), or None without a measured expectation for the member's
+    party — the two numbers the seat-relative vote score is a function of.
+    The ground-truth gate reads them through here so it judges members on
+    exactly the expectation the score used."""
+    _, expected, scale, _ = _seat_vote_expectation(state, party, effective_party, district, reference)
+    if expected is None:
+        return None
+    return break_rate - expected, scale
 
 
 # Weight of position congruence when a roll-call ideal point exists; the
@@ -1518,20 +1691,30 @@ def _calc_constituent_alignment(
          data): the member's break rate on party-labeled votes minus the
          break rate their chamber's same-party members show at the same seat
          lean — both measured each run (compute_constituent_reference).
-         Symmetric: 50 at expectation, above for breaking more, below for
-         breaking less, saturating at the chamber's 90th-percentile
-         deviation.
+         50 at expectation; below for breaking less, reaching 0 at
+         LOYAL_SIDE_SCALE times the chamber's 90th-percentile deviation;
+         above for breaking more up to that deviation (100), then
+         declining for breaking further (OVER_BREAK_DECLINE).
            - Loyalty below expectation is scored, not held neutral. In the
              2004 House test the below-expectation side carried the
              strongest association with vote share (2.3 pts per SD, t=3.4),
              consistent with Carson et al. 2010. The pre-v6.13 floor
-             ("unreadable") discarded it.
+             ("unreadable") discarded it. Since v6.15 it is scored more
+             gently than excess disloyalty (LOYAL_SIDE_SCALE): Senate
+             elections show no cost for it.
            - No seat-safety discount on either side: the association was
              the same in safe and competitive seats (1.5 vs 1.4 pts/SD).
            - No discount for flank-side defectors (Kirkland & Slapin 2017's
              concern): members breaking from the flank did not fare worse
              for it — if anything better (difference +2.2, t=1.9), the
              wrong sign for a discount.
+           - Breaking far past expectation declines (v6.15). The whole
+             seat stops rewarding it at saturation (Senate 1990-2024,
+             N=461: slope past it 0.21, t=0.2) and the member's own party's
+             primary voters take share away past it (House primaries,
+             -3.0 pts/SD, t=-2.0) — research note section 8. The score
+             represents both: the seat that elected the member and the
+             party label it elected them under.
       2. Position congruence (30%, when Voteview ideal points exist): the
          member's congress-specific Nokken-Poole first-dimension position
          minus what a same-party member of a seat with this lean holds
@@ -1573,10 +1756,10 @@ def _constituent_alignment_core(
     contract as _funding_independence_core above."""
     effective_party = voting_record.get("effectiveParty", party)
     eval_party = effective_party or party
-    alignment = _signed_state_alignment(
-        state, party, effective_party=effective_party, district=district,
+    alignment, expected, deviation_scale, measured = _seat_vote_expectation(
+        state, party, effective_party, district, reference,
     )
-    chamber = "house" if district is not None else "senate"
+    chamber = _chamber_of(district)
 
     ideal = _member_ideal_points(chamber)
     dim1 = (ideal.get("members") or {}).get(bioguide_id) if bioguide_id else None
@@ -1597,28 +1780,52 @@ def _constituent_alignment_core(
         )
 
     break_rate, n_party = party_break_rate(voting_record)
-    ref = _constituent_reference(chamber, reference)
-    vote_fit = (ref.get("expected") or {}).get(eval_party)
-    deviation_scale = ref.get("deviation_p90")
-    expected = None
     if break_rate is None:
         party_score = 50.0
-        party_alignment_detail = "fewer than 3 party-labeled votes available — neutral 50"
-    elif vote_fit is None or not deviation_scale:
+        vote_part_status = "neutral:few-votes"
+        party_alignment_detail = f"fewer than {CONSTITUENT_MIN_VOTES} party-labeled votes available — neutral 50"
+    elif expected is None:
         party_score = 50.0
+        vote_part_status = "neutral:no-expectation"
         party_alignment_detail = (
             f"break rate {break_rate:.1%}; no measured expectation for a "
             f"{eval_party or 'non-caucusing'} member of this chamber — neutral 50"
         )
     else:
-        expected = _expected_break_rate(vote_fit, alignment)
         deviation = break_rate - expected
-        party_score = 50.0 + 50.0 * max(-1.0, min(deviation / float(deviation_scale), 1.0))
-        party_alignment_detail = (
-            f"broke with party on {break_rate:.1%} of {n_party} party-labeled votes; "
+        party_score = seat_relative_vote_score(deviation, deviation_scale, n_party)
+        vote_part_status = (
+            f"shrunk:{n_party / CONSTITUENT_FULL_CONFIDENCE_VOTES:.2f}"
+            if n_party < CONSTITUENT_FULL_CONFIDENCE_VOTES else "full"
+        )
+        # measured is False for the bundled hand-set prior, used before a
+        # chamber's first measured run.
+        norm = (
             f"{eval_party} members of this chamber in seats with this lean "
             f"(signal {alignment:+.2f}) break on {expected:.1%}"
+            if measured else
+            f"a {eval_party} member of a seat with this lean (signal {alignment:+.2f}) is "
+            f"expected to break on {expected:.1%} (a preset curve until this chamber is "
+            "measured on the current method)"
         )
+        party_alignment_detail = (
+            f"broke with party on {break_rate:.1%} of {n_party} party-labeled votes; {norm}"
+        )
+        if past_saturation(deviation, deviation_scale):
+            gap = (
+                f"the chamber's {round(SATURATION_QUANTILE * 100)}th-percentile gap"
+                if measured else "the preset saturation gap"
+            )
+            party_alignment_detail += (
+                f" — breaking on more than {expected + deviation_scale:.1%} "
+                f"({deviation_scale * 100:.1f} points above that) is past {gap}, "
+                "where breaking further lowers the score"
+            )
+        if n_party < CONSTITUENT_FULL_CONFIDENCE_VOTES:
+            party_alignment_detail += (
+                f"; only {n_party} votes, so the score is pulled toward 50 "
+                f"until {CONSTITUENT_FULL_CONFIDENCE_VOTES}"
+            )
 
     congruence_weight = POSITION_CONGRUENCE_WEIGHT if congruence_score is not None else 0.0
     party_weight = 1.0 - congruence_weight
@@ -1639,7 +1846,7 @@ def _constituent_alignment_core(
             "score": round(congruence_score, 1),
             "detail": congruence_detail,
         })
-    return {"score": score, "components": components}
+    return {"score": score, "components": components, "vote_part_status": vote_part_status}
 
 
 def _calc_funding_diversity(funding: dict) -> int:
@@ -1942,70 +2149,49 @@ def _advancement_baseline(
     return rates["majority"] if party == majority else rates["minority"]
 
 
-# A member with zero substantive bills after a real term in office is a
-# genuine, if weak, negative data point — not the same as a freshman who
-# simply hasn't had a chance yet. Below this tenure the two are
-# indistinguishable and stay neutral; at/above it, "zero substantive
-# bills" gets the same confidence-shrinkage treatment a genuine low-n
-# attempt already gets, rather than being treated as missing data.
-# Roughly one legislative session.
+# Below this tenure, zero substantive bills is indistinguishable from a
+# member who has not had a chance to sponsor any yet, and scores neutral.
+# At or above it, zero is a record: a credit of 0 on the same scale as
+# everyone else (see _les_component_score). Roughly one legislative session.
 _MIN_TENURE_FOR_ZERO_SIGNAL_YEARS = 0.5
 
-# Confidence assigned to a confirmed-zero record — set just above what a
-# genuine single-bill, zero-success record gets (min(1/10, 1.0) = 0.10),
-# so a confirmed zero isn't treated as a *noisier* sample than an actual
-# attempt that also produced nothing. Without this, a flat 50 for
-# confirmed inaction always beat a genuine low-n attempt that failed
-# once that attempt's own shrinkage-toward-50 was correctly applied —
-# see the 2026-07 "inaction beats trying and failing" fix.
-_ZERO_BILLS_CONFIDENCE = 0.15
 
-
-def _zero_bill_component_score(years_in_office: float | None) -> tuple[float, str]:
-    """Shared "no substantive bills" treatment, used whether the member
-    sponsored nothing at all or only ceremonial resolutions — neither
-    carries a substantive record, so both get the same verdict."""
-    if (years_in_office or 0) >= _MIN_TENURE_FOR_ZERO_SIGNAL_YEARS:
-        score = 50.0 * (1 - _ZERO_BILLS_CONFIDENCE)
-        detail = (
-            f"0 substantive bills over {years_in_office:.1f} years in office "
-            "— confirmed inactivity, not a data gap"
-        )
-        return score, detail
-    return 50.0, "no substantive bills on record — neutral 50"
-
-
-# Legislative Effectiveness: significance-weighted, cumulative-stage
-# scoring — follows Volden & Wiseman (2014, "Legislative Effectiveness in
-# the United States Congress," Cambridge UP; methodology also documented
-# at thelawmakers.org, the Center for Effective Lawmaking). Their real
-# LES weights each sponsored bill by significance and credits that weight
-# CUMULATIVELY across every stage it reaches — a bill that becomes law
-# contributes to the introduced/committee/passed-chamber/law totals all
-# at once, not just its final stage. Two deliberate, disclosed departures
-# from their real methodology, both confirmed by a 2026-07 deep-research
-# audit of their actual published approach (not assumed from the name):
-#   - Only 2 of their 3 significance tiers are implemented: commemorative
-#     resolutions = 1x, substantive bills = 5x (the existing
-#     SUBSTANTIVE_BILL_TYPES split). Their 3rd tier ("substantive AND
-#     significant," 10x) was assigned from hand-curated expert/media
-#     "major legislation of the year" lists this platform has no access
-#     to and no reliable proxy for — not implemented, rather than
-#     approximated with an un-validated stand-in.
-#   - Their real score normalizes to the chamber-term population mean
-#     (an average member scores exactly 1.0); this platform's
-#     sponsored-bill data is career-cumulative (many congresses, not one
-#     fixed 2-year term V&W's design assumes), so credit is computed
-#     per-congress-served and compared against an EXPECTED credit
-#     (majority/minority-adjusted, reusing _advancement_baseline's real
-#     audited rates) rather than a literal population-mean ratio — this
-#     is the same "expected-vs-actual, credit the difference" pattern
-#     already used successfully elsewhere in this file (Constituent
-#     Alignment's seat-relative break rate).
+# Legislative Effectiveness: Volden & Wiseman's (2014, "Legislative
+# Effectiveness in the United States Congress," Cambridge UP; data and
+# methodology at thelawmakers.org) Legislative Effectiveness Score. Each
+# sponsored bill counts, by significance weight, at every stage it reaches
+# (a law counts at all four); at each stage the member's weighted count is
+# divided by the chamber's weighted total there, and the stage shares are
+# summed and scaled so the chamber averages 1.0 (_les_normalized_credit).
+# The per-stage division is the heart of the measure: few bills reach the
+# later stages, so advancing one earns far more than introducing one.
+#
+# v6.14 restored it. v6.4-v6.13 credited weight x stages reached with no
+# division, which made a law worth four introductions and turned the score
+# into a count of bills introduced: against V&W's published LES for the
+# 110th-118th Congresses it ranked members at Spearman 0.76 (House) and
+# 0.79 (Senate), against 0.93 and 0.97 with the division
+# (scripts/research_les_stage_weighting.py, docs/research/
+# les-stage-weighting.md).
+#
+# Disclosed departures from V&W, each measured by that script:
+#   - Four stages, not five: Congress.gov's action codes give committee
+#     action and reporting as one stage here (IN_COMMITTEE), where V&W
+#     separate "action in committee" from "action beyond committee".
+#   - Significance: bills and joint resolutions 5x, simple and concurrent
+#     resolutions 1x, and a bill whose content is commemorative (a post-
+#     office naming, a Gold Medal) 1x — detected from its title by an
+#     embedding classifier calibrated against V&W's own commemorative
+#     counts (analyze/commemorative.py, scripts/calibrate_commemorative.py).
+#     V&W's third tier, "substantive and significant" (10x), comes from CQ
+#     Almanac coverage, which has no source here.
+#   - The score compares each member with the median of their own
+#     majority/minority status in the chamber, measured each run, rather
+#     than reporting the raw ratio to the chamber mean.
 # Legislative leadership (PageRank cosponsorship centrality, Brin & Page
 # 1998) has no basis in Volden & Wiseman's work — it is kept as an
-# explicitly separate 30%-weighted component, not blended into the
-# V&W-based 70%.
+# explicitly separate component (25%, or 30% without cosponsorship data),
+# not blended into the V&W-based one (60%, or 70%).
 
 _LES_STAGE_ORDER: dict[str, int] = {
     "INTRODUCED": 1,
@@ -2056,17 +2242,45 @@ def _les_bill_stage(bill: dict) -> int:
     return 1
 
 
-def _les_significance_weight(bill_type: str) -> float:
+def _les_significance_weight(bill_type: str, commemorative: bool = False) -> float:
+    """V&W's tiers as far as they can be observed here: a bill or joint
+    resolution 5x, unless its content is commemorative (analyze/
+    commemorative.py) — then 1x, like a simple or concurrent resolution."""
+    if commemorative:
+        return 1.0
     return 5.0 if bill_type in SUBSTANTIVE_BILL_TYPES else 1.0
 
 
-def _les_cumulative_credit(bill: dict) -> float:
-    """weight x stages-reached — V&W's real cumulative design: a bill
-    credited into stage 4 contributes 4x its significance weight total
-    (1 unit at each of stages 1-4), not just 1x at its final stage."""
-    w = _les_significance_weight((bill.get("billType") or "").lower())
-    s = _les_bill_stage(bill)
-    return w * s
+def _les_stage_counts(sponsored_bills: list[dict]) -> list[float]:
+    """Significance-weighted count of these bills reaching each stage;
+    index 0 is stage 1 (introduced). Cumulative, as in V&W: a bill that
+    became law counts at all four stages."""
+    counts = [0.0] * _LES_MAX_STAGE
+    for b in sponsored_bills:
+        w = _les_significance_weight((b.get("billType") or "").lower(), bool(b.get("commemorative")))
+        for k in range(_les_bill_stage(b)):
+            counts[k] += w
+    return counts
+
+
+def _les_normalized_credit(
+    stage_counts: list[float], stage_totals: list[float], n_members: int,
+) -> float:
+    """Volden & Wiseman's LES arithmetic: at each stage, the member's
+    weighted count over the chamber's weighted total at that stage, summed
+    over stages and scaled by N/stages so the chamber averages 1.0.
+
+    Dividing by each stage's total is what makes advancement count: a
+    stage few bills reach has a small total, so one bill there is a large
+    share of it. Crediting weight x stages-reached instead (v6.4-v6.13)
+    made an enacted bill worth four introductions where V&W's arithmetic
+    makes it worth ~47 (House) to ~67 (Senate), and ranked members by bill
+    volume (Spearman 0.95-0.98 with introductions, 0.76-0.79 with V&W's
+    published LES) — scripts/research_les_stage_weighting.py,
+    docs/research/les-stage-weighting.md.
+    """
+    total = sum(c / t for c, t in zip(stage_counts, stage_totals) if t > 0)
+    return total * n_members / len(stage_totals)
 
 
 # ── LES population reference ────────────────────────────────────────────
@@ -2108,11 +2322,19 @@ def _les_cumulative_credit(bill: dict) -> float:
 _LES_SATURATION_STDEVS = 1.5
 
 
-def _les_member_inputs(sponsored_bills: list[dict], party: str | None) -> dict | None:
+def _les_member_inputs(
+    sponsored_bills: list[dict],
+    party: str | None,
+    stage_totals: list[float] | None = None,
+    n_members: int | None = None,
+) -> dict | None:
     """Per-member quantities the LES component and its population reference
     share — one definition, so the reference is always measured with the
     exact formula members are scored with. None when the member has no
-    substantive bills (not part of the credit distribution)."""
+    substantive bills (not part of the credit distribution).
+
+    `raw_per_congress` needs the chamber's stage totals (compute_les_
+    reference measures them); without them it is None."""
     n_sub = sum(
         1 for b in sponsored_bills
         if (b.get("billType") or "").lower() in SUBSTANTIVE_BILL_TYPES
@@ -2124,9 +2346,14 @@ def _les_member_inputs(sponsored_bills: list[dict], party: str | None) -> dict |
         1 for b in sponsored_bills
         if (b.get("billType") or "").lower() in _LES_HOUSE_TYPES
     )
+    raw = None
+    if stage_totals and n_members:
+        raw = _les_normalized_credit(
+            _les_stage_counts(sponsored_bills), stage_totals, n_members,
+        ) / max(len(congresses), 1)
     return {
         "n_sub": n_sub,
-        "raw_per_congress": sum(_les_cumulative_credit(b) for b in sponsored_bills) / max(len(congresses), 1),
+        "raw_per_congress": raw,
         "is_house": house_n > (len(sponsored_bills) - house_n),
     }
 
@@ -2196,12 +2423,20 @@ def compute_les_reference(
     """
     current = (congress, majority) if majority else None
     rates = _measure_advancement_rates(members, current) or previous_rates
+    # The chamber's weighted total at each stage, over every member's bills
+    # (V&W's denominators). N is the whole chamber, not only members with
+    # substantive bills, so the chamber — not its sponsors — averages 1.0.
+    stage_totals = [0.0] * _LES_MAX_STAGE
+    for bills, _ in members:
+        for k, c in enumerate(_les_stage_counts(bills)):
+            stage_totals[k] += c
+    n_members = len(members)
     credits: list[float] = []
     baselines: list[float] = []
     by_status: dict[str, list[float]] = {"majority": [], "minority": []}
     for bills, party in members:
-        inputs = _les_member_inputs(bills, party)
-        if inputs is None:
+        inputs = _les_member_inputs(bills, party, stage_totals, n_members)
+        if inputs is None or inputs["raw_per_congress"] is None:
             continue
         credits.append(inputs["raw_per_congress"])
         baselines.append(_les_member_baseline(bills, party, current, rates))
@@ -2219,6 +2454,8 @@ def compute_les_reference(
         "stdev_credit": round(statistics.pstdev(credits), 4),
         "avg_baseline": round(statistics.mean(baselines), 6),
         "advancement_rates": rates,
+        "stage_totals": [round(t, 4) for t in stage_totals],
+        "n_members": n_members,
     }
     if all(len(v) >= _MIN_LES_STATUS_MEMBERS for v in by_status.values()):
         ref["status_median"] = {k: round(statistics.median(v), 4) for k, v in by_status.items()}
@@ -2258,28 +2495,59 @@ def _les_component_score(
     party: str | None,
     years_in_office: float | None,
     reference: dict | None = None,
+    chamber: str | None = None,
+    bills_known: bool = True,
 ) -> tuple[float, str]:
-    """The V&W-based 70% component: significance-weighted, cumulative-
-    stage credit per congress served, scored relative to what an average
-    sponsor of this party/status/chamber would be expected to achieve —
-    not an absolute rate. Confirmed-zero-vs-no-data-yet distinction (see
-    _zero_bill_component_score) carried forward unchanged from the
-    2026-07 "inaction beats trying and failing" fix; this is the same
-    invariant, re-homed into the new formula.
+    """The V&W-based component: stage-normalized credit per congress
+    served (_les_normalized_credit), scored against the median member of
+    the same majority/minority status in the chamber.
+
+    No substantive bills scores neutral below _MIN_TENURE_FOR_ZERO_SIGNAL_
+    YEARS or when the chamber is unknown, and otherwise as a credit of 0 —
+    so inaction never beats an attempt. `bills_known=False` (the fetch
+    failed) is neutral: an empty list there is not a record.
 
     `reference` is {"senate": {...}, "house": {...}} (compute_les_reference
     per chamber); None reads load_les_reference(). See the LES population
     reference comment above for where each number comes from."""
+    if not bills_known:
+        # The member's sponsored legislation could not be fetched this run.
+        # An empty list here is a failed request, not a record of zero bills.
+        return 50.0, "sponsored legislation could not be fetched this run — neutral 50"
     inputs = _les_member_inputs(sponsored_bills, party)
     if inputs is None:
-        return _zero_bill_component_score(years_in_office)
-    n_sub = inputs["n_sub"]
-    raw_per_congress = inputs["raw_per_congress"]
-    chamber = "house" if inputs["is_house"] else "senate"
+        if (years_in_office or 0) < _MIN_TENURE_FOR_ZERO_SIGNAL_YEARS:
+            return 50.0, "no substantive bills on record yet — neutral 50"
+        if chamber is None:
+            return 50.0, "no substantive bills and no chamber to compare against — neutral 50"
+        n_sub = 0
+    else:
+        n_sub = inputs["n_sub"]
+        chamber = "house" if inputs["is_house"] else "senate"
 
     ref = (reference or load_les_reference()).get(chamber)
     if not ref:
         return 50.0, "no population reference available for this chamber — neutral 50"
+    if not ref.get("stage_totals") or not ref.get("n_members"):
+        # A reference measured before v6.14 is on the old weight x stages
+        # scale; comparing a stage-normalized credit with it would be
+        # meaningless. The next pipeline run replaces it.
+        return 50.0, (
+            f"the stored {chamber} reference predates stage-normalized credit "
+            "— neutral 50 until the next pipeline run measures a new one"
+        )
+    if inputs is None:
+        # No substantive bills after real tenure: a credit of 0, compared
+        # on the same scale as everyone else — V&W's LES is 0 for a member
+        # who sponsored nothing. That keeps "inaction never beats an
+        # attempt" true by construction (credit is monotone in bills),
+        # which the fixed near-neutral score it replaces could only keep by
+        # shrinking every low-volume sponsor toward 50.
+        raw_per_congress = 0.0
+    else:
+        raw_per_congress = _les_member_inputs(
+            sponsored_bills, party, ref["stage_totals"], ref["n_members"],
+        )["raw_per_congress"]
     member_congress = max((b.get("congress") or 0 for b in sponsored_bills), default=0)
     if member_congress and ref.get("congress") and member_congress != ref["congress"]:
         # First days of a new congress, before enough members have
@@ -2310,7 +2578,7 @@ def _les_component_score(
         expected_per_congress = status_median
     else:
         rates = ref.get("advancement_rates")
-        if rates and avg_baseline:
+        if rates and avg_baseline and sponsored_bills:
             member_baseline = _les_member_baseline(sponsored_bills, party, current, rates)
             status_ratio = member_baseline / avg_baseline
         else:
@@ -2324,10 +2592,16 @@ def _les_component_score(
         expected_per_congress = population_median * status_ratio
 
     diff = raw_per_congress - expected_per_congress
-    conf = min(n_sub / 10, 1.0)
     normalized_diff = max(-1.0, min(diff / saturation, 1.0)) if saturation else 0.0
-    raw_score = 50.0 + 50.0 * normalized_diff
-    score = raw_score * conf + 50.0 * (1 - conf)
+    # No shrinkage toward 50 by bill count (v6.14). Credit is a total over
+    # every bill the member sponsored — all of them observed, nothing
+    # estimated — and already grows with volume, so shrinking a low-volume
+    # sponsor toward the middle penalised volume a second time: it pulled a
+    # member with two bills, one enacted, down toward members with dozens
+    # introduced. Against V&W's published LES it cost 0.06 of rank agreement
+    # in the House (scripts/research_les_stage_weighting.py). The published
+    # confidence grade still says how many bills stand behind the number.
+    score = 50.0 + 50.0 * normalized_diff
 
     # Stage-count breakdown (2026-07, per user request): the raw credit
     # figure above is one opaque number that a bill-mill sponsor (many
@@ -2347,15 +2621,20 @@ def _les_component_score(
     enacted = sum(1 for b in substantive_bills if _les_bill_stage(b) >= _LES_MAX_STAGE)
 
     bar = f"median {status}-party sponsor" if status_median is not None else "for this sponsor's status"
+    if inputs is None:
+        return score, (
+            f"0 substantive bills over {years_in_office:.1f} years in office — "
+            f"a credit of 0 vs. {expected_per_congress:.2f} expected ({bar})"
+        )
+    commemorative = sum(1 for b in substantive_bills if b.get("commemorative"))
     detail = (
-        f"{raw_per_congress:.1f} significance-weighted stage-credit/congress vs. "
-        f"{expected_per_congress:.1f} expected ({bar}) — "
-        f"{n_sub} substantive bills: {introduced_only} introduced only (still "
-        f"counts under Volden & Wiseman's real methodology), "
+        f"stage-normalized credit {raw_per_congress:.2f}/congress (chamber average 1.00) vs. "
+        f"{expected_per_congress:.2f} expected ({bar}) — "
+        f"{n_sub} bills: {introduced_only} introduced only, "
         f"{advanced_short_of_law} advanced further, {enacted} became law"
     )
-    if conf < 1.0:
-        detail += f", confidence-scaled {conf:.0%} ({n_sub} of 10 bills)"
+    if commemorative:
+        detail += f"; {commemorative} commemorative (weighted 1x, not 5x)"
     return score, detail
 
 
@@ -2366,6 +2645,8 @@ def _calc_legislative_effectiveness(
     years_in_office: float | None = None,
     attracted_bipartisanship: float | None = None,
     les_reference: dict | None = None,
+    chamber: str | None = None,
+    bills_known: bool = True,
 ) -> int:
     """
     Legislative Effectiveness Score (0-100, higher = better).
@@ -2373,11 +2654,9 @@ def _calc_legislative_effectiveness(
     Three components (two when bipartisan-attraction data is missing —
     weights then revert to exactly the pre-v6.11 70/30 split):
 
-      1. Bill significance & advancement (60%): Volden & Wiseman
-         (2014)-based — see the module comment above _LES_STAGE_ORDER for
-         the full methodology and the two disclosed departures from their
-         real approach (2-tier significance, expected-vs-actual credit
-         instead of population-mean-ratio normalization).
+      1. Bill significance & advancement (60%): Volden & Wiseman's (2014)
+         Legislative Effectiveness Score — see the module comment above
+         _LES_STAGE_ORDER for the method and its disclosed departures.
 
       2. Legislative leadership (25%): PageRank score from the
          cosponsorship network (Brin & Page 1998, computed in
@@ -2415,15 +2694,15 @@ def _calc_legislative_effectiveness(
          live correlation after the first full run, same standing check
          as the v6.8 r=-0.76 finding.
 
-    Components apply linear count-confidence shrinkage toward 50 when data is
-    sparse, preventing extreme scores from thin evidence — including a
-    confirmed-zero-bills record after real tenure, which is a weak but
-    real negative signal, not the same as a freshman with no data yet
-    (see _zero_bill_component_score).
+    The leadership component is shrunk toward 50 for short tenure. The
+    V&W-based component is not shrunk by bill count (v6.14, see
+    _les_component_score); a member with no substantive bills after real
+    tenure scores a credit of 0 on the same scale when `chamber` is known,
+    and neutral when their bills could not be fetched (`bills_known`).
     """
     return _legislative_effectiveness_core(
         sponsored_bills, leadership_score, party, years_in_office,
-        attracted_bipartisanship, les_reference,
+        attracted_bipartisanship, les_reference, chamber, bills_known,
     )["score"]
 
 
@@ -2434,12 +2713,15 @@ def _legislative_effectiveness_core(
     years_in_office: float | None = None,
     attracted_bipartisanship: float | None = None,
     les_reference: dict | None = None,
+    chamber: str | None = None,
+    bills_known: bool = True,
 ) -> dict:
     """Same math as _calc_legislative_effectiveness, returning every
     intermediate value alongside the final score. Single implementation,
     same reuse contract as _funding_independence_core above."""
     les_score, les_detail = _les_component_score(
         sponsored_bills or [], party, years_in_office, les_reference,
+        chamber=chamber, bills_known=bills_known,
     )
 
     # Component: leadership score from cosponsorship PageRank

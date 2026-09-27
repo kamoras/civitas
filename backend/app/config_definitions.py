@@ -210,3 +210,34 @@ EXPLORE_RETRIEVAL_WEIGHT: float = 1.0
 # against the live corpus by pipeline/calibrate_ranking.py on every
 # explore pipeline run and read through pipeline/explore_ranking.py.
 # There is deliberately nothing to hand-edit here.
+
+
+# ── Constituent Alignment reference definition ──────────────────────────────
+# Kept here, not in score_calculator, because population_reference needs them
+# to stamp CONSTITUENT_REFERENCE at construction (it can't import the scorer).
+
+# Fewest party-labeled votes Constituent Alignment reads a break rate from
+# (party_break_rate); below it the vote part is a neutral 50.
+CONSTITUENT_MIN_VOTES = 3
+
+# Party-labeled votes at which Constituent Alignment's data sufficiency is
+# graded "high" (calculate_confidence) and its vote score stops shrinking
+# toward 50. A volume count, the same for every member.
+CONSTITUENT_FULL_CONFIDENCE_VOTES = 20
+
+# The deviation quantile Constituent Alignment's vote score saturates at
+# (deviation_p90): the most out-of-pattern tenth of a chamber, measured on
+# both sides of the expectation, sits at or past it.
+SATURATION_QUANTILE = 0.9
+
+# What a Constituent Alignment reference is measured on: the unweighted
+# break rate (party_break_rate) over records with at least
+# CONSTITUENT_FULL_CONFIDENCE_VOTES party-labeled votes, saturating at the
+# SATURATION_QUANTILE (written exactly, so any change to either constant
+# changes the stamp). CONSTITUENT_REFERENCE accepts only stored entries
+# carrying it, so one measured under another rule — v6.13's content-weighted
+# rate over 3+-vote records, or another threshold or quantile — is not
+# scored against.
+CONSTITUENT_REFERENCE_STATISTIC = (
+    f"unweighted-break-rate/n>={CONSTITUENT_FULL_CONFIDENCE_VOTES}/q={SATURATION_QUANTILE!r}"
+)

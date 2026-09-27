@@ -72,8 +72,36 @@ def _normalise(text: str) -> str:
     line wrapping, smart quotes and capitalisation drift. Punctuation is
     kept: dropping it would let "Collins, rejected" match "Collins
     rejected" and admit a relationship the source never stated."""
+    return _flatten(text).lower()
+
+
+def _flatten(text: str) -> str:
+    """_normalise without the lowercasing, for text that gets rendered."""
     swapped = (text or "").replace("’", "'").replace("“", '"').replace("”", '"')
-    return re.sub(r"\s+", " ", swapped).strip().lower()
+    return re.sub(r"\s+", " ", swapped).strip()
+
+
+def headline_source(title: str | None, summary: str | None) -> str:
+    """The source text for a headline and its summary, with the headline
+    closed as the sentence it is.
+
+    Headlines carry no closing period, so "title\nsummary" read as one
+    sentence once whitespace was collapsed: a predicate ending exactly at
+    the headline's end ran on into the summary's first word and failed
+    _ends_at_clause_boundary, and an actor at the end of a headline could
+    be joined to a predicate opening the summary. Measured on a live run
+    (2026-09-27): 11 of 40 articles lost a claim that ended at its
+    headline — "U.S. Supreme Court rejected a Republican attempt at
+    redistricting congressional seats in Missouri" among them — and most
+    clusters then fell short of the two claims an issue needs. The break
+    is marked here rather than by treating every newline as a boundary,
+    because a wrapped line inside one sentence is a real input too.
+    """
+    title = (title or "").strip()
+    summary = (summary or "").strip()
+    if title and title[-1] not in ".?!:":
+        title += "."
+    return f"{title}\n{summary}".strip()
 
 
 def _is_verbatim(span: str, source: str) -> bool:
@@ -87,8 +115,9 @@ def _is_verbatim(span: str, source: str) -> bool:
 _MAX_GAP_WORDS = 3
 
 
-def _asserted_together(actor: str, predicate: str, source: str) -> bool:
-    """True only where the source says the PREDICATE of the ACTOR.
+def _asserted_together(actor: str, predicate: str, source: str) -> str | None:
+    """The source's own text between ACTOR and PREDICATE where it says the
+    predicate of the actor, else None.
 
     Checking each span verbatim but separately is not enough, and this
     is the exact hole that produced issue #376. Given
@@ -109,14 +138,14 @@ def _asserted_together(actor: str, predicate: str, source: str) -> bool:
     class `ungrounded_relationship_claims` demonstrably misses (a
     published story called Donald Trump Jr. Hunter Biden's son).
     """
-    haystack = _normalise(source)
-    needle_actor = _normalise(actor)
-    needle_predicate = _normalise(predicate)
-    for match in re.finditer(re.escape(needle_actor), haystack):
+    haystack = _flatten(source)
+    needle_predicate = re.compile(re.escape(_flatten(predicate)), re.IGNORECASE)
+    for match in re.finditer(re.escape(_flatten(actor)), haystack, re.IGNORECASE):
         tail = haystack[match.end():match.end() + 400]
-        found = tail.find(needle_predicate)
-        if found == -1:
+        hit = needle_predicate.search(tail)
+        if hit is None:
             continue
+        found = hit.start()
         # Only the GAP between them is constrained. The predicate itself
         # may legitimately contain a period — "takes a selfie with
         # Maryland Sens. Chris Van Hollen" is one assertion, and an
@@ -129,8 +158,13 @@ def _asserted_together(actor: str, predicate: str, source: str) -> bool:
         # NEXT sentence, whose subject is somebody else.
         if "." in gap:
             continue
-        return True
-    return False
+        # The gap is RETURNED so compose renders it. Dropping it changed
+        # who acted: "OpenAI agent made unauthorized attempts" composed as
+        # "OpenAI made unauthorized attempts" (live, 2026-09-27), and
+        # "Trump's lawyer argued" would compose as "Trump argued". The
+        # published sentence is now one contiguous span of the source.
+        return gap
+    return None
 
 
 def _looks_like_an_actor(span: str) -> bool:
@@ -225,7 +259,8 @@ def compose(actor: str, predicate: str, source: str) -> str | None:
     # Both spans real is not enough — the source has to assert one OF the
     # other. See _asserted_together for the two-true-fragments-one-false-
     # sentence case this closes.
-    if not _asserted_together(actor, predicate, source):
+    gap = _asserted_together(actor, predicate, source)
+    if gap is None:
         return None
     # A predicate that restates its own actor is malformed, not a fact:
     # "Veronica Fernandez" + "VOTE VERONICA FERNANDEZ" are both verbatim
@@ -249,6 +284,6 @@ def compose(actor: str, predicate: str, source: str) -> str | None:
     if not _ends_at_clause_boundary(predicate, source):
         return None
 
-    sentence = f"{actor} {predicate}"
+    sentence = f"{actor}{gap or ' '}{predicate}"
     sentence = re.sub(r"\s+", " ", sentence).strip().rstrip(".")
     return sentence + "."

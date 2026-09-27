@@ -13,7 +13,9 @@ from app.pipeline.analyze.score_calculator import (
     _funding_independence_core,
     _legislative_effectiveness_core,
     _les_bill_stage,
-    _les_cumulative_credit,
+    _les_component_score,
+    _les_normalized_credit,
+    _les_stage_counts,
     _les_significance_weight,
     calculate_scores,
     clamp,
@@ -680,12 +682,33 @@ class TestLegislativeEffectiveness:
              "billType": "s", "congress": 119},
         ]
         score_tried_and_failed = _calc_legislative_effectiveness(
-            one_bill_zero_advanced, None, years_in_office=2,
+            one_bill_zero_advanced, None, years_in_office=2, chamber="senate",
         )
         score_confirmed_zero = _calc_legislative_effectiveness(
-            [], None, years_in_office=2,
+            [], None, years_in_office=2, chamber="senate",
         )
         assert score_confirmed_zero <= score_tried_and_failed
+
+    def test_more_output_never_scores_lower(self):
+        """Credit is monotone in bills sponsored and stages reached, from
+        zero bills up — the property the removed bill-count shrinkage used
+        to be needed for."""
+        def bills(n, law=0):
+            return [{"title": f"B{i}", "isLaw": i < law, "latestAction": "Introduced",
+                     "billType": "s", "congress": 119} for i in range(n)]
+        records = [bills(0), bills(1), bills(3), bills(3, law=1), bills(10, law=1), bills(10, law=3)]
+        scores = [_calc_legislative_effectiveness(b, None, party="R", years_in_office=4, chamber="senate")
+                  for b in records]
+        assert scores == sorted(scores)
+
+    def test_unfetched_bills_are_neutral_not_zero(self):
+        """A failed sponsored-legislation request is not a record of zero
+        bills: the V&W component stays neutral instead of scoring a
+        credit of 0."""
+        score, detail = _les_component_score([], "R", 6.0, None, chamber="senate", bills_known=False)
+        assert score == 50.0 and "could not be fetched" in detail
+        zero, _ = _les_component_score([], "R", 6.0, None, chamber="senate")
+        assert zero < 50.0
 
     def test_freshman_zero_bills_stays_neutral(self):
         """Below the tenure floor, zero bills is indistinguishable from no
@@ -713,18 +736,21 @@ class TestLegislativeEffectiveness:
         )
         assert score_with_leadership > score_without_leadership
 
-    def test_low_bill_count_volume_is_shrunk_not_raw(self):
-        """A single sponsored bill's expected-vs-actual credit gap must be
-        shrunk toward neutral 50 by the same n_sub-based confidence curve
-        every other low-n component in this file uses, not treated as
-        fully-confident data — one real attempt should never score far
-        below a member who sponsored nothing."""
-        one_bill = [
-            {"title": "B1", "isLaw": False, "latestAction": "Introduced",
-             "billType": "s", "congress": 119},
+    def test_low_bill_count_is_not_shrunk_toward_neutral(self):
+        """v6.14: no shrinkage by bill count. A focused sponsor with two
+        bills, one enacted, outscores a member with twenty bills that
+        never advanced — V&W's ordering, which the old min(bills/10, 1)
+        shrink reversed by pulling the two-bill record toward 50."""
+        focused = [
+            {"title": "A", "isLaw": True, "latestAction": "Became Public Law", "billType": "s", "congress": 119},
+            {"title": "B", "isLaw": False, "latestAction": "Introduced", "billType": "s", "congress": 119},
         ]
-        score = _calc_legislative_effectiveness(one_bill, None)
-        assert score > 40
+        prolific = [
+            {"title": f"B{i}", "isLaw": False, "latestAction": "Introduced", "billType": "s", "congress": 119}
+            for i in range(20)
+        ]
+        assert (_les_component_score(focused, "R", 4.0)[0]
+                > _les_component_score(prolific, "R", 4.0)[0])
 
     def test_prolific_but_no_passage(self):
         """Many bills introduced but none advanced past stage 1 still
@@ -869,21 +895,30 @@ class TestLegislativeEffectiveness:
         assert _les_significance_weight("s") == 5.0
         assert _les_significance_weight("hr") == 5.0
 
-    def test_les_cumulative_credit_scales_with_both_significance_and_stage(self):
-        """A bill that became law contributes MORE cumulative credit than
-        one that only reached committee, at the same significance — V&W's
-        real design credits every stage a bill passed through, not just
-        its final one, so a law is worth 4x a merely-introduced bill of
-        the same type, not the same 1x an absolute pass/fail rate would
-        give it."""
+    def test_stage_counts_are_cumulative_and_significance_weighted(self):
+        """A bill counts, by its significance weight, at every stage it
+        reaches — a law at all four — as in V&W's LES."""
         introduced = {"latestAction": "Introduced", "billType": "s"}
         became_law = {"latestAction": "Introduced", "billType": "s", "isLaw": True}
         commemorative_law = {"latestAction": "Introduced", "billType": "sres", "isLaw": True}
-        assert _les_cumulative_credit(became_law) == 4 * _les_cumulative_credit(introduced)
-        # Significance and stage both matter independently: a commemorative
-        # bill that became law still earns less than a substantive bill at
-        # the same stage — significance weight isn't overridden by outcome.
-        assert _les_cumulative_credit(commemorative_law) < _les_cumulative_credit(became_law)
+        assert _les_stage_counts([introduced]) == [5.0, 0.0, 0.0, 0.0]
+        assert _les_stage_counts([became_law]) == [5.0, 5.0, 5.0, 5.0]
+        assert _les_stage_counts([commemorative_law]) == [1.0, 1.0, 1.0, 1.0]
+
+    def test_advancing_a_bill_is_worth_far_more_than_introducing_one(self):
+        """V&W divide each stage's count by the chamber's total there, so a
+        law — one of few — outweighs many introductions. Under v6.13's
+        weight x stages it was worth exactly four."""
+        totals = [51325.0, 7055.0, 3250.0, 870.0]  # 118th House, weighted
+        one_law = _les_normalized_credit([5.0, 5.0, 5.0, 5.0], totals, 448)
+        one_intro = _les_normalized_credit([5.0, 0.0, 0.0, 0.0], totals, 448)
+        assert one_law / one_intro > 40
+
+    def test_a_chamber_averages_one(self):
+        members = [[5.0 * n, n, n / 2, n / 4] for n in range(1, 41)]
+        totals = [sum(m[k] for m in members) for k in range(4)]
+        credits = [_les_normalized_credit(m, totals, len(members)) for m in members]
+        assert abs(sum(credits) / len(credits) - 1.0) < 1e-9
 
     def test_resolutions_excluded_from_volume(self):
         """The original v5.9 "Mushroom Day" bug let a commemorative-only
@@ -1050,7 +1085,9 @@ class TestLegislativeEffectiveness:
         # 40 typical members at 10 bills, 5 prolific ones at 200.
         members = [member(10) for _ in range(40)] + [member(200) for _ in range(5)]
         ref = compute_les_reference(members, congress=119, majority="R")
-        assert ref["median_credit"] == 50.0  # 10 bills x weight 5 x stage 1
+        # 10 introduced bills (weight 5) of 7,000 weighted introductions,
+        # x N/4 = 45/4.
+        assert ref["median_credit"] == round(50 / 7000 * 45 / 4, 4)
         assert ref["median_credit"] < ref["mean_credit"]
         assert ref["n"] == 45
 
@@ -1134,7 +1171,9 @@ class TestCalculateConfidence:
     def test_empty_data_is_low_everywhere(self):
         from app.pipeline.analyze.score_calculator import calculate_confidence
         conf = calculate_confidence({})
+        status = conf.pop("constituentAlignmentVotePart")
         assert set(conf.values()) == {"low"}
+        assert status == "neutral:few-votes"
 
     def test_rich_data_is_high_everywhere(self):
         from app.pipeline.analyze.score_calculator import calculate_confidence
@@ -1156,6 +1195,9 @@ class TestCalculateConfidence:
             "sponsoredBills": [{"title": f"b{i}"} for i in range(15)],
         }
         conf = calculate_confidence(senator)
+        # The vote-part status rides along; this member has no party, so no
+        # party norm to score the vote part against.
+        assert conf.pop("constituentAlignmentVotePart") == "neutral:no-expectation"
         assert set(conf.values()) == {"high"}
 
     def test_unlabeled_votes_do_not_count(self):
@@ -1440,7 +1482,7 @@ class TestLeadershipZeroIsAScore:
         assert lowest["score"] <= next_up["score"]
 
     def test_missing_is_still_neutral(self):
-        core = _legislative_effectiveness_core([], None, years_in_office=8)
+        core = _legislative_effectiveness_core([], None, years_in_office=8, chamber="senate")
         lead = {c["label"]: c for c in core["components"]}["Legislative leadership"]
         assert lead["score"] == 50.0
         assert "no cosponsorship-network data" in lead["detail"]

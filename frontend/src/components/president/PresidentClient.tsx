@@ -6,6 +6,7 @@ import { MetricBar, StatBox } from "@/components/shared/ScoreMetric";
 import ScoreTrendSection from "@/components/checker/ScoreTrendSection";
 import StockTrades from "@/components/checker/StockTrades";
 import type { President } from "@/types/president";
+import { displayScore } from "@/lib/formatting";
 
 const PARTY_META: Record<string, { label: string; color: string; bg: string; border: string }> = {
   D: {
@@ -88,7 +89,7 @@ export function PresidentCard({
   titleAs?: "h1" | "h2";
 }) {
   const SectionHeading = Title === "h1" ? "h2" : "h3";
-  const overall = president.score.overall;
+  const overall = displayScore(president.score.overall);
   const pm = getPartyMeta(president.party);
   const termEnd = president.termEnd ? president.termEnd.slice(0, 4) : "Present";
 

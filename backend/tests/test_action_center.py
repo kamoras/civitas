@@ -1,11 +1,14 @@
 """Tests for Action Center deduplication and national monitor creation logic."""
 
 import json
+import sqlite3
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
 from app.models import (
     ActionIssue,
@@ -19,6 +22,7 @@ from app.models import (
     Representative,
     Senator,
 )
+from app.database import Base
 from app.time_utils import utcnow
 from app.pipeline.fetch.news_feeds import NewsArticle
 from app.pipeline.analyze.action_center import (
@@ -27,7 +31,6 @@ from app.pipeline.analyze.action_center import (
     _update_national_monitors,
     _cleanup_monitor_lifecycle,
     _generate_monitor_metadata,
-    _story_word_target,
     _full_story_should_invalidate,
     _find_related_explore_docs,
     _find_related_senators,
@@ -41,7 +44,6 @@ from app.pipeline.analyze.action_center import (
     _retire_untouched_issues,
     _record_generation_sample,
     _bsky_repost_has_new_information,
-    _fix_impossible_senate_vote_counts,
     _is_exact_content_duplicate,
     _issue_signature,
     _largest_coherent_subgroup,
@@ -503,30 +505,6 @@ class TestNationalMonitorCreation:
         mock_call_llm.assert_called_once()
 
 
-class TestStoryWordTarget:
-    """Word-count band scales with fact count instead of forcing every
-    issue to the same length regardless of how much reporting backs it."""
-
-    def test_one_fact_gets_short_band(self):
-        low, high = _story_word_target(1)
-        assert low < 250
-        assert high < 400
-
-    def test_more_facts_widen_the_band(self):
-        low_1, high_1 = _story_word_target(1)
-        low_5, high_5 = _story_word_target(5)
-        assert low_5 > low_1
-        assert high_5 > high_1
-
-    def test_zero_facts_still_returns_a_valid_band(self):
-        low, high = _story_word_target(0)
-        assert 0 < low < high
-
-    def test_band_is_bounded_at_high_fact_counts(self):
-        low, high = _story_word_target(50)
-        assert high <= 750
-
-
 class TestFullStoryShouldInvalidate:
     """A topic-similarity match can land two substantively different stories
     on the same row (e.g. two senators' health events). full_story must be
@@ -674,49 +652,6 @@ class TestLogRelevancePrototypeAgreement:
         _log_relevance_prototype_agreement(
             db_session, ["a"], np.array([[1.0, 0.0]]), np.array([True]),
         )
-
-
-class TestFixImpossibleSenateVoteCounts:
-    """The Senate has 100 members, so any reported vote tally >100 total
-    is physically impossible for the Senate — it can only be a House
-    roll call. Confirmed live 2026-07: a generated fact read 'The bill
-    passed the Senate with a vote of 226-195' for a story where the bill
-    passed the House 226-195 and was later taken up in the Senate."""
-
-    @pytest.mark.parametrize(
-        "text, expected",
-        [
-            pytest.param(
-                "The bill passed the Senate with a vote of 226-195.",
-                "The bill passed the House with a vote of 226-195.",
-                id="corrects_impossible_senate_vote_to_house",
-            ),
-            pytest.param(
-                "The proposal gained traction in the Senate, where it passed with a vote of 226 to 195.",
-                "The proposal gained traction in the House, where it passed with a vote of 226 to 195.",
-                id="corrects_across_word_variants_of_tally",
-            ),
-            # 51 + 49 = 100, exactly at the Senate's ceiling — plausible.
-            pytest.param(
-                "The bill passed the Senate with a vote of 51-49.",
-                "The bill passed the Senate with a vote of 51-49.",
-                id="leaves_plausible_senate_vote_unchanged",
-            ),
-            pytest.param(
-                "The bill passed the House 226-195 and now moves to the Senate for consideration.",
-                "The bill passed the House 226-195 and now moves to the Senate for consideration.",
-                id="leaves_already_correct_house_mention_unchanged",
-            ),
-            pytest.param("", "", id="empty_string_returns_unchanged"),
-            pytest.param(
-                "The Senate is expected to take up the bill next week.",
-                "The Senate is expected to take up the bill next week.",
-                id="no_vote_tally_returns_unchanged",
-            ),
-        ],
-    )
-    def test_fix_impossible_senate_vote_counts(self, text, expected):
-        assert _fix_impossible_senate_vote_counts(text) == expected
 
 
 class TestFindRelatedExploreDocsGenericTitleFilter:
@@ -1673,6 +1608,33 @@ class TestRecordGenerationSample:
             input_text="x", output={"summary": "y"}, passed=True,
         )  # must not raise
 
+    def test_does_not_hold_the_callers_write_transaction(self, tmp_path):
+        """The refresh loop's session commits only after every cluster's
+        LLM work. A sample flushed into it held SQLite's write lock for the
+        rest of the run and starved every other writer, the refresh lock's
+        heartbeat first (2026-09-27)."""
+        path = tmp_path / "samples.db"
+        engine = create_engine(f"sqlite:///{path}")
+        Base.metadata.create_all(engine, tables=[LlmGenerationSample.__table__])
+        refresh_db = Session(bind=engine)
+        try:
+            _record_generation_sample(
+                refresh_db, "action_center_issue", rank=1, attempt=1,
+                input_text="x", output={"summary": "y"}, passed=True,
+            )
+            other = sqlite3.connect(path, timeout=0)
+            other.execute(
+                "INSERT INTO llm_generation_samples "
+                "(task, rank, attempt, input_text, output_json, passed, created_at) "
+                "VALUES ('t', 1, 1, 'x', '{}', 1, '2026-09-27')"
+            )
+            other.commit()
+            assert other.execute("SELECT COUNT(*) FROM llm_generation_samples").fetchone()[0] == 2
+            other.close()
+        finally:
+            refresh_db.close()
+            engine.dispose()
+
 
 
 class TestApplyMatchedIssueUpdate:
@@ -2339,102 +2301,6 @@ class TestValidateFactsMetricPaths:
         facts = ["The program cost $450 million last year."]
         clean = _validate_facts(facts, source_text="The program's cost rose sharply last year.")
         assert clean == []
-
-
-class TestGenerateFullStoryRelationshipGuard:
-    """Audit M8: the full-story generator must reject a story asserting a
-    family relationship absent from the material the model was shown, and
-    accept the clean retry."""
-
-    def test_ungrounded_relationship_rejected_then_clean_retry_accepted(self, db_session):
-        issue = ActionIssue(
-            date="2026-07-22", rank=1, is_current=True,
-            title="Senate Budget Committee convenes after leadership change",
-            summary="The committee met for the first time since the vacancy opened.",
-            facts=json.dumps([
-                "The Senate Budget Committee held its first meeting since the vacancy.",
-                "Senator Darline Graham announced her candidacy for the vacant seat.",
-            ]),
-            source_names=json.dumps(["AP News"]),
-            policy_areas=json.dumps(["CONGRESS"]),
-        )
-        db_session.add(issue)
-        db_session.commit()
-
-        bad = (
-            "The Senate Budget Committee convened for the first time since the vacancy "
-            "opened, marking a somber return to regular business for its members. "
-            "Senator Darline Graham announced her candidacy for the seat left by her "
-            "brother, telling reporters she would focus on fiscal policy in the term ahead."
-        )
-        clean = (
-            "The Senate Budget Committee convened for the first time since the vacancy "
-            "opened, marking a somber return to regular business for its members. "
-            "Senator Darline Graham announced her candidacy for the vacant seat, "
-            "telling reporters she would focus on fiscal policy in the term ahead."
-        )
-        calls = []
-
-        def fake_call_llm(**kwargs):
-            calls.append(kwargs)
-            return {"story": bad if len(calls) == 1 else clean}
-
-        with patch("app.pipeline.analyze.action_center.call_llm", side_effect=fake_call_llm):
-            from app.pipeline.analyze.action_center import _generate_full_story
-            story = _generate_full_story(issue, db_session=db_session)
-
-        assert len(calls) == 2  # first rejected, retry accepted
-        assert "brother" not in story
-        assert "family relationship" in str(calls[1]["user_prompt"])
-
-
-class TestGenerateFullStoryFormerStatusGuard:
-    """2026-07 stale-training-data class: a full story that demotes a
-    sitting official to "former" without source basis must be rejected
-    and retried, mirroring the relationship guard above."""
-
-    def test_ungrounded_former_status_rejected_then_clean_retry_accepted(self, db_session):
-        issue = ActionIssue(
-            date="2026-07-22", rank=1, is_current=True,
-            title="President Trump announces new tariffs",
-            summary="President Trump announced tariffs on steel imports.",
-            facts=json.dumps([
-                "President Trump announced tariffs targeting steel imports.",
-                "The tariffs take effect next month.",
-            ]),
-            source_names=json.dumps(["AP News"]),
-            policy_areas=json.dumps(["TRADE"]),
-        )
-        db_session.add(issue)
-        db_session.commit()
-
-        bad = (
-            "Former President Donald Trump announced new tariffs targeting steel "
-            "imports, which are set to take effect next month. The announcement "
-            "follows weeks of negotiations between administration officials and "
-            "domestic steel producers who had pushed for expanded protections "
-            "against foreign competition in the sector."
-        )
-        clean = (
-            "President Trump announced new tariffs targeting steel imports, "
-            "which are set to take effect next month. The announcement follows "
-            "weeks of negotiations between administration officials and domestic "
-            "steel producers who had pushed for expanded protections against "
-            "foreign competition in the sector."
-        )
-        calls = []
-
-        def fake_call_llm(**kwargs):
-            calls.append(kwargs)
-            return {"story": bad if len(calls) == 1 else clean}
-
-        with patch("app.pipeline.analyze.action_center.call_llm", side_effect=fake_call_llm):
-            from app.pipeline.analyze.action_center import _generate_full_story
-            story = _generate_full_story(issue, db_session=db_session)
-
-        assert len(calls) == 2  # first rejected, retry accepted
-        assert "Former" not in story
-        assert "former" in str(calls[1]["user_prompt"]).lower()
 
 
 class TestDigestFiltering:
