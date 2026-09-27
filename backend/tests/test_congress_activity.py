@@ -459,3 +459,32 @@ def test_a_run_reads_the_newest_first(monkeypatch):
     ]
     assert set(result["rollCalls"]) == {"senate-2", "house-2", "senate-1", "house-1"}
     assert not ca.is_congress_sync_running()
+
+
+def test_a_senate_file_for_a_day_off_is_not_a_session(db_session, monkeypatch):
+    # 2026-09-26 (a Saturday): senate.gov publishes a file holding only
+    # "scheduled to reconvene" — it read as "The Senate met" in production.
+    s = fl.parse_senate_floor((FIX / "floor_logs" / "09_26_2026_Senate_Floor.xml").read_bytes())
+    assert s["in_session"] is False and s["events"] == []
+    assert s["next_meeting"].startswith("The Senate is scheduled to reconvene at 3 p.m. Monday, September 28")
+    monkeypatch.setattr(ca, "_get", _fake_get({
+        "clerk.house.gov": ca._ABSENT,
+        "senate.gov": (FIX / "floor_logs" / "09_26_2026_Senate_Floor.xml").read_bytes(),
+    }))
+    asyncio.run(ca.sync_floor_logs(None, db_session, date(2026, 9, 26)))
+    row = db_session.query(CongressDay).filter_by(chamber="senate").one()
+    assert row.in_session is False
+
+
+def test_a_meeting_day_is_a_session():
+    s = fl.parse_senate_floor((FIX / "floor_logs" / "09_24_2026_Senate_Floor.xml").read_bytes())
+    assert s["in_session"] is True
+
+
+def test_a_pending_day_of_the_last_week_is_read_again(db_session):
+    db_session.add(CongressDay(chamber="senate", date="2026-09-25", in_session=True, is_final=False, source="floor_log"))
+    db_session.add(CongressDay(chamber="senate", date="2026-09-24", in_session=True, is_final=True, source="digest"))
+    db_session.add(CongressDay(chamber="senate", date="2026-08-01", in_session=True, is_final=False, source="floor_log"))
+    db_session.commit()
+    days = ca._floor_log_days(db_session, date(2026, 9, 27))
+    assert [d.isoformat() for d in days] == ["2026-09-25", "2026-09-26", "2026-09-27"]

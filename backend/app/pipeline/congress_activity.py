@@ -144,6 +144,19 @@ def _day_row(db: Session, chamber: str, day: str) -> CongressDay:
 
 # ── Floor logs ────────────────────────────────────────────────────
 
+def _floor_log_days(db: Session, today: date) -> list[date]:
+    """Today, yesterday, and any day of the last week still on its floor
+    log (not made final by a Digest), so a row the log got wrong is read
+    again rather than kept."""
+    start = (today - timedelta(days=_RECENT_DAYS)).isoformat()
+    pending = {
+        date.fromisoformat(d) for (d,) in db.query(CongressDay.date).filter(
+            CongressDay.date >= start, CongressDay.is_final.is_(False),
+        )
+    }
+    return sorted(pending | {today - timedelta(days=1), today})
+
+
 def _next_meeting_from_iso(iso: str | None) -> str | None:
     """"20260928T12:00" -> "12 noon, Monday, September 28", the Digest's
     own wording for a next meeting, so the live and final rows read alike."""
@@ -185,7 +198,7 @@ async def sync_floor_logs(client: httpx.AsyncClient, db: Session, day: date) -> 
             continue
         row = _day_row(db, chamber, iso)
         if not row.is_final:
-            row.in_session = True
+            row.in_session = parsed.get("in_session", True)
             row.source = "floor_log"
             row.source_url = url
             row.convened_at = parsed.get("convened_at")
@@ -193,6 +206,8 @@ async def sync_floor_logs(client: httpx.AsyncClient, db: Session, day: date) -> 
             row.adjournment_text = parsed.get("adjournment_text") or ""
             if parsed.get("next_meeting_iso"):
                 row.next_meeting = _next_meeting_from_iso(parsed["next_meeting_iso"])
+            elif parsed.get("next_meeting"):
+                row.next_meeting = parsed["next_meeting"][:120]
             row.fetched_at = utcnow()
         _replace_events(db, chamber, iso, "floor_log", parsed["events"])
         db.commit()
@@ -505,7 +520,7 @@ async def run_congress_sync() -> dict:
         async with make_async_client() as client:
             result["floorLogs"] = {
                 d.isoformat(): await sync_floor_logs(client, db, d)
-                for d in (today - timedelta(days=1), today)
+                for d in _floor_log_days(db, today)
             }
             result["digests"] = await sync_digests(client, db, today)
             votes: dict[str, dict] = {}

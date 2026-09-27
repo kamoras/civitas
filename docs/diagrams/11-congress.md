@@ -33,6 +33,12 @@ opens a sub-item, because continuation lines are at column 0
 (`app/pipeline/fetch/daily_digest.py`, tested against real issues in
 `backend/tests/fixtures/daily_digest`).
 
+**A file is not a session.** On a day the Senate does not meet, senate.gov
+still publishes its floor file, holding only when it reconvenes; with no
+opening and no proceedings it is a day not in session (on 2026-09-27 two
+such files read as "The Senate met"). Every day of the last week still on
+its floor log is read again each run, so a wrong row corrects itself.
+
 **Live, then final.** A chamber's floor log fills its day while it meets;
 the Digest replaces the row (`is_final`) the next day. The floor log's timed
 entries stay beside the Digest's, since only the House log has times.
