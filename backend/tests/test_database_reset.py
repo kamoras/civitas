@@ -616,10 +616,12 @@ def test_the_hourly_tidy_marks_only_proven_dead_runs(db_session, monkeypatch):
     assert run.status == "stale" and run.error_message == DEAD_RUN_MESSAGE
 
 
-def test_startup_spares_only_a_senate_run_still_beating_elsewhere(db_session, monkeypatch):
-    """A restart killed every run of this process; only a Senate run whose
-    lease still beats is live — in the other task, during a rollout. A swept
-    Senate row's lease goes with it, so the next run isn't held off."""
+def test_startup_spares_a_senate_run_whose_lease_still_holds(db_session, monkeypatch):
+    """A restart killed every run of this process, but a Senate run whose
+    lease still holds (an hour without a beat, as for every reader) may be
+    live in the other task during a rollout — its beats can stall for
+    minutes. A lapsed lease proves it dead: the row is swept and the lease
+    goes with it, so the next run isn't held off."""
     from contextlib import ExitStack
 
     from app import main
@@ -628,21 +630,50 @@ def test_startup_spares_only_a_senate_run_still_beating_elsewhere(db_session, mo
     from tests.conftest import start_senate_run_then_stop_beating
 
     monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
-    live = start_senate_run_then_stop_beating(db_session)  # beating now
-    main._invalidate_orphaned_pipelines()
-    db_session.expire_all()
-    assert db_session.get(models.PipelineRun, live.id).status == "running"
+    run = start_senate_run_then_stop_beating(db_session, beat_ago=None)
+    for quiet in (0, 5, 50):  # beating, or stalled for minutes: held
+        db_session.query(models.ApiCache).update({"cached_at": utcnow_minus(minutes=quiet)})
+        db_session.commit()
+        main._invalidate_orphaned_pipelines()
+        db_session.expire_all()
+        assert db_session.get(models.PipelineRun, run.id).status == "running", quiet
 
-    db_session.query(models.ApiCache).update({"cached_at": utcnow_minus(minutes=5)})
+    db_session.query(models.ApiCache).update({"cached_at": utcnow_minus(minutes=61)})
     db_session.commit()
     main._invalidate_orphaned_pipelines()
     db_session.expire_all()
-    assert db_session.get(models.PipelineRun, live.id).status == "stale"
+    assert db_session.get(models.PipelineRun, run.id).status == "stale"
     assert lease.lease_record(db_session, lease.SENATE_RUN) is None
     with ExitStack() as stack, pytest.MonkeyPatch.context() as mp:
         mp.setattr(senate_pipeline, "SessionLocal", lambda: _Unclosable(db_session))
         refused, token = senate_pipeline._take_senate_run_lease(stack)
         assert refused is None and token is not None
+
+
+def test_a_beat_landing_during_the_startup_sweep_keeps_the_run(db_session, monkeypatch):
+    """The lease read as lapsed, then its run beat before the delete: the
+    lease stays, and so does its row — the run is alive."""
+    from app import main
+    from app.pipeline import lease, run_tracker
+
+    from tests.conftest import start_senate_run_then_stop_beating
+
+    monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
+    run = start_senate_run_then_stop_beating(db_session)
+    db_session.query(models.ApiCache).update({"cached_at": utcnow_minus(minutes=61)})
+    db_session.commit()
+    lease_on = run_tracker._lease_on
+
+    def then_it_beats(db, model, row_id):
+        said = lease_on(db, model, row_id)
+        db.query(models.ApiCache).update({"cached_at": utcnow_minus(minutes=0)})
+        return said
+
+    monkeypatch.setattr(run_tracker, "_lease_on", then_it_beats)
+    main._invalidate_orphaned_pipelines()
+    db_session.expire_all()
+    assert db_session.get(models.PipelineRun, run.id).status == "running"
+    assert lease.held(db_session, lease.SENATE_RUN)
 
 
 def test_startup_sweeps_nothing_while_a_reset_holds_the_database(db_session, monkeypatch):

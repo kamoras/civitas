@@ -72,7 +72,7 @@ Swarm rollout can't both start the same pipeline
 so a restart kills them without letting them record it; on startup the backend
 marks every pipeline's leftover `running` row `stale`
 (`main._invalidate_orphaned_pipelines`), sparing only a Senate run whose
-lease is still beating in the other task, and a row older than 12 hours is
+lease still holds (it may be live in the other task), and a row older than 12 hours is
 cleared at the next acquisition. `check-and-deploy.sh` does not deploy while
 any pipeline runs.
 
