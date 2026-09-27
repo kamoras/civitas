@@ -794,6 +794,7 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
     fundraising. Returns a summary dict with counts."""
     cycle = cycle if cycle is not None else current_election_cycle()
     db = SessionLocal()
+    _run_token = 0  # no run of ours for the finally to stop until start() below
 
     run = acquire_pipeline_lock(db, ElectionPipelineRun, STALE_PIPELINE_TIMEOUT)
     if run is None:
@@ -801,7 +802,7 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
         db.close()
         return {"status": "skipped", "reason": "already_running"}
 
-    _tracker.start()
+    _run_token = _tracker.start()
     start_time = time.time()
     progress = ProgressTracker(run, ELECTION_PIPELINE_STEPS, db, start_time)
 
@@ -957,7 +958,7 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                 progress.complete("coverage_ingestion", detail="skipped (refresh running)")
                 progress.complete("bluesky_posting", detail="skipped (refresh running)")
             else:
-                coverage_tracker().start()
+                _coverage_token = coverage_tracker().start()
                 try:
                     run.current_phase = "coverage"
                     db.commit()
@@ -994,7 +995,7 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                         logger.exception("Bluesky posting failed — continuing")
                         progress.fail("bluesky_posting")
                 finally:
-                    coverage_tracker().stop()
+                    coverage_tracker().stop(_coverage_token)
 
             run.current_phase = "snapshot"
             db.commit()
@@ -1038,5 +1039,5 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
             logger.exception("Failed to record election pipeline failure")
         return {"status": PipelineStatus.FAILED, "error": summary}
     finally:
-        _tracker.stop()
+        _tracker.stop(_run_token)
         db.close()

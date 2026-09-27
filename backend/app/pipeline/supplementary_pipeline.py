@@ -46,6 +46,7 @@ async def run_supplementary_pipeline() -> dict:
     """Ingest explore documents, refresh SCOTUS justice scorecards
     (weekly cadence), and update president scorecards."""
     db = SessionLocal()
+    _run_token = 0  # no run of ours for the finally to stop until start() below
 
     # Same reasoning as senate_pipeline.py's own lock: until 2026-07-23
     # this was an unconditional insert with no lock at all, so a row
@@ -60,7 +61,7 @@ async def run_supplementary_pipeline() -> dict:
         db.close()
         return {"status": "skipped", "reason": "already_running"}
 
-    _tracker.start()
+    _run_token = _tracker.start()
     start_time = time.time()
     progress = ProgressTracker(run, SUPPLEMENTARY_PIPELINE_STEPS, db, start_time)
 
@@ -242,5 +243,5 @@ async def run_supplementary_pipeline() -> dict:
             logger.exception("Failed to record supplementary pipeline failure")
         return {"status": PipelineStatus.FAILED, "error": summary}
     finally:
-        _tracker.stop()
+        _tracker.stop(_run_token)
         db.close()

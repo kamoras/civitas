@@ -452,3 +452,21 @@ def test_a_leased_job_does_not_run_without_its_lease():
     with patch("app.background.threading.Thread", _SyncThread), patch("app.pipeline.lease.job", refused):
         scheduler._start_job(lambda: ran.append(1), name="bill-status-refresh", lease_tier=lease.BILL_REFRESH)
     assert ran == []
+
+
+@pytest.mark.parametrize("reason, cause", [
+    ("data_reset", "data reset"),
+    ("busy", "locked by another writer"),
+])
+def test_a_skipped_nightly_run_alert_names_what_held_it_off(reason, cause):
+    from app import scheduler
+
+    with patch("app.scheduler.run_senate_pipeline", new_callable=AsyncMock,
+               return_value={"status": "skipped", "reason": reason}), \
+         patch("app.background.threading.Thread", _SyncThread), \
+         patch("app.ops_alerts.send_ops_alert") as alert, \
+         patch("app.ops_alerts.check_current_congress_staleness"), \
+         patch("app.ops_alerts.check_feedback_token_expiration"), \
+         patch("app.ops_alerts.check_state_pvi_staleness"):
+        scheduler._nightly_pipeline()
+    assert cause in alert.call_args.args[1]

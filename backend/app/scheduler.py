@@ -38,6 +38,10 @@ def _is_stale(age: timedelta | None, threshold: timedelta) -> bool:
     return age is not None and age > threshold
 
 
+_RESET_CAUSE = ("an admin data reset holds the database — if none is running, one died mid-wipe "
+                "and its lease lapses within the half hour")
+
+
 def _start_job(target, *, name: str, alert: bool = False, lease_tier: str | None = None) -> None:
     """Start a scheduled job's thread. While the admin data reset holds the
     database the job doesn't run this time: logged, and for the nightly
@@ -52,14 +56,22 @@ def _start_job(target, *, name: str, alert: bool = False, lease_tier: str | None
         job = target
 
         def target() -> None:
-            with ExitStack() as stack:
-                try:
-                    held = stack.enter_context(lease.job(lease_tier))
-                except Exception:
-                    logger.exception("%s: its lease could not be taken", name)
-                    return
+            stack = ExitStack()
+            try:
+                held = stack.enter_context(lease.job(lease_tier))
+            except Exception:
+                logger.exception("%s: its lease could not be taken", name)
+                return
+            try:
                 if held:
                     job()
+            except Exception:
+                logger.exception("%s failed", name)
+            finally:
+                try:
+                    stack.close()
+                except Exception:
+                    logger.exception("%s: its lease could not be released", name)
 
     try:
         start_writer(target, name=name)
@@ -107,7 +119,7 @@ def _nightly_pipeline() -> None:
         logger.info("%s pipeline skipped — %s", label, result.get("reason", "unknown reason"))
         send_ops_alert(
             f"Nightly {label} run skipped",
-            f"The scheduled {label} pipeline did not start because {_skip_cause()}. {label} data will be a "
+            f"The scheduled {label} pipeline did not start because {_skip_cause(result.get('reason'))}. {label} data will be a "
             "day stale unless triggered manually. If this was Senate, "
             "note that Supplementary/House/Stock never ran either tonight "
             "— the chain stops here, it does not skip just this one step.",
@@ -115,16 +127,20 @@ def _nightly_pipeline() -> None:
         )
         return True
 
-    def _skip_cause() -> str:
-        """What held the run off: a data reset holding the database (a live
-        one, or a dead one's lease until it lapses), or a run still active."""
+    def _skip_cause(reason: str | None) -> str:
+        """What held the run off, from the skip's own reason where it gives
+        one (lease.refusal_code), else whether a data reset holds the
+        database now."""
+        if reason == lease.REFUSED_BY_RESET:
+            return _RESET_CAUSE
+        if reason == lease.REFUSED_BUSY:
+            return "the database stayed locked by another writer"
         from app.database import SessionLocal
 
         db = SessionLocal()
         try:
             if lease.held(db, lease.DATA_RESET):
-                return ("an admin data reset holds the database — if none is running, one died "
-                        "mid-wipe and its lease lapses within the half hour")
+                return _RESET_CAUSE
         except Exception:
             logger.exception("Could not check for a data reset")
         finally:
@@ -438,7 +454,7 @@ def _election_coverage_refresh() -> None:
                 "Previous election coverage refresh has been running for %s — "
                 "treating as hung and proceeding anyway", age,
             )
-        coverage_tracker().start()
+        _run_token = coverage_tracker().start()
         try:
             from app.database import SessionLocal
             from app.pipeline.analyze.election_bluesky import post_race_coverage_updates
@@ -465,7 +481,7 @@ def _election_coverage_refresh() -> None:
         except Exception:
             logger.exception("Election coverage refresh failed")
         finally:
-            coverage_tracker().stop()
+            coverage_tracker().stop(_run_token)
 
     _start_job(_run, name="election-coverage-refresh", lease_tier=lease.COVERAGE_REFRESH)
 
@@ -505,7 +521,7 @@ def _election_ballot_sync() -> None:
                 logger.info("Ballot sync skipped — the previous one is still running")
                 return
             logger.warning("Previous ballot sync has been running for %s — proceeding anyway", age)
-        ballot_tracker().start()
+        _run_token = ballot_tracker().start()
         loop = asyncio.new_event_loop()
         try:
             result = loop.run_until_complete(run_ballot_sync())
@@ -517,7 +533,7 @@ def _election_ballot_sync() -> None:
             logger.exception("Election-season ballot sync failed")
         finally:
             loop.close()
-            ballot_tracker().stop()
+            ballot_tracker().stop(_run_token)
 
     _start_job(_run, name="election-ballot-sync", lease_tier=lease.BALLOT_SYNC)
 

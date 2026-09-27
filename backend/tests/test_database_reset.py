@@ -362,3 +362,49 @@ class TestLease:
         with pytest.raises(RuntimeError):
             asyncio.run(senate_pipeline.run_senate_pipeline())
         assert not lease.held(db_session, lease.SENATE_RUN)
+
+
+def test_a_hung_runs_late_stop_leaves_the_newer_run_running():
+    from app.pipeline.run_tracker import PipelineRunTracker
+
+    tracker = PipelineRunTracker()
+    hung = tracker.start()
+    newer = tracker.start()  # a hung-run override started past it
+    tracker.stop(hung)       # the hung one finally returns
+    assert tracker.is_running
+    tracker.stop(newer)
+    assert not tracker.is_running
+
+
+def test_a_run_finishing_during_the_orphan_check_keeps_its_status(db_session, monkeypatch):
+    from app import main
+    from app.pipeline import lease
+    from app.time_utils import utcnow
+
+    run = models.PipelineRun(status="running", started_at=utcnow())
+    db_session.add(run)
+    db_session.commit()
+    monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
+
+    def finishes_meanwhile(db, tier):
+        # Between the orphan check's reads: the run writes its final status,
+        # then lets go of its lease.
+        db_session.query(models.PipelineRun).update({"status": "completed"})
+        db_session.commit()
+        return False
+
+    monkeypatch.setattr(lease, "held", finishes_meanwhile)
+    main._mark_orphaned_senate_runs()
+    db_session.expire_all()
+    assert db_session.query(models.PipelineRun).one().status == "completed"
+
+
+def test_a_senate_run_held_off_says_why(db_session, monkeypatch):
+    import asyncio
+
+    from app.pipeline import lease, senate_pipeline
+
+    monkeypatch.setattr(senate_pipeline, "SessionLocal", lambda: _Unclosable(db_session))
+    lease.acquire(db_session, lease.DATA_RESET)
+    result = asyncio.run(senate_pipeline.run_senate_pipeline())
+    assert result == {"status": "skipped", "reason": lease.REFUSED_BY_RESET}

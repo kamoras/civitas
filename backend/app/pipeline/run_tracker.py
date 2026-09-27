@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 from datetime import timedelta
 from typing import TypeVar
@@ -151,23 +152,38 @@ class PipelineRunTracker:
     this pattern — it tracks state via the PipelineRun DB row directly,
     so it has no tracker instance.
 
-    Not thread-safe by design: each pipeline runs in at most one
-    dedicated background thread at a time (enforced by the DB-row lock
-    each pipeline acquires via acquire_pipeline_lock before starting),
-    so this only ever has one writer.
+    A pipeline runs in at most one background thread at a time (its DB-row
+    lock sees to that), but a scheduled job's hung-run override can start a
+    run beside one still going: start and stop are locked, and stop takes
+    the token its start returned, so the late finisher of the two doesn't
+    mark the newer one stopped.
     """
 
     def __init__(self) -> None:
         self._running: bool = False
         self._started_at: float | None = None
+        self._run = 0
+        # A hung-run override (scheduler.py) starts a run beside one still
+        # going, so start and stop can come from two threads.
+        self._lock = threading.Lock()
 
-    def start(self) -> None:
-        self._running = True
-        self._started_at = time.time()
+    def start(self) -> int:
+        """Mark a run started; returns its token for stop()."""
+        with self._lock:
+            self._run += 1
+            self._running = True
+            self._started_at = time.time()
+            return self._run
 
-    def stop(self) -> None:
-        self._running = False
-        self._started_at = None
+    def stop(self, run: int | None = None) -> None:
+        """Mark the run `run` stopped — a no-op once a later run has started:
+        a run the caller's hung-run override started past is still marked
+        running when the hung one finally returns."""
+        with self._lock:
+            if run is not None and run != self._run:
+                return
+            self._running = False
+            self._started_at = None
 
     @property
     def is_running(self) -> bool:

@@ -3829,10 +3829,7 @@ def refresh_action_issues(db: Session | None = None) -> int:
     try:
         with lease.holding(db, lease.ACTION_REFRESH, yield_to=lease.DATA_RESET) as token:
             if token is None:
-                if lease.held(db, lease.DATA_RESET):
-                    logger.warning("Action refresh skipped: an admin data reset is running")
-                else:
-                    logger.info("Action refresh lock held by another container — skipping this run")
+                logger.info("Action refresh skipped: %s", lease.refusal(db, lease.ACTION_REFRESH))
                 return 0
             try:
                 return _run_refresh(db)

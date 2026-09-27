@@ -216,7 +216,7 @@ async def refresh_bill_statuses(db: Session | None = None) -> dict:
     # The caller decides whether a refresh still running is hung
     # (scheduler._hourly_bill_status_refresh); one it proceeds past keeps
     # running beside this one, as the other hung-run overrides allow.
-    _tracker.start()
+    _run_token = _tracker.start()
     try:
         owns_session = db is None
         if owns_session:
@@ -229,8 +229,12 @@ async def refresh_bill_statuses(db: Session | None = None) -> dict:
                 recent = await _fetch_recently_updated(client, since)
                 summary = await _apply_updates(db, client, recent)
             # Only advance the window marker after a full successful pass, so
-            # a crashed cycle is retried over the same window next hour.
-            api_cache_set(db, _LAST_RUN_TIER, LAST_RUN_CACHE_KEY, {"lastRun": now.isoformat()})
+            # a crashed cycle is retried over the same window next hour — and
+            # only forward: a hung pass the scheduler proceeded past can
+            # finish after a newer one.
+            stored = api_cache_get(db, _LAST_RUN_TIER, LAST_RUN_CACHE_KEY, max_age_hours=24 * 365)
+            if not stored or stored.get("lastRun", "") < now.isoformat():
+                api_cache_set(db, _LAST_RUN_TIER, LAST_RUN_CACHE_KEY, {"lastRun": now.isoformat()})
         finally:
             if owns_session:
                 db.close()
@@ -244,4 +248,4 @@ async def refresh_bill_statuses(db: Session | None = None) -> dict:
         summary["recently_updated"] = len(recent)
         return summary
     finally:
-        _tracker.stop()
+        _tracker.stop(_run_token)

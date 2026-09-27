@@ -121,6 +121,7 @@ def recent_not_covered_by_key_bills(
 async def run_house_pipeline() -> dict:
     """Run the full House representative pipeline."""
     db = SessionLocal()
+    _run_token = 0  # no run of ours for the finally to stop until start() below
 
     # Acquire the run lock BEFORE any global/DB mutation — same reasoning
     # as senate_pipeline.py's _acquire_pipeline_lock call. Without it, a row
@@ -132,7 +133,7 @@ async def run_house_pipeline() -> dict:
         db.close()
         return {"status": "skipped", "reason": "already_running"}
 
-    _tracker.start()
+    _run_token = _tracker.start()
     start_time = time.time()
     reset_fec_run_state()  # clear the by_contributor circuit breaker from any prior run
 
@@ -953,7 +954,7 @@ async def run_house_pipeline() -> dict:
             logger.exception("Failed to record house pipeline failure")
         return {"status": PipelineStatus.FAILED, "error": str(e)[:500]}
     finally:
-        _tracker.stop()
+        _tracker.stop(_run_token)
         db.close()
 
 

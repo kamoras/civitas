@@ -471,6 +471,7 @@ async def run_stock_trades_pipeline() -> dict:
     filings does not prevent the others from being ingested.
     """
     db: Session = SessionLocal()
+    _run_token = 0  # no run of ours for the finally to stop until start() below
     try:
         if _other_pipeline_running(db):
             logger.info("Stock trades pipeline skipped — a member pipeline is currently running")
@@ -487,7 +488,7 @@ async def run_stock_trades_pipeline() -> dict:
             logger.info("Stock trades pipeline already running in another process — skipping")
             return {"status": "skipped", "reason": "already_running"}
 
-        _tracker.start()
+        _run_token = _tracker.start()
         start_time = time.time()
         progress = ProgressTracker(run, STOCK_PIPELINE_STEPS, db, start_time)
 
@@ -583,5 +584,5 @@ async def run_stock_trades_pipeline() -> dict:
             "elapsed_seconds": elapsed,
         }
     finally:
-        _tracker.stop()
+        _tracker.stop(_run_token)
         db.close()

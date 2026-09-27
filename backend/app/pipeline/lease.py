@@ -80,21 +80,29 @@ def stale_after(tier: str) -> timedelta:
     return timedelta(seconds=_STALE_S_BY_TIER.get(tier, STALE_S))
 
 
-# How old a run still going is when its job's own checks call it hung and
-# start another anyway — the one number both use (scheduler.py reads these).
-# A holder stops renewing its lease a stale window short of it, so the lease
-# has lapsed when that override comes due; without a bound a hung holder,
-# whose process lives on, would renew it forever and hold its job, and every
-# data reset, off until a restart.
+# How long each lease may be held. A holder stops renewing its lease a stale
+# window short of this, so the lease has lapsed by then; without a bound a
+# hung holder, whose process lives on, would renew it forever and hold its
+# job, and every data reset, off until a restart. Where the job has its own
+# check that proceeds past a run it calls hung (scheduler.py reads these for
+# the refreshes), this is that check's age; where it has none, the lapse is
+# the hung-run rule: the next attempt takes the lease over.
+def _pipeline_timeout() -> timedelta:
+    from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT
+
+    return STALE_PIPELINE_TIMEOUT
+
+
 HUNG_AFTER = {
     DATA_RESET: timedelta(hours=1),
     ACTION_REFRESH: timedelta(hours=4),
-    # A pipeline's run lock goes stale at 12h (run_tracker.STALE_PIPELINE_TIMEOUT);
-    # the Senate run's lease, and the Supplementary steps', with it.
-    SENATE_RUN: timedelta(hours=12),
-    JUSTICE_PIPELINE: timedelta(hours=12),
-    PRESIDENT_PIPELINE: timedelta(hours=12),
-    EXPLORE: timedelta(hours=12),
+    # A pipeline's run lock goes stale at run_tracker.STALE_PIPELINE_TIMEOUT;
+    # the Senate run's lease, and the Supplementary steps' (whose own runs
+    # it bounds), with it.
+    SENATE_RUN: _pipeline_timeout(),
+    JUSTICE_PIPELINE: _pipeline_timeout(),
+    PRESIDENT_PIPELINE: _pipeline_timeout(),
+    EXPLORE: _pipeline_timeout(),
     STARTUP_RESCORE: timedelta(hours=2),
     BILL_REFRESH: timedelta(hours=2),
     BALLOT_SYNC: timedelta(hours=2),
@@ -258,13 +266,27 @@ def holding(db: Session, tier: str, *, yield_to: str | None = None, take_over: b
         _let_go(held_lease)
 
 
-def refusal(db: Session, tier: str) -> str:
-    """Why `tier` couldn't be taken, as a skip message says it."""
+# Why a lease couldn't be taken (refusal_code), and how a skip message says it.
+REFUSED_BY_RESET, REFUSED_HELD, REFUSED_BUSY = "data_reset", "held_elsewhere", "busy"
+_REFUSALS = {
+    REFUSED_BY_RESET: "a data reset is running",
+    REFUSED_HELD: "it is running elsewhere",
+    REFUSED_BUSY: "the database was busy",
+}
+
+
+def refusal_code(db: Session, tier: str) -> str:
+    """Why `tier` couldn't be taken, read just after acquire refused."""
     if held(db, DATA_RESET):
-        return "a data reset is running"
+        return REFUSED_BY_RESET
     if held(db, tier):
-        return "it is running elsewhere"
-    return "the database was busy"
+        return REFUSED_HELD
+    return REFUSED_BUSY
+
+
+def refusal(db: Session, tier: str) -> str:
+    """refusal_code, as a skip message says it."""
+    return _REFUSALS[refusal_code(db, tier)]
 
 
 @contextmanager
@@ -285,18 +307,38 @@ def job(tier: str) -> Iterator[bool]:
         db.close()
 
 
-def _open_and_take(tier: str) -> tuple[Session, "_Held | None", str | None]:
-    """job_async's take, whole, in one worker thread: its own session, the
-    lease, and the refusal reason if it was refused."""
-    from app.database import SessionLocal
+class _Taking:
+    """A job_async take in flight, handed between the worker thread that
+    takes and the caller that may stop waiting for it: whichever of the two
+    finishes second lets go of what was taken, so it is never stranded."""
 
-    db = SessionLocal()
-    try:
-        held_lease = _take(db, tier, DATA_RESET, False)
-        return db, held_lease, None if held_lease is not None else refusal(db, tier)
-    except BaseException:
-        db.close()
-        raise
+    def __init__(self, tier: str) -> None:
+        self.tier = tier
+        self.lock = threading.Lock()
+        self.abandoned = False
+        self.result: "tuple[Session, _Held | None, str | None] | None" = None
+
+    def take(self) -> "tuple[Session, _Held | None, str | None]":
+        from app.database import SessionLocal
+
+        db = SessionLocal()
+        try:
+            held_lease = _take(db, self.tier, DATA_RESET, False)
+            result = (db, held_lease, None if held_lease is not None else refusal(db, self.tier))
+        except BaseException:
+            db.close()
+            raise
+        with self.lock:
+            self.result, abandoned = result, self.abandoned
+        if abandoned:
+            _let_go_and_close(db, held_lease)
+        return result
+
+    def abandon(self) -> None:
+        with self.lock:
+            self.abandoned, result = True, self.result
+        if result is not None:
+            threading.Thread(target=_let_go_and_close, args=result[:2], daemon=True).start()
 
 
 def _let_go_and_close(db: Session, held_lease: "_Held | None") -> None:
@@ -313,19 +355,14 @@ async def job_async(tier: str) -> AsyncIterator[bool]:
     database work in worker threads, off the event loop, which serves every
     request. Cancellation can't strand anything: the take and the release
     each run to completion in their thread whatever happens to the await,
-    and a take the caller stopped waiting for is let go of by the thread
-    that finishes it."""
+    and a take the caller stopped waiting for is let go of (_Taking)."""
     import asyncio
 
-    taking = asyncio.ensure_future(asyncio.to_thread(_open_and_take, tier))
+    taking = _Taking(tier)
     try:
-        db, held_lease, refused = await asyncio.shield(taking)
+        db, held_lease, refused = await asyncio.shield(asyncio.to_thread(taking.take))
     except asyncio.CancelledError:
-        def let_go_when_taken(done) -> None:
-            if not done.cancelled() and done.exception() is None:
-                threading.Thread(target=_let_go_and_close, args=done.result()[:2], daemon=True).start()
-
-        taking.add_done_callback(let_go_when_taken)
+        taking.abandon()
         raise
     try:
         if held_lease is None:

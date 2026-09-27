@@ -754,27 +754,28 @@ def split_key_and_recent_votes(
 _SENATE_LEASE_ATTEMPTS = 5
 
 
-def _take_senate_run_lease(stack) -> bool:
-    """Hold lease.SENATE_RUN on its own session until `stack` closes; False
-    when it can't be had. Taken before the Senate run lock, and held until
-    after the run's row is final, so a RUNNING row always has a live lease
-    beside it while its run lives — which is how a process starting up tells
-    a live run from one a dead process left (main._invalidate_orphaned_pipelines).
-    Held by another, a Senate run (or a reset) is live and this one doesn't
-    start; a busy database is waited out a few times first."""
+def _take_senate_run_lease(stack) -> str | None:
+    """Hold lease.SENATE_RUN on its own session until `stack` closes; None
+    once held, or the lease.refusal_code why it can't be had. Taken before
+    the Senate run lock, and held until after the run's row is final, so a
+    RUNNING row always has a live lease beside it while its run lives —
+    which is how a process starting up tells a live run from one a dead
+    process left (main._invalidate_orphaned_pipelines). Held by another, a
+    Senate run (or a reset) is live and this one doesn't start; a busy
+    database is waited out a few times first."""
     from app.pipeline import lease
 
     lease_db = SessionLocal()
     stack.callback(lease_db.close)
+    why = lease.REFUSED_BUSY
     for _ in range(_SENATE_LEASE_ATTEMPTS):
         if stack.enter_context(lease.holding(lease_db, lease.SENATE_RUN, yield_to=lease.DATA_RESET)) is not None:
-            return True
-        why = lease.refusal(lease_db, lease.SENATE_RUN)
-        if why != "the database was busy":
-            logger.warning("Senate run not started: %s", why)
-            return False
-    logger.warning("Senate run not started: the database stayed busy")
-    return False
+            return None
+        why = lease.refusal_code(lease_db, lease.SENATE_RUN)
+        if why != lease.REFUSED_BUSY:
+            break
+    logger.warning("Senate run not started: %s", lease.refusal(lease_db, lease.SENATE_RUN))
+    return why
 
 
 async def run_senate_pipeline(
@@ -802,7 +803,8 @@ async def run_senate_pipeline(
 
     run_lease = ExitStack()
     try:
-        pipeline_run = _acquire_pipeline_lock(db) if _take_senate_run_lease(run_lease) else None
+        refused = _take_senate_run_lease(run_lease)
+        pipeline_run = _acquire_pipeline_lock(db) if refused is None else None
     except BaseException:
         # Before the run's own try: let go of the lease (and its heartbeat)
         # here, or it would be renewed for as long as the process lives.
@@ -810,10 +812,12 @@ async def run_senate_pipeline(
         db.close()
         raise
     if pipeline_run is None:
-        logger.warning("Pipeline already running in another process — skipping")
+        logger.warning("Senate pipeline not started — skipping")
         db.close()
         run_lease.close()
-        return {"status": "skipped", "reason": "already_running"}
+        # Why, for the nightly chain's skip alert: a data reset, a busy
+        # database, or a run already going.
+        return {"status": "skipped", "reason": refused if refused is not None else "already_running"}
 
     try:
         reset_stats()

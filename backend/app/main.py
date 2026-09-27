@@ -108,21 +108,29 @@ def _mark_orphaned_senate_runs():
         # Rows first, then the lease: a run takes its lease before its row
         # (senate_pipeline._take_senate_run_lease), so a row read here whose
         # run is live has a lease the read below sees.
-        orphaned = db.query(PipelineRun).filter(PipelineRun.status == PipelineStatus.RUNNING).all()
+        orphaned = db.query(PipelineRun.id, PipelineRun.started_at).filter(
+            PipelineRun.status == PipelineStatus.RUNNING,
+        ).all()
         if not orphaned:
             return None
         if lease.held(db, lease.SENATE_RUN):
             return lease.SENATE_RUN
-        for run in orphaned:
-            run.status = PipelineStatus.STALE
-            run.completed_at = utcnow()
-            run.error_message = "Marked stale: app restarted while pipeline was running"
-            logging.getLogger("app.main").warning(
-                "Invalidated orphaned pipeline run #%d (started %s)",
-                run.id, run.started_at,
-            )
-        if orphaned:
-            db.commit()
+        # Conditional on the row still RUNNING: a run that finished between
+        # the reads above (its lease let go after its row was final) keeps
+        # the status it wrote.
+        marked = db.query(PipelineRun).filter(
+            PipelineRun.id.in_([run.id for run in orphaned]), PipelineRun.status == PipelineStatus.RUNNING,
+        ).update({
+            "status": PipelineStatus.STALE,
+            "completed_at": utcnow(),
+            "error_message": "Marked stale: app restarted while pipeline was running",
+        }, synchronize_session=False)
+        db.commit()
+        if marked:
+            for run in orphaned:
+                logging.getLogger("app.main").warning(
+                    "Invalidated orphaned pipeline run #%d (started %s)", run.id, run.started_at,
+                )
     except Exception as e:
         logging.getLogger("app.main").warning("Orphan pipeline cleanup failed: %s", e)
     finally:
@@ -181,7 +189,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         try:
             with lease.holding(db, lease.STARTUP_RESCORE, yield_to=lease.DATA_RESET) as token:
                 if token is None:
-                    logging.getLogger("app.main").info("Startup rescore skipped: a data reset or another rescore holds the database")
+                    logging.getLogger("app.main").info(
+                        "Startup rescore skipped: %s", lease.refusal(db, lease.STARTUP_RESCORE),
+                    )
                     return
                 rescore_stale_legislative_effectiveness(_rescore_session)
                 rescore_stale_constituent_alignment(_rescore_session)
