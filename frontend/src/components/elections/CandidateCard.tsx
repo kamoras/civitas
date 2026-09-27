@@ -28,6 +28,8 @@ export const PARTY_META: Record<string, { label: string; color: string; rule: st
   NPA: { label: "NO PARTY AFFILIATION", color: "text-ink-lo", rule: "bg-ink-min" },
   NNE: { label: "NO PARTY AFFILIATION", color: "text-ink-lo", rule: "bg-ink-min" },
   UNK: { label: "UNAFFILIATED/UNKNOWN", color: "text-ink-lo", rule: "bg-ink-min" },
+  // FEC's code for a declared write-in: on the state's list, not printed on the ballot.
+  W: { label: "WRITE-IN", color: "text-ink-lo", rule: "bg-ink-min" },
 };
 
 export function getPartyMeta(party: string) {

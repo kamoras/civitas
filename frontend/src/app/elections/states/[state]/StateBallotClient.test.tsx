@@ -201,9 +201,9 @@ describe("the contest drawer", () => {
     render(<StateBallotClient ballot={twoContests()} />);
     const drawer = await openContest(/U\.S\. Senator/);
     expect(drawer.getByText(/CONTEST 1 OF/)).toBeInTheDocument();
-    await userEvent.click(drawer.getByRole("button", { name: "U.S. Representative →" }));
+    await userEvent.click(drawer.getByRole("button", { name: "U.S. Representative\u00a0→" }));
     expect(within(screen.getByRole("dialog")).getByRole("heading", { name: "U.S. Representative" })).toBeInTheDocument();
-    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "← U.S. Senator" }));
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "←\u00a0U.S. Senator" }));
     expect(within(screen.getByRole("dialog")).getByRole("heading", { name: "U.S. Senator" })).toBeInTheDocument();
   });
 

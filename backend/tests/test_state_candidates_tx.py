@@ -140,3 +140,20 @@ class TestFetchConfirmedCandidates:
             mock_fetch.side_effect = [_response(ELECTIONS_FIXTURE), _response(candidates)]
             results = await tx.fetch_confirmed_candidates(None, 2026)
         assert "SOMEONE" not in {r["last_name"] for r in results}
+
+    @pytest.mark.asyncio
+    async def test_skips_declared_write_ins(self):
+        """Live 2026: Civix gives six declared write-ins (Ayers, Hall,
+        Mohamed, Simmons for Senate) status CG with cdCandType WRTIN. They
+        are not printed on the ballot, so they must not confirm."""
+        candidates = CANDIDATES_FIXTURE + [{
+            "cdOfficeType": "FD", "cdFilingStatus": "CG", "cdCandType": "WRTIN",
+            "txOfficeName": "U. S. SENATOR ", "txLastNameBallot": "AYERS", "cdParty": "W",
+        }]
+        with patch(
+            "app.pipeline.fetch.state_candidates_tx.fetch_with_retry", new_callable=AsyncMock,
+        ) as mock_fetch:
+            mock_fetch.side_effect = [_response(ELECTIONS_FIXTURE), _response(candidates)]
+            results = await tx.fetch_confirmed_candidates(None, 2026)
+        assert "AYERS" not in {r["last_name"] for r in results}
+        assert "PAXTON" in {r["last_name"] for r in results}
