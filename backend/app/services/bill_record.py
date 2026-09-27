@@ -43,11 +43,14 @@ _PARTS = {
 
 
 def parse_bill_id(bill_id: str) -> tuple[str, int] | None:
-    """"S.4668" -> ("s", 4668); None for anything that is not a bill id."""
-    m = re.fullmatch(r"([A-Z]+)\.(\d+)", bill_id or "")
-    if not m or m.group(1) not in _TYPE_PATH:
+    """"S.4668" -> ("s", 4668); None for anything that is not a bill id.
+    Split, not matched: the id comes from the URL (CodeQL py/polynomial-redos)."""
+    if not bill_id or len(bill_id) > 16 or bill_id.count(".") != 1:
         return None
-    return _TYPE_PATH[m.group(1)], int(m.group(2))
+    prefix, number = bill_id.split(".")
+    if prefix not in _TYPE_PATH or not number.isdigit():
+        return None
+    return _TYPE_PATH[prefix], int(number)
 
 
 NOT_FOUND = object()
