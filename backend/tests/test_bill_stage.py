@@ -180,3 +180,40 @@ class TestReferredVsInCommitteeRealData:
             {"actionCode": "10000", "type": "IntroReferral", "text": "Introduced in Senate"},
         ]
         assert classify_bill_stage_from_actions(actions) == BillStage.IN_COMMITTEE
+
+
+class TestOnTheFloor:
+    """2026-09: a bill under floor debate is ON_FLOOR, not IN_COMMITTEE."""
+
+    # S. 4668 (119th), newest first, as Congress.gov returned it on
+    # 2026-09-27: reported, then a week of Senate floor action, not passed.
+    S4668 = [
+        {"type": "Floor", "text": "The committee substitute tabled by Voice Vote."},
+        {"type": "Floor", "text": "Cloture on the measure, as amended, invoked in Senate by Yea-Nay Vote. 74 - 25. Record Vote Number: 243."},
+        {"type": "Floor", "text": "Considered by Senate. (consideration: CR S4959-4962)"},
+        {"type": "Floor", "text": "Motion to proceed to consideration of measure agreed to in Senate by Yea-Nay Vote. 77 - 22. Record Vote Number: 236. (CR S4773-4774)"},
+        {"type": "Calendars", "text": "Placed on Senate Legislative Calendar under General Orders. Calendar No. 449."},
+        {"type": "Committee", "text": "Committee on Commerce, Science, and Transportation. Reported by Senator Cruz with an amendment in the nature of a substitute. Without written report."},
+        {"type": "IntroReferral", "text": "Read twice and referred to the Committee on Commerce, Science, and Transportation."},
+        {"type": "IntroReferral", "text": "Introduced in Senate"},
+    ]
+
+    def test_floor_debate_is_on_the_floor(self):
+        assert classify_bill_stage_from_actions(self.S4668) == BillStage.ON_FLOOR
+
+    def test_passage_outranks_floor_debate(self):
+        actions = [{"actionCode": "17000", "type": "Floor", "text": "Passed/agreed to in Senate."}, *self.S4668]
+        assert classify_bill_stage_from_actions(actions) == BillStage.PASSED_CHAMBER
+
+    def test_second_chamber_floor_debate_is_the_other_chamber(self):
+        actions = [
+            {"type": "Floor", "text": "Considered under suspension of the rules."},
+            {"actionCode": "H14000", "type": "Floor", "text": "Received in the House."},
+            {"actionCode": "17000", "type": "Floor", "text": "Passed/agreed to in Senate."},
+            *self.S4668,
+        ]
+        assert classify_bill_stage_from_actions(actions) == BillStage.IN_OTHER_CHAMBER
+
+    def test_a_floor_action_that_does_not_name_consideration_is_not_a_guess(self):
+        actions = [{"type": "Floor", "text": "Message on Senate action sent to the House."}]
+        assert classify_bill_stage_from_actions(actions) == BillStage.INTRODUCED

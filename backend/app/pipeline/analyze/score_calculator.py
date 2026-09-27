@@ -2375,6 +2375,10 @@ _LES_STAGE_ORDER: dict[str, int] = {
     # sponsored-bills summary reading "135 bills, 123 advancing").
     "REFERRED": 1,
     "IN_COMMITTEE": 2,
+    # V&W's "action beyond committee" is a stage of its own; crediting it
+    # here would move every sponsor's score, so ON_FLOOR (2026-09, a display
+    # stage) scores as committee action until that is decided separately.
+    "ON_FLOOR": 2,
     "PASSED_CHAMBER": 3,
     "IN_OTHER_CHAMBER": 3,  # already passed its own chamber; no separate V&W stage for this
     "TO_PRESIDENT": 3,      # same — passed both chambers, not yet a new milestone
