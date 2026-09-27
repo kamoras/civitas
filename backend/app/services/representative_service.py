@@ -573,6 +573,7 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
             bill_type=sp_data.get("billType") or "",
             is_law=sp_data.get("isLaw") or False,
             stage=sp_data.get("stage") or "",
+            commemorative=bool(sp_data.get("commemorative")),
         ))
 
     partisan_depth_data = rep_data.get("partisanDepth")

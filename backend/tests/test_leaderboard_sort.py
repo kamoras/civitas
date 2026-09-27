@@ -149,3 +149,25 @@ def test_rep_score_ties_round_like_the_page():
     from app.services.representative_service import _half_up
 
     assert _half_up(56.5) == 57.0 and _half_up(57.5) == 58.0 and _half_up(56.49) == 56.0
+
+
+def test_rep_leaderboard_route_passes_sort_and_rejects_unknown_keys(db_session):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.api.representatives import router
+    from app.database import get_db
+
+    for i in range(3):
+        r = _rep(f"R{i}", f"Rep {i}", funding_independence=50)
+        r.total_contributions, r.total_from_pacs = 1_000_000, 100_000 * i
+        db_session.add(r)
+    db_session.commit()
+    app = FastAPI()
+    app.include_router(router, prefix="/api")
+    app.dependency_overrides[get_db] = lambda: db_session
+    client = TestClient(app)
+
+    body = client.get("/api/representatives/leaderboard", params={"sort": "pac_pct", "dir": "asc"}).json()
+    assert [e["id"] for e in body["entries"]] == ["R0", "R1", "R2"]
+    assert client.get("/api/representatives/leaderboard", params={"sort": "name"}).status_code == 422

@@ -330,6 +330,7 @@ def upsert_senator(db: Session, data: dict) -> None:
                 bill_type=sp_data.get("billType") or "",
                 is_law=sp_data.get("isLaw") or False,
                 stage=sp_data.get("stage") or "",
+                commemorative=bool(sp_data.get("commemorative")),
             )
         )
 
@@ -1742,6 +1743,11 @@ async def run_senate_pipeline(
                     "Bill-stage classification failed for %d sponsored bills — "
                     "those use the latestAction fallback", stage_failures,
                 )
+
+            # Commemorative bills (V&W's 1x tier) — before the LES reference
+            # is measured, since its stage totals are significance-weighted.
+            from app.pipeline.analyze.commemorative import mark_commemorative
+            mark_commemorative([sp for p in senator_prepared for sp in p.get("sponsoredBills", [])])
 
             funding_reference = live_funding_reference(
                 "senate", [p.get("funding") or {} for p in senator_prepared],

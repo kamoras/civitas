@@ -560,6 +560,11 @@ async def run_house_pipeline() -> dict:
                 )
                 progress.fail("sponsorship", detail="failed — continuing with empty scores")
 
+            # Commemorative bills (V&W's 1x tier) — before the LES reference
+            # is measured, since its stage totals are significance-weighted.
+            from app.pipeline.analyze.commemorative import mark_commemorative
+            mark_commemorative([sp for r in reps for sp in r.get("sponsoredBills") or []])
+
             # A withheld or failed analysis leaves members out of these
             # dicts; score them with last run's values, as the Senate does.
             from app.models import Representative

@@ -430,12 +430,15 @@ export default function AboutPage() {
                   four introductions. Checked against Volden &amp; Wiseman&apos;s own published
                   scores for the 110th&ndash;118th Congresses, that version ranked members at a rank
                   correlation of 0.71 (House) and 0.76 (Senate) and mostly tracked how many bills a
-                  member introduced; the current one ranks them at 0.90 and 0.96. Two differences
-                  remain and are disclosed: significance comes from the type of measure rather than
-                  from reading each bill, so a post-office renaming counts as a full bill (Volden
-                  &amp; Wiseman count it as commemorative, and their top &ldquo;substantive and
-                  significant&rdquo; tier has no source here); and committee action is one stage
-                  rather than two. Members with few bills are not pulled toward 50 — their record
+                  member introduced; the current one ranks them at 0.90 and 0.96. Commemorative
+                  bills (a post-office renaming, a Congressional Gold Medal) count 1x like simple
+                  resolutions: they are recognised from the title by an embedding classifier
+                  calibrated against Volden &amp; Wiseman&apos;s own commemorative counts
+                  (<code>backend/scripts/calibrate_commemorative.py</code>; exact per-member counts
+                  for 87% of the 118th House, about 1 false flag per 1,000 bills). Two differences
+                  remain and are disclosed: their top &ldquo;substantive and significant&rdquo; tier
+                  (10x) comes from CQ Almanac coverage, which has no source here; and committee
+                  action is one stage rather than two. Members with few bills are not pulled toward 50 — their record
                   is every bill they sponsored, fully observed — and a member with no substantive
                   bills after half a year in office scores as a record of zero, so inaction never
                   outscores an attempt. The reproduction is{" "}

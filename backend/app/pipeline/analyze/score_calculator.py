@@ -1975,14 +1975,13 @@ _MIN_TENURE_FOR_ZERO_SIGNAL_YEARS = 0.5
 #   - Four stages, not five: Congress.gov's action codes give committee
 #     action and reporting as one stage here (IN_COMMITTEE), where V&W
 #     separate "action in committee" from "action beyond committee".
-#   - Significance comes from bill TYPE: simple and concurrent resolutions
-#     1x, bills and joint resolutions 5x. V&W code it from CONTENT
-#     (commemorative 1x, substantive 5x, substantive and significant 10x),
-#     so a post-office naming bill is 5x here and 1x there. Content-based
-#     commemorative detection would raise agreement with V&W further (House
-#     0.93 -> 0.98 in the same test); it needs an embedding classifier
-#     calibrated on real bill titles. The 10x tier comes from CQ Almanac
-#     coverage, which has no source here.
+#   - Significance: bills and joint resolutions 5x, simple and concurrent
+#     resolutions 1x, and a bill whose content is commemorative (a post-
+#     office naming, a Gold Medal) 1x — detected from its title by an
+#     embedding classifier calibrated against V&W's own commemorative
+#     counts (analyze/commemorative.py, scripts/calibrate_commemorative.py).
+#     V&W's third tier, "substantive and significant" (10x), comes from CQ
+#     Almanac coverage, which has no source here.
 #   - The score compares each member with the median of their own
 #     majority/minority status in the chamber, measured each run, rather
 #     than reporting the raw ratio to the chamber mean.
@@ -2040,7 +2039,12 @@ def _les_bill_stage(bill: dict) -> int:
     return 1
 
 
-def _les_significance_weight(bill_type: str) -> float:
+def _les_significance_weight(bill_type: str, commemorative: bool = False) -> float:
+    """V&W's tiers as far as they can be observed here: a bill or joint
+    resolution 5x, unless its content is commemorative (analyze/
+    commemorative.py) — then 1x, like a simple or concurrent resolution."""
+    if commemorative:
+        return 1.0
     return 5.0 if bill_type in SUBSTANTIVE_BILL_TYPES else 1.0
 
 
@@ -2050,7 +2054,7 @@ def _les_stage_counts(sponsored_bills: list[dict]) -> list[float]:
     became law counts at all four stages."""
     counts = [0.0] * _LES_MAX_STAGE
     for b in sponsored_bills:
-        w = _les_significance_weight((b.get("billType") or "").lower())
+        w = _les_significance_weight((b.get("billType") or "").lower(), bool(b.get("commemorative")))
         for k in range(_les_bill_stage(b)):
             counts[k] += w
     return counts
@@ -2419,12 +2423,15 @@ def _les_component_score(
             f"0 substantive bills over {years_in_office:.1f} years in office — "
             f"a credit of 0 vs. {expected_per_congress:.2f} expected ({bar})"
         )
+    commemorative = sum(1 for b in substantive_bills if b.get("commemorative"))
     detail = (
         f"stage-normalized credit {raw_per_congress:.2f}/congress (chamber average 1.00) vs. "
         f"{expected_per_congress:.2f} expected ({bar}) — "
-        f"{n_sub} substantive bills: {introduced_only} introduced only, "
+        f"{n_sub} bills: {introduced_only} introduced only, "
         f"{advanced_short_of_law} advanced further, {enacted} became law"
     )
+    if commemorative:
+        detail += f"; {commemorative} commemorative (weighted 1x, not 5x)"
     return score, detail
 
 

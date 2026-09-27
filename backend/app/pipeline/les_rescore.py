@@ -35,6 +35,7 @@ def _bills(entity) -> list[dict]:
             "isLaw": b.is_law,
             "latestAction": b.latest_action,
             "stage": b.stage,
+            "commemorative": b.commemorative,
         }
         for b in entity.sponsored_bills
     ]

@@ -107,13 +107,30 @@ comparison.
 
 ## What is still different, and why
 
-- **Commemorative bills.** Civitas sets significance by bill type, so a
-  post-office renaming (an H.R. bill) gets 5x; V&W give it 1x. Reading the
-  content would raise agreement further (House 0.93 to 0.98 in the table
-  above). Doing that needs an embedding classifier calibrated on real bill
-  titles, per AGENTS.md principle 1. The model and the bill titles are on the
-  production host, not in this environment, so the calibration has to run
-  there.
+- **Commemorative bills — now detected.** Bill type can't tell a
+  post-office naming from any other H.R. bill, so v6.14 classifies titles
+  with an embedding classifier (`analyze/commemorative.py`, on the
+  similarity model): best similarity to three commemorative prototypes
+  minus similarity to a substantive one, over a calibrated threshold.
+  [`calibrate_commemorative.py`](../../backend/scripts/calibrate_commemorative.py)
+  fits the threshold against V&W's own per-member commemorative counts for
+  the 118th Congress, joined to GovTrack's bill titles. Where the two
+  sources agree on a member's total, the bill sets are identical, which
+  gives two measures: the false-positive rate on bills of members V&W
+  credit with no commemorative bills, and the error in each member's count.
+
+  | 118th Congress | members | FPR | count MAE (always 0) | exact count (always 0) |
+  |---|---|---|---|---|
+  | House (fitted) | 326 | 0.10% | 0.150 (0.491) | 87.4% (64.4%) |
+  | Senate (held out) | 52 | 0.09% | 0.288 (0.865) | 73.1% (51.9%) |
+
+  End to end, rebuilding every member's stage-normalized LES from GovTrack
+  statuses and weighting predicted commemorative bills 1x raises rank
+  agreement with V&W's published LES from 0.902 to 0.944 (House) and 0.936
+  to 0.955 (Senate). The threshold and these numbers live in
+  `app/data/commemorative_calibration.json`, with a hash of the prototypes
+  they were fitted to; a test fails if the prototypes change without a
+  recalibration.
 - **Substantive and significant (10x).** V&W assign this tier from CQ Almanac
   coverage, which has no source here. Its effect is inside the gap between the
   last row and 1.0.

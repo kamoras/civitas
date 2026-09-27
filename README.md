@@ -325,7 +325,7 @@ Classification decisions — what industry a donor belongs to, which direction a
 | Tier | Technique | Speed | Used For |
 |------|-----------|-------|----------|
 | 1 | FEC metadata / learning store exact match | Instant | Donor types, previously classified bills and donors |
-| 2 | Sentence-transformer embeddings (cosine similarity) | Fast | Bill policy areas, industry, party alignment, donor types, stance direction, procedural detection, skip entity detection, employer filtering, memo transfer detection |
+| 2 | Sentence-transformer embeddings (cosine similarity) | Fast | Bill policy areas, industry, party alignment, donor types, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection |
 | 2b | SVD / PageRank on cosponsorship matrix | Fast | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
 | 3 | k-Nearest Neighbor in embedding space | Fast | Remaining unclassified donors (~5%), bill classification from reference corpus |
 | 4 | LLM (LFM2.5-1.2B-Instruct via llama.cpp) | Slow | Action Center issue synthesis, justice profile summaries |
@@ -338,6 +338,7 @@ Key embedding-based classification features:
 - **Semantic category normalization** maps stale/unknown category labels to valid industries via embedding similarity, replacing a hardcoded alias table.
 - **Stance direction** is derived primarily from embedding similarity against pro/anti/neutral action prototypes — see the disclosed exception below.
 - **Procedural bill detection** uses embedding similarity against a procedural prototype instead of substring matching.
+- **Commemorative bill detection** (`analyze/commemorative.py`) gives Legislative Effectiveness Volden & Wiseman's 1x tier for bills like post-office namings and Gold Medals: the margin between commemorative and substantive prototypes on the similarity model, over a threshold calibrated against V&W's own per-member commemorative counts (`scripts/calibrate_commemorative.py`, written to `app/data/commemorative_calibration.json`).
 
 ### Disclosed exceptions
 
