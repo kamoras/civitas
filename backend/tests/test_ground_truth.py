@@ -217,7 +217,7 @@ class TestDerivedConsistency:
     def test_probe_is_not_counted_when_too_few_members_are_readable(self):
         members = [
             {"name": f"m{i}", "scores": {}, "raw": {"labeled_votes": 50},
-             "metrics": {"seat_relative_vote": None, "past_saturation": True if i < 3 else None}}
+             "metrics": {"seat_relative_vote": None, "beyond_saturation": True if i < 3 else None}}
             for i in range(40)
         ]
         measured = evaluate_derived_checks(members, reference_measured=True)
@@ -225,12 +225,23 @@ class TestDerivedConsistency:
         assert measured["checked"] == unmeasured["checked"]
         assert not any("reference and the votes disagree" in f["rationale"] for f in measured["failures"])
 
+    def test_beyond_saturation_counts_both_sides(self):
+        # The reference's quantile is taken over |deviation|, so the probe
+        # counts members that far out on the loyal side too. Conftest: 10%
+        # expected in a swing seat (NY is not; use the helper directly).
+        from app.pipeline.analyze.ground_truth import constituent_metrics
+
+        loyal = constituent_metrics(0.0, 50, "SW", "D", reference={"senate": {
+            "expected": {"D": {"a": 0.30, "b": 0.0}}, "deviation_p90": 0.2, "n": 100,
+            "statistic": CONSTITUENT_REFERENCE_STATISTIC}})
+        assert loyal["beyond_saturation"] is True
+
     def test_probe_allows_exactly_twice_the_tail(self):
         # 2 * (1 - 0.9) is 0.19999999999999996 in floating point; a share of
         # exactly 20% is inside the documented tolerance.
         members = [
             {"name": f"m{i}", "scores": {}, "raw": {"labeled_votes": 50},
-             "metrics": {"seat_relative_vote": 50.0, "past_saturation": i < 20}}
+             "metrics": {"seat_relative_vote": 50.0, "beyond_saturation": i < 20}}
             for i in range(100)
         ]
         failures = evaluate_derived_checks(members, reference_measured=True)["failures"]

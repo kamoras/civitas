@@ -23,6 +23,7 @@ import json
 import logging
 import pathlib
 
+from app.config_definitions import CONSTITUENT_REFERENCE_STATISTIC
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -144,7 +145,5 @@ class ChamberReference:
 
 LES_REFERENCE = ChamberReference("les_reference")
 FUNDING_REFERENCE = ChamberReference("funding_reference")
-# The statistic its entries must be measured on is set by score_calculator
-# (CONSTITUENT_REFERENCE_STATISTIC), built from the constants it describes.
-CONSTITUENT_REFERENCE = ChamberReference("constituent_reference")
+CONSTITUENT_REFERENCE = ChamberReference("constituent_reference", statistic=CONSTITUENT_REFERENCE_STATISTIC)
 PRESIDENT_REFERENCE = ChamberReference("president_reference", keys=("presidents",))

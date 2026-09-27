@@ -120,28 +120,37 @@ def seat_relative_vote_shape(rows: list[dict]) -> dict[str, float]:
     member's evidence is their vote count). rows: {bioguide, party, state, district,
     break_rate, n_votes}."""
     from app.pipeline.analyze.score_calculator import (
+        CONSTITUENT_FULL_CONFIDENCE_VOTES,
         _signed_state_alignment,
         compute_constituent_reference,
         seat_break_deviation,
         seat_relative_vote_score,
     )
 
+    # An Independent is scored as the party they caucus with, as the
+    # pipeline does; party_unity_breaks already counts their breaks against
+    # the Democratic majority, so they caucus D here.
+    def caucus(party: str) -> str:
+        return "D" if party == "I" else party
+
     inputs = []
     for r in rows:
-        if r["party"] in ("D", "R"):
-            alignment = _signed_state_alignment(r["state"], r["party"], district=r.get("district"))
-            inputs.append((r["party"], alignment, r["break_rate"]))
+        p = caucus(r["party"])
+        if p in ("D", "R") and r["n_votes"] >= CONSTITUENT_FULL_CONFIDENCE_VOTES:
+            alignment = _signed_state_alignment(r["state"], r["party"], effective_party=p, district=r.get("district"))
+            inputs.append((p, alignment, r["break_rate"]))
     ref = compute_constituent_reference(inputs)
     if ref is None:
         return {}
     out = {}
     for r in rows:
-        if r["party"] not in ("D", "R"):
+        p = caucus(r["party"])
+        if p not in ("D", "R"):
             continue
         # The score's own expectation lookup, handed this reference for
         # whichever chamber the row belongs to.
         dev = seat_break_deviation(
-            r["break_rate"], r["state"], r["party"], district=r.get("district"),
+            r["break_rate"], r["state"], r["party"], effective_party=p, district=r.get("district"),
             reference={"senate": ref, "house": ref},
         )
         if dev is not None:

@@ -164,6 +164,11 @@ import logging
 import math
 import statistics
 
+from app.config_definitions import (
+    CONSTITUENT_FULL_CONFIDENCE_VOTES,
+    CONSTITUENT_REFERENCE_STATISTIC,
+    SATURATION_QUANTILE,
+)
 from app.models import PromiseAlignment
 from app.pipeline.analyze.population_reference import (
     CONSTITUENT_REFERENCE,
@@ -620,10 +625,9 @@ def explain_scores(senator: dict) -> dict:
     }
 
 
-# Party-labeled votes at which Constituent Alignment's data sufficiency is
-# graded "high" (calculate_confidence) and its vote score stops shrinking
-# toward 50. A volume count, the same for every member.
-CONSTITUENT_FULL_CONFIDENCE_VOTES = 20
+# CONSTITUENT_FULL_CONFIDENCE_VOTES, SATURATION_QUANTILE and
+# CONSTITUENT_REFERENCE_STATISTIC live in config_definitions (imported at
+# the top of this module) so population_reference can stamp at construction.
 
 
 def calculate_confidence(senator: dict) -> dict[str, str]:
@@ -1369,11 +1373,6 @@ _MIN_CONSTITUENT_REFERENCE_PARTY = 20
 _MIN_OPPOSED_SEATS_FOR_KINK = 5
 
 
-# The deviation quantile Constituent Alignment's vote score saturates at
-# (deviation_p90): the most out-of-pattern tenth of a chamber, measured on
-# both sides of the expectation, sits at or past it.
-SATURATION_QUANTILE = 0.9
-
 
 def party_break_rate(voting_record: dict) -> tuple[float | None, int]:
     """(share of party-labeled votes cast against the member's party, count
@@ -1490,19 +1489,6 @@ def constituent_reference_inputs(members: list[dict]) -> list[tuple[str, float, 
     return out
 
 
-# The statistic Constituent Alignment references are measured on: the
-# unweighted break rate (party_break_rate) over records with at least
-# CONSTITUENT_FULL_CONFIDENCE_VOTES party-labeled votes. Stamped on every
-# reference compute_constituent_reference produces and checked by
-# CONSTITUENT_REFERENCE when it reads the persisted and bundled files, so a
-# reference measured under another rule — v6.13's content-weighted rate
-# over 3+-vote records, a different threshold or saturation quantile — is
-# not scored against. Built from the constants it depends on so changing
-# either invalidates it.
-CONSTITUENT_REFERENCE_STATISTIC = (
-    f"unweighted-break-rate/n>={CONSTITUENT_FULL_CONFIDENCE_VOTES}/p{round(SATURATION_QUANTILE * 100)}"
-)
-CONSTITUENT_REFERENCE.statistic = CONSTITUENT_REFERENCE_STATISTIC
 
 
 def _constituent_reference(chamber: str, reference: dict | None) -> dict:

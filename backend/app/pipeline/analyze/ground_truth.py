@@ -72,7 +72,6 @@ from app.pipeline.analyze.score_calculator import (
     CONSTITUENT_FULL_CONFIDENCE_VOTES,
     SATURATION_QUANTILE,
     party_break_rate,
-    past_saturation,
     seat_break_deviation,
     seat_relative_vote_score,
 )
@@ -181,7 +180,8 @@ def constituent_metrics(
     """The Constituent Alignment inputs a member record carries:
     seat_relative_vote (the vote component recomputed from the raw votes by
     the scorer's own seat_relative_vote_score; None below MIN_LABELED_VOTES
-    or without a measured expectation) and past_saturation (None below
+    or without a measured expectation) and beyond_saturation (|deviation|
+    past the saturation deviation on either side; None below
     CONSTITUENT_FULL_CONFIDENCE_VOTES — the reference's saturation point is
     measured only on full-confidence records). ``break_rate`` and
     ``labeled_votes`` are party_break_rate's. Shared by the pipeline gate
@@ -192,7 +192,7 @@ def constituent_metrics(
     the decline, the shrinkage) is pinned by test_constituent_alignment.py,
     not here: a gate metric written to differ from the formula would flag
     every legitimate design change as a failure."""
-    out = {"seat_relative_vote": None, "past_saturation": None}
+    out = {"seat_relative_vote": None, "beyond_saturation": None}
     if break_rate is None or labeled_votes < MIN_LABELED_VOTES:
         return out
     dev = seat_break_deviation(
@@ -202,25 +202,27 @@ def constituent_metrics(
     if dev is not None:
         out["seat_relative_vote"] = seat_relative_vote_score(*dev, labeled_votes)
         if labeled_votes >= CONSTITUENT_FULL_CONFIDENCE_VOTES:
-            out["past_saturation"] = past_saturation(*dev)
+            # Either side, as the reference's quantile is taken over |deviation|.
+            out["beyond_saturation"] = abs(dev[0]) > dev[1]
     return out
 
 
 # Twice the reference's out-of-pattern tail (1 - SATURATION_QUANTILE),
 # rounded so the float arithmetic lands on the documented value: 0.2, not
 # 0.19999999999999996, which would fail a share of exactly 20%.
-_PAST_SATURATION_TOLERANCE = round(2 * (1 - SATURATION_QUANTILE), 9)
+_BEYOND_SATURATION_TOLERANCE = round(2 * (1 - SATURATION_QUANTILE), 9)
 
 
-def _past_saturation_share(members: list[dict]) -> tuple[float, int] | None:
-    """Share of full-confidence members who sit past the saturation
-    deviation. The reference defines that deviation as the SATURATION_
-    QUANTILE of the full-confidence members it was measured on, so at most
-    ~1 - SATURATION_QUANTILE of them are past it; the probe allows twice
+def _beyond_saturation_share(members: list[dict]) -> tuple[float, int] | None:
+    """Share of full-confidence members whose |deviation| from their seat's
+    expectation exceeds the saturation deviation, on either side. The
+    reference defines that deviation as the SATURATION_QUANTILE of |deviation|
+    over the full-confidence members it was measured on, so ~1 -
+    SATURATION_QUANTILE of them are beyond it; the probe allows twice
     that, because the gate reads current members' stored votes — members
     whose scoring failed this run keep last run's — rather than the exact
     run population."""
-    flags = [m["metrics"].get("past_saturation") for m in members]
+    flags = [m["metrics"].get("beyond_saturation") for m in members]
     readable = [f for f in flags if f is not None]
     # Same minimum as every rank check: early in a congress only a few
     # members have enough labeled votes, and 2 of 8 is noise, not a
@@ -245,7 +247,7 @@ def evaluate_derived_checks(
          "metrics": {"pac_ratio": float | None,
                      "small_donor_pct": float | None,
                      "seat_relative_vote": float | None,
-                     "past_saturation": bool | None},
+                     "beyond_saturation": bool | None},
          "raw": {"total_raised": float, "total_from_pacs": float,
                  "labeled_votes": int}}
 
@@ -303,23 +305,24 @@ def evaluate_derived_checks(
     # measured from this population (a fallback reference from another run
     # makes no promise about these members' spread) and enough members are
     # readable.
-    probe = _past_saturation_share(members) if reference_measured else None
+    probe = _beyond_saturation_share(members) if reference_measured else None
     if probe is not None:
         share, n_readable = probe
         checked += 1
-        if share > _PAST_SATURATION_TOLERANCE:
+        if share > _BEYOND_SATURATION_TOLERANCE:
             rationale = (
-                f"{share:.0%} of full-confidence {entity_label} sit past Constituent "
-                "Alignment's saturation deviation; the reference defines it as the "
-                f"{SATURATION_QUANTILE:.0%} quantile (about {1 - SATURATION_QUANTILE:.0%} "
-                f"past it) and the gate allows up to {_PAST_SATURATION_TOLERANCE:.0%} — "
+                f"{share:.0%} of full-confidence {entity_label} sit beyond Constituent "
+                "Alignment's saturation deviation (either side); the reference defines "
+                f"it as the {SATURATION_QUANTILE:.0%} quantile of |deviation| (about "
+                f"{1 - SATURATION_QUANTILE:.0%} beyond it) and the gate allows up to "
+                f"{_BEYOND_SATURATION_TOLERANCE:.0%} — "
                 "the constituent reference and the votes disagree"
             )
             failures.append({
                 "senator": f"{round(share * n_readable)} of {n_readable} full-confidence {entity_label}",
                 "dimension": "IV",
                 "score": round(share, 3),
-                "expected": [f"share past saturation <= {_PAST_SATURATION_TOLERANCE:.0%}", None],
+                "expected": [f"share beyond saturation <= {_BEYOND_SATURATION_TOLERANCE:.0%}", None],
                 "rationale": rationale,
             })
             logger.warning("DERIVED CHECK FAIL [IV]: %s", rationale)
