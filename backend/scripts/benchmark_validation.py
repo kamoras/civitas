@@ -28,9 +28,13 @@ score from, using the same constructs the scores claim to measure (v6.16):
        moves one way with position.
   Legislative Effectiveness (optional, --les-csv):
     3. The Center for Effective Lawmaking's Legislative Effectiveness Score
-       (thelawmakers.org) — the benchmark our LE adapts. Supply their file as
-       CSV; --les-id-col / --les-col name its bioguide/ICPSR and score
-       columns (their layout has not been verified from here).
+       (thelawmakers.org) — the benchmark our LE adapts. Supply their
+       spreadsheet exported as CSV. Its file covers every congress from the
+       93rd, one row per member-congress, so only the rows for the congress
+       being checked are read ("Congress number" column); CEL publishes a
+       congress's scores after it ends, so --congress must name a finished
+       one. --les-id-col / --les-col name the member-id and score columns by
+       prefix (defaults match CEL's "ICPSR number..." and "LES 1.0").
 
 Run after algorithm changes, inside the backend container:
 
@@ -200,21 +204,49 @@ def position_congruence(member_rows: list[dict], chamber: str) -> dict[str, floa
     return out
 
 
-def load_les(path: str, id_col: str, score_col: str) -> dict[str, float]:
+def _column(columns: list[str], name: str) -> str | None:
+    """The column named `name`, else the first whose name starts with it
+    (case-insensitive): CEL's headers are long ("ICPSR number, according to
+    Poole and Rosenthal"), and a prefix is what a user can reasonably type."""
+    lowered = [(c.strip().lower(), c) for c in columns]
+    name = name.lower()
+    return next((c for low, c in lowered if low == name), None) or next(
+        (c for low, c in lowered if low.startswith(name)), None)
+
+
+def _as_int(value) -> int | None:
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def load_les(path: str, id_col: str, score_col: str, congress: int) -> dict[str, float]:
+    """Member id -> LES for one congress. CEL's file has a row per
+    member-congress, so reading it unfiltered would keep whichever congress
+    came last for each member."""
     with open(path, newline="", encoding="utf-8-sig") as f:
         rows = list(csv.DictReader(f))
     if not rows:
         return {}
-    cols = {c.lower(): c for c in rows[0]}
-    idc, sc = cols.get(id_col.lower()), cols.get(score_col.lower())
+    columns = list(rows[0])
+    idc, sc, cc = _column(columns, id_col), _column(columns, score_col), _column(columns, "congress")
     if idc is None or sc is None:
-        raise SystemExit(f"--les-csv has no {id_col!r}/{score_col!r} columns; it has {list(rows[0])}")
-    out = {}
+        raise SystemExit(f"--les-csv has no {id_col!r}/{score_col!r} columns; it has {columns}")
+    if cc is not None:
+        rows = [r for r in rows if _as_int(r[cc]) == congress]
+        if not rows:
+            raise SystemExit(f"--les-csv has no rows for the {congress}th Congress (CEL publishes a congress after it ends)")
+    out: dict[str, float] = {}
     for r in rows:
+        key = str(_as_int(r[idc]) if _as_int(r[idc]) is not None else r[idc]).strip()
         try:
-            out[str(r[idc]).strip()] = float(r[sc])
+            score = float(r[sc])
         except (TypeError, ValueError):
             continue
+        if key in out:
+            raise SystemExit(f"--les-csv has more than one row for member {key!r} and no congress column to tell them apart")
+        out[key] = score
     return out
 
 
@@ -279,7 +311,7 @@ def run_chamber(chamber: str, congress: int, les: dict[str, float] | None, les_k
     report("CA vs seat-relative vote shape (Voteview)", vote_shape, "ca", +1)
     report("CA vs Constituent Alignment recomputed from Voteview", recomputed, "ca", +1)
     if les is not None:
-        key_of = {m["bioguide"]: m["icpsr"] for m in members.values()}
+        key_of = {m["bioguide"]: str(_as_int(m["icpsr"])) for m in members.values()}
         les_by_bio = {b: les[key_of[b] if les_key == "icpsr" else b] for b in key_of
                       if (key_of[b] if les_key == "icpsr" else b) in les}
         report("LE vs CEL Legislative Effectiveness Score", les_by_bio, "le", +1)
@@ -290,14 +322,14 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--congress", type=int, default=None, help="default: settings.CURRENT_CONGRESS")
     ap.add_argument("--chamber", choices=["senate", "house", "both"], default="both")
-    ap.add_argument("--les-csv", help="CEL LES file exported as CSV")
-    ap.add_argument("--les-id-col", default="icpsr", help="member id column (icpsr or bioguide)")
-    ap.add_argument("--les-col", default="les", help="score column")
+    ap.add_argument("--les-csv", help="CEL LES file for the chamber checked (House and Senate are separate files), exported as CSV")
+    ap.add_argument("--les-id-col", default="icpsr", help="member id column, or its prefix (icpsr or bioguide)")
+    ap.add_argument("--les-col", default="les 1.0", help="score column, or its prefix")
     args = ap.parse_args()
 
     from app.config import settings
     congress = args.congress or settings.CURRENT_CONGRESS
-    les = load_les(args.les_csv, args.les_id_col, args.les_col) if args.les_csv else None
+    les = load_les(args.les_csv, args.les_id_col, args.les_col, congress) if args.les_csv else None
     les_key = "icpsr" if args.les_id_col.lower() == "icpsr" else "bioguide"
     problems = []
     for chamber in (["senate", "house"] if args.chamber == "both" else [args.chamber]):

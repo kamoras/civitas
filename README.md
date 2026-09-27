@@ -126,7 +126,7 @@ the content is per-request.
 
 ## Nightly Pipeline: Phase by Phase
 
-The nightly pipeline processes every senator and House representative through seven sequential phases before persisting scores and snapshots. Those phases are one link in a five-pipeline **chain**, run in this order by `scheduler.py`:
+The nightly pipeline processes every senator and House representative through FETCH → TRANSFORM → ANALYZE → FINALIZE before persisting scores and snapshots; the Supplementary pipeline carries the other three phases below (EXPLORE, JUSTICES, PRESIDENTS). They are links in a five-pipeline **chain**, run in this order by `scheduler.py`:
 
 ```
 Senate ──▶ Supplementary ──▶ House ──▶ Stock trades ──▶ Election
@@ -143,11 +143,12 @@ Pulls raw data from each government API and stores the complete response verbati
 
 | Source | What is fetched | Rate limit |
 |--------|-----------------|------------|
-| Congress.gov | Bills sponsored/cosponsored (last 2 years), roll-call votes | 1.2 RPS |
+| Congress.gov | Members, bills sponsored/cosponsored and their actions (current congress), bill summaries and titles | 1.2 RPS |
+| Senate.gov / House Clerk | Roll-call vote XML (every member's position on each vote) | 1.2 RPS (shared with Congress.gov) |
 | FEC API | Campaign finance transactions, committee receipts, PAC committee types | 0.25 RPS |
-| GovInfo API | Full bill text for key votes (PDF → text extraction) | 1.0 RPS |
-| Senate.gov | Floor speeches, press remarks (scraped; no public API) | polite crawl |
-| Oyez / SCOTUS | Justice voting records, case metadata | 0.5 RPS |
+| GovInfo API | Bill text; Congressional Record floor remarks (Explore) | 1.0 RPS |
+| Senate LDA | Registered lobbying spend for organizations in donor–vote matches | 0.2 RPS |
+| Oyez / supremecourt.gov | Justice voting records, case metadata, docket pages | ~2 RPS (fixed pauses) |
 | BLS | Unemployment, inflation, job growth by administration | batch |
 | BEA | GDP growth by quarter | batch |
 | Federal Register | Executive orders signed per administration | 1.0 RPS |
@@ -176,13 +177,13 @@ their output unreliable — generic boilerplate, occasionally fabricated
 per-vote reasoning — regardless of prompting approach. See
 `cross_reference.py`'s module docstring.)
 
-1. Embed all sponsored/cosponsored bill titles → classify policy areas (nearest centroid, 18 prototypes)
-2. Embed all donor employer names → classify industries (tiered: exact match → embedding → kNN)
-3. Compute lobbying conflicts: cosine similarity between donor industries and bill policy areas
-4. Select key votes: composite score = party deviation + donor industry overlap
-5. Embed platform text → extract policy topics (sentence-transformer, not LLM)
-6. Embed floor speeches → compute party alignment (nearest centroid vs. party platform corpora)
-7. Compute corruption/representation sub-scores and persist the member's scorecard
+1. Embed bill titles → classify policy area, stance direction, procedural and commemorative bills (prototype similarity, kNN for the residual)
+2. Classify donors by type and industry (tiered: FEC metadata → learning store → embedding → kNN)
+3. Party alignment per bill: how the parties actually split on its roll call, else content similarity to party platform positions (see "Party Alignment" below)
+4. Sponsorship network over the chamber: PageRank legislative leadership and SVD ideology from the cosponsorship matrix
+5. Donor–vote connections: substantial industry funding matched against policy-anchored vote similarity, with Senate LDA lobbying spend attached
+6. Select key votes: against the party line, related to a top donor's industry, substantive
+7. Compute the representation sub-scores against population references measured from the chamber this run, and persist the member's scorecard
 
 ### Phase 4 — EXPLORE
 
@@ -203,10 +204,11 @@ not for scoring.
 
 ### Phase 5 — JUSTICES
 
-Fetches and scores Supreme Court justices from Oyez:
-- Pulls all majority/dissent/concurrence votes for the current term
-- Scores ideological consistency: deviation from the justice's historical median position
-- Scores impartiality: proportion of cases where the justice's coalition crossed party-appointment lines
+Fetches and scores Supreme Court justices from Oyez (`justice_analyzer.py`):
+- Pulls each justice's votes in the Court's decided cases
+- Scores consistency: how little a justice's agreement differs between their appointing party's bloc and the other, weighted toward close decisions
+- Scores independence: per non-unanimous case, the share of the opposing bloc on the justice's side times the share of their own bloc against it, averaged
+- Both are shrunk toward 50 when backed by few cases; a 9-justice profile summary is the one LLM step
 
 ### Phase 6 — PRESIDENTS
 
@@ -218,7 +220,7 @@ Scores sitting and historical presidents from a mix of live and archival sources
 ### Phase 7 — FINALIZE
 
 Persists everything computed in phases 3–6:
-- Writes senator/representative scores, key votes, lobbying matches, campaign promises, sponsored bills to SQLite
+- Writes senator/representative scores, key votes, donor–vote matches and sponsored bills to SQLite
 - Appends a `ScoreSnapshot` record (all 5 sub-scores + overall) for each member — enables historical score trend charts
 - Records a `PipelineRun` with phase timings, counts, and any per-member errors
 - Runs a SHA-256 fingerprint over all analysis source files (docstring-stripped ASTs, so comment-only edits don't count); if changed since last run, clears `AnalysisCache` and `LearnedClassification` so stale results from the old code are not served

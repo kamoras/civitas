@@ -108,10 +108,10 @@ pipeline_is_busy() {
   # their turn — exactly the case this guard exists for. The admin
   # endpoint has always published the field; only this tuple was short.
   #
-  # Worse, its orphaned row is not swept: main._invalidate_orphaned_pipelines
-  # only marks PipelineRun rows stale on startup, so a killed election run
-  # stays "running" until the NEXT run's acquire_pipeline_lock ages it out
-  # past STALE_PIPELINE_TIMEOUT.
+  # A killed run's row is swept on the next startup
+  # (main._invalidate_orphaned_pipelines, every pipeline's table since
+  # 2026-09-27); before that only the Senate's was, and a killed election
+  # run read "running" until STALE_PIPELINE_TIMEOUT aged it out.
   if echo "$status" | python3 -c '
 import json, sys
 try:

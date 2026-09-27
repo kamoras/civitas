@@ -28,7 +28,6 @@ cur = conn.cursor()
 cur.execute("""
 SELECT name, state, party,
   round(score_funding_independence,1) fi,
-  round(score_promise_persistence,1) pp,
   round(score_constituent_alignment,1) ca,
   round(score_funding_diversity,1) fd,
   round(score_legislative_effectiveness,1) le,
@@ -40,18 +39,22 @@ FROM senators ORDER BY overall DESC
 """)
 rows = cur.fetchall()
 
-print(f"{'Name':<28} {'ST':>2} {'P':>1}  {'FI':>4} {'PP':>4} {'CA':>4} {'FD':>4} {'LE':>4}  {'OVR':>4}  {'PAC%':>5} {'$M':>6}")
-print("-" * 90)
+print(f"{'Name':<28} {'ST':>2} {'P':>1}  {'FI':>4} {'CA':>4} {'FD':>4} {'LE':>4}  {'OVR':>4}  {'PAC%':>5} {'$M':>6}")
+print("-" * 85)
 for r in rows:
-    print(f"{r['name']:<28} {r['state']:>2} {r['party']:>1}  {r['fi'] or 0:>4} {r['pp'] or 0:>4} {r['ca'] or 0:>4} {r['fd'] or 0:>4} {r['le'] or 0:>4}  {r['overall'] or 0:>4}  {r['pac_pct'] or 0:>5} {r['raised_m'] or 0:>6}")
+    print(f"{r['name']:<28} {r['state']:>2} {r['party']:>1}  {r['fi'] or 0:>4} {r['ca'] or 0:>4} {r['fd'] or 0:>4} {r['le'] or 0:>4}  {r['overall'] or 0:>4}  {r['pac_pct'] or 0:>5} {r['raised_m'] or 0:>6}")
 
-for dim in ['fi','pp','ca','fd','le','overall']:
+for dim in ['fi','ca','fd','le','overall']:
     vals = [r[dim] or 0 for r in rows]
     print(f"\n{dim.upper()}: min={min(vals)} max={max(vals)} mean={round(statistics.mean(vals),1)} stdev={round(statistics.stdev(vals),1)} median={statistics.median(vals)}")
 
 conn.close()
 EOF
 ```
+
+Promise Persistence is left out: campaign-promise tracking was removed in
+v6.0, so `score_promise_persistence` is the neutral 50 for every member and
+carries no signal (it is still stored, unweighted).
 
 **What to look for:**
 - `stdev` should be 10–20 for each dimension. If stdev < 8, scores are too compressed — the formula needs recalibration or more data.
@@ -120,7 +123,7 @@ cur.execute("SELECT count(*) n FROM senators"); total = cur.fetchone()['n']
 checks = [
     ("Has FEC funding data",   "total_raised > 0"),
     ("Has vote record",        "EXISTS(SELECT 1 FROM key_votes kv WHERE kv.senator_id=s.id)"),
-    ("Has campaign promises",  "EXISTS(SELECT 1 FROM campaign_promises cp WHERE cp.senator_id=s.id)"),
+    ("Has sponsored bills",    "EXISTS(SELECT 1 FROM sponsored_bills sb WHERE sb.senator_id=s.id)"),
     ("Has lobbying matches",   "EXISTS(SELECT 1 FROM lobbying_matches lm WHERE lm.senator_id=s.id)"),
     ("Has industry breakdown", "EXISTS(SELECT 1 FROM industry_donations id2 WHERE id2.senator_id=s.id)"),
 ]
@@ -140,18 +143,18 @@ for label, condition in checks:
 # Senators defaulting to 50 on multiple dimensions (data desert)
 cur.execute("""
 SELECT name, state,
-  score_funding_independence fi, score_promise_persistence pp,
-  score_constituent_alignment ca, score_funding_diversity fd
+  score_funding_independence fi, score_constituent_alignment ca,
+  score_legislative_effectiveness le
 FROM senators
 WHERE abs(score_funding_independence - 50) < 2
-  AND abs(score_promise_persistence - 50) < 2
   AND abs(score_constituent_alignment - 50) < 2
+  AND abs(score_legislative_effectiveness - 50) < 2
 """)
 deserts = cur.fetchall()
 if deserts:
-    print(f"\n⚠ DATA DESERTS (3+ dimensions defaulting near 50): {len(deserts)}")
+    print(f"\n⚠ DATA DESERTS (all three weighted dimensions near 50): {len(deserts)}")
     for r in deserts:
-        print(f"  {r['name']} ({r['state']}): FI={r['fi']} PP={r['pp']} CA={r['ca']} FD={r['fd']}")
+        print(f"  {r['name']} ({r['state']}): FI={r['fi']} CA={r['ca']} LE={r['le']}")
 else:
     print("\n✓ No data deserts found")
 
@@ -172,29 +175,14 @@ print(f"  1-50 votes:  {vd.get('low',0):>3} senators (sparse)")
 print(f"  51-200:      {vd.get('mid',0):>3} senators (adequate)")
 print(f"  200+ votes:  {vd.get('high',0):>3} senators (good)")
 
-# Promise coverage
-cur.execute("""
-SELECT
-  count(distinct senator_id) with_promises,
-  count(case when alignment != 'unclear' then 1 end) evaluable,
-  count(*) total_promises
-FROM campaign_promises
-""")
-pd = dict(cur.fetchone())
-print(f"\nPROMISE DATA")
-print(f"  Senators with promises: {pd.get('with_promises',0)}")
-print(f"  Total promises tracked: {pd.get('total_promises',0)}")
-print(f"  Evaluable (not unclear): {pd.get('evaluable',0)}")
-
 conn.close()
 EOF
 ```
 
 **What to look for:**
 - Any coverage below 70% (✗) means the pipeline has a data fetch problem — investigate before trusting scores.
-- Data deserts (3+ dimensions at 50) indicate senators where no data source is working — could be new senators, name-matching failures, or API gaps.
+- Data deserts (all three weighted dimensions at 50) indicate senators where no data source is working — could be new senators, name-matching failures, or API gaps.
 - If >20 senators have zero votes, the vote normalization is broken.
-- If evaluable promises < 30% of total, the LLM is classifying too many as "unclear" — may need prompt tuning.
 
 ---
 
@@ -210,14 +198,14 @@ conn.row_factory = sqlite3.Row
 cur = conn.cursor()
 
 cur.execute("""
-SELECT score_funding_independence fi, score_promise_persistence pp,
+SELECT score_funding_independence fi,
        score_constituent_alignment ca, score_funding_diversity fd,
        score_legislative_effectiveness le
 FROM senators WHERE total_raised > 0
 """)
 rows = [dict(r) for r in cur.fetchall()]
 
-dims = ['fi', 'pp', 'ca', 'fd', 'le']
+dims = ['fi', 'ca', 'fd', 'le']
 def corr(xs, ys):
     n = len(xs)
     mx, my = sum(xs)/n, sum(ys)/n
@@ -246,7 +234,6 @@ EOF
 
 **What to look for:**
 - Any off-diagonal correlation above 0.40 (absolute value) is a design problem.
-- PP×CA correlation above 0.4 means the PP fallback is still using voting data (check score_calculator.py).
 - FI×FD correlation above 0.5 is expected (both measure funding quality) but shouldn't be above 0.7.
 - CA×FI correlation above 0.4 suggests the donor independence component is driving both.
 
@@ -272,7 +259,7 @@ if not s:
     print("Not found"); exit()
 
 print(f"=== {s['name']} ({s['state']}-{s['party']}) ===")
-print(f"FI={s['score_funding_independence']} PP={s['score_promise_persistence']} CA={s['score_constituent_alignment']} FD={s['score_funding_diversity']} LE={s['score_legislative_effectiveness']}")
+print(f"FI={s['score_funding_independence']} CA={s['score_constituent_alignment']} FD={s['score_funding_diversity']} LE={s['score_legislative_effectiveness']}")
 print(f"Total raised: \${s['total_raised']:,.0f} | PAC total: \${s['total_from_pacs']:,.0f} ({round(s['total_from_pacs']/max(s['total_raised'],1)*100,1)}%)")
 
 # Vote breakdown
@@ -285,12 +272,9 @@ FROM key_votes WHERE senator_id=?
 v = dict(cur.fetchone())
 print(f"Votes: {v['total']} total | {v['with_party']} with party | {v['against_party']} against party ({round(v['against_party']/max(v['total'],1)*100,1)}%)")
 
-# Promise breakdown
-cur.execute("""
-SELECT alignment, count(*) n FROM campaign_promises
-WHERE senator_id=? GROUP BY alignment
-""", (s['id'],))
-print("Promises:", {r['alignment']: r['n'] for r in cur.fetchall()})
+# Sponsored bills by stage (Legislative Effectiveness's input)
+cur.execute("SELECT stage, count(*) n FROM sponsored_bills WHERE senator_id=? GROUP BY stage", (s['id'],))
+print("Sponsored bills by stage:", {r['stage']: r['n'] for r in cur.fetchall()})
 
 # Top donors
 cur.execute("SELECT name, total, type, industry FROM donors WHERE senator_id=? ORDER BY total DESC LIMIT 5", (s['id'],))
@@ -358,7 +342,8 @@ cur.execute("SELECT count(distinct date) n_dates, count(distinct entity_id) n_en
 snap = dict(cur.fetchone())
 print(f"Score snapshots: {snap['n_dates']} pipeline runs × {snap['n_entities']} senators")
 
-# Senators with high score variance (oscillating)
+# Senators with high score variance (oscillating). Only snapshots from the
+# current algorithm version: a version change is supposed to move scores.
 cur.execute("""
 SELECT entity_id,
   max(overall_score) - min(overall_score) as range_,
@@ -366,6 +351,8 @@ SELECT entity_id,
   round(avg(overall_score), 1) avg_score
 FROM score_snapshots
 WHERE entity_type = 'senator'
+  AND algorithm_version = (SELECT algorithm_version FROM score_snapshots
+                           WHERE entity_type = 'senator' ORDER BY date DESC, id DESC LIMIT 1)
 GROUP BY entity_id
 HAVING n_snaps >= 3 AND range_ > 15
 ORDER BY range_ DESC
@@ -458,13 +445,16 @@ docker exec "$(docker ps -q -f name=civitas_backend)" \
   python3 scripts/benchmark_validation.py --chamber both [--les-csv /data/cel_les.csv]
 ```
 
-It exits non-zero when a benchmark correlates in the wrong direction. v6.13
+It exits non-zero when a benchmark correlates in the wrong direction. v6.16
 has no recorded baseline yet; write the first run's correlations into the
-script's docstring and investigate any later drop of more than ~0.15.
+script's docstring and investigate any later drop of more than ~0.15. The
+Center for Effective Lawmaking publishes a congress's LES only after it ends,
+so the LE check needs `--congress` set to a finished congress whose scores
+you still hold (or a database restored from one).
 
 The research scripts under `backend/scripts/research_*.py` and
-`audit_funding_components.py` re-run the evidence behind v6.13's design
-decisions from public data (`docs/research/`).
+`audit_funding_components.py` re-run the evidence behind the design decisions
+since v6.13 from public data (`docs/research/`).
 
 ---
 
@@ -476,23 +466,21 @@ After running the audit, use this framework to decide what to change:
 |---|---|---|
 | stdev < 8 on any dimension | Formula too narrow, or defaults dominate | Recalibrate multipliers; check default values |
 | mean > 65 on any dimension | Missing data treated as positive | Change "no data" default from positive to neutral (50) |
-| PP×CA correlation > 0.4 | PP fallback using vote data | Remove voting fallback from PP; use 50 |
 | FI > 85 for high-fundraising senators | PAC committee types unresolved, so the dollar fallback applied | Check donors.committee_type coverage; verify fetch_committee_type. (Outside spending is deliberately not scored since v6.13 — see docs/research/funding-independence.md) |
 | Derived consistency check ✗ | Vote/finance matching broken, or algorithm regression | The failure's rationale names the raw metric that decoupled; check key_votes/donor tables and the corresponding fetch |
 | >20% senators in data desert | API fetch failure | Check API cache, rate limits, name matching |
 | High score variance (>15 pts) on specific senator | Inconsistent vote/FEC matching | Add name normalization or use bioguide_id as primary key |
-| LE scores all below 50 | Advancement threshold too high | Compare against the current threshold in score_calculator.py |
+| LE median far from 50 | The LES reference was measured on a different population (a stale `/data/les_reference.json`, or a congress boundary) | Compare its `stage_totals` / `n_members` with the current chamber's; the next pipeline run re-measures it |
 
 ## Algorithm change history
 
-Full rationale for every scoring-formula change lives in commit messages,
-not here — a static table in this doc would drift out of sync with the
-algorithm the same way an earlier version of this document did. To see it:
+The rationale and measurements for every scoring-formula change live in
+[`docs/methodology/member-score/`](docs/methodology/member-score/), one
+record per `ALGORITHM_VERSION`, with the evidence notes in
+[`docs/research/`](docs/research/). Not here: a static table in this doc
+would drift out of sync with the algorithm the same way an earlier version of
+this document did. The commit history carries the same changes:
 
 ```bash
 git log --oneline -- backend/app/pipeline/analyze/score_calculator.py backend/app/config_definitions.py
 ```
-
-Each commit message documents what changed, why, and the measured impact
-(e.g. "FI mean 69→52, stdev 18" style before/after numbers), matching this
-project's commit convention.

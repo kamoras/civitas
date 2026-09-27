@@ -1,9 +1,8 @@
 /**
  * Shared party (D/R/I) styling constants — Tailwind class names keyed by
- * party code. Copy-pasted verbatim across ~6 components before this
- * extraction (ActionPreview, ElectionsTab, MyRepsTab, SenatorCard,
- * app/action, app/compare) — a single source of truth here means a color
- * or opacity change can't silently drift out of sync between them.
+ * party code, imported by every component that colours a party badge or
+ * name. A single source of truth here means a color or opacity change can't
+ * silently drift out of sync between them.
  *
  * President/Justice cards use a different shape (no Independent option,
  * different label text, different opacity values) and are left as their

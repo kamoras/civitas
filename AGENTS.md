@@ -872,7 +872,7 @@ the pending list).
 | Frontend types | `frontend/src/types/` |
 | Metric explanations (tooltips on all scorecard metrics) | `frontend/src/components/checker/MetricTooltip.tsx` |
 | Interactive globe component | `frontend/src/components/action/GlobeTab.tsx` |
-| Homepage action preview | `frontend/src/components/home/ActionPreview.tsx` |
+| Homepage (masthead, record index, sources panel) | `frontend/src/components/home/Masthead.tsx`, `RecordIndex.tsx`, `Holdings.tsx` |
 
 ## Conventions
 
