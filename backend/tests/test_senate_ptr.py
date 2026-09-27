@@ -337,3 +337,34 @@ class TestRepeatedRowsAcrossPages:
         filings = await senate_ptr._scrape_via_page(page, "")
 
         assert sorted(f["first"] for f in filings) == ["A", "B", "C"]
+
+    @pytest.mark.asyncio
+    async def test_a_repeated_row_is_not_reported_as_a_short_search(self, caplog):
+        """Both pages loaded; one filing was listed twice. The rows the
+        pages held reached recordsTotal, so nothing is reported missing."""
+        pages = [
+            {"recordsTotal": 2, "data": [_search_row("A", "One", path="/search/view/ptr/a/")]},
+            {"recordsTotal": 2, "data": [_search_row("A", "One", path="/search/view/ptr/a/")]},
+        ]
+        responses = iter([_FakeSearchResponse(p) for p in pages])
+        page = _FakePage({
+            ("locator", "#agree_statement"): _FakeLocator(count=0),
+            ("role", "combobox", "Show entries"): _FakeLocator(count=0),
+        })
+        page._locators[("role", "button", "Search Reports")] = _FakeLocator(
+            on_click=lambda: page.fire_response(next(responses)),
+        )
+        next_button = _FakeLocator(attr="paginate_button next")
+
+        def last_page():
+            page.fire_response(next(responses))
+            next_button._attr += " disabled"
+
+        next_button._on_click = last_page
+        page._locators[("text", "Next")] = next_button
+
+        with caplog.at_level("WARNING", logger=senate_ptr.logger.name):
+            filings = await senate_ptr._scrape_via_page(page, "")
+
+        assert [f["first"] for f in filings] == ["A"]
+        assert "returned" not in caplog.text

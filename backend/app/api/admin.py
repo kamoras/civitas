@@ -1431,8 +1431,9 @@ async def admin_clear_stuck_election(db: Session = Depends(get_db)):
 async def admin_reset_data(db: Session = Depends(get_db)):
     """Wipe all pipeline-generated data for a clean start.
 
-    Clears every table (senators, votes, donors, learning store, caches,
-    ChromaDB), then re-seeds static reference data. The next pipeline run
+    Clears every table but database.RESET_KEEPS (senators, votes, donors,
+    learning store, caches, the vector store), then re-seeds static
+    reference data. The next pipeline run
     will rebuild everything from scratch with the latest code.
     """
     from app.api.pipeline import _is_pipeline_running

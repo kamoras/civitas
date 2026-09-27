@@ -1746,24 +1746,13 @@ class TestDuplicateRows:
         from app.pipeline.fetch import senate_ptr
 
         by_id: dict = {}
-        unparsed: dict = {}
+        unparsed: set = set()
         page = [{"url": "a"}, {"url": "b"}, {"url": None, "n": 1}]
         with patch.object(senate_ptr, "_parse_search_row",
                           side_effect=lambda r: {"report_url": f"https://e/view/annual/{r['url']}/"} if r["url"] else None):
             senate_ptr._collect_rows(by_id, unparsed, page)
             senate_ptr._collect_rows(by_id, unparsed, [{"url": "b"}, {"url": "c"}, {"url": None, "n": 1}])
-        assert (sorted(by_id), sum(unparsed.values())) == (["a", "b", "c"], 1)
-
-    def test_identical_unparsed_rows_on_one_page_are_two_rows(self):
-        from app.pipeline.fetch import senate_ptr
-
-        by_id: dict = {}
-        unparsed: dict = {}
-        bad = {"url": None}
-        with patch.object(senate_ptr, "_parse_search_row", return_value=None):
-            senate_ptr._collect_rows(by_id, unparsed, [bad, dict(bad)])
-            senate_ptr._collect_rows(by_id, unparsed, [dict(bad)])  # a repeat on the next page
-        assert sum(unparsed.values()) == 2
+        assert (sorted(by_id), len(unparsed)) == (["a", "b", "c"], 1)
 
     async def test_a_house_document_listed_twice_is_fetched_once(self, db_session, rep):
         filing = _house_filing("10078188")

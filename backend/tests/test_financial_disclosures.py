@@ -235,6 +235,15 @@ class TestSenateAssetsTable:
         assert by_name["Index Sleeve"].account == "CollegeInvest Fund ⇒ Income Portfolio"
         assert by_name["Old Portfolio"].account == "CollegeInvest Fund"
 
+    def test_an_account_is_a_container_even_when_its_middle_row_is_unreadable(self):
+        page = _SENATE_PAGE.replace(
+            '<tr><td>2.2</td>',
+            '<tr><td>3.1.1</td><td><strong>Deep Fund</strong></td><td>Mutual Funds<div class="muted">Mutual Fund'
+            '</div></td><td>Self</td><td>$1,001 - $15,000</td><td></td><td></td></tr><tr><td>2.2</td>',
+        )
+        names = [h.asset_name for h in parse_assets_table(page)]
+        assert "Deep Fund" in names and "Apple Inc. (AAPL)" not in names  # row 3 holds 3.1.1
+
     def test_values_types_and_owners(self):
         by_name = {h.asset_name: h for h in parse_assets_table(_SENATE_PAGE)}
         assert (by_name["Truist"].category, by_name["Truist"].owner) == ("CASH", "spouse")

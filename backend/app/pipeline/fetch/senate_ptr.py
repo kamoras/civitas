@@ -285,24 +285,28 @@ async def _scrape_via_page(
             pass
         await _wait_until(lambda: len(responses) > before)
 
-    filings, seen, total = await _page_through(page, responses)
-    if total and seen < total:
-        # Paging ended short of recordsTotal — a page that didn't load, or a
-        # row that repeated across pages while another was never shown.
+    filings, received, total = await _page_through(page, responses)
+    if total and received < total:
+        # The pages held fewer rows than recordsTotal: one didn't load.
         # Reported, not retried in the same browser session: every caller
         # searches again on its next nightly run, and holdings never lets a
         # partial search replace a newer stored report (_is_older).
-        logger.warning("Senate eFD search returned %d of %d filings", seen, total)
+        logger.warning("Senate eFD search returned %d of %d rows", received, total)
     return filings
 
 
 async def _page_through(page, responses: list) -> tuple[list[dict], int, int]:
     """Collect every results page from the latest response on. Returns the
-    parsed filings, how many distinct rows were seen (parsed or not), and
-    recordsTotal."""
+    parsed filings, how many rows the pages held, and recordsTotal.
+
+    Paging stops early only once every row is accounted for by distinct
+    content: a row can reappear on a later page when the ordering shifts,
+    and counted twice it would stop paging before the page that holds the
+    row it displaced. Distinct content can undercount (two identical rows),
+    which only means paging on to the last page, where Next is disabled."""
     by_id: dict[str, dict] = {}
-    unparsed: dict[str, int] = {}
-    total = 0
+    unparsed: set[str] = set()
+    received = total = 0
     for _ in range(_MAX_PAGES):
         try:
             payload = await responses[-1].json()
@@ -311,8 +315,10 @@ async def _page_through(page, responses: list) -> tuple[list[dict], int, int]:
             break
 
         total = payload.get("recordsTotal", 0)
-        _collect_rows(by_id, unparsed, payload.get("data", []))
-        if len(by_id) + sum(unparsed.values()) >= total:
+        rows = payload.get("data", [])
+        received += len(rows)
+        _collect_rows(by_id, unparsed, rows)
+        if len(by_id) + len(unparsed) >= total:
             break
 
         next_el = page.get_by_text("Next", exact=True)
@@ -322,25 +328,19 @@ async def _page_through(page, responses: list) -> tuple[list[dict], int, int]:
         await _click(next_el)
         if not await _wait_until(lambda: len(responses) > before):
             break
-    return list(by_id.values()), len(by_id) + sum(unparsed.values()), total
+    return list(by_id.values()), received, total
 
 
-def _collect_rows(by_id: dict[str, dict], unparsed: dict[str, int], rows: list) -> None:
-    """Add a results page's rows to `by_id`, keyed by filing, and count the
-    rows that don't parse in `unparsed`, keyed by their content — a row can
-    reappear on a later page (see _scrape_via_page), and counted twice it
-    would end paging before every row was seen. So each distinct content
-    counts as often as one page shows it, not once per page: two identical
-    rows on one page are two rows. The first sighting of a filing is kept."""
-    on_page: dict[str, int] = {}
+def _collect_rows(by_id: dict[str, dict], unparsed: set[str], rows: list) -> None:
+    """Add a results page's rows to `by_id`, keyed by filing, and the rows
+    that don't parse to `unparsed`, keyed by their content. The first
+    sighting of a filing is kept."""
     for row in rows:
         parsed = _parse_search_row(row)
         if parsed is None:
-            on_page[repr(row)] = on_page.get(repr(row), 0) + 1
+            unparsed.add(repr(row))
         else:
             by_id.setdefault(senate_filing_id(parsed["report_url"]), parsed)
-    for key, count in on_page.items():
-        unparsed[key] = max(unparsed.get(key, 0), count)
 
 
 def senate_filing_id(report_url: str) -> str:

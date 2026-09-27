@@ -2,7 +2,7 @@ import logging
 from collections.abc import Generator
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine, event, inspect, text
+from sqlalchemy import create_engine, event, func, inspect, select, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import settings
@@ -1000,11 +1000,22 @@ def _init_db_locked() -> None:
     # (2026-07, see president_pipeline.py's module docstring).
 
 
+# Tables a reset leaves alone: records of things that happened outside this
+# database, which no pipeline run can rebuild.
+RESET_KEEPS = frozenset({
+    # Which members the Bluesky account has already spotlighted — posts
+    # that were really made. Wiped, the rotation would repeat them.
+    "bsky_senator_spotlights",
+    # LLM generations captured as fine-tuning data, accumulated over months.
+    "llm_generation_samples",
+})
+
+
 def reset_all_data() -> dict:
     """Drop all pipeline-generated data and start fresh.
 
-    Truncates every table except the schema itself, resets the vector
-    store's collections, and re-seeds static reference data (presidents).
+    Truncates every table except RESET_KEEPS, resets the vector store's
+    collections, and re-seeds static reference data (presidents).
     Returns a summary of what was cleared.
     """
     from app import models  # noqa: F401
@@ -1012,61 +1023,16 @@ def reset_all_data() -> dict:
     summary: dict[str, int] = {}
     db = SessionLocal()
     try:
-        for model_cls in [
-            models.Donor,
-            models.IndustryDonation,
-            models.KeyVote,
-            models.LobbyingMatch,
-            models.CampaignPromise,
-            models.SponsoredBill,
-            models.StockTrade,
-            models.RepDonor,
-            models.RepIndustryDonation,
-            models.RepKeyVote,
-            models.RepLobbyingMatch,
-            models.RepCampaignPromise,
-            models.RepSponsoredBill,
-            models.RepStockTrade,
-            # Annual-report holdings, child then parent, before the members
-            # they belong to.
-            models.FinancialHolding,
-            models.FinancialDisclosure,
-            # Before models.President below — the delete order here is
-            # child-then-parent throughout, and a president row's cascade
-            # would otherwise take these with it uncounted.
-            models.PresidentTrade,
-            models.JusticeVote,
-            models.MonitorUpdate,
-            models.NationalMonitor,
-            models.TimelineEntry,
-            models.LearnedClassification,
-            models.ApiCache,
-            models.AnalysisCache,
-            models.ExploreDocument,
-            models.ScoreSnapshot,
-            models.PipelineRun,
-            # Election-cycle tables. These were omitted when the
-            # midterm-elections feature landed (2026-07), so an admin
-            # reset silently left the candidate roster, race coverage and
-            # run history behind while reporting a clean wipe — the same
-            # class of omission the drops list above was bitten by in
-            # #215. Child-then-parent, like every other pair here:
-            # Candidate/RaceCoverageItem cascade from Race.
-            models.Candidate,
-            models.RaceCoverageItem,
-            models.Race,
-            models.BallotMeasure,
-            models.MeasureCoverage,
-            models.ElectionPipelineRun,
-            models.Senator,
-            models.Representative,
-            models.Justice,
-            models.President,
-        ]:
-            table = model_cls.__tablename__
-            count = db.query(model_cls).count()
-            summary[table] = count
-            db.query(model_cls).delete()
+        # Every table, children before parents (the bulk deletes skip the
+        # ORM cascade and SQLite doesn't enforce foreign keys, so a child
+        # left behind would reattach to a recreated member). Derived from the
+        # schema rather than listed by hand: a hand-kept list silently
+        # missed the election tables (#215) and later a dozen more.
+        for table in reversed(Base.metadata.sorted_tables):
+            if table.name in RESET_KEEPS:
+                continue
+            summary[table.name] = db.execute(select(func.count()).select_from(table)).scalar_one()
+            db.execute(table.delete())
         db.commit()
     finally:
         db.close()

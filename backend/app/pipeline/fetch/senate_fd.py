@@ -244,7 +244,11 @@ def parse_assets_table(page) -> list[HoldingRow] | None:
     # An account whose underlying assets are itemized ("3" with "3.1",
     # "3.2" ...) is a container: counting its own row as well would
     # double-count whatever value it states.
-    containers = {number.rsplit(".", 1)[0] for number, _ in raw if "." in number}
+    # Every ancestor, not just the parent: an intermediate row the table
+    # didn't give a name (skipped above) must not un-nest its outer account.
+    containers = {
+        ".".join(parts[:i]) for parts in (number.split(".") for number, _ in raw) for i in range(1, len(parts))
+    }
     holdings: list[HoldingRow] = []
     for number, row in raw:
         if number in containers:

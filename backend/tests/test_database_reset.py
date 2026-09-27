@@ -46,3 +46,21 @@ class TestResetAllDataTables:
             reset_all_data()
         assert db_session.query(models.FinancialDisclosure).count() == 0
         assert db_session.query(models.FinancialHolding).count() == 0
+
+    def test_empties_every_table_but_the_kept_ones(self, db_session, monkeypatch):
+        from sqlalchemy import func, select
+
+        from app.database import RESET_KEEPS, Base
+
+        db_session.add(models.Senator(id="S1", name="A Senator", state="TX", party="R"))
+        db_session.add(models.PipelineRun(status="completed"))
+        db_session.commit()
+        monkeypatch.setattr("app.database.SessionLocal", lambda: db_session)
+        with patch("app.pipeline.vector_store.reset_vector_db"):
+            summary = reset_all_data()
+        tables = {t.name for t in Base.metadata.sorted_tables}
+        assert RESET_KEEPS <= tables  # a renamed table must not drop out of the keep list unnoticed
+        assert set(summary) >= tables - RESET_KEEPS
+        for table in Base.metadata.sorted_tables:
+            if table.name not in RESET_KEEPS:
+                assert db_session.execute(select(func.count()).select_from(table)).scalar_one() == 0, table.name
