@@ -15,9 +15,14 @@ logger = logging.getLogger(__name__)
 # may move to reconsider (Senate Rule XIII; House Rule XIX clause 2) — the
 # switch keeps the motion alive for another try. It is a documented
 # procedural convention of the office, not a break with party, and counting
-# it as one made the Senate Majority Leader's 18 "breaks" in the 119th
+# it as one made the Senate Majority Leader's 16 "breaks" in the 119th
 # Congress (every one a Nay on a rejected cloture vote his own conference
-# supported) read as a maverick record. Scoped to the majority leader only:
+# supported) read as a maverick record. The same rule covers the mirror
+# case — a Yea on a motion that carried over the leader's own party's
+# opposition — and any rejected or carried question, not only cloture: the
+# roll call can't tell a leader's switch from a decisive vote of conscience
+# on the same side, and in the 119th Congress every such vote checked was a
+# switch on cloture. Scoped to the majority leader only:
 # it is the leader's job to make that motion, and the Speaker and the
 # minority leader have no such practice (the Speaker voted Aye on the same
 # failed House rule the Majority Leader voted No on). Exact titles as
@@ -85,23 +90,26 @@ def stamp_roll_call_outcome(bill: dict, roll_call: dict) -> None:
 
 def is_reconsider_switch(
     bill: dict, leader_spans: list[tuple[str | None, str | None]] | None,
-) -> bool:
-    """Whether a Nay by this member on this roll call could be the majority
-    leader's reconsider switch (MAJORITY_LEADER_TITLES): the member held
-    the office on the vote's date and the chamber recorded the question as
-    rejected. An unknown result or date is not enough — the exemption
-    needs the chamber's own word that the motion failed."""
-    if not leader_spans or bill.get("motionRejected") is not True:
-        return False
+) -> str | None:
+    """The prevailing side ("Nay" if the question was rejected, "Yea" if it
+    carried) when a vote on it by this member could be the majority leader's
+    reconsider switch (MAJORITY_LEADER_TITLES): the member held the office
+    on the vote's date and the chamber recorded the outcome. None otherwise
+    — an unknown result or date is not enough; the exemption needs the
+    chamber's own word on which side prevailed."""
+    rejected = bill.get("motionRejected")
+    if not leader_spans or rejected not in (True, False):
+        return None
+    prevailing = "Nay" if rejected else "Yea"
     date = vote_date_iso(bill.get("rollCallDate") or bill.get("date"))
     for start, end in leader_spans:
         if (start, end) == _ALWAYS:
-            return True
+            return prevailing
         if date is None:
             continue
         if (start is None or start <= date) and (end is None or date < end):
-            return True
-    return False
+            return prevailing
+    return None
 
 
 def vote_identity(vote: dict) -> str:
@@ -157,17 +165,19 @@ def dedupe_votes(votes: list[dict]) -> list[dict]:
 
 
 def reconsider_switch_applied(
-    party: str, vote: str, party_leaning: str | None, reconsider_switch: bool,
+    party: str, vote: str, party_leaning: str | None, reconsider_switch: str | None,
 ) -> bool:
     """Whether the reconsider-switch exemption turns this vote from a break
-    into no party signal: an eligible roll call (is_reconsider_switch), a
-    Nay, and the member's own party on the Yea side."""
-    return (
-        reconsider_switch
-        and vote == "Nay"
-        and party in ("R", "D")
-        and party_leaning == party
-    )
+    into no party signal: an eligible roll call (is_reconsider_switch gives
+    the prevailing side), the member voting with the prevailing side, and
+    their own party on the losing one — a Nay on a rejected question their
+    party backed (party_leaning, the side that voted Yea, is theirs), or a
+    Yea on a carried one it opposed (the other party was the Yea side)."""
+    if not reconsider_switch or vote != reconsider_switch or party not in ("R", "D"):
+        return False
+    if reconsider_switch == "Nay":
+        return party_leaning == party
+    return party_leaning in ("R", "D") and party_leaning != party
 
 
 def _determine_party_alignment(
@@ -175,16 +185,17 @@ def _determine_party_alignment(
     vote: str,
     party_leaning: str | None,
     *,
-    reconsider_switch: bool = False,
+    reconsider_switch: str | None = None,
 ) -> bool | None:
     """Determine if a senator voted with or against their party.
 
-    reconsider_switch (see is_reconsider_switch): the member was majority
-    leader and the motion was rejected, so a Nay against their own party's
-    Yea is the procedural switch to the prevailing side, not a break — it
-    returns None (no party signal) rather than False. It never turns a
-    vote into a party-line one, and a Nay on a motion that passed stays a
-    break.
+    reconsider_switch (see is_reconsider_switch): the side that prevailed,
+    when the member was majority leader and the chamber recorded the
+    outcome. A vote with the prevailing side against the member's own
+    party is the procedural switch, not a break — it returns None (no
+    party signal) rather than False (reconsider_switch_applied). It never
+    turns a vote into a party-line one, and a vote against the party on
+    the losing side stays a break.
 
     For Independents, uses their inferred caucus party (see
     _infer_caucus_party). This ensures that senators like Sanders (I-VT)

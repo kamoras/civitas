@@ -385,7 +385,7 @@ def loyalty_tests(m, p):
     r = smf.ols(f"{base} + sc", S).fit(cov_type="HC1")
     print(f"  loyalty held at 50: {r.params['sc']:.3f}/pt (t={r.tvalues['sc']:.1f}) dR2={r.rsquared - b0.rsquared:.4f}")
     S = S.assign(dev=S.dev14, p90=p90)
-    compare_v616(S, "y", base.split("~", 1)[1].strip(), lambda f: smf.ols(f, S).fit(cov_type="HC1"))
+    compare_v616(S, "y", base.split("~", 1)[1].strip(), lambda f: smf.ols(f, S).fit(cov_type="HC1"), S.party)
     return hr
 
 
@@ -484,15 +484,28 @@ def v615_score(dev, p90, n, loyal_scale=4.0):
     return _shrink(shape, n)
 
 
-def v616_score(res, scale, n, crossing_zero=None, loyal_zero=None):
-    """The shipped vote component: score_calculator._vote_shape on the
-    member's residual (standard deviations per vote) at the chamber's scale,
-    with the shipped zero points unless the sweep gives others, shrunk
-    toward 50 by vote count exactly as seat_relative_vote_score does."""
+def v616_score(res, scale, n, groups, crossing_zero=None, loyal_zero=None):
+    """The shipped vote component: score_calculator.seat_relative_vote_score
+    on the member's residual (standard deviations per vote) at their party's
+    scale, with the shipped zero points unless the sweep gives others. Thin
+    records are pulled toward the typical score, as the scorer does: the
+    median shape over full-confidence members of the same group (`groups`
+    labels each row's congress x party), for whichever shape is being
+    scored. Over the rows given — for the election tests, the incumbents
+    tested rather than the whole chamber; on party-unity votes nearly every
+    member has far more than 20, so the pull rarely applies at all."""
     res = np.asarray(res, float)
     scale = np.broadcast_to(np.asarray(scale, float), res.shape)
+    n = np.broadcast_to(np.asarray(n, float), res.shape)
+    groups = np.asarray(groups)
     shape = np.array([score_calculator._vote_shape(r, s, crossing_zero, loyal_zero) for r, s in zip(res, scale)])
-    return _shrink(shape, n)
+    full = n >= score_calculator.CONSTITUENT_FULL_CONFIDENCE_VOTES
+    typical = np.full(res.shape, 50.0)
+    for g in np.unique(groups):
+        in_group = groups == g
+        if (in_group & full).any():
+            typical[in_group] = np.median(shape[in_group & full])
+    return typical + (shape - typical) * np.minimum(n / score_calculator.CONSTITUENT_FULL_CONFIDENCE_VOTES, 1)
 
 
 def ascii_upper(s: pd.Series) -> pd.Series:
@@ -614,7 +627,7 @@ def print_overbreak(S, y, base):
           f"(t={r3.tvalues['pos2']:.1f}, n={int((S.pos2 > 0).sum())})")
 
 
-def compare_v616(S, y, base, fit):
+def compare_v616(S, y, base, fit, groups):
     """Section 10: v6.15's score against v6.16's on the same members and the
     same outcome — and, to separate the two changes, v6.16's shape read on
     v6.15's percentage-point scale — then v6.16's zero points swept. Each
@@ -623,14 +636,14 @@ def compare_v616(S, y, base, fit):
     b0 = fit(f"{y} ~ {base}")
     print(" v6.15 vs v6.16 (section 10):")
     for label, sc in (("v6.15 score (points, peak one scale above)", v615_score(S.dev, S.p90, S.n)),
-                      ("v6.16 shape on v6.15's point scale", v616_score(S.dev, S.p90, S.n)),
-                      ("v6.16 score (SD per vote, shipped)", v616_score(S.res, S.scale, S.n))):
+                      ("v6.16 shape on v6.15's point scale", v616_score(S.dev, S.p90, S.n, groups)),
+                      ("v6.16 score (SD per vote, shipped)", v616_score(S.res, S.scale, S.n, groups))):
         S["sc"] = sc
         r = fit(f"{y} ~ {base} + sc")
         print(f"  {label:44s} {r.params['sc']:7.3f}/pt (t={r.tvalues['sc']:.1f}) dR2={r.rsquared - b0.rsquared:.4f}")
     print("  v6.16 zero points (crossing / loyal, in scales):")
     for cz, lz in ((1.0, 1.0), (1.0, 3.0), (1.5, 3.0), (1.5, 6.0), (2.0, 4.0), (3.0, 6.0)):
-        S["sc"] = v616_score(S.res, S.scale, S.n, cz, lz)
+        S["sc"] = v616_score(S.res, S.scale, S.n, groups, cz, lz)
         r = fit(f"{y} ~ {base} + sc")
         print(f"   {cz:.1f} / {lz:.1f}: {r.params['sc']:.3f}/pt (t={r.tvalues['sc']:.1f}) dR2={r.rsquared - b0.rsquared:.4f}")
 
@@ -658,7 +671,7 @@ def senate_general_test(p):
         if M is None:
             continue
         v14, v13 = v615_score(M.dev, M.p90, M.n), 50 + 50 * (M.dev / M.p90).clip(-1, 1)
-        v16, pooled = v616_score(M.res, M.scale, M.n), v616_score(M.res, M.scale_pooled, M.n)
+        v16, pooled = v616_score(M.res, M.scale, M.n, M.party), v616_score(M.res, M.scale_pooled, M.n, M.party)
         party_means.append({"senate": c, **{
             f"{party} {v}": round(float(x[(M.party == party).values].mean()), 1)
             for party in ("D", "R")
@@ -695,7 +708,7 @@ def senate_general_test(p):
         r = smf.ols("own ~ x + I(x**2) + C(fe) + sc", S).fit(cov_type="cluster", cov_kwds={"groups": S.gid})
         print(f"  {k}x: {r.params['sc']:.3f}/pt (t={r.tvalues['sc']:.1f}) dR2={r.rsquared - b0.rsquared:.4f}")
     compare_v616(S, "own", "x + I(x**2) + C(fe)",
-                 lambda f: smf.ols(f, S).fit(cov_type="cluster", cov_kwds={"groups": S.gid}))
+                 lambda f: smf.ols(f, S).fit(cov_type="cluster", cov_kwds={"groups": S.gid}), S.fe)
 
 
 def house_primary_test(p):
@@ -737,7 +750,7 @@ def house_primary_test(p):
     for y, D in (("pshare", Cd), ("challenged", A), ("lost", A)):
         print(f" {y}:")
         compare_v616(D, y, "alignment + C(fe)",
-                     lambda f, D=D: smf.ols(f, D).fit(cov_type="cluster", cov_kwds={"groups": D.gid}))
+                     lambda f, D=D: smf.ols(f, D).fit(cov_type="cluster", cov_kwds={"groups": D.gid}), D.fe)
 
 
 def main():

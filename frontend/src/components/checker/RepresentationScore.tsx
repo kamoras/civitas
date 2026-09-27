@@ -152,11 +152,12 @@ export default function RepresentationScore({
     if (!votingRecord || votingRecord.totalVotes === 0) return "no voting record · defaults to 50";
     const tracked = `${votingRecord.totalVotes} votes tracked`;
     const status = breakdown.confidence?.constituentAlignmentVotePart;
+    if (status === "typical:few-votes") return `${tracked} · too few party-line votes, vote part set to the party's typical score`;
     if (status === "neutral:few-votes") return `${tracked} · too few party-line votes, vote part neutral 50`;
     if (status === "neutral:no-expectation") return `${tracked} · no party norm to compare with, vote part neutral 50`;
     if (status?.startsWith("shrunk:")) {
       const kept = Math.round(parseFloat(status.slice("shrunk:".length)) * 100);
-      if (Number.isFinite(kept)) return `${tracked} · few party-line votes, vote part keeps ${kept}% of its distance from 50`;
+      if (Number.isFinite(kept)) return `${tracked} · few party-line votes, vote part keeps ${kept}% of its distance from the party's typical score`;
     }
     return tracked;
   })();

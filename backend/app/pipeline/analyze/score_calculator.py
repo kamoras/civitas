@@ -1468,14 +1468,25 @@ def seat_residual(break_rate: float, expected: float, n_votes: int) -> float:
     return (break_rate - p) / math.sqrt(p * (1.0 - p))
 
 
+# A logit coefficient past this, per unit of seat alignment (which spans
+# -1..1), multiplies the odds of breaking by more than e^50 across one seat
+# lean: not an estimate but a fit running off to infinity. That happens when
+# the rates are separable — every member on one side of a lean breaks zero
+# times (common early in a Congress), so no finite coefficient maximizes the
+# likelihood. A numerical sanity bound, not a calibrated value.
+_MAX_LOGIT_COEFFICIENT = 50.0
+
+
 def _fractional_logit(X, y):
     """Fractional-response logit (Papke & Wooldridge 1996): the Bernoulli
     quasi-likelihood of proportions under a logit link, maximized by Newton's
     method with step-halving. The objective is convex, so halving each step
-    until it improves always converges — plain iteratively reweighted least
+    until it improves always improves it — plain iteratively reweighted least
     squares does not: it overshot to coefficients in the billions on the
     118th Senate's Democrats (research note section 10). Coefficients, or
-    None when the rates carry no variation to fit (all zero or all one)."""
+    None when no finite fit exists: the rates carry no variation (all zero
+    or all one), or they are separable and the coefficients run off
+    (_MAX_LOGIT_COEFFICIENT, or no convergence within the iteration cap)."""
     import numpy as np
 
     mean = float(y.mean())
@@ -1490,6 +1501,7 @@ def _fractional_logit(X, y):
     beta = np.zeros(X.shape[1])
     beta[0] = math.log(mean / (1.0 - mean))
     current = loss(beta)
+    converged = False
     for _ in range(200):
         mu = 0.5 * (1.0 + np.tanh(0.5 * (X @ beta)))  # expit, overflow-safe
         grad = X.T @ (mu - y)
@@ -1503,11 +1515,15 @@ def _fractional_logit(X, y):
                 break
             t /= 2.0
         else:
+            # No step improves the objective: at its minimum to precision.
+            converged = True
             break
         converged = abs(current - value) < 1e-12 * max(1.0, abs(current))
         beta, current = candidate, value
         if converged:
             break
+    if not converged or float(np.max(np.abs(beta))) > _MAX_LOGIT_COEFFICIENT:
+        return None
     return beta
 
 
@@ -1540,9 +1556,9 @@ def compute_constituent_reference(members: list[tuple[str, float, float, int]]) 
     expectation: one scale pooled across both parties let whichever party
     was more cohesive that Congress score higher simply for sitting closer
     to its own norm — on Voteview's 101st-119th Senates the two parties'
-    averages differed by 7.7 points on a pooled scale (up to 22 in one
+    averages differed by 7.9 points on a pooled scale (up to 22 in one
     Congress, the sign flipping with which party was more unified) and by
-    1.6 on per-party ones (research note section 10). Returns None unless
+    1.8 on per-party ones (research note section 10). Returns None unless
     BOTH parties have enough members with rates to fit — one party scored
     against a measured expectation and the other against a fallback would
     not be comparable (the same both-or-neither rule as fetch/voteview.py's
@@ -1558,8 +1574,16 @@ def compute_constituent_reference(members: list[tuple[str, float, float, int]]) 
         al = np.array([r[0] for r in rows])
         br = np.array([r[1] for r in rows])
         kinked = int((al < 0).sum()) >= _MIN_OPPOSED_SEATS_FOR_KINK
-        cols = [np.ones_like(al), al] + ([np.minimum(al, 0.0)] if kinked else [])
-        coef = _fractional_logit(np.column_stack(cols), br)
+        coef = None
+        # The kinked fit first; if it has no finite solution (every
+        # opposed-seat member at zero breaks, say), a single slope; if that
+        # has none either, no measured reference this run.
+        for bend in ((True, False) if kinked else (False,)):
+            cols = [np.ones_like(al), al] + ([np.minimum(al, 0.0)] if bend else [])
+            coef = _fractional_logit(np.column_stack(cols), br)
+            if coef is not None:
+                kinked = bend
+                break
         if coef is None:
             return None
         fit = {
@@ -1569,13 +1593,15 @@ def compute_constituent_reference(members: list[tuple[str, float, float, int]]) 
             "b_opposed": round(float(coef[2]), 5) if kinked else 0.0,
             "n": len(rows),
         }
-        scale = float(np.quantile(
-            [abs(seat_residual(r, _expected_break_rate(fit, a), n)) for a, r, n in rows],
-            SATURATION_QUANTILE,
-        ))
+        residuals = [seat_residual(r, _expected_break_rate(fit, a), n) for a, r, n in rows]
+        scale = round(float(np.quantile(np.abs(residuals), SATURATION_QUANTILE)), 5)
         if scale <= 0:
             return None
-        fits[party] = {**fit, "scale": round(scale, 5)}
+        # What a typical member of this party scores on the vote shape: the
+        # score a record too thin to read is pulled toward (see
+        # seat_relative_vote_score). Measured with the scale as stored.
+        typical = float(np.median([_vote_shape(r, scale) for r in residuals]))
+        fits[party] = {**fit, "scale": scale, "typical": round(typical, 2)}
     return {
         "expected": fits, "n": sum(f["n"] for f in fits.values()),
         "statistic": CONSTITUENT_REFERENCE_STATISTIC,
@@ -1654,22 +1680,27 @@ def _vote_shape(
 
 
 def beyond_saturation(residual: float, scale: float) -> bool:
-    """Whether a member's break rate is more than the chamber's scale from
+    """Whether a member's break rate is more than their party's scale from
     their seat's expectation on either side — the two-sided count the
     reference's quantile (over |residual|) describes, and so the one the
     ground-truth gate's share probe checks against it."""
     return abs(residual) > scale
 
 
-def seat_relative_vote_score(residual: float, scale: float, n_votes: int) -> float:
+def seat_relative_vote_score(residual: float, scale: float, n_votes: int, typical: float = 50.0) -> float:
     """Constituent Alignment's seat-relative vote component: the peaked
-    shape (_vote_shape), shrunk linearly toward 50 until the member has
-    CONSTITUENT_FULL_CONFIDENCE_VOTES party-labeled votes (AGENTS.md
+    shape (_vote_shape), shrunk linearly toward `typical` until the member
+    has CONSTITUENT_FULL_CONFIDENCE_VOTES party-labeled votes (AGENTS.md
     principle 3) — with a handful of votes one break moves the rate far
-    enough to reach either end. The one implementation the score and the
-    ground-truth gate both call."""
+    enough to reach either end. `typical` is what a full-confidence member
+    of the party scores (the reference's per-party "typical", measured each
+    run): since v6.16 the shape tops out at the expectation, so 50 is a
+    below-average score, and shrinking a thin record toward it ranked every
+    newcomer under their peers for having few votes. 50 only for the
+    bundled prior, which has no population to measure. The one
+    implementation the score and the ground-truth gate both call."""
     confidence = min(n_votes / CONSTITUENT_FULL_CONFIDENCE_VOTES, 1.0)
-    return 50.0 + (_vote_shape(residual, scale) - 50.0) * confidence
+    return typical + (_vote_shape(residual, scale) - typical) * confidence
 
 
 def _chamber_of(district: int | None) -> str:
@@ -1685,12 +1716,13 @@ def _seat_vote_expectation(
     district: int | None,
     reference: dict | None,
 ) -> tuple[float, float | None, float | None, bool]:
-    """(seat alignment, expected break rate, the chamber's residual scale,
-    whether the reference was measured) for a member; expected and scale are
+    """(seat alignment, expected break rate, the member's party's residual
+    scale, whether the reference was measured, the party's typical vote
+    score) for a member; expected, scale and typical are
     None when the chamber has no usable expectation for their party, and
     'measured' is False for the bundled preset prior (no member count).
     The single derivation both the score (_constituent_alignment_core) and
-    the gate (seat_break_deviation) read, from one resolution of the
+    the gate (seat_break_residual) read, from one resolution of the
     reference, so they can't disagree about who is beyond saturation."""
     alignment = _signed_state_alignment(state, party, effective_party=effective_party, district=district)
     ref = _constituent_reference(_chamber_of(district), reference)
@@ -1700,8 +1732,9 @@ def _seat_vote_expectation(
     scale = (fit or {}).get("scale") or ref.get("deviation_p90")
     measured = ref.get("n") is not None
     if fit is None or not scale:
-        return alignment, None, None, measured
-    return alignment, _expected_break_rate(fit, alignment), float(scale), measured
+        return alignment, None, None, measured, None
+    typical = float(fit.get("typical", 50.0))
+    return alignment, _expected_break_rate(fit, alignment), float(scale), measured, typical
 
 
 def seat_break_residual(
@@ -1713,15 +1746,15 @@ def seat_break_residual(
     district: int | None = None,
     reference: dict | None = None,
 ) -> tuple[float, float] | None:
-    """(the member's seat_residual, the chamber's scale), or None without a
-    measured expectation for the member's party — the two numbers the
-    seat-relative vote score is a function of. The ground-truth gate reads
-    them through here so it judges members on exactly the expectation the
-    score used."""
-    _, expected, scale, _ = _seat_vote_expectation(state, party, effective_party, district, reference)
+    """(the member's seat_residual, their party's scale, their party's
+    typical vote score), or None without a measured expectation for the
+    member's party — the numbers the seat-relative vote score is a function
+    of, with the vote count. The ground-truth gate reads them through here
+    so it judges members on exactly the expectation the score used."""
+    _, expected, scale, _, typical = _seat_vote_expectation(state, party, effective_party, district, reference)
     if expected is None:
         return None
-    return seat_residual(break_rate, expected, n_votes), scale
+    return seat_residual(break_rate, expected, n_votes), scale, typical
 
 
 # Weight of position congruence when a roll-call ideal point exists; the
@@ -1848,7 +1881,7 @@ def _constituent_alignment_core(
     contract as _funding_independence_core above."""
     effective_party = voting_record.get("effectiveParty", party)
     eval_party = effective_party or party
-    alignment, expected, scale, measured = _seat_vote_expectation(
+    alignment, expected, scale, measured, typical = _seat_vote_expectation(
         state, party, effective_party, district, reference,
     )
     chamber = _chamber_of(district)
@@ -1872,9 +1905,20 @@ def _constituent_alignment_core(
 
     break_rate, n_party = party_break_rate(voting_record)
     if break_rate is None:
-        party_score = 50.0
-        vote_part_status = "neutral:few-votes"
-        party_alignment_detail = f"fewer than {CONSTITUENT_MIN_VOTES} party-labeled votes available — neutral 50"
+        if expected is not None:
+            vote_part_status = "typical:few-votes"
+            # No record to read: the party's typical score, not 50, which
+            # since v6.16 sits below nearly every member (see
+            # seat_relative_vote_score).
+            party_score = typical
+            party_alignment_detail = (
+                f"fewer than {CONSTITUENT_MIN_VOTES} party-labeled votes available — "
+                f"the typical score for a {eval_party} member of this chamber, {typical:.0f}"
+            )
+        else:
+            party_score = 50.0
+            vote_part_status = "neutral:few-votes"
+            party_alignment_detail = f"fewer than {CONSTITUENT_MIN_VOTES} party-labeled votes available — neutral 50"
     elif expected is None:
         party_score = 50.0
         vote_part_status = "neutral:no-expectation"
@@ -1884,7 +1928,7 @@ def _constituent_alignment_core(
         )
     else:
         residual = seat_residual(break_rate, expected, n_party)
-        party_score = seat_relative_vote_score(residual, scale, n_party)
+        party_score = seat_relative_vote_score(residual, scale, n_party, typical)
         vote_part_status = (
             f"shrunk:{n_party / CONSTITUENT_FULL_CONFIDENCE_VOTES:.2f}"
             if n_party < CONSTITUENT_FULL_CONFIDENCE_VOTES else "full"
@@ -1899,18 +1943,29 @@ def _constituent_alignment_core(
             f"expected to break on {expected:.1%} (a preset curve until this chamber is "
             "measured on the current method)"
         )
-        side, reach = (
-            ("more loyal", LOYAL_ZERO_GAPS) if residual < 0 else ("more independent", CROSSING_ZERO_GAPS)
-        )
+        # seat_residual keeps p half a vote of this record from 0 and 1; say
+        # so when it moved, or the printed numbers don't reproduce the gap.
+        edge = 0.5 / max(n_party, 1)
+        used = min(max(expected, edge), 1.0 - edge)
+        if used != expected:
+            norm += f" (read as {used:.1%}, half a vote of this record)"
+        if residual == 0:
+            gap = "exactly that"
+        else:
+            side, reach = (
+                ("more loyal", LOYAL_ZERO_GAPS) if residual < 0 else ("more independent", CROSSING_ZERO_GAPS)
+            )
+            gap = (
+                f"{abs(residual):.2f} standard deviations per vote {side} than that "
+                f"(100 at the expectation, 0 at {reach * scale:.2f} standard deviations per vote {side})"
+            )
         party_alignment_detail = (
-            f"broke with party on {break_rate:.1%} of {n_party} party-labeled votes; {norm} — "
-            f"{abs(residual):.2f} standard deviations per vote {side} than that "
-            f"(100 at the expectation, 0 at {reach * scale:.2f} {side})"
+            f"broke with party on {break_rate:.1%} of {n_party} party-labeled votes; {norm} — {gap}"
         )
         if n_party < CONSTITUENT_FULL_CONFIDENCE_VOTES:
             party_alignment_detail += (
-                f"; only {n_party} votes, so the score is pulled toward 50 "
-                f"until {CONSTITUENT_FULL_CONFIDENCE_VOTES}"
+                f"; only {n_party} votes, so the score is pulled toward {typical:.0f}, the typical "
+                f"score for a {eval_party} member of this chamber, until {CONSTITUENT_FULL_CONFIDENCE_VOTES}"
             )
 
     congruence_weight = POSITION_CONGRUENCE_WEIGHT if congruence_score is not None else 0.0

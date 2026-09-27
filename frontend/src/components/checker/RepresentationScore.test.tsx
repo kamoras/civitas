@@ -25,14 +25,19 @@ describe("RepresentationScore constituent basis line", () => {
     expect(screen.getByText(/too few party-line votes, vote part neutral 50/)).toBeInTheDocument();
   });
 
+  it("states the party's typical score for too few votes when a party norm exists", () => {
+    renderWith("typical:few-votes");
+    expect(screen.getByText(/too few party-line votes, vote part set to the party's typical score/)).toBeInTheDocument();
+  });
+
   it("states a neutral vote part when there is no party norm", () => {
     renderWith("neutral:no-expectation");
     expect(screen.getByText(/no party norm to compare with, vote part neutral 50/)).toBeInTheDocument();
   });
 
-  it("states how much of the distance from 50 a thin record keeps", () => {
+  it("states how much of the distance from the party's typical score a thin record keeps", () => {
     renderWith("shrunk:0.60");
-    expect(screen.getByText(/vote part keeps 60% of its distance from 50/)).toBeInTheDocument();
+    expect(screen.getByText(/vote part keeps 60% of its distance from the party's typical score/)).toBeInTheDocument();
   });
 
   it("says nothing extra at full confidence or for scores stored before the status existed", () => {

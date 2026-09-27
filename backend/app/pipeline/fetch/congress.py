@@ -629,6 +629,11 @@ _YEA_PREVAILED_RESULTS = (
     "agreed to", "passed", "confirmed", "adopted", "sustained",
     "well taken", "guilty", "invoked", "veto overridden",
 )
+# Checked before the nay list: each ends in a nay-prevailed suffix but
+# records the question carrying. "Veto Not Sustained" (an override that
+# succeeded) is not the Senate's usual wording ("Veto Overridden"), but a
+# misread here would exempt a leader's vote on a motion that passed.
+_YEA_PREVAILED_OVERRIDES = ("veto not sustained",)
 
 
 def roll_call_rejected(result: str | None) -> bool | None:
@@ -644,6 +649,8 @@ def roll_call_rejected(result: str | None) -> bool | None:
     text = " ".join((result or "").split()).lower()
     if not text:
         return None
+    if text.endswith(_YEA_PREVAILED_OVERRIDES):
+        return False
     if text.endswith(_NAY_PREVAILED_RESULTS):
         return True
     if text.endswith(_YEA_PREVAILED_RESULTS):

@@ -388,6 +388,21 @@ class TestMajorityLeaderReconsiderSwitch:
     def test_nay_on_other_partys_rejected_motion_still_counts_with_party(self):
         assert self._alignment(self._rc(leaning="D"), "Nay") is True
 
+    def test_majority_leader_yea_on_motion_carried_over_own_party_is_not_a_break(self):
+        # The mirror case: the other party's motion carried against the
+        # leader's own party, and the leader switched to Yea — the
+        # prevailing side — to be able to move to reconsider.
+        assert self._alignment(self._rc(leaning="D", rejected=False), "Yea") is None
+
+    def test_majority_leader_yea_on_carried_motion_own_party_backed_counts_with_party(self):
+        assert self._alignment(self._rc(rejected=False), "Yea") is True
+
+    def test_mirror_case_needs_the_majority_leader(self):
+        bill = self._rc(leaning="R", rejected=False, date="March 14, 2025,  01:30 PM")
+        assert self._alignment(
+            bill, "Yea", party="D", title="Senate Minority Leader", tenures=self.SCHUMER_TENURES,
+        ) is False
+
     def test_minority_leader_is_never_exempted(self):
         # Schumer's March 2025 CR cloture: a real break, and it stays one.
         bill = self._rc(leaning="D", rejected=True, date="March 14, 2025,  01:30 PM")

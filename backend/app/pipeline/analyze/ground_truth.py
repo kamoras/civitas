@@ -201,9 +201,10 @@ def constituent_metrics(
         district=district, reference=reference,
     )
     if dev is not None:
-        out["seat_relative_vote"] = seat_relative_vote_score(*dev, labeled_votes)
+        residual, scale, typical = dev
+        out["seat_relative_vote"] = seat_relative_vote_score(residual, scale, labeled_votes, typical)
         if labeled_votes >= CONSTITUENT_FULL_CONFIDENCE_VOTES:
-            out["beyond_saturation"] = beyond_saturation(*dev)
+            out["beyond_saturation"] = beyond_saturation(residual, scale)
     return out
 
 

@@ -390,7 +390,7 @@ to the controls:
 | Outcome | v6.15 score | v6.16 shape, v6.15 points | **v6.16 (shipped)** |
 |---|---|---|---|
 | House 2004 general, vote share | +0.088 (4.4), ΔR² 0.0285 | −0.032 (−2.4), 0.0079 | **−0.032 (−2.5), 0.0085** |
-| Senate generals 1990–2024, vote share | +0.035 (1.2), 0.0036 | −0.039 (−2.5), 0.0087 | **−0.038 (−2.6), 0.0101** |
+| Senate generals 1990–2024, vote share | +0.035 (1.2), 0.0036 | −0.039 (−2.5), 0.0088 | **−0.039 (−2.6), 0.0102** |
 | House primaries 1990–2010, contested, primary share | −0.015 (−0.5), 0.0003 | +0.058 (2.4), 0.0080 | **+0.053 (2.4), 0.0081** |
 | drew a primary challenger | +0.000 (0.6) | −0.001 (−1.6) | **−0.001 (−1.7)** |
 | lost the primary | −0.000 (−1.2) | −0.000 (−1.1) | **−0.000 (−0.8)** |
@@ -420,9 +420,9 @@ site's About page.
 |---|---|---|---|
 | 1.0 / 1.0 | 0.000 (0.0) | −0.026 (−2.1) | +0.027 (1.5) |
 | 1.0 / 3.0 | −0.034 (−3.3) | −0.031 (−2.4) | +0.037 (2.1) |
-| **1.5 / 3.0 (shipped)** | **−0.032 (−2.5)** | **−0.038 (−2.6)** | **+0.053 (2.4)** |
+| **1.5 / 3.0 (shipped)** | **−0.032 (−2.5)** | **−0.039 (−2.6)** | **+0.053 (2.4)** |
 | 1.5 / 6.0 | −0.041 (−3.4) | −0.037 (−2.5) | +0.051 (2.4) |
-| 2.0 / 4.0 | −0.037 (−2.6) | −0.046 (−2.6) | +0.070 (2.6) |
+| 2.0 / 4.0 | −0.037 (−2.6) | −0.047 (−2.6) | +0.070 (2.6) |
 | 3.0 / 6.0 | −0.051 (−2.5) | −0.060 (−2.6) | +0.100 (2.7) |
 
 Wider zero points strengthen both associations together, so the data does
@@ -431,10 +431,10 @@ puts the heaviest breakers of today's Senate (Fetterman, Murkowski, Paul) at
 or near 0.
 
 **Party balance.** Across every Senate from the 101st to the 119th, the
-parties' average vote scores differ by 1.6 points on average under v6.16,
-against 1.8 under v6.15 and 2.2 under v6.13, and which party is higher
-changes from one Congress to the next. On one scale pooled across both
-parties the average gap was 7.7 points, and 22.3 in the worst Congress,
+parties' average vote scores differ by 1.8 points on average under v6.16,
+the same as under v6.15 and against 2.2 under v6.13, and which party is
+higher changes from one Congress to the next. On one scale pooled across
+both parties the average gap was 7.9 points, and 22.3 in the worst Congress,
 the sign following whichever party was more unified. That is why the scale
 is per party. Averages sit around 73–80: most members are close to their
 seat's norm.

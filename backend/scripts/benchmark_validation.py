@@ -160,7 +160,8 @@ def seat_relative_vote_shape(rows: list[dict]) -> dict[str, float]:
             reference={"senate": ref, "house": ref},
         )
         if dev is not None:
-            out[r["bioguide"]] = seat_relative_vote_score(*dev, r["n_votes"])
+            residual, scale, typical = dev
+            out[r["bioguide"]] = seat_relative_vote_score(residual, scale, r["n_votes"], typical)
     return out
 
 def position_congruence(member_rows: list[dict], chamber: str) -> dict[str, float]:

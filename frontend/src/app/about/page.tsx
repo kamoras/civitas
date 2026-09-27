@@ -311,8 +311,9 @@ export default function AboutPage() {
                   the member&apos;s party shows. Breaking less often lowers it more gently, reaching 0
                   only at three times that gap, so being more loyal than the norm costs less than
                   breaking too often. Each party-line roll call counts once. With fewer than 20 of
-                  them the result is pulled toward 50 in proportion, so a single break in a thin
-                  record can&apos;t reach either end.
+                  them the result is pulled, in proportion, toward what a typical member of the same
+                  party scores, so a single break in a thin record can&apos;t reach either end and a
+                  newcomer isn&apos;t ranked below their colleagues just for having few votes.
                 </P>
                 <P>
                   What the ends mean: a 0 or 100 is a relative position, not a verdict. A 100 means
@@ -322,7 +323,7 @@ export default function AboutPage() {
                   measured from that party&apos;s own members, so a member is only ever compared
                   with their own party, and a party that happens to be more unified in a given
                   Congress isn&apos;t scored higher for it: across every Senate from 1989 to today
-                  the two parties&apos; averages differed by about 2 points, and which party was
+                  the two parties&apos; averages differed by 1.8 points on average, and which party was
                   higher changed from one Congress to the next.
                 </P>
                 <P>

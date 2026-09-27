@@ -129,7 +129,9 @@ def test_rejected_is_read_from_the_result_not_the_counts():
 
 def test_result_vocabulary():
     for text in ("Cloture Motion Agreed to", "Bill Passed", "Nomination Confirmed",
-                 "Decision of Chair Sustained", "Veto Overridden", "Point of Order Well Taken"):
+                 "Decision of Chair Sustained", "Veto Overridden", "Point of Order Well Taken",
+                 # Ends in "not sustained" but records an override that carried.
+                 "Veto Not Sustained"):
         assert roll_call_rejected(text) is False, text
     for text in ("Amendment Rejected", "Motion to Table Failed", "Joint Resolution Defeated",
                  "Motion Not Agreed to", "Veto Sustained", "Decision of Chair Not Sustained",

@@ -196,8 +196,8 @@ class TestSeatRelativeVotes:
         # expect 30%.
         from app.pipeline.analyze.score_calculator import _seat_vote_expectation
 
-        _, with_district, _, _ = _seat_vote_expectation("AL", "D", None, 7, None)
-        _, state_only, _, _ = _seat_vote_expectation("AL", "D", None, None, None)
+        _, with_district, _, _, _ = _seat_vote_expectation("AL", "D", None, 7, None)
+        _, state_only, _, _, _ = _seat_vote_expectation("AL", "D", None, None, None)
         assert with_district == pytest.approx(0.1 - 0.05 * 13 / 15)
         assert state_only == pytest.approx(0.30)
         assert score(record(6), state="AL", district=7) > score(record(6), state="AL")
@@ -255,9 +255,40 @@ class TestSeatRelativeVotes:
         above = _constituent_alignment_core(record(19), [], {}, state="SW", party="D")["components"][0]["detail"]
         below = _constituent_alignment_core(record(0), [], {}, state="SW", party="D")["components"][0]["detail"]
         assert "0.30 standard deviations per vote more independent than that" in above
-        assert "0 at 0.45 more independent" in above
+        assert "0 at 0.45 standard deviations per vote more independent" in above
         assert "0.33 standard deviations per vote more loyal than that" in below
-        assert "0 at 0.90 more loyal" in below
+        assert "0 at 0.90 standard deviations per vote more loyal" in below
+        at = _constituent_alignment_core(record(10), [], {}, state="SW", party="D")["components"][0]["detail"]
+        assert "exactly that" in at and "standard deviations per vote more" not in at
+
+    def test_breakdown_says_when_the_half_vote_floor_moved_the_expectation(self):
+        # 10 votes against a 0% expectation: the gap is read against 5%,
+        # half a vote of this record, and the text says so.
+        ref = {"senate": {"statistic": score_calculator.CONSTITUENT_REFERENCE_STATISTIC, "n": 50, "expected": {
+            "D": {"a": 0.0, "b": 0.0, "scale": 0.3, "typical": 85.0}}}}
+        detail = _constituent_alignment_core(record(1, total=10), [], {}, state="SW", party="D",
+                                             reference=ref)["components"][0]["detail"]
+        assert "break on 0.0% (read as 5.0%, half a vote of this record)" in detail
+
+    def _typical_ref(self):
+        return {"senate": {"statistic": score_calculator.CONSTITUENT_REFERENCE_STATISTIC, "n": 50, "expected": {
+            "D": {"a": 0.10, "b": 0.0, "scale": 0.3, "typical": 85.0}}}}
+
+    def test_thin_records_are_pulled_toward_the_partys_typical_score(self):
+        # v6.16: matching the norm scores 100, so 50 sits below nearly every
+        # member; a thin record is pulled toward what a typical member of the
+        # party scores instead (here 85). 10 votes keep half the distance.
+        ref = self._typical_ref()
+        assert score(record(1, total=10), reference=ref) == 92  # 85 + (100 - 85) / 2
+        assert score(record(7, total=10), reference=ref) == 42  # 85 + (0 - 85) / 2
+        detail = _constituent_alignment_core(record(7, total=10), [], {}, state="SW", party="D",
+                                             reference=ref)["components"][0]["detail"]
+        assert "pulled toward 85, the typical score for a D member" in detail
+
+    def test_no_readable_record_scores_the_partys_typical(self):
+        core = _constituent_alignment_core(record(1, total=2), [], {}, state="SW", party="D",
+                                           reference=self._typical_ref())
+        assert core["score"] == 85 and "typical score for a D member of this chamber, 85" in core["components"][0]["detail"]
 
     def test_breakdown_names_the_comparison(self):
         detail = _constituent_alignment_core(record(20), [], {}, state="SW", party="D")["components"][0]["detail"]
@@ -334,6 +365,38 @@ class TestMeasuredReference:
         best = minimize(loss, np.zeros(3), method="BFGS")
         assert np.all(np.abs(beta) < 50)
         assert loss(beta) <= best.fun + 1e-8
+
+    def test_records_each_partys_typical_score(self):
+        import numpy as np
+
+        from app.pipeline.analyze.score_calculator import _expected_break_rate, _vote_shape, seat_residual
+
+        members = self._members("D") + self._members("R", a=-2.9)
+        ref = compute_constituent_reference(members)
+        for party in ("D", "R"):
+            fit = ref["expected"][party]
+            shapes = [_vote_shape(seat_residual(br, _expected_break_rate(fit, al), n), fit["scale"])
+                      for p, al, br, n in members if p == party]
+            assert fit["typical"] == pytest.approx(float(np.median(shapes)), abs=0.01)
+
+    def test_separable_opposed_seats_fall_back_to_one_slope(self):
+        # Every opposed-seat member at zero breaks (common early in a
+        # Congress): the kink has no finite coefficient. The fit drops the
+        # kink instead of running it off to a step at the swing seat.
+        members = [("D", al, 0.0 if al < 0 else 0.05 + 0.01 * (i % 3), 40)
+                   for i, al in enumerate(x / 12 for x in range(-12, 13))]
+        members += self._members("R", a=-2.9)
+        ref = compute_constituent_reference(members)
+        d = ref["expected"]["D"]
+        assert d["b_opposed"] == 0.0 and abs(d["a"]) < 50 and abs(d["b"]) < 50
+
+    def test_no_finite_fit_means_no_reference(self):
+        # One member breaks, at the edge of the lean; everyone else never
+        # does. No slope, kinked or not, is finite: fall back rather than
+        # extrapolate toward a 100% expectation.
+        members = [("D", al, 0.0, 40) for al in (x / 12 for x in range(-12, 12))] + [("D", 1.0, 0.2, 40)]
+        members += self._members("R", a=-2.9)
+        assert compute_constituent_reference(members) is None
 
     def test_no_bend_without_enough_opposed_seats(self):
         ref = compute_constituent_reference(self._members("D", opposed=False) + self._members("R"))
@@ -527,7 +590,9 @@ class TestVotePartStatus:
             {"state": "SW", "party": "D", "votingRecord": rec, **kw})["constituentAlignmentVotePart"]
 
     def test_few_votes(self):
-        assert self.status(record(1, total=2)) == "neutral:few-votes"
+        # A party norm exists: the party's typical score. None: neutral 50.
+        assert self.status(record(1, total=2)) == "typical:few-votes"
+        assert self.status(record(1, total=2), party="I") == "neutral:few-votes"
 
     def test_no_expectation(self):
         assert self.status(record(1, total=10), party="I") == "neutral:no-expectation"
