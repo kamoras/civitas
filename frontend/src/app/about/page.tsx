@@ -1112,6 +1112,12 @@ export default function AboutPage() {
                   is treated as the final word: anyone not on it is taken off the page.
                 </P>
                 <P>
+                  Declared write-in candidates are not printed on the ballot, so they are
+                  never shown as on it. Texas lists its write-ins in the same list as its
+                  nominees, and until 27 September 2026 this page showed four of them
+                  as Senate candidates.
+                </P>
+                <P>
                   Everyone on a certified ballot is shown, including candidates who never
                   filed with the FEC — they appear with &ldquo;no FEC filing&rdquo; instead
                   of fundraising figures. Colorado, Virginia, Tennessee, Florida, New Jersey, Maryland,
@@ -1345,7 +1351,10 @@ export default function AboutPage() {
                   goes ten minutes unrenewed is released. A claim used to last four hours whether or
                   not its run was still alive, so a deploy that stopped a refresh partway through
                   silenced the next four. On 26 September 2026, a day of steady deploys, that kept
-                  every refresh from running and no issue was published.
+                  every refresh from running and no issue was published. The renewal itself then
+                  failed for most of each run, because the refresh held the database&rsquo;s single write
+                  slot open across its model calls; it now saves each write before the next call, so
+                  the renewal and every other writer get a turn.
                 </P>
                 <P>
                   The cost is silence. A cluster with no attributable assertion produces no issue at

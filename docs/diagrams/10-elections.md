@@ -209,7 +209,10 @@ everything below reads it.
 - **Phone**: an index of every contest, one line each; a contest opens on its
   own screen (the same drawer, full screen) with Previous/Next — the
   voting-machine pattern, one contest per screen.
-- **Tabs only inside a race** (`RaceResearch.tsx`: Money / Record / News), never
+- Declared write-ins are dropped by every certified-list source, TX included
+  (`tx_civix` skips Civix `cdCandType` "WRTIN"): they are not printed.
+- **Tabs only inside a race** (`RaceResearch.tsx`: Money / Record / News, equal
+  width so the row does not shift as the bold active tab changes), never
   across the ballot's sections: a voter needs every contest, but within one
   contest those are supplemental views of the same candidates.
 - A section the API says nobody has checked is not a contest at all; the

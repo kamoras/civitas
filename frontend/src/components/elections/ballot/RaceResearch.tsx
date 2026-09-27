@@ -112,7 +112,7 @@ export default function RaceResearch({
               aria-controls={`${base}-${t.id}-panel`}
               tabIndex={selected ? 0 : -1}
               onClick={() => setTab(t.id)}
-              className={`min-h-[44px] border px-4 text-sm ${
+              className={`min-h-[44px] flex-1 border px-4 text-sm ${
                 selected
                   ? "border-phos bg-phos font-bold text-surface-base"
                   : "border-white/25 text-ink-hi hover:border-white/50"
