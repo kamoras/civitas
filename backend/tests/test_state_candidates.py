@@ -399,7 +399,48 @@ class TestCrawlFailuresAreContained:
         assert outcomes["AA"] == "save failed" and alerts == ["AA: disk full"]
 
 
+class TestEveryCrawlLooksForAFilingList:
+    @pytest.mark.asyncio
+    async def test_a_state_whose_results_source_was_found_is_searched_too(self, db_session, monkeypatch):
+        """A filing list's general rows are the only way to see a third-party
+        candidate; a state the crawler found results for was never searched
+        for one."""
+        _race(db_session, "2026-HOUSE-ZZ-3", "ZZ", "H", 3)
+        _candidate(db_session, "c1", "2026-HOUSE-ZZ-3", "FLOOD, MIKE", party="REP")
+        db_session.commit()
+        TestCrawlAdoption._patch(
+            monkeypatch, [{"office": "H", "district": 3, "party": "R", "last_name": "Flood"}],
+        )
+        looked = []
+
+        async def filings(client, state, cycle):
+            looked.append(state)
+            return None
+
+        monkeypatch.setattr(sc, "discover_filings", filings)
+        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert outcomes["ZZ"].startswith("adopted") and looked == ["ZZ"]
+
+
 class TestFilingsForHandVerifiedStates:
+    def test_a_crawler_found_list_puts_the_ballot_elsewhere(self, tmp_path, monkeypatch):
+        """The results pass asked only the hand entry whether a filing list
+        speaks for the November ballot, so for a hand-verified state whose
+        list the crawler found it pruned the ballot-only candidates the
+        filing pass had just added."""
+        import json
+
+        from app.pipeline.fetch import state_candidate_sources as sources
+
+        path = tmp_path / "discovered.json"
+        path.write_text(json.dumps({"TX": {"filings": {"url": "x"}}}))
+        monkeypatch.setattr(sources, "_DISCOVERED_PATH", str(path))
+        monkeypatch.setattr(sources, "_discovered_cache", None)
+        assert sc._has_general_filings("TX") is True
+        path.write_text("{}")
+        monkeypatch.setattr(sources, "_discovered_cache", None)
+        assert sc._has_general_filings("TX") is False
+
     def test_a_filing_list_found_for_a_hand_verified_state_is_read(self, tmp_path, monkeypatch):
         """The hand-verified entry won whole, so a filing list the crawler
         proved for such a state was stored and never used."""

@@ -614,7 +614,11 @@ class TestBallotSync:
             patch("app.pipeline.election_pipeline.utcnow", return_value=datetime(2026, 9, 29, 3)),  # a Tuesday
             patch(
                 "app.pipeline.election_pipeline.crawl_for_new_sources",
-                return_value={"NM": "adopted results", "WY": "none", "ZZ": "error"},
+                return_value={
+                    "NM": "adopted results", "WY": "none", "ZZ": "error", "KS": "kept",
+                    "OR": "failing since 2026-09-20", "UT": "rejected; filings adopted (2/3 matched)",
+                    "ID": "unproven",
+                },
             ) as crawl,
             patch("app.pipeline.election_pipeline.sync_confirmed_candidates") as nightly_sync,
         ):
@@ -624,7 +628,10 @@ class TestBallotSync:
         run = db_session.query(ElectionPipelineRun).order_by(ElectionPipelineRun.id.desc()).first()
         step = next(s for s in json.loads(run.progress_detail) if s.get("key") == "confirmed_candidates")
         assert step["status"] == "skipped"
-        assert step["detail"] == "skipped: Ballot sync is already running; crawl: NM adopted results, ZZ error"
+        assert step["detail"] == (
+            "skipped: Ballot sync is already running; crawl: NM adopted results, "
+            "OR failing since 2026-09-20, UT rejected; filings adopted (2/3 matched), ZZ error"
+        )
 
     def test_a_crawl_that_raises_does_not_cost_the_sync(self, db_session):
         import json

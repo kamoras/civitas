@@ -777,6 +777,12 @@ def _prune_stale_coverage(db: Session) -> int:
     return deleted
 
 
+# What in a state's crawl outcome is worth the dashboard's line: a source
+# or filing list adopted, a source failing or forgotten, a crawl that raised
+# or couldn't save.
+_CRAWL_NEWS = ("adopted", "failing since", "forgotten", "error", "save failed")
+
+
 def _adopted_detail(changes: dict[str, str]) -> str:
     """The crawl's part of the phase's dashboard detail: what tonight's
     crawl changed or failed at — a source adopted or forgotten, a state
@@ -890,7 +896,7 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                     leads = await crawl_for_new_sources(db, client, cycle)
                     adopted = {
                         s: r for s, r in leads.items()
-                        if r.startswith(("adopted", "forgotten", "error", "save failed"))
+                        if any(mark in r for mark in _CRAWL_NEWS)
                     }
                     logger.info("Source crawl: %s", leads or "no state due")
                 except Exception:

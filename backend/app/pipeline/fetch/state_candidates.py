@@ -408,10 +408,13 @@ def _keep_ballot_only(db: Session, race: Race, record: dict) -> str | None:
     return cid
 
 
-def _has_general_filings(source: dict) -> bool:
+def _has_general_filings(state: str) -> bool:
     """Whether this state has a filing list, whose general-election rows
-    then speak for its November ballot (North Carolina's do)."""
-    return bool(source.get("filings"))
+    then speak for its November ballot (North Carolina's do). By state,
+    not by the source in hand: a hand-verified state's list may be one the
+    crawler found (filings_for_state), and asking only its entry let the
+    results pass prune what the filing pass had just put on the ballot."""
+    return bool(filings_for_state(state))
 
 
 def _apply_ballot(
@@ -679,18 +682,30 @@ async def _crawl_state(
         k: v for k, v in (hand or {}).items()
         if k in ("runoff_threshold_pct", "advance_count")
     }
+    earlier = outcome
+    outcome = await _crawl_results_source(db, client, cycle, state, rules, record, now)
+    if earlier != "none":  # what this state's filing-list pass already found
+        outcome = f"{outcome}; {earlier}" if outcome not in ("none", "kept") else earlier
+    # Every state is looked for a filing list, whatever became of its
+    # results source: the list's general rows are the only way to see a
+    # third-party or independent candidate, and a stored list is re-found
+    # each week, so one that moves is followed.
+    if not looked_for_filings:
+        filings = await _adopt_filings(db, client, cycle, state, hand or {})
+        if filings != "none":
+            outcome = filings if outcome in ("none", "kept", "filings only") else f"{outcome}; {filings}"
+    return outcome
+
+
+async def _crawl_results_source(
+    db: Session, client: httpx.AsyncClient, cycle: int, state: str,
+    rules: dict, record: dict, now: datetime,
+) -> str:
+    """Find, prove and keep (or retire) a state's RESULTS source; the
+    outcome."""
     found = await discover_source(client, state, cycle, rules)
     if not found:
-        outcome = await _forget_if_broken(client, cycle, state, record, now)
-        # A state with no usable RESULTS source can still publish a
-        # filing list, and before its primary that is the only answer
-        # there is — so it is looked for either way (and a stored one is
-        # re-found each week, so a list that moves is followed).
-        if outcome != "kept" and not looked_for_filings:
-            filings = await _adopt_filings(db, client, cycle, state, hand or {})
-            if filings != "none":
-                outcome = filings
-        return outcome
+        return await _forget_if_broken(client, cycle, state, record, now)
 
     strategy = STRATEGIES.get(found.get("strategy"))
     records = await strategy(client, cycle, state, found) if strategy else None
@@ -1253,7 +1268,7 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
         # from that list (sync_ballot_filings), which is what may speak for
         # candidates this results file cannot see or has gone stale on.
         # Here, it only confirms who the results name.
-        ballot_is_elsewhere = _has_general_filings(source)
+        ballot_is_elsewhere = _has_general_filings(state)
         if general_records is not None:
             # The certified ballot answered: it alone decides every federal
             # race it covers. Races it does not cover — a national source
