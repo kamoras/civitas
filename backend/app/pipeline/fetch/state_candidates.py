@@ -39,6 +39,7 @@ list is left exactly as it was for that race, which is always at least as
 accurate as before this sync ran, never worse.
 """
 
+import hashlib
 import logging
 import re
 import sys
@@ -432,6 +433,7 @@ def _filings_speak_for_november(state: str) -> bool:
 def _apply_ballot(
     db: Session, cycle: int, state: str, records: list[dict],
     *, keep_unlisted: bool, authoritative: bool, scope: set[str] | None = None,
+    prune: bool = True,
 ) -> dict:
     """Confirm a state's federal records against its races.
 
@@ -439,7 +441,10 @@ def _apply_ballot(
     person on the ballot — show them (ballot-only row) rather than drop
     them. `authoritative`: these records ARE the certified November
     ballot, so anyone confirmed in a race they cover but not on them is
-    unconfirmed (_unconfirm_off_ballot)."""
+    unconfirmed (_unconfirm_off_ballot). `prune`: whether ballot-only rows
+    these records don't list are dropped — not when a weaker source is
+    answering for a state whose certified ballot listed them
+    (_may_prune)."""
     confirmed = unmatched = 0
     ballot_only: set[str] = set()
     listed: dict[str, set[str]] = {}
@@ -470,7 +475,7 @@ def _apply_ballot(
         _note_ballot_name(db, match, record)
         listed[race.id].add(match.id)
         confirmed += 1
-    if keep_unlisted:
+    if keep_unlisted and prune:
         _prune_ballot_only(db, cycle, state, ballot_only, scope)
     withdrawn = _unconfirm_off_ballot(db, listed) if authoritative else 0
     return {
@@ -526,6 +531,18 @@ def _unconfirm_off_ballot(db: Session, listed: dict[str, set[str]]) -> int:
     return changed
 
 
+def _may_prune(configured: dict, answering: dict) -> bool:
+    """Whether tonight's answering source may drop ballot-only rows. Only a
+    source as authoritative as the state's configured one: a state with a
+    certified ballot (general_ballot_complete, or a general_list) had its
+    third-party and independent candidates listed by it, and a primary-
+    results file answering while it is down — a fallback, the crawler's
+    spare, the results beside a general_list — cannot list them, so its
+    silence says nothing about them."""
+    certified = bool(configured.get("general_ballot_complete") or configured.get("general_list"))
+    return not certified or bool(answering.get("general_ballot_complete"))
+
+
 def _prune_ballot_only(
     db: Session, cycle: int, state: str, kept: set[str], scope: set[str] | None = None,
 ) -> None:
@@ -562,6 +579,10 @@ def _prune_ballot_only(
 # states after it, which a single weekly sweep in a fixed order did.
 CRAWL_TIER = "source-crawl"
 _CRAWL_EVERY = timedelta(days=7)
+# The election run starts at a different time each night (it is last in the
+# nightly chain), so a week to the hour would often slip a state to the
+# eighth night.
+_CRAWL_SLACK = timedelta(hours=12)
 # A discovered source that fails on consecutive crawls this long apart is
 # gone; one failed fetch is as likely an outage as a move, and forgetting
 # on it left the state dark until a later crawl could re-prove it.
@@ -580,7 +601,7 @@ def _crawl_record(db: Session, cycle: int, state: str) -> dict:
 
 def _crawl_due(record: dict, now: datetime) -> bool:
     last = record.get("lastOk")
-    return not last or now - datetime.fromisoformat(last) >= _CRAWL_EVERY
+    return not last or now - datetime.fromisoformat(last) >= _CRAWL_EVERY - _CRAWL_SLACK
 
 
 async def crawl_for_new_sources(
@@ -777,9 +798,13 @@ def report_file_problems(subject: str, lead: str, problems: list[str], key: str)
         return
     try:
         from app.ops_alerts import send_ops_alert
+        # Once a day per set of failing states, not per day: the first
+        # alert of a day must not silence a different failure later in it.
+        failing = sorted({p.split(":", 1)[0] for p in problems})
+        digest = hashlib.sha1("|".join(failing).encode()).hexdigest()[:12]
         send_ops_alert(
             subject, lead + "\n" + "\n".join(problems),
-            dedupe_key=f"{key}-{utcnow().date().isoformat()}",
+            dedupe_key=f"{key}-{utcnow().date().isoformat()}-{digest}",
         )
     except Exception:
         logger.exception("Could not send the %s ops alert", key)
@@ -806,8 +831,12 @@ async def _adopt_filings(
         found = await fetch_ballot_candidates(client, cycle, state, candidate_source)
     except Exception:
         # The list discovery validated can differ from the file this reads
-        # (a generalised link pattern), and a parse can raise on it.
-        _note_raise(state, "Filing-list read")
+        # (a generalised link pattern), and a parse can raise on it. The
+        # list already on file is read (and reported) by the nightly sync.
+        if candidate_source["filings"] == filings_for_state(state):
+            logger.exception("Filing-list read raised for %s", state)
+        else:
+            _note_raise(state, "Filing-list read")
         return "none"
     if not found:
         return "none"
@@ -933,7 +962,9 @@ async def _forget_if_broken(
         # A filing list alone — no results source to test. The caller looks
         # for the filing list again, which keeps it current if it moves.
         return "filings only"
-    records = await _fetch(client, cycle, state, source, "Discovered source")
+    # Logged, not reported: the nightly sync fetches this same source and
+    # reports its raise already.
+    records = await _fetch(client, cycle, state, source, "Discovered source", report=False)
     if records is not None:
         record.pop("failingSince", None)
         return "kept"
@@ -1280,6 +1311,7 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
     results: dict[str, dict] = {}
     for state in sorted(configured_states()):
         source = source_for_state(state)
+        configured = source or {}
         strategy = STRATEGIES.get(source["strategy"]) if source else None
         if strategy is None:
             logger.error(
@@ -1383,6 +1415,7 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
                 db, cycle, state, records,
                 keep_unlisted=not ballot_is_elsewhere,
                 authoritative=bool(source.get("general_ballot_complete")) and not ballot_is_elsewhere,
+                prune=_may_prune(configured, source),
             )
             if not ballot_is_elsewhere:
                 _record_ballot_basis(db, cycle, state, source)

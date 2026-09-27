@@ -522,6 +522,119 @@ class TestAdoptingAFilingListThatWontParse:
             sc._RAISED.reset(token)
         assert raised == ["ZZ: Filing-list read raised Error: field larger than field limit"]
 
+    @pytest.mark.asyncio
+    async def test_the_list_already_on_file_is_left_to_the_syncs_report(self, db_session, monkeypatch):
+        """The nightly sync reads the same list and reports it; the crawl
+        reporting it too was two alerts for one fault."""
+        async def filings(client, state, cycle):
+            return {"url": "x", "_evidence": "a list"}
+
+        async def unreadable(client, year, state, source):
+            raise ValueError("unreadable")
+
+        raised = []
+        monkeypatch.setattr(sc, "discover_filings", filings)
+        monkeypatch.setattr(sc, "fetch_ballot_candidates", unreadable)
+        monkeypatch.setattr(sc, "filings_for_state", lambda st: {"url": "x"})
+        token = sc._RAISED.set(raised)
+        try:
+            assert await sc._adopt_filings(db_session, None, 2026, "ZZ", {}) == "none"
+        finally:
+            sc._RAISED.reset(token)
+        assert raised == []
+
+
+class TestAWeakerSourceNeverPrunesTheCertifiedBallot:
+    """A state's certified ballot lists third-party and independent
+    candidates no FEC row covers (ballot-only rows). A primary-results file
+    answering while it is down cannot list them — its silence must not
+    delete them."""
+
+    @staticmethod
+    def _setup(monkeypatch, tmp_path, state, discovered=None):
+        import json
+
+        from app.pipeline.fetch import state_candidate_sources as sources
+
+        async def no_calendar(client, cycle):
+            return {}, True
+
+        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+        monkeypatch.setattr(sc, "report_file_problems", lambda *a, **k: None)
+        monkeypatch.setattr(sc, "configured_states", lambda: {state})
+        path = tmp_path / "d.json"
+        path.write_text(json.dumps(discovered or {}))
+        monkeypatch.setattr(sources, "_DISCOVERED_PATH", str(path))
+        monkeypatch.setattr(sources, "_discovered_cache", None)
+        return sources.source_for_state(state)
+
+    @staticmethod
+    def _ids(db):
+        return sorted(c.id for c in db.query(Candidate).all())
+
+    @pytest.mark.asyncio
+    async def test_the_crawlers_spare_answering_for_tx(self, db_session, monkeypatch, tmp_path):
+        from unittest.mock import AsyncMock
+
+        self._setup(monkeypatch, tmp_path, "TX", {"TX": {
+            "strategy": "tabular", "source_name": "a results file",
+            "description": "Found automatically on 2026-10-01: x"}})
+        _race(db_session, "2026-SEN-TX", "TX", office="S")
+        _candidate(db_session, "A", "2026-SEN-TX", "PAXTON, KEN", party="REP", confirmed_general=True)
+        db_session.commit()
+        paxton = {"office": "S", "district": None, "party": "R", "last_name": "PAXTON", "display_name": "Ken Paxton"}
+        green = {"office": "S", "district": None, "party": "G", "last_name": "GREENE", "display_name": "Gina Greene"}
+        monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(return_value=[paxton, green]))
+        await sc.sync_confirmed_candidates(db_session, None, 2026)
+        night1 = self._ids(db_session)
+        assert any(i.startswith("ballot:") for i in night1)
+        monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(return_value=None))
+        monkeypatch.setitem(sc.STRATEGIES, "tabular", AsyncMock(return_value=[paxton]))
+        await sc.sync_confirmed_candidates(db_session, None, 2026)
+        assert self._ids(db_session) == night1
+
+    @pytest.mark.asyncio
+    async def test_primary_results_beside_a_general_list_that_is_down(self, db_session, monkeypatch, tmp_path):
+        from unittest.mock import AsyncMock
+
+        src = self._setup(monkeypatch, tmp_path, "CO")
+        _race(db_session, "2026-SEN-CO", "CO", office="S")
+        _candidate(db_session, "A", "2026-SEN-CO", "HICK, JOHN", party="DEM")
+        db_session.commit()
+        rec = [{"office": "S", "district": None, "party": "D", "last_name": "HICK", "display_name": "John Hick"}]
+        green = {"office": "S", "district": None, "party": "G", "last_name": "GREENE", "display_name": "Gina Greene"}
+        monkeypatch.setitem(sc.STRATEGIES, src["strategy"], AsyncMock(return_value=rec))
+        monkeypatch.setitem(sc.STRATEGIES, src["general_list"]["strategy"], AsyncMock(return_value=rec + [green]))
+        await sc.sync_confirmed_candidates(db_session, None, 2026)
+        night1 = self._ids(db_session)
+        assert len(night1) == 2
+        monkeypatch.setitem(sc.STRATEGIES, src["general_list"]["strategy"], AsyncMock(return_value=None))
+        await sc.sync_confirmed_candidates(db_session, None, 2026)
+        assert self._ids(db_session) == night1
+
+    def test_a_state_with_no_certified_source_still_prunes(self):
+        assert sc._may_prune({"strategy": "clarity"}, {"strategy": "clarity"}) is True
+        assert sc._may_prune({"general_ballot_complete": True}, {"strategy": "tabular"}) is False
+        assert sc._may_prune({"general_ballot_complete": True}, {"general_ballot_complete": True}) is True
+
+
+class TestAlertsAndCadence:
+    def test_a_new_failure_later_in_the_day_is_not_silenced(self, monkeypatch):
+        keys = []
+        monkeypatch.setattr("app.ops_alerts.send_ops_alert",
+                            lambda subject, body, dedupe_key=None: keys.append(dedupe_key))
+        sc.report_file_problems("s", "l", ["WV: raised X"], "k")
+        sc.report_file_problems("s", "l", ["WV: raised X again"], "k")
+        sc.report_file_problems("s", "l", ["WV: raised X", "TX: raised Y"], "k")
+        assert keys[0] == keys[1] and keys[2] != keys[0]
+
+    def test_a_weekly_crawl_does_not_slip_to_the_eighth_night(self):
+        from datetime import datetime
+
+        record = {"lastOk": datetime(2026, 9, 1, 5).isoformat()}
+        assert sc._crawl_due(record, datetime(2026, 9, 8, 2)) is True  # the run started earlier tonight
+        assert sc._crawl_due(record, datetime(2026, 9, 7, 5)) is False
+
 
 class TestTheCrawlAlwaysReports:
     @pytest.mark.asyncio
