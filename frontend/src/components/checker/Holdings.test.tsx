@@ -31,7 +31,6 @@ function holdings(overrides: Partial<HoldingsData> = {}): HoldingsData {
   return {
     available: true,
     reportLabel: "2025 annual report",
-    reportVersion: "1",
     asOfDate: "2025-12-31",
     filedDate: "2026-05-15",
     sourceUrl: "https://example.com/report",

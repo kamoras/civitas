@@ -35,7 +35,6 @@ from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
-from app.alerting import safe_ops_alert as _alert
 from app.models import (
     ActionIssue,
     BskySenatorSpotlight,
@@ -91,6 +90,17 @@ def _model_for(chamber: str):
 
 def _today_str(today: str | None) -> str:
     return today or utcnow().strftime("%Y-%m-%d")
+
+
+def _alert(subject: str, body: str, *, dedupe_key: str) -> None:
+    """Best-effort ops alert. Imported lazily and never allowed to raise —
+    this module runs mid-pipeline and an alerting failure must not take the
+    nightly run down with it (same lazy-import pattern as scheduler.py)."""
+    try:
+        from app.ops_alerts import send_ops_alert
+        send_ops_alert(subject, body, dedupe_key=dedupe_key)
+    except Exception:
+        logger.exception("Failed to send ops alert: %s", subject)
 
 
 def _is_iso_date(value: str | None) -> bool:

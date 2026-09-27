@@ -16,7 +16,6 @@ import {
   fetchPviMap,
   fetchRaces,
   fetchRepStates,
-  fetchSenatorHoldings,
   fetchSenatorsByState,
   fetchStates,
   fetchTimeline,
@@ -363,39 +362,5 @@ describe("submitDocumentComment", () => {
     const result = await submitDocumentComment(7, "A comment long enough.");
     expect(result.success).toBe(false);
     expect(result.message).toMatch(/Submission failed/);
-  });
-});
-
-describe("fetchSenatorHoldings", () => {
-  beforeEach(() => __resetApiCache());
-  afterEach(() => vi.unstubAllGlobals());
-
-  const report = (reportVersion: string, page: number) => ({ reportVersion, page });
-  const ok = (body: unknown) => ({ ok: true, json: async () => body });
-
-  it("drops a member's pages cached from an older report version", async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(ok(report("2026-09-26|1", 1)))
-      .mockResolvedValueOnce(ok(report("2026-09-27|2", 2)))
-      .mockResolvedValueOnce(ok(report("2026-09-27|2", 1)));
-    vi.stubGlobal("fetch", fetchMock);
-
-    await fetchSenatorHoldings("S1", { page: 1 });
-    await fetchSenatorHoldings("S1", { page: 2 });
-    expect((await fetchSenatorHoldings("S1", { page: 1 })).reportVersion).toBe("2026-09-27|2");
-    expect((await fetchSenatorHoldings("S1", { page: 2 })).reportVersion).toBe("2026-09-27|2");  // kept
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-  });
-
-  it("refetches an older version the browser cache served, past that cache", async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(ok(report("2026-09-27|2", 2)))
-      .mockResolvedValueOnce(ok(report("2026-09-26|1", 1)))   // the browser's stale copy
-      .mockResolvedValueOnce(ok(report("2026-09-27|2", 1)));
-    vi.stubGlobal("fetch", fetchMock);
-
-    await fetchSenatorHoldings("S1", { page: 2 });
-    expect((await fetchSenatorHoldings("S1", { page: 1 })).reportVersion).toBe("2026-09-27|2");
-    expect(fetchMock.mock.calls[2][1]).toEqual({ cache: "no-store" });
   });
 });

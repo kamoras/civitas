@@ -55,5 +55,5 @@ def persist_ground_truth_failures(
     run.ground_truth_failures = json.dumps(gt_failures)
     db.commit()
     if gt_failures:
-        from app.alerting import safe_ops_alert
-        safe_ops_alert(alert_title, alert_body, dedupe_key=dedupe_key)
+        from app.ops_alerts import send_ops_alert
+        send_ops_alert(alert_title, alert_body, dedupe_key=dedupe_key)

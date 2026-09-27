@@ -35,7 +35,6 @@ import httpx
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.alerting import safe_ops_alert as _alert
 from app.models import FinancialDisclosure, FinancialHolding
 from app.pipeline.fetch.fd_common import UNREADABLE_SCANNED, AnnualReport, until_deadline
 from app.pipeline.fetch.house_fd import PARSER_VERSION as HOUSE_PARSER_VERSION
@@ -64,9 +63,18 @@ from app.pipeline.filer_matching import (
 )
 from app.holdings_schedule import FETCH_BUDGET, HOLDINGS_STEPS, PREP_BUDGET, PROBE_BUDGET
 from app.time_utils import utcnow
-from app.time_utils import utcnow as _written_at  # a row's write time, apart from the calendar clock
 
 logger = logging.getLogger(__name__)
+
+
+def _alert(subject: str, body: str, *, dedupe_key: str) -> None:
+    """Best-effort ops alert — lazily imported and never allowed to raise,
+    the same pattern member_lifecycle.py uses for mid-pipeline alerting."""
+    try:
+        from app.ops_alerts import send_ops_alert
+        send_ops_alert(subject, body, dedupe_key=dedupe_key)
+    except Exception:
+        logger.exception("Failed to send ops alert: %s", subject)
 
 T = TypeVar("T")
 
@@ -526,7 +534,7 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
                 # is, not what it was stored with.
                 db.query(FinancialDisclosure).filter_by(
                     **{chamber.owner_key: member_id}, filing_id=mine.filing_id,
-                ).update({**repair, "ingested_at": _written_at()}, synchronize_session=False)  # a new version
+                ).update(repair, synchronize_session=False)
                 # Committed at once: rare (a row that says more than what was
                 # stored), and an open write would hold SQLite's lock across
                 # the downloads that follow.

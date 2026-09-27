@@ -1738,12 +1738,3 @@ class TestDuplicateRows:
         filing = _house_filing("10078188")
         _, fetch = await _ingest_house(db_session, {2025: [filing, dict(filing)]}, {})
         assert fetch.call_count == 1
-
-class TestReportVersion:
-    async def test_a_repair_moves_the_report_version_forward(self, db_session, senator):
-        await _ingest_senate(db_session, [_senate_filing("cy2025", title="Annual Report for CY", filed="2026-05-11")],
-                             {"cy2025": [_row()]})
-        before = get_senator_holdings(db_session, "S1").report_version
-        await _ingest_senate(db_session, [_senate_filing("cy2025", filed="2026-05-11")], {"cy2025": [_row()]})
-        after = get_senator_holdings(db_session, "S1")
-        assert after.report_label == "2025 annual report" and after.report_version > before

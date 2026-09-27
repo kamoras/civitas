@@ -41,7 +41,6 @@ from urllib.parse import urlparse
 from lxml import html as lxml_html
 from sqlalchemy.orm import Session
 
-from app.alerting import safe_ops_alert as _alert
 from app.config import settings
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import fetch_with_retry_requests
@@ -125,6 +124,16 @@ _OFFICE_CELL_VALUES = {
 }
 
 _rate_limiter = RateLimiter(settings.PRESIDENT_PTR_RPS)
+
+
+def _alert(subject: str, body: str, *, dedupe_key: str) -> None:
+    """Best-effort ops alert — lazily imported and never allowed to raise,
+    the same pattern member_lifecycle.py uses for mid-pipeline alerting."""
+    try:
+        from app.ops_alerts import send_ops_alert
+        send_ops_alert(subject, body, dedupe_key=dedupe_key)
+    except Exception:
+        logger.exception("Failed to send ops alert: %s", subject)
 
 
 def _filing_id_for(pdf_url: str) -> str:

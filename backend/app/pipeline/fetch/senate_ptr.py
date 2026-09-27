@@ -241,7 +241,6 @@ async def _scrape_via_page(
     """The actual eFD search flow, given an already-launched Playwright
     page. See search_ptr_filings for why this exists as a real browser
     session at all."""
-    filings: list[dict] = []
     await page.goto(HOME_URL, wait_until="domcontentloaded")
 
     # Accept the statutory use-restriction gate if presented (a fresh
@@ -286,24 +285,23 @@ async def _scrape_via_page(
             pass
         await _wait_until(lambda: len(responses) > before)
 
-    by_id: dict[str, dict] = {}
-    unparsed: set[str] = set()
-    total = await _page_through(page, responses, by_id, unparsed)
-    filings.extend(by_id.values())
-    if total and len(by_id) + len(unparsed) < total:
+    filings, seen, total = await _page_through(page, responses)
+    if total and seen < total:
         # Paging ended short of recordsTotal — a page that didn't load, or a
         # row that repeated across pages while another was never shown.
         # Reported, not retried in the same browser session: every caller
         # searches again on its next nightly run, and holdings never lets a
         # partial search replace a newer stored report (_is_older).
-        logger.warning("Senate eFD search returned %d of %d filings", len(by_id) + len(unparsed), total)
+        logger.warning("Senate eFD search returned %d of %d filings", seen, total)
     return filings
 
 
-async def _page_through(page, responses: list, by_id: dict[str, dict], unparsed: set[str]) -> int:
-    """Collect every results page from the latest response on, into `by_id`
-    (and the rows that don't parse into `unparsed`, keyed the same way so
-    a repeat never counts twice). Returns recordsTotal."""
+async def _page_through(page, responses: list) -> tuple[list[dict], int, int]:
+    """Collect every results page from the latest response on. Returns the
+    parsed filings, how many distinct rows were seen (parsed or not), and
+    recordsTotal."""
+    by_id: dict[str, dict] = {}
+    unparsed: set[str] = set()
     total = 0
     for _ in range(_MAX_PAGES):
         try:
@@ -324,7 +322,7 @@ async def _page_through(page, responses: list, by_id: dict[str, dict], unparsed:
         await _click(next_el)
         if not await _wait_until(lambda: len(responses) > before):
             break
-    return total
+    return list(by_id.values()), len(by_id) + len(unparsed), total
 
 
 def _collect_rows(by_id: dict[str, dict], unparsed: set[str], rows: list) -> None:

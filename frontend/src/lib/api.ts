@@ -159,12 +159,9 @@ const _inflight = new Map<string, Promise<unknown>>();
 export function __resetApiCache(): void {
   _fetchCache.clear();
   _inflight.clear();
-  _holdingsVersion.clear();
 }
 
-async function cachedFetch<T>(
-  url: string, ttlMs: number, errorLabel = "Fetch failed", init?: RequestInit,
-): Promise<T> {
+async function cachedFetch<T>(url: string, ttlMs: number): Promise<T> {
   const now = Date.now();
   const hit = _fetchCache.get(url);
   if (hit && hit.expiry > now) return hit.data as T;
@@ -173,10 +170,8 @@ async function cachedFetch<T>(
   if (pending) return pending as Promise<T>;
 
   const request = (async () => {
-    const res = await (init ? fetch(url, init) : fetch(url));
-    // Same "<label>: <status>" shape requestJson throws, so a section that
-    // shows the message names itself.
-    if (!res.ok) throw new Error(`${errorLabel}: ${res.status}`);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
     const data: T = await res.json();
     _fetchCache.set(url, { data, expiry: Date.now() + ttlMs });
     if (_fetchCache.size > 100) {
@@ -385,35 +380,13 @@ async function fetchHoldings(
   if (options?.page) params.set("page", String(options.page));
   if (options?.perPage) params.set("per_page", String(options.perPage));
   if (options?.category) params.set("category", options.category);
-  // Cached: legend toggles and paging back revisit the same URLs, and a
-  // member's holdings change at most once a night. But every page carries
-  // its report's breakdown and label, so pages of different report versions
-  // must not mix. reportVersion sorts in the order versions were written:
-  // a page of an older version than one already seen (from this cache or
-  // the browser's, which the route's max-age allows) is fetched again past
-  // both; a page of a newer version drops the member's other cached pages.
-  const base = `${API_BASE}/${CHAMBER_PATH[chamber]}/${memberId}/holdings?`;
-  const url = `${base}${params}`;
-  const load = (init?: RequestInit) => cachedFetch<Holdings>(url, TTL.MEDIUM, "Failed to load holdings", init);
-  let data = await load();
-  const seen = _holdingsVersion.get(base);
-  if (seen !== undefined && data.reportVersion < seen) {
-    _fetchCache.delete(url);
-    data = await load({ cache: "no-store" });
-  }
-  if (seen !== undefined && data.reportVersion > seen) {
-    const kept = _fetchCache.get(url);
-    _fetchCache.forEach((_, key) => {
-      if (key.startsWith(base)) _fetchCache.delete(key);
-    });
-    if (kept) _fetchCache.set(url, kept);
-  }
-  if (seen === undefined || data.reportVersion > seen) _holdingsVersion.set(base, data.reportVersion);
-  return data;
+  // Loaded like the stock-trade and vote pages, outside cachedFetch's
+  // client cache.
+  return requestJson(
+    `${API_BASE}/${CHAMBER_PATH[chamber]}/${memberId}/holdings?${params}`,
+    "Failed to load holdings",
+  );
 }
-
-/** The newest report version seen for each member's holdings pages. */
-const _holdingsVersion = new Map<string, string>();
 
 type HoldingsOptions = { page?: number; perPage?: number; category?: string | null };
 
