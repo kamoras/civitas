@@ -10,7 +10,6 @@ from app.pipeline.analyze.grounding import (
     hedge_language,
     intensifier_words,
     log_intensifier_usage,
-    repeated_sentences,
     ungrounded_electoral_claims,
     ungrounded_numbers,
     ungrounded_statistics,
@@ -121,32 +120,6 @@ class TestUngroundedStatistics:
     )
     def test_ungrounded_statistics(self, text, expected):
         assert ungrounded_statistics(text, SOURCE) == expected
-
-
-class TestRepeatedSentences:
-    def test_no_repetition_is_clean(self):
-        text = "The Senate passed the bill. The House will vote next week."
-        assert repeated_sentences(text) == []
-
-    def test_verbatim_repeat_flagged(self):
-        text = (
-            "The proposal is currently under review by the agency. "
-            "Something else happened in between. "
-            "The proposal is currently under review by the agency."
-        )
-        assert repeated_sentences(text) == ["the proposal is currently under review by the agency"]
-
-    def test_short_repeated_phrase_ignored(self):
-        text = "He said no. Later, he said no."
-        assert repeated_sentences(text) == []
-
-    def test_whitespace_differences_still_match(self):
-        text = (
-            "The  agreement   includes specific targets for both countries. "
-            "Filler sentence goes here now. "
-            "The agreement includes specific targets for both countries."
-        )
-        assert repeated_sentences(text) == ["the agreement includes specific targets for both countries"]
 
 
 class TestHedgeLanguage:
@@ -921,7 +894,7 @@ class TestEveryPublishingPathIsChecked:
 
     # Functions whose LLM output reaches a reader as prose.
     PUBLISHES_PROSE = {
-        "_generate_period_summary", "_generate_full_story",
+        "_generate_period_summary",
         "_generate_monitor_metadata", "_run_refresh", "_generate_new_post",
         "_generate_spotlight_post", "_generate_weekly_post", "_draft_developing_issue",
         "_draft_developing_rule_issue", "_generate_post_text", "_generate_summary",

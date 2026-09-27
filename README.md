@@ -417,7 +417,15 @@ Every hour at :15
        │         appear verbatim, that the source asserts one OF the other
        │         (adjacency — two true fragments can otherwise be assembled
        │         into one false sentence), that the span runs to the end of
-       │         its clause, and only then renders "actor predicate."
+       │         its clause, and only then renders the source's own words
+       │         from actor through predicate — any words between them
+       │         included, so "OpenAI agent made" never becomes "OpenAI
+       │         made". Each article is read as headline + summary with
+       │         the headline closed as its own sentence: joined by a bare
+       │         newline, a claim ending at the headline's end read as cut
+       │         off, and 2026-09-27's measured yield was 5 claims from 40
+       │         articles (14 with the break marked), so most clusters
+       │         missed the two-claim bar and nothing published for days.
        │         Title = the top article's real headline. Summary = the
        │         single best claim. Facts = the supporting claims, each
        │         carrying the outlet it came from.
@@ -436,6 +444,15 @@ Every hour at :15
        │         also brings new information (a name, figure, or development).
        │         Otherwise the rank updates silently and nothing is posted.
        │         Brand new story → create new row.
+       │         Full story (issue page): built here, while the cluster's
+       │         articles exist. Each article is asked once more about its
+       │         summary alone (with the headline in view the model always
+       │         picks the headline); every verified claim, headline and
+       │         body, is listed under the outlet that made it. Nothing is
+       │         written. None when it would only repeat summary + facts.
+       │         It replaced ~800 chars of model prose that published a
+       │         relationship no source stated (issue 748), a wrong office
+       │         (750) and filler (751); stored prose was cleared (0004).
        ▼
   7. ENRICH ──── sqlite-vec semantic search → link related bills/senators
        │         Resolve bill IDs mentioned in article text
@@ -467,7 +484,7 @@ Every hour at :15
 
 **How do you tell a quiet news day from an over-suppressing gate?** Both look the same from outside: nothing on the Action Center, nothing on Bluesky. Roughly ten independent checks in this pipeline fail closed — the right default when the platform publishes under its own name, but it means silence is the shared failure mode of all of them. Every refresh records what came in (`articles_fetched`, `articles_policy_relevant`, `clusters_considered`), what published (`issues_new_topic`, `issues_matched_existing`, `bsky_reposts_allowed`), and what each gate dropped, including on the two abort paths that publish nothing at all. `GET /api/admin/action-metrics` reads the window back with those three groups totalled: healthy intake against near-zero output is a suppression problem, near-zero intake is a quiet cycle or a broken feed. Runs are hourly, so a gap in the series is itself a signal — a refresh that crashed or was still holding the lock leaves no row.
 
-**Why can't a deploy silence the refresh?** Two containers overlap during a deploy, so the refresh takes a cross-container lock: a row in `api_cache` whose primary key makes the second insert fail. The lock is a lease. Its holder rewrites the row's timestamp every minute from a heartbeat thread, a row ten minutes without a beat is taken over, and heartbeat and release touch only the row carrying the holder's own token. It used to be honored for a flat four hours from acquisition. A refresh runs in a thread, so a deploy's SIGTERM kills it without its `finally`, and the row it left made every run for the next four hours skip with "held by another container". On 2026-09-26 twenty-two deploys between 15:08 and 22:50 UTC kept that going all day, and no issue was published. The first runs after the fix showed the heartbeat failing on every beat from minute three to the end of the run: the refresh flushed an LLM training-sample row into its own session and did not commit until every remaining cluster's model work was done, holding SQLite's one write transaction for about fifteen minutes. The heartbeat, the election coverage refresh and the LLM cache all waited out their 30-second busy timeout and failed, and the lease went stale under a live holder. Samples are now written on their own short session, and the monitor stage commits each write before its next model call.
+**Why can't a deploy silence the refresh?** Two containers overlap during a deploy, so the refresh takes a cross-container lock: a row in `api_cache` whose primary key makes the second insert fail. The lock is a lease. Its holder rewrites the row's timestamp every minute from a heartbeat thread, a row ten minutes without a beat is taken over, and heartbeat and release touch only the row carrying the holder's own token. It used to be honored for a flat four hours from acquisition. A refresh runs in a thread, so a deploy's SIGTERM kills it without its `finally`, and the row it left made every run for the next four hours skip with "held by another container". On 2026-09-26 twenty-two deploys between 15:08 and 22:50 UTC kept that going all day, and no issue was published. A deploy still kills the refresh it lands on, and a refresh takes about twenty minutes of every hour, so on such a day most runs would die anyway: `check-and-deploy.sh` now defers a deploy while a refresh is running, but only for one that started within the last 40 minutes (twice the longest measured run), so an `is_running` flag wedged true cannot hold deploys the way it did on 2026-07-27. The first runs after the fix showed the heartbeat failing on every beat from minute three to the end of the run: the refresh flushed an LLM training-sample row into its own session and did not commit until every remaining cluster's model work was done, holding SQLite's one write transaction for about fifteen minutes. The heartbeat, the election coverage refresh and the LLM cache all waited out their 30-second busy timeout and failed, and the lease went stale under a live holder. Samples are now written on their own short session, and the monitor stage commits each write before its next model call.
 
 ---
 

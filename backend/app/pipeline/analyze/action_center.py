@@ -55,7 +55,6 @@ from app.pipeline.analyze.grounding import (
     hedge_and_editorializing_violations,
     log_intensifier_usage,
     proposal_stated_as_fact,
-    repeated_sentences,
     validate_facts,
 )
 from app.pipeline.analyze import claims as claim_layer
@@ -3044,218 +3043,29 @@ def generate_period_summaries(today_str: str, db: "Session") -> None:
         logger.info("Generated year-in-review for %d", yr)
 
 
-def _story_word_target(n_facts: int) -> tuple[int, int]:
-    """Word-count band scaled to how much source material actually exists.
-
-    A fixed 350-500 word floor forced the model to pad every issue to the
-    same length regardless of how much reporting backed it. When an issue
-    had one thin fact, the model filled the gap with invented specifics —
-    a story built from a single vague fact about a "China climate deal"
-    stated a fabricated "1.5 degrees Celsius" target and "Paris Agreement"
-    framing that appeared nowhere in the source (2026-07 audit). Scaling
-    the target to fact count removes the incentive to invent: 1 fact gets
-    a short paragraph, not a forced 350-word article.
-    """
-    low = max(120, min(550, 80 + 90 * n_facts))
-    high = max(200, min(750, 140 + 130 * n_facts))
-    return low, high
-
-
-def _generate_full_story(issue, db_session: Session | None = None) -> str | None:
-    """Generate a factual deep-dive for an action issue, length scaled to
-    how many key facts actually support it (see ``_story_word_target``).
-
-    Returns plain text (paragraphs separated by double newlines), or None on failure.
-    Stored in action_issues.full_story so it is ready before users click through.
-    """
-
-    facts = json.loads(issue.facts or "[]")
-    source_names = json.loads(issue.source_names or "[]")
-    policy_areas = json.loads(issue.policy_areas or "[]")
-
-    facts_text = "\n".join(f"- {f}" for f in facts) if facts else "(none provided)"
-    sources_text = ", ".join(source_names[:10]) if source_names else "(none provided)"
-    policy_text = ", ".join(policy_areas) if policy_areas else "(none provided)"
-
-    word_low, word_high = _story_word_target(len(facts))
-
-    user_prompt = f"""Write a concise, factual article on the following civic issue for Civitas, a U.S. civic transparency platform.
-
-STRICT REQUIREMENTS:
-- {word_low}-{word_high} words. Stop when the facts run out — do not pad. A short, \
-accurate article is far better than a longer one that repeats itself or invents detail.
-- Every sentence must add new information not already stated.
-- Do NOT repeat or rephrase information you have already written.
-- Factual and non-partisan — report what happened, not what to think about it.
-- Flowing paragraphs only (no headers, no bullet points).
-- Do not speculate beyond what the sources support.
-- Do not name, quote, or attribute a statement or role to any person not \
-named in the key facts above.
-- Do NOT open with a generic hedge like "Recent coverage indicates," "Recent \
-reports say/suggest," "Recent developments show," or any similar throat-clearing \
-preamble. Start the first sentence with the concrete news itself — who did what. \
-If the key facts include a vote tally, dollar figure, or ruling, state that \
-number in the opening sentence before any characterization of it.
-- Vary sentence length — do not write every sentence to the same length or \
-shape. Let a short, direct sentence land after a longer explanatory one; \
-uniform sentence length reads as mechanical, not as prose written for a \
-person to read aloud.
-- When a procedural or technical term first appears (a bill stage, a \
-parliamentary procedure, an agency acronym), define it in the same sentence \
-in a few words — not as a separate explanatory aside.
-- Never substitute a vague intensifier ("significant," "sweeping," \
-"dramatic") for a specific number already given in the key facts.
-- Do NOT use hedging attribution phrases ANYWHERE in the piece — "sources say," \
-"reports indicate," "coverage shows," "officials suggest," and similar. State \
-facts directly as facts, not as something reports/coverage/sources are saying.
-- Do NOT evaluate, justify, or defend any action, speech, or policy. Never write \
-that something "is warranted" or "is justified," and never present an actor's \
-stated rationale for their own action as established fact. Do not speculate \
-about the political or legislative purpose or effect of an action (e.g., how a \
-speech "helps move legislation"). Report only what was said or done — not \
-whether it was right, smart, necessary, or effective.
-- Do NOT assert what an actor's strategic motive, purpose, or intention was \
-(e.g., "reflects an effort to manage public perception," "in an effort to \
-shape the narrative") unless that motive is explicitly stated as a claim or \
-quote in the key facts. Report the action; do not explain why you think they \
-did it.
-- Use the SPECIFIC names, quotes, and numbers given in the key facts — do not \
-paraphrase a specific fact into a vaguer, unnamed version. If a key fact names \
-a person or gives a figure, the article should use that same name or figure, \
-not a vaguer substitute like "a commentator" or "several officials."
-- Do NOT write about "the coverage," "the debate," "the discussion," or "the \
-reporting" as if it were the subject of the article — write about what people \
-and institutions actually did or said, not about how the news covered it.
-- Do NOT end with a vague, generic wrap-up sentence that restates the topic \
-without adding new information (e.g., "these developments underscore the \
-complex interplay between..."). If there is nothing more concrete to add, end \
-the article on the last concrete fact instead.
-
-STRUCTURE (3 natural paragraphs):
-1. What is happening and why it matters right now
-2. Relevant background and specific details from the key facts
-3. What government, Congress, or affected people are doing about it (only if known)
-
-If a section has no supporting facts, skip it rather than inventing content.
-
-ISSUE TITLE: {issue.title}
-BRIEF SUMMARY: {issue.summary or "(none)"}
-
-KEY FACTS FROM REPORTING:
-{facts_text}
-
-POLICY AREAS: {policy_text}
-NEWS SOURCES: {sources_text}
-
-Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}}"""
-
-    system_prompt = (
-        "You are a senior civic journalist writing factual, thorough, accessible "
-        "articles for Civitas — a non-partisan platform that aggregates U.S. government "
-        "data. Your goal is to give citizens a complete picture of what is happening in "
-        "Washington and why it matters to them. Write clearly for a general audience "
-        "without being condescending. Report events directly and in your own voice — "
-        "never as something 'reports say' or 'coverage indicates.' Never evaluate "
-        "whether an action was warranted, justified, or well-reasoned, and never adopt "
-        "an actor's stated rationale as fact — describe what was said and done, not "
-        "whether it was right or what it accomplishes."
+def _build_full_story(
+    filtered_cluster: list, headline_claims: list,
+    summary: str, facts: list[str], source_text: str, locate,
+) -> str | None:
+    """The issue page's full story, from verified claims only (see
+    claims.build_story). Each article is asked once more, about its body,
+    so the story carries what the headline claims do not; the same topic
+    check and the same backstop as the issue's own text then apply, and a
+    story failing either is not published (fail closed, like the issue)."""
+    body_claims = claim_layer.extract_body_claims(filtered_cluster, locate)
+    claims = claim_layer.on_topic(
+        claim_layer.dedupe_claims(headline_claims + body_claims), filtered_cluster,
     )
-    # Everything the model is shown — the grounding universe for statistics.
-    source_material = f"{issue.title}\n{issue.summary or ''}\n{facts_text}"
-
-    retry_note = ""
-    for attempt in range(2):
-        result = call_llm(
-            prompt_version="full_story_v2",
-            system_prompt=system_prompt,
-            user_prompt=user_prompt + retry_note,
-            # Public-facing surface: use the story-tier model when
-            # configured (see settings.OLLAMA_STORY_MODEL — two-tier
-            # design, 2026-07). The cache hash includes the resolved
-            # model, so switching tiers never serves stale generations.
-            model=settings.OLLAMA_STORY_MODEL or None,
-            # The retry must not be served the same rejected story from cache.
-            cache_key=(
-                f"full_story:{issue.id}:{issue.title[:80]}" if attempt == 0 else None
-            ),
-            # call_llm caches only when BOTH cache_key and db_session are
-            # set — passing None here silently disabled the first-attempt
-            # cache the cache_key above exists for.
-            db_session=db_session,
-            max_tokens=2048,
-            num_ctx=4096,
-        )
-
-        if not result or not isinstance(result.get("story"), str):
-            logger.warning("Full story generation returned no result for issue %s", issue.id)
-            return None
-
-        story = _fix_impossible_senate_vote_counts(result["story"].strip())
-        if len(story) < 200:
-            logger.warning("Full story too short (%d chars) for issue %s", len(story), issue.id)
-            return None
-
-        # Reject fabricated statistics and fabricated named officials: any
-        # money/percent/magnitude/year figure, or any titled/role-described
-        # person, must appear in the material the model was shown. Plain
-        # contextual numbers and untitled bare names are left to the prompt
-        # rules (see grounding.py) — this only catches the two highest-
-        # precision hallucination signals mechanically. (2026-07: a full
-        # story invented "The Senate Republican leader, Chuck Schumer, has
-        # said Graham's death has made a hard month harder for the Senate
-        # agenda" — no Schumer mention anywhere in the source material, and
-        # this generator had no check for fabricated names at all until
-        # then, unlike the Bluesky poster which already ran this check.)
-        # The SHARED combinator, not a hand-picked subset. This block
-        # used to name seven checks individually, and therefore silently
-        # did not inherit electioneering_language when that was added to
-        # grounding_violations — the longest generated text on the site
-        # was the least protected. Two modules had independently grown
-        # the same hand-rolled list (bluesky_spotlight was the other),
-        # and each missed whatever was added to the combinator after it
-        # was written. Anything genuinely specific to long-form prose
-        # stays below; everything shared comes from one place.
-        shared = grounding_violations(story, source_material)
-        shared += hedge_and_editorializing_violations(story)
-        # Not in the combinator: only long-form generation loops on
-        # itself when it runs out of source material to paraphrase.
-        dupes = repeated_sentences(story)
-        if not shared and not dupes:
-            logger.info(
-                "Generated full story for issue %s (%d chars): %s",
-                issue.id, len(story), issue.title[:60],
-            )
-            log_intensifier_usage("full_story", story, source_material)
-            return story
-
-        # One list, from one place — the combinator already returns
-        # human-readable reasons, so the retry note no longer needs a
-        # bespoke sentence per check.
-        problems = list(shared)
-        if dupes:
-            problems.append(f"repeated sentences: {'; '.join(dupes[:2])}")
-        logger.warning(
-            "Full story for issue %s failed checks (attempt %d): %s",
-            issue.id, attempt + 1, "; ".join(problems)[:300],
-        )
-
-        retry_note = (
-            "\n\nYour previous attempt was rejected because it contained "
-            f"{' and '.join(problems)}. Stop writing once the facts are "
-            "covered instead of repeating yourself, use only numbers "
-            "that appear in the material above, do not name or quote "
-            "anyone who isn't named in the material above, do not describe "
-            "any election, race, campaign, or challenge for office unless the "
-            "material above says so, report events directly instead of "
-            "through phrases like 'reports say,' do not evaluate whether "
-            "any action was warranted or justified, do not attach a party "
-            "label (Republican/Democrat/GOP/(R-)/(D-)) to anyone unless the "
-            "material above states their party, and name the specific "
-            "office-holder instead of a vague indefinite phrase like 'a "
-            "president' or 'a Speaker' — there is only one at a time."
-        )
-
-    return None
+    story = claim_layer.build_story(claims, [summary, *facts])
+    if story is None:
+        return None
+    reasons = grounding_violations(story, source_text)
+    reasons += hedge_and_editorializing_violations(story)
+    if reasons:
+        logger.warning("Full story failed the backstop (%s) — none published", "; ".join(reasons)[:200])
+        action_metrics.increment("stories_skipped_grounding")
+        return None
+    return story
 
 
 def _save_timeline_entry(today: str, db: Session) -> None:
@@ -3994,95 +3804,6 @@ def _cleanup_monitor_lifecycle(today: str, db: Session) -> None:
     db.commit()
 
 
-_US_REFS_RE = re.compile(
-    r'\bU\.S\.?\b|\bUnited States\b|\bAmerican?\b', re.IGNORECASE,
-)
-
-
-
-
-# The Senate has 100 members, so any reported vote tally whose yeas+nays
-# exceeds 100 is physically impossible for the Senate — it can only be a
-# House roll call (435 members). Confirmed live 2026-07: a generated fact
-# read "The bill passed the Senate with a vote of 226-195" for a story
-# where the bill passed the House 226-195 and was later taken up in the
-# Senate — the model correctly extracted a real number from the source
-# article but attached the wrong chamber label from elsewhere in the
-# same article. Unlike most hallucination guards in this file, this one
-# doesn't just drop the offending content: because only two chambers
-# exist and only the Senate has this hard 100-member ceiling, "count
-# exceeds 100 and is currently labeled Senate" has exactly one possible
-# correction, deterministically.
-SENATE_MAX_MEMBERS = 100
-_VOTE_TALLY_RE = re.compile(r'\b(\d{1,3})\s*(?:-|to|–|—)\s*(\d{1,3})\b')
-_SENATE_WORD_RE = re.compile(r'\bSenate\b')
-_HOUSE_WORD_RE = re.compile(r'\bHouse\b')
-_CHAMBER_LOOKBACK_CHARS = 80
-
-
-def _fix_impossible_senate_vote_counts(text: str) -> str:
-    """Correct 'Senate' to 'House' when the nearest vote tally before it
-    exceeds the Senate's 100-member ceiling. See module-level comment
-    above _VOTE_TALLY_RE for the real case this was found from."""
-    if not text:
-        return text
-
-    replacements: list[tuple[int, int]] = []  # (start, end) spans to become "House"
-    for m in _VOTE_TALLY_RE.finditer(text):
-        total = int(m.group(1)) + int(m.group(2))
-        if total <= SENATE_MAX_MEMBERS:
-            continue  # plausible for either chamber — not this function's problem
-
-        window_start = max(0, m.start() - _CHAMBER_LOOKBACK_CHARS)
-        window = text[window_start:m.start()]
-        senate_hits = list(_SENATE_WORD_RE.finditer(window))
-        house_hits = list(_HOUSE_WORD_RE.finditer(window))
-        if not senate_hits or house_hits:
-            # No nearby "Senate" to fix, or "House" already mentioned
-            # closer/at all in the window — ambiguous, leave untouched
-            # rather than guess.
-            continue
-        nearest = senate_hits[-1]
-        replacements.append((window_start + nearest.start(), window_start + nearest.end()))
-
-    if not replacements:
-        return text
-
-    logger.warning(
-        "Correcting %d impossible Senate vote-count mention(s) (>100 total) to House: %s",
-        len(replacements), text[:120],
-    )
-    fixed = text
-    for start, end in sorted(replacements, reverse=True):
-        fixed = fixed[:start] + "House" + fixed[end:]
-    return fixed
-
-
-_ROLE_CHECK_SYSTEM = (
-    "You are a rigorous fact-checker. You check ONE thing: whether a summary "
-    "correctly attributes actions and outcomes to the right people — who did "
-    "what to whom, who sued whom, who was found guilty or liable versus who "
-    "brought the case or made the accusation. You are not checking style, "
-    "completeness, or opinion — only whether any party's role has been "
-    "reversed or confused with another party's."
-)
-
-_ROLE_CHECK_TEMPLATE = """\
-Source articles:
-{articles}
-
-Generated summary:
-{summary}
-
-Does the summary correctly attribute every action, accusation, and legal \
-outcome to the right person — with nobody's role reversed (e.g. describing \
-an accuser/plaintiff/victim as the one found guilty or liable, or crediting \
-one party's action or outcome to the other party)?
-
-Respond with ONLY a JSON object:
-{{"accurate": true}}
-or
-{{"accurate": false, "reason": "<one sentence naming what was reversed>"}}"""
 
 
 
@@ -4524,6 +4245,7 @@ def _run_refresh(db: Session) -> int:
     _new_issues: list[ActionIssue] = []   # newly inserted rows (no ID yet)
 
     issues_created = 0
+    stories_built = 0
     # (title, embedding) pairs for post-LLM dedup within a single run
     generated_title_embs: list[tuple[str, "np.ndarray"]] = []
 
@@ -4894,6 +4616,19 @@ def _run_refresh(db: Session) -> int:
             action_metrics.increment("issues_new_topic")
             logger.info("Rank %d new topic: '%s'", rank, title[:60])
 
+        # Only a row without a story gets one: new, just promoted, or
+        # cleared because its title or facts changed. A developing draft
+        # has one primary source and no reporting to tell yet.
+        row = match or new_row
+        if row.full_story is None and row.status != ActionIssueStatus.DEVELOPING:
+            _set_refresh_state(stage_detail=f"story for rank {rank}")
+            row.full_story = _build_full_story(
+                filtered_cluster, cluster_claims, summary, facts,
+                issue_source_text, _locate,
+            )
+            if row.full_story:
+                stories_built += 1
+
         issues_created += 1
 
     # Flush to assign IDs to newly inserted rows, then mark them as touched.
@@ -4969,33 +4704,7 @@ def _run_refresh(db: Session) -> int:
         except Exception:
             logger.exception("Bluesky posting failed (non-fatal)")
 
-    # Stage 5: Generate full stories for issues that don't have one yet.
-    # Runs every refresh (not gated on issues_created) so that stories missed
-    # due to LLM timeouts or concurrent refreshes get filled in on the next cycle.
-    story_issues = (
-        db.query(ActionIssue)
-        .filter(ActionIssue.date == today, ActionIssue.is_current == True,  # noqa: E712
-                ActionIssue.full_story.is_(None),
-                # A full-length narrative implies more depth than a
-                # primary-source-only draft has — skip until promoted.
-                ActionIssue.status != ActionIssueStatus.DEVELOPING)
-        .order_by(ActionIssue.rank)
-        .all()
-    )
-    _stories_total = len(story_issues)
-    _stories_done = 0
-    _set_refresh_state(stage="stories", stage_detail=f"0/{_stories_total}" if _stories_total else None)
-    for i, issue in enumerate(story_issues):
-        _set_refresh_state(stage_detail=f"{i + 1}/{_stories_total}")
-        try:
-            story = _generate_full_story(issue, db_session=db)
-            if story:
-                issue.full_story = story
-                _stories_done += 1
-                db.commit()
-        except Exception:
-            logger.exception("Full story generation failed for issue %s (non-fatal)", issue.id)
-    _set_refresh_state(last_stories_generated=_stories_done)
+    _set_refresh_state(last_stories_generated=stories_built)
 
     # Stage 6: Daily senator score spotlight + weekly civic summary
     _run_periodic_bluesky_posts(db)

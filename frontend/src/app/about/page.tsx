@@ -1343,8 +1343,14 @@ export default function AboutPage() {
                   article — who did something, and what they did — and the platform then checks that
                   both spans appear in the source word for word, that the source asserts one OF the
                   other rather than merely containing both, and that the span runs to the end of its
-                  clause. Only then is the sentence rendered. The headline is the top article&apos;s
-                  real headline; each fact carries the outlet it came from.
+                  clause. Only then is the sentence rendered, in the source&apos;s own words from
+                  who through what, including anything between them: leaving those words out once
+                  turned &ldquo;OpenAI agent made&rdquo; into &ldquo;OpenAI made&rdquo;. The headline is the top article&apos;s
+                  real headline; each fact carries the outlet it came from. An issue&apos;s full
+                  story is built the same way: every checked sentence from its articles, listed under
+                  the outlet that reported it. A model used to write that story from the facts, and
+                  it once described a relationship no source stated and gave a House member the wrong
+                  office. Those stories were removed.
                 </P>
                 <P>
                   This replaced asking a model to write neutrally and then checking whether it had.
@@ -1367,7 +1373,8 @@ export default function AboutPage() {
                   goes ten minutes unrenewed is released. A claim used to last four hours whether or
                   not its run was still alive, so a deploy that stopped a refresh partway through
                   silenced the next four. On 26 September 2026, a day of steady deploys, that kept
-                  every refresh from running and no issue was published. The renewal itself then
+                  every refresh from running and no issue was published. A deploy now also waits for
+                  a refresh already under way, up to a limit, rather than stopping it. The renewal itself then
                   failed for most of each run, because the refresh held the database&rsquo;s single write
                   slot open across its model calls; it now saves each write before the next call, so
                   the renewal and every other writer get a turn.
