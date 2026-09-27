@@ -56,6 +56,11 @@ record for its page, any bill, at `/api/bills/{id}/record`
 and `/congress/bills/{id}` any bill's page, whose vote panel loads one roll
 call's members at a time. `/bills` and `/bills/:id` redirect permanently.
 
+**Bluesky.** After each sync run, `analyze/congress_bluesky.py` posts the most
+recent session day whose record the Digest has made final, if it is from the
+last three days and not already posted: the day report's sentence and the
+passed bills' numbers (never titles), linking to `/congress/{date}`.
+
 **Bill ids** are the site's (`S.3257`, `HCONRES.89`) whichever spelling the
 source used: the Record's "H. Con. Res. 89", the House roll call's
 "H CON RES 89", the Senate log's "H.Con.Res. 89".
