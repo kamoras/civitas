@@ -132,14 +132,14 @@ class TestResetGuard:
         from app.background import WritesHeld, start_writer
         from app.pipeline import lease
         from app.pipeline.analyze import action_center
-        from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
+        from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock_why
 
         monkeypatch.setattr(action_center, "_run_refresh", lambda db: 7)
         during = {}
 
         def wipe():
             # What another process's pipeline or refresh meets mid-wipe.
-            during["pipeline_started"] = acquire_pipeline_lock(db_session, models.HousePipelineRun, STALE_PIPELINE_TIMEOUT) is not None
+            during["pipeline_started"] = acquire_pipeline_lock_why(db_session, models.HousePipelineRun, STALE_PIPELINE_TIMEOUT)[0] is not None
             during["refresh_ran"] = action_center.refresh_action_issues(db_session) == 7
             try:
                 start_writer(lambda: None, name="test-late")
@@ -177,22 +177,22 @@ class TestYieldingToAReset:
 
     def test_a_pipeline_backs_out_leaving_no_run_row(self, db_session):
         from app.pipeline import lease
-        from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
+        from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock_why
 
         assert lease.acquire(db_session, lease.DATA_RESET) is not None
-        assert acquire_pipeline_lock(db_session, models.HousePipelineRun, STALE_PIPELINE_TIMEOUT) is None
+        assert acquire_pipeline_lock_why(db_session, models.HousePipelineRun, STALE_PIPELINE_TIMEOUT)[0] is None
         assert db_session.query(models.HousePipelineRun).count() == 0
 
     def test_a_locked_database_is_busy_not_a_crash(self, db_session, monkeypatch):
         from sqlalchemy.exc import OperationalError
 
-        from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
+        from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock_why
 
         def locked():
             raise OperationalError("INSERT", {}, Exception("database is locked"))
 
         monkeypatch.setattr(db_session, "flush", locked)
-        assert acquire_pipeline_lock(db_session, models.HousePipelineRun, STALE_PIPELINE_TIMEOUT) is None
+        assert acquire_pipeline_lock_why(db_session, models.HousePipelineRun, STALE_PIPELINE_TIMEOUT)[0] is None
 
     def test_a_lease_yields_without_committing_its_row(self, db_session):
         from app.pipeline import lease
@@ -237,12 +237,17 @@ def test_startup_clears_a_senate_run_nobody_holds(db_session, monkeypatch):
 
 
 class TestLease:
-    def test_a_holder_of_the_lock_it_stands_for_takes_the_lease_over(self, db_session):
-        from app.pipeline import lease
+    def test_a_live_holder_is_never_replaced_and_a_stale_one_is(self, db_session):
+        from datetime import timedelta
 
-        assert lease.acquire(db_session, lease.SENATE_RUN) is not None       # a dead run's, still fresh
-        assert lease.acquire(db_session, lease.SENATE_RUN) is None
-        assert lease.acquire(db_session, lease.SENATE_RUN, take_over=True) is not None
+        from app.pipeline import lease
+        from app.time_utils import utcnow
+
+        assert lease.acquire(db_session, lease.SENATE_RUN) is not None
+        assert lease.acquire(db_session, lease.SENATE_RUN) is None  # live: refused
+        db_session.query(models.ApiCache).update({"cached_at": utcnow() - timedelta(minutes=11)})
+        db_session.commit()
+        assert lease.acquire(db_session, lease.SENATE_RUN) is not None  # its beats stopped: replaced
 
     def test_the_resets_lease_outlasts_an_unbeaten_wipe(self, db_session):
         from datetime import timedelta
@@ -513,7 +518,7 @@ def test_a_run_finishing_during_the_orphan_check_keeps_its_status(db_session, mo
         return False
 
     monkeypatch.setattr(lease, "held", finishes_meanwhile)
-    main._mark_orphaned_senate_runs()
+    main._check_orphaned_senate_runs()
     db_session.expire_all()
     assert db_session.query(models.PipelineRun).one().status == "completed"
 

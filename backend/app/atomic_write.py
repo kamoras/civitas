@@ -47,7 +47,9 @@ def write_text_atomic(path: str | os.PathLike, text: str) -> None:
     Raises OSError as a plain write would; nothing is left behind on
     failure."""
     path = os.fspath(path)
-    tmp = os.path.join(os.path.dirname(os.path.abspath(path)), f".{os.path.basename(path)}.{uuid.uuid4().hex}.tmp")
+    directory, name = os.path.dirname(os.path.abspath(path)), os.path.basename(path)
+    _sweep_leftovers(directory, name)
+    tmp = os.path.join(directory, f".{name}.{uuid.uuid4().hex}.tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)  # umask applies, as for open(path, "w")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
@@ -65,6 +67,30 @@ def write_text_atomic(path: str | os.PathLike, text: str) -> None:
         except OSError:
             pass
         raise
+
+
+# A temp file this old beside its target is a write that never finished —
+# its process was killed between creating it and the rename — not one in
+# flight (a write takes milliseconds to seconds).
+_LEFTOVER_AFTER_S = 3600
+
+
+def _sweep_leftovers(directory: str, name: str) -> None:
+    """Remove a killed writer's temp files for `name`, so they don't pile up
+    on the data volume across deploys."""
+    prefix, cutoff = f".{name}.", time.time() - _LEFTOVER_AFTER_S
+    try:
+        entries = os.listdir(directory)
+    except OSError:
+        return
+    for entry in entries:
+        if entry.startswith(prefix) and entry.endswith(".tmp"):
+            leftover = os.path.join(directory, entry)
+            try:
+                if os.stat(leftover).st_mtime < cutoff:
+                    os.unlink(leftover)
+            except OSError:
+                pass
 
 
 def update_json_file(

@@ -10,7 +10,6 @@ process_issues_for_bluesky tests.
 from datetime import timedelta
 from unittest.mock import patch
 
-import pytest
 from sqlalchemy.orm import sessionmaker
 
 from app.models import Candidate, Race, RaceCoverageItem
@@ -274,123 +273,6 @@ class TestPostRaceCoverageUpdates:
         assert posted == 1
         mock_publish.assert_called_once()
 
-    def test_an_item_another_pass_claimed_is_not_posted_again(self, db_session, monkeypatch):
-        """Two passes that read the same batch: only the one whose claim
-        finds the item still unconsidered posts it."""
-        _creds(monkeypatch)
-        _stub_relevance(monkeypatch)
-        _race(db_session)
-        _candidate(db_session)
-        item = _item(db_session)
-        db_session.commit()
-
-        other = sessionmaker(bind=db_session.get_bind())()
-        real_cooled = election_bluesky._races_posted_recently
-        claimed_elsewhere = []
-
-        def claim_meanwhile(db):
-            # Runs just after this pass read its batch: the other pass
-            # claims the item now.
-            other.query(RaceCoverageItem).update({"bsky_posted_at": election_bluesky.utcnow()})
-            other.commit()
-            claimed_elsewhere.append(True)
-            return real_cooled(db)
-
-        monkeypatch.setattr(election_bluesky, "_races_posted_recently", claim_meanwhile)
-        with patch.object(election_bluesky, "_generate_post_text", return_value="A grounded sentence."), \
-             patch.object(election_bluesky, "_publish", return_value=True) as mock_publish:
-            posted = election_bluesky.post_race_coverage_updates(db_session)
-        other.close()
-
-        assert claimed_elsewhere and posted == 0
-        mock_publish.assert_not_called()
-        assert item.bsky_posted is False
-
-    def test_another_pass_posting_for_the_race_meanwhile_holds_this_one_off(self, db_session, monkeypatch):
-        """The cooldown and the daily budget are checked again in the same
-        update that reserves the post, not only when the pass read them."""
-        _creds(monkeypatch)
-        _stub_relevance(monkeypatch)
-        _race(db_session)
-        _candidate(db_session)
-        _item(db_session, url="https://apnews.com/mine")
-        db_session.commit()
-
-        other = sessionmaker(bind=db_session.get_bind())()
-
-        real_roster_fact = election_bluesky._roster_fact
-
-        def posted_meanwhile(*args):
-            # While this pass checks its item (past its cooldown read),
-            # another pass publishes a different item about the same race.
-            other.add(RaceCoverageItem(
-                race_id="2026-SEN-GA", source_type="news", source_name="AP News", title="Other story",
-                url="https://apnews.com/theirs", summary="s", matched_candidate_id="S6GA001",
-                match_basis="full_name", bsky_posted=True, bsky_posted_at=election_bluesky.utcnow(),
-            ))
-            other.commit()
-            return real_roster_fact(*args)
-
-        monkeypatch.setattr(election_bluesky, "_roster_fact", posted_meanwhile)
-        with patch.object(election_bluesky, "_generate_post_text", return_value="A grounded sentence.") as gen, \
-             patch.object(election_bluesky, "_publish", return_value=True) as mock_publish:
-            posted = election_bluesky.post_race_coverage_updates(db_session)
-        other.close()
-        gen.assert_not_called()  # refused before the LLM was asked
-        assert posted == 0
-        mock_publish.assert_not_called()
-        db_session.expire_all()
-        mine = db_session.query(RaceCoverageItem).filter_by(url="https://apnews.com/mine").one()
-        assert mine.bsky_posted_at is None and not mine.bsky_posted  # back for the next run
-
-    def test_a_failure_composing_the_post_releases_its_reservation(self, db_session, monkeypatch):
-        _creds(monkeypatch)
-        _stub_relevance(monkeypatch)
-        _race(db_session)
-        _candidate(db_session)
-        item = _item(db_session)
-        db_session.commit()
-
-        with patch.object(election_bluesky, "_generate_post_text", side_effect=RuntimeError("compose broke")), \
-             pytest.raises(RuntimeError, match="compose broke"):
-            election_bluesky.post_race_coverage_updates(db_session)
-        db_session.expire_all()
-        assert db_session.get(RaceCoverageItem, item.id).bsky_posted is False  # no slot, no cooldown held
-
-    def test_a_pass_whose_budget_is_spent_leaves_the_rest_unconsidered(self, db_session, monkeypatch):
-        """They wait for the next run rather than being burned unposted."""
-        _creds(monkeypatch)
-        _stub_relevance(monkeypatch)
-        monkeypatch.setattr(election_bluesky, "MAX_POSTS_PER_DAY", 1)
-        for i in range(3):
-            race_id = f"2026-SEN-R{i}"
-            _race(db_session, race_id=race_id, state="GA")
-            _candidate(db_session, cand_id=f"C{i}", race_id=race_id)
-            _item(db_session, race_id=race_id, url=f"https://apnews.com/b{i}", matched_candidate_id=f"C{i}")
-        db_session.commit()
-
-        with patch.object(election_bluesky, "_generate_post_text", return_value="A grounded sentence."), \
-             patch.object(election_bluesky, "_publish", return_value=True):
-            assert election_bluesky.post_race_coverage_updates(db_session) == 1
-        db_session.expire_all()
-        assert db_session.query(RaceCoverageItem).filter(RaceCoverageItem.bsky_posted_at.is_(None)).count() == 2
-
-    def test_no_item_is_started_past_the_deadline(self, db_session, monkeypatch):
-        import time
-
-        _creds(monkeypatch)
-        _stub_relevance(monkeypatch)
-        _race(db_session)
-        _candidate(db_session)
-        item = _item(db_session)
-        db_session.commit()
-
-        with patch.object(election_bluesky, "_publish", return_value=True) as mock_publish:
-            posted = election_bluesky.post_race_coverage_updates(db_session, deadline=time.monotonic() - 1)
-        assert posted == 0
-        mock_publish.assert_not_called()
-        assert item.bsky_posted_at is None  # left for the next run
-
     def test_considered_marker_committed_before_publish(self, db_session, monkeypatch):
         """At-most-once for a public account: the considered marker must be
         durable BEFORE the publish attempt, so a failed/crashed publish can
@@ -577,3 +459,22 @@ class TestOnlyVettedSourcesArePosted:
 
         assert eb.post_race_coverage_updates(db_session) == 1
         assert published == ["some sentence."]
+
+
+def test_no_item_is_started_past_the_deadline(db_session, monkeypatch):
+    """Where the coverage guards stop holding (lease.deadline): the loop
+    never awaits, so it stops itself, leaving the rest for the next run."""
+    import time
+
+    _creds(monkeypatch)
+    _stub_relevance(monkeypatch)
+    _race(db_session)
+    _candidate(db_session)
+    item = _item(db_session)
+    db_session.commit()
+
+    with patch.object(election_bluesky, "_publish", return_value=True) as mock_publish:
+        posted = election_bluesky.post_race_coverage_updates(db_session, deadline=time.monotonic() - 1)
+    assert posted == 0
+    mock_publish.assert_not_called()
+    assert item.bsky_posted_at is None

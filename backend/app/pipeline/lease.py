@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 # The admin data reset's lease (api/admin.py). Every other writer holds a lock
 # of its own — a pipeline's run lock, or one of the leases below — and checks
 # this inside that lock's own insert, before committing (acquire's
-# `yield_to`, run_tracker.acquire_pipeline_lock); the reset checks theirs
+# `yield_to`, run_tracker.acquire_pipeline_lock_why); the reset checks theirs
 # only after committing this one. Each writes its claim before reading the
 # other's, and SQLite serializes writers, so at least one of any two sees the
 # other. A job that yields just rolls back: backing out writes nothing.
@@ -72,7 +72,7 @@ STALE_S = 10 * 60
 # The reset's wipe is one transaction: its own heartbeat can't write until
 # it commits, so its lease must outlast the wipe unbeaten — a few table
 # deletes, well inside this. A reset whose process died holds writers off
-# this long, and each it holds off says so (run_tracker.acquire_pipeline_lock).
+# this long, and each it holds off says so (run_tracker.acquire_pipeline_lock_why).
 _STALE_S_BY_TIER = {DATA_RESET: 30 * 60}
 
 
@@ -118,15 +118,14 @@ def max_hold(tier: str) -> timedelta:
 
 
 def acquire(
-    db: Session, tier: str, *, yield_to: str | None = None, take_over: bool = False, who: str | None = None,
+    db: Session, tier: str, *, yield_to: str | None = None, who: str | None = None,
 ) -> str | None:
     """Take the lease; the holder's token, or None when it is held — or, with
     `yield_to`, when that lease is held once this one's row is in (checked
     before committing, so yielding just rolls back; see DATA_RESET), or when
     the database stays locked past the busy timeout (a writer holding it:
-    busy, not a failure). `take_over` replaces a live holder's row: for a
-    caller that already holds the lock the lease stands for, whose previous
-    holder must therefore be dead. `who` names the holder to anyone it
+    busy, not a failure). A holder's row that has gone stale is replaced;
+    a live one never is. `who` names the holder to anyone it
     refuses (lease.holder): the tier's job, by default — a job some other
     run also does a step of (the nightly election run's ballot step) says so.
     """
@@ -135,10 +134,9 @@ def acquire(
     now = utcnow()
     token = uuid.uuid4().hex
     try:
-        stale = db.query(ApiCache).filter(ApiCache.tier == tier, ApiCache.cache_key == "lock")
-        if not take_over:
-            stale = stale.filter(ApiCache.cached_at < now - stale_after(tier))
-        stale.delete()
+        db.query(ApiCache).filter(
+            ApiCache.tier == tier, ApiCache.cache_key == "lock", ApiCache.cached_at < now - stale_after(tier),
+        ).delete()
         row = {"holder": token, "who": who or TIERS[tier]}
         db.add(ApiCache(tier=tier, cache_key="lock", data_json=json.dumps(row), cached_at=now))
         db.flush()
@@ -267,8 +265,8 @@ class _Held:
         self.heartbeat.start()
 
 
-def _take(db: Session, tier: str, yield_to: str | None, take_over: bool, who: str | None = None) -> _Held | None:
-    token = acquire(db, tier, yield_to=yield_to, take_over=take_over, who=who)
+def _take(db: Session, tier: str, yield_to: str | None, who: str | None = None) -> _Held | None:
+    token = acquire(db, tier, yield_to=yield_to, who=who)
     return _Held(db, tier, token) if token is not None else None
 
 
@@ -282,12 +280,12 @@ def _let_go(held_lease: _Held) -> None:
 
 @contextmanager
 def holding(
-    db: Session, tier: str, *, yield_to: str | None = None, take_over: bool = False, who: str | None = None,
+    db: Session, tier: str, *, yield_to: str | None = None, who: str | None = None,
 ) -> Iterator[str | None]:
     """Hold the lease for the enclosed work, beating it throughout (for its
     tier's max_hold, see _keep); yields the token, or None (and holds
     nothing) when acquire refused."""
-    held_lease = _take(db, tier, yield_to, take_over, who)
+    held_lease = _take(db, tier, yield_to, who)
     if held_lease is None:
         yield None
         return
@@ -392,7 +390,7 @@ class _Taking:
 
         db = SessionLocal()
         try:
-            held_lease = _take(db, self.tier, DATA_RESET, False, self.who)
+            held_lease = _take(db, self.tier, DATA_RESET, self.who)
             result = (db, held_lease, None if held_lease is not None else refusal(db, self.tier))
         except BaseException:
             db.close()

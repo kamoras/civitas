@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 _RunModel = TypeVar("_RunModel")
 
-# Shared stale-run threshold for acquire_pipeline_lock's callers other than
+# Shared stale-run threshold for acquire_pipeline_lock_why's callers other than
 # Senate (which keeps its own STALE_PIPELINE_TIMEOUT_S in senate_pipeline.py —
 # same 12h value, not re-derived from this constant, to avoid disturbing
 # that module's existing behavior for an unrelated refactor). 12h matches
@@ -40,7 +40,7 @@ def run_tables() -> dict[str, type]:
 def run_in_progress(db: Session, model: type[_RunModel], stale_timeout: timedelta = STALE_PIPELINE_TIMEOUT) -> bool:
     """Whether a `model` run is RUNNING and young enough to be real. A row
     older than `stale_timeout` is one a killed process left behind (the
-    same bar acquire_pipeline_lock clears it by), not a live run."""
+    same bar acquire_pipeline_lock_why clears it by), not a live run."""
     from app.models import PipelineStatus
 
     running = db.query(model).filter(model.status == PipelineStatus.RUNNING).first()
@@ -77,7 +77,7 @@ def acquire_pipeline_lock_why(
     lock, else a lease.refusal_code — a data reset holds the database, or it
     stayed busy — so the skip can say which.
 
-    Generalizes senate_pipeline.py's original _acquire_pipeline_lock
+    Generalizes senate_pipeline.py's original _acquire_pipeline_lock_why
     (2026-07) to House/Stock/Supplementary, which
     had no equivalent protection at all until 2026-07-23: no unique
     index (a real cross-container double-start race, not just a
@@ -155,14 +155,6 @@ def acquire_pipeline_lock_why(
         logger.warning("%s not started: the database is locked by another writer", model.__name__)
         return None, lease.REFUSED_BUSY
     return run, None
-
-
-def acquire_pipeline_lock(db: Session, model: type[_RunModel], stale_timeout: timedelta) -> "_RunModel | None":
-    """acquire_pipeline_lock_why without the reason."""
-    return acquire_pipeline_lock_why(db, model, stale_timeout)[0]
-
-
-
 
 
 class PipelineRunTracker:

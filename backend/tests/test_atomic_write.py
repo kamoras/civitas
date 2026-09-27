@@ -122,3 +122,17 @@ def test_a_writer_holding_the_lock_too_long_is_a_lock_timeout(workdir, monkeypat
         with pytest.raises(atomic_write.LockTimeout, match="stayed locked"):
             update_json_file(target, lambda known: known)
     assert not issubclass(atomic_write.LockTimeout, OSError)
+
+
+def test_a_killed_writers_temp_file_is_swept_up(workdir):
+    """Left behind by a process killed mid-write; not one still in flight."""
+    import time
+
+    target = workdir / "dates.json"
+    old, fresh = workdir / ".dates.json.dead.tmp", workdir / ".dates.json.live.tmp"
+    old.write_text("{")
+    fresh.write_text("{")
+    an_hour_ago = time.time() - 2 * 3600
+    os.utime(old, (an_hour_ago, an_hour_ago))
+    write_text_atomic(target, "{}")
+    assert not old.exists() and fresh.exists()

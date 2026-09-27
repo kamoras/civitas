@@ -117,7 +117,7 @@ def _other_pipeline_running(db: Session) -> bool:
     Confirmed live: this is what left stock-trades data stale for 4+
     days after a since-fixed deploy-race incident. A row this old is
     treated as dead, not as "still running" — same STALE_PIPELINE_TIMEOUT
-    bar acquire_pipeline_lock uses to actually clear these rows, so this
+    bar acquire_pipeline_lock_why uses to actually clear these rows, so this
     check and the thing that eventually cleans them up agree on what
     "stuck" means.
     """

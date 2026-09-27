@@ -85,20 +85,25 @@ def _invalidate_orphaned_pipelines() -> None:
     finishes the run, or dies and its lease goes stale — and decide then.
     """
     from app.pipeline import lease
+    from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT
 
-    if _mark_orphaned_senate_runs() is lease.SENATE_RUN:
+    if _check_orphaned_senate_runs():
         def _watch() -> None:
             import time
 
-            while _mark_orphaned_senate_runs() is lease.SENATE_RUN:
+            # Past the run lock's own stale window a Senate run clears the
+            # row itself (run_tracker.acquire_pipeline_lock_why): no need to.
+            give_up = time.monotonic() + STALE_PIPELINE_TIMEOUT.total_seconds()
+            while time.monotonic() < give_up and _check_orphaned_senate_runs():
                 time.sleep(lease.BEAT_S)
 
         start_writer(_watch, name="orphaned-senate-run-watch")
 
 
-def _mark_orphaned_senate_runs():
-    """One check: marks orphaned rows stale and returns None, or returns
-    lease.SENATE_RUN while a live run holds that lease."""
+def _check_orphaned_senate_runs() -> bool:
+    """One check: marks orphaned rows stale. True when it should be checked
+    again later — a live run holds the lease, or the check itself failed (a
+    locked database is no reason to leave a dead run's row RUNNING)."""
     from app.database import SessionLocal
     from app.models import PipelineRun, PipelineStatus
     from app.pipeline import lease
@@ -112,9 +117,9 @@ def _mark_orphaned_senate_runs():
             PipelineRun.status == PipelineStatus.RUNNING,
         ).all()
         if not orphaned:
-            return None
+            return False
         if lease.held(db, lease.SENATE_RUN):
-            return lease.SENATE_RUN
+            return True
         # Conditional on the row still RUNNING: a run that finished between
         # the reads above (its lease let go after its row was final) keeps
         # the status it wrote.
@@ -134,10 +139,11 @@ def _mark_orphaned_senate_runs():
                 "Invalidated orphaned pipeline run #%d (started %s)", run.id, run.started_at,
             )
     except Exception as e:
-        logging.getLogger("app.main").warning("Orphan pipeline cleanup failed: %s", e)
+        logging.getLogger("app.main").warning("Orphan pipeline cleanup failed (checking again): %s", e)
+        return True
     finally:
         db.close()
-    return None
+    return False
 
 
 PROCESS_STARTED_AT: str | None = None

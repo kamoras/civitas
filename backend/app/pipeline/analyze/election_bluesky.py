@@ -32,12 +32,11 @@ conservative at the 15-minute election-season cadence, 96 runs/day):
   - one post per race per RACE_COOLDOWN_HOURS.
 """
 
-import time
 import logging
+import time
 from datetime import timedelta
 
-from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import Candidate, Race, RaceCoverageItem
@@ -271,71 +270,6 @@ def _races_posted_recently(db: Session) -> set[str]:
     return {r[0] for r in rows}
 
 
-_REFUSED_RACE, _REFUSED_BUDGET = "race", "budget"
-
-
-def _reserve_post(db: Session, item: RaceCoverageItem) -> str | None:
-    """Mark `item` published before publishing it — only if its race is out
-    of cooldown and the day's budget has room, checked in the same
-    conditional update, so passes running at once can't both post about one
-    race or both take the day's last slot (_races_posted_recently and
-    _posts_in_last_day, read once per pass, are only what it plans from).
-    At most once: a failed publish is released (_release_post). None when
-    reserved; else why not (_REFUSED_RACE or _REFUSED_BUDGET), read in the
-    same transaction as the refused update, so a release by another pass
-    in between can't change the answer."""
-    other = aliased(RaceCoverageItem)
-    now = utcnow()
-    race_recent = (
-        select(other.id)
-        .where(
-            other.race_id == item.race_id,
-            other.bsky_posted.is_(True),
-            other.bsky_posted_at >= now - timedelta(hours=RACE_COOLDOWN_HOURS),
-        )
-        .exists()
-    )
-    posted_today = (
-        select(func.count(other.id))
-        .where(other.bsky_posted.is_(True), other.bsky_posted_at >= now - timedelta(hours=24))
-        .scalar_subquery()
-    )
-    reserved = (
-        db.query(RaceCoverageItem)
-        .filter(
-            RaceCoverageItem.id == item.id,
-            or_(RaceCoverageItem.bsky_posted.is_(False), RaceCoverageItem.bsky_posted.is_(None)),
-            ~race_recent,
-            posted_today < MAX_POSTS_PER_DAY,
-        )
-        .update({"bsky_posted": True}, synchronize_session=False)
-    )
-    why = None
-    if reserved != 1:
-        # Still inside the update's write transaction: nothing has changed.
-        budget_spent = db.query(posted_today).scalar() >= MAX_POSTS_PER_DAY
-        why = _REFUSED_BUDGET if budget_spent else _REFUSED_RACE
-    db.commit()
-    return why
-
-
-def _release_post(db: Session, item: RaceCoverageItem) -> None:
-    """A reserved post that didn't publish: it counts toward nothing."""
-    db.query(RaceCoverageItem).filter(RaceCoverageItem.id == item.id).update(
-        {"bsky_posted": False}, synchronize_session=False,
-    )
-    db.commit()
-
-
-def _unclaim(db: Session, item: RaceCoverageItem) -> None:
-    """Hand back a claimed item nothing was attempted for (its reservation
-    was refused): the next run considers it again."""
-    db.query(RaceCoverageItem).filter(RaceCoverageItem.id == item.id).update(
-        {"bsky_posted_at": None}, synchronize_session=False,
-    )
-    db.commit()
-
-
 def _drain_stale_unconsidered(db: Session) -> int:
     """Mark never-considered items older than CONSIDER_MAX_AGE_HOURS as
     considered-without-posting so the eligible pool stays bounded."""
@@ -360,10 +294,13 @@ def post_race_coverage_updates(db: Session, *, deadline: float | None = None) ->
     next run doesn't re-evaluate it; actually-published items additionally
     set bsky_posted (the daily budget counts only those).
 
-    `deadline` (time.monotonic()) is where the caller's guards stop holding
-    (lease.deadline): no item is started past it. This loop never awaits, so
-    nothing else can stop it there; each item is bounded (the LLM and
-    Bluesky calls time out), so it ends within one item of the deadline.
+    One pass at a time: both callers hold the coverage refresh's lease and
+    tracker (lease.tracked_job), which hold for lease.max_hold. `deadline`
+    (time.monotonic(), from lease.deadline) is where they stop holding: no
+    item is started past it. This loop never awaits, so the cut-off at
+    max_hold can't stop it; each item is bounded (the LLM and Bluesky calls
+    time out), so it ends within one item of the deadline — inside the
+    lease's stale window, before another pass could start.
     """
     if not getattr(settings, "BSKY_HANDLE", "") or not getattr(settings, "BSKY_APP_PASSWORD", ""):
         return 0
@@ -397,33 +334,20 @@ def post_race_coverage_updates(db: Session, *, deadline: float | None = None) ->
     cooled_down = _races_posted_recently(db)
 
     posted = 0
-    # Races another pass holds a reservation for: their items are left
-    # unconsidered, as that reservation may yet be released.
-    held_elsewhere: set[str] = set()
     for item in candidates:
         if deadline is not None and time.monotonic() >= deadline:
             logger.warning("Election coverage posting stopped at its deadline — the rest wait for the next run")
             break
-        if posted >= budget:
-            break  # the rest wait for the next run, unconsidered
-        if item.race_id in held_elsewhere:
-            continue
         race = races_by_id.get(item.race_id)
         # Considered either way — and COMMITTED before any publish attempt:
         # a crash between publish and commit must not re-post the same item
         # on the next run (at-most-once beats at-least-once for a public
-        # account; 2026-07 review B3). Claimed, not just marked: only the
-        # pass whose update finds it still unconsidered goes on, so two
-        # passes that read the same batch can't both post it.
-        claimed = (
-            db.query(RaceCoverageItem)
-            .filter(RaceCoverageItem.id == item.id, RaceCoverageItem.bsky_posted_at.is_(None))
-            .update({"bsky_posted_at": utcnow()}, synchronize_session=False)
-        )
+        # account; 2026-07 review B3).
+        item.bsky_posted_at = utcnow()
         db.commit()
-        if not claimed:
-            continue
         if race is None:
+            continue
+        if posted >= budget:
             continue
         if item.race_id in cooled_down:
             logger.info(
@@ -443,31 +367,13 @@ def post_race_coverage_updates(db: Session, *, deadline: float | None = None) ->
         roster_fact = _roster_fact(item, race, db)
         if roster_fact is None:
             continue
-
-        # Reserved before the LLM is asked for anything: a pass that can't
-        # post this (another pass holds the race, or the day's last slot)
-        # spends nothing finding that out. Nor does the item: it goes back
-        # unconsidered, as another pass's reservation may yet be released —
-        # the race's other items with it, and on the budget, the rest.
-        refused = _reserve_post(db, item)
-        if refused is not None:
-            _unclaim(db, item)
-            if refused == _REFUSED_BUDGET:
-                logger.info("Election coverage posting stopped — other passes hold the day's budget")
-                break
-            # Held or already made — a reservation and a post look alike; if
-            # it was made, the next run's cooldown read retires these items.
-            logger.info("Skipping race %s this run — another pass has reserved or made a post for it", race.id)
-            held_elsewhere.add(item.race_id)
+        text = _generate_post_text(item, race, roster_fact)
+        if not text:
             continue
-        published = False
-        try:
-            text = _generate_post_text(item, race, roster_fact)
-            published = bool(text) and _publish(text, race)
-        finally:
-            if not published:
-                _release_post(db, item)
-        if published:
+
+        if _publish(text, race):
+            item.bsky_posted = True
+            db.commit()
             cooled_down.add(item.race_id)
             posted += 1
 

@@ -220,7 +220,7 @@ class TestAcquirePipelineLock:
 
 
 class TestAcquirePipelineLockGeneric:
-    """run_tracker.acquire_pipeline_lock (2026-07-23) — the generalized
+    """run_tracker.acquire_pipeline_lock_why (2026-07-23) — the generalized
     version of senate_pipeline's own lock, extended to House/Stock/
     Supplementary, which had no lock at all before this (not even the
     check-then-insert Senate had pre-O15) — confirmed live as the root
@@ -235,26 +235,26 @@ class TestAcquirePipelineLockGeneric:
 
     def test_acquires_when_free_and_blocks_second_caller(self, db_session):
         from app.models import HousePipelineRun
-        from app.pipeline.run_tracker import acquire_pipeline_lock
+        from app.pipeline.run_tracker import acquire_pipeline_lock_why
 
-        run = acquire_pipeline_lock(db_session, HousePipelineRun, timedelta(hours=12))
+        run = acquire_pipeline_lock_why(db_session, HousePipelineRun, timedelta(hours=12))[0]
         assert run is not None
         assert run.status == PipelineStatus.RUNNING
-        assert acquire_pipeline_lock(db_session, HousePipelineRun, timedelta(hours=12)) is None
+        assert acquire_pipeline_lock_why(db_session, HousePipelineRun, timedelta(hours=12))[0] is None
 
     def test_stale_row_is_auto_cleared_and_fresh_lock_acquired(self, db_session):
         # The core regression fix: a row orphaned by a killed process
         # (container restart mid-run) must not block this pipeline
         # forever — only Senate had this auto-clear before 2026-07-23.
         from app.models import HousePipelineRun
-        from app.pipeline.run_tracker import acquire_pipeline_lock
+        from app.pipeline.run_tracker import acquire_pipeline_lock_why
 
         stale = HousePipelineRun(started_at=utcnow() - timedelta(hours=13), status=PipelineStatus.RUNNING)
         db_session.add(stale)
         db_session.commit()
         stale_id = stale.id
 
-        run = acquire_pipeline_lock(db_session, HousePipelineRun, timedelta(hours=12))
+        run = acquire_pipeline_lock_why(db_session, HousePipelineRun, timedelta(hours=12))[0]
         assert run is not None
         assert run.id != stale_id
 
@@ -264,13 +264,13 @@ class TestAcquirePipelineLockGeneric:
 
     def test_fresh_row_within_timeout_is_not_cleared_and_blocks(self, db_session):
         from app.models import HousePipelineRun
-        from app.pipeline.run_tracker import acquire_pipeline_lock
+        from app.pipeline.run_tracker import acquire_pipeline_lock_why
 
         fresh = HousePipelineRun(started_at=utcnow() - timedelta(hours=1), status=PipelineStatus.RUNNING)
         db_session.add(fresh)
         db_session.commit()
 
-        assert acquire_pipeline_lock(db_session, HousePipelineRun, timedelta(hours=12)) is None
+        assert acquire_pipeline_lock_why(db_session, HousePipelineRun, timedelta(hours=12))[0] is None
         unchanged = db_session.query(HousePipelineRun).one()
         assert unchanged.status == PipelineStatus.RUNNING
 
@@ -278,7 +278,7 @@ class TestAcquirePipelineLockGeneric:
         from sqlalchemy.exc import IntegrityError
 
         from app.models import HousePipelineRun
-        from app.pipeline.run_tracker import acquire_pipeline_lock
+        from app.pipeline.run_tracker import acquire_pipeline_lock_why
 
         real_commit = db_session.commit
         calls = {"n": 0}
@@ -290,7 +290,7 @@ class TestAcquirePipelineLockGeneric:
             return real_commit()
 
         monkeypatch.setattr(db_session, "commit", racing_commit)
-        assert acquire_pipeline_lock(db_session, HousePipelineRun, timedelta(hours=12)) is None
+        assert acquire_pipeline_lock_why(db_session, HousePipelineRun, timedelta(hours=12))[0] is None
 
 
 class TestEnsureIndexesCoversAllFourPipelineTables:

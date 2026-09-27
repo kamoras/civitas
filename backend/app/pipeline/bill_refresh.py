@@ -31,6 +31,7 @@ from sqlalchemy import and_, case, func, or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.config_definitions import BillStage
 from app.http_client import make_async_client
 from app.models import RepSponsoredBill, SponsoredBill
 from app.pipeline.analyze.bill_stage import (
@@ -68,7 +69,7 @@ _MAX_ACTION_FETCHES = 500
 
 _tracker = PipelineRunTracker()
 
-_ENACTED = str(classify_bill_stage_from_actions([], is_law=True))
+_ENACTED = str(BillStage.ENACTED)
 
 
 def bill_tracker() -> PipelineRunTracker:
@@ -140,21 +141,27 @@ async def _fetch_fresh_actions(
 
 
 def _supersedes(new_date: str, stored_date: str | None, makes_law: bool = False) -> bool:
-    """Whether a listing's latest action may replace the stored one: only
-    one dated strictly after it, or anything over a row with no date. Not
-    one on the same day — the listing can lag a later action that day the
-    nightly pipeline stored from the bill itself, and a date can't say which
-    came first (the nightly run settles it) — and not an undated one over a
-    dated row, which it can't be ordered against. Except that the "Became
-    Public/Private Law" action (`makes_law`) may replace any other action on
-    its own day: becoming law ends a bill's history, so nothing stored that
-    day came after it — and Congress.gov dates it the day the President
-    signed, often the day of the stored "Signed by President." action."""
+    """Whether a listing's latest action may replace the stored one on its
+    date alone: one dated strictly after it, or anything over a row with no
+    date — and not an undated one over a dated row, which it can't be
+    ordered against. On the stored action's own day a date can't say which
+    came first, and the listing can lag a later action that day the nightly
+    pipeline stored; there the bill's own history decides (_newest_action),
+    except for the "Became Public/Private Law" action (`makes_law`): it ends
+    a bill's history, so nothing stored that day came after it — and
+    Congress.gov dates it the day the President signed, often the day of the
+    stored "Signed by President." action."""
     if not stored_date:
         return True
     if not new_date:
         return False
     return new_date > stored_date or (makes_law and new_date == stored_date)
+
+
+def _newest_action(actions: list[dict]) -> str | None:
+    """The text of a bill's newest action, from its history (Congress.gov
+    lists it newest first, same-day actions in order), or None without one."""
+    return ((actions[0].get("text") or "").strip() or None) if actions else None
 
 
 async def _apply_updates(
@@ -174,7 +181,7 @@ async def _apply_updates(
 
     # Every write waits for the end of the pass and is applied in one go:
     # none holds SQLite's write lock across the fetches between them.
-    writes: list[tuple[type, int, str, str, bool, dict]] = []
+    writes: list[tuple[type, int, str, str, bool, str | None, dict]] = []
     for model in (SponsoredBill, RepSponsoredBill):
         rows = []
         for i in range(0, len(bill_ids), 500):  # stay under SQLite's bind-parameter limit
@@ -201,9 +208,10 @@ async def _apply_updates(
             # Not "and not row.is_law": a row read as law from its history
             # ("Signed by President.") still takes the same-day law number.
             makes_law = becomes_law and not became_law_action(row.latest_action)
-            if not _supersedes(new_date, row.latest_action_date, makes_law):
+            same_day = bool(new_date) and new_date == row.latest_action_date and not makes_law
+            if not same_day and not _supersedes(new_date, row.latest_action_date, makes_law):
                 # The listing can lag what the nightly pipeline stored from the
-                # bill itself: an action not dated after the stored one never
+                # bill itself: an action dated before the stored one never
                 # replaces it (see _supersedes).
                 continue
 
@@ -219,6 +227,10 @@ async def _apply_updates(
                     continue
                 actions = await _fetch_fresh_actions(db, client, congress, bill_type, number)
                 actions_cache[actions_key] = actions
+            if same_day and _newest_action(actions) != new_text.strip():
+                # A later action the same day, by the bill's own history — or
+                # no history to say: the stored one stands (_supersedes).
+                continue
             enacted = is_enacted(new_text, actions)
             # is_law is monotone: never un-set it.
             is_law = row.is_law or enacted
@@ -236,16 +248,24 @@ async def _apply_updates(
                 )
             # else: keep the stored stage — a failed/empty actions fetch
             # must not regress a real stage to the INTRODUCED fallback.
-            writes.append((model, row.id, row.bill_id, new_date, makes_law, values))
+            # A same-day write goes only over the action it was checked
+            # against: had the row moved since, the history said nothing
+            # about the action it holds now.
+            same_day_over = (row.latest_action or "") if same_day else None
+            writes.append((model, row.id, row.bill_id, new_date, makes_law, same_day_over, values))
 
-    for model, row_id, bill_id, new_date, makes_law, values in writes:
+    for model, row_id, bill_id, new_date, makes_law, same_day_over, values in writes:
         # _supersedes again at write time: the row may have moved on since it
         # was read (the nightly pipeline rewrites these). It rewrites them by
         # delete and insert, and SQLite can hand a deleted row's id to a new
         # one — the bill_id is what says it is still the same bill's row. A
         # row deleted since simply matches nothing.
         undated = or_(model.latest_action_date.is_(None), model.latest_action_date == "")
-        if not new_date:
+        if same_day_over is not None:
+            superseded = and_(
+                model.latest_action_date == new_date, func.coalesce(model.latest_action, "") == same_day_over,
+            )
+        elif not new_date:
             superseded = undated
         elif makes_law:
             # The same day, only over an action that isn't itself the law.

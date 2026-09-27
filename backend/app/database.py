@@ -562,7 +562,7 @@ def _ensure_indexes() -> None:
         # unbounded history of completed/failed/stale rows is unaffected.
         #
         # Applies to House, Stock, and Supplementary too, alongside a
-        # stale-row auto-clear (run_tracker.acquire_pipeline_lock) — a row
+        # stale-row auto-clear (run_tracker.acquire_pipeline_lock_why) — a row
         # orphaned by a killed process (a deploy restarting the container
         # mid-run) would otherwise stay "running" forever, silently
         # blocking every future run of that pipeline.

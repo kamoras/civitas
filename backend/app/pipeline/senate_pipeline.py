@@ -413,7 +413,7 @@ def _acquire_pipeline_lock(db: Session) -> "tuple[PipelineRun | None, str | None
     two containers hitting the same tick during a blue/green overlap
     both pass the check and both start a full pipeline run.
 
-    Thin wrapper over run_tracker.acquire_pipeline_lock, shared by
+    Thin wrapper over run_tracker.acquire_pipeline_lock_why, shared by
     House/Stock/Supplementary too so none of them need their own copy.
     """
     from app.pipeline.run_tracker import acquire_pipeline_lock_why

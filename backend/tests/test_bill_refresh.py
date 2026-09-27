@@ -113,6 +113,27 @@ class TestApplyUpdates:
         assert summary["changed"] == 0
         assert bill.latest_action == "Passed Senate."
 
+    def test_a_same_day_action_the_history_puts_last_is_applied(self, db_session, actions_stub):
+        """Several floor actions a day is normal: the bill's own history
+        (newest first) orders them, so the hourly pass needn't wait for the
+        nightly run — and a lagging listing is still refused."""
+        bill = _make_senate_bill(
+            db_session, latest_action="Motion to proceed agreed to.", latest_action_date="2026-07-20",
+        )
+        actions_stub.result = [
+            {"actionCode": "17000", "type": "Floor", "text": "Passed Senate."},
+            {"type": "Floor", "text": "Motion to proceed agreed to."},
+        ]
+        recent = {"S.100": _feed_item("S.100", "Passed Senate.", "2026-07-20")}
+        assert asyncio.run(bill_refresh._apply_updates(db_session, None, recent))["changed"] == 1
+        db_session.expire_all()
+        row = db_session.get(SponsoredBill, bill.id)
+        assert (row.latest_action, row.stage) == ("Passed Senate.", "PASSED_CHAMBER")
+
+        # The listing lags: the history's newest is what's stored.
+        recent = {"S.100": _feed_item("S.100", "Motion to proceed agreed to.", "2026-07-20")}
+        assert asyncio.run(bill_refresh._apply_updates(db_session, None, recent))["changed"] == 0
+
     def test_an_undated_listed_action_never_replaces_a_dated_one(self, db_session, actions_stub):
         bill = _make_senate_bill(db_session, latest_action="Passed Senate.", latest_action_date="2026-07-20")
         recent = {"S.100": _feed_item("S.100", "Something undated.", "")}
