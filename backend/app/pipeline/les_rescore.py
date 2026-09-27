@@ -43,27 +43,22 @@ def _bills(entity) -> list[dict]:
 def rescore_stale_legislative_effectiveness(session_factory) -> list[str]:
     """Rescore each chamber whose persisted LES reference predates the
     current scale. Returns the chambers rescored. Never raises."""
-    from app.models import HousePipelineRun, PipelineRun, PipelineStatus, Representative, Senator
+    from app.models import HousePipelineRun, PipelineRun, Representative, Senator
     from app.pipeline.analyze.population_reference import LES_REFERENCE
-    from app.pipeline.analyze.score_calculator import _calc_legislative_effectiveness
-    from app.pipeline.live_references import live_les_reference
+    from app.pipeline.analyze.score_calculator import _calc_legislative_effectiveness, derive_chamber_majority
+    from app.pipeline.live_references import measure_les_reference, sitting_president_party
+    from app.pipeline.run_tracker import run_in_progress
 
     stale = [c for c in ("senate", "house") if _needs_rescore(LES_REFERENCE.load().get(c))]
-    if not stale:
-        return []
-
     done: list[str] = []
-    db = session_factory()
-    try:
-        if any(
-            db.query(run).filter(run.status == PipelineStatus.RUNNING).first()
-            for run in (PipelineRun, HousePipelineRun)
-        ):
-            # A run in progress writes a fresh reference and scores itself.
-            logger.info("LES rescore skipped — a pipeline run is in progress")
-            return []
-        for chamber in stale:
-            model = Senator if chamber == "senate" else Representative
+    for chamber in stale:
+        model, run = (Senator, PipelineRun) if chamber == "senate" else (Representative, HousePipelineRun)
+        db = session_factory()
+        try:
+            if run_in_progress(db, run):
+                # A run in progress writes a fresh reference and scores itself.
+                logger.info("LES rescore (%s) skipped — a pipeline run is in progress", chamber)
+                continue
             rows = (
                 db.query(model)
                 .options(selectinload(model.sponsored_bills))
@@ -71,10 +66,12 @@ def rescore_stale_legislative_effectiveness(session_factory) -> list[str]:
                 .all()
             )
             members = [(_bills(r), r.caucus_party or r.party) for r in rows]
-            reference = live_les_reference(chamber, members, db)
-            if reference is None:
+            majority = derive_chamber_majority([p for _, p in members], chamber, sitting_president_party(db))
+            ref = measure_les_reference(chamber, members, majority)
+            if ref is None:
                 logger.warning("LES rescore (%s): too few members with bills to measure a reference", chamber)
                 continue
+            reference = {**LES_REFERENCE.load(), chamber: ref}
             for row, (bills, party) in zip(rows, members):
                 row.score_legislative_effectiveness = _calc_legislative_effectiveness(
                     bills,
@@ -86,11 +83,15 @@ def rescore_stale_legislative_effectiveness(session_factory) -> list[str]:
                     chamber=chamber,
                 )
             db.commit()
+            # Persisted only once the scores it describes are committed: a
+            # reference on the current scale is what marks the chamber done,
+            # so writing it first would strand the scores on a failure.
+            LES_REFERENCE.write(chamber, ref)
             done.append(chamber)
             logger.info("LES rescore (%s): %d members moved to the current reference", chamber, len(rows))
-    except Exception:
-        db.rollback()
-        logger.exception("LES rescore failed (non-fatal) — the next pipeline run rescores")
-    finally:
-        db.close()
+        except Exception:
+            db.rollback()
+            logger.exception("LES rescore (%s) failed (non-fatal) — retried next startup", chamber)
+        finally:
+            db.close()
     return done

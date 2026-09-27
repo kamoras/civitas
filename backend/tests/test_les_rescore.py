@@ -57,3 +57,39 @@ def test_skipped_while_a_pipeline_run_is_in_progress(db_session, pinned_populati
     db_session.add(PipelineRun(status=PipelineStatus.RUNNING))
     db_session.commit()
     assert rescore_stale_legislative_effectiveness(_factory(db_session)) == []
+
+
+def test_reference_is_persisted_only_after_the_scores_commit(db_session, pinned_population_references, monkeypatch):
+    from app.pipeline import les_rescore
+
+    old = {k: v for k, v in LES_REFERENCE.load()["senate"].items() if k not in ("stage_totals", "n_members")}
+    LES_REFERENCE.write("senate", old)
+    _seed(db_session)
+    import app.pipeline.analyze.score_calculator as sc
+
+    real, fail = sc._calc_legislative_effectiveness, [True]
+
+    def flaky(*a, **k):
+        if fail[0]:
+            raise RuntimeError("scoring failed")
+        return real(*a, **k)
+
+    monkeypatch.setattr(sc, "_calc_legislative_effectiveness", flaky)
+    assert les_rescore.rescore_stale_legislative_effectiveness(_factory(db_session)) == []
+    # Still stale, so the next startup retries instead of stranding the scores.
+    assert not LES_REFERENCE.load()["senate"].get("stage_totals")
+    fail[0] = False
+    assert les_rescore.rescore_stale_legislative_effectiveness(_factory(db_session)) == ["senate"]
+
+
+def test_an_orphaned_run_does_not_block(db_session, pinned_population_references):
+    from datetime import timedelta
+
+    from app.time_utils import utcnow
+
+    old = {k: v for k, v in LES_REFERENCE.load()["senate"].items() if k not in ("stage_totals", "n_members")}
+    LES_REFERENCE.write("senate", old)
+    _seed(db_session)
+    db_session.add(PipelineRun(status=PipelineStatus.RUNNING, started_at=utcnow() - timedelta(hours=13)))
+    db_session.commit()
+    assert rescore_stale_legislative_effectiveness(_factory(db_session)) == ["senate"]

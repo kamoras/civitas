@@ -13,9 +13,10 @@ Everything the score needs is stored: the party-labeled votes, party and
 caucus, state and district, and the Voteview ideal points in
 /data/member_ideal_points.json. So on startup, when a chamber's persisted
 reference was measured on a different statistic, this re-measures it from
-the database (persisting it, as the pipeline does) and rescores that
-chamber's stored Constituent Alignment and its vote-part status. Once the
-persisted reference is current it does nothing. Same shape as les_rescore.
+the database, rescores that chamber's stored Constituent Alignment and its
+vote-part status, and persists the reference only once those scores are
+committed. Once the persisted reference is current it does nothing. Same
+shape as les_rescore.
 """
 
 import json
@@ -57,28 +58,26 @@ def rescore_stale_constituent_alignment(session_factory) -> list[str]:
     """Rescore each chamber whose persisted Constituent Alignment reference
     predates the current statistic. Returns the chambers rescored. Never
     raises."""
-    from app.models import HousePipelineRun, PipelineRun, PipelineStatus, Representative, Senator
+    from app.models import HousePipelineRun, PipelineRun, Representative, Senator
     from app.pipeline.analyze.ground_truth import _vote_query_for
-    from app.pipeline.analyze.score_calculator import _constituent_alignment_core
-    from app.pipeline.live_references import live_constituent_reference_measured
+    from app.pipeline.analyze.population_reference import CONSTITUENT_REFERENCE
+    from app.pipeline.analyze.score_calculator import (
+        _constituent_alignment_core,
+        compute_constituent_reference,
+        constituent_reference_inputs,
+    )
+    from app.pipeline.run_tracker import run_in_progress
     from app.pipeline.transform.normalize_votes import stored_vote
 
-    stale = _stale_chambers()
-    if not stale:
-        return []
-
     done: list[str] = []
-    db = session_factory()
-    try:
-        if any(
-            db.query(run).filter(run.status == PipelineStatus.RUNNING).first()
-            for run in (PipelineRun, HousePipelineRun)
-        ):
-            # A run in progress writes a fresh reference and scores itself.
-            logger.info("Constituent Alignment rescore skipped — a pipeline run is in progress")
-            return []
-        for chamber in stale:
-            model = Senator if chamber == "senate" else Representative
+    for chamber in _stale_chambers():
+        model, run = (Senator, PipelineRun) if chamber == "senate" else (Representative, HousePipelineRun)
+        db = session_factory()
+        try:
+            if run_in_progress(db, run):
+                # A run in progress writes a fresh reference and scores itself.
+                logger.info("Constituent Alignment rescore (%s) skipped — a pipeline run is in progress", chamber)
+                continue
             vote_model, fk_col = _vote_query_for(model)
             rows = db.query(model).filter(model.is_current.is_(True)).all()
             votes: dict[str, list[dict]] = defaultdict(list)
@@ -90,8 +89,8 @@ def rescore_stale_constituent_alignment(session_factory) -> list[str]:
             ):
                 votes[member_id].append(stored_vote(row_id, bill_id, with_party))
             members = [_member_dict(r, votes[r.id], chamber) for r in rows]
-            reference, measured = live_constituent_reference_measured(chamber, members)
-            if not measured:
+            ref = compute_constituent_reference(constituent_reference_inputs(members))
+            if ref is None:
                 # Scoring against the prior would move every score for no
                 # gain; the next pipeline run measures and rescores.
                 logger.warning(
@@ -99,6 +98,7 @@ def rescore_stale_constituent_alignment(session_factory) -> list[str]:
                     chamber,
                 )
                 continue
+            reference = {**CONSTITUENT_REFERENCE.load(), chamber: ref}
             for row, m in zip(rows, members):
                 core = _constituent_alignment_core(
                     m["votingRecord"], [], {}, m["state"], m["party"],
@@ -113,14 +113,20 @@ def rescore_stale_constituent_alignment(session_factory) -> list[str]:
                     confidence["constituentAlignmentVotePart"] = core["vote_part_status"]
                     row.score_confidence = json.dumps(confidence)
             db.commit()
+            # Persisted only once the scores it describes are committed: a
+            # current-statistic reference is what marks the chamber done, so
+            # writing it first would strand the scores on a failure.
+            CONSTITUENT_REFERENCE.write(chamber, ref)
             done.append(chamber)
             logger.info(
                 "Constituent Alignment rescore (%s): %d members moved to the current reference",
                 chamber, len(rows),
             )
-    except Exception:
-        db.rollback()
-        logger.exception("Constituent Alignment rescore failed (non-fatal) — the next pipeline run rescores")
-    finally:
-        db.close()
+        except Exception:
+            db.rollback()
+            logger.exception(
+                "Constituent Alignment rescore (%s) failed (non-fatal) — retried next startup", chamber,
+            )
+        finally:
+            db.close()
     return done

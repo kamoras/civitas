@@ -26,6 +26,20 @@ def sitting_president_party(db: Session) -> str | None:
     return row[0] if row else None
 
 
+def measure_les_reference(
+    chamber: str, members: list[tuple[list[dict], str | None]], majority: str | None,
+) -> dict | None:
+    """`chamber`'s Legislative Effectiveness reference measured from
+    `members`, not persisted (None when too few members to measure)."""
+    from app.pipeline.analyze.population_reference import LES_REFERENCE
+    from app.pipeline.analyze.score_calculator import compute_les_reference
+
+    previous = LES_REFERENCE.load().get(chamber) or {}
+    return compute_les_reference(
+        members, settings.CURRENT_CONGRESS, majority, previous.get("advancement_rates"),
+    )
+
+
 def live_les_reference(
     chamber: str, members: list[tuple[list[dict], str | None]], db: Session,
 ) -> dict | None:
@@ -36,10 +50,7 @@ def live_les_reference(
     one — a single-member filter run, or the first days of a congress.
     """
     from app.pipeline.analyze.population_reference import LES_REFERENCE
-    from app.pipeline.analyze.score_calculator import (
-        compute_les_reference,
-        derive_chamber_majority,
-    )
+    from app.pipeline.analyze.score_calculator import derive_chamber_majority
 
     majority = derive_chamber_majority(
         [party for _, party in members], chamber, sitting_president_party(db),
@@ -50,10 +61,7 @@ def live_les_reference(
             "adjustment falls back to the historical table for this congress",
             chamber,
         )
-    previous = LES_REFERENCE.load().get(chamber) or {}
-    ref = compute_les_reference(
-        members, settings.CURRENT_CONGRESS, majority, previous.get("advancement_rates"),
-    )
+    ref = measure_les_reference(chamber, members, majority)
     if ref is None:
         logger.warning(
             "Too few %s members with substantive bills to measure an LES reference "

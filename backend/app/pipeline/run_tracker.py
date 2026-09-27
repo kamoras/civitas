@@ -23,6 +23,16 @@ _RunModel = TypeVar("_RunModel")
 STALE_PIPELINE_TIMEOUT = timedelta(hours=12)
 
 
+def run_in_progress(db: Session, model: type[_RunModel], stale_timeout: timedelta = STALE_PIPELINE_TIMEOUT) -> bool:
+    """Whether a `model` run is RUNNING and young enough to be real. A row
+    older than `stale_timeout` is one a killed process left behind (the
+    same bar acquire_pipeline_lock clears it by), not a live run."""
+    from app.models import PipelineStatus
+
+    running = db.query(model).filter(model.status == PipelineStatus.RUNNING).first()
+    return running is not None and utcnow() - running.started_at < stale_timeout
+
+
 def acquire_pipeline_lock(db: Session, model: type[_RunModel], stale_timeout: timedelta) -> "_RunModel | None":
     """Atomically create a new locked run of `model`, auto-clearing a
     stale leftover RUNNING row first. Returns None if a genuinely still-
