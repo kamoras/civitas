@@ -676,6 +676,25 @@ class TestAWeakerSourceNeverPrunesTheCertifiedBallot:
         sc._apply_ballot(db_session, 2026, "AK", [john], keep_unlisted=True, authoritative=False, prune=False)
         assert "ballot:2026-SEN-AK:mary-smith" in self._ids(db_session)
 
+    @pytest.mark.parametrize("certified, tonight, fec", [
+        ("T.J. Cox", "T.J. Cox", "COX, TERRANCE JOHN"),  # initials only
+        ("Daniel Cox", "Dan Cox", "COX, DANIEL"),  # another source's short form
+    ])
+    def test_an_fec_match_replaces_its_placeholder_however_it_was_spelled(
+        self, db_session, certified, tonight, fec,
+    ):
+        _race(db_session, "2026-HOUSE-CA-21", "CA", office="H", district=21)
+        db_session.commit()
+        rec = {"office": "H", "district": 21, "party": "D", "last_name": "COX"}
+        sc._apply_ballot(db_session, 2026, "CA", [rec | {"display_name": certified}],
+                         keep_unlisted=True, authoritative=True)
+        assert any(i.startswith("ballot:") for i in self._ids(db_session))
+        _candidate(db_session, "H1", "2026-HOUSE-CA-21", fec, party="DEM")
+        db_session.commit()
+        sc._apply_ballot(db_session, 2026, "CA", [rec | {"display_name": tonight}],
+                         keep_unlisted=True, authoritative=False, prune=False)
+        assert self._ids(db_session) == ["H1"]
+
     def test_one_person_spelled_two_ways_keeps_one_row(self, db_session):
         _race(db_session, "2026-HOUSE-CO-1", "CO", office="H", district=1)
         db_session.commit()
