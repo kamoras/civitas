@@ -146,6 +146,28 @@ class TestCrawlAdoption:
         assert "MI" in saved
 
     @pytest.mark.asyncio
+    async def test_a_google_civic_states_filing_list_is_looked_for_once(self, db_session, monkeypatch):
+        """Its crawl goes on to discovery; finding nothing there must not
+        look for the same filing list a second time."""
+        async def nothing_found(client, state, cycle, rules=None):
+            return None
+
+        looked = []
+
+        async def filings(client, state, cycle):
+            looked.append(state)
+            return None
+
+        self._patch(monkeypatch, [])
+        sc.STRATEGIES["google_civic"] = _ok
+        monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"MI": ["michigan.gov"]})
+        monkeypatch.setattr(sc, "_refresh_dates", _ok)
+        monkeypatch.setattr(sc, "discover_source", nothing_found)
+        monkeypatch.setattr(sc, "discover_filings", filings)
+        await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert looked == ["MI"]
+
+    @pytest.mark.asyncio
     async def test_a_BROKEN_hand_verified_state_is_crawled_for_a_replacement(
         self, db_session, monkeypatch,
     ):

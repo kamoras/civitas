@@ -643,6 +643,7 @@ async def _crawl_state(
     # anyone editing a URL. Its LAW still comes from the hand-written
     # entry; only the location is rediscovered.
     outcome = "none"
+    looked_for_filings = False
     if hand:
         strategy = STRATEGIES.get(hand.get("strategy"))
         still_works = await strategy(client, cycle, state, hand) if strategy else None
@@ -654,6 +655,7 @@ async def _crawl_state(
             await _refresh_dates(client, cycle, state, hand)
             if not hand.get("filings"):
                 outcome = await _adopt_filings(db, client, cycle, state, hand)
+                looked_for_filings = True
             # google_civic is a national fallback for a state with no
             # real per-district vendor at all — unlike every other
             # hand-verified strategy, it must never shadow discovery
@@ -684,7 +686,7 @@ async def _crawl_state(
         # filing list, and before its primary that is the only answer
         # there is — so it is looked for either way (and a stored one is
         # re-found each week, so a list that moves is followed).
-        if outcome != "kept":
+        if outcome != "kept" and not looked_for_filings:
             filings = await _adopt_filings(db, client, cycle, state, hand or {})
             if filings != "none":
                 outcome = filings

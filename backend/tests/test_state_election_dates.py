@@ -235,7 +235,7 @@ class TestCalendarRetraction:
                             complete=True, read_on="d1")
         dates.save_calendar(2026, {}, complete=True, read_on="d2")
         assert dates.all_dates()["2026-GA"] == {
-            "primary": "2026-05-19", "runoff": "2026-06-16", "state_feed": True,
+            "primary": "2026-05-19", "runoff": "2026-06-16", "state_feed": ["primary", "runoff"],
         }
 
     def test_a_legacy_calendar_date_stops_shadowing_the_calendar(self, dates_file):
@@ -249,3 +249,12 @@ class TestCalendarRetraction:
         dates.save_calendar(2026, {"OK": {"primary": "2026-06-23"}}, complete=True, read_on="d2")
         assert dates.primary_date("OK", 2026) == "2026-06-23"
         assert dates.all_dates()["2026-OK"] == {"fec_primary": "2026-06-23"}
+
+    def test_a_feed_that_states_only_the_runoff_does_not_vouch_for_a_legacy_primary(self, dates_file):
+        import json
+        dates_file.write_text(json.dumps({"2026-GA": {"primary": "2026-05-19", "senate": "2026-11-03"}}))
+        dates.save("GA", 2026, {"primary": None, "runoff": "2026-06-16"})
+        dates.save_calendar(2026, {"GA": {"primary": "2026-05-26", "senate": "2026-11-03"}},
+                            complete=True, read_on="d1")
+        assert dates.primary_date("GA", 2026) == "2026-05-26"
+        assert dates.all_dates()["2026-GA"]["runoff"] == "2026-06-16"  # what the feed did state stays

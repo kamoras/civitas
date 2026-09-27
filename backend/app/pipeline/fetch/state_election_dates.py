@@ -67,11 +67,20 @@ _cache: dict[str, Any] | None = None
 # state's own feed, "fec_primary"/"fec_runoff"/"senate" from the national
 # calendar. The state is the authority on its own election and wins where
 # both answer; a disagreement is logged, not averaged away. "state_feed"
-# marks an entry whose primary/runoff a state's feed wrote: before the two
-# were kept apart, the calendar wrote those keys too, and a complete read
-# drops such a legacy value (primary_date falls back to fec_primary; a
-# state with its own feed rewrites its date within a week).
+# lists which of primary/runoff a state's feed wrote: before the two were
+# kept apart, the calendar wrote those keys too, and a complete read drops
+# such a legacy value (primary_date falls back to fec_primary; a state with
+# its own feed rewrites its date within a week). Per key, not per entry: a
+# feed that states only the runoff says nothing about a legacy primary.
 _STATE_FEED = "state_feed"
+_STATE_KEYS = ("primary", "runoff")
+
+
+def _state_written(entry: dict) -> set[str]:
+    written = entry.get(_STATE_FEED)
+    if written is True:  # an earlier form of the marker, meaning both
+        return set(_STATE_KEYS)
+    return set(written) if isinstance(written, list) else set()
 
 
 def _path() -> str:
@@ -175,7 +184,11 @@ def save(state: str, cycle: int, dates: dict) -> None:
         return
 
     def change(known: dict) -> dict:
-        known[key] = {**(known.get(key) or {}), **stated, _STATE_FEED: True}
+        entry = known.get(key) or {}
+        known[key] = {
+            **entry, **stated,
+            _STATE_FEED: sorted(_state_written(entry) | set(stated)),
+        }
         _disagreement(state.upper(), known[key])
         return known
 
@@ -208,9 +221,9 @@ def save_calendar(cycle: int, calendar: dict[str, dict], *, complete: bool, read
                 "senate": listed.get("senate"),
             }
             entry = dict(known.get(key) or {})
-            if complete and not entry.get(_STATE_FEED):
-                entry.pop("primary", None)
-                entry.pop("runoff", None)
+            if complete:
+                for legacy in set(_STATE_KEYS) - _state_written(entry):
+                    entry.pop(legacy, None)
             for field, value in fec.items():
                 if value:
                     entry[field] = value
