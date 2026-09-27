@@ -1335,7 +1335,8 @@ export default function AboutPage() {
               month. The source is the Congressional Record&apos;s Daily Digest, the Record&apos;s own
               summary of each day, published by the Government Publishing Office the next day.
               Until it appears, the page shows each chamber&apos;s live floor log. Record votes
-              come from each chamber&apos;s roll-call files, with every member&apos;s vote.
+              come from each chamber&apos;s roll-call files, with every member&apos;s vote. The
+              record is filled in newest first, back to the start of the 119th Congress.
             </P>
             <P>
               Every entry uses the record&apos;s own wording. The one-line summary at the top of a
