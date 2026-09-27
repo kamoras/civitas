@@ -771,15 +771,21 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
     )
     from app.pipeline.run_tracker import senate_run_state
 
-    # The in-process flags first, before any query: a run commits its final
-    # status and only then drops its flag, so a flag read as down always
-    # finds the row final. Read after the rows (whose snapshot the first
-    # query fixes), a run finishing in between would show as stopped with
-    # its row still RUNNING — announced as ending without an outcome.
-    house_running = is_house_pipeline_running()
-    stock_running = is_stock_pipeline_running()
-    supplementary_running = is_supplementary_pipeline_running()
-    election_running = is_election_pipeline_running()
+    # The in-process flags are read on both sides of the rows, and a
+    # pipeline counts as running if either read says so: a run commits its
+    # RUNNING row before raising its flag, and its final status before
+    # dropping it. So a run finishing during this poll is caught by the read
+    # before (its row may still read RUNNING in the snapshot the first query
+    # fixes), and one starting during it by the read after — either way no
+    # RUNNING row is paired with a lowered flag, which the dashboard shows
+    # as stuck (and, once the run ends, as ending without an outcome).
+    def running_flags() -> tuple[bool, bool, bool, bool]:
+        return (
+            is_house_pipeline_running(), is_stock_pipeline_running(),
+            is_supplementary_pipeline_running(), is_election_pipeline_running(),
+        )
+
+    flags_before = running_flags()
 
     # One read of the Senate row and lease for both fields below.
     _row, is_running, senate_clearable = senate_run_state(db)
@@ -808,6 +814,10 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
         db.query(ElectionPipelineRun)
         .order_by(ElectionPipelineRun.started_at.desc())
         .first()
+    )
+
+    house_running, stock_running, supplementary_running, election_running = (
+        before or after for before, after in zip(flags_before, running_flags())
     )
 
     result: dict = {

@@ -130,32 +130,41 @@ async def test_status_reports_a_data_reset_so_deploys_wait_it_out(db_session):
     assert (await admin_pipeline_status(db=db_session))["dataResetIsRunning"] is True
 
 
+
+_FLAGS = [
+    ("app.pipeline.house_pipeline", "is_house_pipeline_running", "houseIsRunning"),
+    ("app.pipeline.stock_pipeline", "is_stock_pipeline_running", "stockTradesIsRunning"),
+    ("app.pipeline.supplementary_pipeline", "is_supplementary_pipeline_running", "supplementaryIsRunning"),
+    ("app.pipeline.election_pipeline", "is_election_pipeline_running", "electionIsRunning"),
+]
+
+
 @pytest.mark.asyncio
-async def test_status_reads_every_running_flag_before_its_first_query(db_session, monkeypatch):
-    """A run commits its final status, then drops its flag. Read after the
-    rows (whose snapshot the first query fixes), a run finishing in between
-    shows a dropped flag beside a still-RUNNING row — which the dashboard
-    announces as a run that ended without an outcome."""
+@pytest.mark.parametrize("raised_before_rows", [True, False], ids=["finishing", "starting"])
+async def test_a_run_changing_state_during_a_poll_never_reads_as_stuck(db_session, monkeypatch, raised_before_rows):
+    """A run commits its RUNNING row before raising its flag and its final
+    status before dropping it. A flag read only on one side of the row
+    queries would, for a run starting (or finishing) mid-poll, pair a
+    lowered flag with a RUNNING row — shown as stuck. Each flag here is up
+    on exactly one side of the first query; every pipeline must still read
+    as running."""
     from sqlalchemy import event
 
     from app.api.admin import admin_pipeline_status
 
-    order: list[str] = []
-    for module, name in [
-        ("app.pipeline.house_pipeline", "is_house_pipeline_running"),
-        ("app.pipeline.stock_pipeline", "is_stock_pipeline_running"),
-        ("app.pipeline.supplementary_pipeline", "is_supplementary_pipeline_running"),
-        ("app.pipeline.election_pipeline", "is_election_pipeline_running"),
-    ]:
-        monkeypatch.setattr(f"{module}.{name}", lambda name=name: order.append(name) or False)
+    queried = []
+    for module, name, _key in _FLAGS:
+        monkeypatch.setattr(
+            f"{module}.{name}", lambda: (not queried) if raised_before_rows else bool(queried),
+        )
 
     def on_query(*_args):
-        order.append("query")
+        queried.append(True)
 
     engine = db_session.get_bind()
     event.listen(engine, "before_cursor_execute", on_query)
     try:
-        await admin_pipeline_status(db=db_session)
+        result = await admin_pipeline_status(db=db_session)
     finally:
         event.remove(engine, "before_cursor_execute", on_query)
-    assert order.index("query") == 4 and all(o.startswith("is_") for o in order[:4])
+    assert all(result[key] for _m, _n, key in _FLAGS)
