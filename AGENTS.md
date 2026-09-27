@@ -262,8 +262,10 @@ Key mathematical properties:
   a senator with 1 campaign promise gets a score near 50, not 0 or 100).
   Two exceptions: Constituent Alignment's vote part shrinks toward the
   party's measured typical score (its scale tops out at the seat's norm, so
-  50 is below average), and Legislative Effectiveness doesn't shrink (a
-  member's bills are the whole record, not a sample).
+  50 is below average), and Legislative Effectiveness's bill component
+  doesn't shrink by bill count (a member's bills are the whole record, not
+  a sample) — its leadership component is still pulled toward 50 for short
+  tenure.
   The rate is the count confidence below — fixed, not estimated from the
   population's variance, so do not call it Bayesian or empirical Bayes
 - **Count confidence**: `min(n / threshold, 1.0)` ensures minimum sample

@@ -193,8 +193,9 @@ export default function AboutPage() {
               estimator is. Two scores differ. Constituent Alignment&apos;s vote part pulls a thin
               record toward what a typical member of the same party scores instead, because its
               scale tops out at the seat&apos;s norm and 50 would sit below nearly every member.
-              Legislative Effectiveness isn&apos;t pulled at all, because a member&apos;s bills are
-              their whole record rather than a sample.
+              Legislative Effectiveness&apos;s bill component isn&apos;t pulled by bill count, because a
+              member&apos;s bills are their whole record rather than a sample; its leadership
+              component is still pulled toward 50 for members with short tenure.
             </P>
             <P>
               The Action Center extends this mission to daily civic engagement. It automatically

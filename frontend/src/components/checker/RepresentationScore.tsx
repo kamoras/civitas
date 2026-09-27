@@ -269,7 +269,7 @@ export default function RepresentationScore({
 
       <div className="mt-3 text-xs text-ink-lo">
         Data: fec.gov · congress.gov · govinfo.gov · voteview.com · Scores regress toward a neutral
-        value when data is sparse (50, or the party&apos;s typical score for Constituent Alignment)
+        value when data is sparse (see About for how each score does this)
       </div>
     </div>
   );

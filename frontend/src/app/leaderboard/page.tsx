@@ -1223,8 +1223,8 @@ function LeaderboardContent() {
                   </p>
                   <p className="font-sans text-xs text-ink-min">
                     Scores are shrunk toward a neutral value when data is thin — members with limited public
-                    data are pulled toward 50 (for Constituent Alignment, toward their party&apos;s typical
-                    score), not penalized or rewarded
+                    data are not penalized or rewarded for it (the About page says how each score does
+                    this)
                   </p>
                 </div>
               )}
