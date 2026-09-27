@@ -6,6 +6,7 @@ import { getScoreLabel, getScoreColor, getScoreBgColor, asciiScoreBar } from "@/
 import MetricTooltip from "./MetricTooltip";
 import ScoreBreakdownPanel from "@/components/shared/ScoreBreakdownPanel";
 import { SCORE_TERMS } from "@/lib/scoreTerms";
+import { useConfig } from "@/hooks/useConfig";
 import type { ScoreKey } from "@/lib/scoreTerms";
 
 interface RepresentationScoreProps {
@@ -139,24 +140,32 @@ export default function RepresentationScore({
   entityId,
   chamber,
 }: RepresentationScoreProps) {
+  const config = useConfig();
   const entityType = chamber === "house" ? "representative" : "senator";
   const overall = breakdown.overall;
   const label = getScoreLabel(overall);
   const colorClass = getScoreColor(overall);
   const grade = getScoreGrade(overall);
 
-  // Below its high-confidence volume of party-line votes, Constituent
-  // Alignment's vote part is pulled toward 50 (config_definitions
-  // CONSTITUENT_FULL_CONFIDENCE_VOTES), or sits at 50 when there are too
-  // few to read or no expectation to compare with; the confidence grade
-  // says when either applies.
-  const votingBasis: string | undefined =
-    !votingRecord || votingRecord.totalVotes === 0
-      ? "no voting record · defaults to 50"
-      : breakdown.confidence?.constituentAlignment &&
-          breakdown.confidence.constituentAlignment !== "high"
-        ? `${votingRecord.totalVotes} votes tracked · few party-line votes, vote part at or near 50`
-        : `${votingRecord.totalVotes} votes tracked`;
+  // Constituent Alignment's vote part reads the member's party-line votes:
+  // below the minimum it is a neutral 50, below full confidence it keeps
+  // only that fraction of its distance from 50 (the rules come from
+  // /api/config, so this line can't drift from the scorer).
+  const votingBasis: string | undefined = (() => {
+    if (!votingRecord || votingRecord.totalVotes === 0) return "no voting record · defaults to 50";
+    const tracked = `${votingRecord.totalVotes} votes tracked`;
+    const rules = config?.constituentVotes;
+    if (!rules) return tracked;
+    const partyLine = (votingRecord.votedWithPartyCount ?? 0) + (votingRecord.votedAgainstPartyCount ?? 0);
+    if (partyLine < rules.minimum) {
+      return `${tracked} · ${partyLine} party-line, vote part neutral 50`;
+    }
+    if (partyLine < rules.fullConfidence) {
+      const kept = Math.round((partyLine / rules.fullConfidence) * 100);
+      return `${tracked} · ${partyLine} party-line, vote part keeps ${kept}% of its distance from 50`;
+    }
+    return tracked;
+  })();
 
   // Surface the FI sub-components so the score is an auditable claim,
   // not a black-box number (matches the methodology on /about).

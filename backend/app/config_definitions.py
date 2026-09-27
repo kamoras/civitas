@@ -194,6 +194,10 @@ EXPLORE_RETRIEVAL_WEIGHT: float = 1.0
 # Kept here, not in score_calculator, because population_reference needs them
 # to stamp CONSTITUENT_REFERENCE at construction (it can't import the scorer).
 
+# Fewest party-labeled votes Constituent Alignment reads a break rate from
+# (party_break_rate); below it the vote part is a neutral 50.
+CONSTITUENT_MIN_VOTES = 3
+
 # Party-labeled votes at which Constituent Alignment's data sufficiency is
 # graded "high" (calculate_confidence) and its vote score stops shrinking
 # toward 50. A volume count, the same for every member.

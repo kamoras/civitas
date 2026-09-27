@@ -71,6 +71,7 @@ from app.pipeline.analyze.score_calculator import (
     ALGORITHM_VERSION,
     CONSTITUENT_FULL_CONFIDENCE_VOTES,
     SATURATION_QUANTILE,
+    beyond_saturation,
     party_break_rate,
     seat_break_deviation,
     seat_relative_vote_score,
@@ -202,8 +203,7 @@ def constituent_metrics(
     if dev is not None:
         out["seat_relative_vote"] = seat_relative_vote_score(*dev, labeled_votes)
         if labeled_votes >= CONSTITUENT_FULL_CONFIDENCE_VOTES:
-            # Either side, as the reference's quantile is taken over |deviation|.
-            out["beyond_saturation"] = abs(dev[0]) > dev[1]
+            out["beyond_saturation"] = beyond_saturation(*dev)
     return out
 
 

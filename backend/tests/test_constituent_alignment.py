@@ -140,22 +140,6 @@ class TestSeatRelativeVotes:
         # Passed in, unstamped, it isn't used either.
         assert score(record(20), reference=stale) == 75
 
-    def test_setting_the_statistic_drops_what_was_loaded_under_the_old_one(self):
-        # A load() before score_calculator set the stamp must not keep a
-        # stale entry usable.
-        import json
-
-        stale = {"senate": {"expected": {"D": {"a": 0.0, "b": 0.0}}, "deviation_p90": 0.01}}
-        CONSTITUENT_REFERENCE.live_path.write_text(json.dumps(stale))
-        stamp = CONSTITUENT_REFERENCE.statistic
-        try:
-            CONSTITUENT_REFERENCE.statistic = None
-            assert CONSTITUENT_REFERENCE.load()["senate"]["deviation_p90"] == 0.01
-            CONSTITUENT_REFERENCE.statistic = stamp
-            assert CONSTITUENT_REFERENCE.load()["senate"]["deviation_p90"] == 0.2  # bundled
-        finally:
-            CONSTITUENT_REFERENCE.statistic = stamp
-
     def test_a_malformed_stored_entry_falls_back_instead_of_crashing(self):
         import json
 
@@ -426,3 +410,17 @@ def test_votes_without_an_identity_are_not_collapsed():
 
     votes = [{"votedWithParty": True}, {"votedWithParty": False}, {"billId": "a"}, {"billId": "a"}]
     assert len(dedupe_votes(votes)) == 3
+
+
+def test_config_serves_the_vote_count_rules_the_scorer_uses():
+    # The scorecard's basis line reads these; they must be the scorer's own.
+    import json
+
+    from app.api.senators import get_config
+    from app.config_definitions import CONSTITUENT_FULL_CONFIDENCE_VOTES, CONSTITUENT_MIN_VOTES
+
+    body = json.loads(get_config().body)
+    assert body["constituentVotes"] == {
+        "minimum": CONSTITUENT_MIN_VOTES, "fullConfidence": CONSTITUENT_FULL_CONFIDENCE_VOTES,
+    }
+    assert party_break_rate(record(1, total=CONSTITUENT_MIN_VOTES - 1))[0] is None

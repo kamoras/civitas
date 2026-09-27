@@ -120,7 +120,6 @@ def seat_relative_vote_shape(rows: list[dict]) -> dict[str, float]:
     member's evidence is their vote count). rows: {bioguide, party, state, district,
     break_rate, n_votes}."""
     from app.pipeline.analyze.score_calculator import (
-        CONSTITUENT_FULL_CONFIDENCE_VOTES,
         _signed_state_alignment,
         compute_constituent_reference,
         seat_break_deviation,
@@ -136,7 +135,7 @@ def seat_relative_vote_shape(rows: list[dict]) -> dict[str, float]:
     inputs = []
     for r in rows:
         p = caucus(r["party"])
-        if p in ("D", "R") and r["n_votes"] >= CONSTITUENT_FULL_CONFIDENCE_VOTES:
+        if p in ("D", "R"):  # rows are already full-confidence (run_chamber)
             alignment = _signed_state_alignment(r["state"], r["party"], effective_party=p, district=r.get("district"))
             inputs.append((p, alignment, r["break_rate"]))
     ref = compute_constituent_reference(inputs)

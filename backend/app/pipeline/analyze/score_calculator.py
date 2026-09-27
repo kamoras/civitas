@@ -166,6 +166,7 @@ import statistics
 
 from app.config_definitions import (
     CONSTITUENT_FULL_CONFIDENCE_VOTES,
+    CONSTITUENT_MIN_VOTES,
     CONSTITUENT_REFERENCE_STATISTIC,
     SATURATION_QUANTILE,
 )
@@ -1396,7 +1397,7 @@ def party_break_rate(voting_record: dict) -> tuple[float | None, int]:
         if isinstance(v, dict)
     ])
     labeled = [v["votedWithParty"] for v in votes if v.get("votedWithParty") is not None]
-    if len(labeled) < 3:
+    if len(labeled) < CONSTITUENT_MIN_VOTES:
         return None, len(labeled)
     return sum(1 for wp in labeled if wp is not True) / len(labeled), len(labeled)
 
@@ -1550,9 +1551,17 @@ def _peaked_vote_shape(deviation: float, scale: float, loyal_scale: float | None
 def past_saturation(deviation: float, scale: float) -> bool:
     """Whether a member's break rate sits past the saturation deviation
     above their seat's expectation — where the vote score declines as the
-    rate rises. The one definition the breakdown text and the ground-truth
-    gate read."""
+    rate rises. The one definition the score's shape and its breakdown
+    text read."""
     return deviation > scale
+
+
+def beyond_saturation(deviation: float, scale: float) -> bool:
+    """Whether a member's break rate is more than the saturation deviation
+    from their seat's expectation on either side — the two-sided count the
+    reference's quantile (over |deviation|) describes, and so the one the
+    ground-truth gate's share probe checks against it."""
+    return abs(deviation) > scale
 
 
 def seat_relative_vote_score(deviation: float, scale: float, n_votes: int) -> float:
@@ -1747,7 +1756,7 @@ def _constituent_alignment_core(
     break_rate, n_party = party_break_rate(voting_record)
     if break_rate is None:
         party_score = 50.0
-        party_alignment_detail = "fewer than 3 party-labeled votes available — neutral 50"
+        party_alignment_detail = f"fewer than {CONSTITUENT_MIN_VOTES} party-labeled votes available — neutral 50"
     elif expected is None:
         party_score = 50.0
         party_alignment_detail = (

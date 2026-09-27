@@ -67,14 +67,8 @@ class ChamberReference:
 
     @property
     def statistic(self) -> str | None:
+        """Fixed at construction: which stored entries load() accepts."""
         return self._statistic
-
-    @statistic.setter
-    def statistic(self, value: str | None) -> None:
-        # Setting it changes which entries load() accepts, so drop anything
-        # loaded under the old value.
-        self._statistic = value
-        self._cache = None
 
     def usable(self, entry: dict | None) -> bool:
         """Whether one chamber's entry can be scored against."""
