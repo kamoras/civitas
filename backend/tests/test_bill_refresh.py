@@ -366,9 +366,33 @@ class TestFetchRecentlyUpdated:
 
         monkeypatch.setattr(bill_refresh, "_fetch_with_retry", _fake)
 
-        found = asyncio.run(bill_refresh._fetch_recently_updated(None, utcnow()))
+        found, resume_at = asyncio.run(bill_refresh._fetch_recently_updated(None, utcnow()))
 
         assert set(found) == {"HR.22", "S.4967"}
+        assert resume_at is None  # read to the end
+
+    def test_a_listing_cut_short_resumes_where_it_stopped(self, monkeypatch):
+        monkeypatch.setattr(bill_refresh, "_PAGE_SIZE", 2)
+        monkeypatch.setattr(bill_refresh, "_MAX_LIST_PAGES", 2)
+        items = [
+            {"congress": CURRENT, "type": "hr", "number": str(n), "updateDate": day,
+             "latestAction": {"text": "x", "actionDate": day}}
+            for n, day in enumerate(["2026-09-20", "2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24"])
+        ]
+        urls = []
+
+        async def _fake(client, url):
+            urls.append(url)
+            offset = int(url.rsplit("offset=", 1)[1])
+            return {"bills": items[offset:offset + 2]}
+
+        monkeypatch.setattr(bill_refresh, "_fetch_with_retry", _fake)
+        found, resume_at = asyncio.run(bill_refresh._fetch_recently_updated(None, utcnow()))
+
+        assert "sort=updateDate+asc" in urls[0]
+        assert set(found) == {"HR.0", "HR.1", "HR.2", "HR.3"}
+        # The newest update was not read: the next cycle starts at the last one that was.
+        assert resume_at.isoformat() == "2026-09-23T00:00:00"
 
 
 class TestRefreshBillStatuses:
@@ -377,7 +401,7 @@ class TestRefreshBillStatuses:
         actions_stub.result = [{"actionCode": "17000", "type": "Floor", "text": "Passed Senate."}]
 
         async def _fake_recent(client, since):
-            return {"S.100": _feed_item("S.100", "Passed Senate.", "2026-07-20")}
+            return {"S.100": _feed_item("S.100", "Passed Senate.", "2026-07-20")}, None
 
         monkeypatch.setattr(bill_refresh, "_fetch_recently_updated", _fake_recent)
         # Don't spawn the real cache-warm thread from a test.
@@ -443,3 +467,31 @@ def test_the_senate_reads_is_law_from_the_history_before_the_graph(monkeypatch):
     assert source.index("await _classify_sponsored_stages(") < source.index(
         "sponsored_bills_for_cosponsor = _build_current_term_sponsored_for_cosponsor("
     )
+
+
+def test_bills_left_at_the_fetch_cap_are_read_again_next_cycle(db_session, monkeypatch, actions_stub):
+    for n in range(3):
+        _make_senate_bill(db_session, bill_id=f"S.{n}")
+    monkeypatch.setattr(bill_refresh, "_MAX_ACTION_FETCHES", 2)
+    actions_stub.result = [{"actionCode": "17000", "type": "Floor", "text": "Passed Senate."}]
+    recent = {}
+    for n in range(3):
+        item = _feed_item(f"S.{n}", "Passed Senate.", "2026-07-20")
+        item["updateDate"] = f"2026-07-2{n}"
+        recent[f"S.{n}"] = item
+
+    async def _fake_recent(client, since):
+        return recent, None
+
+    monkeypatch.setattr(bill_refresh, "_fetch_recently_updated", _fake_recent)
+    import app.services.bill_service as bill_service
+    monkeypatch.setattr(bill_service, "warm_bill_collection_cache", lambda: None)
+
+    summary = asyncio.run(bill_refresh.refresh_bill_statuses(db=db_session))
+
+    assert summary["skipped_at_cap"] == 1
+    from app.pipeline.cache import api_cache_get
+    marker = api_cache_get(db_session, "congress", bill_refresh.LAST_RUN_CACHE_KEY)
+    assert marker["lastRun"] == "2026-07-22T00:00:00"
+    assert summary["resumes_at"] == "2026-07-22T00:00:00"
+
