@@ -61,18 +61,19 @@ class TestCrawlAdoption:
         return saved
 
     @pytest.mark.asyncio
-    async def test_a_sweep_resumes_after_the_last_state_it_finished(self, db_session, monkeypatch):
-        """A crawl cut off partway is resumed where it stopped, and hears
-        each finished state (a cut-off one isn't finished)."""
+    async def test_one_states_failure_is_that_states_not_the_sweeps(self, db_session, monkeypatch):
+        """An adapter raising on a changed page costs its state, not every
+        state after it; a cut-off (cancellation) still ends the sweep, and
+        what it hears is only the states that finished."""
         import asyncio
 
         self._patch(monkeypatch, records=[])
         monkeypatch.setattr(sc, "ELECTION_DOMAINS", {st: ["x.gov"] for st in ("AA", "BB", "CC")})
-        order = []
 
         async def discover(client, state, cycle, rules=None):
-            order.append(state)
             if state == "AA":
+                raise ValueError("the page changed")
+            if state == "CC":
                 raise asyncio.CancelledError  # cut off here
             return None
 
@@ -80,11 +81,8 @@ class TestCrawlAdoption:
         monkeypatch.setattr(sc, "_forget_if_broken", lambda *a: _none())
         heard = []
         with pytest.raises(asyncio.CancelledError):
-            await sc.crawl_for_new_sources(
-                db_session, None, 2026, resume_after="AA", on_state=lambda st, out: heard.append((st, out)),
-            )
-        assert order == ["BB", "CC", "AA"]
-        assert heard == [("BB", "none"), ("CC", "none")]
+            await sc.crawl_for_new_sources(db_session, None, 2026, on_state=lambda st, out: heard.append((st, out)))
+        assert heard == [("AA", "error"), ("BB", "none")]
 
     @pytest.mark.asyncio
     async def test_adopts_a_source_whose_nominees_are_real_candidates(

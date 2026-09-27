@@ -1392,11 +1392,9 @@ async def run_senate_pipeline(
 
         if fetch_only:
             logger.info("=== FETCH COMPLETE (fetch-only mode) ===")
-            # Every step after the fetch phase, from the step list itself, so
-            # a step added later isn't left pending in a completed run.
-            step_keys = [key for key, _phase, _label in PIPELINE_STEPS]
-            for sk in step_keys[step_keys.index("fetch_platforms") + 1:]:
-                progress.skip(sk, detail="fetch-only mode")
+            # Every step not yet started, whatever the list holds, so a step
+            # added later isn't left pending in a completed run.
+            progress.skip_pending(detail="fetch-only mode")
             elapsed = time.time() - start_time
             pipeline_run.status = PipelineStatus.COMPLETED
             pipeline_run.completed_at = utcnow()

@@ -48,7 +48,7 @@ from typing import Any
 
 import httpx
 
-from app.atomic_write import LockTimeout, update_json_file
+from app.atomic_write import SharedJsonFile
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +123,6 @@ def save(state: str, cycle: int, dates: dict) -> None:
     """Record what is known about a state's cycle. Merges rather than
     replaces, so a per-state read that knows only the primary doesn't drop
     the runoff the national calendar supplied, or vice versa."""
-    global _cache
     key = f"{cycle}-{state.upper()}"
 
     def merge(known: dict[str, Any]) -> dict[str, Any]:
@@ -131,28 +130,16 @@ def save(state: str, cycle: int, dates: dict) -> None:
         return known
 
     # Merged into the file as it stands now, under its lock: the source
-    # crawl and a ballot sync both write here (update_json_file).
-    def publish(known: dict[str, Any]) -> None:
-        global _cache
-        _cache = known
+    # crawl and a ballot sync both write here (atomic_write.SharedJsonFile).
+    _FILE.update(merge, state)
 
-    for path in _PATHS:
-        try:
-            update_json_file(
-                path, merge, missing=lambda: dict(_load()), written=publish, indent=2, sort_keys=True,
-            )
-            return
-        except LockTimeout:
-            # Another writer held the file far past a write's length. Not
-            # the next path (where the next read won't look): this process
-            # keeps the date, and the next run's read writes it again.
-            logger.warning("Election dates for %s not persisted this time — the file stayed locked", state)
-            break
-        except OSError:
-            continue
-    else:
-        logger.warning("Nowhere writable to record election dates for %s", state)
-    _cache = merge(dict(_load()))
+
+def _publish(known: dict[str, Any]) -> None:
+    global _cache
+    _cache = known
+
+
+_FILE = SharedJsonFile("Election dates", lambda: _PATHS, lambda: _load(), _publish, indent=2, sort_keys=True)
 
 
 async def fetch_fec_calendar(client: httpx.AsyncClient, cycle: int) -> dict[str, dict]:

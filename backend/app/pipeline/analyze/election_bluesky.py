@@ -455,7 +455,9 @@ def post_race_coverage_updates(db: Session, *, deadline: float | None = None) ->
             if refused == _REFUSED_BUDGET:
                 logger.info("Election coverage posting stopped — other passes hold the day's budget")
                 break
-            logger.info("Skipping race %s this run — another pass holds a post for it", race.id)
+            # Held or already made — a reservation and a post look alike; if
+            # it was made, the next run's cooldown read retires these items.
+            logger.info("Skipping race %s this run — another pass has reserved or made a post for it", race.id)
             held_elsewhere.add(item.race_id)
             continue
         published = False

@@ -537,7 +537,6 @@ def _prune_ballot_only(
 
 async def crawl_for_new_sources(
     db: Session, client: httpx.AsyncClient, cycle: int, *,
-    resume_after: str | None = None,
     on_state: Callable[[str, str], None] | None = None,
 ) -> dict:
     """Look for a usable results source in every state that doesn't have a
@@ -560,17 +559,15 @@ async def crawl_for_new_sources(
     lost by waiting — a source adopted the week after certification is
     still months before the general.
 
-    `resume_after` begins the sweep at the state after it (wrapping), and
-    `on_state(state, outcome)` hears each state as it finishes: a crawl cut
-    off partway is resumed where it stopped, and what it adopted before the
-    cut is still reported.
+    One state's failure (an adapter raising on a changed page) is that
+    state's "error", not the sweep's end: every other state is still
+    crawled. `on_state(state, outcome)` hears each state as it finishes, so
+    a caller cut off partway still knows what was adopted before the cut.
     """
     hand_verified = (_sources_file().get("states") or {})
     outcomes: dict[str, str] = {}
-    states = sorted(ELECTION_DOMAINS)
-    first = next((i for i, st in enumerate(states) if resume_after and st > resume_after), 0)
-    for state in states[first:] + states[:first]:
-        failed = False  # a state the crawl raised out of (a cut-off) isn't finished
+    for state in sorted(ELECTION_DOMAINS):
+        cut_off = False  # a state the crawl was cancelled out of isn't finished
         try:
             hand = hand_verified.get(state)
             # A hand-verified state is left alone while its source works. When
@@ -656,11 +653,14 @@ async def crawl_for_new_sources(
                                               f"hand-verified entry, which overrides this one."})
             outcomes[state] = f"adopted ({matched}/{len(records)} matched)"
             logger.info("Adopted a discovered source for %s: %s", state, found.get("_evidence"))
+        except Exception:
+            logger.exception("Source crawl failed for %s — moving on to the next state", state)
+            outcomes[state] = "error"
         except BaseException:
-            failed = True
+            cut_off = True
             raise
         finally:
-            if on_state is not None and not failed:
+            if on_state is not None and not cut_off:
                 on_state(state, outcomes.get(state, "unchanged"))
     return outcomes
 

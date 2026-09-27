@@ -101,6 +101,13 @@ class ProgressTracker:
         self._flush()
         self._record_timing(step)
 
+    def skip_pending(self, *, detail: str | None = None) -> None:
+        """Skip every step that hasn't started — for a run that ends early
+        by design (a fetch-only run), whatever steps the list holds."""
+        for key, _phase, _label in self._steps_def:
+            if self._steps[key]["status"] == "pending":
+                self.skip(key, detail=detail)
+
     def fail(self, key: str, *, detail: str | None = None) -> None:
         step = self._steps.get(key)
         if not step:

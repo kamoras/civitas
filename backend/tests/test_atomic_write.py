@@ -146,9 +146,9 @@ def test_the_written_copy_is_published_before_the_lock_is_let_go(workdir):
     assert locked_while_published == [True]
 
 
-def test_a_data_writer_that_loses_a_lock_race_keeps_its_change_in_memory(workdir, monkeypatch):
-    """Not an error for the sync or the crawl, and never written to the
-    fallback path: this process keeps the date, the next run writes it."""
+def test_a_change_that_loses_a_lock_race_is_carried_by_the_next_write(workdir, monkeypatch):
+    """Never written to the fallback path, never an error for the sync or
+    the crawl, and not dropped when the next save publishes the file."""
     import fcntl
 
     from app import atomic_write
@@ -157,9 +157,38 @@ def test_a_data_writer_that_loses_a_lock_race_keeps_its_change_in_memory(workdir
     primary, fallback = workdir / "dates.json", workdir / "fallback" / "dates.json"
     monkeypatch.setattr(dates, "_PATHS", (str(primary), str(fallback)))
     monkeypatch.setattr(dates, "_cache", None)
+    monkeypatch.setattr(dates._FILE, "_pending", [])
     monkeypatch.setattr(atomic_write, "LOCK_WAIT_S", 0.05)
+    monkeypatch.setattr(atomic_write, "_contended_until", {})
     with open(f"{primary}.lock", "a") as held:
         fcntl.flock(held.fileno(), fcntl.LOCK_EX)
         dates.save("MN", 2026, {"primary": "2026-08-11"})
-    assert dates.primary_date("MN", 2026) == "2026-08-11"
+    assert dates.primary_date("MN", 2026) == "2026-08-11"  # kept in memory
     assert not primary.exists() and not fallback.exists()
+
+    dates.save("WI", 2026, {"primary": "2026-08-11"})  # the lock is free again
+    written = json.loads(primary.read_text())
+    assert set(written) == {"2026-MN", "2026-WI"}  # carried, not dropped
+    assert dates.primary_date("MN", 2026) == "2026-08-11"
+
+
+def test_a_contended_file_is_not_waited_on_again_for_a_while(workdir, monkeypatch):
+    """A loop of saves behind one stuck writer mustn't wait LOCK_WAIT_S each."""
+    import fcntl
+    import time
+
+    from app import atomic_write
+
+    monkeypatch.setattr(atomic_write, "LOCK_WAIT_S", 0.3)
+    monkeypatch.setattr(atomic_write, "_contended_until", {})
+    target = workdir / "dates.json"
+    with open(f"{target}.lock", "a") as held:
+        fcntl.flock(held.fileno(), fcntl.LOCK_EX)
+        with pytest.raises(atomic_write.LockTimeout):
+            update_json_file(target, lambda known: known)
+        started = time.monotonic()
+        with pytest.raises(atomic_write.LockTimeout):
+            update_json_file(target, lambda known: known)
+        assert time.monotonic() - started < 0.1
+    update_json_file(target, lambda known: {**known, "free": 1})  # one try succeeds once it's free
+    assert json.loads(target.read_text()) == {"free": 1}

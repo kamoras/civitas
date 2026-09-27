@@ -22,7 +22,7 @@ import logging
 import os
 from typing import Any
 
-from app.atomic_write import LockTimeout, update_json_file
+from app.atomic_write import SharedJsonFile
 
 logger = logging.getLogger(__name__)
 
@@ -78,8 +78,6 @@ def _load_discovered() -> dict[str, Any]:
 def save_discovered(state: str, source: dict[str, Any] | None) -> None:
     """Record (or, with None, forget) what the crawler proved for `state`.
     Never touches the hand-verified file."""
-    global _discovered_cache
-
     def record(discovered: dict[str, Any]) -> dict[str, Any]:
         if source is None:
             discovered.pop(state.upper(), None)
@@ -87,29 +85,19 @@ def save_discovered(state: str, source: dict[str, Any] | None) -> None:
             discovered[state.upper()] = source
         return discovered
 
-    # Into the file as it stands now, under its lock (update_json_file).
-    def publish(discovered: dict[str, Any]) -> None:
-        global _discovered_cache
-        _discovered_cache = discovered
+    # Into the file as it stands now, under its lock (atomic_write.SharedJsonFile).
+    _DISCOVERED_FILE.update(record, state)
 
-    for path in _DISCOVERED_PATHS:
-        try:
-            update_json_file(
-                path, record, missing=lambda: dict(_load_discovered()), written=publish,
-                indent=2, sort_keys=True,
-            )
-            return
-        except LockTimeout:
-            # Another writer held the file far past a write's length. Not
-            # the next path (where the next read won't look): this process
-            # keeps the source, and the next crawl adopts it again.
-            logger.warning("Discovered source for %s not persisted this time — the file stayed locked", state)
-            break
-        except OSError:
-            continue
-    else:
-        logger.warning("Nowhere writable to record discovered source for %s", state)
-    _discovered_cache = record(dict(_load_discovered()))
+
+def _publish_discovered(discovered: dict[str, Any]) -> None:
+    global _discovered_cache
+    _discovered_cache = discovered
+
+
+_DISCOVERED_FILE = SharedJsonFile(
+    "Discovered source", lambda: _DISCOVERED_PATHS, lambda: _load_discovered(), _publish_discovered,
+    indent=2, sort_keys=True,
+)
 
 
 def discovered_states() -> set[str]:

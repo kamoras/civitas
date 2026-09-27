@@ -782,9 +782,6 @@ def _prune_stale_coverage(db: Session) -> int:
 # week since it last ran, and a night the ballot guards refused it (or it
 # failed) is made up the next night rather than the next week.
 _CRAWL_TIER, _CRAWL_KEY = "election", "source-crawl-completed"
-# The last state a crawl in progress finished: the next attempt resumes
-# after it, so a crawl cut off at its time limit still reaches every state.
-_CRAWL_CURSOR_KEY = "source-crawl-cursor"
 # A little under a week: the nightly run's start time drifts by minutes.
 _CRAWL_EVERY_HOURS = 7 * 24 - 12
 
@@ -808,19 +805,17 @@ async def _weekly_source_crawl(db: Session, client, cycle: int) -> dict[str, str
     def finished(state: str, outcome: str) -> None:
         if outcome.startswith("adopted"):
             adopted[state] = outcome
-        api_cache_set(db, _CRAWL_TIER, _CRAWL_CURSOR_KEY, {"after": state})
 
     try:
-        if api_cache_get(db, _CRAWL_TIER, _CRAWL_KEY, max_age_hours=_CRAWL_EVERY_HOURS) is not None:
-            return {}
-        cursor = api_cache_get(db, _CRAWL_TIER, _CRAWL_CURSOR_KEY) or {}
         async with lease.bounded_job_async(lease.SOURCE_CRAWL, who="Election pipeline's source crawl") as granted:
             if not granted:
                 return {}
-            await crawl_for_new_sources(db, client, cycle, resume_after=cursor.get("after"), on_state=finished)
-            # Inside the lease: a data reset that wipes these can't start
-            # between the crawl and the writes.
-            api_cache_set(db, _CRAWL_TIER, _CRAWL_CURSOR_KEY, {"after": None})
+            # Read under the lease, as it is written.
+            if api_cache_get(db, _CRAWL_TIER, _CRAWL_KEY, max_age_hours=_CRAWL_EVERY_HOURS) is not None:
+                return {}
+            await crawl_for_new_sources(db, client, cycle, on_state=finished)
+            # Inside the lease: a data reset that wipes the marker can't
+            # start between the crawl and this write.
             api_cache_set(db, _CRAWL_TIER, _CRAWL_KEY, {"completedAt": utcnow().isoformat()})
         logger.info(
             "Source crawl: %d state(s) adopted%s",
@@ -829,12 +824,12 @@ async def _weekly_source_crawl(db: Session, client, cycle: int) -> dict[str, str
     except lease.CutOff as cut:
         db.rollback()
         logger.warning(
-            "%s — %d adopted before it; the crawl resumes where it stopped tomorrow, and the sync goes ahead",
+            "%s — %d adopted before it; the crawl runs again tomorrow, and the sync goes ahead",
             cut, len(adopted),
         )
     except Exception:
         db.rollback()
-        logger.exception("Source crawl failed — the sync goes ahead, and the crawl resumes tomorrow")
+        logger.exception("Source crawl failed — the sync goes ahead, and the crawl runs again tomorrow")
     return adopted
 
 

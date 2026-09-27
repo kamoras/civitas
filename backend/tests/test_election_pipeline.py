@@ -605,7 +605,7 @@ class TestBallotSync:
         from app.pipeline import lease
 
         def crawl(error):
-            async def sweep(db, client, cycle, *, resume_after=None, on_state=None):
+            async def sweep(db, client, cycle, *, on_state=None):
                 if error is not None:
                     raise error
                 for state, outcome in {"NM": "adopted results", "WY": "none"}.items():
