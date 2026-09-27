@@ -1682,12 +1682,17 @@ class TestSameDayNotesKeep:
             await _ingest_senate(db_session, [e2025], {"e2025": [_row(), _row()]})
         assert db_session.query(FinancialDisclosure).one().later_filing_url == paper["report_url"]
 
-    async def test_an_older_years_index_failing_only_loses_fallbacks(self, db_session, rep):
+    async def test_the_older_years_index_failing_fails_the_phase_too(self, db_session, rep):
+        """Until May it holds nearly every member's current report."""
         async def index(_client, _db, year):
             return [_house_filing("NEW")] if year == 2025 else None
 
         with patch.object(holdings_pipeline, "fetch_annual_filing_index", side_effect=index), \
-             patch.object(holdings_pipeline, "fetch_house_annual", AsyncMock(return_value=AnnualReport("Member", [_row()]))), \
              patch.object(holdings_pipeline, "utcnow") as now:
             now.return_value.year = 2026
-            assert await holdings_pipeline.ingest_house_holdings(db_session, None) == 1
+            with pytest.raises(RuntimeError, match="2024 could not be loaded"):
+                await holdings_pipeline.ingest_house_holdings(db_session, None)
+
+    def test_only_a_new_filer_title_is_dated_by_its_date(self):
+        assert holdings_pipeline._senate_as_of({"title": "Annual Report (Amendment) 06/01/2026"}) is None
+        assert holdings_pipeline._senate_as_of({"title": "New Filer Report for 06/01/2026"}) == "2026-06-01"

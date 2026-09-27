@@ -241,7 +241,9 @@ def _replace_disclosure(
     carried = next(
         (
             row for row in old
-            if _filed_not_before(row.later_filing_filed, filed_date) and row.later_filing_url != source_url
+            # Notes are Senate-only: the same filing-id rule as _note_later_filing.
+            if _filed_not_before(row.later_filing_filed, filed_date)
+            and senate_filing_id(row.later_filing_url or "") != filing_id
         ),
         None,
     )
@@ -600,15 +602,13 @@ async def _house_candidates(db: Session, client: httpx.AsyncClient) -> dict[str,
     for year in range(current_year - 1, current_year - 1 - _YEARS_BACK, -1):
         filings = await fetch_annual_filing_index(client, db, year)
         if filings is None:
-            if year == current_year - 1:
-                # Not an empty year: without last year's index, a member's
-                # older report would pass for their newest — and nothing
-                # fetched would look wrong.
-                raise RuntimeError(f"House annual-report index for {year} could not be loaded")
-            # The older year only supplies fallbacks for members who haven't
-            # filed last year's report yet: they wait for the next run.
-            logger.warning("House annual-report index for %d could not be loaded", year)
-            continue
+            # Not an empty year, for either index. Without last year's, a
+            # member's older report would pass for their newest; the year
+            # before holds nearly every member's current report and its
+            # amendments until last year's are filed in May. Either way
+            # nothing fetched would look wrong, so the phase fails (and
+            # alerts) instead.
+            raise RuntimeError(f"House annual-report index for {year} could not be loaded")
         indexed += len(filings)
         for filing in filings:
             if (rep_id := match(filing["last"], filing["first"], filing["state_district"])) is not None:
@@ -668,7 +668,9 @@ def _senate_as_of(filing: dict) -> str | None:
     title = filing.get("title") or ""
     if m := _CY_RE.search(title):
         return f"{m.group(1)}-12-31"
-    if (m := _DATE_RE.search(title)) and (iso := normalize_date(m.group(0))):
+    # Only a new-filer report is described by the date in its title; a
+    # date elsewhere (on an amendment, say) is not what its holdings describe.
+    if is_new_filer_title(title) and (m := _DATE_RE.search(title)) and (iso := normalize_date(m.group(0))):
         return iso
     return None
 
