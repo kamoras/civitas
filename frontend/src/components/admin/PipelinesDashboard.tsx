@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import {
   clearStuckElectionPipeline,
   clearStuckHousePipeline,
+  clearStuckSenatePipeline,
   clearStuckStockTradesPipeline,
   clearStuckSupplementaryPipeline,
   fetchAdminPipelineTimings,
@@ -106,6 +107,7 @@ function PipelineStatusPanel({
           isRunning={!!status?.isRunning}
           run={senate}
           token={token}
+          clear={clearStuckSenatePipeline}
           onCleared={onChanged}
           detail={
             senate && (

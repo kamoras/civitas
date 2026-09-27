@@ -1186,6 +1186,14 @@ export async function fetchAdminPipelineStatus(token: string): Promise<AdminPipe
   });
 }
 
+export async function clearStuckSenatePipeline(
+  token: string
+): Promise<{ cleared: number; message: string }> {
+  return requestJson(`${API_BASE}/admin/pipeline/clear-stuck-senate`, "Clear failed", {
+    init: { method: "POST", headers: adminHeaders(token) },
+  });
+}
+
 export async function clearStuckHousePipeline(
   token: string
 ): Promise<{ cleared: number; message: string }> {

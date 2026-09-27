@@ -108,7 +108,7 @@ def _history_entry(run, pipeline_type: str, extra: dict) -> dict:
 def _clear_stuck_runs(db: Session, model, is_running: bool, pipeline_label: str) -> dict:
     """Mark any stuck (status=running) run of `model` as failed.
 
-    Shared by the House and Stock Trades "clear stuck run" admin endpoints —
+    Shared by the pipelines' "clear stuck run" admin endpoints —
     use when the in-memory flag says idle but the DB record still shows
     running (e.g. after a container restart mid-run).
     """
@@ -1354,6 +1354,20 @@ async def admin_trigger_house_pipeline():
         run_house_pipeline, name="house-pipeline-run", error_label="House pipeline run failed",
     )
     return {"message": "House pipeline triggered"}
+
+
+@router.post("/pipeline/clear-stuck-senate", dependencies=[Depends(require_admin)])
+async def admin_clear_stuck_senate(db: Session = Depends(get_db)):
+    """Mark any stuck (status=running) Senate pipeline run as failed.
+
+    The operator's override for a row no lease can prove dead yet
+    (run_tracker.live_run gives it the benefit of the doubt): refused while
+    a Senate run's lease is live — a run is beating right now.
+    """
+    from app.models import PipelineRun
+    from app.pipeline import lease
+
+    return _clear_stuck_runs(db, PipelineRun, lease.held(db, lease.SENATE_RUN), "Senate")
 
 
 @router.post("/pipeline/clear-stuck-house", dependencies=[Depends(require_admin)])

@@ -36,13 +36,10 @@ class TestCheckPipelineOverrunAllFourPipelines:
         assert "Senate" in mock_alert.call_args[0][0]
 
     def test_a_senate_run_its_lease_proves_dead_is_not_an_overrun(self, db_session):
-        from app.models import ApiCache
-        from app.pipeline import lease
+        from tests.conftest import start_senate_run_then_stop_beating
 
-        db_session.add(PipelineRun(started_at=utcnow() - timedelta(hours=9), status=PipelineStatus.RUNNING))
-        db_session.commit()
-        lease.acquire(db_session, lease.SENATE_RUN)
-        db_session.query(ApiCache).update({"cached_at": utcnow() - timedelta(hours=2)})
+        run = start_senate_run_then_stop_beating(db_session, beat_ago=timedelta(hours=2))
+        run.started_at = utcnow() - timedelta(hours=9)
         db_session.commit()
         _check(db_session).assert_not_called()  # check_pipeline_staleness reports a run that never finished
 

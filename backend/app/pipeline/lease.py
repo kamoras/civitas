@@ -190,10 +190,39 @@ def holder(db: Session, tier: str) -> str | None:
 def last_beat(db: Session, tier: str) -> "datetime | None":
     """When `tier`'s lease row was last taken or renewed — live or stale —
     or None when there is no row (never taken, or let go)."""
+    record = lease_record(db, tier)
+    return record[0] if record else None
+
+
+def lease_record(db: Session, tier: str) -> "tuple[datetime, int | None] | None":
+    """`tier`'s lease row, live or stale: (last beat, the run it names —
+    tag() — or None), or None when there is no row."""
     from app.models import ApiCache
 
-    row = db.query(ApiCache.cached_at).filter(ApiCache.tier == tier, ApiCache.cache_key == "lock").first()
-    return row[0] if row else None
+    row = db.query(ApiCache.cached_at, ApiCache.data_json).filter(
+        ApiCache.tier == tier, ApiCache.cache_key == "lock",
+    ).first()
+    if row is None:
+        return None
+    try:
+        run = json.loads(row[1]).get("run")
+    except (TypeError, ValueError, AttributeError):
+        run = None
+    return row[0], run if isinstance(run, int) else None
+
+
+def tag(db: Session, tier: str, token: str, run_id: int) -> None:
+    """Name, on the lease row `token` holds, the run it covers — flushed on
+    `db`, for the caller to commit with that run's row, so the lease never
+    covers a run without saying which: when its beats stop, the proof of
+    death is about exactly that run (run_tracker._proven_dead)."""
+    from sqlalchemy import func
+
+    from app.models import ApiCache
+
+    _own_row(db, tier, token).update(
+        {"data_json": func.json_set(ApiCache.data_json, "$.run", run_id)}, synchronize_session=False,
+    )
 
 
 def held(db: Session, tier: str) -> bool:

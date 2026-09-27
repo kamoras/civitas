@@ -528,99 +528,115 @@ def test_busy_holds_off_a_fresh_run_not_a_hung_one():
     assert not tracker.is_running and tracker.holder is None
 
 
-def _lease_beat_ago(db_session, ago):
-    from app.pipeline import lease
-    from app.time_utils import utcnow
-
-    lease.acquire(db_session, lease.SENATE_RUN)
-    db_session.query(models.ApiCache).filter(models.ApiCache.tier == lease.SENATE_RUN).update(
-        {"cached_at": utcnow() - ago},
-    )
-    db_session.commit()
-
-
-def test_a_senate_row_is_dead_only_on_its_leases_proof(db_session):
-    """One liveness test for every reader (run_tracker.live_run): a lease an
-    hour without a beat proves the run dead; a lease just lapsed (a stalled
-    run?) or none at all (an older release's run) proves nothing, and the
-    row gets the benefit of the doubt."""
+def test_a_senate_row_is_dead_only_on_its_own_leases_proof(db_session):
+    """One liveness test for every reader (run_tracker.live_run), on a run
+    started the real way (lease, then row, tagged together): its lease an
+    hour without a beat proves it dead — even a run killed before its first
+    beat; a lease just lapsed (a stalled run?) proves nothing."""
     from datetime import timedelta
 
+    from app.time_utils import utcnow
+
     from app.api.pipeline import _is_pipeline_running
+    from app.pipeline.run_tracker import live_run
+
+    from tests.conftest import start_senate_run_then_stop_beating
+
+    start_senate_run_then_stop_beating(db_session)
+    assert live_run(db_session, models.PipelineRun) is not None and _is_pipeline_running(db_session)
+    db_session.query(models.ApiCache).update({"cached_at": utcnow() - timedelta(minutes=20)})
+    db_session.commit()
+    assert live_run(db_session, models.PipelineRun) is not None  # lapsed, not proven
+    db_session.query(models.ApiCache).update({"cached_at": utcnow() - timedelta(hours=2)})
+    db_session.commit()
+    assert live_run(db_session, models.PipelineRun) is None and not _is_pipeline_running(db_session)
+
+
+def test_a_lease_proves_only_the_row_it_names(db_session):
+    """A RUNNING row the lease doesn't name — a run from a release without
+    leases, say — keeps the age rule, however long the lease is quiet."""
+    from datetime import timedelta
+
+    from app.pipeline import lease
     from app.pipeline.run_tracker import live_run
     from app.time_utils import utcnow
 
     db_session.add(models.PipelineRun(status="running", started_at=utcnow() - timedelta(hours=3)))
     db_session.commit()
-    assert live_run(db_session, models.PipelineRun) is not None and _is_pipeline_running(db_session)
-    _lease_beat_ago(db_session, timedelta(minutes=20))  # lapsed, not proven
+    lease.acquire(db_session, lease.SENATE_RUN)  # untagged
+    db_session.query(models.ApiCache).update({"cached_at": utcnow() - timedelta(hours=2)})
+    db_session.commit()
     assert live_run(db_session, models.PipelineRun) is not None
-    _lease_beat_ago(db_session, timedelta(hours=2))
-    assert live_run(db_session, models.PipelineRun) is None and not _is_pipeline_running(db_session)
 
 
 def test_startup_and_the_hourly_tidy_mark_only_proven_dead_runs(db_session, monkeypatch):
     from datetime import timedelta
 
-    from app import main
-    from app.pipeline.run_tracker import tidy_dead_runs
     from app.time_utils import utcnow
 
-    db_session.add(models.PipelineRun(status="running", started_at=utcnow() - timedelta(hours=3)))
-    db_session.add(models.HousePipelineRun(status="running", started_at=utcnow() - timedelta(hours=13)))
-    db_session.commit()
+    from app import main
+    from app.pipeline.run_tracker import tidy_dead_runs
+
+    from tests.conftest import start_senate_run_then_stop_beating
+
     monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
-    _lease_beat_ago(db_session, timedelta(minutes=20))
+    start_senate_run_then_stop_beating(db_session, beat_ago=timedelta(minutes=20))
     main._invalidate_orphaned_pipelines()
     db_session.expire_all()
     assert db_session.query(models.PipelineRun).one().status == "running"  # maybe a stalled live run
-    assert db_session.query(models.HousePipelineRun).one().status == "stale"  # past the age rule
-    _lease_beat_ago(db_session, timedelta(hours=2))
+    db_session.query(models.ApiCache).update({"cached_at": utcnow() - timedelta(hours=2)})
+    db_session.commit()
     assert tidy_dead_runs() == 1
     db_session.expire_all()
-    assert db_session.query(models.PipelineRun).one().status == "stale"
+    run = db_session.query(models.PipelineRun).one()
+    assert run.status == "stale" and "without a beat" in run.error_message
 
 
-def test_a_leases_proof_covers_only_rows_started_by_its_last_beat(db_session, monkeypatch):
-    """A row a later run inserted — after the dead lease's last beat — isn't
-    the dead run's, and nothing marks it on that proof."""
+def test_the_next_senate_run_acts_on_the_proof_before_replacing_it(db_session):
+    """A lapsed lease that proves nothing isn't taken over while a row is
+    RUNNING (that would delete the evidence); one that proves its run dead
+    has that run's row marked stale first, then the new run starts."""
+    from contextlib import ExitStack
     from datetime import timedelta
 
-    from app.pipeline.run_tracker import live_run, tidy_dead_runs
     from app.time_utils import utcnow
 
-    _lease_beat_ago(db_session, timedelta(hours=2))
-    db_session.add(models.PipelineRun(status="running", started_at=utcnow() - timedelta(minutes=5)))
+    from app.pipeline import lease, senate_pipeline
+    from app.pipeline.run_tracker import LEASE_LAPSED
+
+    from tests.conftest import start_senate_run_then_stop_beating
+
+    dead = start_senate_run_then_stop_beating(db_session, beat_ago=timedelta(minutes=20))
+    with ExitStack() as stack, pytest.MonkeyPatch.context() as mp:
+        mp.setattr(senate_pipeline, "SessionLocal", lambda: _Unclosable(db_session))
+        assert senate_pipeline._take_senate_run_lease(stack) == (LEASE_LAPSED, None)
+    assert lease.lease_record(db_session, lease.SENATE_RUN)[1] == dead.id  # the evidence kept
+
+    db_session.query(models.ApiCache).update({"cached_at": utcnow() - timedelta(hours=2)})
     db_session.commit()
-    monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
-    assert live_run(db_session, models.PipelineRun) is not None
-    assert tidy_dead_runs() == 0
+    with ExitStack() as stack, pytest.MonkeyPatch.context() as mp:
+        mp.setattr(senate_pipeline, "SessionLocal", lambda: _Unclosable(db_session))
+        refused, token = senate_pipeline._take_senate_run_lease(stack)
+        assert refused is None and token is not None
+        run, refused = senate_pipeline._acquire_pipeline_lock(db_session, lease_token=token)
+        assert refused is None and lease.lease_record(db_session, lease.SENATE_RUN)[1] == run.id
+    db_session.expire_all()
+    assert db_session.get(models.PipelineRun, dead.id).status == "stale"
 
 
-def test_the_next_senate_run_clears_a_proven_dead_runs_row(db_session):
-    """Its evidence read before the lease is taken over (a new run's own
-    lease can't vouch for the dead row), and a lapsed lease that proves
-    nothing yet isn't taken over at all (that would delete the evidence)."""
+def test_a_lapsed_lease_with_no_run_to_protect_is_taken(db_session):
+    """A run that finished but whose release failed leaves only a lease row:
+    nothing is RUNNING, so nothing is held off."""
     from contextlib import ExitStack
     from datetime import timedelta
 
     from app.pipeline import lease, senate_pipeline
     from app.time_utils import utcnow
 
-    db_session.add(models.PipelineRun(status="running", started_at=utcnow() - timedelta(hours=3)))
+    lease.acquire(db_session, lease.SENATE_RUN)
+    db_session.query(models.ApiCache).update({"cached_at": utcnow() - timedelta(minutes=20)})
     db_session.commit()
-    _lease_beat_ago(db_session, timedelta(minutes=20))
     with ExitStack() as stack, pytest.MonkeyPatch.context() as mp:
         mp.setattr(senate_pipeline, "SessionLocal", lambda: _Unclosable(db_session))
-        assert senate_pipeline._take_senate_run_lease(stack) == (lease.REFUSED_HELD, None)
-    assert lease.last_beat(db_session, lease.SENATE_RUN) is not None  # the evidence kept
-
-    _lease_beat_ago(db_session, timedelta(hours=2))
-    beat = lease.last_beat(db_session, lease.SENATE_RUN)
-    with ExitStack() as stack, pytest.MonkeyPatch.context() as mp:
-        mp.setattr(senate_pipeline, "SessionLocal", lambda: _Unclosable(db_session))
-        refused, dead_since = senate_pipeline._take_senate_run_lease(stack)
-        assert refused is None and dead_since == beat
-        run, refused = senate_pipeline._acquire_pipeline_lock(db_session, dead_since=dead_since)
-        assert refused is None and run is not None
-    assert sorted(r.status for r in db_session.query(models.PipelineRun).all()) == ["running", "stale"]
+        refused, token = senate_pipeline._take_senate_run_lease(stack)
+        assert refused is None and token is not None

@@ -617,9 +617,8 @@ def test_an_election_season_job_is_cut_off_where_its_guards_stop_holding(monkeyp
 def test_the_bill_refresh_waits_for_a_senate_run_only_while_it_may_be_live(db_session, beat_ago, waits):
     """Through run_tracker.live_run: a young RUNNING row gets the benefit of
     the doubt; one its lease proves dead is proceeded past."""
-    from app import models, scheduler
+    from app import scheduler
     from app.pipeline import lease
-    from app.time_utils import utcnow
 
     class _Session:
         def __getattr__(self, name):
@@ -628,12 +627,9 @@ def test_the_bill_refresh_waits_for_a_senate_run_only_while_it_may_be_live(db_se
         def close(self):
             pass
 
-    db_session.add(models.PipelineRun(status="running", started_at=utcnow() - timedelta(hours=3)))
-    db_session.commit()
-    if beat_ago is not None:
-        lease.acquire(db_session, lease.SENATE_RUN)
-        db_session.query(models.ApiCache).update({"cached_at": utcnow() - beat_ago})
-        db_session.commit()
+    from tests.conftest import start_senate_run_then_stop_beating
+
+    start_senate_run_then_stop_beating(db_session, beat_ago=beat_ago)
     refresh = AsyncMock(return_value={})
 
     @contextmanager

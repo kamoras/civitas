@@ -210,12 +210,10 @@ class TestOtherPipelineRunningStaleness:
 
     def test_recent_running_senate_row_blocks(self, db_session):
         from app.models import ApiCache
-        from app.pipeline import lease
+        from tests.conftest import start_senate_run_then_stop_beating
 
-        db_session.add(PipelineRun(started_at=utcnow() - timedelta(hours=3), status=PipelineStatus.RUNNING))
-        db_session.commit()
-        assert stock_pipeline._other_pipeline_running(db_session) is True  # no proof it's dead
-        lease.acquire(db_session, lease.SENATE_RUN)
+        start_senate_run_then_stop_beating(db_session)
+        assert stock_pipeline._other_pipeline_running(db_session) is True
         db_session.query(ApiCache).update({"cached_at": utcnow() - timedelta(hours=2)})
         db_session.commit()
         assert stock_pipeline._other_pipeline_running(db_session) is False  # its lease: dead

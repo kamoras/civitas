@@ -2,6 +2,7 @@ import logging
 import threading
 import time
 from datetime import datetime, timedelta
+from collections.abc import Callable
 from typing import TypeVar
 
 from sqlalchemy.exc import IntegrityError, OperationalError
@@ -54,36 +55,34 @@ DEAD_AFTER = timedelta(hours=1)
 
 
 def lease_proves_dead(beat: "datetime | None") -> bool:
-    """Whether a run lease's last beat (lease.last_beat) proves the run that
-    held it dead. No lease row proves nothing: the run may predate leases
-    (an older release, mid-rollout) — its row falls back to the age rule."""
+    """Whether a run lease's last beat proves its run dead — an hour
+    without one (DEAD_AFTER). No lease row proves nothing."""
     return beat is not None and utcnow() - beat >= DEAD_AFTER
 
 
 def _proven_dead(db: Session, model: type, row) -> bool:
-    """Whether `row` (RUNNING) is proven dead: past the age rule, or, for a
-    run that holds a lease (_run_lease), started no later than that lease's
-    last beat and the beat proves its holder dead — the proof is about the
-    run that held the lease, so a row a later run inserted isn't covered."""
+    """Whether `row` (RUNNING) is proven dead by its run's lease: the lease
+    row names this run (lease.tag, written with the row) and has gone
+    DEAD_AFTER without a beat. A lease naming another run, or none, says
+    nothing about this row — it keeps the age rule."""
     from app.pipeline import lease
 
-    if utcnow() - row.started_at >= STALE_PIPELINE_TIMEOUT:
-        return True
     tier = _run_lease(model)
     if tier is None:
         return False
-    beat = lease.last_beat(db, tier)
-    return lease_proves_dead(beat) and row.started_at <= beat
+    record = lease.lease_record(db, tier)
+    return record is not None and record[1] == row.id and lease_proves_dead(record[0])
 
 
 def live_run(db: Session, model: type[_RunModel], stale_timeout: timedelta = STALE_PIPELINE_TIMEOUT) -> "_RunModel | None":
     """`model`'s RUNNING row if its run may still be live, else None: a row
-    older than `stale_timeout`, or one proven dead (_proven_dead), is not.
-    Anything short of proof gets the benefit of the doubt — a falsely dead
-    run can be deployed over, reset under or run twice; a falsely live one
-    only makes things wait. Every reader asking "is a Senate run going?" —
-    the status endpoint and triggers, the data reset, the rescores, Stock,
-    the hourly refreshes, the overrun alert — asks this."""
+    older than `stale_timeout`, or one its lease proves dead (_proven_dead),
+    is not. Anything short of proof gets the benefit of the doubt — a
+    falsely dead run can be deployed over, reset under or run twice; a
+    falsely live one only makes things wait. Every reader asking "is a
+    Senate run going?" — the status endpoint and triggers, the data reset,
+    the rescores, Stock, the hourly refreshes, the overrun alert — asks
+    this."""
     from app.models import PipelineStatus
 
     running = db.query(model).filter(model.status == PipelineStatus.RUNNING).first()
@@ -95,37 +94,43 @@ def live_run(db: Session, model: type[_RunModel], stale_timeout: timedelta = STA
     return running
 
 
-def tidy_dead_runs() -> int:
-    """Mark stale every RUNNING row, of every run table, proven dead
-    (_proven_dead), so run history stops showing it as running; on its own
-    session. Run at startup and hourly. Conditional on the row still
-    RUNNING. Returns how many were marked; logs, never raises."""
-    from app.database import SessionLocal
+def mark_proven_dead_stale(db: Session, model: type) -> int:
+    """Mark stale `model`'s RUNNING rows its lease proves dead
+    (_proven_dead), conditional on still RUNNING; commits. Returns how many.
+    Raises what the database raises."""
     from app.models import PipelineStatus
 
-    db = SessionLocal()
     marked = 0
+    for row in db.query(model).filter(model.status == PipelineStatus.RUNNING).all():
+        if _proven_dead(db, model, row):
+            marked += db.query(model).filter(model.id == row.id, model.status == PipelineStatus.RUNNING).update({
+                "status": PipelineStatus.STALE,
+                "completed_at": utcnow(),
+                "error_message": f"Marked stale: its run's lease went {DEAD_AFTER} without a beat",
+            }, synchronize_session=False)
+            logger.warning("Marking the dead %s run #%d stale — its lease went %s without a beat",
+                           model.__name__, row.id, DEAD_AFTER)
+    db.commit()
+    return marked
+
+
+def tidy_dead_runs() -> int:
+    """mark_proven_dead_stale for every run table that holds a run lease,
+    on its own session, so run history stops showing a proven-dead run as
+    running. Run at startup and hourly. Rows no lease proves dead are left
+    to the age rule, applied by their own run lock as a new run starts.
+    Logs, never raises."""
+    from app.database import SessionLocal
+
+    db = SessionLocal()
     try:
-        for label, model in run_tables().items():
-            for row in db.query(model).filter(model.status == PipelineStatus.RUNNING).all():
-                if not _proven_dead(db, model, row):
-                    continue
-                marked += db.query(model).filter(
-                    model.id == row.id, model.status == PipelineStatus.RUNNING,
-                ).update({
-                    "status": PipelineStatus.STALE,
-                    "completed_at": utcnow(),
-                    "error_message": "Marked stale: its run was proven dead (age, or its lease without a beat)",
-                }, synchronize_session=False)
-                logger.warning("Marking the dead %s run #%d stale", label, row.id)
-        db.commit()
+        return sum(mark_proven_dead_stale(db, model) for model in run_tables().values() if _run_lease(model))
     except Exception:
         db.rollback()
         logger.exception("Dead-run tidy failed — it runs again next hour")
         return 0
     finally:
         db.close()
-    return marked
 
 
 def run_in_progress(db: Session, model: type[_RunModel], stale_timeout: timedelta = STALE_PIPELINE_TIMEOUT) -> bool:
@@ -138,6 +143,9 @@ def run_in_progress(db: Session, model: type[_RunModel], stale_timeout: timedelt
 ALREADY_RUNNING = "already_running"
 # The stock pipeline's own: it waits for the member pipelines.
 MEMBER_PIPELINE_RUNNING = "member_pipeline_running"
+# The Senate run's lease lapsed without yet proving its run dead
+# (senate_pipeline._take_senate_run_lease).
+LEASE_LAPSED = "lease_lapsed"
 
 
 def skip_reason_text(reason: str | None, tier: str | None = None) -> str:
@@ -150,13 +158,17 @@ def skip_reason_text(reason: str | None, tier: str | None = None) -> str:
         return lease.refusal_text(reason, tier)
     return {
         ALREADY_RUNNING: "a previous run of it was still active",
+        LEASE_LAPSED: (
+            "its previous run's lease lapsed without proving that run dead — it may be a live run stalled "
+            "behind another writer; proven dead an hour after its last beat, its row is cleared"
+        ),
         MEMBER_PIPELINE_RUNNING: "a member pipeline (Senate or House) was running",
     }.get(reason or "", f"it was skipped ({reason or 'no reason given'})")
 
 
 def acquire_pipeline_lock_why(
     db: Session, model: type[_RunModel], stale_timeout: timedelta, *,
-    dead_if_started_by: "datetime | None" = None, stale_because: str | None = None,
+    on_insert: Callable[[_RunModel], None] | None = None,
 ) -> "tuple[_RunModel | None, str | None]":
     """Atomically create a new locked run of `model`, auto-clearing a
     stale leftover RUNNING row first. Returns (run, None), or (None, why):
@@ -197,18 +209,14 @@ def acquire_pipeline_lock_why(
     cleared = None
     if running:
         age = utcnow() - running.started_at
-        # `dead_if_started_by`: a run proven dead at that time (its lease's
-        # last beat) — a row it could have written, started no later.
-        proven = dead_if_started_by is not None and running.started_at <= dead_if_started_by
-        if age <= stale_timeout and not proven:
+        if age <= stale_timeout:
             return None, ALREADY_RUNNING
         # Marked stale in the same transaction as the new row and the reset
         # check below, not committed ahead of them: a run that yields to the
         # reset backs out with a rollback, writing nothing (lease.DATA_RESET).
         running.status = PipelineStatus.STALE
         running.completed_at = utcnow()
-        # Why, for the run history: its age, or the caller's reason.
-        running.error_message = f"Marked stale: {stale_because or f'exceeded {stale_timeout} timeout'}"
+        running.error_message = f"Marked stale: exceeded {stale_timeout} timeout"
         cleared = (running.id, age)
 
     try:
@@ -216,6 +224,8 @@ def acquire_pipeline_lock_why(
         run = model(started_at=utcnow(), status=PipelineStatus.RUNNING)
         db.add(run)
         db.flush()
+        if on_insert is not None:
+            on_insert(run)  # in the row's own transaction (a run lease's tag)
         if lease.held(db, lease.DATA_RESET):
             # Checked inside the insert's own transaction (see
             # lease.DATA_RESET): backing out is a rollback, no second write.
