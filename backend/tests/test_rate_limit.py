@@ -157,3 +157,14 @@ class TestPublicApiRateLimit:
         for _ in range(20):
             await write_rate_limit(req)
         await _rate_limit_dep(req)  # a separate bucket
+
+
+@pytest.mark.usefixtures("_fixed_salt")
+async def test_a_key_is_too_short_to_single_out_an_address():
+    # Enumerating the IPv4 space against the day's salt must leave many
+    # candidates per key, never one.
+    from app.api import rate_limit
+
+    key = await client_key(_make_request("8.8.4.11"), "pulse", "3")
+    assert len(key) * 4 == rate_limit._KEY_BITS
+    assert 2 ** 32 / 2 ** rate_limit._KEY_BITS >= 256

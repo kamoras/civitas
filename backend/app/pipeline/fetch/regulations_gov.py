@@ -7,6 +7,7 @@ API docs: https://open.gsa.gov/api/regulationsgov/
 Rate limit: 1,000 requests/hour with an API key.
 """
 
+import asyncio
 import logging
 import re
 from collections.abc import Callable
@@ -99,7 +100,8 @@ async def fetch_comments(
     if page is not None:
         return page
     if spend is not None:
-        spend(1 if object_id else 2)
+        # A write to the shared budget (api/throttle.py): off the event loop.
+        await asyncio.to_thread(spend, 1 if object_id else 2)
 
     async with make_async_client() as client:
         try:

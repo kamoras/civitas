@@ -214,8 +214,41 @@ class TestKeywordBackfill:
 @pytest.mark.parametrize("value", ["worker", "all"])
 async def test_the_pipeline_side_refuses_to_run_as_several_workers(role, monkeypatch, value):
     role(value)
+    monkeypatch.setattr(main_module, "_cmdline", lambda pid: [])
     monkeypatch.setenv("WEB_CONCURRENCY", "2")
     monkeypatch.setattr(main_module, "init_db", lambda: None)
     with pytest.raises(RuntimeError, match="single worker"):
         async with main_module.lifespan(main_module.app):
             pass
+
+
+class TestConfiguredWorkers:
+    """An explicit --workers wins over WEB_CONCURRENCY, as in uvicorn — a
+    compose `command:` override must not slip past the guard."""
+
+    def _cmdlines(self, monkeypatch, own, parent):
+        import os
+
+        monkeypatch.setattr(main_module, "_cmdline", lambda pid: own if pid == os.getpid() else parent)
+
+    def test_the_supervisors_flag(self, monkeypatch):
+        self._cmdlines(monkeypatch, ["python", "-c", "spawn"], ["uvicorn", "app.main:app", "--workers", "2"])
+        monkeypatch.setenv("WEB_CONCURRENCY", "1")
+        assert main_module._configured_workers() == 2
+
+    def test_the_equals_form(self, monkeypatch):
+        self._cmdlines(monkeypatch, [], ["uvicorn", "app.main:app", "--workers=3"])
+        assert main_module._configured_workers() == 3
+
+    def test_an_explicit_single_worker_beats_the_env(self, monkeypatch):
+        self._cmdlines(monkeypatch, ["uvicorn", "app.main:app", "--workers", "1"], [])
+        monkeypatch.setenv("WEB_CONCURRENCY", "4")
+        assert main_module._configured_workers() == 1
+
+    def test_the_env_otherwise(self, monkeypatch):
+        self._cmdlines(monkeypatch, ["uvicorn", "app.main:app", "--reload"], ["sh"])
+        monkeypatch.setenv("WEB_CONCURRENCY", "2")
+        assert main_module._configured_workers() == 2
+
+    def test_this_process_reads_its_real_command_line(self):
+        assert isinstance(main_module._cmdline(__import__("os").getpid()), list)

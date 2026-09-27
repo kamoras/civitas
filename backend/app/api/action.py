@@ -528,6 +528,9 @@ async def record_pulse_vote(
             detail="You've already registered a stance on this issue today.",
         )
 
+    # Until the vote commits, a failure means no vote was recorded, so the
+    # claim mustn't hold the visitor off. After it, the claim stands
+    # whatever fails next: releasing it would let a retry count twice.
     try:
         issue = db.query(ActionIssue).filter(ActionIssue.id == body.issue_id).first()
         if not issue:
@@ -538,11 +541,10 @@ async def record_pulse_vote(
         else:
             issue.not_priority_count = (issue.not_priority_count or 0) + 1
         db.commit()
-        db.refresh(issue)
     except BaseException:
-        # No vote was recorded: the claim mustn't hold the visitor off.
         await asyncio.to_thread(throttle.release, _PULSE_BUCKET, key)
         raise
+    db.refresh(issue)
 
     return {
         "issueId": issue.id,
@@ -758,23 +760,20 @@ _next_election_day = next_election_day
 _seats_up_for_year = seats_up_for_year
 
 
-_house_districts_cache: dict[str, int] | None = None
-
-
 def _house_districts() -> dict[str, int]:
     """Per-state House district count, derived by counting district_pvi.json's
     own "ST-N" keys (2026-07 data-hygiene fix) — this used to be a second,
     independent hand-typed copy of the same 50-state apportionment table
     district_pvi.json already encodes, with no mechanism keeping the two in
-    sync. Verified identical to the prior hardcoded dict before replacing it."""
-    global _house_districts_cache
-    if _house_districts_cache is None:
-        from collections import Counter
-        from app.pipeline.analyze.score_calculator import get_district_pvi_map
-        _house_districts_cache = dict(
-            Counter(k.rsplit("-", 1)[0] for k in get_district_pvi_map()),
-        )
-    return _house_districts_cache
+    sync. Verified identical to the prior hardcoded dict before replacing it.
+
+    Counted on every call rather than cached: the pipeline process rewrites
+    district_pvi.json, and _district_pvi() reloads it here when it does, but
+    a count cached on top of it would not. 435 keys cost microseconds."""
+    from collections import Counter
+    from app.pipeline.analyze.score_calculator import get_district_pvi_map
+
+    return dict(Counter(k.rsplit("-", 1)[0] for k in get_district_pvi_map()))
 
 
 @router.get("/my-reps")

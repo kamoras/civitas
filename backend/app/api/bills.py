@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.rate_limit import UpstreamRouteLimit, spend_upstream
-from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, cached_json
+from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, cached_json, uncached_json
 from app.database import get_db
 from app.http_client import make_async_client
 from app.pipeline.fetch.congress import expected_current_congress
@@ -77,4 +77,9 @@ async def get_bill_record(
         raw = await fetch_bill_record(client, db, congress, bill_id, spend=spend_upstream)
     if raw["not_found"]:
         raise HTTPException(status_code=404, detail="Bill not found")
-    return _cached_json(shape_record(db, congress, bill_id, raw), max_age=CACHE_TTL_DETAIL_S)
+    record = shape_record(db, congress, bill_id, raw)
+    if raw["unavailable"]:
+        # Some part timed out or failed upstream just now; cached, every
+        # reader would get the gap until it expired.
+        return uncached_json(record)
+    return _cached_json(record, max_age=CACHE_TTL_DETAIL_S)

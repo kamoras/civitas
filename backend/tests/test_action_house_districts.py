@@ -19,7 +19,20 @@ class TestHouseDistricts:
     def test_covers_all_50_states(self):
         assert len(_house_districts()) == 50
 
-    def test_cached_across_calls(self):
-        first = _house_districts()
-        second = _house_districts()
-        assert first is second
+    def test_follows_a_district_pvi_refresh(self, tmp_path, monkeypatch):
+        # The pipeline process rewrites district_pvi.json; the count here
+        # must follow it rather than keep the copy it first derived.
+        import json
+        import os
+
+        from app.pipeline.analyze import score_calculator
+
+        monkeypatch.setattr(score_calculator, "_PVI_PERSISTENT_DIR", str(tmp_path))
+        monkeypatch.setattr(score_calculator, "_district_pvi_cache", None)
+        path = tmp_path / "district_pvi.json"
+        path.write_text(json.dumps({"districts": {"MT-1": 5, "MT-2": 10}}))
+        os.utime(path, (1000, 1000))
+        assert _house_districts()["MT"] == 2
+        path.write_text(json.dumps({"districts": {"MT-1": 5}}))
+        os.utime(path, (2000, 2000))
+        assert _house_districts()["MT"] == 1

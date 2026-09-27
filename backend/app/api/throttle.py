@@ -26,11 +26,15 @@ Keys are never IP addresses (rate_limit.client_key), and every row carries
 the time it stops mattering; expired rows are deleted at most once a
 minute per process, across every bucket.
 
-Cost: a `hit` is one small WAL write transaction — measured at ~1.4 ms
-(~700/s, serialized across processes) on a development container, against
-~1 µs for the in-process deque it replaced. Only mutations and
-/api/public/ pay it; every other read goes through nginx's cache and per-IP
-limit without touching this store.
+Cost: a `hit` or `claim` is one small WAL write transaction — measured at
+~1.4 ms (~700/s, serialized across processes) on a development container,
+against ~1 µs for the in-process deque it replaced. Paid by every request
+that reaches the backend on a limited route: every mutation (WriteRateLimit),
+the public API and Explore search and /api/qa (public.RateLimit), and the
+two live-lookup routes, bills/{id}/record and explore/{id}/comments
+(UpstreamRouteLimit, plus the shared hourly budget on a cache miss). Reads
+nginx answers from its cache never reach it; the rest of the API doesn't
+use it.
 
 Every function fails open. A limiter that can't reach its store lets the
 request through and logs it, rather than turning a locked database into an

@@ -76,3 +76,20 @@ async def test_a_new_day_salt_allows_a_new_vote(db_session):
     await _vote(db_session, "203.0.113.7", issue_id, salt=b"a" * 32)
     again = await _vote(db_session, "203.0.113.7", issue_id, salt=b"b" * 32)
     assert again["concernedCount"] == 2
+
+
+async def test_a_failure_after_the_vote_commits_keeps_the_claim(db_session):
+    # The vote is counted; releasing the claim on a later error would let
+    # the visitor's retry count a second one.
+    issue_id = _issue(db_session)
+
+    def broken_refresh(_obj):
+        raise RuntimeError("connection lost")
+
+    with patch.object(db_session, "refresh", broken_refresh), pytest.raises(RuntimeError):
+        await _vote(db_session, "203.0.113.9", issue_id)
+    with pytest.raises(HTTPException) as again:
+        await _vote(db_session, "203.0.113.9", issue_id)
+    assert again.value.status_code == 429
+    db_session.expire_all()
+    assert db_session.get(ActionIssue, issue_id).concerned_count == 1

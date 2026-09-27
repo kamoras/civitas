@@ -1767,11 +1767,11 @@ class ThrottleWindow(VisitsBase):
     that must hold across every API worker process (api/throttle.py).
 
     `key` is never an IP address, and never a visitor hash another table
-    holds: per-client keys are an HMAC under the day's visit salt with a
-    purpose tag of their own (api/rate_limit.client_key), so a row can't be
-    joined to SiteVisit — nor, for the pulse dedup, to the same visitor's
-    other rows. Deleted once `expires_at` passes; unlinkable to any address
-    once the day's salt is gone.
+    holds: per-client keys are a truncated HMAC under the day's visit salt
+    with a purpose tag of their own (api/rate_limit.client_key), so a row
+    can't be joined to SiteVisit — nor, for the pulse dedup, to the same
+    visitor's other rows — and each key matches hundreds of addresses, so
+    even with the salt no row names one. Deleted once `expires_at` passes.
     """
     __tablename__ = "throttle_windows"
 

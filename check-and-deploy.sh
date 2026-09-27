@@ -89,11 +89,16 @@ pipeline_is_busy() {
     -H "Authorization: Bearer $admin_token" \
     "http://localhost:8081/api/admin/pipeline/status" 2>/dev/null); then
     # The status lives in the pipeline service. If that service exists and
-    # has no task running at all, nothing can be running in it either —
-    # and deferring would block the very deploy that fixes it, forever.
+    # has no task running or starting — a starting task may already be
+    # running its startup jobs before its healthcheck passes — nothing can
+    # be running in it, and deferring would block the very deploy that
+    # fixes it, forever. A crash-looping task spends most of its time
+    # "Starting", but its restart_policy (max_attempts: 3,
+    # docker-compose.swarm.yml) ends the loop within minutes, and from
+    # then on this lets the fix through (live-checked on a swarm).
     if docker service inspect civitas_pipeline >/dev/null 2>&1 \
-      && [[ "$(docker service ps civitas_pipeline --filter desired-state=running --format '{{.CurrentState}}' 2>/dev/null | grep -c '^Running' || true)" == "0" ]]; then
-      log "pipeline status unreachable and civitas_pipeline has no running task — nothing to wait for"
+      && [[ "$(docker service ps civitas_pipeline --filter desired-state=running --format '{{.CurrentState}}' 2>/dev/null | grep -cE '^(Running|Starting)' || true)" == "0" ]]; then
+      log "pipeline status unreachable and civitas_pipeline has no running or starting task — nothing to wait for"
       return 1
     fi
     _busy_reason="couldn't reach pipeline status"

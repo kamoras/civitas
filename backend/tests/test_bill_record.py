@@ -181,6 +181,23 @@ class TestRoutes:
     def test_not_a_bill_id(self, client):
         assert client.get("/api/bills/PN.12/record").status_code == 404
 
+    def test_a_complete_record_is_cacheable(self, client):
+        r = client.get("/api/bills/S.4668/record?congress=119")
+        assert r.headers["Cache-Control"].startswith("public, max-age=")
+
+    def test_a_record_missing_a_part_is_never_stored(self, senate, monkeypatch):
+        # nginx caches whatever the backend marks public: one reader's
+        # upstream timeout would be every reader's missing section.
+        fake, _ = _answers(fail={"actions"})
+        monkeypatch.setattr(br, "_congress_get", fake)
+        app.dependency_overrides[get_db] = lambda: senate
+        try:
+            r = TestClient(app).get("/api/bills/S.4668/record?congress=119")
+        finally:
+            app.dependency_overrides.clear()
+        assert r.status_code == 200 and r.json()["unavailable"] == ["actions"]
+        assert r.headers["Cache-Control"] == "no-store"
+
     def test_a_congress_that_has_not_convened_is_refused(self, client):
         assert client.get("/api/bills/S.1/record?congress=200").status_code == 404
 

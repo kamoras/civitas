@@ -33,6 +33,14 @@ def cached_json(data, max_age: int = CACHE_TTL_LIST_S) -> JSONResponse:
     )
 
 
+def uncached_json(data) -> JSONResponse:
+    """A response that reports a failed live fetch — part of an upstream
+    record missing, a ballot that couldn't be read. It is this request's
+    failure, not the resource's state, so no cache (nginx's, a CDN's, the
+    browser's) may keep it and hand it to the next reader."""
+    return JSONResponse(content=data, headers={"Cache-Control": "no-store"})
+
+
 # Default score_1..score_5 -> dimension-name mapping (senators/reps share
 # this shape). Presidents use a different set of dimensions on the same
 # generic score_1..score_5 slots (see PRESIDENT_DIMENSION_LABELS below) —

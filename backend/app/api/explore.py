@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.api.auth import check_pipeline_token
 from app.api.public import RateLimit
 from app.api.rate_limit import UpstreamRouteLimit, WriteRateLimit, spend_upstream
+from app.api.response_helpers import uncached_json
 from app.database import get_db
 from app.models import ExploreDocument
 from app.services.explore_search import hybrid_search
@@ -229,11 +230,11 @@ async def get_document_comments(
         spend=spend_upstream,
     )
     # Fetched live, so an error here (a rate limit, a timeout) is this
-    # moment's, not the document's: cached, one visitor's failure would be
-    # served to every visitor for the whole lifetime. Answered 200 either
-    # way — the page shows the message in place of the list.
-    cache_control = "no-store" if result.get("error") else "public, max-age=300"
-    return JSONResponse(content=result, headers={"Cache-Control": cache_control})
+    # moment's, not the document's. Answered 200 either way — the page
+    # shows the message in place of the list.
+    if result.get("error"):
+        return uncached_json(result)
+    return JSONResponse(content=result, headers={"Cache-Control": "public, max-age=300"})
 
 
 class CommentSubmission(BaseModel):

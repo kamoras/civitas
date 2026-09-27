@@ -346,6 +346,7 @@ def _state_pvi() -> dict[str, int]:
     return _state_pvi_cache
 
 _member_ideal_points_cache: dict | None = None
+_member_ideal_points_stamp: Stamp = None
 
 
 _MEMBER_IDEAL_POINTS_PATH = "/data/member_ideal_points.json"
@@ -381,11 +382,18 @@ def _member_ideal_points(chamber: str) -> dict:
     slowly week to week). Missing data is never punitive — same
     convention as every other loader in this file.
     """
-    global _member_ideal_points_cache
-    if _member_ideal_points_cache is None:
+    import pathlib
+
+    from app.file_cache import files_stamp
+
+    global _member_ideal_points_cache, _member_ideal_points_stamp
+    path = pathlib.Path(_MEMBER_IDEAL_POINTS_PATH)
+    # Rewritten each run in the pipeline process; read by the API processes'
+    # score breakdowns (explain_scores), which reload when it moves.
+    stamp = files_stamp([path])
+    if _member_ideal_points_cache is None or stamp != _member_ideal_points_stamp:
         import json
-        import pathlib
-        path = pathlib.Path(_MEMBER_IDEAL_POINTS_PATH)
+        _member_ideal_points_stamp = stamp
         try:
             _member_ideal_points_cache = json.loads(path.read_text())
         except Exception:

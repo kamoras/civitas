@@ -81,3 +81,15 @@ def test_district_pvi_sees_a_rewrite_by_another_process(tmp_path, monkeypatch):
     assert score_calculator.get_district_pvi_map()["AL-7"] == -13
     _write(tmp_path / "district_pvi.json", {"districts": {"AL-7": -9}}, 2000)
     assert score_calculator.get_district_pvi_map()["AL-7"] == -9
+
+
+def test_member_ideal_points_see_a_rewrite_by_another_process(tmp_path, monkeypatch):
+    from app.pipeline.analyze import score_calculator
+
+    path = tmp_path / "member_ideal_points.json"
+    monkeypatch.setattr(score_calculator, "_MEMBER_IDEAL_POINTS_PATH", str(path))
+    monkeypatch.setattr(score_calculator, "_member_ideal_points_cache", None)
+    _write(path, {"senate": {"members": {"A1": 0.1}}}, 1000)
+    assert score_calculator._member_ideal_points("senate")["members"]["A1"] == 0.1
+    _write(path, {"senate": {"members": {"A1": 0.4}}}, 2000)
+    assert score_calculator._member_ideal_points("senate")["members"]["A1"] == 0.4

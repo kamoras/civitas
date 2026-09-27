@@ -147,6 +147,44 @@ def _start_pipeline_side_startup_jobs() -> None:
     start_writer(_startup_rescore, name="startup-rescore")
 
 
+def _cmdline(pid: int) -> list[str]:
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as fh:
+            return [arg.decode(errors="replace") for arg in fh.read().split(b"\0") if arg]
+    except OSError:
+        return []
+
+
+def _workers_flag(args: list[str]) -> int | None:
+    for i, arg in enumerate(args):
+        value = None
+        if arg == "--workers" and i + 1 < len(args):
+            value = args[i + 1]
+        elif arg.startswith("--workers="):
+            value = arg.split("=", 1)[1]
+        if value is not None:
+            try:
+                return int(value)
+            except ValueError:
+                return None
+    return None
+
+
+def _configured_workers() -> int:
+    """How many worker processes uvicorn runs this app in: an explicit
+    --workers on this process's command line or its parent's (the uvicorn
+    supervisor, for a spawned worker) wins, as it does in uvicorn;
+    WEB_CONCURRENCY otherwise."""
+    for pid in (os.getpid(), os.getppid()):
+        flag = _workers_flag(_cmdline(pid))
+        if flag is not None:
+            return flag
+    try:
+        return int(os.environ.get("WEB_CONCURRENCY") or 1)
+    except ValueError:
+        return 1
+
+
 PROCESS_STARTED_AT: str | None = None
 
 
@@ -160,14 +198,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     serves_reads = role in ("all", "api")
     runs_pipelines = role in ("all", "worker")
     logging.getLogger("app.main").info("Backend process role: %s", role)
-    if runs_pipelines and int(os.environ.get("WEB_CONCURRENCY") or 1) > 1:
+    if runs_pipelines and _configured_workers() > 1:
         # The pipeline side keeps state only its own process can see — the
         # in-memory run flags the admin status endpoint (and through it
         # check-and-deploy.sh's busy check) reports, the data reset's
         # writer registry — and would run one scheduler per worker.
         raise RuntimeError(
             f"PROCESS_ROLE={role} must run as a single worker process "
-            f"(WEB_CONCURRENCY={os.environ['WEB_CONCURRENCY']}); only PROCESS_ROLE=api scales out"
+            f"(uvicorn is running {_configured_workers()}); only PROCESS_ROLE=api scales out"
         )
 
     if runs_pipelines:
