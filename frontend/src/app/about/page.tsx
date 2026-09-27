@@ -311,11 +311,23 @@ export default function AboutPage() {
                   in standard deviations rather than percentage points: four extra points on a seat
                   whose members break 1.5% of the time is breaking several times as often as its
                   norm, while four extra on a seat whose members break 7% is a modest departure.
-                  Matching the expectation scores 100. Breaking more often lowers the score,
-                  reaching 0 at one and a half times the gap that the most out-of-pattern tenth of
-                  the member&apos;s party shows. Breaking less often lowers it more gently, reaching 0
-                  only at three times that gap, so being more loyal than the norm costs less than
-                  breaking too often. Each party-line roll call counts once. With fewer than 20 of
+                  Matching the expectation scores 100. Breaking more often lowers the score in a
+                  straight line, reaching 0 at one and a half times the gap that the most
+                  out-of-pattern tenth of the member&apos;s party shows. Breaking less often lowers it
+                  more gently, reaching 0 only at three times that gap, so being more loyal than the
+                  norm costs half as much as breaking too often. The gap is measured from the
+                  chamber on every update, separately for each party: in the Senate as of September
+                  2026 it is
+                  about 0.37 standard deviations per vote for Democrats and 0.33 for Republicans,
+                  so a Democrat&apos;s vote score reaches 0 at about 0.56 more independent than their
+                  seat&apos;s norm. Each score&apos;s breakdown shows its own numbers. The one and a
+                  half and the three are design choices, not measurements: when we tested other
+                  values against election results, wider or narrower settings didn&apos;t fit
+                  consistently better, so they were set to reserve 0 for the heaviest breakers (5
+                  senators as of September 2026: Durbin, Fetterman, King, Murkowski and Paul) and
+                  keep loyalty the gentler side. No senator then was more than about three-quarters
+                  of a gap more loyal than their seat&apos;s norm, so extra loyalty costs at most
+                  about 24 points. Each party-line roll call counts once. With fewer than 20 of
                   them the result is pulled, in proportion, toward what a typical member of the same
                   party scores, so a single break in a thin record can&apos;t reach either end and a
                   newcomer isn&apos;t ranked below their colleagues just for having few votes.
@@ -552,10 +564,10 @@ export default function AboutPage() {
               across members.
             </Gist>
             <P>
-              <em className="text-ink">Comparison windows differ by tenure and chamber.</em> Funding
-              metrics cover a member&apos;s two most recent election periods — roughly 8 years for a
-              veteran senator, 2 for a freshman, 4 for House members — so cross-member comparisons
-              weigh different spans of time.
+              <em className="text-ink">Comparison windows differ by chamber.</em> Funding metrics
+              cover a member&apos;s most recent completed election — the campaign that won them
+              their current seat, six years of fundraising for a senator and two for a House
+              member — so cross-chamber comparisons weigh different spans of time.
             </P>
             <Gist>
               when we flag a donor whose industry overlaps with a vote, that shows where money and
@@ -644,6 +656,23 @@ export default function AboutPage() {
               just as much as competitive-seat voters did, so v6.13 removed the scaling. Issue-level
               opinion data (e.g. MRP estimates or CES roll-call-matched items) remains the named
               next step for this dimension.
+            </P>
+            <Gist>
+              the votes alone can&apos;t tell a member who breaks often because it wins over voters
+              on both sides from one whose breaks alienate their own party, so both score low.
+            </Gist>
+            <P>
+              <em className="text-ink">
+                Heavy breaking reads the same whether it builds a coalition or burns one.
+              </em>{" "}
+              Since v6.16 the vote part is highest at the seat&apos;s norm. That is the pattern a
+              member&apos;s own party&apos;s primary voters reward. The electorate as a whole leans the
+              other way: in Senate general elections from 1990 to 2024, members who broke more than
+              their seat&apos;s norm did somewhat better, and some heavy breakers keep winning
+              statewide by appealing to both sides. A roll-call record can&apos;t separate those
+              members from ones whose breaks cost them their base. Telling them apart would take
+              opinion data split by party, such as approval of each member among Democrats and
+              Republicans in their state, which is the same survey data named above.
             </P>
             <Gist>
               two of the checks that used to lower Constituent Alignment were computed from the same

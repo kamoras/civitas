@@ -1968,9 +1968,17 @@ def _constituent_alignment_core(
             side, reach = (
                 ("more loyal", LOYAL_ZERO_GAPS) if residual < 0 else ("more independent", CROSSING_ZERO_GAPS)
             )
+            # Name where the zero comes from: a multiple of the party's own
+            # 90th-percentile gap, not a number from nowhere.
+            basis = (
+                f"the gap beyond which the most out-of-pattern tenth of {eval_party} members "
+                "of this chamber sit"
+                if measured else "the preset scale"
+            )
             gap = (
                 f"{abs(residual):.2f} standard deviations per vote {side} than that "
-                f"(100 at the expectation, 0 at {reach * scale:.2f} standard deviations per vote {side})"
+                f"(100 at the expectation, 0 at {reach * scale:.2f} {side}: "
+                f"{reach:g} × {scale:.2f}, {basis})"
             )
         party_alignment_detail = (
             f"broke with party on {break_rate:.1%} of {n_party} party-labeled votes; {norm} — {gap}"
