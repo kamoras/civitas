@@ -457,6 +457,35 @@ async def sync_roll_calls(client: httpx.AsyncClient, db: Session, chamber: str,
     return stored, "ok"
 
 
+# House roll calls stored before the House parser read <vote-type> have no
+# majority requirement ("2/3" on a suspension). Re-read this many per run
+# until none is left; each costs one request, once.
+_REQUIREMENT_REPAIR_BATCH = 60
+
+
+async def repair_house_requirements(client: httpx.AsyncClient, db: Session,
+                                    limit: int = _REQUIREMENT_REPAIR_BATCH) -> tuple[int, str]:
+    """-> (repaired, outcome). Reads only <vote-type>; the stored tally and
+    positions are left as they are."""
+    rows = db.query(RollCall).filter(
+        RollCall.chamber == "house", RollCall.majority_requirement == "",
+    ).order_by(RollCall.id.desc()).limit(limit).all()
+    repaired = 0
+    for rc in rows:
+        body = await _get(client, rc.source_url, label="house roll call")
+        if body is None:
+            return repaired, "failed"
+        if body is _ABSENT:
+            continue
+        parsed = parse_house_vote_xml(body.decode("utf-8", errors="replace"), 0, rc.number)
+        if parsed is None:
+            continue
+        rc.majority_requirement = parsed["majorityRequirement"][:10]
+        db.commit()
+        repaired += 1
+    return repaired, "ok"
+
+
 # ── The run ───────────────────────────────────────────────────────
 
 async def run_congress_sync() -> dict:
@@ -475,6 +504,8 @@ async def run_congress_sync() -> dict:
                     n, status = await sync_roll_calls(client, db, chamber, congress, session)
                     votes[f"{chamber}-{session}"] = {"stored": n, "status": status}
             result["rollCalls"] = votes
+            fixed, status = await repair_house_requirements(client, db)
+            result["requirementsRepaired"] = {"repaired": fixed, "status": status}
             result["floorLogs"] = {
                 d.isoformat(): await sync_floor_logs(client, db, d)
                 for d in (today - timedelta(days=1), today)

@@ -147,3 +147,15 @@ class TestDateBounds:
 
     def test_first_congress_is_in_range(self, client):
         assert client.get("/api/congress/month/1789-03").status_code == 200
+
+
+def test_closest_votes_are_measured_from_what_each_vote_needed():
+    cloture_short_by_one = RollCall(chamber="senate", yeas=59, nays=41, majority_requirement="3/5")
+    simple_by_two = RollCall(chamber="senate", yeas=51, nays=49, majority_requirement="1/2")
+    suspension_clear_by_three = RollCall(chamber="house", yeas=290, nays=140, majority_requirement="2/3")
+    unstated = RollCall(chamber="house", yeas=220, nays=210, majority_requirement="")
+    assert cs.votes_from_threshold(cloture_short_by_one) == 1
+    assert cs.votes_from_threshold(simple_by_two) == 1
+    assert round(cs.votes_from_threshold(suspension_clear_by_three), 2) == 3.33
+    assert cs.votes_from_threshold(unstated) == 5
+

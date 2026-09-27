@@ -391,3 +391,29 @@ def test_a_senate_vote_on_an_amendment_belongs_to_its_bill(db_session, monkeypat
     monkeypatch.setattr(ca, "_get", _fake_get({"_00001.xml": vote, "vote1192": ca._ABSENT}))
     asyncio.run(ca.sync_roll_calls(None, db_session, "senate", 119, 2))
     assert db_session.query(RollCall).one().bill_id == "S.4668"
+
+
+def test_a_house_suspension_needs_two_thirds():
+    from app.pipeline.fetch.congress import parse_house_vote_xml
+
+    text = (FIX / "roll_calls" / "house_2026_roll309.xml").read_text()
+    assert parse_house_vote_xml(text, 2026, 309)["majorityRequirement"] == "1/2"
+    suspension = text.replace("<vote-type>YEA-AND-NAY</vote-type>", "<vote-type>2/3 YEA-AND-NAY</vote-type>")
+    assert parse_house_vote_xml(suspension, 2026, 309)["majorityRequirement"] == "2/3"
+
+
+def test_house_votes_stored_without_a_requirement_are_repaired_once(db_session, monkeypatch):
+    text = (FIX / "roll_calls" / "house_2026_roll309.xml").read_text()
+    suspension = text.replace("<vote-type>YEA-AND-NAY</vote-type>", "<vote-type>2/3 YEA-AND-NAY</vote-type>")
+    db_session.add(RollCall(chamber="house", congress=119, session=2, number=309, date="2026-09-16",
+                            source_url="https://clerk.house.gov/evs/2026/roll309.xml", majority_requirement=""))
+    db_session.add(RollCall(chamber="senate", congress=119, session=2, number=1, date="2026-09-16",
+                            source_url="https://www.senate.gov/x.xml", majority_requirement=""))
+    db_session.commit()
+    monkeypatch.setattr(ca, "_get", _fake_get({"roll309.xml": suspension.encode()}))
+    assert _run(ca.repair_house_requirements(None, db_session)) == (1, "ok")
+    assert db_session.query(RollCall).filter_by(chamber="house").one().majority_requirement == "2/3"
+    # Nothing left to repair: no request is made.
+    monkeypatch.setattr(ca, "_get", _fake_get({}))
+    assert _run(ca.repair_house_requirements(None, db_session)) == (0, "ok")
+
