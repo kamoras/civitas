@@ -132,11 +132,17 @@ BILL_STAGES: dict[str, dict] = {
     # because nearly all of them simply hadn't died yet.
     "REFERRED":         {"name": "Referred to Committee", "color": "#60a5fa", "order": 2},
     "IN_COMMITTEE":     {"name": "In Committee",       "color": "#3b82f6", "order": 3},
-    "PASSED_CHAMBER":   {"name": "Passed Chamber",     "color": "#8b5cf6", "order": 4},
-    "IN_OTHER_CHAMBER": {"name": "In Other Chamber",   "color": "#f59e0b", "order": 5},
-    "TO_PRESIDENT":     {"name": "To President",       "color": "#ec4899", "order": 6},
-    "ENACTED":          {"name": "Enacted",            "color": "#00ff41", "order": 7},
-    "VETOED":           {"name": "Vetoed",             "color": "#ef4444", "order": 8},
+    # 2026-09: a bill reported out of committee and under floor debate
+    # (motion to proceed, cloture, "considered by Senate") had no stage of
+    # its own, so it read "In Committee" through a week of floor votes
+    # (S. 4668, 119th Congress). Volden & Wiseman call this step "action
+    # beyond committee".
+    "ON_FLOOR":         {"name": "On the Floor",       "color": "#ff8a3d", "order": 4},
+    "PASSED_CHAMBER":   {"name": "Passed Chamber",     "color": "#8b5cf6", "order": 5},
+    "IN_OTHER_CHAMBER": {"name": "In Other Chamber",   "color": "#f59e0b", "order": 6},
+    "TO_PRESIDENT":     {"name": "To President",       "color": "#ec4899", "order": 7},
+    "ENACTED":          {"name": "Enacted",            "color": "#00ff41", "order": 8},
+    "VETOED":           {"name": "Vetoed",             "color": "#ef4444", "order": 9},
 }
 
 # Derived from BILL_STAGES's keys rather than listed separately, so a code

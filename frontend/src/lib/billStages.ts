@@ -60,6 +60,13 @@ const STAGE_STYLES: Record<string, BillStageStyle> = {
     bar: "bg-dem-blue",
     rule: "border-l-dem-blue",
   },
+  ON_FLOOR: {
+    text: "text-signal-orange",
+    border: "border-signal-orange/30",
+    bg: "bg-signal-orange/10",
+    bar: "bg-signal-orange",
+    rule: "border-l-signal-orange",
+  },
   PASSED_CHAMBER: {
     text: "text-ind-purple",
     border: "border-ind-purple/30",

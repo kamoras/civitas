@@ -135,7 +135,12 @@ comparison.
   coverage, which has no source here. Its effect is inside the gap between the
   last row and 1.0.
 - **Four stages, not five.** Congress.gov's action codes give committee action
-  and reporting as one stage (IN_COMMITTEE).
+  and reporting as one stage (IN_COMMITTEE). Floor action short of passage is
+  now its own display stage, ON_FLOOR (2026-09: S. 4668 read "In Committee"
+  through a week of Senate floor votes), which is V&W's "action beyond
+  committee". The scorer still credits it as committee action, so no score
+  moved; giving it a fifth stage of credit is open and needs the same
+  measurement against the published LES as the rows above.
 - **Benchmark.** Each member is compared with the median member of their own
   majority/minority status in their chamber (v6.13). The majority − minority
   gap stays at zero.
