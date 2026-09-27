@@ -29,8 +29,8 @@ export const metadata = pageMetadata({
 //
 // `defaultOpen` covers two cases: the lead section, so the page never opens
 // on a bare list of closed boxes, and any section carrying an `id`, because
-// that id is a deep-link target (the leaderboard links to
-// /about#known-limitations) and fragment-navigation auto-expansion of a
+// any id is a potential deep-link target (e.g. /about#known-limitations,
+// shared from outside the site) and fragment-navigation auto-expansion of a
 // closed <details> is too recent to rely on across browsers.
 function Section({
   title,
