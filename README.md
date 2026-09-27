@@ -474,8 +474,10 @@ Every hour at :15
   9. TIMELINE ── Record daily TimelineEntry
        │         At week/month/year boundaries: LLM generates period summary
        ▼
- 10. BLUESKY ─── Post new/updated issues (LLM-written, with staleness framing
-       │         if event predates today). Daily senator score spotlight.
+ 10. BLUESKY ─── Post new/updated issues: the verified lede, verbatim (or the
+       │         real headline if it doesn't fit), opening "Yesterday:" / "On
+       │         <date>:" if the event predates today. Nothing model-written.
+       │         Daily senator score spotlight.
        │         Weekly civic summary.  (spotlight + weekly also run on the
        │         early-abort paths above — neither depends on the news)
        │         Repost + like outlet posts that match active issues.
@@ -765,7 +767,7 @@ The Civitas Bluesky account (`@civitas-research.org`) is updated automatically b
 
 | Post type | Trigger | Content |
 |-----------|---------|---------|
-| **Issue post** | New topic enters action center, or existing topic gets articles with a newer date | Verbatim claims extracted from the sources and rendered by `post_composer` — the model locates spans, it does not write the sentence. If the event predates today, the post opens with "Yesterday: …" or "On [date]: …" |
+| **Issue post** | New topic enters action center, or existing topic gets articles with a newer date | The issue's lede — a claim the model located and `post_composer` verified verbatim — or the top article's real headline when the lede is too long to post whole (a claim is never cut: truncation can drop the qualifier that makes it true). No word is model-written. If the event predates today, code prefixes "Yesterday: …" or "On [Month day]: …" (`bluesky_poster._compose_new_post`) |
 | **Senator spotlight** | Once per day (random pick from those not yet spotlighted, cycling through all before repeating) | LLM-written score highlight with data from Civitas scorecard |
 | **Weekly summary** | Once per week (6-day cooldown) | LLM-written condensed week-in-review from the timeline pipeline |
 | **Repost + like** | Outlet post matches an active issue (cosine sim ≥ 0.78) | Reposts + likes posts from AP News, NPR, and PBS NewsHour (`NEWS_OUTLET_HANDLES` — a narrower list than the RSS feed set, since it needs a Bluesky presence); posts under 24h old; max 3 per hourly run |

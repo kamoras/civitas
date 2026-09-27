@@ -1112,7 +1112,7 @@ class LearnedClassification(Base):
     entity_name: Mapped[str] = mapped_column(String, primary_key=True)
     entity_type: Mapped[str] = mapped_column(String, primary_key=True)  # "donor_type", "industry"
     value: Mapped[str] = mapped_column(String, nullable=False)
-    confidence: Mapped[float] = mapped_column(Float, default=1.0)  # 1.0=rule, 0.9=embedding, 0.7=LLM
+    confidence: Mapped[float] = mapped_column(Float, default=1.0)  # per source: donor_classifier_ai._CONFIDENCE_MAP
     source: Mapped[str] = mapped_column(String, nullable=False)  # "fec", "semantic", "embedding", "embedding_correction", "nn"
     model_version: Mapped[str | None] = mapped_column(String, nullable=True)  # embedding model that produced this
     match_metadata: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON: top scores, matched anchors

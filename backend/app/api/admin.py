@@ -1467,6 +1467,9 @@ _SUPPRESSION_COUNTERS = (
     "issues_skipped_no_action_surface",
     "bsky_reposts_suppressed_no_new_information",
     "bsky_posts_suppressed_near_duplicate",
+    "bsky_posts_skipped_too_long",
+    # No longer emitted (the post stopped being model-written, 2026-09);
+    # kept so runs from before that still total in the window.
     "bsky_post_grounding_rejections",
 )
 

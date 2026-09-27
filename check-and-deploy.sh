@@ -161,8 +161,9 @@ fi
 log "new commit on main: ${REMOTE:0:8} (was ${LOCAL:0:8})"
 git reset --hard origin/main
 
-# Branch protection isn't available on this repo (private, free plan), so
-# this is the enforcement point: refuse to ship a commit whose CI failed.
+# The enforcement point whatever GitHub's branch settings say (this was
+# written when the repo was private on a free plan, where branch protection
+# wasn't available): refuse to ship a commit whose CI failed.
 # Override with FORCE_DEPLOY=1.
 if [[ -z "${FORCE_DEPLOY:-}" ]] && command -v gh >/dev/null 2>&1; then
   ci_conclusion=$(gh run list --commit "$REMOTE" --workflow CI \

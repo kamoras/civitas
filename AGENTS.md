@@ -151,7 +151,8 @@ of these approaches:
 - **LLM inference** for tasks that require natural language synthesis from
   unstructured input: Action Center claim location (verbatim-checked),
   monitor significance and merge decisions, timeline period summaries,
-  Bluesky post text, early-signal vote drafts, on-request Explore document
+  Bluesky spotlight and weekly-summary text (issue posts are the verified
+  lede, verbatim), early-signal vote drafts, on-request Explore document
   summaries (`POST /api/explore/{id}/summary`, a write), and justice profile
   summaries. Never a score, and never ballot content (§7). (Per-senator/rep
   narrative generation and promise evaluation used to be LLM-based; both
