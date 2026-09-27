@@ -532,6 +532,8 @@ What each chamber did each day, for the Congress reports. Every half hour (`cong
 
 **The pages.** `/congress` is the latest day either chamber met; `/congress/2026-09-24`, `/congress/week/2026-09-21` and `/congress/month/2026-09` are a day, a week and a month, each with the Senate and the House side by side. `/congress/bills` is the in-motion list that used to be `/bills` (old links redirect), and `/congress/bills/{id}` is any bill's page: the CRS summary, sponsor and cosponsors, the full action history with a link to each day's report, text versions, and every recorded vote with each party's split and each member's position, filterable by state. A day whose Digest is not out yet shows the chambers' live floor logs and says so.
 
+**A file is not a session.** On a day the Senate does not meet it still publishes its floor file, holding only when it reconvenes; the sync reads that as not in session (it first read as "The Senate met" for Friday and Saturday, 2026-09-25/26), and re-reads every not-yet-final day of the last week so a wrong row corrects itself.
+
 **A missing file is not a failed fetch.** A 404, or senate.gov's redirect of a missing file to its "not found" page, means the chamber has nothing for that day. Anything else writes nothing, so a day is never made final from part of its Digest, and the back-fill stops before a failed day to retry it.
 
 ---

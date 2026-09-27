@@ -1344,7 +1344,8 @@ export default function AboutPage() {
               bills, agreed to 4 resolutions and took 3 record votes.&quot; It never describes what a
               bill does or whether it is good. &quot;Passed both chambers&quot; means a measure was passed
               by the chamber it did not start in, which it can only reach by passing the first.
-              A chamber that did not meet is shown as not in session. A source that could not be
+              A chamber that did not meet is shown as not in session, including on days the
+              Senate publishes only the time it reconvenes. A source that could not be
               read is shown as unavailable, never as a day with nothing in it.
             </P>
             <P>
