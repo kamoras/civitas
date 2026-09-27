@@ -33,7 +33,7 @@ import logging
 from dataclasses import dataclass
 from typing import Callable
 
-from app.pipeline.analyze.post_composer import compose
+from app.pipeline.analyze.post_composer import compose, headline_source
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +103,7 @@ def extract_claims(
     """
     claims: list[Claim] = []
     for article in articles:
-        source = f"{getattr(article, 'title', '')}\n{getattr(article, 'summary', '') or ''}".strip()
+        source = headline_source(getattr(article, "title", ""), getattr(article, "summary", ""))
         if not source:
             continue
         try:

@@ -1319,7 +1319,9 @@ export default function AboutPage() {
                   article — who did something, and what they did — and the platform then checks that
                   both spans appear in the source word for word, that the source asserts one OF the
                   other rather than merely containing both, and that the span runs to the end of its
-                  clause. Only then is the sentence rendered. The headline is the top article&apos;s
+                  clause. Only then is the sentence rendered, in the source&apos;s own words from
+                  who through what, including anything between them: leaving those words out once
+                  turned &ldquo;OpenAI agent made&rdquo; into &ldquo;OpenAI made&rdquo;. The headline is the top article&apos;s
                   real headline; each fact carries the outlet it came from.
                 </P>
                 <P>

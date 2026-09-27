@@ -45,7 +45,7 @@ from app.pipeline.analyze.grounding import (
     hedge_and_editorializing_violations,
 )
 from app.pipeline.analyze.ollama_client import call_llm
-from app.pipeline.analyze.post_composer import compose
+from app.pipeline.analyze.post_composer import compose, headline_source
 from app.pipeline.analyze import race_relevance
 from app.pipeline.candidate_dedup import resolve_candidate_id
 from app.time_utils import utcnow
@@ -160,7 +160,7 @@ def _generate_post_text(item: RaceCoverageItem, race: Race, roster_fact: str) ->
     no attributable fact simply produces no post, which is what stopped
     60 of 160 live race posts from having said only that they existed.
     """
-    source_material = f"{item.title or ''}\n{item.summary or ''}".strip()
+    source_material = headline_source(item.title, item.summary)
     if not source_material:
         return None
 
