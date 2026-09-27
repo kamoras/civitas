@@ -300,3 +300,65 @@ class TestLease:
         result = asyncio.run(senate_pipeline.run_senate_pipeline())
         assert result["status"] == "skipped"
         assert db_session.query(models.PipelineRun).count() == 0
+
+    def test_every_lease_has_a_hung_horizon(self):
+        from app.pipeline import lease
+
+        assert set(lease.HUNG_AFTER) == set(lease.TIERS)
+        assert all(lease._max_hold(tier).total_seconds() > 0 for tier in lease.TIERS)
+
+    def test_a_hung_holders_lease_stops_being_renewed(self, db_session, monkeypatch):
+        import time
+        from datetime import timedelta
+
+        from app.pipeline import lease
+
+        monkeypatch.setattr(lease, "BEAT_S", 0.01)
+        monkeypatch.setitem(lease.HUNG_AFTER, lease.BILL_REFRESH, lease.stale_after(lease.BILL_REFRESH) + timedelta(seconds=0.05))
+        beats = []
+        monkeypatch.setattr(lease, "beat", lambda db, tier, token: beats.append(time.monotonic()) or True)
+        with lease.holding(db_session, lease.BILL_REFRESH):
+            time.sleep(0.3)
+        assert beats and beats[-1] - beats[0] < 0.1  # stopped at its limit, not at the end of the hold
+
+    async def test_a_cancelled_async_take_lets_go_of_what_it_took(self, db_session, monkeypatch):
+        import asyncio
+        import threading
+
+        from app.pipeline import lease
+
+        monkeypatch.setattr("app.database.SessionLocal", lambda: _Unclosable(db_session))
+        took = threading.Event()
+        let_go = threading.Event()
+        real_take = lease._take
+        monkeypatch.setattr(lease, "_take", lambda *a: (took.wait(), real_take(*a))[1])
+        real_let_go = lease._let_go_and_close
+        monkeypatch.setattr(lease, "_let_go_and_close", lambda *a: (real_let_go(*a), let_go.set()))
+
+        async def use():
+            async with lease.job_async(lease.EXPLORE):
+                pass
+
+        task = asyncio.ensure_future(use())
+        await asyncio.sleep(0.05)
+        task.cancel()
+        took.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert await asyncio.to_thread(let_go.wait, 5)
+        assert not lease.held(db_session, lease.EXPLORE)
+
+    def test_a_senate_run_whose_lock_fails_lets_go_of_its_lease(self, db_session, monkeypatch):
+        import asyncio
+
+        from app.pipeline import lease, senate_pipeline
+
+        monkeypatch.setattr(senate_pipeline, "SessionLocal", lambda: _Unclosable(db_session))
+
+        def broken(_db):
+            raise RuntimeError("disk I/O error")
+
+        monkeypatch.setattr(senate_pipeline, "_acquire_pipeline_lock", broken)
+        with pytest.raises(RuntimeError):
+            asyncio.run(senate_pipeline.run_senate_pipeline())
+        assert not lease.held(db_session, lease.SENATE_RUN)

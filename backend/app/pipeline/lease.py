@@ -80,6 +80,32 @@ def stale_after(tier: str) -> timedelta:
     return timedelta(seconds=_STALE_S_BY_TIER.get(tier, STALE_S))
 
 
+# How old a run still going is when its job's own checks call it hung and
+# start another anyway — the one number both use (scheduler.py reads these).
+# A holder stops renewing its lease a stale window short of it, so the lease
+# has lapsed when that override comes due; without a bound a hung holder,
+# whose process lives on, would renew it forever and hold its job, and every
+# data reset, off until a restart.
+HUNG_AFTER = {
+    DATA_RESET: timedelta(hours=1),
+    ACTION_REFRESH: timedelta(hours=4),
+    # A pipeline's run lock goes stale at 12h (run_tracker.STALE_PIPELINE_TIMEOUT);
+    # the Senate run's lease, and the Supplementary steps', with it.
+    SENATE_RUN: timedelta(hours=12),
+    JUSTICE_PIPELINE: timedelta(hours=12),
+    PRESIDENT_PIPELINE: timedelta(hours=12),
+    EXPLORE: timedelta(hours=12),
+    STARTUP_RESCORE: timedelta(hours=2),
+    BILL_REFRESH: timedelta(hours=2),
+    BALLOT_SYNC: timedelta(hours=2),
+    COVERAGE_REFRESH: timedelta(hours=2),
+}
+
+
+def _max_hold(tier: str) -> timedelta:
+    return HUNG_AFTER[tier] - stale_after(tier)
+
+
 def acquire(db: Session, tier: str, *, yield_to: str | None = None, take_over: bool = False) -> str | None:
     """Take the lease; the holder's token, or None when it is held — or, with
     `yield_to`, when that lease is held once this one's row is in (checked
@@ -191,12 +217,12 @@ def _keep(bind, tier: str, token: str, stop: threading.Event, beat_s: float, unt
 class _Held:
     """A taken lease and its heartbeat, from _take until _let_go."""
 
-    def __init__(self, db: Session, tier: str, token: str, max_hold: timedelta | None) -> None:
+    def __init__(self, db: Session, tier: str, token: str) -> None:
         import time
 
         self.db, self.tier, self.token = db, tier, token
         self.stop = threading.Event()
-        until = time.monotonic() + max_hold.total_seconds() if max_hold is not None else None
+        until = time.monotonic() + _max_hold(tier).total_seconds()
         self.heartbeat = threading.Thread(
             target=_keep, args=(db.get_bind(), tier, token, self.stop, BEAT_S, until),
             name=f"{tier}-beat", daemon=True,
@@ -204,9 +230,9 @@ class _Held:
         self.heartbeat.start()
 
 
-def _take(db: Session, tier: str, yield_to: str | None, take_over: bool, max_hold: timedelta | None) -> _Held | None:
+def _take(db: Session, tier: str, yield_to: str | None, take_over: bool) -> _Held | None:
     token = acquire(db, tier, yield_to=yield_to, take_over=take_over)
-    return _Held(db, tier, token, max_hold) if token is not None else None
+    return _Held(db, tier, token) if token is not None else None
 
 
 def _let_go(held_lease: _Held) -> None:
@@ -218,14 +244,11 @@ def _let_go(held_lease: _Held) -> None:
 
 
 @contextmanager
-def holding(
-    db: Session, tier: str, *, yield_to: str | None = None, take_over: bool = False,
-    max_hold: timedelta | None = None,
-) -> Iterator[str | None]:
+def holding(db: Session, tier: str, *, yield_to: str | None = None, take_over: bool = False) -> Iterator[str | None]:
     """Hold the lease for the enclosed work, beating it throughout (up to
-    `max_hold`, see _keep); yields the token, or None (and holds nothing)
-    when acquire refused."""
-    held_lease = _take(db, tier, yield_to, take_over, max_hold)
+    its tier's HUNG_AFTER, see _keep); yields the token, or None (and holds
+    nothing) when acquire refused."""
+    held_lease = _take(db, tier, yield_to, take_over)
     if held_lease is None:
         yield None
         return
@@ -235,7 +258,8 @@ def holding(
         _let_go(held_lease)
 
 
-def _refusal(db: Session, tier: str) -> str:
+def refusal(db: Session, tier: str) -> str:
+    """Why `tier` couldn't be taken, as a skip message says it."""
     if held(db, DATA_RESET):
         return "a data reset is running"
     if held(db, tier):
@@ -244,50 +268,68 @@ def _refusal(db: Session, tier: str) -> str:
 
 
 @contextmanager
-def job(tier: str, *, max_hold: timedelta | None = None) -> Iterator[bool]:
+def job(tier: str) -> Iterator[bool]:
     """A background job's lease, on its own session, yielding to the data
     reset: yields True while held, False — hold nothing, skip the work —
     when a reset is running, another process runs the same job, or the
-    database stayed busy. `max_hold`: see _keep."""
+    database stayed busy."""
     from app.database import SessionLocal
 
     db = SessionLocal()
     try:
-        with holding(db, tier, yield_to=DATA_RESET, max_hold=max_hold) as token:
+        with holding(db, tier, yield_to=DATA_RESET) as token:
             if token is None:
-                logger.info("%s skipped: %s", TIERS[tier], _refusal(db, tier))
+                logger.info("%s skipped: %s", TIERS[tier], refusal(db, tier))
             yield token is not None
     finally:
         db.close()
 
 
-@asynccontextmanager
-async def job_async(tier: str, *, max_hold: timedelta | None = None) -> AsyncIterator[bool]:
-    """job() for async code: the same lease, its database work in a thread,
-    off the event loop, which serves every request. A cancellation while the
-    lease is being taken waits for the taking to finish, and lets go of what
-    it took, before the session closes."""
-    import asyncio
-
+def _open_and_take(tier: str) -> tuple[Session, "_Held | None", str | None]:
+    """job_async's take, whole, in one worker thread: its own session, the
+    lease, and the refusal reason if it was refused."""
     from app.database import SessionLocal
 
     db = SessionLocal()
     try:
-        taking = asyncio.ensure_future(asyncio.to_thread(_take, db, tier, DATA_RESET, False, max_hold))
-        try:
-            held_lease = await asyncio.shield(taking)
-        except asyncio.CancelledError:
-            held_lease = await taking
-            if held_lease is not None:
-                await asyncio.to_thread(_let_go, held_lease)
-            raise
-        if held_lease is None:
-            logger.info("%s skipped: %s", TIERS[tier], await asyncio.to_thread(_refusal, db, tier))
-            yield False
-            return
-        try:
-            yield True
-        finally:
-            await asyncio.to_thread(_let_go, held_lease)
+        held_lease = _take(db, tier, DATA_RESET, False)
+        return db, held_lease, None if held_lease is not None else refusal(db, tier)
+    except BaseException:
+        db.close()
+        raise
+
+
+def _let_go_and_close(db: Session, held_lease: "_Held | None") -> None:
+    try:
+        if held_lease is not None:
+            _let_go(held_lease)
     finally:
         db.close()
+
+
+@asynccontextmanager
+async def job_async(tier: str) -> AsyncIterator[bool]:
+    """job() for async code: the same lease, with its session and all its
+    database work in worker threads, off the event loop, which serves every
+    request. Cancellation can't strand anything: the take and the release
+    each run to completion in their thread whatever happens to the await,
+    and a take the caller stopped waiting for is let go of by the thread
+    that finishes it."""
+    import asyncio
+
+    taking = asyncio.ensure_future(asyncio.to_thread(_open_and_take, tier))
+    try:
+        db, held_lease, refused = await asyncio.shield(taking)
+    except asyncio.CancelledError:
+        def let_go_when_taken(done) -> None:
+            if not done.cancelled() and done.exception() is None:
+                threading.Thread(target=_let_go_and_close, args=done.result()[:2], daemon=True).start()
+
+        taking.add_done_callback(let_go_when_taken)
+        raise
+    try:
+        if held_lease is None:
+            logger.info("%s skipped: %s", TIERS[tier], refused)
+        yield held_lease is not None
+    finally:
+        await asyncio.shield(asyncio.to_thread(_let_go_and_close, db, held_lease))

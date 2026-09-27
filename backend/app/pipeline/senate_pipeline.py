@@ -769,14 +769,11 @@ def _take_senate_run_lease(stack) -> bool:
     for _ in range(_SENATE_LEASE_ATTEMPTS):
         if stack.enter_context(lease.holding(lease_db, lease.SENATE_RUN, yield_to=lease.DATA_RESET)) is not None:
             return True
-        if lease.held(lease_db, lease.DATA_RESET):
-            from app.pipeline.run_tracker import held_off_by_reset
-
-            held_off_by_reset(lease_db, "PipelineRun")
+        why = lease.refusal(lease_db, lease.SENATE_RUN)
+        if why != "the database was busy":
+            logger.warning("Senate run not started: %s", why)
             return False
-        if lease.held(lease_db, lease.SENATE_RUN):
-            return False
-    logger.warning("Senate run lease not taken: the database stayed busy")
+    logger.warning("Senate run not started: the database stayed busy")
     return False
 
 
@@ -804,7 +801,14 @@ async def run_senate_pipeline(
     from contextlib import ExitStack
 
     run_lease = ExitStack()
-    pipeline_run = _acquire_pipeline_lock(db) if _take_senate_run_lease(run_lease) else None
+    try:
+        pipeline_run = _acquire_pipeline_lock(db) if _take_senate_run_lease(run_lease) else None
+    except BaseException:
+        # Before the run's own try: let go of the lease (and its heartbeat)
+        # here, or it would be renewed for as long as the process lives.
+        run_lease.close()
+        db.close()
+        raise
     if pipeline_run is None:
         logger.warning("Pipeline already running in another process — skipping")
         db.close()

@@ -105,9 +105,14 @@ def _mark_orphaned_senate_runs():
 
     db = SessionLocal()
     try:
+        # Rows first, then the lease: a run takes its lease before its row
+        # (senate_pipeline._take_senate_run_lease), so a row read here whose
+        # run is live has a lease the read below sees.
+        orphaned = db.query(PipelineRun).filter(PipelineRun.status == PipelineStatus.RUNNING).all()
+        if not orphaned:
+            return None
         if lease.held(db, lease.SENATE_RUN):
             return lease.SENATE_RUN
-        orphaned = db.query(PipelineRun).filter(PipelineRun.status == PipelineStatus.RUNNING).all()
         for run in orphaned:
             run.status = PipelineStatus.STALE
             run.completed_at = utcnow()

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from contextlib import ExitStack
 from datetime import timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -37,9 +38,7 @@ def _is_stale(age: timedelta | None, threshold: timedelta) -> bool:
     return age is not None and age > threshold
 
 
-def _start_job(
-    target, *, name: str, alert: bool = False, lease_tier: str | None = None, hung_after: timedelta | None = None,
-) -> None:
+def _start_job(target, *, name: str, alert: bool = False, lease_tier: str | None = None) -> None:
     """Start a scheduled job's thread. While the admin data reset holds the
     database the job doesn't run this time: logged, and for the nightly
     chain — whose skip leaves the wiped database unbuilt for a day — an ops
@@ -47,22 +46,20 @@ def _start_job(
 
     `lease_tier`: a job that takes no run lock of its own holds this lease
     (lease.job) while it runs, so a reset in another process sees it, and it
-    sees the reset. `hung_after`: the age at which the job's own checks
-    treat a run still going as hung and start another anyway. Its lease
-    stops being renewed early enough to have lapsed by then (lease.STALE_S
-    before), or it would keep that from happening."""
+    sees the reset; it lapses by the tier's lease.HUNG_AFTER, the age at
+    which the job's own checks proceed past a run they call hung."""
     if lease_tier is not None:
         job = target
-        max_hold = hung_after - timedelta(seconds=lease.STALE_S) if hung_after is not None else None
 
         def target() -> None:
-            try:
-                with lease.job(lease_tier, max_hold=max_hold) as held:
-                    if held:
-                        job()
-            except Exception:
-                # The job logs its own failures; this is the lease's.
-                logger.exception("%s: its lease failed", name)
+            with ExitStack() as stack:
+                try:
+                    held = stack.enter_context(lease.job(lease_tier))
+                except Exception:
+                    logger.exception("%s: its lease could not be taken", name)
+                    return
+                if held:
+                    job()
 
     try:
         start_writer(target, name=name)
@@ -110,14 +107,29 @@ def _nightly_pipeline() -> None:
         logger.info("%s pipeline skipped — %s", label, result.get("reason", "unknown reason"))
         send_ops_alert(
             f"Nightly {label} run skipped",
-            f"The scheduled {label} pipeline did not start because a "
-            f"previous run of it was still active. {label} data will be a "
+            f"The scheduled {label} pipeline did not start because {_skip_cause()}. {label} data will be a "
             "day stale unless triggered manually. If this was Senate, "
             "note that Supplementary/House/Stock never ran either tonight "
             "— the chain stops here, it does not skip just this one step.",
             dedupe_key=f"skipped-{label.lower()}-{utcnow():%Y-%m-%d}",
         )
         return True
+
+    def _skip_cause() -> str:
+        """What held the run off: a data reset holding the database (a live
+        one, or a dead one's lease until it lapses), or a run still active."""
+        from app.database import SessionLocal
+
+        db = SessionLocal()
+        try:
+            if lease.held(db, lease.DATA_RESET):
+                return ("an admin data reset holds the database — if none is running, one died "
+                        "mid-wipe and its lease lapses within the half hour")
+        except Exception:
+            logger.exception("Could not check for a data reset")
+        finally:
+            db.close()
+        return "a previous run of it was still active"
 
     def _run():
         # Loud, deduped alerts before another night's scoring. Each is a
@@ -203,7 +215,7 @@ def _hourly_action_refresh() -> None:
             if state.get("is_running"):
                 started = state.get("started_at")
                 age = utcnow() - started if started else None
-                if _is_stale(age, timedelta(hours=4)):
+                if _is_stale(age, lease.HUNG_AFTER[lease.ACTION_REFRESH]):
                     # Same reasoning as the stale-PipelineRun checks below: a
                     # refresh this old (normal is minutes, worst case with a
                     # degraded LLM is ~1-2h) is wedged, not just slow. This
@@ -346,11 +358,15 @@ def _hourly_bill_status_refresh() -> None:
     """
     def _run():
         try:
-            from app.pipeline.bill_refresh import is_bill_refresh_running, refresh_bill_statuses
+            from app.pipeline.bill_refresh import bill_refresh_age, is_bill_refresh_running, refresh_bill_statuses
 
             if is_bill_refresh_running():
-                logger.info("Bill status refresh skipped — previous refresh still running")
-                return
+                age = bill_refresh_age()
+                if not _is_stale(age, lease.HUNG_AFTER[lease.BILL_REFRESH]):
+                    logger.info("Bill status refresh skipped — previous refresh still running")
+                    return
+                logger.warning("Previous bill status refresh has been running for %s — "
+                               "treating as hung and proceeding anyway", age)
             from app.database import SessionLocal
             from app.models import PipelineRun, PipelineStatus
             db = SessionLocal()
@@ -415,7 +431,7 @@ def _election_coverage_refresh() -> None:
         # _hourly_action_refresh's guard above.
         if is_coverage_refresh_running():
             age = coverage_refresh_age()
-            if not _is_stale(age, timedelta(hours=2)):
+            if not _is_stale(age, lease.HUNG_AFTER[lease.COVERAGE_REFRESH]):
                 logger.info("Election coverage refresh skipped — previous refresh still running")
                 return
             logger.warning(
@@ -451,7 +467,7 @@ def _election_coverage_refresh() -> None:
         finally:
             coverage_tracker().stop()
 
-    _start_job(_run, name="election-coverage-refresh", lease_tier=lease.COVERAGE_REFRESH, hung_after=timedelta(hours=2))
+    _start_job(_run, name="election-coverage-refresh", lease_tier=lease.COVERAGE_REFRESH)
 
 
 def _election_ballot_sync() -> None:
@@ -485,7 +501,7 @@ def _election_ballot_sync() -> None:
             )
         if is_ballot_sync_running():
             age = ballot_sync_age()
-            if not _is_stale(age, timedelta(hours=2)):
+            if not _is_stale(age, lease.HUNG_AFTER[lease.BALLOT_SYNC]):
                 logger.info("Ballot sync skipped — the previous one is still running")
                 return
             logger.warning("Previous ballot sync has been running for %s — proceeding anyway", age)
@@ -503,7 +519,7 @@ def _election_ballot_sync() -> None:
             loop.close()
             ballot_tracker().stop()
 
-    _start_job(_run, name="election-ballot-sync", lease_tier=lease.BALLOT_SYNC, hung_after=timedelta(hours=2))
+    _start_job(_run, name="election-ballot-sync", lease_tier=lease.BALLOT_SYNC)
 
 
 def start_scheduler() -> None:

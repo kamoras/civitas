@@ -67,6 +67,11 @@ def is_bill_refresh_running() -> bool:
     return _tracker.is_running
 
 
+def bill_refresh_age():
+    """Wall-clock age of the in-process refresh, or None when idle."""
+    return _tracker.age
+
+
 def _window_start(db: Session, now: datetime) -> datetime:
     stored = api_cache_get(
         db, _LAST_RUN_TIER, LAST_RUN_CACHE_KEY,
@@ -208,8 +213,9 @@ async def _apply_updates(
 async def refresh_bill_statuses(db: Session | None = None) -> dict:
     """Run one incremental refresh cycle. Pass `db` for tests; production
     opens (and closes) its own session."""
-    if _tracker.is_running:
-        return {"status": "skipped", "reason": "previous refresh still running"}
+    # The caller decides whether a refresh still running is hung
+    # (scheduler._hourly_bill_status_refresh); one it proceeds past keeps
+    # running beside this one, as the other hung-run overrides allow.
     _tracker.start()
     try:
         owns_session = db is None
