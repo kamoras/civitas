@@ -30,7 +30,6 @@ function category(overrides: Partial<HoldingCategory>): HoldingCategory {
 function holdings(overrides: Partial<HoldingsData> = {}): HoldingsData {
   return {
     available: true,
-    reportYear: 2025,
     reportLabel: "2025 annual report",
     asOfDate: "2025-12-31",
     filedDate: "2026-05-15",
@@ -151,6 +150,14 @@ describe("Holdings", () => {
     render(<Holdings memberId="S1" />);
     const footer = await screen.findByText(/Disclosed value/);
     expect(footer.textContent?.match(/2026-05-14/g)).toHaveLength(1);
+  });
+
+  it("still names the filing date of a dated report filed on the day it describes", async () => {
+    fetchSenatorHoldings.mockResolvedValue(holdings({
+      reportLabel: "new-filer report as of 2026-03-24", asOfDate: "2026-03-24", filedDate: "2026-03-24",
+    }));
+    render(<Holdings memberId="S1" />);
+    expect(await screen.findByText(/as of 2026-03-24, filed 2026-03-24/)).toBeInTheDocument();
   });
 
   it("names an undated filing made after the charted report instead of implying this one is the latest", async () => {

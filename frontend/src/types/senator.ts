@@ -261,7 +261,6 @@ export interface HoldingCategory {
 export interface Holdings {
   /** False when no annual report has been ingested for this member yet. */
   available: boolean;
-  reportYear: number | null;
   /** "2025 annual report", "new-filer report as of 2026-03-24" — what the
    * holdings describe, as the page names it. */
   reportLabel: string;

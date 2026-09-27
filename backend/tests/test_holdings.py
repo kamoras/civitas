@@ -581,7 +581,7 @@ class TestSenateRankingByStatedYear:
         electronic = _senate_filing("e", title="Annual Report for CY 2024", filed="2025-05-11")
         paper = _senate_filing("p", title="Annual Report", filed="2025-12-01", paper=True)
         rank = lambda f: holdings_pipeline._rank(  # noqa: E731
-            holdings_pipeline._senate_as_of(f), False, f["filed_date"],
+            holdings_pipeline._senate_as_of(f), False, f["filed_date"], 0, f["report_url"],
         )
         assert rank(electronic) > rank(paper)
 
@@ -1568,3 +1568,22 @@ class TestSameDayAmendments:
         second = _senate_filing("a2", title="Annual Report for CY 2025 (Amendment 2)", filed="2026-07-01")
         await _ingest_senate(db_session, [second, first], {"a1": [_row()], "a2": [_row()]})
         assert db_session.query(FinancialDisclosure).one().filing_id == "a2"
+
+
+class TestAmendmentOrderSignals:
+    async def test_the_house_document_id_outranks_an_inherited_filing_date(self, db_session, rep):
+        """The index can give an amendment its original's filing date, or
+        none that parses; the later document id still wins."""
+        a1 = {**_house_filing("10078299", filing_date="2026-06-01"), "filing_type": "A", "prefix": "Hon."}
+        a2 = {**_house_filing("10078402", filing_date=""), "filing_type": "A", "prefix": "Hon."}
+        reports = {"10078299": AnnualReport("Member", [_row()]), "10078402": AnnualReport("Member", [_row()])}
+        await _ingest_house(db_session, {2025: [a1, a2]}, reports)
+        assert db_session.query(FinancialDisclosure).one().filing_id == "10078402"
+
+    async def test_an_unresolvable_tie_resolves_the_same_way_every_run(self, db_session, senator):
+        x = _senate_filing("x", title="Annual Report (Amendment)", filed="2026-07-01", office="Senator", paper=True)
+        y = _senate_filing("y", title="Annual Report (Amendment)", filed="2026-07-01", office="Senator", paper=True)
+        await _ingest_senate(db_session, [x, y], {})
+        first = db_session.query(FinancialDisclosure).one().filing_id
+        await _ingest_senate(db_session, [y, x], {})
+        assert db_session.query(FinancialDisclosure).one().filing_id == first

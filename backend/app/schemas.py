@@ -236,7 +236,6 @@ class HoldingsSchema(CamelModel):
     # (a newly seated member, or before the first ingest run) — every other
     # field is then at its default.
     available: bool = True
-    report_year: int | None = None
     # "2025 annual report", "new-filer report as of 2026-03-24" — what the
     # holdings describe, for the page to say in words.
     report_label: str = ""

@@ -81,29 +81,39 @@ _YEARS_BACK = 2
 MIN_ATTEMPTS_FOR_OUTAGE = 5
 
 
-# (as-of date, precedence, filed date, seq) — newest first sorted descending.
-Rank = tuple[str, int, str, int]
+# (as-of date, precedence, seq, filed date, filing id) — newest first
+# when sorted descending.
+Rank = tuple[str, int, int, str, str]
 
 
-def _rank(as_of: str | None, amended: bool, filed_date: str | None, seq: int = 0) -> Rank:
+def _rank(as_of: str | None, amended: bool, filed_date: str | None, seq: int, filing_id: str) -> Rank:
     """Where a report ranks among a member's filings. The date its holdings
     describe decides first — a year end, or a new-filer report's stated
     date, so an annual report outranks a same-year new-filer snapshot
     however either was amended. For the same date, an amendment supersedes
     the original — always filed after it, so this holds even when a filing
-    date didn't parse — and the filing date orders amendments among
-    themselves, then seq (the amendment number, or the House document id)
-    when two were filed the same day.
+    date didn't parse.
 
-    A report whose date isn't known (a Senate paper filing) ranks below
-    every dated one, and among those an original goes before an amendment:
-    an original's place in the once-a-year sequence is at least known,
-    while an undated amendment can amend any earlier report."""
+    Among amendments, seq decides before the filing date: the Senate
+    title's amendment number, or the House document id. The House index
+    often gives an amendment its original's filing date (2025: Chu, Johnson
+    and five others list both on one day), while its document ids rise with
+    filing order — every pair of 8-digit electronic ids with different
+    filing dates in the 2025–26 indexes (31 of 31); the only exceptions
+    mixed a 7-digit paper id with an 8-digit electronic one, where the id
+    only keeps the choice stable. The filing id last makes any remaining
+    tie resolve the same way every run, whatever order a search returns.
+
+    A report whose date isn't known (a Senate paper filing, or a title
+    that states none) ranks below every dated one, and among those an
+    original goes before an amendment: an original's place in the
+    once-a-year sequence is at least known, while an undated amendment can
+    amend any earlier report."""
     if as_of:
         precedence = 1 if amended else 0
     else:
         precedence = 0 if amended else 1
-    return (as_of or "", precedence, filed_date or "", seq)
+    return (as_of or "", precedence, seq, filed_date or "", filing_id)
 
 
 @dataclass
@@ -120,7 +130,7 @@ class _Stored:
 
     @property
     def rank(self) -> Rank:
-        return _rank(self.as_of_date, self.amended, self.filed_date, self.seq)
+        return _rank(self.as_of_date, self.amended, self.filed_date, self.seq, self.filing_id)
 
     def rank_fields(self) -> dict:
         """What the stored row knows that decides its rank and its label."""
@@ -180,11 +190,13 @@ def _keeps_earlier_read(prior: int | None, report: AnnualReport) -> bool:
 
 
 def _merge_known(stored: dict, tonight: dict) -> dict:
-    """One filing's fields from two nights' rows. What the title says —
-    as-of date, label, amended — comes as a set from whichever row's title
-    parsed (tonight's, if both did), so a label never disagrees with its
-    date. (Tonight's row already carries the stored filing date when it
-    had none of its own: _ingest_members recomputes it with that date.)"""
+    """One filing's fields from two nights' rows. What the row's title or
+    type says — as-of date, label, amended, seq (a Senate title's amendment
+    number; a House document id, which never differs) — comes as a set from
+    whichever row's title parsed (tonight's, if both did), so a label never
+    disagrees with its date. (Tonight's row already carries the stored
+    filing date when it had none of its own: _ingest_members recomputes it
+    with that date.)"""
     title_from = tonight if tonight["as_of_date"] or not stored["as_of_date"] else stored
     return {**tonight, **{key: title_from[key] for key in ("as_of_date", "report_label", "amended", "seq")}}
 
@@ -449,7 +461,9 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
         outcome = _Outcome()
         out_of_time = False
         fields = {chamber.filing_id(f): chamber.fields(f) for f in per_member[member_id]}
-        ranks = {fid: _rank(v["as_of_date"], v["amended"], v["filed_date"], v["seq"]) for fid, v in fields.items()}
+        ranks = {
+            fid: _rank(v["as_of_date"], v["amended"], v["filed_date"], v["seq"], fid) for fid, v in fields.items()
+        }
         if mine is not None and mine.filing_id in fields:
             own = next(f for f in per_member[member_id] if chamber.filing_id(f) == mine.filing_id)
             if not own.get(chamber.date_key) and mine.filed_date:
@@ -462,7 +476,9 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
             # the reports it superseded nor keeps a gap tonight's row fills.
             merged = _merge_known(mine.rank_fields(), fields[mine.filing_id])
             fields[mine.filing_id] = merged
-            ranks[mine.filing_id] = _rank(merged["as_of_date"], merged["amended"], merged["filed_date"], merged["seq"])
+            ranks[mine.filing_id] = _rank(
+                merged["as_of_date"], merged["amended"], merged["filed_date"], merged["seq"], mine.filing_id,
+            )
             repair = {k: merged[k] for k, v in mine.rank_fields().items() if merged[k] != v}
             if repair:
                 # Saved now, whatever happens to this member below, and used
@@ -594,7 +610,7 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
             "source_url": f["pdf_url"],
             "as_of_date": f"{f['year']}-12-31" if f.get("year") else None,  # annual: holdings at year end
             "amended": f.get("filing_type") == "A",
-            "seq": int(f["doc_id"]) if str(f["doc_id"]).isdigit() else 0,  # issued in filing order
+            "seq": int(f["doc_id"]) if str(f["doc_id"]).isdigit() else 0,  # see _rank
         },
         still_loads=lambda url: house_report_still_loads(client, url),
     )
@@ -688,8 +704,9 @@ def _senate_fields(filing: dict) -> dict:
         "source_url": filing["report_url"],
         "as_of_date": as_of,
         "amended": amended,
-        # "(Amendment 2)" after "(Amendment 1)"; an unnumbered one is the first.
-        "seq": int(m.group(1)) if (m := _AMENDMENT_NO_RE.search(title)) else int(amended),
+        # "(Amendment 2)" after "(Amendment 1)"; an unnumbered one (paper)
+        # has no number to compare, and the filing date decides.
+        "seq": int(m.group(1)) if (m := _AMENDMENT_NO_RE.search(title)) else 0,
     }
 
 
