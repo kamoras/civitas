@@ -20,6 +20,10 @@ flowchart TB
     DAY[("congress_days (one per chamber per day)<br/>congress_events (passed · failed · reported ·<br/>confirmed · committee · floor)")]
 ```
 
+**Newest first.** Each run reads the floor logs, then the recent Digests, then
+the current session's roll calls, and only then the back-fill, so a fresh
+database shows this week before the Congress's first months.
+
 **The Digest's own words.** Every event keeps the record's wording. Parsing
 only decides which heading an entry sits under ("Measures Passed:",
 "Nominations Confirmed:", a House measure's own heading, "Suspensions:") and
