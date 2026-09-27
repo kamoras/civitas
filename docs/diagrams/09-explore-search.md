@@ -52,7 +52,7 @@ flowchart TB
         FUSE --> DEDUP["Collapse near-duplicate documents"]
         DEDUP --> DIV["Cap results per member/agency<br/>(demoted, never dropped)"]
         DIV --> OUT["Return keyword-in-context excerpt with matched<br/>terms marked, source URL, doc type, citation count<br/>+ comment link and deadline for open rulemakings"]
-        OUT -.->|"optional, streamed"| SUM["LLM summary of how this<br/>document relates to the query"]
+        OUT -.->|"optional, streamed"| SUM["LLM summary of the document<br/>(POST, on request, cached)"]
     end
 
     UPSERT --> ANN

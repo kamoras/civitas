@@ -16,12 +16,10 @@ const INITIAL_VISIBLE = 8;
 // Matches SUBSTANTIVE_BILL_TYPES in backend/app/pipeline/analyze/score_calculator.py —
 // simple/concurrent resolutions (sres/hres/sconres/hconres) are routinely
 // ceremonial ("designating April as Second Chance Month") and "agreed to"
-// without debate by unanimous consent. The Legislative Effectiveness score
-// already excludes them from its advancement count for exactly this reason
-// (the "Mushroom Day" fix) — this summary count must use the same filter,
-// or it displays a bigger, more impressive "advancing" number right next
-// to a score that didn't credit any of it, an unexplained contradiction
-// on the same card.
+// without debate by unanimous consent. Legislative Effectiveness weights
+// them 1x against a bill's 5x (Volden & Wiseman's commemorative tier), so
+// counting them here as "became law" or "advancing" would put a bigger
+// number next to a score that credited them a fifth as much.
 const SUBSTANTIVE_BILL_TYPES = new Set(["s", "hr", "sjres", "hjres"]);
 
 // Deliberately excludes IN_COMMITTEE, unlike MAIN_FLOW_STAGES in
@@ -89,83 +87,33 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
     >
       <div className="space-y-3">
         <div className="grid grid-cols-3 gap-2 text-center text-sm">
-          {/* div[role=button], not <button> — MetricTooltip renders its own
-              [?] <button> internally, and a <button> can't nest a <button>
-              (invalid HTML, throws a hydration error). */}
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => setFilter("all")}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                setFilter("all");
-              }
-            }}
-            aria-pressed={filter === "all"}
-            className={`panel p-2 transition-colors cursor-pointer ${filter === "all" ? "border-ink-lo bg-white/[0.06]" : "hover:bg-white/[0.03]"}`}
-          >
-            <div className="text-xl font-display font-semibold text-ink-hi">{bills.length}</div>
-            <div className="text-xs text-ink-min">
-              <MetricTooltip text="Number of bills this senator introduced as primary sponsor. Sponsoring a bill means they authored or championed it.">
-                BILLS SPONSORED
-              </MetricTooltip>
-            </div>
-          </div>
-          <div
-            role="button"
-            tabIndex={lawCount === 0 ? -1 : 0}
-            onClick={() => {
-              if (lawCount > 0) toggleFilter("law");
-            }}
-            onKeyDown={(e) => {
-              if (lawCount > 0 && (e.key === "Enter" || e.key === " ")) {
-                e.preventDefault();
-                toggleFilter("law");
-              }
-            }}
-            aria-pressed={filter === "law"}
-            aria-disabled={lawCount === 0}
-            className={`panel p-2 transition-colors ${lawCount === 0 ? "cursor-default" : "cursor-pointer"} ${filter === "law" ? "border-signal-cyan/40 bg-signal-cyan/10" : lawCount > 0 ? "hover:bg-white/[0.03]" : ""}`}
-          >
-            <div
-              className={`text-xl font-display font-semibold ${lawCount > 0 ? "text-signal-cyan" : "text-ink-min"}`}
-            >
-              {lawCount}
-            </div>
-            <div className="text-xs text-ink-min">
-              <MetricTooltip text="How many of this senator's sponsored bills (S./H.R./joint resolutions — not simple/concurrent resolutions) were signed into law. Most bills never pass — even 1 is notable. Click to filter the list below to just these.">
-                BECAME LAW
-              </MetricTooltip>
-            </div>
-          </div>
-          <div
-            role="button"
-            tabIndex={advancedCount === 0 ? -1 : 0}
-            onClick={() => {
-              if (advancedCount > 0) toggleFilter("advancing");
-            }}
-            onKeyDown={(e) => {
-              if (advancedCount > 0 && (e.key === "Enter" || e.key === " ")) {
-                e.preventDefault();
-                toggleFilter("advancing");
-              }
-            }}
-            aria-pressed={filter === "advancing"}
-            aria-disabled={advancedCount === 0}
-            className={`panel p-2 transition-colors ${advancedCount === 0 ? "cursor-default" : "cursor-pointer"} ${filter === "advancing" ? "border-signal-amber/40 bg-signal-amber/10" : advancedCount > 0 ? "hover:bg-white/[0.03]" : ""}`}
-          >
-            <div
-              className={`text-xl font-display font-semibold ${advancedCount > 0 ? "text-signal-amber" : "text-ink-min"}`}
-            >
-              {advancedCount}
-            </div>
-            <div className="text-xs text-ink-min">
-              <MetricTooltip text="Substantive bills (S./H.R./joint resolutions) that passed at least one chamber or were reported out of committee. Simple/concurrent resolutions (commemorative, e.g. designating an awareness month) are excluded — they're routinely agreed to without debate and aren't meaningful legislative progress, matching how the Legislative Effectiveness score itself counts advancement. Click to filter the list below to just these.">
-                ADVANCING
-              </MetricTooltip>
-            </div>
-          </div>
+          <FilterTile
+            count={bills.length}
+            label="BILLS SPONSORED"
+            help="Number of bills and resolutions this member introduced as primary sponsor this congress. Sponsoring a bill means they authored or championed it."
+            pressed={filter === "all"}
+            onSelect={() => setFilter("all")}
+            activeClass="border-ink-lo bg-white/[0.06]"
+            countClass="text-ink-hi"
+          />
+          <FilterTile
+            count={lawCount}
+            label="BECAME LAW"
+            help="How many of this member's sponsored bills (S./H.R./joint resolutions — not simple/concurrent resolutions) were signed into law. Most bills never pass — even 1 is notable. Click to filter the list below to just these."
+            pressed={filter === "law"}
+            onSelect={() => toggleFilter("law")}
+            activeClass="border-signal-cyan/40 bg-signal-cyan/10"
+            countClass="text-signal-cyan"
+          />
+          <FilterTile
+            count={advancedCount}
+            label="ADVANCING"
+            help="Bills (S./H.R./joint resolutions) that have passed at least one chamber and haven't yet become law. Being referred to committee doesn't count — nearly every bill is, automatically. Simple/concurrent resolutions (e.g. designating an awareness month) are left out: they're routinely agreed to without debate, and Legislative Effectiveness weights them a fifth as much as a bill. Click to filter the list below to just these."
+            pressed={filter === "advancing"}
+            onSelect={() => toggleFilter("advancing")}
+            activeClass="border-signal-amber/40 bg-signal-amber/10"
+            countClass="text-signal-amber"
+          />
         </div>
 
         {filter !== "all" && (
@@ -209,6 +157,13 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
                           SIGNED INTO LAW
                         </span>
                       )}
+                      {bill.commemorative && (
+                        <span className="text-xs px-1.5 py-0.5 border border-white/15 text-ink-lo font-mono">
+                          <MetricTooltip text="Reads as commemorative — naming a post office or building, awarding a medal, recognising a person or event. Legislative Effectiveness weights it 1× instead of a bill's 5×, as Volden & Wiseman's scores do. Detected from the title by a classifier calibrated against their coding.">
+                            COMMEMORATIVE · 1×
+                          </MetricTooltip>
+                        </span>
+                      )}
                       {badge && (
                         <span className={`text-xs px-1 py-0.5 border font-mono ${badge.className}`}>
                           {badge.label}
@@ -249,5 +204,47 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
         )}
       </div>
     </CollapsibleSection>
+  );
+}
+
+interface FilterTileProps {
+  count: number;
+  label: string;
+  help: string;
+  pressed: boolean;
+  onSelect: () => void;
+  activeClass: string;
+  countClass: string;
+}
+
+/**
+ * One filter toggle. The count and label are a real <button>; the [?]
+ * explanation sits beside it, not inside. It used to be a div[role=button]
+ * wrapping the label's MetricTooltip — which renders its own <button> — and
+ * an interactive element inside another is announced as one control, so the
+ * explanation was unreachable to a screen reader (axe: nested-interactive).
+ * A zero count can't filter to anything, so its tile is disabled (the
+ * explanation stays reachable).
+ */
+function FilterTile({ count, label, help, pressed, onSelect, activeClass, countClass }: FilterTileProps) {
+  const empty = count === 0;
+  return (
+    <div className={`panel p-2 transition-colors ${pressed ? activeClass : empty ? "" : "hover:bg-white/[0.03]"}`}>
+      <button
+        type="button"
+        onClick={onSelect}
+        disabled={empty}
+        aria-pressed={pressed}
+        className={`block w-full ${empty ? "cursor-default" : "cursor-pointer"}`}
+      >
+        <span className={`block text-xl font-display font-semibold ${empty ? "text-ink-min" : countClass}`}>
+          {count}
+        </span>{" "}
+        <span className="block text-xs text-ink-min">{label}</span>
+      </button>
+      <span className="text-xs text-ink-min">
+        <MetricTooltip text={help} />
+      </span>
+    </div>
   );
 }

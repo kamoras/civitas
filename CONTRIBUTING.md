@@ -67,10 +67,10 @@ frontend/       Next.js 16 app
 2. Make your changes with focused commits
 3. Run the backend tests: `cd backend && python -m pytest tests/`
    (`-m "not slow"` skips the tests that load the sentence-transformer model)
-4. Run the frontend checks: `cd frontend && npm run lint && npm test && npm run build`
+4. Run the frontend checks: `cd frontend && npm run lint && npm run knip && npm test && npm run build`
 5. Open a pull request with a clear description of what changed and why
 
-CI gates every PR on all of the above, plus `ruff check app/` and two backend
+CI gates every PR on all of the above, plus `ruff check app/ scripts/ tests/ migrations/` (ruff 0.15.4, pinned) and two backend
 coverage checks: a 46% total floor and a 60% floor on the lines your PR
 changes (`diff-cover`). Adding tests alongside a change is the path of least
 resistance.

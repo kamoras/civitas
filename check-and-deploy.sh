@@ -108,10 +108,10 @@ pipeline_is_busy() {
   # their turn — exactly the case this guard exists for. The admin
   # endpoint has always published the field; only this tuple was short.
   #
-  # Worse, its orphaned row is not swept: main._invalidate_orphaned_pipelines
-  # only marks PipelineRun rows stale on startup, so a killed election run
-  # stays "running" until the NEXT run's acquire_pipeline_lock ages it out
-  # past STALE_PIPELINE_TIMEOUT.
+  # A killed run's row is swept on the next startup
+  # (main._invalidate_orphaned_pipelines, every pipeline's table since
+  # 2026-09-27); before that only the Senate's was, and a killed election
+  # run read "running" until STALE_PIPELINE_TIMEOUT aged it out.
   if echo "$status" | python3 -c '
 import json, sys
 try:
@@ -161,8 +161,9 @@ fi
 log "new commit on main: ${REMOTE:0:8} (was ${LOCAL:0:8})"
 git reset --hard origin/main
 
-# Branch protection isn't available on this repo (private, free plan), so
-# this is the enforcement point: refuse to ship a commit whose CI failed.
+# The enforcement point whatever GitHub's branch settings say (this was
+# written when the repo was private on a free plan, where branch protection
+# wasn't available): refuse to ship a commit whose CI failed.
 # Override with FORCE_DEPLOY=1.
 if [[ -z "${FORCE_DEPLOY:-}" ]] && command -v gh >/dev/null 2>&1; then
   ci_conclusion=$(gh run list --commit "$REMOTE" --workflow CI \

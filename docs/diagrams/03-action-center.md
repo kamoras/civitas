@@ -15,11 +15,11 @@ the heartbeat for fifteen minutes a run (2026-09-27).
 flowchart TB
     TICK(["Hourly at :15"]) --> FETCH
 
-    FETCH["<b>1. FETCH</b><br/>9 RSS feeds across 7 newsrooms<br/>+ Google Trends + Bluesky trending<br/>48h article window · direct URLs only"]
+    FETCH["<b>1. FETCH</b><br/>8 RSS feeds across 7 newsrooms<br/>+ Google Trends + Bluesky trending<br/>48h article window · direct URLs only"]
     FETCH --> FILTER
 
     FILTER["<b>2. FILTER</b><br/>embed each article against<br/>24 policy prototypes (19 US, 5 international)"]
-    FILTER --> RELCHECK{"cosine ≥ 0.22?"}
+    FILTER --> RELCHECK{"cosine ≥ 0.20?"}
     RELCHECK -->|no| DROP(["Discard — off topic"])
     RELCHECK -->|yes| CLUSTER
 
@@ -57,7 +57,7 @@ flowchart TB
     TIMELINE["<b>9. TIMELINE</b><br/>record daily TimelineEntry<br/>at week/month/year boundaries,<br/>LLM writes the period summary"]
     TIMELINE --> POST
 
-    POST["<b>10. BLUESKY</b><br/>new/updated issue posts<br/>daily senator spotlight<br/>weekly civic summary<br/>repost + like matching posts from AP, NPR, PBS<br/>(≥ 0.78, under 24h old, max 3/run)"]
+    POST["<b>10. BLUESKY</b><br/>new/updated issue posts: the verified lede, verbatim<br/>daily senator spotlight<br/>weekly civic summary<br/>repost + like matching posts from AP, NPR, PBS<br/>(≥ 0.78, under 24h old, max 3/run)"]
 ```
 
 The daily spotlight and the weekly summary also run on the two early-abort
@@ -77,7 +77,7 @@ within minutes. Rank first and every "top issue" is the same story from AP,
 NPR, BBC and PBS. Clustering first, then ranking by source breadth, surfaces
 *distinct* stories.
 
-**0.22 relevance filter is deliberately permissive.** A false negative drops a
+**0.20 relevance filter is deliberately permissive.** A false negative drops a
 real policy story; a false positive is caught downstream by extraction — a
 cluster that yields no verbatim, adjacently-asserted claim produces no issue at
 all. The asymmetry favours recall.

@@ -65,24 +65,42 @@ def _preload_embedding_model() -> None:
 
 
 def _invalidate_orphaned_pipelines() -> None:
-    """Mark any 'running' pipeline rows as stale on startup.
+    """Mark any 'running' pipeline rows as stale on startup, for every
+    pipeline that holds a run-row lock (acquire_pipeline_lock).
 
-    If the app is starting, no pipeline thread from this process can be
-    active -- any 'running' row is left over from a prior crash or deploy.
+    Pipelines run in threads of the backend process, so a restart kills
+    them without letting them record it: any 'running' row is left over
+    from a prior crash or deploy. (check-and-deploy.sh does not deploy
+    while one runs, which is what keeps a start-first rollout's overlap
+    from sweeping a live run.) Every table, not just the Senate's: an
+    unswept row reads as "running" on the admin dashboard and blocks a
+    manual trigger until STALE_PIPELINE_TIMEOUT ages it out.
     """
     from app.database import SessionLocal
-    from app.models import PipelineRun, PipelineStatus
+    from app.models import (
+        ElectionPipelineRun,
+        HousePipelineRun,
+        PipelineRun,
+        PipelineStatus,
+        StockTradesPipelineRun,
+        SupplementaryPipelineRun,
+    )
 
     db = SessionLocal()
     try:
-        orphaned = db.query(PipelineRun).filter(PipelineRun.status == PipelineStatus.RUNNING).all()
+        orphaned = [
+            run
+            for model in (PipelineRun, SupplementaryPipelineRun, HousePipelineRun,
+                          StockTradesPipelineRun, ElectionPipelineRun)
+            for run in db.query(model).filter(model.status == PipelineStatus.RUNNING).all()
+        ]
         for run in orphaned:
             run.status = PipelineStatus.STALE
             run.completed_at = utcnow()
             run.error_message = "Marked stale: app restarted while pipeline was running"
             logging.getLogger("app.main").warning(
-                "Invalidated orphaned pipeline run #%d (started %s)",
-                run.id, run.started_at,
+                "Invalidated orphaned %s #%d (started %s)",
+                type(run).__name__, run.id, run.started_at,
             )
         if orphaned:
             db.commit()

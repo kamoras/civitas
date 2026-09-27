@@ -11,6 +11,8 @@ export interface SponsoredBill {
   billType: string;
   isLaw: boolean;
   stage: string;
+  /** Content read as commemorative: Legislative Effectiveness weights it 1x, not 5x. */
+  commemorative?: boolean;
 }
 
 export interface Senator {

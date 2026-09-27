@@ -2,13 +2,15 @@
 Pipeline orchestrator — unified data pipeline.
 
 The 7 phases:
-  1. FETCH      — congress, FEC, platforms, floor remarks
+  1. FETCH      — Congress.gov members, bills and votes; Senate.gov roll
+                  calls; FEC finance
   2. TRANSFORM  — normalize members, votes, finance
   3. ANALYZE    — classify bills/donors, cross-reference, score
-  4. EXPLORE    — ingest government documents for semantic search
-  5. JUSTICES   — fetch and score Supreme Court justices
-  6. PRESIDENTS — fetch and score presidential records
   7. FINALIZE   — persist stats and mark complete
+
+Phases 4–6 (EXPLORE, JUSTICES, PRESIDENTS) moved to supplementary_pipeline.py
+in 2026-07; FINALIZE keeps its number because PipelineRun.current_phase and
+the logs still name it that way.
 
 Uses SQLAlchemy sessions for persistence and PipelineRun records to track progress.
 """
@@ -49,7 +51,6 @@ from app.pipeline.fetch.congress import (
     fetch_member_sponsored,
     fetch_recent_roll_calls,
     fetch_roll_call_vote,
-    fetch_senator_platform_text,
     fetch_senators,
     fetch_significant_bills,
 )
@@ -138,7 +139,6 @@ PIPELINE_STEPS = [
     ("fetch_sponsored",      "fetch",     "Fetch sponsored legislation"),
     ("fetch_official_titles", "fetch",    "Fetch official bill titles"),
     ("fetch_fec",            "fetch",     "Fetch FEC financial data"),
-    ("fetch_platforms",      "fetch",     "Fetch platform text"),
     ("classify_bills",       "analyze",   "Classify bills"),
     ("classify_recent",      "analyze",   "Classify recent votes"),
     ("embed_bills",          "analyze",   "Embed bills in vector DB"),
@@ -643,7 +643,7 @@ def _build_current_term_sponsored_for_cosponsor(senator_prepared: list[dict]) ->
     return entries
 
 
-def _build_analysis_input(prepared: dict, platform_texts: dict) -> dict:
+def _build_analysis_input(prepared: dict) -> dict:
     """Build the analysis input dict for a senator's embedding pre-computation."""
     senator = prepared["senator"]
     funding = prepared["funding"]
@@ -657,7 +657,6 @@ def _build_analysis_input(prepared: dict, platform_texts: dict) -> dict:
         "industryBreakdown": funding.get("industryBreakdown", []),
         "keyVotes": voting_record.get("keyVotes", []),
         "allVotes": all_votes,
-        "platformText": platform_texts.get(senator["id"], ""),
         "sponsoredBills": prepared.get("sponsoredBills", []),
     }
 
@@ -1258,28 +1257,6 @@ async def run_senate_pipeline(
             for cid in pac_committee_ids:
                 committee_type_map[cid] = await fetch_committee_type(client, db, cid)
 
-            # 1f. Fetch platform text for each senator from their official website
-            logger.info("Fetching senator platform text from official websites...")
-            progress.begin("fetch_platforms", total=len(senators))
-            platform_texts: dict[str, str] = {}
-            for plat_idx, senator in enumerate(senators):
-                text = await fetch_senator_platform_text(
-                    client,
-                    db,
-                    senator["id"],
-                    senator["name"],
-                    senator.get("officialWebsiteUrl", ""),
-                )
-                platform_texts[senator["id"]] = text
-                progress.update("fetch_platforms", done=plat_idx + 1)
-            fetched_platforms = sum(1 for t in platform_texts.values() if t)
-            logger.info(
-                "Platform text fetched for %d/%d senators",
-                fetched_platforms,
-                len(senators),
-            )
-            progress.complete("fetch_platforms", detail=f"{fetched_platforms}/{len(senators)} found")
-
         if fetch_only:
             logger.info("=== FETCH COMPLETE (fetch-only mode) ===")
             for sk in ("classify_bills", "classify_recent", "embed_bills",
@@ -1809,7 +1786,7 @@ async def run_senate_pipeline(
                 progress.update("analyze_senators", done=senator_idx, detail=senator["name"])
 
                 try:
-                    analysis_input = _build_analysis_input(prepared, platform_texts)
+                    analysis_input = _build_analysis_input(prepared)
                     precomputed = precompute_senator_analysis(analysis_input)
 
                     analysis_results = await analyze_senator_batch(

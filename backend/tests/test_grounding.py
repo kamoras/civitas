@@ -895,7 +895,7 @@ class TestEveryPublishingPathIsChecked:
     # Functions whose LLM output reaches a reader as prose.
     PUBLISHES_PROSE = {
         "_generate_period_summary",
-        "_generate_monitor_metadata", "_run_refresh", "_generate_new_post",
+        "_generate_monitor_metadata", "_run_refresh",
         "_generate_spotlight_post", "_generate_weekly_post", "_draft_developing_issue",
         "_draft_developing_rule_issue", "_generate_post_text", "_generate_summary",
     }

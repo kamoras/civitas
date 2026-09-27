@@ -245,3 +245,40 @@ class TestDegradedMode:
         assert body["semanticUnavailable"] is False
         assert body["channels"]["semantic"] == 0
         assert body["count"] == 1
+
+
+class TestPublicSearch:
+    """GET /api/public/v1/search runs the same hybrid engine as Explore. It
+    used to call the semantic channel alone, so an identifier query found
+    nothing there that the site's own search page found."""
+
+    async def _public(self, db, q, **overrides):
+        from types import SimpleNamespace
+
+        from app.api.public import search as public_search
+
+        params = {"chamber": None, "doc_type": None, "politician_id": None, "limit": 20}
+        params.update(overrides)
+        request = SimpleNamespace(state=SimpleNamespace())
+        return await public_search(None, request, q=q, db=db, **params)
+
+    async def test_an_identifier_is_found_by_the_keyword_channel(self, indexed_db):
+        # The vector index is down in this module (see _no_vector_index):
+        # a semantic-only endpoint would have answered indexEmpty here.
+        doc = _add(indexed_db, title="Executive Order 14110 on artificial intelligence",
+                   doc_type="Executive Order", chamber="Executive")
+        _add(indexed_db, title="Executive Order 13985 on equity", doc_type="Executive Order",
+             chamber="Executive")
+        body = _body(await self._public(indexed_db, "14110"))
+        assert [r["id"] for r in body["results"]] == [doc.id]
+
+    async def test_snippets_carry_no_highlight_control_characters(self, indexed_db):
+        _add(indexed_db, title="wildfire rule", body="Standards for wildfire smoke exposure.")
+        body = _body(await self._public(indexed_db, "wildfire"))
+        assert body["results"]
+        for result in body["results"]:
+            assert "\x02" not in result["snippet"] and "\x03" not in result["snippet"]
+
+    async def test_nothing_answerable_reports_index_empty(self, indexed_db):
+        body = _body(await self._public(indexed_db, "wildfire"))
+        assert body == {"query": "wildfire", "results": [], "count": 0, "indexEmpty": True}

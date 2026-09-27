@@ -15,7 +15,7 @@ import Link from "next/link";
 const SOURCES: readonly { label: string; detail: string }[] = [
   { label: "MEMBERS", detail: "Congress.gov · Senate.gov · Clerk.House.gov" },
   { label: "MONEY", detail: "FEC — itemised receipts and committee filings" },
-  { label: "BILLS", detail: "GovInfo — full text and stage histories" },
+  { label: "BILLS", detail: "Congress.gov stage histories · GovInfo full text" },
   { label: "COURT", detail: "Oyez — argued cases and opinion alignment" },
   { label: "ECONOMY", detail: "BLS · BEA · Federal Register" },
 ];
@@ -23,7 +23,7 @@ const SOURCES: readonly { label: string; detail: string }[] = [
 const TERMS: readonly { label: string; detail: string }[] = [
   { label: "CODE", detail: "Open source · AGPL-3.0 · re-runnable" },
   { label: "MODELS", detail: "Run locally — no third-party AI services" },
-  { label: "SCORES", detail: "Deterministic — no estimates, no imputation" },
+  { label: "SCORES", detail: "Fixed formulas, no AI · missing data scores a neutral 50" },
 ];
 
 export default function Holdings() {

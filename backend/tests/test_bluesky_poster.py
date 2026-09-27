@@ -251,8 +251,8 @@ class TestValidateFacts:
 
 
 class TestProcessIssuesMetrics:
-    """Audit M9: the poster's suppression and grounding-rejection paths
-    must increment the run counters."""
+    """Audit M9: the poster's suppression path must increment the run
+    counters, and every path that marks an issue posted pins its facts."""
 
     def _issue(self, **overrides):
         from app.models import ActionIssue
@@ -288,7 +288,7 @@ class TestProcessIssuesMetrics:
         db_session.commit()
 
         action_metrics.reset()
-        with patch.object(bluesky_poster, "_generate_new_post", return_value=prior_text):
+        with patch.object(bluesky_poster, "_compose_new_post", return_value=prior_text):
             posted = bluesky_poster.process_issues_for_bluesky([fresh], db_session)
 
         assert posted == 0
@@ -314,7 +314,7 @@ class TestProcessIssuesMetrics:
         db_session.commit()
 
         text = "The House passed the defense bill 216-212."
-        with patch.object(bluesky_poster, "_generate_new_post", return_value=text), \
+        with patch.object(bluesky_poster, "_compose_new_post", return_value=text), \
                 patch.object(bluesky_poster, "_publish", return_value=True):
             posted = bluesky_poster.process_issues_for_bluesky([issue], db_session)
 
@@ -334,7 +334,7 @@ class TestProcessIssuesMetrics:
         db_session.add(issue)
         db_session.commit()
 
-        with patch.object(bluesky_poster, "_generate_new_post", return_value="Some post text."), \
+        with patch.object(bluesky_poster, "_compose_new_post", return_value="Some post text."), \
                 patch.object(bluesky_poster, "_publish", return_value=False):
             posted = bluesky_poster.process_issues_for_bluesky([issue], db_session)
 
@@ -378,124 +378,23 @@ class TestProcessIssuesMetrics:
             ))
             db_session.commit()
 
-        with patch.object(bluesky_poster, "_generate_new_post", return_value=prior), \
+        with patch.object(bluesky_poster, "_compose_new_post", return_value=prior), \
                 patch.object(bluesky_poster, "_publish", return_value=True):
             bluesky_poster.process_issues_for_bluesky([issue], db_session)
 
         if issue.bsky_posted_at is not None:
             assert issue.bsky_posted_facts is not None
 
-    def test_grounding_rejection_increments_counter(self, db_session):
-        from app.pipeline.analyze import action_metrics, bluesky_poster
 
-        issue = self._issue()
-        # Post invents a figure not in the issue's material — grounding
-        # rejects it on both attempts, so no post text is returned.
-        with patch.object(
-            bluesky_poster, "call_llm",
-            return_value={"post": "The House passed the defense bill with $900 billion in new spending."},
-        ):
-            action_metrics.reset()
-            text = bluesky_poster._generate_new_post(issue, "2026-07-22")
+class TestComposeNewPost:
+    """The issue post is the verified lede, verbatim — not model prose.
 
-        assert text is None
-        assert action_metrics.snapshot().get("bsky_post_grounding_rejections") == 2
-
-    def test_former_president_status_hallucination_rejected(self, db_session):
-        # 2026-07 live case: the post described "former President Donald
-        # Trump" while the issue's material said "President Trump" — the
-        # model's stale training data demoting the sitting president. The
-        # grounding gate must reject it, not publish it.
-        import json as _json
-
-        from app.pipeline.analyze import action_metrics, bluesky_poster
-
-        issue = self._issue(
-            title="President Trump announces new tariffs",
-            summary="President Trump announced tariffs on steel imports.",
-            facts=_json.dumps(["President Trump announced tariffs on steel imports."]),
-        )
-        with patch.object(
-            bluesky_poster, "call_llm",
-            return_value={"post": "Former President Donald Trump announced tariffs on steel imports."},
-        ):
-            action_metrics.reset()
-            text = bluesky_poster._generate_new_post(issue, "2026-07-22")
-
-        assert text is None
-        assert action_metrics.snapshot().get("bsky_post_grounding_rejections") == 2
-
-    def test_genuinely_former_official_still_posts(self, db_session):
-        # The permissive side: when the issue's own material calls someone
-        # "former", the post repeating it is grounded and publishes.
-        import json as _json
-
-        from app.pipeline.analyze import bluesky_poster
-
-        issue = self._issue(
-            title="Former President Obama criticizes ruling",
-            summary="Former President Barack Obama criticized the court ruling.",
-            facts=_json.dumps(["Former President Barack Obama criticized the ruling."]),
-        )
-        with patch.object(
-            bluesky_poster, "call_llm",
-            return_value={"post": "Former President Barack Obama criticized the court ruling."},
-        ):
-            text = bluesky_poster._generate_new_post(issue, "2026-07-22")
-
-        assert text == "Former President Barack Obama criticized the court ruling."
-
-    def test_vague_president_reference_rejected(self, db_session):
-        # 2026-07 live case: the post read "a U.S. president stated fines
-        # from the EU... should be fully reversed" when the issue title
-        # named Trump directly — vague indefinite phrasing for an office
-        # only one person holds must be rejected, not published.
-        import json as _json
-
-        from app.pipeline.analyze import action_metrics, bluesky_poster
-
-        issue = self._issue(
-            title="Trump calls for EU investigation into tech fines",
-            summary="Trump said fines the EU imposed on major tech companies should be reversed.",
-            facts=_json.dumps(["Trump said EU fines against major tech companies should be reversed."]),
-        )
-        with patch.object(
-            bluesky_poster, "call_llm",
-            return_value={
-                "post": "A U.S. president stated fines from the EU against major tech "
-                        "companies should be fully reversed.",
-            },
-        ):
-            action_metrics.reset()
-            text = bluesky_poster._generate_new_post(issue, "2026-07-22")
-
-        assert text is None
-        assert action_metrics.snapshot().get("bsky_post_grounding_rejections") == 2
-
-    def test_named_president_reference_still_posts(self, db_session):
-        import json as _json
-
-        from app.pipeline.analyze import bluesky_poster
-
-        issue = self._issue(
-            title="Trump calls for EU investigation into tech fines",
-            summary="Trump said fines the EU imposed on major tech companies should be reversed.",
-            facts=_json.dumps(["Trump said EU fines against major tech companies should be reversed."]),
-        )
-        with patch.object(
-            bluesky_poster, "call_llm",
-            return_value={"post": "Trump said EU fines against major tech companies should be reversed."},
-        ):
-            text = bluesky_poster._generate_new_post(issue, "2026-07-22")
-
-        assert text == "Trump said EU fines against major tech companies should be reversed."
-
-
-class TestStalenessPhrasing:
-    """2026-07 live case: a post opened with 'On 2026-07-24' the day after
-    the event, when the prompt also offered 'Yesterday: ...' and that was
-    both available and accurate — the model picked the more awkward
-    option. Only ever offer the one phrasing that's actually correct."""
+    The LLM used to write it from the issue's title, summary and facts, and
+    four live failures were caught by grounding checks (a figure not in the
+    facts, "former President" for the sitting one, "a U.S. president" for a
+    named one). The full story was moved off model prose after three more got
+    PAST those same checks (issues 748, 750, 751); the post now carries no
+    model-written word, so none of those can be produced at all."""
 
     def _issue(self, **overrides):
         from app.models import ActionIssue
@@ -504,7 +403,7 @@ class TestStalenessPhrasing:
             date="2026-07-24", rank=1, is_current=True,
             title="Trump calls for EU investigation into tech fines",
             summary="Trump said EU fines against major tech companies should be reversed.",
-            facts=_json.dumps(["Trump said EU fines against major tech companies should be reversed."]),
+            facts=_json.dumps(["The EU fined three companies this year."]),
             source_names=_json.dumps(["AP News"]),
             bsky_posted_at=None,
             primary_article_date="2026-07-24",
@@ -512,49 +411,107 @@ class TestStalenessPhrasing:
         defaults.update(overrides)
         return ActionIssue(**defaults)
 
-    def test_exactly_one_day_stale_offers_only_yesterday(self):
+    def test_the_post_is_the_lede_verbatim_and_calls_no_model(self):
         from app.pipeline.analyze import bluesky_poster
 
-        issue = self._issue(primary_article_date="2026-07-24")
-        captured = {}
+        assert not hasattr(bluesky_poster, "call_llm")
+        text = bluesky_poster._compose_new_post(self._issue(), "2026-07-24")
+        assert text == "Trump said EU fines against major tech companies should be reversed."
 
-        def _fake_call_llm(**kwargs):
-            captured["user_prompt"] = kwargs["user_prompt"]
-            return {"post": "Yesterday: Trump said EU fines against major tech companies should be reversed."}
-
-        with patch.object(bluesky_poster, "call_llm", side_effect=_fake_call_llm):
-            bluesky_poster._generate_new_post(issue, "2026-07-25")
-
-        assert "Yesterday: ..." in captured["user_prompt"]
-        assert "On 2026-07-24: ..." not in captured["user_prompt"]
-
-    def test_multiple_days_stale_offers_only_the_date(self):
+    def test_a_lede_too_long_falls_back_to_the_headline_rather_than_being_cut(self):
         from app.pipeline.analyze import bluesky_poster
 
-        issue = self._issue(primary_article_date="2026-07-20")
-        captured = {}
+        long_lede = "Trump said " + "EU fines against major tech companies should be reversed, " * 6 + "officials said."
+        assert len(long_lede) > bluesky_poster.MAX_POST_CHARS
+        text = bluesky_poster._compose_new_post(self._issue(summary=long_lede), "2026-07-24")
+        assert text == "Trump calls for EU investigation into tech fines"
 
-        def _fake_call_llm(**kwargs):
-            captured["user_prompt"] = kwargs["user_prompt"]
-            return {"post": "On 2026-07-20: Trump said EU fines against major tech companies should be reversed."}
+    def test_nothing_that_fits_posts_nothing_and_is_counted(self):
+        from app.pipeline.analyze import action_metrics, bluesky_poster
 
-        with patch.object(bluesky_poster, "call_llm", side_effect=_fake_call_llm):
-            bluesky_poster._generate_new_post(issue, "2026-07-25")
+        too_long = "x" * (bluesky_poster.MAX_POST_CHARS + 1)
+        action_metrics.reset()
+        assert bluesky_poster._compose_new_post(self._issue(summary=too_long, title=too_long), "2026-07-24") is None
+        assert action_metrics.snapshot().get("bsky_posts_skipped_too_long") == 1
 
-        assert "On 2026-07-20: ..." in captured["user_prompt"]
-        assert "'Yesterday: ...'" not in captured["user_prompt"]
-
-    def test_not_stale_has_no_staleness_instruction(self):
+    def test_hashtags_become_words(self):
         from app.pipeline.analyze import bluesky_poster
 
-        issue = self._issue(primary_article_date="2026-07-25")
-        captured = {}
+        text = bluesky_poster._compose_new_post(self._issue(summary="The #Senate passed the bill."), "2026-07-24")
+        assert text == "The Senate passed the bill."
 
-        def _fake_call_llm(**kwargs):
-            captured["user_prompt"] = kwargs["user_prompt"]
-            return {"post": "Trump said EU fines against major tech companies should be reversed."}
 
-        with patch.object(bluesky_poster, "call_llm", side_effect=_fake_call_llm):
-            bluesky_poster._generate_new_post(issue, "2026-07-25")
+    def test_a_repost_leads_with_the_fact_the_last_post_lacked(self):
+        # The repost gate released this because the facts gained something;
+        # the lede is unchanged, and posting it again would only be
+        # suppressed as a near-duplicate — the update would never post.
+        import json as _json
 
-        assert "IMPORTANT: The events described" not in captured["user_prompt"]
+        from app.pipeline.analyze import bluesky_poster
+
+        issue = self._issue(
+            facts=_json.dumps(["The EU fined three companies this year.", "The Commission said it would appeal."]),
+            bsky_posted_facts=_json.dumps(["The EU fined three companies this year."]),
+            bsky_last_post_text="Trump said EU fines against major tech companies should be reversed.",
+        )
+        assert bluesky_poster._compose_new_post(issue, "2026-07-24") == "The Commission said it would appeal."
+
+    def test_a_first_post_ignores_facts_and_uses_the_lede(self):
+        import json as _json
+
+        from app.pipeline.analyze import bluesky_poster
+
+        issue = self._issue(facts=_json.dumps(["The Commission said it would appeal."]), bsky_posted_facts=None)
+        assert bluesky_poster._compose_new_post(issue, "2026-07-24") == (
+            "Trump said EU fines against major tech companies should be reversed."
+        )
+
+    def test_a_repost_with_no_new_fact_falls_back_to_the_lede(self):
+        import json as _json
+
+        from app.pipeline.analyze import bluesky_poster
+
+        facts = _json.dumps(["The EU fined three companies this year."])
+        issue = self._issue(facts=facts, bsky_posted_facts=facts)
+        assert bluesky_poster._compose_new_post(issue, "2026-07-24").startswith("Trump said EU fines")
+
+
+class TestStalenessPhrasing:
+    """2026-07 live case: a post opened with 'On 2026-07-24' the day after
+    the event, when 'Yesterday:' was both available and accurate. Only the
+    one phrasing that's actually true is ever used — and it is added by
+    code, not by asking a model to."""
+
+    def _issue(self, article_date):
+        from app.models import ActionIssue
+        return ActionIssue(
+            date="2026-07-25", rank=1, is_current=True,
+            title="Trump calls for EU investigation into tech fines",
+            summary="Trump said EU fines against major tech companies should be reversed.",
+            facts="[]", source_names="[]", bsky_posted_at=None,
+            primary_article_date=article_date,
+        )
+
+    def test_exactly_one_day_stale_opens_with_yesterday(self):
+        from app.pipeline.analyze import bluesky_poster
+
+        text = bluesky_poster._compose_new_post(self._issue("2026-07-24"), "2026-07-25")
+        assert text == "Yesterday: Trump said EU fines against major tech companies should be reversed."
+
+    def test_multiple_days_stale_opens_with_the_date(self):
+        from app.pipeline.analyze import bluesky_poster
+
+        text = bluesky_poster._compose_new_post(self._issue("2026-07-20"), "2026-07-25")
+        assert text == "On July 20: Trump said EU fines against major tech companies should be reversed."
+
+    def test_not_stale_has_no_prefix(self):
+        from app.pipeline.analyze import bluesky_poster
+
+        text = bluesky_poster._compose_new_post(self._issue("2026-07-25"), "2026-07-25")
+        assert text == "Trump said EU fines against major tech companies should be reversed."
+
+    def test_unreadable_or_missing_date_has_no_prefix(self):
+        from app.pipeline.analyze import bluesky_poster
+
+        assert bluesky_poster._staleness_prefix(None, "2026-07-25") == ""
+        assert bluesky_poster._staleness_prefix("July 20", "2026-07-25") == ""
