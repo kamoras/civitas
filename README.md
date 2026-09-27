@@ -940,17 +940,17 @@ from the `ExploreDocument` rows already in the app database; search returns
 
 ## Score Data Transparency
 
-Each score shown in the UI links to a "data basis" view that surfaces the raw data behind the number. This is built without any additional data storage — the existing tables are queried at render time:
+Every score on a profile opens a "show the math" panel (`ScoreBreakdownPanel`). It is served by `GET /api/{senators|representatives|presidents|justices}/{id}/score-breakdown`, which recomputes each dimension from the member's stored records with the scorer's own functions (`score_calculator.explain_scores`) and returns every component: its value, its weight, the input it was computed from, and the population reference it was compared with. Nothing in it is written by a model, and because it is the same code the pipeline scores with, the panel can't drift from the number above it.
 
-| Score | Data shown |
-|-------|------------|
-| Funding Independence | Top 10 donors by amount, PAC fraction |
-| Promise Persistence | Per-promise verdict (kept/broken/partial), supporting vote or speech |
-| Constituent Alignment | Key votes where member broke with party, bill title + vote |
-| Funding Diversity | Industry breakdown pie chart from `IndustryDonation` records |
-| Legislative Effectiveness | Sponsored bills, cosponsor counts, committee/floor passage rate |
+The profile also lists the records the dimensions read:
 
-The score transparency layer deliberately surfaces the underlying `KeyVote`, `Donor`, `CampaignPromise`, and `SponsoredBill` records rather than LLM-written explanations — the numbers are auditable against the source data.
+| Score | Records shown |
+|-------|---------------|
+| Funding Independence | Top donors by amount with type and industry, PAC share, small-donor share, industry breakdown (`IndustryDonation`) |
+| Constituent Alignment | Votes on party-labeled roll calls, marked where the member broke with their party, and the seat's expected break rate |
+| Legislative Effectiveness | Sponsored bills by the furthest stage each reached, with commemorative bills marked |
+
+The layer surfaces the underlying `KeyVote`, `Donor`, `IndustryDonation` and `SponsoredBill` records rather than LLM-written explanations — the numbers are auditable against the source data.
 
 ---
 
@@ -966,9 +966,10 @@ GET /api/public/v1/representatives               All representatives with scores
 GET /api/public/v1/representatives/{id}          Single representative
 GET /api/public/v1/representatives/{id}/history  Score history over time
 GET /api/public/v1/states                        State metadata
-GET /api/public/v1/search                        Semantic search over bills, lobbying
-                                                 records, and federal-register documents
-                                                 (not politician names)
+GET /api/public/v1/search                        Hybrid (semantic + keyword) search over
+                                                 floor speeches, presidential actions,
+                                                 Supreme Court opinions and Federal Register
+                                                 rulemaking (not bill text or politician names)
 ```
 
 Score weights, industry codes, and policy areas are available unauthenticated
@@ -987,11 +988,11 @@ Key algorithmic decisions and their academic backing:
 |----------|-----------|-----------|
 | Embeddings over keywords for classification | Semantic similarity generalizes to unseen text; keywords are brittle | Reimers & Gurevych 2019 (Sentence-BERT) |
 | kNN over LLM for donor classification | 5s vs 40min, no hallucinated categories, deterministic | Cover & Hart 1967; Snell et al. 2017 |
-| Content-based party alignment | Vote tallies conflate strategy with ideology | Clinton, Jackman & Rivers 2004; Laver et al. 2003 |
+| Party alignment from the roll call's actual split; content only where no roll call exists | "Broke with party" is defined by how the parties voted; content fills gaps and the per-area depth breakdown | Poole & Rosenthal 1985; Laver et al. 2003 |
 | Learning store as experience replay | Past classifications bootstrap future accuracy | Lin 1992; Yarowsky 1995 |
 | Inverse HHI for funding diversity | Standard concentration metric from IO economics | Rhoades 1993 |
-| Linear shrinkage toward 50 for promise scores (fixed rate `min(n/k, 1)`, not empirical Bayes) | Prevents inflation when few promises are evaluable | Stein-type shrinkage idea: Efron & Morris 1975 |
-| Cook PVI adjustment for independence | Raw party-break rates mislead without constituency context | Carson et al. 2010 |
+| Linear shrinkage toward 50 on thin evidence (fixed rate `min(n/k, 1)`, not empirical Bayes) | Keeps a few votes or cases from producing an extreme score | Stein-type shrinkage idea: Efron & Morris 1975 |
+| Seat-relative break rate for Constituent Alignment (expected rate by party and Cook PVI, fitted from the chamber each run) | Raw party-break rates mislead without constituency context | Carson et al. 2010; Papke & Wooldridge 1996 |
 | Donation-vote correlation ≠ causation | Methodological caution in interpreting funding influence | Ansolabehere et al. 2003 |
 | Fuzzy name matching for self-funded detection | SequenceMatcher handles spelling variations, middle names | Ratcliff & Obershelp 1988 |
 | PageRank for legislative leadership | Cosponsorship network centrality measures peer influence | Brin & Page 1998; Tauberer 2012 |

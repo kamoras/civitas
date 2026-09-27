@@ -16,12 +16,10 @@ const INITIAL_VISIBLE = 8;
 // Matches SUBSTANTIVE_BILL_TYPES in backend/app/pipeline/analyze/score_calculator.py —
 // simple/concurrent resolutions (sres/hres/sconres/hconres) are routinely
 // ceremonial ("designating April as Second Chance Month") and "agreed to"
-// without debate by unanimous consent. The Legislative Effectiveness score
-// already excludes them from its advancement count for exactly this reason
-// (the "Mushroom Day" fix) — this summary count must use the same filter,
-// or it displays a bigger, more impressive "advancing" number right next
-// to a score that didn't credit any of it, an unexplained contradiction
-// on the same card.
+// without debate by unanimous consent. Legislative Effectiveness weights
+// them 1x against a bill's 5x (Volden & Wiseman's commemorative tier), so
+// counting them here as "became law" or "advancing" would put a bigger
+// number next to a score that credited them a fifth as much.
 const SUBSTANTIVE_BILL_TYPES = new Set(["s", "hr", "sjres", "hjres"]);
 
 // Deliberately excludes IN_COMMITTEE, unlike MAIN_FLOW_STAGES in
@@ -107,7 +105,7 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
           >
             <div className="text-xl font-display font-semibold text-ink-hi">{bills.length}</div>
             <div className="text-xs text-ink-min">
-              <MetricTooltip text="Number of bills this senator introduced as primary sponsor. Sponsoring a bill means they authored or championed it.">
+              <MetricTooltip text="Number of bills and resolutions this member introduced as primary sponsor this congress. Sponsoring a bill means they authored or championed it.">
                 BILLS SPONSORED
               </MetricTooltip>
             </div>
@@ -134,7 +132,7 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
               {lawCount}
             </div>
             <div className="text-xs text-ink-min">
-              <MetricTooltip text="How many of this senator's sponsored bills (S./H.R./joint resolutions — not simple/concurrent resolutions) were signed into law. Most bills never pass — even 1 is notable. Click to filter the list below to just these.">
+              <MetricTooltip text="How many of this member's sponsored bills (S./H.R./joint resolutions — not simple/concurrent resolutions) were signed into law. Most bills never pass — even 1 is notable. Click to filter the list below to just these.">
                 BECAME LAW
               </MetricTooltip>
             </div>
@@ -161,7 +159,7 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
               {advancedCount}
             </div>
             <div className="text-xs text-ink-min">
-              <MetricTooltip text="Substantive bills (S./H.R./joint resolutions) that passed at least one chamber or were reported out of committee. Simple/concurrent resolutions (commemorative, e.g. designating an awareness month) are excluded — they're routinely agreed to without debate and aren't meaningful legislative progress, matching how the Legislative Effectiveness score itself counts advancement. Click to filter the list below to just these.">
+              <MetricTooltip text="Bills (S./H.R./joint resolutions) that have passed at least one chamber and haven't yet become law. Being referred to committee doesn't count — nearly every bill is, automatically. Simple/concurrent resolutions (e.g. designating an awareness month) are left out: they're routinely agreed to without debate, and Legislative Effectiveness weights them a fifth as much as a bill. Click to filter the list below to just these.">
                 ADVANCING
               </MetricTooltip>
             </div>
@@ -207,6 +205,13 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
                       {bill.isLaw && (
                         <span className="text-xs px-1.5 py-0.5 border text-signal-cyan border-white/15 bg-signal-cyan/10 font-mono">
                           SIGNED INTO LAW
+                        </span>
+                      )}
+                      {bill.commemorative && (
+                        <span className="text-xs px-1.5 py-0.5 border border-white/15 text-ink-lo font-mono">
+                          <MetricTooltip text="Reads as commemorative — naming a post office or building, awarding a medal, recognising a person or event. Legislative Effectiveness weights it 1× instead of a bill's 5×, as Volden & Wiseman's scores do. Detected from the title by a classifier calibrated against their coding.">
+                            COMMEMORATIVE · 1×
+                          </MetricTooltip>
                         </span>
                       )}
                       {badge && (

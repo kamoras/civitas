@@ -73,6 +73,7 @@ def seed(db) -> None:
             db.add(M.SponsoredBill(
                 senator_id=sid, bill_id=f"S.{200 + i * 10 + j}", title=f"Rural Broadband Access Act, part {j}",
                 congress=119, bill_type="s", stage=rng.choice(STAGES), introduced_date="2025-03-01",
+                commemorative=j == 0,
             ))
 
     for d in range(1, 6):

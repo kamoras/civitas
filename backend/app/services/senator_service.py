@@ -180,6 +180,7 @@ def _build_sponsored_bills(sponsored_bills: list) -> list[SponsoredBillSchema]:
             bill_type=sb.bill_type or "",
             is_law=sb.is_law or False,
             stage=sb.stage or "",
+            commemorative=bool(sb.commemorative),
         ))
     result.sort(key=lambda x: x.introduced_date, reverse=True)
     return result
