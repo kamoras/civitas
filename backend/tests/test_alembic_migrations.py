@@ -61,6 +61,23 @@ def test_one_head():
     assert len(ScriptDirectory.from_config(database._alembic_config()).get_heads()) == 1
 
 
+def test_revisions_form_one_numbered_chain():
+    """_run_migrations tells a rollback from a stray revision by number, so
+    the numbers must be one sequence, each revising the one before. Two
+    branches that each took the next number fail here once both are merged
+    (Alembic itself only warns about a duplicate id, keeping one file)."""
+    import re
+    from pathlib import Path
+
+    script_dir = ScriptDirectory.from_config(database._alembic_config())
+    files = sorted(Path(script_dir.versions).glob("[0-9]*.py"))
+    ids = [re.search(r"^revision = ['\"](\w+)['\"]", f.read_text(), re.M).group(1) for f in files]
+    assert ids == [f"{n:04d}" for n in range(1, len(files) + 1)]
+    for script in script_dir.walk_revisions():
+        expected = None if script.revision == "0001" else f"{int(script.revision) - 1:04d}"
+        assert script.down_revision == expected, script.revision
+
+
 def test_upgrade_is_idempotent(patched_engine):
     database._run_migrations()
     database._run_migrations()
@@ -105,3 +122,46 @@ def test_the_drift_check_is_not_vacuous(patched_engine):
     with patched_engine.begin() as conn:
         conn.execute(text("ALTER TABLE senators DROP COLUMN caucus_party"))
     assert any(d[0] == "add_column" and d[3].name == "caucus_party" for d in _diff(patched_engine))
+
+
+def test_a_database_migrated_by_a_newer_image_is_left_alone(patched_engine):
+    """Swarm's automatic rollback starts the previous image against a
+    database the failed new image already migrated. Alembic can't locate
+    that newer revision; the older image must start anyway (the schema only
+    ever expands between releases), not crash-loop the rollback."""
+    database._run_migrations()
+    newer = f"{int(_head()) + 1:04d}"
+    with patched_engine.begin() as conn:
+        conn.execute(text(f"UPDATE alembic_version SET version_num = '{newer}'"))
+
+    database._run_migrations()  # must not raise
+
+    assert _revision(patched_engine) == newer
+
+
+def test_an_unknown_revision_that_is_not_a_later_one_still_fails_loudly(patched_engine):
+    """Another branch's revision, a renamed file: not a rollback. Starting
+    anyway would run the app against a schema nobody checked."""
+    from alembic.util.exc import CommandError
+
+    database._run_migrations()
+    with patched_engine.begin() as conn:
+        conn.execute(text("UPDATE alembic_version SET version_num = 'a1b2c3d4e5f6'"))
+
+    with pytest.raises(CommandError):
+        database._run_migrations()
+
+
+def test_an_owner_this_image_does_not_know_reads_as_unknown():
+    """0006 writes owner 'unknown'; an image reading a row some other
+    image's parser wrote must not fail the member's whole response on it."""
+    from app.schemas import StockTradeSchema
+
+    fields = dict(
+        asset_name="A", transaction_type="purchase", transaction_date="2026-01-01",
+        disclosure_date="2026-01-02", days_to_disclose=1, amount_low=1, amount_high=2,
+        industry="X", source_url="",
+    )
+    assert StockTradeSchema(owner="unknown", **fields).owner == "unknown"
+    assert StockTradeSchema(owner="trust", **fields).owner == "unknown"
+    assert StockTradeSchema(owner="spouse", **fields).owner == "spouse"
