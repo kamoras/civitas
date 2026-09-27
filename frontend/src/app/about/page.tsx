@@ -1096,6 +1096,12 @@ export default function AboutPage() {
                   is treated as the final word: anyone not on it is taken off the page.
                 </P>
                 <P>
+                  Declared write-in candidates are not printed on the ballot, so they are
+                  never shown as on it. Texas lists its write-ins in the same list as its
+                  nominees, and until 27 September 2026 this page showed four of them
+                  as Senate candidates.
+                </P>
+                <P>
                   Everyone on a certified ballot is shown, including candidates who never
                   filed with the FEC — they appear with &ldquo;no FEC filing&rdquo; instead
                   of fundraising figures. Colorado, Virginia, Tennessee, Florida, New Jersey, Maryland,

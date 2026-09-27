@@ -1027,7 +1027,8 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
           <header className="mb-5 flex flex-col gap-4 border-b border-white/[0.14] pb-5 font-sans lg:flex-row lg:items-end lg:justify-between">
             <div className="min-w-0">
               <p className="font-mono text-xs tracking-[0.14em] text-phos">
-                BALLOT RESEARCH · {stateName.toUpperCase()} · {ballot.electionDate.toUpperCase()}
+                BALLOT RESEARCH · {stateName.toUpperCase()} ·{" "}
+                <span className="whitespace-nowrap">{ballot.electionDate.toUpperCase()}</span>
               </p>
               <h1 className="mt-1 font-display text-2xl font-extrabold text-ink-hi sm:text-[28px]">
                 Everyone on {stateName}&apos;s ballot, and who is behind them

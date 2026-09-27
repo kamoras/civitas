@@ -146,14 +146,14 @@ export default function ContestDrawer({
             onClick={() => prev && onNavigate(prev.key)}
             className="min-h-[48px] border border-white/25 px-3 text-left text-sm text-ink-hi hover:border-white/50 disabled:text-ink-min disabled:hover:border-white/25"
           >
-            {prev ? `← ${prev.title}` : "← First contest"}
+            {prev ? `←\u00a0${prev.title}` : "←\u00a0First contest"}
           </button>
           <button
             type="button"
             onClick={() => (next ? onNavigate(next.key) : onClose())}
             className="min-h-[48px] bg-phos px-3 text-right text-sm font-bold text-surface-base hover:bg-phos-mid"
           >
-            {next ? `${next.title} →` : "Back to the ballot"}
+            {next ? `${next.title}\u00a0→` : "Back to the ballot"}
           </button>
         </div>
       </div>

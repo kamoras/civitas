@@ -50,6 +50,7 @@ logger = logging.getLogger(__name__)
 
 CIVIX_BASE = "https://goelect.txelections.civixapps.com/api-ivis-cbp/api/cbp"
 CONFIRMED_FILING_STATUS = "CG"
+WRITE_IN_CAND_TYPE = "WRTIN"
 
 # Civix's API 403s a request with no browser-like User-Agent at all
 # (verified live) — an honest, identifying UA (same convention
@@ -130,6 +131,11 @@ async def fetch_confirmed_candidates(
         if row.get("cdOfficeType") != "FD":
             continue
         if row.get("cdFilingStatus") != CONFIRMED_FILING_STATUS:
+            continue
+        # A declared write-in also carries "CG" but is not printed on the
+        # ballot. Every other certified-list adapter drops these; Civix
+        # marks them in its own candidate-type field (party "W" too).
+        if row.get("cdCandType") == WRITE_IN_CAND_TYPE:
             continue
         parsed = _parse_office(row.get("txOfficeName") or "")
         if parsed is None:
