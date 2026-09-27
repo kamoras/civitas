@@ -36,4 +36,22 @@ describe("SponsoredBills", () => {
     );
     expect(screen.getByText(/2 bills · 1 advancing/)).toBeInTheDocument();
   });
+
+  it("filters with real buttons, none nested in another (axe: nested-interactive)", () => {
+    const { container } = render(
+      <SponsoredBills
+        bills={[
+          bill({ billId: "H.R.14", title: "Enacted Act", isLaw: true, stage: "BECAME_LAW" }),
+          bill({ billId: "H.R.15", title: "Pending Act" }),
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /SPONSORED LEGISLATION/ }));
+    expect(container.querySelectorAll("button button, [role=button] button")).toHaveLength(0);
+    const law = screen.getByRole("button", { name: "1 BECAME LAW" });
+    fireEvent.click(law);
+    expect(law).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByText("Pending Act")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "0 ADVANCING" })).toBeDisabled();
+  });
 });
