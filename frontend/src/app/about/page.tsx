@@ -1352,6 +1352,17 @@ export default function AboutPage() {
                   step used to remove only what one cluster&apos;s headlines had in common, which is
                   the topic itself, and it threw away most of each story&apos;s coverage.
                 </P>
+                <P>
+                  Articles join one story only if every one of them resembles every other. The
+                  earlier rule asked only that each article resemble one other, so stories chained
+                  together by theme: on 27 September 2026 an issue titled for floods in Bangkok led
+                  with a hurricane near Hawaii and listed facts about a nor&apos;easter and an HIV
+                  epidemic in Fiji. Headline similarity cannot reliably tell the same event from
+                  the same kind of event, so the grouping errs toward keeping stories apart. Two
+                  articles about one event may land in separate groups; the smaller one is set
+                  aside as a duplicate rather than folded in, so the issue cites fewer sources.
+                  That is a smaller error than publishing an issue built from unrelated stories.
+                </P>
               </div>
 
               <div>

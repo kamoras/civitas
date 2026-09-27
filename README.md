@@ -399,13 +399,21 @@ Every hour at :15
   2. FILTER ──── Embed each article against 24 policy prototypes (19 US, 5 intl.)
        │         Discard cosine_sim < 0.22 (off-topic articles)
        ▼
-  3. CLUSTER ─── Pairwise cosine similarity on title embeddings
-       │         Merge clusters starting at centroid similarity 0.20, self-
-       │         calibrated upward in 0.05 steps (to 0.61 max) to avoid
-       │         collapsing everything into one mega-cluster
+  3. CLUSTER ─── Complete linkage on title embeddings at cosine 0.40:
+       │         EVERY pair in a cluster must clear it, so a chain of
+       │         look-alikes (floods ~ storm ~ epidemic) can't form one
+       │         story. Single linkage plus a centroid merge from 0.20 built
+       │         2026-09-27's chimeras: a Bangkok-floods title over a Hawaii
+       │         hurricane lede and facts about a nor'easter and Fiji's HIV
+       │         epidemic. Title similarity can't tell same-event from
+       │         same-theme (18 labelled pairs overlapped 0.16-0.82 vs
+       │         0.24-0.46), so a split beats a wrong merge. The same-run
+       │         duplicate check drops a look-alike cluster rather than
+       │         appending it (appending folded Hurricane Nolo into the
+       │         nor'easter on that feed).
        │         Titles are compared with the day's mean headline vector
-       │         removed. The later per-cluster split and coherence filter
-       │         used to remove the CLUSTER's own mean instead, which erases
+       │         removed. The coherence filter used to remove the CLUSTER's
+       │         own mean instead, which erases
        │         the topic the articles share: live runs kept 1 of 5
        │         same-story articles, and on 2026-09-27's feed the filter
        │         kept 28 articles where the day's mean keeps 48.
