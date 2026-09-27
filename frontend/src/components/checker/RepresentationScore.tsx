@@ -182,12 +182,14 @@ export default function RepresentationScore({
   })();
 
   const nBills = sponsoredBills?.length ?? 0;
+  // States the record only. Since v6.14 a small record is not shrunk toward
+  // 50, and zero bills scores 0 or neutral depending on tenure and whether
+  // the bill list downloaded — facts this component doesn't have; the
+  // breakdown's own detail says which applied.
   const effectivenessBasis: string =
     nBills === 0
-      ? "no bill data · defaults to 50"
-      : nBills < 10
-        ? `${nBills} bill${nBills !== 1 ? "s" : ""} sponsored · score shrunk toward 50`
-        : `${nBills} bills sponsored`;
+      ? "no sponsored bills on record"
+      : `${nBills} bill${nBills !== 1 ? "s" : ""} sponsored`;
 
   const scoreBasis: Partial<Record<ScoreKey, string | undefined>> = {
     constituentAlignment: votingBasis,

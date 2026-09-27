@@ -16,7 +16,6 @@ Once the reference is on the current scale it does nothing.
 """
 
 import logging
-import threading
 
 from sqlalchemy.orm import selectinload
 
@@ -95,13 +94,3 @@ def rescore_stale_legislative_effectiveness(session_factory) -> list[str]:
     finally:
         db.close()
     return done
-
-
-def start_les_rescore(session_factory) -> None:
-    """Run the rescore on a daemon thread so startup isn't held up."""
-    threading.Thread(
-        target=rescore_stale_legislative_effectiveness,
-        args=(session_factory,),
-        name="les-rescore",
-        daemon=True,
-    ).start()

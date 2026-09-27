@@ -192,7 +192,10 @@ def build_payload(cur, s, search, fin):
          "congress": r["congress"],
          # The stored stage classification — without it, LE fell back to
          # latestAction keywords and diverged from the pipeline's score.
-         "stage": r["stage"] or None}
+         "stage": r["stage"] or None,
+         # Commemorative bills count 1x, not 5x (v6.14) — as les_rescore
+         # and the pipeline pass it.
+         "commemorative": bool(r["commemorative"])}
         for r in cur.fetchall()
     ]
 
