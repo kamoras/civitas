@@ -1432,22 +1432,6 @@ async def admin_clear_stuck_election(db: Session = Depends(get_db)):
 _STARTUP_WRITER_THREADS = {"explore-reindex", "explore-fts-backfill", "startup-rescore"}
 
 
-def _running_writers(db: Session) -> list[str]:
-    """Every job that writes what a reset deletes and is running now: the
-    Senate run (tracked by its DB row), every PipelineRunTracker job, the
-    Action Center refresh (by its lease) and the boot-time threads."""
-    from app.api.pipeline import _is_pipeline_running
-    from app.pipeline.analyze.action_center import refresh_lock_held
-    from app.pipeline.run_tracker import PipelineRunTracker
-
-    running = ["Senate"] if _is_pipeline_running(db) else []
-    running += PipelineRunTracker.running()
-    if refresh_lock_held(db):
-        running.append("Action Center refresh")
-    running += sorted(t.name for t in threading.enumerate() if t.name in _STARTUP_WRITER_THREADS)
-    return running
-
-
 @router.post("/data/reset", dependencies=[Depends(require_admin)])
 async def admin_reset_data(db: Session = Depends(get_db)):
     """Wipe what the pipelines derive from their sources, for a clean start.
@@ -1456,21 +1440,48 @@ async def admin_reset_data(db: Session = Depends(get_db)):
     vector store — every table except database.RESET_KEEPS, the history no
     run can rebuild (the Action Center's, run history). The next pipeline
     runs rebuild the rest from scratch with the latest code.
+
+    Every writer is held off for the whole wipe, not just checked before
+    it: the reset takes each pipeline's run lock and the Action Center
+    refresh's lease — the database-level locks those jobs take themselves,
+    so a job in another process (a rollout's other task) is held off too —
+    and pauses the in-process jobs that have none. Anything already running
+    refuses the reset.
     """
-    running = _running_writers(db)
-    if running:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Cannot reset while running: {', '.join(running)}",
-        )
-
     from app.database import reset_all_data
+    from app.models import (
+        ElectionPipelineRun, HousePipelineRun, PipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun,
+    )
+    from app.pipeline.analyze.action_center import _acquire_refresh_lock, _release_refresh_lock
+    from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT, PipelineRunTracker, acquire_pipeline_lock, pause_writes
 
-    # Run on the event loop, deliberately: the scheduler (AsyncIOScheduler)
-    # and every API trigger start their jobs from this loop, so holding it
-    # is what keeps a new writer from starting mid-wipe after the check
-    # above. A rare admin action; visitors wait out the few seconds.
-    summary = reset_all_data()
+    locks = {
+        "Senate": PipelineRun, "Supplementary": SupplementaryPipelineRun, "House": HousePipelineRun,
+        "Stock trades": StockTradesPipelineRun, "Election": ElectionPipelineRun,
+    }
+    with pause_writes():
+        held, running = [], []
+        for label, model in locks.items():
+            run = acquire_pipeline_lock(db, model, STALE_PIPELINE_TIMEOUT)
+            if run is None:
+                running.append(label)
+            else:
+                held.append(run)
+        lease = _acquire_refresh_lock(db)
+        if lease is None:
+            running.append("Action Center refresh")
+        running += [name for name in PipelineRunTracker.running() if name not in locks]
+        running += sorted(t.name for t in threading.enumerate() if t.name in _STARTUP_WRITER_THREADS)
+        try:
+            if running:
+                raise HTTPException(status_code=409, detail=f"Cannot reset while running: {', '.join(running)}")
+            summary = await asyncio.to_thread(reset_all_data)
+        finally:
+            for run in held:
+                db.delete(run)
+            db.commit()
+            if lease is not None:
+                _release_refresh_lock(db, lease)
     total_rows = sum(v for k, v in summary.items() if isinstance(v, int))
     return {
         "status": "reset_complete",

@@ -21,6 +21,8 @@ PresidentTrade's docstring.
 
 import logging
 import time
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 import httpx
@@ -29,6 +31,7 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.http_client import make_async_client
+from app.pipeline.cache import api_cache_get, api_cache_set
 from app.models import (
     PipelineRun, HousePipelineRun, PipelineStatus, President, PresidentTrade,
     StockTrade, RepStockTrade, StockTradesPipelineRun,
@@ -197,6 +200,30 @@ async def _classify_rows_industry(
             row.industry = industry
 
 
+def _trade(model, *, row: TradeRow, **owner):
+    """A stored trade row of `model` (StockTrade, RepStockTrade or
+    PresidentTrade) for one parsed transaction; `owner` names the filer
+    (senator_id=, representative_id= or president_id=). The one place a
+    parsed row becomes a stored one, for every chamber and for re-reads."""
+    return model(
+        **owner,
+        ticker=row.ticker,
+        asset_name=row.asset_name,
+        owner=row.owner,
+        transaction_type=row.transaction_type,
+        transaction_date=row.transaction_date,
+        disclosure_date=row.disclosure_date,
+        days_to_disclose=_compute_days_to_disclose(row.transaction_date, row.disclosure_date),
+        amount_low=row.amount_low,
+        amount_high=row.amount_high,
+        industry=row.industry or "UNCLASSIFIED",
+        source_url=row.source_url,
+        filing_id=row.filing_id,
+        parse_confidence=row.parse_confidence,
+        parser_version=PTR_PARSER_VERSION,
+    )
+
+
 async def _ingest_house(db: Session, client: httpx.AsyncClient) -> int:
     existing_rep_filing_ids = {row[0] for row in db.query(RepStockTrade.filing_id).all()}
 
@@ -216,23 +243,7 @@ async def _ingest_house(db: Session, client: httpx.AsyncClient) -> int:
                 continue
             await _classify_rows_industry(db, client, rows)
             for row in rows:
-                days = _compute_days_to_disclose(row.transaction_date, row.disclosure_date)
-                db.add(RepStockTrade(
-                    representative_id=rep_id,
-                    ticker=row.ticker,
-                    asset_name=row.asset_name,
-                    owner=row.owner,
-                    transaction_type=row.transaction_type,
-                    transaction_date=row.transaction_date,
-                    disclosure_date=row.disclosure_date,
-                    days_to_disclose=days,
-                    amount_low=row.amount_low,
-                    amount_high=row.amount_high,
-                    industry=row.industry or "UNCLASSIFIED",
-                    source_url=row.source_url,
-                    filing_id=row.filing_id,
-                    parse_confidence=row.parse_confidence,
-                ))
+                db.add(_trade(RepStockTrade, representative_id=rep_id, row=row))
                 inserted += 1
             existing_rep_filing_ids.add(filing["doc_id"])
     db.commit()
@@ -285,80 +296,86 @@ async def _ingest_senate(db: Session, client: httpx.AsyncClient) -> int:
             continue
         await _classify_rows_industry(db, client, rows)
         for row in rows:
-            days = _compute_days_to_disclose(row.transaction_date, row.disclosure_date)
-            db.add(StockTrade(
-                senator_id=senator_id,
-                ticker=row.ticker,
-                asset_name=row.asset_name,
-                owner=row.owner,
-                transaction_type=row.transaction_type,
-                transaction_date=row.transaction_date,
-                disclosure_date=row.disclosure_date,
-                days_to_disclose=days,
-                amount_low=row.amount_low,
-                amount_high=row.amount_high,
-                industry=row.industry or "UNCLASSIFIED",
-                source_url=row.source_url,
-                filing_id=row.filing_id,
-                parse_confidence=row.parse_confidence,
-                parser_version=PTR_PARSER_VERSION,
-            ))
+            db.add(_trade(StockTrade, senator_id=senator_id, row=row))
             inserted += 1
         existing_filing_ids.add(filing_id)
     db.commit()
-    await _reread_senate(db, client)
     return inserted
 
 
-async def _reread_senate(db: Session, client: httpx.AsyncClient) -> int:
-    """Read stored electronic Senate filings again when an older
-    ptr_common.PARSER_VERSION read them, replacing their rows. Their report
-    pages are stored, so this needs no search, whose window reaches back
-    only a few weeks. A filing that doesn't read keeps its rows. Paper
-    filings are not re-read: their OCR rows name no owner either way.
-    Returns filings re-read."""
-    stale = (
-        db.query(StockTrade.filing_id, func.min(StockTrade.source_url), func.max(StockTrade.disclosure_date))
-        .filter(StockTrade.parser_version < PTR_PARSER_VERSION, StockTrade.source_url.like("%/view/ptr/%"))
-        .group_by(StockTrade.filing_id)
-        .order_by(func.max(StockTrade.disclosure_date).desc())
-        .all()
-    )
+@dataclass(frozen=True)
+class _StoredSource:
+    """One trade table whose stored filings can be read again: `fetch`
+    takes a filing's stored id and source URL."""
+    label: str
+    model: type
+    owner_key: str
+    fetch: Callable[[str, str], Awaitable[list[TradeRow]]]
+
+
+# A filing that didn't read is not tried again for this long, so a few dead
+# links can't spend every night's budget ahead of the filings that do read.
+_REREAD_RETRY_HOURS = 24 * 7
+_REREAD_TIER = "ptr_reread"
+
+
+async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
+    """Read stored filings again when an older ptr_common.PARSER_VERSION
+    read them, replacing their rows — the Senate's first (its owners were
+    misread), newest first within each, until PTR_REREAD_BUDGET is spent.
+    Every stored row names its filing's URL, so this needs no search or
+    index, whose windows reach back only weeks. A filing that doesn't read
+    keeps its rows and waits _REREAD_RETRY_HOURS. Returns filings re-read."""
+    sources = [
+        _StoredSource("Senate", StockTrade, "senator_id", lambda _fid, url: fetch_senate_ptr(
+            client, db, {"report_url": url, "is_paper": "/view/paper/" in url},
+        )),
+        _StoredSource("House", RepStockTrade, "representative_id", lambda fid, url: fetch_house_ptr(
+            client, db, {"doc_id": fid, "pdf_url": url},
+        )),
+        _StoredSource("President", PresidentTrade, "president_id", lambda fid, url: fetch_president_ptr(
+            db, {"doc_id": fid, "pdf_url": url},
+        )),
+    ]
     deadline = time.monotonic() + PTR_REREAD_BUDGET.total_seconds()
     reread = 0
-    for filing_id, report_url, filed_date in stale:
-        if time.monotonic() >= deadline:
-            logger.info("Senate PTR re-read: time budget spent — %d filings wait for the next run", len(stale) - reread)
-            break
-        # An electronic filing's disclosure date is its filed date (the
-        # table has no notification column; see fetch_senate_ptr).
-        rows = await fetch_senate_ptr(client, db, {"report_url": report_url, "filed_date": filed_date})
-        if not rows:
+    for source in sources:
+        model = source.model
+        stale = (
+            db.query(model.filing_id, func.min(model.source_url))
+            .filter(model.parser_version < PTR_PARSER_VERSION)
+            .group_by(model.filing_id)
+            .order_by(func.max(model.disclosure_date).desc())
+            .all()
+        )
+        if stale and source.label == "Senate" and await senate_accept_terms(client) is None:
+            logger.warning("Senate PTR re-read skipped: no eFD session")
             continue
-        old = db.query(StockTrade).filter(StockTrade.filing_id == filing_id)
-        senator_id = old.first().senator_id
-        await _classify_rows_industry(db, client, rows)
-        old.delete(synchronize_session="fetch")
-        for row in rows:
-            db.add(StockTrade(
-                senator_id=senator_id,
-                ticker=row.ticker,
-                asset_name=row.asset_name,
-                owner=row.owner,
-                transaction_type=row.transaction_type,
-                transaction_date=row.transaction_date,
-                disclosure_date=row.disclosure_date,
-                days_to_disclose=_compute_days_to_disclose(row.transaction_date, row.disclosure_date),
-                amount_low=row.amount_low,
-                amount_high=row.amount_high,
-                industry=row.industry or "UNCLASSIFIED",
-                source_url=row.source_url,
-                filing_id=row.filing_id,
-                parse_confidence=row.parse_confidence,
-                parser_version=PTR_PARSER_VERSION,
-            ))
-        db.commit()
-        reread += 1
+        for position, (filing_id, url) in enumerate(stale):
+            if time.monotonic() >= deadline:
+                logger.info("PTR re-read: time budget spent — %d %s filings wait", len(stale) - position, source.label)
+                return reread
+            failed_key = f"failed-{source.label}-{filing_id}"
+            if api_cache_get(db, _REREAD_TIER, failed_key, max_age_hours=_REREAD_RETRY_HOURS) is not None:
+                continue
+            try:
+                rows = await source.fetch(filing_id, url)
+                if rows:
+                    await _classify_rows_industry(db, client, rows)
+            except Exception:
+                logger.exception("PTR re-read of %s filing %s failed", source.label, filing_id)
+                db.rollback()
+                rows = []
+            if not rows:
+                api_cache_set(db, _REREAD_TIER, failed_key, {"url": url}, normal_ttl_hours=_REREAD_RETRY_HOURS)
+                continue
+            stored = db.query(model).filter(model.filing_id == filing_id)
+            filer = getattr(stored.first(), source.owner_key)
+            stored.delete(synchronize_session="fetch")
+            for row in rows:
+                db.add(_trade(model, row=row, **{source.owner_key: filer}))
+            db.commit()
+            reread += 1
     return reread
 
 
@@ -402,23 +419,7 @@ async def _ingest_president(db: Session, client: httpx.AsyncClient) -> int:
             continue
         await _classify_rows_industry(db, client, rows)
         for row in rows:
-            days = _compute_days_to_disclose(row.transaction_date, row.disclosure_date)
-            db.add(PresidentTrade(
-                president_id=president.id,
-                ticker=row.ticker,
-                asset_name=row.asset_name,
-                owner=row.owner,
-                transaction_type=row.transaction_type,
-                transaction_date=row.transaction_date,
-                disclosure_date=row.disclosure_date,
-                days_to_disclose=days,
-                amount_low=row.amount_low,
-                amount_high=row.amount_high,
-                industry=row.industry or "UNCLASSIFIED",
-                source_url=row.source_url,
-                filing_id=row.filing_id,
-                parse_confidence=row.parse_confidence,
-            ))
+            db.add(_trade(PresidentTrade, president_id=president.id, row=row))
             inserted += 1
         existing_filing_ids.add(filing["doc_id"])
     db.commit()
@@ -494,6 +495,17 @@ async def run_stock_trades_pipeline() -> dict:
                 error_parts.append("President: failed — see server logs")
                 progress.fail("president_ptr")
                 failed_steps.add("president_ptr")
+            # Stored filings an older parser read. Not a trade phase of its
+            # own: a failure here is logged and reported, and leaves the
+            # night's new trades, already committed, as they are.
+            try:
+                reread = await _reread_trades(db, client)
+                if reread:
+                    logger.info("PTR re-read: %d stored filings read again", reread)
+            except Exception:
+                logger.exception("PTR re-read failed")
+                db.rollback()
+                error_parts.append("Re-read of stored filings: failed — see server logs")
             # Annual-report holdings: same sources, same best-effort
             # isolation (a failure leaves the trade rows above committed and
             # the stored holdings untouched). The phases live in

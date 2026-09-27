@@ -336,10 +336,9 @@ class TestClassifyRowsIndustryUntickered:
         assert rows[0].industry is None  # stays the model default (UNCLASSIFIED at the DB layer)
 
 
-class TestRereadSenate:
-    """Stored electronic Senate trades an older PTR parser read are read
-    again from their stored report pages; a filing that doesn't read keeps
-    its rows, and paper filings are left alone."""
+class TestRereadTrades:
+    """Stored filings an older PTR parser read are read again from their
+    stored URLs; a filing that doesn't read keeps its rows and waits a week."""
 
     def _stored(self, db_session, filing_id, url, version=1, owner="self"):
         from app.models import Senator, StockTrade
@@ -353,30 +352,58 @@ class TestRereadSenate:
         ))
         db_session.commit()
 
-    async def test_rereads_old_electronic_filings_and_keeps_what_does_not_read(self, db_session):
+    @staticmethod
+    def _row(filing_id, url, owner="spouse"):
+        from app.pipeline.fetch.ptr_common import TradeRow
+
+        return TradeRow(ticker="AAPL", asset_name="Apple Inc.", owner=owner, transaction_type="purchase",
+                        transaction_date="2026-01-02", disclosure_date="2026-01-20",
+                        amount_low=1001.0, amount_high=15000.0, source_url=url, filing_id=filing_id)
+
+    async def _reread(self, db_session, fetch):
+        with patch.object(stock_pipeline, "fetch_senate_ptr", side_effect=fetch) as mock_fetch, \
+             patch.object(stock_pipeline, "senate_accept_terms", new_callable=AsyncMock, return_value="tok"), \
+             patch.object(stock_pipeline, "_classify_rows_industry", new_callable=AsyncMock):
+            count = await stock_pipeline._reread_trades(db_session, None)
+        return count, mock_fetch
+
+    async def test_rereads_old_filings_and_keeps_what_does_not_read(self, db_session):
         from app.models import StockTrade
-        from app.pipeline.fetch.ptr_common import PARSER_VERSION, TradeRow
+        from app.pipeline.fetch.ptr_common import PARSER_VERSION
 
         base = "https://efdsearch.senate.gov/search/view"
         self._stored(db_session, "a", f"{base}/ptr/a/")
-        self._stored(db_session, "b", f"{base}/ptr/b/")                        # won't load tonight
-        self._stored(db_session, "p", f"{base}/paper/p/")                      # paper: not re-read
+        self._stored(db_session, "b", f"{base}/ptr/b/")                          # won't load tonight
         self._stored(db_session, "c", f"{base}/ptr/c/", version=PARSER_VERSION)  # already current
 
         async def fetch(_client, _db, filing):
-            if filing["report_url"].endswith("/a/"):
-                assert filing["filed_date"] == "2026-01-20"
-                return [TradeRow(ticker="AAPL", asset_name="Apple Inc.", owner="spouse", transaction_type="purchase",
-                                 transaction_date="2026-01-02", disclosure_date="2026-01-20",
-                                 amount_low=1001.0, amount_high=15000.0, source_url=filing["report_url"], filing_id="a")]
-            return []
+            assert "filed_date" not in filing  # the page states it
+            return [self._row("a", filing["report_url"])] if filing["report_url"].endswith("/a/") else []
 
-        with patch.object(stock_pipeline, "fetch_senate_ptr", side_effect=fetch) as mock_fetch, \
-             patch.object(stock_pipeline, "_classify_rows_industry", new_callable=AsyncMock):
-            assert await stock_pipeline._reread_senate(db_session, None) == 1
+        count, mock_fetch = await self._reread(db_session, fetch)
 
+        assert count == 1
         assert sorted(c.args[2]["report_url"][-2] for c in mock_fetch.call_args_list) == ["a", "b"]
         by_filing = {t.filing_id: t for t in db_session.query(StockTrade).all()}
         assert (by_filing["a"].owner, by_filing["a"].parser_version, by_filing["a"].senator_id) == ("spouse", PARSER_VERSION, "S1")
         assert (by_filing["b"].owner, by_filing["b"].parser_version) == ("self", 1)
-        assert by_filing["p"].parser_version == 1
+
+    async def test_a_filing_that_did_not_read_waits_instead_of_starving_the_rest(self, db_session):
+        self._stored(db_session, "b", "https://efdsearch.senate.gov/search/view/ptr/b/")
+
+        async def fetch(_client, _db, filing):
+            raise RuntimeError("eFD hiccup")
+
+        await self._reread(db_session, fetch)            # fails, and is remembered
+        _, mock_fetch = await self._reread(db_session, fetch)
+        mock_fetch.assert_not_called()
+
+    async def test_a_paper_filing_is_fetched_as_one(self, db_session):
+        self._stored(db_session, "p", "https://efdsearch.senate.gov/search/view/paper/p/")
+
+        async def fetch(_client, _db, filing):
+            assert filing["is_paper"] is True
+            return [self._row("p", filing["report_url"], owner="unknown")]
+
+        count, _ = await self._reread(db_session, fetch)
+        assert count == 1

@@ -21,6 +21,7 @@ from app.pipeline.election_pipeline import (
     run_ballot_sync, is_ballot_sync_running, ballot_sync_age, ballot_tracker,
 )
 from app.pipeline.analyze.action_center import get_action_refresh_state, refresh_action_issues
+from app.pipeline.run_tracker import writes_paused
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -379,6 +380,9 @@ def _election_coverage_refresh() -> None:
                 "Previous election coverage refresh has been running for %s — "
                 "treating as hung and proceeding anyway", age,
             )
+        if writes_paused():
+            logger.info("Election coverage refresh skipped — data reset in progress")
+            return
         coverage_tracker().start()
         try:
             from app.database import SessionLocal
@@ -446,6 +450,9 @@ def _election_ballot_sync() -> None:
                 logger.info("Ballot sync skipped — the previous one is still running")
                 return
             logger.warning("Previous ballot sync has been running for %s — proceeding anyway", age)
+        if writes_paused():
+            logger.info("Ballot sync skipped — data reset in progress")
+            return
         ballot_tracker().start()
         loop = asyncio.new_event_loop()
         try:

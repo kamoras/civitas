@@ -361,6 +361,21 @@ def senate_filing_id(report_url: str) -> str:
     return report_url.rstrip("/").rsplit("/", 1)[-1]
 
 
+_FILED_RE = re.compile(r"\bFiled\s+(\d{1,2}/\d{1,2}/\d{4})")
+
+
+def _page_filed_date(page_html: str) -> str | None:
+    """The filing date a report page states in its header, as YYYY-MM-DD —
+    the same date the search lists (checked 2026-09-27 on three live
+    filings)."""
+    if not page_html:
+        return None
+    # Text nodes joined with spaces: adjacent elements' text would otherwise
+    # run together ("ReportFiled").
+    match = _FILED_RE.search(" ".join(" ".join(lxml_html.fromstring(page_html).itertext()).split()))
+    return normalize_date(match.group(1)) if match else None
+
+
 def _html_table_to_rows(table_el) -> list[list[str | None]]:
     rows = []
     for tr in table_el.xpath(".//tr"):
@@ -411,6 +426,10 @@ async def fetch_and_parse_ptr(
         except Exception as e:
             logger.error("Failed to parse Senate PTR HTML %s: %s", filing["report_url"], e)
 
+    # The search result's filed date, or the one the page states in its
+    # header ("Filed 09/21/2026 @ 2:52 PM") — a re-read of a stored filing
+    # has no search result.
+    filed_date = filing.get("filed_date") or _page_filed_date(resp.text)
     for row in rows:
         row.parse_confidence = confidence
         row.source_url = filing["report_url"]
@@ -423,8 +442,8 @@ async def fetch_and_parse_ptr(
         # date (the date the report was actually filed with the Secretary
         # of the Senate) is the real disclosure date; use it whenever the
         # parser had no genuine notification signal of its own.
-        if filing.get("filed_date") and row.disclosure_date == row.transaction_date:
-            row.disclosure_date = filing["filed_date"]
+        if filed_date and row.disclosure_date == row.transaction_date:
+            row.disclosure_date = filed_date
 
     # The API cache stores plain JSON, not dataclasses — convert at this
     # boundary and reconstruct on the cache-hit path above. normal_ttl_hours

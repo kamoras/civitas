@@ -1046,7 +1046,13 @@ def reset_all_data() -> dict:
         for table in reversed(Base.metadata.sorted_tables):
             if table.name in RESET_KEEPS:
                 continue
-            summary[table.name] = db.execute(table.delete()).rowcount
+            wipe = table.delete()
+            if table.name == "api_cache":
+                # The Action Center refresh's lease, which the reset itself
+                # holds while it runs (api/admin.py) — deleted, a refresh
+                # could start mid-wipe.
+                wipe = wipe.where(table.c.tier != "action-refresh-lock")
+            summary[table.name] = db.execute(wipe).rowcount
         # A kept issue's links to Explore documents name them by rowid, and
         # SQLite hands the rebuilt documents the same rowids again: left, the
         # links would point at unrelated documents.

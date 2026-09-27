@@ -169,4 +169,5 @@ def test_0006_stops_guessing_ocr_owners_and_versions_senate_trades(patched_engin
 
     with patched_engine.connect() as conn:
         rows = conn.execute(text("SELECT parse_confidence, owner, parser_version FROM stock_trades ORDER BY id")).all()
-    assert [tuple(r) for r in rows] == [("ocr", "unknown", 1), ("text", "self", 1), ("ocr", "spouse", 1)]
+    # OCR rows now read exactly as version 2 reads them, so they are current.
+    assert [tuple(r) for r in rows] == [("ocr", "unknown", 2), ("text", "self", 1), ("ocr", "spouse", 2)]

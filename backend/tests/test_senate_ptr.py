@@ -311,6 +311,31 @@ class TestFiledDateBecomesDisclosureDate:
         cached_rows = json.loads(json.dumps(stored[f"ptr-parsed-v{PTR_PARSER_VERSION}-abc123"]))
         assert cached_rows[0]["disclosure_date"] == "2026-07-01"
 
+    @pytest.mark.asyncio
+    async def test_without_a_search_result_the_page_states_the_filed_date(self, monkeypatch):
+        """A re-read of a stored filing has no search result; the report
+        page's header ("Filed 07/01/2026 @ 2:52 PM") says the same date."""
+        html = """
+        <html><body><h1>Periodic Transaction Report</h1><p>Filed 07/01/2026 @ 2:52 PM</p><table>
+          <tr><th>Transaction Date</th><th>Owner</th><th>Asset Name</th>
+              <th>Asset Type</th><th>Type</th><th>Amount</th></tr>
+          <tr><td>6/1/2026</td><td>Spouse</td><td>Apple Inc. (AAPL)</td>
+              <td>Stock</td><td>Purchase</td><td>$1,001 - $15,000</td></tr>
+        </table></body></html>
+        """
+
+        async def fake_request(client, method, url, **kwargs):
+            return _FakeResponse(text=html)
+
+        monkeypatch.setattr(senate_ptr, "_request_with_retry", fake_request)
+        monkeypatch.setattr(senate_ptr, "api_cache_get", lambda *a, **k: None)
+        monkeypatch.setattr(senate_ptr, "api_cache_set", lambda *a, **k: None)
+
+        rows = await senate_ptr.fetch_and_parse_ptr(
+            None, None, {"report_url": "https://efdsearch.senate.gov/search/view/ptr/abc123/", "is_paper": False},
+        )
+        assert (rows[0].disclosure_date, rows[0].owner) == ("2026-07-01", "spouse")
+
 
 class TestRepeatedRowsAcrossPages:
     @pytest.mark.asyncio

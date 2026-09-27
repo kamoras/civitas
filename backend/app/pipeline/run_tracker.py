@@ -1,5 +1,7 @@
 import logging
+import threading
 import time
+from contextlib import contextmanager
 from datetime import timedelta
 from typing import TypeVar
 
@@ -90,6 +92,25 @@ def acquire_pipeline_lock(db: Session, model: type[_RunModel], stale_timeout: ti
         logger.info("%s lock held by another container — skipping this run", model.__name__)
         return None
     return run
+
+
+# Set while the admin data reset runs (api/admin.py). The pipelines with a
+# run table are held off by the reset holding their locks; the jobs without
+# one (the bill, ballot and coverage refreshes) check this before starting.
+_writes_paused = threading.Event()
+
+
+def writes_paused() -> bool:
+    return _writes_paused.is_set()
+
+
+@contextmanager
+def pause_writes():
+    _writes_paused.set()
+    try:
+        yield
+    finally:
+        _writes_paused.clear()
 
 
 class PipelineRunTracker:

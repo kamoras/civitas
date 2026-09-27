@@ -314,9 +314,9 @@ class StockTrade(Base):
     # reliable — see grounding.py's precedent of never silently trusting
     # unverified extracted content.
     parse_confidence: Mapped[str] = mapped_column(String, default="text")
-    # ptr_common.PARSER_VERSION that read the filing; an electronic filing
-    # read by an older one is read again (stock_pipeline._reread_senate).
-    # Rows stored before versions existed are 1.
+    # ptr_common.PARSER_VERSION that read the filing; one read by an older
+    # version is read again (stock_pipeline._reread_trades). Rows stored
+    # before versions existed are 1.
     parser_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
 
     senator: Mapped["Senator"] = relationship(back_populates="stock_trades")
@@ -540,6 +540,10 @@ class RepStockTrade(Base):
     source_url: Mapped[str] = mapped_column(String, default="")
     filing_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     parse_confidence: Mapped[str] = mapped_column(String, default="text")
+    # ptr_common.PARSER_VERSION that read the filing; one read by an older
+    # version is read again (stock_pipeline._reread_trades). Rows stored
+    # before versions existed are 1.
+    parser_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
 
     representative: Mapped["Representative"] = relationship(back_populates="stock_trades")
 
@@ -752,6 +756,10 @@ class PresidentTrade(Base):
     source_url: Mapped[str] = mapped_column(String, default="")
     filing_id: Mapped[str] = mapped_column(String, nullable=False, index=True)  # dedupe key
     parse_confidence: Mapped[str] = mapped_column(String, default="text")
+    # ptr_common.PARSER_VERSION that read the filing; one read by an older
+    # version is read again (stock_pipeline._reread_trades). Rows stored
+    # before versions existed are 1.
+    parser_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
 
     president: Mapped["President"] = relationship(back_populates="trades")
 
