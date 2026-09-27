@@ -255,9 +255,9 @@ class TestSeatRelativeVotes:
         above = _constituent_alignment_core(record(19), [], {}, state="SW", party="D")["components"][0]["detail"]
         below = _constituent_alignment_core(record(0), [], {}, state="SW", party="D")["components"][0]["detail"]
         assert "0.30 standard deviations per vote more independent than that" in above
-        assert "0 at 0.45 standard deviations per vote more independent" in above
+        assert "0 at 0.45 more independent: 1.5 × 0.30, the gap beyond which the most out-of-pattern tenth of D members" in above
         assert "0.33 standard deviations per vote more loyal than that" in below
-        assert "0 at 0.90 standard deviations per vote more loyal" in below
+        assert "0 at 0.90 more loyal: 3 × 0.30" in below
         at = _constituent_alignment_core(record(10), [], {}, state="SW", party="D")["components"][0]["detail"]
         assert "exactly that" in at and "standard deviations per vote more" not in at
 

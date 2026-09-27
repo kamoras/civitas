@@ -430,6 +430,33 @@ not pick one. 1.5 / 3 keeps loyalty at half the cost of excess breaking, and
 puts the heaviest breakers of today's Senate (Fetterman, Murkowski, Paul) at
 or near 0.
 
+**Where a breakdown's "0 at" number comes from.** The zero point a scorecard
+prints is the zero multiple times the member's party's scale:
+`CROSSING_ZERO_GAPS × scale` above the expectation, `LOYAL_ZERO_GAPS × scale`
+below it. The scale is the 90th percentile of the party's |residual|, measured
+from the chamber every run. On the live 119th Senate (September 2026 — these
+figures come from the site's own per-senator breakdowns run through the
+scorer, not from the research script) the
+Democratic scale was 0.37 standard deviations per vote and the Republican 0.33,
+so a Democrat reaches 0 at 1.5 × 0.37 ≈ 0.56 more independent than their seat's
+norm, a Republican at about 0.49.
+
+The two multiples are design weights; nothing above estimates them. They were
+chosen for what they do on real records:
+
+- **1.5 above.** Reserves 0 for the heaviest breakers, members well past where
+  even their party's most out-of-pattern tenth sits. On the live Senate that is
+  5 of 100: Durbin (1.61 gaps), Fetterman (1.60), King (1.59), Murkowski (3.14)
+  and Paul (5.45). Six more sit between 1 and 1.5 gaps, and score between 33
+  and 0.
+- **3 below.** Loyalty costs half as much per gap. The residual is bounded on
+  this side (nobody breaks fewer than zero times), so in practice nobody
+  reaches 0: the most loyal senator was 0.72 gaps below their norm, which
+  costs 24 points.
+
+A multiple would need re-deciding if the chamber's spread changed shape, not
+merely size: the scale moves with the chamber on every run.
+
 **Party balance.** Across every Senate from the 101st to the 119th, the
 parties' average vote scores differ by 1.8 points on average under v6.16,
 the same as under v6.15 and against 2.2 under v6.13, and which party is

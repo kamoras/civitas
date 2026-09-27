@@ -298,7 +298,7 @@ Everything else uses geometric methods in sentence-embedding space:
 |------|---------|-----------|
 | Bill policy area | Nearest centroid (18 prototypes) | Deterministic, explainable, ~100ms vs. ~30s |
 | Donor industry | k-NN (300+ labeled entities) | Generalizes from precedent; full audit trail |
-| Party alignment | Nearest centroid (party platform corpora) | Content-based, not vote-based — avoids circular reasoning |
+| Party alignment | The roll call's actual party split when one exists; nearest centroid (party platform corpora) otherwise | "Did this member break with their party" is defined by how the parties really voted; content fills in where no roll call exists |
 | Lobbying conflicts | Cosine similarity (donor industry ↔ bill policy) | Transparent, reproducible threshold |
 | Key vote selection | Composite score: party deviation + donor overlap | Fully deterministic |
 | Monitor deduplication | Pairwise cosine (full text + title-only) | Robust to surface paraphrase |
@@ -362,16 +362,17 @@ This enables selective re-verification: low-confidence classifications from prev
 
 **Version-aware artifact management** ensures updated analysis algorithms always produce fresh results. At pipeline start, a SHA-256 fingerprint of all analysis source files (their docstring-stripped syntax trees, so comment edits don't count) is compared to the stored hash from the last run. If the code has changed, stale artifacts (LLM cache, learned classifications, kNN reference corpus) are cleared so updated algorithms start clean. The API cache (raw Congress.gov / FEC / GovInfo responses) is never cleared — it reflects source data, not processing logic.
 
-### Party Alignment (Content-Based)
+### Party Alignment (Vote Split First, Content Where There's No Roll Call)
 
-Party alignment for bills is determined by **what the bill does**, not how senators voted on it. This addresses a fundamental limitation of roll-call-based ideology measures (Poole & Rosenthal 1985; Clinton, Jackman & Rivers 2004): vote outcomes reflect party discipline, logrolling, and strategic calculation as much as the bill's ideological content.
+A bill's party alignment comes from **how the parties actually voted on it** whenever a roll call exists (`refine_with_vote_data`), and from its content only when none does. The consumer is the voted-with-party computation, and "did this member break with their party" is defined by the parties' real split: a bill whose content reads partisan but passed with both party majorities must not count as a party-line vote. (Content used to win over a bipartisan split; a 2026-06 audit found that pinned every House member's score near 87–89.)
 
-The system implements a nearest-centroid classifier (Rocchio 1971) in sentence-embedding space:
+Where there is no roll call, and for the per-area partisan depth breakdown, the system uses a nearest-centroid classifier (Rocchio 1971) in sentence-embedding space:
 1. Each party's platform positions per policy area are embedded as centroids
 2. Bill text is embedded and compared to both party centroids
 3. Stance direction (pro/anti) disambiguates policy-area overlap
-4. Vote tallies refine (not override) the content-based classification
-5. Sponsor party data serves as supervised ground truth for adaptive learning
+4. Sponsor party data serves as supervised ground truth for adaptive learning
+
+One procedural exception, read from the chamber's own result field: a **majority leader** who votes with the prevailing side against their own party — a Nay on a motion the chamber recorded as rejected, or a Yea on one carried over their party's opposition — is doing so to be able to move to reconsider (Senate Rule XIII; House Rule XIX cl. 2), so the vote carries no party signal. It applies only within the member's tenure as majority leader (`leadership_tenures.json`); the Speaker and minority leader are never exempted. In the 119th Congress every off-party vote by Thune (16) and Scalise (1) was such a switch.
 
 Independent senators have their caucus party inferred mathematically from voting patterns (proportion of votes aligning with each party), ensuring they are scored fairly against the party they actually caucus with.
 
@@ -992,7 +993,7 @@ Key algorithmic decisions and their academic backing:
 |----------|-----------|-----------|
 | Embeddings over keywords for classification | Semantic similarity generalizes to unseen text; keywords are brittle | Reimers & Gurevych 2019 (Sentence-BERT) |
 | kNN over LLM for donor classification | 5s vs 40min, no hallucinated categories, deterministic | Cover & Hart 1967; Snell et al. 2017 |
-| Content-based party alignment | Vote tallies conflate strategy with ideology | Clinton, Jackman & Rivers 2004; Laver et al. 2003 |
+| Content-based party alignment (bills with no roll call) | Where no vote split exists, the bill's text is the only party signal; where one exists, the split decides | Clinton, Jackman & Rivers 2004; Laver et al. 2003 |
 | Learning store as experience replay | Past classifications bootstrap future accuracy | Lin 1992; Yarowsky 1995 |
 | Inverse HHI for funding diversity | Standard concentration metric from IO economics | Rhoades 1993 |
 | Linear shrinkage toward 50 for promise scores (fixed rate `min(n/k, 1)`, not empirical Bayes) | Prevents inflation when few promises are evaluable | Stein-type shrinkage idea: Efron & Morris 1975 |
