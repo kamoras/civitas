@@ -225,3 +225,20 @@ class TestBackfillWithheldSponsorshipScores:
         _backfill_withheld_sponsorship_scores(
             db_session, {"S001"}, dict(scores), dict(scores), dict(scores), dict(scores),
         )
+
+
+def test_upsert_senator_persists_confidence(db_session):
+    # Senators' confidence grades (and the Constituent Alignment vote-part
+    # status) were never written before v6.14; only the House saved them.
+    import json
+
+    from app.pipeline.senate_pipeline import upsert_senator
+
+    confidence = {"constituentAlignment": "medium", "constituentAlignmentVotePart": "shrunk:0.60"}
+    upsert_senator(db_session, {
+        "id": "s-test", "name": "Senator Test", "state": "SW", "party": "D",
+        "representationScore": {"constituentAlignment": 55, "confidence": confidence},
+    })
+    db_session.commit()
+    stored = db_session.query(Senator).filter(Senator.id == "s-test").one()
+    assert json.loads(stored.score_confidence) == confidence

@@ -230,6 +230,10 @@ def upsert_senator(db: Session, data: dict) -> None:
         "score_constituent_alignment": corruption.get("constituentAlignment", 50),
         "score_funding_diversity": corruption.get("fundingDiversity", 50),
         "score_legislative_effectiveness": corruption.get("legislativeEffectiveness", 50),
+        # Data-sufficiency grades and the vote-part status
+        # (calculate_confidence). Never persisted for senators before
+        # v6.14 — only the House wrote it — so senators served none.
+        "score_confidence": json.dumps(corruption.get("confidence") or {}),
         "total_raised": funding.get("totalRaised") or 0,
         "total_contributions": funding.get("totalContributions"),
         "caucus_party": (data.get("votingRecord") or {}).get("effectiveParty"),

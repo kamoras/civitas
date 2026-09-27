@@ -598,22 +598,26 @@ def explain_scores(senator: dict) -> dict:
     voting_record = senator.get("votingRecord", {})
     funding = senator.get("funding", {})
     lobbying_matches = senator.get("lobbyingMatches", [])
+    constituent = _constituent_alignment_core(
+        voting_record,
+        lobbying_matches,
+        funding,
+        senator.get("state", ""),
+        senator.get("party", "I"),
+        district=senator.get("district"),
+        bioguide_id=senator.get("bioguideId"),
+        reference=senator.get("constituentReference"),
+    )
+    # The vote-part status is served with the stored confidence grades
+    # (calculate_confidence), not in the breakdown payload.
+    constituent.pop("vote_part_status", None)
 
     return {
         "fundingIndependence": _funding_independence_core(
             funding, senator.get("state", ""), senator.get("district"),
             senator.get("fundingReference"),
         ),
-        "constituentAlignment": _constituent_alignment_core(
-            voting_record,
-            lobbying_matches,
-            funding,
-            senator.get("state", ""),
-            senator.get("party", "I"),
-            district=senator.get("district"),
-            bioguide_id=senator.get("bioguideId"),
-            reference=senator.get("constituentReference"),
-        ),
+        "constituentAlignment": constituent,
         "fundingDiversity": _funding_diversity_core(funding),
         "legislativeEffectiveness": _legislative_effectiveness_core(
             senator.get("sponsoredBills", []),
@@ -659,7 +663,7 @@ def calculate_confidence(senator: dict) -> dict[str, str]:
     n_industries = len(funding.get("industryBreakdown") or [])
     # The same deduplicated count the score's shrinkage reads, so the
     # confidence grade and the breakdown's "only n votes" can't disagree.
-    rate, n_party_votes = party_break_rate(voting_record)
+    _, n_party_votes = party_break_rate(voting_record)
     n_evaluable = sum(
         1 for p in promises
         if isinstance(p, dict) and p.get("alignment") in (PromiseAlignment.KEPT, PromiseAlignment.PARTIAL, PromiseAlignment.BROKEN)
@@ -679,29 +683,25 @@ def calculate_confidence(senator: dict) -> dict[str, str]:
         "constituentAlignment": grade(n_party_votes, 5, CONSTITUENT_FULL_CONFIDENCE_VOTES),
         "fundingDiversity": grade(n_industries, 3, 6) if has_funding else "low",
         "legislativeEffectiveness": grade(len(bills), 2, 5),
-        "constituentAlignmentVotePart": _constituent_vote_part_status(senator, rate, n_party_votes),
+        "constituentAlignmentVotePart": _constituent_vote_part_status(senator),
     }
 
 
-def _constituent_vote_part_status(senator: dict, rate: float | None, n: int) -> str:
+def _constituent_vote_part_status(senator: dict) -> str:
     """How Constituent Alignment's vote part was scored, for the scorecard to
     state rather than re-derive: "neutral:few-votes" (under
     CONSTITUENT_MIN_VOTES), "neutral:no-expectation" (no usable reference
     for the member's party), "shrunk:<share kept>" (under
-    CONSTITUENT_FULL_CONFIDENCE_VOTES) or "full"."""
-    if rate is None:
-        return "neutral:few-votes"
-    record = senator.get("votingRecord") or {}
-    _, expected, _, _ = _seat_vote_expectation(
-        senator.get("state", ""), senator.get("party", "I"),
-        record.get("effectiveParty", senator.get("party", "I")),
-        senator.get("district"), senator.get("constituentReference"),
-    )
-    if expected is None:
-        return "neutral:no-expectation"
-    if n < CONSTITUENT_FULL_CONFIDENCE_VOTES:
-        return f"shrunk:{n / CONSTITUENT_FULL_CONFIDENCE_VOTES:.2f}"
-    return "full"
+    CONSTITUENT_FULL_CONFIDENCE_VOTES) or "full". Read from the scoring
+    function itself (_constituent_alignment_core), so the branch that
+    scored the vote is the one that labels it — given the same member dict,
+    reference included, that calculate_scores received."""
+    return _constituent_alignment_core(
+        senator.get("votingRecord") or {}, [], {},
+        state=senator.get("state", ""), party=senator.get("party", "I"),
+        district=senator.get("district"), bioguide_id=senator.get("bioguideId"),
+        reference=senator.get("constituentReference"),
+    )["vote_part_status"]
 
 
 # Small-donor share (Funding Independence component 2) baseline.
@@ -1778,9 +1778,11 @@ def _constituent_alignment_core(
     break_rate, n_party = party_break_rate(voting_record)
     if break_rate is None:
         party_score = 50.0
+        vote_part_status = "neutral:few-votes"
         party_alignment_detail = f"fewer than {CONSTITUENT_MIN_VOTES} party-labeled votes available — neutral 50"
     elif expected is None:
         party_score = 50.0
+        vote_part_status = "neutral:no-expectation"
         party_alignment_detail = (
             f"break rate {break_rate:.1%}; no measured expectation for a "
             f"{eval_party or 'non-caucusing'} member of this chamber — neutral 50"
@@ -1788,6 +1790,10 @@ def _constituent_alignment_core(
     else:
         deviation = break_rate - expected
         party_score = seat_relative_vote_score(deviation, deviation_scale, n_party)
+        vote_part_status = (
+            f"shrunk:{n_party / CONSTITUENT_FULL_CONFIDENCE_VOTES:.2f}"
+            if n_party < CONSTITUENT_FULL_CONFIDENCE_VOTES else "full"
+        )
         # measured is False for the bundled hand-set prior, used before a
         # chamber's first measured run.
         norm = (
@@ -1795,8 +1801,8 @@ def _constituent_alignment_core(
             f"(signal {alignment:+.2f}) break on {expected:.1%}"
             if measured else
             f"a {eval_party} member of a seat with this lean (signal {alignment:+.2f}) is "
-            f"expected to break on {expected:.1%} (a preset curve until this chamber's "
-            "first measurement)"
+            f"expected to break on {expected:.1%} (a preset curve until this chamber is "
+            "measured on the current method)"
         )
         party_alignment_detail = (
             f"broke with party on {break_rate:.1%} of {n_party} party-labeled votes; {norm}"
@@ -1836,7 +1842,7 @@ def _constituent_alignment_core(
             "score": round(congruence_score, 1),
             "detail": congruence_detail,
         })
-    return {"score": score, "components": components}
+    return {"score": score, "components": components, "vote_part_status": vote_part_status}
 
 
 def _calc_funding_diversity(funding: dict) -> int:
