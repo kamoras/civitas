@@ -740,6 +740,30 @@ class TestAWeakerSourceNeverPrunesTheCertifiedBallot:
         sc._apply_ballot(db_session, 2026, "CA", [jim], keep_unlisted=True, authoritative=False)
         assert db_session.get(Candidate, "H1").confirmed_general is True
 
+    @pytest.mark.parametrize("fec_party, record_party", [("DFL", "D"), ("DNL", "D"), ("NPA", "I"), ("UN", "I")])
+    def test_fecs_state_party_codes_are_the_same_party(self, db_session, fec_party, record_party):
+        """FEC files some Minnesota and North Dakota Democrats under the
+        state party's code (Ilhan Omar as DFL) and independents as NPA/UN:
+        a nominee listed by nickname must still be matched."""
+        _race(db_session, "2026-HOUSE-MN-2", "MN", office="H", district=2)
+        _candidate(db_session, "H1", "2026-HOUSE-MN-2", "SMITH, WILLIAM", party=fec_party)
+        db_session.commit()
+        bill = {"office": "H", "district": 2, "party": record_party, "last_name": "SMITH",
+                "display_name": "Bill Smith"}
+        sc._apply_ballot(db_session, 2026, "MN", [bill], keep_unlisted=True, authoritative=True)
+        assert self._ids(db_session) == ["H1"]
+        assert db_session.get(Candidate, "H1").confirmed_general is True
+
+    def test_a_nickname_placeholder_goes_when_its_fec_row_matches(self, db_session):
+        _race(db_session, "2026-HOUSE-CA-7", "CA", office="H", district=7)
+        db_session.commit()
+        bill = {"office": "H", "district": 7, "party": "D", "last_name": "SMITH", "display_name": "Bill Smith"}
+        sc._apply_ballot(db_session, 2026, "CA", [bill], keep_unlisted=True, authoritative=True)
+        _candidate(db_session, "H1", "2026-HOUSE-CA-7", "SMITH, WILLIAM", party="DEM")
+        db_session.commit()
+        sc._apply_ballot(db_session, 2026, "CA", [bill], keep_unlisted=True, authoritative=False, prune=False)
+        assert self._ids(db_session) == ["H1"]
+
     def test_names_without_a_given_half_match_nothing(self):
         assert sc._same_given_name("SMITH", "SMITH") is False
         assert sc._given_initial("SMITH, MR. J") == "j"

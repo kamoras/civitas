@@ -83,6 +83,7 @@ from app.pipeline.candidate_dedup import normalized_surname
 from app.pipeline.fetch.state_candidates_common import (
     BALLOT_BASIS_TIER,
     PARTY_CODE_MAP,
+    fec_party,
     ballot_basis_key,
     clean_display_name,
     JUDICIAL_COURT_LABELS,
@@ -302,6 +303,9 @@ def _surname_fallbacks(
     return []
 
 
+_KNOWN_PARTIES = frozenset(PARTY_CODE_MAP.values())
+
+
 def _contradicts(cand: Candidate, party_code: str, display_name: str | None) -> bool:
     """Whether a lone same-surname candidate is plainly someone else: a
     different party AND a given name that fits none of theirs. Either alone
@@ -309,7 +313,10 @@ def _contradicts(cand: Candidate, party_code: str, display_name: str | None) -> 
     a nickname ("Jim" for JAMES) fits no FEC token — but both together is a
     different person (Mary Smith, Libertarian, is not John Smith, DEM)."""
     expected = PARTY_CODE_MAP.get(party_code)
-    if not expected or not cand.party or cand.party == expected:
+    theirs = fec_party(cand.party)
+    # Only a party both sides name (fec_party): a code the map doesn't know
+    # says nothing either way.
+    if not expected or theirs not in _KNOWN_PARTIES or theirs == expected:
         return False
     wanted = _first_name_key(display_name or "")
     if not wanted:
@@ -335,7 +342,7 @@ def _match_candidate(
         return None
 
     expected_party = PARTY_CODE_MAP.get(party_code)
-    pool = [c for c in matches if c.party == expected_party] or matches
+    pool = [c for c in matches if fec_party(c.party) == expected_party] or matches
     if len(pool) == 1:
         return None if _contradicts(pool[0], party_code, display_name) else pool[0]
     # Two candidates sharing a surname AND a party. A given name separates
@@ -610,7 +617,13 @@ def _placeholder_for(
         .all()
         if c.id not in claimed and c.party == party
         and _candidate_surname(c.name or "") == surname
-        and _same_given_name(c.name or "", reference or wanted)
+        and (
+            _same_given_name(c.name or "", wanted)
+            # The FEC row's name too — another source may have spelled the
+            # placeholder "Daniel" for tonight's "Dan" — but only a full
+            # given name: "SMITH, J" would fit Jane's row as well as John's.
+            or (reference and _first_name_key(reference) and _same_given_name(c.name or "", reference))
+        )
     ]
     if len(rows) > 1:
         key = _first_name_key(wanted)
