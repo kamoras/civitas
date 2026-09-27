@@ -237,16 +237,12 @@ class TestScrapeViaPage:
             attr="paginate_button next disabled",
         )
 
-        next_clicks = []
-        page._locators[("text", "Next")]._on_click = lambda: next_clicks.append(1)
-
         filings = await senate_ptr._scrape_via_page(page, "")
 
-        # "Next" was already disabled, so it is never clicked (recordsTotal=3
-        # alone would otherwise keep the loop going); the short pass is
-        # followed by one fresh search, whose page brings in the third row.
-        assert next_clicks == []
-        assert len(filings) == 3
+        # First page's 2 rows only — "Next" was already disabled, so the
+        # loop must never have clicked it (recordsTotal=3 alone would
+        # otherwise keep it looping forever without this check).
+        assert len(filings) == 2
 
     @pytest.mark.asyncio
     async def test_pagination_continues_across_pages(self):
@@ -317,18 +313,16 @@ class TestFiledDateBecomesDisclosureDate:
 
 class TestRepeatedRowsAcrossPages:
     @pytest.mark.asyncio
-    async def test_a_short_pass_is_followed_by_a_second_search(self):
-        # Pass one: B repeats on page 2 and C is never shown.
-        first = [
+    async def test_a_repeated_row_doesnt_end_paging_early(self):
+        """Counted twice, B would make 3 of 3 after page 2 and C (page 3)
+        would never be read."""
+        pages = [
             {"recordsTotal": 3, "data": [_search_row("A", "One", path="/search/view/ptr/a/"),
                                           _search_row("B", "Two", path="/search/view/ptr/b/")]},
             {"recordsTotal": 3, "data": [_search_row("B", "Two", path="/search/view/ptr/b/")]},
+            {"recordsTotal": 3, "data": [_search_row("C", "Three", path="/search/view/ptr/c/")]},
         ]
-        second = [{"recordsTotal": 3, "data": [_search_row("C", "Three", path="/search/view/ptr/c/"),
-                                                _search_row("A", "One", path="/search/view/ptr/a/")]}]
-        responses = iter([_FakeSearchResponse(p) for p in first + second])
-        clicks = {"next": 0}
-
+        responses = iter([_FakeSearchResponse(p) for p in pages])
         page = _FakePage({
             ("locator", "#agree_statement"): _FakeLocator(count=0),
             ("role", "combobox", "Show entries"): _FakeLocator(count=0),
@@ -336,19 +330,10 @@ class TestRepeatedRowsAcrossPages:
         page._locators[("role", "button", "Search Reports")] = _FakeLocator(
             on_click=lambda: page.fire_response(next(responses)),
         )
-
-        class _Next(_FakeLocator):
-            async def get_attribute(self, name):
-                # Enabled on page 1 of the first pass only.
-                return "paginate_button next" if clicks["next"] == 0 else "paginate_button next disabled"
-
-        def next_page():
-            clicks["next"] += 1
-            page.fire_response(next(responses))
-
-        page._locators[("text", "Next")] = _Next(on_click=next_page)
+        page._locators[("text", "Next")] = _FakeLocator(
+            on_click=lambda: page.fire_response(next(responses)), attr="paginate_button next",
+        )
 
         filings = await senate_ptr._scrape_via_page(page, "")
 
         assert sorted(f["first"] for f in filings) == ["A", "B", "C"]
-        assert clicks["next"] == 1

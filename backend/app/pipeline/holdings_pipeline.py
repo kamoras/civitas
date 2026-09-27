@@ -64,6 +64,7 @@ from app.pipeline.filer_matching import (
 )
 from app.holdings_schedule import FETCH_BUDGET, HOLDINGS_STEPS, PREP_BUDGET, PROBE_BUDGET
 from app.time_utils import utcnow
+from app.time_utils import utcnow as _written_at  # a row's write time, apart from the calendar clock
 
 logger = logging.getLogger(__name__)
 
@@ -495,10 +496,14 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
         mine = stored.get(member_id)
         outcome = _Outcome()
         out_of_time = False
-        # One row per filing: the House index can list a document twice
+        # One row per filing, the first sighting kept (as the Senate search
+        # keeps it while paging): the House index can list a document twice
         # (2025: Ansari's 10078188), and a failing filing shouldn't be
-        # fetched twice. (The Senate search is de-duplicated as it pages.)
-        per_member[member_id] = list({chamber.filing_id(f): f for f in per_member[member_id]}.values())
+        # fetched twice.
+        unique: dict[str, dict] = {}
+        for f in per_member[member_id]:
+            unique.setdefault(chamber.filing_id(f), f)
+        per_member[member_id] = list(unique.values())
         fields = {chamber.filing_id(f): chamber.fields(f) for f in per_member[member_id]}
         ranks = {fid: chamber.rank(v, fid) for fid, v in fields.items()}
         if mine is not None and mine.filing_id in fields:
@@ -521,7 +526,7 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
                 # is, not what it was stored with.
                 db.query(FinancialDisclosure).filter_by(
                     **{chamber.owner_key: member_id}, filing_id=mine.filing_id,
-                ).update(repair, synchronize_session=False)
+                ).update({**repair, "ingested_at": _written_at()}, synchronize_session=False)  # a new version
                 # Committed at once: rare (a row that says more than what was
                 # stored), and an open write would hold SQLite's lock across
                 # the downloads that follow.

@@ -289,18 +289,13 @@ async def _scrape_via_page(
     by_id: dict[str, dict] = {}
     unparsed: set[str] = set()
     total = await _page_through(page, responses, by_id, unparsed)
-    if total and len(by_id) + len(unparsed) < total:
-        # The results are ordered by filing date, and eFD's order within a
-        # date isn't stable from one page request to the next: a row can
-        # repeat on the next page while another is never shown. A second
-        # pass through a fresh search usually turns up what the first one
-        # missed; anything still missing is reported, not guessed at.
-        before = len(responses)
-        await _click(page.get_by_role("button", name="Search Reports"))
-        if await _wait_until(lambda: len(responses) > before):
-            total = await _page_through(page, responses, by_id, unparsed) or total
     filings.extend(by_id.values())
     if total and len(by_id) + len(unparsed) < total:
+        # Paging ended short of recordsTotal — a page that didn't load, or a
+        # row that repeated across pages while another was never shown.
+        # Reported, not retried in the same browser session: every caller
+        # searches again on its next nightly run, and holdings never lets a
+        # partial search replace a newer stored report (_is_older).
         logger.warning("Senate eFD search returned %d of %d filings", len(by_id) + len(unparsed), total)
     return filings
 

@@ -370,20 +370,32 @@ describe("fetchSenatorHoldings", () => {
   beforeEach(() => __resetApiCache());
   afterEach(() => vi.unstubAllGlobals());
 
-  it("drops a member's pages cached from a report since replaced", async () => {
-    const report = (sourceUrl: string, page: number) => ({ sourceUrl, page });
+  const report = (reportVersion: string, page: number) => ({ reportVersion, page });
+  const ok = (body: unknown) => ({ ok: true, json: async () => body });
+
+  it("drops a member's pages cached from an older report version", async () => {
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => report("old", 1) })   // page 1, cached
-      .mockResolvedValueOnce({ ok: true, json: async () => report("new", 2) })   // page 2, after the swap
-      .mockResolvedValueOnce({ ok: true, json: async () => report("new", 1) });  // page 1 again, refetched
+      .mockResolvedValueOnce(ok(report("2026-09-26|1", 1)))
+      .mockResolvedValueOnce(ok(report("2026-09-27|2", 2)))
+      .mockResolvedValueOnce(ok(report("2026-09-27|2", 1)));
     vi.stubGlobal("fetch", fetchMock);
 
-    expect((await fetchSenatorHoldings("S1", { page: 1 })).sourceUrl).toBe("old");
-    expect((await fetchSenatorHoldings("S1", { page: 2 })).sourceUrl).toBe("new");
-    expect((await fetchSenatorHoldings("S1", { page: 1 })).sourceUrl).toBe("new");
+    await fetchSenatorHoldings("S1", { page: 1 });
+    await fetchSenatorHoldings("S1", { page: 2 });
+    expect((await fetchSenatorHoldings("S1", { page: 1 })).reportVersion).toBe("2026-09-27|2");
+    expect((await fetchSenatorHoldings("S1", { page: 2 })).reportVersion).toBe("2026-09-27|2");  // kept
     expect(fetchMock).toHaveBeenCalledTimes(3);
-    // And the fresh page-2 response stayed cached.
-    expect((await fetchSenatorHoldings("S1", { page: 2 })).sourceUrl).toBe("new");
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("refetches an older version the browser cache served, past that cache", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(ok(report("2026-09-27|2", 2)))
+      .mockResolvedValueOnce(ok(report("2026-09-26|1", 1)))   // the browser's stale copy
+      .mockResolvedValueOnce(ok(report("2026-09-27|2", 1)));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchSenatorHoldings("S1", { page: 2 });
+    expect((await fetchSenatorHoldings("S1", { page: 1 })).reportVersion).toBe("2026-09-27|2");
+    expect(fetchMock.mock.calls[2][1]).toEqual({ cache: "no-store" });
   });
 });

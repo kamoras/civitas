@@ -51,10 +51,8 @@ def _nightly_pipeline() -> None:
         check_current_congress_staleness,
         check_feedback_token_expiration,
         check_state_pvi_staleness,
+        send_ops_alert,
     )
-    # Best-effort: a failure to send an alert must not end the chain it is
-    # reporting on.
-    from app.alerting import safe_ops_alert as send_ops_alert
 
     def _alert_if_skipped(label: str, result: dict) -> bool:
         """Returns True (and alerts) if `result` reports the step was
@@ -81,14 +79,18 @@ def _nightly_pipeline() -> None:
     def _run():
         # Loud, deduped alert if CURRENT_CONGRESS has fallen behind the
         # calendar before we score another day against a possibly-dead one.
-        check_current_congress_staleness()
         # Same idea for FEEDBACK_TOKEN's mandatory PAT expiration — a real
         # GitHub API call, so this one is self-gated to run at most weekly.
-        check_feedback_token_expiration()
         # Same idea for state_pvi.json's election-year window — this one
         # can't self-advance (see the check's own docstring for why), so
         # the alert is the only signal that a manual refresh is due.
-        check_state_pvi_staleness()
+        # Each is a warning about the chain, never a reason to skip it: one
+        # that raises is logged and the pipelines still run.
+        for check in (check_current_congress_staleness, check_feedback_token_expiration, check_state_pvi_staleness):
+            try:
+                check()
+            except Exception:
+                logger.exception("Pre-pipeline check %s failed", check.__name__)
         loop = asyncio.new_event_loop()
         try:
             result = loop.run_until_complete(run_senate_pipeline())
@@ -202,9 +204,7 @@ def _hourly_action_refresh() -> None:
                     # House run this old is wedged, not just slow (normal
                     # runs are 1-2h) — left unchecked, a hung run would
                     # silently starve the action center of fresh data all day.
-                    # Best-effort: an alert that fails to send must not stop
-                    # the refresh from going ahead.
-                    from app.alerting import safe_ops_alert as send_ops_alert
+                    from app.ops_alerts import send_ops_alert
                     logger.warning(
                         "House pipeline has been running for %s — treating as "
                         "hung and proceeding with action center refresh",
@@ -228,9 +228,7 @@ def _hourly_action_refresh() -> None:
                 # can run 5h+ — a tight threshold would misfire as "hung"
                 # on a run that's just legitimately slow that day.
                 if _is_stale(supp_age, timedelta(hours=8)):
-                    # Best-effort: an alert that fails to send must not stop
-                    # the refresh from going ahead.
-                    from app.alerting import safe_ops_alert as send_ops_alert
+                    from app.ops_alerts import send_ops_alert
                     logger.warning(
                         "Supplementary pipeline has been running for %s — "
                         "treating as hung and proceeding with action center refresh",
@@ -257,9 +255,7 @@ def _hourly_action_refresh() -> None:
                 from app.ops_alerts import stock_trades_overrun_budget
 
                 if _is_stale(stock_age, stock_trades_overrun_budget()):
-                    # Best-effort: an alert that fails to send must not stop
-                    # the refresh from going ahead.
-                    from app.alerting import safe_ops_alert as send_ops_alert
+                    from app.ops_alerts import send_ops_alert
                     logger.warning(
                         "Stock trades pipeline has been running for %s — "
                         "treating as hung and proceeding with action center refresh",

@@ -264,6 +264,9 @@ export interface Holdings {
   /** "2025 annual report", "new-filer report as of 2026-03-24" — what the
    * holdings describe, as the page names it. */
   reportLabel: string;
+  /** Changes when the report is replaced, re-read or relabelled; pages of
+   * one version belong together. */
+  reportVersion: string;
   filedDate: string | null;
   sourceUrl: string;
   /** False when the report exists but couldn't be read — see unreadableReason. */
