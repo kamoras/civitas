@@ -24,6 +24,7 @@ before re-reads.
 
 import asyncio
 import dataclasses
+import functools
 import logging
 import re
 import time
@@ -38,7 +39,7 @@ from sqlalchemy.orm import Session
 
 from app.alerting import safe_ops_alert as _alert
 from app.models import FinancialDisclosure, FinancialHolding
-from app.pipeline.fetch.fd_common import UNREADABLE_SCANNED, AnnualReport
+from app.pipeline.fetch.fd_common import UNREADABLE_SCANNED, AnnualReport, until_deadline
 from app.pipeline.fetch.house_fd import PARSER_VERSION as HOUSE_PARSER_VERSION
 from app.pipeline.fetch.house_fd import fetch_and_parse_annual as fetch_house_annual, fetch_annual_filing_index
 from app.pipeline.fetch.house_fd import report_still_loads as house_report_still_loads
@@ -74,6 +75,13 @@ T = TypeVar("T")
 # extensions into August — so a member's newest report is for last year, or
 # (before they file) the year before.
 _YEARS_BACK = 2
+
+
+def _report_years() -> list[int]:
+    """The calendar years whose reports are candidates, newest first — the
+    one definition both phases' windows come from."""
+    newest = utcnow().year - 1
+    return list(range(newest, newest - _YEARS_BACK, -1))
 
 # Members tried with nothing coming back live before _SourceHealth looks
 # further — asking the source about a stored report, or (when reports load
@@ -195,7 +203,7 @@ def _keeps_earlier_read(prior: int | None, report: AnnualReport) -> bool:
     return True
 
 
-def _merge_known(stored: dict, tonight: dict, same_rules: bool) -> dict:
+def _merge_known(stored: dict, tonight: dict) -> dict:
     """One filing's fields from two nights' rows. What the row's title or
     type says — as-of date, label, amended, seq (a Senate title's amendment
     number; a House document id, which never differs) — comes as a set from
@@ -204,11 +212,11 @@ def _merge_known(stored: dict, tonight: dict, same_rules: bool) -> dict:
     filing date when it had none of its own: _ingest_members recomputes it
     with that date.)
 
-    Only while the stored row was derived by the same rules (same_rules:
-    the same PARSER_VERSION — the title rules in _senate_fields are part of
-    what it versions). After a bump, tonight's derivation stands, so a
-    tightened rule reaches rows stored under the old one."""
-    title_from = tonight if tonight["as_of_date"] or not stored["as_of_date"] or not same_rules else stored
+    A stored as-of date is never given up for a row that has none, even
+    after a rule change: a derivation that loses the date would drop the
+    report below the ones it superseded. (Rules only ever gain dates for
+    stored rows this way; 0003's rows were all derived by today's rules.)"""
+    title_from = tonight if tonight["as_of_date"] or not stored["as_of_date"] else stored
     return {**tonight, **{key: title_from[key] for key in ("as_of_date", "report_label", "amended", "seq")}}
 
 
@@ -503,9 +511,7 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
             # either may lack what failed to parse on its night. Each value
             # comes from whichever has it, so the filing neither sorts below
             # the reports it superseded nor keeps a gap tonight's row fills.
-            merged = _merge_known(
-                mine.rank_fields(), fields[mine.filing_id], mine.parser_version == chamber.parser_version,
-            )
+            merged = _merge_known(mine.rank_fields(), fields[mine.filing_id])
             fields[mine.filing_id] = merged
             ranks[mine.filing_id] = chamber.rank(merged, mine.filing_id)
             repair = {k: merged[k] for k, v in mine.rank_fields().items() if merged[k] != v}
@@ -516,7 +522,8 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
                 db.query(FinancialDisclosure).filter_by(
                     **{chamber.owner_key: member_id}, filing_id=mine.filing_id,
                 ).update(repair, synchronize_session=False)
-                db.commit()
+                # Committed with the member's replacement, if any, or at the
+                # end of the phase — not one transaction per member.
                 mine = dataclasses.replace(mine, **repair)
         stored_rank = chamber.rank(mine.rank_fields(), mine.filing_id) if mine is not None else None
         for filing in sorted(per_member[member_id], key=lambda f: ranks[chamber.filing_id(f)], reverse=True):
@@ -577,6 +584,7 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
         if out_of_time:
             logger.info("%s: time budget spent — %d members wait for the next run", chamber.source, len(order) - position)
             break
+    db.commit()  # the rank repairs of members that stored nothing new
     # Also true when the last fetch was cut off at the deadline and every
     # member after it was already current.
     health.out_of_time = time.monotonic() > deadline
@@ -603,11 +611,10 @@ def _house_owner(filing: dict, report: AnnualReport) -> str:
 
 
 async def _house_candidates(db: Session, client: httpx.AsyncClient) -> dict[str, list[dict]]:
-    current_year = utcnow().year
     per_rep: dict[str, list[dict]] = {}
     match = FilerMatcher(current_representatives(db), match_representative)
     indexed = 0
-    for year in range(current_year - 1, current_year - 1 - _YEARS_BACK, -1):
+    for year in _report_years():
         filings = await fetch_annual_filing_index(client, db, year)
         if filings is None:
             # Not an empty year, for either index. Without last year's, a
@@ -720,13 +727,13 @@ def _note_later_filing(db: Session, per_senator: dict[str, list[dict]]) -> None:
     for disclosure in db.query(FinancialDisclosure).filter(FinancialDisclosure.senator_id.in_(list(per_senator))):
         later = [
             f for f in per_senator[disclosure.senator_id]
-            if not _senate_as_of(f)
+            if not _senate_fields(f)["as_of_date"]
             and senate_filing_id(f["report_url"]) != disclosure.filing_id
             # On the same day counts: an undated amendment filed alongside
             # the dated report may be the later of the two.
             and _filed_not_before(f.get("filed_date"), disclosure.filed_date)
         ]
-        # Filing date, then report URL: two filed the same day resolve the
+        # Filing date, then filing id: two filed the same day resolve the
         # same way every run, whatever order the search returned them in.
         newest = max(later, key=lambda f: (f["filed_date"], senate_filing_id(f["report_url"])), default=None)
         if newest is not None:
@@ -742,22 +749,25 @@ def _note_later_filing(db: Session, per_senator: dict[str, list[dict]]) -> None:
 
 def _senate_fields(filing: dict) -> dict:
     """What gets stored for a Senate filing (_Chamber.fields), from one
-    parse of its title. These title rules are part of what
-    senate_fd.PARSER_VERSION versions: changing one is a bump, so stored
-    rows are re-derived (_merge_known)."""
-    title = filing.get("title") or ""
-    as_of = _senate_as_of(filing)
+    parse of its title — memoized, so the rank, the note and the label all
+    read the same parse (_senate_fields_of)."""
+    return dict(_senate_fields_of(filing.get("title") or "", filing.get("filed_date"), filing["report_url"]))
+
+
+@functools.lru_cache(maxsize=4096)
+def _senate_fields_of(title: str, filed: str | None, report_url: str) -> tuple:
+    as_of = _senate_as_of({"title": title})
     amended = is_amendment_title(title)
-    return {
-        "report_label": _senate_report_label(title, as_of, amended, filing.get("filed_date")),
-        "filed_date": filing.get("filed_date") or None,
-        "source_url": filing["report_url"],
+    return tuple({
+        "report_label": _senate_report_label(title, as_of, amended, filed),
+        "filed_date": filed or None,
+        "source_url": report_url,
         "as_of_date": as_of,
         "amended": amended,
         # "(Amendment 2)" after "(Amendment 1)" — a same-day tiebreak only
         # (see _rank); an unnumbered one has none.
         "seq": int(m.group(1)) if (m := _AMENDMENT_NO_RE.search(title)) else 0,
-    }
+    }.items())
 
 
 def _senate_report_label(title: str, as_of: str | None, amended: bool, filed: str | None) -> str:
@@ -777,11 +787,11 @@ def _senate_report_label(title: str, as_of: str | None, amended: bool, filed: st
 async def _senate_candidates(db: Session, client: httpx.AsyncClient) -> dict[str, list[dict]]:
     if await senate_accept_terms(client) is None:
         raise RuntimeError("Could not establish a Senate eFD session")
-    # Filed since last Jan 1 — covering reports for the same two calendar
-    # years the House phase reads (last year's, filed this year, and the
-    # year before's, filed last year); earlier filings can't be anyone's
-    # newest, and each extra page is a slow real-browser round trip.
-    filings = await search_annual_filings(f"{utcnow().year - (_YEARS_BACK - 1)}-01-01")
+    # Filed since Jan 1 of the earliest report year the House reads: that
+    # covers both years' reports, and also a report filed during that year
+    # itself — a new-filer report from a senator appointed then, their only
+    # report until their first annual one.
+    filings = await search_annual_filings(f"{min(_report_years())}-01-01")
     if not any(is_senator_filing(f) and is_annual_title(f.get("title") or "") for f in filings):
         # Every senator files one every year; none across two years means
         # the search broke (search_filings returns [] on any failure).
@@ -819,12 +829,9 @@ async def _fetch_senate(client: httpx.AsyncClient, db: Session, filing: dict, de
     (the parse is synchronous, so cancelling only ever interrupts a
     request)."""
     try:
-        return await asyncio.wait_for(
-            _retry_after_lapse(client, lambda: fetch_senate_annual(client, db, filing)),
-            max(deadline - time.monotonic(), 0.001),
+        return await until_deadline(
+            _retry_after_lapse(client, lambda: fetch_senate_annual(client, db, filing)), deadline,
         )
-    except TimeoutError:
-        return None
     except _TermsRefused:
         # Every remaining fetch would lapse the same way. Stop, and fail
         # the phase.

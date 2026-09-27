@@ -1699,7 +1699,7 @@ class TestSameDayNotesKeep:
 
 
 class TestRound40:
-    async def test_the_senate_search_covers_the_two_report_years_the_house_reads(self, db_session, senator):
+    async def test_the_senate_search_starts_in_the_earliest_report_year(self, db_session, senator):
         search = AsyncMock(return_value=[_senate_filing("e2025")])
         with patch.object(holdings_pipeline, "senate_accept_terms", new_callable=AsyncMock, return_value="tok"), \
              patch.object(holdings_pipeline, "search_annual_filings", search), \
@@ -1708,17 +1708,14 @@ class TestRound40:
              patch.object(holdings_pipeline, "utcnow") as now:
             now.return_value.year = 2026
             await holdings_pipeline.ingest_senate_holdings(db_session, None)
-        search.assert_awaited_once_with("2025-01-01")
+        search.assert_awaited_once_with("2024-01-01")
 
-    async def test_a_parser_bump_re_derives_stored_title_fields(self, db_session, senator):
-        """A row stored under an older title rule (here: a date taken from
-        an amendment's title) is re-derived once the version moves on."""
-        db_session.add(FinancialDisclosure(
-            senator_id="S1", filing_id="a", as_of_date="2026-06-01", report_label="2026 annual report (amended)",
-            amended=True, filed_date="2026-06-02", source_url="x", parser_version=0,
-        ))
-        db_session.commit()
-        filing = _senate_filing("a", title="Annual Report (Amendment) 06/01/2026", filed="2026-06-02")
-        await _ingest_senate(db_session, [filing], {"a": [_row()]})
+    async def test_a_stored_as_of_date_survives_a_bump_whose_row_has_none(self, db_session, senator):
+        """Giving it up would drop the report below the ones it superseded."""
+        await _ingest_senate(db_session, [_senate_filing("cy2025", filed="2026-05-11")], {"cy2025": [_row()]})
+        garbled = _senate_filing("cy2025", title="Annual Report for CY", filed="2026-05-11")
+        older = _senate_filing("cy2024", title="Annual Report for CY 2024", filed="2025-05-11")
+        with patch.object(holdings_pipeline, "SENATE_PARSER_VERSION", 2):
+            await _ingest_senate(db_session, [garbled, older], {"cy2025": [_row()], "cy2024": [_row()]})
         stored = db_session.query(FinancialDisclosure).one()
-        assert (stored.as_of_date, stored.report_label) == (None, "annual report amendment filed 2026-06-02")
+        assert (stored.filing_id, stored.as_of_date) == ("cy2025", "2025-12-31")

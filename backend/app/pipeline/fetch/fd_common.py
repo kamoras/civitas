@@ -24,8 +24,10 @@ unrecognized goes to OTHER, and an unrecognized Senate type is logged so the
 table can be extended from the real value rather than a guess.
 """
 
+import asyncio
 import logging
 import re
+import time
 from dataclasses import MISSING, asdict, dataclass, field, fields
 
 from app.pipeline.fetch.ptr_common import OPEN_ENDED_AMOUNT_RE, extract_ticker
@@ -330,3 +332,15 @@ def crashed_before(db, tier: str, key: str) -> bool:
 
 # Long enough to span one nightly run to the next, with slack.
 _CRASH_MEMORY_HOURS = 72
+
+
+async def until_deadline(step, deadline: float | None):
+    """Await `step`, cut off at `deadline` (time.monotonic()) — None when it
+    was cut off, or when it returned None. The one rule for how a holdings
+    fetch in flight at the budget's end is stopped; no deadline, no limit."""
+    if deadline is None:
+        return await step
+    try:
+        return await asyncio.wait_for(step, max(deadline - time.monotonic(), 0.001))
+    except TimeoutError:
+        return None

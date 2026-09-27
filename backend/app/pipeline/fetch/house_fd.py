@@ -43,6 +43,7 @@ from app.pipeline.fetch.fd_common import (
     split_account,
     strip_house_code,
     ticker_for,
+    until_deadline,
 )
 from app.pipeline.fetch.house_ptr import download_pdf, fetch_filing_index
 from app.pipeline.fetch.ptr_common import OWNER_CODES
@@ -316,13 +317,7 @@ async def fetch_and_parse_annual(
     if cached is not None:
         return cached
 
-    download = download_pdf(client, filing["pdf_url"])
-    if deadline is not None:
-        download = asyncio.wait_for(download, max(deadline - time.monotonic(), 0.001))
-    try:
-        pdf_bytes = await download
-    except TimeoutError:
-        return None
+    pdf_bytes = await until_deadline(download_pdf(client, filing["pdf_url"]), deadline)
     if pdf_bytes is None:
         return None
 
