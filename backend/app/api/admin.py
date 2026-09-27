@@ -105,13 +105,15 @@ def _history_entry(run, pipeline_type: str, extra: dict) -> dict:
     }
 
 
-def _senate_lease_beating(db: Session) -> bool:
-    from app.pipeline import lease
+def _senate_row_clearable(db: Session) -> bool:
+    from app.pipeline.run_tracker import senate_row_unaccounted
 
-    return lease.held(db, lease.SENATE_RUN)
+    return senate_row_unaccounted(db)
 
 
-def _clear_stuck_runs(db: Session, model, is_running: bool, pipeline_label: str) -> dict:
+def _clear_stuck_runs(
+    db: Session, model, is_running: bool, pipeline_label: str, refused: str | None = None,
+) -> dict:
     """Mark any stuck (status=running) run of `model` as failed.
 
     Shared by the pipelines' "clear stuck run" admin endpoints —
@@ -120,7 +122,7 @@ def _clear_stuck_runs(db: Session, model, is_running: bool, pipeline_label: str)
     """
     if is_running:
         raise HTTPException(
-            status_code=409, detail=f"{pipeline_label} pipeline is actively running — stop it first"
+            status_code=409, detail=refused or f"{pipeline_label} pipeline is actively running — stop it first"
         )
 
     stuck = db.query(model).filter(model.status == PipelineStatus.RUNNING).all()
@@ -806,12 +808,10 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
 
     result: dict = {
         "isRunning": is_running,
-        # Whether a Senate run's lease is beating right now. A RUNNING Senate
-        # row without one may be a dead run nothing has proved dead yet
-        # (run_tracker.live_run still counts it): the dashboard offers
-        # clear-stuck-senate then, the operator's call — the endpoint
-        # refuses exactly while this is true.
-        "senateLeaseBeating": _senate_lease_beating(db),
+        # A RUNNING Senate row no lease speaks for
+        # (run_tracker.senate_row_unaccounted): the dashboard shows it as
+        # stuck and offers clear-stuck-senate, which accepts exactly then.
+        "senateRowClearable": _senate_row_clearable(db),
         "houseIsRunning": is_house_pipeline_running(),
         "stockTradesIsRunning": is_stock_pipeline_running(),
         "supplementaryIsRunning": is_supplementary_pipeline_running(),
@@ -1372,16 +1372,21 @@ async def admin_trigger_house_pipeline():
 async def admin_clear_stuck_senate(db: Session = Depends(get_db)):
     """Mark any stuck (status=running) Senate pipeline run as failed.
 
-    The operator's override for a row nothing has proved dead yet
-    (run_tracker.live_run gives it the benefit of the doubt for an hour
-    after its lease's last beat): refused while a Senate run's lease is
-    beating. Short of that it is the operator's call that the run is dead —
-    a run whose beats are only stalled behind a writer would go on beside
-    the next one — as with every other pipeline's clear.
+    For a row no lease speaks for (run_tracker.senate_row_unaccounted):
+    one from a release without leases, or one left RUNNING after its run's
+    lease was let go. Refused for a row its run's lease names and hasn't
+    proved dead — that may be a live run whose beats are stalled, and the
+    proof (an hour after its last beat) clears it.
     """
     from app.models import PipelineRun
 
-    return _clear_stuck_runs(db, PipelineRun, _senate_lease_beating(db), "Senate")
+    return _clear_stuck_runs(
+        db, PipelineRun, not _senate_row_clearable(db), "Senate",
+        refused=(
+            "The Senate run's lease still speaks for this row — it may be a live run whose heartbeat is "
+            "stalled. If it has died, its row is cleared an hour after its last beat."
+        ),
+    )
 
 
 @router.post("/pipeline/clear-stuck-house", dependencies=[Depends(require_admin)])

@@ -1158,10 +1158,9 @@ export interface ActionRefreshState {
 
 export interface AdminPipelineStatus {
   isRunning: boolean;
-  // A Senate run's lease is beating now. A RUNNING Senate row without it may
-  // be a dead run nothing has proved dead yet — clear-stuck-senate is
-  // offered then, and refused while this is true.
-  senateLeaseBeating?: boolean;
+  // A RUNNING Senate row no lease speaks for (no run is known to be behind
+  // it): shown as stuck, and the one case clear-stuck-senate accepts.
+  senateRowClearable?: boolean;
   houseIsRunning?: boolean;
   stockTradesIsRunning?: boolean;
   supplementaryIsRunning?: boolean;
@@ -1182,6 +1181,13 @@ export interface AdminPipelineStatus {
   // server log).
   electionLastRun?: PipelineHistoryRun;
   actionRefresh?: ActionRefreshState;
+}
+
+/** Whether a Senate run is going, as every admin view shows it: the status's
+ * isRunning, except for a row no lease speaks for (senateRowClearable),
+ * which is shown as stuck rather than running. */
+export function senateIsRunning(status: AdminPipelineStatus | null | undefined): boolean {
+  return !!status?.isRunning && !status?.senateRowClearable;
 }
 
 export async function fetchAdminPipelineStatus(token: string): Promise<AdminPipelineStatus> {

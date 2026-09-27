@@ -5,6 +5,7 @@ import {
   fetchAdminLoadTimes,
   fetchAdminPipelineTrend,
   fetchAdminVisitorStats,
+  senateIsRunning,
   type AdminDashboard,
   type AdminPipelineStatus,
   type HostStats,
@@ -98,7 +99,7 @@ export function OverviewDashboard({
       | null
       | undefined;
   }[] = [
-    { label: "Senate", running: !!status?.isRunning, run: status?.lastRun },
+    { label: "Senate", running: senateIsRunning(status), run: status?.lastRun },
     { label: "House", running: !!status?.houseIsRunning, run: status?.houseLastRun },
     {
       label: "Supplementary",

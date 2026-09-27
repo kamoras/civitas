@@ -8,6 +8,7 @@ import {
   clearStuckStockTradesPipeline,
   clearStuckSupplementaryPipeline,
   fetchAdminPipelineTimings,
+  senateIsRunning,
   fetchAdminPipelineTrend,
   type AdminDashboard,
   type AdminPipelineStatus,
@@ -104,9 +105,7 @@ function PipelineStatusPanel({
       <div className="space-y-1.5 text-sm font-mono">
         <StuckAwareRow
           label="SENATE"
-          // Not isRunning: that counts a row nothing has proved dead yet as
-          // running, which would hide Clear in exactly the case it's for.
-          isRunning={!!(status?.senateLeaseBeating ?? status?.isRunning)}
+          isRunning={senateIsRunning(status)}
           run={senate}
           token={token}
           clear={clearStuckSenatePipeline}

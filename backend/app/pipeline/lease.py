@@ -17,7 +17,7 @@ import json
 import logging
 import threading
 import uuid
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta
 
@@ -119,6 +119,7 @@ def max_hold(tier: str) -> timedelta:
 
 def acquire(
     db: Session, tier: str, *, yield_to: str | None = None, who: str | None = None,
+    may_replace: Callable[[datetime, dict], bool] | None = None,
 ) -> str | None:
     """Take the lease; the holder's token, or None when it is held — or, with
     `yield_to`, when that lease is held once this one's row is in (checked
@@ -128,15 +129,30 @@ def acquire(
     a live one never is. `who` names the holder to anyone it
     refuses (lease.holder): the tier's job, by default — a job some other
     run also does a step of (the nightly election run's ballot step) says so.
+    `may_replace(last_beat, row)` decides whether a stale row may be
+    replaced; the delete then removes exactly the row it judged, so a beat
+    landing in between leaves it (the take fails, as for a live holder).
     """
     from app.models import ApiCache
 
     now = utcnow()
     token = uuid.uuid4().hex
     try:
-        db.query(ApiCache).filter(
+        stale = db.query(ApiCache).filter(
             ApiCache.tier == tier, ApiCache.cache_key == "lock", ApiCache.cached_at < now - stale_after(tier),
-        ).delete()
+        )
+        if may_replace is not None:
+            found = stale.first()
+            if found is not None:
+                try:
+                    data = json.loads(found.data_json)
+                except (TypeError, ValueError):
+                    data = {}
+                if not may_replace(found.cached_at, data if isinstance(data, dict) else {}):
+                    db.rollback()
+                    return None
+                stale = stale.filter(ApiCache.cached_at == found.cached_at, ApiCache.data_json == found.data_json)
+        stale.delete()
         row = {"holder": token, "who": who or TIERS[tier]}
         db.add(ApiCache(tier=tier, cache_key="lock", data_json=json.dumps(row), cached_at=now))
         db.flush()
@@ -303,8 +319,10 @@ class _Held:
         self.heartbeat.start()
 
 
-def _take(db: Session, tier: str, yield_to: str | None, who: str | None = None) -> _Held | None:
-    token = acquire(db, tier, yield_to=yield_to, who=who)
+def _take(
+    db: Session, tier: str, yield_to: str | None, who: str | None = None, may_replace=None,
+) -> _Held | None:
+    token = acquire(db, tier, yield_to=yield_to, who=who, may_replace=may_replace)
     return _Held(db, tier, token) if token is not None else None
 
 
@@ -318,12 +336,12 @@ def _let_go(held_lease: _Held) -> None:
 
 @contextmanager
 def holding(
-    db: Session, tier: str, *, yield_to: str | None = None, who: str | None = None,
+    db: Session, tier: str, *, yield_to: str | None = None, who: str | None = None, may_replace=None,
 ) -> Iterator[str | None]:
     """Hold the lease for the enclosed work, beating it throughout (for its
     tier's max_hold, see _keep); yields the token, or None (and holds
     nothing) when acquire refused."""
-    held_lease = _take(db, tier, yield_to, who)
+    held_lease = _take(db, tier, yield_to, who, may_replace)
     if held_lease is None:
         yield None
         return

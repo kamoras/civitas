@@ -16,6 +16,7 @@ Uses SQLAlchemy sessions for persistence and PipelineRun records to track progre
 import json
 import logging
 import time
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 
@@ -827,36 +828,56 @@ def _take_senate_run_lease(stack) -> "tuple[str | None, str | None]":
 
     from app.models import PipelineStatus
     from app.pipeline import lease
-    from app.pipeline.run_tracker import LEASE_LAPSED, lease_proves_dead, mark_proven_dead_stale
+    from app.pipeline.run_tracker import (
+        LEASE_LAPSED, STALE_PIPELINE_TIMEOUT, lease_proves_dead, mark_proven_dead_stale,
+    )
 
     lease_db = SessionLocal()
     stack.callback(lease_db.close)
+
+    held_off: list[tuple[int, datetime]] = []
+
+    def may_replace(beat: datetime, data: dict) -> bool:
+        # Judged inside acquire's transaction, on the exact row it replaces.
+        named = data.get("run")
+        if not isinstance(named, int):
+            return True  # names no run: nothing to protect
+        row = lease_db.query(PipelineRun.started_at).filter(
+            PipelineRun.id == named, PipelineRun.status == PipelineStatus.RUNNING,
+        ).first()
+        if row is None or utcnow() - row[0] >= STALE_PIPELINE_TIMEOUT:
+            return True  # finished, marked, or past the age rule (the lock clears it)
+        held_off.append((named, beat))
+        return False
+
     why = lease.REFUSED_BUSY
     for _ in range(_SENATE_LEASE_ATTEMPTS):
         if lease.held(lease_db, lease.DATA_RESET):
-            return lease.REFUSED_BY_RESET, None  # before writing anything (lease.DATA_RESET)
+            return lease.REFUSED_BY_RESET, None
         record = lease.lease_record(lease_db, lease.SENATE_RUN)
-        if record is not None and not lease.held(lease_db, lease.SENATE_RUN):
-            beat, named = record
-            if lease_proves_dead(beat):
-                try:
-                    mark_proven_dead_stale(lease_db, PipelineRun)
-                except OperationalError as error:
-                    lease_db.rollback()
-                    if not lease.is_locked(error):
-                        raise
-                    continue  # busy: waited out like the lease's own take; the evidence stays
-            elif named is not None and lease_db.query(PipelineRun.id).filter(
-                PipelineRun.id == named, PipelineRun.status == PipelineStatus.RUNNING,
-            ).first():
-                logger.warning(
-                    "The Senate run's lease lapsed %s ago without proving run #%d dead — "
-                    "not taking it over yet", utcnow() - beat, named,
-                )
-                return LEASE_LAPSED, None
-        token = stack.enter_context(lease.holding(lease_db, lease.SENATE_RUN, yield_to=lease.DATA_RESET))
+        if record is not None and lease_proves_dead(record[0]):
+            try:
+                mark_proven_dead_stale(lease_db, PipelineRun)  # yields to a reset itself
+            except OperationalError as error:
+                lease_db.rollback()
+                if not lease.is_locked(error):
+                    raise
+                continue  # busy: waited out like the lease's own take; the evidence stays
+        held_off.clear()
+        token = stack.enter_context(
+            lease.holding(lease_db, lease.SENATE_RUN, yield_to=lease.DATA_RESET, may_replace=may_replace),
+        )
         if token is not None:
             return None, token
+        if held_off:
+            named, beat = held_off[-1]
+            if lease_proves_dead(beat):
+                continue  # proven dead meanwhile: marked on the next pass
+            logger.warning(
+                "The Senate run's lease lapsed %s ago without proving run #%d dead — not taking it over yet",
+                utcnow() - beat, named,
+            )
+            return LEASE_LAPSED, None
         why = lease.refusal_code(lease_db, lease.SENATE_RUN)
         if why != lease.REFUSED_BUSY:
             break

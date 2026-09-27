@@ -642,33 +642,64 @@ def test_a_lapsed_lease_with_no_run_to_protect_is_taken(db_session):
         assert refused is None and token is not None
 
 
-def test_clear_stuck_senate_is_refused_only_while_the_lease_beats(db_session):
-    """The operator's override for a row nothing has proved dead yet; the
-    dashboard offers it exactly when the endpoint would take it."""
+def test_clear_stuck_senate_takes_only_a_row_no_lease_speaks_for(db_session):
+    """Refused for a row its run's lease names and hasn't proved dead (maybe
+    a live run whose beats stalled); accepted once nothing speaks for it.
+    The dashboard offers Clear exactly when the endpoint would take it."""
     import asyncio
     from datetime import timedelta
 
     from fastapi import HTTPException
 
     from app.api import admin
+
+    from tests.conftest import start_senate_run_then_stop_beating
+
+    run = start_senate_run_then_stop_beating(db_session, beat_ago=timedelta(minutes=20))
+    assert not admin._senate_row_clearable(db_session)
+    with pytest.raises(HTTPException) as refused:
+        asyncio.run(admin.admin_clear_stuck_senate(db=db_session))
+    assert refused.value.status_code == 409 and "stalled" in refused.value.detail
+
+    db_session.query(models.ApiCache).delete()  # its lease let go, its row left RUNNING
+    db_session.commit()
+    assert admin._senate_row_clearable(db_session)
+    assert asyncio.run(admin.admin_clear_stuck_senate(db=db_session))["cleared"] == 1
+    db_session.expire_all()
+    assert db_session.get(models.PipelineRun, run.id).status == "failed"
+    assert not admin._senate_row_clearable(db_session)
+
+
+def test_the_lease_row_naming_a_running_run_is_not_replaced_even_once_stale(db_session):
+    """The hold-off is judged inside the take (lease.acquire's may_replace)
+    on the exact row it would replace — no window between a check and it —
+    and a row past the 12h age rule is the lock's to clear, not held off."""
+    from contextlib import ExitStack
+    from datetime import timedelta
+
+    from app.pipeline import lease, senate_pipeline
+    from app.pipeline.run_tracker import LEASE_LAPSED
     from app.time_utils import utcnow
 
     from tests.conftest import start_senate_run_then_stop_beating
 
-    run = start_senate_run_then_stop_beating(db_session)
-    assert admin._senate_lease_beating(db_session)
-    with pytest.raises(HTTPException) as refused:
-        asyncio.run(admin.admin_clear_stuck_senate(db=db_session))
-    assert refused.value.status_code == 409
+    run = start_senate_run_then_stop_beating(db_session, beat_ago=timedelta(minutes=20))
+    with ExitStack() as stack, pytest.MonkeyPatch.context() as mp:
+        mp.setattr(senate_pipeline, "SessionLocal", lambda: _Unclosable(db_session))
+        mp.setattr(lease, "held", lambda db, tier: False)  # as if the check raced the take
+        assert senate_pipeline._take_senate_run_lease(stack) == (LEASE_LAPSED, None)
+    assert lease.lease_record(db_session, lease.SENATE_RUN)[1] == run.id
 
-    db_session.query(models.ApiCache).update({"cached_at": utcnow() - timedelta(minutes=20)})
+    run.started_at = utcnow() - timedelta(hours=13)  # past the age rule
     db_session.commit()
-    assert not admin._senate_lease_beating(db_session)
-    assert asyncio.run(admin.admin_clear_stuck_senate(db=db_session))["cleared"] == 1
+    with ExitStack() as stack, pytest.MonkeyPatch.context() as mp:
+        mp.setattr(senate_pipeline, "SessionLocal", lambda: _Unclosable(db_session))
+        refused, token = senate_pipeline._take_senate_run_lease(stack)
+        assert refused is None
+        new, refused = senate_pipeline._acquire_pipeline_lock(db_session, lease_token=token)
+        assert refused is None and new is not None
     db_session.expire_all()
-    assert db_session.get(models.PipelineRun, run.id).status == "failed"
-
-
+    assert db_session.get(models.PipelineRun, run.id).status == "stale"  # the lock's age rule
 def test_a_senate_attempt_during_a_reset_says_so_before_writing_anything(db_session):
     from contextlib import ExitStack
     from datetime import timedelta

@@ -94,11 +94,28 @@ def live_run(db: Session, model: type[_RunModel], stale_timeout: timedelta = STA
     return running
 
 
+def senate_row_unaccounted(db: Session) -> bool:
+    """Whether a RUNNING Senate row exists that no lease speaks for — none
+    names it, or the one that does proves it dead — so no run is known to
+    be behind it. What an operator may clear (clear-stuck-senate); a row a
+    lease names and hasn't yet proved dead may be a live run whose beats
+    stalled, and is left to the proof."""
+    from app.models import PipelineRun, PipelineStatus
+    from app.pipeline import lease
+
+    row = db.query(PipelineRun.id).filter(PipelineRun.status == PipelineStatus.RUNNING).first()
+    if row is None:
+        return False
+    record = lease.lease_record(db, lease.SENATE_RUN)
+    return record is None or record[1] != row[0] or lease_proves_dead(record[0])
+
+
 def mark_proven_dead_stale(db: Session, model: type) -> int:
     """Mark stale `model`'s RUNNING rows its lease proves dead
     (_proven_dead), conditional on still RUNNING; commits. Returns how many.
     Raises what the database raises."""
     from app.models import PipelineStatus
+    from app.pipeline import lease
 
     marked = 0
     for row in db.query(model).filter(model.status == PipelineStatus.RUNNING).all():
@@ -110,6 +127,11 @@ def mark_proven_dead_stale(db: Session, model: type) -> int:
             }, synchronize_session=False)
             logger.warning("Marking the dead %s run #%d stale — its lease went %s without a beat",
                            model.__name__, row.id, DEAD_AFTER)
+    if marked and lease.held(db, lease.DATA_RESET):
+        # Checked in the write's own transaction, before committing
+        # (lease.DATA_RESET): a reset holds the database, so back out.
+        db.rollback()
+        return 0
     db.commit()
     return marked
 
@@ -224,18 +246,18 @@ def acquire_pipeline_lock_why(
         run = model(started_at=utcnow(), status=PipelineStatus.RUNNING)
         db.add(run)
         db.flush()
-        # In the row's own transaction (a run lease's tag); refused, the
-        # run doesn't start — its lease was lost meanwhile.
-        if on_insert is not None and not on_insert(run):
-            db.rollback()
-            logger.warning("%s not started: its lease was taken over before its row was written", model.__name__)
-            return None, lease.REFUSED_HELD
         if lease.held(db, lease.DATA_RESET):
             # Checked inside the insert's own transaction (see
             # lease.DATA_RESET): backing out is a rollback, no second write.
             db.rollback()
             logger.warning("%s not started: an admin data reset is running", model.__name__)
             return None, lease.REFUSED_BY_RESET
+        # In the row's own transaction (a run lease's tag); refused, the
+        # run doesn't start — its lease was lost meanwhile.
+        if on_insert is not None and not on_insert(run):
+            db.rollback()
+            logger.warning("%s not started: its lease was taken over before its row was written", model.__name__)
+            return None, lease.REFUSED_HELD
         db.commit()
     except IntegrityError:
         # Another container inserted its running row between our check
