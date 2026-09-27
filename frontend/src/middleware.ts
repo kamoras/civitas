@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextFetchEvent, NextRequest } from "next/server";
+import { isPageLoad } from "@/lib/pageLoad";
 
 // Matches the fallback next.config.mjs already uses for its API rewrite —
 // the frontend container isn't given BACKEND_URL at runtime, so both rely
@@ -22,6 +23,13 @@ export function middleware(request: NextRequest, event: NextFetchEvent) {
   // scrape OG metadata for Bluesky posts, self-identifying with this UA —
   // don't count the app visiting itself as a visitor.
   if (userAgent.startsWith("Civitas-Bot/")) {
+    return NextResponse.next();
+  }
+
+  // Only a document load is a visit here: prefetches and the router's data
+  // fetches pass through too (see isPageLoad), and navigations inside the
+  // app are counted by NavigationBeacon.
+  if (!isPageLoad(request.headers)) {
     return NextResponse.next();
   }
 

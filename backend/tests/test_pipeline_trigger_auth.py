@@ -40,7 +40,7 @@ async def test_presidents_trigger_rejects_wrong_token_when_configured(monkeypatc
     monkeypatch.setattr(settings, "PIPELINE_TRIGGER_TOKEN", "real-token")
     with pytest.raises(HTTPException) as exc:
         await trigger_pipeline(authorization="Bearer wrong")
-    assert exc.value.status_code == 403
+    assert exc.value.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -79,7 +79,7 @@ async def test_explore_trigger_rejects_wrong_token_when_configured(monkeypatch):
     monkeypatch.setattr(settings, "PIPELINE_TRIGGER_TOKEN", "real-token")
     with pytest.raises(HTTPException) as exc:
         await trigger_explore_pipeline(authorization="Bearer wrong")
-    assert exc.value.status_code == 403
+    assert exc.value.status_code == 401
 
 
 @pytest.mark.asyncio

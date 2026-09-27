@@ -48,7 +48,9 @@ run's per-source outcome is stored (`api_cache`, tier `congress`, key
 **Reports.** `app/services/congress_service.py` builds the day, week and
 month reports from these rows: counts, "passed both chambers" (a measure
 passed by the chamber it did not start in; simple resolutions never count),
-the three closest votes, and a one-line summary filled from counts by
+the three closest votes (by how far the yeas were from what the vote
+needed: a simple majority, two-thirds of those voting, or cloture's 60), and
+a one-line summary filled from counts by
 template. Served at `/api/congress/{latest, day/…, week/…, month/…}`; one roll
 call with every member's position at `/api/congress/votes/…`. A bill's full
 record for its page, any bill, at `/api/bills/{id}/record`

@@ -259,7 +259,7 @@ def purge_departed_members(
         if m.left_office_date > cutoff:
             continue
 
-        _purge_member_traces(db, m.id, chamber)
+        _purge_member_traces(db, m, chamber)
         # ORM delete, not a bulk query delete: SQLite runs without
         # PRAGMA foreign_keys=ON (see database.py's pragma list), so the
         # ON DELETE CASCADE on donors/votes/promises/bills/trades is
@@ -282,7 +282,7 @@ def purge_departed_members(
     return {"status": "ok", "purged": purged, "stamped": stamped, "cutoff": cutoff}
 
 
-def _purge_member_traces(db: Session, member_id: str, chamber: str) -> None:
+def _purge_member_traces(db: Session, member, chamber: str) -> None:
     """Clear references to a member that no foreign key would catch.
 
     Everything hanging off a real FK (donors, votes, lobbying matches,
@@ -290,7 +290,15 @@ def _purge_member_traces(db: Session, member_id: str, chamber: str) -> None:
     These four don't have one and would otherwise dangle: a stale entry in
     an action issue renders a contact chip linking to a 404, and an orphan
     snapshot keeps feeding the trend series of an id nothing else knows.
+
+    Every one is scoped to this chamber. Both chambers' ids are the
+    member's "last-first" name, so a representative who went on to the
+    Senate (Schiff, Slotkin, Gallego, Kim and Banks in 2025) leaves a
+    departed House row with the same id as a serving senator — and a purge
+    by id alone unlinked the senator's floor speeches and struck them from
+    every action issue.
     """
+    member_id = member.id
     db.query(ScoreSnapshot).filter(
         ScoreSnapshot.entity_type == _SNAPSHOT_ENTITY[chamber],
         ScoreSnapshot.entity_id == member_id,
@@ -312,15 +320,28 @@ def _purge_member_traces(db: Session, member_id: str, chamber: str) -> None:
     # pointing at a profile that no longer exists. The matching vec_explore
     # metadata is left as-is: it is only ever read as a search filter, and
     # nothing can ask for a purged member's id once the profile is gone.
-    db.query(ExploreDocument).filter(
-        ExploreDocument.politician_id == member_id,
-    ).update({ExploreDocument.politician_id: None}, synchronize_session=False)
+    #
+    # Nor when the same person serves on in the other chamber under the
+    # same id: /politicians/{id} still reaches them, which is where their
+    # earlier speeches belong.
+    other = db.get(_MODELS[_other_chamber(chamber)], member_id)
+    if not (other and member.bioguide_id and other.bioguide_id == member.bioguide_id):
+        db.query(ExploreDocument).filter(
+            ExploreDocument.politician_id == member_id,
+            ExploreDocument.chamber == chamber.title(),
+        ).update({ExploreDocument.politician_id: None}, synchronize_session=False)
 
-    _strip_from_action_issues(db, member_id)
+    _strip_from_action_issues(db, member_id, chamber)
 
 
-def _strip_from_action_issues(db: Session, member_id: str) -> None:
-    """Remove a member from every action issue's related_senators blob."""
+def _other_chamber(chamber: str) -> str:
+    return CHAMBER_HOUSE if chamber == CHAMBER_SENATE else CHAMBER_SENATE
+
+
+def _strip_from_action_issues(db: Session, member_id: str, chamber: str) -> None:
+    """Remove a member from every action issue's related_senators blob.
+    An entry without a chamber is a senator's (the blob held only
+    senators before representatives were added)."""
     # LIKE prefilter so this touches only the handful of issues that
     # actually name the member, rather than rewriting the whole table.
     issues = (
@@ -335,6 +356,10 @@ def _strip_from_action_issues(db: Session, member_id: str) -> None:
             continue
         if not isinstance(entries, list):
             continue
-        kept = [e for e in entries if not (isinstance(e, dict) and e.get("id") == member_id)]
+        kept = [
+            e for e in entries
+            if not (isinstance(e, dict) and e.get("id") == member_id
+                    and (e.get("chamber") or CHAMBER_SENATE) == chamber)
+        ]
         if len(kept) != len(entries):
             issue.related_senators = json.dumps(kept)

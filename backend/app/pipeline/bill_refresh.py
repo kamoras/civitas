@@ -24,7 +24,7 @@ run benefits from them too.
 Scheduling and the skip-while-nightly-runs guard live in scheduler.py.
 """
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from sqlalchemy import and_, case, func, or_
@@ -61,10 +61,11 @@ _MAX_LOOKBACK = timedelta(days=7)
 _WINDOW_OVERLAP = timedelta(minutes=30)
 
 _PAGE_SIZE = 250
-_MAX_LIST_PAGES = 8  # up to 2,000 most-recently-updated bills per cycle
+_MAX_LIST_PAGES = 8  # up to 2,000 updated bills per cycle, oldest update first
 # Backstop against a pathological cycle (first run after a long outage,
 # say) fanning out thousands of per-bill actions fetches in one go.
-# Anything past the cap is caught by later cycles or the nightly rebuild.
+# Anything past either cap is picked up by the next cycle: the marker is
+# left at the oldest update not yet applied (_resume_point), not at now.
 _MAX_ACTION_FETCHES = 500
 
 _tracker = PipelineRunTracker()
@@ -91,35 +92,61 @@ def _window_start(db: Session, now: datetime) -> datetime:
     return now - _DEFAULT_LOOKBACK
 
 
-async def _fetch_recently_updated(client: httpx.AsyncClient, since: datetime) -> dict[str, dict]:
-    """{our bill_id format ("HR.22") -> Congress.gov bill list item} for
-    current-congress bills updated since `since`, newest first, bounded by
-    _MAX_LIST_PAGES. Deliberately NOT ApiCache'd — the whole point of the
-    call is what changed in the last hour."""
+def _update_time(item: dict) -> datetime | None:
+    """A listing item's updateDate as naive UTC. The listing gives only the
+    day ("2026-09-25", checked live 2026-09-27), read as its start: a cycle
+    resuming there re-reads that day, which costs nothing for what it has
+    applied, and always gets past it — a day brings hundreds of updates
+    (321 and 639 on 2026-09-24/25), far under _MAX_LIST_PAGES' 2,000."""
+    raw = item.get("updateDate") or ""
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed.astimezone(timezone.utc).replace(tzinfo=None) if parsed.tzinfo else parsed
+
+
+async def _fetch_recently_updated(
+    client: httpx.AsyncClient, since: datetime,
+) -> tuple[dict[str, dict], datetime | None]:
+    """({our bill_id format ("HR.22") -> Congress.gov bill list item},
+    resume_at) for current-congress bills updated since `since`.
+
+    Oldest update first, so that when _MAX_LIST_PAGES cuts the listing off
+    what is left is the newer end, and `resume_at` (the last update read)
+    is where the next cycle starts. Read newest first, the cut dropped the
+    oldest updates, and the window then moved past them for good. A bill
+    updated again while the pages are read moves to the end of the
+    listing; one skipped by that shift is newer than `resume_at`, so the
+    next cycle still reads it. `resume_at` is None when the listing was
+    read to its end. Deliberately NOT ApiCache'd — the whole point of the
+    call is what changed since the last cycle."""
     from_param = since.strftime("%Y-%m-%dT%H:%M:%SZ")
     found: dict[str, dict] = {}
     offset = 0
+    last_seen: datetime | None = None
     for _ in range(_MAX_LIST_PAGES):
         data = await _fetch_with_retry(
             client,
             f"{CONGRESS_API_BASE}/bill"
-            f"?fromDateTime={from_param}&sort=updateDate+desc&limit={_PAGE_SIZE}&offset={offset}",
+            f"?fromDateTime={from_param}&sort=updateDate+asc&limit={_PAGE_SIZE}&offset={offset}",
         )
         page = (data or {}).get("bills") or []
         for item in page:
+            last_seen = _update_time(item) or last_seen
             bill_type = (item.get("type") or "").upper()
             number = item.get("number")
             if not bill_type or number is None:
                 continue
             if (item.get("congress") or 0) < settings.CURRENT_CONGRESS:
                 continue
-            # setdefault: sorted newest-update-first, so the first
-            # occurrence is the most current view of the bill.
-            found.setdefault(f"{bill_type}.{number}", item)
+            # Oldest update first, so a later occurrence is the more
+            # current view of the bill.
+            found[f"{bill_type}.{number}"] = item
         if len(page) < _PAGE_SIZE:
-            break
+            return found, None
         offset += _PAGE_SIZE
-    return found
+    return found, last_seen
 
 
 async def _fetch_fresh_actions(
@@ -176,6 +203,7 @@ async def _apply_updates(
     matched = 0
     changed = 0
     skipped_at_cap = 0
+    deferred_from: datetime | None = None
     actions_cache: dict[str, list[dict]] = {}
     bill_ids = list(recent)
 
@@ -231,6 +259,9 @@ async def _apply_updates(
             else:
                 if len(actions_cache) >= _MAX_ACTION_FETCHES:
                     skipped_at_cap += 1
+                    updated = _update_time(item)
+                    if updated is not None and (deferred_from is None or updated < deferred_from):
+                        deferred_from = updated
                     continue
                 actions = await _fetch_fresh_actions(db, client, congress, bill_type, number)
                 actions_cache[actions_key] = actions
@@ -292,14 +323,24 @@ async def _apply_updates(
     if skipped_at_cap:
         logger.warning(
             "Bill status refresh hit the %d actions-fetch cap — %d changed bills "
-            "deferred to the next cycle", _MAX_ACTION_FETCHES, skipped_at_cap,
+            "left for the next cycle", _MAX_ACTION_FETCHES, skipped_at_cap,
         )
-    return {
+    summary = {
         "matched": matched,
         "changed": changed,
         "action_fetches": len(actions_cache),
         "skipped_at_cap": skipped_at_cap,
     }
+    if deferred_from is not None:
+        summary["deferred_from"] = deferred_from
+    return summary
+
+
+def _resume_point(now: datetime, listing_cut_at: datetime | None, deferred_from: datetime | None) -> datetime:
+    """Where the next cycle's window starts (less _WINDOW_OVERLAP): the
+    oldest update this cycle did not apply, or now when it applied all."""
+    pending = [t for t in (listing_cut_at, deferred_from) if t is not None]
+    return min(pending) if pending else now
 
 
 async def refresh_bill_statuses(db: Session | None = None) -> dict:
@@ -317,11 +358,13 @@ async def refresh_bill_statuses(db: Session | None = None) -> dict:
         now = utcnow()
         since = _window_start(db, now)
         async with make_async_client() as client:
-            recent = await _fetch_recently_updated(client, since)
+            recent, listing_cut_at = await _fetch_recently_updated(client, since)
             summary = await _apply_updates(db, client, recent)
         # Only advance the window marker after a full successful pass, so
-        # a crashed cycle is retried over the same window next hour.
-        api_cache_set(db, _LAST_RUN_TIER, LAST_RUN_CACHE_KEY, {"lastRun": now.isoformat()})
+        # a crashed cycle is retried over the same window next hour — and
+        # only as far as what it applied.
+        resume = _resume_point(now, listing_cut_at, summary.pop("deferred_from", None))
+        api_cache_set(db, _LAST_RUN_TIER, LAST_RUN_CACHE_KEY, {"lastRun": resume.isoformat()})
     finally:
         if owns_session:
             db.close()
@@ -332,5 +375,7 @@ async def refresh_bill_statuses(db: Session | None = None) -> dict:
 
     summary["status"] = "completed"
     summary["window_start"] = since.isoformat()
+    if resume != now:
+        summary["resumes_at"] = resume.isoformat()
     summary["recently_updated"] = len(recent)
     return summary
