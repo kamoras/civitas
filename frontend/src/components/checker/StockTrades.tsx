@@ -29,6 +29,7 @@ const OWNER_LABEL: Record<StockTrade["owner"], string> = {
   spouse: "SPOUSE",
   joint: "JOINT",
   dependent: "DEPENDENT",
+  unknown: "OWNER NOT STATED",
 };
 
 function formatAmountRange(trade: StockTrade): string {
