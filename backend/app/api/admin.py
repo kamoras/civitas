@@ -771,14 +771,15 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
     )
     from app.pipeline.run_tracker import senate_run_state
 
-    # The in-process flags are read on both sides of the rows, and a
-    # pipeline counts as running if either read says so: a run commits its
-    # RUNNING row before raising its flag, and its final status before
-    # dropping it. So a run finishing during this poll is caught by the read
-    # before (its row may still read RUNNING in the snapshot the first query
-    # fixes), and one starting during it by the read after — either way no
-    # RUNNING row is paired with a lowered flag, which the dashboard shows
-    # as stuck (and, once the run ends, as ending without an outcome).
+    # Whether each pipeline is going is read on both sides of its row, and
+    # counts as running if either read says so. A run makes itself known
+    # (its flag — acquire_tracked_run — or its Senate lease's tag) in the
+    # same step as committing its RUNNING row, and lets go only after
+    # committing its final status; each query here sees the latest commit.
+    # So a run finishing during this poll is caught by the read before, one
+    # starting by the read after, and a RUNNING row is never paired with a
+    # stopped run — which the dashboard would show as stuck, and, once the
+    # run ends, as ending without an outcome.
     def running_flags() -> tuple[bool, bool, bool, bool]:
         return (
             is_house_pipeline_running(), is_stock_pipeline_running(),
@@ -786,9 +787,7 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
         )
 
     flags_before = running_flags()
-
-    # One read of the Senate row and lease for both fields below.
-    _row, is_running, senate_clearable = senate_run_state(db)
+    _row, senate_running_before, senate_clearable_before = senate_run_state(db)
 
     last_run = (
         db.query(PipelineRun)
@@ -816,9 +815,13 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
         .first()
     )
 
+    _row, senate_running_after, senate_clearable_after = senate_run_state(db)
     house_running, stock_running, supplementary_running, election_running = (
         before or after for before, after in zip(flags_before, running_flags())
     )
+    is_running = senate_running_before or senate_running_after
+    # Clearable only if both reads found a row no live lease speaks for.
+    senate_clearable = senate_clearable_before and senate_clearable_after
 
     result: dict = {
         "isRunning": is_running,

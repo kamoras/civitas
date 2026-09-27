@@ -428,9 +428,18 @@ def _acquire_pipeline_lock(db: Session, *, lease_token: str | None = None) -> "t
 # editing them must not wipe learned data. The holdings ingest reads
 # filer-declared asset types (mapped in fetch/, already unhashed) and
 # classifies nothing; filer matching only decides whose filing a filing is.
+# The run-coordination modules (_COORDINATION_PATHS) decide when a run may
+# go and record how far it got — none imports analysis code (tested).
+_COORDINATION_PATHS = {
+    "pipeline/lease.py",
+    "pipeline/run_tracker.py",
+    "pipeline/progress_tracker.py",
+    "pipeline/rate_limiter.py",
+}
 _NOT_ANALYSIS_PATHS = {
     "pipeline/holdings_pipeline.py",
     "pipeline/filer_matching.py",
+    *_COORDINATION_PATHS,
 }
 
 # Top-level names, per hashed file, that are display settings rather than

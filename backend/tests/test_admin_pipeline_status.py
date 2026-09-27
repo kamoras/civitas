@@ -168,3 +168,22 @@ async def test_a_run_changing_state_during_a_poll_never_reads_as_stuck(db_sessio
     finally:
         event.remove(engine, "before_cursor_execute", on_query)
     assert all(result[key] for _m, _n, key in _FLAGS)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "reads, running, clearable",
+    [
+        ([(None, False, False), (7, True, False)], True, False),  # started during the poll
+        ([(7, True, False), (None, False, False)], True, False),  # finished during it
+        ([(7, True, True), (7, True, True)], True, True),  # stuck on both reads: offered Clear
+        ([(7, True, True), (8, True, False)], True, False),  # cleared and restarted meanwhile
+    ],
+)
+async def test_the_senate_state_is_read_on_both_sides_of_its_row(db_session, monkeypatch, reads, running, clearable):
+    from app.api.admin import admin_pipeline_status
+
+    calls = iter(reads)
+    monkeypatch.setattr("app.pipeline.run_tracker.senate_run_state", lambda db: next(calls))
+    result = await admin_pipeline_status(db=db_session)
+    assert (result["isRunning"], result["senateRowClearable"]) == (running, clearable)

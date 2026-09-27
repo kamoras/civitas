@@ -53,7 +53,7 @@ from app.pipeline.fetch.state_candidates import (
 from app.pipeline.fetch.state_election_dates import senate_election_known
 from app.pipeline.progress_tracker import ProgressTracker
 from app.pipeline import lease
-from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock_why, skip_reason_text
+from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_tracked_run, skip_reason_text
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -827,13 +827,12 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
     db = SessionLocal()
     _run_token = None  # no run of ours for the finally to stop until start() below
 
-    run, refused = acquire_pipeline_lock_why(db, ElectionPipelineRun, STALE_PIPELINE_TIMEOUT)
+    run, _run_token, refused = acquire_tracked_run(db, ElectionPipelineRun, STALE_PIPELINE_TIMEOUT, _tracker)
     if run is None:
         logger.warning("Election pipeline not started: %s", skip_reason_text(refused))
         db.close()
         return {"status": "skipped", "reason": refused}
 
-    _run_token = _tracker.start()
     start_time = time.time()
     progress = ProgressTracker(run, ELECTION_PIPELINE_STEPS, db, start_time)
 

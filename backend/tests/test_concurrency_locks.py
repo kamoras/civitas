@@ -368,3 +368,46 @@ class TestRefreshActionIssuesLockWrapper:
 
         monkeypatch.setattr(db_session, "query", boom)
         _release_refresh_lock(db_session, "token")  # must not raise
+
+
+def test_a_tracked_run_raises_its_flag_before_its_row_commits_and_drops_it_on_refusal(db_session, monkeypatch):
+    """acquire_tracked_run: the flag is up by the time the RUNNING row can be
+    seen, so no reader finds the row with the flag down (the admin status
+    shows that as stuck); a refused start leaves the flag down."""
+    from sqlalchemy import event
+    from sqlalchemy.exc import OperationalError
+
+    from app.models import HousePipelineRun
+    from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_tracked_run
+
+    tracker = PipelineRunTracker()
+    at_commit = []
+
+    def record(_session):
+        at_commit.append(tracker.is_running)
+
+    event.listen(db_session, "before_commit", record)
+    try:
+        run, token, why = acquire_tracked_run(db_session, HousePipelineRun, STALE_PIPELINE_TIMEOUT, tracker)
+    finally:
+        event.remove(db_session, "before_commit", record)
+    assert run is not None and why is None and at_commit == [True] and tracker.is_running
+
+    again, again_token, why = acquire_tracked_run(db_session, HousePipelineRun, STALE_PIPELINE_TIMEOUT, tracker)
+    assert again is None and again_token is None and why is not None
+    assert tracker.is_running  # the refusal leaves the live run's flag alone
+    tracker.stop(token)
+    assert not tracker.is_running
+
+    run.status = "completed"
+    db_session.commit()
+    fresh, raised = PipelineRunTracker(), []
+
+    def locked_commit():
+        raised.append(fresh.is_running)
+        raise OperationalError("COMMIT", {}, Exception("database is locked"))
+
+    monkeypatch.setattr(db_session, "commit", locked_commit)
+    assert acquire_tracked_run(db_session, HousePipelineRun, STALE_PIPELINE_TIMEOUT, fresh)[0] is None
+    monkeypatch.undo()
+    assert raised == [True] and not fresh.is_running  # up for the commit, down once it failed

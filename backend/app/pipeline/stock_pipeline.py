@@ -57,7 +57,7 @@ from app.pipeline.fetch.senate_ptr import (
     senate_filing_id,
 )
 from app.pipeline.progress_tracker import ProgressTracker
-from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, MEMBER_PIPELINE_RUNNING, acquire_pipeline_lock_why, run_in_progress, skip_reason_text
+from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, MEMBER_PIPELINE_RUNNING, acquire_tracked_run, run_in_progress, skip_reason_text
 from app.pipeline.transform.industry_classifier import classify_batch_with_learning
 from app.time_utils import utcnow
 
@@ -478,12 +478,11 @@ async def run_stock_trades_pipeline() -> dict:
         # every future Stock run via _other_pipeline_running's check above
         # (which any OTHER pipeline's own stuck row would also trip) and
         # this one (a stuck STOCK row blocking Stock's own next attempt).
-        run, refused = acquire_pipeline_lock_why(db, StockTradesPipelineRun, STALE_PIPELINE_TIMEOUT)
+        run, _run_token, refused = acquire_tracked_run(db, StockTradesPipelineRun, STALE_PIPELINE_TIMEOUT, _tracker)
         if run is None:
             logger.warning("Stock trades pipeline not started: %s", skip_reason_text(refused))
             return {"status": "skipped", "reason": refused}
 
-        _run_token = _tracker.start()
         start_time = time.time()
         progress = ProgressTracker(run, STOCK_PIPELINE_STEPS, db, start_time)
 

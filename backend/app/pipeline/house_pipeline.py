@@ -28,7 +28,7 @@ from app.pipeline.member_lifecycle import (
     reconcile_roster,
 )
 from app.pipeline.progress_tracker import ProgressTracker
-from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock_why, skip_reason_text
+from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_tracked_run, skip_reason_text
 from app.services.representative_service import upsert_representative
 
 from app.pipeline.fetch.congress import (
@@ -128,13 +128,12 @@ async def run_house_pipeline() -> dict:
     # as senate_pipeline.py's _acquire_pipeline_lock call. Without it, a row
     # orphaned by a killed process (a deploy restarting the container
     # mid-run) stays "running" forever, blocking every future House run.
-    house_run, refused = acquire_pipeline_lock_why(db, HousePipelineRun, STALE_PIPELINE_TIMEOUT)
+    house_run, _run_token, refused = acquire_tracked_run(db, HousePipelineRun, STALE_PIPELINE_TIMEOUT, _tracker)
     if house_run is None:
         logger.warning("House pipeline not started: %s", skip_reason_text(refused))
         db.close()
         return {"status": "skipped", "reason": refused}
 
-    _run_token = _tracker.start()
     start_time = time.time()
     reset_fec_run_state()  # clear the by_contributor circuit breaker from any prior run
 

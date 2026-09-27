@@ -70,10 +70,12 @@ has it*: it shipped in a release of its own, deployed before the first
 revision that relied on it (`0005`). `0002`–`0004` predate it — a rollback
 across one of those is not covered.
 
-The same release carried the schema's tolerance for a trade owner of
-`unknown` (`schemas.DisclosureOwner`), which `0006` writes: an image
-without it fails validation on such a row, so it too had to be running
-before `0006` could be.
+The same release carried the tolerance for a trade owner of `unknown`,
+which `0006` writes, on both sides: the schema's (`schemas.DisclosureOwner`)
+— an image without it fails validation on such a row — and the frontend's
+owner type and "OWNER NOT STATED" label, since Swarm rolls services back
+one at a time and a rolled-back frontend can be served by the new backend.
+Both had to be running before `0006` could be.
 
 So every release must leave a schema the image before it can still read:
 

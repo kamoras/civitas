@@ -114,6 +114,30 @@ class TestNormalizedSource:
                 for py in (app_dir / "pipeline").rglob("*.py"):
                     assert name not in _referenced_names(py.read_text()), (py, name)
 
+    def test_exempt_coordination_modules_import_no_analysis_code(self):
+        """Exempt because they classify and score nothing: an import of
+        analysis code (or config_definitions, its constants) would mean an
+        edit here could change a result the hash no longer notices."""
+        import ast
+        import pathlib
+
+        from app.pipeline import senate_pipeline
+
+        app_dir = pathlib.Path(senate_pipeline.__file__).resolve().parent.parent
+        assert senate_pipeline._COORDINATION_PATHS <= senate_pipeline._NOT_ANALYSIS_PATHS
+        for rel in senate_pipeline._COORDINATION_PATHS:
+            for node in ast.walk(ast.parse((app_dir / rel).read_text())):
+                if isinstance(node, ast.ImportFrom):
+                    names = [node.module or ""] + [f"{node.module}.{a.name}" for a in node.names]
+                elif isinstance(node, ast.Import):
+                    names = [a.name for a in node.names]
+                else:
+                    continue
+                for name in names:
+                    assert not name.startswith(("app.pipeline.analyze", "app.pipeline.transform", "app.config_definitions")), (rel, name)
+                    if name.startswith("app.pipeline."):
+                        assert f"pipeline/{name.split('.')[2]}.py" in senate_pipeline._COORDINATION_PATHS, (rel, name)
+
 
 class TestKnnReferencesExcludeOwnOutputs:
     def _add(self, db, name, value, source):

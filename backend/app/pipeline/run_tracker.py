@@ -268,6 +268,36 @@ def acquire_pipeline_lock_why(
     return run, None
 
 
+def acquire_tracked_run(
+    db: Session, model: type[_RunModel], stale_timeout: timedelta, tracker: "PipelineRunTracker",
+) -> "tuple[_RunModel | None, int | None, str | None]":
+    """acquire_pipeline_lock_why with `tracker` raised in the row's own
+    transaction, before it commits: (run, the tracker's token, None), or
+    (None, None, why). The flag goes up before the RUNNING row can be seen
+    and comes down only after the final status is committed, so a reader
+    that finds a RUNNING row with the flag down (the admin status, which
+    shows that as stuck) is looking at a run that really isn't going. A
+    refused or failed insert takes the flag back down. Only one insert
+    reaches the flag at a time: a second waits on the first's write lock,
+    then fails on the RUNNING row's unique index."""
+    token = None
+
+    def raise_flag(_run) -> bool:
+        nonlocal token
+        token = tracker.start()
+        return True
+
+    try:
+        run, why = acquire_pipeline_lock_why(db, model, stale_timeout, on_insert=raise_flag)
+    except BaseException:
+        tracker.stop(token)
+        raise
+    if run is None:
+        tracker.stop(token)
+        return None, None, why
+    return run, token, None
+
+
 class PipelineRunTracker:
     """In-process running/age tracker for a pipeline that also persists
     its status to a DB row (HousePipelineRun/StockTradesPipelineRun).

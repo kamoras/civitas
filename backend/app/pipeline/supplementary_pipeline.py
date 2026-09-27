@@ -17,7 +17,7 @@ from app.database import SessionLocal
 from app.models import Justice, PipelineStatus, SupplementaryPipelineRun
 from app.pipeline import lease
 from app.pipeline.progress_tracker import ProgressTracker
-from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock_why, skip_reason_text
+from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_tracked_run, skip_reason_text
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -55,13 +55,12 @@ async def run_supplementary_pipeline() -> dict:
     # supplementary run. Confirmed live: this left supplementary data
     # (explore docs, SCOTUS, presidents) stale for 1+ day after a
     # since-fixed deploy-race incident.
-    run, refused = acquire_pipeline_lock_why(db, SupplementaryPipelineRun, STALE_PIPELINE_TIMEOUT)
+    run, _run_token, refused = acquire_tracked_run(db, SupplementaryPipelineRun, STALE_PIPELINE_TIMEOUT, _tracker)
     if run is None:
         logger.warning("Supplementary pipeline not started: %s", skip_reason_text(refused))
         db.close()
         return {"status": "skipped", "reason": refused}
 
-    _run_token = _tracker.start()
     start_time = time.time()
     progress = ProgressTracker(run, SUPPLEMENTARY_PIPELINE_STEPS, db, start_time)
 
