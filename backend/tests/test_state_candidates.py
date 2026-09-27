@@ -350,7 +350,7 @@ class TestCrawlFailuresAreContained:
         return alerts
 
     @pytest.mark.asyncio
-    async def test_a_state_that_raises_is_alone_in_failing_and_is_retried_next_night(
+    async def test_a_state_whose_crawl_raises_is_alone_in_failing_and_is_retried_next_night(
         self, db_session, monkeypatch,
     ):
         from datetime import datetime
@@ -358,12 +358,18 @@ class TestCrawlFailuresAreContained:
         calls = []
 
         async def discover(client, state, cycle, rules=None):
-            calls.append(state)
-            if state == "AA":
-                raise RuntimeError("adapter bug")
             return None
 
+        real = sc._crawl_results_source
+
+        async def results(db, client, cycle, state, *args):
+            calls.append(state)
+            if state == "AA":
+                raise RuntimeError("a bug past every guard")
+            return await real(db, client, cycle, state, *args)
+
         alerts = self._patch(monkeypatch, discover)
+        monkeypatch.setattr(sc, "_crawl_results_source", results)
         monkeypatch.setattr(sc, "utcnow", lambda: datetime(2026, 9, 1, 3))
         outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
         assert outcomes == {"AA": "error", "BB": "none"}
@@ -372,6 +378,29 @@ class TestCrawlFailuresAreContained:
         calls.clear()
         await sc.crawl_for_new_sources(db_session, None, 2026)
         assert calls == ["AA"]  # BB completed and isn't due for a week; AA is retried
+
+    @pytest.mark.asyncio
+    async def test_a_raise_inside_a_step_is_contained_and_still_alerted(self, db_session, monkeypatch):
+        """Discovery raising (a portal's JSON in a shape nobody checked) is
+        treated as finding nothing, so the state still gets its forget check
+        and filing-list search — but it is reported, since a bug in an
+        adapter otherwise looks exactly like an outage."""
+        async def discover(client, state, cycle, rules=None):
+            if state == "AA":
+                raise AttributeError("'list' object has no attribute 'get'")
+            return None
+
+        looked = []
+
+        async def filings(client, state, cycle):
+            looked.append(state)
+            return None
+
+        alerts = self._patch(monkeypatch, discover)
+        monkeypatch.setattr(sc, "discover_filings", filings)
+        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert outcomes == {"AA": "none", "BB": "none"} and looked == ["AA", "BB"]
+        assert alerts == ["AA: Source discovery raised AttributeError: 'list' object has no attribute 'get'"]
 
     @pytest.mark.asyncio
     async def test_a_find_that_cannot_be_saved_is_not_reported_as_adopted(
@@ -472,7 +501,72 @@ class TestARaisingSourceIsNotFetching:
         assert searched == ["TX"] and outcomes["TX"] != "error"
 
 
+class TestAdoptingAFilingListThatWontParse:
+    @pytest.mark.asyncio
+    async def test_a_read_that_raises_adopts_nothing_and_is_reported(self, db_session, monkeypatch):
+        import csv
+
+        async def filings(client, state, cycle):
+            return {"url": "x", "_evidence": "a list"}
+
+        async def unreadable(client, year, state, source):
+            raise csv.Error("field larger than field limit")
+
+        raised = []
+        monkeypatch.setattr(sc, "discover_filings", filings)
+        monkeypatch.setattr(sc, "fetch_ballot_candidates", unreadable)
+        token = sc._RAISED.set(raised)
+        try:
+            assert await sc._adopt_filings(db_session, None, 2026, "ZZ", {}) == "none"
+        finally:
+            sc._RAISED.reset(token)
+        assert raised == ["ZZ: Filing-list read raised Error: field larger than field limit"]
+
+
+class TestSyncRaisesAreReported:
+    @pytest.mark.asyncio
+    async def test_a_raising_source_in_the_sync_is_alerted(self, db_session, monkeypatch):
+        from unittest.mock import AsyncMock
+
+        async def no_calendar(client, cycle):
+            return {}, True
+
+        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+        monkeypatch.setattr(sc, "configured_states", lambda: {"TX"})
+        monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(side_effect=TypeError("refactor slip")))
+        monkeypatch.setattr(sc, "_discovered_source", lambda st: None)
+        alerts = []
+        monkeypatch.setattr(sc, "report_file_problems",
+                            lambda subject, lead, problems, key: alerts.extend(problems))
+        results = await sc.sync_confirmed_candidates(db_session, None, 2026)
+        assert results["TX"]["status"] == "fetch_failed"
+        assert alerts == ["TX: Confirmed-candidate fetch raised TypeError: refactor slip"]
+
+
 class TestAPrimarySeasonListSaysTheBallotIsNotYetWhole:
+    @pytest.mark.asyncio
+    async def test_a_failed_read_before_any_basis_is_not_taken_as_complete(self, db_session, monkeypatch):
+        """A fresh deploy or a new cycle, and NC's list fails to fetch: with
+        no basis recorded the page fell back to the entry's
+        general_ballot_complete. A basis already recorded is left alone."""
+        recorded = []
+
+        async def fails(client, year, state, source):
+            return None
+
+        monkeypatch.setattr(sc, "states_with_filings", lambda: {"NC"})
+        monkeypatch.setattr(sc, "fetch_ballot_candidates", fails)
+        real = sc._record_ballot_basis
+
+        def record(db, c, st, src, **k):
+            recorded.append(src.get("general_ballot_complete"))
+            real(db, c, st, src, **k)
+
+        monkeypatch.setattr(sc, "_record_ballot_basis", record)
+        await sc.sync_ballot_filings(db_session, None, 2026)
+        await sc.sync_ballot_filings(db_session, None, 2026)
+        assert recorded == [False]  # once: the second night finds a basis on record
+
     @pytest.mark.asyncio
     async def test_nc_records_an_incomplete_basis_until_its_list_names_november(
         self, db_session, monkeypatch,

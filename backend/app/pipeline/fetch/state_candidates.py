@@ -41,6 +41,8 @@ accurate as before this sync ran, never worse.
 
 import logging
 import re
+import sys
+from contextvars import ContextVar
 from datetime import datetime, timedelta
 import unicodedata
 
@@ -612,6 +614,25 @@ async def crawl_for_new_sources(
     hand_verified = (_sources_file().get("states") or {})
     outcomes: dict[str, str] = {}
     problems: list[str] = []
+    raised_token = _RAISED.set([])
+    try:
+        await _crawl_due_states(db, client, cycle, hand_verified, outcomes, problems)
+    finally:
+        problems += _RAISED.get() or []
+        _RAISED.reset(raised_token)
+    report_file_problems(
+        "Election source crawl failed for some states",
+        "These states' crawl raised or couldn't save (an \"error\" or \"save failed\" is "
+        "retried the next night; a raise inside a step was treated as not fetching).",
+        problems, "election-source-crawl",
+    )
+    return outcomes
+
+
+async def _crawl_due_states(
+    db: Session, client: httpx.AsyncClient, cycle: int, hand_verified: dict,
+    outcomes: dict[str, str], problems: list[str],
+) -> None:
     for state in sorted(ELECTION_DOMAINS):
         now = utcnow()
         record = _crawl_record(db, cycle, state)
@@ -635,12 +656,6 @@ async def crawl_for_new_sources(
         api_cache_set(db, CRAWL_TIER, f"{cycle}-{state}", record,
                       normal_ttl_hours=_CRAWL_RECORD_TTL_HOURS)
         db.commit()
-    report_file_problems(
-        "Election source crawl failed for some states",
-        "These states' crawl raised or couldn't save; each is retried the next night.",
-        problems, "election-source-crawl",
-    )
-    return outcomes
 
 
 async def _crawl_state(
@@ -712,7 +727,13 @@ async def _crawl_results_source(
 ) -> str:
     """Find, prove and keep (or retire) a state's RESULTS source; the
     outcome."""
-    found = await discover_source(client, state, cycle, rules)
+    try:
+        found = await discover_source(client, state, cycle, rules)
+    except Exception:
+        # Portals' JSON has shapes nobody checked; a raise here must not
+        # keep the state from its forget check and filing-list search.
+        _note_raise(state, "Source discovery")
+        found = None
     if not found:
         return await _forget_if_broken(client, cycle, state, record, now)
 
@@ -770,7 +791,7 @@ async def _adopt_filings(
     try:
         filings = await discover_filings(client, state, cycle)
     except Exception:
-        logger.exception("Filing-list discovery raised for %s", state)
+        _note_raise(state, "Filing-list discovery")
         return "none"
     if not filings:
         return "none"
@@ -778,7 +799,13 @@ async def _adopt_filings(
     candidate_source = {**base, "filings": {
         k: v for k, v in filings.items() if not k.startswith("_")
     }}
-    found = await fetch_ballot_candidates(client, cycle, state, candidate_source)
+    try:
+        found = await fetch_ballot_candidates(client, cycle, state, candidate_source)
+    except Exception:
+        # The list discovery validated can differ from the file this reads
+        # (a generalised link pattern), and a parse can raise on it.
+        _note_raise(state, "Filing-list read")
+        return "none"
     if not found:
         return "none"
     records = found["primary"] + found["general"]
@@ -822,27 +849,52 @@ async def _refresh_dates(
     try:
         dates = await election_dates.discover_dates(client, cycle, state, source)
     except Exception:
-        logger.exception("Election-date read raised for %s", state)
+        _note_raise(state, "Election-date read")
         return
     if dates:
         election_dates.save(state, cycle, dates)
 
 
+# The raises a pass contained, collected for its alert (_note_raise). A
+# contained raise is treated like a source that returned nothing — but a
+# programming error in an adapter looks exactly like an outage in the data,
+# so each one is still reported, not only logged.
+_RAISED: ContextVar[list[str] | None] = ContextVar("election_source_raised", default=None)
+
+
+def _note_raise(state: str, what: str) -> None:
+    """Log the exception being handled, and add it to the running pass's
+    report. Call from an except block."""
+    logger.exception("%s raised for %s", what, state)
+    raised = _RAISED.get()
+    if raised is not None:
+        error = sys.exc_info()[1]
+        raised.append(f"{state}: {what} raised {type(error).__name__}: {error}")
+
+
+def _report_raises(subject: str, key: str, extra: list[str] | None = None) -> None:
+    report_file_problems(
+        subject,
+        "Contained and treated as not fetching; each is also in the log with its traceback.",
+        (_RAISED.get() or []) + (extra or []), key,
+    )
+
+
 async def _fetch(
     client: httpx.AsyncClient, cycle: int, state: str, source: dict, what: str,
 ) -> list[dict] | None:
-    """Run `source`'s strategy, a raise counted as not fetching (None): one
-    source that breaks by raising (a host serving HTML where a spreadsheet
-    was) must not end a pass over every state, nor keep its own state out
-    of the "not fetching" handling — replacement, retirement — a source
-    that returns nothing gets."""
+    """Run `source`'s strategy, a raise counted as not fetching (None) and
+    reported (_note_raise): one source that breaks by raising (a host
+    serving HTML where a spreadsheet was) must not end a pass over every
+    state, nor keep its own state out of the "not fetching" handling —
+    replacement, retirement — a source that returns nothing gets."""
     strategy = STRATEGIES.get(source.get("strategy"))
     if strategy is None:
         return None
     try:
         return await strategy(client, cycle, state, source)
     except Exception:
-        logger.exception("%s fetch raised for %s", what, state)
+        _note_raise(state, f"{what} fetch")
         return None
 
 
@@ -1168,6 +1220,17 @@ def _sync_judicial_nominees(
 
 
 async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycle: int) -> dict:
+    """_sync_confirmed_candidates, with every source raise it contained
+    reported in one alert."""
+    token = _RAISED.set([])
+    try:
+        return await _sync_confirmed_candidates(db, client, cycle)
+    finally:
+        _report_raises("Election sources raised in the ballot sync", "election-sync-raised")
+        _RAISED.reset(token)
+
+
+async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycle: int) -> dict:
     """Confirm every registered state's general-election candidates
     against this cycle's Race/Candidate rows. Returns per-state counts —
     `confirmed` (candidates newly or already flagged), `unmatched`
@@ -1225,18 +1288,10 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
         # from primary results only to be unconfirmed moments later.
         general = source.get("general_list")
         general_records = None
-        if general and STRATEGIES.get(general.get("strategy")):
-            try:
-                general_records = await STRATEGIES[general["strategy"]](client, cycle, state, general)
-            except Exception:
-                logger.exception("Certified general list fetch raised for %s", state)
-                general_records = None
+        if general:
+            general_records = await _fetch(client, cycle, state, general, "Certified general list")
 
-        try:
-            records = await strategy(client, cycle, state, source)
-        except Exception:
-            logger.exception("Confirmed-candidate fetch raised for %s", state)
-            records = None
+        records = await _fetch(client, cycle, state, source, "Confirmed-candidate")
 
         fallback = source.get("fallback")
         if records is None and fallback and STRATEGIES.get(fallback.get("strategy")):
@@ -1244,11 +1299,7 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
             # canvass file name changes between cycles, and until the new
             # one is known its national fallback still says something.
             logger.info("Falling back to %s for %s", fallback["strategy"], state)
-            try:
-                records = await STRATEGIES[fallback["strategy"]](client, cycle, state, fallback)
-            except Exception:
-                logger.exception("Fallback fetch raised for %s", state)
-                records = None
+            records = await _fetch(client, cycle, state, fallback, "Fallback")
             if records is not None:
                 source = fallback
         if records is None:
@@ -1342,6 +1393,17 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
 
 
 async def sync_ballot_filings(db: Session, client: httpx.AsyncClient, cycle: int) -> dict:
+    """_sync_ballot_filings, with every filing-list raise it contained
+    reported in one alert."""
+    token = _RAISED.set([])
+    try:
+        return await _sync_ballot_filings(db, client, cycle)
+    finally:
+        _report_raises("Filing lists raised in the ballot sync", "election-filings-raised")
+        _RAISED.reset(token)
+
+
+async def _sync_ballot_filings(db: Session, client: httpx.AsyncClient, cycle: int) -> dict:
     """Flag what a state's own candidate filing list says about both its
     ballots, and record its primary date.
 
@@ -1363,9 +1425,17 @@ async def sync_ballot_filings(db: Session, client: httpx.AsyncClient, cycle: int
         try:
             found = await fetch_ballot_candidates(client, cycle, state, source)
         except Exception:
-            logger.exception("Ballot-filing fetch raised for %s", state)
+            _note_raise(state, "Ballot-filing fetch")
             found = None
         if found is None:
+            if _filings_speak_for_november(state) and api_cache_get(
+                db, BALLOT_BASIS_TIER, ballot_basis_key(state, cycle),
+                max_age_hours=STATEWIDE_MARKER_TTL_HOURS,
+            ) is None:
+                # Nothing has said what this cycle's ballot rests on, and the
+                # page would otherwise fall back to the entry's claim of a
+                # complete one. A basis a good night recorded is left alone.
+                _record_ballot_basis(db, cycle, state, {**source, "general_ballot_complete": False})
             results[state] = {"primary": 0, "general": 0, "unmatched": 0,
                               "status": "fetch_failed"}
             continue
