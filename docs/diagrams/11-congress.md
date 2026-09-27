@@ -41,6 +41,15 @@ back-fill cursor stops before a failed day so the next run retries it. Each
 run's per-source outcome is stored (`api_cache`, tier `congress`, key
 `congress-sync-last-run`).
 
+**Reports.** `app/services/congress_service.py` builds the day, week and
+month reports from these rows: counts, "passed both chambers" (a measure
+passed by the chamber it did not start in; simple resolutions never count),
+the three closest votes, and a one-line summary filled from counts by
+template. Served at `/api/congress/{latest, day/…, week/…, month/…}`; one roll
+call with every member's position at `/api/congress/votes/…`. A bill's full
+record for its page, any bill, at `/api/bills/{id}/record`
+(`app/services/bill_record.py`).
+
 **Bill ids** are the site's (`S.3257`, `HCONRES.89`) whichever spelling the
 source used: the Record's "H. Con. Res. 89", the House roll call's
 "H CON RES 89", the Senate log's "H.Con.Res. 89".
