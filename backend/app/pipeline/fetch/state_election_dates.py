@@ -40,21 +40,21 @@ Read weekly rather than nightly (see crawl_for_new_sources): a date moves
 once a cycle, and there is nothing to gain from asking every night.
 """
 
+import json
 import logging
 import os
 import re
-from collections.abc import Callable
 from typing import Any
 
 import httpx
 
-from app.atomic_write import LOCK_WAIT_S, load_shared_file, update_shared_file
+from app.atomic_write import write_text_atomic
 
 logger = logging.getLogger(__name__)
 
-# Three pages covers a cycle's ~240 federal election dates; the cap leaves
-# room to grow. A listing past it means the endpoint's shape changed: it
-# isn't paged through, and the calendar isn't recorded (fetch_fec_calendar).
+# Three pages covers a cycle's ~240 federal election dates with headroom;
+# a fourth would mean the endpoint's shape changed, which should stop
+# rather than page forever.
 _FEC_MAX_PAGES = 6
 
 _PATHS = (
@@ -69,8 +69,16 @@ def _load() -> dict[str, Any]:
     global _cache
     if _cache is not None:
         return _cache
-    # Assigned once read: a reader on another thread never sees it half-set.
-    _cache = load_shared_file(_PATHS, "election dates")
+    for path in _PATHS:
+        try:
+            with open(path, encoding="utf-8") as fh:
+                _cache = json.load(fh) or {}
+                return _cache
+        except FileNotFoundError:
+            continue
+        except Exception:
+            logger.exception("Failed to read election dates file %s", path)
+    _cache = {}
     return _cache
 
 
@@ -102,76 +110,41 @@ def senate_election_known(state: str, cycle: int) -> bool | None:
     return bool((known.get(f"{cycle}-{state.upper()}") or {}).get("senate"))
 
 
+def mark_calendar_read(cycle: int, on: str) -> None:
+    save(_CALENDAR_KEY, cycle, {"read": on})
+
+
 def all_dates() -> dict[str, Any]:
     """Every date known, keyed "{cycle}-{STATE}"."""
     return dict(_load())
 
 
-def save(state: str, cycle: int, dates: dict) -> bool:
+def save(state: str, cycle: int, dates: dict) -> None:
     """Record what is known about a state's cycle. Merges rather than
     replaces, so a per-state read that knows only the primary doesn't drop
-    the runoff the national calendar supplied, or vice versa. False when it
-    wasn't recorded (atomic_write.update_shared_file)."""
-    return _update(_merged(state, cycle, dates), f"election dates for {state}")
-
-
-def save_calendar(cycle: int, calendar: dict[str, dict], read_on: str) -> bool:
-    """Record a complete national calendar (fetch_fec_calendar's) for every
-    state, and that it was read, in one update: every state's dates and the
-    "read" marker land together or not at all, so the marker never vouches
-    for a state whose dates weren't recorded (senate_election_known would
-    read that state's missing Senate race as "none").
-
-    Merged like every other save: a Senate date the calendar stops listing
-    is kept, not retracted. Deliberately — a missing Senate date deletes the
-    state's Senate race and its candidates (the roster sync's prune), and a
-    calendar can stop listing a real one: the FEC relabelling an election-
-    day special, or a row shifting between pages mid-read. A race the FEC
-    listed in error stays until someone removes it, which is visible and
-    costs nothing; a real race wrongly retracted is data loss."""
-    changes = [_merged(state, cycle, dates) for state, dates in calendar.items()]
-    changes.append(_merged(_CALENDAR_KEY, cycle, {"read": read_on}))
-
-    def merge_all(known: dict[str, Any]) -> dict[str, Any]:
-        for change in changes:
-            known = change(known)
-        return known
-
-    # Once a run, so the longer wait (atomic_write.LOCK_WAIT_S).
-    return _update(merge_all, f"the {cycle} election calendar", wait=LOCK_WAIT_S)
-
-
-def _merged(state: str, cycle: int, dates: dict) -> Callable[[dict[str, Any]], dict[str, Any]]:
-    key = f"{cycle}-{state.upper()}"
-
-    def merge(known: dict[str, Any]) -> dict[str, Any]:
-        known[key] = {**known.get(key, {}), **{k: v for k, v in dates.items() if v}}
-        return known
-
-    return merge
-
-
-def _publish(known: dict[str, Any]) -> None:
+    the runoff the national calendar supplied, or vice versa."""
     global _cache
+    known = dict(_load())
+    key = f"{cycle}-{state.upper()}"
+    known[key] = {**known.get(key, {}), **{k: v for k, v in dates.items() if v}}
+    for path in _PATHS:
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            # Replaced whole, never truncated in place for a reader to find
+            # empty (atomic_write).
+            write_text_atomic(path, json.dumps(known, indent=2, sort_keys=True))
+            break
+        except OSError:
+            continue
+    else:
+        logger.warning("Nowhere writable to record election dates for %s", state)
     _cache = known
-
-
-def _update(change: Callable[[dict[str, Any]], dict[str, Any]], what: str, wait: float | None = None) -> bool:
-    # Merged into the file as it stands now, under its lock: the source
-    # crawl and a ballot sync both write here.
-    return update_shared_file(
-        _PATHS, change, missing=lambda: dict(_load()), publish=_publish, what=what, wait=wait,
-        indent=2, sort_keys=True,
-    )
 
 
 async def fetch_fec_calendar(client: httpx.AsyncClient, cycle: int) -> dict[str, dict]:
     """{state: {"primary": iso, "runoff": iso|None}} for every state the
-    FEC lists a federal primary for. Empty on any failure — a page that
-    fails after the first included, and a listing longer than the page cap:
-    the calendar is recorded as read (save_calendar), and a partial one
-    would vouch that the states on its missing pages hold no Senate race.
-    This augments per-state reads, it never replaces them.
+    FEC lists a federal primary for. Empty on any failure — this augments
+    per-state reads, it never replaces them.
 
     Special elections are excluded: a special primary is a different race
     on its own schedule, and folding one in would report a state's regular
@@ -181,22 +154,16 @@ async def fetch_fec_calendar(client: httpx.AsyncClient, cycle: int) -> dict[str,
 
     rows: list[dict] = []
     page = 1
-    while True:  # ends at the last page, or returns on a failure or the cap
+    while page <= _FEC_MAX_PAGES:
         payload = await _fetch_with_retry(
             client,
             "https://api.open.fec.gov/v1/election-dates/"
             f"?election_year={cycle}&per_page=100&page={page}",
         )
         if not payload:
-            return {}  # a failed page: all or nothing
-        pages = (payload.get("pagination") or {}).get("pages", 1)
-        if pages > _FEC_MAX_PAGES:
-            # Decided on the first page: none of it would be recorded.
-            logger.warning("FEC election calendar runs to %d pages (cap %d) — not recording a partial one",
-                           pages, _FEC_MAX_PAGES)
-            return {}
+            break
         rows += payload.get("results") or []
-        if page >= pages:
+        if page >= (payload.get("pagination") or {}).get("pages", 1):
             break
         page += 1
 

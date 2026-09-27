@@ -22,7 +22,7 @@ import logging
 import os
 from typing import Any
 
-from app.atomic_write import load_shared_file, update_shared_file
+from app.atomic_write import write_text_atomic
 
 logger = logging.getLogger(__name__)
 
@@ -62,31 +62,40 @@ def _load_discovered() -> dict[str, Any]:
     global _discovered_cache
     if _discovered_cache is not None:
         return _discovered_cache
-    # Assigned once read: a reader on another thread never sees it half-set.
-    _discovered_cache = load_shared_file(_DISCOVERED_PATHS, "discovered sources")
+    for path in _DISCOVERED_PATHS:
+        try:
+            with open(path, encoding="utf-8") as fh:
+                _discovered_cache = json.load(fh) or {}
+                return _discovered_cache
+        except FileNotFoundError:
+            continue
+        except Exception:
+            logger.exception("Failed to read discovered sources file %s", path)
+    _discovered_cache = {}
     return _discovered_cache
 
 
-def save_discovered(state: str, source: dict[str, Any] | None) -> bool:
+def save_discovered(state: str, source: dict[str, Any] | None) -> None:
     """Record (or, with None, forget) what the crawler proved for `state`.
-    Never touches the hand-verified file. False when it wasn't recorded
-    (atomic_write.update_shared_file)."""
-    def record(discovered: dict[str, Any]) -> dict[str, Any]:
-        if source is None:
-            discovered.pop(state.upper(), None)
-        else:
-            discovered[state.upper()] = source
-        return discovered
-
-    def publish(discovered: dict[str, Any]) -> None:
-        global _discovered_cache
-        _discovered_cache = discovered
-
-    # Into the file as it stands now, under its lock.
-    return update_shared_file(
-        _DISCOVERED_PATHS, record, missing=lambda: dict(_load_discovered()), publish=publish,
-        what=f"the discovered source for {state}", indent=2, sort_keys=True,
-    )
+    Never touches the hand-verified file."""
+    discovered = dict(_load_discovered())
+    if source is None:
+        discovered.pop(state.upper(), None)
+    else:
+        discovered[state.upper()] = source
+    for path in _DISCOVERED_PATHS:
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            # Replaced whole, never truncated in place for a reader to find
+            # empty (atomic_write).
+            write_text_atomic(path, json.dumps(discovered, indent=2, sort_keys=True))
+            break
+        except OSError:
+            continue
+    else:
+        logger.warning("Nowhere writable to record discovered source for %s", state)
+    global _discovered_cache
+    _discovered_cache = discovered
 
 
 def discovered_states() -> set[str]:

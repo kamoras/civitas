@@ -5,7 +5,7 @@ import os
 
 import pytest
 
-from app.atomic_write import update_json_file, update_shared_file, write_text_atomic
+from app.atomic_write import update_json_file, write_text_atomic
 
 
 @pytest.fixture()
@@ -110,9 +110,7 @@ def test_a_file_not_holding_an_object_starts_from_what_the_caller_knows(workdir,
 
 
 def test_a_writer_holding_the_lock_too_long_is_a_lock_timeout(workdir, monkeypatch):
-    """Not an OSError, which callers take as "try the next path" — that
-    would write the change where the next read won't look. An event loop
-    isn't stalled for long either."""
+    """Not an OSError, which a caller could take as "try the next path"."""
     import fcntl
 
     from app import atomic_write
@@ -124,147 +122,3 @@ def test_a_writer_holding_the_lock_too_long_is_a_lock_timeout(workdir, monkeypat
         with pytest.raises(atomic_write.LockTimeout, match="stayed locked"):
             update_json_file(target, lambda known: known)
     assert not issubclass(atomic_write.LockTimeout, OSError)
-
-
-def test_the_written_copy_is_published_before_the_lock_is_let_go(workdir):
-    """So two writers in one process publish their copies (a module cache)
-    in the order they wrote them."""
-    import fcntl
-
-    target = workdir / "dates.json"
-    locked_while_published = []
-
-    def publish(_data):
-        with open(f"{target}.lock", "a") as probe:
-            try:
-                fcntl.flock(probe.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                locked_while_published.append(False)
-            except BlockingIOError:
-                locked_while_published.append(True)
-
-    update_json_file(target, lambda known: {**known, "a": 1}, written=publish)
-    assert locked_while_published == [True]
-
-
-def test_a_date_that_loses_a_lock_race_is_dropped_not_misfiled(workdir, monkeypatch):
-    """Never written to the fallback path (where the next read wouldn't
-    look), never an error for the sync or the crawl; the file and the cache
-    agree, and the next save is unaffected."""
-    import fcntl
-
-    from app import atomic_write
-    from app.pipeline.fetch import state_election_dates as dates
-
-    primary, fallback = workdir / "dates.json", workdir / "fallback" / "dates.json"
-    monkeypatch.setattr(dates, "_PATHS", (str(primary), str(fallback)))
-    monkeypatch.setattr(dates, "_cache", None)
-    monkeypatch.setattr(atomic_write, "DATA_FILE_WAIT_S", 0.05)
-    with open(f"{primary}.lock", "a") as held:
-        fcntl.flock(held.fileno(), fcntl.LOCK_EX)
-        dates.save("MN", 2026, {"primary": "2026-08-11"})
-        assert dates.save("MN", 2026, {"primary": "2026-08-12"}) is False  # the caller hears it
-    assert dates.primary_date("MN", 2026) is None
-    assert not primary.exists() and not fallback.exists()
-
-    dates.save("WI", 2026, {"primary": "2026-08-11"})  # the lock is free again
-    assert set(json.loads(primary.read_text())) == {"2026-WI"}
-    assert dates.primary_date("WI", 2026) == "2026-08-11"
-
-
-def test_the_calendar_and_its_read_marker_land_together(workdir, monkeypatch):
-    """One update: the marker never vouches for a state whose dates weren't
-    recorded, and a lost lock race records neither."""
-    import fcntl
-
-    from app import atomic_write
-    from app.pipeline.fetch import state_election_dates as dates
-
-    primary = workdir / "dates.json"
-    monkeypatch.setattr(dates, "_PATHS", (str(primary),))
-    monkeypatch.setattr(dates, "_cache", None)
-    monkeypatch.setattr(atomic_write, "DATA_FILE_WAIT_S", 0.05)
-    calendar = {"OH": {"primary": "2028-03-14", "senate": True}, "MN": {"primary": "2028-08-08"}}
-    with open(f"{primary}.lock", "a") as held:
-        fcntl.flock(held.fileno(), fcntl.LOCK_EX)
-        assert dates.save_calendar(2028, calendar, "2027-12-01") is False
-    assert dates.senate_election_known("OH", 2028) is None  # not read, rather than "no race"
-    assert dates.save_calendar(2028, calendar, "2027-12-01") is True
-    assert dates.senate_election_known("OH", 2028) is True
-    assert dates.senate_election_known("MN", 2028) is False
-    assert dates.primary_date("MN", 2028) == "2028-08-08"
-
-
-
-def test_a_shared_file_is_written_where_reads_find_it(workdir, monkeypatch):
-    """The first path that exists — never a later one on a write failure,
-    and never the cache alone when nothing can be written."""
-    primary, fallback = workdir / "p" / "dates.json", workdir / "f" / "dates.json"
-    fallback.parent.mkdir()
-    fallback.write_text('{"old": 1}')  # only the fallback exists: reads find it first
-    published = []
-    assert update_shared_file(
-        [str(primary), str(fallback)], lambda known: {**known, "new": 1},
-        missing=dict, publish=published.append, what="test",
-    )
-    assert json.loads(fallback.read_text()) == {"old": 1, "new": 1} and not primary.exists()
-
-    import errno
-
-    from app import atomic_write
-
-    def disk_full(*_args):
-        raise OSError(errno.ENOSPC, "No space left on device")
-
-    monkeypatch.setattr(atomic_write, "write_text_atomic", disk_full)  # the file reads find can't be written
-    published.clear()
-    assert not update_shared_file(
-        [str(primary), str(fallback)], lambda known: {**known, "newer": 1},
-        missing=dict, publish=published.append, what="test",
-    )
-    assert not primary.exists() and published == []  # not misfiled, not cache-only
-
-
-def test_a_senate_race_the_calendar_stops_listing_is_kept(workdir, monkeypatch):
-    """Merged, deliberately: a calendar can stop listing a real race (a
-    relabelled election-day special), and retracting it deletes the race."""
-    from app.pipeline.fetch import state_election_dates as dates
-
-    monkeypatch.setattr(dates, "_PATHS", (str(workdir / "dates.json"),))
-    monkeypatch.setattr(dates, "_cache", None)
-    dates.save_calendar(2028, {"OH": {"primary": "2028-03-14", "senate": "2028-11-07"}}, "2027-12-01")
-    dates.save_calendar(2028, {"OH": {"primary": "2028-03-14"}}, "2027-12-08")
-    assert dates.senate_election_known("OH", 2028) is True
-
-
-def test_a_data_file_goes_where_it_can_be_written(workdir, monkeypatch):
-    """Before it exists anywhere: the first writable data directory, else
-    the last path's, created — never a directory the process can't write."""
-    from app.atomic_write import shared_file_path
-
-    volume, checkout = workdir / "volume", workdir / "checkout" / "data"
-    volume.mkdir()
-    assert shared_file_path([str(volume / "x.json"), str(checkout / "x.json")]) == str(volume / "x.json")
-    monkeypatch.setattr(os, "access", lambda path, mode: False)  # the volume isn't writable
-    assert shared_file_path([str(volume / "x.json"), str(checkout / "x.json")]) == str(checkout / "x.json")
-    assert checkout.is_dir()
-
-
-def test_a_calendar_missing_a_page_is_not_a_calendar(monkeypatch):
-    """Recorded as read, a partial calendar would vouch that the states on
-    its missing pages hold no Senate race."""
-    import asyncio
-
-    from app.pipeline.fetch import fec
-    from app.pipeline.fetch import state_election_dates as dates
-
-    pages = iter([
-        {"results": [{"election_state": "OH", "election_date": "2028-03-14", "office_sought": "S",
-                      "election_type_full": "Primary Election"}], "pagination": {"pages": 2}},
-        None,  # page 2 failed after its retries
-    ])
-
-    async def fetch(_client, _url):
-        return next(pages)
-
-    monkeypatch.setattr(fec, "_fetch_with_retry", fetch)
-    assert asyncio.run(dates.fetch_fec_calendar(None, 2028)) == {}

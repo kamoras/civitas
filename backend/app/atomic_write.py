@@ -10,43 +10,35 @@ process; an empty embedding-model version file reads as a model change and
 wipes the vector store. Written beside the target and renamed over it, the
 file is always the old version or the new one.
 
-A read-modify-write of a shared file (update_json_file) also holds an
-exclusive lock across the read and the write, so two writers — the source
-crawl and a ballot sync, the Senate and House pipelines, in one process or
-two — can't each write back a copy missing the other's change.
+A read-modify-write of a file two writers share (update_json_file — the
+Senate and House pipelines each own a key of the population references and
+the member ideal points) also holds an exclusive lock across the read and
+the write, so neither can write back a copy missing the other's key.
 """
 
 import fcntl
 import json
-import logging
 import os
 import stat
 import time
 import uuid
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
-# How long update_json_file waits for another writer's lock, by default. A
-# holder keeps it for one read and one write — milliseconds, though an fsync
-# on the Pi's SD card under a pipeline's I/O can take seconds — so a wait
-# this long means a stuck writer, not a busy one. The writers are pipeline
-# steps, each on its own thread and event loop (never the API's), so a wait
-# delays only the pipeline that waits. A loop of saves (the crawl, a state
-# each) passes a shorter one (DATA_FILE_WAIT_S): behind a stuck writer it
-# pays that per save.
+# How long update_json_file waits for another writer's lock. A holder keeps
+# it for one read and one write — milliseconds, though an fsync on the Pi's
+# SD card under a pipeline's I/O can take seconds — so a wait this long
+# means a stuck writer, not a busy one. The writers are pipeline steps, each
+# on its own thread and event loop (never the API's), so a wait delays only
+# the pipeline that waits.
 LOCK_WAIT_S = 10.0
-DATA_FILE_WAIT_S = 2.0
 
 
 class LockTimeout(Exception):
-    """Another writer held a file's lock past the caller's wait
-    (update_json_file's `wait`). Not an OSError:
-    callers take OSError to mean "this path isn't writable, try the next",
-    and a change written to a fallback path because of a lock race would be
-    lost the next time the primary is read. The update didn't happen; the
-    caller decides what that costs."""
+    """Another writer held a file's lock past LOCK_WAIT_S. Not an OSError: a
+    caller that takes OSError to mean "this path isn't writable, try the
+    next" would write the change where the next read won't look. The update
+    didn't happen; the caller decides what that costs."""
 
 
 def write_text_atomic(path: str | os.PathLike, text: str) -> None:
@@ -80,25 +72,20 @@ def update_json_file(
     update: Callable[[dict[str, Any]], dict[str, Any]],
     *,
     missing: Callable[[], dict[str, Any]] = dict,
-    written: Callable[[dict[str, Any]], None] | None = None,
     end: str = "",
-    wait: float | None = None,
     **dump_kwargs: Any,
 ) -> dict[str, Any]:
     """Read `path`'s JSON object, `update` it, and write it back whole —
     under an exclusive lock (`path`.lock) held across all three, so no
     concurrent writer's change is lost. `missing()` stands in for a file
-    that doesn't exist or doesn't hold a JSON object. `written(data)` runs
-    before the lock is released — for a module cache, so writers publish
-    their copies in the order they wrote them. `end` follows the JSON (a
-    trailing newline). `wait` bounds the lock wait (LOCK_WAIT_S by default).
-    Returns what was written.
-    Raises OSError when the file can't be written, LockTimeout when another
-    writer holds the lock past `wait`."""
+    that doesn't exist or doesn't hold a JSON object; `end` follows the JSON
+    (a trailing newline). Returns what was written. Raises OSError when the
+    file can't be written, LockTimeout when another writer holds the lock
+    past LOCK_WAIT_S."""
     path = os.fspath(path)
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with open(f"{path}.lock", "a") as lock:
-        _lock(lock.fileno(), path, LOCK_WAIT_S if wait is None else wait)  # released when the file closes
+        _lock(lock.fileno(), path)  # released when the file closes
         try:
             with open(path, encoding="utf-8") as fh:
                 current = json.load(fh)
@@ -108,96 +95,16 @@ def update_json_file(
             current = missing()
         updated = update(dict(current))
         write_text_atomic(path, json.dumps(updated, **dump_kwargs) + end)
-        if written is not None:
-            written(updated)
         return updated
 
 
-def _lock(fd: int, path: str, wait: float) -> None:
-    give_up = time.monotonic() + wait
+def _lock(fd: int, path: str) -> None:
+    give_up = time.monotonic() + LOCK_WAIT_S
     while True:
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             return
         except BlockingIOError:
             if time.monotonic() >= give_up:
-                raise LockTimeout(f"{path} stayed locked by another writer for {wait}s") from None
+                raise LockTimeout(f"{path} stayed locked by another writer for {LOCK_WAIT_S}s") from None
             time.sleep(0.02)
-
-
-def shared_file_path(paths: Iterable[str]) -> str | None:
-    """The one file of a shared data file's candidate `paths` that both its
-    loader (load_shared_file) and its writers (update_shared_file) use: the
-    first that exists; before it exists anywhere, the first in a directory
-    that exists and is writable (the data volume in production); failing
-    that, the last, its directory created (the checkout's data/ in
-    development). Chosen before any read or write, never by one failing, so
-    a file that can't be read or written is a failure on that file, not a
-    quiet switch to another that the next process wouldn't look at."""
-    paths = list(paths)
-    for path in paths:
-        if os.path.exists(path):
-            return path
-    for path in paths:
-        directory = os.path.dirname(os.path.abspath(path))
-        if os.path.isdir(directory) and os.access(directory, os.W_OK):
-            return path
-    if not paths:
-        return None
-    try:
-        os.makedirs(os.path.dirname(os.path.abspath(paths[-1])), exist_ok=True)
-    except OSError:
-        return None
-    return paths[-1]
-
-
-def load_shared_file(paths: Iterable[str], what: str) -> dict[str, Any]:
-    """A shared data file's contents ({} when it doesn't exist yet, or can't
-    be read — logged), from the file shared_file_path picks."""
-    path = shared_file_path(paths)
-    if path is None:
-        return {}
-    try:
-        with open(path, encoding="utf-8") as fh:
-            loaded = json.load(fh)
-    except FileNotFoundError:
-        return {}
-    except Exception:
-        logger.exception("Failed to read %s from %s", what, path)
-        return {}
-    return loaded if isinstance(loaded, dict) else {}
-
-
-def update_shared_file(
-    paths: Iterable[str],
-    change: Callable[[dict[str, Any]], dict[str, Any]],
-    *,
-    missing: Callable[[], dict[str, Any]],
-    publish: Callable[[dict[str, Any]], None],
-    what: str,
-    wait: float | None = None,
-    **dump_kwargs: Any,
-) -> bool:
-    """`change` a shared data file that has a module cache — the file
-    shared_file_path picks, as its loader does — returning whether the
-    change was recorded; `publish(data)` updates the cache under the file's
-    lock. A failure (another writer holding it past `wait`,
-    DATA_FILE_WAIT_S by default; a full disk) records nothing, anywhere:
-    never another path, and never the cache alone, which the next process
-    wouldn't have. The file and the cache agree; the caller says what the
-    loss costs."""
-    path = shared_file_path(paths)
-    if path is None:
-        logger.warning("%s not recorded — no data directory among %s", what, ", ".join(paths))
-        return False
-    try:
-        update_json_file(
-            path, change, missing=missing, written=publish,
-            wait=DATA_FILE_WAIT_S if wait is None else wait, **dump_kwargs,
-        )
-        return True
-    except LockTimeout:
-        logger.warning("%s not recorded — %s stayed locked by another writer", what, path)
-    except OSError:
-        logger.warning("%s not recorded — %s couldn't be written", what, path, exc_info=True)
-    return False

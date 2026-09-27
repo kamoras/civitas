@@ -57,47 +57,8 @@ class TestCrawlAdoption:
         monkeypatch.setattr(sc, "discover_filings", no_filings)
         monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"ZZ": ["example.gov"]})
         monkeypatch.setattr(sc, "STRATEGIES", {"tabular": fake_fetch})
-        monkeypatch.setattr(sc, "save_discovered", lambda st, src: saved.update({st: src}) is None)
+        monkeypatch.setattr(sc, "save_discovered", lambda st, src: saved.update({st: src}))
         return saved
-
-    @pytest.mark.asyncio
-    async def test_one_states_failure_is_that_states_not_the_sweeps(self, db_session, monkeypatch):
-        """A hand-verified adapter raising on a changed page costs its state,
-        not every state after it."""
-        self._patch(monkeypatch, records=[])
-        monkeypatch.setattr(sc, "ELECTION_DOMAINS", {st: ["x.gov"] for st in ("AA", "BB")})
-
-        async def broken(client, cycle, state, source):
-            raise ValueError("the page changed")
-
-        monkeypatch.setattr(sc, "STRATEGIES", {"broken": broken})
-        monkeypatch.setattr(sc, "_sources_file", lambda: {"states": {"AA": {"strategy": "broken"}}})
-        monkeypatch.setattr(sc, "_forget_if_broken", lambda *a: _none())
-        crawled = []
-
-        async def discover(client, state, cycle, rules=None):
-            crawled.append(state)
-            return None
-
-        monkeypatch.setattr(sc, "discover_source", discover)
-        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
-        assert outcomes["AA"] == "error" and crawled == ["BB"]
-
-    @pytest.mark.asyncio
-    async def test_a_source_proved_but_not_recorded_is_not_adopted(self, db_session, monkeypatch):
-        """A save that lost a lock race isn't reported as an adoption."""
-        # Matched records are needed for the adoption path: reuse the
-        # positive test's setup through _patch, then make the save fail.
-        saved = self._patch(monkeypatch, records=[])
-        monkeypatch.setattr(sc, "save_discovered", lambda st, src: False)
-        monkeypatch.setattr(sc, "_confirmed_match", lambda *a: object())
-
-        async def one_record(client, cycle, state, source):
-            return [{"office": "S", "name": "A Person"}]
-
-        monkeypatch.setattr(sc, "STRATEGIES", {"tabular": one_record})
-        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
-        assert outcomes["ZZ"] == "error" and saved == {}
 
     @pytest.mark.asyncio
     async def test_adopts_a_source_whose_nominees_are_real_candidates(
@@ -228,14 +189,17 @@ class TestForgetsBrokenDiscoveries:
     """The other half of self-healing: finding a state's new location only
     helps if the dead one goes away."""
 
-    @staticmethod
-    def _setup(monkeypatch, saved, *, fetches):
-        """ZZ holds a discovered source; `fetches` says whether it does now."""
+    @pytest.mark.asyncio
+    async def test_a_discovered_source_that_stopped_fetching_is_forgotten(
+        self, db_session, monkeypatch,
+    ):
+        saved = {"ZZ": {"strategy": "tabular"}}
+
         async def nothing_found(client, state, cycle, rules=None):
             return None
 
-        async def source(client, cycle, state, src):
-            return [] if fetches() else None
+        async def broken(client, cycle, state, source):
+            return None
 
         async def no_filings(client, state, cycle):
             return None
@@ -243,92 +207,17 @@ class TestForgetsBrokenDiscoveries:
         async def no_calendar(client, cycle):
             return {}
 
-        def record(st, src):
-            if src is None:
-                saved.pop(st, None)
-            else:
-                saved[st] = src
-            return True
-
         monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
         monkeypatch.setattr(sc, "discover_source", nothing_found)
         monkeypatch.setattr(sc, "discover_filings", no_filings)
         monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"ZZ": ["example.gov"]})
-        monkeypatch.setattr(sc, "STRATEGIES", {"tabular": source})
-        monkeypatch.setattr(sc, "discovered_states", lambda: set(saved))
+        monkeypatch.setattr(sc, "STRATEGIES", {"tabular": broken})
+        monkeypatch.setattr(sc, "discovered_states", lambda: {"ZZ"})
         monkeypatch.setattr(sc, "source_for_state", lambda st: saved.get(st))
-        monkeypatch.setattr(sc, "_discovered_source", lambda st: saved.get(st))
-        monkeypatch.setattr(sc, "save_discovered", record)
-
-    @staticmethod
-    def _on(monkeypatch, day):
-        from datetime import datetime
-
-        monkeypatch.setattr(sc, "utcnow", lambda: datetime(2026, 9, day, 3))
-
-    @pytest.mark.asyncio
-    async def test_a_source_failing_two_weeks_running_is_forgotten(self, db_session, monkeypatch):
-        """One night's failure is as likely the network as the source: it is
-        marked failing and kept in use, and forgotten when the next week's
-        crawl finds it failing too (a re-run the same week doesn't count)."""
-        saved = {"ZZ": {"strategy": "tabular"}}
-        self._setup(monkeypatch, saved, fetches=lambda: False)
-        self._on(monkeypatch, 1)
-        assert (await sc.crawl_for_new_sources(db_session, None, 2026))["ZZ"] == "failing"
-        assert saved["ZZ"]["failing_since"] == "2026-09-01"
-        self._on(monkeypatch, 3)
-        assert (await sc.crawl_for_new_sources(db_session, None, 2026))["ZZ"] == "failing"
-        self._on(monkeypatch, 8)
-        assert (await sc.crawl_for_new_sources(db_session, None, 2026))["ZZ"] == "forgotten"
+        monkeypatch.setattr(sc, "save_discovered", lambda st, src: saved.pop(st))
+        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert outcomes["ZZ"] == "forgotten"
         assert saved == {}
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize("mark", ["2026-06-01", "not a date"])
-    async def test_a_stale_or_malformed_mark_starts_the_count_again(self, db_session, monkeypatch, mark):
-        """A mark from months ago (the source worked since) isn't last week's
-        failure; neither is one that can't be read."""
-        saved = {"ZZ": {"strategy": "tabular", "failing_since": mark}}
-        self._setup(monkeypatch, saved, fetches=lambda: False)
-        self._on(monkeypatch, 15)
-        assert (await sc.crawl_for_new_sources(db_session, None, 2026))["ZZ"] == "failing"
-        assert saved["ZZ"]["failing_since"] == "2026-09-15"
-
-    @pytest.mark.asyncio
-    async def test_a_source_that_recovers_is_unmarked(self, db_session, monkeypatch):
-        """An outage (early or late in the sweep) or a blip forgets nothing."""
-        up = {"now": False}
-        saved = {"ZZ": {"strategy": "tabular"}}
-        self._setup(monkeypatch, saved, fetches=lambda: up["now"])
-        self._on(monkeypatch, 1)
-        await sc.crawl_for_new_sources(db_session, None, 2026)
-        up["now"] = True
-        self._on(monkeypatch, 8)
-        assert (await sc.crawl_for_new_sources(db_session, None, 2026))["ZZ"] == "kept"
-        assert saved["ZZ"] == {"strategy": "tabular"}
-
-    @pytest.mark.asyncio
-    async def test_a_forget_that_wasnt_recorded_is_not_reported_forgotten(self, db_session, monkeypatch):
-        saved = {"ZZ": {"strategy": "tabular", "failing_since": "2026-09-01"}}
-        self._setup(monkeypatch, saved, fetches=lambda: False)
-        self._on(monkeypatch, 8)
-        monkeypatch.setattr(sc, "save_discovered", lambda st, src: False)  # a lost lock race
-        assert (await sc.crawl_for_new_sources(db_session, None, 2026))["ZZ"] == "error"
-
-    @pytest.mark.asyncio
-    async def test_a_filing_list_alone_is_re_proved_each_week(self, db_session, monkeypatch):
-        """No results source to mark failing: forgotten at once, and the
-        crawl looks for (re-proves) the filing list straight after."""
-        saved = {"ZZ": {"filings": {"primary": "https://x.gov/list.csv"}}}
-        self._setup(monkeypatch, saved, fetches=lambda: False)
-        looked = []
-
-        async def adopt(db, client, cycle, state, base):
-            looked.append(state)
-            return "none"
-
-        monkeypatch.setattr(sc, "_adopt_filings", adopt)
-        assert (await sc.crawl_for_new_sources(db_session, None, 2026))["ZZ"] == "forgotten"
-        assert looked == ["ZZ"]
 
     @pytest.mark.asyncio
     async def test_one_that_still_fetches_survives_a_crawl_that_missed_it(
@@ -357,8 +246,7 @@ class TestForgetsBrokenDiscoveries:
         monkeypatch.setattr(sc, "STRATEGIES", {"tabular": working})
         monkeypatch.setattr(sc, "discovered_states", lambda: {"ZZ"})
         monkeypatch.setattr(sc, "source_for_state", lambda st: saved.get(st))
-        monkeypatch.setattr(sc, "_discovered_source", lambda st: saved.get(st))
-        monkeypatch.setattr(sc, "save_discovered", lambda st, src: saved.pop(st) and True)
+        monkeypatch.setattr(sc, "save_discovered", lambda st, src: saved.pop(st))
         outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
         assert outcomes["ZZ"] == "kept"
         assert "ZZ" in saved
@@ -568,7 +456,3 @@ class TestSyncConfirmedCandidates:
         results = await sc.sync_confirmed_candidates(db_session, None, 2026)
 
         assert results["TX"]["status"] == "fetch_failed"
-
-
-async def _none():
-    return "none"

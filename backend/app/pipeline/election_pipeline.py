@@ -53,7 +53,6 @@ from app.pipeline.fetch.state_candidates import (
 from app.pipeline.fetch.state_election_dates import senate_election_known
 from app.pipeline.progress_tracker import ProgressTracker
 from app.pipeline import lease
-from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock_why, skip_reason_text
 from app.time_utils import utcnow
 
@@ -778,51 +777,9 @@ def _prune_stale_coverage(db: Session) -> int:
     return deleted
 
 
-# When the last source crawl completed, in api_cache — so "weekly" is a
-# week since it last ran, and a night the crawl failed is made up the next
-# night rather than the next week.
-_CRAWL_TIER, _CRAWL_KEY = "election", "source-crawl-completed"
-# A little under a week: the nightly run's start time drifts by minutes.
-_CRAWL_EVERY_HOURS = 7 * 24 - 12
-
-
-def _crawl_due(db: Session) -> bool:
-    return api_cache_get(db, _CRAWL_TIER, _CRAWL_KEY, max_age_hours=_CRAWL_EVERY_HOURS) is None
-
-
-async def _weekly_source_crawl(db: Session, client, cycle: int) -> dict[str, str]:
-    """Crawl for new ballot sources, when a week has passed since the last
-    crawl completed; the states it adopted. Weekly, not nightly: this sweeps
-    every state that has no hand-verified source, and what it looks for — a
-    state standing up a results portal, a new cycle's file appearing —
-    moves on the scale of weeks, not hours. Runs BEFORE the sync so anything
-    it proves out contributes the same night, but outside the sync's guards
-    and their time budget: it writes no Candidate row, and the discovered-
-    source and election-date files it shares with the sync are updated
-    under their own lock (atomic_write.update_json_file). It needs no guard
-    of its own: it runs only inside this run, whose run lock the data reset
-    already respects and whose hung-run limit bounds it, as it does every
-    other step here. Best-effort — a failure is logged, costs the night's
-    sync nothing, and the crawl runs again the next night."""
-    try:
-        if not _crawl_due(db):
-            return {}
-        leads = await crawl_for_new_sources(db, client, cycle)
-        api_cache_set(db, _CRAWL_TIER, _CRAWL_KEY, {"completedAt": utcnow().isoformat()})
-    except Exception:
-        db.rollback()
-        logger.exception("Source crawl failed — the sync goes ahead, and the crawl runs again tomorrow")
-        return {}
-    adopted = {s: r for s, r in leads.items() if r.startswith("adopted")}
-    logger.info(
-        "Source crawl: %d state(s) adopted%s",
-        len(adopted), f" — {adopted}" if adopted else "",
-    )
-    return adopted
-
-
 def _adopted_detail(adopted: dict[str, str]) -> str:
-    """The crawl's part of the phase's dashboard detail."""
+    """The crawl's part of the phase's dashboard detail — whether this
+    week's crawl (Sundays only) found anything new."""
     if not adopted:
         return ""
     return f"; crawler adopted {len(adopted)} this week: {', '.join(sorted(adopted))}"
@@ -920,7 +877,21 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
             progress.begin("confirmed_candidates")
             confirmed_open = True  # until the phase is marked done or skipped
             try:
-                adopted = await _weekly_source_crawl(db, client, cycle)
+                # Weekly, not nightly: this sweeps every state that has no
+                # hand-verified source, and what it looks for — a state
+                # standing up a results portal, a new cycle's file
+                # appearing — moves on the scale of weeks, not hours. Same
+                # self-gating shape as ops_alerts' weekly checks. Runs
+                # BEFORE the sync so anything it proves out contributes the
+                # same night.
+                adopted: dict[str, str] = {}
+                if utcnow().weekday() == 6:
+                    leads = await crawl_for_new_sources(db, client, cycle)
+                    adopted = {s: r for s, r in leads.items() if r.startswith("adopted")}
+                    logger.info(
+                        "Source crawl: %d state(s) adopted%s",
+                        len(adopted), f" — {adopted}" if adopted else "",
+                    )
                 # The election-season ballot sync may be mid-pass; two
                 # passes writing the same Candidate rows at once is the one
                 # thing to avoid, and that pass is doing this step anyway.
