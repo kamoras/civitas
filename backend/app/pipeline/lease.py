@@ -21,6 +21,7 @@ from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta
 
+from sqlalchemy import insert
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
@@ -160,8 +161,10 @@ def acquire(
                 stale = stale.filter(ApiCache.cached_at == found.cached_at, ApiCache.data_json == found.data_json)
         stale.delete()
         row = {"holder": token, "who": who or TIERS[tier]}
-        db.add(ApiCache(tier=tier, cache_key="lock", data_json=json.dumps(row), cached_at=now))
-        db.flush()
+        # A Core insert, not db.add: the session may already hold the live
+        # holder's row (read by held()), and an ORM add of the same key
+        # warns before failing on the unique key as the refusal below.
+        db.execute(insert(ApiCache).values(tier=tier, cache_key="lock", data_json=json.dumps(row), cached_at=now))
         if yield_to is not None and held(db, yield_to):
             db.rollback()
             return None

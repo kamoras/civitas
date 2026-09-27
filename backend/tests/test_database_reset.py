@@ -416,14 +416,20 @@ class TestLease:
 
         from app.pipeline import lease
 
-        def fail(message):
-            def flush():
-                raise OperationalError("INSERT", {}, Exception(message))
-            return flush
+        from sqlalchemy.sql.dml import Insert
 
-        monkeypatch.setattr(db_session, "flush", fail("database is locked"))
+        execute = db_session.execute
+
+        def fail(message):
+            def on_insert(statement, *args, **kwargs):
+                if isinstance(statement, Insert):  # the take's own write
+                    raise OperationalError("INSERT", {}, Exception(message))
+                return execute(statement, *args, **kwargs)
+            return on_insert
+
+        monkeypatch.setattr(db_session, "execute", fail("database is locked"))
         assert lease.acquire(db_session, lease.BILL_REFRESH) is None
-        monkeypatch.setattr(db_session, "flush", fail("no such table: api_cache"))
+        monkeypatch.setattr(db_session, "execute", fail("no such table: api_cache"))
         with pytest.raises(OperationalError):
             lease.acquire(db_session, lease.BILL_REFRESH)
 
