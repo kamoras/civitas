@@ -56,6 +56,15 @@ def test_stock_trade_schema_late_flag_derived():
     assert late.late is True
 
 
+def test_a_stored_owner_the_schema_lacks_reads_as_not_stated(db_session):
+    _senator(db_session)
+    trade = _trade("S1")
+    trade.owner = "trust"
+    db_session.add(trade)
+    db_session.commit()
+    assert get_senator_stock_trades(db_session, "S1").trades[0].owner == "unknown"
+
+
 def test_get_senator_stock_trades_not_found_returns_none(db_session):
     assert get_senator_stock_trades(db_session, "does-not-exist") is None
 

@@ -66,6 +66,8 @@ from typing import Any
 import numpy as np
 from sqlalchemy.orm import Session
 
+from app.pipeline.analyze.bill_stage import became_law_action
+
 logger = logging.getLogger(__name__)
 
 POLICY_TAXONOMY = {
@@ -962,7 +964,7 @@ def _extract_bill_date(actions: list[dict]) -> str:
         return ""
     for action in actions:
         text = (action.get("text") or "").lower()
-        if any(kw in text for kw in ("became public law", "signed by president", "passed senate")):
+        if became_law_action(text) or any(kw in text for kw in ("signed by president", "passed senate")):
             date_str = action.get("actionDate") or action.get("date") or ""
             if date_str:
                 return date_str

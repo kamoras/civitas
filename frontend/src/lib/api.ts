@@ -1,4 +1,4 @@
-import { LeaderboardEntry, PaginatedStockTrades, PaginatedVotes, Senator } from "@/types/senator";
+import { Holdings, LeaderboardEntry, PaginatedStockTrades, PaginatedVotes, Senator } from "@/types/senator";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 import type { JusticeLeaderboardEntry } from "@/types/justice";
 import type { ActionIssue, ActionIssuesResponse, MyRepsResponse } from "@/types/action";
@@ -372,6 +372,36 @@ export async function fetchSenatorStockTrades(
   options?: { page?: number; perPage?: number }
 ): Promise<PaginatedStockTrades> {
   return fetchPaginatedStockTrades(CHAMBER_PATH[Chamber.Senate], senatorId, options);
+}
+
+/** Asset holdings from a member's latest annual financial disclosure: the
+ * by-category breakdown plus one page of holdings, largest first, optionally
+ * narrowed to one category. */
+async function fetchHoldings(
+  chamber: Chamber,
+  memberId: string,
+  options?: HoldingsOptions
+): Promise<Holdings> {
+  const params = new URLSearchParams();
+  if (options?.page) params.set("page", String(options.page));
+  if (options?.perPage) params.set("per_page", String(options.perPage));
+  if (options?.category) params.set("category", options.category);
+  // Loaded like the stock-trade and vote pages, outside cachedFetch's
+  // client cache.
+  return requestJson(
+    `${API_BASE}/${CHAMBER_PATH[chamber]}/${memberId}/holdings?${params}`,
+    "Failed to load holdings",
+  );
+}
+
+type HoldingsOptions = { page?: number; perPage?: number; category?: string | null };
+
+export async function fetchSenatorHoldings(senatorId: string, options?: HoldingsOptions): Promise<Holdings> {
+  return fetchHoldings(Chamber.Senate, senatorId, options);
+}
+
+export async function fetchRepHoldings(repId: string, options?: HoldingsOptions): Promise<Holdings> {
+  return fetchHoldings(Chamber.House, repId, options);
 }
 
 /** Disclosed buy/sell/exchange transactions from a president's OGE Form
@@ -1129,6 +1159,10 @@ export interface ActionRefreshState {
 
 export interface AdminPipelineStatus {
   isRunning: boolean;
+  // A RUNNING Senate row no live lease speaks for — past the 12h age rule,
+  // proven dead by its own lapsed lease, or named by no lease: shown as
+  // stuck, and the one case clear-stuck-senate accepts.
+  senateRowClearable?: boolean;
   houseIsRunning?: boolean;
   stockTradesIsRunning?: boolean;
   supplementaryIsRunning?: boolean;
@@ -1151,9 +1185,24 @@ export interface AdminPipelineStatus {
   actionRefresh?: ActionRefreshState;
 }
 
+/** Whether a Senate run is going, as every admin view shows it: the status's
+ * isRunning, except for a row no live lease speaks for (senateRowClearable),
+ * which is shown as stuck rather than running. */
+export function senateIsRunning(status: AdminPipelineStatus | null | undefined): boolean {
+  return !!status?.isRunning && !status?.senateRowClearable;
+}
+
 export async function fetchAdminPipelineStatus(token: string): Promise<AdminPipelineStatus> {
   return requestJson(`${API_BASE}/admin/pipeline/status`, "Status failed", {
     init: { headers: adminHeaders(token) },
+  });
+}
+
+export async function clearStuckSenatePipeline(
+  token: string
+): Promise<{ cleared: number; message: string }> {
+  return requestJson(`${API_BASE}/admin/pipeline/clear-stuck-senate`, "Clear failed", {
+    init: { method: "POST", headers: adminHeaders(token) },
   });
 }
 

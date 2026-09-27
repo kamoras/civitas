@@ -21,13 +21,14 @@ from app.config import settings
 from app.database import SessionLocal
 from app.http_client import make_async_client
 from app.models import HousePipelineRun, PipelineStatus, Representative, ScoreSnapshot
+from app.pipeline.analyze.bill_stage import is_enacted
 from app.pipeline.member_lifecycle import (
     CHAMBER_HOUSE,
     purge_departed_members,
     reconcile_roster,
 )
 from app.pipeline.progress_tracker import ProgressTracker
-from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
+from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_tracked_run, skip_reason_text
 from app.services.representative_service import upsert_representative
 
 from app.pipeline.fetch.congress import (
@@ -126,18 +127,18 @@ def recent_not_covered_by_key_bills(
 async def run_house_pipeline() -> dict:
     """Run the full House representative pipeline."""
     db = SessionLocal()
+    _run_token = None  # no run of ours for the finally to stop until start() below
 
     # Acquire the run lock BEFORE any global/DB mutation — same reasoning
     # as senate_pipeline.py's _acquire_pipeline_lock call. Without it, a row
     # orphaned by a killed process (a deploy restarting the container
     # mid-run) stays "running" forever, blocking every future House run.
-    house_run = acquire_pipeline_lock(db, HousePipelineRun, STALE_PIPELINE_TIMEOUT)
+    house_run, _run_token, refused = acquire_tracked_run(db, HousePipelineRun, STALE_PIPELINE_TIMEOUT, _tracker)
     if house_run is None:
-        logger.warning("House pipeline already running in another process — skipping")
+        logger.warning("House pipeline not started: %s", skip_reason_text(refused))
         db.close()
-        return {"status": "skipped", "reason": "already_running"}
+        return {"status": "skipped", "reason": refused}
 
-    _tracker.start()
     start_time = time.time()
     reset_fec_run_state()  # clear the by_contributor circuit breaker from any prior run
 
@@ -418,11 +419,11 @@ async def run_house_pipeline() -> dict:
                             sp_key = f"{sp_type}.{sp_num}"
                             sp_title = sp.get("title", "")
                             latest_action_text = (sp.get("latestAction") or {}).get("text", "")
-                            is_law = "became public law" in latest_action_text.lower()
                             sp_congress = sp.get("congress", 0)
                             bill_actions = await fetch_bill_actions(
                                 client, db, sp_congress, sp_type.lower(), int(sp_num),
                             )
+                            is_law = is_enacted(latest_action_text, bill_actions)
                             # Sponsored bills previously got no policy/party
                             # classification at all here (always None/[]) —
                             # unlike Senate, which classifies every sponsored
@@ -973,7 +974,7 @@ async def run_house_pipeline() -> dict:
             logger.exception("Failed to record house pipeline failure")
         return {"status": PipelineStatus.FAILED, "error": str(e)[:500]}
     finally:
-        _tracker.stop()
+        _tracker.stop(_run_token)
         db.close()
 
 

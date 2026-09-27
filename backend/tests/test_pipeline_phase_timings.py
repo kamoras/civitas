@@ -287,3 +287,18 @@ async def test_timings_endpoint_is_empty_before_any_run_records_timings(db_sessi
     result = await admin_pipeline_timings(kind="house_pipeline_runs", runs=10, db=db_session)
     assert result["runs"] == []
     assert result["phaseTrend"] == {}
+
+
+def test_skip_pending_leaves_finished_steps_alone(db_session):
+    """A run that ends early by design (fetch-only) skips what never
+    started, whatever the step list holds, and nothing it finished."""
+    run = PipelineRun(status="running")
+    tracker = _tracker(db_session, run)
+    tracker.begin("fetch_a")
+    tracker.complete("fetch_a")
+    tracker.begin("fetch_b")
+    tracker.complete("fetch_b")
+    tracker.skip_pending(detail="fetch-only mode")
+
+    statuses = {s["key"]: s["status"] for s in json.loads(run.progress_detail)}
+    assert statuses == {"fetch_a": "done", "fetch_b": "done", "analyze_a": "skipped", "finalize": "skipped"}

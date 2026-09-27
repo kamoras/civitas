@@ -3,10 +3,10 @@ from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 
 import logging
-import threading
 from app.config import settings
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
@@ -14,7 +14,7 @@ from app.api.cache_headers import DataVersionCacheMiddleware
 from app.api.router import api_router
 from app.database import init_db
 from app.scheduler import start_scheduler, stop_scheduler
-from app.time_utils import utcnow
+from app.background import WritesHeld, start_writer, writing
 
 # Configure logging level from PIPELINE_LOG_LEVEL env setting
 _level_name = (settings.PIPELINE_LOG_LEVEL or "info").upper()
@@ -50,7 +50,17 @@ async def _bootstrap_explore() -> None:
             _logger = logging.getLogger("app.main")
             _logger.info("Explore document store is empty — running initial ingestion")
             from app.pipeline.explore_pipeline import run_explore_pipeline
-            await run_explore_pipeline(days_back=60)
+            from app.pipeline import lease
+
+            # Registered for the admin data reset: the pipeline hands its
+            # writes to threads while this awaits. And a lease, so a reset in
+            # another process sees it too.
+            with writing("Explore bootstrap"):
+                async with lease.job_async(lease.EXPLORE) as held:
+                    if held:
+                        await run_explore_pipeline(days_back=60)
+    except WritesHeld as held:
+        logging.getLogger("app.main").info("%s", held)
     except Exception as e:
         logging.getLogger("app.main").warning("Explore bootstrap failed: %s", e)
 
@@ -65,8 +75,8 @@ def _preload_embedding_model() -> None:
 
 
 def _invalidate_orphaned_pipelines() -> None:
-    """Mark any 'running' pipeline rows as stale on startup, for every
-    pipeline that holds a run-row lock (acquire_pipeline_lock).
+    """Mark stale the 'running' pipeline rows a restart left behind, for
+    every pipeline (run_tracker.sweep_orphaned_runs).
 
     Pipelines run in threads of the backend process, so a restart kills
     them without letting them record it: any 'running' row is left over
@@ -74,40 +84,13 @@ def _invalidate_orphaned_pipelines() -> None:
     while one runs, which is what keeps a start-first rollout's overlap
     from sweeping a live run.) Every table, not just the Senate's: an
     unswept row reads as "running" on the admin dashboard and blocks a
-    manual trigger until STALE_PIPELINE_TIMEOUT ages it out.
+    manual trigger until STALE_PIPELINE_TIMEOUT ages it out. The one
+    exception is a Senate row whose lease still holds — it may be a run
+    live in the other task, the one case that can be seen.
     """
-    from app.database import SessionLocal
-    from app.models import (
-        ElectionPipelineRun,
-        HousePipelineRun,
-        PipelineRun,
-        PipelineStatus,
-        StockTradesPipelineRun,
-        SupplementaryPipelineRun,
-    )
+    from app.pipeline.run_tracker import sweep_orphaned_runs
 
-    db = SessionLocal()
-    try:
-        orphaned = [
-            run
-            for model in (PipelineRun, SupplementaryPipelineRun, HousePipelineRun,
-                          StockTradesPipelineRun, ElectionPipelineRun)
-            for run in db.query(model).filter(model.status == PipelineStatus.RUNNING).all()
-        ]
-        for run in orphaned:
-            run.status = PipelineStatus.STALE
-            run.completed_at = utcnow()
-            run.error_message = "Marked stale: app restarted while pipeline was running"
-            logging.getLogger("app.main").warning(
-                "Invalidated orphaned %s #%d (started %s)",
-                type(run).__name__, run.id, run.started_at,
-            )
-        if orphaned:
-            db.commit()
-    except Exception as e:
-        logging.getLogger("app.main").warning("Orphan pipeline cleanup failed: %s", e)
-    finally:
-        db.close()
+    sweep_orphaned_runs()
 
 
 PROCESS_STARTED_AT: str | None = None
@@ -153,10 +136,27 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from app.pipeline.les_rescore import rescore_stale_legislative_effectiveness
 
     def _startup_rescore() -> None:
-        rescore_stale_legislative_effectiveness(_rescore_session)
-        rescore_stale_constituent_alignment(_rescore_session)
+        from app.pipeline import lease
 
-    threading.Thread(target=_startup_rescore, name="startup-rescore", daemon=True).start()
+        # A lease, so an admin data reset in another process sees this run
+        # and this run sees the reset (lease.DATA_RESET).
+        db = _rescore_session()
+        try:
+            with lease.holding(db, lease.STARTUP_RESCORE, yield_to=lease.DATA_RESET) as token:
+                if token is None:
+                    logging.getLogger("app.main").info(
+                        "Startup rescore skipped: %s", lease.refusal(db, lease.STARTUP_RESCORE),
+                    )
+                    return
+                rescore_stale_legislative_effectiveness(_rescore_session)
+                rescore_stale_constituent_alignment(_rescore_session)
+        except Exception:
+            # Each rescore logs its own failures; this is the lease's.
+            logging.getLogger("app.main").exception("Startup rescore failed")
+        finally:
+            db.close()
+
+    start_writer(_startup_rescore, name="startup-rescore")
 
     from app.api.visits import run_visit_consumer
     visit_consumer_task = asyncio.create_task(run_visit_consumer())
@@ -174,6 +174,15 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+
+
+@app.exception_handler(WritesHeld)
+async def _writes_held(_request, held: WritesHeld) -> JSONResponse:
+    """An endpoint's writer refused while the admin data reset holds the
+    database (app.background.writing)."""
+    return JSONResponse(status_code=409, content={"detail": str(held)})
+
 
 app.add_middleware(GZipMiddleware, minimum_size=500)
 # Added after GZip, so it runs *outside* it: a 304 short-circuit should

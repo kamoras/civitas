@@ -14,13 +14,22 @@ from datetime import timedelta
 from sqlalchemy import text
 
 from app.models import ApiCache, PipelineRun, PipelineStatus
-from app.pipeline.analyze.action_center import (
-    _REFRESH_LOCK_STALE_S,
-    _acquire_refresh_lock,
-    _beat_refresh_lock,
-    _release_refresh_lock,
-)
+from app.pipeline import lease
 from app.time_utils import utcnow
+
+_REFRESH_LOCK_STALE_S = lease.STALE_S
+
+
+def _acquire_refresh_lock(db):
+    return lease.acquire(db, lease.ACTION_REFRESH)
+
+
+def _beat_refresh_lock(db, token):
+    return lease.beat(db, lease.ACTION_REFRESH, token)
+
+
+def _release_refresh_lock(db, token):
+    lease.release(db, lease.ACTION_REFRESH, token)
 
 
 def _create_partial_unique_index(session) -> None:
@@ -182,11 +191,12 @@ class TestAcquirePipelineLock:
     def test_acquires_when_free_and_blocks_second_caller(self, db_session):
         from app.pipeline.senate_pipeline import _acquire_pipeline_lock
 
-        run = _acquire_pipeline_lock(db_session)
+        run, _ = _acquire_pipeline_lock(db_session)
         assert run is not None
         assert run.status == PipelineStatus.RUNNING
-        # Second caller sees the running row and yields (early-return path).
-        assert _acquire_pipeline_lock(db_session) is None
+        # Second caller sees the running row and yields (early-return path),
+        # saying why.
+        assert _acquire_pipeline_lock(db_session) == (None, "already_running")
 
     def test_integrity_error_on_commit_yields_gracefully(self, db_session, monkeypatch):
         # The race window the DB constraint closes: another container
@@ -206,11 +216,11 @@ class TestAcquirePipelineLock:
             return real_commit()
 
         monkeypatch.setattr(db_session, "commit", racing_commit)
-        assert senate_pipeline._acquire_pipeline_lock(db_session) is None
+        assert senate_pipeline._acquire_pipeline_lock(db_session)[0] is None
 
 
 class TestAcquirePipelineLockGeneric:
-    """run_tracker.acquire_pipeline_lock (2026-07-23) — the generalized
+    """run_tracker.acquire_pipeline_lock_why (2026-07-23) — the generalized
     version of senate_pipeline's own lock, extended to House/Stock/
     Supplementary, which had no lock at all before this (not even the
     check-then-insert Senate had pre-O15) — confirmed live as the root
@@ -225,26 +235,26 @@ class TestAcquirePipelineLockGeneric:
 
     def test_acquires_when_free_and_blocks_second_caller(self, db_session):
         from app.models import HousePipelineRun
-        from app.pipeline.run_tracker import acquire_pipeline_lock
+        from app.pipeline.run_tracker import acquire_pipeline_lock_why
 
-        run = acquire_pipeline_lock(db_session, HousePipelineRun, timedelta(hours=12))
+        run = acquire_pipeline_lock_why(db_session, HousePipelineRun, timedelta(hours=12))[0]
         assert run is not None
         assert run.status == PipelineStatus.RUNNING
-        assert acquire_pipeline_lock(db_session, HousePipelineRun, timedelta(hours=12)) is None
+        assert acquire_pipeline_lock_why(db_session, HousePipelineRun, timedelta(hours=12))[0] is None
 
     def test_stale_row_is_auto_cleared_and_fresh_lock_acquired(self, db_session):
         # The core regression fix: a row orphaned by a killed process
         # (container restart mid-run) must not block this pipeline
         # forever — only Senate had this auto-clear before 2026-07-23.
         from app.models import HousePipelineRun
-        from app.pipeline.run_tracker import acquire_pipeline_lock
+        from app.pipeline.run_tracker import acquire_pipeline_lock_why
 
         stale = HousePipelineRun(started_at=utcnow() - timedelta(hours=13), status=PipelineStatus.RUNNING)
         db_session.add(stale)
         db_session.commit()
         stale_id = stale.id
 
-        run = acquire_pipeline_lock(db_session, HousePipelineRun, timedelta(hours=12))
+        run = acquire_pipeline_lock_why(db_session, HousePipelineRun, timedelta(hours=12))[0]
         assert run is not None
         assert run.id != stale_id
 
@@ -254,13 +264,13 @@ class TestAcquirePipelineLockGeneric:
 
     def test_fresh_row_within_timeout_is_not_cleared_and_blocks(self, db_session):
         from app.models import HousePipelineRun
-        from app.pipeline.run_tracker import acquire_pipeline_lock
+        from app.pipeline.run_tracker import acquire_pipeline_lock_why
 
         fresh = HousePipelineRun(started_at=utcnow() - timedelta(hours=1), status=PipelineStatus.RUNNING)
         db_session.add(fresh)
         db_session.commit()
 
-        assert acquire_pipeline_lock(db_session, HousePipelineRun, timedelta(hours=12)) is None
+        assert acquire_pipeline_lock_why(db_session, HousePipelineRun, timedelta(hours=12))[0] is None
         unchanged = db_session.query(HousePipelineRun).one()
         assert unchanged.status == PipelineStatus.RUNNING
 
@@ -268,7 +278,7 @@ class TestAcquirePipelineLockGeneric:
         from sqlalchemy.exc import IntegrityError
 
         from app.models import HousePipelineRun
-        from app.pipeline.run_tracker import acquire_pipeline_lock
+        from app.pipeline.run_tracker import acquire_pipeline_lock_why
 
         real_commit = db_session.commit
         calls = {"n": 0}
@@ -280,7 +290,7 @@ class TestAcquirePipelineLockGeneric:
             return real_commit()
 
         monkeypatch.setattr(db_session, "commit", racing_commit)
-        assert acquire_pipeline_lock(db_session, HousePipelineRun, timedelta(hours=12)) is None
+        assert acquire_pipeline_lock_why(db_session, HousePipelineRun, timedelta(hours=12))[0] is None
 
 
 class TestEnsureIndexesCoversAllFourPipelineTables:
@@ -336,7 +346,7 @@ class TestRefreshActionIssuesLockWrapper:
 
         from app.pipeline.analyze import action_center
 
-        monkeypatch.setattr(action_center, "_REFRESH_LOCK_BEAT_S", 0.02)
+        monkeypatch.setattr(lease, "BEAT_S", 0.02)
         seen = []
 
         def run(db):
@@ -358,3 +368,46 @@ class TestRefreshActionIssuesLockWrapper:
 
         monkeypatch.setattr(db_session, "query", boom)
         _release_refresh_lock(db_session, "token")  # must not raise
+
+
+def test_a_tracked_run_raises_its_flag_before_its_row_commits_and_drops_it_on_refusal(db_session, monkeypatch):
+    """acquire_tracked_run: the flag is up by the time the RUNNING row can be
+    seen, so no reader finds the row with the flag down (the admin status
+    shows that as stuck); a refused start leaves the flag down."""
+    from sqlalchemy import event
+    from sqlalchemy.exc import OperationalError
+
+    from app.models import HousePipelineRun
+    from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_tracked_run
+
+    tracker = PipelineRunTracker()
+    at_commit = []
+
+    def record(_session):
+        at_commit.append(tracker.is_running)
+
+    event.listen(db_session, "before_commit", record)
+    try:
+        run, token, why = acquire_tracked_run(db_session, HousePipelineRun, STALE_PIPELINE_TIMEOUT, tracker)
+    finally:
+        event.remove(db_session, "before_commit", record)
+    assert run is not None and why is None and at_commit == [True] and tracker.is_running
+
+    again, again_token, why = acquire_tracked_run(db_session, HousePipelineRun, STALE_PIPELINE_TIMEOUT, tracker)
+    assert again is None and again_token is None and why is not None
+    assert tracker.is_running  # the refusal leaves the live run's flag alone
+    tracker.stop(token)
+    assert not tracker.is_running
+
+    run.status = "completed"
+    db_session.commit()
+    fresh, raised = PipelineRunTracker(), []
+
+    def locked_commit():
+        raised.append(fresh.is_running)
+        raise OperationalError("COMMIT", {}, Exception("database is locked"))
+
+    monkeypatch.setattr(db_session, "commit", locked_commit)
+    assert acquire_tracked_run(db_session, HousePipelineRun, STALE_PIPELINE_TIMEOUT, fresh)[0] is None
+    monkeypatch.undo()
+    assert raised == [True] and not fresh.is_running  # up for the commit, down once it failed

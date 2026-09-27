@@ -129,3 +129,14 @@ async def test_fetch_and_parse_ptr_parse_exception_returns_empty_not_raises(db_s
         mock_parse.side_effect = Exception("corrupt PDF")
         rows = await fetch_and_parse_ptr(None, db_session, filing)
     assert rows == []
+
+
+@pytest.mark.asyncio
+async def test_a_failed_index_download_is_not_cached_as_empty(db_session):
+    from app.pipeline.fetch.house_ptr import fetch_filing_index
+
+    with patch("app.pipeline.fetch.house_ptr.fetch_bytes_with_retry", new_callable=AsyncMock, return_value=b"not a zip"):
+        assert await fetch_filing_index(None, db_session, 2026, filing_types={"O"}, pdf_dir="x") is None
+    with patch("app.pipeline.fetch.house_ptr.fetch_bytes_with_retry", new_callable=AsyncMock, return_value=None) as get:
+        assert await fetch_filing_index(None, db_session, 2026, filing_types={"O"}, pdf_dir="x") is None
+    get.assert_awaited_once()  # asked again, not answered from a cached []

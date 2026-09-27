@@ -13,9 +13,9 @@ than issuing multiple run_until_complete calls.
 
 import asyncio
 import logging
-import threading
 from collections.abc import Awaitable
 from typing import Callable
+from app.background import start_writer
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,8 @@ def run_pipeline_in_thread(
 
     Any exception — including ``BaseException`` (SystemExit/KeyboardInterrupt) —
     is logged under ``error_label`` and never propagated out of the thread, so a
-    failed run can't take the process down.
+    failed run can't take the process down. Raises WritesHeld (a 409) instead
+    of starting while the admin data reset holds the database.
     """
     def _run() -> None:
         loop = asyncio.new_event_loop()
@@ -42,4 +43,4 @@ def run_pipeline_in_thread(
         finally:
             loop.close()
 
-    threading.Thread(target=_run, daemon=True, name=name).start()
+    start_writer(_run, name=name)

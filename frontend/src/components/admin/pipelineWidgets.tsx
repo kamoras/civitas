@@ -494,9 +494,9 @@ export function RunHistory({ runs: allRuns }: { runs: PipelineHistoryRun[] }) {
 
 /**
  * One "PIPELINE  STATUS · detail" row plus its stuck-run clear button.
- * Shared by the House and Stock Trades rows (which both track a
- * possibly-stuck DB run separate from the in-memory running flag); Senate
- * has no stuck-run concept and renders its own row inline.
+ * Shared by every pipeline's row: each tracks a possibly-stuck DB run
+ * separate from whether a run is going — the in-memory running flag, or for
+ * Senate, senateIsRunning (a row no live lease speaks for is stuck).
  */
 export function PipelineStatusRow({
   label,

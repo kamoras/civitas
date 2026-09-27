@@ -33,6 +33,7 @@ conservative at the 15-minute election-season cadence, 96 runs/day):
 """
 
 import logging
+import time
 from datetime import timedelta
 
 from sqlalchemy.orm import Session
@@ -286,12 +287,20 @@ def _drain_stale_unconsidered(db: Session) -> int:
     return drained
 
 
-def post_race_coverage_updates(db: Session) -> int:
+def post_race_coverage_updates(db: Session, *, deadline: float | None = None) -> int:
     """Post a capped, prioritized batch of not-yet-considered coverage
     items to Bluesky. No-op if Bluesky credentials aren't configured.
     Every considered item (posted or not) is marked bsky_posted_at so the
     next run doesn't re-evaluate it; actually-published items additionally
     set bsky_posted (the daily budget counts only those).
+
+    One pass at a time: both callers hold the coverage refresh's lease and
+    tracker (lease.tracked_job), which hold for lease.max_hold. `deadline`
+    (time.monotonic(), from lease.deadline) is where they stop holding: no
+    item is started past it. This loop never awaits, so the cut-off at
+    max_hold can't stop it; each item is bounded (the LLM and Bluesky calls
+    time out), so it ends within one item of the deadline — inside the
+    lease's stale window, before another pass could start.
     """
     if not getattr(settings, "BSKY_HANDLE", "") or not getattr(settings, "BSKY_APP_PASSWORD", ""):
         return 0
@@ -326,6 +335,9 @@ def post_race_coverage_updates(db: Session) -> int:
 
     posted = 0
     for item in candidates:
+        if deadline is not None and time.monotonic() >= deadline:
+            logger.warning("Election coverage posting stopped at its deadline — the rest wait for the next run")
+            break
         race = races_by_id.get(item.race_id)
         # Considered either way — and COMMITTED before any publish attempt:
         # a crash between publish and commit must not re-post the same item

@@ -35,6 +35,14 @@ class TestCheckPipelineOverrunAllFourPipelines:
         mock_alert.assert_called_once()
         assert "Senate" in mock_alert.call_args[0][0]
 
+    def test_a_senate_run_its_lease_proves_dead_is_not_an_overrun(self, db_session):
+        from tests.conftest import start_senate_run_then_stop_beating
+
+        run = start_senate_run_then_stop_beating(db_session, beat_ago=timedelta(hours=2))
+        run.started_at = utcnow() - timedelta(hours=9)
+        db_session.commit()
+        _check(db_session).assert_not_called()  # check_pipeline_staleness reports a run that never finished
+
     def test_house_overrunning_its_8h_budget_alerts(self, db_session):
         db_session.add(HousePipelineRun(started_at=utcnow() - timedelta(hours=9), status=PipelineStatus.RUNNING))
         db_session.commit()

@@ -124,7 +124,12 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
           {scorecard && (
             <div className="mb-6">
               {(branch === "senate" || branch === "house") && (
+                // Keyed by member: moving between two profiles reuses this
+                // page, and every section of the card that loads or keeps
+                // state (votes, disclosures, party breaks, score trend)
+                // belongs to the member it was loaded for.
                 <SenatorCard
+                  key={`${branch}-${(scorecard as unknown as Senator).id}`}
                   senator={scorecard as unknown as Senator}
                   chamber={branch}
                   thumbnailUrl={identity.thumbnailUrl}
@@ -136,7 +141,11 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
                 />
               )}
               {branch === "president" && (
-                <PresidentCard president={scorecard as unknown as President} titleAs="h1" />
+                <PresidentCard
+                  key={(scorecard as unknown as President).id}
+                  president={scorecard as unknown as President}
+                  titleAs="h1"
+                />
               )}
               {branch === "scotus" && (
                 <JusticeCard justice={scorecard as unknown as Justice} titleAs="h1" />

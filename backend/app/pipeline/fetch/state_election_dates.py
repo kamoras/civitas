@@ -48,6 +48,8 @@ from typing import Any
 
 import httpx
 
+from app.atomic_write import write_text_atomic
+
 logger = logging.getLogger(__name__)
 
 # Three pages covers a cycle's ~240 federal election dates with headroom;
@@ -128,8 +130,9 @@ def save(state: str, cycle: int, dates: dict) -> None:
     for path in _PATHS:
         try:
             os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, "w", encoding="utf-8") as fh:
-                json.dump(known, fh, indent=2, sort_keys=True)
+            # Replaced whole, never truncated in place for a reader to find
+            # empty (atomic_write).
+            write_text_atomic(path, json.dumps(known, indent=2, sort_keys=True))
             break
         except OSError:
             continue

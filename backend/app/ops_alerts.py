@@ -261,6 +261,17 @@ def check_state_pvi_staleness() -> None:
         )
 
 
+def stock_trades_overrun_budget() -> timedelta:
+    """How long a stock-trades run may take before it counts as hung: 2h
+    for the trade phases (normal runs finish in under 90 minutes), plus the
+    time-boxed steps it also runs — the re-read of stored trades, and the
+    annual-holdings phases, each capped at holdings_schedule.PHASE_CEILING —
+    at the budgets they set themselves rather than restated here."""
+    from app.holdings_schedule import HOLDINGS_STEPS, PHASE_CEILING, PTR_REREAD_BUDGET
+
+    return timedelta(hours=2) + PTR_REREAD_BUDGET + len(HOLDINGS_STEPS) * PHASE_CEILING
+
+
 def check_pipeline_overrun() -> None:
     """Watchdog: alert once per run when a pipeline exceeds the budget.
 
@@ -273,23 +284,30 @@ def check_pipeline_overrun() -> None:
     nothing telling an operator to look. Per-pipeline budgets mirror the
     ones scheduler.py's _hourly_action_refresh already uses for the same
     four checks (Supplementary gets Senate/House's 8h, not Stock's
-    tighter 2h — its weekly SCOTUS-refresh day includes an uncached
+    tighter stock_trades_overrun_budget() — its weekly SCOTUS-refresh day includes an uncached
     Oyez crawl that took 5h+ in run 69).
     """
     from app.database import SessionLocal
     from app.models import (
-        HousePipelineRun, PipelineRun, PipelineStatus,
-        StockTradesPipelineRun, SupplementaryPipelineRun,
+        HousePipelineRun, PipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun,
     )
+
+    from app.pipeline.run_tracker import live_run
 
     default_budget = timedelta(hours=settings.PIPELINE_OVERRUN_ALERT_HOURS)
     db = SessionLocal()
     try:
+        # Runs that may be live (run_tracker.live_run), however old — a
+        # budget can be set past the 12h age rule; a row its lease proves
+        # dead is a dead run's, not an overrunning one.
         checks = [
-            ("Senate", db.query(PipelineRun).filter(PipelineRun.status == PipelineStatus.RUNNING).first(), default_budget),
-            ("House", db.query(HousePipelineRun).filter(HousePipelineRun.status == PipelineStatus.RUNNING).first(), default_budget),
-            ("Supplementary", db.query(SupplementaryPipelineRun).filter(SupplementaryPipelineRun.status == PipelineStatus.RUNNING).first(), default_budget),
-            ("Stock trades", db.query(StockTradesPipelineRun).filter(StockTradesPipelineRun.status == PipelineStatus.RUNNING).first(), timedelta(hours=2)),
+            (label, live_run(db, model, timedelta.max), budget)
+            for label, model, budget in (
+                ("Senate", PipelineRun, default_budget),
+                ("House", HousePipelineRun, default_budget),
+                ("Supplementary", SupplementaryPipelineRun, default_budget),
+                ("Stock trades", StockTradesPipelineRun, stock_trades_overrun_budget()),
+            )
         ]
     finally:
         db.close()

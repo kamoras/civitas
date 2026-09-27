@@ -8,7 +8,7 @@ pipeline.py already had the correct fail-closed pattern; this pins that
 all four now match it.
 """
 
-from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import pytest
 from fastapi import HTTPException
@@ -21,7 +21,7 @@ async def test_presidents_trigger_fails_closed_when_unconfigured(monkeypatch):
     from app.api.presidents import trigger_pipeline
     monkeypatch.setattr(settings, "PIPELINE_TRIGGER_TOKEN", "")
     with pytest.raises(HTTPException) as exc:
-        await trigger_pipeline(background_tasks=MagicMock(), authorization=None)
+        await trigger_pipeline(authorization=None)
     assert exc.value.status_code == 503
 
 
@@ -30,7 +30,7 @@ async def test_justices_trigger_fails_closed_when_unconfigured(monkeypatch):
     from app.api.justices import trigger_pipeline
     monkeypatch.setattr(settings, "PIPELINE_TRIGGER_TOKEN", "")
     with pytest.raises(HTTPException) as exc:
-        await trigger_pipeline(background_tasks=MagicMock(), authorization=None)
+        await trigger_pipeline(authorization=None)
     assert exc.value.status_code == 503
 
 
@@ -39,7 +39,7 @@ async def test_presidents_trigger_rejects_wrong_token_when_configured(monkeypatc
     from app.api.presidents import trigger_pipeline
     monkeypatch.setattr(settings, "PIPELINE_TRIGGER_TOKEN", "real-token")
     with pytest.raises(HTTPException) as exc:
-        await trigger_pipeline(background_tasks=MagicMock(), authorization="Bearer wrong")
+        await trigger_pipeline(authorization="Bearer wrong")
     assert exc.value.status_code == 403
 
 
@@ -47,10 +47,21 @@ async def test_presidents_trigger_rejects_wrong_token_when_configured(monkeypatc
 async def test_presidents_trigger_accepts_correct_token(monkeypatch):
     from app.api.presidents import trigger_pipeline
     monkeypatch.setattr(settings, "PIPELINE_TRIGGER_TOKEN", "real-token")
-    bg = MagicMock()
-    result = await trigger_pipeline(background_tasks=bg, authorization="Bearer real-token")
+    with patch("app.background.start_writer") as start:
+        result = await trigger_pipeline(authorization="Bearer real-token")
     assert result["status"] == "started"
-    bg.add_task.assert_called_once()
+    start.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_a_trigger_during_a_data_reset_is_refused_not_silently_dropped(monkeypatch):
+    from app.api.presidents import trigger_pipeline
+    from app.background import WritesHeld, exclusive
+
+    monkeypatch.setattr(settings, "PIPELINE_TRIGGER_TOKEN", "real-token")
+    with exclusive("test-reset"):
+        with pytest.raises(WritesHeld):  # answered 409 by main's handler
+            await trigger_pipeline(authorization="Bearer real-token")
 
 
 @pytest.mark.asyncio
@@ -58,7 +69,7 @@ async def test_explore_trigger_fails_closed_when_unconfigured(monkeypatch):
     from app.api.explore import trigger_explore_pipeline
     monkeypatch.setattr(settings, "PIPELINE_TRIGGER_TOKEN", "")
     with pytest.raises(HTTPException) as exc:
-        await trigger_explore_pipeline(background_tasks=MagicMock(), authorization=None)
+        await trigger_explore_pipeline(authorization=None)
     assert exc.value.status_code == 503
 
 
@@ -67,7 +78,7 @@ async def test_explore_trigger_rejects_wrong_token_when_configured(monkeypatch):
     from app.api.explore import trigger_explore_pipeline
     monkeypatch.setattr(settings, "PIPELINE_TRIGGER_TOKEN", "real-token")
     with pytest.raises(HTTPException) as exc:
-        await trigger_explore_pipeline(background_tasks=MagicMock(), authorization="Bearer wrong")
+        await trigger_explore_pipeline(authorization="Bearer wrong")
     assert exc.value.status_code == 403
 
 
@@ -75,7 +86,7 @@ async def test_explore_trigger_rejects_wrong_token_when_configured(monkeypatch):
 async def test_explore_trigger_accepts_correct_token(monkeypatch):
     from app.api.explore import trigger_explore_pipeline
     monkeypatch.setattr(settings, "PIPELINE_TRIGGER_TOKEN", "real-token")
-    bg = MagicMock()
-    result = await trigger_explore_pipeline(background_tasks=bg, authorization="Bearer real-token")
+    with patch("app.api.pipeline_runner.start_writer") as start:
+        result = await trigger_explore_pipeline(authorization="Bearer real-token")
     assert result["status"] == "started"
-    bg.add_task.assert_called_once()
+    start.assert_called_once()

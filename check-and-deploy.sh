@@ -120,10 +120,10 @@ except ValueError:
     sys.exit(1)
 sys.exit(0 if any(d.get(k) for k in
     ("isRunning", "houseIsRunning", "stockTradesIsRunning",
-     "supplementaryIsRunning", "electionIsRunning")
+     "supplementaryIsRunning", "electionIsRunning", "dataResetIsRunning")
 ) else 1)
 '; then
-    _busy_reason="a pipeline is running"
+    _busy_reason="a pipeline or data reset is running"
     return 0
   fi
   # The hourly action refresh is waited for too, but only while it is

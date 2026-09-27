@@ -49,6 +49,7 @@ from app.config import settings
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.fetch.ptr_common import TradeRow, normalize_date, parse_pdf_bytes, parse_table_rows
+from app.pipeline.fetch.ptr_common import PARSER_VERSION as PTR_PARSER_VERSION
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -135,21 +136,29 @@ async def accept_terms(client: httpx.AsyncClient) -> str | None:
 def _parse_search_row(row: list) -> dict | None:
     """One DataTables row -> a filing dict, or None if it can't be parsed.
 
-    Column order: [first, last, office/filer description (unused),
-    link_html, filed_date]. Getting this wrong (e.g. assuming link_html
-    comes first) means searching for an href inside a plain name string
-    and silently matching nothing on every row.
+    Column order: [first, last, office/filer description, link_html,
+    filed_date]. Getting this wrong (e.g. assuming link_html comes first)
+    means searching for an href inside a plain name string and silently
+    matching nothing on every row.
+
+    The office cell ("Baldwin, Tammy (Senator)", "Candidate (Candidate)")
+    is kept because an annual-report search returns candidates' reports
+    too, and a candidate who shares a sitting senator's surname must not be
+    matched to that senator (see senate_fd.is_senator_filing).
     """
     if len(row) < 5:
         return None
-    first, last, _office, link_html, filed_date_raw = row[0], row[1], row[2], row[3], row[4]
+    first, last, office, link_html, filed_date_raw = row[0], row[1], row[2], row[3], row[4]
     link_match = re.search(r'href="([^"]+)"', link_html or "")
     if not link_match:
         return None
     report_path = link_match.group(1)
+    title = " ".join(re.sub(r"<[^>]+>", " ", link_html or "").split())
     return {
         "last": (last or "").strip(),
         "first": (first or "").strip(),
+        "office": (office or "").strip(),
+        "title": title,
         "filed_date": normalize_date(filed_date_raw),
         "report_url": f"{EFD_BASE}{report_path}" if report_path.startswith("/") else report_path,
         "is_paper": "/paper/" in report_path,
@@ -181,8 +190,23 @@ async def _wait_until(predicate, timeout_s: float = 10.0, poll_s: float = 0.1) -
 async def search_ptr_filings(since_date: str) -> list[dict]:
     """Search for PTR filings submitted on or after since_date (YYYY-MM-DD).
 
-    Returns one dict per filing: {last, first, filed_date, report_url,
-    is_paper}. Does not cache across runs (session-bound), unlike the
+    See search_filings — this is its "Periodic Transactions" report type.
+    """
+    return await search_filings(since_date, PTR_REPORT_TYPE)
+
+
+# The search form's report-type checkbox labels (the site's own wording).
+PTR_REPORT_TYPE = "Periodic Transactions"
+ANNUAL_REPORT_TYPE = "Annual"
+SENATOR_FILER_TYPE = "Senator"
+
+
+async def search_filings(since_date: str, report_type: str, filer_type: str | None = None) -> list[dict]:
+    """Search for filings of `report_type` (a checkbox label on the search
+    form) submitted on or after since_date (YYYY-MM-DD).
+
+    Returns one dict per filing: {last, first, office, filed_date,
+    report_url, is_paper}. Does not cache across runs (session-bound), unlike the
     House index — a fresh search is cheap and the session itself expires.
 
     Drives a real headless Chromium tab through the actual search form
@@ -204,7 +228,7 @@ async def search_ptr_filings(since_date: str) -> list[dict]:
             try:
                 page = await browser.new_page()
                 page.set_default_timeout(_ACTION_TIMEOUT_MS)
-                return await _scrape_via_page(page, since_date)
+                return await _scrape_via_page(page, since_date, report_type, filer_type)
             finally:
                 await browser.close()
     except Exception:
@@ -212,11 +236,12 @@ async def search_ptr_filings(since_date: str) -> list[dict]:
         return []
 
 
-async def _scrape_via_page(page, since_date: str) -> list[dict]:
+async def _scrape_via_page(
+    page, since_date: str, report_type: str = PTR_REPORT_TYPE, filer_type: str | None = None,
+) -> list[dict]:
     """The actual eFD search flow, given an already-launched Playwright
     page. See search_ptr_filings for why this exists as a real browser
     session at all."""
-    filings: list[dict] = []
     await page.goto(HOME_URL, wait_until="domcontentloaded")
 
     # Accept the statutory use-restriction gate if presented (a fresh
@@ -228,7 +253,10 @@ async def _scrape_via_page(page, since_date: str) -> list[dict]:
         await _click(page.locator("#agreement_form button, #agreement_form input[type=submit]"))
 
     await page.goto(SEARCH_URL, wait_until="domcontentloaded")
-    await _click(page.get_by_role("checkbox", name="Periodic Transactions"))
+    await _click(page.get_by_role("checkbox", name=report_type))
+    if filer_type:
+        # Exact: "Senator" is also a substring of "Former Senator".
+        await _click(page.get_by_role("checkbox", name=filer_type, exact=True))
     us_date = _iso_to_us_date(since_date)
     if us_date:
         date_input = page.locator('input[name="submitted_start_date"]')
@@ -258,21 +286,49 @@ async def _scrape_via_page(page, since_date: str) -> list[dict]:
             pass
         await _wait_until(lambda: len(responses) > before)
 
+    filings, distinct, received, total = await _page_through(page, responses)
+    # Reported, not retried in the same browser session: every caller
+    # searches again on its next nightly run, and holdings never lets a
+    # partial search replace a newer stored report (_is_older).
+    if total and received < total:
+        logger.warning("Senate eFD search returned %d of %d rows — a results page didn't load", received, total)
+    elif total and distinct < total:
+        # Every row arrived, but some twice. Either the same filing was
+        # listed twice or the ordering shifted between pages and a repeat
+        # took the place of a filing that was never shown; the search
+        # can't tell which.
+        logger.warning(
+            "Senate eFD search showed %d distinct rows of %d — a filing listed twice, "
+            "or one displaced by a shifting order", distinct, total,
+        )
+    return filings
+
+
+async def _page_through(page, responses: list) -> tuple[list[dict], int, int, int]:
+    """Collect every results page from the latest response on. Returns the
+    parsed filings, how many distinct rows and how many rows in all the
+    pages held, and recordsTotal.
+
+    Paging stops early only once every row is accounted for by distinct
+    content: a row can reappear on a later page when the ordering shifts,
+    and counted twice it would stop paging before the page that holds the
+    row it displaced. Distinct content can undercount (two identical rows),
+    which only means paging on to the last page, where Next is disabled."""
+    by_id: dict[str, dict] = {}
+    unparsed: set[str] = set()
+    received = total = 0
     for _ in range(_MAX_PAGES):
-        resp = responses[-1]
         try:
-            payload = await resp.json()
+            payload = await responses[-1].json()
         except Exception:
             logger.error("Senate eFD search response was not JSON — session/endpoint may have changed")
             break
 
         total = payload.get("recordsTotal", 0)
-        for row in payload.get("data", []):
-            parsed = _parse_search_row(row)
-            if parsed is not None:
-                filings.append(parsed)
-
-        if len(filings) >= total:
+        rows = payload.get("data", [])
+        received += len(rows)
+        _collect_rows(by_id, unparsed, rows)
+        if len(by_id) + len(unparsed) >= total:
             break
 
         next_el = page.get_by_text("Next", exact=True)
@@ -282,8 +338,40 @@ async def _scrape_via_page(page, since_date: str) -> list[dict]:
         await _click(next_el)
         if not await _wait_until(lambda: len(responses) > before):
             break
+    return list(by_id.values()), len(by_id) + len(unparsed), received, total
 
-    return filings
+
+def _collect_rows(by_id: dict[str, dict], unparsed: set[str], rows: list) -> None:
+    """Add a results page's rows to `by_id`, keyed by filing, and the rows
+    that don't parse to `unparsed`, keyed by their content. The first
+    sighting of a filing is kept."""
+    for row in rows:
+        parsed = _parse_search_row(row)
+        if parsed is None:
+            unparsed.add(repr(row))
+        else:
+            by_id.setdefault(senate_filing_id(parsed["report_url"]), parsed)
+
+
+def senate_filing_id(report_url: str) -> str:
+    """A report's stable id: the UUID that ends its eFD URL
+    (".../view/annual/<uuid>/"). The one derivation every Senate ingest
+    dedupes on — a second spelling of it would stop stored filings from
+    matching and re-fetch every one of them each run."""
+    return report_url.rstrip("/").rsplit("/", 1)[-1]
+
+
+_FILED_RE = re.compile(r"\bFiled\s+(\d{1,2}/\d{1,2}/\d{4})")
+
+
+def _page_filed_date(doc) -> str | None:
+    """The filing date a parsed report page states in its header, as
+    YYYY-MM-DD — the same date the search lists (checked 2026-09-27 on three
+    live filings)."""
+    # Text nodes joined with spaces: adjacent elements' text would otherwise
+    # run together ("ReportFiled").
+    match = _FILED_RE.search(" ".join(" ".join(doc.itertext()).split()))
+    return normalize_date(match.group(1)) if match else None
 
 
 def _html_table_to_rows(table_el) -> list[list[str | None]]:
@@ -305,8 +393,8 @@ async def fetch_and_parse_ptr(
     parse_confidence ("text" or "ocr"); never fabricates a row it can't
     confidently parse.
     """
-    filing_id = filing["report_url"].rstrip("/").rsplit("/", 1)[-1]
-    cache_key = f"ptr-parsed-{filing_id}"
+    filing_id = senate_filing_id(filing["report_url"])
+    cache_key = f"ptr-parsed-v{PTR_PARSER_VERSION}-{filing_id}"
     cached = api_cache_get(db, "senate_ptr", cache_key, max_age_hours=24 * 30)
     if cached is not None:
         return [TradeRow(**row) for row in cached]
@@ -317,24 +405,34 @@ async def fetch_and_parse_ptr(
 
     rows: list[TradeRow] = []
     confidence = "text"
+    page_filed = None
     if filing.get("is_paper"):
         pdf_link = re.search(r'href="([^"]+\.pdf)"', resp.text, re.I)
         if pdf_link:
             pdf_resp = await _request_with_retry(client, "GET", f"{EFD_BASE}{pdf_link.group(1)}")
             if pdf_resp is not None:
                 try:
-                    rows, confidence = parse_pdf_bytes(pdf_resp.content)
+                    # A blank owner is not stated on the Senate's forms, as
+                    # on its electronic tables.
+                    rows, confidence = parse_pdf_bytes(pdf_resp.content, blank_owner="unknown")
                 except Exception as e:
                     logger.error("Failed to parse Senate paper PTR %s: %s", filing["report_url"], e)
     else:
         try:
             doc = lxml_html.fromstring(resp.text)
+            page_filed = _page_filed_date(doc)
             for table_el in doc.xpath("//table"):
                 table_rows = _html_table_to_rows(table_el)
-                rows.extend(parse_table_rows(table_rows))
+                # eFD prints every owner as a word, "Self" included.
+                rows.extend(parse_table_rows(table_rows, blank_owner="unknown"))
         except Exception as e:
             logger.error("Failed to parse Senate PTR HTML %s: %s", filing["report_url"], e)
 
+    # The search result's filed date; for a re-read of a stored filing,
+    # which has no search result, the one the page states in its header
+    # ("Filed 09/21/2026 @ 2:52 PM"), or failing that the one its stored
+    # rows already carried.
+    filed_date = filing.get("filed_date") or page_filed or filing.get("stored_filed_date")
     for row in rows:
         row.parse_confidence = confidence
         row.source_url = filing["report_url"]
@@ -347,8 +445,8 @@ async def fetch_and_parse_ptr(
         # date (the date the report was actually filed with the Secretary
         # of the Senate) is the real disclosure date; use it whenever the
         # parser had no genuine notification signal of its own.
-        if filing.get("filed_date") and row.disclosure_date == row.transaction_date:
-            row.disclosure_date = filing["filed_date"]
+        if filed_date and row.disclosure_date == row.transaction_date:
+            row.disclosure_date = filed_date
 
     # The API cache stores plain JSON, not dataclasses — convert at this
     # boundary and reconstruct on the cache-hit path above. normal_ttl_hours

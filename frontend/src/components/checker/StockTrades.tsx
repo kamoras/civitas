@@ -1,10 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 import { PaginatedStockTrades, StockTrade } from "@/types/senator";
 import { fetchPresidentStockTrades, fetchRepStockTrades, fetchSenatorStockTrades } from "@/lib/api";
 import CollapsibleSection from "../shared/CollapsibleSection";
+import Pagination from "../shared/Pagination";
 import MetricTooltip from "./MetricTooltip";
+import { formatBracket, OWNER_LABEL } from "@/lib/disclosures";
+import { useLatestRequest } from "@/hooks/useLatestRequest";
 
 const TRADES_PER_PAGE = 15;
 
@@ -24,21 +27,10 @@ const TXN_TYPE_LABEL: Record<StockTrade["transactionType"], string> = {
   exchange: "EXCHANGE",
 };
 
-const OWNER_LABEL: Record<StockTrade["owner"], string> = {
-  self: "SELF",
-  spouse: "SPOUSE",
-  joint: "JOINT",
-  dependent: "DEPENDENT",
-  unknown: "OWNER NOT STATED",
-};
-
 function formatAmountRange(trade: StockTrade): string {
-  const fmt = (n: number) => `$${n.toLocaleString()}`;
-  // The top bracket on these forms discloses a floor and no ceiling, so
-  // there is no upper figure to show — see StockTrade.amountOpenEnded.
-  return trade.amountOpenEnded
-    ? `${fmt(trade.amountLow)}+`
-    : `${fmt(trade.amountLow)} – ${fmt(trade.amountHigh)}`;
+  // The top bracket on these forms discloses a floor and no ceiling — see
+  // StockTrade.amountOpenEnded and formatBracket.
+  return formatBracket(trade.amountLow, trade.amountHigh, trade.amountOpenEnded);
 }
 
 function TransactionBadge({ type }: { type: StockTrade["transactionType"] }) {
@@ -113,41 +105,6 @@ function TradeRow({ trade }: { trade: StockTrade }) {
   );
 }
 
-function Pagination({
-  page,
-  totalPages,
-  onPageChange,
-}: {
-  page: number;
-  totalPages: number;
-  onPageChange: (p: number) => void;
-}) {
-  if (totalPages <= 1) return null;
-  return (
-    <div className="flex items-center justify-center gap-2 mt-4">
-      <button
-        onClick={() => onPageChange(page - 1)}
-        disabled={page === 1}
-        aria-label="Previous page"
-        className="text-xs px-2 py-1 font-mono text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed"
-      >
-        &lt; PREV
-      </button>
-      <span className="text-xs text-ink-min">
-        page {page}/{totalPages}
-      </span>
-      <button
-        onClick={() => onPageChange(page + 1)}
-        disabled={page === totalPages}
-        aria-label="Next page"
-        className="text-xs px-2 py-1 font-mono text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed"
-      >
-        NEXT &gt;
-      </button>
-    </div>
-  );
-}
-
 const FETCHER = {
   senate: fetchSenatorStockTrades,
   house: fetchRepStockTrades,
@@ -168,24 +125,13 @@ const ABOUT_DATA = {
 } as const;
 
 export default function StockTrades({ politicianId, filer = "senate" }: StockTradesProps) {
-  const [data, setData] = useState<PaginatedStockTrades | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, loading, error, request } = useLatestRequest<PaginatedStockTrades, null>(
+    null, "Failed to load stock trades",
+  );
 
   const fetchPage = useCallback(
-    async (p: number) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const result = await FETCHER[filer](politicianId, { page: p, perPage: TRADES_PER_PAGE });
-        setData(result);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load stock trades");
-      } finally {
-        setLoading(false);
-      }
-    },
-    [politicianId, filer]
+    (p: number) => request(null, () => FETCHER[filer](politicianId, { page: p, perPage: TRADES_PER_PAGE })),
+    [request, politicianId, filer]
   );
 
   useEffect(() => {
@@ -197,15 +143,11 @@ export default function StockTrades({ politicianId, filer = "senate" }: StockTra
   // the section only renders once we know there's something to show.
   if (!loading && (!data || data.total === 0) && !error) return null;
 
-  if (loading && !data) {
-    return (
-      <div className="panel p-4 text-center" role="status" aria-live="polite">
-        <span className="text-ink-lo text-sm animate-pulse">Loading stock trades...</span>
-      </div>
-    );
-  }
+  // Nothing until the first response: most members disclose no trades, and
+  // a loading panel that then vanishes shifts the whole scorecard below it.
+  if (loading && !data) return null;
 
-  if (error) {
+  if (error && !data) {
     return (
       <div className="panel p-4 text-center" role="alert">
         <span className="text-signal-red text-sm">{error}</span>
@@ -228,6 +170,12 @@ export default function StockTrades({ politicianId, filer = "senate" }: StockTra
             ABOUT THIS DATA
           </MetricTooltip>
         </p>
+        {error && (
+          // A failed page change keeps the last page that loaded on screen.
+          <p className="text-signal-red text-sm" role="alert">
+            {error}
+          </p>
+        )}
         <div className={`space-y-2 ${loading ? "opacity-60 transition-opacity" : ""}`}>
           {data.trades.map((trade, i) => (
             <TradeRow key={`${trade.sourceUrl}-${i}`} trade={trade} />

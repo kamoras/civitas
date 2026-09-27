@@ -8,6 +8,7 @@ import {
   fetchAdminDashboard,
   fetchAdminPipelineStatus,
   fetchAdminPipelineHistory,
+  senateIsRunning,
   type AdminDashboard,
   type AdminPipelineStatus,
   type PipelineHistoryRun,
@@ -220,7 +221,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
       setPipelineStatus(s);
 
       const watched: WatchedPipeline[] = [
-        { key: "senate", label: "SENATE", running: s.isRunning, run: s.lastRun },
+        { key: "senate", label: "SENATE", running: senateIsRunning(s), run: s.lastRun },
         { key: "house", label: "HOUSE", running: !!s.houseIsRunning, run: s.houseLastRun },
         {
           key: "supplementary",
@@ -277,7 +278,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
   );
 
   const anyPipelineRunning = !!(
-    pipelineStatus?.isRunning ||
+    senateIsRunning(pipelineStatus) ||
     pipelineStatus?.houseIsRunning ||
     pipelineStatus?.supplementaryIsRunning ||
     pipelineStatus?.stockTradesIsRunning ||
@@ -350,7 +351,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
             role="status"
             aria-live="polite"
             className={`mb-6 border p-4 flex items-start justify-between gap-4 ${
-              finishedRuns.some((r) => r.status === "failed")
+              finishedRuns.some((r) => r.status === "failed" || r.status === "stuck")
                 ? "border-signal-magenta/40 bg-signal-magenta/10"
                 : finishedRuns.some((r) => r.status === "partial")
                   ? "border-signal-amber/40 bg-signal-amber/10"
@@ -362,7 +363,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
                 <li key={r.key} className="flex flex-wrap items-baseline gap-x-4">
                   <span
                     className={`text-sm font-mono font-bold ${
-                      r.status === "failed"
+                      r.status === "failed" || r.status === "stuck"
                         ? "text-signal-magenta"
                         : r.status === "partial"
                           ? "text-signal-amber"
@@ -372,9 +373,11 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
                     {r.label} PIPELINE{" "}
                     {r.status === "failed"
                       ? "FAILED"
-                      : r.status === "partial"
-                        ? "FINISHED PARTIAL"
-                        : "COMPLETED"}
+                      : r.status === "stuck"
+                        ? "STOPPED WITHOUT AN OUTCOME — SEE PIPELINES"
+                        : r.status === "partial"
+                          ? "FINISHED PARTIAL"
+                          : "COMPLETED"}
                   </span>
                   <span className="text-ink-lo text-xs font-mono">
                     {formatDuration(r.elapsedSeconds)}

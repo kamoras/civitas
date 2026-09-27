@@ -193,3 +193,24 @@ def pinned_les_reference(pinned_population_references):
 @pytest.fixture()
 def pinned_funding_reference(pinned_population_references):
     return TEST_FUNDING_REFERENCE
+
+
+def start_senate_run_then_stop_beating(db, beat_ago=None):
+    """A Senate run started the way the pipeline starts one — its lease
+    taken, then its RUNNING row inserted and the lease tagged with the row's
+    id in the same transaction — whose heartbeat then stopped `beat_ago`
+    ago (None: still beating). Returns the run's row."""
+    from app import models
+    from app.pipeline import lease, senate_pipeline
+    from app.time_utils import utcnow
+
+    token = lease.acquire(db, lease.SENATE_RUN)
+    assert token is not None
+    run, refused = senate_pipeline._acquire_pipeline_lock(db, lease_token=token)
+    assert refused is None, refused
+    if beat_ago is not None:
+        db.query(models.ApiCache).filter(models.ApiCache.tier == lease.SENATE_RUN).update(
+            {"cached_at": utcnow() - beat_ago},
+        )
+        db.commit()
+    return run

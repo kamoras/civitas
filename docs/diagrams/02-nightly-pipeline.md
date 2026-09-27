@@ -68,10 +68,11 @@ Concurrency control is a row in each pipeline's run table with
 `status == "running"`, not a process-level lock: a partial UNIQUE index lets
 only one process insert it, so the two backend processes that overlap during a
 Swarm rollout can't both start the same pipeline
-(`run_tracker.acquire_pipeline_lock`). Pipelines are threads of the backend,
+(`run_tracker.acquire_pipeline_lock_why`). Pipelines are threads of the backend,
 so a restart kills them without letting them record it; on startup the backend
 marks every pipeline's leftover `running` row `stale`
-(`main._invalidate_orphaned_pipelines`), and a row older than 12 hours is
+(`main._invalidate_orphaned_pipelines`), sparing only a Senate run whose
+lease still holds (it may be live in the other task), and a row older than 12 hours is
 cleared at the next acquisition. `check-and-deploy.sh` does not deploy while
 any pipeline runs.
 

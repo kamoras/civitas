@@ -6,6 +6,7 @@ import logging
 import os
 import secrets
 from datetime import datetime
+from collections.abc import Callable
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -105,31 +106,41 @@ def _history_entry(run, pipeline_type: str, extra: dict) -> dict:
     }
 
 
-def _clear_stuck_runs(db: Session, model, is_running: bool, pipeline_label: str) -> dict:
+def _clear_stuck_runs(db: Session, model, is_running: Callable[[], bool], pipeline_label: str) -> dict:
     """Mark any stuck (status=running) run of `model` as failed.
 
-    Shared by the House and Stock Trades "clear stuck run" admin endpoints —
+    Shared by the pipelines' "clear stuck run" admin endpoints —
     use when the in-memory flag says idle but the DB record still shows
     running (e.g. after a container restart mid-run).
+
+    The rows are read before the flag, and only those rows are cleared,
+    each still RUNNING: a run raises its flag before its row commits
+    (run_tracker.acquire_tracked_run), so a row read here whose run is
+    going in this process finds the flag up, and a run starting after the
+    read keeps its row.
     """
-    if is_running:
+    stuck = [
+        (run.id, run.started_at)
+        for run in db.query(model).filter(model.status == PipelineStatus.RUNNING).all()
+    ]
+    if is_running():
         raise HTTPException(
             status_code=409, detail=f"{pipeline_label} pipeline is actively running — stop it first"
         )
-
-    stuck = db.query(model).filter(model.status == PipelineStatus.RUNNING).all()
     if not stuck:
         return {"cleared": 0, "message": "No stuck runs found"}
 
     now = utcnow()
-    for run in stuck:
-        run.status = PipelineStatus.FAILED
-        run.error_message = "Cleared by admin (container restart)"
-        run.completed_at = now
-        if run.started_at:
-            run.elapsed_seconds = round((now - run.started_at).total_seconds(), 1)
+    cleared = 0
+    for run_id, started_at in stuck:
+        cleared += db.query(model).filter(model.id == run_id, model.status == PipelineStatus.RUNNING).update({
+            "status": PipelineStatus.FAILED,
+            "error_message": "Cleared by admin (container restart)",
+            "completed_at": now,
+            "elapsed_seconds": round((now - started_at).total_seconds(), 1) if started_at else None,
+        }, synchronize_session=False)
     db.commit()
-    return {"cleared": len(stuck), "message": f"Marked {len(stuck)} run(s) as failed"}
+    return {"cleared": cleared, "message": f"Marked {cleared} run(s) as failed"}
 
 
 @router.post("/auth")
@@ -762,7 +773,6 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
     """Live pipeline status for polling during a run."""
     db.expire_all()
 
-    from app.api.pipeline import _is_pipeline_running
     from app.pipeline.house_pipeline import is_house_pipeline_running
     from app.pipeline.stock_pipeline import is_stock_pipeline_running
     from app.pipeline.supplementary_pipeline import is_supplementary_pipeline_running
@@ -770,7 +780,25 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
     from app.models import (
         ElectionPipelineRun, HousePipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun,
     )
-    is_running = _is_pipeline_running(db)
+    from app.pipeline.run_tracker import senate_run_state
+
+    # Whether each pipeline is going is read on both sides of its row, and
+    # counts as running if either read says so. A run makes itself known
+    # (its flag — acquire_tracked_run — or its Senate lease's tag) in the
+    # same step as committing its RUNNING row, and lets go only after
+    # committing its final status; each query here sees the latest commit.
+    # So a run finishing during this poll is caught by the read before, one
+    # starting by the read after, and a RUNNING row is never paired with a
+    # stopped run — which the dashboard would show as stuck, and, once the
+    # run ends, as ending without an outcome.
+    def running_flags() -> tuple[bool, bool, bool, bool]:
+        return (
+            is_house_pipeline_running(), is_stock_pipeline_running(),
+            is_supplementary_pipeline_running(), is_election_pipeline_running(),
+        )
+
+    flags_before = running_flags()
+    _row, senate_running_before, senate_clearable_before = senate_run_state(db)
 
     last_run = (
         db.query(PipelineRun)
@@ -798,12 +826,28 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
         .first()
     )
 
+    _row, senate_running_after, senate_clearable_after = senate_run_state(db)
+    house_running, stock_running, supplementary_running, election_running = (
+        before or after for before, after in zip(flags_before, running_flags())
+    )
+    is_running = senate_running_before or senate_running_after
+    # Clearable only if both reads found a row no live lease speaks for.
+    senate_clearable = senate_clearable_before and senate_clearable_after
+
     result: dict = {
         "isRunning": is_running,
-        "houseIsRunning": is_house_pipeline_running(),
-        "stockTradesIsRunning": is_stock_pipeline_running(),
-        "supplementaryIsRunning": is_supplementary_pipeline_running(),
-        "electionIsRunning": is_election_pipeline_running(),
+        # A RUNNING Senate row no live lease speaks for
+        # (run_tracker.senate_run_state): the dashboard shows it as stuck and
+        # offers clear-stuck-senate, which accepts exactly then.
+        "senateRowClearable": senate_clearable,
+        "houseIsRunning": house_running,
+        "stockTradesIsRunning": stock_running,
+        "supplementaryIsRunning": supplementary_running,
+        "electionIsRunning": election_running,
+        # An admin data reset in any process; check-and-deploy.sh waits it
+        # out like a pipeline run, since killing it mid-wipe leaves the
+        # indexes describing rows that are gone.
+        "dataResetIsRunning": _data_reset_running(db),
     }
 
     if last_supplementary_run:
@@ -1286,6 +1330,7 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
     index end up disagreeing about what exists.
     """
     from app.models import ExploreDocument
+    from app.background import writing
     from app.pipeline.analyze.document_authority import update_document_authority
     from app.pipeline.lexical_index import rebuild_index
     from app.pipeline.vector_store import (
@@ -1294,36 +1339,45 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
         embed_explore_documents,
     )
 
-    try:
-        clear_explore()
-    except Exception:
-        pass
+    from app.pipeline import lease
 
-    all_docs = db.query(ExploreDocument).all()
-    doc_dicts = [
-        {
-            "id": d.id,
-            "title": d.title,
-            "summary": d.summary,
-            "body": d.body,
-            "doc_type": d.doc_type,
-            "source": d.source,
-            "date": d.date,
-            "politician_name": d.politician_name,
-            "politician_id": d.politician_id,
-            "chamber": d.chamber,
-        }
-        for d in all_docs
-    ]
+    # Registered for the admin data reset: the awaits below free the loop
+    # while threads write the explore tables. And a lease, so a reset or an
+    # explore ingest in another process sees it too.
+    with writing("Explore re-embed"):
+        async with lease.job_async(lease.EXPLORE) as held:
+            if not held:
+                raise HTTPException(status_code=409, detail=f"Explore re-embed not started: {held.why}")
+            try:
+                clear_explore()
+            except Exception:
+                pass
 
-    def _run():
-        count = embed_explore_documents(doc_dicts)
-        _write_model_version()
-        return count
+            all_docs = db.query(ExploreDocument).all()
+            doc_dicts = [
+                {
+                    "id": d.id,
+                    "title": d.title,
+                    "summary": d.summary,
+                    "body": d.body,
+                    "doc_type": d.doc_type,
+                    "source": d.source,
+                    "date": d.date,
+                    "politician_name": d.politician_name,
+                    "politician_id": d.politician_id,
+                    "chamber": d.chamber,
+                }
+                for d in all_docs
+            ]
 
-    count = await asyncio.to_thread(_run)
-    indexed = await asyncio.to_thread(rebuild_index, db)
-    authority = await asyncio.to_thread(update_document_authority, db)
+            def _run():
+                count = embed_explore_documents(doc_dicts)
+                _write_model_version()
+                return count
+
+            count = await asyncio.to_thread(_run)
+            indexed = await asyncio.to_thread(rebuild_index, db)
+            authority = await asyncio.to_thread(update_document_authority, db)
     return {"embedded": count, "keywordIndexed": indexed, "authority": authority}
 
 
@@ -1342,6 +1396,43 @@ async def admin_trigger_house_pipeline():
     return {"message": "House pipeline triggered"}
 
 
+@router.post("/pipeline/clear-stuck-senate", dependencies=[Depends(require_admin)])
+async def admin_clear_stuck_senate(db: Session = Depends(get_db)):
+    """Mark any stuck (status=running) Senate pipeline run as failed.
+
+    For a row no live lease speaks for (run_tracker.senate_run_state):
+    past the age rule, proven dead, or named by no lease — one from a
+    release without leases, or one left RUNNING after its lease was let go.
+    Refused for a row its run's lease names while held: that may be a live
+    run whose heartbeat stalled; if it died, the hourly tidy or the next
+    Senate run marks it stale within about two hours of its last beat.
+    Only the row checked is cleared (a run starting meanwhile keeps its own).
+    """
+    from app.models import PipelineRun
+    from app.pipeline.run_tracker import senate_run_state
+
+    row_id, _running, clearable = senate_run_state(db)
+    if row_id is None:
+        return {"cleared": 0, "message": "No stuck runs found"}
+    if not clearable:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "The Senate run's lease still speaks for this row — it may be a live run whose heartbeat "
+                "is stalled. If it has died, it is marked stale within about two hours of its last beat."
+            ),
+        )
+    now = utcnow()
+    cleared = db.query(PipelineRun).filter(
+        PipelineRun.id == row_id, PipelineRun.status == PipelineStatus.RUNNING,
+    ).update({
+        "status": PipelineStatus.FAILED, "error_message": "Cleared by admin (container restart)",
+        "completed_at": now,
+    }, synchronize_session=False)
+    db.commit()
+    return {"cleared": cleared, "message": f"Marked {cleared} run(s) as failed"}
+
+
 @router.post("/pipeline/clear-stuck-house", dependencies=[Depends(require_admin)])
 async def admin_clear_stuck_house(db: Session = Depends(get_db)):
     """Mark any stuck (status=running) house pipeline run as failed.
@@ -1352,7 +1443,7 @@ async def admin_clear_stuck_house(db: Session = Depends(get_db)):
     from app.models import HousePipelineRun
     from app.pipeline.house_pipeline import is_house_pipeline_running
 
-    return _clear_stuck_runs(db, HousePipelineRun, is_house_pipeline_running(), "House")
+    return _clear_stuck_runs(db, HousePipelineRun, is_house_pipeline_running, "House")
 
 
 @router.post("/pipeline/clear-stuck-stock-trades", dependencies=[Depends(require_admin)])
@@ -1365,7 +1456,7 @@ async def admin_clear_stuck_stock_trades(db: Session = Depends(get_db)):
     from app.models import StockTradesPipelineRun
     from app.pipeline.stock_pipeline import is_stock_pipeline_running
 
-    return _clear_stuck_runs(db, StockTradesPipelineRun, is_stock_pipeline_running(), "Stock trades")
+    return _clear_stuck_runs(db, StockTradesPipelineRun, is_stock_pipeline_running, "Stock trades")
 
 
 @router.post("/pipeline/trigger-supplementary", dependencies=[Depends(require_admin)])
@@ -1394,7 +1485,7 @@ async def admin_clear_stuck_supplementary(db: Session = Depends(get_db)):
     from app.models import SupplementaryPipelineRun
     from app.pipeline.supplementary_pipeline import is_supplementary_pipeline_running
 
-    return _clear_stuck_runs(db, SupplementaryPipelineRun, is_supplementary_pipeline_running(), "Supplementary")
+    return _clear_stuck_runs(db, SupplementaryPipelineRun, is_supplementary_pipeline_running, "Supplementary")
 
 
 @router.post("/pipeline/trigger-election", dependencies=[Depends(require_admin)])
@@ -1424,28 +1515,72 @@ async def admin_clear_stuck_election(db: Session = Depends(get_db)):
     from app.models import ElectionPipelineRun
     from app.pipeline.election_pipeline import is_election_pipeline_running
 
-    return _clear_stuck_runs(db, ElectionPipelineRun, is_election_pipeline_running(), "Election")
+    return _clear_stuck_runs(db, ElectionPipelineRun, is_election_pipeline_running, "Election")
+
+
+def _data_reset_running(db: Session) -> bool:
+    from app.pipeline import lease
+
+    return lease.held(db, lease.DATA_RESET)
+
+
+def _reset_holding_every_writer() -> dict:
+    """reset_all_data, with every writer held off from before it starts to
+    after it ends. One synchronous function, run in a worker thread: the
+    request awaiting it can be cancelled (a client that disconnects), the
+    thread can't, so the holds are released only when the wipe is done.
+
+    - In this process, app.background.exclusive(): granted only while no
+      writer thread or task is registered, and while held none starts.
+    - In any process — a rollout's other task included — the reset's lease
+      (lease.DATA_RESET), which a pipeline's run lock and every other lease
+      (lease.TIERS: each job without a run lock holds one) check. The reset commits it first and then checks
+      theirs, so between a pipeline or refresh and the reset one always sees
+      the other.
+
+    Raises WritersBusy, naming them, if anything is writing already.
+    """
+    from app.background import WritersBusy, exclusive
+    from app.database import SessionLocal, reset_all_data
+    from app.pipeline import lease
+    from app.pipeline.run_tracker import run_in_progress, run_tables
+
+    with exclusive("Another data reset"):
+        db = SessionLocal()
+        try:
+            with lease.holding(db, lease.DATA_RESET) as token:
+                if token is None:
+                    raise WritersBusy(["Another data reset"])
+                busy = [f"{label} run" for label, model in run_tables().items() if run_in_progress(db, model)]
+                busy += [
+                    who for who in (lease.holder(db, tier) for tier in lease.TIERS if tier != lease.DATA_RESET)
+                    if who is not None and who not in busy
+                ]
+                if busy:
+                    raise WritersBusy(busy)
+                return reset_all_data()
+        finally:
+            db.close()
 
 
 @router.post("/data/reset", dependencies=[Depends(require_admin)])
-async def admin_reset_data(db: Session = Depends(get_db)):
-    """Wipe all pipeline-generated data for a clean start.
+async def admin_reset_data():
+    """Wipe what the pipelines derive from their sources, for a clean start.
 
-    Clears every table (senators, votes, donors, learning store, caches,
-    ChromaDB), then re-seeds static reference data. The next pipeline run
-    will rebuild everything from scratch with the latest code.
+    Clears senators, votes, donors, the learning store, caches and the
+    vector store — every table except database.RESET_KEEPS, the history no
+    run can rebuild (the Action Center's, run history). The next pipeline
+    runs rebuild the rest from scratch with the latest code.
+
+    Every writer is held off for the whole wipe (_reset_holding_every_writer);
+    anything already writing refuses the reset (409, naming it).
     """
-    from app.api.pipeline import _is_pipeline_running
+    from app.background import WritersBusy
 
-    if _is_pipeline_running(db):
-        raise HTTPException(
-            status_code=409,
-            detail="Cannot reset while the pipeline is running",
-        )
-
-    from app.database import reset_all_data
-
-    summary = reset_all_data()
+    try:
+        summary = await asyncio.to_thread(_reset_holding_every_writer)
+    except WritersBusy as busy:
+        raise HTTPException(status_code=409, detail=f"Cannot reset while running: {busy}") from None
     total_rows = sum(v for k, v in summary.items() if isinstance(v, int))
     return {
         "status": "reset_complete",

@@ -459,3 +459,22 @@ class TestOnlyVettedSourcesArePosted:
 
         assert eb.post_race_coverage_updates(db_session) == 1
         assert published == ["some sentence."]
+
+
+def test_no_item_is_started_past_the_deadline(db_session, monkeypatch):
+    """Where the coverage guards stop holding (lease.deadline): the loop
+    never awaits, so it stops itself, leaving the rest for the next run."""
+    import time
+
+    _creds(monkeypatch)
+    _stub_relevance(monkeypatch)
+    _race(db_session)
+    _candidate(db_session)
+    item = _item(db_session)
+    db_session.commit()
+
+    with patch.object(election_bluesky, "_publish", return_value=True) as mock_publish:
+        posted = election_bluesky.post_race_coverage_updates(db_session, deadline=time.monotonic() - 1)
+    assert posted == 0
+    mock_publish.assert_not_called()
+    assert item.bsky_posted_at is None
