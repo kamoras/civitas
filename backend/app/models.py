@@ -569,9 +569,10 @@ class FinancialDisclosure(Base):
     # amendment number (breaking a same-day tie only) — see
     # holdings_pipeline._rank.
     seq: Mapped[int] = mapped_column(Integer, default=0)
-    # The newest Senate filing made after this report whose date can't be
-    # known — a paper filing (its page is page images) or one whose title
-    # states no year — and so can't be ranked against a dated report. It is
+    # The newest Senate filing made on or after this report's filing date
+    # whose as-of date can't be known — a paper filing (its page is page
+    # images) or one whose title states no year — and so can't be ranked
+    # against a dated report. It is
     # named here instead, as filed ("annual report filed 2026-05-14"), so
     # the scorecard can say a later filing exists rather than imply this one
     # is the latest.

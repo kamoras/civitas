@@ -235,10 +235,16 @@ def _replace_disclosure(
         FinancialDisclosure.later_filing_filed,
     ).filter_by(**owner_filter).all()
     old_ids = [row.id for row in old]
-    # A note naming a filing made after the old report stays while that
-    # filing is also after the new one (a re-read of the same report, say):
+    # A note naming a filing made on or after the old report's date stays
+    # while that holds for the new one too (a re-read of the same report, say):
     # tonight's search may not have the row to rebuild it from.
-    carried = next((row for row in old if _filed_after(row.later_filing_filed, filed_date)), None)
+    carried = next(
+        (
+            row for row in old
+            if _filed_not_before(row.later_filing_filed, filed_date) and row.later_filing_url != source_url
+        ),
+        None,
+    )
     if old_ids:
         # "fetch", not False: the session can hold these rows as objects
         # (_note_later_filing loads disclosures; so can a caller), and SQLite
@@ -594,9 +600,15 @@ async def _house_candidates(db: Session, client: httpx.AsyncClient) -> dict[str,
     for year in range(current_year - 1, current_year - 1 - _YEARS_BACK, -1):
         filings = await fetch_annual_filing_index(client, db, year)
         if filings is None:
-            # Not an empty year: without it, a member's older report would
-            # pass for their newest — and nothing fetched would look wrong.
-            raise RuntimeError(f"House annual-report index for {year} could not be loaded")
+            if year == current_year - 1:
+                # Not an empty year: without last year's index, a member's
+                # older report would pass for their newest — and nothing
+                # fetched would look wrong.
+                raise RuntimeError(f"House annual-report index for {year} could not be loaded")
+            # The older year only supplies fallbacks for members who haven't
+            # filed last year's report yet: they wait for the next run.
+            logger.warning("House annual-report index for %d could not be loaded", year)
+            continue
         indexed += len(filings)
         for filing in filings:
             if (rep_id := match(filing["last"], filing["first"], filing["state_district"])) is not None:
@@ -650,7 +662,7 @@ def _senate_as_of(filing: dict) -> str | None:
     which is page images (checked 2026-09-26) — so it has no date and ranks
     below every dated report, this run's or the one stored (_rank): a
     senator's newest dated report stays, and a paper one is stored only for
-    a senator with none. A paper filing made after the report shown is
+    a senator with none. A paper filing made on or after the report shown is
     named beside it instead (_note_later_filing): "filed later" is a fact;
     "newer" would be a guess."""
     title = filing.get("title") or ""
@@ -673,22 +685,24 @@ def _write_notes(db: Session, per_senator: dict[str, list[dict]]) -> None:
         _alert(
             "Senate holdings notes not updated",
             "Tonight's Senate holdings phase could not update the notes that name an undated filing "
-            "made after a senator's shown report, so some may be stale or missing — see the server "
+            "made on or after a senator's shown report, so some may be stale or missing — see the server "
             "logs for the cause. (Any reports it stored before then are kept.)",
             dedupe_key=f"senate-holdings-notes-{utcnow():%Y-%m-%d}",
         )
 
 
-def _filed_after(filed: str | None, reference: str | None) -> bool:
-    """Whether a filing date is known to be later than another. With either
-    missing, nothing can be said to be filed after anything."""
-    return bool(filed and reference and filed > reference)
+def _filed_not_before(filed: str | None, reference: str | None) -> bool:
+    """Whether a filing date is known to be on or after another — the one
+    rule for which undated filings a note may name, keep and carry (a
+    filing made the same day may be the later of the two). With either
+    date missing, nothing can be said."""
+    return bool(filed and reference and filed >= reference)
 
 
 def _note_later_filing(db: Session, per_senator: dict[str, list[dict]]) -> None:
     """Name, beside each senator's stored report, the newest undated filing
     — no as-of date to rank by (see _senate_as_of): a paper filing, or a
-    title that states no year — they made after it. Only for senators this
+    title that states no year — they made on or after its filing date. Only for senators this
     search returned filings for, and a note is only ever replaced by a
     later such filing or dropped once the stored report is itself filed
     after it — never cleared just because tonight's rows lack it, since a
@@ -700,8 +714,7 @@ def _note_later_filing(db: Session, per_senator: dict[str, list[dict]]) -> None:
             and senate_filing_id(f["report_url"]) != disclosure.filing_id
             # On the same day counts: an undated amendment filed alongside
             # the dated report may be the later of the two.
-            and (_filed_after(f.get("filed_date"), disclosure.filed_date)
-                 or (f.get("filed_date") and f.get("filed_date") == disclosure.filed_date))
+            and _filed_not_before(f.get("filed_date"), disclosure.filed_date)
         ]
         # Filing date, then report URL: two filed the same day resolve the
         # same way every run, whatever order the search returned them in.
@@ -712,7 +725,7 @@ def _note_later_filing(db: Session, per_senator: dict[str, list[dict]]) -> None:
                 disclosure.later_filing_label = _senate_fields(newest)["report_label"]
                 disclosure.later_filing_url = newest["report_url"]
                 disclosure.later_filing_filed = newest["filed_date"]
-        elif disclosure.later_filing_url and not _filed_after(disclosure.later_filing_filed, disclosure.filed_date):
+        elif disclosure.later_filing_url and not _filed_not_before(disclosure.later_filing_filed, disclosure.filed_date):
             disclosure.later_filing_label = disclosure.later_filing_url = disclosure.later_filing_filed = None
     db.commit()
 

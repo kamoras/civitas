@@ -112,18 +112,18 @@ def match_representative(roster: list[Member], last: str, first: str, state_dist
     if state_district and len(state_district) > 2 and state_district[2:].isdigit():
         district = int(state_district[2:])
 
-    firsts = _first_names(first)
-    # The first name has to agree too, even with one member left: the index
-    # still lists a departed member's filings under the same surname and
-    # district as a new member who shares it. Measured against the 2025–26
-    # indexes and the current roster, every real match agrees on a
-    # first-name token — 447 of 447 annual reports, 820 of 820 PTRs.
+    # A single member with the surname in the district is taken without
+    # comparing first names. Against the 2025–26 indexes and the real
+    # roster (433 members, 2026-09), 45 of 445 annual-report matches and 12
+    # distinct PTR filers name the member differently — Richard/Rick,
+    # Rohit/Ro, Michael/Mike — and all of them are the same person; no
+    # departed member sharing a successor's surname and district turned up.
+    # Requiring a first name to agree would drop those real matches.
     candidates = [
         r for r in roster
         if (not state or r.state == state) and (district is None or r.district == district)
-        and firsts & set(_fold(r.name).split())
     ]
-    return _pick(candidates, last, firsts)
+    return _pick(candidates, last, _first_names(first))
 
 
 class FilerMatcher:

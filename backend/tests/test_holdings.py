@@ -1656,15 +1656,38 @@ class TestIndexAndMatchEdges:
                 await holdings_pipeline.ingest_house_holdings(db_session, None)
         assert db_session.query(FinancialDisclosure).count() == 0
 
-    async def test_a_predecessors_filing_is_not_a_new_members(self, db_session):
-        db_session.add(Representative(id="R1", name="Jane Doe", state="TX", district=1, party="R", is_current=True))
+    async def test_a_formal_first_name_still_matches_the_member(self, db_session):
+        """The index often uses a formal or nickname variant ("Rohit" for Ro
+        Khanna); the district and surname decide."""
+        db_session.add(Representative(id="R1", name="Ro Khanna", state="CA", district=17, party="D", is_current=True))
         db_session.commit()
-        index = {2024: [_house_filing("JOHN", year=2024, first="John")]}
-        count, fetch = await _ingest_house(db_session, index, {"JOHN": AnnualReport("Member", [_row()])})
-        assert (count, fetch.call_count) == (0, 0)
+        index = {2025: [_house_filing("K", first="Rohit", last="Khanna", district="CA17")]}
+        count, _ = await _ingest_house(db_session, index, {"K": AnnualReport("Member", [_row()])})
+        assert count == 1
 
     async def test_an_undated_filing_the_same_day_is_named(self, db_session, senator):
         e2025 = _senate_filing("e2025", filed="2026-05-15")
         paper = _senate_filing("p", title="Annual Report (Amendment)", filed="2026-05-15", office="Senator", paper=True)
         await _ingest_senate(db_session, [e2025, paper], {"e2025": [_row()]})
         assert db_session.query(FinancialDisclosure).one().later_filing_url == paper["report_url"]
+
+
+class TestSameDayNotesKeep:
+    async def test_a_same_day_note_survives_a_search_that_misses_it_and_a_re_read(self, db_session, senator):
+        e2025 = _senate_filing("e2025", filed="2026-05-15")
+        paper = _senate_filing("p", title="Annual Report (Amendment)", filed="2026-05-15", office="Senator", paper=True)
+        await _ingest_senate(db_session, [e2025, paper], {"e2025": [_row()]})
+        await _ingest_senate(db_session, [e2025], {"e2025": [_row()]})
+        with patch.object(holdings_pipeline, "SENATE_PARSER_VERSION", 2):
+            await _ingest_senate(db_session, [e2025], {"e2025": [_row(), _row()]})
+        assert db_session.query(FinancialDisclosure).one().later_filing_url == paper["report_url"]
+
+    async def test_an_older_years_index_failing_only_loses_fallbacks(self, db_session, rep):
+        async def index(_client, _db, year):
+            return [_house_filing("NEW")] if year == 2025 else None
+
+        with patch.object(holdings_pipeline, "fetch_annual_filing_index", side_effect=index), \
+             patch.object(holdings_pipeline, "fetch_house_annual", AsyncMock(return_value=AnnualReport("Member", [_row()]))), \
+             patch.object(holdings_pipeline, "utcnow") as now:
+            now.return_value.year = 2026
+            assert await holdings_pipeline.ingest_house_holdings(db_session, None) == 1

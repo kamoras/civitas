@@ -274,7 +274,7 @@ export interface Holdings {
   /** The date the holdings describe (a year end for an annual report, the
    * stated date for a new-filer report); null for a paper filing. */
   asOfDate: string | null;
-  /** A Senate filing made after this report that states no year it can be
+  /** A Senate filing made on or after this report's date that states no year it can be
    * ranked by (a paper filing, or a title without one) — "annual report
    * filed 2026-05-14". The page names it instead of implying this report is
    * the latest filed. */
