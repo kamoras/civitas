@@ -849,13 +849,20 @@ async def test_a_document_that_disappears_after_coverage_is_a_failure(monkeypatc
     later read as not published flipped quietly to not_yet_covered."""
     from app.pipeline.fetch.ballot_measure_text import NotYetPublished
 
-    _direct_source(monkeypatch, [["1"], NotYetPublished("guide", deadline_applies=False)])
+    nights = 3
+    _direct_source(monkeypatch, [["1"]] + [NotYetPublished("guide", deadline_applies=False)] * nights)
     await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
-    _, failed, _ = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
-    assert failed == 1
-    row = _coverage(db_session)
-    assert row.status == MeasureCoverage.INGEST_FAILED
-    assert "was covered" in row.error_detail
+    good = _coverage(db_session).last_success_at
+    # Not just the first night: the alarm holds every night the document
+    # stays missing (round 3 — night 2 used to fall back to
+    # not_yet_covered, silently, because night 1 had set ingest_failed).
+    for _ in range(nights):
+        _, failed, _ = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+        assert failed == 1
+        row = _coverage(db_session)
+        assert row.status == MeasureCoverage.INGEST_FAILED
+        assert "read successfully for this election before" in row.error_detail
+        assert row.last_success_at == good
     assert db_session.query(BallotMeasure).one().status == "certified"
 
 
@@ -953,3 +960,158 @@ def test_past_elections_measures_are_pruned(db_session):
     db_session.commit()
     assert election_pipeline._prune_past_measures(db_session) == 1
     assert [m.id for m in db_session.query(BallotMeasure).all()] == ["vs-now"]
+
+
+# ── round 3 ──────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_a_cached_truncated_read_never_counts_toward_the_shrink_streak(monkeypatch, db_session):
+    """The regression: a non-empty list is cached for 72h, so ONE truncated
+    read came back from the cache on nights 2 and 3 and reached
+    MEASURE_SHRINK_CONFIRM_RUNS — measures struck on the strength of one
+    bad response. Only a fresh read counts, and a held-back list's cache
+    entry is dropped so the next night asks the state again."""
+    from datetime import timedelta as td
+
+    from app.models import ApiCache
+    from app.pipeline.fetch import ballot_measure_pdf_sources, ballot_measures_pdf as bmp
+
+    source = _fake_pdf_source()
+    source["strategy"] = "fake_multi"
+    monkeypatch.setattr(ballot_measure_pdf_sources, "configured_states", lambda: {"CA"})
+    monkeypatch.setattr(ballot_measure_pdf_sources, "source_for_state", lambda st: source)
+    monkeypatch.setattr(bmp, "source_for_state", lambda st: source)
+    calls = []
+
+    def item(n):
+        return ({"number": str(n), "title": f"T{n}", "origin": None, "official_summary": "S",
+                 "fiscal_impact": None, "yes_means": None, "no_means": None}, "https://x")
+
+    async def reader(client, year):
+        calls.append(year)
+        return [item(1), item(2), item(3), item(4)] if len(calls) == 1 else [item(1)]
+
+    monkeypatch.setitem(bmp.MULTI_DOCUMENT_STRATEGIES, "fake_multi", reader)
+    await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    for e in db_session.query(ApiCache).all():
+        e.cached_at = utcnow() - td(hours=100)
+    db_session.commit()
+    runs = election_pipeline.MEASURE_SHRINK_CONFIRM_RUNS
+    for night in range(1, runs + 1):
+        _, failed, _ = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+        # Every night asked the state again: nothing was replayed.
+        assert len(calls) == night + 1
+        if night < runs:
+            assert failed == 1
+            assert {m.status for m in db_session.query(BallotMeasure).all()} == {"certified"}
+    # Three FRESH identical reads are the state's answer.
+    assert _coverage(db_session).status == MeasureCoverage.COVERED
+
+
+def test_a_cached_list_does_not_advance_the_streak(db_session):
+    _measure(db_session, "CA-2026-11-03-1", state="CA", number="1", source_name="S")
+    _measure(db_session, "CA-2026-11-03-2", state="CA", number="2", source_name="S")
+    _measure(db_session, "CA-2026-11-03-3", state="CA", number="3", source_name="S")
+    db_session.commit()
+    for _ in range(5):
+        assert election_pipeline._shrink_held_back(
+            db_session, "CA", "2026-11-03", ["CA-2026-11-03-1"], 1, 0, 3, fresh=False,
+        )
+    assert (_coverage(db_session).shrink_streak or 0) == 0
+
+
+@pytest.mark.asyncio
+async def test_coverage_another_source_left_is_not_this_sources_success(monkeypatch, db_session):
+    """The regression: Maine's first night on its own office read "was
+    confirmed_none, now reads as not published" — the confirmed none was
+    Vote Smart's."""
+    from app.pipeline.fetch.ballot_measure_text import NotYetPublished
+
+    election_pipeline._set_coverage(
+        db_session, "CA", "2026-11-03", MeasureCoverage.CONFIRMED_NONE, source_name="Vote Smart",
+    )
+    db_session.commit()
+    _direct_source(monkeypatch, [NotYetPublished("guide", deadline_applies=False)])
+    _, failed, _ = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    assert failed == 0
+    assert _coverage(db_session).status == MeasureCoverage.NOT_YET_COVERED
+
+
+@pytest.mark.asyncio
+async def test_not_yet_covered_never_claims_a_successful_read(monkeypatch, db_session):
+    from app.pipeline.fetch.ballot_measure_text import NotYetPublished
+
+    _direct_source(monkeypatch, [NotYetPublished("guide", deadline_applies=False)])
+    await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    row = _coverage(db_session)
+    assert row.status == MeasureCoverage.NOT_YET_COVERED
+    assert row.last_success_at is None
+
+
+def test_a_held_back_shrink_with_no_coverage_row_claims_no_success(db_session):
+    for n in range(4):
+        _measure(db_session, f"CA-2026-11-03-{n}", state="CA", number=str(n), source_name="S")
+    db_session.commit()
+    assert election_pipeline._shrink_held_back(
+        db_session, "CA", "2026-11-03", ["CA-2026-11-03-0"], 1, 0, 4,
+    )
+    row = _coverage(db_session)
+    assert row.last_success_at is None
+    assert row.shrink_streak == 1
+
+
+@pytest.mark.asyncio
+async def test_only_struck_measures_on_file_explain_a_drop(monkeypatch, db_session):
+    """The regression: explained = every Removed row the state reported, so
+    Removed rows never on file padded a real shrink past the floor."""
+    _direct_source(monkeypatch, [["1", "2", "3", "4", "5"], ["1", "8-", "9-"]])
+    await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    _, failed, marked = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    assert (failed, marked) == (1, 0)
+    assert {m.status for m in db_session.query(BallotMeasure).all()} == {"certified"}
+
+
+@pytest.mark.asyncio
+async def test_a_late_cycle_notice_for_documents_that_may_never_come(monkeypatch, db_session):
+    """A reader whose document exists only in a year with a measure can sit
+    in not_yet_covered to election day if it broke before reading anything.
+    At the default expected-by date it sends one low-severity notice (the
+    page stays "not yet covered"), deduped per state and election."""
+    import app.ops_alerts as ops_alerts
+    from app.pipeline.fetch.ballot_measure_text import NotYetPublished
+
+    sent = []
+    monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda subject, body, dedupe_key=None: sent.append(dedupe_key))
+    monkeypatch.setattr(election_pipeline, "_past_expected_by", lambda src, day: True)
+    _direct_source(monkeypatch, [NotYetPublished("guide", deadline_applies=False)])
+    _, failed, _ = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    assert failed == 0
+    assert _coverage(db_session).status == MeasureCoverage.NOT_YET_COVERED
+    assert sent == ["ballot-measure-late-CA-2026-11-03"]
+
+    sent.clear()
+    monkeypatch.setattr(election_pipeline, "_past_expected_by", lambda src, day: False)
+    _direct_source(monkeypatch, [NotYetPublished("guide", deadline_applies=False)])
+    await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    assert sent == []
+
+
+def test_election_dates_are_stored_as_iso_or_not_at_all(db_session):
+    """The state page, reconciliation and pruning all compare
+    election_date as an ISO string. Vote Smart's format isn't verified
+    against a real payload (its API answers "Authorization failed" with no
+    key, and none is on file), so both plausible shapes are normalised and
+    anything else is skipped, never stored under a date no query matches."""
+    assert election_pipeline._iso_election_date("2026-11-03") == "2026-11-03"
+    assert election_pipeline._iso_election_date("2026-11-03T00:00:00") == "2026-11-03"
+    assert election_pipeline._iso_election_date("11/03/2026") == "2026-11-03"
+    assert election_pipeline._iso_election_date("11/3/2026") == "2026-11-03"
+    assert election_pipeline._iso_election_date("Nov 3") is None
+    for mid, given in (("vs-us", "11/03/2026"), ("vs-bad", "November 2026")):
+        election_pipeline._upsert_measure(
+            db_session, {"id": mid, "state": "GA", "number": mid, "title": "t", "election_date": given},
+            {}, "Vote Smart",
+        )
+    db_session.commit()
+    assert [(m.id, m.election_date) for m in db_session.query(BallotMeasure).all()] == [("vs-us", "2026-11-03")]

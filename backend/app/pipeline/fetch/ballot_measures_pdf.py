@@ -325,6 +325,23 @@ def _to_measure(state: str, parsed: dict, election_date: str, source_url: str) -
     }
 
 
+def cached_answer(db, state: str, year: int) -> list[dict] | None:
+    """The state's answer as currently cached (what fetch_state_measures_pdf
+    would serve without asking the state), or None."""
+    cached = api_cache_get(db, CACHE_TIER, f"{state}-{year}", max_age_hours=CACHE_TTL_HOURS)
+    return cached if isinstance(cached, list) else None
+
+
+def forget_cached(db, state: str, year: int) -> None:
+    """Drop the state's cached answer, so the next fetch asks the state
+    again — used when the pipeline holds an answer back as suspicious."""
+    from app.models import ApiCache
+
+    db.query(ApiCache).filter(
+        ApiCache.tier == CACHE_TIER, ApiCache.cache_key == f"{state}-{year}",
+    ).delete(synchronize_session=False)
+
+
 def _duplicate_ids(measures: list[dict]) -> list[str]:
     seen: set[str] = set()
     dupes: list[str] = []

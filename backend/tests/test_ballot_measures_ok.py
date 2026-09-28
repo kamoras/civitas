@@ -47,7 +47,6 @@ def test_year_with_no_row_is_not_yet_published_never_none_or_empty(monkeypatch):
     monkeypatch.setattr(ok, "fetch_text_with_retry", get_text)
     with pytest.raises(NotYetPublished):
         asyncio.run(ok.fetch_measures(None, 2030))
-    assert len(asyncio.run(ok.fetch_measures(None, 2026))) == 2
 
 
 def test_an_election_date_in_another_form_refuses_the_register():
@@ -95,10 +94,30 @@ def _serve_pages(monkeypatch, first, following):
     return posts
 
 
-def test_the_real_first_page_already_reaches_an_earlier_election(monkeypatch):
-    posts = _serve_pages(monkeypatch, PAGES["page_1"], [])
+def test_the_real_register_is_read_until_it_is_past_any_question_for_the_ballot(monkeypatch):
+    """Round 3: stopping at the first earlier-dated row assumed numbers
+    follow election order. They follow filing order — SQ 832, filed in
+    2023, is set for June 2026 and sits on page 2 among 2024 and 2023
+    questions — so paging continues until a page's newest dated question
+    is more than READ_BACK_MARGIN_DAYS before the election: page 3 (2020)
+    on the live register."""
+    assert not ok.reaches_before(PAGES["page_1"], 2026)
+    assert not ok.reaches_before(PAGES["page_2"], 2026)
+    assert ok.reaches_before(PAGES["page_3"], 2026)
+    posts = _serve_pages(monkeypatch, PAGES["page_1"], [PAGES["page_2"], PAGES["page_3"]])
     assert [m["number"] for m, _ in asyncio.run(ok.fetch_measures(None, 2026))] == ["847", "845"]
-    assert posts == []
+    assert posts == ["Page$2", "Page$3"]
+
+
+def test_a_question_for_the_ballot_on_a_page_of_older_numbers_is_read(monkeypatch):
+    """SQ 832's shape: an older number set for this election, on a later
+    page than questions dated for earlier elections."""
+    page_2 = PAGES["page_2"].replace("6-16-2026", "11-03-2026").replace(
+        "FOR The Proposal", "ELECTION DATE:  November 3, 2026 FOR The Proposal", 1,
+    )
+    assert page_2 != PAGES["page_2"]
+    _serve_pages(monkeypatch, PAGES["page_1"], [page_2, PAGES["page_3"]])
+    assert [m["number"] for m, _ in asyncio.run(ok.fetch_measures(None, 2026))] == ["847", "845", "832"]
 
 
 def test_november_rows_pushed_to_page_two_are_still_read(monkeypatch):
@@ -108,9 +127,9 @@ def test_november_rows_pushed_to_page_two_are_still_read(monkeypatch):
     page_1 = _without_rows(PAGES["page_1"], {"848"})
     page_2 = _without_rows(PAGES["page_1"], {str(n) for n in range(834, 848)})
     assert not ok.reaches_before(page_1, 2026)
-    posts = _serve_pages(monkeypatch, page_1, [page_2])
+    posts = _serve_pages(monkeypatch, page_1, [page_2, PAGES["page_3"]])
     assert [m["number"] for m, _ in asyncio.run(ok.fetch_measures(None, 2026))] == ["847", "845"]
-    assert posts == ["Page$2"]
+    assert posts == ["Page$2", "Page$3"]
 
 
 def test_a_register_that_ends_or_fails_before_an_earlier_election_is_a_failure(monkeypatch):

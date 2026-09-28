@@ -626,6 +626,27 @@ describe("ballot measures", () => {
     expect(drawer.getByText("Summary.")).toBeInTheDocument();
   });
 
+  it("keeps the stale notice when the latest check found the document missing", async () => {
+    // Round 3: a status other than ingest_failed (not_yet_covered, after a
+    // document that was read goes missing) hid the notice while the
+    // measures still rendered as current.
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures: [measure],
+          measureCoverage: {
+            status: "not_yet_covered", sourceName: "Ohio SoS",
+            checkedAt: "2026-09-20T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
+          },
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    const notice = drawer.getByRole("status");
+    expect(notice).toHaveTextContent("latest check could not find OH's published list (2026-09-28)");
+    expect(notice).toHaveTextContent("last successful read, 2026-09-20");
+  });
+
   it("shows no stale notice when the latest read worked", async () => {
     render(
       <StateBallotClient

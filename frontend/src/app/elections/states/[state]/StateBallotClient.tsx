@@ -335,13 +335,17 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
     // Measures on file don't make the coverage status irrelevant: after a
     // failed read they are the LAST successful read's list, and a reader
     // has to be told that rather than shown them as current.
-    const stale = measureCoverage.status === "ingest_failed";
+    // Any status but covered / confirmed_none means the latest read did
+    // not confirm this list — failed, or found the document missing.
+    const stale = measureCoverage.status !== "covered" && measureCoverage.status !== "confirmed_none";
     return (
       <div className="space-y-3">
         {stale && (
           <div role="status" className="border border-signal-amber/40 bg-signal-amber/10 p-3">
             <p className="text-xs text-signal-amber">
-              Our latest attempt to re-read {state}&apos;s measures failed
+              {measureCoverage.status === "ingest_failed"
+                ? `Our latest attempt to re-read ${state}'s measures failed`
+                : `Our latest check could not find ${state}'s published list`}
               {measureCoverage.lastAttemptAt ? ` (${measureCoverage.lastAttemptAt.slice(0, 10)})` : ""}. The list
               below is from the last successful read
               {measureCoverage.checkedAt ? `, ${measureCoverage.checkedAt.slice(0, 10)}` : ""}, and may be out of

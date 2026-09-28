@@ -26,8 +26,10 @@ as the title (not presented as the official ballot title —
 official_title is None for exactly that reason).
 
 The register is read page after page (its own WebForms pager) until a
-page carries a question dated for an election BEFORE this one; a page
-budget running out first, or the register ending first, is a failure.
+page whose every dated question is for an election more than
+READ_BACK_MARGIN_DAYS before this one (numbers follow filing order, not
+election order — see that constant); a page budget running out first, or
+the register ending first, is a failure.
 Page 1 alone once was: SQ 848 (April 2027) sits above November's 845 and
 847, so one or two more filings would push them onto page 2. Pages read
 to that point with no row dated `year`'s general election raise
@@ -39,7 +41,7 @@ date is printed in any other form refuses the page (None).
 
 import logging
 import re
-from datetime import date
+from datetime import date, timedelta
 from urllib.parse import urljoin
 
 import httpx
@@ -161,13 +163,24 @@ def _column_date(cell) -> date | None:
         return None
 
 
+# How far before `year`'s general a page's newest dated question must be
+# before paging stops. SQ numbers follow FILING order, not election order:
+# SQ 832 was filed in 2023 and set for the June 2026 primary, so a question
+# for November can sit on a page among much older numbers. Two years is a
+# full cycle of lead time; on the live register (2026-09-28) it stops
+# after page 3, whose newest dated question is November 2020.
+READ_BACK_MARGIN_DAYS = 730
+
+
 def reaches_before(page_html: str, year: int) -> bool:
-    """Whether this register page carries a State Question dated (by the
-    register's own Election Date column) for an election BEFORE `year`'s
-    general. The register is newest-first by number, and numbers follow
-    filing order, so past that row the pages hold questions filed before
-    anything set for this election."""
+    """Whether paging can stop at this register page: it carries at least
+    one dated State Question, and every dated one is for an election more
+    than READ_BACK_MARGIN_DAYS before `year`'s general (by the register's
+    own Election Date column). While any row is dated for the target, a
+    later election, or anything within the margin, the next page could
+    still hold a question set for this ballot."""
     target = next_election_day(date(year, 1, 1))
+    cutoff = target - timedelta(days=READ_BACK_MARGIN_DAYS)
     tree = lxml_html.fromstring(page_html)
     header_row = next(
         (tr for tr in tree.xpath("//tr[th]") if "SQ Num" in " ".join(tr.text_content().split())),
@@ -180,13 +193,11 @@ def reaches_before(page_html: str, year: int) -> bool:
         return False
     idx = headers.index("Election Date")
     table = next(header_row.iterancestors("table"))
-    for tr in table.xpath(".//tr[td]"):
-        cells = tr.xpath("td")
-        if len(cells) == len(headers):
-            d = _column_date(cells[idx])
-            if d is not None and d < target:
-                return True
-    return False
+    dated = [
+        d for tr in table.xpath(".//tr[td]")
+        if len(cells := tr.xpath("td")) == len(headers) and (d := _column_date(cells[idx])) is not None
+    ]
+    return bool(dated) and max(dated) < cutoff
 
 
 def next_page_form(page_html: str, page: int) -> dict[str, str] | None:
@@ -205,8 +216,8 @@ def next_page_form(page_html: str, page: int) -> dict[str, str] | None:
 
 async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dict, str]] | None:
     """Every State Question the register dates for `year`'s general,
-    reading page after page until one carries a question dated for an
-    EARLIER election. Page 1 alone isn't enough: a question filed later
+    reading page after page until reaches_before says the pages have gone
+    back past any question that could be set for it. Page 1 alone isn't enough: a question filed later
     for another election (SQ 848, April 2027, sits above 845 and 847)
     pushes November's rows onto page 2, and a list read from page 1 would
     be published short — or read as "not yet" — without a sign of it."""
