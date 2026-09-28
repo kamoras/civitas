@@ -1,12 +1,14 @@
 {
   "_source": "Hand-verified during research: checked each state's own Secretary of State (or equivalent) site directly for a plain, static, address-free official ballot-measure document (a voter guide/pamphlet covering proposition text), not an API, not a lookup tool.",
-  "_method": "Each entry here has a real, currently-or-recently-fetched document backing it and a registered parsing strategy in ballot_measures_pdf.py's STRATEGIES map. A state with no entry here still falls back to Vote Smart in election_pipeline._sync_ballot_measures — this file only ever ADDS coverage, it never removes a state's chance at data. Two ways to point at a state's PDF: 'url_pattern' (a {year}-substitutable formula, verified stable across two real elections) for states whose filename convention doesn't change; 'landing_page_url' + optional 'keyword' (discover_pdf_url in ballot_measures_pdf.py) for states that republish under a NEW filename every cycle but keep the same stable landing page and human-readable link text (e.g. 'Blue Book 2024') — this is what makes those entries evergreen without a human updating a URL each cycle. 'absent_until_published': true makes a 404 (url_pattern) or a crawl that read every page and found no link (landing_page_url) raise NotYetPublished — not_yet_covered, no alert — instead of reading as a failed ingest; set only where the state is known to post the document late or only in a year with a measure. A fetch that failed is still a failure.",
+  "_method": "Each entry here has a real, currently-or-recently-fetched document backing it and a registered parsing strategy in ballot_measures_pdf.py's STRATEGIES map. A state with no entry here still falls back to Vote Smart in election_pipeline._sync_ballot_measures — this file only ever ADDS coverage, it never removes a state's chance at data. Two ways to point at a state's PDF: 'url_pattern' (a {year}-substitutable formula, verified stable across two real elections) for states whose filename convention doesn't change; 'landing_page_url' + optional 'keyword' (discover_pdf_url in ballot_measures_pdf.py) for states that republish under a NEW filename every cycle but keep the same stable landing page and human-readable link text (e.g. 'Blue Book 2024') — this is what makes those entries evergreen without a human updating a URL each cycle. 'absent_until_published': true makes a 404 (url_pattern) or a crawl that read every page and found no link (landing_page_url) raise NotYetPublished — not_yet_covered, no alert — instead of reading as a failed ingest; set only where the state is known to post the document late or only in a year with a measure. A fetch that failed is still a failure. A document the state publishes for EVERY general that is still not published past its expected-by cutoff (the entry's 'expected_by_days_before', with 'expected_by_basis' citing the statute where one sets the date; otherwise election_pipeline.DEFAULT_EXPECTED_BY_DAYS_BEFORE) reads as ingest_failed. 'absence_can_mean_none': true marks a document that exists only in a year with a measure (Vermont's notice, Wyoming's propositions), whose absence never hits that cutoff.",
   "_as_of": "2026-08-07",
   "states": {
     "CA": {
       "source_name": "California Secretary of State",
       "strategy": "ca_voter_guide_html",
-      "description": "The Official Voter Information Guide as HTML — voterguide.sos.ca.gov for the current election, vigarchive.sos.ca.gov/<year>/general/ once archived; the guide whose banner names the year's general election is used. Per proposition: the Attorney General's Official Title and Summary, the Legislative Analyst's fiscal estimate, and the state's own 'A YES/NO vote on this measure means' sentences, verbatim; the count read must equal the guide's own index. Replaced the PDF reader, whose 2026 guide text layer maps fi/fl/ff ligatures to a bare 'f' ('infation', 'fnance'). Verified live 2026-09-28: 14 propositions on the November 3, 2026 guide, 10 on the archived 2024 guide. See ballot_measures_ca.py."
+      "description": "The Official Voter Information Guide as HTML — voterguide.sos.ca.gov for the current election, vigarchive.sos.ca.gov/<year>/general/ once archived; the guide whose banner names the year's general election is used. Per proposition: the Attorney General's Official Title and Summary, the Legislative Analyst's fiscal estimate, and the state's own 'A YES/NO vote on this measure means' sentences, verbatim; the count read must equal the guide's own index. Replaced the PDF reader, whose 2026 guide text layer maps fi/fl/ff ligatures to a bare 'f' ('infation', 'fnance'). Verified live 2026-09-28: 14 propositions on the November 3, 2026 guide, 10 on the archived 2024 guide. See ballot_measures_ca.py.",
+      "expected_by_days_before": 21,
+      "expected_by_basis": "Cal. Elections Code §9094: the state voter information guide is mailed no later than 21 days before the election; its web edition is up well before that."
     },
     "MA": {
       "url_pattern": "https://www.sec.state.ma.us/divisions/elections/download/research-and-statistics/IFV_{year}.pdf",
@@ -21,7 +23,9 @@
       "source_name": "Colorado Legislative Council",
       "strategy": "co_quick_ballot_reference",
       "description": "Official 'Blue Book', 'Quick Ballot Reference Guide' section. Filename changes every cycle (verified: a different one-off convention nearly every year back to 2012), AND the exact listing page isn't guaranteed stable either (no state is bound to a particular site layout) — so landing_page_url is deliberately the bare legislature domain, not a specific sub-page. discover_pdf_url's bounded crawl (generic election-vocabulary link-following, same-domain only) finds the real PDF from there every time, verified live: 3 real years (2024, 2022, 2020), both from the exact listing page AND from this bare-domain starting point, with default crawl bounds. Note: colorado's Blue Book is published by the LEGISLATURE, not the Secretary of State — verified the SOS's own domain does not lead to it at all (correctly returns no match rather than guessing). Parser verified against 2024's format (14/14 measures, 12/14 clean yes/no); 2022 uses a different sub-format for legislature-referred amendments that isn't handled yet (see ballot_measures_co.py's module docstring) — a Blue Book in that shape fails the state (ingest_failed) rather than publishing a list with those measures missing. A crawl that reads every page and finds no Blue Book for the year reads as not yet published (absent_until_published): checked live 2026-09-28, the Legislature's Blue Book page lists nothing after 2024 yet.",
-      "absent_until_published": true
+      "absent_until_published": true,
+      "expected_by_days_before": 30,
+      "expected_by_basis": "Colo. Const. art. V, §1(7.5): the ballot information booklet (Blue Book) goes to voters at least 30 days before the election."
     },
     "LA": {
       "landing_page_url": "https://www.sos.la.gov/elections-voting/types-of-elections",
@@ -66,7 +70,8 @@
       "source_name": "Vermont General Assembly",
       "strategy": "vt_constitutional_amendment_notice",
       "description": "The General Assembly's statutory notice of proposed constitutional amendments (17 V.S.A. ch. 32), a PDF linked from the Legislature's Announcements page with the election year in its filename; per proposal, the Assembly's one-sentence plain-language description is stored verbatim. Verified live 2026-09-28 against the 2026 notice: Proposal 3 (collective bargaining) and Proposal 4 (equal protection), matching the Governor's 2026-07-27 proclamations. Vermont has no initiative; no yes/no framing or fiscal statement is published, so those stay null. No notice linked for the year reads as not yet published (absent_until_published): the notice exists only in a year with a proposal, so its absence is neither a failure nor a checked 'none'.",
-      "absent_until_published": true
+      "absent_until_published": true,
+      "absence_can_mean_none": true
     },
     "ME": {
       "source_name": "Maine Secretary of State",
@@ -223,7 +228,8 @@
       "source_name": "Wyoming Secretary of State",
       "strategy": "wy_statewide_ballot_propositions",
       "description": "'{year} Statewide Ballot Propositions' PDF, discovered from the Elections landing page (the 2026 path's pattern 404s for 2024/2022, so no url_pattern). Verified live 2026-09-28: Proposed Initiative Proposition Number One (homeowner's property-tax exemption) with its estimated fiscal impact. See ballot_measures_wy.py. No document linked for the year reads as not yet published (absent_until_published); a linked document with no readable proposition fails the state.",
-      "absent_until_published": true
+      "absent_until_published": true,
+      "absence_can_mean_none": true
     }
   }
 }

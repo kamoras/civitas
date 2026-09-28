@@ -189,7 +189,11 @@ export interface BallotMeasure {
 export interface MeasureCoverage {
   status: "covered" | "confirmed_none" | "not_yet_covered" | "ingest_failed";
   sourceName: string | null;
+  /** When the status (and any measures shown) was last established by a
+   * read that worked. A failed read never moves it. */
   checkedAt: string | null;
+  /** When a read was last attempted, failures included. */
+  lastAttemptAt: string | null;
 }
 
 /** One statewide executive contest (Governor, Attorney General, ...) and

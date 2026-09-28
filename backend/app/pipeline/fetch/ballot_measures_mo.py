@@ -227,7 +227,9 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
         if any(_SECTION_HEADING_RE.search(h.text_content()) for h in tree.xpath("//h2")):
             # The page we know, carrying only the primary's section so far:
             # nothing is certified to November YET. Not "none".
-            raise NotYetPublished(f"Missouri's {year} general-election ballot measures section")
+            raise NotYetPublished(
+                f"Missouri's {year} general-election ballot measures section", deadline_applies=False,
+            )
         logger.warning("MO ballot measures page for %d has no section heading this reader knows", year)
         return None
     try:

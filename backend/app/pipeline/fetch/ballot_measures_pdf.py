@@ -188,7 +188,11 @@ async def discover_pdf_url_checked(
             if urlparse(next_url).netloc == start_domain and next_url not in visited:
                 queue.append((next_url, depth + 1))
 
-    return None, complete and fetched > 0
+    # A crawl that stopped at its page budget with links still queued did
+    # NOT read everything it would have: the document could be on a page
+    # it never opened, so that is not a "complete" miss.
+    unread = [u for u, _ in queue if u not in visited]
+    return None, complete and fetched > 0 and not unread
 
 STRATEGIES = {
     "ma_information_for_voters": parse_ma_document,
@@ -257,6 +261,13 @@ MULTI_DOCUMENT_STRATEGIES = {
 # failure (None) and NotYetPublished are never cached at all.
 CACHE_TTL_HOURS = 72
 
+# "_v2": entries written before the list was cached bare (and before
+# _finish's checks, and official_title's no-default rule) sat under
+# "ballot_measure_pdf" as {"measures": [...]} and would otherwise be served
+# for up to 72h after a deploy — unchecked, with labels presented as
+# official titles. Nothing else reads the old tier; its rows simply expire.
+CACHE_TIER = "ballot_measure_pdf_v2"
+
 
 def is_configured(state: str) -> bool:
     """Whether `state` has both a registered source AND a strategy
@@ -306,6 +317,11 @@ def _to_measure(state: str, parsed: dict, election_date: str, source_url: str) -
         "title_authority": parsed.get("title_authority"),
         "fiscal_authority": parsed.get("fiscal_authority"),
         "source_url": source_url,
+        # The state's own record says this measure was struck from the
+        # ballot (Florida's Status "Removed"). Not upserted as on the
+        # ballot; election_pipeline reconciles it to removed and counts it
+        # as an explained drop, not a suspicious shrink.
+        "removed": bool(parsed.get("removed")),
     }
 
 
@@ -337,14 +353,19 @@ def _finish(db, state: str, year: int, measures: list[dict]) -> list[dict] | Non
     the full 72h.
     """
     dupes = _duplicate_ids(measures)
-    if dupes:
+    numbers = [m["number"] for m in measures if m["number"]]
+    dupe_numbers = sorted({n for n in numbers if numbers.count(n) > 1})
+    if dupes or dupe_numbers:
+        # A shared non-empty number is the same failure in another form:
+        # BallotMeasure is unique on (state, election_date, number), so the
+        # second insert fails and the state would publish one measure.
         logger.error(
-            "Ballot measures for %s %d: %d measures share id(s) %s — refusing the state's answer",
-            state, year, len(measures), dupes,
+            "Ballot measures for %s %d: %d measures share id(s) %s / number(s) %s — refusing the state's answer",
+            state, year, len(measures), dupes, dupe_numbers,
         )
         return None
     api_cache_set(
-        db, "ballot_measure_pdf", f"{state}-{year}", measures,
+        db, CACHE_TIER, f"{state}-{year}", measures,
         normal_ttl_hours=CACHE_TTL_HOURS,
     )
     return measures
@@ -385,10 +406,9 @@ async def fetch_state_measures_pdf(
         return None
 
     cache_key = f"{state}-{year}"
-    cached = api_cache_get(db, "ballot_measure_pdf", cache_key, max_age_hours=CACHE_TTL_HOURS)
-    if cached is not None:
-        # Older entries wrapped the list as {"measures": [...]}.
-        return cached.get("measures") if isinstance(cached, dict) else cached
+    cached = api_cache_get(db, CACHE_TIER, cache_key, max_age_hours=CACHE_TTL_HOURS)
+    if isinstance(cached, list):
+        return cached
 
     if multi_strategy is not None:
         try:
@@ -418,6 +438,7 @@ async def fetch_state_measures_pdf(
             if absent_until_published and complete:
                 raise NotYetPublished(
                     f"{source['source_name']}: no {year} document linked from {source['landing_page_url']}",
+                    deadline_applies=not source.get("absence_can_mean_none", False),
                 )
             logger.warning("Could not discover current ballot measure PDF for %s %d", state, year)
             return None
@@ -429,7 +450,10 @@ async def fetch_state_measures_pdf(
         pdf_bytes = response.content
     except httpx.HTTPStatusError as exc:
         if absent_until_published and exc.response.status_code == 404:
-            raise NotYetPublished(f"{source['source_name']}: {url} not posted yet (404)") from None
+            raise NotYetPublished(
+                f"{source['source_name']}: {url} not posted yet (404)",
+                deadline_applies=not source.get("absence_can_mean_none", False),
+            ) from None
         logger.warning(
             "Ballot measure PDF fetch failed for %s %d: HTTP %d",
             state, year, exc.response.status_code,

@@ -104,7 +104,10 @@ def parse_page(page_html: str, year: int) -> list[dict] | None:
             # The page is the one we know, carrying another election's
             # amendment (the August primary's, or last cycle's): this
             # election's isn't posted yet.
-            raise NotYetPublished(f"the Kansas Secretary of State's amendment page for the {year} general election")
+            raise NotYetPublished(
+                f"the Kansas Secretary of State's amendment page for the {year} general election",
+                deadline_applies=False,
+            )
         return None
 
     blocks: list[list[str]] = []

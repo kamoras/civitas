@@ -80,7 +80,7 @@ function ballot(overrides: Partial<StateBallot> = {}): StateBallot {
     houseRaces: [houseRace()],
     coverage: [],
     measures: [],
-    measureCoverage: { status: "not_yet_covered", sourceName: null, checkedAt: null },
+    measureCoverage: { status: "not_yet_covered", sourceName: null, checkedAt: null, lastAttemptAt: null },
     statewideRaces: [],
     statewideCoverage: { status: "not_yet_covered", sourceName: null, checkedAt: null },
     stateLegRaces: [],
@@ -595,6 +595,52 @@ describe("ballot measures", () => {
     const drawer = await openContest(/Statewide ballot measures/);
     expect(drawer.getByText(/does not have OH's statewide ballot measures yet/)).toBeInTheDocument();
     expect(drawer.getByText("not")).toBeInTheDocument(); // "This does not mean there are none"
+  });
+
+  const measure = {
+    id: "OH-2026-11-03-1", state: "OH", electionDate: "2026-11-03", electionType: "general",
+    number: "1", title: "Issue 1", measureType: null, origin: null, status: "certified",
+    officialTitle: null, officialSummary: "Summary.", fiscalImpact: null, yesMeans: null, noMeans: null,
+    titleAuthority: null, fiscalAuthority: null, sourceName: "Ohio SoS", sourceUrl: null, asOf: null,
+  };
+
+  it("says when the measures shown are from the last successful read after a failure", async () => {
+    // The regression: with any measures on file the section showed them as
+    // current and hid the coverage status, so a failed re-read (a measure
+    // struck since, say) was invisible to the reader.
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures: [measure],
+          measureCoverage: {
+            status: "ingest_failed", sourceName: "Ohio SoS",
+            checkedAt: "2026-09-20T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
+          },
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    const notice = drawer.getByRole("status");
+    expect(notice).toHaveTextContent("latest attempt to re-read OH's measures failed (2026-09-28)");
+    expect(notice).toHaveTextContent("last successful read, 2026-09-20");
+    expect(drawer.getByText("Summary.")).toBeInTheDocument();
+  });
+
+  it("shows no stale notice when the latest read worked", async () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures: [measure],
+          measureCoverage: {
+            status: "covered", sourceName: "Ohio SoS",
+            checkedAt: "2026-09-28T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
+          },
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    expect(drawer.queryByRole("status")).not.toBeInTheDocument();
+    expect(drawer.getByText(/last read successfully 2026-09-28/)).toBeInTheDocument();
   });
 });
 

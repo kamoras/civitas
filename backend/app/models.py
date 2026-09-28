@@ -1597,8 +1597,18 @@ class MeasureCoverage(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default=NOT_YET_COVERED)
     source_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     measure_count: Mapped[int] = mapped_column(Integer, default=0)
+    # When a read was last ATTEMPTED — failures included.
     checked_at: Mapped[datetime] = mapped_column(default=utcnow)
+    # When the status shown was last established by a read that worked.
+    # Never advanced by an ingest failure, so a page still showing earlier
+    # measures after a failed read can say how old they are.
+    last_success_at: Mapped[datetime | None] = mapped_column(nullable=True)
     error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # A read that shrank past MEASURE_SHRINK_FLOOR is held back until the
+    # same shorter list repeats (election_pipeline._accept_shrink): the
+    # ids of that list (JSON) and how many consecutive runs returned it.
+    pending_shrink: Mapped[str | None] = mapped_column(Text, nullable=True)
+    shrink_streak: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
 class PipelinePhaseTiming(Base):

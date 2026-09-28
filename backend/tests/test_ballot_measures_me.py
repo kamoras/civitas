@@ -101,10 +101,22 @@ class TestDiscovery:
 class TestFetchMeasures:
     async def test_guide_not_published_is_not_yet_published_never_empty(self, monkeypatch):
         async def fake_text(client, limiter, url, label, **kw):
-            return "<a href='/sos/news/other'>other</a>"
+            return "<a href='/sos/news/other'>other</a><time datetime=\"2026-06-25T12:00:00Z\">Jun 25</time>"
         monkeypatch.setattr(me, "fetch_text_with_retry", fake_text)
-        with pytest.raises(NotYetPublished):
+        with pytest.raises(NotYetPublished) as raised:
             await me.fetch_measures(None, 2026)
+        # A guide printed only when there are questions: its absence can be
+        # the real answer, so no expected-by cutoff applies.
+        assert raised.value.deadline_applies is False
+
+    async def test_news_pages_that_dont_reach_back_far_enough_are_not_a_complete_search(self, monkeypatch):
+        """Three news pages is a page budget, not a date range: if they all
+        fall after the earliest the guide is ever announced, its release
+        could be on page 4 — that is a blind spot, not "not published"."""
+        async def fake_text(client, limiter, url, label, **kw):
+            return "<a href='/sos/news/other'>other</a><time datetime=\"2026-09-25T12:00:00Z\">Sep 25</time>"
+        monkeypatch.setattr(me, "fetch_text_with_retry", fake_text)
+        assert await me.fetch_measures(None, 2026) is None
 
     async def test_full_flow_with_the_real_2024_guide(self, monkeypatch):
         guide = "https://www.maine.gov/sos/x/Citizens-20Guide-2011.5.2024-20FINAL.pdf"

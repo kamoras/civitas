@@ -182,5 +182,7 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
     if parsed is None:
         return None
     if not parsed:
-        raise NotYetPublished(f"a public question for {year} in Indiana's legislation summary")
+        raise NotYetPublished(
+            f"a public question for {year} in Indiana's legislation summary", deadline_applies=False,
+        )
     return [(m, url) for m in parsed]

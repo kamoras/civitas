@@ -1028,10 +1028,14 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         key=lambda r: r["district"] if r["district"] is not None else -1,
     )
 
+    # Only the election this page is about. Rows from an earlier cycle
+    # (or a primary) stay in the table until pruned and must never render
+    # under this election's heading. Removed measures for THIS election
+    # are still returned, and render as removed for their grace window.
     measures = (
         db.query(BallotMeasure)
-        .filter(BallotMeasure.state == state)
-        .order_by(BallotMeasure.election_date, BallotMeasure.number)
+        .filter(BallotMeasure.state == state, BallotMeasure.election_date == election_day)
+        .order_by(BallotMeasure.number)
         .all()
     )
     coverage = (
@@ -1089,7 +1093,12 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         "measureCoverage": {
             "status": coverage.status if coverage else MeasureCoverage.NOT_YET_COVERED,
             "sourceName": coverage.source_name if coverage else None,
-            "checkedAt": _iso_utc(coverage.checked_at) if coverage else None,
+            # When what is shown was last established by a read that
+            # worked. A failed read doesn't move it, so measures still on
+            # the page after tonight's failure say how old they are.
+            "checkedAt": _iso_utc(coverage.last_success_at) if coverage and coverage.last_success_at else None,
+            # When a read was last attempted, failures included.
+            "lastAttemptAt": _iso_utc(coverage.checked_at) if coverage else None,
         },
         "officialLookup": lookup_for_state(state),
         "statewideRaces": statewide_races,

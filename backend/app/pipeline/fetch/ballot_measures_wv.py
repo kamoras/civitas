@@ -184,7 +184,7 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
         # Every `year` article was read and none is a notice. West Virginia
         # posts one only in a year WITH an amendment, so its absence can
         # never confirm none — nor is it a failure.
-        raise NotYetPublished(f"West Virginia amendment public notice for {year}")
+        raise NotYetPublished(f"West Virginia amendment public notice for {year}", deadline_applies=False)
 
     results: dict[str, tuple[dict, str]] = {}
     for url in notices:

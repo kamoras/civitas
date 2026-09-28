@@ -219,12 +219,17 @@ class TestFlorida:
         active = self.fx["results_2024_html"].replace("Defeated", "Active").replace("Passed", "Active")
         assert [r["number"] for r in fl.listed_measures(active, 2024)] == ["1", "2", "3", "4", "5", "6"]
 
-    def test_a_struck_measure_is_not_listed_and_an_unknown_status_refuses(self):
-        # 2018's Amendment 8 was removed from the ballot by the courts.
-        numbers = [r["number"] for r in fl.listed_measures(
+    def test_a_struck_measure_is_reported_as_removed_and_an_unknown_status_refuses(self):
+        # 2018's Amendment 8 was removed from the ballot by the courts. It
+        # is reported as removed — the state's own explanation for a
+        # shorter list — never as on the ballot.
+        rows = fl.listed_measures(
             self.fx["results_2018_html"].replace("Passed", "Active").replace("Defeated", "Active"), 2018,
-        )]
-        assert "8" not in numbers and len(numbers) == 12
+        )
+        assert [r["number"] for r in rows if not r.get("removed")] == [
+            "1", "2", "3", "4", "5", "6", "7", "9", "10", "11", "12", "13",
+        ]
+        assert [r["number"] for r in rows if r.get("removed")] == ["8"]
         odd = self.fx["results_html"].replace("Active", "Pending Review", 1)
         assert odd != self.fx["results_html"]
         assert fl.listed_measures(odd, 2026) is None
@@ -436,8 +441,14 @@ class TestTennessee:
             return SimpleNamespace(status_code=404, text="")
 
         monkeypatch.setattr(common, "fetch_with_retry", missing)
-        with pytest.raises(NotYetPublished):
+        with pytest.raises(NotYetPublished) as off_year:
             await tn.fetch_measures(None, 2028)
+        # 2028 elects no governor, so no amendment can be on it: a 404 there
+        # never hits the expected-by cutoff. In a gubernatorial year it does.
+        assert off_year.value.deadline_applies is False
+        with pytest.raises(NotYetPublished) as gubernatorial:
+            await tn.fetch_measures(None, 2030)
+        assert gubernatorial.value.deadline_applies is True
 
         async def down(*a, **kw):
             return None

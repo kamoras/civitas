@@ -65,6 +65,11 @@ _YES_RE = re.compile(r"^A\s+“yes”\s+vote\b", re.IGNORECASE)
 _NO_RE = re.compile(r"^A\s+“no”\s+vote\b", re.IGNORECASE)
 
 
+def _is_gubernatorial_year(year: int) -> bool:
+    """Tennessee elects its governor every four years: 2022, 2026, 2030."""
+    return year % 4 == 2
+
+
 def _text(el) -> str:
     return clean_text(el.text_content()) or ""
 
@@ -143,6 +148,11 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
     page = await get_text_unless_missing(
         client, url, f"TN proposed constitutional amendments {year}",
         awaited=f"Tennessee's {year} proposed constitutional amendments page",
+        # Amendments go only to a gubernatorial general (art. XI §3) —
+        # 2026, 2030, ... — and the Secretary has posted this page for
+        # each one, so past the expected-by cutoff its absence then is a
+        # failure. In any other year a 404 is the normal state.
+        deadline_applies=_is_gubernatorial_year(year),
     )
     if page is None:
         return None

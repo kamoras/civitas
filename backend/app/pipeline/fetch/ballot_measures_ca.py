@@ -24,8 +24,10 @@ failure (None).
 
 Per proposition, all verbatim:
 - the guide's index (/propositions/) lists every proposition on the
-  ballot; each is read, and the number read must equal the number the
-  index lists or the state is refused (None);
+  ballot, and each is read (any that can't be is a refusal). That index
+  must list exactly the propositions the guide's separate Quick Reference
+  Guide index (/quick-reference-guide/) lists — a second, independent
+  count — or the state is refused (None);
 - "Official Title and Summary" (propositions/<n>/title-summary.htm),
   under the page's own "PREPARED BY THE ATTORNEY GENERAL" heading: the
   title (official_title — the ballot label title) and the bulleted
@@ -106,6 +108,23 @@ def proposition_links(index_html: str, index_url: str) -> dict[str, str] | None:
             return None
         links[m.group(1)] = urljoin(index_url, a[0].get("href"))
     return links or None
+
+
+_QRG_LINK_RE = re.compile(r"/quick-reference-guide/(\d+)\.htm$")
+
+
+def quick_reference_numbers(qrg_html: str) -> list[str] | None:
+    """The proposition numbers the guide's separate Quick Reference Guide
+    index lists — the second, independent count completeness is checked
+    against. None when it lists none it can read."""
+    tree = lxml_html.fromstring(qrg_html)
+    numbers = []
+    for a in tree.xpath("//div[@id='mainCont']//ul[contains(@class,'contentNav')]/li/a[@href]"):
+        m = _QRG_LINK_RE.search(a.get("href").split("?")[0])
+        if m is None:
+            return None
+        numbers.append(m.group(1))
+    return numbers or None
 
 
 def _prop_badge(tree) -> tuple[str | None, str | None]:
@@ -245,6 +264,23 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
         return None
     if links is None:
         return None
+    # Completeness is checked against a SECOND list the guide publishes on
+    # its own: the Quick Reference Guide index. The propositions index
+    # alone can't catch a proposition missing from it.
+    qrg_html = await get_text(client, urljoin(guide, "quick-reference-guide/"), f"CA {year} quick reference index")
+    if qrg_html is None:
+        return None
+    try:
+        qrg = quick_reference_numbers(qrg_html)
+    except Exception:
+        logger.exception("CA %d quick reference index was not parseable", year)
+        return None
+    if qrg is None or sorted(qrg, key=int) != sorted(links, key=int):
+        logger.warning(
+            "CA %d: propositions index lists %s but the quick reference guide lists %s — refusing",
+            year, list(links), qrg,
+        )
+        return None
 
     results: list[tuple[dict, str]] = []
     for number, prop_url in links.items():
@@ -264,8 +300,4 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
             logger.warning("CA Prop %s pages didn't match the verified shape — refusing the guide", number)
             return None
         results.append((parsed, summary_url))
-    # Fail-closed completeness: every proposition the guide's own index
-    # lists was read (the loop above returns None on any that isn't).
-    if [p["number"] for p, _ in results] != list(links):
-        return None
     return results

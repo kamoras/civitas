@@ -73,6 +73,11 @@ logger = logging.getLogger(__name__)
 UPCOMING_URL = "https://www.maine.gov/sos/elections-voting/upcoming-elections"
 NEWS_URL = "https://www.maine.gov/sos/about-us/news"
 NEWS_PAGES = 3
+# The guide is announced in the autumn (2024: October; 2025: September 25);
+# a news listing that reaches back before July 1 of the year has covered
+# every date it could have been announced on.
+GUIDE_NEVER_BEFORE = "07-01"
+_DATETIME_RE = re.compile(r'<time[^>]*datetime="(\d{4}-\d{2}-\d{2})')
 
 TITLE_AUTHORITY = "Maine Secretary of State"
 
@@ -257,11 +262,14 @@ async def _find_guide(client: httpx.AsyncClient, year: int) -> tuple[str | None,
     pages = [UPCOMING_URL] + [f"{NEWS_URL}?page={n}" for n in range(NEWS_PAGES)]
     releases: list[str] = []
     complete = True
+    news_dates: list[str] = []
     for url in pages:
         html = await fetch_text_with_retry(client, _rate_limiter, url, "ME SOS page")
         if html is None:
             complete = False
             continue
+        if url.startswith(NEWS_URL):
+            news_dates += _DATETIME_RE.findall(html)
         links = guide_links(html, url, year)
         if links:
             return links[0], True
@@ -274,6 +282,12 @@ async def _find_guide(client: httpx.AsyncClient, year: int) -> tuple[str | None,
         links = guide_links(html, url, year)
         if links:
             return links[0], True
+    # The news pages read must reach back past the earliest the guide has
+    # ever been announced; otherwise its release could sit on a page
+    # beyond NEWS_PAGES and "not linked" would be a blind spot.
+    if not news_dates or min(news_dates) >= f"{year}-{GUIDE_NEVER_BEFORE}":
+        logger.warning("ME %d: the news pages read don't reach back before %s-%s", year, year, GUIDE_NEVER_BEFORE)
+        complete = False
     return None, complete
 
 
@@ -290,7 +304,7 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
             return None
         # The guide is published weeks before November; until then Maine's
         # ballot is simply not known yet.
-        raise NotYetPublished(f"Maine Citizen's Guide for {year}")
+        raise NotYetPublished(f"Maine Citizen's Guide for {year}", deadline_applies=False)
     raw = await fetch_bytes_with_retry(client, _rate_limiter, guide_url, f"ME {year} Citizen's Guide")
     if raw is None:
         return None

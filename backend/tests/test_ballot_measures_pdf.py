@@ -92,7 +92,7 @@ async def test_fetch_returns_cached_result_without_a_fetch(monkeypatch, db_sessi
 
     monkeypatch.setattr(pdf, "source_for_state", lambda state: _fake_source())
     monkeypatch.setitem(pdf.STRATEGIES, "fake_strategy", lambda pages: [])
-    api_cache_set(db_session, "ballot_measure_pdf", "ZZ-2026", [{"id": "ZZ-x"}])
+    api_cache_set(db_session, pdf.CACHE_TIER, "ZZ-2026", [{"id": "ZZ-x"}])
 
     async def fail_get(*a, **kw):
         raise AssertionError("should not fetch — cache hit")
@@ -511,7 +511,7 @@ async def test_a_confirmed_none_is_cached_only_briefly(monkeypatch, db_session):
 
     monkeypatch.setitem(pdf.MULTI_DOCUMENT_STRATEGIES, "fake_multi", none_this_year)
     assert await pdf.fetch_state_measures_pdf(None, db_session, "ZZ", 2026, "2026-11-03") == []
-    entry = db_session.query(ApiCache).filter(ApiCache.tier == "ballot_measure_pdf").one()
+    entry = db_session.query(ApiCache).filter(ApiCache.tier == pdf.CACHE_TIER).one()
     # Backdated so it expires EMPTY_RESPONSE_TTL_HOURS after it was written.
     age = utcnow() - entry.cached_at
     assert age > timedelta(hours=pdf.CACHE_TTL_HOURS - EMPTY_RESPONSE_TTL_HOURS - 1)
@@ -523,13 +523,61 @@ async def test_a_confirmed_none_is_cached_only_briefly(monkeypatch, db_session):
 
 
 @pytest.mark.asyncio
-async def test_a_legacy_wrapped_cache_entry_still_reads(monkeypatch, db_session):
+async def test_a_pre_fix_cache_entry_is_never_served(monkeypatch, db_session):
+    """Entries written before this change sat under the old tier as
+    {"measures": [...]}, unchecked and with labels as official titles;
+    serving them for up to 72h after a deploy would undo the fixes."""
     from app.pipeline.cache import api_cache_set
 
-    monkeypatch.setattr(pdf, "source_for_state", lambda state: _fake_source())
-    monkeypatch.setitem(pdf.STRATEGIES, "fake_strategy", lambda pages: [])
-    api_cache_set(db_session, "ballot_measure_pdf", "ZZ-2026", {"measures": [{"id": "ZZ-y"}]})
-    assert await pdf.fetch_state_measures_pdf(None, db_session, "ZZ", 2026, "2026-11-03") == [{"id": "ZZ-y"}]
+    monkeypatch.setattr(pdf, "source_for_state", lambda state: _fake_source("fake_multi"))
+    api_cache_set(db_session, "ballot_measure_pdf", "ZZ-2026", {"measures": [{"id": "ZZ-stale"}]})
+    calls = []
+
+    async def fresh(client, year):
+        calls.append(year)
+        return [(_one("1"), "u")]
+
+    monkeypatch.setitem(pdf.MULTI_DOCUMENT_STRATEGIES, "fake_multi", fresh)
+    [m] = await pdf.fetch_state_measures_pdf(None, db_session, "ZZ", 2026, "2026-11-03")
+    assert m["id"] == "ZZ-2026-11-03-1" and calls == [2026]
+    assert pdf.CACHE_TIER != "ballot_measure_pdf"
+
+
+@pytest.mark.asyncio
+async def test_two_measures_sharing_a_number_refuse_the_states_answer(monkeypatch, db_session):
+    """Different ids, same non-empty number: BallotMeasure is unique on
+    (state, election_date, number), so the second insert would fail and
+    the state would publish one of the two."""
+    monkeypatch.setattr(pdf, "source_for_state", lambda state: _fake_source("fake_multi"))
+
+    async def same_number(client, year):
+        return [(_one("1", id_key="A"), "u1"), (_one("1", id_key="B"), "u2")]
+
+    monkeypatch.setitem(pdf.MULTI_DOCUMENT_STRATEGIES, "fake_multi", same_number)
+    assert await pdf.fetch_state_measures_pdf(None, db_session, "ZZ", 2026, "2026-11-03") is None
+
+
+@pytest.mark.asyncio
+async def test_a_crawl_that_ran_out_of_budget_is_not_complete():
+    """The regression: the crawl stopped at max_pages with links still
+    queued and reported (None, True) — "read everything, nothing there" —
+    so a document linked on a page it never opened read as not published."""
+    async def get(url, timeout=None):
+        n = int(url.rsplit("/", 1)[-1] or 0)
+        body = f'<a href="https://example.com/ballot/{n + 1}">ballot {n + 1}</a>'
+        if n == 10:
+            body = '<a href="https://example.com/2026-ballot-guide.pdf">2026 ballot guide</a>'
+        return SimpleNamespace(text=body, raise_for_status=lambda: None)
+
+    client = SimpleNamespace(get=get)
+    url, complete = await pdf.discover_pdf_url_checked(
+        client, "https://example.com/ballot/0", 2026, max_pages=8, max_depth=20,
+    )
+    assert (url, complete) == (None, False)
+    url, complete = await pdf.discover_pdf_url_checked(
+        client, "https://example.com/ballot/0", 2026, max_pages=20, max_depth=20,
+    )
+    assert url == "https://example.com/2026-ballot-guide.pdf" and complete
 
 
 # ── a document not posted yet vs a failure (single-document sources) ─
@@ -601,3 +649,7 @@ def test_the_late_posting_sources_are_flagged():
     sources.invalidate_cache()
     flagged = {st for st in sources.configured_states() if (sources.source_for_state(st) or {}).get("absent_until_published")}
     assert flagged == {"AK", "CO", "MA", "VT", "WY"}
+    # Of those, only the ones that publish for every general hit the
+    # expected-by cutoff.
+    can_be_none = {st for st in flagged if sources.source_for_state(st).get("absence_can_mean_none")}
+    assert can_be_none == {"VT", "WY"}

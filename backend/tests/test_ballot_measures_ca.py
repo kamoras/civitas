@@ -28,6 +28,12 @@ def _prop(number, prefix="current"):
 
 
 class TestIndex:
+    def test_both_real_indexes_list_the_same_propositions(self):
+        props = ca.proposition_links(FX["current_index"], CURRENT + "propositions/")
+        assert ca.quick_reference_numbers(FX["current_quick_reference_index"]) == list(props)
+        archived = ca.proposition_links(FX["archive_2024_index"], ARCHIVE_2024 + "propositions/")
+        assert ca.quick_reference_numbers(FX["archive_2024_quick_reference_index"]) == list(archived)
+
     def test_the_2026_guide_lists_its_fourteen_propositions(self):
         links = ca.proposition_links(FX["current_index"], CURRENT + "propositions/")
         assert list(links) == ["1", "2", "3", "4", "5", "37", "38", "39", "40", "41", "42", "43", "44", "45"]
@@ -133,6 +139,17 @@ def _serve(monkeypatch, pages: dict, missing: set = frozenset()):
     monkeypatch.setattr(ca, "get_text_or_missing", get_text_or_missing)
 
 
+def _one_qrg_index(numbers):
+    """The real 2026 Quick Reference Guide index cut down to `numbers`."""
+    import re
+
+    html = FX["current_quick_reference_index"]
+    for m in re.finditer(r'<li><a href="/quick-reference-guide/(\d+)\.htm">.*?</li>', html, re.S):
+        if m.group(1) not in numbers:
+            html = html.replace(m.group(0), "")
+    return html
+
+
 def _one_prop_index(numbers):
     """The real 2026 index cut down to `numbers`' entries."""
     import re
@@ -147,7 +164,10 @@ def _one_prop_index(numbers):
 class TestFetch:
     async def test_every_listed_proposition_is_read(self, monkeypatch):
         index = _one_prop_index({"1", "3", "45"})
-        pages = {CURRENT + "propositions/": index}
+        pages = {
+            CURRENT + "propositions/": index,
+            CURRENT + "quick-reference-guide/": _one_qrg_index({"1", "3", "45"}),
+        }
         for n in ("1", "3", "45"):
             pages[CURRENT + f"propositions/{n}/"] = FX[f"current_{n}_quick"]
             pages[CURRENT + f"propositions/{n}/title-summary.htm"] = FX[f"current_{n}_title_summary"]
@@ -160,11 +180,32 @@ class TestFetch:
         """Fail-closed completeness: the guide's index lists it, so a
         guide read without it is not the ballot."""
         index = _one_prop_index({"1", "3", "45"})
-        pages = {CURRENT + "propositions/": index}
+        pages = {
+            CURRENT + "propositions/": index,
+            CURRENT + "quick-reference-guide/": _one_qrg_index({"1", "3", "45"}),
+        }
         for n in ("1", "3"):
             pages[CURRENT + f"propositions/{n}/"] = FX[f"current_{n}_quick"]
             pages[CURRENT + f"propositions/{n}/title-summary.htm"] = FX[f"current_{n}_title_summary"]
         _serve(monkeypatch, pages)
+        assert await ca.fetch_measures(None, 2026) is None
+
+    async def test_a_proposition_missing_from_one_of_the_two_indexes_refuses(self, monkeypatch):
+        """The regression: the final "read == listed" check compared the
+        propositions index with itself and could never fail — a
+        proposition missing from that one index went unnoticed. The Quick
+        Reference Guide's own index is the independent second count."""
+        pages = {
+            CURRENT + "propositions/": _one_prop_index({"1", "3"}),
+            CURRENT + "quick-reference-guide/": _one_qrg_index({"1", "3", "45"}),
+        }
+        for n in ("1", "3", "45"):
+            pages[CURRENT + f"propositions/{n}/"] = FX[f"current_{n}_quick"]
+            pages[CURRENT + f"propositions/{n}/title-summary.htm"] = FX[f"current_{n}_title_summary"]
+        _serve(monkeypatch, pages)
+        assert await ca.fetch_measures(None, 2026) is None
+        # ... and an unreachable second index is a failure too.
+        del pages[CURRENT + "quick-reference-guide/"]
         assert await ca.fetch_measures(None, 2026) is None
 
     async def test_an_earlier_year_is_read_from_the_archive(self, monkeypatch):

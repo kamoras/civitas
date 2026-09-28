@@ -209,7 +209,9 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
             # The Bureau posts this document only once something is
             # certified to November's ballot; until then there is nothing
             # to read and nothing broken. Not yet covered, never none.
-            raise NotYetPublished(f"Michigan's '{year} November ballot questions' document")
+            raise NotYetPublished(
+                f"Michigan's '{year} November ballot questions' document", deadline_applies=False,
+            )
         logger.warning("MI: more than one '%d November ballot questions' PDF link on the landing page", year)
         return None
     raw = await fetch_bytes_with_retry(client, _rate_limiter, pdf_url, "MI ballot questions PDF", headers=HEADERS)

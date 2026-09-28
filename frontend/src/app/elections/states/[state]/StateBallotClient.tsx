@@ -332,8 +332,27 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
   const { measures, measureCoverage, state } = ballot;
 
   if (measures.length > 0) {
+    // Measures on file don't make the coverage status irrelevant: after a
+    // failed read they are the LAST successful read's list, and a reader
+    // has to be told that rather than shown them as current.
+    const stale = measureCoverage.status === "ingest_failed";
     return (
       <div className="space-y-3">
+        {stale && (
+          <div role="status" className="border border-signal-amber/40 bg-signal-amber/10 p-3">
+            <p className="text-xs text-signal-amber">
+              Our latest attempt to re-read {state}&apos;s measures failed
+              {measureCoverage.lastAttemptAt ? ` (${measureCoverage.lastAttemptAt.slice(0, 10)})` : ""}. The list
+              below is from the last successful read
+              {measureCoverage.checkedAt ? `, ${measureCoverage.checkedAt.slice(0, 10)}` : ""}, and may be out of
+              date — check the{" "}
+              <a href={lookupHref} target="_blank" rel="noopener noreferrer" className="text-signal-cyan hover:text-phos">
+                official lookup ↗
+              </a>
+              .
+            </p>
+          </div>
+        )}
         {measures.map((m) => (
           <BallotMeasureCard key={m.id} measure={m} />
         ))}
@@ -341,7 +360,7 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
           {measures.length} statewide {measures.length === 1 ? "measure" : "measures"} on
           record from {measureCoverage.sourceName || "the source"}
           {measureCoverage.checkedAt
-            ? ` · last checked ${measureCoverage.checkedAt.slice(0, 10)}`
+            ? ` · last read successfully ${measureCoverage.checkedAt.slice(0, 10)}`
             : ""}
           . Local measures on your ballot are not shown here.
         </p>
@@ -387,9 +406,9 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
         </a>{" "}
         to see everything on your ballot.
       </p>
-      {measureCoverage.checkedAt && (
+      {measureCoverage.lastAttemptAt && (
         <p className="text-[10px] text-ink-min mt-2">
-          Last attempt {measureCoverage.checkedAt.slice(0, 10)}.
+          Last attempt {measureCoverage.lastAttemptAt.slice(0, 10)}.
         </p>
       )}
     </div>

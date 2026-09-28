@@ -581,11 +581,14 @@ def _direct_source(monkeypatch, listed_by_call, source_name="Example Elections O
         answer = next(answers)
         if answer is None:
             return None
+        if isinstance(answer, Exception):
+            raise answer
+        # "3-" is measure 3 reported by the state as struck (removed).
         return [
             ballot_measures_pdf._to_measure(
                 st,
-                {"number": n, "title": f"T{n}", "origin": None, "official_summary": "S",
-                 "fiscal_impact": None, "yes_means": None, "no_means": None},
+                {"number": n.rstrip("-"), "title": f"T{n}", "origin": None, "official_summary": "S",
+                 "fiscal_impact": None, "yes_means": None, "no_means": None, "removed": n.endswith("-")},
                 election_date, "https://example.com/ballot.pdf",
             )
             for n in answer
@@ -631,8 +634,14 @@ async def test_a_confirmed_none_reconciles_earlier_rows(monkeypatch, db_session)
     """The regression: [] wrote CONFIRMED_NONE and returned before
     reconciling, so a measure listed earlier stayed "certified" on a page
     whose coverage said there were none."""
-    _direct_source(monkeypatch, [["1"], []])
+    runs = election_pipeline.MEASURE_SHRINK_CONFIRM_RUNS
+    _direct_source(monkeypatch, [["1"]] + [[]] * runs)
     await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    # 1 -> 0 is a shrink past the floor: held back until it repeats ...
+    for _ in range(runs - 1):
+        await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+        assert db_session.query(BallotMeasure).one().status == "certified"
+    # ... and then accepted: removed, never left "certified" under a none.
     _, failed, marked = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
     assert (failed, marked) == (0, 1)
     assert db_session.query(BallotMeasure).one().status == "removed"
@@ -647,20 +656,22 @@ async def test_switching_a_state_to_direct_sourcing_retires_its_vote_smart_rows(
     certified duplicate. They are superseded, so they are deleted — and
     only by a successful read."""
     _measure(db_session, "vs-100", state="CA", number="Prop 1", source_name="Vote Smart")
-    _measure(db_session, "vs-101", state="CA", date="2026-11-04", number="Prop 2", source_name="Vote Smart")
-    # An earlier cycle's record is left alone.
+    _measure(db_session, "vs-101", state="CA", number="Prop 2", source_name="Vote Smart")
+    # Another election in the same year (a primary) and an earlier
+    # cycle's record are left alone: only the election read is replaced.
+    _measure(db_session, "vs-090", state="CA", date="2026-06-02", number="Prop 1", source_name="Vote Smart")
     _measure(db_session, "vs-050", state="CA", date="2024-11-05", number="Prop 9", source_name="Vote Smart")
     db_session.commit()
 
     _direct_source(monkeypatch, [None, ["1", "2"]])
     await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
     # A failed read retires nothing.
-    assert db_session.query(BallotMeasure).filter(BallotMeasure.id.like("vs-%")).count() == 3
+    assert db_session.query(BallotMeasure).filter(BallotMeasure.id.like("vs-%")).count() == 4
 
     _, failed, marked = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
     assert (failed, marked) == (0, 0)
     ids = sorted(m.id for m in db_session.query(BallotMeasure).all())
-    assert ids == ["CA-2026-11-03-1", "CA-2026-11-03-2", "vs-050"]
+    assert ids == ["CA-2026-11-03-1", "CA-2026-11-03-2", "vs-050", "vs-090"]
     assert {m.status for m in db_session.query(BallotMeasure).all()} == {"certified"}
 
 
@@ -684,6 +695,7 @@ async def test_vote_smart_confirmed_none_reconciles_earlier_rows(monkeypatch, db
     monkeypatch.setattr(ballot_measure_pdf_sources, "configured_states", lambda: set())
     monkeypatch.setattr(election_pipeline, "STATES_WITH_FEDERAL_RACES", {"GA"})
     monkeypatch.setattr(election_pipeline, "next_election_day", lambda d: __import__("datetime").date(2026, 11, 3))
+    monkeypatch.setattr(election_pipeline, "MEASURE_SHRINK_CONFIRM_RUNS", 1)
     _measure(db_session, "vs-1", source_name="Vote Smart")
     db_session.commit()
 
@@ -709,3 +721,235 @@ async def test_direct_source_failures_alert_without_a_votesmart_key(monkeypatch,
     result = await election_pipeline._sync_ballot_measures(db_session, None, 2026)
     assert result["failed_states"] == 1
     assert len(sent) == 1
+
+
+# ── round 2: the write can't lose both answers; scope; freshness ─────
+
+
+@pytest.mark.asyncio
+async def test_a_direct_row_sharing_a_vote_smart_number_replaces_it(monkeypatch, db_session):
+    """The regression: the direct row with Vote Smart's number tripped
+    uq_ballot_measure_state_date_number and rolled back, but was still
+    counted as seen, so the Vote Smart row was then deleted — an empty
+    table under coverage "covered, 1"."""
+    _measure(db_session, "vs-100", state="CA", number="1", source_name="Vote Smart")
+    db_session.commit()
+    _direct_source(monkeypatch, [["1"]])
+    synced, failed, _ = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    assert (synced, failed) == (1, 0)
+    [row] = db_session.query(BallotMeasure).all()
+    assert row.id == "CA-2026-11-03-1" and row.status == "certified"
+    assert _coverage(db_session).measure_count == 1
+
+
+@pytest.mark.asyncio
+async def test_a_failed_write_keeps_the_old_rows_and_counts_nothing(monkeypatch, db_session):
+    _measure(db_session, "vs-100", state="CA", number="Prop 1", source_name="Vote Smart")
+    db_session.commit()
+    _direct_source(monkeypatch, [["1", "2"]])
+    real_upsert = election_pipeline._upsert_measure
+
+    def failing_upsert(db, raw, detail, source_name):
+        if raw["number"] == "2":
+            raise RuntimeError("constraint")
+        real_upsert(db, raw, detail, source_name)
+
+    monkeypatch.setattr(election_pipeline, "_upsert_measure", failing_upsert)
+    synced, failed, marked = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    assert (synced, failed, marked) == (0, 1, 0)
+    # The whole write rolled back: the superseded row is still there, and
+    # nothing half-written is.
+    assert [m.id for m in db_session.query(BallotMeasure).all()] == ["vs-100"]
+    assert _coverage(db_session).status == MeasureCoverage.INGEST_FAILED
+
+
+@pytest.mark.asyncio
+async def test_a_reported_removal_explains_a_shrink(monkeypatch, db_session):
+    """Florida reports a struck amendment (Status "Removed"); a shorter list
+    the state itself explains is written at once, not held as suspicious."""
+    _direct_source(monkeypatch, [["1", "2", "3", "4"], ["1", "2-", "3-", "4-"]])
+    await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    _, failed, marked = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    assert (failed, marked) == (0, 3)
+    status = {m.number: m.status for m in db_session.query(BallotMeasure).all()}
+    assert status == {"1": "certified", "2": "removed", "3": "removed", "4": "removed"}
+    assert _coverage(db_session).measure_count == 1
+
+
+@pytest.mark.asyncio
+async def test_a_repeated_shorter_list_is_eventually_accepted(monkeypatch, db_session):
+    runs = election_pipeline.MEASURE_SHRINK_CONFIRM_RUNS
+    _direct_source(monkeypatch, [["1", "2", "3", "4"]] + [["1"]] * runs)
+    await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    for _ in range(runs - 1):
+        _, failed, _ = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+        assert failed == 1
+    _, failed, marked = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    assert (failed, marked) == (0, 3)
+    assert _coverage(db_session).status == MeasureCoverage.COVERED
+
+
+@pytest.mark.asyncio
+async def test_a_different_shorter_list_restarts_the_streak(monkeypatch, db_session):
+    runs = election_pipeline.MEASURE_SHRINK_CONFIRM_RUNS
+    answers = [["1", "2", "3", "4"]] + [["1"] if i % 2 else ["2"] for i in range(runs + 1)]
+    _direct_source(monkeypatch, answers)
+    await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    for _ in range(runs + 1):
+        _, failed, _ = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+        assert failed == 1
+    assert {m.status for m in db_session.query(BallotMeasure).all()} == {"certified"}
+
+
+@pytest.mark.asyncio
+async def test_earlier_cycles_do_not_inflate_the_shrink_baseline(monkeypatch, db_session):
+    """The regression: the Vote Smart path counted every row the state had
+    ever had, so 2024's measures held a real, shorter 2026 list back."""
+    from app.pipeline.fetch import ballot_measure_pdf_sources
+
+    monkeypatch.setattr(ballot_measures.settings, "VOTESMART_API_KEY", "k")
+    monkeypatch.setattr(ballot_measure_pdf_sources, "configured_states", lambda: set())
+    monkeypatch.setattr(election_pipeline, "STATES_WITH_FEDERAL_RACES", {"GA"})
+    monkeypatch.setattr(election_pipeline, "next_election_day", lambda d: __import__("datetime").date(2026, 11, 3))
+    monkeypatch.setattr(election_pipeline, "_prune_past_measures", lambda db: 0)
+    for i in range(4):
+        _measure(db_session, f"vs-old{i}", date="2024-11-05", number=f"Amendment {i}", source_name="Vote Smart")
+    db_session.commit()
+
+    async def one_listed(client, db, state, cycle):
+        return [{"id": "vs-new", "source_measure_id": "new", "state": "GA", "number": "Amendment 1",
+                 "title": "T", "election_date": "2026-11-03"}]
+
+    async def detail(client, db, mid):
+        return {"election_date": "2026-11-03"}
+
+    monkeypatch.setattr(ballot_measures, "fetch_state_measures", one_listed)
+    monkeypatch.setattr(ballot_measures, "fetch_measure_detail", detail)
+    result = await election_pipeline._sync_ballot_measures(db_session, None, 2026)
+    assert result["failed_states"] == 0
+    assert _coverage(db_session, "GA").status == MeasureCoverage.COVERED
+
+
+@pytest.mark.asyncio
+async def test_a_failed_read_does_not_refresh_the_last_successful_check(monkeypatch, db_session):
+    _direct_source(monkeypatch, [["1"], None])
+    await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    good = _coverage(db_session).last_success_at
+    assert good is not None
+    await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    row = _coverage(db_session)
+    assert row.status == MeasureCoverage.INGEST_FAILED
+    assert row.last_success_at == good
+    assert row.checked_at >= good
+
+
+@pytest.mark.asyncio
+async def test_a_document_that_disappears_after_coverage_is_a_failure(monkeypatch, db_session):
+    """The regression: a state covered for this election whose document
+    later read as not published flipped quietly to not_yet_covered."""
+    from app.pipeline.fetch.ballot_measure_text import NotYetPublished
+
+    _direct_source(monkeypatch, [["1"], NotYetPublished("guide", deadline_applies=False)])
+    await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    _, failed, _ = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    assert failed == 1
+    row = _coverage(db_session)
+    assert row.status == MeasureCoverage.INGEST_FAILED
+    assert "was covered" in row.error_detail
+    assert db_session.query(BallotMeasure).one().status == "certified"
+
+
+@pytest.mark.asyncio
+async def test_not_published_past_the_expected_by_cutoff_is_a_failure(monkeypatch, db_session):
+    """A document the state publishes for every general (a sample ballot, a
+    guide with a mail-by date) that is still missing after the cutoff is a
+    moved file or a renamed link, not a wait — it alerts. One that exists
+    only in a year with a measure never hits the cutoff."""
+    from app.pipeline.fetch.ballot_measure_text import NotYetPublished
+
+    monkeypatch.setattr(election_pipeline, "_past_expected_by", lambda src, day: False)
+    _direct_source(monkeypatch, [NotYetPublished("sample ballot")])
+    _, failed, _ = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    assert failed == 0
+    assert _coverage(db_session).status == MeasureCoverage.NOT_YET_COVERED
+
+    monkeypatch.setattr(election_pipeline, "_past_expected_by", lambda src, day: True)
+    _direct_source(monkeypatch, [NotYetPublished("sample ballot"), NotYetPublished("notice", deadline_applies=False)])
+    _, failed, _ = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    assert failed == 1
+    assert _coverage(db_session).status == MeasureCoverage.INGEST_FAILED
+    assert "expected by now" in _coverage(db_session).error_detail
+
+    db_session.query(MeasureCoverage).delete()
+    db_session.commit()
+    _, failed, _ = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    assert failed == 0
+    assert _coverage(db_session).status == MeasureCoverage.NOT_YET_COVERED
+
+
+def test_the_expected_by_cutoff_counts_back_from_election_day(monkeypatch):
+    from datetime import datetime
+
+    election = "2026-11-03"
+    monkeypatch.setattr(election_pipeline, "utcnow", lambda: datetime(2026, 10, 13))
+    assert election_pipeline._past_expected_by({"expected_by_days_before": 21}, election)
+    assert not election_pipeline._past_expected_by({"expected_by_days_before": 21}, "2026-11-10")
+    assert not election_pipeline._past_expected_by({}, election)  # default: 14 days -> Oct 20
+    monkeypatch.setattr(election_pipeline, "utcnow", lambda: datetime(2026, 10, 12))
+    assert not election_pipeline._past_expected_by({"expected_by_days_before": 21}, election)
+    monkeypatch.setattr(election_pipeline, "utcnow", lambda: datetime(2026, 10, 20))
+    assert election_pipeline._past_expected_by({}, election)
+
+
+# ── the state page shows its own election only ───────────────────────
+
+
+def _page_election():
+    return elections.next_election_day(elections.utcnow().date()).isoformat()
+
+
+def test_state_ballot_shows_only_the_pages_own_election(db_session):
+    """The regression (pre-existing): every BallotMeasure the state had
+    ever had was listed, so an earlier cycle's measures — or a primary's —
+    rendered under this election's heading."""
+    current = _page_election()
+    _measure(db_session, "vs-now", date=current, number="Amendment 1", source_name="Vote Smart")
+    _measure(db_session, "vs-old", date="2024-11-05", number="Amendment 1", source_name="Vote Smart")
+    _measure(db_session, "vs-primary", date=f"{current[:4]}-05-19", number="Amendment 9", source_name="Vote Smart")
+    db_session.commit()
+    data = _body(elections.state_ballot("GA", db=db_session))
+    assert [m["id"] for m in data["measures"]] == ["vs-now"]
+
+
+def test_a_removed_measure_of_this_election_still_renders_as_removed(db_session):
+    _measure(db_session, "vs-struck", date=_page_election(), status="removed", source_name="Vote Smart")
+    _measure(db_session, "vs-old-struck", date="2024-11-05", status="removed", source_name="Vote Smart")
+    db_session.commit()
+    data = _body(elections.state_ballot("GA", db=db_session))
+    assert [(m["id"], m["status"]) for m in data["measures"]] == [("vs-struck", "removed")]
+
+
+def test_checked_at_is_the_last_successful_check(db_session):
+    """After a failed read the page still shows the measures on file; the
+    date it prints for them must be when they were last read, not when
+    the failure happened."""
+    election = _page_election()
+    election_pipeline._set_coverage(db_session, "GA", election, MeasureCoverage.COVERED, 1, source_name="S")
+    db_session.commit()
+    row = db_session.query(MeasureCoverage).one()
+    row.last_success_at = row.checked_at = utcnow() - timedelta(days=3)
+    db_session.commit()
+    election_pipeline._set_coverage(db_session, "GA", election, MeasureCoverage.INGEST_FAILED, 1, source_name="S")
+    db_session.commit()
+    cov = _body(elections.state_ballot("GA", db=db_session))["measureCoverage"]
+    assert cov["status"] == MeasureCoverage.INGEST_FAILED
+    assert cov["checkedAt"][:10] == (utcnow() - timedelta(days=3)).date().isoformat()
+    assert cov["lastAttemptAt"][:10] == utcnow().date().isoformat()
+
+
+def test_past_elections_measures_are_pruned(db_session):
+    _measure(db_session, "vs-old", date="2024-11-05", number="Amendment 1")
+    _measure(db_session, "vs-now", date=_page_election(), number="Amendment 1")
+    db_session.commit()
+    assert election_pipeline._prune_past_measures(db_session) == 1
+    assert [m.id for m in db_session.query(BallotMeasure).all()] == ["vs-now"]

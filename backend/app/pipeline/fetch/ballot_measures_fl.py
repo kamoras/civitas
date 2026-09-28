@@ -82,8 +82,9 @@ def search_form_fields(page_html: str) -> dict[str, str] | None:
 
 
 def listed_measures(results_html: str, year: int) -> list[dict] | None:
-    """[{number, title, detail_url, sponsor}] for every "made ballot" row
-    of `year`'s general election still Active, or None if the results
+    """[{number, title, detail_url, sponsor[, removed]}] for every "made
+    ballot" row of `year`'s general election still Active, plus each one
+    struck from it (Status "Removed", flagged removed=True), or None if the results
     table is missing (the answer page didn't render — not the same as
     zero rows) or any of `year`'s rows can't be read."""
     tree = lxml_html.fromstring(results_html)
@@ -108,8 +109,17 @@ def listed_measures(results_html: str, year: int) -> list[dict] | None:
                 year, status, _text(cells[4]), _text(cells[3])[:60],
             )
             return None
+        if status == "Removed":
+            # Struck from this ballot. Reported, not silently skipped: the
+            # pipeline marks it removed and accepts the shorter list as
+            # the state's own statement rather than a suspicious shrink.
+            rows.append({
+                "number": m.group(1), "title": _text(cells[3]), "detail_url": link[0],
+                "sponsor": "", "removed": True,
+            })
+            continue
         if status != _ON_BALLOT_STATUS:
-            continue  # struck (Removed), or an election already decided
+            continue  # an election already decided (Passed / Defeated)
         sponsor_links = cells[5].xpath(".//a")
         rows.append({
             "number": m.group(1),
@@ -215,6 +225,13 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
 
     results = []
     for row in sorted(rows, key=lambda r: int(r["number"])):
+        if row.get("removed"):
+            results.append(({
+                "number": row["number"], "title": row["title"], "origin": None,
+                "official_summary": None, "fiscal_impact": None, "yes_means": None,
+                "no_means": None, "removed": True,
+            }, row["detail_url"]))
+            continue
         detail = await get_text(client, row["detail_url"], f"FL Amendment {row['number']} detail")
         if detail is None:
             return None

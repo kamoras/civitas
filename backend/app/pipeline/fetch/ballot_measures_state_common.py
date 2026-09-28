@@ -80,15 +80,18 @@ async def get_text_or_missing(client: httpx.AsyncClient, url: str, label: str) -
     return resp.text, False
 
 
-async def get_text_unless_missing(client: httpx.AsyncClient, url: str, label: str, awaited: str) -> str | None:
+async def get_text_unless_missing(
+    client: httpx.AsyncClient, url: str, label: str, awaited: str, *, deadline_applies: bool = True,
+) -> str | None:
     """get_text for a page a state creates only when it has something to
     post: a 404 there raises NotYetPublished(`awaited`) — not yet covered,
     no alert — while any other failure is still None (ingest_failed). Use
     it only where the address is the state's own per-election convention
-    and its absence is known to mean "not posted"."""
+    and its absence is known to mean "not posted". `deadline_applies` is
+    passed through to NotYetPublished (see its docstring)."""
     text, missing = await get_text_or_missing(client, url, label)
     if missing:
-        raise NotYetPublished(awaited)
+        raise NotYetPublished(awaited, deadline_applies=deadline_applies)
     return text
 
 
