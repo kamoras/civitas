@@ -79,6 +79,7 @@ export default function FundingColumn({
   return (
     <ScoreColumn
       title="Funding Independence"
+      shareId="funding-independence"
       weight={weight}
       score={score}
       more={{ label: "All donors and industries", onClick: onMore }}
