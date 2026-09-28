@@ -1049,7 +1049,9 @@ export default function AboutPage() {
             <P>
               Justices are scored on impartiality and ideological consistency using case-level
               voting data from the Oyez Project and official Supreme Court records. Case opinions
-              link directly to the official supremecourt.gov slip opinion PDFs.
+              link directly to the official supremecourt.gov slip opinion PDFs. When the source
+              lists a justice twice in one decision, the vote is counted once if the two entries
+              agree and left out if they do not; a vote the source omits is never filled in.
             </P>
             <P>
               Justice scoring evaluates whether a justice applies consistent legal principles across
