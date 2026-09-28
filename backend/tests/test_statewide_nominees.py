@@ -592,6 +592,7 @@ class TestSourcesFileOptIns:
         "tally_enr", "totalvote_enr",
         "clarity", "enhanced_voting", "nh_results", "sd_vip", "tabular", "tally_enr",
         "totalvote_enr", "vt_enr",
+        "certified_table", "clarity", "enhanced_voting", "sd_vip", "tabular", "tally_enr", "totalvote_enr",
     }
 
     def _states(self):
@@ -604,6 +605,17 @@ class TestSourcesFileOptIns:
         for state, entry in self._states().items():
             if entry.get("statewide_offices"):
                 assert entry["strategy"] in self.READS_STATEWIDE or entry.get("statewide_offices_basis"), state
+
+    def test_a_general_lists_opt_in_is_read(self):
+        """A certified November list can carry the claim itself (Wyoming,
+        New Mexico, Tennessee): its strategy must read the labels, and it
+        must read them from the office column, not a federal code map."""
+        for state, entry in self._states().items():
+            general = entry.get("general_list") or {}
+            if general.get("statewide_offices"):
+                assert general["strategy"] in self.READS_STATEWIDE, state
+                assert general.get("format", {}).get("office_parse"), state
+                assert not general.get("statewide_offices_basis"), state
 
     def test_a_basis_is_never_set_without_the_opt_in(self):
         for state, entry in self._states().items():

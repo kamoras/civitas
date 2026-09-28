@@ -78,6 +78,20 @@ Optional, each because a live state needed it:
                                      at least one (Kentucky links one page
                                      per office, and a year with no Senate
                                      race has no Senate page)
+  format.party_column as a list      the first of these columns present in a
+                                     row (Tennessee's legislative files say
+                                     "Party" where its federal ones say
+                                     "Party Name")
+  statewide_offices                  also read the state's own executive
+                                     contests and legislative seats, through
+                                     parse_statewide_office and
+                                     parse_state_leg_office — the same claim
+                                     the flag makes on a results adapter (see
+                                     the sources file's _contract). A list is
+                                     the certified November ballot, so every
+                                     qualified name is published, independents
+                                     included, rather than one winner per
+                                     party (Wyoming, New Mexico, Tennessee)
 
 An HTML page is read from its table whose header row carries every
 configured heading (New Mexico). A PDF is read as a table too (Iowa, Nebraska): the row whose cells include
@@ -115,6 +129,8 @@ from app.pipeline.fetch.state_candidates_common import (
     discover_certification_link,
     normalize_party,
     parse_office,
+    parse_state_leg_office,
+    parse_statewide_office,
     surname,
 )
 from app.pipeline.fetch.state_candidates_tabular import _html_rows, _xlsx_rows
@@ -190,8 +206,18 @@ def pdf_table_rows(pages: list[list[dict]], headings: list[str]) -> list[dict]:
 def html_table_rows(page: bytes, headings: list[str]) -> list[dict]:
     """Rows of the page's table whose header row names every heading. A
     repeated heading keeps its last column (New Mexico prints "Contest"
-    twice; both hold the office)."""
-    tree = lxml_html.fromstring(page)
+    twice; both hold the office).
+
+    New Mexico's portal serves UTF-8 (in its Content-Type header) with no
+    charset in the page itself, and lxml then reads the bytes as Latin-1:
+    its 2026 Secretary of State nominee's "LÓPEZ" came out as two Latin-1 characters.
+    Bytes that are valid UTF-8 are read as UTF-8."""
+    try:
+        page.decode("utf-8")
+    except UnicodeDecodeError:
+        tree = lxml_html.fromstring(page)
+    else:
+        tree = lxml_html.fromstring(page, parser=lxml_html.HTMLParser(encoding="utf-8"))
     for table in tree.iter("table"):
         trs = table.xpath("./tr|./thead/tr|./tbody/tr")
         if not trs:
@@ -205,8 +231,13 @@ def html_table_rows(page: bytes, headings: list[str]) -> list[dict]:
     return []
 
 
+def _party_columns(fmt: dict) -> list[str]:
+    columns = fmt["party_column"]
+    return list(columns) if isinstance(columns, list) else [columns]
+
+
 def _headings(fmt: dict) -> list[str]:
-    headings = [fmt["office_column"], fmt["party_column"], *fmt["name_columns"]]
+    headings = [fmt["office_column"], _party_columns(fmt)[0], *fmt["name_columns"]]
     if fmt.get("district_column"):
         headings.append(fmt["district_column"])
     return headings
@@ -235,8 +266,16 @@ def _rows(payload: bytes, url: str, fmt: dict) -> list[dict] | None:
         return None
 
 
-def parse_certified_rows(rows: list[dict], fmt: dict) -> list[dict]:
-    """Federal candidate records from the list's rows."""
+def parse_certified_rows(rows: list[dict], fmt: dict, state_offices: bool = False) -> list[dict]:
+    """Federal candidate records from the list's rows — and, with
+    `state_offices`, the state's executive and legislative ones too.
+
+    A state-office record keeps the whole printed name in `last_name`
+    (there is no FEC surname to match it against; see
+    _sync_statewide_nominees) and a legislative one carries its `seat`.
+    Its party is "" when the list's code is one normalize_party does not
+    know: the candidate is on the ballot either way, and dropping them
+    would be the worse error."""
     codes = {" ".join(str(k).split()).upper(): v for k, v in (fmt.get("office_codes") or {}).items()}
     by_label = bool(fmt.get("office_parse"))
     statuses = {str(v).strip().upper() for v in fmt.get("status_values") or []}
@@ -253,7 +292,9 @@ def parse_certified_rows(rows: list[dict], fmt: dict) -> list[dict]:
         if any(rx.search(str(row.get(col) or "")) for col, rx in exclude_re.items()):
             continue
         label = " ".join(str(row.get(fmt["office_column"]) or "").split())
-        party_label = str(row.get(fmt["party_column"]) or "").strip()
+        party_label = next(
+            (str(row[col]).strip() for col in _party_columns(fmt) if str(row.get(col) or "").strip()), "",
+        )
         if fmt.get("party_regex"):
             found = re.search(fmt["party_regex"], party_label)
             party_label = found.group(1).strip() if found else ""
@@ -280,6 +321,11 @@ def parse_certified_rows(rows: list[dict], fmt: dict) -> list[dict]:
                 label = f"{label} {' '.join(str(row.get(fmt['district_column']) or '').split())}".strip()
             parsed = parse_office(label)
             if parsed is None:
+                if state_offices and display:
+                    state_record = _state_office_record(label, party_label, display)
+                    if state_record is not None:
+                        records[(state_record["office"], state_record["district"],
+                                 state_record.get("seat"), display.lower())] = state_record
                 continue
             office, district = parsed
         else:
@@ -310,6 +356,25 @@ def parse_certified_rows(rows: list[dict], fmt: dict) -> list[dict]:
     return list(records.values())
 
 
+def _state_office_record(label: str, party_label: str, display: str) -> dict | None:
+    """A statewide-executive or legislative record for one list row, or
+    None for anything else on the list (county offices, judges,
+    commissions seated by district) — both gates refuse by default."""
+    party = normalize_party(party_label, ballot_list=True) or ""
+    statewide = parse_statewide_office(label)
+    if statewide is not None:
+        office, district = statewide
+        return {"office": office, "district": district, "party": party, "last_name": display}
+    seat = parse_state_leg_office(label)
+    if seat is not None:
+        chamber, district, seat_id = seat
+        record = {"office": chamber, "district": district, "party": party, "last_name": display}
+        if seat_id is not None:
+            record["seat"] = seat_id
+        return record
+    return None
+
+
 async def fetch_confirmed_candidates(
     client: httpx.AsyncClient, year: int, state: str, source: dict,
 ) -> list[dict] | None:
@@ -329,12 +394,21 @@ async def fetch_confirmed_candidates(
     if missing:
         logger.warning("%s certified_table format is missing %s", state, missing)
         return None
+    if source.get("statewide_offices") and not fmt.get("office_parse"):
+        # State offices are read from the office label; an exact code map
+        # names only the federal ones, so the opt-in would claim a reading
+        # that cannot happen.
+        logger.warning("%s certified_table statewide_offices needs format.office_parse", state)
+        return None
 
     if discovery.get("url"):
         payloads = await _download(client, discovery["url"], discovery, year, state)
         if payloads is None:
             return None
-        return _records(state, [row for p in payloads for row in (_rows(p, discovery["url"], fmt) or [])], fmt)
+        return _records(
+            state, [row for p in payloads for row in (_rows(p, discovery["url"], fmt) or [])], fmt,
+            bool(source.get("statewide_offices")),
+        )
 
     page_url = discovery.get("page_url")
     if discovery.get("index_url") and discovery.get("index_regex"):
@@ -374,7 +448,7 @@ async def fetch_confirmed_candidates(
                 logger.warning("%s certified list %s did not parse", state, url)
                 return None
             rows += part
-    return _records(state, rows, fmt)
+    return _records(state, rows, fmt, bool(source.get("statewide_offices")))
 
 
 async def _download(
@@ -435,10 +509,14 @@ async def _download(
     return payloads
 
 
-def _records(state: str, rows: list[dict], fmt: dict) -> list[dict] | None:
-    records = parse_certified_rows(rows, fmt)
-    if not records:
+def _records(state: str, rows: list[dict], fmt: dict, state_offices: bool = False) -> list[dict] | None:
+    records = parse_certified_rows(rows, fmt, state_offices)
+    federal = [r for r in records if r["office"] in ("S", "H")]
+    if not federal:
         logger.warning("%s certified list has no federal candidate — columns or codes changed?", state)
         return None
-    logger.info("%s certified list: %d federal candidates", state, len(records))
+    logger.info(
+        "%s certified list: %d federal candidates, %d state-office candidates",
+        state, len(federal), len(records) - len(federal),
+    )
     return records

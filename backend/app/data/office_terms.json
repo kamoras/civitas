@@ -23,6 +23,8 @@
     "SC statewide": "Governor (jointly with the Lieutenant Governor since 2018), Secretary of State, Treasurer, Attorney General, Comptroller General, Superintendent of Education and Commissioner of Agriculture all four years (S.C. Const. art. IV §3, art. VI §7). The Adjutant General has been appointed since 2019 and is not on the ballot.",
     "VT statewide": "All six executive officers are elected biennially, to two-year terms (Vt. Const. ch. II sec. 43).",
     "NH governor": "Two-year term (N.H. Const. pt. II art. 42).",
+    "NM public_lands_commissioner": "Four-year term (N.M. Const. art. V §1, Commissioner of Public Lands).",
+    "NM governor": "Elected jointly with the lieutenant governor as one ticket (N.M. Const. art. V §1), so the ticket is stored under governor and there is no separate lt_governor contest.",
     "HI and IL legislatures": "No upper-chamber term listed: both state senates run a 2-4-4 cycle, so a 2026 seat's term depends on its district's place in the decade."
   },
   "statewide": {
@@ -91,7 +93,16 @@
       "governor": 2, "lt_governor": 2, "treasurer": 2, "secretary_of_state": 2,
       "auditor": 2, "attorney_general": 2
     },
-    "NH": {"governor": 2}
+    "NH": {"governor": 2},
+    "WY": {
+      "governor": 4, "secretary_of_state": 4, "auditor": 4, "treasurer": 4,
+      "school_superintendent": 4
+    },
+    "NM": {
+      "governor": 4, "attorney_general": 4, "secretary_of_state": 4, "auditor": 4,
+      "treasurer": 4, "public_lands_commissioner": 4
+    },
+    "TN": {"governor": 4}
   },
   "legislature": {
     "AK": {"upper": 4, "lower": 2},
@@ -118,7 +129,10 @@
     "MO": {"upper": 4, "lower": 2},
     "SC": {"lower": 2},
     "TX": {"upper": 4, "lower": 2},
-    "PA": {"upper": 4, "lower": 2}
+    "PA": {"upper": 4, "lower": 2},
+    "WY": {"upper": 4, "lower": 2},
+    "NM": {"upper": 4, "lower": 2},
+    "TN": {"upper": 4, "lower": 2}
   },
   "judicial": {
     "FL": {"circuit": 6},
