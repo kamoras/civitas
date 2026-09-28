@@ -135,3 +135,47 @@ class TestMalformedRelatedOfficials:
         self._issue(db_session, senators="[]", officials='["potus"]')
 
         assert _get_active_issues("potus", db_session) == []
+
+
+class TestChamberRank:
+    """The profile states the rank the leaderboard gives: by the overall
+    score as displayed, ties sharing a standard competition rank, among
+    members serving now."""
+
+    def _rep(self, db, rid, score, current=True):
+        db.add(Representative(
+            id=rid, name=rid, state="TN", district=1, party="R", is_current=current,
+            score_funding_independence=score, score_constituent_alignment=score,
+            score_legislative_effectiveness=score,
+        ))
+
+    def test_rank_among_serving_members_with_ties_sharing(self, db_session):
+        from app.api.politicians import _chamber_rank
+        for rid, score in (("a", 80), ("b", 70), ("c", 70), ("d", 60)):
+            self._rep(db_session, rid, score)
+        self._rep(db_session, "gone", 90, current=False)
+        db_session.commit()
+
+        def rank(rid):
+            return _chamber_rank("house", db_session.get(Representative, rid), db_session)
+
+        assert rank("a") == {"rank": 1, "of": 4}
+        assert rank("b") == rank("c") == {"rank": 2, "of": 4}
+        assert rank("d") == {"rank": 4, "of": 4}
+        # Not serving: the leaderboard doesn't rank them, so neither does the profile.
+        assert rank("gone") is None
+
+    def test_a_president_ranks_among_completed_terms_and_a_sitting_one_not_at_all(self, db_session):
+        """As the president leaderboard ranks them (get_president_leaderboard)."""
+        from app.api.politicians import _chamber_rank
+        from app.models import President
+        for pid, number, score, current in (("a-1", 1, 80.0, False), ("b-2", 2, 60.0, False), ("c-3", 3, 70.0, True)):
+            db_session.add(President(id=pid, name=pid, party="D", number=number, term_start="2001-01-20",
+                                     is_current=current, score_public_mandate=score))
+        db_session.commit()
+        assert _chamber_rank("president", db_session.get(President, "b-2"), db_session) == {"rank": 2, "of": 2}
+        assert _chamber_rank("president", db_session.get(President, "c-3"), db_session) is None
+
+    def test_no_rank_for_a_justice(self, db_session):
+        from app.api.politicians import _chamber_rank
+        assert _chamber_rank("scotus", object(), db_session) is None

@@ -6,6 +6,7 @@ Includes party alignment analysis.
 """
 
 import logging
+import re
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -93,6 +94,27 @@ def roll_call_ref(roll_call: dict) -> str | None:
     return f"{chamber}-{parts[0]}-{parts[1]}-{parts[2]}"
 
 
+# Questions that run the chamber rather than decide anything (v6.19): quorum
+# calls, adjourning, approving the Journal, the House's previous question,
+# and motions to table or to recommit. They split on party lines as a
+# matter of course — a motion to recommit is the minority's messaging vote,
+# the previous question the majority's hold on the floor — so a vote with
+# the other side on one says little about the member. They never count as
+# a break with the party (or as voting with it). Rule votes, cloture and
+# nominations are not here: those decide whether a bill reaches the floor,
+# whether it gets a vote, and who serves.
+_HOUSEKEEPING_QUESTION_RE = re.compile(
+    r"quorum|call of the house|adjourn|journal|previous question|motion to table|to table the|recommit",
+    re.IGNORECASE,
+)
+
+
+def is_housekeeping(question: str | None) -> bool:
+    """A roll call on running the chamber rather than on a bill, nominee or
+    rule (see _HOUSEKEEPING_QUESTION_RE)."""
+    return bool(question) and bool(_HOUSEKEEPING_QUESTION_RE.search(question))
+
+
 def stamp_roll_call_outcome(bill: dict, roll_call: dict) -> None:
     """Copy the roll call's own record onto the classified vote dict that
     represents it: motionRejected (the chamber's result, True / False /
@@ -100,11 +122,13 @@ def stamp_roll_call_outcome(bill: dict, roll_call: dict) -> None:
     rollCall (roll_call_ref), and partySplit — how the parties actually
     voted (compute_party_split). A vote counts toward party loyalty only
     through partySplit: with no roll call there is no split, and a vote
-    is never marked with or against the party from what the bill says."""
+    is never marked with or against the party from what the bill says.
+    A housekeeping question (is_housekeeping) has no split for loyalty
+    either."""
     bill["motionRejected"] = roll_call.get("rejected")
     bill["rollCallDate"] = vote_date_iso(roll_call.get("voteDate"))
     bill["rollCall"] = roll_call_ref(roll_call)
-    bill["partySplit"] = compute_party_split(roll_call)
+    bill["partySplit"] = None if is_housekeeping(roll_call.get("question")) else compute_party_split(roll_call)
 
 
 def is_reconsider_switch(

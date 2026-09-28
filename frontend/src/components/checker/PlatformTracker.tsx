@@ -39,7 +39,7 @@ function PartisanDepthPanel({
       <div className="flex items-baseline justify-between mb-3">
         <h4 className="text-sm font-mono text-signal-cyan">
           {">"}{" "}
-          <MetricTooltip text="Measures how partisan this senator's actual votes are. Analyzes roll-call votes on bills and compares them against each party's platform positions. Based on what they voted for, not what they say.">
+          <MetricTooltip text="Measures how partisan this member's actual votes are. Analyzes roll-call votes on bills and compares them against each party's platform positions. Based on what they voted for, not what they say.">
             PARTISAN DEPTH ANALYSIS
           </MetricTooltip>
         </h4>
@@ -93,7 +93,7 @@ function PartisanDepthPanel({
         <div className="panel p-2 min-w-0">
           <div className="text-sm font-mono text-ink-hi">{depth.totalPositions}</div>
           <div className="text-xs text-ink-min">
-            <MetricTooltip text="Number of policy areas where this senator has cast votes. Each area's lean is derived from how they voted on D-leaning vs R-leaning bills in that area.">
+            <MetricTooltip text="Number of policy areas where this member has cast votes. Each area's lean is derived from the votes cast on D-leaning vs R-leaning bills in that area.">
               AREAS
             </MetricTooltip>
           </div>
@@ -105,7 +105,7 @@ function PartisanDepthPanel({
             {depth.crossPartyCount}
           </div>
           <div className="text-xs text-ink-min">
-            <MetricTooltip text="Number of policy areas where this senator's votes align with the opposite party's platform. Higher = more ideologically independent.">
+            <MetricTooltip text="Number of policy areas where this member's votes align with the opposite party's platform. Higher = more ideologically independent.">
               CROSS
             </MetricTooltip>
           </div>
@@ -123,7 +123,7 @@ function PartisanDepthPanel({
               </span>
             ) : depth.depth === "cross-cutting" ? (
               <span>
-                Despite being {senatorParty === "R" ? "Republican" : "Democrat"}, this senator voted
+                Despite being {senatorParty === "R" ? "Republican" : "Democrat"}, this member voted
                 with {oppositeParty === "R" ? "Republicans" : "Democrats"} in{" "}
                 <span className="text-signal-cyan">{depth.crossPartyCount} policy areas</span>.
               </span>

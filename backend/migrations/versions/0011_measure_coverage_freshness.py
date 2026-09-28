@@ -19,16 +19,16 @@ image runs unchanged against the migrated schema (expand only):
   force, rows marked). An audit trail that a reader's later answer does
   not clear, unlike operator_note.
 
-Revision ID: 0010
-Revises: 0009
+Revision ID: 0011
+Revises: 0010
 Create Date: 2026-09-28
 """
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0010"
-down_revision = "0009"
+revision = "0011"
+down_revision = "0010"
 branch_labels = None
 depends_on = None
 

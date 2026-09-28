@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildBallotContests, countBallotContests } from "./ballotContests";
+import {
+  buildBallotContests,
+  contestForHash,
+  contestHash,
+  countBallotContests,
+} from "./ballotContests";
 import type { StateBallot } from "@/types/election";
 
 function race(id: string, district: number | null) {
@@ -42,5 +47,58 @@ describe("countBallotContests", () => {
       measures: [{}, {}],
     } as unknown as Partial<StateBallot>);
     expect(countBallotContests(buildBallotContests(b, true), b)).toBe(2 + 3 + 2 + 1 + 2);
+  });
+});
+
+describe("statewide ballot measures", () => {
+  const m = (id: string, status: string) => ({ id, number: id, title: id, status });
+
+  it("counts only measures still on the ballot", () => {
+    const b = ballot({
+      measureCoverage: { status: "covered" },
+      measures: [m("1", "certified"), m("2", "removed"), m("3", "withdrawn")],
+    } as unknown as Partial<StateBallot>);
+    const contests = buildBallotContests(b, false);
+    expect(contests.find((c) => c.kind === "measures")!.subtitle).toBe("1 measure");
+    expect(countBallotContests(contests, b)).toBe(2 + 1);
+  });
+
+  it("never calls a dropped list that no read confirmed empty 'none'", () => {
+    const b = ballot({
+      measureCoverage: { status: "not_yet_covered" },
+      measures: [m("SQ 1", "removed")],
+    } as unknown as Partial<StateBallot>);
+    const subtitle = buildBallotContests(b, false).find((c) => c.kind === "measures")!.subtitle;
+    expect(subtitle).toBe("None current — check the official lookup");
+  });
+
+  it("does not word an operator's 'none' as the state's", () => {
+    const b = ballot({
+      measureCoverage: { status: "confirmed_none", basis: "operator" },
+      measures: [],
+    } as unknown as Partial<StateBallot>);
+    expect(buildBallotContests(b, false).find((c) => c.kind === "measures")!.subtitle).toBe("None remaining");
+  });
+});
+
+// A shared image of a contest links to the fragment that reopens it; the
+// page reads the same fragment back. The two must agree for every contest.
+describe("contestHash", () => {
+  it("round-trips through contestForHash for every contest", () => {
+    const b = ballot();
+    const contests = buildBallotContests(b, false);
+    for (const c of contests) {
+      const back = contestForHash(contestHash(c), contests, b);
+      expect(back?.key).toBe(c.key);
+    }
+  });
+
+  it("names the picked House district", () => {
+    const b = ballot();
+    const contests = buildBallotContests(b, false);
+    const house = contests.find((c) => c.key === "house")!;
+    const hash = contestHash(house, "2026-H-CT-03");
+    expect(hash).toBe("#race-2026-H-CT-03");
+    expect(contestForHash(hash, contests, b)).toEqual({ key: "house", houseRaceId: "2026-H-CT-03" });
   });
 });

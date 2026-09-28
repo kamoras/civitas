@@ -21,6 +21,7 @@ Senate/House leaderboards immediately, but stay in this directory for the
 whole grace period. Presidents are never removed by any of that.
 """
 import json
+import math
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -361,6 +362,32 @@ def _build_scorecard(branch: str, pid: str, db: Session) -> dict | None:
     return None
 
 
+def _chamber_rank(branch: str, entity, db: Session) -> dict | None:
+    """Where the profile stands on its leaderboard: {"rank", "of"}. The
+    leaderboard's order — the overall score as displayed (a whole number,
+    rounded half up), ties sharing a standard competition rank — so the
+    profile states the rank the leaderboard shows. None for whom the
+    leaderboard doesn't rank: a member no longer serving, a sitting
+    president (only completed terms are ranked: get_president_leaderboard),
+    or anyone not scored."""
+    shown = {}
+    if branch == "president":
+        if entity.is_current:
+            return None
+        for p in db.query(President).filter(President.is_current == False).all():  # noqa: E712
+            shown[p.id] = math.floor(compute_president_overall_score(p) + 0.5)
+    elif branch in ("senate", "house") and getattr(entity, "is_current", False):
+        model = Senator if branch == "senate" else Representative
+        for m in db.query(model).filter(model.is_current == True).all():  # noqa: E712
+            overall = compute_overall_score(m)
+            if overall is not None:
+                shown[m.id] = math.floor(overall + 0.5)
+    if not shown or entity.id not in shown:
+        return None
+    mine = shown[entity.id]
+    return {"rank": 1 + sum(1 for v in shown.values() if v > mine), "of": len(shown)}
+
+
 def _get_active_issues(politician_id: str, db: Session) -> list[dict]:
     issues = db.query(ActionIssue).filter(ActionIssue.is_current == True).all()  # noqa: E712
     result = []
@@ -435,6 +462,7 @@ def get_politician(politician_id: str, db: Session = Depends(get_db)) -> JSONRes
         "hasScorecard": overall is not None,
         "overallScore": overall,
         "scorecard": scorecard,
+        "chamberRank": _chamber_rank(branch, entity, db),
         "activeIssues": _get_active_issues(politician_id, db),
         "governmentRecord": _get_gov_record(politician_id, db),
     })

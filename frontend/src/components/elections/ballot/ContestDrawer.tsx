@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import type { BallotContest } from "@/lib/ballotContests";
+import { useModalDialog } from "@/lib/useModalDialog";
+import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
+import ShareSectionButton from "@/components/share/ShareSectionButton";
 
 const COLUMN_LABEL: Record<BallotContest["column"], string> = {
   federal: "FEDERAL",
@@ -25,6 +28,7 @@ export default function ContestDrawer({
   next,
   onNavigate,
   onClose,
+  shareAnchor,
   children,
 }: {
   contest: BallotContest;
@@ -34,56 +38,18 @@ export default function ContestDrawer({
   next: BallotContest | null;
   onNavigate: (key: string) => void;
   onClose: () => void;
+  /** The fragment (no "#") that reopens this contest, for its share link. */
+  shareAnchor: string;
   children: ReactNode;
 }) {
-  const panel = useRef<HTMLDivElement>(null);
+  const panel = useModalDialog(onClose);
   const heading = useRef<HTMLHeadingElement>(null);
-  const opener = useRef<Element | null>(null);
-
-  // Opened: remember what had focus, lock the page behind, focus the
-  // title. Closed: unlock and hand focus back.
-  useEffect(() => {
-    opener.current = document.activeElement;
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = overflow;
-      if (opener.current instanceof HTMLElement) opener.current.focus();
-    };
-  }, []);
 
   // Each contest starts at its top, with its title announced.
   useEffect(() => {
     heading.current?.focus();
     panel.current?.querySelector("[data-drawer-body]")?.scrollTo?.({ top: 0 });
-  }, [contest.key]);
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose();
-        return;
-      }
-      if (e.key !== "Tab" || !panel.current) return;
-      const focusable = panel.current.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])',
-      );
-      const visible = Array.from(focusable).filter((el) => !el.closest("[hidden]"));
-      if (visible.length === 0) return;
-      const first = visible[0];
-      const last = visible[visible.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [contest.key, panel]);
 
   return (
     <div className="fixed inset-0 z-[60] flex justify-end">
@@ -120,23 +86,29 @@ export default function ContestDrawer({
         </div>
 
         <div data-drawer-body className="flex-1 overflow-y-auto px-4 pb-6 pt-4">
-          <div className="mb-4 flex items-baseline justify-between gap-3 border border-white/25 bg-surface-raised px-4 py-3">
-            <div className="min-w-0">
-              <h2
-                id="contest-drawer-title"
-                ref={heading}
-                tabIndex={-1}
-                className="text-[19px] font-bold leading-tight text-ink-hi outline-none"
-              >
-                {contest.title}
-              </h2>
-              <p className="mt-0.5 text-[13px] text-ink-lo">{contest.subtitle}</p>
+          {/* The contest and its research, as one shareable image. */}
+          <div {...{ [SHARE_SECTION_ATTR]: `contest-${contest.key}` }} className="bg-surface-base">
+            <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-2 border border-white/25 bg-surface-raised px-4 py-3">
+              <div className="min-w-0">
+                <h2
+                  id="contest-drawer-title"
+                  ref={heading}
+                  tabIndex={-1}
+                  className="text-[19px] font-bold leading-tight text-ink-hi outline-none"
+                >
+                  {contest.title}
+                </h2>
+                <p className="mt-0.5 text-[13px] text-ink-lo">{contest.subtitle}</p>
+              </div>
+              <span className="flex shrink-0 items-center gap-3">
+                {contest.instruction && (
+                  <span className="font-mono text-xs text-ink-lo">{contest.instruction}</span>
+                )}
+                <ShareSectionButton label={contest.title} anchor={shareAnchor} />
+              </span>
             </div>
-            {contest.instruction && (
-              <span className="shrink-0 font-mono text-xs text-ink-lo">{contest.instruction}</span>
-            )}
+            {children}
           </div>
-          {children}
         </div>
 
         <div className="grid grid-cols-2 gap-2 border-t border-white/[0.14] p-3">

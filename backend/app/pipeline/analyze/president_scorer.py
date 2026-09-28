@@ -342,11 +342,17 @@ def _effectiveness_core(
     does not fetch yet.
     """
     components: list[dict] = []
+    # The scorecard's sentence and scales, as numbers (None where not
+    # measured): the president's values and the averages they're scored
+    # against.
+    facts: dict = {"jobsMillions": jobs_created_millions, "jobsPerYear": None, "jobsMean": None,
+                   "gdpGrowth": gdp_growth_avg, "gdpMean": None, "gdpSince": None}
 
     gdp_key = _gdp_reference_key(term_start_year)
     gdp_stat = _president_stat(reference, gdp_key)
     if gdp_growth_avg is not None and gdp_stat:
         era = "before" if gdp_key == "gdp_growth_prewar" else "since"
+        facts.update(gdpMean=gdp_stat[0], gdpSince=gdp_key == "gdp_growth_postwar")
         components.append(_population_zscore_component(
             "GDP growth", 0.60, gdp_growth_avg, gdp_stat[0], gdp_stat[1],
             f"{gdp_growth_avg:.1f}% average annual real growth (first year excluded) vs. "
@@ -356,13 +362,14 @@ def _effectiveness_core(
     jobs_stat = _president_stat(reference, "jobs_per_year")
     if jobs_created_millions is not None and term_years > 0 and jobs_stat:
         rate = jobs_per_attributed_year(jobs_created_millions, term_years)
+        facts.update(jobsPerYear=round(rate, 3), jobsMean=jobs_stat[0])
         components.append(_population_zscore_component(
             "Jobs created", 0.40, rate, jobs_stat[0], jobs_stat[1],
             f"{jobs_created_millions:.1f}M jobs = {rate:.2f}M per attributed year "
             f"(term minus the year-1 lag) vs. {jobs_stat[0]:.2f}M for presidencies since 1939",
         ))
 
-    return _blend_live_components(components)
+    return {**_blend_live_components(components), "facts": facts}
 
 
 def calc_agency_alignment(
@@ -400,13 +407,14 @@ def _agency_alignment_core(
     """
     components: list[dict] = []
     stat = _president_stat(reference, "rulemaking_finalized_pct")
+    facts = {"finalizedPct": rulemaking_finalized_pct, "finalizedMean": stat[0] if stat else None}
     if rulemaking_finalized_pct is not None and stat:
         components.append(_population_zscore_component(
             "Finalization rate", 1.0, rulemaking_finalized_pct, stat[0], stat[1],
             f"{rulemaking_finalized_pct:.0f}% of rulemakings reached a final rule vs. "
             f"{stat[0]:.0f}% across administrations since 1994",
         ))
-    return _blend_live_components(components)
+    return {**_blend_live_components(components), "facts": facts}
 
 
 # Population statistics for the term-average-approval, approval-trend, and
@@ -545,6 +553,11 @@ def _public_mandate_core(
     approval = _president_stat(reference, "avg_approval")
     trend = _president_stat(reference, "approval_trend")
     margin = _president_stat(reference, "election_margin")
+    facts = {
+        "approval": avg_approval, "approvalMean": approval[0] if approval else None,
+        "approvalTrend": approval_trend, "trendMean": trend[0] if trend else None,
+        "electionMargin": election_margin, "marginMean": margin[0] if margin else None,
+    }
 
     if avg_approval is not None and approval:
         components.append(_population_zscore_component(
@@ -568,7 +581,7 @@ def _public_mandate_core(
             "historical proxy used instead",
         ))
 
-    return _blend_live_components(components)
+    return {**_blend_live_components(components), "facts": facts}
 
 
 # Historical Legacy's population mean/stdev over C-SPAN point totals comes
@@ -621,13 +634,14 @@ def _historical_legacy_core(
     """
     components: list[dict] = []
     legacy = _president_stat(reference, "historical_legacy")
+    facts = {"points": historical_legacy_score, "pointsMean": legacy[0] if legacy else None}
     if historical_legacy_score is not None and legacy:
         components.append(_population_zscore_component(
             "Historians' assessment", 1.0, historical_legacy_score, legacy[0], legacy[1],
             f"{historical_legacy_score} points in C-SPAN's 2021 Presidential Historians Survey "
             f"vs. population mean {legacy[0]:.0f}",
         ))
-    return _blend_live_components(components)
+    return {**_blend_live_components(components), "facts": facts}
 
 
 def recalculate_president_scores(

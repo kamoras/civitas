@@ -705,6 +705,24 @@ describe("ballot measures", () => {
     expect(drawer.getByText("Summary.")).toBeInTheDocument();
   });
 
+  it("carries the stale notice and removed marks into the ballot box, which is shared on its own", () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures: [measure, { ...measure, id: "OH-2", number: "2", title: "Issue 2", status: "removed" }],
+          measureCoverage: {
+            status: "ingest_failed", sourceName: "Ohio SoS",
+            checkedAt: "2026-09-20T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
+          },
+        })}
+      />,
+    );
+    const box = within(screen.getByTestId("ballot-columns"));
+    expect(box.getByText(/From our last successful read — may be out of date/)).toBeInTheDocument();
+    expect(box.getByText("removed")).toBeInTheDocument();
+    expect(box.getByText("1 measure")).toBeInTheDocument();
+  });
+
   it("keeps the stale notice when the latest check found the document missing", async () => {
     // Round 3: a status other than ingest_failed (not_yet_covered, after a
     // document that was read goes missing) hid the notice while the

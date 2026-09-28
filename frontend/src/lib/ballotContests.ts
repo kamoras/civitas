@@ -149,25 +149,32 @@ export function buildBallotContests(ballot: StateBallot, hasTowns: boolean): Bal
     });
   }
 
-  const measures = ballot.measures.length;
+  // Measures still on the ballot: one removed or withdrawn is shown (marked)
+  // for a grace window, but is not something a voter marks.
+  const measures = ballot.measures.filter((m) => m.status !== "removed" && m.status !== "withdrawn").length;
+  const listed = ballot.measures.length;
+  const none = ballot.measureCoverage.status === "confirmed_none";
+  // "None on this ballot" is the state's own answer. After measures were
+  // dropped, or when "none" is our operator's call (basis "operator"), it
+  // is "none remaining"; a dropped list that no read has confirmed as
+  // empty is not "none" at all.
+  const noneLine =
+    none && (listed > 0 || ballot.measureCoverage.basis === "operator")
+      ? "None remaining"
+      : none
+        ? "None on this ballot"
+        : listed > 0
+          ? "None current"
+          : "Not loaded yet";
   contests.push({
     key: "measures",
     kind: "measures",
     column: "local",
     title: "Statewide ballot measures",
     subtitle:
-      measures > 0
-        ? plural(measures, "measure")
-        : ballot.measureCoverage.status === "confirmed_none"
-          ? "None on this ballot"
-          : "Not loaded yet — check the official lookup",
+      measures > 0 ? plural(measures, "measure") : none ? noneLine : `${noneLine} — check the official lookup`,
     instruction: measures > 0 ? "Yes or no on each" : null,
-    summary:
-      measures > 0
-        ? plural(measures, "measure")
-        : ballot.measureCoverage.status === "confirmed_none"
-          ? "None on this ballot"
-          : "Not loaded yet",
+    summary: measures > 0 ? plural(measures, "measure") : noneLine,
   });
 
   if (hasTowns) {
@@ -193,6 +200,14 @@ export function buildBallotContests(ballot: StateBallot, hasTowns: boolean): Bal
   });
 
   return contests;
+}
+
+/** The link fragment that opens a contest (read back by `contestForHash`):
+ * the race's own `#race-{id}` where the contest is one race (or a House
+ * district was picked), else `#ballot-{key}`. */
+export function contestHash(contest: BallotContest, houseRaceId: string | null = null): string {
+  if (houseRaceId) return `#race-${houseRaceId}`;
+  return contest.race ? `#race-${contest.race.id}` : `#ballot-${contest.key}`;
 }
 
 /** Which contest a `#race-{id}` link (old /elections/{raceId} redirects,
@@ -228,7 +243,8 @@ export function countBallotContests(contests: BallotContest[], ballot: StateBall
     else if (c.kind === "statewide") n += ballot.statewideRaces.length;
     else if (c.kind === "stateleg") n += ballot.stateLegRaces.length;
     else if (c.kind === "judicial") n += ballot.judicialRaces.length;
-    else if (c.kind === "measures") n += ballot.measures.length;
+    else if (c.kind === "measures")
+      n += ballot.measures.filter((m) => m.status !== "removed" && m.status !== "withdrawn").length;
   }
   return n;
 }

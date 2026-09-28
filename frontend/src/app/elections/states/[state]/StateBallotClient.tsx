@@ -16,7 +16,7 @@ import ContestBox from "@/components/elections/ballot/ContestBox";
 import BallotRaceRows from "@/components/elections/ballot/BallotRaceRows";
 import ContestDrawer from "@/components/elections/ballot/ContestDrawer";
 import RaceResearch from "@/components/elections/ballot/RaceResearch";
-import { buildBallotContests, contestForHash, countBallotContests, type BallotContest } from "@/lib/ballotContests";
+import { buildBallotContests, contestForHash, countBallotContests, type BallotContest, contestHash } from "@/lib/ballotContests";
 import {
   candidateName,
   districtAreaLabel,
@@ -29,6 +29,9 @@ import {
   tierCandidates,
 } from "@/lib/elections";
 import { safeHref } from "@/lib/formatting";
+import { absoluteUrl } from "@/lib/site";
+import { SHARE_EXCLUDE_ATTR } from "@/lib/shareImage";
+import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { fetchTownBallot, fetchTownsForState } from "@/lib/api";
 import type {
   RaceWithCandidates,
@@ -815,6 +818,7 @@ function OpenButton({ label, onClick }: { label: string; onClick: () => void }) 
     <button
       type="button"
       onClick={onClick}
+      {...{ [SHARE_EXCLUDE_ATTR]: "" }}
       className="min-h-[44px] w-full px-4 text-left font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
     >
       {label} →
@@ -831,8 +835,16 @@ function ContestOverview({
   ballot: StateBallot;
   onOpen: (key: string, houseRaceId?: string | null) => void;
 }) {
-  const box = (children: ReactNode) => (
-    <ContestBox title={contest.title} subtitle={contest.subtitle} instruction={contest.instruction}>
+  // Shared as an image unless the box is only controls (the House district
+  // picker), linking to the fragment that opens this contest.
+  const box = (children: ReactNode, share: { houseRaceId?: string | null } | false = {}) => (
+    <ContestBox
+      title={contest.title}
+      subtitle={contest.subtitle}
+      instruction={contest.instruction}
+      shareId={share ? `contest-${contest.key}` : undefined}
+      shareAnchor={share ? contestHash(contest, share.houseRaceId ?? null).slice(1) : undefined}
+    >
       {children}
     </ContestBox>
   );
@@ -858,6 +870,7 @@ function ContestOverview({
             <BallotRaceRows race={ballot.houseRaces[0]} />
             <OpenButton label="RESEARCH THIS RACE" onClick={() => onOpen("house", ballot.houseRaces[0].id)} />
           </>,
+          { houseRaceId: ballot.houseRaces[0].id },
         );
       }
       return box(
@@ -884,6 +897,7 @@ function ContestOverview({
             DON&apos;T KNOW YOUR DISTRICT? MAP OR COUNTY →
           </button>
         </div>,
+        false,
       );
     }
     case "statewide":
@@ -965,11 +979,25 @@ function ContestOverview({
       return box(
         ballot.measures.length > 0 ? (
           <>
+            {/* This box is shared as an image on its own, so it carries the
+                drawer's two caveats in short: a list the latest read did not
+                confirm is not presented as current, and a measure no longer
+                on the ballot is not listed as if it were. */}
+            {(ballot.measureCoverage.unreadReason ||
+              (ballot.measureCoverage.status !== "covered" &&
+                ballot.measureCoverage.status !== "confirmed_none")) && (
+              <p className="border-b border-white/[0.09] px-4 py-2 text-[12px] text-signal-amber">
+                From our last successful read — may be out of date.
+              </p>
+            )}
             <ul>
               {ballot.measures.map((m) => (
                 <li key={m.id} className="border-b border-white/[0.09] px-4 py-2 text-[13px] text-ink-hi">
                   <span className="mr-2 font-mono text-xs text-ink-lo">{m.number}</span>
                   {m.title}
+                  {(m.status === "removed" || m.status === "withdrawn") && (
+                    <span className="ml-2 font-mono text-[10px] uppercase text-signal-red">{m.status}</span>
+                  )}
                 </li>
               ))}
             </ul>
@@ -979,7 +1007,9 @@ function ContestOverview({
           <>
             <p className="px-4 pt-3 text-[13px] text-ink-lo">
               {ballot.measureCoverage.status === "confirmed_none"
-                ? "No statewide measures are on record for this ballot."
+                ? ballot.measureCoverage.basis === "operator"
+                  ? "None remain as far as Civitas can tell — our determination, not a list from the state."
+                  : "No statewide measures are on record for this ballot."
                 : "Civitas does not have this state's measures yet — that does not mean there are none."}
             </p>
             <OpenButton label="DETAILS" onClick={() => onOpen(contest.key)} />
@@ -1063,8 +1093,8 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   const openContest = useCallback(
     (key: string, houseRaceId: string | null = null) => {
       setChosen({ key, houseRaceId });
-      const race = contests.find((c) => c.key === key)?.race;
-      const hash = houseRaceId ? `#race-${houseRaceId}` : race ? `#race-${race.id}` : `#ballot-${key}`;
+      const contest = contests.find((c) => c.key === key);
+      const hash = contest ? contestHash(contest, houseRaceId) : `#ballot-${key}`;
       window.history.replaceState(null, "", hash);
     },
     [contests],
@@ -1120,7 +1150,16 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
 
   const columns: BallotContest["column"][] = ["federal", "state", "local"];
 
+  // What a shared image of any contest says it is from. "Statewide", like
+  // the page itself: a precinct's ballot has more on it (ballot.omits).
+  const shareSubject = {
+    title: `${stateName} statewide ballot`,
+    subtitle: `${ballot.cycleYear} general election · ${ballot.electionDate}`,
+    url: absoluteUrl(`/elections/states/${ballot.state}`),
+  };
+
   return (
+    <ShareSubjectProvider subject={shareSubject}>
     <div className="min-h-screen bg-surface-base text-ink-hi">
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
@@ -1280,6 +1319,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
       {openContestEntry && (
         <ContestDrawer
           contest={openContestEntry}
+          shareAnchor={contestHash(openContestEntry, open?.houseRaceId ?? null).slice(1)}
           index={openIndex}
           total={contests.length}
           prev={openIndex > 0 ? contests[openIndex - 1] : null}
@@ -1294,5 +1334,6 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
       <BackToTop />
       <Footer />
     </div>
+    </ShareSubjectProvider>
   );
 }

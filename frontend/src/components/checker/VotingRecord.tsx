@@ -1,18 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 import {
   KeyVote,
   PaginatedVotes,
   VoteCounts,
   VotingRecord as VotingRecordType,
 } from "@/types/senator";
-import { voteSourceUrl } from "@/lib/sources";
+import { billPageHref } from "@/lib/congress";
 import { fetchSenatorVotes, fetchRepVotes } from "@/lib/api";
 import CollapsibleSection from "../shared/CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
-import RollCallSummary from "./RollCallSummary";
-import { PARTY_BADGE, policyAreaBadgeClass } from "@/lib/partyStyles";
+import Link from "next/link";
+import { shortDate, voteTitle } from "@/components/scorecard/format";
 import Pagination from "@/components/shared/Pagination";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 
@@ -22,28 +22,6 @@ interface VotingRecordProps {
   senatorId: string;
   votingRecord: VotingRecordType;
   chamber?: "senate" | "house";
-}
-
-function PartyBadge({ leaning }: { leaning: string | null }) {
-  if (!leaning) return null;
-  const badge = PARTY_BADGE[leaning];
-  if (!badge) return null;
-  return (
-    <span className={`text-xs px-1 py-0.5 border font-mono ${badge.className}`}>{badge.label}</span>
-  );
-}
-
-function PartyAlignmentBadge({ votedWithParty }: { votedWithParty: boolean | null }) {
-  if (votedWithParty === null) return null;
-  return votedWithParty ? (
-    <span className="text-xs px-1.5 py-0.5 border text-ink-lo border-white/[0.07] bg-white/[0.03]">
-      WITH PARTY
-    </span>
-  ) : (
-    <span className="text-xs px-1.5 py-0.5 border text-signal-magenta border-signal-magenta/40 bg-signal-magenta/10 font-bold">
-      AGAINST PARTY
-    </span>
-  );
 }
 
 function VoteBadge({ vote }: { vote: string }) {
@@ -60,170 +38,44 @@ function VoteBadge({ vote }: { vote: string }) {
   );
 }
 
-function VoteCard({ vote, expandable = false }: { vote: KeyVote; expandable?: boolean }) {
-  const [expanded, setExpanded] = useState(false);
-
-  const getVoteBorder = (v: string) => {
-    if (v === "Yea") return "border-l-4 border-l-white/15";
-    if (v === "Nay") return "border-l-4 border-l-signal-red/40";
-    return "border-l-4 border-l-signal-amber/30";
-  };
-
-  const voteColor =
-    vote.vote === "Yea"
-      ? "text-ink-hi"
-      : vote.vote === "Nay"
-        ? "text-signal-red"
-        : "text-signal-amber";
-
-  const borderClass = getVoteBorder(vote.vote);
-  const sourceLink = voteSourceUrl(vote.billId);
-
-  const detailBadges = (
-    <div className="flex items-center gap-2 flex-wrap">
-      <VoteBadge vote={vote.vote} />
-      <PartyBadge leaning={vote.partyLeaning} />
-      {vote.vote !== "Not Voting" && (
-        <>
-          <PartyAlignmentBadge votedWithParty={vote.votedWithParty} />
-          {vote.policyArea !== "PROCEDURAL" &&
-            (vote.policyAreas?.length > 0
-              ? vote.policyAreas
-                  .filter((a) => a.area !== "PROCEDURAL")
-                  .map((a) => (
-                    <span
-                      key={a.area}
-                      className={`text-xs px-1.5 py-0.5 border ${policyAreaBadgeClass(a.party)}`}
-                      title={`${a.area} — ${a.party} aligned (${Math.round(a.confidence * 100)}%)`}
-                    >
-                      {a.area}
-                    </span>
-                  ))
-              : vote.policyArea &&
-                vote.policyArea !== "PROCEDURAL" && (
-                  <span
-                    className="text-xs px-1.5 py-0.5 border text-signal-amber border-signal-amber/40 bg-signal-amber/10"
-                    title={vote.policyArea}
-                  >
-                    {vote.policyArea}
-                  </span>
-                ))}
-        </>
-      )}
-    </div>
-  );
-
-  if (!expandable) {
-    return (
-      <div className={`panel p-3 ${borderClass}`}>
-        <div className="flex items-center gap-2 flex-wrap">
-          <VoteBadge vote={vote.vote} />
-          <span className="text-ink text-sm">{vote.billName}</span>
-        </div>
-        <div className="flex items-center gap-2 mt-1">
-          {vote.date && <span className="text-xs text-ink-min">{vote.date}</span>}
-          {sourceLink && (
-            <a
-              href={sourceLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs font-mono tracking-wide text-ink-lo hover:text-phos transition-colors"
-            >
-              SOURCE ↗
-            </a>
-          )}
-        </div>
-      </div>
-    );
-  }
-
+/** One vote, on one line: what was voted on (linked to the bill's page,
+ *  where its text, sponsor and every vote on it are), the question, the
+ *  date, the member's vote, and whether it went against the party. It used
+ *  to expand into the pipeline's own working — content-lean badges, policy
+ *  areas, "stance", the internal vote id — which meant nothing to a reader. */
+function VoteRow({ vote }: { vote: KeyVote }) {
+  const rc = vote.rollCall;
+  const title = voteTitle(rc?.title, rc?.billLabel, vote.billName);
+  // The roll call's bill, or, for a vote stored before its roll call was
+  // recorded, the vote's own bill id. A nomination has no bill page.
+  const href = billPageHref(rc ? rc.billId : vote.billId);
   return (
-    <div className={`panel ${borderClass}`}>
-      <button
-        onClick={() => setExpanded(!expanded)}
-        aria-expanded={expanded}
-        aria-label={`${vote.billName}: ${vote.vote}. ${expanded ? "Collapse" : "Expand"} details`}
-        className="w-full text-left p-3 flex items-center justify-between gap-2"
-      >
-        <div className="flex-1 min-w-0">
-          <span className="text-ink text-sm">{vote.billName}</span>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className={`font-mono text-xs tracking-widest ${voteColor}`}>
-            {vote.vote.toUpperCase()}
+    <li className="flex items-start justify-between gap-3 border-b border-white/[0.07] py-2.5">
+      <div className="min-w-0">
+        {href ? (
+          <Link
+            href={href}
+            className="line-clamp-2 text-sm text-ink underline decoration-white/20 underline-offset-2 hover:text-phos"
+            title={rc?.title || vote.billName}
+          >
+            {title}
+          </Link>
+        ) : (
+          <span className="line-clamp-2 text-sm text-ink">{title}</span>
+        )}
+        <p className="mt-0.5 text-xs text-ink-min">
+          {[rc?.question, rc ? shortDate(rc.date) : vote.date].filter(Boolean).join(" · ")}
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {vote.votedWithParty === false && (
+          <span className="border border-signal-magenta/40 bg-signal-magenta/10 px-1.5 py-0.5 font-mono text-xs text-signal-magenta">
+            AGAINST PARTY
           </span>
-          <span className="text-ink-min" aria-hidden="true">
-            {expanded ? "−" : "+"}
-          </span>
-        </div>
-      </button>
-
-      {expanded && (
-        <div className="px-3 pb-3 border-t border-white/[0.07] pt-3 space-y-2 text-sm">
-          {detailBadges}
-
-          <div className="flex items-center gap-2 flex-wrap text-ink-lo">
-            <span>
-              {vote.billId} &mdash; {vote.date}
-            </span>
-            {sourceLink && (
-              <a
-                href={sourceLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-ink-lo hover:text-phos transition-colors border border-white/15 px-1.5 py-0.5"
-              >
-                VIEW ON CONGRESS.GOV
-              </a>
-            )}
-          </div>
-
-          {vote.rollCall && <RollCallSummary rollCall={vote.rollCall} />}
-
-          {vote.description && vote.description !== vote.billName && (
-            <p className="text-ink">{vote.description}</p>
-          )}
-
-          {vote.policyArea && vote.policyArea !== "PROCEDURAL" && (
-            <div className="bg-signal-amber/10 border border-signal-amber/40 p-2">
-              <div className="flex items-center gap-2 mb-1 flex-wrap">
-                <span className="text-xs text-ink-lo">POLICY AREAS:</span>
-                {(vote.policyAreas?.length > 0
-                  ? vote.policyAreas.filter((a) => a.area !== "PROCEDURAL")
-                  : [
-                      {
-                        area: vote.policyArea,
-                        confidence: 1,
-                        party: vote.partyLeaning || ("bipartisan" as const),
-                      },
-                    ]
-                ).map((a) => (
-                  <span
-                    key={a.area}
-                    className={`text-xs px-1.5 py-0.5 border ${policyAreaBadgeClass(a.party)}`}
-                    title={`Confidence: ${Math.round(a.confidence * 100)}% — ${a.party} aligned`}
-                  >
-                    {a.area}
-                    <span className="ml-1 opacity-50">
-                      {a.party === "R" ? "R" : a.party === "D" ? "D" : "~"}
-                    </span>
-                  </span>
-                ))}
-                {vote.stance && (
-                  <span className="text-xs text-ink-lo ml-1">STANCE: {vote.stance}</span>
-                )}
-              </div>
-              {vote.partyAlignmentWeight > 0 && vote.partyAlignmentWeight < 1 && (
-                <div className="text-xs text-ink-min mb-1">
-                  Alignment weight: {Math.round(vote.partyAlignmentWeight * 100)}% of areas lean{" "}
-                  {vote.partyLeaning}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+        )}
+        <VoteBadge vote={vote.vote} />
+      </div>
+    </li>
   );
 }
 
@@ -269,13 +121,20 @@ function PaginatedVoteList({
   // `filter` is the one last asked for, `shownFilter` the one the votes on
   // screen were fetched with.
   const {
-    data, loading, error, requested: filter, shown: shownFilter, request,
+    data,
+    loading,
+    error,
+    requested: filter,
+    shown: shownFilter,
+    request,
   } = useLatestRequest<PaginatedVotes, VoteFilterType>("all", "Failed to load votes");
 
   const fetchVotes = useCallback(
     (p: number, f: VoteFilterType) => {
       const fetcher = chamber === "house" ? fetchRepVotes : fetchSenatorVotes;
-      request(f, () => fetcher(senatorId, { category, page: p, perPage: VOTES_PER_PAGE, filter: f }));
+      request(f, () =>
+        fetcher(senatorId, { category, page: p, perPage: VOTES_PER_PAGE, filter: f })
+      );
     },
     [request, senatorId, category, chamber]
   );
@@ -359,11 +218,11 @@ function PaginatedVoteList({
         </p>
       )}
 
-      <div className="space-y-2">
-        {data.votes.map((vote) => (
-          <VoteCard key={`${category}-${vote.billId}`} vote={vote} expandable />
+      <ul>
+        {data.votes.map((vote, i) => (
+          <VoteRow key={`${category}-${vote.billId}-${vote.rollCall?.number ?? i}`} vote={vote} />
         ))}
-      </div>
+      </ul>
 
       <Pagination
         numbered
@@ -401,7 +260,7 @@ export default function VotingRecord({
           {totalVotes.toLocaleString()}
         </div>
         <div className="text-ink-min text-xs">
-          <MetricTooltip text="Total roll-call votes tracked from Congress.gov and Senate.gov for this senator across recent and key votes.">
+          <MetricTooltip text="Total roll-call votes tracked from Congress.gov and Senate.gov for this member across recent and key votes.">
             TOTAL TRACKED
           </MetricTooltip>
         </div>
@@ -411,7 +270,7 @@ export default function VotingRecord({
           {Math.round(partyLoyaltyPct)}%
         </div>
         <div className="text-ink-min text-xs">
-          <MetricTooltip text="How often this senator votes with the majority of their party. 100% = perfect party-line voter. Calculated from all scoreable roll-call votes.">
+          <MetricTooltip text="How often this member votes with the majority of the member's party. 100% = perfect party-line voter. Calculated from all scoreable roll-call votes.">
             PARTY LOYALTY
           </MetricTooltip>
         </div>
@@ -422,7 +281,7 @@ export default function VotingRecord({
           {partyIndependencePct}%
         </div>
         <div className="text-ink-min text-xs">
-          <MetricTooltip text="How often this senator votes against their own party. Higher = more willingness to break from party leadership on roll-call votes.">
+          <MetricTooltip text="How often this member votes against the member's own party. Higher = more willingness to break from party leadership on roll-call votes.">
             INDEPENDENT
           </MetricTooltip>
         </div>
@@ -441,23 +300,11 @@ export default function VotingRecord({
       alwaysVisible={statBoxes}
     >
       <div className="space-y-6 mt-4">
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-lo mb-1">
-          <span>
-            <span className="text-signal-red font-display font-semibold">R</span> =
-            Republican-aligned bill
-          </span>
-          <span>
-            <span className="text-dem-blue font-display font-semibold">D</span> = Democrat-aligned
-            bill
-          </span>
-          <span>
-            <span className="text-ind-purple font-display font-semibold">BP</span> = Bipartisan bill
-          </span>
-          <span>
-            <span className="text-signal-magenta font-bold">AGAINST PARTY</span> = voted against own
-            party
-          </span>
-        </div>
+        <p className="text-xs text-ink-lo">
+          Each vote links to its bill.{" "}
+          <span className="font-mono text-signal-magenta">AGAINST PARTY</span> marks a vote with the
+          other side on a roll call the parties split on.
+        </p>
         {keyVoteCount > 0 && (
           <div>
             <div className="text-xs text-ink-lo mb-2 font-mono tracking-widest">

@@ -12,11 +12,13 @@ import BranchSelector, { type Branch } from "@/components/BranchSelector";
 import Footer from "@/components/layout/Footer";
 import PageFallback from "@/components/layout/PageFallback";
 import BackToTop from "@/components/BackToTop";
+import PresidentScorecard from "@/components/scorecard/PresidentScorecard";
 import {
   fetchLeaderboard,
   fetchRepLeaderboard,
   fetchPresidentLeaderboard,
   fetchCurrentPresident,
+  fetchPresidentScoreBreakdown,
   fetchJusticeLeaderboard,
 } from "@/lib/api";
 import { getScoreColor, getScoreBgColor } from "@/lib/representation";
@@ -24,7 +26,6 @@ import MetricTooltip from "@/components/checker/MetricTooltip";
 import { PARTY_BADGE } from "@/lib/partyStyles";
 import { BOXED_CONTROL, boxedControl } from "@/lib/controlStyles";
 import { competitionRanks, displayScore, formatCurrency } from "@/lib/formatting";
-import { PresidentCard } from "@/components/president/PresidentClient";
 import type { LeaderboardEntry, ScoreTrend } from "@/types/senator";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 import type { JusticeLeaderboardEntry } from "@/types/justice";
@@ -270,10 +271,8 @@ function termYears(start: string, end: string | null): string {
 }
 
 // The ranked table below excludes the currently-serving president
-// entirely (see fetchCurrentPresident's comment) — this renders their
-// profile separately, reusing PresidentCard (already surfaces
-// dimensionsAvailable, per-dimension N/A reasons, and the 90-day
-// rolling approval stat) rather than building a second, parallel view.
+// entirely (see fetchCurrentPresident's comment); their scorecard is shown
+// above it, the same one their profile opens with.
 function CurrentPresidentSpotlight({
   president,
   loading,
@@ -281,6 +280,10 @@ function CurrentPresidentSpotlight({
   president: President | null;
   loading: boolean;
 }) {
+  const breakdown = useAsyncData(
+    `president-breakdown-${president?.id ?? ""}`,
+    president ? () => fetchPresidentScoreBreakdown(president.id) : null
+  );
   if (loading) {
     return (
       <div className="panel p-6 text-center mb-6" role="status" aria-live="polite">
@@ -293,7 +296,7 @@ function CurrentPresidentSpotlight({
   if (!president) return null;
 
   return (
-    <div className="mb-6">
+    <div className="mb-10">
       <div className="mb-3 flex items-center gap-2">
         <span className="text-signal-amber text-xs animate-pulse border border-signal-amber/40 px-2 py-0.5 font-mono">
           CURRENTLY SERVING
@@ -304,7 +307,7 @@ function CurrentPresidentSpotlight({
           under one ordinal position isn&apos;t a fair fight.
         </p>
       </div>
-      <PresidentCard president={president} />
+      <PresidentScorecard president={president} breakdown={breakdown.data ?? null} titleAs="h2" />
     </div>
   );
 }
@@ -1200,13 +1203,13 @@ function LeaderboardContent() {
                 <div className="mt-4 space-y-1 text-center">
                   <p className="font-sans text-xs text-ink-lo">
                     Higher score = better constituent representation. Computed from: funding
-                    independence (33%) + constituent alignment (33%) + legislative effectiveness (34%).
-                    Click any row to view full profile.
+                    independence (33%) + constituent alignment (33%) + legislative effectiveness
+                    (34%). Click any row to view full profile.
                   </p>
                   <p className="font-sans text-xs text-ink-min">
-                    Scores are shrunk toward a neutral value when data is thin — members with limited public
-                    data are not penalized or rewarded for it (the About page says how each score does
-                    this)
+                    Scores are shrunk toward a neutral value when data is thin — members with
+                    limited public data are not penalized or rewarded for it (the About page says
+                    how each score does this)
                   </p>
                 </div>
               )}
@@ -1228,7 +1231,15 @@ const EMPTY_JUSTICES: JusticeLeaderboardEntry[] = [];
 
 export default function LeaderboardPage() {
   return (
-    <Suspense fallback={<PageFallback eyebrow={"Leaderboard · ranked by representation score"} title={"Leaderboard"} rows={6} />}>
+    <Suspense
+      fallback={
+        <PageFallback
+          eyebrow={"Leaderboard · ranked by representation score"}
+          title={"Leaderboard"}
+          rows={6}
+        />
+      }
+    >
       <LeaderboardContent />
     </Suspense>
   );
