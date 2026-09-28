@@ -1372,6 +1372,11 @@ async def test_an_unregistered_state_keeps_the_date_of_measures_still_on_file(mo
     row = db_session.query(MeasureCoverage).filter(MeasureCoverage.state == "OR").one()
     assert row.status == MeasureCoverage.NOT_YET_COVERED
     assert row.last_success_at is not None
+    # The rows' own source stays named, so the page can date them as that
+    # source's last read. They stay certified: marking them removed would
+    # claim the state struck them, which nobody checked.
+    assert row.source_name == "Oregon SoS"
+    assert db_session.query(BallotMeasure).filter(BallotMeasure.state == "OR").one().status == "certified"
 
 
 def test_every_unread_state_has_a_reason_and_no_read_state_claims_one():
@@ -1406,6 +1411,23 @@ def test_unread_reasons_make_no_claim_about_network_access():
         reason = entry["reason"].lower()
         assert not [w for w in network_words if w in reason], (state, reason)
         assert ("does not read" in reason and "automatically yet" in reason) or "publish" in reason or "posted" in reason, state
+
+
+def test_unread_reasons_are_true_in_any_cycle():
+    """A reason stays on the page election after election: a date, a year
+    or "this election" in it goes stale (and contradicts the next cycle).
+    When something was found belongs in dev_note."""
+    import re
+
+    from app.pipeline.fetch import ballot_measure_pdf_sources as sources
+
+    sources.invalidate_cache()
+    months = r"january|february|march|april|may|june|july|august|september|october|november|december"
+    for state, entry in sources._load()["unread"].items():
+        reason = entry["reason"].lower()
+        assert not re.search(r"\b(19|20)\d{2}\b", reason), (state, reason)
+        assert not re.search(rf"\b({months})\b", reason), (state, reason)
+        assert "this election" not in reason and "as of" not in reason, (state, reason)
 
 
 def test_the_page_gives_an_unread_states_reason(db_session):

@@ -1179,8 +1179,8 @@ def _record_unread_state(db: Session, state: str, election_day: str) -> None:
     Anything the row carried from an earlier source's read is cleared: no
     reader is running, so a shrink streak can't continue and an operator's
     "none" (accept-absence needs a registered source) can't stand. The
-    "last successful read" date is kept only while measures from that read
-    are still on file — it is what dates them; with none on file (the
+    "last successful read" date (and the source it names) is kept only
+    while measures from that read are still on file — it is what dates them; with none on file (the
     retired source's rows are purged) it would date a check this site no
     longer makes, beside a status saying nothing was checked.
     """
@@ -1189,6 +1189,8 @@ def _record_unread_state(db: Session, state: str, election_day: str) -> None:
     from app.pipeline.fetch.ballot_measure_pdf_sources import unread_reason
 
     reason = unread_reason(state) or "Civitas does not read this state's official measure list automatically yet."
+    prior = _coverage_row(db, state, election_day)
+    prior_source = prior.source_name if prior is not None else None
     _set_coverage(
         db, state, election_day, MeasureCoverage.NOT_YET_COVERED, error=f"no direct source: {reason}",
     )
@@ -1202,7 +1204,15 @@ def _record_unread_state(db: Session, state: str, election_day: str) -> None:
         .first()
         is not None
     )
-    if not has_rows:
+    if has_rows:
+        # A reader de-registered mid-cycle: its rows stay as they are,
+        # certified — marking them removed would claim the state struck
+        # them, which nobody checked. The coverage row keeps naming their
+        # source so the page can date them as that source's last read, and
+        # the page words them from unreadReason ("no longer read"), never
+        # as a check that failed. They are pruned with the election.
+        row.source_name = prior_source
+    else:
         row.last_success_at = None
 
 

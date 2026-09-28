@@ -360,9 +360,26 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
       sources.length === 1 && sources[0] === measureCoverage.sourceName && measureCoverage.checkedAt
         ? measureCoverage.checkedAt.slice(0, 10)
         : null;
+    // No reader runs for this state any more (de-registered mid-cycle):
+    // the list is the last read's, and nothing has been checked since —
+    // "our latest check" or a fresh-list wording would both be false.
+    const unread = Boolean(measureCoverage.unreadReason);
     return (
       <div className="space-y-3">
-        {stale && allRemoved && measureCoverage.status === "not_yet_covered" && (
+        {unread && (
+          <div role="status" className="border border-signal-amber/40 bg-signal-amber/10 p-3">
+            <p className="text-xs text-signal-amber">
+              Civitas no longer reads {state}&apos;s measures automatically: {measureCoverage.unreadReason} The
+              list below is from our last read{readDate ? `, ${readDate}` : ""}, and may be out of date —
+              check the{" "}
+              <a href={lookupHref} target="_blank" rel="noopener noreferrer" className="text-signal-cyan hover:text-phos">
+                official lookup ↗
+              </a>
+              .
+            </p>
+          </div>
+        )}
+        {!unread && stale && allRemoved && measureCoverage.status === "not_yet_covered" && (
           // The latest read worked and dropped these; it names nothing
           // else for this ballot yet (Oklahoma's register re-dating its
           // only State Question). "Could not find the list" would be false.
@@ -386,7 +403,7 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
             </p>
           </div>
         )}
-        {stale && !(allRemoved && measureCoverage.status === "not_yet_covered") && (
+        {!unread && stale && !(allRemoved && measureCoverage.status === "not_yet_covered") && (
           <div role="status" className="border border-signal-amber/40 bg-signal-amber/10 p-3">
             <p className="text-xs text-signal-amber">
               {measureCoverage.status === "ingest_failed"
@@ -476,7 +493,9 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
         </a>{" "}
         to see everything on your ballot.
       </p>
-      {measureCoverage.lastAttemptAt && (
+      {/* Nothing is attempted for an unread state: its row's timestamp
+          is nightly bookkeeping, not a check. */}
+      {measureCoverage.lastAttemptAt && !measureCoverage.unreadReason && (
         <p className="text-[10px] text-ink-min mt-2">
           Last attempt {measureCoverage.lastAttemptAt.slice(0, 10)}.
         </p>

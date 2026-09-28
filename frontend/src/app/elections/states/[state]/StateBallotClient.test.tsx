@@ -615,6 +615,47 @@ describe("ballot measures", () => {
     expect(drawer.getByText(/does not read Ohio's official measure list automatically yet/)).toBeInTheDocument();
     expect(drawer.queryByText(/no measures|none on the ballot/i)).not.toBeInTheDocument();
     expect(drawer.getByRole("link", { name: /official lookup/ })).toHaveAttribute("href", expect.stringMatching(/^https:/));
+    // Nothing is attempted for an unread state; a nightly bookkeeping
+    // timestamp must not read as one.
+    expect(drawer.queryByText(/Last attempt/)).not.toBeInTheDocument();
+  });
+
+  it("words a de-registered state's leftover measures from its reason, not as a failed check", async () => {
+    const reason = "Civitas does not read Ohio's official measure list automatically yet.";
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures: [{ ...measure, sourceName: "Ohio SoS" }],
+          measureCoverage: {
+            status: "not_yet_covered", sourceName: "Ohio SoS", checkedAt: "2026-09-20T00:00:00Z",
+            lastAttemptAt: "2026-09-28T00:00:00Z", unreadReason: reason,
+          },
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    const notice = drawer.getByRole("status");
+    expect(notice).toHaveTextContent("Civitas no longer reads OH's measures automatically");
+    expect(notice).toHaveTextContent("from our last read, 2026-09-20");
+    expect(notice).not.toHaveTextContent(/latest check|attempt|2026-09-28/);
+  });
+
+  it("does not describe an unread state's removed measures as a fresh list", async () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures: [{ ...measure, sourceName: "Ohio SoS", status: "removed" }],
+          measureCoverage: {
+            status: "not_yet_covered", sourceName: "Ohio SoS", checkedAt: "2026-09-20T00:00:00Z",
+            lastAttemptAt: "2026-09-28T00:00:00Z",
+            unreadReason: "Civitas does not read Ohio's official measure list automatically yet.",
+          },
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    expect(drawer.queryByText(/latest list no longer includes/)).not.toBeInTheDocument();
+    expect(drawer.getByText(/Civitas no longer reads OH's measures automatically/)).toBeInTheDocument();
   });
 
   it("says a registered state's list is not published yet, not that it was never read", async () => {
