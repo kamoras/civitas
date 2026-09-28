@@ -200,22 +200,22 @@ export function isActiveCandidate(c: CandidateSummary): boolean {
   return c.confirmed || c.candidateStatus === "C" || c.hasRaisedFunds || c.incumbentChallenge === "I";
 }
 
-/** FEC party codes that are the Democratic Party's state-level
- * affiliates — DFL (Minnesota), D-NPL (North Dakota, FEC code DNL) —
- * mapped to the display suffix CandidateCard.tsx's PARTY_META uses in
- * its label ("DEMOCRAT (DFL)"). The single source of truth for "which
- * codes count as Democratic": majorPartyOf and PARTY_META both read
- * from this list instead of each keeping an independent copy, which
- * previously meant a new affiliate added to one could silently miss
- * the other. */
+/** Display suffixes for FEC codes that are a Democratic state affiliate —
+ * DFL (Minnesota), D-NPL (North Dakota, FEC code DNL) — for
+ * CandidateCard.tsx's PARTY_META label ("DEMOCRAT (DFL)"). Labels only:
+ * WHICH codes are the same party comes from the backend, as each
+ * candidate's `partyGroup` (FEC_PARTY_ALIASES), so the page keeps no
+ * second list of it. */
 export const DEM_AFFILIATE_PARTIES: Record<string, string> = { DFL: "DFL", DNL: "D-NPL" };
 
-/** Which major party a candidate's FEC code belongs to, or null for
- * anyone else — so a real DFL/DNL nominee reads as the major-party
- * candidate everywhere on the page, not just on their own card. */
-export function majorPartyOf(party: string): "DEM" | "REP" | null {
-  if (party === "DEM" || party in DEM_AFFILIATE_PARTIES) return "DEM";
-  if (party === "REP") return "REP";
+/** Which major party a candidate belongs to, or null for anyone else —
+ * read from the backend's `partyGroup` (a DFL nominee's is "DEM"), so a
+ * real DFL/DNL nominee reads as the major-party candidate everywhere on
+ * the page. A statewide nominee's `party` is already that group. */
+export function majorPartyOf(c: { party: string; partyGroup?: string | null }): "DEM" | "REP" | null {
+  const group = c.partyGroup ?? c.party;
+  if (group === "DEM") return "DEM";
+  if (group === "REP") return "REP";
   return null;
 }
 
@@ -256,7 +256,7 @@ export function tierCandidates(candidates: BallotCandidate[]): RaceTiers {
   const byRaised = (c: BallotCandidate) => c.contributions ?? 0;
 
   const topOf = (party: "DEM" | "REP") =>
-    active.filter((c) => majorPartyOf(c.party) === party).sort((a, b) => byRaised(b) - byRaised(a))[0] ??
+    active.filter((c) => majorPartyOf(c) === party).sort((a, b) => byRaised(b) - byRaised(a))[0] ??
     null;
   const majorLeaders = [topOf("DEM"), topOf("REP")].filter(
     (c): c is BallotCandidate => c != null,
@@ -274,7 +274,7 @@ export function tierCandidates(candidates: BallotCandidate[]): RaceTiers {
   // bar for "this minor-party/independent run looks real" — not re-tuned
   // per race, and not meant to predict who wins, just who's worth a card.
   const bestOther = active
-    .filter((c) => majorPartyOf(c.party) == null && !leaderIds.has(c.id))
+    .filter((c) => majorPartyOf(c) == null && !leaderIds.has(c.id))
     .sort((a, b) => byCash(b) - byCash(a))[0];
   if (bestOther && bestMajorCash > 0 && byCash(bestOther) >= bestMajorCash * 0.1) {
     leaderIds.add(bestOther.id);

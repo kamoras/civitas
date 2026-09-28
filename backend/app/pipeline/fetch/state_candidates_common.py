@@ -302,15 +302,21 @@ PARTY_CODE_MAP = {
 }
 
 # FEC's own party codes that name one of PARTY_CODE_MAP's parties under
-# another code — a data-format translation of FEC's published party table,
-# not a classification: DFL/DNL are the Minnesota and North Dakota
-# Democratic parties; NPA, UN and NNE are FEC's no-party/unaffiliated/none
-# codes for an independent; CRV and UST the Conservative and U.S. Taxpayers
-# parties, the Constitution party's forerunner and state affiliates.
+# another code — a data-format translation of FEC's published party-code
+# table (https://www.fec.gov/campaign-finance-data/party-code-descriptions/),
+# not a classification. DFL and DNL are the Minnesota and North Dakota
+# Democratic parties. NPA ("No Party Affiliation"), UN ("Unaffiliated"),
+# NNE ("None"), NOP ("No Party Preference", CA and WA) and NON
+# ("Non-Party") are no-party codes, which a state's list prints as
+# independent. UST is the U.S. Taxpayers Party, the Constitution Party's
+# former name and still some state affiliates' label. Not CRV: that is the
+# Conservative Party, a different party from CON (Constitution).
+# The single source of this list: the elections API sends each
+# candidate's translated party as `partyGroup`, and the page reads that.
 FEC_PARTY_ALIASES = {
     "DFL": "DEM", "DNL": "DEM",
-    "NPA": "IND", "UN": "IND", "NNE": "IND",
-    "CRV": "CON", "UST": "CON",
+    "NPA": "IND", "UN": "IND", "NNE": "IND", "NOP": "IND", "NON": "IND",
+    "UST": "CON",
 }
 
 

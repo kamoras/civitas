@@ -1275,3 +1275,52 @@ class TestSyncConfirmedCandidates:
         results = await sc.sync_confirmed_candidates(db_session, None, 2026)
 
         assert results["TX"]["status"] == "fetch_failed"
+
+
+class TestFecPartyCodes:
+    """FEC's published party codes, translated only where they name the
+    same party — never a different one."""
+
+    def test_translations(self):
+        from app.pipeline.fetch.state_candidates_common import fec_party
+
+        assert fec_party("DFL") == fec_party("DNL") == "DEM"
+        assert {fec_party(c) for c in ("NPA", "UN", "NNE", "NOP", "NON")} == {"IND"}
+        assert fec_party("UST") == "CON"
+        assert fec_party("CRV") == "CRV"  # the Conservative Party is not the Constitution Party
+        assert fec_party("REP") == "REP" and fec_party(None) is None
+
+    def test_a_conservative_party_filer_is_not_the_constitution_nominee(self, db_session):
+        _race(db_session, "2026-HOUSE-NY-1", "NY", office="H", district=1)
+        _candidate(db_session, "H1", "2026-HOUSE-NY-1", "JONES, ROBERT", party="CRV")
+        _candidate(db_session, "H2", "2026-HOUSE-NY-1", "JONES, ALICE", party="REP")
+        db_session.commit()
+        mary = [c for c in db_session.get(Race, "2026-HOUSE-NY-1").candidates]
+        assert sc._match_candidate(mary, "JONES", "C", "Mary Jones") is None
+
+    def test_one_person_refiled_under_the_state_code_is_still_one_person(self, db_session):
+        _race(db_session, "2026-SEN-MN", "MN", office="S")
+        _candidate(db_session, "S1", "2026-SEN-MN", "KLOBUCHAR, AMY", party="DFL", has_raised_funds=True)
+        _candidate(db_session, "S2", "2026-SEN-MN", "KLOBUCHAR, AMY J", party="DEM")
+        db_session.commit()
+        rows = db_session.get(Race, "2026-SEN-MN").candidates
+        assert sc._match_candidate(rows, "KLOBUCHAR", "D", "Amy Klobuchar").id == "S1"
+
+    def test_the_page_does_not_bring_back_a_dfl_nominees_primary_loser(self, db_session):
+        from app.api.elections import _unopposed_nominees
+
+        _race(db_session, "2026-HOUSE-MN-3", "MN", office="H", district=3)
+        nominee = _candidate(db_session, "H1", "2026-HOUSE-MN-3", "DOE, JANE", party="DFL", confirmed_general=True)
+        rep = _candidate(db_session, "H2", "2026-HOUSE-MN-3", "ROE, RICK", party="REP", confirmed_general=True)
+        loser = _candidate(db_session, "H3", "2026-HOUSE-MN-3", "LOSS, LEE", party="DEM")
+        db_session.commit()
+        assert _unopposed_nominees([nominee, rep, loser], [nominee, rep], "MN", False) == []
+
+    def test_the_api_names_each_candidates_party_group(self, db_session):
+        from app.api.elections import _candidate_summary
+
+        _race(db_session, "2026-HOUSE-MN-5", "MN", office="H", district=5)
+        omar = _candidate(db_session, "H1", "2026-HOUSE-MN-5", "OMAR, ILHAN", party="DFL")
+        db_session.commit()
+        summary = _candidate_summary(omar)
+        assert summary["party"] == "DFL" and summary["partyGroup"] == "DEM"

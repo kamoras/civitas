@@ -363,7 +363,7 @@ def _match_candidate(
     # nominee unconfirmed. Same surname, given name and party inside one
     # race is the same person; confirm the record that raised money, and
     # the other drops off the page with every other unconfirmed filer.
-    if len({(_first_name_key(c.name), c.party) for c in pool}) == 1 and _first_name_key(pool[0].name):
+    if len({(_first_name_key(c.name), fec_party(c.party)) for c in pool}) == 1 and _first_name_key(pool[0].name):
         return max(pool, key=lambda c: (bool(c.has_raised_funds), c.contributions or 0, c.id))
     return None
 
