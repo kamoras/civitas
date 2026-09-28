@@ -311,7 +311,9 @@ export default function AboutPage() {
                   classifiable donor money is matched to the member&apos;s votes on legislation in
                   that industry&apos;s policy area. For the industry&apos;s largest donor we look up
                   the Lobbying Disclosure Act registry (lda.gov) under the donor&apos;s name — the
-                  sponsoring company&apos;s when the donor is its PAC — and show registered lobbying
+                  sponsoring company&apos;s when the donor is its PAC (a PAC the FEC lists no
+                  separate sponsor for is searched under its own name, and finding nothing there
+                  is reported as unknown, not as no lobbying) — and show registered lobbying
                   spend for every client the search matched, each listed with its amount, and any bill the member voted on that those
                   filings name, linked to the filing and the client it was for. A client sharing
                   the name can be a subsidiary or a separate company (an independent bottler beside

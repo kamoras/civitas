@@ -356,6 +356,7 @@ def detect_donor_vote_connections(
 
         top_donor_name = None
         lobbying_client = None
+        client_is_committee = False
         if donors_by_industry.get(industry):
             top_donor = max(
                 donors_by_industry[industry], key=lambda d: d.get("total", 0),
@@ -364,10 +365,14 @@ def detect_donor_vote_connections(
             # The name the lobbying registry lists: a PAC's connected
             # organization (FEC committee master), else the donor's own name.
             lobbying_client = top_donor.get("connectedOrg") or top_donor_name
+            # A committee with no separate sponsor is searched under its own
+            # name, where a miss is no evidence of no lobbying.
+            client_is_committee = bool(top_donor.get("isCommittee")) and not top_donor.get("connectedOrg")
 
         industry_matches.append({
             "lobbyistOrg": top_donor_name or f"{industry.replace('_', ' ').title()} industry",
             "lobbyingClient": lobbying_client,
+            "lobbyingClientIsCommittee": client_is_committee,
             "industry": industry,
             "lobbyingSpend": 0,
             "donationToSenator": round(ind["total"]),

@@ -14,7 +14,8 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
       <div className="text-xs text-ink-lo mb-3">
         Industries that make up a large share of this member&apos;s classifiable donor money,
         matched to votes on legislation in that industry&apos;s policy area. Lobbying Disclosure
-        Act reports are looked up under the largest donor&apos;s name; where a report names a bill
+        Act reports are looked up under the largest donor&apos;s name, or its sponsoring
+        organization&apos;s when the donor is a PAC; where a report names a bill
         the member voted on, the filing is linked with the client it was filed for, which can be a
         separate company sharing the name. A filing records lobbying on a bill, not which way;
         none of this shows that money changed a vote.

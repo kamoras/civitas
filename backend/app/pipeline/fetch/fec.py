@@ -701,7 +701,14 @@ COMMITTEE_MASTER_CACHE_TTL_HOURS = 24 * 7
 
 # Column positions in cm.txt, per the FEC's published data dictionary
 # ("Committee master file description"): pipe-delimited, no header row.
-_CM_ID, _CM_DESIGNATION, _CM_TYPE, _CM_ORG_TYPE, _CM_CONNECTED_ORG = 0, 8, 9, 12, 13
+_CM_ID, _CM_NAME, _CM_DESIGNATION, _CM_TYPE, _CM_ORG_TYPE, _CM_CONNECTED_ORG = 0, 1, 8, 9, 12, 13
+
+
+def _same_name(a: str, b: str) -> bool:
+    """Equal ignoring case, spacing and punctuation."""
+    def key(s: str) -> str:
+        return " ".join(re.sub(r"[^A-Z0-9]+", " ", s.upper()).split())
+    return key(a) == key(b)
 
 
 def parse_committee_master(text: str) -> dict[str, dict]:
@@ -714,7 +721,9 @@ def parse_committee_master(text: str) -> dict[str, dict]:
     cooperative, corporation without stock). Elsewhere the same column
     holds joint-fundraising partners ("TAKE BACK THE HOUSE 2022", "TRUMP
     VICTORY") or the form's "NONE" placeholder (28,595 of the 2020-2026
-    files' rows), neither of which is a lobbying client.
+    files' rows), neither of which is a lobbying client. A fund that names
+    itself as its own connected organization (157 of cm26's 2,067 sponsored
+    committees) names no sponsor either.
     """
     out: dict[str, dict] = {}
     for line in text.splitlines():
@@ -722,7 +731,11 @@ def parse_committee_master(text: str) -> dict[str, dict]:
         if len(cols) <= _CM_CONNECTED_ORG or not cols[_CM_ID]:
             continue
         org = cols[_CM_CONNECTED_ORG].strip()
-        sponsored = bool(cols[_CM_ORG_TYPE].strip()) and org.upper() not in ("", "NONE")
+        sponsored = (
+            bool(cols[_CM_ORG_TYPE].strip())
+            and org.upper() not in ("", "NONE")
+            and not _same_name(org, cols[_CM_NAME])
+        )
         out[cols[_CM_ID]] = {
             "type": cols[_CM_TYPE] or None,
             "designation": cols[_CM_DESIGNATION] or None,

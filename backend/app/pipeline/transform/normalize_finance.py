@@ -292,6 +292,9 @@ def build_top_donors(
         # the FEC's committee entity types, not only "COM").
         cid = committee_id_of(r)
         if cid:
+            # A committee's own name is not how the lobbying registry lists
+            # anyone (fetch/lda.py), so a search under it proves nothing.
+            existing["isCommittee"] = True
             meta = committee_meta_map.get(cid)
             # The PAC-cap signal in _funding_independence_core still reads
             # the type only for "COM" rows, as before. Given every committee
@@ -375,6 +378,7 @@ def build_top_donors(
             "industry": d.get("industry", "OTHER"),
             "committeeType": d.get("committeeType"),
             "connectedOrg": d.get("connectedOrg"),
+            "isCommittee": bool(d.get("isCommittee")),
         }
         for d in sorted_donors
         if d["total"] > 0 and len(d["name"].strip()) >= 3

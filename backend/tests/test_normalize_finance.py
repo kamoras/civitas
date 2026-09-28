@@ -389,6 +389,7 @@ class TestCommitteeMasterMetadata:
         )
         assert donors[0]["industry"] == "FINANCE"
         assert donors[0]["connectedOrg"] == "JPMORGAN CHASE & CO."
+        assert donors[0]["isCommittee"] is True
         # The master's type fills the PAC-utilization input when the
         # per-committee API wasn't asked.
         assert donors[0]["committeeType"] == "Q"

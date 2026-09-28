@@ -776,7 +776,18 @@ async def enrich_lobbying_matches_with_lda(
                 failed = any(a is None for a in activities.values())
                 spend_year = activities.get(lda_year)
                 m["lobbyingChecked"] = spend_year is not None
-                if spend_year is not None:
+                if spend_year is not None and not spend_year.clients and m.get("lobbyingClientIsCommittee"):
+                    # Searched under a PAC's own name (the FEC lists no
+                    # separate sponsor): registry clients are the sponsoring
+                    # organizations, so finding none is not "none reported".
+                    m["lobbyingChecked"] = None
+                    m["description"] = (
+                        m.get("description", "")
+                        + f" No lobbying registry client matched \"{search_name(org)}\", the committee's"
+                        " own name; the registry lists a PAC's sponsor, which the FEC does not name"
+                        " separately for this committee, so its lobbying is unknown."
+                    )
+                elif spend_year is not None:
                     m["lobbyingSpend"] = round(spend_year.total)
                     # The total's parts by the registry's client names, so
                     # the structured field isn't read as one company's.
@@ -820,6 +831,8 @@ async def enrich_lobbying_matches_with_lda(
             except Exception:
                 failed = True
                 m.setdefault("lobbyingChecked", False)
+                if m["lobbyingChecked"] is None:
+                    m["lobbyingChecked"] = False
                 logger.exception(
                     "LDA enrichment failed for %s (non-fatal)", m.get("lobbyistOrg", "?"),
                 )

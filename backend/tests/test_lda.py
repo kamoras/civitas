@@ -172,6 +172,38 @@ class TestEnrich:
         assert {c.args[2] for c in mock.await_args_list} == {"JPMORGAN CHASE & CO."}
 
     @pytest.mark.asyncio
+    async def test_a_miss_under_a_committees_own_name_is_unknown_not_none(self, db_session):
+        # No registry client is a PAC, so nothing found under one's own name
+        # says nothing about its lobbying.
+        matches = [{"lobbyistOrg": "Coal Miners PAC", "lobbyingClient": "Coal Miners PAC",
+                    "lobbyingClientIsCommittee": True, "description": ""}]
+        with patch.object(lda, "fetch_lobbying_activity", new=AsyncMock(return_value=_activity(0.0))):
+            stats = await enrich_lobbying_matches_with_lda(matches, db_session, 2025, congress=119)
+        assert matches[0]["lobbyingChecked"] is None
+        assert "none reported" not in matches[0]["description"]
+        assert "lobbying is unknown" in matches[0]["description"]
+        assert stats == {"lookups": 1, "failed": 0}
+
+    @pytest.mark.asyncio
+    async def test_a_hit_under_a_committees_own_name_still_counts(self, db_session):
+        activity = _activity(40000.0)
+        activity.clients = [("INTERNATIONAL UNION OF BRICKLAYERS", 40000.0)]
+        matches = [{"lobbyistOrg": "Intl Union of Bricklayers", "lobbyingClient": "Intl Union of Bricklayers",
+                    "lobbyingClientIsCommittee": True, "description": ""}]
+        with patch.object(lda, "fetch_lobbying_activity", new=AsyncMock(return_value=activity)):
+            await enrich_lobbying_matches_with_lda(matches, db_session, 2025, congress=119)
+        assert matches[0]["lobbyingChecked"] is True
+        assert matches[0]["lobbyingSpend"] == 40000
+
+    @pytest.mark.asyncio
+    async def test_a_company_with_no_filings_is_none_reported(self, db_session):
+        matches = [{"lobbyistOrg": "Acme", "lobbyingClient": "Acme", "description": ""}]
+        with patch.object(lda, "fetch_lobbying_activity", new=AsyncMock(return_value=_activity(0.0))):
+            await enrich_lobbying_matches_with_lda(matches, db_session, 2025, congress=119)
+        assert matches[0]["lobbyingChecked"] is True
+        assert "none reported" in matches[0]["description"]
+
+    @pytest.mark.asyncio
     async def test_industry_label_headline_is_never_searched(self, db_session):
         matches = [{"lobbyistOrg": "Finance industry", "lobbyingClient": None, "description": ""}]
         mock = AsyncMock()

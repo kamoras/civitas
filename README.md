@@ -145,9 +145,9 @@ Pulls raw data from each government API and stores the complete response verbati
 |--------|-----------------|------------|
 | Congress.gov | Members, bills sponsored/cosponsored and their actions (current congress), bill summaries and titles | 1.2 RPS |
 | Senate.gov / House Clerk | Roll-call vote XML (every member's position on each vote) | 1.2 RPS (shared with Congress.gov) |
-| FEC API | Campaign finance transactions, committee receipts, PAC committee types | 0.25 RPS |
+| FEC API + bulk committee master (`cm{yy}.zip`) | Campaign finance transactions, committee receipts; committee type, designation and connected organization | 0.25 RPS (bulk files: one download per cycle, weekly) |
 | GovInfo API | Bill text; Congressional Record floor remarks (Explore) | 1.0 RPS |
-| Senate LDA | Registered lobbying spend for organizations in donor–vote matches | 0.2 RPS |
+| Lobbying Disclosure Act registry (lda.gov) | Registered lobbying spend by client, and the bills named in filings, for organizations in donor–vote matches | 0.2 RPS anonymous / 1.0 with `LDA_API_KEY` |
 | Oyez / supremecourt.gov | Justice voting records, case metadata, docket pages | ~2 RPS (fixed pauses) |
 | BLS | Unemployment, inflation, job growth by administration | batch |
 | BEA | GDP growth by quarter | batch |
@@ -181,7 +181,7 @@ per-vote reasoning — regardless of prompting approach. See
 2. Classify donors by type and industry (tiered: FEC metadata → learning store → embedding → kNN)
 3. Party alignment per bill: how the parties actually split on its roll call, else content similarity to party platform positions (see "Party Alignment" below)
 4. Sponsorship network over the chamber: PageRank legislative leadership and SVD ideology from the cosponsorship matrix
-5. Donor–vote connections: substantial industry funding matched against policy-anchored vote similarity, with Senate LDA lobbying spend attached
+5. Donor–vote connections: substantial industry funding matched against policy-anchored vote similarity, with registered lobbying spend (LDA) by client attached, and bills the member voted on that the organization's own filings name
 6. Select key votes: against the party line, related to a top donor's industry, substantive
 7. Compute the representation sub-scores against population references measured from the chamber this run, and persist the member's scorecard
 
