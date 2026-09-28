@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.api.pipeline_runner import run_pipeline_in_thread
 from app.config import settings
-from app.database import get_db, get_visits_db
+from app.database import get_db, get_visits_db, off_loop
 from app.http_client import make_async_client
 from app.models import (
     ActionIssue,
@@ -1382,8 +1382,8 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
                 return count
 
             count = await asyncio.to_thread(_run)
-            indexed = await asyncio.to_thread(rebuild_index, db)
-            authority = await asyncio.to_thread(update_document_authority, db)
+            indexed = await off_loop(db, rebuild_index)
+            authority = await off_loop(db, update_document_authority)
     return {"embedded": count, "keywordIndexed": indexed, "authority": authority}
 
 

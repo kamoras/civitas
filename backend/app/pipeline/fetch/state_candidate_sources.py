@@ -23,7 +23,7 @@ import os
 from typing import Any
 
 from app.atomic_write import LockTimeout, NotSaved, runtime_data_path, update_json_file
-from app.file_cache import Stamp, read_json_preferring, reload_if_moved
+from app.file_cache import Stamp, read_json_preferring, reload_if_moved, reload_lock
 
 logger = logging.getLogger(__name__)
 
@@ -81,10 +81,11 @@ def _load_discovered() -> dict[str, Any]:
     # The election pipeline (the pipeline process) writes the file; the API
     # processes read it here and reload when its mtime moves
     # (file_cache.reload_if_moved) — invalidate_cache() reaches only its caller.
-    _discovered_cache, _discovered_stamp = reload_if_moved(
-        [path], _discovered_cache, _discovered_stamp, lambda: _read_discovered(path),
-    )
-    return _discovered_cache
+    with reload_lock:
+        _discovered_cache, _discovered_stamp = reload_if_moved(
+            [path], _discovered_cache, _discovered_stamp, lambda: _read_discovered(path),
+        )
+        return _discovered_cache
 
 
 def _update_discovered(change) -> None:

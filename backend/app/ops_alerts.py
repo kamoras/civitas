@@ -80,8 +80,9 @@ def _already_sent(dedupe_key: str) -> bool:
     from app.database import SessionLocal
     from app.models import ApiCache
 
-    db = SessionLocal()
+    db = None
     try:
+        db = SessionLocal()
         return (
             db.query(ApiCache.cache_key)
             .filter(
@@ -91,8 +92,14 @@ def _already_sent(dedupe_key: str) -> bool:
             .first()
             is not None
         )
+    except Exception:
+        # Only a shortcut (_record's insert decides): an unreadable database
+        # must not stop an alert that may be about the database.
+        logger.warning("Ops alert dedupe check failed — sending", exc_info=True)
+        return False
     finally:
-        db.close()
+        if db is not None:
+            db.close()
 
 
 def _record(subject: str, body: str, dedupe_key: str | None) -> bool:
@@ -112,8 +119,9 @@ def _record(subject: str, body: str, dedupe_key: str | None) -> bool:
         "body": body,
         "at": now.isoformat(),
     })
-    db = SessionLocal()
+    db = None
     try:
+        db = SessionLocal()
         key = f"dedupe-{dedupe_key}" if dedupe_key else f"alert-{now.isoformat()}"
         inserted = db.execute(
             sqlite_insert(ApiCache)
@@ -139,7 +147,8 @@ def _record(subject: str, body: str, dedupe_key: str | None) -> bool:
     except Exception:
         logger.exception("Failed to record ops alert")
     finally:
-        db.close()
+        if db is not None:
+            db.close()
     return True
 
 

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.api.rate_limit import UpstreamRouteLimit, spend_upstream
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, cached_json, retry_soon_json
-from app.database import get_db
+from app.database import get_db, off_loop
 from app.http_client import make_async_client
 from app.pipeline.fetch.congress import expected_current_congress
 from app.services.bill_record import fetch_bill_record, parse_bill_id, shape_record
@@ -77,7 +77,8 @@ async def get_bill_record(
         raw = await fetch_bill_record(client, db, congress, bill_id, spend=spend_upstream)
     if raw["not_found"]:
         raise HTTPException(status_code=404, detail="Bill not found")
-    record = shape_record(db, congress, bill_id, raw)
+    # Its roll-call queries off the event loop, on a session of their own.
+    record = await off_loop(db, lambda session: shape_record(session, congress, bill_id, raw))
     if raw["unavailable"]:
         # Some part timed out or failed upstream just now; cached, every
         # reader would get the gap until it expired.

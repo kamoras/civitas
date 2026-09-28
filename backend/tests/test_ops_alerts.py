@@ -311,3 +311,17 @@ class TestCheckPipelineStaleness:
         ))
         db_session.commit()
         assert _labels(_check_stale(db_session)) == {"Supplementary pipeline is stale"}
+
+
+def test_an_unreadable_database_does_not_stop_an_alert(monkeypatch):
+    from app import ops_alerts
+
+    def no_database():
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr("app.database.SessionLocal", no_database)
+    monkeypatch.setattr(ops_alerts.settings, "ALERT_NTFY_URL", "https://ntfy.invalid/x")
+    sent = []
+    monkeypatch.setattr(ops_alerts, "_send_ntfy", lambda subject, body: sent.append(subject))
+    assert ops_alerts.send_ops_alert("down", "b", dedupe_key="k")
+    assert sent == ["down"]

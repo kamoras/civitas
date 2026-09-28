@@ -13,7 +13,7 @@ from app.api.auth import check_pipeline_token
 from app.api.public import RateLimit
 from app.api.rate_limit import UpstreamRouteLimit, WriteRateLimit, spend_upstream
 from app.api.response_helpers import FAILURE_RETRY_S, retry_soon_json
-from app.database import get_db
+from app.database import get_db, off_loop
 from app.models import ExploreDocument
 from app.services.explore_search import hybrid_search
 from app.time_utils import comment_period_today
@@ -82,9 +82,10 @@ async def search_explore(
         _CHAMBER_CANONICAL.get(chamber.lower(), chamber) if chamber else None
     )
 
-    outcome = await asyncio.to_thread(
-        hybrid_search,
-        db,
+    # Off the loop on a session of its own (database.off_loop): the request's
+    # is closed under a thread still using it if the request is cancelled.
+    outcome = await off_loop(db, lambda session: hybrid_search(
+        session,
         q,
         limit=limit,
         doc_type=doc_type,
@@ -92,7 +93,7 @@ async def search_explore(
         politician_id=politician_id,
         commentable=commentable,
         sort=sort,
-    )
+    ))
 
     # indexReady is False only when neither channel could answer: the
     # semantic index is missing or mid-rebuild AND the keyword index

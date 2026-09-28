@@ -4,14 +4,13 @@ Retrieval-first by design: see services/qa.py for why nothing here
 generates a figure.
 """
 
-import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.public import RateLimit
-from app.database import get_db
+from app.database import get_db, off_loop
 from app.services.qa import answer_question
 
 logger = logging.getLogger(__name__)
@@ -36,4 +35,4 @@ async def ask(
 
     On a worker thread, like Explore search: every question encodes.
     """
-    return await asyncio.to_thread(answer_question, db, q, limit=limit)
+    return await off_loop(db, lambda session: answer_question(session, q, limit=limit))

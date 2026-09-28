@@ -399,7 +399,7 @@ def _member_ideal_points(chamber: str) -> dict:
     """
     import pathlib
 
-    from app.file_cache import Uncached, read_json, reload_if_moved
+    from app.file_cache import Uncached, read_json, reload_if_moved, reload_lock
 
     global _member_ideal_points_cache, _member_ideal_points_stamp
     path = pathlib.Path(_MEMBER_IDEAL_POINTS_PATH)
@@ -422,10 +422,12 @@ def _member_ideal_points(chamber: str) -> dict:
 
     # Rewritten each run in the pipeline process; read by the API processes'
     # score breakdowns (explain_scores), which reload when it moves.
-    _member_ideal_points_cache, _member_ideal_points_stamp = reload_if_moved(
-        [path], _member_ideal_points_cache, _member_ideal_points_stamp, read,
-    )
-    chamber_data = _member_ideal_points_cache.get(chamber)
+    with reload_lock:
+        _member_ideal_points_cache, _member_ideal_points_stamp = reload_if_moved(
+            [path], _member_ideal_points_cache, _member_ideal_points_stamp, read,
+        )
+        points = _member_ideal_points_cache
+    chamber_data = points.get(chamber)
     return chamber_data if isinstance(chamber_data, dict) else {}
 
 
@@ -528,7 +530,7 @@ def _district_pvi() -> dict[str, int]:
     """
     import pathlib
 
-    from app.file_cache import Uncached, reload_if_moved
+    from app.file_cache import Uncached, reload_if_moved, reload_lock
 
     global _district_pvi_cache, _district_pvi_stamp
 
@@ -544,10 +546,11 @@ def _district_pvi() -> dict[str, int]:
         except Uncached as unreadable:
             raise Uncached(parse(unreadable.value)) from None
 
-    _district_pvi_cache, _district_pvi_stamp = reload_if_moved(
-        [pathlib.Path(_PVI_PERSISTENT_DIR) / "district_pvi.json"], _district_pvi_cache, _district_pvi_stamp, read,
-    )
-    return _district_pvi_cache
+    with reload_lock:
+        _district_pvi_cache, _district_pvi_stamp = reload_if_moved(
+            [pathlib.Path(_PVI_PERSISTENT_DIR) / "district_pvi.json"], _district_pvi_cache, _district_pvi_stamp, read,
+        )
+        return _district_pvi_cache
 
 
 def get_state_pvi_map() -> dict[str, int]:

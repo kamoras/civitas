@@ -22,7 +22,8 @@ from sqlalchemy.orm import Session
 
 from app.models import RollCall, RollCallPosition, Representative, Senator
 from app.config import settings
-from app.pipeline.cache import api_cache_get, api_cache_set_async, off_loop
+from app.database import off_loop
+from app.pipeline.cache import api_cache_get, api_cache_set_async, api_cache_set_many_async
 from app.pipeline.fetch.congress import CONGRESS_API_BASE, _rate_limiter, congress_gov_bill_url
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.services.congress_service import bill_days, bill_label
@@ -101,6 +102,7 @@ async def fetch_bill_record(
     if spend is not None and missing:
         # A write to the shared budget (api/throttle.py): off the event loop.
         await asyncio.to_thread(spend, missing)
+    fetched: dict = {}  # written in one transaction at the end
     for part, suffix in _PARTS.items():
         key = keys[part]
         if cached[part] is not None:
@@ -125,7 +127,8 @@ async def fetch_bill_record(
             "text": data.get("textVersions"),
         }[part]
         out[part] = value
-        await api_cache_set_async(db, _CACHE_TIER, key, {"value": value}, normal_ttl_hours=_CACHE_HOURS)
+        fetched[key] = {"value": value}
+    await api_cache_set_many_async(db, _CACHE_TIER, fetched, normal_ttl_hours=_CACHE_HOURS)
     return out
 
 

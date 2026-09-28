@@ -148,3 +148,17 @@ def test_api_cache_set_survives_a_concurrent_first_write(db_session, monkeypatch
     monkeypatch.setattr(db_session, "query", real_query)
     row = db_session.get(ApiCache, ("t", "k"))
     assert row.data_json == '{"a": 2}'
+
+
+async def test_a_request_path_cache_write_that_fails_is_only_logged(db_session, monkeypatch):
+    """A cache write only saves later work: a failing one (the pipeline
+    holding the write lock past the busy timeout) must not fail the request
+    that already has its answer."""
+    from app.pipeline import cache
+
+    def locked(*a, **k):
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(cache, "api_cache_set", locked)
+    await cache.api_cache_set_async(db_session, "t", "k", {"a": 1})
+    await cache.api_cache_set_many_async(db_session, "t", {"k": {"a": 1}})

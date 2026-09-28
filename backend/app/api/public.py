@@ -24,7 +24,7 @@ from app.api.response_helpers import (
     PARTY_QUERY_PATTERN,
 )
 from app.config_definitions import SCORE_WEIGHTS
-from app.database import get_db
+from app.database import get_db, off_loop
 from app.models import ScoreSnapshot
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from fastapi import Request
@@ -428,15 +428,15 @@ async def search(
     # Normalize chamber to the stored casing so a lowercase filter matches.
     canonical_chamber = _CHAMBER_CANONICAL.get(chamber.lower()) if chamber else None
 
-    outcome = await asyncio.to_thread(
-        hybrid_search,
-        db,
+    # Off the loop on a session of its own (database.off_loop).
+    outcome = await off_loop(db, lambda session: hybrid_search(
+        session,
         q,
         limit=limit,
         doc_type=doc_type,
         chamber=canonical_chamber,
         politician_id=politician_id,
-    )
+    ))
     if not outcome["indexReady"]:
         return _pub_json(
             {"query": q, "results": [], "count": 0, "indexEmpty": True},

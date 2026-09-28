@@ -59,7 +59,8 @@ import logging
 import httpx
 
 from app.config import settings
-from app.pipeline.cache import api_cache_get_async, api_cache_set_async
+from app.database import off_loop
+from app.pipeline.cache import api_cache_get, api_cache_set_async
 from app.pipeline.fetch.town_directory import address_for_town
 
 logger = logging.getLogger(__name__)
@@ -183,7 +184,7 @@ async def fetch_town_ballot(
         return None
 
     cache_key = f"civic-town-{state.upper()}-{town.casefold()}"
-    cached = await api_cache_get_async(db, "google_civic", cache_key, max_age_hours=TOWN_CACHE_TTL_HOURS)
+    cached = await off_loop(db, lambda session: api_cache_get(session, "google_civic", cache_key, max_age_hours=TOWN_CACHE_TTL_HOURS))
     if cached is not None:
         return _to_result(cached, address)
 

@@ -34,7 +34,7 @@ from typing import Any
 import httpx
 
 from app.atomic_write import write_text_atomic
-from app.file_cache import Stamp, read_json_preferring, reload_if_moved
+from app.file_cache import Stamp, read_json_preferring, reload_if_moved, reload_lock
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -65,8 +65,9 @@ def _read() -> dict[str, Any]:
 
 def _load() -> dict[str, Any]:
     global _cache, _cache_stamp
-    _cache, _cache_stamp = reload_if_moved([_VOLUME_PATH], _cache, _cache_stamp, _read)
-    return _cache
+    with reload_lock:
+        _cache, _cache_stamp = reload_if_moved([_VOLUME_PATH], _cache, _cache_stamp, _read)
+        return _cache
 
 
 def invalidate_cache() -> None:

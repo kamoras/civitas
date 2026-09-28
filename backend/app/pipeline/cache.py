@@ -75,7 +75,7 @@ _EMPTY_JSON = ("null", "[]", "{}", '""', "0", "false", "0.0")
 
 
 def api_cache_set(
-    db: Session, tier: str, key: str, data, *, normal_ttl_hours: int | None = None,
+    db: Session, tier: str, key: str, data, *, normal_ttl_hours: int | None = None, commit: bool = True,
 ) -> None:
     """Store API response in cache (upsert).
 
@@ -117,40 +117,40 @@ def api_cache_set(
         set_={"data_json": upsert.excluded.data_json, "cached_at": upsert.excluded.cached_at},
         where=ApiCache.data_json.in_(_EMPTY_JSON) if is_empty else None,
     ))
-    db.commit()
+    if commit:
+        db.commit()
 
 
-async def api_cache_get_async(db: Session, tier: str, key: str, **kwargs):
-    """api_cache_get for a request path: on a worker thread, on a session of
-    its own bound to `db`'s engine. The request's session is closed by
-    get_db's cleanup if the request is cancelled — under a thread still
-    using it."""
-    import asyncio
+async def api_cache_set_many_async(db: Session, tier: str, items: dict, **kwargs) -> None:
+    """Several api_cache_set writes in one transaction on one thread hop,
+    best-effort like api_cache_set_async: a request that fetched several
+    parts commits once rather than once per part."""
+    from app.database import off_loop
 
-    return await asyncio.to_thread(_on_own_session, db, api_cache_get, tier, key, **kwargs)
+    def write(session):
+        for key, data in items.items():
+            api_cache_set(session, tier, key, data, commit=False, **kwargs)
+        session.commit()
+
+    if not items:
+        return
+    try:
+        await off_loop(db, write)
+    except Exception:
+        logger.warning("Cache writes to %s failed — not cached", tier, exc_info=True)
 
 
 async def api_cache_set_async(db: Session, tier: str, key: str, data, **kwargs) -> None:
-    """api_cache_set for a request path; see api_cache_get_async."""
-    import asyncio
+    """api_cache_set for a request path: off the event loop on a session of
+    its own (database.off_loop), and best-effort — a cache write only saves
+    later work, so one that fails (the pipeline holding the write lock past
+    the busy timeout) is logged, never turned into a failed request."""
+    from app.database import off_loop
 
-    await asyncio.to_thread(_on_own_session, db, api_cache_set, tier, key, data, **kwargs)
-
-
-async def off_loop(db: Session, fn):
-    """Run fn(session) on a worker thread, on a session of its own bound to
-    `db`'s engine — several cache reads in one hop; see api_cache_get_async."""
-    import asyncio
-
-    return await asyncio.to_thread(_on_own_session, db, fn)
-
-
-def _on_own_session(db: Session, fn, *args, **kwargs):
-    own = Session(bind=db.get_bind())
     try:
-        return fn(own, *args, **kwargs)
-    finally:
-        own.close()
+        await off_loop(db, lambda session: api_cache_set(session, tier, key, data, **kwargs))
+    except Exception:
+        logger.warning("Cache write %s/%s failed — not cached", tier, key, exc_info=True)
 
 
 def analysis_cache_get(

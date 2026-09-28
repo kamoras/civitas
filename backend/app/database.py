@@ -1136,3 +1136,31 @@ def session_scope() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
+
+
+@contextmanager
+def own_session(db: Session) -> Generator[Session, None, None]:
+    """A session of its own on `db`'s engine, configured as SessionLocal's.
+
+    For work a request hands to a worker thread: the request's session is
+    closed by get_db's cleanup when the request is cancelled (a client
+    disconnect), which would otherwise happen under the thread still using
+    it. The one way to get such a session (off_loop, the pulse vote)."""
+    own = sessionmaker(bind=db.get_bind(), autocommit=False, autoflush=False)()
+    try:
+        yield own
+    finally:
+        own.close()
+
+
+async def off_loop(db: Session, fn):
+    """fn(session) on a worker thread, on own_session(db): a request path's
+    database work off the event loop (a commit can wait out the pipeline's
+    write lock), safe against the request being cancelled."""
+    import asyncio
+
+    def run():
+        with own_session(db) as session:
+            return fn(session)
+
+    return await asyncio.to_thread(run)

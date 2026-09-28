@@ -16,7 +16,7 @@ from datetime import date, timedelta
 from app.retractions import retraction_for_issue
 from app.api.admin import require_admin
 from app.api.rate_limit import WriteRateLimit
-from app.database import get_db, get_visits_db
+from app.database import get_db, get_visits_db, own_session
 from app.election_calendar import next_election_day, seats_up_for_year
 from app.fact_diff import new_facts_since
 from app.issue_ids import from_public_id, to_public_id
@@ -545,8 +545,7 @@ async def record_pulse_vote(
         # A session of its own on the request's engine: the request's is
         # closed by get_db's cleanup when the request is cancelled, which
         # would otherwise happen under this thread mid-commit.
-        own = Session(bind=db.get_bind())
-        try:
+        with own_session(db) as own:
             # Until the vote commits, a failure means no vote was recorded,
             # so the claim mustn't hold the visitor off. After it, the claim
             # stands whatever fails next: releasing it would let a retry
@@ -574,8 +573,6 @@ async def record_pulse_vote(
                 .filter(ActionIssue.id == body.issue_id)
                 .first()
             )
-        finally:
-            own.close()
 
     try:
         issue = await asyncio.to_thread(_vote)

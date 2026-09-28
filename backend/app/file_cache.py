@@ -16,28 +16,41 @@ what a failed read leaves behind, are decided once.
 import json
 import logging
 import os
+import threading
 from collections.abc import Iterable
 
 logger = logging.getLogger(__name__)
 
-Stamp = tuple[float | None, ...] | None
+Stamp = tuple | None
 
 
 def files_stamp(paths: Iterable[str | os.PathLike]) -> Stamp:
-    """The modification times of `paths`, or None when none exists (so a
-    cache loaded from a bundled fallback, or set directly, stays valid
-    until a runtime copy appears)."""
-    mtimes = []
+    """What identifies the current version of `paths` — each one's inode,
+    size and modification time in nanoseconds — or None when none exists
+    (so a cache loaded from a bundled fallback, or set directly, stays valid
+    until a runtime copy appears). The inode matters: every rewrite here is
+    atomic (a new file renamed into place), and two within one tick of a
+    coarse filesystem clock would otherwise carry the same mtime."""
+    stamps = []
     for path in paths:
         try:
-            mtimes.append(os.stat(path).st_mtime)
+            st = os.stat(path)
         except OSError:
-            mtimes.append(None)
-    return None if all(m is None for m in mtimes) else tuple(mtimes)
+            stamps.append(None)
+        else:
+            stamps.append((st.st_ino, st.st_size, st.st_mtime_ns))
+    return None if all(stamp is None for stamp in stamps) else tuple(stamps)
 
 
 # A stamp no file ever has: a value stored under it is reloaded on next use.
 _RELOAD = ("reload",)
+
+# Held by every reload_if_moved caller around the call and its assignment:
+# a value and its stamp are two stores, and two threads reloading at once
+# could otherwise leave the older value under the newer stamp — served
+# until the file next changed. One lock for all: the section is a stat,
+# and a reload is rare. Re-entrant, so a loader may read another cache.
+reload_lock = threading.RLock()
 
 
 class Uncached(Exception):

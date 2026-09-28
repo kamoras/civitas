@@ -21,7 +21,22 @@ def _write(path, data, mtime):
 def test_stamp_is_none_until_a_file_exists(tmp_path):
     assert files_stamp([tmp_path / "a.json", tmp_path / "b.json"]) is None
     _write(tmp_path / "b.json", {}, 1000)
-    assert files_stamp([tmp_path / "a.json", tmp_path / "b.json"]) == (None, 1000)
+    stamp = files_stamp([tmp_path / "a.json", tmp_path / "b.json"])
+    assert stamp[0] is None and stamp[1][2] == 1000 * 10**9
+
+
+def test_a_rewrite_in_the_same_clock_tick_still_moves_the_stamp(tmp_path):
+    # Every rewrite here is atomic (a new file renamed into place): with the
+    # same mtime, the new inode is what tells the versions apart.
+    from app.atomic_write import write_text_atomic
+
+    path = tmp_path / "f.json"
+    write_text_atomic(path, "{}")
+    os.utime(path, (1000, 1000))
+    first = files_stamp([path])
+    write_text_atomic(path, "{}")
+    os.utime(path, (1000, 1000))
+    assert files_stamp([path]) != first
 
 
 def test_ballot_lookup_sees_a_rewrite_by_another_process(tmp_path, monkeypatch):

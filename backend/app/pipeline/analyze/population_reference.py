@@ -23,7 +23,7 @@ import logging
 import pathlib
 
 from app.atomic_write import update_json_file
-from app.file_cache import Stamp, Uncached, read_json, reload_if_moved
+from app.file_cache import Stamp, Uncached, read_json, reload_if_moved, reload_lock
 from app.config_definitions import CONSTITUENT_REFERENCE_STATISTIC
 from app.time_utils import utcnow
 
@@ -77,10 +77,11 @@ class ChamberReference:
         Re-read whenever either file changes on disk (mtime), so the API
         worker that didn't run the pipeline doesn't keep serving the
         previous run's numbers."""
-        self._cache, self._cache_stamp = reload_if_moved(
-            [self.live_path, self.bundled_path], self._cache, self._cache_stamp, self._read,
-        )
-        return self._cache
+        with reload_lock:
+            self._cache, self._cache_stamp = reload_if_moved(
+                [self.live_path, self.bundled_path], self._cache, self._cache_stamp, self._read,
+            )
+            return self._cache
 
     def _read(self) -> dict:
         unreadable = False

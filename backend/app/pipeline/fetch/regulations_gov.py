@@ -17,7 +17,8 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.http_client import make_async_client
-from app.pipeline.cache import api_cache_get, api_cache_set_async, off_loop
+from app.database import off_loop
+from app.pipeline.cache import api_cache_get, api_cache_set_async
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
 
 logger = logging.getLogger(__name__)
