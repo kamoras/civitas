@@ -219,6 +219,12 @@ export default function AboutPage() {
               filtering to navigate the larger membership.
             </P>
             <P>
+              A member&apos;s page shows the three scores side by side, each with what drives it: where
+              the money comes from and the top donors, every vote against the member&apos;s party with
+              both parties&apos; counts, and sponsored bills by how far each got. Every figure in those
+              sentences is the one the scorer used; the full record behind each opens beside it.
+            </P>
+            <P>
               Campaign-promise extraction was removed entirely (2026-07), not just excluded from
               the weighted score below — four attempts at matching generic platform language
               against specific vote/bill text never got real promise data past a handful of

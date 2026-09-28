@@ -137,6 +137,47 @@ class TestSenatorCoreConsistency:
         assert "promisePersistence" not in breakdown  # removed dimension, no bar to explain
 
 
+class TestScorecardFacts:
+    """The numbers the scorecard's sentences state, served beside the
+    components by the same functions that compute the score, so a page never
+    re-derives a share or a count itself."""
+
+    def test_funding_facts_are_the_shares_the_score_used(self):
+        facts = _funding_independence_core(TestSenatorCoreConsistency.FUNDING, district=2)["facts"]
+        assert facts["contributions"] == 1_000_000
+        assert facts["pacShare"] == 0.3
+        assert facts["smallDonorShare"] == 0.17
+        assert facts["smallDonorComparison"] == "house-median"
+        senate = _funding_independence_core(TestSenatorCoreConsistency.FUNDING, state="CA")["facts"]
+        assert senate["smallDonorComparison"] == "state-size"
+
+    def test_alignment_facts_count_the_breaks(self):
+        voting_record = {
+            "keyVotes": [{"votedWithParty": True} for _ in range(18)]
+            + [{"votedWithParty": False} for _ in range(2)],
+        }
+        facts = _constituent_alignment_core(voting_record, [], {}, "CA", "D")["facts"]
+        assert facts["party"] == "D"
+        assert facts["partyVotes"] == 20 and facts["breaks"] == 2
+        assert facts["breakRate"] == 0.1
+
+    def test_alignment_facts_with_too_few_votes_have_no_rate(self):
+        facts = _constituent_alignment_core({"keyVotes": [{"votedWithParty": False}]}, [], {}, "CA", "D")["facts"]
+        assert facts["breakRate"] is None and facts["breaks"] is None
+
+    def test_effectiveness_facts_count_bills_by_furthest_stage(self):
+        bills = [
+            {"billType": "s", "congress": 119, "stage": "REFERRED"},
+            {"billType": "s", "congress": 119, "stage": "IN_COMMITTEE"},
+            {"billType": "s", "congress": 119, "stage": "REPORTED"},
+            {"billType": "s", "congress": 119, "stage": "IN_OTHER_CHAMBER"},
+            {"billType": "s", "congress": 119, "stage": "ENACTED", "isLaw": True},
+            {"billType": "s", "congress": 119, "stage": "ENACTED", "isLaw": True},
+        ]
+        facts = _legislative_effectiveness_core(bills, leadership_score=0.5, party="D", years_in_office=6)["facts"]
+        assert facts["billsByStage"] == [1, 1, 1, 1, 2]
+
+
 class TestPresidentCoreConsistency:
     def test_effectiveness_core_matches_calc(self):
         args = (5.0, 3.5, 4.0, 2010)

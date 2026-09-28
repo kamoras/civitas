@@ -72,7 +72,7 @@ export function JusticeCard({
   titleAs: Title = "h2",
 }: {
   justice: Justice;
-  /** See SenatorCard's `titleAs` — h1 only where this card is the page. */
+  /** h1 only where this card is the page (a document has one h1). */
   titleAs?: "h1" | "h2";
 }) {
   const SectionHeading = Title === "h1" ? "h2" : "h3";
