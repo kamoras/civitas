@@ -230,10 +230,10 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
       </div>
       <div>
         <div className="flex items-center justify-between mb-1">
-          {/* This container's own interfaces: the admin API is served by
-              the pipeline process, so this is the pipeline's traffic (its
-              upstream fetches), not the API's visitors. */}
-          <span className="text-ink-lo text-xs font-mono tracking-wider">PIPELINE NETWORK</span>
+          {/* The backend's containers together: the pipeline's own
+              interfaces plus what the API containers record (net_stats.py) —
+              a container sees only its own. */}
+          <span className="text-ink-lo text-xs font-mono tracking-wider">NETWORK</span>
           <span className="text-ink-hi text-xs font-mono tabular-nums">
             {rx != null && tx != null ? formatRate(rx + tx) : "—"}
           </span>
@@ -342,8 +342,8 @@ export function SystemDashboard({
             emptyMessage="Collecting readings…"
           />
           <LineChart
-            title="PIPELINE NETWORK THROUGHPUT"
-            subtitle="bytes per second, the pipeline container's own traffic"
+            title="NETWORK THROUGHPUT"
+            subtitle="bytes per second, API and pipeline together"
             xLabels={labels}
             series={[
               {

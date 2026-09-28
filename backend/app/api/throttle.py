@@ -67,6 +67,7 @@ import secrets
 import sqlite3
 import tempfile
 import threading
+from contextlib import contextmanager
 import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
@@ -161,34 +162,67 @@ def _enable_wal(conn: sqlite3.Connection) -> None:
         time.sleep(0.01)
 
 
+def _open(path: str) -> sqlite3.Connection:
+    # check_same_thread off only so use_path can close it; each connection
+    # is otherwise used by the one thread that opened it.
+    conn = sqlite3.connect(path, timeout=_BUSY_TIMEOUT_S, isolation_level=None, check_same_thread=False)
+    try:
+        _enable_wal(conn)
+        # In RAM already: a sync would buy nothing.
+        conn.execute("PRAGMA synchronous=OFF")
+        # A deleted salt must be gone, not left in a freed page
+        # (_drop_salts also truncates the WAL, the other place it lingers).
+        conn.execute("PRAGMA secure_delete=ON")
+        conn.executescript(_SCHEMA)
+    except sqlite3.Error:
+        # Not kept, so the next call retries — close it, or each failed
+        # setup under contention would leave one open.
+        conn.close()
+        raise
+    return conn
+
+
 def _conn() -> tuple[sqlite3.Connection, threading.Lock]:
-    """This thread's connection and the lock to hold while using it."""
-    conn = getattr(_local, "conn", None)
-    if conn is not None and _local.generation != _generation:
-        _discard(conn)  # outdated: use_path left it to us (it was in use)
-        conn = None
-    if conn is None:
-        # check_same_thread off only so use_path can close it; each
-        # connection is still used by the one thread that opened it.
-        conn = sqlite3.connect(_path, timeout=_BUSY_TIMEOUT_S, isolation_level=None, check_same_thread=False)
-        try:
-            _enable_wal(conn)
-            # In RAM already: a sync would buy nothing.
-            conn.execute("PRAGMA synchronous=OFF")
-            # A deleted salt must be gone, not left in a freed page
-            # (_drop_salts also truncates the WAL, the other place it lingers).
-            conn.execute("PRAGMA secure_delete=ON")
-            conn.executescript(_SCHEMA)
-        except sqlite3.Error:
-            # Not kept, so the next call retries — close it, or each failed
-            # setup under contention would leave one open.
-            conn.close()
-            raise
+    """This thread's connection for the current store, and its lock. Hold
+    the lock while using it — through _using(), which also checks the
+    connection is still current once the lock is held."""
+    while True:
+        conn = getattr(_local, "conn", None)
+        if conn is not None and _local.generation == _generation:
+            return conn, _local.lock
+        if conn is not None:
+            _discard(conn)  # outdated: use_path left it to us (it was in use)
+        # The path and its generation read together: a use_path between
+        # reading one and the other would tag a connection to the old store
+        # as current.
+        with _conns_lock:
+            path, generation = _path, _generation
+        conn = _open(path)
         lock = threading.Lock()
         with _conns_lock:
+            if generation != _generation:  # use_path ran while we opened
+                conn.close()
+                continue
             _conns.append((conn, lock))
-        _local.conn, _local.lock, _local.generation = conn, lock, _generation
-    return conn, _local.lock
+        _local.conn, _local.lock, _local.generation = conn, lock, generation
+
+
+@contextmanager
+def _using():
+    """This thread's connection, locked for the block. use_path closes only
+    connections it can lock, and bumps the generation before it closes: a
+    connection whose generation is still current once its lock is held
+    cannot have been closed under us."""
+    while True:
+        conn, lock = _conn()
+        lock.acquire()
+        if _local.generation == _generation and getattr(_local, "conn", None) is conn:
+            break
+        lock.release()  # use_path ran between _conn() and the acquire
+    try:
+        yield conn
+    finally:
+        lock.release()
 
 
 def _discard(conn: sqlite3.Connection) -> None:
@@ -213,12 +247,12 @@ class _Txn:
     and every other worker would wait on the lock it holds."""
 
     def __enter__(self) -> sqlite3.Connection:
-        self.conn, self.lock = _conn()
-        self.lock.acquire()
+        self.using = _using()
+        self.conn = self.using.__enter__()
         try:
             self.conn.execute("BEGIN IMMEDIATE")
         except BaseException:
-            self.lock.release()
+            self.using.__exit__(None, None, None)
             raise
         return self.conn
 
@@ -232,14 +266,14 @@ class _Txn:
             except sqlite3.Error:
                 pass
             if self.conn.in_transaction:
-                self.lock.release()
+                self.using.__exit__(None, None, None)
+                self.using = None
                 _discard(self.conn)
-                self.lock = None
             if exc_type is None:
                 raise
         finally:
-            if self.lock is not None:
-                self.lock.release()
+            if self.using is not None:
+                self.using.__exit__(None, None, None)
 
 
 @dataclass(frozen=True)
@@ -359,8 +393,7 @@ def _truncate_wal() -> None:
     forget_stale_salt tick tries again."""
     global _truncate_pending
     try:
-        conn, lock = _conn()
-        with lock:
+        with _using() as conn:
             busy = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0]
     except sqlite3.Error:
         busy = 1

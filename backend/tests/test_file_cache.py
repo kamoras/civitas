@@ -209,7 +209,7 @@ class TestReadJson:
         assert fell_back.value.value == {"b": 1}
 
 
-@pytest.mark.parametrize("module", ["town_directory", "ballot_pdf_sources", "ballot_measure_pdf_sources"])
+@pytest.mark.parametrize("module", ["town_directory", "ballot_pdf_sources", "ballot_measure_pdf_sources", "state_candidate_sources"])
 def test_an_operator_override_unreadable_for_a_moment_is_not_kept(module, tmp_path, monkeypatch):
     # Kept, the bundled fallback (or nothing) would stand for the life of
     # the process after one transient read error.

@@ -228,3 +228,39 @@ class TestRoutes:
 ])
 def test_display_name(person, name):
     assert br.display_name(person) == name
+
+
+async def test_parts_fetched_before_a_cancellation_are_still_cached(db_session, monkeypatch):
+    """The budget was spent on them: a reader who leaves mid-fetch mustn't
+    make the next one pay again."""
+    import asyncio
+
+    from app.services import bill_record
+
+    calls = []
+
+    async def congress_get(client, url):
+        calls.append(url)
+        if len(calls) == 2:
+            await asyncio.sleep(10)  # the reader leaves here
+        return {"bill": {"number": "1"}, "summaries": [], "actions": [], "cosponsors": [], "textVersions": []}
+
+    monkeypatch.setattr(bill_record, "_congress_get", congress_get)
+    written = []
+
+    async def write_many(db, tier, items, **kw):
+        written.append(dict(items))
+
+    monkeypatch.setattr(bill_record, "api_cache_set_many_async", write_many)
+    task = asyncio.create_task(bill_record.fetch_bill_record(None, db_session, 119, "S.4668"))
+    for _ in range(300):
+        if len(calls) >= 2 or task.done():
+            break
+        await asyncio.sleep(0.01)
+    assert len(calls) == 2
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    assert written and len(written[0]) == 1  # the first part, fetched before the cancel

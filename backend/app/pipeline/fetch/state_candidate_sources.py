@@ -17,13 +17,12 @@ nobody has written up yet, so an automatic find can add a state but can
 never quietly override a checked one.
 """
 
-import json
 import logging
 import os
 from typing import Any
 
 from app.atomic_write import LockTimeout, NotSaved, runtime_data_path, update_json_file
-from app.file_cache import Stamp, read_json_preferring, reload_if_moved, reload_lock
+from app.file_cache import Stamp, load_json_once, read_json_preferring, reload_if_moved, reload_lock
 
 logger = logging.getLogger(__name__)
 
@@ -48,19 +47,10 @@ _discovered_stamp: Stamp = None
 
 def _load() -> dict[str, Any]:
     global _cache
-    if _cache is not None:
-        return _cache
-    for path in (_VOLUME_PATH, _BUNDLED_PATH):
-        try:
-            with open(path, encoding="utf-8") as fh:
-                _cache = json.load(fh)
-                return _cache
-        except FileNotFoundError:
-            continue
-        except Exception:
-            logger.exception("Failed to read state candidate sources file %s", path)
-    _cache = {}
-    return _cache
+    # file_cache.load_json_once: a volume copy unreadable for a moment is
+    # served from the bundled one this once, not kept for the process's life.
+    data, _cache = load_json_once(_cache, _VOLUME_PATH, _BUNDLED_PATH)
+    return data
 
 
 def _discovered_path() -> str:

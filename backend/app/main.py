@@ -256,6 +256,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Only a separate API process can notice the pipeline process is gone:
     # with both in one process, a dead scheduler means a dead site.
     liveness_task = asyncio.create_task(_watch_pipeline_service()) if role == "api" else None
+    # The admin dashboard is served by the pipeline process, which sees only
+    # its own container's network counters: the API records its own.
+    net_task = None
+    if role == "api":
+        from app.net_stats import run_recorder
+
+        net_task = asyncio.create_task(run_recorder())
 
     yield
 
@@ -263,6 +270,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     throttle_task.cancel()
     if liveness_task is not None:
         liveness_task.cancel()
+    if net_task is not None:
+        net_task.cancel()
     if bootstrap_task is not None:
         bootstrap_task.cancel()
     stop_scheduler()

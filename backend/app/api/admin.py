@@ -249,35 +249,15 @@ def _read_system_stats() -> dict:
         stats["uptimeSeconds"] = None
 
     try:
-        rx_total = 0
-        tx_total = 0
-        for iface_dir in ("/host/net/eth0", "/host/net/docker-br"):
-            if not os.path.isdir(iface_dir):
-                continue
-            try:
-                with open(os.path.join(iface_dir, "rx_bytes")) as f:
-                    rx_total += int(f.read().strip())
-                with open(os.path.join(iface_dir, "tx_bytes")) as f:
-                    tx_total += int(f.read().strip())
-            except (OSError, ValueError):
-                pass
-        if rx_total == 0 and tx_total == 0:
-            with open("/proc/net/dev") as f:
-                for line in f:
-                    line = line.strip()
-                    if ":" not in line or line.startswith("Inter") or line.startswith("face"):
-                        continue
-                    iface, data = line.split(":", 1)
-                    if iface.strip() == "lo":
-                        continue
-                    cols = data.split()
-                    rx_total += int(cols[0])
-                    tx_total += int(cols[8])
-        # This container's own interfaces (its network namespace): under
-        # Swarm the admin API runs in the pipeline service, so these count
-        # the pipeline's traffic, not the API containers' visitors.
-        stats["netRxBytes"] = rx_total
-        stats["netTxBytes"] = tx_total
+        # The backend's traffic across its containers: this one's (the
+        # pipeline's, under Swarm) plus what the API containers recorded
+        # (net_stats) — a container sees only its own interfaces.
+        from app.net_stats import backend_totals
+
+        totals = backend_totals()
+        stats["netRxBytes"] = totals["rx"]
+        stats["netTxBytes"] = totals["tx"]
+        stats["netIncludesApi"] = totals["includesApi"]
     except Exception:
         stats["netRxBytes"] = 0
         stats["netTxBytes"] = 0

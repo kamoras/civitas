@@ -11,6 +11,7 @@ than shown empty, and only a successful answer is cached, so an outage
 never reads as a bill with no actions or no cosponsors.
 """
 
+import asyncio
 import html as html_lib
 import re
 import unicodedata
@@ -102,33 +103,39 @@ async def fetch_bill_record(
     if spend is not None and missing:
         # A write to the shared budget (api/throttle.py): off the event loop.
         await throttle.run(spend, missing)
-    fetched: dict = {}  # written in one transaction at the end
-    for part, suffix in _PARTS.items():
-        key = keys[part]
-        if cached[part] is not None:
-            out[part] = cached[part].get("value")
-            continue
-        data = await _congress_get(client, f"{CONGRESS_API_BASE}/bill/{congress}/{type_path}/{number}{suffix}")
-        if data is NOT_FOUND:
-            if part == "bill":
-                out["not_found"] = True
-                await api_cache_set_async(db, _CACHE_TIER, key, {"not_found": True}, normal_ttl_hours=_CACHE_HOURS)
-                return out
-            data = {}
-        if data is None:
-            out[part] = None
-            out["unavailable"].append(part)
-            continue
-        value = {
-            "bill": data.get("bill"),
-            "summaries": data.get("summaries"),
-            "actions": data.get("actions"),
-            "cosponsors": data.get("cosponsors"),
-            "text": data.get("textVersions"),
-        }[part]
-        out[part] = value
-        fetched[key] = {"value": value}
-    await api_cache_set_many_async(db, _CACHE_TIER, fetched, normal_ttl_hours=_CACHE_HOURS)
+    fetched: dict = {}  # written in one transaction, in the finally below
+    try:
+        for part, suffix in _PARTS.items():
+            key = keys[part]
+            if cached[part] is not None:
+                out[part] = cached[part].get("value")
+                continue
+            data = await _congress_get(client, f"{CONGRESS_API_BASE}/bill/{congress}/{type_path}/{number}{suffix}")
+            if data is NOT_FOUND:
+                if part == "bill":
+                    out["not_found"] = True
+                    await api_cache_set_async(db, _CACHE_TIER, key, {"not_found": True}, normal_ttl_hours=_CACHE_HOURS)
+                    return out
+                data = {}
+            if data is None:
+                out[part] = None
+                out["unavailable"].append(part)
+                continue
+            value = {
+                "bill": data.get("bill"),
+                "summaries": data.get("summaries"),
+                "actions": data.get("actions"),
+                "cosponsors": data.get("cosponsors"),
+                "text": data.get("textVersions"),
+            }[part]
+            out[part] = value
+            fetched[key] = {"value": value}
+    finally:
+        # Written even when the request is cancelled or fails partway: the
+        # parts already fetched were charged to the shared budget, and the
+        # next reader shouldn't pay for them again. Shielded, so the
+        # cancellation that brought us here doesn't also stop the write.
+        await asyncio.shield(api_cache_set_many_async(db, _CACHE_TIER, fetched, normal_ttl_hours=_CACHE_HOURS))
     return out
 
 

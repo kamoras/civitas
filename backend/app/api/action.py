@@ -574,6 +574,10 @@ async def record_pulse_vote(
                 .first()
             )
 
+    # The default executor, not throttle.run's: this thread also commits to
+    # the main database, which can wait out its busy timeout on the
+    # pipeline's write lock — on the store's small pool that wait would hold
+    # up every rate-limit check in the process.
     try:
         issue = await asyncio.to_thread(_vote)
     except throttle.Unavailable:

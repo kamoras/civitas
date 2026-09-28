@@ -606,3 +606,24 @@ def test_use_path_never_closes_a_connection_mid_use(throttle_store):
     worker.join()
     closer.join()
     assert outcome["still_open"]
+
+
+def test_a_connection_opened_across_a_use_path_is_not_kept(throttle_store, tmp_path, monkeypatch):
+    """use_path running while a thread opens its connection: the connection
+    (to the old store) must not be tagged current and kept."""
+    new_store = str(tmp_path / "new.db")
+    real_open = throttle._open
+    calls = []
+
+    def open_then_repoint(path):
+        conn = real_open(path)
+        if not calls:
+            throttle.use_path(new_store)  # lands mid-open
+        calls.append(path)
+        return conn
+
+    throttle.use_path(throttle_store)
+    monkeypatch.setattr(throttle, "_open", open_then_repoint)
+    throttle.hit("b", "k", limit=5, period=60)
+    assert calls == [throttle_store, new_store]
+    assert _rows(new_store, "SELECT COUNT(*) FROM windows") == [(1,)]
