@@ -45,6 +45,61 @@
       "source_name": "Missouri Secretary of State",
       "strategy": "mo_ballot_measures",
       "description": "No PDF at all — the certified measures are published directly as HTML at a stable, evergreen url_pattern (sos.mo.gov/petitions/{year}ballotmeasures), verified live across 3 real cycles (2022/2024/2026, all 200 OK). The page carries both the state's August primary measures and its November general measures under two 'The following ballot measures ... <election>' headings; this strategy reads only the general-election section. Verified live 2026-09-03 against all 3 real measures on the November 3, 2026 ballot (reproductive rights/abortion repeal, a new state endowment fund, county sheriff elections): 3/3 parse with real 'Official Ballot Title' summaries, real fiscal notes, AND real 'A yes vote will.../A no vote will...' framing (Fair Ballot Language) — richer data than most states registered so far. Survived a real site inconsistency found in the process: Amendment 8's own heading paragraph sits as the last child of Amendment 7's <div>, not the first child of its own — this strategy flattens elements across div boundaries before splitting on the heading text itself, unaffected by that. Origin is read per-measure from its own 'Proposed by ...' line, not hardcoded fixed, since Missouri has a real citizen-initiative process for constitutional amendments (unlike LA/VA)."
+    },
+    "AK": {
+      "url_pattern": "https://www.elections.alaska.gov/election/{year}/General/SampleBallots/HD1-JD1.pdf",
+      "source_name": "Alaska Division of Elections",
+      "strategy": "ak_sample_ballot",
+      "description": "Official general-election sample ballot, House District 1 (statewide measures are identical on every district's ballot). Used because the 2026 Official Election Pamphlet was not yet posted on 2026-09-28 while the sample ballots were. url_pattern verified on two real generals: 2024 (Ballot Measures No. 1 and 2) and 2026 (No. 2 and 3 — No. 1 was on the August primary, so numbers are read, never assumed). Columns are cropped from the words' own aligned edges; see ballot_measures_ak.py."
+    },
+    "HI": {
+      "source_name": "Hawaii Office of Elections",
+      "strategy": "hi_proposed_amendments",
+      "description": "HTML page elections.hawaii.gov/voting/{year}-proposed-amendments-to-the-hawaii-state-constitution/ (verified 2024 and 2026). Each 'QUESTION #N: title' paired with the blockquoted ballot question. Verified live 2026-09-28: 2 questions. Hawaii has no initiative/referendum, so every question is legislature-referred; no yes/no framing or fiscal statement is published. See ballot_measures_hi.py."
+    },
+    "ID": {
+      "landing_page_url": "https://voteidaho.gov/idaho-general-election/",
+      "keyword": [
+        "voter_pamphlet"
+      ],
+      "exclude": [
+        "primary",
+        "folleto"
+      ],
+      "source_name": "Idaho Secretary of State",
+      "strategy": "id_voter_pamphlet",
+      "description": "Official Idaho Voter Pamphlet (archive.voteidaho.gov/download/{year}_Voter_Pamphlet.pdf, discovered from the general-election page; the Spanish 'Folleto' is excluded). Verified live 2026-09-28: HJR 4, HJR 6, Proposition One and the House Bill 932 advisory question, with Idaho's own 'WHAT YOUR VOTE WILL DO' YES/NO framing and the Division of Financial Management's fiscal summary. See ballot_measures_id.py."
+    },
+    "MT": {
+      "source_name": "Montana Secretary of State",
+      "strategy": "mt_qualified_ballot_issues",
+      "description": "sosmt.gov/elections/ballot_issues/proposed-{year}-ballot-issues/ (verified 2022, 2024, 2026): the 'Issues Qualified for the {year} General Election Ballot' section, each issue's text read from its linked 'BALLOT LANGUAGE FOR ...' PDF (the page's own subjects may be paraphrased, by its own footnote). Verified live 2026-09-28: CI-132, CI-133, I-194. See ballot_measures_mt.py."
+    },
+    "NM": {
+      "source_name": "New Mexico Legislature",
+      "strategy": "nm_amendments_and_bonds",
+      "bond_acts": {
+        "2026": {
+          "bill": "HB 248",
+          "url": "https://www.nmlegis.gov/Sessions/26%20Regular/final/HB0248.pdf"
+        }
+      },
+      "description": "Two official documents: the Legislative Council Service's constitutional-amendments publication (nmlegis.gov .../Constitutional_Amendments_{year}.pdf, verified 2024 and 2026) and the ballot language written into that year's General Obligation Bond Act (final version, configured per year in bond_acts because the bill number changes every session; a year without one reads as ingest_failed, never an amendments-only list). Verified live 2026-09-28: Constitutional Amendments 1-4 and HB 248's three bond questions. See ballot_measures_nm.py."
+    },
+    "WA": {
+      "source_name": "Washington Secretary of State",
+      "strategy": "wa_certified_measures",
+      "description": "sos.wa.gov/elections/voters/proposed-ballot-measure-information, the {year} section — read only once its 'Certification of Measures to General Election' link is present. Each measure's Attorney General ballot-title letter (ballot title + ballot measure summary) and OFM fiscal impact summary. Verified live 2026-09-28: IL26-001, IL26-638, IP26-645. See ballot_measures_wa.py."
+    },
+    "WY": {
+      "landing_page_url": "https://sos.wyo.gov/Elections/Default.aspx",
+      "keyword": [
+        "statewide",
+        "propositions"
+      ],
+      "source_name": "Wyoming Secretary of State",
+      "strategy": "wy_statewide_ballot_propositions",
+      "description": "'{year} Statewide Ballot Propositions' PDF, discovered from the Elections landing page (the 2026 path's pattern 404s for 2024/2022, so no url_pattern). Verified live 2026-09-28: Proposed Initiative Proposition Number One (homeowner's property-tax exemption) with its estimated fiscal impact. See ballot_measures_wy.py."
     }
   }
 }

@@ -521,3 +521,19 @@ async def test_sync_ballot_measures_runs_pdf_states_even_without_a_votesmart_key
     assert result["skipped_other_states"] is True
     assert result["synced"] == 1
     assert db_session.query(BallotMeasure).filter(BallotMeasure.state == "CA").count() == 1
+
+
+def test_upsert_stores_the_named_drafters(db_session):
+    election_pipeline._upsert_measure(
+        db_session,
+        {"id": "ID-2026-11-03-Proposition One", "state": "ID", "number": "Proposition One",
+         "title": "T", "election_date": "2026-11-03"},
+        {"official_summary": "S", "fiscal_impact": "F",
+         "title_authority": "Idaho Attorney General (ballot titles)",
+         "fiscal_authority": "Idaho Division of Fiscal Management"},
+        "Idaho Secretary of State",
+    )
+    db_session.commit()
+    m = db_session.query(BallotMeasure).one()
+    assert m.title_authority == "Idaho Attorney General (ballot titles)"
+    assert m.fiscal_authority == "Idaho Division of Fiscal Management"

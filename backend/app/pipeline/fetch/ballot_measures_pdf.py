@@ -41,12 +41,19 @@ import pdfplumber
 
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.ballot_measure_pdf_sources import source_for_state
+from app.pipeline.fetch.ballot_measures_ak import parse_document as parse_ak_document
 from app.pipeline.fetch.ballot_measures_ca import parse_document as parse_ca_document
 from app.pipeline.fetch.ballot_measures_co import parse_document as parse_co_document
+from app.pipeline.fetch.ballot_measures_hi import fetch_measures as hi_fetch_measures
+from app.pipeline.fetch.ballot_measures_id import parse_document as parse_id_document
 from app.pipeline.fetch.ballot_measures_la import parse_document as parse_la_document
 from app.pipeline.fetch.ballot_measures_ma import parse_information_for_voters as parse_ma_document
 from app.pipeline.fetch.ballot_measures_mo import fetch_measures as mo_fetch_measures
+from app.pipeline.fetch.ballot_measures_mt import fetch_measures as mt_fetch_measures
+from app.pipeline.fetch.ballot_measures_nm import fetch_measures as nm_fetch_measures
 from app.pipeline.fetch.ballot_measures_va import fetch_measures as va_fetch_measures
+from app.pipeline.fetch.ballot_measures_wa import fetch_measures as wa_fetch_measures
+from app.pipeline.fetch.ballot_measures_wy import parse_document as parse_wy_document
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +150,9 @@ STRATEGIES = {
     "ma_information_for_voters": parse_ma_document,
     "co_quick_ballot_reference": parse_co_document,
     "la_proposed_amendments": parse_la_document,
+    "ak_sample_ballot": parse_ak_document,
+    "id_voter_pamphlet": parse_id_document,
+    "wy_statewide_ballot_propositions": parse_wy_document,
 }
 
 # A strategy here doesn't fit STRATEGIES' `pdf.pages -> list[dict]`
@@ -157,6 +167,10 @@ STRATEGIES = {
 MULTI_DOCUMENT_STRATEGIES = {
     "va_referenda": va_fetch_measures,
     "mo_ballot_measures": mo_fetch_measures,
+    "hi_proposed_amendments": hi_fetch_measures,
+    "mt_qualified_ballot_issues": mt_fetch_measures,
+    "nm_amendments_and_bonds": nm_fetch_measures,
+    "wa_certified_measures": wa_fetch_measures,
 }
 
 # Longer than Vote Smart's 12h (MEASURE_CACHE_TTL_HOURS in
@@ -199,6 +213,10 @@ def _to_measure(state: str, parsed: dict, election_date: str, source_url: str) -
         "measure_type": None,
         "origin": parsed["origin"],
         "source_url": source_url,
+        # Every strategy names its drafters (AGENTS.md §7: "its drafter
+        # named"); without these two keys they never reached the row.
+        "title_authority": parsed.get("title_authority"),
+        "fiscal_authority": parsed.get("fiscal_authority"),
     }
 
 

@@ -406,3 +406,20 @@ async def test_fetch_returns_none_when_discovery_finds_nothing(monkeypatch, db_s
     client = SimpleNamespace(get=fail_get)
     result = await pdf.fetch_state_measures_pdf(client, db_session, "ZZ", 2026, "2026-11-03")
     assert result is None
+
+
+def test_to_measure_carries_the_drafters_through_to_the_row():
+    parsed = {
+        "number": "1", "title": "T", "origin": None, "official_summary": "S",
+        "fiscal_impact": "F", "yes_means": None, "no_means": None,
+        "title_authority": "Idaho Attorney General (ballot titles)",
+        "fiscal_authority": "Idaho Division of Fiscal Management",
+    }
+    measure = pdf._to_measure("ID", parsed, "2026-11-03", "https://example.com/p.pdf")
+    assert measure["title_authority"] == "Idaho Attorney General (ballot titles)"
+    assert measure["fiscal_authority"] == "Idaho Division of Fiscal Management"
+
+
+@pytest.mark.parametrize("state", ["AK", "HI", "ID", "MT", "NM", "WA", "WY"])
+def test_western_states_are_registered_with_a_real_strategy(state):
+    assert pdf.is_configured(state) is True
