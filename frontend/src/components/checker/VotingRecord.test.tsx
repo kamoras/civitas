@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import VotingRecord from "./VotingRecord";
 import type { KeyVote, PaginatedVotes } from "@/types/senator";
@@ -12,23 +12,46 @@ vi.mock("@/lib/api", () => ({
 
 function vote(billName: string): KeyVote {
   return {
-    billName, billId: billName, date: "2026-03-01", vote: "Yea", policyArea: "Health", policyAreas: [],
-    partyAlignmentWeight: 0, stance: "", description: "", partyLeaning: null, votedWithParty: true,
+    billName,
+    billId: billName,
+    date: "2026-03-01",
+    vote: "Yea",
+    policyArea: "Health",
+    policyAreas: [],
+    partyAlignmentWeight: 0,
+    stance: "",
+    description: "",
+    partyLeaning: null,
+    votedWithParty: true,
     voteCategory: "recent",
   };
 }
 
-function votes(filter: string, billName: string, overrides: Partial<PaginatedVotes> = {}): PaginatedVotes {
+function votes(
+  filter: string,
+  billName: string,
+  overrides: Partial<PaginatedVotes> = {}
+): PaginatedVotes {
   return {
-    votes: [vote(billName)], total: 40, page: 1, perPage: 15, totalPages: 3, category: "recent", filter,
+    votes: [vote(billName)],
+    total: 40,
+    page: 1,
+    perPage: 15,
+    totalPages: 3,
+    category: "recent",
+    filter,
     counts: { all: 40, yea: 30, nay: 10, againstParty: 0 },
     ...overrides,
   };
 }
 
 const record = {
-  totalVotes: 40, votedWithPartyCount: 30, votedAgainstPartyCount: 10, partyLoyaltyPct: 75,
-  recentVoteCount: 40, keyVoteCount: 0,
+  totalVotes: 40,
+  votedWithPartyCount: 30,
+  votedAgainstPartyCount: 10,
+  partyLoyaltyPct: 75,
+  recentVoteCount: 40,
+  keyVoteCount: 0,
 };
 
 async function openList() {
@@ -52,7 +75,9 @@ describe("VotingRecord", () => {
     await screen.findByText("Yea bill");
 
     resolveNay(votes("nay", "Nay bill"));
-    await waitFor(() => expect(screen.getByRole("button", { name: /^YEA/ })).toHaveAttribute("aria-pressed", "true"));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^YEA/ })).toHaveAttribute("aria-pressed", "true")
+    );
     expect(screen.queryByText("Nay bill")).not.toBeInTheDocument();
     expect(screen.getByText("Yea bill")).toBeInTheDocument();
   });
@@ -78,5 +103,48 @@ describe("VotingRecord", () => {
     await userEvent.click(screen.getByRole("button", { name: /^NAY/ }));
 
     expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
+  });
+
+  it("shows each vote as one line linked to its bill, without the pipeline's working", async () => {
+    const warPowers: KeyVote = {
+      ...vote("H CON RES 38"),
+      billId: "HouseRC-2026-201",
+      vote: "Nay",
+      votedWithParty: false,
+      partyLeaning: "bipartisan",
+      policyArea: "DEFENSE",
+      policyAreas: [{ area: "DEFENSE", confidence: 0.8, party: "bipartisan" }],
+      stance: "neutral",
+      rollCall: {
+        chamber: "house",
+        congress: 119,
+        session: 2,
+        number: 201,
+        date: "2026-06-04",
+        question: "On Agreeing to the Resolution",
+        result: "Failed",
+        billId: "HCONRES.38",
+        billLabel: "H.Con.Res. 38",
+        title:
+          "Directing the President pursuant to section 5(c) of the War Powers Resolution to remove United States Armed Forces from Lebanon",
+        sourceUrl: "https://clerk.house.gov/evs/2026/roll201.xml",
+        parties: [],
+      },
+    };
+    fetchSenatorVotes.mockResolvedValueOnce({ ...votes("all", "unused"), votes: [warPowers] });
+    render(<VotingRecord senatorId="S1" votingRecord={record} />);
+    await userEvent.click(screen.getByRole("button", { name: /VOTING RECORD/ }));
+
+    const link = await screen.findByRole("link", {
+      name: /War Powers Resolution to remove United States Armed Forces from Lebanon/,
+    });
+    expect(link).toHaveAttribute("href", "/congress/bills/HCONRES.38");
+    expect(screen.getByText("On Agreeing to the Resolution · Jun 4, 2026")).toBeInTheDocument();
+    expect(
+      within(link.closest("li") as HTMLElement).getByText("AGAINST PARTY")
+    ).toBeInTheDocument();
+    for (const noise of ["BP", "DEFENSE", "HouseRC-2026-201", /STANCE/]) {
+      expect(screen.queryByText(noise)).not.toBeInTheDocument();
+    }
   });
 });
