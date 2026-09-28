@@ -61,7 +61,7 @@ export function generateCommentary(senator: Senator): string[] {
   const lobbiedBills = countLobbiedBills(lobbyingMatches);
   if (lobbiedBills > 0) {
     comments.push(
-      `${lobbiedBills} bill${lobbiedBills !== 1 ? "s" : ""} ${senator.name} voted on ${lobbiedBills !== 1 ? "are" : "is"} named in the lobbying filings of an organization among their largest donor industries. A filing records that the organization lobbied on a bill, not which way, and none of this shows influence.`
+      `${lobbiedBills} bill${lobbiedBills !== 1 ? "s" : ""} ${senator.name} voted on ${lobbiedBills !== 1 ? "are" : "is"} named in lobbying filings for clients sharing the name of a top donor in one of their largest donor industries. A filing records lobbying on a bill, not which way, and none of this shows influence.`
     );
   }
 

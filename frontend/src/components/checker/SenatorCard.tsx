@@ -548,7 +548,7 @@ export default function SenatorCard({
                 const base = `${senator.lobbyingMatches.length} donor-vote overlap${senator.lobbyingMatches.length !== 1 ? "s" : ""}`;
                 const named = countLobbiedBills(senator.lobbyingMatches);
                 return named > 0
-                  ? `${base} · ${named} bill${named !== 1 ? "s" : ""} named in the donors' own lobbying filings`
+                  ? `${base} · ${named} bill${named !== 1 ? "s" : ""} named in lobbying filings under donors' names`
                   : base;
               })()}
               source="fec.gov/data · lda.gov"

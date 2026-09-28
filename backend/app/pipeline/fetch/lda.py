@@ -101,8 +101,9 @@ class LobbyingActivity:
     mentions: list[dict] = field(default_factory=list)
     # False when the page cap was hit: the total is a lower bound.
     complete: bool = True
-    # The client names whose filings were counted (_own_filings).
-    clients: list[str] = field(default_factory=list)
+    # [(client name, amount)] for the filings counted, largest first: the
+    # registry's own names, shown beside the total (see is_same_client).
+    clients: list[tuple[str, float]] = field(default_factory=list)
 
 
 def _sum_filing_amounts(results: list[dict]) -> float:
@@ -143,6 +144,7 @@ def _filing_mentions(results: list[dict]) -> list[dict]:
                     "filings": [{
                         "url": filing.get("filing_document_url") or "",
                         "registrant": registrant,
+                        "client": _client_name(filing),
                         "posted": filing.get("dt_posted") or "",
                     }],
                 })
@@ -185,13 +187,6 @@ def search_name(org_name: str) -> str:
     return " ".join(words)
 
 
-def _client_key(client_name: str) -> str:
-    """A filing's client as a search name: the registry often appends a
-    former name or scope in parentheses ("META PLATFORMS INC (FKA
-    FACEBOOK)"), which is not part of the name."""
-    return search_name((client_name or "").split("(")[0])
-
-
 def is_same_client(searched: str, client_name: str) -> bool:
     """Whether a filing's client is the organization searched for.
 
@@ -206,9 +201,18 @@ def is_same_client(searched: str, client_name: str) -> bool:
     parenthesis (a registrant filing for the client: "WILMERHALE ON BEHALF
     OF APPLE INC."). A similarity ratio was tried and dropped: it accepted
     the American Veterinary Medical Association for the American Medical
-    Association. A prefix also admits a separate company that shares the
-    name ("COCA-COLA BOTTLING COMPANY UNITED" for "COCA COLA"), which
-    _own_filings resolves.
+    Association.
+
+    A prefix also admits a separate company that shares the name: an
+    independent bottler ("COCA-COLA BOTTLING COMPANY UNITED") beside The
+    Coca-Cola Company, Boeing Employees' Credit Union beside Boeing. No
+    name rule tells those from the organization's own filing entities
+    (JPMORGAN CHASE HOLDINGS LLC, KOCH GOVERNMENT AFFAIRS, GOOGLE CLIENT
+    SERVICES LLC — measured on 48 large clients' 2025 filings, 15 file
+    only under such longer names), and choosing between them by rule
+    failed in review both ways. So nothing here claims the client *is*
+    the organization: every amount and every linked bill carries the
+    client name the registry filed it under, and the page shows it.
     """
     q = searched
     c = _name_key(client_name)
@@ -229,35 +233,6 @@ def is_same_client(searched: str, client_name: str) -> bool:
     return False
 
 
-def _is_exact_client(searched: str, client_name: str) -> bool:
-    """The client is the searched name itself (legal form aside), or a
-    registrant filing on behalf of exactly that name."""
-    if _client_key(client_name) == searched:
-        return True
-    c = _name_key(client_name)
-    for marker in (" ON BEHALF OF ", " OBO "):
-        i = c.find(marker)
-        if i >= 0 and search_name(c[i + len(marker):]) == searched:
-            return True
-    return False
-
-
-def _own_filings(searched: str, filings: list[dict]) -> list[dict]:
-    """The filings to attribute to the organization. When the registry has
-    a client under the organization's own name, only those count: a longer
-    name beginning with it may be a separate company (an independent
-    bottler beside The Coca-Cola Company, Boeing Employees' Credit Union
-    beside Boeing). When it has none, the organization files through
-    entities named after it (JPMORGAN CHASE HOLDINGS LLC, KOCH GOVERNMENT
-    AFFAIRS, GOOGLE CLIENT SERVICES LLC), and those count. Measured on 48
-    large clients' 2025 filings: 33 have an own-name client, 15 file only
-    under longer names. The page lists the client names counted, so what
-    was aggregated is visible either way."""
-    family = [f for f in filings if is_same_client(searched, _client_name(f))]
-    exact = [f for f in family if _is_exact_client(searched, _client_name(f))]
-    return exact or family
-
-
 def _client_name(filing: dict) -> str:
     return (filing.get("client") or {}).get("name", "")
 
@@ -267,7 +242,7 @@ def _cache_key(org_key: str, year: int) -> str:
     # share an 80-char prefix (e.g. federal vs. state PAC variants of one
     # sponsor) can't collide onto one cached figure.
     key_hash = hashlib.sha256(org_key.encode()).hexdigest()[:12]
-    return f"lda-activity-v5-{year}-{org_key[:60]}-{key_hash}"
+    return f"lda-activity-v6-{year}-{org_key[:60]}-{key_hash}"
 
 
 async def fetch_lobbying_activity(
@@ -293,7 +268,7 @@ async def fetch_lobbying_activity(
             total=float(cached.get("total", 0.0)),
             mentions=cached.get("mentions") or [],
             complete=bool(cached.get("complete", True)),
-            clients=cached.get("clients") or [],
+            clients=[tuple(c) for c in cached.get("clients") or []],
         )
 
     # Follow pagination: a heavy-lobbying client can file dozens to
@@ -328,10 +303,13 @@ async def fetch_lobbying_activity(
         logger.warning("LDA fetch failed for %s: %s", org_key, exc)
         return None
 
-    own = _own_filings(org_key, filings)
+    own = [f for f in filings if is_same_client(org_key, _client_name(f))]
     total = _sum_filing_amounts(own)
     mentions = _filing_mentions(own)
-    clients = sorted({_client_name(f) for f in own if _client_name(f)})
+    by_client: dict[str, float] = {}
+    for f in own:
+        by_client[_client_name(f)] = by_client.get(_client_name(f), 0.0) + _sum_filing_amounts([f])
+    clients = sorted(by_client.items(), key=lambda c: (-c[1], c[0]))
     complete = not (url and pages >= _MAX_PAGES)
     if not complete:
         logger.warning(
@@ -500,28 +478,30 @@ async def lobbied_bills_for(
             continue
         if vote.get("billName"):
             titles.append(vote["billName"])
-        fits = {
-            id(m): (title_match_score(m.get("after", ""), titles), title_match_score(m.get("before", ""), titles))
-            for m in mentions
-        }
-        if not any(max(f) >= BILL_TITLE_MATCH_MIN for f in fits.values()):
-            # No wording fits this bill at all: nothing to rule out, so the
-            # previous congress's titles aren't worth a request.
-            continue
-        previous = await _bill_titles(client, db, congress - 1, bill_key)
-        if previous is None:
-            # Without the previous congress's same-numbered bill to rule
-            # out, nothing is claimed for this one.
-            continue
-        matching = []
-        for m in mentions:
-            # The titles are part of the key: the vote's own billName is
-            # appended to them, and it differs between chambers and votes.
-            key = (congress, bill_key, m.get("before", ""), m.get("after", ""), tuple(titles))
-            if key not in _verdicts:
-                _verdicts[key] = names_bill(key[2], key[3], titles, bill_key, pool, previous, fits[id(m)])
-            if _verdicts[key]:
-                matching.append(m)
+        # The titles are part of the key: the vote's own billName is
+        # appended to them, and it differs between chambers and votes.
+        keyed = [(m, (congress, bill_key, m.get("before", ""), m.get("after", ""), tuple(titles))) for m in mentions]
+        pending = [(m, key) for m, key in keyed if key not in _verdicts]
+        if pending:
+            fits = {
+                key: (title_match_score(key[3], titles), title_match_score(key[2], titles))
+                for _, key in pending
+            }
+            if any(max(f) >= BILL_TITLE_MATCH_MIN for f in fits.values()):
+                previous = await _bill_titles(client, db, congress - 1, bill_key)
+                if previous is None:
+                    # Without the previous congress's same-numbered bill to
+                    # rule out, nothing is claimed for this one (and not
+                    # remembered, so a later member can try again).
+                    continue
+                for _, key in pending:
+                    _verdicts[key] = names_bill(key[2], key[3], titles, bill_key, pool, previous, fits[key])
+            else:
+                # No wording fits this bill at all: nothing to rule out, so
+                # the previous congress's titles aren't worth a request.
+                for _, key in pending:
+                    _verdicts[key] = False
+        matching = [m for m, key in keyed if _verdicts[key]]
         if not matching:
             continue
         filings = {f["url"]: (m.get("filingYear") or 0, f) for m in matching for f in m.get("filings", [])}
@@ -537,6 +517,10 @@ async def lobbied_bills_for(
             "filingYear": year or None,
             "filingUrl": newest.get("url"),
             "registrant": newest.get("registrant"),
+            # The registry's name for the client the filing was for: the
+            # page says whose filing it is rather than asserting it's the
+            # donor's (is_same_client).
+            "client": newest.get("client"),
             "filingCount": len(filings),
         })
     found.sort(key=lambda b: (-(b.get("filingYear") or 0), b.get("billId") or ""))
@@ -601,11 +585,16 @@ async def enrich_lobbying_matches_with_lda(
                 if spend_year is not None and spend_year.total > 0:
                     # A total cut off at the page cap is a floor, not a total.
                     amount = f"${spend_year.total:,.0f}" if spend_year.complete else f"at least ${spend_year.total:,.0f}"
-                    shown = spend_year.clients[:3]
-                    filed_as = "; ".join(shown) + ("; and others" if len(spend_year.clients) > 3 else "")
+                    parts = [
+                        f"${spent:,.0f} as {name.rstrip('. ')}"
+                        for name, spent in spend_year.clients[:3] if spent > 0
+                    ]
+                    rest = len([c for c in spend_year.clients if c[1] > 0]) - len(parts)
+                    filed_as = "; ".join(parts) + (f"; and {rest} more" if rest > 0 else "")
                     m["description"] = (
                         m.get("description", "")
-                        + f" Registered federal lobbying (LDA {lda_year}): {amount}, filed as {filed_as}."
+                        + f" Registered federal lobbying (LDA {lda_year}) by clients named"
+                        f" {org.strip()}: {amount} ({filed_as})."
                     )
                 lobbied = await lobbied_bills_for(
                     lda_client, db, [a for a in activities.values() if a is not None], voted, congress,

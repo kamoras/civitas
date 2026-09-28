@@ -303,6 +303,8 @@ class LobbiedBillSchema(CamelModel):
     filing_year: int | None = None
     filing_url: str | None = None
     registrant: str | None = None
+    # The registry's name for the filing's client (lda.is_same_client).
+    client: str | None = None
     filing_count: int = 1
 
 

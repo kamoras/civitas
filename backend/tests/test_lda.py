@@ -430,29 +430,45 @@ def test_the_motion_reaches_the_api():
     assert dumped["lobbiedBills"][0]["motionType"] == "cloture"
 
 
-class TestOwnFilings:
-    def test_an_own_name_client_excludes_other_companies_with_the_prefix(self):
-        # Found in review, live: "COCA COLA" also returned an independent
-        # bottler, whose spend was added to Coca-Cola's.
-        filings = [{"client": {"name": "THE COCA-COLA COMPANY"}},
-                   {"client": {"name": "COCA-COLA BOTTLING COMPANY UNITED, INC."}}]
-        assert lda._own_filings("COCA COLA", filings) == filings[:1]
-
-    def test_without_one_the_named_entities_count(self):
-        filings = [{"client": {"name": "JPMORGAN CHASE HOLDINGS LLC"}},
-                   {"client": {"name": "JPMORGAN CHASE HOLDINGS, LLC"}}]
-        assert lda._own_filings(lda.search_name("JPMORGAN CHASE & CO."), filings) == filings
-
-    def test_a_registrant_filing_for_the_exact_name_counts_as_own(self):
-        filings = [{"client": {"name": "ELI LILLY AND COMPANY"}},
-                   {"client": {"name": "TIBER CREEK HEALTH STRATEGIES, INC. ON BEHALF OF ELI LILLY AND COMPANY"}},
-                   {"client": {"name": "ELI LILLY BIO"}}]
-        assert lda._own_filings(lda.search_name("Eli Lilly & Company"), filings) == filings[:2]
+class TestClientsShown:
+    """No name rule tells a subsidiary (JPMorgan Chase Holdings) from a
+    separate company sharing the name (an independent Coca-Cola bottler),
+    so every amount and linked bill carries the registry's client name."""
 
     @pytest.mark.asyncio
-    async def test_the_description_names_the_clients_counted(self, db_session):
-        matches = [{"lobbyistOrg": "Coca-Cola", "description": ""}]
-        act = LobbyingActivity(total=10.0, clients=["THE COCA-COLA COMPANY"])
+    async def test_spend_is_broken_down_by_client_largest_first(self, db_session):
+        client = MagicMock()
+        page = {"next": None, "results": [
+            {"client": {"name": "THE COCA-COLA COMPANY"}, "filing_type": "Q1", "income": "900000"},
+            {"client": {"name": "COCA-COLA BOTTLING COMPANY UNITED, INC."}, "filing_type": "Q1", "income": "70000"},
+        ]}
+        resp = MagicMock(status_code=200)
+        resp.json.return_value = page
+        client.get = AsyncMock(return_value=resp)
+        with patch.object(lda._rate_limiter, "acquire", new=AsyncMock()):
+            act = await fetch_lobbying_activity(client, db_session, "The Coca-Cola Company", 2025)
+        assert act.total == 970_000
+        assert act.clients == [("THE COCA-COLA COMPANY", 900_000.0),
+                               ("COCA-COLA BOTTLING COMPANY UNITED, INC.", 70_000.0)]
+
+    @pytest.mark.asyncio
+    async def test_the_description_names_each_client_and_its_amount(self, db_session):
+        matches = [{"lobbyistOrg": "Coca-Cola PAC", "lobbyingClient": "COCA-COLA", "description": ""}]
+        act = LobbyingActivity(total=970_000.0, clients=[("THE COCA-COLA COMPANY", 900_000.0),
+                                                         ("COCA-COLA BOTTLING COMPANY UNITED, INC.", 70_000.0)])
         with patch.object(lda, "fetch_lobbying_activity", new=AsyncMock(return_value=act)):
             await enrich_lobbying_matches_with_lda(matches, db_session, 2025, congress=119)
-        assert "filed as THE COCA-COLA COMPANY." in matches[0]["description"]
+        d = matches[0]["description"]
+        assert "by clients named COCA-COLA: $970,000" in d
+        assert "$900,000 as THE COCA-COLA COMPANY; $70,000 as COCA-COLA BOTTLING COMPANY UNITED, INC)" in d
+        assert ".." not in d
+
+    @pytest.mark.asyncio
+    async def test_a_linked_bill_names_the_client_the_filing_was_for(self, db_session):
+        text = ", to equalize the negotiation period between small-molecule and biologic candidates"
+        mention = _mention("HR.1492", text)
+        mention["filings"][0]["client"] = "PFIZER INC."
+        matches = [{"lobbyistOrg": "Pfizer", "description": ""}]
+        with patch.object(lda, "fetch_lobbying_activity", new=AsyncMock(return_value=_activity(5.0, [mention]))):
+            await enrich_lobbying_matches_with_lda(matches, db_session, 2025, votes=VOTES, congress=119)
+        assert matches[0]["lobbiedBills"][0]["client"] == "PFIZER INC."

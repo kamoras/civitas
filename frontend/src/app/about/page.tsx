@@ -310,10 +310,13 @@ export default function AboutPage() {
                   Not scored. An industry that makes up at least a quarter of a member&apos;s
                   classifiable donor money is matched to the member&apos;s votes on legislation in
                   that industry&apos;s policy area. For the industry&apos;s largest donor we look up
-                  the organization in the Lobbying Disclosure Act registry (lda.gov) — under the
-                  sponsoring company&apos;s name when the donor is its PAC — and show its registered
-                  lobbying spend and any bill the member voted on that its own filings name,
-                  linked to the filing. Filings cite bills by number and often name earlier
+                  the Lobbying Disclosure Act registry (lda.gov) under the donor&apos;s name — the
+                  sponsoring company&apos;s when the donor is its PAC — and show registered lobbying
+                  spend by each client of that name, and any bill the member voted on that those
+                  filings name, linked to the filing and the client it was for. A client sharing
+                  the name can be a subsidiary or a separate company (an independent bottler beside
+                  The Coca-Cola Company), and no name rule can tell which, so the client is always
+                  shown rather than assumed to be the donor. Filings cite bills by number and often name earlier
                   congresses&apos; bills, so a number counts only when the filer&apos;s wording
                   around it also matches that bill&apos;s title in the current congress. A filing
                   records that an organization lobbied on a bill, not which way, so none of this

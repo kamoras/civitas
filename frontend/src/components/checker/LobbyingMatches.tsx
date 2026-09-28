@@ -7,18 +7,20 @@ interface LobbyingMatchesProps {
 }
 
 // What the vote shown decided, when it wasn't the vote on the bill itself
-// (bill_learning.MOTION_PROTOTYPES). Worded for what a Yea means: a Yea on
-// "overriding the veto" is a vote against the veto.
+// (bill_learning.MOTION_PROTOTYPES). Neutral on purpose: "veto" also covers
+// motions to refer or table a veto message, where a Yea is not an override.
 const MOTION_LABELS: Record<string, string> = {
   amendment: " (on an amendment to it)",
-  cloture: " (on cutting off debate on it)",
+  cloture: " (on a cloture motion)",
   procedural: " (on a procedural motion)",
-  veto: " (on overriding the President's veto)",
+  veto: " (on a motion about the President's veto)",
   nomination: " (on a nomination)",
 };
 
 function motionLabel(motionType: string | null | undefined): string {
-  return (motionType && MOTION_LABELS[motionType]) || "";
+  if (motionType === "passage") return "";
+  // Unrecognized, or no question recorded: don't let it read as passage.
+  return (motionType && MOTION_LABELS[motionType]) || " (on a motion, not necessarily passage)";
 }
 
 export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
@@ -28,10 +30,11 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
     <div>
       <div className="text-xs text-ink-lo mb-3">
         Industries that make up a large share of this member&apos;s classifiable donor money,
-        matched to votes on legislation in that industry&apos;s policy area. Where the
-        organization&apos;s own lobbying filings (Lobbying Disclosure Act reports) name a bill the
-        member voted on, the filing is linked. A filing records that the organization lobbied on
-        a bill, not which way; none of this shows that money changed a vote.
+        matched to votes on legislation in that industry&apos;s policy area. Lobbying Disclosure
+        Act reports are looked up under the largest donor&apos;s name; where a report names a bill
+        the member voted on, the filing is linked with the client it was filed for, which can be a
+        separate company sharing the name. A filing records lobbying on a bill, not which way;
+        none of this shows that money changed a vote.
       </div>
       <div className="space-y-4">
         {matches.map((match, i) => {
@@ -54,7 +57,7 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
                 )}
                 {lobbied.length > 0 && (
                   <div>
-                    <div>NAMED IN THIS ORGANIZATION&apos;S LOBBYING FILINGS:</div>
+                    <div>NAMED IN LOBBYING FILINGS FOR CLIENTS OF THIS NAME:</div>
                     <ul className="mt-1 space-y-1 pl-3">
                       {lobbied.map((b) => {
                         const bill = billUrl(b.billId);
@@ -90,7 +93,8 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
                                   className="hover:text-phos underline underline-offset-2 transition-colors"
                                 >
                                   {b.filingYear ? `${b.filingYear} filing` : "filing"}
-                                  {b.registrant ? ` by ${b.registrant}` : ""}
+                                  {b.client ? ` for ${b.client}` : ""}
+                                  {b.registrant && b.registrant !== b.client ? ` by ${b.registrant}` : ""}
                                 </a>
                                 {b.filingCount > 1 && ` (+${b.filingCount - 1} more)`}
                               </>
