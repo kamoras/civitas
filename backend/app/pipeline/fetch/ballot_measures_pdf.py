@@ -78,6 +78,12 @@ from app.pipeline.fetch.ballot_measures_mt import fetch_measures as mt_fetch_mea
 from app.pipeline.fetch.ballot_measures_nm import fetch_measures as nm_fetch_measures
 from app.pipeline.fetch.ballot_measures_wa import fetch_measures as wa_fetch_measures
 from app.pipeline.fetch.ballot_measures_wy import parse_document as parse_wy_document
+from app.pipeline.fetch.ballot_measures_ga import fetch_measures as ga_fetch_measures
+from app.pipeline.fetch.ballot_measures_ms import fetch_measures as ms_fetch_measures
+from app.pipeline.fetch.ballot_measures_nh import fetch_measures as nh_fetch_measures
+from app.pipeline.fetch.ballot_measures_nv import fetch_measures as nv_fetch_measures
+from app.pipeline.fetch.ballot_measures_oh import fetch_measures as oh_fetch_measures
+from app.pipeline.fetch.ballot_measures_ut import fetch_measures as ut_fetch_measures
 
 logger = logging.getLogger(__name__)
 
@@ -247,6 +253,12 @@ MULTI_DOCUMENT_STRATEGIES = {
     "mt_qualified_ballot_issues": mt_fetch_measures,
     "nm_amendments_and_bonds": nm_fetch_measures,
     "wa_certified_measures": wa_fetch_measures,
+    "ga_amendments_booklet": ga_fetch_measures,
+    "ms_sample_ballot": ms_fetch_measures,
+    "nh_general_election_questions": nh_fetch_measures,
+    "nv_ballot_questions_booklet": nv_fetch_measures,
+    "oh_official_sample_ballot": oh_fetch_measures,
+    "ut_general_election_certification": ut_fetch_measures,
 }
 
 # Longer than Vote Smart's 12h (MEASURE_CACHE_TTL_HOURS in
