@@ -173,33 +173,40 @@ export default function ScoresChapter() {
         <Sub title="How often they break with their party">
           <Steps>
             <Step n={1} title="Pick the party-line votes">
-              A roll call counts when the parties split on it: at least 65% of one party voting yes
-              and at most 35% of the other. A member breaks when they vote with the other side.
-              Votes with no recorded roll call don&apos;t count, and neither does housekeeping —
-              quorum calls, adjourning, the House&apos;s previous question, motions to table or to
-              recommit — which splits on party lines as a matter of course. Rule votes, cloture and
-              confirmations count in full: they decide whether a bill reaches the floor, whether it
-              gets a vote, and who serves. Every break on a profile shows that roll call&apos;s
-              party tallies.
+              Every roll call of the current Congress counts when the parties split on it: at least
+              65% of one party voting yes and at most 35% of the other. Votes with no recorded roll
+              call don&apos;t count, and neither does housekeeping — quorum calls, adjourning, the
+              House&apos;s previous question, motions to table or to recommit — which splits on
+              party lines as a matter of course. Each bill or nomination counts once, however many
+              times it came to a vote: cloture and then confirmation on one nominee is one decision.
             </Step>
-            <Step n={2} title="Work out what the seat expects">
+            <Step n={2} title="Count breaks toward the other party">
+              A member breaks when they vote with the other side <em>and</em> the party&apos;s
+              members who broke on that vote sit nearer the other party than the party does. A vote
+              against the party from its own flank — hardliners voting down their party&apos;s bill
+              — is listed on the profile but not counted here, because how far toward the flank a
+              member sits is already scored by where their record sits (below)
+              <Cite id="kirkland2017" />. Every break on a profile shows that roll call&apos;s party
+              tallies.
+            </Step>
+            <Step n={3} title="Work out what the seat expects">
               From the chamber itself, on every run: how often members of the same party break in
               seats with the same partisan lean (Cook PVI). Each party gets its own line, allowed to
               bend at swing seats, so a Republican in a seat Biden won is compared with how
               Republicans in seats like that actually vote.
             </Step>
-            <Step n={3} title="Measure the gap">
+            <Step n={4} title="Measure the gap">
               In standard deviations, not percentage points. Four extra points on a seat whose
               members break 1.5% of the time is several times the norm; four extra on a seat whose
               members break 7% of the time is a modest departure.
             </Step>
-            <Step n={4} title="Score it">
+            <Step n={5} title="Score it">
               Matching the expectation scores 100. Breaking more often lowers the score in a
               straight line, reaching 0 at one and a half times the gap the most out-of-pattern
               tenth of the member&apos;s party shows. Being more loyal than expected lowers it half
               as fast, reaching 0 only at three times that gap.
             </Step>
-            <Step n={5} title="Allow for thin records">
+            <Step n={6} title="Allow for thin records">
               With fewer than 20 party-line roll calls, the result is pulled toward what a typical
               member of the same party scores, so a single break can&apos;t reach either end and a
               newcomer isn&apos;t ranked below colleagues just for having few votes.
@@ -233,7 +240,7 @@ export default function ScoresChapter() {
             changed from Congress to Congress.
           </P>
         </Sub>
-        <More label="Where the numbers come from, with September 2026 examples">
+        <More label="Where the numbers come from, with September 2026 examples (before v6.20)">
           <P>
             The gap is measured from each chamber on every update, separately for each party. In the
             Senate as of September 2026 it was about 0.37 standard deviations per vote for Democrats
@@ -263,9 +270,7 @@ export default function ScoresChapter() {
             <Cite id="canes2002" />? It does, and it contradicted both choices. Loyalty beyond what
             the seat predicts carried the strongest association of all (about 2 points of vote share
             per standard deviation in 2004), and the association was the same in safe seats as in
-            competitive ones. Members who break from their party&apos;s flank side
-            <Cite id="kirkland2017" /> did not fare worse for it, so those breaks aren&apos;t
-            discounted either.
+            competitive ones.
           </P>
           <P>
             Why the score peaks at the seat&apos;s norm (since v6.16): a member elected by a seat
@@ -289,6 +294,14 @@ export default function ScoresChapter() {
           </P>
         </More>
         <More label="What this part used to measure">
+          <P>
+            Until v6.20 (September 2026) the break rate was read from a sample of each member&apos;s
+            latest votes, counted every vote against most of the party — including breaks from the
+            party&apos;s flank — and counted a nominee&apos;s cloture and confirmation as two. Over
+            the whole Congress, counting only breaks toward the other party and each measure once
+            predicted election results at least as well (docs/research/constituent-alignment.md,
+            sections 11 and 12). The September 2026 figures above were measured before that change.
+          </P>
           <P>
             Before v4.2 it was called Independent Voting and rewarded raw defection, and it exempted
             party-line votes on topics tied to a member&apos;s top donor industries. That exemption
