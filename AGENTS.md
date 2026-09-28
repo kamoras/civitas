@@ -985,10 +985,13 @@ the pending list).
   inside it, and wrap the page in a `ShareSubjectProvider` naming what it is
   about (the image's title strip and link come from there). Mark controls
   that mean nothing in a picture (toggles, "open" buttons, votes) with
-  `data-share-exclude`. The capture is client-side, from the live DOM; an
-  image from a host without CORS headers can't be drawn, which is why member
-  photos go through `/photo/bioguide/[id]` — add a same-origin route like it
-  (taking an id, never a URL) rather than proxying arbitrary URLs.
+  `data-share-exclude`. The capture is client-side, from the live DOM, and
+  never requests a third-party host from the visitor's browser (§8): images
+  that aren't same-origin are left blank unfetched, so mark them excluded.
+  Member photos are the exception, read through the same-origin
+  `/photo/bioguide/[id]` route (cached and rate-limited in nginx) — add a
+  route like it (taking an id, never a URL) rather than proxying arbitrary
+  URLs.
 - Tabbed UIs follow the WAI-ARIA tabs pattern with a roving `tabindex`.
   Activating a tab must focus **the incoming tab**, not its panel — the
   Arrow/Home/End handler lives on the `role="tablist"` container, so moving
