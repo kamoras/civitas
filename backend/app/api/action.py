@@ -164,9 +164,8 @@ def _issue_bill_ids(issue: ActionIssue) -> set[str]:
 def _internal_bill_congresses(db: Session, bill_ids: set[str]) -> dict[str, set[int]]:
     """{bill_id: {congress, ...}} for bills the site holds its own record
     of (current members' sponsored bills, either chamber — bill_service.
-    get_bill_detail's lookup): what lets an entry with no recorded Congress,
-    or an earlier one, link to /congress/bills/{id}. Any current-Congress
-    bill links there regardless."""
+    get_bill_detail's lookup): which Congress an entry that never recorded
+    one refers to, when it can be told at all."""
     if not bill_ids:
         return {}
     found: dict[str, set[int]] = {}
@@ -246,26 +245,29 @@ def _build_issue_response(
     for b in raw_bills:
         if isinstance(b, dict) and b.get("id") and b.get("url"):
             bill_id = b["id"].upper()
-            # The site's bill page shows any bill of the current Congress
-            # (its record comes from Congress.gov on demand). A bill of an
-            # earlier Congress links internally only when we hold it from
-            # that Congress; an entry that never recorded its Congress,
-            # only when we hold the bill at all (a bill number alone is
-            # ambiguous across congresses).
+            # The site's bill page shows any bill of any Congress that has
+            # convened, named by ?congress= (its record comes from
+            # Congress.gov on demand). A bill number alone names a different
+            # bill in each Congress, so the link always says which: the
+            # entry's own, or for an entry that never recorded one, the
+            # newest Congress we hold the bill from (and no link when we
+            # hold it from none).
             entry_congress = b.get("congress")
             internal_congresses = internal_bills.get(bill_id)
-            is_internal = (
-                entry_congress == current_congress and parse_bill_id(bill_id) is not None
-            ) or (
-                internal_congresses is not None
-                and (entry_congress is None or entry_congress in internal_congresses)
-            )
+            if isinstance(entry_congress, int) and entry_congress <= current_congress:
+                link_congress = entry_congress if parse_bill_id(bill_id) is not None else None
+            elif entry_congress is None and internal_congresses:
+                link_congress = max(internal_congresses)
+            else:
+                link_congress = None
             related_bills.append(
                 RelatedBillSchema(
                     name=b.get("name", b["id"]),
                     id=b["id"],
                     url=b["url"],
-                    internal_url=f"/congress/bills/{bill_id}" if is_internal else None,
+                    internal_url=(
+                        f"/congress/bills/{bill_id}?congress={link_congress}" if link_congress else None
+                    ),
                 ).model_dump(by_alias=True)
             )
 

@@ -46,8 +46,9 @@ export function fetchMonth(month: string): Promise<MonthReport | null> {
 
 /** Null on any failure, not just a 404: the bill page still renders from the
  * site's own record of a tracked bill when Congress.gov's side is out. */
-export function fetchBillRecord(billId: string): Promise<BillRecord | null> {
-  return getJson<BillRecord>(`/api/bills/${encodeURIComponent(billId)}/record`, "billId", "actions").catch(() => null);
+export function fetchBillRecord(billId: string, congress?: number | null): Promise<BillRecord | null> {
+  const query = congress ? `?congress=${congress}` : "";
+  return getJson<BillRecord>(`/api/bills/${encodeURIComponent(billId)}/record${query}`, "billId", "actions").catch(() => null);
 }
 
 export const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;

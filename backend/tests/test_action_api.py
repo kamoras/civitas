@@ -204,7 +204,7 @@ class TestRelatedBillInternalLinks:
 
         resp = _build_issue_response(issue, db_session)
 
-        assert resp["relatedBills"][0]["internalUrl"] == "/congress/bills/HR.22"
+        assert resp["relatedBills"][0]["internalUrl"] == "/congress/bills/HR.22?congress=119"
         # stored congress.gov URL stays available verbatim as the fact-check fallback
         assert resp["relatedBills"][0]["url"] == (
             "https://www.congress.gov/bill/119th-congress/house-bill/22"
@@ -222,10 +222,10 @@ class TestRelatedBillInternalLinks:
 
         assert resp["relatedBills"][0]["internalUrl"] is None
 
-    def test_congress_mismatch_blocks_internal_link(self, db_session):
+    def test_an_earlier_congress_links_to_that_congress_bill(self, db_session):
         """A bill number alone is ambiguous across congresses — an issue
         entry that recorded a different congress than our hosted record
-        must not link to our (different) bill."""
+        links to that Congress's bill, never to ours."""
         from app.api.action import _build_issue_response
 
         self._host_senate_bill(db_session, "HR.3055", congress=119)
@@ -237,7 +237,16 @@ class TestRelatedBillInternalLinks:
 
         resp = _build_issue_response(issue, db_session)
 
-        assert resp["relatedBills"][0]["internalUrl"] is None
+        assert resp["relatedBills"][0]["internalUrl"] == "/congress/bills/HR.3055?congress=101"
+
+    def test_a_congress_that_has_not_convened_is_not_linked(self, db_session):
+        from app.api.action import _build_issue_response
+        from app.pipeline.fetch.congress import expected_current_congress
+
+        issue = self._make_issue_with_bill(db_session, {
+            "name": "A bill", "id": "S.1", "url": "https://www.congress.gov/", "congress": expected_current_congress() + 1,
+        })
+        assert _build_issue_response(issue, db_session)["relatedBills"][0]["internalUrl"] is None
 
     def test_legacy_entry_without_congress_still_links(self, db_session):
         """Rows stored before the congress field existed match by id alone."""
@@ -251,7 +260,7 @@ class TestRelatedBillInternalLinks:
 
         resp = _build_issue_response(issue, db_session)
 
-        assert resp["relatedBills"][0]["internalUrl"] == "/congress/bills/HR.22"
+        assert resp["relatedBills"][0]["internalUrl"] == "/congress/bills/HR.22?congress=119"
 
     def test_any_current_congress_bill_links_to_the_sites_bill_page(self, db_session):
         """The bill page shows any bill of the current Congress (its record
@@ -269,7 +278,7 @@ class TestRelatedBillInternalLinks:
 
         resp = _build_issue_response(issue, db_session)
 
-        assert resp["relatedBills"][0]["internalUrl"] == "/congress/bills/S.55"
+        assert resp["relatedBills"][0]["internalUrl"] == f"/congress/bills/S.55?congress={current}"
 
 
 class TestElectionsAndTimelineRoutesUseCanonicalClock:

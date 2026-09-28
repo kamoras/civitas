@@ -138,7 +138,7 @@ describe("VotingRecord", () => {
     const link = await screen.findByRole("link", {
       name: /War Powers Resolution to remove United States Armed Forces from Lebanon/,
     });
-    expect(link).toHaveAttribute("href", "/congress/bills/HCONRES.38");
+    expect(link).toHaveAttribute("href", "/congress/bills/HCONRES.38?congress=119");
     expect(screen.getByText("On Agreeing to the Resolution · Jun 4, 2026")).toBeInTheDocument();
     expect(
       within(link.closest("li") as HTMLElement).getByText("AGAINST PARTY")

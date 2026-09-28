@@ -6,6 +6,7 @@ import { SponsoredBill } from "@/types/senator";
 import CollapsibleSection from "../shared/CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
 import { PARTY_BADGE, policyAreaBadgeClass } from "@/lib/partyStyles";
+import { billHref } from "@/lib/congress";
 
 interface SponsoredBillsProps {
   bills: SponsoredBill[];
@@ -123,7 +124,7 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
         {/* Bill list */}
         <div className="space-y-1.5">
           {visible.map((bill) => {
-            const url = `/congress/bills/${encodeURIComponent(bill.billId)}`;
+            const url = billHref(bill.billId, bill.congress);
             const badge = bill.partyLeaning ? PARTY_BADGE[bill.partyLeaning] : null;
             return (
               <div

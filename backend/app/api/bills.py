@@ -45,9 +45,14 @@ def list_bills_in_flight(
 
 
 @router.get("/bills/{bill_id}")
-def get_bill(bill_id: str, db: Session = Depends(get_db)) -> JSONResponse:
-    """Return full detail for a single bill by its bill_id (e.g. "S.4967")."""
-    detail = get_bill_detail(db, bill_id)
+def get_bill(
+    bill_id: str,
+    congress: int | None = Query(None, ge=93, le=200),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Return full detail for a single bill by its bill_id (e.g. "S.4967"):
+    of `congress` when given, else the newest one held."""
+    detail = get_bill_detail(db, bill_id, congress)
     if detail is None:
         raise HTTPException(status_code=404, detail="Bill not found")
     return _cached_json(detail.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)
