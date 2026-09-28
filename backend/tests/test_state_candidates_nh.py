@@ -265,3 +265,103 @@ class TestFetchConfirmedCandidates:
             "republican-state-primary": REP_PAGE_HTML,
         }, {}, held="2026-01-01")  # discovery succeeds, but every file download 404s
         assert await nh.fetch_confirmed_candidates(None, 2026, "NH", {}) is None
+
+
+# ── Statewide: the Governor ───────────────────────────────────────────
+#
+# fixtures_nh_democratic_page_statewide.html holds three REAL anchors off
+# the live 2026 Democratic State Primary page (fetched 2026-09-28): the
+# "Governor Summary" workbook, one of its ten per-county breakdowns
+# ("Governor Belknap", the decoy the summary rule must refuse), and
+# "Executive Council District 1", which must never be read as statewide.
+#
+# The rows are the real 2026 Governor Summary exports, trimmed to two
+# counties. Statewide the real totals are Cinde Warmington 126,626 (the
+# only Democrat on the ballot) and Kelly Ayotte 100,920 to Shaun Fife's 4,418
+# on the Republican side; Ayotte's 2,643 write-ins on the Democratic ballot
+# (Belknap 193 + Carroll 90 here) must stay out of the Democratic count.
+
+STATEWIDE_ANCHORS = (FIXTURES / "fixtures_nh_democratic_page_statewide.html").read_text()
+DEM_PAGE_SW = DEM_PAGE_HTML + STATEWIDE_ANCHORS
+REP_PAGE_SW = DEM_PAGE_SW.replace("democratic", "republican").replace("Democratic", "Republican")
+
+GOV_DEM_ROWS = [
+    [None, "State of New Hampshire - Primary Election"],
+    [None, "Governor - Democratic"],
+    ["Summary By Counties", "Cinde Warmington, d", "Kelly Ayotte, r", "Shaun Fife, r", "Bob Wayne McClory, r", "", "Write-Ins"],
+    ["Belknap", "5326", "193", "2", "0", "", "59"],
+    ["Carroll", "5542", "90", "0", "0", "", "56"],
+    ["TOTALS", "10868", "283", "2", "0", "0", "115"],
+]
+GOV_REP_ROWS = [
+    [None, "State of New Hampshire - Primary Election"],
+    [None, "Governor - Republican"],
+    ["Summary By Counties", "Kelly Ayotte, r", "Shaun Fife, r", "Bob Wayne McClory, r", "Cinde Warmington, d", "", "Write-Ins"],
+    ["Belknap", "6591", "266", "185", "28", "", "29"],
+    ["Carroll", "5560", "235", "217", "19", "", "8"],
+    ["TOTALS", "12151", "501", "402", "47", "0", "37"],
+]
+
+
+class TestStatewide:
+    def _patch_sw(self, monkeypatch, dem_page=DEM_PAGE_SW, rep_page=REP_PAGE_SW):
+        _patch(monkeypatch, {
+            "/elections": ROOT_HTML,
+            "state-primary-election-results": INDEX_HTML,
+            "democratic-state-primary": dem_page,
+            "republican-state-primary": rep_page,
+        }, {
+            "us-senator-summary-democratic": _workbook(DEM_ROWS),
+            "us-senator-summary-republican": _workbook(REP_ROWS),
+            "congressional-district-1-democratic": _workbook(DEM_ROWS),
+            "congressional-district-1-republican": _workbook(REP_ROWS),
+            "governor-summary-democratic": _workbook(GOV_DEM_ROWS),
+            "governor-summary-republican": _workbook(GOV_REP_ROWS),
+        }, held="2026-01-01")
+
+    @pytest.mark.asyncio
+    async def test_discovers_the_governor_summary_and_nothing_else_new(self, monkeypatch):
+        self._patch_sw(monkeypatch)
+        offices = await nh._discover_office_links(None, 2026, statewide=True)
+        assert set(offices) == {("S", None), ("H", 1), ("governor", None)}
+        assert offices[("governor", None)]["d"].endswith("governor-summary-democratic.xlsx")
+        assert offices[("governor", None)]["r"].endswith("governor-summary-republican.xlsx")
+
+    @pytest.mark.asyncio
+    async def test_without_the_opt_in_the_governor_is_not_discovered(self, monkeypatch):
+        self._patch_sw(monkeypatch)
+        offices = await nh._discover_office_links(None, 2026)
+        assert set(offices) == {("S", None), ("H", 1)}
+
+    @pytest.mark.asyncio
+    async def test_resolves_the_real_governor_nominees(self, monkeypatch):
+        self._patch_sw(monkeypatch)
+        records = await nh.fetch_confirmed_candidates(None, 2026, "NH", {"statewide_offices": True})
+        governor = [r for r in records if r["office"] == "governor"]
+        assert sorted(governor, key=lambda r: r["party"]) == [
+            {"office": "governor", "district": None, "party": "D", "last_name": "Cinde Warmington"},
+            {"office": "governor", "district": None, "party": "R", "last_name": "Kelly Ayotte"},
+        ]
+        # The federal records are unchanged by the opt-in.
+        assert {(r["office"], r["party"]) for r in records if r["office"] in ("S", "H")} == {
+            ("S", "D"), ("S", "R"), ("H", "D"), ("H", "R"),
+        }
+
+    @pytest.mark.asyncio
+    async def test_the_executive_council_is_never_published(self, monkeypatch):
+        """Elected district by district, so it is not statewide -- see the
+        module docstring and the entry's statewide_omits."""
+        self._patch_sw(monkeypatch)
+        records = await nh.fetch_confirmed_candidates(None, 2026, "NH", {"statewide_offices": True})
+        assert {r["office"] for r in records} == {"S", "H", "governor"}
+
+    @pytest.mark.asyncio
+    async def test_federal_pages_with_no_governor_summary_fail_rather_than_say_none(self, monkeypatch):
+        """New Hampshire elects a governor every even year. Pages that list
+        federal contests but no Governor Summary would otherwise be stored
+        as a confirmed "no statewide offices"."""
+        self._patch_sw(monkeypatch, dem_page=DEM_PAGE_HTML,
+                       rep_page=REP_PAGE_HTML)
+        assert await nh.fetch_confirmed_candidates(None, 2026, "NH", {"statewide_offices": True}) is None
+        # ...and without the opt-in the same pages are simply federal.
+        assert await nh.fetch_confirmed_candidates(None, 2026, "NH", {})

@@ -1455,6 +1455,48 @@ class TestSyncConfirmedCandidates:
 
         assert results["TX"]["status"] == "fetch_failed"
 
+    @pytest.mark.asyncio
+    async def test_an_empty_answer_is_not_recorded_as_no_statewide_offices(self, db_session, monkeypatch):
+        """A feed with nothing in it yet (a primary inside its settle
+        window returns []) is not a ballot read. Under the statewide opt-in
+        it used to write the marker, and the page said the state had no
+        statewide offices -- and deleted the nominees already stored."""
+        from app.api.elections import _statewide_marker
+        from app.models import StatewideNominee
+
+        source = {"strategy": "tx_civix", "source_name": "TX SoS", "statewide_offices": True}
+        monkeypatch.setattr(sc, "source_for_state", lambda state: source)
+        sc._sync_statewide_nominees(db_session, 2026, "TX", source, [
+            {"office": "governor", "district": None, "party": "R", "last_name": "Greg Abbott"},
+        ])
+        marker_before = _statewide_marker(db_session, "TX", 2026)
+
+        monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(return_value=[]))
+        results = await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+        assert results["TX"]["status"] == "ok"
+        assert results["TX"]["statewide"] == 0
+        assert _statewide_marker(db_session, "TX", 2026) == marker_before
+        assert db_session.query(StatewideNominee).filter_by(state="TX").count() == 1
+
+    @pytest.mark.asyncio
+    async def test_an_empty_answer_still_records_a_calendar_none(self, db_session, monkeypatch):
+        """A state whose none rests on its constitutional calendar
+        (statewide_offices_basis) is still recorded: that claim never
+        depended on the feed holding anything."""
+        from app.api.elections import _statewide_marker
+
+        source = {
+            "strategy": "tx_civix", "source_name": "TX SoS", "statewide_offices": True,
+            "statewide_offices_basis": "Elects its executive officers in odd years.",
+        }
+        monkeypatch.setattr(sc, "source_for_state", lambda state: source)
+        monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(return_value=[]))
+        await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+        marker = _statewide_marker(db_session, "TX", 2026)
+        assert marker and marker["count"] == 0
+
 
 class TestFecPartyCodes:
     """FEC's published party codes, translated only where they name the

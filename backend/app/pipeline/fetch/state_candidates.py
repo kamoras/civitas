@@ -1609,6 +1609,18 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
         # state as checked and hold none, and the page would call that a
         # confirmed absence.
         main_answered = records is not None
+        # An answer holding NO contest at all is a feed with nothing in it
+        # yet -- a primary not settled, a results page not posted -- not a
+        # read of a ballot: every state has a House seat on every even-year
+        # ballot, so a real read always yields something. Syncing it would
+        # record the state as checked and holding no statewide offices,
+        # which is what every opted-in state said between the start of a
+        # cycle and its primary settling (New Hampshire's 21-day settle
+        # window ran to 2026-09-29). A state whose "none" rests on its
+        # constitutional calendar rather than the feed
+        # (statewide_offices_basis) is still recorded.
+        if main_answered and not records and not source.get("statewide_offices_basis"):
+            main_answered = False
         records = records or []
 
         # Neither a statewide executive office (Governor, AG, ...) nor a

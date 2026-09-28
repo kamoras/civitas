@@ -1,0 +1,28 @@
+{
+  "electionDetails": {
+    "electionId": 7100,
+    "electionName": "2026 GENERAL ELECTION",
+    "electionDate": "2026-11-03T00:00:00",
+    "electionTypeCode": "G",
+    "electionCategoryCode": "S",
+    "isOfficial": false,
+    "isSync": true,
+    "isDefault": false,
+    "isReports": false,
+    "isSearch": false,
+    "isHomeLinks": false,
+    "electionType": "GENERAL",
+    "electionGuid": "68d61e96-1d28-4210-8c1d-8e90512ae105",
+    "electionDateWithName": "11/03/2026 2026 GENERAL ELECTION",
+    "isStateWideElection": true,
+    "isGeneralElection": true
+  },
+  "federal": {
+    "isEnable": true,
+    "path": "elections\\68d61e96-1d28-4210-8c1d-8e90512ae105-f-20260928075112.json"
+  },
+  "stateWide": {
+    "isEnable": true,
+    "path": "elections\\68d61e96-1d28-4210-8c1d-8e90512ae105-s-20260928075112.json"
+  }
+}

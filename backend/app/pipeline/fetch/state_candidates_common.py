@@ -185,9 +185,12 @@ _STATEWIDE_OFFICES = [
     # office cannot slip through either.
     # Nebraska's own name for the office is "Auditor of Public
     # Accounts" -- specific enough to stand without a "state" qualifier,
-    # since no county calls its auditor that.
+    # since no county calls its auditor that. Vermont's is the "Auditor of
+    # Accounts" (its 2026 primary and general reports), on the same terms:
+    # a Vermont town's auditors are "Town Auditor", and the locality gate
+    # refuses those first.
     ("auditor", re.compile(
-        r"\b(?:state|general)\s+auditor\b|\bAuditor\s+of\s+(?:Public\s+Accounts|State)\b",
+        r"\b(?:state|general)\s+auditor\b|\bAuditor\s+of\s+(?:(?:Public\s+)?Accounts|State)\b",
         re.IGNORECASE)),
     # Pennsylvania's title, word order reversed ("Auditor General"); on
     # its 2028 ballot, not 2026's, but its adapter reads every office.

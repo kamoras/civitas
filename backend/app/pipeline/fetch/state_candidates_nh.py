@@ -70,6 +70,28 @@ in rather than being silently excluded. The SAME office's OTHER party's
 real nominee is always read from ITS OWN separate file, never summed
 together with this one.
 
+STATEWIDE OFFICES (only when the entry sets statewide_offices). The same
+party pages list a "Governor Summary" workbook beside ten per-county
+"Governor <County>" ones -- the Senate's exact shape, so the same
+"summary"-only rule applies, and the workbook is read the same way
+(own-party columns only: Kelly Ayotte's 2,643 write-ins on the real 2026
+Democratic ballot are not hers to keep there). The Governor is New
+Hampshire's only statewide-elected executive officer; its Secretary of
+State and Treasurer are chosen by the legislature.
+
+The Executive Council is deliberately NOT read, though its five
+"Executive Council District N" workbooks sit on the same pages. Each
+councillor is elected by the voters of one district only (N.H. Const.
+Pt. II Art. 60; RSA 662:2 draws the five districts) --
+unlike Georgia's Public Service Commission, which the whole state
+elects -- so listing all five seats under "statewide" would
+show four contests a given voter cannot vote in, with nothing on the page
+to tell them which is theirs. The page names the gap instead (the
+entry's `statewide_omits`). State Senate and House workbooks are left
+out too: several Senate files carry more than one district as separate
+sheets, and the House's are per-county workbooks of multi-member
+districts, neither checked against the shared parsers.
+
 New Hampshire nominates by PLURALITY — no runoff mechanism exists for a
 federal primary — so `runoff_threshold_pct` is null, and each party's
 real winner is picked via the shared tie-safe `pick_nominee` from real
@@ -94,7 +116,14 @@ from urllib.parse import urljoin
 import httpx
 
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_bytes_with_retry, fetch_text_with_retry
-from app.pipeline.fetch.state_candidates_common import federal_record, parse_office, pick_nominee
+from app.pipeline.fetch.state_candidates_common import (
+    STATEWIDE_OFFICE_LABELS,
+    clean_display_name,
+    federal_record,
+    parse_office,
+    parse_statewide_office,
+    pick_nominee,
+)
 from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _settled, _xlsx_rows
 from app.pipeline.fetch.state_election_dates import primary_date
 from app.pipeline.rate_limiter import RateLimiter
@@ -138,11 +167,13 @@ def _links(html: str) -> list[tuple[str, str]]:
 
 
 async def _discover_office_links(
-    client: httpx.AsyncClient, year: int,
-) -> dict[tuple[str, int | None], dict[str, str]] | None:
+    client: httpx.AsyncClient, year: int, statewide: bool = False,
+) -> dict[tuple[str, int | str | None], dict[str, str]] | None:
     """{(office, district): {"d": url, "r": url}} for every real federal
-    office this cycle's results index currently lists. None only on a
-    genuine fetch failure at any hop; an empty/partial dict is a real,
+    office this cycle's results index currently lists -- and, with
+    `statewide`, every statewide executive office too, keyed by its
+    STATEWIDE_OFFICE_LABELS code and seat (see module docstring). None
+    only on a genuine fetch failure at any hop; an empty/partial dict is a real,
     healthy "not published yet" (today's actual reality until each hop
     exists) — see fetch_confirmed_candidates for how they're told apart."""
     root_html = await _get_text(client, _ROOT_URL, f"NH elections root {year}")
@@ -177,10 +208,13 @@ async def _discover_office_links(
             if not href.lower().endswith(".xlsx"):
                 continue
             office_district = parse_office(text)
+            if office_district is None and statewide:
+                office_district = parse_statewide_office(text)
             if office_district is None:
                 continue
-            if office_district == ("S", None) and "summary" not in text.lower():
-                continue  # a per-county Senate breakdown, not the statewide summary
+            elected_statewide = office_district == ("S", None) or office_district[0] in STATEWIDE_OFFICE_LABELS
+            if elected_statewide and "summary" not in text.lower():
+                continue  # a per-county breakdown ("Governor Belknap"), not the statewide summary
             key = (office_district, party_letter)
             if key in ambiguous:
                 continue
@@ -265,11 +299,21 @@ async def fetch_confirmed_candidates(
     if held and not _settled(held, settle_days):
         return []
 
-    offices = await _discover_office_links(client, year)
+    want_statewide = bool(source.get("statewide_offices"))
+    offices = await _discover_office_links(client, year, statewide=want_statewide)
     if offices is None:
         return None
     if not offices:
         return []
+    if want_statewide and not any(office in STATEWIDE_OFFICE_LABELS for office, _ in offices):
+        # New Hampshire elects its Governor every even year (two-year
+        # term, N.H. Const. Pt. II Art. 42), on the same primary pages as
+        # its federal seats. Party pages listing federal contests and no
+        # Governor Summary are a page this module no longer understands,
+        # and under statewide_offices an empty statewide list would be
+        # published as "no statewide offices on this ballot".
+        logger.warning("NH %s: results pages list federal contests but no statewide summary", year)
+        return None
 
     results: list[dict] = []
     for (office, district), party_urls in offices.items():
@@ -285,6 +329,14 @@ async def fetch_confirmed_candidates(
                 return None
             won = pick_nominee(_office_choices(rows, party_letter), runoff_threshold_pct=None)
             if not won:
+                continue
+            if office in STATEWIDE_OFFICE_LABELS:
+                # The whole printed name, not a surname: there is no FEC
+                # row to match a state office against (see
+                # _sync_statewide_nominees).
+                name = clean_display_name(won[0])
+                if name:
+                    results.append({"office": office, "district": district, "party": party, "last_name": name})
                 continue
             record = federal_record(office, district, party, won[0])
             if record:

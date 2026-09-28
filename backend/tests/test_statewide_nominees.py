@@ -590,6 +590,8 @@ class TestSourcesFileOptIns:
         "clarity", "enhanced_voting", "pa_returns", "sd_vip", "tabular", "tally_enr", "totalvote_enr",
         "clarity", "enhanced_voting", "me_results", "or_abstract_pdf", "sd_vip", "tabular",
         "tally_enr", "totalvote_enr",
+        "clarity", "enhanced_voting", "nh_results", "sd_vip", "tabular", "tally_enr",
+        "totalvote_enr", "vt_enr",
     }
 
     def _states(self):
