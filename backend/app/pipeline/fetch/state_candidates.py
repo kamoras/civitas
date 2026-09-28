@@ -265,28 +265,31 @@ def _one_transposition_or_typo(a: str, b: str) -> bool:
 
 def _surname_fallbacks(
     candidates: list[Candidate], target: str, display_name: str | None,
+    keep=lambda found: found,
 ) -> list[Candidate]:
     """Candidates a state's surname reaches only indirectly. Each rule runs
-    only when the one before found nobody, and each still has to come out
-    UNIQUE in the race (the caller refuses anything ambiguous)."""
+    only when the one before found nobody — `keep` decides what "found"
+    means for a rule's result (the caller's plausibility test) — and each
+    still has to come out UNIQUE in the race (the caller refuses anything
+    ambiguous)."""
     # A MULTI-WORD surname survives on the FEC side ("WASSERMAN SCHULTZ,
     # DEBBIE") but not on the state's, because a state publishes a display
     # name and the trailing token is all that can be taken from "Debbie
     # Wasserman Schultz" without guessing where the surname begins.
-    found = [c for c in candidates if _candidate_surname(c.name).split()[-1:] == [target]]
+    found = keep([c for c in candidates if _candidate_surname(c.name).split()[-1:] == [target]])
     if found:
         return found
     # The mirror: the state prints the whole surname and FEC files only its
     # last word — Maryland's "McClain Delaney" is FEC's "DELANEY, APRIL
     # MCCLAIN" (MD-6, 2026).
     if len(target.split()) > 1:
-        found = [c for c in candidates if _candidate_surname(c.name) == target.split()[-1]]
+        found = keep([c for c in candidates if _candidate_surname(c.name) == target.split()[-1]])
         if found:
             return found
     # A married or former surname filed as a given name: the ballot says
     # "Ashley Hinson" and FEC has "ARENHOLZ, ASHLEY HINSON" (IA Senate,
     # 2026 — the Republican nominee, unmatched without this).
-    found = [c for c in candidates if _given_names(c.name)[-1:] == [target]]
+    found = keep([c for c in candidates if _given_names(c.name)[-1:] == [target]])
     if found:
         return found
     # A one-letter slip on either side, only with the given name agreeing
@@ -295,19 +298,38 @@ def _surname_fallbacks(
     # from "Lee" is too many real names.
     wanted = _first_name_key(display_name or "")
     if wanted and len(target) >= 5:
-        return [
+        return keep([
             c for c in candidates
             if _first_name_key(c.name) == wanted
             and _one_transposition_or_typo(_candidate_surname(c.name), target)
-        ]
+        ])
     return []
 
 
 _KNOWN_PARTIES = frozenset(PARTY_CODE_MAP.values())
 
 
-def _contradicts(cand: Candidate, party_code: str, display_name: str | None) -> bool:
-    """Whether a lone same-surname candidate is plainly someone else: a
+def _record_given(display_name: str | None, last_name: str) -> tuple[str, str]:
+    """(first given name, else "", its initial) a record's display name
+    states — its surname's words, honorifics and suffixes set aside, so
+    "J. Smith" states only the initial "j", and "Smith", "Smith Jr." and
+    "Dr. Smith" state nothing."""
+    display = (display_name or "").strip()
+    if "," in display:
+        words = _fold(display.split(",", 1)[1]).replace(".", " ").split()
+    else:
+        surname = set(_fold(last_name or "").replace(".", " ").split())
+        words = [w for w in _fold(display).replace(".", " ").split() if w not in surname]
+    words = ["".join(ch for ch in w if ch.isalpha()) for w in words]
+    words = [w for w in words if w and w not in _NOT_A_NAME]
+    full = next((w for w in words if len(w) > 1), "")
+    return full, (words[0][0] if words else "")
+
+
+def _contradicts(
+    cand: Candidate, party_code: str, display_name: str | None, last_name: str = "",
+) -> bool:
+    """Whether a same-surname candidate is plainly someone else: a
     different party AND a given name that fits none of theirs. Either alone
     is not enough — a party can be coded differently between sources, and
     a nickname ("Jim" for JAMES) fits no FEC token — but both together is a
@@ -318,18 +340,17 @@ def _contradicts(cand: Candidate, party_code: str, display_name: str | None) -> 
     # says nothing either way.
     if not expected or theirs not in _KNOWN_PARTIES or theirs == expected:
         return False
-    display = (display_name or "").strip()
-    # A display name that is a surname alone ("Smith", as Oregon prints
-    # them) has no given name to contradict anyone with.
-    words = [w for w in re.split(r"[\s,]+", display) if any(ch.isalpha() for ch in w)]
-    wanted = _first_name_key(display) if len(words) >= 2 else ""
-    if not wanted:
-        return False
-    tokens = _given_names(cand.name or "")
-    if tokens:
-        return not any(t == wanted or t.startswith(wanted) or wanted.startswith(t) for t in tokens)
-    initial = _given_initial(cand.name or "")
-    return bool(initial) and initial != wanted[0]
+    wanted, initial = _record_given(display_name, last_name)
+    if wanted:
+        tokens = _given_names(cand.name or "")
+        if tokens:
+            return not any(t == wanted or t.startswith(wanted) or wanted.startswith(t) for t in tokens)
+        theirs_initial = _given_initial(cand.name or "")
+        return bool(theirs_initial) and theirs_initial != wanted[0]
+    if initial:  # an initial alone ("J. Smith") against theirs
+        theirs_initial = _given_initial(cand.name or "")
+        return bool(theirs_initial) and theirs_initial != initial
+    return False  # no given name stated: nothing to contradict with
 
 
 def _match_candidate(
@@ -341,7 +362,7 @@ def _match_candidate(
     that is plainly someone else — another party AND another given name
     (_contradicts) — is refused."""
     match = _match_by_surname(candidates, last_name, party_code, display_name)
-    return None if match is not None and _contradicts(match, party_code, display_name) else match
+    return None if match is not None and _contradicts(match, party_code, display_name, last_name) else match
 
 
 def _match_by_surname(
@@ -357,14 +378,17 @@ def _match_by_surname(
         # married name. A tier with anyone plausible is judged whole, as
         # before — dropping only the implausible could turn an ambiguous
         # pair into a false unique match.
-        return [] if tier and all(_contradicts(c, party_code, display_name) for c in tier) else tier
+        return [] if tier and all(_contradicts(c, party_code, display_name, last_name) for c in tier) else tier
 
-    matches = plausible([c for c in candidates if _candidate_surname(c.name) == target])
+    exact = [c for c in candidates if _candidate_surname(c.name) == target]
+    matches = plausible(exact)
     if not matches:
-        # The fallback rules see only plausible people: the one that reads a
-        # surname's last word would otherwise find John Hinson again.
+        # Each fallback rule is judged the same way, over everyone but the
+        # exact-surname people just refused (the rule that reads a
+        # surname's last word would otherwise find John Hinson again).
+        refused = {id(c) for c in exact}
         matches = _surname_fallbacks(
-            [c for c in candidates if not _contradicts(c, party_code, display_name)], target, display_name,
+            [c for c in candidates if id(c) not in refused], target, display_name, keep=plausible,
         )
     if len(matches) == 1:
         return matches[0]

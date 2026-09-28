@@ -769,6 +769,33 @@ class TestAWeakerSourceNeverPrunesTheCertifiedBallot:
         rows = db_session.get(Race, "2026-HOUSE-OR-1").candidates
         assert sc._match_candidate(rows, "Smith", "I", "Smith").id == "H1"
 
+    @pytest.mark.parametrize("robert, alice", [
+        ("SMITH JONES, ROBERT", "BROWN JONES, ALICE"),  # the last-word rule
+        ("SMITH, ROBERT JONES", "BROWN, ALICE JONES"),  # the given-name rule
+    ])
+    def test_a_fallback_rule_is_judged_whole_too(self, db_session, robert, alice):
+        """Dropping Alice (plainly not Mary) from a fallback rule's pair would
+        leave Robert, a Conservative, as a false unique match for the
+        Constitution nominee Mary Jones."""
+        _race(db_session, "2026-HOUSE-NY-2", "NY", office="H", district=2)
+        _candidate(db_session, "H1", "2026-HOUSE-NY-2", robert, party="CRV")
+        _candidate(db_session, "H2", "2026-HOUSE-NY-2", alice, party="REP")
+        db_session.commit()
+        rows = db_session.get(Race, "2026-HOUSE-NY-2").candidates
+        assert sc._match_candidate(rows, "JONES", "C", "Mary Jones") is None
+
+    @pytest.mark.parametrize("display, matches", [
+        ("J. Smith", True), ("Smith Jr.", True), ("Dr. Smith", True), ("Smith", True),
+        ("M. Smith", False),  # an initial that isn't his
+    ])
+    def test_only_a_stated_given_name_can_contradict(self, db_session, display, matches):
+        _race(db_session, "2026-HOUSE-OR-2", "OR", office="H", district=2)
+        _candidate(db_session, "H1", "2026-HOUSE-OR-2", "SMITH, JOHN", party="DEM")
+        db_session.commit()
+        rows = db_session.get(Race, "2026-HOUSE-OR-2").candidates
+        found = sc._match_candidate(rows, "Smith", "I", display)
+        assert (found is not None and found.id == "H1") is matches
+
     def test_a_nickname_or_a_recoded_party_alone_still_matches(self, db_session):
         _race(db_session, "2026-HOUSE-CA-6", "CA", office="H", district=6)
         _candidate(db_session, "H1", "2026-HOUSE-CA-6", "JONES, JAMES", party="DEM")
