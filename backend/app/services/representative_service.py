@@ -29,6 +29,7 @@ from app.schemas import (
     StockTradeSchema,
     STOCK_ACT_DISCLOSURE_DEADLINE_DAYS,
 )
+from app.services.bill_record import roll_call_summaries
 from app.services.pagination import paginate_bounds
 from app.services.score_trends import compute_score_trend_map
 from app.services.senator_service import (
@@ -526,6 +527,7 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
             party_leaning=v.get("partyLeaning"),
             voted_with_party=v.get("votedWithParty"),
             vote_category=category,
+            roll_call=v.get("rollCall"),
         ))
 
     db.query(RepLobbyingMatch).filter(RepLobbyingMatch.representative_id == rid).delete()
@@ -609,10 +611,9 @@ def get_rep_votes(
     if rep is None:
         return None
 
-    base_q = db.query(RepKeyVote).filter(
-        RepKeyVote.representative_id == rep_id,
-        RepKeyVote.vote_category == category,
-    )
+    base_q = db.query(RepKeyVote).filter(RepKeyVote.representative_id == rep_id)
+    if category != "all":
+        base_q = base_q.filter(RepKeyVote.vote_category == category)
 
     count_all = base_q.count()
     count_yea = base_q.filter(RepKeyVote.vote == "Yea").count()
@@ -632,6 +633,7 @@ def get_rep_votes(
 
     # id tiebreaker — same rationale as the senator vote pagination.
     votes_db = query.order_by(RepKeyVote.date.desc(), RepKeyVote.id.desc()).offset((page - 1) * per_page).limit(per_page).all()
+    roll_calls = roll_call_summaries(db, [v.roll_call for v in votes_db])
 
     return {
         "votes": [
@@ -648,6 +650,7 @@ def get_rep_votes(
                 "partyLeaning": v.party_leaning,
                 "votedWithParty": v.voted_with_party,
                 "voteCategory": v.vote_category or "key",
+                "rollCall": roll_calls.get(v.roll_call),
             }
             for v in votes_db
         ],
