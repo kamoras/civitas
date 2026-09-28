@@ -52,7 +52,7 @@ import type {
  * unopposed nominee, where there is no contrast to read the party from
  * at all. */
 function NomineeName({ nominee }: { nominee: StatewideNominee }) {
-  const major = majorPartyOf(nominee.party);
+  const major = majorPartyOf(nominee);
   return (
     <span className="inline-flex items-baseline gap-1">
       <span className="font-mono text-[10px] text-ink-min">{nominee.party}</span>
@@ -545,8 +545,8 @@ function HouseDistrictOption({
   onPick: () => void;
 }) {
   const { leaders } = tierCandidates(race.candidates.filter(isActiveCandidate));
-  const dem = leaders.find((c) => majorPartyOf(c.party) === "DEM");
-  const rep = leaders.find((c) => majorPartyOf(c.party) === "REP");
+  const dem = leaders.find((c) => majorPartyOf(c) === "DEM");
+  const rep = leaders.find((c) => majorPartyOf(c) === "REP");
   const countiesLabel = districtAreaLabel(race.counties);
 
   return (
@@ -972,7 +972,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   // What the header counts — the ballot's shape at a glance.
   const federalRaces = [...ballot.senateRaces, ...ballot.houseRaces];
   const federalCandidates = federalRaces.flatMap((r) => r.candidates.filter(isActiveCandidate));
-  const thirdParty = federalCandidates.filter((c) => majorPartyOf(c.party) === null).length;
+  const thirdParty = federalCandidates.filter((c) => majorPartyOf(c) === null).length;
   const withRecords = federalCandidates.filter((c) => c.incumbentRecord).length;
 
   function detailFor(contest: BallotContest) {

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from datetime import date, timedelta
 
+from app.retractions import retraction_for_issue
 from app.api.admin import require_admin
 from app.api.rate_limit import WriteRateLimit, client_ip
 from app.database import get_db, get_visits_db
@@ -470,6 +471,11 @@ async def get_action_issue(issue_id: str, response: Response, db: Session = Depe
     )
     if not issue:
         from fastapi import HTTPException
+        retracted = retraction_for_issue(issue_id)
+        if retracted:
+            # 410, with the reason: a link someone saw in a withdrawn post
+            # explains itself instead of reading as a broken page.
+            raise HTTPException(status_code=410, detail={"retracted": True, **retracted})
         raise HTTPException(status_code=404, detail="Issue not found")
     # Pass None, not {} — an empty map is a *populated* prefetch that happens to
     # contain nothing, so _build_issue_response would resolve every related

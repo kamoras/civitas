@@ -234,7 +234,7 @@ def _db_cand(db, cid, race_id, name, party, **kw):
 @pytest.fixture()
 def only(monkeypatch):
     async def no_calendar(client, cycle):
-        return {}
+        return {}, False
     monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
 
     def scope(state, records):
@@ -420,7 +420,7 @@ def test_canvass_reads_the_states_own_winner_marks():
 @pytest.mark.asyncio
 async def test_a_states_fallback_runs_when_its_source_returns_nothing(db_session, monkeypatch):
     async def no_calendar(client, cycle):
-        return {}
+        return {}, False
     monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
     monkeypatch.setattr(sc, "configured_states", lambda: {"WI"})
     monkeypatch.setitem(sc.STRATEGIES, "canvass_summary_pdf", AsyncMock(return_value=None))
@@ -456,7 +456,7 @@ def test_a_complete_ballot_readmits_no_unopposed_filer(db_session):
 @pytest.mark.asyncio
 async def test_a_fallback_answer_is_labelled_nominees_not_confirmed(db_session, monkeypatch):
     async def no_calendar(client, cycle):
-        return {}
+        return {}, False
     monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
     monkeypatch.setattr(sc, "configured_states", lambda: {"CO"})
     monkeypatch.setitem(sc.STRATEGIES, "certified_table", AsyncMock(return_value=None))
@@ -525,7 +525,7 @@ async def test_a_certified_general_list_decides_federal_races_over_primary_resul
     # certified list names Jackson. The list runs first and alone decides;
     # Platner is never confirmed, not even for a moment within the run.
     async def no_calendar(client, cycle):
-        return {}
+        return {}, False
     monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
     monkeypatch.setattr(sc, "configured_states", lambda: {"ME"})
     monkeypatch.setitem(sc.STRATEGIES, "me_results", AsyncMock(return_value=[_rec("S", None, "D", "Platner", "Graham Platner")]))
@@ -837,7 +837,7 @@ async def test_a_partial_certified_list_decides_only_the_races_it_covers(db_sess
     # for. It decides those races; primary results still fill the rest, and
     # the page may call only the covered races "confirmed".
     async def no_calendar(client, cycle):
-        return {}
+        return {}, False
     monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
     monkeypatch.setattr(sc, "configured_states", lambda: {"ME"})
     monkeypatch.setitem(sc.STRATEGIES, "me_results", AsyncMock(return_value=[
@@ -882,6 +882,12 @@ def test_the_states_printed_name_is_kept_but_never_a_last_first_one(db_session):
     # marks a "Last, First" printing, which is left to the FEC name.
     assert olszewski.ballot_name == 'John "Johnny O" Olszewski, Jr.'
     assert wallace.ballot_name is None
+
+    # "Last, First, Jr." is still a last-first printing, suffix or not; so is
+    # "Lee, Jr.", a surname and its suffix.
+    for printed in ("OLSZEWSKI, JOHN, JR.", "Wallace, Jr."):
+        sc._note_ballot_name(db_session, wallace, {"display_name": printed})
+        assert wallace.ballot_name is None
 
 
 from app.pipeline.fetch.state_candidates_grouped_list_pdf import (  # noqa: E402

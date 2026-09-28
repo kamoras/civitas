@@ -221,7 +221,7 @@ function DistrictPreview({ state, race }: { state: string; race: RaceWithCandida
       </span>
       <span className="text-ink-min">{formatPvi(race.pvi)}</span>
       {top.map((c) => {
-        const major = majorPartyOf(c.party);
+        const major = majorPartyOf(c);
         return (
           <span
             key={c.id}

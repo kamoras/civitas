@@ -16,16 +16,47 @@ import IssueActions from "./IssueActions";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
-async function fetchIssue(id: string): Promise<ActionIssue | null> {
+interface Retraction {
+  date: string;
+  reason: string;
+}
+
+/** The issue; or, for one Civitas withdrew (410, backend/app/data/
+ * retractions.json), the date and reason; or null. */
+async function fetchIssueOrRetraction(id: string): Promise<{ issue: ActionIssue | null; retraction: Retraction | null }> {
   try {
     const res = await fetch(`${BACKEND}/api/action/issues/${encodeURIComponent(id)}`, {
       next: { revalidate: 300 },
     });
-    if (!res.ok) return null;
-    return usableRecord<ActionIssue>(await res.json(), "id", "title");
+    if (res.status === 410) {
+      const detail = (await res.json())?.detail;
+      return { issue: null, retraction: detail?.reason ? { date: detail.date, reason: detail.reason } : null };
+    }
+    if (!res.ok) return { issue: null, retraction: null };
+    return { issue: usableRecord<ActionIssue>(await res.json(), "id", "title"), retraction: null };
   } catch {
-    return null;
+    return { issue: null, retraction: null };
   }
+}
+
+function Withdrawn({ retraction }: { retraction: Retraction }) {
+  return (
+    <div className="min-h-screen bg-surface-base font-sans text-ink-hi">
+      <Navbar />
+      <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
+        <div className="mx-auto flex max-w-2xl flex-col gap-4">
+          <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">Withdrawn {retraction.date}</p>
+          <h1 className="font-display text-3xl font-extrabold text-ink-hi">This issue was withdrawn</h1>
+          <p className="leading-relaxed text-ink">{retraction.reason}</p>
+          <p className="text-sm text-ink-lo">
+            Every withdrawal is listed, with its reason, in the public retraction log in the Civitas
+            source code. <Link href={ACTION_CENTER_HREF} className="underline decoration-white/30 underline-offset-4 hover:text-phos">Current issues</Link>
+          </p>
+        </div>
+      </main>
+      <Footer />
+    </div>
+  );
 }
 
 export async function generateMetadata({
@@ -34,8 +65,16 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const issue = await fetchIssue(id);
+  const { issue, retraction } = await fetchIssueOrRetraction(id);
 
+  if (retraction) {
+    return pageMetadata({
+      title: "Issue withdrawn",
+      description: retraction.reason,
+      path: `/issue/${encodeURIComponent(id)}`,
+      noindex: true,
+    });
+  }
   if (!issue) {
     return pageMetadata({
       title: "Issue not found",
@@ -65,7 +104,8 @@ export async function generateMetadata({
 
 export default async function IssuePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const issue = await fetchIssue(id);
+  const { issue, retraction } = await fetchIssueOrRetraction(id);
+  if (retraction) return <Withdrawn retraction={retraction} />;
 
   // A real 404, not a 200 page that says "not found": search engines
   // index the latter as a thin duplicate of every other missing id.

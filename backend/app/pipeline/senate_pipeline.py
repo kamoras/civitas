@@ -459,6 +459,11 @@ _NOT_ANALYSIS_PATHS = {
     # Which bills a lobbying filing names: shown beside donor-vote
     # connections, read by no classifier or score.
     "pipeline/analyze/lobbying_records.py",
+    # The election run's orchestration: candidate rosters, ballots, measures
+    # and coverage, none of it classified or scored. Its matching and
+    # posting logic lives in analyze/ and fetch/, and is hashed (or not)
+    # there.
+    "pipeline/election_pipeline.py",
     *_COORDINATION_PATHS,
 }
 
