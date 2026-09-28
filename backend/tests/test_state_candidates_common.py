@@ -231,6 +231,26 @@ class TestBallotListParty:
         # A lone code letter (Texas's "W" is a write-in) names no party.
         assert common.ballot_list_party("W") is None
 
+    def test_a_non_partisan_entry_is_non_partisan_not_independent(self):
+        """North Dakota's Superintendent of Public Instruction candidates
+        are printed "Nonpartisan" (its 2026 list): a state row keeps that
+        word under NONPARTISAN. The federal reading is unchanged."""
+        assert common.ballot_list_party("Nonpartisan") == ("N", "Nonpartisan")
+        assert common.ballot_list_party("NON-PARTISAN") == ("N", "NON-PARTISAN")
+        assert common.normalize_party("Nonpartisan", ballot_list=True) == "I"
+        assert common.NONPARTISAN not in common.PARTY_CODE_MAP
+        assert common.state_nominee_party("N") == "N"
+
+    def test_a_party_named_independent_is_a_party(self):
+        """Florida's IND is the Independent Party of Florida (the
+        Division's own party list), Delaware's is FEC's IDE."""
+        assert common.ballot_list_party("Independent Party of Florida") == (
+            "O", "Independent Party of Florida")
+        assert common.normalize_party("Independent Party of Delaware", ballot_list=True) is None
+        # The word alone is still no party.
+        assert common.ballot_list_party("Independent") == ("I", None)
+        assert common.ballot_list_party("independent nomination") == ("I", None)
+
     def test_other_party_never_takes_part_in_federal_matching(self):
         """"O" names no party, so it is not an FEC party code of ours --
         a federal candidate is never matched or contradicted through it."""

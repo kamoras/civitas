@@ -34,14 +34,24 @@ cannot supply this: it cancels a primary nobody contests, so its 2026
 results never mention an Attorney General at all (James Uthmeier and Jose
 Javier Rodriguez were both unopposed for their nominations).
 
+Party codes are the Division's own (ASP, MGT, IND, LPF...), and a code is
+not what a reader should see: each is read through the Division's
+political-parties page (`party_legend_url`, dos.fl.gov), which names every
+registered party beside its code -- "American Solidarity Party of
+Florida" (ASP), "MGTOW Party" (MGT), and "Independent Party of Florida"
+(IND), a party, where the code alone read as an independent. Without the
+legend the state offices are not read that run.
+
 A special election held with the general is a separate election id on the
 Division's index ("20261103-S01", the 2026 State Senate District 21
 vacancy) but the same November ballot, so under the opt-in each such id
 found on `special_index_url` is read too, for state offices only.
 """
 
+import html
 import logging
 import re
+from datetime import UTC, datetime, timedelta
 
 import httpx
 from lxml import html as lxml_html
@@ -72,7 +82,9 @@ _WRITE_IN = "WRI"
 _STATE_ON_BALLOT = frozenset({"QUALIFIED"})
 
 
-def _state_record(heading: str, district: int | None, name_cell: str) -> dict | None:
+def _state_record(
+    heading: str, district: int | None, name_cell: str, legend: dict[str, str] | None = None,
+) -> dict | None:
     """The statewide-executive or legislative record for one qualified
     candidate under `heading`, or None when the gates refuse it."""
     label = f"{heading} District {district}" if district is not None else heading
@@ -88,7 +100,12 @@ def _state_record(heading: str, district: int | None, name_cell: str) -> dict | 
     m = _NAME_RE.match(name_cell)
     if not m or m.group("party") == _WRITE_IN:
         return None
-    party = ballot_list_party(m.group("party"))
+    # The code as the Division prints it beside the name, read through
+    # its own legend: ASP is the "American Solidarity Party of Florida",
+    # and IND the Independent Party of Florida -- a party, not "no party"
+    # (NPA). A code the legend does not list (NPA) is read as printed.
+    code = m.group("party")
+    party = ballot_list_party((legend or {}).get(code, code))
     name = clean_display_name(f"{m.group('first')} {m.group('last').strip()}".replace("*Incumbent", ""))
     if party is None or len(name.split()) < 2:
         return None
@@ -100,11 +117,43 @@ def _state_record(heading: str, district: int | None, name_cell: str) -> dict | 
     return record
 
 
+# One political-parties page entry: the party's name (a link) and its
+# code in parentheses, sometimes inside a <span> -- "<a ...>American
+# Solidarity Party of Florida</a> (ASP)", "<a ...>MGTOW Party</a><span>
+# (MGT)</span>" (dos.fl.gov, read 2026-09-28).
+_LEGEND_RE = re.compile(r">([^<>]+)</a>\s*(?:<span>)?\s*\(([A-Z]{2,4})\)")
+_LEGEND_TTL = timedelta(hours=24)
+_legend_cache: dict[str, tuple[datetime, dict[str, str]]] = {}
+
+
+def parse_party_legend(page: str) -> dict[str, str]:
+    """{code: party name} from the Division's political-parties page,
+    disbanded parties included (a code on an old list still names one)."""
+    return {code: " ".join(html.unescape(name).split()) for name, code in _LEGEND_RE.findall(page)}
+
+
+async def _party_legend(client: httpx.AsyncClient, url: str | None, state: str) -> dict[str, str] | None:
+    """The state's own code -> party-name legend, fetched live and kept
+    for a day (parties are registered, not renamed, between runs). None
+    when it cannot be read or names nobody."""
+    if not url:
+        return None
+    cached = _legend_cache.get(url)
+    if cached and datetime.now(UTC) - cached[0] < _LEGEND_TTL:
+        return cached[1]
+    page = await fetch_text_with_retry(client, _rate_limiter, url, f"{state} political parties")
+    legend = parse_party_legend(page or "")
+    if not legend:
+        return None
+    _legend_cache[url] = (datetime.now(UTC), legend)
+    return legend
+
+
 def _cells(tr) -> list[str]:
     return [" ".join((td.text_content() or "").replace("\xa0", " ").split()) for td in tr.xpath("./td")]
 
 
-def _state_rows(table, heading: str) -> list[dict]:
+def _state_rows(table, heading: str, legend: dict[str, str] | None = None) -> list[dict]:
     """Every qualified state-office candidate in one office's table. A
     district office's table leads with a District column filled only on
     each district's first row, exactly as for the U.S. House."""
@@ -118,13 +167,15 @@ def _state_rows(table, heading: str) -> list[dict]:
             cells = cells[1:]
         if len(cells) < 2 or cells[1].upper() not in _STATE_ON_BALLOT:
             continue
-        record = _state_record(heading, district, cells[0])
+        record = _state_record(heading, district, cells[0], legend)
         if record is not None:
             records.append(record)
     return records
 
 
-def parse_canlist(page: str, state_offices: bool = False, federal: bool = True) -> list[dict]:
+def parse_canlist(
+    page: str, state_offices: bool = False, federal: bool = True, legend: dict[str, str] | None = None,
+) -> list[dict]:
     """Candidates still on the general ballot, from the report: federal
     ones, and with `state_offices` the state executive and legislative
     ones too."""
@@ -136,7 +187,7 @@ def parse_canlist(page: str, state_offices: bool = False, federal: bool = True) 
         office = parse_office(heading_text) if heading_text else None
         if office is None:
             if state_offices and heading_text:
-                records += _state_rows(table, heading_text)
+                records += _state_rows(table, heading_text, legend)
             continue
         if not federal:
             continue
@@ -204,6 +255,12 @@ async def fetch_confirmed_candidates(
             # from a report that holds only federal offices.
             logger.warning("%s dos_canlist statewide_offices needs state_office_groups and special_index_url", state)
             return None
+        legend = await _party_legend(client, source.get("party_legend_url"), state)
+        if legend is None:
+            # Without the names a party code would render as a bare code,
+            # and IND (a party) as an independent. The state offices wait.
+            logger.warning("%s party legend unavailable -- state offices not read this run", state)
+            return records
         index = await fetch_text_with_retry(client, _rate_limiter, index_url, f"{state} candidate list index")
         if index is None:
             return None
@@ -213,7 +270,7 @@ async def fetch_confirmed_candidates(
             if page is None:
                 # A missing group would publish its offices as absent.
                 return None
-            part = parse_canlist(page, state_offices=True, federal=False)
+            part = parse_canlist(page, state_offices=True, federal=False, legend=legend)
             if not part and elecid == election_id:
                 logger.warning("%s candidate list %s %s had no qualified state candidate", state, elecid, group)
                 return None
