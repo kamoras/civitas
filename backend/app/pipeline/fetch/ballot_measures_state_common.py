@@ -66,21 +66,30 @@ async def get_text(client: httpx.AsyncClient, url: str, label: str, **kwargs) ->
     return await fetch_text_with_retry(client, _rate_limiter, url, label, **kwargs)
 
 
+async def get_text_or_missing(client: httpx.AsyncClient, url: str, label: str) -> tuple[str | None, bool]:
+    """(body, missing): body None with missing True is a 404 (the page
+    isn't there); with missing False, any other failure."""
+    resp = await fetch_with_retry(
+        client, _rate_limiter, "GET", url, log_label=label, headers=BROWSER_HEADERS,
+        expected_statuses=(404,),
+    )
+    if resp is None:
+        return None, False
+    if resp.status_code == 404:
+        return None, True
+    return resp.text, False
+
+
 async def get_text_unless_missing(client: httpx.AsyncClient, url: str, label: str, awaited: str) -> str | None:
     """get_text for a page a state creates only when it has something to
     post: a 404 there raises NotYetPublished(`awaited`) — not yet covered,
     no alert — while any other failure is still None (ingest_failed). Use
     it only where the address is the state's own per-election convention
     and its absence is known to mean "not posted"."""
-    resp = await fetch_with_retry(
-        client, _rate_limiter, "GET", url, log_label=label, headers=BROWSER_HEADERS,
-        expected_statuses=(404,),
-    )
-    if resp is None:
-        return None
-    if resp.status_code == 404:
+    text, missing = await get_text_or_missing(client, url, label)
+    if missing:
         raise NotYetPublished(awaited)
-    return resp.text
+    return text
 
 
 async def get_bytes(client: httpx.AsyncClient, url: str, label: str) -> bytes | None:

@@ -5,7 +5,7 @@ and parsing strategy — no API key, no Vote Smart.
 This is deliberately NOT one parser that guesses an arbitrary state's PDF
 layout. Every state's Secretary of State (or equivalent) publishes its
 own format — California's Voter Information Guide has a two-level nested-
-column "Quick Reference Guide" page (see ballot_measures_ca.py); other
+column layout (see ballot_measures_ma.py); other
 states may turn out to need a completely different geometric strategy, or
 none at all. Guessing a layout risks exactly the failure mode this
 codebase treats as worst-case: a plausible-looking but WRONG yes/no
@@ -20,7 +20,7 @@ STRATEGIES maps a source's "strategy" key to that state's whole-document
 parser function: `pages -> list[dict]` (pdfplumber's `pdf.pages`, not one
 page) with keys number/title/origin/official_summary/fiscal_impact/
 yes_means/no_means/title_authority/fiscal_authority (see
-ballot_measures_ca.parse_document for the reference implementation and
+ballot_measures_ma.parse_information_for_voters for a reference implementation and
 field-by-field contract). Operating on the whole document rather than one
 page at a time is deliberate: California's format happens to fit one
 proposition-pair per page, but Massachusetts's does not — a long ballot
@@ -44,7 +44,7 @@ from app.pipeline.fetch.ballot_measure_pdf_sources import source_for_state
 from app.pipeline.fetch.ballot_measure_text import NotYetPublished
 from app.pipeline.fetch.ballot_measures_al import fetch_measures as al_fetch_measures
 from app.pipeline.fetch.ballot_measures_ar import fetch_measures as ar_fetch_measures
-from app.pipeline.fetch.ballot_measures_ca import parse_document as parse_ca_document
+from app.pipeline.fetch.ballot_measures_ca import fetch_measures as ca_fetch_measures
 from app.pipeline.fetch.ballot_measures_co import parse_document as parse_co_document
 from app.pipeline.fetch.ballot_measures_fl import fetch_measures as fl_fetch_measures
 from app.pipeline.fetch.ballot_measures_ky import fetch_measures as ky_fetch_measures
@@ -191,7 +191,6 @@ async def discover_pdf_url_checked(
     return None, complete and fetched > 0
 
 STRATEGIES = {
-    "ca_quick_reference": parse_ca_document,
     "ma_information_for_voters": parse_ma_document,
     "co_quick_ballot_reference": parse_co_document,
     "la_proposed_amendments": parse_la_document,
@@ -211,6 +210,7 @@ STRATEGIES = {
 # (parsed, source_url) pairs directly. See each module's own docstring
 # for why that state specifically needs this and most states don't.
 MULTI_DOCUMENT_STRATEGIES = {
+    "ca_voter_guide_html": ca_fetch_measures,
     "va_referenda": va_fetch_measures,
     "mo_ballot_measures": mo_fetch_measures,
     "ct_sample_ballots": ct_fetch_measures,

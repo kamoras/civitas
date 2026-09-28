@@ -5,7 +5,7 @@ registered in ballot_measures_pdf.py's generic fetch/cache/upsert
 pipeline; this module owns only the page-parsing logic specific to
 Massachusetts's document.
 
-WHY THIS EXISTS: same reason as ballot_measures_ca.py — replacing Vote
+WHY THIS EXISTS: the same reason as every direct reader — replacing Vote
 Smart with the state's own real document, state by state. Massachusetts
 publishes a "Question N: <origin>" section per ballot question with
 official SUMMARY, "WHAT YOUR VOTE WILL DO" (A YES VOTE.../A NO VOTE...
@@ -15,7 +15,7 @@ different document layout. Verified against two real elections' guides
 (2024 general, 56 pages, 5 real questions; 2022 general, 5 questions
 across the guide) at a STABLE URL pattern
 (.../IFV_{year}.pdf) — the same two-election bar
-ballot_measures_ca.py's URL pattern was held to.
+California's former PDF URL pattern was held to.
 
 THE HARD PART, different from California: this page format is NOT one
 fixed two-level nested column layout. It has THREE separate challenges,

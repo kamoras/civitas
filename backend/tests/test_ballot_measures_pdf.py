@@ -1,8 +1,8 @@
 """Tests for the generic ballot-measure PDF pipeline stage: fetch, cache,
 and normalize any registered state's PDF into the shape
 election_pipeline._upsert_measure expects. Per-state page-parsing logic
-(e.g. California's) is tested in its own module
-(test_ballot_measures_ca.py) — these tests exercise the shared
+is tested in each state's own module (test_ballot_measures_<st>.py) —
+these tests exercise the shared
 fetch/cache/dispatch code and use a fake strategy rather than a real PDF.
 """
 

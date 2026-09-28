@@ -1,8 +1,8 @@
 """Colorado's ballot-measure PDF strategy — parses the Legislative
 Council's "Blue Book", "Quick Ballot Reference Guide" section (one of
 potentially many per-state strategies in ballot_measures_pdf.py; see
-that module and ballot_measures_ca.py for the shared contract and
-geometry helpers this reuses).
+that module and ballot_measure_pdf_geometry.py for the shared contract
+and geometry helpers this reuses).
 
 Each measure: a large decorative letter/number badge (29pt+, e.g. "G",
 "KK", "127" — filtered out by font size, not content, since the badge

@@ -4,10 +4,9 @@
   "_as_of": "2026-08-07",
   "states": {
     "CA": {
-      "url_pattern": "https://vig.cdn.sos.ca.gov/{year}/general/pdf/complete-vig.pdf",
       "source_name": "California Secretary of State",
-      "strategy": "ca_quick_reference",
-      "description": "Official Voter Information Guide, 'Quick Reference Guide' section. Verified against the real 2024 general (144 pages, 10 real propositions) and 2026 primary (64 pages, zero propositions) guides; only the general guide is fetched, and one with no proposition found fails the state rather than reading as none. url_pattern's {year} is substituted at fetch time; the general-election path is the only one that carries propositions."
+      "strategy": "ca_voter_guide_html",
+      "description": "The Official Voter Information Guide as HTML — voterguide.sos.ca.gov for the current election, vigarchive.sos.ca.gov/<year>/general/ once archived; the guide whose banner names the year's general election is used. Per proposition: the Attorney General's Official Title and Summary, the Legislative Analyst's fiscal estimate, and the state's own 'A YES/NO vote on this measure means' sentences, verbatim; the count read must equal the guide's own index. Replaced the PDF reader, whose 2026 guide text layer maps fi/fl/ff ligatures to a bare 'f' ('infation', 'fnance'). Verified live 2026-09-28: 14 propositions on the November 3, 2026 guide, 10 on the archived 2024 guide. See ballot_measures_ca.py."
     },
     "MA": {
       "url_pattern": "https://www.sec.state.ma.us/divisions/elections/download/research-and-statistics/IFV_{year}.pdf",
