@@ -180,14 +180,21 @@ def is_configured(state: str) -> bool:
     return source is not None and source.get("strategy") in STRATEGIES
 
 
-def _race_id_for(cycle: int, state: str, office: str, district: int | None) -> str:
-    """Same id convention election_pipeline._race_id uses for a REGULAR
-    race. Nothing registered here reaches a special election: every
-    adapter's discovery matches that state's PRIMARY by name, so a
-    special's results are never fetched in the first place. A state whose
-    special general shares this cycle's ballot would need both that
-    discovery and this id taught the "-SPECIAL" suffix."""
+def _race_id_for(db: Session, cycle: int, state: str, office: str, district: int | None) -> str:
+    """The race a state's record belongs to, by election_pipeline._race_id's
+    convention. A Senate record goes to the state's one Senate race this
+    cycle, regular or special: Florida and Ohio elect a senator in 2026
+    only to fill a vacancy, so their race is "2026-SEN-FL-SPECIAL", and a
+    record keyed to the regular id matched nothing — both pages showed
+    every FEC filer instead of the certified ballot. With both a regular
+    and a special race in one state (Georgia, 2020) a record carries
+    nothing to choose between them, so it stays with the regular race."""
     if office == "S":
+        senate = [rid for (rid,) in db.query(Race.id).filter(
+            Race.cycle_year == cycle, Race.state == state, Race.office == "S",
+        )]
+        if len(senate) == 1:
+            return senate[0]
         return f"{cycle}-SEN-{state}"
     return f"{cycle}-HOUSE-{state}-{district if district is not None else 0}"
 
@@ -578,7 +585,7 @@ def _apply_ballot(
     ballot_only: set[str] = set()
     listed: dict[str, set[str]] = {}
     for record in records:
-        race_id = _race_id_for(cycle, state, record["office"], record["district"])
+        race_id = _race_id_for(db, cycle, state, record["office"], record["district"])
         race = db.query(Race).filter(Race.id == race_id).first()
         if race is None:
             unmatched += 1
@@ -1240,7 +1247,7 @@ def _note_ballot_name(db: Session, cand: Candidate, record: dict) -> None:
 
 def _confirmed_match(db: Session, cycle: int, state: str, record: dict):
     race = db.query(Race).filter(
-        Race.id == _race_id_for(cycle, state, record["office"], record["district"]),
+        Race.id == _race_id_for(db, cycle, state, record["office"], record["district"]),
     ).first()
     if race is None:
         return None
@@ -1622,7 +1629,7 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
             # as if the list did not exist for them. Primary results above
             # still supplied the state offices, which the list may not cover.
             general_federal = [r for r in general_records if r["office"] in ("S", "H")]
-            covered = {_race_id_for(cycle, state, r["office"], r["district"]) for r in general_federal}
+            covered = {_race_id_for(db, cycle, state, r["office"], r["district"]) for r in general_federal}
             races_here = {
                 rid for (rid,) in db.query(Race.id).filter(Race.state == state, Race.cycle_year == cycle)
             }
@@ -1630,7 +1637,7 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
                 db, cycle, state, general_federal, keep_unlisted=True, authoritative=True,
                 scope=covered,
             )
-            rest = [r for r in records if _race_id_for(cycle, state, r["office"], r["district"]) not in covered]
+            rest = [r for r in records if _race_id_for(db, cycle, state, r["office"], r["district"]) not in covered]
             if rest:
                 # Primary results beside a certified list never prune: a
                 # race the list didn't answer for tonight (an empty or
