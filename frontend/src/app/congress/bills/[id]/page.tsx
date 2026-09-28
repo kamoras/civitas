@@ -68,7 +68,7 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
     return pageMetadata({ ...describeBill(detail), path, type: "article" });
   }
   return pageMetadata({
-    title: `${record!.billLabel ?? billId}: ${record!.title ?? ""}`.trim(),
+    title: record!.title ? `${record!.billLabel ?? billId}: ${record!.title}` : record!.billLabel ?? billId,
     description: record!.summary?.paragraphs[1] ?? record!.latestAction?.text ?? `${record!.billLabel} in the ${ordinal(record!.congress)} Congress.`,
     path,
     type: "article",
