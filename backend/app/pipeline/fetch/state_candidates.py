@@ -332,19 +332,31 @@ def _match_candidate(
     candidates: list[Candidate], last_name: str, party_code: str,
     display_name: str | None = None,
 ) -> Candidate | None:
+    """The one candidate `last_name` (with party and display name to break
+    ties) names in `candidates`, or None. Whatever path chose it, a match
+    that is plainly someone else — another party AND another given name
+    (_contradicts) — is refused."""
+    match = _match_by_surname(candidates, last_name, party_code, display_name)
+    return None if match is not None and _contradicts(match, party_code, display_name) else match
+
+
+def _match_by_surname(
+    candidates: list[Candidate], last_name: str, party_code: str,
+    display_name: str | None = None,
+) -> Candidate | None:
     target = _candidate_surname(last_name)
     matches = [c for c in candidates if _candidate_surname(c.name) == target]
     if not matches:
         matches = _surname_fallbacks(candidates, target, display_name)
     if len(matches) == 1:
-        return None if _contradicts(matches[0], party_code, display_name) else matches[0]
+        return matches[0]
     if not matches:
         return None
 
     expected_party = PARTY_CODE_MAP.get(party_code)
     pool = [c for c in matches if fec_party(c.party) == expected_party] or matches
     if len(pool) == 1:
-        return None if _contradicts(pool[0], party_code, display_name) else pool[0]
+        return pool[0]
     # Two candidates sharing a surname AND a party. A given name separates
     # them where party cannot: Alaska's 2026 top-four advances two
     # Sullivans, TX-34 has Eric and Mayra Flores, AZ-7 Raúl and Adelita

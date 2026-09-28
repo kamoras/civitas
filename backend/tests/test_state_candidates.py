@@ -732,6 +732,21 @@ class TestAWeakerSourceNeverPrunesTheCertifiedBallot:
         assert "ballot:2026-HOUSE-CA-5:mary-smith" in self._ids(db_session)
         assert db_session.get(Candidate, "H1").confirmed_general is not True
 
+    def test_nor_to_an_fec_filer_who_refiled(self, db_session):
+        """Every path of the matcher is checked — including the one that
+        takes the better-funded of one person's two FEC ids, which a
+        Libertarian Mary Smith reached through John's refiling."""
+        _race(db_session, "2026-HOUSE-CA-8", "CA", office="H", district=8)
+        db_session.commit()
+        mary = {"office": "H", "district": 8, "party": "L", "last_name": "SMITH", "display_name": "Mary Smith"}
+        sc._apply_ballot(db_session, 2026, "CA", [mary], keep_unlisted=True, authoritative=False)
+        _candidate(db_session, "H1", "2026-HOUSE-CA-8", "SMITH, JOHN", party="DEM", has_raised_funds=True)
+        _candidate(db_session, "H2", "2026-HOUSE-CA-8", "SMITH, JOHN R", party="DEM")
+        db_session.commit()
+        sc._apply_ballot(db_session, 2026, "CA", [mary], keep_unlisted=True, authoritative=False)
+        assert "ballot:2026-HOUSE-CA-8:mary-smith" in self._ids(db_session)
+        assert db_session.get(Candidate, "H1").confirmed_general is not True
+
     def test_a_nickname_or_a_recoded_party_alone_still_matches(self, db_session):
         _race(db_session, "2026-HOUSE-CA-6", "CA", office="H", district=6)
         _candidate(db_session, "H1", "2026-HOUSE-CA-6", "JONES, JAMES", party="DEM")
