@@ -49,8 +49,13 @@ under the old single IN_COMMITTEE bucket, to one whose bills are
 genuinely getting worked. REFERRED now captures the former (no credit
 beyond bare introduction — see score_calculator.py's _LES_STAGE_ORDER);
 IN_COMMITTEE is reserved for confirmed real committee action: a hearing,
-a markup, being ordered reported, discharged, or placed on a calendar
-(which only happens once committee has already reported the bill out).
+a markup, being ordered reported. A House committee's referral to one of
+its subcommittees is still REFERRED.
+
+REPORTED (v6.17) is Volden & Wiseman's "action beyond committee": reported
+out, discharged, or placed on a calendar (which only follows a report).
+scripts/research_les_stage_classifier.py checks these stages bill by bill
+against V&W's per-member counts.
 """
 
 import re
