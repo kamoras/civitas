@@ -345,6 +345,16 @@ class TestParseStateLegOffice:
         assert common.parse_state_leg_office(
             "REP Representative in General Assembly District 13") == ("lower", "13", None)
 
+    def test_pennsylvanias_article_and_ordinal_districts(self):
+        """Real 2026 PA primary labels (office name + the API's district)."""
+        assert common.parse_state_leg_office(
+            "Senator in the General Assembly 2nd Senatorial District") == ("upper", "2", None)
+        assert common.parse_state_leg_office(
+            "Representative in the General Assembly 203rd Legislative District",
+        ) == ("lower", "203", None)
+        assert common.parse_state_leg_office(
+            "Member of Republican State Committee 12th Senatorial District") is None
+
     def test_leading_zeros_are_the_same_seat(self):
         assert common.parse_state_leg_office(
             "DEM Senator in General Assembly District 05") == ("upper", "5", None)
@@ -717,6 +727,11 @@ class TestNebraskaAuditor:
     def test_a_county_auditor_is_still_refused(self):
         assert common.parse_statewide_office("County Auditor") is None
         assert common.parse_statewide_office("County Auditor/Treasurer") is None
+
+    def test_pennsylvanias_auditor_general(self):
+        """Pennsylvania's title for the office, as its returns API labels
+        a statewide contest (office name + "Statewide")."""
+        assert common.parse_statewide_office("Auditor General Statewide") == ("auditor", None)
 
 
 class TestClarityStateOffices:
