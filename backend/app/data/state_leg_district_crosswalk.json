@@ -1,6 +1,453 @@
 {
  "_source": "U.S. Census Bureau TIGERweb: current-vintage state legislative district polygons (TIGERweb/Legislative layers 1 and 2) against county-subdivision polygons, resolved by point sampling inside each town. See scripts/fetch_state_leg_crosswalk.py for why the block assignment files and a plain spatial intersect both give wrong answers here.",
  "districts": {
+  "AK-lower-1": [
+   "Coffman Cove city",
+   "Ketchikan city",
+   "Saxman city",
+   "Whale Pass city",
+   "Wrangell city and borough"
+  ],
+  "AK-lower-10": [
+   "Anchorage municipality"
+  ],
+  "AK-lower-11": [
+   "Anchorage municipality"
+  ],
+  "AK-lower-12": [
+   "Anchorage municipality"
+  ],
+  "AK-lower-13": [
+   "Anchorage municipality"
+  ],
+  "AK-lower-14": [
+   "Anchorage Municipality"
+  ],
+  "AK-lower-15": [
+   "Anchorage municipality"
+  ],
+  "AK-lower-16": [
+   "Anchorage municipality"
+  ],
+  "AK-lower-17": [
+   "Anchorage Municipality"
+  ],
+  "AK-lower-18": [
+   "Anchorage municipality"
+  ],
+  "AK-lower-19": [
+   "Anchorage Municipality"
+  ],
+  "AK-lower-2": [
+   "Angoon city",
+   "Craig city",
+   "Edna Bay city",
+   "Hoonah city",
+   "Hydaburg city",
+   "Kake city",
+   "Kasaan city",
+   "Klawock city",
+   "Kupreanof city",
+   "Pelican city",
+   "Port Alexander city",
+   "Sitka city and borough",
+   "Tenakee Springs city",
+   "Thorne Bay city"
+  ],
+  "AK-lower-20": [
+   "Anchorage municipality"
+  ],
+  "AK-lower-21": [
+   "Anchorage Municipality"
+  ],
+  "AK-lower-22": [
+   "Anchorage Municipality"
+  ],
+  "AK-lower-23": [
+   "Anchorage municipality"
+  ],
+  "AK-lower-24": [
+   "Anchorage municipality"
+  ],
+  "AK-lower-25": [
+   "Palmer city"
+  ],
+  "AK-lower-26": [
+   "Matanuska-Susitna Borough"
+  ],
+  "AK-lower-27": [
+   "Wasilla city"
+  ],
+  "AK-lower-28": [
+   "Matanuska-Susitna Borough"
+  ],
+  "AK-lower-29": [
+   "Valdez city"
+  ],
+  "AK-lower-3": [
+   "Gustavus city",
+   "Juneau city and borough"
+  ],
+  "AK-lower-30": [
+   "Anderson city",
+   "Houston city"
+  ],
+  "AK-lower-31": [
+   "Fairbanks city"
+  ],
+  "AK-lower-32": [
+   "Fairbanks city"
+  ],
+  "AK-lower-33": [
+   "North Pole city"
+  ],
+  "AK-lower-34": [
+   "Fairbanks North Star Borough"
+  ],
+  "AK-lower-35": [
+   "Fairbanks North Star Borough"
+  ],
+  "AK-lower-36": [
+   "Allakaket city",
+   "Anvik city",
+   "Bettles city",
+   "Delta Junction city",
+   "Eagle city",
+   "Fort Yukon city",
+   "Galena city",
+   "Grayling city",
+   "Holy Cross city",
+   "Hughes city",
+   "Huslia city",
+   "Kaltag city",
+   "Koyukuk city",
+   "McGrath city",
+   "Nenana city",
+   "Nikolai city",
+   "Nulato city",
+   "Ruby city",
+   "Shageluk city",
+   "Tanana city"
+  ],
+  "AK-lower-37": [
+   "Adak city",
+   "Akutan city",
+   "Aleknagik city",
+   "Aniak city",
+   "Atka city",
+   "Chignik city",
+   "Chuathbaluk city",
+   "Clark's Point city",
+   "Cold Bay city",
+   "Dillingham city",
+   "Egegik city",
+   "Ekwok city",
+   "False Pass city",
+   "Goodnews Bay city",
+   "King Cove city",
+   "Lower Kalskag city",
+   "Manokotak city",
+   "New Stuyahok city",
+   "Newhalen city",
+   "Nondalton city",
+   "Pilot Point city",
+   "Platinum city",
+   "Port Heiden city",
+   "Sand Point city",
+   "St. George city",
+   "St. Paul city",
+   "Togiak city",
+   "Unalaska city",
+   "Upper Kalskag city"
+  ],
+  "AK-lower-38": [
+   "Akiak city",
+   "Bethel city",
+   "Chefornak city",
+   "Chevak city",
+   "Eek city",
+   "Kwethluk city",
+   "Mekoryuk city",
+   "Napakiak city",
+   "Napaskiak city",
+   "Nightmute city",
+   "Nunapitchuk city",
+   "Quinhagak city",
+   "Toksook Bay city"
+  ],
+  "AK-lower-39": [
+   "Alakanuk city",
+   "Brevig Mission city",
+   "Diomede city",
+   "Elim city",
+   "Emmonak city",
+   "Gambell city",
+   "Golovin city",
+   "Hooper Bay city",
+   "Kotlik city",
+   "Koyuk city",
+   "Marshall city",
+   "Mountain Village city",
+   "Nome city",
+   "Nunam Iqua city",
+   "Pilot Station city",
+   "Russian Mission city",
+   "Savoonga city",
+   "Scammon Bay city",
+   "Shaktoolik city",
+   "Shishmaref city",
+   "St. Mary's city",
+   "St. Michael city",
+   "Stebbins city",
+   "Teller city",
+   "Unalakleet city",
+   "Wales city",
+   "White Mountain city"
+  ],
+  "AK-lower-4": [
+   "Juneau city and borough"
+  ],
+  "AK-lower-40": [
+   "Ambler city",
+   "Anaktuvuk Pass city",
+   "Atqasuk city",
+   "Buckland city",
+   "Deering city",
+   "Kaktovik city",
+   "Kiana city",
+   "Kivalina city",
+   "Kobuk city",
+   "Kotzebue city",
+   "Noorvik city",
+   "Nuiqsut city",
+   "Point Hope city",
+   "Selawik city",
+   "Shungnak city",
+   "Utqiag\u0307vik city",
+   "Wainwright city"
+  ],
+  "AK-lower-5": [
+   "Akhiok city",
+   "Cordova city",
+   "Kodiak city",
+   "Larsen Bay city",
+   "Old Harbor city",
+   "Ouzinkie city",
+   "Port Lions city",
+   "Seward city"
+  ],
+  "AK-lower-6": [
+   "Homer city",
+   "Kachemak city",
+   "Seldovia city"
+  ],
+  "AK-lower-7": [
+   "Kenai city",
+   "Soldotna city"
+  ],
+  "AK-lower-8": [
+   "Kenai Peninsula Borough"
+  ],
+  "AK-lower-9": [
+   "Anchorage municipality",
+   "Whittier city"
+  ],
+  "AK-upper-A": [
+   "Angoon city",
+   "Coffman Cove city",
+   "Craig city",
+   "Edna Bay city",
+   "Hoonah city",
+   "Hydaburg city",
+   "Kake city",
+   "Kasaan city",
+   "Ketchikan city",
+   "Klawock city",
+   "Kupreanof city",
+   "Pelican city",
+   "Port Alexander city",
+   "Saxman city",
+   "Sitka city and borough",
+   "Tenakee Springs city",
+   "Thorne Bay city",
+   "Whale Pass city",
+   "Wrangell city and borough"
+  ],
+  "AK-upper-B": [
+   "Gustavus city",
+   "Juneau city and borough"
+  ],
+  "AK-upper-C": [
+   "Akhiok city",
+   "Cordova city",
+   "Homer city",
+   "Kachemak city",
+   "Kodiak city",
+   "Larsen Bay city",
+   "Old Harbor city",
+   "Ouzinkie city",
+   "Port Lions city",
+   "Seldovia city",
+   "Seward city"
+  ],
+  "AK-upper-D": [
+   "Kenai city",
+   "Soldotna city"
+  ],
+  "AK-upper-E": [
+   "Anchorage municipality",
+   "Whittier city"
+  ],
+  "AK-upper-F": [
+   "Anchorage municipality"
+  ],
+  "AK-upper-G": [
+   "Anchorage municipality"
+  ],
+  "AK-upper-H": [
+   "Anchorage municipality"
+  ],
+  "AK-upper-I": [
+   "Anchorage municipality"
+  ],
+  "AK-upper-J": [
+   "Anchorage municipality"
+  ],
+  "AK-upper-K": [
+   "Anchorage municipality"
+  ],
+  "AK-upper-L": [
+   "Anchorage municipality"
+  ],
+  "AK-upper-M": [
+   "Palmer city"
+  ],
+  "AK-upper-N": [
+   "Wasilla city"
+  ],
+  "AK-upper-O": [
+   "Anderson city",
+   "Houston city",
+   "Valdez city"
+  ],
+  "AK-upper-P": [
+   "Fairbanks city"
+  ],
+  "AK-upper-Q": [
+   "North Pole city"
+  ],
+  "AK-upper-R": [
+   "Allakaket city",
+   "Anvik city",
+   "Bettles city",
+   "Delta Junction city",
+   "Eagle city",
+   "Fort Yukon city",
+   "Galena city",
+   "Grayling city",
+   "Holy Cross city",
+   "Hughes city",
+   "Huslia city",
+   "Kaltag city",
+   "Koyukuk city",
+   "McGrath city",
+   "Nenana city",
+   "Nikolai city",
+   "Nulato city",
+   "Ruby city",
+   "Shageluk city",
+   "Tanana city"
+  ],
+  "AK-upper-S": [
+   "Adak city",
+   "Akiak city",
+   "Akutan city",
+   "Aleknagik city",
+   "Aniak city",
+   "Atka city",
+   "Bethel city",
+   "Chefornak city",
+   "Chevak city",
+   "Chignik city",
+   "Chuathbaluk city",
+   "Clark's Point city",
+   "Cold Bay city",
+   "Dillingham city",
+   "Eek city",
+   "Egegik city",
+   "Ekwok city",
+   "False Pass city",
+   "Goodnews Bay city",
+   "King Cove city",
+   "Kwethluk city",
+   "Lower Kalskag city",
+   "Manokotak city",
+   "Mekoryuk city",
+   "Napakiak city",
+   "Napaskiak city",
+   "New Stuyahok city",
+   "Newhalen city",
+   "Nightmute city",
+   "Nondalton city",
+   "Nunapitchuk city",
+   "Pilot Point city",
+   "Platinum city",
+   "Port Heiden city",
+   "Quinhagak city",
+   "Sand Point city",
+   "St. George city",
+   "St. Paul city",
+   "Togiak city",
+   "Toksook Bay city",
+   "Unalaska city",
+   "Upper Kalskag city"
+  ],
+  "AK-upper-T": [
+   "Alakanuk city",
+   "Ambler city",
+   "Anaktuvuk Pass city",
+   "Atqasuk city",
+   "Brevig Mission city",
+   "Buckland city",
+   "Deering city",
+   "Diomede city",
+   "Elim city",
+   "Emmonak city",
+   "Gambell city",
+   "Golovin city",
+   "Hooper Bay city",
+   "Kaktovik city",
+   "Kiana city",
+   "Kivalina city",
+   "Kobuk city",
+   "Kotlik city",
+   "Kotzebue city",
+   "Koyuk city",
+   "Marshall city",
+   "Mountain Village city",
+   "Nome city",
+   "Noorvik city",
+   "Nuiqsut city",
+   "Nunam Iqua city",
+   "Pilot Station city",
+   "Point Hope city",
+   "Russian Mission city",
+   "Savoonga city",
+   "Scammon Bay city",
+   "Selawik city",
+   "Shaktoolik city",
+   "Shishmaref city",
+   "Shungnak city",
+   "St. Mary's city",
+   "St. Michael city",
+   "Stebbins city",
+   "Teller city",
+   "Unalakleet city",
+   "Utqiag\u0307vik city",
+   "Wainwright city",
+   "Wales city",
+   "White Mountain city"
+  ],
   "AR-lower-1": [
    "Biggers town",
    "Corning city",
@@ -16933,6 +17380,1505 @@
   "MD-upper-9": [
    "Howard County",
    "Montgomery County"
+  ],
+  "ME-lower-1": [
+   "Allagash town",
+   "Ashland town",
+   "Eagle Lake town",
+   "Fort Kent town",
+   "Garfield plantation",
+   "Masardis town",
+   "Nashville plantation",
+   "New Canada town",
+   "Northwest Aroostook UT",
+   "Portage Lake town",
+   "Square Lake UT",
+   "St. Francis town",
+   "St. John plantation",
+   "Wallagrass town",
+   "Winterville plantation"
+  ],
+  "ME-lower-10": [
+   "Alexander town",
+   "Charlotte town",
+   "Cooper town",
+   "Crawford town",
+   "Cutler town",
+   "Dennysville town",
+   "East Central Washington UT",
+   "East Machias town",
+   "Lubec town",
+   "Machiasport town",
+   "Marshfield town",
+   "North Washington UT",
+   "Northfield town",
+   "Pembroke town",
+   "Princeton town",
+   "Wesley town",
+   "Whiting town"
+  ],
+  "ME-lower-100": [
+   "Brunswick town"
+  ],
+  "ME-lower-101": [
+   "Brunswick town"
+  ],
+  "ME-lower-102": [
+   "Freeport town"
+  ],
+  "ME-lower-103": [
+   "Yarmouth town"
+  ],
+  "ME-lower-104": [
+   "Gray town",
+   "New Gloucester town"
+  ],
+  "ME-lower-105": [
+   "Gray town",
+   "North Yarmouth town"
+  ],
+  "ME-lower-106": [
+   "Windham town"
+  ],
+  "ME-lower-107": [
+   "Windham town"
+  ],
+  "ME-lower-108": [
+   "Gorham town"
+  ],
+  "ME-lower-109": [
+   "Gorham town"
+  ],
+  "ME-lower-11": [
+   "Addison town",
+   "Beals town",
+   "Columbia Falls town",
+   "Columbia town",
+   "Harrington town",
+   "Jonesboro town",
+   "Jonesport town",
+   "Machias town",
+   "Milbridge town",
+   "North Washington UT",
+   "Roque Bluffs town",
+   "Whitneyville town"
+  ],
+  "ME-lower-110": [
+   "Chebeague Island town",
+   "Cumberland town",
+   "Long Island town"
+  ],
+  "ME-lower-111": [
+   "Falmouth town"
+  ],
+  "ME-lower-112": [
+   "Falmouth town",
+   "Portland city"
+  ],
+  "ME-lower-113": [
+   "Portland city"
+  ],
+  "ME-lower-114": [
+   "Portland city"
+  ],
+  "ME-lower-115": [
+   "Portland city"
+  ],
+  "ME-lower-116": [
+   "Portland city"
+  ],
+  "ME-lower-117": [
+   "Portland city"
+  ],
+  "ME-lower-118": [
+   "Portland city"
+  ],
+  "ME-lower-119": [
+   "Long Island town",
+   "Portland city"
+  ],
+  "ME-lower-12": [
+   "Franklin town",
+   "Gouldsboro town",
+   "Hancock town",
+   "Sorrento town",
+   "Steuben town",
+   "Sullivan town",
+   "Winter Harbor town"
+  ],
+  "ME-lower-120": [
+   "South Portland city"
+  ],
+  "ME-lower-121": [
+   "Cape Elizabeth town",
+   "South Portland city"
+  ],
+  "ME-lower-122": [
+   "South Portland city"
+  ],
+  "ME-lower-123": [
+   "Cape Elizabeth town"
+  ],
+  "ME-lower-124": [
+   "Scarborough town"
+  ],
+  "ME-lower-125": [
+   "Scarborough town"
+  ],
+  "ME-lower-126": [
+   "Saco city",
+   "Scarborough town",
+   "Westbrook city"
+  ],
+  "ME-lower-127": [
+   "Westbrook city"
+  ],
+  "ME-lower-128": [
+   "Westbrook city"
+  ],
+  "ME-lower-129": [
+   "Saco city"
+  ],
+  "ME-lower-13": [
+   "Central Hancock UT",
+   "Ellsworth city",
+   "Waltham town"
+  ],
+  "ME-lower-130": [
+   "Saco city"
+  ],
+  "ME-lower-131": [
+   "Old Orchard Beach town"
+  ],
+  "ME-lower-132": [
+   "Biddeford city"
+  ],
+  "ME-lower-133": [
+   "Biddeford city"
+  ],
+  "ME-lower-134": [
+   "Biddeford city",
+   "Kennebunk town",
+   "Kennebunkport town"
+  ],
+  "ME-lower-135": [
+   "Kennebunk town"
+  ],
+  "ME-lower-136": [
+   "Alfred town",
+   "Lyman town",
+   "Waterboro town"
+  ],
+  "ME-lower-137": [
+   "Buxton town",
+   "Dayton town",
+   "Hollis town"
+  ],
+  "ME-lower-138": [
+   "Buxton town",
+   "Cornish town",
+   "Hollis town",
+   "Limington town"
+  ],
+  "ME-lower-139": [
+   "Limerick town",
+   "Parsonsfield town",
+   "Waterboro town"
+  ],
+  "ME-lower-14": [
+   "Bar Harbor town",
+   "Cranberry Isles town",
+   "Lamoine town",
+   "Mount Desert town"
+  ],
+  "ME-lower-140": [
+   "Arundel town",
+   "Dayton town",
+   "Lyman town"
+  ],
+  "ME-lower-141": [
+   "Newfield town",
+   "Sanford city",
+   "Shapleigh town"
+  ],
+  "ME-lower-142": [
+   "Sanford city"
+  ],
+  "ME-lower-143": [
+   "Sanford city"
+  ],
+  "ME-lower-144": [
+   "Acton town",
+   "Lebanon town"
+  ],
+  "ME-lower-145": [
+   "Wells town"
+  ],
+  "ME-lower-146": [
+   "Ogunquit town",
+   "Wells town",
+   "York town"
+  ],
+  "ME-lower-147": [
+   "York town"
+  ],
+  "ME-lower-148": [
+   "Berwick town",
+   "North Berwick town"
+  ],
+  "ME-lower-149": [
+   "North Berwick town",
+   "South Berwick town"
+  ],
+  "ME-lower-15": [
+   "Brooklin town",
+   "Deer Isle town",
+   "Frenchboro town",
+   "Isle au Haut town",
+   "Marshall Island UT",
+   "Southwest Harbor town",
+   "Stonington town",
+   "Swans Island town",
+   "Tremont town",
+   "Vinalhaven town"
+  ],
+  "ME-lower-150": [
+   "Eliot town",
+   "Kittery town",
+   "South Berwick town"
+  ],
+  "ME-lower-151": [
+   "Kittery town"
+  ],
+  "ME-lower-16": [
+   "Blue Hill town",
+   "Brooksville town",
+   "Castine town",
+   "Sedgwick town",
+   "Surry town",
+   "Trenton town"
+  ],
+  "ME-lower-17": [
+   "Bucksport town",
+   "Orland town",
+   "Penobscot town",
+   "Verona Island town"
+  ],
+  "ME-lower-18": [
+   "Amherst town",
+   "Aurora town",
+   "Beddington town",
+   "Burlington town",
+   "Cherryfield town",
+   "Clifton town",
+   "Deblois town",
+   "Dedham town",
+   "East Central Penobscot UT",
+   "East Hancock UT",
+   "Eastbrook town",
+   "Great Pond town",
+   "Greenbush town",
+   "Lowell town",
+   "Mariaville town",
+   "North Washington UT",
+   "Northwest Hancock UT",
+   "Osborn town",
+   "Otis town",
+   "Passadumkeag town"
+  ],
+  "ME-lower-19": [
+   "Eddington town",
+   "Holden town",
+   "Orrington town"
+  ],
+  "ME-lower-2": [
+   "Frenchville town",
+   "Grand Isle town",
+   "Madawaska town",
+   "Perham town",
+   "Square Lake UT",
+   "St. Agatha town",
+   "Van Buren town"
+  ],
+  "ME-lower-20": [
+   "Brewer city"
+  ],
+  "ME-lower-21": [
+   "Bangor city"
+  ],
+  "ME-lower-22": [
+   "Bangor city"
+  ],
+  "ME-lower-23": [
+   "Bangor city"
+  ],
+  "ME-lower-24": [
+   "Bangor city",
+   "Brewer city",
+   "Orono town",
+   "Veazie town"
+  ],
+  "ME-lower-25": [
+   "Orono town"
+  ],
+  "ME-lower-26": [
+   "Bradley town",
+   "Old Town city",
+   "Penobscot Indian Island Reservation"
+  ],
+  "ME-lower-27": [
+   "Alton town",
+   "Argyle UT",
+   "Bradford town",
+   "Corinth town",
+   "Hudson town",
+   "Milford town"
+  ],
+  "ME-lower-28": [
+   "Edinburg town",
+   "Enfield town",
+   "Howland town",
+   "Lagrange town",
+   "Lincoln town",
+   "Maxfield town",
+   "North Penobscot UT",
+   "Seboeis plantation",
+   "Winn town"
+  ],
+  "ME-lower-29": [
+   "Chester town",
+   "East Millinocket town",
+   "Medway town",
+   "Millinocket town",
+   "Mount Chase town",
+   "North Penobscot UT",
+   "Patten town",
+   "Woodville town"
+  ],
+  "ME-lower-3": [
+   "Caswell town",
+   "Connor UT",
+   "Cyr plantation",
+   "Easton town",
+   "Fort Fairfield town",
+   "Hamlin town",
+   "Limestone town",
+   "New Sweden town",
+   "Stockholm town",
+   "Westmanland town",
+   "Woodland town"
+  ],
+  "ME-lower-30": [
+   "Abbot town",
+   "Beaver Cove town",
+   "Blanchard UT",
+   "Bowerbank town",
+   "Brighton plantation",
+   "Cambridge town",
+   "Greenville town",
+   "Guilford town",
+   "Kingsbury plantation",
+   "Monson town",
+   "Northeast Piscataquis UT",
+   "Northwest Piscataquis UT",
+   "Parkman town",
+   "Sangerville town",
+   "Sebec town",
+   "Shirley town",
+   "Wellington town",
+   "Willimantic town"
+  ],
+  "ME-lower-31": [
+   "Brownville town",
+   "Dover-Foxcroft town",
+   "Lake View plantation",
+   "Medford town",
+   "Milo town",
+   "Southeast Piscataquis UT"
+  ],
+  "ME-lower-32": [
+   "Bradford town",
+   "Charleston town",
+   "Dexter town",
+   "Exeter town",
+   "Garland town",
+   "Stetson town"
+  ],
+  "ME-lower-33": [
+   "Corinna town",
+   "Dixmont town",
+   "Etna town",
+   "Newport town",
+   "Plymouth town"
+  ],
+  "ME-lower-34": [
+   "Glenburn town",
+   "Kenduskeag town",
+   "Levant town"
+  ],
+  "ME-lower-35": [
+   "Carmel town",
+   "Hermon town"
+  ],
+  "ME-lower-36": [
+   "Hampden town",
+   "Newburgh town"
+  ],
+  "ME-lower-37": [
+   "Frankfort town",
+   "Prospect town",
+   "Searsport town",
+   "Stockton Springs town",
+   "Winterport town"
+  ],
+  "ME-lower-38": [
+   "Brooks town",
+   "Frankfort town",
+   "Jackson town",
+   "Knox town",
+   "Monroe town",
+   "Swanville town",
+   "Thorndike town",
+   "Unity town",
+   "Waldo town"
+  ],
+  "ME-lower-39": [
+   "Belfast city",
+   "Belmont town",
+   "Northport town"
+  ],
+  "ME-lower-4": [
+   "Caribou city",
+   "Wade town",
+   "Washburn town"
+  ],
+  "ME-lower-40": [
+   "Appleton town",
+   "Islesboro town",
+   "Liberty town",
+   "Lincolnville town",
+   "Montville town",
+   "Morrill town",
+   "Searsmont town"
+  ],
+  "ME-lower-41": [
+   "Camden town",
+   "Rockport town"
+  ],
+  "ME-lower-42": [
+   "Criehaven UT",
+   "Matinicus Isle plantation",
+   "Muscle Ridge Islands UT",
+   "North Haven town",
+   "Owls Head town",
+   "Rockland city"
+  ],
+  "ME-lower-43": [
+   "Cushing town",
+   "Owls Head town",
+   "South Thomaston town",
+   "St. George town",
+   "Thomaston town"
+  ],
+  "ME-lower-44": [
+   "Hope town",
+   "Union town",
+   "Warren town"
+  ],
+  "ME-lower-45": [
+   "Bremen town",
+   "Friendship town",
+   "Louds Island UT",
+   "Waldoboro town",
+   "Washington town"
+  ],
+  "ME-lower-46": [
+   "Bristol town",
+   "Damariscotta town",
+   "Monhegan plantation",
+   "Newcastle town",
+   "Nobleboro town"
+  ],
+  "ME-lower-47": [
+   "Alna town",
+   "Jefferson town",
+   "Whitefield town",
+   "Wiscasset town"
+  ],
+  "ME-lower-48": [
+   "Boothbay Harbor town",
+   "Boothbay town",
+   "Edgecomb town",
+   "South Bristol town",
+   "Southport town",
+   "Westport Island town"
+  ],
+  "ME-lower-49": [
+   "Arrowsic town",
+   "Georgetown town",
+   "Phippsburg town",
+   "West Bath town",
+   "Woolwich town"
+  ],
+  "ME-lower-5": [
+   "Presque Isle city"
+  ],
+  "ME-lower-50": [
+   "Bath city"
+  ],
+  "ME-lower-51": [
+   "Topsham town"
+  ],
+  "ME-lower-52": [
+   "Bowdoin town",
+   "Bowdoinham town",
+   "Perkins UT",
+   "Richmond town"
+  ],
+  "ME-lower-53": [
+   "Chelsea town",
+   "Dresden town",
+   "Pittston town",
+   "Randolph town"
+  ],
+  "ME-lower-54": [
+   "Farmingdale town",
+   "Gardiner city"
+  ],
+  "ME-lower-55": [
+   "Hallowell city",
+   "Manchester town",
+   "West Gardiner town"
+  ],
+  "ME-lower-56": [
+   "Litchfield town",
+   "Monmouth town",
+   "Wales town"
+  ],
+  "ME-lower-57": [
+   "Readfield town",
+   "Winthrop town"
+  ],
+  "ME-lower-58": [
+   "Belgrade town",
+   "Fayette town",
+   "Mount Vernon town",
+   "New Sharon town",
+   "Rome town",
+   "Vienna town"
+  ],
+  "ME-lower-59": [
+   "Augusta city"
+  ],
+  "ME-lower-6": [
+   "Blaine town",
+   "Bridgewater town",
+   "Castle Hill town",
+   "Central Aroostook UT",
+   "Chapman town",
+   "Dyer Brook town",
+   "Hammond town",
+   "Hersey town",
+   "Littleton town",
+   "Mapleton town",
+   "Mars Hill town",
+   "Merrill town",
+   "Monticello town",
+   "Moro plantation",
+   "Smyrna town",
+   "Westfield town"
+  ],
+  "ME-lower-60": [
+   "Augusta city"
+  ],
+  "ME-lower-61": [
+   "Sidney town",
+   "Vassalboro town"
+  ],
+  "ME-lower-62": [
+   "China town",
+   "Hibberts gore",
+   "Palermo town",
+   "Somerville town",
+   "Windsor town"
+  ],
+  "ME-lower-63": [
+   "Albion town",
+   "Freedom town",
+   "Unity UT",
+   "Winslow town"
+  ],
+  "ME-lower-64": [
+   "Waterville city",
+   "Winslow town"
+  ],
+  "ME-lower-65": [
+   "Waterville city"
+  ],
+  "ME-lower-66": [
+   "Mercer town",
+   "Oakland town",
+   "Sidney town",
+   "Smithfield town",
+   "Starks town"
+  ],
+  "ME-lower-67": [
+   "Benton town",
+   "Fairfield town"
+  ],
+  "ME-lower-68": [
+   "Burnham town",
+   "Clinton town",
+   "Pittsfield town",
+   "Troy town"
+  ],
+  "ME-lower-69": [
+   "Canaan town",
+   "Detroit town",
+   "Hartland town",
+   "Palmyra town",
+   "St. Albans town"
+  ],
+  "ME-lower-7": [
+   "Houlton town",
+   "Linneus town",
+   "Ludlow town",
+   "New Limerick town",
+   "Oakfield town"
+  ],
+  "ME-lower-70": [
+   "Skowhegan town"
+  ],
+  "ME-lower-71": [
+   "Cornville town",
+   "Madison town",
+   "Norridgewock town"
+  ],
+  "ME-lower-72": [
+   "Anson town",
+   "Athens town",
+   "Bingham town",
+   "Caratunk town",
+   "Central Somerset UT",
+   "Embden town",
+   "Harmony town",
+   "Moscow town",
+   "Northeast Somerset UT",
+   "Pleasant Ridge plantation",
+   "Ripley town",
+   "Seboomook Lake UT",
+   "Solon town"
+  ],
+  "ME-lower-73": [
+   "Andover town",
+   "Carrabassett Valley town",
+   "Coplin plantation",
+   "Dallas plantation",
+   "Dennistown plantation",
+   "East Central Franklin UT",
+   "Eustis town",
+   "Gilead town",
+   "Highland plantation",
+   "Jackman town",
+   "Kingfield town",
+   "Lincoln plantation",
+   "Moose River town",
+   "Newry town",
+   "North Franklin UT",
+   "North Oxford UT",
+   "Northwest Somerset UT",
+   "Phillips town",
+   "Rangeley plantation",
+   "Rangeley town",
+   "Sandy River plantation",
+   "The Forks plantation",
+   "Upton town",
+   "West Central Franklin UT",
+   "West Forks plantation",
+   "Wyman UT"
+  ],
+  "ME-lower-74": [
+   "Avon town",
+   "Carthage town",
+   "Industry town",
+   "New Portland town",
+   "New Vineyard town",
+   "South Franklin UT",
+   "Strong town",
+   "Temple town",
+   "Weld town",
+   "Wilton town"
+  ],
+  "ME-lower-75": [
+   "Chesterville town",
+   "Farmington town"
+  ],
+  "ME-lower-76": [
+   "Jay town",
+   "Livermore Falls town",
+   "Livermore town"
+  ],
+  "ME-lower-77": [
+   "Canton town",
+   "Dixfield town",
+   "Hartford town",
+   "Livermore town",
+   "Mexico town",
+   "Peru town"
+  ],
+  "ME-lower-78": [
+   "Bethel town",
+   "Byron town",
+   "Hanover town",
+   "Milton UT",
+   "Roxbury town",
+   "Rumford town"
+  ],
+  "ME-lower-79": [
+   "Paris town",
+   "Sumner town",
+   "West Paris town",
+   "Woodstock town"
+  ],
+  "ME-lower-8": [
+   "Amity town",
+   "Bancroft UT",
+   "Carroll plantation",
+   "Codyville UT",
+   "Crystal town",
+   "Danforth town",
+   "Drew UT",
+   "Glenwood plantation",
+   "Haynesville town",
+   "Hodgdon town",
+   "Island Falls town",
+   "Kingman UT",
+   "Lakeville town",
+   "Lee town",
+   "Macwahoc plantation",
+   "Mattawamkeag town",
+   "North Washington UT",
+   "Orient town",
+   "Prentiss UT",
+   "Reed plantation",
+   "Sherman town",
+   "South Aroostook UT",
+   "Springfield town",
+   "Stacyville town",
+   "Talmadge town",
+   "Topsfield town",
+   "Twombly Ridge UT",
+   "Vanceboro town",
+   "Waite town",
+   "Webster plantation",
+   "Weston town",
+   "Whitney UT"
+  ],
+  "ME-lower-80": [
+   "Buckfield town",
+   "Hebron town",
+   "Otisfield town",
+   "Oxford town"
+  ],
+  "ME-lower-81": [
+   "Greenwood town",
+   "Norway town",
+   "South Oxford UT",
+   "Stoneham town",
+   "Stow town",
+   "Sweden town",
+   "Waterford town"
+  ],
+  "ME-lower-82": [
+   "Brownfield town",
+   "Fryeburg town",
+   "Hiram town",
+   "Lovell town",
+   "Porter town"
+  ],
+  "ME-lower-83": [
+   "Bridgton town",
+   "Denmark town",
+   "Harrison town"
+  ],
+  "ME-lower-84": [
+   "Baldwin town",
+   "Naples town",
+   "Sebago town",
+   "Standish town"
+  ],
+  "ME-lower-85": [
+   "Standish town"
+  ],
+  "ME-lower-86": [
+   "Casco town",
+   "Frye Island town",
+   "Poland town",
+   "Raymond town"
+  ],
+  "ME-lower-87": [
+   "Mechanic Falls town",
+   "Poland town"
+  ],
+  "ME-lower-88": [
+   "Auburn city"
+  ],
+  "ME-lower-89": [
+   "Auburn city"
+  ],
+  "ME-lower-9": [
+   "Baileyville town",
+   "Baring plantation",
+   "Calais city",
+   "Eastport city",
+   "Grand Lake Stream plantation",
+   "Meddybemps town",
+   "Passamaquoddy Indian Township Reservation",
+   "Passamaquoddy Pleasant Point Reservation",
+   "Perry town",
+   "Robbinston town"
+  ],
+  "ME-lower-90": [
+   "Auburn city",
+   "Minot town"
+  ],
+  "ME-lower-91": [
+   "Leeds town",
+   "Turner town",
+   "Wayne town"
+  ],
+  "ME-lower-92": [
+   "Greene town",
+   "Sabattus town"
+  ],
+  "ME-lower-93": [
+   "Lewiston city"
+  ],
+  "ME-lower-94": [
+   "Lewiston city"
+  ],
+  "ME-lower-95": [
+   "Lewiston city"
+  ],
+  "ME-lower-96": [
+   "Lewiston city"
+  ],
+  "ME-lower-97": [
+   "Lisbon town"
+  ],
+  "ME-lower-98": [
+   "Bowdoin town",
+   "Durham town",
+   "Lisbon town",
+   "Pownal town",
+   "Topsham town"
+  ],
+  "ME-lower-99": [
+   "Brunswick town",
+   "Harpswell town"
+  ],
+  "ME-upper-1": [
+   "Allagash town",
+   "Ashland town",
+   "Caribou city",
+   "Castle Hill town",
+   "Caswell town",
+   "Chapman town",
+   "Connor UT",
+   "Cyr plantation",
+   "Eagle Lake town",
+   "Fort Fairfield town",
+   "Fort Kent town",
+   "Frenchville town",
+   "Garfield plantation",
+   "Grand Isle town",
+   "Hamlin town",
+   "Limestone town",
+   "Madawaska town",
+   "Mapleton town",
+   "Masardis town",
+   "Nashville plantation",
+   "New Canada town",
+   "New Sweden town",
+   "Northwest Aroostook UT",
+   "Perham town",
+   "Portage Lake town",
+   "Square Lake UT",
+   "St. Agatha town",
+   "St. Francis town",
+   "St. John plantation",
+   "Stockholm town",
+   "Van Buren town",
+   "Wade town",
+   "Wallagrass town",
+   "Washburn town",
+   "Westmanland town",
+   "Winterville plantation",
+   "Woodland town"
+  ],
+  "ME-upper-10": [
+   "Bradley town",
+   "Brewer city",
+   "Bucksport town",
+   "Carmel town",
+   "Clifton town",
+   "Dedham town",
+   "Eddington town",
+   "Hampden town",
+   "Holden town",
+   "Newburgh town",
+   "Orrington town",
+   "Otis town"
+  ],
+  "ME-upper-11": [
+   "Belfast city",
+   "Belmont town",
+   "Brooks town",
+   "Burnham town",
+   "Frankfort town",
+   "Freedom town",
+   "Islesboro town",
+   "Jackson town",
+   "Knox town",
+   "Liberty town",
+   "Lincolnville town",
+   "Monroe town",
+   "Montville town",
+   "Morrill town",
+   "Northport town",
+   "Palermo town",
+   "Prospect town",
+   "Searsmont town",
+   "Searsport town",
+   "Stockton Springs town",
+   "Swanville town",
+   "Thorndike town",
+   "Troy town",
+   "Unity town",
+   "Waldo town",
+   "Winterport town"
+  ],
+  "ME-upper-12": [
+   "Appleton town",
+   "Camden town",
+   "Criehaven UT",
+   "Cushing town",
+   "Friendship town",
+   "Hope town",
+   "Matinicus Isle plantation",
+   "Muscle Ridge Islands UT",
+   "North Haven town",
+   "Owls Head town",
+   "Rockland city",
+   "Rockport town",
+   "South Thomaston town",
+   "St. George town",
+   "Thomaston town",
+   "Union town",
+   "Vinalhaven town",
+   "Warren town"
+  ],
+  "ME-upper-13": [
+   "Alna town",
+   "Boothbay Harbor town",
+   "Boothbay town",
+   "Bremen town",
+   "Bristol town",
+   "Damariscotta town",
+   "Edgecomb town",
+   "Hibberts gore",
+   "Jefferson town",
+   "Louds Island UT",
+   "Monhegan plantation",
+   "Newcastle town",
+   "Nobleboro town",
+   "Somerville town",
+   "South Bristol town",
+   "Southport town",
+   "Waldoboro town",
+   "Washington town",
+   "Westport Island town",
+   "Whitefield town",
+   "Windsor town",
+   "Wiscasset town"
+  ],
+  "ME-upper-14": [
+   "Chelsea town",
+   "Farmingdale town",
+   "Gardiner city",
+   "Hallowell city",
+   "Manchester town",
+   "Monmouth town",
+   "Pittston town",
+   "Randolph town",
+   "Readfield town",
+   "Wayne town",
+   "West Gardiner town",
+   "Winthrop town"
+  ],
+  "ME-upper-15": [
+   "Augusta city",
+   "Belgrade town",
+   "China town",
+   "Mount Vernon town",
+   "Sidney town",
+   "Vassalboro town"
+  ],
+  "ME-upper-16": [
+   "Albion town",
+   "Fairfield town",
+   "Oakland town",
+   "Waterville city",
+   "Winslow town"
+  ],
+  "ME-upper-17": [
+   "Fayette town",
+   "Greene town",
+   "Leeds town",
+   "Lisbon town",
+   "Litchfield town",
+   "Livermore Falls town",
+   "Livermore town",
+   "Sabattus town",
+   "Turner town",
+   "Wales town"
+  ],
+  "ME-upper-18": [
+   "Bridgton town",
+   "Brownfield town",
+   "Denmark town",
+   "Fryeburg town",
+   "Harrison town",
+   "Hebron town",
+   "Mechanic Falls town",
+   "Minot town",
+   "Norway town",
+   "Otisfield town",
+   "Oxford town",
+   "Paris town",
+   "Sweden town",
+   "Waterford town"
+  ],
+  "ME-upper-19": [
+   "Andover town",
+   "Avon town",
+   "Bethel town",
+   "Buckfield town",
+   "Byron town",
+   "Canton town",
+   "Carthage town",
+   "Coplin plantation",
+   "Dallas plantation",
+   "Dixfield town",
+   "Eustis town",
+   "Gilead town",
+   "Greenwood town",
+   "Hanover town",
+   "Hartford town",
+   "Jay town",
+   "Lincoln plantation",
+   "Lovell town",
+   "Mexico town",
+   "Milton UT",
+   "Newry town",
+   "North Franklin UT",
+   "North Oxford UT",
+   "Peru town",
+   "Phillips town",
+   "Rangeley plantation",
+   "Rangeley town",
+   "Roxbury town",
+   "Rumford town",
+   "Sandy River plantation",
+   "South Franklin UT",
+   "South Oxford UT",
+   "Stoneham town",
+   "Stow town",
+   "Sumner town",
+   "Temple town",
+   "Upton town",
+   "Weld town",
+   "West Central Franklin UT",
+   "West Paris town",
+   "Woodstock town"
+  ],
+  "ME-upper-2": [
+   "Amity town",
+   "Bancroft UT",
+   "Blaine town",
+   "Bridgewater town",
+   "Central Aroostook UT",
+   "Chester town",
+   "Crystal town",
+   "Drew UT",
+   "Dyer Brook town",
+   "East Millinocket town",
+   "Easton town",
+   "Glenwood plantation",
+   "Hammond town",
+   "Haynesville town",
+   "Hersey town",
+   "Hodgdon town",
+   "Houlton town",
+   "Island Falls town",
+   "Kingman UT",
+   "Linneus town",
+   "Littleton town",
+   "Ludlow town",
+   "Macwahoc plantation",
+   "Mars Hill town",
+   "Mattawamkeag town",
+   "Maxfield town",
+   "Medway town",
+   "Merrill town",
+   "Millinocket town",
+   "Monticello town",
+   "Moro plantation",
+   "Mount Chase town",
+   "New Limerick town",
+   "North Penobscot UT",
+   "Oakfield town",
+   "Orient town",
+   "Patten town",
+   "Presque Isle city",
+   "Reed plantation",
+   "Seboeis plantation",
+   "Sherman town",
+   "Smyrna town",
+   "South Aroostook UT",
+   "Stacyville town",
+   "Westfield town",
+   "Weston town",
+   "Woodville town"
+  ],
+  "ME-upper-20": [
+   "Auburn city",
+   "Durham town",
+   "New Gloucester town",
+   "Poland town"
+  ],
+  "ME-upper-21": [
+   "Lewiston city"
+  ],
+  "ME-upper-22": [
+   "Acton town",
+   "Baldwin town",
+   "Cornish town",
+   "Hiram town",
+   "Limerick town",
+   "Limington town",
+   "Naples town",
+   "Newfield town",
+   "Parsonsfield town",
+   "Porter town",
+   "Sebago town",
+   "Shapleigh town",
+   "Standish town"
+  ],
+  "ME-upper-23": [
+   "Brunswick town",
+   "Chebeague Island town",
+   "Freeport town",
+   "Harpswell town",
+   "Pownal town",
+   "Yarmouth town"
+  ],
+  "ME-upper-24": [
+   "Arrowsic town",
+   "Bath city",
+   "Bowdoin town",
+   "Bowdoinham town",
+   "Dresden town",
+   "Georgetown town",
+   "Perkins UT",
+   "Phippsburg town",
+   "Richmond town",
+   "Topsham town",
+   "West Bath town",
+   "Woolwich town"
+  ],
+  "ME-upper-25": [
+   "Cumberland town",
+   "Falmouth town",
+   "Gray town",
+   "Long Island town",
+   "North Yarmouth town",
+   "Yarmouth town"
+  ],
+  "ME-upper-26": [
+   "Casco town",
+   "Frye Island town",
+   "Raymond town",
+   "Westbrook city",
+   "Windham town"
+  ],
+  "ME-upper-27": [
+   "Portland city",
+   "Westbrook city"
+  ],
+  "ME-upper-28": [
+   "Long Island town",
+   "Portland city"
+  ],
+  "ME-upper-29": [
+   "Cape Elizabeth town",
+   "Scarborough town",
+   "South Portland city"
+  ],
+  "ME-upper-3": [
+   "Benton town",
+   "Canaan town",
+   "Clinton town",
+   "Detroit town",
+   "Dixmont town",
+   "Etna town",
+   "Madison town",
+   "Newport town",
+   "Norridgewock town",
+   "Palmyra town",
+   "Pittsfield town",
+   "Plymouth town",
+   "Skowhegan town",
+   "Stetson town",
+   "Unity UT"
+  ],
+  "ME-upper-30": [
+   "Gorham town",
+   "Scarborough town"
+  ],
+  "ME-upper-31": [
+   "Buxton town",
+   "Old Orchard Beach town",
+   "Saco city"
+  ],
+  "ME-upper-32": [
+   "Arundel town",
+   "Biddeford city",
+   "Dayton town",
+   "Hollis town",
+   "Lyman town"
+  ],
+  "ME-upper-33": [
+   "Alfred town",
+   "Lebanon town",
+   "Sanford city",
+   "Waterboro town"
+  ],
+  "ME-upper-34": [
+   "Berwick town",
+   "Kennebunk town",
+   "Kennebunkport town",
+   "North Berwick town",
+   "Wells town"
+  ],
+  "ME-upper-35": [
+   "Eliot town",
+   "Kittery town",
+   "Ogunquit town",
+   "South Berwick town",
+   "York town"
+  ],
+  "ME-upper-4": [
+   "Abbot town",
+   "Beaver Cove town",
+   "Blanchard UT",
+   "Bowerbank town",
+   "Bradford town",
+   "Brownville town",
+   "Charleston town",
+   "Corinna town",
+   "Corinth town",
+   "Dexter town",
+   "Dover-Foxcroft town",
+   "Exeter town",
+   "Garland town",
+   "Glenburn town",
+   "Greenville town",
+   "Guilford town",
+   "Hudson town",
+   "Kenduskeag town",
+   "Kingsbury plantation",
+   "Lake View plantation",
+   "Levant town",
+   "Medford town",
+   "Milo town",
+   "Monson town",
+   "Northeast Piscataquis UT",
+   "Northwest Piscataquis UT",
+   "Parkman town",
+   "Sangerville town",
+   "Sebec town",
+   "Shirley town",
+   "Southeast Piscataquis UT",
+   "Wellington town",
+   "Willimantic town"
+  ],
+  "ME-upper-5": [
+   "Anson town",
+   "Athens town",
+   "Bingham town",
+   "Brighton plantation",
+   "Cambridge town",
+   "Caratunk town",
+   "Carrabassett Valley town",
+   "Central Somerset UT",
+   "Chesterville town",
+   "Cornville town",
+   "Dennistown plantation",
+   "East Central Franklin UT",
+   "Embden town",
+   "Farmington town",
+   "Harmony town",
+   "Hartland town",
+   "Highland plantation",
+   "Industry town",
+   "Jackman town",
+   "Kingfield town",
+   "Mercer town",
+   "Moose River town",
+   "Moscow town",
+   "New Portland town",
+   "New Sharon town",
+   "New Vineyard town",
+   "Northeast Somerset UT",
+   "Northwest Somerset UT",
+   "Pleasant Ridge plantation",
+   "Ripley town",
+   "Rome town",
+   "Seboomook Lake UT",
+   "Smithfield town",
+   "Solon town",
+   "St. Albans town",
+   "Starks town",
+   "Strong town",
+   "The Forks plantation",
+   "Vienna town",
+   "West Forks plantation",
+   "Wilton town",
+   "Wyman UT"
+  ],
+  "ME-upper-6": [
+   "Addison town",
+   "Alexander town",
+   "Amherst town",
+   "Aurora town",
+   "Baileyville town",
+   "Baring plantation",
+   "Beals town",
+   "Beddington town",
+   "Calais city",
+   "Central Hancock UT",
+   "Charlotte town",
+   "Cherryfield town",
+   "Codyville UT",
+   "Columbia Falls town",
+   "Columbia town",
+   "Cooper town",
+   "Crawford town",
+   "Cutler town",
+   "Danforth town",
+   "Deblois town",
+   "Dennysville town",
+   "East Central Washington UT",
+   "East Hancock UT",
+   "East Machias town",
+   "Eastbrook town",
+   "Eastport city",
+   "Franklin town",
+   "Gouldsboro town",
+   "Grand Lake Stream plantation",
+   "Great Pond town",
+   "Hancock town",
+   "Harrington town",
+   "Jonesboro town",
+   "Jonesport town",
+   "Lubec town",
+   "Machias town",
+   "Machiasport town",
+   "Mariaville town",
+   "Marshfield town",
+   "Meddybemps town",
+   "Milbridge town",
+   "North Washington UT",
+   "Northfield town",
+   "Northwest Hancock UT",
+   "Osborn town",
+   "Passamaquoddy Indian Township Reservation",
+   "Passamaquoddy Pleasant Point Reservation",
+   "Pembroke town",
+   "Perry town",
+   "Princeton town",
+   "Robbinston town",
+   "Roque Bluffs town",
+   "Sorrento town",
+   "Steuben town",
+   "Sullivan town",
+   "Talmadge town",
+   "Topsfield town",
+   "Vanceboro town",
+   "Waite town",
+   "Waltham town",
+   "Wesley town",
+   "Whiting town",
+   "Whitneyville town",
+   "Winter Harbor town"
+  ],
+  "ME-upper-7": [
+   "Bar Harbor town",
+   "Blue Hill town",
+   "Brooklin town",
+   "Brooksville town",
+   "Castine town",
+   "Cranberry Isles town",
+   "Deer Isle town",
+   "Ellsworth city",
+   "Frenchboro town",
+   "Isle au Haut town",
+   "Lamoine town",
+   "Marshall Island UT",
+   "Mount Desert town",
+   "Orland town",
+   "Penobscot town",
+   "Sedgwick town",
+   "Southwest Harbor town",
+   "Stonington town",
+   "Surry town",
+   "Swans Island town",
+   "Tremont town",
+   "Trenton town",
+   "Verona Island town"
+  ],
+  "ME-upper-8": [
+   "Alton town",
+   "Argyle UT",
+   "Burlington town",
+   "Carroll plantation",
+   "East Central Penobscot UT",
+   "Edinburg town",
+   "Enfield town",
+   "Greenbush town",
+   "Howland town",
+   "Lagrange town",
+   "Lakeville town",
+   "Lee town",
+   "Lincoln town",
+   "Lowell town",
+   "Milford town",
+   "Old Town city",
+   "Orono town",
+   "Passadumkeag town",
+   "Penobscot Indian Island Reservation",
+   "Prentiss UT",
+   "Springfield town",
+   "Twombly Ridge UT",
+   "Veazie town",
+   "Webster plantation",
+   "Whitney UT",
+   "Winn town"
+  ],
+  "ME-upper-9": [
+   "Bangor city",
+   "Hermon town"
   ],
   "MN-lower-10A": [
    "Aitkin city",
