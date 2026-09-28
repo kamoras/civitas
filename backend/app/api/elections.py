@@ -61,6 +61,7 @@ from app.pipeline.fetch.state_candidates_common import (
     JUDICIAL_MARKER_TTL_HOURS,
     judicial_marker_key,
     PARTY_CODE_MAP,
+    fec_party,
     STATE_LEG_CHAMBER_LABELS,
     district_label,
     district_sort_key,
@@ -190,6 +191,10 @@ def _candidate_summary(cand: Candidate, stale_incumbent_ids: frozenset[str] = fr
         # this candidate; the page prefers it and falls back to `name`.
         "ballotName": cand.ballot_name,
         "party": cand.party,
+        # The party that FEC code belongs to (fec_party: Minnesota's DFL is
+        # DEM) — the one place the page learns which codes are the same
+        # party, so it keeps no list of its own.
+        "partyGroup": fec_party(cand.party),
         # Per-CANDIDATE confidence, which `candidateSource` cannot carry:
         # a race's list can now mix a state-confirmed nominee with an
         # unopposed one the primary file never listed (see
@@ -303,13 +308,13 @@ def _unopposed_nominees(
     # filer for that party would add someone who is not running.
     if complete:
         return []
-    covered = {c.party for c in confirmed}
+    covered = {fec_party(c.party) for c in confirmed}
     coded_incumbents = [c for c in candidates if c.incumbent_challenge == "I"]
     sole_incumbent = coded_incumbents[0] if len(coded_incumbents) == 1 else None
 
     recovered: list[Candidate] = []
     for party in _PRIMARY_NOMINATING_PARTIES - covered:
-        pool = [c for c in candidates if c.party == party and not c.confirmed_general]
+        pool = [c for c in candidates if fec_party(c.party) == party and not c.confirmed_general]
         if len(pool) == 1:
             recovered.append(pool[0])
         elif sole_incumbent is not None and sole_incumbent in pool:

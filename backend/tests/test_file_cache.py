@@ -38,7 +38,7 @@ def test_discovered_sources_see_a_rewrite_by_another_process(tmp_path, monkeypat
     from app.pipeline.fetch import state_candidate_sources as sources
 
     path = tmp_path / "discovered.json"
-    monkeypatch.setattr(sources, "_DISCOVERED_PATHS", (str(path),))
+    monkeypatch.setattr(sources, "_DISCOVERED_PATH", str(path))
     monkeypatch.setattr(sources, "_discovered_cache", None)
     _write(path, {}, 1000)
     assert sources._load_discovered() == {}
@@ -50,7 +50,7 @@ def test_election_dates_see_a_rewrite_by_another_process(tmp_path, monkeypatch):
     from app.pipeline.fetch import state_election_dates as dates
 
     path = tmp_path / "dates.json"
-    monkeypatch.setattr(dates, "_PATHS", (str(path),))
+    monkeypatch.setattr(dates, "_PATH", str(path))
     monkeypatch.setattr(dates, "_cache", None)
     _write(path, {}, 1000)
     assert dates.primary_date("TX", 2026) is None
@@ -62,7 +62,7 @@ def test_a_writers_own_save_needs_no_reload(tmp_path, monkeypatch):
     from app.pipeline.fetch import state_election_dates as dates
 
     path = tmp_path / "dates.json"
-    monkeypatch.setattr(dates, "_PATHS", (str(path),))
+    monkeypatch.setattr(dates, "_PATH", str(path))
     monkeypatch.setattr(dates, "_cache", None)
     dates.save("TX", 2026, {"primary": "2026-03-03"})
     reads = []

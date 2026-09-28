@@ -41,6 +41,21 @@ class LockTimeout(Exception):
     didn't happen; the caller decides what that costs."""
 
 
+class NotSaved(Exception):
+    """A data file's change wasn't written — the file couldn't be written
+    (OSError) or its lock stayed held (LockTimeout). The caller must not
+    report the change as made: it exists nowhere a restart would find."""
+
+
+def runtime_data_path(name: str) -> str:
+    """Where a data file written at runtime lives: the Docker volume (/data)
+    when it is mounted, else ./data (development). One path per file, used
+    by its reader and its writer alike — a writer that fell through to a
+    second location on failure left its change where no reader looks."""
+    base = "/data" if os.path.isdir("/data") else os.path.join(os.getcwd(), "data")
+    return os.path.join(base, name)
+
+
 def write_text_atomic(path: str | os.PathLike, text: str) -> None:
     """Write `text` to `path` (UTF-8), replacing it in one step, keeping
     the file's mode (a new one gets the umask's, as open() would give).

@@ -6,6 +6,10 @@ export interface CandidateSummary {
   id: string;
   name: string;
   party: string;
+  /** The party that FEC code belongs to (the backend's FEC_PARTY_ALIASES:
+   * Minnesota's DFL is "DEM") — majorPartyOf reads this. Optional: an
+   * older backend omits it. */
+  partyGroup?: string | null;
   /** Whether a state source actually confirmed this person as a
    * general-election nominee. A "confirmed"/"nominees" race can mix
    * both: a candidate whose primary was uncontested is never listed in
