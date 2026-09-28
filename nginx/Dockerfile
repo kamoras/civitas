@@ -9,6 +9,9 @@ RUN rm -f /etc/nginx/conf.d/default.conf \
     && chown -R nginx:nginx /var/cache/nginx/civitas
 
 COPY civitas.conf /etc/nginx/conf.d/civitas.conf
+# Included by civitas.conf at server level and in every location that sets
+# a header of its own (see the file for why).
+COPY security-headers.conf /etc/nginx/snippets/security-headers.conf
 
 EXPOSE 8081
 
