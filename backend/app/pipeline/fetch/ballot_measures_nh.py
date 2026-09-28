@@ -32,9 +32,10 @@ boxes), and whatever sits between one question's "Yes No" and the next
 number is the heading of the questions under it — which must open
 "Questions ..." or "Statutory Question ..." (both verified forms), or
 the document is refused. Page furniture a longer document would carry
-("Page 1 of 2", a bare page number, the running "<year> General
-Election" header) is dropped first, so it never lands in a question or
-becomes the next heading (tested on a two-page layout built from the
+("Page 1 of 2" or a bare page number at a page's top or foot, the
+running "<year> General Election" header atop a later page) is dropped
+first, so it never lands in a question or becomes the next heading — and
+only at a page's edges, so a line that is just a number mid-page stays (tested on a two-page layout built from the
 real 2026 text; every real document seen is one page). Per question, verbatim:
 the printed question from its opening quotation mark through anything
 the document prints after the closing one (the legislative vote record
@@ -73,7 +74,7 @@ from app.pipeline.fetch.ballot_measures_state_common import (
     HEADERS_NO_CONTACT,
     get_bytes,
     get_text_or_missing,
-    pdf_text,
+    pdf_pages,
 )
 
 logger = logging.getLogger(__name__)
@@ -108,21 +109,34 @@ def find_questions_url(page_html: str, year: int) -> tuple[str | None, bool]:
     return (hrefs.pop() if hrefs else None), True
 
 
-def parse_questions(text: str, year: int) -> list[dict] | None:
-    """Every numbered question in the document, or None when it isn't
-    this year's general-election list or anything in it can't be read."""
-    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-    if len(lines) < 2 or lines[0] != f"{year} General Election":
+def _page_lines(page: str, header: str, first_page: bool) -> list[str]:
+    """A page's non-blank lines without its furniture: "Page N of M" or a
+    bare page number as its first or last lines, and (after page 1) the
+    running header at its top. Only at a page's edges — a line holding
+    just a number (a year wrapped onto its own line) mid-page is text."""
+    lines = [ln.strip() for ln in page.splitlines() if ln.strip()]
+    while lines and _PAGE_FURNITURE_RE.match(lines[-1]):
+        lines.pop()
+    while lines and (_PAGE_FURNITURE_RE.match(lines[0]) or (not first_page and lines[0] == header)):
+        lines.pop(0)
+    return lines
+
+
+def parse_questions(pages: list[str] | str, year: int) -> list[dict] | None:
+    """Every numbered question in the document (its pages' text, in
+    order), or None when it isn't this year's general-election list or
+    anything in it can't be read."""
+    if isinstance(pages, str):
+        pages = [pages]
+    header = f"{year} General Election"
+    lines = [ln for i, page in enumerate(pages) for ln in _page_lines(page, header, i == 0)]
+    if len(lines) < 2 or lines[0] != header:
         logger.warning("NH questions document does not open with '%d General Election'", year)
         return None
     if lines[1] != f"The following questions will be placed on the {year} General Election ballot.":
         logger.warning("NH questions document lacks its %d general-election statement", year)
         return None
-
-    # A longer document's page furniture — "Page 1 of 2", a bare page
-    # number, the running "<year> General Election" header — is not part
-    # of any question or heading.
-    body_lines = [ln for ln in lines[2:] if not _PAGE_FURNITURE_RE.match(ln) and ln != lines[0]]
+    body_lines = lines[2:]
 
     results: list[dict] = []
     heading: str | None = None
@@ -211,7 +225,7 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
     if raw is None:
         return None
     try:
-        parsed = parse_questions(pdf_text(raw), year)
+        parsed = parse_questions(pdf_pages(raw), year)
     except Exception:
         logger.exception("NH general election questions PDF was not parseable")
         return None

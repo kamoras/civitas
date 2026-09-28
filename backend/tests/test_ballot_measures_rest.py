@@ -109,7 +109,7 @@ class TestNewHampshire:
 
         monkeypatch.setattr(nh, "get_text_or_missing", get_text_or_missing)
         monkeypatch.setattr(nh, "get_bytes", get_bytes)
-        monkeypatch.setattr(nh, "pdf_text", lambda raw: raw)
+        monkeypatch.setattr(nh, "pdf_pages", lambda raw: [raw])
         result = await nh.fetch_measures(None, 2026)
         assert [(p["number"], u) for p, u in result] == [("1", pdf_url), ("2", pdf_url)]
 
@@ -545,16 +545,27 @@ class TestNewHampshireMultiPage:
 
     def _two_pages(self):
         # SYNTHETIC multi-page layout built from the real 2026 text: a page
-        # break inside question 1, with a page footer, a bare page number
-        # and the running header repeated on page 2.
+        # break inside question 1, with a page footer and a bare page
+        # number at the foot of page 1 and the running header atop page 2.
         lines = self.text.split("\n")
         cut = next(i for i, ln in enumerate(lines) if ln.startswith("counsel, act as advocate"))
-        return "\n".join(lines[:cut] + ["Page 1 of 2", "1", "2026 General Election"] + lines[cut:] + ["Page 2 of 2"])
+        return [
+            "\n".join(lines[:cut] + ["Page 1 of 2", "1"]),
+            "\n".join(["2026 General Election"] + lines[cut:] + ["Page 2 of 2"]),
+        ]
 
     def test_footers_and_page_numbers_never_land_in_the_text(self):
         one, two = nh.parse_questions(self._two_pages(), 2026)
         assert one["official_summary"] == nh.parse_questions(self.text, 2026)[0]["official_summary"]
         assert two["title"] == "Statutory Question required by HB 1300, Chapter 324, 2026"
+
+    def test_a_wrapped_line_that_is_just_a_number_is_kept(self):
+        # Mid-page, a line holding only "2026" is question text, not a
+        # page number: removing it would change the verbatim question.
+        text = self.text.replace("proposed by the 2026 General Court", "proposed by the 2026 General Court")
+        text = text.replace("RSA 32:5-i? If adopted for a two-year period:", "RSA 32:5-i? If adopted for\n2026\nand a two-year period:")
+        (two,) = [m for m in nh.parse_questions(text, 2026) if m["number"] == "2"]
+        assert "If adopted for 2026 and a two-year period:" in two["official_summary"]
 
     def test_stray_unquoted_text_between_questions_refuses(self):
         stray = self.text.replace(
@@ -579,3 +590,101 @@ class TestOhioYesNoSentenceEnd:
         assert oh.yes_no_sentences(body.replace("\n", " ")) == (
             "A “YES” vote means approval of the amendment.", "A “NO” vote means disapproval of the amendment.",
         )
+
+
+# ── Review round 2 (PR #715) ─────────────────────────────────────────
+
+class TestOhioYesNoBounds:
+    def test_a_single_capital_before_the_no_sentence_ends_yes(self):
+        body = "A “YES” vote means the tax applies to Plan B. A “NO” vote means it does not."
+        assert oh.yes_no_sentences(body) == (
+            "A “YES” vote means the tax applies to Plan B.", "A “NO” vote means it does not.",
+        )
+
+    def test_sentences_ending_in_a_roman_numeral_read_whole(self):
+        body = (
+            "A “YES” vote means approval of the amendment to Article V.\n"
+            "A “NO” vote means disapproval of the amendment to Article V.\n"
+            "SHALL THE AMENDMENT BE APPROVED?"
+        )
+        assert oh.yes_no_sentences(body) == (
+            "A “YES” vote means approval of the amendment to Article V.",
+            "A “NO” vote means disapproval of the amendment to Article V.",
+        )
+
+
+class TestNevadaUnrecognisedBooklet:
+    fx = _json("fixtures_nv_ballot_questions_2026.json")
+
+    async def _run(self, monkeypatch, pages):
+        url = "https://www.nvsos.gov/files/2026-ballot-question-booklet.pdf"
+        page = (
+            "<html><head><title>2026 Petitions &amp; General Election Ballot Questions</title></head>"
+            "<body><a href='/files/2026-ballot-question-booklet.pdf'>2026 Ballot Questions</a></body></html>"
+        )
+
+        async def get_text(client, u, label, **kw):
+            return page
+
+        async def get_bytes(client, u, label, **kw):
+            return "raw" if u == url else None
+
+        monkeypatch.setattr(nv, "get_text", get_text)
+        monkeypatch.setattr(nv, "get_bytes", get_bytes)
+        monkeypatch.setattr(nv, "pdf_pages", lambda raw: pages)
+        return await nv.fetch_measures(None, 2026)
+
+    @pytest.mark.asyncio
+    async def test_a_reworded_cover_is_a_failure_not_a_wait(self, monkeypatch):
+        pages = list(self.fx["pages"])
+        pages[0] = pages[0].replace("To Appear on the November 3, 2026, General Election Ballot", "For the 2026 General Election")
+        assert await self._run(monkeypatch, pages) is None
+
+    @pytest.mark.asyncio
+    async def test_a_booklet_with_no_text_layer_is_a_failure(self, monkeypatch):
+        assert await self._run(monkeypatch, [""] * 30) is None
+
+
+class TestMississippiReissuedBallot:
+    fx = _json("fixtures_ms_sample_ballot_2026.json")
+    general = "https://www.sos.ms.gov/content/documents/Elections/2026/Sample Ballot 9-9-26.pdf"
+    corrected = "https://www.sos.ms.gov/content/documents/Elections/2026/Sample Ballot 9-15-26 corrected.pdf"
+    stale = "https://www.sos.ms.gov/content/documents/Elections/2026/Sample Ballot Primary.pdf"
+
+    def _stub(self, monkeypatch, hrefs, docs):
+        links = "".join(f'<a href="{h.split("sos.ms.gov")[1]}">Sample Ballot</a>' for h in hrefs)
+        page = f"<html><head><title>Elections &amp; Voting | MS SOS</title></head><body>{links}</body></html>"
+
+        async def get_text(client, u, label, **kw):
+            return page
+
+        async def get_bytes(client, u, label, **kw):
+            return u if u in docs else None
+
+        monkeypatch.setattr(ms, "get_text", get_text)
+        monkeypatch.setattr(ms, "get_bytes", get_bytes)
+        monkeypatch.setattr(ms, "pdf_pages", lambda raw: docs[raw])
+
+    @pytest.mark.asyncio
+    async def test_two_general_ballots_with_the_same_answer_read(self, monkeypatch):
+        pages = self.fx["sample_ballot_pages"]
+        self._stub(monkeypatch, [self.general, self.corrected], {self.general: pages, self.corrected: pages})
+        assert await ms.fetch_measures(None, 2026) == []
+
+    @pytest.mark.asyncio
+    async def test_a_dead_extra_link_does_not_fail_a_found_general(self, monkeypatch):
+        self._stub(monkeypatch, [self.stale, self.general], {self.general: self.fx["sample_ballot_pages"]})
+        assert await ms.fetch_measures(None, 2026) == []
+
+    @pytest.mark.asyncio
+    async def test_a_dead_link_and_no_general_is_a_failure_not_a_wait(self, monkeypatch):
+        self._stub(monkeypatch, [self.stale], {})
+        assert await ms.fetch_measures(None, 2026) is None
+
+
+def test_ga_registry_description_names_what_the_reader_cannot_see():
+    from app.pipeline.fetch import ballot_measure_pdf_sources as sources
+
+    sources.invalidate_cache()
+    desc = sources.source_for_state("GA")["description"]
+    assert "county sample ballots" in desc and "Augusta-Richmond" in desc and "by hand" in desc

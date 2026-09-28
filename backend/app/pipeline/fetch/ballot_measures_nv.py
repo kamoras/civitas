@@ -48,9 +48,12 @@ booklet's address on it could be seen. The booklet itself is real — the
 copy the fixture was made from is the Secretary's document as republished
 by Eureka County's clerk (see the fixture's _source). A challenge page,
 a page that isn't the year's petitions page, a document that can't be
-fetched, or two documents with the booklet's cover is a failure (None) —
-never "not yet" and never "none"; a real page none of whose documents is
-the booklet is NotYetPublished, with no deadline (a general with no
+fetched, two documents with the booklet's cover, or a document that
+looks like the statewide booklet (names the year, "Statewide" and
+"Question", or has no text at all) but lacks its verified cover, is a
+failure (None) —
+never "not yet" and never "none"; a real page none of whose documents
+even looks like the booklet is NotYetPublished, with no deadline (a general with no
 statewide question may have no booklet).
 """
 
@@ -104,6 +107,19 @@ def booklet_urls(page_html: str, year: int) -> list[str] | None:
             if url not in urls:
                 urls.append(url)
     return urls
+
+
+def looks_like_statewide_booklet(pages: list[str], year: int) -> bool:
+    """A loose reading of a candidate document: its first page names
+    `year`, "Statewide" and "Question", or it has no text at all (a scan,
+    or a lost text layer) — either could be the statewide booklet, so a
+    candidate like this that fails is_statewide_booklet refuses the state
+    rather than being passed over. A Spanish edition ("Preguntas ...
+    Estatales") or a county/city summary names none of those."""
+    first = " ".join((pages[0] if pages else "").split())
+    if not "".join(pages).strip():
+        return True
+    return str(year) in first and "statewide" in first.lower() and "question" in first.lower()
 
 
 def is_statewide_booklet(pages: list[str], year: int) -> bool:
@@ -241,6 +257,13 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
             return None
         if is_statewide_booklet(pages, year):
             booklets.append((url, pages))
+        elif looks_like_statewide_booklet(pages, year):
+            # Its cover names the year's statewide questions but not in
+            # the verified form (a reworded cover, or no text layer at
+            # all): the booklet is there and can't be read — a failure,
+            # never "not yet".
+            logger.warning("NV %s looks like the %d statewide booklet but its cover isn't the verified one — refusing", url, year)
+            return None
     if not booklets:
         # Published for a general that has a statewide question; a year
         # with none may have no booklet at all, so no deadline.

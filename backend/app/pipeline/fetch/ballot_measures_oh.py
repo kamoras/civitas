@@ -36,7 +36,9 @@ line per bullet or numbered item as printed; the ballot's own
 prints them (2026 does, 2022 and 2024 did not), are yes_means /
 no_means — each running to the period that really ends it (followed by the
 end or a capital; a period ending an abbreviation such as "R.C." or
-"U.S." does not count), and one printed without the other, twice, or
+"U.S." does not count, a lone capital like "Plan B." does), the YES
+sentence never running past the start of the NO one nor the NO past
+its paragraph or the question, and one printed without the other, twice, or
 with no clear end refuses the issue. The answer ovals are not text.
 
 [] (confirmed none) only when every page of the sample ballot is one of
@@ -82,8 +84,11 @@ _ITEM_RE = re.compile(r"^(•|\d+\.\s)")
 _YES_START = "A “YES” vote means "
 _NO_START = "A “NO” vote means "
 # A period that ends a word like these is an abbreviation, not the end of
-# the sentence ("R.C. 3505.062", "the U.S. Constitution", "Sec. 5").
-_ABBREVIATION_RE = re.compile(r"(?:^|\s)(?:(?:[A-Z]\.)*[A-Z]|No|Nos|Sec|Secs|Art|Ch|Const|Stat|Rev|Div|Dist|vs?)$")
+# the sentence ("R.C. 3505.062", "the U.S. Constitution", "Sec. 5"). A
+# lone capital ("Plan B.", "Article V.") is NOT one: it ends a sentence
+# like any other word, and _SENTENCE_BREAK_RE already requires the next
+# word to start with a capital, so "B. 12" or "V. of" never breaks.
+_ABBREVIATION_RE = re.compile(r"(?:^|\s)(?:(?:[A-Z]\.)+[A-Z]|No|Nos|Sec|Secs|Art|Ch|Const|Stat|Rev|Div|Dist|vs?)$")
 _SENTENCE_BREAK_RE = re.compile(r"\.(?=\s*$|\s+[A-Z“\"(•])")
 
 
@@ -91,32 +96,48 @@ class AmbiguousSentence(ValueError):
     pass
 
 
-def _sentence_from(body: str, start: int) -> str:
-    """The sentence starting at `start`: through the first period that is
-    followed by the end of the text or by whitespace and a capital (or a
-    quotation mark, bullet or parenthesis), skipping periods that end an
+def _sentence_in(segment: str) -> str:
+    """The first sentence of `segment`: through the first period followed
+    by the segment's end or by whitespace and a capital (or a quotation
+    mark, bullet or parenthesis), skipping periods that end an
     abbreviation. No such period is ambiguous."""
-    for m in _SENTENCE_BREAK_RE.finditer(body, start):
-        if _ABBREVIATION_RE.search(body[start:m.start()]):
+    for m in _SENTENCE_BREAK_RE.finditer(segment):
+        if _ABBREVIATION_RE.search(segment[:m.start()]):
             continue
-        return body[start:m.end()]
-    raise AmbiguousSentence(body[start:start + 60])
+        return segment[:m.end()]
+    raise AmbiguousSentence(segment[:60])
 
 
 def yes_no_sentences(body: str) -> tuple[str | None, str | None]:
     """The ballot's own 'A “YES” vote means ...' and 'A “NO” vote means
     ...' sentences, whole, or (None, None) where it prints neither.
-    Raises AmbiguousSentence when one is printed without the other, more
-    than once, or with no clear end."""
-    found = []
+
+    Each is read only within its own bounds, so one can never run into
+    the other: the YES sentence stops at the start of the NO sentence or
+    at its paragraph's end, the NO sentence at its paragraph's end or the
+    ballot's "SHALL ..." question. Raises AmbiguousSentence when one is
+    printed without the other, more than once, or with no clear end."""
+    starts = {}
     for prefix in (_YES_START, _NO_START):
-        starts = [m.start() for m in re.finditer(re.escape(prefix), body)]
-        if len(starts) > 1:
+        found = [m.start() for m in re.finditer(re.escape(prefix), body)]
+        if len(found) > 1:
             raise AmbiguousSentence(prefix)
-        found.append(_sentence_from(body, starts[0]) if starts else None)
-    if (found[0] is None) != (found[1] is None):
+        starts[prefix] = found[0] if found else None
+    yes_at, no_at = starts[_YES_START], starts[_NO_START]
+    if yes_at is None and no_at is None:
+        return None, None
+    if yes_at is None or no_at is None:
         raise AmbiguousSentence("one of the YES/NO sentences is missing")
-    return found[0], found[1]
+
+    def bound(start: int, *stops: int) -> str:
+        para_end = body.find("\n", start)
+        ends = [e for e in (para_end, *stops) if e is not None and e > start]
+        return body[start:min(ends)] if ends else body[start:]
+
+    shall = body.find("SHALL ", no_at)
+    yes = _sentence_in(bound(yes_at, no_at))
+    no = _sentence_in(bound(no_at, yes_at, shall if shall >= 0 else None))
+    return yes, no
 _FOOTER_KINDS = {
     "candidates": re.compile(r"provides the CORRECT TITLES? and ORDER OF OFFICES"),
     "state_issues": re.compile(r"provides the CORRECT ballot format and ballot language for the state issues?"),

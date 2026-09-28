@@ -87,6 +87,11 @@ TITLE_AUTHORITY = "Georgia General Assembly"
 # questions. Any sign of them — on the booklet's cover, in its link, or
 # as another same-year document linked from the page — refuses the state
 # (ingest_failed) rather than publishing the amendments as the whole list.
+# Blind spot: a referendum question published only on county sample
+# ballots, named neither on the landing page nor on the booklet's cover,
+# is invisible here. 2026 was checked complete by hand (2026-09-28)
+# against Augusta-Richmond County's composite sample ballot: Amendments
+# 1-3 and no statewide referendum question.
 REFERENDUM_WORDS = ("referend", "ballot question")
 
 COLUMNS = 4

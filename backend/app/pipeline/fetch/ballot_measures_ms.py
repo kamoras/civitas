@@ -33,7 +33,11 @@ address or label reads "Sample Ballot" is read, and the one whose first
 page names the state and the general-election date is used — the 2026
 link names neither ("Sample Ballot 9-9-26.pdf"), so a primary's ballot
 beside it is told apart by its content. No such ballot among them (none
-linked, or only a primary's) is NotYetPublished; two is a refusal.
+linked, or only a primary's) is NotYetPublished — unless a link couldn't
+be read, when it is a failure, since that one may have been the general.
+A link that fails beside a general ballot that was read changes nothing.
+Two general ballots (a reissued or corrected one beside the original)
+are accepted only when each on its own confirms none.
 """
 
 import logging
@@ -128,22 +132,34 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
         logger.warning("MS elections page is not the page this reader knows")
         return None
     generals = []
+    failed = []
     for url in urls:
         raw = await get_bytes(client, url, "MS sample ballot")
-        if raw is None:
-            return None
-        try:
-            pages = pdf_pages(raw)
-        except Exception:
-            logger.exception("MS sample ballot %s was not parseable", url)
-            return None
+        pages = None
+        if raw is not None:
+            try:
+                pages = pdf_pages(raw)
+            except Exception:
+                logger.exception("MS sample ballot %s was not parseable", url)
+        if pages is None:
+            # A stale link (a primary's ballot taken down) needn't sink a
+            # general ballot found beside it; it only matters when no
+            # general ballot was read (below).
+            failed.append(url)
+            continue
         if is_general_ballot(pages, year):
             generals.append(pages)
     if not generals:
+        if failed:
+            # The general's ballot may be the one that couldn't be read.
+            logger.warning("MS: no general sample ballot read and %d link(s) failed: %s", len(failed), failed)
+            return None
         # Every linked sample ballot was read and none is this general's
         # (only a primary's, or none posted yet): not yet, nothing broken.
         raise NotYetPublished(f"the Mississippi Secretary of State's {year} general-election sample ballot")
-    if len(generals) > 1:
-        logger.warning("MS: %d sample ballots name the %d general election — refusing", len(generals), year)
+    # A reissued or corrected ballot can sit beside the original; it is
+    # accepted only when every general ballot gives the same answer.
+    answers = {confirms_none(pages, year) for pages in generals}
+    if answers != {True}:
         return None
-    return [] if confirms_none(generals[0], year) else None
+    return []
