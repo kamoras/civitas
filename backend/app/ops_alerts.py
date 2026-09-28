@@ -329,6 +329,40 @@ def check_pipeline_overrun() -> None:
             )
 
 
+# How long the scheduler's heartbeat (scheduler._record_next_run, every 5
+# minutes) may go unwritten before the pipeline service is taken for down.
+PIPELINE_SERVICE_SILENT_AFTER = timedelta(minutes=30)
+
+
+def check_pipeline_service_alive() -> None:
+    """Watchdog run by the read-only API process: alert when the pipeline
+    service's scheduler has stopped writing its heartbeat.
+
+    Every other pipeline watchdog here runs in the pipeline process's own
+    scheduler, so none of them can report that process being gone — and
+    since the two were split (settings.PROCESS_ROLE), the site stays up
+    when it goes: a crash loop past Swarm's restart limit would stop every
+    nightly run with no page and no alert. Once a day at most.
+    """
+    from app.database import SCHEDULER_HEARTBEAT_KEY, SCHEDULER_HEARTBEAT_TIER
+    from app.shared_state import UNREADABLE, read_row
+
+    row = read_row(SCHEDULER_HEARTBEAT_TIER, SCHEDULER_HEARTBEAT_KEY)
+    if row is UNREADABLE:
+        return  # not evidence of anything; the next tick asks again
+    last = row[0] if isinstance(row, tuple) else None
+    if last is not None and last >= utcnow() - PIPELINE_SERVICE_SILENT_AFTER:
+        return
+    since = f"since {last:%Y-%m-%d %H:%M} UTC" if last is not None else "ever"
+    send_ops_alert(
+        "Pipeline service is not running",
+        f"The pipeline service's scheduler has not reported {since}. The site is still being "
+        "served, but no scheduled job — the nightly chain, the hourly refreshes — will run until "
+        "it is back. Check `docker service ps civitas_pipeline` and its logs.",
+        dedupe_key=f"pipeline-service-silent-{utcnow():%Y-%m-%d}",
+    )
+
+
 def check_pipeline_staleness() -> None:
     """Watchdog: alert when a nightly pipeline has not COMPLETED recently.
 

@@ -92,9 +92,10 @@ async def fetch_bill_record(
     if (cached["bill"] or {}).get("not_found"):
         out["not_found"] = True
         return out
-    if spend is not None:
+    missing = sum(1 for part in _PARTS if cached[part] is None)
+    if spend is not None and missing:
         # A write to the shared budget (api/throttle.py): off the event loop.
-        await asyncio.to_thread(spend, sum(1 for part in _PARTS if cached[part] is None))
+        await asyncio.to_thread(spend, missing)
     for part, suffix in _PARTS.items():
         key = keys[part]
         if cached[part] is not None:

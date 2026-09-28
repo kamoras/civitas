@@ -229,19 +229,12 @@ def warm_bill_collection_cache() -> None:
 
 
 def _record_change() -> None:
-    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-
     from app.database import session_scope
-    from app.models import ApiCache
+    from app.shared_state import write_row
 
     try:
         with session_scope() as db:
-            now = utcnow()
-            db.execute(
-                sqlite_insert(ApiCache)
-                .values(tier=_CHANGED_TIER, cache_key=_CHANGED_KEY, data_json="{}", cached_at=now)
-                .on_conflict_do_update(index_elements=["tier", "cache_key"], set_={"cached_at": now})
-            )
+            write_row(db, _CHANGED_TIER, _CHANGED_KEY, {}, at=utcnow())
             db.commit()
     except Exception:
         # The API processes still rebuild on their TTL.
@@ -252,22 +245,16 @@ def _changed_since(db: Session, built_at: datetime) -> bool:
     """Whether a writer in another process changed the data after `built_at`
     (checked at most every _CHANGED_CHECK_SECONDS)."""
     global _last_changed_check
+    from app.shared_state import read_row
+
     now = time.monotonic()
     if now - _last_changed_check < _CHANGED_CHECK_SECONDS:
         return False
     _last_changed_check = now
-    from app.models import ApiCache
-
-    try:
-        changed_at = (
-            db.query(ApiCache.cached_at)
-            .filter(ApiCache.tier == _CHANGED_TIER, ApiCache.cache_key == _CHANGED_KEY)
-            .scalar()
-        )
-    except Exception:
-        logger.warning("Could not read the bill-collection change marker", exc_info=True)
-        return False
-    return changed_at is not None and changed_at >= built_at
+    row = read_row(_CHANGED_TIER, _CHANGED_KEY, db)
+    # None (no change recorded) and UNREADABLE (a moment's lock) alike: no
+    # change to act on; the TTL still rebuilds.
+    return isinstance(row, tuple) and row[0] >= built_at
 
 
 def _collect_bills(db: Session) -> list[_Row]:

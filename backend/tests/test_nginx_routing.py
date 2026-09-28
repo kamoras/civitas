@@ -5,8 +5,8 @@ Production runs the read-only API (PROCESS_ROLE=api) and the pipeline
 request reaches. The API process refuses to start background work (a 503),
 so a trigger nginx sends to the wrong place fails loudly — but only when
 someone presses it. This fails at CI time instead: every POST route the
-app has is either routed to the pipeline, or listed below as one the API
-process serves itself.
+app has (and PUT, PATCH, DELETE) is either routed to the pipeline, or
+listed below as one the API process serves itself.
 """
 
 import re
@@ -16,7 +16,8 @@ import pytest
 
 CONF = Path(__file__).resolve().parents[2] / "nginx" / "civitas.conf"
 
-# POST routes that do their work inside the request, in the API process.
+# Mutating routes (POST, PUT, PATCH, DELETE) that do their work inside the
+# request, in the API process.
 # Adding a route here is a claim that it starts no background writer
 # (app.background.start_writer / writing) — the API process would refuse it.
 SERVED_BY_API = {
@@ -58,12 +59,17 @@ def route(path: str) -> str:
     return longest[2] if longest is not None else ""
 
 
+# Every method that can change something — not only POST: a PUT, PATCH or
+# DELETE route that starts background work has to be routed the same way.
+_MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
+
+
 def _post_routes() -> list[str]:
     from app.main import app
 
     return sorted({
         r.path for r in app.routes
-        if "POST" in getattr(r, "methods", set()) and r.path.startswith("/api/")
+        if _MUTATING & set(getattr(r, "methods", None) or ()) and r.path.startswith("/api/")
     })
 
 
@@ -71,7 +77,7 @@ def _concrete(path: str) -> str:
     return re.sub(r"\{[^}]+\}", "1", path)
 
 
-def test_every_post_route_is_routed_or_served_by_the_api():
+def test_every_mutating_route_is_routed_or_served_by_the_api():
     unrouted = [
         path for path in _post_routes()
         if path not in SERVED_BY_API and route(_concrete(path)) != "pipeline_upstream"

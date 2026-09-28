@@ -69,50 +69,23 @@ class RankingCalibrationMissing(RuntimeError):
     """Neither the database nor the bundled file has a calibration."""
 
 
-def _load_from_db() -> dict | None:
-    try:
-        from app.database import SessionLocal
-        from app.pipeline.cache import api_cache_get
+def _stored():
+    """The stored calibration row: (written at, value), None, or UNREADABLE
+    (shared_state.read_row — read whatever its age: a calibration stands
+    until the explore pipeline replaces it)."""
+    from app.shared_state import read_row
 
-        db = SessionLocal()
+    return read_row(_CACHE_NAMESPACE, _CACHE_KEY)
+
+
+def _decode(value) -> dict | None:
+    """The stored value as a calibration (it is stored JSON-encoded)."""
+    if isinstance(value, str):
         try:
-            raw = api_cache_get(db, _CACHE_NAMESPACE, _CACHE_KEY)
-        finally:
-            db.close()
-        if isinstance(raw, dict):
-            return raw
-        if isinstance(raw, str):
-            return json.loads(raw)
-    except Exception:
-        logger.debug("No stored ranking calibration; using the bundled one",
-                     exc_info=True)
-    return None
-
-
-_UNKNOWN = object()
-
-
-def _stored_at():
-    """When the stored calibration was written; None when there is none;
-    _UNKNOWN when the database couldn't be asked — which must not read as a
-    change, or a moment's lock would swap the fitted calibration for the
-    bundled one."""
-    try:
-        from app.database import SessionLocal
-        from app.models import ApiCache
-
-        db = SessionLocal()
-        try:
-            return (
-                db.query(ApiCache.cached_at)
-                .filter(ApiCache.tier == _CACHE_NAMESPACE, ApiCache.cache_key == _CACHE_KEY)
-                .scalar()
-            )
-        finally:
-            db.close()
-    except Exception:
-        logger.debug("Couldn't check the stored ranking calibration", exc_info=True)
-        return _UNKNOWN
+            value = json.loads(value)
+        except ValueError:
+            return None
+    return value if isinstance(value, dict) else None
 
 
 def _load_bundled() -> dict | None:
@@ -132,8 +105,10 @@ def ranking(*, force_reload: bool = False) -> dict:
     if _override is not None and set(_override) >= _REQUIRED_KEYS:
         return _override
 
-    # Every database read here happens outside _lock, which every search
+    # The one database read here happens outside _lock, which every search
     # thread takes: under it, one slow read would hold all searches up.
+    from app.shared_state import UNREADABLE
+
     now = time.monotonic()
     with _lock:
         cached, cached_at, cached_stored = _cached, _cached_at, _cached_stored_at
@@ -144,22 +119,21 @@ def ranking(*, force_reload: bool = False) -> dict:
     if not due:
         return _with_override(cached)
 
-    stored = _stored_at()
+    row = _stored()
+    stored_at = row[0] if isinstance(row, tuple) else None
     if cached is not None:
-        if stored is _UNKNOWN:
-            # The database can't be read right now: keep what we have
-            # rather than fall back to the bundled calibration — forced or
-            # not, a moment's lock is no reason to rank worse.
-            return _with_override(cached)
-        if not expired and stored == cached_stored:
-            return _with_override(cached)
+        unchanged = row is not UNREADABLE and stored_at == cached_stored
+        # UNREADABLE: the database can't be read right now — keep what we
+        # have (forced or not) rather than fall back to the bundled one.
+        if row is UNREADABLE or (unchanged and not force_reload):
+            return _keep(cached, now)
 
-    from_db = _load_from_db() if stored not in (None, _UNKNOWN) else None
-    if from_db is None and stored not in (None, _UNKNOWN) and cached is not None:
-        # A stored calibration exists but couldn't be read: the one in hand
-        # is better than the bundled one, and the next check tries again.
-        return _with_override(cached)
-    loaded = from_db or _load_bundled()
+    payload = _decode(row[1]) if isinstance(row, tuple) else None
+    if payload is None and isinstance(row, tuple) and cached is not None:
+        # A stored calibration exists but couldn't be decoded: the one in
+        # hand is better than the bundled one.
+        return _keep(cached, now)
+    loaded = payload or _load_bundled()
     if not loaded:
         raise RankingCalibrationMissing(
             "No explore ranking calibration available. Run "
@@ -170,8 +144,19 @@ def ranking(*, force_reload: bool = False) -> dict:
         _cached, _cached_at = loaded, time.monotonic()
         # Stamped with the row only when it came from the row: a bundled
         # stand-in stays "not the stored one", so the next check reloads.
-        _cached_stored_at = stored if from_db is not None else None
+        _cached_stored_at = stored_at if payload is not None else None
     return _with_override(loaded)
+
+
+def _keep(cached: dict, now: float) -> dict:
+    """Serve the calibration in hand, and count it as fresh: kept after a
+    failed read, it must not be re-read on every call until one succeeds —
+    the 30-second check still picks up a replacement."""
+    global _cached_at
+    with _lock:
+        if _cached is cached:
+            _cached_at = now
+    return _with_override(cached)
 
 
 def _with_override(calibration: dict) -> dict:

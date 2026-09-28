@@ -129,7 +129,7 @@ def test_only_cache_misses_are_charged_before_anything_is_fetched(senate, monkey
     charged = []
     asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668", spend=charged.append))
     asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668", spend=charged.append))
-    assert charged == [5, 0]
+    assert charged == [5]  # the cached call charges nothing, not even a zero
 
     def refuse(n):
         raise RuntimeError("budget spent")

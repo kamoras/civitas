@@ -135,41 +135,31 @@ def otsu_threshold(values: list[float], bins: int = 256) -> float | None:
     return best_t
 
 
-def _stored_at(db):
-    """When the stored calibration was written; None when there is none or
-    the database can't be asked right now (either way: no change to act on)."""
-    from app.models import ApiCache
-
-    try:
-        return (
-            db.query(ApiCache.cached_at)
-            .filter(ApiCache.tier == _CACHE_NAMESPACE, ApiCache.cache_key == _CACHE_KEY)
-            .scalar()
-        )
-    except Exception:
-        return None
-
-
 def threshold(db=None) -> float:
+    """The calibrated threshold, read from its stored row whatever its age
+    (shared_state.read_row: it stands until the election pipeline replaces
+    it), or the measured bootstrap before the first calibration."""
     global _cached, _cached_stored_at, _checked_at
-    if _cached is not None and db is not None:
-        now = time.monotonic()
-        if now - _checked_at >= _CHECK_STORED_EVERY_SECONDS:
-            _checked_at = now
-            stored = _stored_at(db)
-            if stored is not None and stored != _cached_stored_at:
-                _cached = None  # replaced elsewhere: reload below
-    if _cached is None and db is not None:
-        from app.pipeline.cache import api_cache_get
+    from app.shared_state import UNREADABLE, read_row
 
-        stored = _stored_at(db)
-        raw = api_cache_get(db, _CACHE_NAMESPACE, _CACHE_KEY)
-        if raw:
-            try:
-                _cached = json.loads(raw)
-                _cached_stored_at, _checked_at = stored, time.monotonic()
-            except ValueError:
-                logger.warning("Race-relevance calibration unreadable — using bootstrap")
+    if db is not None:
+        now = time.monotonic()
+        if _cached is None or now - _checked_at >= _CHECK_STORED_EVERY_SECONDS:
+            _checked_at = now
+            row = read_row(_CACHE_NAMESPACE, _CACHE_KEY, db)
+            # UNREADABLE (a moment's lock) and an unchanged row both keep
+            # what we have.
+            if isinstance(row, tuple) and (_cached is None or row[0] != _cached_stored_at):
+                try:
+                    value = json.loads(row[1]) if isinstance(row[1], str) else row[1]
+                except ValueError:
+                    value = None
+                if isinstance(value, dict):
+                    _cached, _cached_stored_at = value, row[0]
+                else:
+                    logger.warning("Race-relevance calibration unreadable — keeping the previous one")
+            elif row is not UNREADABLE and row is None:
+                _cached, _cached_stored_at = None, None
     if _cached:
         return float(_cached.get("threshold", BOOTSTRAP_THRESHOLD))
     return BOOTSTRAP_THRESHOLD

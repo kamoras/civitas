@@ -132,7 +132,7 @@ def test_a_salt_from_a_day_that_ended_is_dropped(monkeypatch):
     # An idle worker must not hold yesterday's salt: it could recompute
     # every one of yesterday's hashes from an IP.
     monkeypatch.setattr(visits, "_salt_cache", ("2000-01-01", b"x" * 32))
-    monkeypatch.setattr(visits, "_fallback_salt", ("2000-01-01", b"y" * 32))
+    monkeypatch.setattr(visits, "_fallback_salt", ("2000-01-01", b"y" * 32, True))
     visits._forget_stale_salts()
     assert visits._salt_cache is None and visits._fallback_salt is None
 
@@ -167,3 +167,21 @@ def test_a_worker_behind_midnight_keeps_the_new_days_visit_salt(db_session):
         tomorrow = visits._load_or_create_salt("2099-01-02")
         visits._load_or_create_salt("2099-01-01")  # a worker that read the clock just before midnight
         assert visits._load_or_create_salt("2099-01-02") == tomorrow
+
+
+def test_a_private_fallback_gives_way_to_the_shared_one(monkeypatch):
+    # Both stores down: this process's own salt. The RAM store back: the
+    # shared one, not the private one for the rest of the day.
+    from app.api import throttle
+
+    def boom(date):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(visits, "_salt_cache", None)
+    monkeypatch.setattr(visits, "_fallback_salt", None)
+    monkeypatch.setattr(visits, "_load_or_create_salt", boom)
+    monkeypatch.setattr(throttle, "derived_salt", lambda purpose: None)
+    private = asyncio.run(_daily_salt("2026-09-24"))
+    assert asyncio.run(_daily_salt("2026-09-24")) == private  # stable meanwhile
+    monkeypatch.setattr(throttle, "derived_salt", lambda purpose: b"s" * 32)
+    assert asyncio.run(_daily_salt("2026-09-24")) == b"s" * 32

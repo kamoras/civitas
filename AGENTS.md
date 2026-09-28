@@ -968,7 +968,7 @@ the pending list).
   - **Anything that starts background work belongs to the pipeline process.**
     `app.background.start_writer`/`writing` refuse in the API role (a 503),
     and nginx sends `/api/admin/` and every trigger endpoint to `pipeline`
-    ("Background work" in `nginx/civitas.conf`). A new POST route must be
+    ("Background work" in `nginx/civitas.conf`). A new POST, PUT, PATCH or DELETE route must be
     either routed there or listed in `tests/test_nginx_routing.py`'s
     `SERVED_BY_API` — that test fails otherwise.
   - **No per-client state in module globals.** With several API workers each

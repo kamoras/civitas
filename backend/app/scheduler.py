@@ -6,7 +6,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from app.config import settings
-from app.database import SCHEDULER_HEARTBEAT_TIER, SessionLocal
+from app.database import SCHEDULER_HEARTBEAT_KEY, SCHEDULER_HEARTBEAT_TIER, SessionLocal
 from app.http_client import make_async_client
 from app.pipeline.senate_pipeline import run_senate_pipeline
 from app.pipeline.house_pipeline import run_house_pipeline, is_house_pipeline_running, house_pipeline_age
@@ -678,7 +678,7 @@ def stop_scheduler() -> None:
 # so a pipeline service that is down stops advertising a run that won't
 # happen.
 _HEARTBEAT_TIER = SCHEDULER_HEARTBEAT_TIER
-_HEARTBEAT_KEY = "next-run"
+_HEARTBEAT_KEY = SCHEDULER_HEARTBEAT_KEY
 _HEARTBEAT_MINUTES = 5
 _HEARTBEAT_STALE = timedelta(minutes=3 * _HEARTBEAT_MINUTES)
 
@@ -691,21 +691,11 @@ def _live_next_run() -> str | None:
 
 
 def _record_next_run() -> None:
-    import json
-
-    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-
     from app.database import session_scope
-    from app.models import ApiCache
+    from app.shared_state import write_row
 
-    now = utcnow()
-    data = json.dumps({"nextRun": _live_next_run()})
     with session_scope() as db:
-        db.execute(
-            sqlite_insert(ApiCache)
-            .values(tier=_HEARTBEAT_TIER, cache_key=_HEARTBEAT_KEY, data_json=data, cached_at=now)
-            .on_conflict_do_update(index_elements=["tier", "cache_key"], set_={"data_json": data, "cached_at": now})
-        )
+        write_row(db, _HEARTBEAT_TIER, _HEARTBEAT_KEY, {"nextRun": _live_next_run()}, at=utcnow())
         db.commit()
 
 
@@ -725,20 +715,10 @@ def get_next_run_time() -> str | None:
     """
     if scheduler.running:
         return _live_next_run()
-    import json
+    from app.shared_state import read_row
 
-    from app.database import session_scope
-    from app.models import ApiCache
-
-    with session_scope() as db:
-        row = (
-            db.query(ApiCache)
-            .filter(ApiCache.tier == _HEARTBEAT_TIER, ApiCache.cache_key == _HEARTBEAT_KEY)
-            .first()
-        )
-        if row is None or row.cached_at < utcnow() - _HEARTBEAT_STALE:
-            return None
-        try:
-            return json.loads(row.data_json).get("nextRun")
-        except (TypeError, ValueError):
-            return None
+    row = read_row(_HEARTBEAT_TIER, _HEARTBEAT_KEY)
+    if not isinstance(row, tuple) or row[0] < utcnow() - _HEARTBEAT_STALE:
+        return None
+    value = row[1]
+    return value.get("nextRun") if isinstance(value, dict) else None

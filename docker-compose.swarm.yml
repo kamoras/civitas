@@ -99,8 +99,10 @@ services:
     environment:
       - PROCESS_ROLE=api
       # Read-only work scales across processes: each worker has its own
-      # interpreter lock. Each also holds its own copy of the two small
-      # embedding models (Explore search, /api/qa). Raise only after
+      # interpreter lock. Each also holds its own copy of the search model
+      # (and /api/qa's, once asked). Measured 2026-09: ~0.9 GB a worker with
+      # the search model loaded, 1.8 GB for two plus the supervisor, under
+      # the 4G limit docker-compose.yml gives backend. Raise only after
       # checking memory under load (`docker stats`).
       - WEB_CONCURRENCY=2
     deploy:
@@ -144,6 +146,9 @@ services:
       resources:
         limits:
           # What the single backend container had when it ran both halves.
+          # With backend's 4G, llama-server's 2G and frontend's 512M the
+          # limits total ~10.5G of the Pi's 15.8G, so each container meets
+          # its own limit before the host runs out.
           memory: 4G
       # stop-first, unlike backend: two pipeline processes overlapping
       # would load a second set of models for nothing and run two

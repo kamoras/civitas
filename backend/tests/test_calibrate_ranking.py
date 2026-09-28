@@ -7,6 +7,8 @@ signal disappear when the corpus cannot support it, since those are what
 keep a prior from inventing an ordering out of nothing.
 """
 
+import json
+
 import pytest
 
 from app.models import ExploreDocument  # noqa: F401  (registers the table)
@@ -165,7 +167,7 @@ class TestLoader:
         # The failure mode that matters: ranking with made-up weights would
         # look like it worked.
         explore_ranking.reset_cache()
-        monkeypatch.setattr(explore_ranking, "_load_from_db", lambda: None)
+        monkeypatch.setattr(explore_ranking, "_stored", lambda: None)
         monkeypatch.setattr(explore_ranking, "_load_bundled", lambda: None)
         with pytest.raises(explore_ranking.RankingCalibrationMissing):
             explore_ranking.ranking(force_reload=True)
@@ -209,72 +211,102 @@ def test_a_recalibration_by_another_process_is_picked_up(db_session, monkeypatch
     explore_ranking.reset_cache()
 
 
-def test_a_moment_the_database_is_unreadable_keeps_the_calibration(db_session, monkeypatch):
-    # Not a change: falling back to the bundled weights for an hour because
-    # one check met a lock would rank worse for no reason.
+def _stub(monkeypatch, row):
     from app.pipeline import explore_ranking
+
+    monkeypatch.setattr(explore_ranking, "_stored", lambda: row)
+
+
+def _row(day, cap):
+    from datetime import datetime
 
     from tests.conftest import TEST_RANKING_CALIBRATION
 
-    from datetime import datetime
+    return datetime(2026, 9, day), json.dumps({**TEST_RANKING_CALIBRATION, "source_diversity_cap": cap})
+
+
+@pytest.fixture()
+def fresh_ranking(monkeypatch):
+    from app.pipeline import explore_ranking
 
     monkeypatch.setattr(explore_ranking, "_override", None)
     explore_ranking.reset_cache()
-    stored = datetime(2026, 9, 1)
-    monkeypatch.setattr(explore_ranking, "_stored_at", lambda: stored)
-    monkeypatch.setattr(explore_ranking, "_load_from_db",
-                        lambda: {**TEST_RANKING_CALIBRATION, "source_diversity_cap": 9})
-    assert explore_ranking.source_diversity_cap() == 9
-    monkeypatch.setattr(explore_ranking, "_stored_at", lambda: explore_ranking._UNKNOWN)
-    monkeypatch.setattr(explore_ranking, "_load_from_db", lambda: None)  # would fall back to bundled
-    monkeypatch.setattr(explore_ranking, "_checked_at", 0.0)
-    assert explore_ranking.source_diversity_cap() == 9
+    yield explore_ranking
     explore_ranking.reset_cache()
 
 
-def test_a_stored_calibration_that_cannot_be_read_is_not_replaced_by_the_bundled_one(monkeypatch):
-    # The row changed (a recalibration elsewhere) but reading it failed:
-    # keep the calibration in hand, stamped as the old row, so the next
-    # check tries the new one again — never the bundled one stamped as new.
+def test_a_moment_the_database_is_unreadable_keeps_the_calibration(fresh_ranking, monkeypatch):
+    # Not a change: falling back to the bundled weights because one check
+    # met a lock would rank worse for no reason.
+    from app.shared_state import UNREADABLE
+
+    _stub(monkeypatch, _row(1, 9))
+    assert fresh_ranking.source_diversity_cap() == 9
+    _stub(monkeypatch, UNREADABLE)
+    monkeypatch.setattr(fresh_ranking, "_checked_at", 0.0)
+    assert fresh_ranking.source_diversity_cap() == 9
+
+
+def test_a_stored_calibration_that_cannot_be_read_is_not_replaced_by_the_bundled_one(fresh_ranking, monkeypatch):
+    # The row changed (a recalibration elsewhere) but its value couldn't be
+    # decoded: keep the calibration in hand, stamped as the old row, so the
+    # next check tries the new one again — never the bundled one.
     from datetime import datetime
 
-    from app.pipeline import explore_ranking
+    _stub(monkeypatch, _row(1, 9))
+    assert fresh_ranking.source_diversity_cap() == 9
+    _stub(monkeypatch, (datetime(2026, 9, 2), "not json"))
+    monkeypatch.setattr(fresh_ranking, "_checked_at", 0.0)
+    assert fresh_ranking.source_diversity_cap() == 9  # not the bundled one
+    _stub(monkeypatch, _row(2, 11))
+    monkeypatch.setattr(fresh_ranking, "_checked_at", 0.0)
+    assert fresh_ranking.source_diversity_cap() == 11  # and the new row once readable
+
+
+def test_a_forced_reload_during_a_lock_keeps_the_calibration(fresh_ranking, monkeypatch):
+    from app.shared_state import UNREADABLE
+
+    _stub(monkeypatch, _row(1, 9))
+    assert fresh_ranking.source_diversity_cap() == 9
+    _stub(monkeypatch, UNREADABLE)
+    assert fresh_ranking.ranking(force_reload=True)["source_diversity_cap"] == 9
+
+
+def test_a_kept_calibration_is_not_reread_on_every_call(fresh_ranking, monkeypatch):
+    # Kept after a failed read, it counts as fresh: re-reading it on each of
+    # a search's half-dozen accessor calls until a read succeeded cost a
+    # dozen database sessions per search.
+    import time
+
+    from app.shared_state import UNREADABLE
+
+    _stub(monkeypatch, _row(1, 9))
+    fresh_ranking.source_diversity_cap()
+    reads = []
+    monkeypatch.setattr(fresh_ranking, "_stored", lambda: (reads.append(1), UNREADABLE)[1])
+    monkeypatch.setattr(fresh_ranking, "_cached_at", time.monotonic() - 10_000)  # expired
+    for _ in range(10):
+        assert fresh_ranking.source_diversity_cap() == 9
+    assert reads == [1]
+
+
+def test_a_calibration_is_read_whatever_its_age(fresh_ranking, db_session, monkeypatch):
+    # A calibration stands until replaced; the 72-hour TTL for cached
+    # responses used to drop one the pipeline hadn't had occasion to redo.
+    from datetime import timedelta
+
+    from sqlalchemy.orm import Session
+
+    from app.models import ApiCache
+    from app.time_utils import utcnow
 
     from tests.conftest import TEST_RANKING_CALIBRATION
 
-    monkeypatch.setattr(explore_ranking, "_override", None)
-    explore_ranking.reset_cache()
-    monkeypatch.setattr(explore_ranking, "_stored_at", lambda: datetime(2026, 9, 1))
-    monkeypatch.setattr(explore_ranking, "_load_from_db",
-                        lambda: {**TEST_RANKING_CALIBRATION, "source_diversity_cap": 9})
-    assert explore_ranking.source_diversity_cap() == 9
-
-    monkeypatch.setattr(explore_ranking, "_stored_at", lambda: datetime(2026, 9, 2))
-    monkeypatch.setattr(explore_ranking, "_load_from_db", lambda: None)
-    monkeypatch.setattr(explore_ranking, "_checked_at", 0.0)
-    assert explore_ranking.source_diversity_cap() == 9  # not the bundled one
-
-    monkeypatch.setattr(explore_ranking, "_load_from_db",
-                        lambda: {**TEST_RANKING_CALIBRATION, "source_diversity_cap": 11})
-    monkeypatch.setattr(explore_ranking, "_checked_at", 0.0)
-    assert explore_ranking.source_diversity_cap() == 11  # and the new row once readable
-    explore_ranking.reset_cache()
-
-
-def test_a_forced_reload_during_a_lock_keeps_the_calibration(monkeypatch):
-    from datetime import datetime
-
-    from app.pipeline import explore_ranking
-
-    from tests.conftest import TEST_RANKING_CALIBRATION
-
-    monkeypatch.setattr(explore_ranking, "_override", None)
-    explore_ranking.reset_cache()
-    monkeypatch.setattr(explore_ranking, "_stored_at", lambda: datetime(2026, 9, 1))
-    monkeypatch.setattr(explore_ranking, "_load_from_db",
-                        lambda: {**TEST_RANKING_CALIBRATION, "source_diversity_cap": 9})
-    assert explore_ranking.source_diversity_cap() == 9
-    monkeypatch.setattr(explore_ranking, "_stored_at", lambda: explore_ranking._UNKNOWN)
-    monkeypatch.setattr(explore_ranking, "_load_from_db", lambda: None)
-    assert explore_ranking.ranking(force_reload=True)["source_diversity_cap"] == 9
-    explore_ranking.reset_cache()
+    monkeypatch.setattr("app.database.SessionLocal", lambda: Session(bind=db_session.get_bind()))
+    db_session.add(ApiCache(
+        tier="explore", cache_key="ranking_calibration",
+        data_json=json.dumps(json.dumps({**TEST_RANKING_CALIBRATION, "source_diversity_cap": 5})),
+        cached_at=utcnow() - timedelta(days=30),
+    ))
+    db_session.commit()
+    assert fresh_ranking.source_diversity_cap() == 5

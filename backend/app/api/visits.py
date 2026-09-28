@@ -307,7 +307,8 @@ async def _daily_salt(date: str) -> bytes:
     return salt
 
 
-_fallback_salt: tuple[str, bytes] | None = None
+# (date, salt, whether it is the container-shared one)
+_fallback_salt: tuple[str, bytes, bool] | None = None
 
 
 # How often an idle worker checks for a salt left over from a previous day.
@@ -332,12 +333,19 @@ def _forget_stale_salts() -> None:
 
 
 def _fallback_salt_for(date: str) -> bytes:
+    """The container's shared fallback (derived from the rate limits' RAM
+    salt) — or, while that store is down too, this process's own, kept
+    only until the shared one can be made: a private salt kept all day
+    would count this worker's visitors apart from every other worker's."""
     global _fallback_salt
-    if _fallback_salt is None or _fallback_salt[0] != date:
+    if _fallback_salt is None or _fallback_salt[0] != date or not _fallback_salt[2]:
         from app.api import throttle
 
-        # This process's own, only if the shared RAM store is down too.
-        _fallback_salt = (date, throttle.derived_salt(f"visits:{date}") or secrets.token_bytes(32))
+        shared = throttle.derived_salt(f"visits:{date}")
+        if shared is not None:
+            _fallback_salt = (date, shared, True)
+        elif _fallback_salt is None or _fallback_salt[0] != date:
+            _fallback_salt = (date, secrets.token_bytes(32), False)
     return _fallback_salt[1]
 
 

@@ -323,3 +323,76 @@ def test_the_test_run_has_its_own_ram_dir():
     from app.api.throttle import RAM_DIR
 
     assert RAM_DIR == os.environ["CIVITAS_RAM_DIR"] and RAM_DIR != "/dev/shm"
+
+
+class TestPipelineServiceLiveness:
+    """The API process alerts when the pipeline service stops: the site
+    stays up without it, and every other watchdog runs inside it."""
+
+    @pytest.fixture()
+    def sent(self, db_session, monkeypatch):
+        from contextlib import contextmanager
+
+        from sqlalchemy.orm import Session
+
+        @contextmanager
+        def _scope():
+            session = Session(bind=db_session.get_bind())
+            try:
+                yield session
+            finally:
+                session.close()
+
+        monkeypatch.setattr("app.database.session_scope", _scope)
+        alerts = []
+        monkeypatch.setattr("app.ops_alerts.send_ops_alert", lambda subject, body, **kw: alerts.append(subject))
+        return alerts
+
+    def _beat(self, db_session, age):
+        from app.database import SCHEDULER_HEARTBEAT_KEY, SCHEDULER_HEARTBEAT_TIER
+        from app.shared_state import write_row
+        from app.time_utils import utcnow
+
+        write_row(db_session, SCHEDULER_HEARTBEAT_TIER, SCHEDULER_HEARTBEAT_KEY, {}, at=utcnow() - age)
+        db_session.commit()
+
+    def test_a_fresh_heartbeat_is_quiet(self, db_session, sent):
+        from app.ops_alerts import check_pipeline_service_alive
+
+        self._beat(db_session, timedelta(minutes=4))
+        check_pipeline_service_alive()
+        assert sent == []
+
+    def test_a_stale_heartbeat_alerts(self, db_session, sent):
+        from app.ops_alerts import PIPELINE_SERVICE_SILENT_AFTER, check_pipeline_service_alive
+
+        self._beat(db_session, PIPELINE_SERVICE_SILENT_AFTER + timedelta(minutes=1))
+        check_pipeline_service_alive()
+        assert sent == ["Pipeline service is not running"]
+
+    def test_no_heartbeat_ever_alerts(self, sent):
+        from app.ops_alerts import check_pipeline_service_alive
+
+        check_pipeline_service_alive()
+        assert sent == ["Pipeline service is not running"]
+
+    def test_an_unreadable_database_is_not_evidence(self, sent, monkeypatch):
+        from app.ops_alerts import check_pipeline_service_alive
+        from app.shared_state import UNREADABLE
+
+        monkeypatch.setattr("app.shared_state.read_row", lambda *a, **k: UNREADABLE)
+        check_pipeline_service_alive()
+        assert sent == []
+
+    async def test_only_the_api_process_watches(self, role, started, monkeypatch):
+        watched = []
+
+        async def _watch():
+            watched.append(1)
+
+        monkeypatch.setattr(main_module, "_watch_pipeline_service", _watch)
+        for value, expected in (("api", [1]), ("worker", [1]), ("all", [1])):
+            role(value)
+            async with main_module.lifespan(main_module.app):
+                await main_module.asyncio.sleep(0)
+            assert watched == expected, value

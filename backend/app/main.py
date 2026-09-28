@@ -100,6 +100,25 @@ def _invalidate_orphaned_pipelines() -> None:
     sweep_orphaned_runs()
 
 
+# How often the API process checks that the pipeline service is alive, and
+# how long it waits after its own start first — at a deploy, both restart.
+_LIVENESS_EVERY_S = 300
+_LIVENESS_GRACE_S = 1800
+
+
+async def _watch_pipeline_service() -> None:
+    """Alert when the pipeline service stops (ops_alerts.check_pipeline_service_alive)."""
+    from app.ops_alerts import check_pipeline_service_alive
+
+    await asyncio.sleep(_LIVENESS_GRACE_S)
+    while True:
+        try:
+            await asyncio.to_thread(check_pipeline_service_alive)
+        except Exception:
+            logging.getLogger("app.main").warning("Pipeline liveness check failed", exc_info=True)
+        await asyncio.sleep(_LIVENESS_EVERY_S)
+
+
 def _start_pipeline_side_startup_jobs() -> None:
     """The startup work that writes: run where pipelines run, never in the
     read-only API process."""
@@ -226,10 +245,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     from app.api.visits import run_visit_consumer
     visit_consumer_task = asyncio.create_task(run_visit_consumer())
+    # Only a separate API process can notice the pipeline process is gone:
+    # with both in one process, a dead scheduler means a dead site.
+    liveness_task = asyncio.create_task(_watch_pipeline_service()) if role == "api" else None
 
     yield
 
     visit_consumer_task.cancel()
+    if liveness_task is not None:
+        liveness_task.cancel()
     if bootstrap_task is not None:
         bootstrap_task.cancel()
     stop_scheduler()

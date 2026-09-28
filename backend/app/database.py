@@ -1004,6 +1004,7 @@ def _init_db_locked() -> None:
 # the read-only API process to report (scheduler.get_next_run_time). Here
 # because the data reset must leave it alone.
 SCHEDULER_HEARTBEAT_TIER = "scheduler"
+SCHEDULER_HEARTBEAT_KEY = "next-run"
 
 
 # Tables a reset leaves alone: history no pipeline run can rebuild. A reset
