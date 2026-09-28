@@ -391,6 +391,17 @@ export default function AboutPage() {
                   weight — they are genuine, whipped party-line tests.
                 </P>
                 <P>
+                  Since v6.20 the break rate covers every roll call of the current Congress, and
+                  a break counts only when it goes toward the other party: on that vote, the
+                  party&apos;s members who broke sit nearer the other party than the party does. A
+                  vote against the party from its own flank, such as hardliners voting down their
+                  party&apos;s bill, is listed on the scorecard but not counted, because how far
+                  toward the flank a member sits is already scored as position congruence. Each
+                  bill or nomination counts once, however many times it came to a vote: cloture
+                  and then confirmation on one nominee is one decision. Both rules predict the
+                  same election results at least as well as counting every vote.
+                </P>
+                <P>
                   Before v4.2 this dimension was called Independent Voting and rewarded raw
                   defection; it also exempted party-line votes on policy areas related to a
                   member&apos;s top donor industries. That exemption is removed: donor industries
