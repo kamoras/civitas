@@ -369,8 +369,8 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
         {unread && (
           <div role="status" className="border border-signal-amber/40 bg-signal-amber/10 p-3">
             <p className="text-xs text-signal-amber">
-              Civitas no longer reads {state}&apos;s measures automatically: {measureCoverage.unreadReason} The
-              list below is from our last read{readDate ? `, ${readDate}` : ""}, and may be out of date —
+              Civitas has stopped reading {state}&apos;s measures automatically. The list below is from
+              our last read{readDate ? `, ${readDate}` : ""}, and may be out of date —
               check the{" "}
               <a href={lookupHref} target="_blank" rel="noopener noreferrer" className="text-signal-cyan hover:text-phos">
                 official lookup ↗

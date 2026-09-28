@@ -635,7 +635,10 @@ describe("ballot measures", () => {
     );
     const drawer = await openContest(/Statewide ballot measures/);
     const notice = drawer.getByRole("status");
-    expect(notice).toHaveTextContent("Civitas no longer reads OH's measures automatically");
+    expect(notice).toHaveTextContent("Civitas has stopped reading OH's measures automatically");
+    // The registry's "does not read … automatically yet" reason would
+    // contradict "has stopped reading" — the leftover notice never repeats it.
+    expect(notice).not.toHaveTextContent("automatically yet");
     expect(notice).toHaveTextContent("from our last read, 2026-09-20");
     expect(notice).not.toHaveTextContent(/latest check|attempt|2026-09-28/);
   });
@@ -655,7 +658,7 @@ describe("ballot measures", () => {
     );
     const drawer = await openContest(/Statewide ballot measures/);
     expect(drawer.queryByText(/latest list no longer includes/)).not.toBeInTheDocument();
-    expect(drawer.getByText(/Civitas no longer reads OH's measures automatically/)).toBeInTheDocument();
+    expect(drawer.getByText(/Civitas has stopped reading OH's measures automatically/)).toBeInTheDocument();
   });
 
   it("says a registered state's list is not published yet, not that it was never read", async () => {
