@@ -240,6 +240,16 @@ async def fetch_confirmed_candidates(
     if primary is None:
         return []  # not published yet this cycle — healthy unknown
 
+    if (state_offices and runoff is not None and _settled(primary["date"], settle_days)
+            and not _settled(runoff["date"], settle_days)):
+        # The primary has settled and its runoff has not. Every office the
+        # runoff decides would be missing from a read of the primary alone,
+        # and under the state-office opt-in the caller takes this list for
+        # the whole ballot (deleting what it does not name). None until the
+        # runoff settles, as Alabama does while a runoff is owed.
+        logger.info("%s: the %d runoff has not settled yet", state, year)
+        return None
+
     by_seat: dict[tuple, list[tuple[str, float]]] = {}
     # Runoff processed second so its answer for a seat overrides the primary's.
     for election, stage_threshold in ((primary, threshold), (runoff, None)):

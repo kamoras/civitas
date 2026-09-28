@@ -325,8 +325,10 @@ class TestStatewideNominees:
                     ("Helt", "Cheri", 200), ("Misc.", "", 10)]),
         ]}
         assert orm._statewide_nominees(contests, _OR_SOURCE) == [
-            {"office": "labor_commissioner", "district": None, "party": "", "last_name": "Christina E Stephenson"},
-            {"office": "labor_commissioner", "district": None, "party": "", "last_name": "Chris Lynch"},
+            {"office": "labor_commissioner", "district": None, "party": "N", "party_label": "Nonpartisan",
+             "last_name": "Christina E Stephenson"},
+            {"office": "labor_commissioner", "district": None, "party": "N", "party_label": "Nonpartisan",
+             "last_name": "Chris Lynch"},
         ]
 
     def test_write_ins_count_toward_the_majority(self):

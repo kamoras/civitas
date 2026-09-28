@@ -165,13 +165,21 @@ class TestNewMexico:
             ("governor", "D", "DEB HAALAND AND STEPHANIE GARCIA RICHARD"),
             ("secretary_of_state", "D", "AMANDA LÓPEZ ASKIN"),   # UTF-8, not "LÃ\x93PEZ"
             ("public_lands_commissioner", "D", "JUAN DE JESUS SANCHEZ, III"),
+            ("public_education_commission", "D", "JACOB A TRUJILLO"),
         }
 
-    def test_district_offices_that_are_not_legislative_are_refused(self):
-        # A county sheriff and a Public Education Commission seat (elected
-        # by district, not statewide) are on the same page.
-        _, _, leg = _split(self._records())
+    def test_a_county_office_is_refused_and_a_district_seated_commission_is_read(self):
+        # A county sheriff is refused. The Public Education Commission is a
+        # statewide body seated by district: listed per district, like the
+        # legislature (the one rule for district-seated bodies).
+        records = self._records()
+        _, _, leg = _split(records)
         assert leg == {("lower", "22", "I", "ZACHARY P WITHERS"), ("upper", "33", "R", "REX A WILSON")}
+        assert {(r["office"], r["district"], r["party"], r["last_name"]) for r in records
+                if r["office"] == "public_education_commission"} == {
+            ("public_education_commission", "3", "D", "JACOB A TRUJILLO"),
+        }
+        assert not any("sheriff" in r["office"] for r in records)
 
 
 # ── Tennessee ────────────────────────────────────────────────────────
@@ -287,3 +295,93 @@ def test_a_bare_seat_number_is_read_only_as_the_whole_label():
     # A number anywhere else in a longer label is not a district.
     assert parse_state_leg_office("State Representative 5 Seat A") is None
     assert parse_state_leg_office("State Senator 2026 Special") is None
+
+
+# ── until the certified list publishes, the primary results stand in ──
+
+@pytest.fixture()
+def colorado(db_session, monkeypatch):
+    # Colorado's main source (Clarity primary results) opts in to state
+    # offices itself, and so does its certified general_list.
+    assert _SOURCES["CO"].get("statewide_offices") and _general("CO").get("statewide_offices")
+
+    async def no_calendar(client, cycle):
+        return {}, False
+    monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+    monkeypatch.setattr(sc, "configured_states", lambda: {"CO"})
+    db_session.add(Race(id="2026-HOU-CO-08", cycle_year=2026, office="H", state="CO", district=8,
+                        is_special=False))
+    db_session.commit()
+    return db_session
+
+
+_CO_PRIMARY = [
+    _rec("H", 8, "R", "Evans", "Gabe Evans"),
+    _rec("governor", None, "D", "Michael Bennet"),
+    _rec("governor", None, "R", "Barbara Kirkmeyer"),
+    _rec("upper", "5", "D", "Primary Winner"),
+]
+
+
+@pytest.mark.parametrize("listed", [None, [_rec("H", 8, "R", "Evans", "Gabe Evans")]])
+@pytest.mark.asyncio
+async def test_primary_results_stand_in_until_the_list_names_state_offices(colorado, monkeypatch, listed):
+    # The list is not published yet (None), or carries its federal rows
+    # only: the main source's own opted-in primary results supply the
+    # state offices, as they did before the list was configured.
+    monkeypatch.setitem(sc.STRATEGIES, "certified_table", AsyncMock(return_value=listed))
+    monkeypatch.setitem(sc.STRATEGIES, "clarity", AsyncMock(return_value=_CO_PRIMARY))
+
+    await sc.sync_confirmed_candidates(colorado, None, 2026)
+
+    assert {(r.office, r.party, r.display_name) for r in colorado.query(StatewideNominee)} == {
+        ("governor", "D", "Michael Bennet"), ("governor", "R", "Barbara Kirkmeyer"),
+    }
+    assert {(r.chamber, r.district) for r in colorado.query(StateLegNominee)} == {("upper", "5")}
+    _, coverage = _statewide_section(colorado, "CO", 2026)
+    assert coverage["status"] == StatewideCoverageStatus.COVERED
+    assert coverage["sourceName"] == _SOURCES["CO"]["source_name"]
+    assert coverage["ballotList"] is False
+
+
+@pytest.mark.asyncio
+async def test_once_the_list_named_state_offices_it_stays_the_source(colorado, monkeypatch):
+    listed = [
+        _rec("H", 8, "R", "Evans", "Gabe Evans"),
+        _rec("governor", None, "D", "Michael Bennet"),
+        _rec("governor", None, "R", "Barbara Kirkmeyer"),
+        _rec("governor", None, "O", "An Independent"),
+    ]
+    monkeypatch.setitem(sc.STRATEGIES, "certified_table", AsyncMock(return_value=listed))
+    monkeypatch.setitem(sc.STRATEGIES, "clarity", AsyncMock(return_value=_CO_PRIMARY))
+    await sc.sync_confirmed_candidates(colorado, None, 2026)
+    _, coverage = _statewide_section(colorado, "CO", 2026)
+    assert coverage["sourceName"] == _general("CO")["source_name"]
+    assert coverage["ballotList"] is True
+    assert colorado.query(StateLegNominee).count() == 0
+
+    # The list is down tonight. Its certified ballot (with the
+    # independent) is not swapped back to the primary winners.
+    monkeypatch.setitem(sc.STRATEGIES, "certified_table", AsyncMock(return_value=None))
+    await sc.sync_confirmed_candidates(colorado, None, 2026)
+    assert ("governor", "O", "An Independent") in {
+        (r.office, r.party, r.display_name) for r in colorado.query(StatewideNominee)
+    }
+    _, coverage = _statewide_section(colorado, "CO", 2026)
+    assert coverage["sourceName"] == _general("CO")["source_name"]
+
+
+@pytest.mark.asyncio
+async def test_a_joint_ticket_is_stored_as_one_governor_contest(colorado, monkeypatch):
+    # Colorado elects the two on one vote: no Lieutenant Governor contest.
+    listed = [
+        _rec("H", 8, "R", "Evans", "Gabe Evans"),
+        _rec("governor", None, "D", "Phil Weiser"),
+        _rec("lt_governor", None, "D", "Lesley Dahlkemper"),
+    ]
+    monkeypatch.setitem(sc.STRATEGIES, "certified_table", AsyncMock(return_value=listed))
+    monkeypatch.setitem(sc.STRATEGIES, "clarity", AsyncMock(return_value=_CO_PRIMARY))
+    await sc.sync_confirmed_candidates(colorado, None, 2026)
+    assert {(r.office, r.display_name) for r in colorado.query(StatewideNominee)} == {
+        ("governor", "Phil Weiser and Lesley Dahlkemper"),
+    }

@@ -394,6 +394,42 @@ class TestFetchConfirmedCandidatesArkansas:
 
 
 @pytest.mark.asyncio
+class TestUnsettledRunoff:
+    """The primary has settled, its runoff has not. Read alone, the
+    primary lacks every office the runoff decides; under the state-office
+    opt-in the caller would take that for the whole ballot."""
+
+    def _patched(self, monkeypatch):
+        elections = json.loads(json.dumps(AR_ELECTIONS))
+        for e in elections:
+            if e["electionID"] == AR_RUNOFF_ID:
+                e["electionDate"] = "2026-12-31T00:00:00"
+
+        async def fake(client, rl, method, url, **kw):
+            if "GetElectionList" in url:
+                return _resp(elections)
+            if f"electionID={AR_PRIMARY_ID}" in url and "GetContestSearchList" in url:
+                return _resp(AR_PRIMARY_SEARCH)
+            if f"electionID={AR_PRIMARY_ID}" in url and "GetContestResults" in url:
+                return _resp(AR_PRIMARY_RESULTS)
+            raise AssertionError(f"unexpected URL: {url}")
+
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
+
+    async def test_with_state_offices_nothing_is_published(self, monkeypatch):
+        self._patched(monkeypatch)
+        source = {**AR_SOURCE, "statewide_offices": True}
+        assert await tenr.fetch_confirmed_candidates(None, 2026, "AR", source) is None
+
+    async def test_federal_only_still_reads_the_settled_primary(self, monkeypatch):
+        # Federal rows are applied non-authoritatively, so the settled
+        # primary's winners are still worth confirming.
+        self._patched(monkeypatch)
+        result = await tenr.fetch_confirmed_candidates(None, 2026, "AR", AR_SOURCE)
+        assert len(result) == 5
+
+
+@pytest.mark.asyncio
 class TestFetchConfirmedCandidatesNorthDakota:
     def _patched(self, monkeypatch):
         async def fake(client, rl, method, url, **kw):

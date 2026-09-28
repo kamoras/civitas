@@ -361,26 +361,26 @@ def test_state_ballot_keeps_the_legislature_omission_when_only_executives_are_co
 
 
 def test_a_covered_state_names_what_its_executive_section_leaves_out(db_session, monkeypatch):
-    """New Hampshire's Executive Council is on every voter's ballot and
-    deliberately not listed (each seat is elected by one district). Once
-    the Governor is covered the general omission goes, so the entry's own
-    statewide_omits has to say it -- and only once covered, since before
-    that the general line already does."""
+    """A state office on the ballot that the adapter does not read (Louisiana's
+    and Montana's district-elected Public Service Commissions) is named by
+    the entry's statewide_omits. Once the Governor is covered the general
+    omission goes, so the entry's own list has to say it -- and only once
+    covered, since before that the general line already does."""
     from app.pipeline.fetch.state_candidates import _sync_statewide_nominees
 
     source = {"strategy": "nh_results", "source_name": "NH SoS", "statewide_offices": True,
-              "statewide_omits": ["Executive Council districts"]}
+              "statewide_omits": ["Public Service Commission districts"]}
     monkeypatch.setattr(elections, "source_for_state", lambda state: source)
 
     before = _body(elections.state_ballot("NH", db=db_session))
-    assert "Executive Council districts" not in before["omits"]
+    assert "Public Service Commission districts" not in before["omits"]
     assert any("Governor" in item for item in before["omits"])
 
     _sync_statewide_nominees(db_session, before["cycleYear"], "NH", source, [
         {"office": "governor", "district": None, "party": "R", "last_name": "Kelly Ayotte"},
     ])
     after = _body(elections.state_ballot("NH", db=db_session))
-    assert "Executive Council districts" in after["omits"]
+    assert "Public Service Commission districts" in after["omits"]
     assert not any("Governor" in item for item in after["omits"])
     assert after["statewideRaces"][0]["termYears"] == 2  # New Hampshire: two-year governors
 

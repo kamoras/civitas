@@ -328,13 +328,21 @@ describe("statewide executive offices", () => {
     expect(drawer.getByText(/Rhode Island Board of Elections · last checked 2026-09-21/)).toBeInTheDocument();
   });
 
-  it("says the list is what the state published, not every office", async () => {
-    // An office whose primary nobody contested is often not itemised in
-    // a results feed at all — Arkansas publishes two of its seven that
-    // way — so the list must not read as exhaustive.
+  it("says names from primary results may be incomplete, office by office", async () => {
+    // A nomination nobody contested is often not itemised in a results
+    // feed at all — Arkansas publishes two of its seven offices that way,
+    // and Alabama none of its unopposed nominees — so neither the list of
+    // offices nor the names under one may read as exhaustive.
     render(<StateBallotClient ballot={ballot(covered)} />);
     const drawer = await openContest(/Statewide offices/);
-    expect(drawer.getByText(/Only offices named in the state's own results feed appear/)).toBeInTheDocument();
+    expect(drawer.getByText(/an office may be missing, or missing a party's nominee/)).toBeInTheDocument();
+  });
+
+  it("says a certified ballot list is the whole list", async () => {
+    render(<StateBallotClient ballot={ballot({ ...covered, statewideCoverage: { ...covered.statewideCoverage, ballotList: true } })} />);
+    const drawer = await openContest(/Statewide offices/);
+    expect(drawer.getByText(/Every candidate on the state's list for the November ballot/)).toBeInTheDocument();
+    expect(drawer.queryByText(/missing a party's nominee/)).not.toBeInTheDocument();
   });
 
   it("says plainly that no money or score exists for these offices", async () => {

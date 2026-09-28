@@ -213,7 +213,16 @@ class _ContestResultsParser(HTMLParser):
 # only in the cycle whose special primary was actually read: Mike Rogers
 # (R-3, 83.2%), Robert Aderholt (R-4, 77.6%), Amanda Pusczek (D-4,
 # 62.8%), Andrew Sneed (D-5, runoff 16,688 to 4,607). Dale Strong (R-5)
-# was unopposed and is in no primary file. Their legislative contests include State Senate districts 25
+# was unopposed and is in no primary file -- and the same holds for a
+# STATEWIDE nominee who ran unopposed: Alabama prints no uncontested
+# contest, so an office read here can hold one party's nominee while the
+# other party's is absent. The Secretary of State's certifications of
+# general-election candidates, which would name them, are image-only
+# scans (checked 2026-09-28: 2026GeneralElectionStateCertificationof
+# {Democratic,Republican}Candidates.pdf, 13 and 14 pages, no text layer),
+# and are not OCR'd. The page says so: a primary-results source's marker
+# carries ballotList false, and the statewide section tells the reader an
+# office may be missing a party's nominee. Their legislative contests include State Senate districts 25
 # and 26, also redrawn and re-run. Reading either would publish a nominee
 # for a contest that no longer exists.
 

@@ -246,7 +246,12 @@ class TestBallotListParty:
         Division's own party list), Delaware's is FEC's IDE."""
         assert common.ballot_list_party("Independent Party of Florida") == (
             "O", "Independent Party of Florida")
-        assert common.normalize_party("Independent Party of Delaware", ballot_list=True) is None
+        # The federal matcher's reading is unchanged from before this
+        # distinction existed: "I", never None (which drops the row).
+        assert common.normalize_party("Independent Party of Delaware", ballot_list=True) == "I"
+        assert common.ballot_list_party("Independent Party of Delaware") == (
+            "O", "Independent Party of Delaware")
+        assert common.ballot_list_party("Ind Pty of DE") != ("I", None)
         # The word alone is still no party.
         assert common.ballot_list_party("Independent") == ("I", None)
         assert common.ballot_list_party("independent nomination") == ("I", None)
@@ -1277,3 +1282,55 @@ class TestAlabamaAndConnecticutStatewideLabels:
 
     def test_connecticuts_secretary_of_the_state(self):
         assert common.parse_statewide_office("Secretary of the State") == ("secretary_of_state", None)
+
+
+class TestStatewidePhrasesRefuseLocalBodies:
+    """Every _STATEWIDE_PHRASES entry skips the general locality gate, so
+    each must still refuse a local body that shares its words. The rows
+    are adversarial local labels, one or more per phrase; the real labels
+    each state prints still parse."""
+
+    @pytest.mark.parametrize("label", [
+        "Sanitary District Public Utilities Commission",
+        "Hibbing Public Utilities Commissioner",
+        "Fripp Island Public Service Commission",
+        "Water District Board of Equalization",
+        "Hospital District Chief Financial Officer",
+        "School District Chief Financial Officer",
+        "Fulton Tax Commissioner",
+        "Soil and Water Conservation District Commissioner of Agriculture",
+        "Fire District Labor Commissioner",
+        "Unified School District Superintendent of Public Instruction",
+        "Port Authority Railroad Commissioner",
+        "Belt Railroad Commission",
+        "Metropolitan Water District Governor's Council",
+        "Library District State Board of Education",
+        "Village Insurance Commissioner",
+        "County Commissioner of Public Lands",
+        "Harbor Commissioner of the General Land Office",
+        "Township Secretary of the Commonwealth",
+        "Irrigation District Commissioner of School and Public Lands",
+        "Regent of the University, Park District",
+        "Improvement District Comm. of State Lands",
+    ])
+    def test_a_local_body_is_refused(self, label):
+        assert common.parse_statewide_office(label) is None
+
+    @pytest.mark.parametrize("label,expected", [
+        ("Public Utilities Commissioner", ("public_utilities_commission", None)),
+        ("Tax Commissioner Republican", ("tax_commissioner", None)),
+        ("RAILROAD COMMISSIONER", ("railroad_commissioner", None)),
+        ("Governor's Council 3rd District", ("governors_council", "3")),
+        ("PSC - District 3", ("public_service_commission", "3")),
+        ("PUBLIC SERVICE COMMISSION, PLACE 1", ("public_service_commission", "Place 1")),
+        ("REP State Board of Education District 3", ("state_board_of_education", "3")),
+        ("MEMBER, STATE BOARD OF EDUCATION, DISTRICT 5", ("state_board_of_education", "5")),
+        ("Member, State Board of Equalization, District 2", ("board_of_equalization", "2")),
+        ("Regent of the University of Colorado - Congressional District 3", ("university_regent", "3")),
+        ("Statewide Secretary of the Commonwealth", ("secretary_of_commonwealth", None)),
+        ("Commissioner of the Bureau of Labor and Industries", ("labor_commissioner", None)),
+        ("Commissioner of School and Public Lands", ("school_public_lands_commissioner", None)),
+        ("Comm. of State Lands", ("state_lands_commissioner", None)),
+    ])
+    def test_the_state_labels_still_parse(self, label, expected):
+        assert common.parse_statewide_office(label) == expected

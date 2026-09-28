@@ -825,6 +825,13 @@ def _statewide_section(db: Session, state: str, cycle: int) -> tuple[list[dict],
         # offices — see _sync_statewide_nominees. Null for every state
         # whose own results were parsed.
         "basis": (marker or {}).get("basis") or None,
+        # True when the names are the state's list of who is on the
+        # November ballot; false when they are primary results, whose
+        # names under an office may be incomplete (an unopposed nominee
+        # is often not itemised; independents never are). A marker
+        # written before this field existed reads as false: the cautious
+        # reading.
+        "ballotList": bool((marker or {}).get("ballotList")),
     }
 
 
@@ -929,11 +936,14 @@ def _judicial_section(
     """
     if marker is None:
         return [], {"status": JudicialCoverageStatus.NOT_YET_COVERED,
-                    "checkedAt": None, "sourceName": None}
+                    "checkedAt": None, "sourceName": None, "ballotList": False}
 
     coverage = {
         "checkedAt": marker.get("checkedAt"),
         "sourceName": marker.get("sourceName") or None,
+        # As on the statewide section: primary results may omit a seat's
+        # unopposed nominee, the state's ballot list does not.
+        "ballotList": bool(marker.get("ballotList")),
     }
     rows = (
         db.query(JudicialNominee)
@@ -1121,10 +1131,10 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
             "Governor and other statewide executive contests",
         ] if statewide_coverage["status"] == StatewideCoverageStatus.NOT_YET_COVERED else [
             # What a covered state's executive section still leaves out,
-            # named by its source entry: an office on every voter's ballot
-            # that the page deliberately does not list (New Hampshire's
-            # Executive Council, elected seat by seat, district by
-            # district). Before coverage the line above already says it.
+            # named by its source entry: a state office on the ballot its
+            # adapter does not read (Louisiana's and Montana's
+            # district-elected Public Service Commissions). Before coverage
+            # the line above already says it.
             str(o) for o in ((source_for_state(state) or {}).get("statewide_omits") or [])
         ]) + ([
             "State legislative districts",

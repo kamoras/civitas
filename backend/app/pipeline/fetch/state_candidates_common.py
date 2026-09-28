@@ -264,8 +264,11 @@ _STATEWIDE_PHRASES = [
     # and North Carolina's export is full of them.
     ("state_board_of_education", re.compile(
         r"\bState\s+Board\s+of\s+Education\b", re.IGNORECASE)),
+    # Nebraska's list prints its elected regents as "University of
+    # Nebraska Board of Regents" (seated by district, like Colorado's).
     ("university_regent", re.compile(
-        r"\bRegent\s+of\s+the\s+University\b|\bUniversity\s+Regent\b", re.IGNORECASE)),
+        r"\bRegent\s+of\s+the\s+University\b|\bUniversity\s+Regent\b"
+        r"|\bUniversity\s+of\s+[A-Za-z]+\s+Board\s+of\s+Regents\b", re.IGNORECASE)),
     # North Dakota's own constitutional officer.
     ("tax_commissioner", re.compile(
         r"\bTax\s+Commissioner\b|\bCommissioner\s+of\s+Taxation\b", re.IGNORECASE)),
@@ -305,6 +308,17 @@ _STATEWIDE_PHRASES = [
         r"\bSecretary\s+of\s+the\s+Commonwealth\b", re.IGNORECASE)),
     ("governors_council", re.compile(
         r"\bGovernor(?:'|\u2019)?s\s+Council\b", re.IGNORECASE)),
+    # New Hampshire's Executive Council, five councillors, one per
+    # district (N.H. Const. Pt. II Art. 60), off its 2026 primary pages
+    # ("Executive Council District 1"). Only with the district that seats
+    # it: a party's own "executive council" is a committee, not an office.
+    ("executive_council", re.compile(
+        r"\bExecutive\s+Council(?:l?or)?\b(?=[\s,\u2013-]*District\b)", re.IGNORECASE)),
+    # New Mexico's Public Education Commission, ten commissioners, one
+    # per district (N.M. Const. art. XII sec. 6), off its 2026 general
+    # candidate list ("Public Education Commissioner", "DISTRICT 3").
+    ("public_education_commission", re.compile(
+        r"\bPublic\s+Education\s+Commission(?:er)?\b", re.IGNORECASE)),
 ]
 
 # The locality markers that stay decisive even beside one of the phrases
@@ -331,6 +345,10 @@ _STATEWIDE_DISTRICT_SEATS = {
     # Massachusetts's Governor's Council, eight councillors, one per
     # council district (each elected by that district's voters).
     "governors_council",
+    # Likewise New Hampshire's Executive Council (five districts) and New
+    # Mexico's Public Education Commission (ten).
+    "executive_council",
+    "public_education_commission",
 }
 
 # Massachusetts puts the ordinal first: "Governor's Council 3rd District".
@@ -361,6 +379,45 @@ _STRICT_LOCAL_RE = re.compile(
     r"|\bpublic\s+service\s+district\b|:",
     re.IGNORECASE,
 )
+
+# Special-purpose local bodies, which elect commissions under the same
+# words the phrases above look for: "Sanitary District Public Utilities
+# Commission", "Hospital District Board of Equalization", a port or
+# transit "Authority". A "District" followed by a number is a seat and
+# stays readable ("PSC - District 3"); a district that is itself the
+# body -- named by what it provides -- is local wherever it appears.
+_SPECIAL_DISTRICT_RE = re.compile(
+    r"\b(?:sanitary|sanitation|water|sewer|fire|hospital|utility|school|park|library|port"
+    r"|irrigation|drainage|conservation|transit|improvement|cemetery|levee|metropolitan"
+    r"|special|service)\s+district\b|\bauthority\b",
+    re.IGNORECASE,
+)
+
+# The only words that may come BEFORE one of the phrases above. A phrase
+# is statewide by construction only as the name of the office itself; a
+# word in front of it names whose office it is -- "Hibbing Public
+# Utilities Commissioner" (a Minnesota city utility), "Fulton Tax
+# Commissioner" (a Georgia county office), "Fripp Island Public Service
+# Commission" -- and no list of localities could name every town. So
+# the prefix is refused unless it is made only of these, a party (the
+# "REP State Board of Education District 3" form), or numbers and
+# punctuation. Every prefix on a real label read so far is here:
+# California's "Member, State Board of Equalization", Massachusetts's
+# "Statewide" scope carried in by its adapter.
+_PHRASE_PREFIX_WORDS = frozenset({"member", "state", "statewide", "for", "of", "the", "office"})
+
+
+def _phrase_leads(name: str, start: int) -> bool:
+    """Whether the words before a statewide phrase (at `start` in `name`)
+    leave it naming the state's own office: see _PHRASE_PREFIX_WORDS."""
+    if _SPECIAL_DISTRICT_RE.search(name):
+        return False
+    for word in re.findall(r"[A-Za-z]+", name[:start]):
+        if word.lower() in _PHRASE_PREFIX_WORDS or normalize_party(word) is not None:
+            continue
+        return False
+    return True
+
 
 _LOCAL_QUALIFIER_RE = re.compile(
     r"\b(?:county|city|town|township|ward|borough|parish|village|precinct|district|"
@@ -522,7 +579,62 @@ STATEWIDE_OFFICE_LABELS = {
     "land_office_commissioner": "Commissioner of the General Land Office",
     "public_lands_commissioner": "Commissioner of Public Lands",
     "governors_council": "Governor's Council",
+    "executive_council": "Executive Council",
+    "public_education_commission": "Public Education Commission",
 }
+
+
+def join_governor_tickets(records: list[dict]) -> list[dict]:
+    """`records` with each lieutenant governor joined to their governor as
+    one ticket ("Phil Weiser and Lesley Dahlkemper"), for a state that
+    elects the two jointly on one vote in November (the entry's
+    joint_governor_ticket). There, the lieutenant governor is not a
+    contest of its own on the ballot, and listing one would show the
+    reader a choice they do not have -- the shape Maryland's, Nebraska's
+    and New Mexico's lists already print.
+
+    A running mate is paired with the governor of the same party (and
+    printed party label), and only while exactly one governor of that
+    party is waiting for a mate. That covers a list that prints each
+    ticket's two rows together even when a party has several tickets
+    (Colorado's certified list puts each "Lt. Governor" row right under
+    its "Governor" row, so every earlier ticket is already joined), and a
+    list that groups the offices with one ticket per party (Iowa's). Two
+    governors of one party waiting at once -- two unaffiliated slates
+    printed as two groups -- cannot say who runs with whom, so neither
+    mate is joined. A mate with no governor to join is dropped rather
+    than shown as a contest the ballot does not have; a governor with no
+    mate (a primary file that itemised only one of the two nominations)
+    stands alone."""
+    out: list[dict] = []
+    open_governors: dict[tuple, list[int]] = {}
+    early: list[dict] = []  # a mate listed before any governor of their party
+
+    def join(record: dict) -> bool:
+        waiting = open_governors.get((record.get("party"), record.get("party_label"))) or []
+        if len(waiting) != 1:
+            return False
+        governor = out[waiting.pop()]
+        governor["last_name"] = f"{governor['last_name']} and {record['last_name']}"
+        return True
+
+    for record in records:
+        key = (record.get("party"), record.get("party_label"))
+        if record["office"] == "governor":
+            open_governors.setdefault(key, []).append(len(out))
+            out.append(dict(record))
+        elif record["office"] == "lt_governor":
+            if not open_governors.get(key):
+                early.append(record)  # a results file may list the deputy first
+            elif not join(record):
+                logger.info("A %s running mate (%s) has no single governor to join", key[0], record["last_name"])
+        else:
+            out.append(record)
+    for record in early:
+        if not join(record):
+            logger.info("A %s running mate (%s) has no single governor to join",
+                        record.get("party"), record["last_name"])
+    return out
 
 
 def _statewide_seat(code: str, name: str) -> tuple[str, str | None]:
@@ -556,7 +668,8 @@ def parse_statewide_office(contest_name: str) -> tuple[str, str | None] | None:
     # Checked first — see _STATEWIDE_PHRASES for why these cannot go
     # through the general locality gate below.
     for code, pattern in _STATEWIDE_PHRASES:
-        if pattern.search(name) and not _STRICT_LOCAL_RE.search(name):
+        found = pattern.search(name)
+        if found and not _STRICT_LOCAL_RE.search(name) and _phrase_leads(name, found.start()):
             return _statewide_seat(code, name)
     if _LOCAL_QUALIFIER_RE.search(name):
         return None
@@ -1017,16 +1130,20 @@ _BALLOT_LIST_PARTY_PATTERNS = [
 ]
 
 _INDEPENDENT_ABBR = frozenset({"IND", "INDEPENDENT", "UNA", "NPA", "NOP", "NP", "NOPTY", "PETITION", "DTS"})
-# "Independent" is not independent when it names a PARTY: the Independent
-# Party of Florida (the Division of Elections' IND, read live 2026-09-28
-# from its political-parties page) and of Delaware (FEC's IDE) are parties
-# with nominees, and Connecticut's Independent Party cross-endorses. So
-# "Independent Party" / "Independent Pty" is never read as no party.
 _INDEPENDENT_RE = re.compile(
-    r"\b(independent(?!\s+(?:party|pty)\b)|unaffiliated|unenrolled|undeclared|no\s+party(\s+affiliation)?"
+    r"\b(independent|unaffiliated|unenrolled|undeclared|no\s+party(\s+affiliation)?"
     r"|non[\s-]?partisan|by\s+petition)\b",
     re.IGNORECASE,
 )
+# "Independent" is not independent when it names a PARTY: the Independent
+# Party of Florida (the Division of Elections' IND, read live 2026-09-28
+# from its political-parties page) and of Delaware (FEC's IDE) are parties
+# with nominees, and Connecticut's Independent Party cross-endorses. That
+# distinction is drawn only for a STATE-office row (ballot_list_party),
+# which renders the party as printed. The federal matcher keeps reading it
+# as "I", as it always has: its codes have no slot for a named minor
+# party, and None there would drop the candidate from the ballot outright.
+_INDEPENDENT_PARTY_RE = re.compile(r"\bindependent\s+(?:party|pty)\b", re.IGNORECASE)
 _NONPARTISAN_RE = re.compile(r"\bnon[\s-]?partisan\b", re.IGNORECASE)
 
 
@@ -1093,6 +1210,10 @@ def ballot_list_party(text: str) -> tuple[str, str | None] | None:
         # Before normalize_party, which reads it as independent for the
         # federal matcher's sake: on a state row it renders as printed.
         return NONPARTISAN, value
+    if _INDEPENDENT_PARTY_RE.search(value):
+        # A party named "Independent", likewise before normalize_party
+        # (see _INDEPENDENT_PARTY_RE): its own name, not "no party".
+        return OTHER_PARTY, value
     code = normalize_party(value, ballot_list=True)
     if code is not None:
         return code, None

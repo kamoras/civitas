@@ -384,20 +384,20 @@ async def _endorsed_nominees(client: httpx.AsyncClient, year: int, spec: dict) -
 
 
 def _merge_statewide(
-    primaried: dict[str, set[str]], pending: set[str],
+    primaried: dict[str, set[str]],
     primary_records: list[dict], endorsed: list[dict],
 ) -> list[dict]:
     """The statewide ballot: an office a party PRIMARIED is decided by that
     primary's result; any other office goes to the party's endorsed
-    candidate. A party whose primary has not settled yet publishes no
-    endorsement (its primary may still change the nominee), and two
+    candidate. Only called once every primary that was held has settled
+    (fetch_confirmed_candidates returns None before then), and two
     endorsements for one party's office publish neither."""
     by_seat: dict[tuple[str, str | None, str], list[str]] = {}
     for rec in endorsed:
         by_seat.setdefault((rec["office"], rec["district"], rec["party"]), []).append(rec["last_name"])
     records = list(primary_records)
     for (office, district, party), names in by_seat.items():
-        if party in pending or office in primaried.get(party, set()):
+        if office in primaried.get(party, set()):
             continue
         if len(set(names)) != 1:
             logger.warning("CT: %d endorsements for the %s %s nomination", len(set(names)), party, office)
@@ -422,16 +422,27 @@ async def fetch_confirmed_candidates(
     if dem is None and rep is None:
         return []  # not published yet this cycle — healthy unknown
 
+    pending = {
+        party for primary, party in ((dem, "D"), (rep, "R"))
+        if primary is not None and not _settled(primary["date"], settle_days)
+    }
+    if pending:
+        # None, never a partial answer, while a primary that was held is
+        # still inside its settle window -- the same rule Alabama follows
+        # while a runoff is owed. Publishing the settled party alone would
+        # be read as the whole ballot: the caller records the state as
+        # checked and deletes every stored nominee absent from the list,
+        # so the pending party's nominees (endorsed or primaried) would
+        # vanish and the page would call the result covered.
+        logger.info("CT: the %d %s primary has not settled yet", year, "/".join(sorted(pending)))
+        return None
+
     results: list[dict] = []
     statewide_results: list[dict] = []
     primaried: dict[str, set[str]] = {}
-    pending: set[str] = set()
     for primary, party in ((dem, "D"), (rep, "R")):
         if primary is None:
             continue  # this party held no primary: every endorsement stands
-        if not _settled(primary["date"], settle_days):
-            pending.add(party)
-            continue  # too soon to trust the count
         party_results = await _party_results(client, primary["id"], year, statewide=statewide)
         if party_results is None:
             return None
@@ -448,5 +459,5 @@ async def fetch_confirmed_candidates(
             # absent. Fail the run rather than publish that.
             logger.warning("CT statewide endorsements for %d could not be read", year)
             return None
-        results.extend(_merge_statewide(primaried, pending, statewide_results, endorsed))
+        results.extend(_merge_statewide(primaried, statewide_results, endorsed))
     return results

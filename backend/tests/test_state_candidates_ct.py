@@ -236,8 +236,38 @@ class TestFetchConfirmedCandidates:
 
         monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
         result = await ct.fetch_confirmed_candidates(None, future_year, "CT", {"settle_days": 21})
-        assert result == []
+        # None, not []: a held primary still settling is not an answer.
+        assert result is None
         assert all(u.endswith("Elections.json") for u in requested)
+
+    async def test_one_party_pending_and_the_other_holding_no_primary_publishes_nothing(self, monkeypatch):
+        # The Republicans held no primary (every endorsement stands) and the
+        # Democratic primary is still inside settle_days. Publishing the
+        # Republican endorsements alone used to be read as the whole
+        # statewide ballot: the Democratic nominees were deleted and the
+        # state was marked covered.
+        future_year = 2099
+        requested = []
+
+        async def fake(client, rl, method, url, **kw):
+            requested.append(url)
+            if url.endswith("Elections.json"):
+                return _resp([{"ID": "d1", "Name": f"08/11/{future_year} -- Democratic Primary"}])
+            # The real certificates, served under the future year.
+            if url == ENDORSEMENTS["index_url"]:
+                return _text_resp(INDEX_HTML.replace("2026", str(future_year)))
+            if url.endswith(f"{future_year}-certificate-of-endorsements"):
+                return _text_resp(YEAR_HTML.replace("2026", str(future_year)))
+            if "democratic-statewide-combined-ada.pdf" in url:
+                return _text_resp(DEM_ENDORSEMENTS)
+            if "statewide-republicans-combined.pdf" in url:
+                return _text_resp(REP_ENDORSEMENTS)
+            raise AssertionError(f"unexpected URL: {url}")
+
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
+        monkeypatch.setattr(ct, "fetch_with_retry", fake)
+        source = {"settle_days": 21, "statewide_offices": True, "endorsements": ENDORSEMENTS}
+        assert await ct.fetch_confirmed_candidates(None, future_year, "CT", source) is None
 
 
 # ── Statewide offices: primary results + convention endorsements ─────
@@ -309,18 +339,14 @@ class TestMergeStatewide:
     def test_a_primaried_office_is_decided_by_its_primary_even_with_no_winner(self):
         # A tie leaves no primary record, but the endorsement is still not
         # the nominee: the primary decides that office, not the convention.
-        merged = ct._merge_statewide({"D": {"governor"}, "R": set()}, set(), [], self.ENDORSED)
+        merged = ct._merge_statewide({"D": {"governor"}, "R": set()}, [], self.ENDORSED)
         assert {(r["office"], r["party"], r["last_name"]) for r in merged} == {
             ("treasurer", "D", "Erick Russell"), ("governor", "R", "Ryan Fazio"),
         }
 
-    def test_a_party_whose_primary_has_not_settled_publishes_no_endorsement(self):
-        merged = ct._merge_statewide({"D": set()}, {"R"}, [], self.ENDORSED)
-        assert {r["party"] for r in merged} == {"D"}
-
     def test_two_endorsements_for_one_nomination_publish_neither(self):
         doubled = [*self.ENDORSED, {"office": "treasurer", "district": None, "party": "D", "last_name": "Someone Else"}]
-        merged = ct._merge_statewide({"D": set(), "R": set()}, set(), [], doubled)
+        merged = ct._merge_statewide({"D": set(), "R": set()}, [], doubled)
         assert ("treasurer", "D") not in {(r["office"], r["party"]) for r in merged}
 
 

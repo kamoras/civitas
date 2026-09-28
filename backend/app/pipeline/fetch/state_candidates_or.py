@@ -121,6 +121,7 @@ from app.pipeline.fetch.state_candidates_common import (
     JUDICIAL_RESOLUTION_DECIDED_EARLY,
     JUDICIAL_RESOLUTION_ELECTS,
     JUDICIAL_RESOLUTION_SOLE_CANDIDATE,
+    NONPARTISAN,
     DiscoveryFailed,
     clean_display_name,
     normalize_party,
@@ -527,8 +528,17 @@ def _statewide_nominees(contests: dict, source: dict) -> list[dict]:
             if any(mark != 1 for _name, mark in won):
                 raise DiscoveryFailed(f"{office} {party} winner(s) {won!r} not marked nominee")
             for name, _mark in won:
-                if name:
-                    records.append({"office": office, "district": seat, "party": party or "", "last_name": name})
+                if not name:
+                    continue
+                if party is None:
+                    # A non-partisan office (the Labor Commissioner) is
+                    # stored the way a certified list stores one: the
+                    # NONPARTISAN code with its label, never "" -- which
+                    # the page cannot tell from a missing party.
+                    records.append({"office": office, "district": seat, "party": NONPARTISAN,
+                                    "party_label": "Nonpartisan", "last_name": name})
+                else:
+                    records.append({"office": office, "district": seat, "party": party, "last_name": name})
     return records
 
 

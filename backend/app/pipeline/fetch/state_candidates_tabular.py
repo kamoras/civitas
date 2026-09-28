@@ -865,6 +865,18 @@ async def fetch_confirmed_candidates(
         logger.warning("No %d results file discoverable for %s — skipping", year, st)
         return None
     usable = [s for s in stages if s.get("url") and not _withheld(s, discovery)]
+    state_offices = bool(source.get("statewide_offices"))
+    if state_offices and usable and len(usable) < len(stages):
+        # Some stages settled, others not: one party's election certified
+        # and the other's still counting (Virginia runs one per party), or
+        # a primary settled with its runoff still open. Under the state-
+        # office opt-in a partial read would be taken for the whole ballot
+        # -- the caller deletes every stored nominee it does not list and
+        # records the state as checked -- so the pending stage's nominees
+        # would vanish. Nothing is said until every stage has settled, the
+        # rule Alabama and Connecticut follow too.
+        logger.info("%s: %d of %d %d stages not settled yet", st, len(stages) - len(usable), len(stages), year)
+        return None
     if not usable:
         logger.info(
             "%s has %d %d election(s) published but none settled enough to name "
@@ -910,7 +922,7 @@ async def fetch_confirmed_candidates(
             rows, fmt, by_seat,
             None if stage["runoff"] else threshold,
             advance_count,
-            state_offices=bool(source.get("statewide_offices")),
+            state_offices=state_offices,
             judicial_resolution=source.get("judicial_resolution"),
             judicial_advance_count=source.get("judicial_advance_count"),
         )
@@ -919,6 +931,10 @@ async def fetch_confirmed_candidates(
         # Withheld is healthy and empty; nothing parsed at all is a
         # failure. Same distinction the discovery gate makes.
         return [] if withheld_any else None
+    if withheld_any and state_offices:
+        # The same partial read as above, found only once a file dated
+        # itself: see the check before the loop.
+        return None
     return [record for records in by_seat.values() for record in records]
 
 

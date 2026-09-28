@@ -149,6 +149,80 @@ def test_colorado_reads_every_party_its_ballot_prints():
     assert [(r["office"], r["district"]) for r in records if r["office"] == "H"] == [("H", 8)]
 
 
+
+# ── Joint governor tickets: one vote, one contest ─────────────────────
+
+def test_colorado_and_iowa_show_the_governor_and_running_mate_as_one_ticket():
+    """Both elect the two jointly on one vote (Colo. Const. art. IV sec. 3,
+    Iowa Const. art. IV sec. 3), so there is no Lieutenant Governor contest
+    on their ballots. Colorado's real list prints each "Lt. Governor" row
+    under its "Governor" row, several parties deep; Iowa's (fetched
+    2026-09-28) groups the offices, one ticket per party."""
+    from app.pipeline.fetch.state_candidates_common import join_governor_tickets
+
+    for state in ("CO", "IA"):
+        assert _SOURCES[state].get("joint_governor_ticket"), state
+
+    co_rows = [
+        _co("Victor Marx", "Governor", "State", "Republican Party"),
+        _co("George Washington Markert", "Lt. Governor", "State", "Republican Party"),
+        _co("Phil Weiser", "Governor", "State", "Democratic Party"),
+        _co("Lesley Dahlkemper", "Lt. Governor", "State", "Democratic Party"),
+        _co("Jeff Peckman", "Governor", "State", "Unity Party"),
+        _co("T.J. Cole", "Lt. Governor", "State", "Unity Party"),
+        _co("Greg Lopez", "Governor", "State", "Unaffiliated"),
+        _co("Taralyn Romero", "Lt. Governor", "State", "Unaffiliated"),
+    ]
+    records = parse_certified_rows(co_rows, _general("CO")["format"], state_offices=True)
+    assert _state(join_governor_tickets(records)) == {
+        ("governor", None, "R", None, "Victor Marx and George Washington Markert"),
+        ("governor", None, "D", None, "Phil Weiser and Lesley Dahlkemper"),
+        ("governor", None, "O", "Unity Party", "Jeff Peckman and T.J. Cole"),
+        ("governor", None, "I", None, "Greg Lopez and Taralyn Romero"),
+    }
+
+    def ia(office, party, name):
+        return {"For the Office Of…": office, "Party": party, "Ballot Name(s)": name}
+    ia_rows = [
+        ia("Governor", "Republican", "Zach Lahn"), ia("", "Democratic", "Rob Sand"),
+        ia("Lieutenant Governor", "Republican", "Derek Wulf"), ia("", "Democratic", "Dave Muhlbauer"),
+        ia("Secretary of State", "Republican", "Paul D. Pate"),
+    ]
+    records = parse_certified_rows(ia_rows, _general("IA")["format"], state_offices=True)
+    assert _state(join_governor_tickets(records)) == {
+        ("governor", None, "R", None, "Zach Lahn and Derek Wulf"),
+        ("governor", None, "D", None, "Rob Sand and Dave Muhlbauer"),
+        ("secretary_of_state", None, "R", None, "Paul D. Pate"),
+    }
+
+
+def test_two_same_party_tickets_printed_as_groups_are_not_guessed_at():
+    from app.pipeline.fetch.state_candidates_common import join_governor_tickets
+
+    records = [
+        {"office": "governor", "district": None, "party": "I", "last_name": "A"},
+        {"office": "governor", "district": None, "party": "I", "last_name": "B"},
+        {"office": "lt_governor", "district": None, "party": "I", "last_name": "a"},
+        {"office": "lt_governor", "district": None, "party": "I", "last_name": "b"},
+        # A deputy listed before their governor still joins them.
+        {"office": "lt_governor", "district": None, "party": "D", "last_name": "Mate"},
+        {"office": "governor", "district": None, "party": "D", "last_name": "Top"},
+    ]
+    assert [(r["office"], r["last_name"]) for r in join_governor_tickets(records)] == [
+        ("governor", "A"), ("governor", "B"), ("governor", "Top and Mate"),
+    ]
+
+
+def test_no_joint_ticket_state_lists_a_lieutenant_governor_term():
+    """A joined ticket has no separate contest, so a term for one would be
+    a row the page can never show -- and a sign the join was forgotten."""
+    from app.office_terms import _PATH
+
+    terms = json.loads(Path(_PATH).read_text())["statewide"]
+    for state, entry in _SOURCES.items():
+        if entry.get("joint_governor_ticket"):
+            assert "lt_governor" not in terms.get(state, {}), state
+
 # ── Maryland: the running mate is a related candidate ─────────────────
 
 def _md(office, district, last, first, party, mate_first="", mate_last="", status="Active"):
@@ -519,6 +593,19 @@ def test_delaware_spells_out_the_independent_party_of_delaware():
         ("auditor", None, "O", "Independent Party of Delaware", "Austin Cassidy"),
     }
 
+
+
+def test_an_independent_party_of_delaware_federal_row_is_still_matched_as_independent():
+    """The federal path is main's: a ballot-list federal row printed
+    "Independent Party of Delaware" is "I" for the FEC matcher (its codes
+    have no slot for a named minor party), never None -- which dropped
+    the candidate from the ballot. Only a STATE row keeps the party name."""
+    rows = [{"Office": "Representative in Congress", "Party": "Ind Pty of DE", "Last Name": "Doe",
+             "BallotName": "Jane Doe", "DisplayedStatus": "Qualified"}]
+    records = parse_certified_rows(rows, _general("DE")["format"], state_offices=True)
+    assert [(r["office"], r["party"], r["party_label"]) for r in records] == [
+        ("H", "I", "Independent Party of Delaware"),
+    ]
 
 # ── Florida: codes read through the Division's own party legend ──────
 

@@ -29,6 +29,11 @@
     "NH governor": "Two-year term (N.H. Const. pt. II art. 42).",
     "NM public_lands_commissioner": "Four-year term (N.M. Const. art. V §1, Commissioner of Public Lands).",
     "NM governor": "Elected jointly with the lieutenant governor as one ticket (N.M. Const. art. V §1), so the ticket is stored under governor and there is no separate lt_governor contest.",
+    "joint governor tickets": "CO, CT, HI, IA, MA, PA and WI also elect the governor and lieutenant governor jointly on one vote (each state's joint_governor_ticket in state_candidate_sources.json cites its constitution), so the lieutenant governor is joined to the governor's ticket and has no term of its own here.",
+    "NH executive_council": "Five councillors, one per district, elected biennially (N.H. Const. Pt. II Art. 60).",
+    "NM public_education_commission": "Ten commissioners, one per district, staggered four-year terms (N.M. Const. art. XII sec. 6).",
+    "NE state_board_of_education": "Eight members, one per district, four-year terms (Neb. Const. art. VII sec. 3); the 2026 list's own Term column reads 4.",
+    "NE university_regent": "University of Nebraska Board of Regents: eight elected by district to six-year terms (Neb. Const. art. VII sec. 10); the 2026 list's Term column reads 6, and 4 for District 4's unexpired seat.",
     "MA governors_council": "Eight councillors, one per council district, elected every two years (Mass. Const. amend. art. 16; Ballotpedia, Massachusetts Governor's Council).",
     "WI legislature": "Senators serve four-year staggered terms, odd-numbered districts elected in midterm years; Assembly two (Wis. Const. art. IV, sec. 4-5)."
   },
@@ -47,10 +52,10 @@
     },
     "CO": {
       "governor": 4, "attorney_general": 4, "secretary_of_state": 4, "treasurer": 4,
-      "state_board_of_education": 6, "university_regent": 6, "lt_governor": 4
+      "state_board_of_education": 6, "university_regent": 6
     },
     "CT": {
-      "governor": 4, "lt_governor": 4, "attorney_general": 4, "secretary_of_state": 4,
+      "governor": 4, "attorney_general": 4, "secretary_of_state": 4,
       "treasurer": 4, "comptroller": 4
     },
     "DE": {"attorney_general": 4, "treasurer": 4, "auditor": 4},
@@ -66,19 +71,19 @@
     },
     "IA": {
       "governor": 4, "attorney_general": 4, "secretary_of_state": 4, "treasurer": 4,
-      "auditor": 4, "agriculture_commissioner": 4, "lt_governor": 4
+      "auditor": 4, "agriculture_commissioner": 4
     },
     "MD": {"governor": 4, "attorney_general": 4, "comptroller": 4},
     "MN": {"governor": 4, "attorney_general": 4, "secretary_of_state": 4, "auditor": 4},
     "NE": {"governor": 4, "attorney_general": 4, "secretary_of_state": 4, "treasurer": 4, "auditor": 4,
-           "public_service_commission": 6},
+           "public_service_commission": 6, "state_board_of_education": 4, "university_regent": 6},
     "ND": {
       "attorney_general": 4, "secretary_of_state": 4, "agriculture_commissioner": 4,
       "public_service_commission": 6, "tax_commissioner": 4, "school_superintendent": 4
     },
     "RI": {"governor": 4, "lt_governor": 4, "attorney_general": 4, "secretary_of_state": 4, "treasurer": 4},
     "UT": {"state_board_of_education": 4},
-    "HI": {"governor": 4, "lt_governor": 4},
+    "HI": {"governor": 4},
     "IL": {
       "governor": 4, "attorney_general": 4, "secretary_of_state": 4, "comptroller": 4,
       "treasurer": 4
@@ -101,28 +106,28 @@
       "land_office_commissioner": 4, "agriculture_commissioner": 4,
       "railroad_commissioner": 6, "state_board_of_education": 4
     },
-    "PA": {"governor": 4, "lt_governor": 4},
+    "PA": {"governor": 4},
     "OR": {"governor": 4, "labor_commissioner": 4},
     "ME": {"governor": 4},
     "VT": {
       "governor": 2, "lt_governor": 2, "treasurer": 2, "secretary_of_state": 2,
       "auditor": 2, "attorney_general": 2
     },
-    "NH": {"governor": 2},
+    "NH": {"governor": 2, "executive_council": 2},
     "WY": {
       "governor": 4, "secretary_of_state": 4, "auditor": 4, "treasurer": 4,
       "school_superintendent": 4
     },
     "NM": {
       "governor": 4, "attorney_general": 4, "secretary_of_state": 4, "auditor": 4,
-      "treasurer": 4, "public_lands_commissioner": 4
+      "treasurer": 4, "public_lands_commissioner": 4, "public_education_commission": 4
     },
     "TN": {"governor": 4},
     "MA": {
-      "governor": 4, "lt_governor": 4, "attorney_general": 4, "secretary_of_commonwealth": 4,
+      "governor": 4, "attorney_general": 4, "secretary_of_commonwealth": 4,
       "treasurer": 4, "auditor": 4, "governors_council": 2
     },
-    "WI": {"governor": 4, "lt_governor": 4, "attorney_general": 4, "secretary_of_state": 4, "treasurer": 4}
+    "WI": {"governor": 4, "attorney_general": 4, "secretary_of_state": 4, "treasurer": 4}
   },
   "legislature": {
     "AK": {"upper": 4, "lower": 2},

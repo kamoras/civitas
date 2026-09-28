@@ -79,16 +79,22 @@ Democratic ballot are not hers to keep there). The Governor is New
 Hampshire's only statewide-elected executive officer; its Secretary of
 State and Treasurer are chosen by the legislature.
 
-The Executive Council is deliberately NOT read, though its five
-"Executive Council District N" workbooks sit on the same pages. Each
-councillor is elected by the voters of one district only (N.H. Const.
-Pt. II Art. 60; RSA 662:2 draws the five districts) --
-unlike Georgia's Public Service Commission, which the whole state
-elects -- so listing all five seats under "statewide" would
-show four contests a given voter cannot vote in, with nothing on the page
-to tell them which is theirs. The page names the gap instead (the
-entry's `statewide_omits`). State Senate and House workbooks are left
-out too: several Senate files carry more than one district as separate
+The Executive Council is read too, one seat per district, labelled with
+its district -- the rule for every statewide body seated by district
+(Massachusetts's Governor's Council, Colorado's and Utah's boards,
+Nebraska's Public Service Commission), shown the way the legislature is:
+each councillor is elected by the voters of one district only (N.H.
+Const. Pt. II Art. 60; RSA 662:2 draws the five districts), and the
+district label is what tells a reader which seat is theirs. Each party
+page links one "Executive Council District N" workbook per district --
+the whole district, town by town, with a TOTALS row, so there is no
+per-county file to refuse and no "Summary" in its name -- read under the
+same own-party-columns rule as every other workbook here. Summed that
+way the real 2026 Republican District 4 primary gives John Stephen
+14,261 to Terese M. Bastarache's 2,543 and Harriet E. Cady's 1,877,
+exactly the workbook's own TOTALS row; its 33 Democratic write-ins for
+Stephen are not his to keep there. State Senate and House workbooks are left
+out: several Senate files carry more than one district as separate
 sheets, and the House's are per-county workbooks of multi-member
 districts, neither checked against the shared parsers.
 
@@ -212,9 +218,15 @@ async def _discover_office_links(
                 office_district = parse_statewide_office(text)
             if office_district is None:
                 continue
-            elected_statewide = office_district == ("S", None) or office_district[0] in STATEWIDE_OFFICE_LABELS
+            elected_statewide = office_district == ("S", None) or (
+                office_district[0] in STATEWIDE_OFFICE_LABELS and office_district[1] is None
+            )
             if elected_statewide and "summary" not in text.lower():
                 continue  # a per-county breakdown ("Governor Belknap"), not the statewide summary
+            # An Executive Council seat is elected by its own district, and
+            # its one workbook per party ("Executive Council District 1")
+            # already covers the whole district: there is no per-county
+            # breakdown of it to refuse, and no "Summary" in its name.
             key = (office_district, party_letter)
             if key in ambiguous:
                 continue

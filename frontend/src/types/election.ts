@@ -246,6 +246,8 @@ export interface JudicialCoverage {
   /** When the pipeline last read this state's judicial contests. */
   checkedAt: string | null;
   sourceName: string | null;
+  /** As StatewideCoverage.ballotList. Optional for an older API. */
+  ballotList?: boolean;
 }
 
 /** One court's seats on this state's ballot. */
@@ -297,6 +299,12 @@ export interface StatewideCoverage {
    * place of "as published by". Optional: an API older than this field
    * omits it. */
   basis?: string | null;
+  /** True when the names are the state's own list of who is on the
+   * November ballot; false when they are primary results, which itemise
+   * only contested nominations — so an office (or seat) may be missing a
+   * party's unopposed nominee, and never shows an independent. Optional:
+   * an API older than this field omits it, read as false. */
+  ballotList?: boolean;
 }
 
 /** Where to go for the parts of the ballot this page cannot show. */

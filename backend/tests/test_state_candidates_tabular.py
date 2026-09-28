@@ -340,6 +340,40 @@ class TestRunoffOverride:
         records = await self._run(monkeypatch, [self._PRIMARY, close])
         assert [r["last_name"] for r in records] == ["Collins"]
 
+    async def _run_one_pending(self, monkeypatch, source):
+        dem = (
+            "Contest Name\tChoice\tChoice Party\tTotal Votes\n"
+            "Governor\tAbigail Spanberger\tDemocratic\t900\n"
+        ).encode()
+
+        async def fake_discover(client, state, year, discovery):
+            # The Democratic election is certified; the Republican one,
+            # held the same day, is not yet.
+            return [
+                {"url": "https://example.gov/dem", "runoff": False, "held": "2026-06-16", "official": True},
+                {"url": "https://example.gov/rep", "runoff": False, "held": "2099-06-16", "official": False},
+            ]
+
+        async def fake_get(client, url, label):
+            assert url.endswith("/dem"), url
+            return _Resp(content=dem)
+
+        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
+        monkeypatch.setattr(tb, "_get", fake_get)
+        return await tb.fetch_confirmed_candidates(None, 2026, "VA", {
+            "format": self._FMT, "discovery": {"require_official": True, "settle_days": 30}, **source,
+        })
+
+    @pytest.mark.asyncio
+    async def test_one_stage_pending_publishes_no_state_offices(self, monkeypatch):
+        """Read alone, the settled party's election would be taken for
+        the whole ballot and the pending party's nominees deleted."""
+        assert await self._run_one_pending(monkeypatch, {"statewide_offices": True}) is None
+
+    @pytest.mark.asyncio
+    async def test_one_stage_pending_still_confirms_federal_only(self, monkeypatch):
+        assert await self._run_one_pending(monkeypatch, {}) == []
+
 
 class TestHouseFromColumns:
     """Virginia's export names its federal races "Member, House of

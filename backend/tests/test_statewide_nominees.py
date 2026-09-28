@@ -709,3 +709,25 @@ class TestStatewideSeatNamedByPlace:
             "Public Service Commission, Place 1",
             "Public Service Commission, Place 2",
         ]
+
+
+
+def test_one_rule_for_district_seated_bodies():
+    """Every statewide body seated by district is listed per district
+    (like the legislature), so no entry hides one behind statewide_omits.
+    What an entry may omit is an office its adapter does not read at all
+    -- Louisiana's and Montana's district-elected PSCs -- and then the
+    page must say so."""
+    import json
+    from pathlib import Path
+
+    from app.pipeline.fetch.state_candidates_common import parse_statewide_office
+
+    sources = json.loads(
+        (Path(__file__).resolve().parents[1] / "app" / "data" / "state_candidate_sources.json").read_text()
+    )["states"]
+    assert "statewide_omits" not in sources["NH"]
+    assert parse_statewide_office("Executive Council District 2") == ("executive_council", "2")
+    assert parse_statewide_office("Governor's Council 3rd District") == ("governors_council", "3")
+    for state in ("LA", "MT"):
+        assert sources[state]["statewide_omits"] == ["Public Service Commission districts"], state

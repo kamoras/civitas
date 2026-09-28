@@ -174,9 +174,10 @@ function StateLegislatureDetail({ ballot }: { ballot: StateBallot }) {
         <StateLegChamberSection key={chamber.chamber} chamber={chamber} />
       ))}
       <p className="mt-1 text-[10px] text-ink-min">
-        Only seats named in the state&apos;s own results feed appear — a seat whose primary was
-        uncontested is often not published at all, so this is not the full chamber. District
-        boundaries from the U.S. Census Bureau; these offices have no federal
+        {ballot.statewideCoverage.ballotList
+          ? "Every candidate on the state's list for the November ballot. "
+          : `${PRIMARY_RESULTS_CAVEAT} This is not the full chamber. `}
+        District boundaries from the U.S. Census Bureau; these offices have no federal
         campaign-finance filings, so no funding figures exist for them.
       </p>
     </div>
@@ -235,14 +236,24 @@ function JudicialDetail({ ballot }: { ballot: StateBallot }) {
         </div>
       ))}
       <p className="mt-1 text-[10px] text-ink-min">
-        Only seats named in the state&apos;s own results feed appear — a seat whose primary
-        was uncontested is often not published at all, so this is not the full bench.
+        {ballot.judicialCoverage.ballotList
+          ? "Every candidate on the state's list for the November ballot. "
+          : `${PRIMARY_RESULTS_CAVEAT} This is not the full bench. `}
         Retention questions are a separate ballot item and are not covered. These offices
         have no federal campaign-finance filings, so no funding figures exist for them.
       </p>
     </div>
   );
 }
+
+/** What primary results cannot show, said wherever state offices are
+ * listed from them. A results file itemises only contested nominations:
+ * a nominee who ran unopposed is often absent (Alabama prints no
+ * uncontested contest at all), so an office or seat can be missing, or
+ * listed with one party's nominee while another party's is not, and no
+ * independent or minor-party candidate ever appears. */
+const PRIMARY_RESULTS_CAVEAT =
+  "Names come from primary results, which often omit a nominee who ran unopposed and never include independent or minor-party candidates — so an office may be missing, or missing a party's nominee.";
 
 /** The state's own executive officers — Governor, Lieutenant Governor,
  * Attorney General, Secretary of State, Treasurer — where its feed
@@ -298,12 +309,16 @@ function StatewideExecutiveDetail({ ballot }: { ballot: StateBallot }) {
           ? ` · last checked ${statewideCoverage.checkedAt.slice(0, 10)}`
           : ""}
         .
-        {/* Only meaningful next to actual nominees: an office whose primary
-            nobody contested is often not itemised in a results feed at all,
-            so this list is what the state published, not necessarily every
-            statewide office on the ballot. */}
+        {/* Only meaningful next to actual nominees. From primary results,
+            a nomination nobody contested is often not itemised at all, so
+            an office can be missing entirely — or be shown with one
+            party's nominee while the other's, unopposed, is absent. */}
         {statewideRaces.length > 0 &&
-          " Only offices named in the state's own results feed appear — one whose primary was uncontested is often not published at all. These offices have no federal campaign-finance filings, so no funding figures or Representation Scores exist for them."}
+          (statewideCoverage.ballotList
+            ? " Every candidate on the state's list for the November ballot."
+            : ` ${PRIMARY_RESULTS_CAVEAT}`)}
+        {statewideRaces.length > 0 &&
+          " These offices have no federal campaign-finance filings, so no funding figures or Representation Scores exist for them."}
       </p>
     </div>
   );
