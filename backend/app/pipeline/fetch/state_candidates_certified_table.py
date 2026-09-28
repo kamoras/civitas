@@ -186,7 +186,6 @@ import html
 import io
 import logging
 import re
-from datetime import date
 from urllib.parse import urljoin
 
 import httpx
@@ -216,6 +215,7 @@ from app.pipeline.fetch.state_candidates_common import (
 )
 from app.pipeline.fetch.state_candidates_tabular import _html_rows, _xlsx_rows
 from app.pipeline.rate_limiter import RateLimiter
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -815,7 +815,7 @@ def _records(
                     f"{state}'s {year} certified list still lacks: {'; '.join(missing)}. Ballots are final, "
                     "so the statewide and legislative sections stay unpublished until the list is complete "
                     "or format.slate_complete is revisited.",
-                    dedupe_key=f"slate-incomplete-{state}-{year}-{date.today().isoformat()}",
+                    dedupe_key=f"slate-incomplete-{state}-{year}-{utcnow().date().isoformat()}",
                 )
             except Exception:
                 logger.exception("Could not send the %s slate-incomplete ops alert", state)
