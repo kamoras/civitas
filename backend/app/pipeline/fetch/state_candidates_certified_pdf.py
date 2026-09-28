@@ -24,6 +24,19 @@ This document has no vote counts. Its text is a plain sequence:
 so every candidate line is read under the nearest party and office
 header above it. The link is found by a regex carrying `{year}`, so the
 next cycle's certification is picked up without an edit.
+
+With the source's `statewide_offices` opt-in, the same party sections'
+state offices are read too — "For State Auditor" (Missouri's only
+executive office in 2026, one candidate per party) and "For State
+Senator" / "For State Representative", each followed by the same
+"District N, Name" lines as the U.S. House. Every name listed is on the
+November ballot, so every one is a record, exactly as for the federal
+offices; nothing is resolved from votes because there are none. The
+header is handed to the shared gates (parse_statewide_office, then
+parse_state_leg_office) with the line's district restated as "District
+N", so the gates make every decision. "For Circuit Judge" appears under
+the party sections too and is refused by both gates; judicial contests
+are a separate claim (`judicial_offices`) this strategy does not make.
 """
 
 import logging
@@ -39,6 +52,8 @@ from app.pipeline.fetch.state_candidates_common import (
     discover_certification_link,
     normalize_party,
     parse_office,
+    parse_state_leg_office,
+    parse_statewide_office,
     surname,
 )
 from app.pipeline.rate_limiter import RateLimiter
@@ -52,12 +67,46 @@ _OFFICE_RE = re.compile(r"^For (.+)$")
 _DISTRICT_RE = re.compile(r"^District (\d+),\s*(.+)$")
 
 
-def parse_certification(lines: list[str]) -> list[dict]:
-    """Federal candidates from the certification's text lines."""
+def _state_record(header: str, line: str, party: str | None) -> dict | None:
+    """The statewide-executive or legislative record one candidate line
+    under `header` makes, or None when the gates refuse the pair."""
+    district_line = _DISTRICT_RE.match(line)
+    label = f"{header} District {district_line.group(1)}" if district_line else header
+    name = clean_display_name(district_line.group(2) if district_line else line)
+    if not name:
+        return None
+    statewide = parse_statewide_office(label)
+    if statewide is not None:
+        office, seat = statewide
+        if district_line and seat is None:
+            # A district beside an office that has none ("Secretary of
+            # State, District 3") is a line this does not understand.
+            return None
+        return {"office": office, "district": seat, "party": party, "last_name": name}
+    if not district_line:
+        # Every legislative seat is printed "District N, Name"; a bare
+        # line under one is the next block's prose.
+        return None
+    leg = parse_state_leg_office(label)
+    if leg is None:
+        return None
+    chamber, district, seat = leg
+    record = {"office": chamber, "district": district, "party": party, "last_name": name}
+    if seat is not None:
+        record["seat"] = seat
+    return record
+
+
+def parse_certification(lines: list[str], state_offices: bool = False) -> list[dict]:
+    """Federal candidates from the certification's text lines — and,
+    with `state_offices`, the statewide-executive and legislative ones
+    (see the module docstring)."""
     records: list[dict] = []
     party: str | None = None
     in_party_section = False
     office: tuple[str, int | None] | None = None
+    # The header of a state office being read, or None.
+    state_header: str | None = None
     for raw in lines:
         line = raw.strip()
         if not line or line.isdigit():  # blank, or a page number
@@ -69,12 +118,32 @@ def parse_certification(lines: list[str]) -> list[dict]:
             party = normalize_party(section.group(1), ballot_list=True)
             in_party_section = party is not None
             office = None
+            state_header = None
             continue
         header = _OFFICE_RE.match(line)
         if header:
             office = parse_office(header.group(1))
+            state_header = None
+            if office is None and state_offices:
+                # Whether it is a state office at all is decided line by
+                # line in _state_record, where the district is known.
+                state_header = header.group(1)
             continue
-        if not in_party_section or office is None:
+        if not in_party_section:
+            continue
+        if state_header is not None:
+            record = _state_record(state_header, line, party)
+            if record is None:
+                # Not a candidate line for this office: the block ended.
+                state_header = None
+                continue
+            records.append(record)
+            if record["office"] not in ("upper", "lower") and record["district"] is None:
+                # One candidate per party for a single-seat statewide
+                # office, as for the U.S. Senate below.
+                state_header = None
+            continue
+        if office is None:
             continue
         chamber, at_large = office
         district_line = _DISTRICT_RE.match(line)
@@ -123,9 +192,12 @@ async def fetch_confirmed_candidates(
     pdf_bytes = await fetch_bytes_with_retry(client, _rate_limiter, pdf_url, f"{state} certification {year}")
     if pdf_bytes is None:
         return None
-    records = parse_certification(_lines(pdf_bytes))
-    if not records:
+    records = parse_certification(_lines(pdf_bytes), bool(source.get("statewide_offices")))
+    if not any(r["office"] in ("S", "H") for r in records):
         logger.warning("%s certification %s parsed no federal candidate", state, pdf_url)
         return None
-    logger.info("%s certification: %d federal candidates", state, len(records))
+    logger.info(
+        "%s certification: %d candidates (%d federal)", state, len(records),
+        sum(r["office"] in ("S", "H") for r in records),
+    )
     return records

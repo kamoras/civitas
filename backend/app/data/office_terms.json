@@ -13,7 +13,9 @@
     "WA judicial": "Supreme Court justices six years (Wash. Const. art. IV §3).",
     "SD public_utilities_commission": "Three commissioners elected statewide to six-year staggered terms (Ballotpedia, South Dakota Public Utilities Commission).",
     "SD school_public_lands_commissioner": "Four-year term (Ballotpedia, South Dakota Commissioner of School and Public Lands).",
-    "HI and IL legislatures": "No upper-chamber term listed: both state senates run a 2-4-4 cycle, so a 2026 seat's term depends on its district's place in the decade."
+    "HI and IL legislatures": "No upper-chamber term listed: both state senates run a 2-4-4 cycle, so a 2026 seat's term depends on its district's place in the decade.",
+    "KS state_board_of_education": "Ten members, one per district, four-year staggered terms (Ballotpedia, Kansas State Board of Education); the 2026 primary's own results carry exactly the odd-numbered seats 1, 3, 5, 7 and 9.",
+    "KS upper": "Four-year terms, elected in presidential years (Kan. Const. art. 2, \u00a72). The only Senate contests on the 2026 primary are Districts 24 and 25, seats being filled for the rest of an unexpired term, which runs shorter than the office's term the page shows."
   },
   "statewide": {
     "AK": {"governor": 4},
@@ -59,7 +61,12 @@
     "SD": {
       "governor": 4, "attorney_general": 4, "secretary_of_state": 4, "auditor": 4,
       "treasurer": 4, "school_public_lands_commissioner": 4, "public_utilities_commission": 6
-    }
+    },
+    "KS": {
+      "governor": 4, "attorney_general": 4, "secretary_of_state": 4, "treasurer": 4,
+      "insurance_commissioner": 4, "state_board_of_education": 4
+    },
+    "MO": {"auditor": 4}
   },
   "legislature": {
     "AK": {"upper": 4, "lower": 2},
@@ -81,7 +88,9 @@
     "WV": {"upper": 4, "lower": 2},
     "HI": {"lower": 2},
     "IL": {"lower": 2},
-    "SD": {"upper": 2, "lower": 2}
+    "SD": {"upper": 2, "lower": 2},
+    "KS": {"upper": 4, "lower": 2},
+    "MO": {"upper": 4, "lower": 2}
   },
   "judicial": {
     "FL": {"circuit": 6},
