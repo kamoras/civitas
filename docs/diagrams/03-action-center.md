@@ -173,6 +173,14 @@ distinction between a quiet news cycle and new topics being dropped on the way i
 
 `GET /api/admin/action-metrics` returns the window with the three groups totalled.
 
+**Calibrated thresholds.** `cluster_title`, `near_identical`, `monitor_issue` and
+`monitor_merge` (`action_thresholds.py`) are refitted daily from labelled pairs
+these rows carry (`thr_*` counters). The labels are signature overlap for article
+and issue pairs and the LLM gate's verdict for monitor pairs, plus one probe per
+stage per run below the floor. A fit needs 30 pairs per class, otherwise the
+previous value stays. The bundled `app/data/action_thresholds.json` covers the
+time before the first fit.
+
 ## Known limitation, disclosed on the methodology page
 
 Under common media-bias ratings the source diet spans centre to lean-left, with
