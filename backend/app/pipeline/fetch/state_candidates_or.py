@@ -97,6 +97,16 @@ Monique DeSpain (CD4 R, real plurality winner of a 2-way field), Janelle
 S Bynum (CD5 D, real plurality winner of a 2-way field), Patti Adair
 (CD5 R, real plurality winner of a 2-way field), Andrea Salinas (CD6 D,
 unopposed), David Russ (CD6 R, unopposed).
+
+STATEWIDE EXECUTIVE contests (only with `statewide_offices`) come off the
+same document by a different reader -- see "Statewide executive contests"
+below for why word positions rather than the table. 2026 carries two:
+Governor (Tina Kotek D, Christine Drazan R) and the NON-partisan
+Commissioner of the Bureau of Labor and Industries, which Christina E
+Stephenson won outright in May with 63.2% (ORS 249.088(1)(b); the
+Abstract marks her "**" Elected), so it is not a November contest and
+nobody is published for it. How a non-partisan contest resolves is the
+state entry's `nonpartisan_resolution`, never assumed here.
 """
 
 import logging
@@ -108,9 +118,16 @@ import pdfplumber
 
 from app.pipeline.fetch.http_utils import fetch_bytes_with_retry, fetch_json_with_retry
 from app.pipeline.fetch.state_candidates_common import (
+    JUDICIAL_RESOLUTION_DECIDED_EARLY,
+    JUDICIAL_RESOLUTION_ELECTS,
+    JUDICIAL_RESOLUTION_SOLE_CANDIDATE,
     DiscoveryFailed,
+    clean_display_name,
     normalize_party,
     parse_office,
+    parse_statewide_office,
+    pick_nominee,
+    pick_nominees,
     resolve_confirmed_nominees,
     surname,
 )
@@ -251,6 +268,270 @@ def _federal_contests(pdf_bytes: bytes) -> list[tuple[str, int | None, str, str,
     return results
 
 
+# ── Statewide executive contests ─────────────────────────────────────
+#
+# Read from each word's own position on the page, NOT from the text-
+# strategy table the federal pages above use. That table places its
+# column boundaries between whitespace runs, and on the statewide pages
+# it cuts names mid-word -- the real 2026 Governor page comes back as
+# "Alexander At" | "kinson IV" and "County Fo" | "rest (Fora)". A
+# surname-only federal read was verified page by page and survives it;
+# the WHOLE printed name a statewide nominee is shown under does not.
+#
+# Every name and every vote figure on the Abstract is RIGHT-aligned to
+# its column (verified on every Governor and BOLI page: "*Kotek", "Tina",
+# each county's figure and "385,999" all end at x=347), so the Total
+# row's own numbers fix each column's right edge, and a word belongs to
+# the first column whose edge is at or past the word's own right end.
+# A candidate's block is: the name line (surnames, the nominee marked
+# "*" and a majority winner of a NON-partisan contest "**" -- the page's
+# own legend reads "* Nominee / ** Elected"), a "County" line of given
+# names, any wrapped continuation of those given names ("Brock" below
+# "David" for David Brock Smith), the 36 county rows, and "Total".
+#
+# A contest can run over several pages: the 2026 Governor's Democratic
+# field is printed as "Democrat" (6 candidates) and then "Democrat
+# (cont.)" (4 more and Misc.), each page with its own Total row, so the
+# field is only complete once every page of it is merged.
+#
+# Legislative contests are deliberately NOT read here. Their pages print
+# several districts each, split some district headings over two lines
+# ("18th" / "District"), and give a one-county district no Total row at
+# all (Senate District 3's Democratic block ends at its lone "Jackson"
+# row), so a block's figures are not reliably where this reader expects
+# them. The page keeps state legislative districts among its omissions.
+
+# The label column (party names, "County", county names, "Total") starts
+# at x=41 (Total at 59); the leftmost candidate column's words start past
+# 100 on every page read.
+_LABEL_X_MAX = 65.0
+_ALIGN_TOL = 2.0
+_LINE_TOL = 3.0
+_LEGEND_RE = re.compile(r"^(?:\*+|WI)$")  # the "* Nominee / ** Elected / WI = Write In" footer
+
+
+def _page_lines(page) -> list[list[dict]]:
+    """The page's words grouped into visual lines, top to bottom, each
+    line left to right."""
+    words = sorted(page.extract_words() or [], key=lambda w: (w["top"], w["x0"]))
+    lines: list[list[dict]] = []
+    for word in words:
+        if lines and abs(lines[-1][0]["top"] - word["top"]) <= _LINE_TOL:
+            lines[-1].append(word)
+        else:
+            lines.append([word])
+    return [sorted(line, key=lambda w: w["x0"]) for line in lines]
+
+
+def _line_text(line: list[dict]) -> str:
+    return " ".join(w["text"] for w in line)
+
+
+def _is_label_line(line: list[dict]) -> bool:
+    return bool(line) and line[0]["x0"] <= _LABEL_X_MAX
+
+
+def _figure(text: str) -> int | None:
+    digits = text.replace(",", "")
+    return int(digits) if digits.isdigit() else None
+
+
+def _page_statewide_office(lines: list[list[dict]]) -> tuple[str, str | None] | None:
+    """The statewide office this page prints, from its centred title lines
+    (after the "... Abstract of Votes" header, before the first line in
+    the label column), or None."""
+    for line in lines[1:4]:
+        if _is_label_line(line):
+            break
+        found = parse_statewide_office(_line_text(line))
+        if found:
+            return found
+    return None
+
+
+def _read_block(
+    name_line: list[dict], given_lines: list[list[dict]], total_line: list[dict],
+) -> list[tuple[str, str, int]] | None:
+    """[(printed surname cell, given-name text, votes), ...] for one party
+    block, one entry per column of its Total row, or None when any word
+    does not fall in a column or any column lacks a name or a figure."""
+    figures = [_figure(w["text"]) for w in total_line[1:]]
+    if not figures or any(f is None for f in figures):
+        return None
+    edges = [w["x1"] for w in total_line[1:]]
+
+    def column(word: dict) -> int | None:
+        return next((i for i, edge in enumerate(edges) if word["x1"] <= edge + _ALIGN_TOL), None)
+
+    surnames: list[list[str]] = [[] for _ in edges]
+    given: list[list[str]] = [[] for _ in edges]
+    for word in name_line:
+        i = column(word)
+        if i is None:
+            return None
+        surnames[i].append(word["text"])
+    for line in given_lines:
+        for word in line:
+            i = column(word)
+            if i is None:
+                return None
+            given[i].append(word["text"])
+    if not all(surnames):
+        return None
+    return [
+        (" ".join(s), " ".join(g), votes)
+        for s, g, votes in zip(surnames, given, figures, strict=True)
+    ]
+
+
+def _page_blocks(lines: list[list[dict]]) -> list[tuple[str | None, list[tuple[str, str, int]]]] | None:
+    """[(party or None, block), ...] for every candidate block on one
+    statewide page, or None when any block on it cannot be read -- a
+    field missing one block would name the wrong winner, so a page is
+    read whole or not at all."""
+    blocks: list[tuple[str | None, list[tuple[str, str, int]]]] = []
+    party: str | None = None
+    unknown_party = False
+    for idx, line in enumerate(lines):
+        if not _is_label_line(line):
+            continue
+        head = line[0]["text"]
+        if head == "County":
+            if idx == 0 or _is_label_line(lines[idx - 1]):
+                return None
+            given_lines = [line[1:]]
+            j = idx + 1
+            while j < len(lines) and not _is_label_line(lines[j]):
+                given_lines.append(lines[j])
+                j += 1
+            total = None
+            for later in lines[j:]:
+                if _is_label_line(later) and later[0]["text"] in ("County", "Total"):
+                    total = later if later[0]["text"] == "Total" else None
+                    break
+            if total is None or unknown_party:
+                return None
+            block = _read_block(lines[idx - 1], given_lines, total)
+            if block is None:
+                return None
+            blocks.append((party, block))
+        elif head != "Total" and not _LEGEND_RE.match(head) and not any(
+            _figure(w["text"]) is not None for w in line
+        ):
+            # A party heading ("Democrat", "Republican (cont.)"). One this
+            # doesn't recognise must not leave the previous party's label
+            # on the block below it.
+            party = normalize_party(_line_text(line))
+            unknown_party = party is None
+    return blocks
+
+
+def _statewide_contests(pdf_bytes: bytes) -> dict[tuple[str, str | None], list | None]:
+    """{(office, seat): [(party or None, block), ...]} for every statewide
+    executive contest in the document, merged across the pages it runs
+    over; None for a contest any page of which could not be read."""
+    contests: dict[tuple[str, str | None], list | None] = {}
+    with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
+        for page in pdf.pages:
+            if _page_office(page.extract_text() or "") is not None:
+                continue
+            lines = _page_lines(page)
+            office = _page_statewide_office(lines)
+            if office is None:
+                continue
+            blocks = _page_blocks(lines)
+            if blocks is None or not blocks:
+                contests[office] = None
+            elif office not in contests:
+                contests[office] = blocks
+            elif contests[office] is not None:
+                contests[office].extend(blocks)
+    return contests
+
+
+def _nonpartisan_winners(
+    named: list[tuple[str, int, int]], write_ins: int, source: dict,
+) -> list[tuple[str, int]] | None:
+    """[(name, marker)] who go on to November from a NON-partisan statewide
+    contest, [] when nobody does, None when the state's rule isn't
+    configured. Oregon's is ORS 249.088(1): "(a) Unless a candidate for
+    nonpartisan office receives a majority of the votes cast for the
+    office, the two candidates who receive the highest number of votes
+    are nominated. (b) If a candidate for nonpartisan office receives a
+    majority of votes cast for the office, that candidate is elected."
+    Votes cast for the office include its write-ins, so the majority is
+    measured against them too."""
+    resolution = source.get("nonpartisan_resolution")
+    if resolution is None:
+        return None
+    marker = {name: mark for name, _votes, mark in named}
+    ranked = sorted(named, key=lambda c: c[1], reverse=True)
+    cast = sum(v for _n, v, _m in named) + write_ins
+    if resolution == JUDICIAL_RESOLUTION_DECIDED_EARLY:
+        return []
+    if ranked and cast and ranked[0][1] * 2 > cast:
+        if resolution == JUDICIAL_RESOLUTION_ELECTS:
+            return []
+        if resolution == JUDICIAL_RESOLUTION_SOLE_CANDIDATE:
+            return [(ranked[0][0], ranked[0][2])]
+    won = pick_nominees(
+        [(n, v) for n, v, _m in named], None, int(source.get("nonpartisan_advance_count") or 2),
+    )
+    return [(name, marker[name]) for name, _pct in won]
+
+
+def _statewide_nominees(contests: dict, source: dict) -> list[dict]:
+    """The November nominees these contests resolve to. Each winner is
+    computed from the vote figures (pick_nominee / pick_nominees, as for
+    the federal pages) and then held against the Abstract's own marks: a
+    nominee must carry "*", and a non-partisan contest decided in May
+    must show its winner "**" (Elected).
+
+    Anything this cannot read or reconcile RAISES DiscoveryFailed rather
+    than dropping the contest. With `statewide_offices` set, a contest
+    missing from the result is recorded as a confirmed absence, so a
+    skipped Governor page would tell a reader Oregon elects no governor.
+    Failing the fetch leaves the last good sync standing instead."""
+    threshold = source.get("runoff_threshold_pct")
+    records: list[dict] = []
+    for (office, seat), blocks in contests.items():
+        if blocks is None:
+            raise DiscoveryFailed(f"a {office} page could not be read")
+        parties = {party for party, _block in blocks}
+        if None in parties and len(parties) > 1:
+            raise DiscoveryFailed(f"{office} mixes party and non-party blocks")
+        by_party: dict[str | None, list[tuple[str, str, int]]] = {}
+        for party, block in blocks:
+            by_party.setdefault(party, []).extend(block)
+        for party, cells in by_party.items():
+            named = [
+                (clean_display_name(f"{given} {cell}"), votes, len(cell) - len(cell.lstrip("*")))
+                for cell, given, votes in cells if not _NON_CANDIDATE_RE.search(cell)
+            ]
+            write_ins = sum(votes for cell, _g, votes in cells if _NON_CANDIDATE_RE.search(cell))
+            if party is None:
+                won = _nonpartisan_winners(named, write_ins, source)
+                if won is None:
+                    raise DiscoveryFailed(f"{office} is non-partisan and no nonpartisan_resolution is set")
+                if not won:
+                    # Decided in the primary, which the Abstract states
+                    # itself with "**" (Elected).
+                    leader = max(named, key=lambda c: c[1], default=None)
+                    if leader and leader[2] != 2:
+                        raise DiscoveryFailed(f"{office} leader {leader[0]!r} is not marked elected")
+                    continue
+            else:
+                pick = pick_nominee([(n, v) for n, v, _m in named], threshold)
+                marker = {n: m for n, _v, m in named}
+                won = [(pick[0], marker[pick[0]])] if pick else []
+            if any(mark != 1 for _name, mark in won):
+                raise DiscoveryFailed(f"{office} {party} winner(s) {won!r} not marked nominee")
+            for name, _mark in won:
+                if name:
+                    records.append({"office": office, "district": seat, "party": party or "", "last_name": name})
+    return records
+
+
 async def fetch_confirmed_candidates(
     client: httpx.AsyncClient, year: int, state: str, source: dict,  # noqa: ARG001 — state unused, this strategy is OR-only by construction
 ) -> list[dict] | None:
@@ -276,4 +557,11 @@ async def fetch_confirmed_candidates(
         by_group.setdefault((office, district, party), []).append((name, votes))
 
     runoff_threshold_pct = source.get("runoff_threshold_pct")
-    return resolve_confirmed_nominees(by_group, runoff_threshold_pct)
+    results = resolve_confirmed_nominees(by_group, runoff_threshold_pct)
+    if source.get("statewide_offices"):
+        try:
+            results.extend(_statewide_nominees(_statewide_contests(pdf_bytes), source))
+        except DiscoveryFailed as exc:
+            logger.warning("OR results: statewide contests unreadable, failing the fetch: %s", exc)
+            return None
+    return results

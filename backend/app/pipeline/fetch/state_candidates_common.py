@@ -231,8 +231,11 @@ _STATEWIDE_PHRASES = [
     ("agriculture_commissioner", re.compile(
         r"\bCommissioner\s+of\s+Agriculture\b|\bAgriculture\s+Commissioner\b"
         r"|\bSecretary\s+of\s+Agriculture\b", re.IGNORECASE)),
+    # Oregon's is "Commissioner of the Bureau of Labor and Industries"
+    # (BOLI), off its 2026 primary Abstract of Votes.
     ("labor_commissioner", re.compile(
-        r"\bCommissioner\s+of\s+Labor\b|\bLabor\s+Commissioner\b", re.IGNORECASE)),
+        r"\bCommissioner\s+of\s+Labor\b|\bLabor\s+Commissioner\b"
+        r"|\bCommissioner\s+of\s+the\s+Bureau\s+of\s+Labor\b", re.IGNORECASE)),
     ("school_superintendent", re.compile(
         r"\bState\s+School\s+Superintendent\b"
         r"|\bSuperintendent\s+of\s+Public\s+Instruction\b", re.IGNORECASE)),

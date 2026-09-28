@@ -81,7 +81,9 @@
       "land_office_commissioner": 4, "agriculture_commissioner": 4,
       "railroad_commissioner": 6, "state_board_of_education": 4
     },
-    "PA": {"governor": 4, "lt_governor": 4}
+    "PA": {"governor": 4, "lt_governor": 4},
+    "OR": {"governor": 4, "labor_commissioner": 4},
+    "ME": {"governor": 4}
   },
   "legislature": {
     "AK": {"upper": 4, "lower": 2},

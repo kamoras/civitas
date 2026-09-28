@@ -452,6 +452,9 @@ class TestStatewideOfficePhrases:
             "Commissioner of Agriculture - Dem") == ("agriculture_commissioner", None)
         assert common.parse_statewide_office(
             "Commissioner of Labor - Rep") == ("labor_commissioner", None)
+        # Oregon's own label, off its 2026 primary Abstract of Votes.
+        assert common.parse_statewide_office(
+            "Commissioner of the Bureau of Labor and Industries") == ("labor_commissioner", None)
 
     def test_either_word_order_works(self):
         assert common.parse_statewide_office(
