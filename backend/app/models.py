@@ -1479,8 +1479,9 @@ class ElectionPipelineRun(Base):
 
 
 class BallotMeasure(Base):
-    """One statewide ballot measure, as published by an official or
-    reference source (see pipeline/fetch/ballot_measures.py).
+    """One statewide ballot measure, as published by the state's own
+    office (see pipeline/fetch/ballot_measures_pdf.py and the per-state
+    readers it dispatches to).
 
     Keyed on ELECTION DATE, not cycle year. Ohio can run an "Issue 1" in a
     May primary and a different "Issue 1" in the November general; a
@@ -1502,8 +1503,8 @@ class BallotMeasure(Base):
     __tablename__ = "ballot_measures"
     __table_args__ = (
         # Partial, not a plain UniqueConstraint: `number` defaults to ""
-        # whenever a source doesn't publish one yet (see
-        # pipeline/fetch/ballot_measures.py's `_text` fallback), and a
+        # whenever a source doesn't publish one (North Carolina, South
+        # Carolina and Kentucky print none), and a
         # state routinely has more than one such measure at once early in
         # a cycle. A non-partial constraint on (state, election_date,
         # number) collides on the second blank-numbered measure and the

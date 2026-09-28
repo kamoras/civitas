@@ -347,9 +347,9 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
     // not confirm this list — failed, or found the document missing.
     const stale = measureCoverage.status !== "covered" && measureCoverage.status !== "confirmed_none";
     // Credit the measures to the source they came from, not to whichever
-    // source the coverage row names: while a state moves from Vote Smart to
-    // its own office, the cards are still Vote Smart's. A read date is only
-    // shown when it is that same source's.
+    // source the coverage row names: while a state's registered source is
+    // renamed or re-pointed, the cards are still the previous source's. A
+    // read date is only shown when it is that same source's.
     const sources = [...new Set(measures.map((m) => m.sourceName).filter(Boolean))];
     // Every card is a measure no longer on the ballot (the source dropped
     // it, or an operator accepted its absence) — the notices below then
@@ -360,9 +360,26 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
       sources.length === 1 && sources[0] === measureCoverage.sourceName && measureCoverage.checkedAt
         ? measureCoverage.checkedAt.slice(0, 10)
         : null;
+    // No reader runs for this state any more (de-registered mid-cycle):
+    // the list is the last read's, and nothing has been checked since —
+    // "our latest check" or a fresh-list wording would both be false.
+    const unread = Boolean(measureCoverage.unreadReason);
     return (
       <div className="space-y-3">
-        {stale && allRemoved && (
+        {unread && (
+          <div role="status" className="border border-signal-amber/40 bg-signal-amber/10 p-3">
+            <p className="text-xs text-signal-amber">
+              Civitas has stopped reading {state}&apos;s measures automatically. The list below is from
+              our last read{readDate ? `, ${readDate}` : ""}, and may be out of date —
+              check the{" "}
+              <a href={lookupHref} target="_blank" rel="noopener noreferrer" className="text-signal-cyan hover:text-phos">
+                official lookup ↗
+              </a>
+              .
+            </p>
+          </div>
+        )}
+        {!unread && stale && allRemoved && measureCoverage.status === "not_yet_covered" && (
           // The latest read worked and dropped these; it names nothing
           // else for this ballot yet (Oklahoma's register re-dating its
           // only State Question). "Could not find the list" would be false.
@@ -386,7 +403,7 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
             </p>
           </div>
         )}
-        {stale && !allRemoved && (
+        {!unread && stale && !(allRemoved && measureCoverage.status === "not_yet_covered") && (
           <div role="status" className="border border-signal-amber/40 bg-signal-amber/10 p-3">
             <p className="text-xs text-signal-amber">
               {measureCoverage.status === "ingest_failed"
@@ -452,24 +469,33 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
     );
   }
 
-  // not_yet_covered / ingest_failed — say so plainly. Never imply zero.
+  // not_yet_covered / ingest_failed — say so plainly, with the actual
+  // reason. Never imply zero.
+  const failed = measureCoverage.status === "ingest_failed";
+  const why = failed
+    ? "our last attempt to load them failed."
+    : measureCoverage.unreadReason
+      ? measureCoverage.unreadReason
+      : measureCoverage.lastAttemptAt
+        ? "the state has not published its list for this election yet."
+        : "we have not checked this state yet.";
   return (
     <div className="border border-signal-amber/40 bg-signal-amber/10 p-4">
       <p className="text-sm text-signal-amber">
-        Civitas does not have {state}&apos;s statewide ballot measures yet.
+        {failed
+          ? `Civitas does not have ${state}'s statewide ballot measures yet.`
+          : `${state}'s statewide ballot measures are not yet covered.`}
       </p>
       <p className="text-xs text-ink-lo mt-2">
-        This does <strong>not</strong> mean there are none —{" "}
-        {measureCoverage.status === "ingest_failed"
-          ? "our last attempt to load them failed"
-          : "we have not ingested this state yet"}
-        . Use the{" "}
+        This does <strong>not</strong> mean there are none — {why} Use the{" "}
         <a href={lookupHref} target="_blank" rel="noopener noreferrer" className="text-signal-cyan hover:text-phos">
           official lookup ↗
         </a>{" "}
         to see everything on your ballot.
       </p>
-      {measureCoverage.lastAttemptAt && (
+      {/* Nothing is attempted for an unread state: its row's timestamp
+          is nightly bookkeeping, not a check. */}
+      {measureCoverage.lastAttemptAt && !measureCoverage.unreadReason && (
         <p className="text-[10px] text-ink-min mt-2">
           Last attempt {measureCoverage.lastAttemptAt.slice(0, 10)}.
         </p>

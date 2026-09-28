@@ -48,6 +48,7 @@ from app.pipeline.candidate_dedup import dedupe_candidates, normalized_surname
 from app.pipeline.election_pipeline import current_election_cycle
 from app.pipeline.fetch import ballot_pdf
 from app.pipeline.fetch.ballot_lookup import lookup_for_state
+from app.pipeline.fetch.ballot_measure_pdf_sources import unread_reason
 from app.pipeline.analyze.election_coverage import vacuous_corroboration_clause
 from app.pipeline.fetch.ballot_pdf_sources import source_for_town as ballot_pdf_source_for_town
 from app.pipeline.fetch.ballot_pdf_sources import town_names_for_state as ballot_pdf_town_names_for_state
@@ -1104,6 +1105,10 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
             # absence after checking — admin accept-absence). The note
             # itself stays internal.
             "basis": "operator" if coverage and coverage.operator_note else "source",
+            # Why this state's measures are not read at all (its official
+            # site blocks automated access, or it publishes no list),
+            # written for a voter; null for a state Civitas reads.
+            "unreadReason": unread_reason(state),
         },
         "officialLookup": lookup_for_state(state),
         "statewideRaces": statewide_races,

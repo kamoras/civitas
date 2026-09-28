@@ -1,6 +1,6 @@
 """Generic ballot-measure PDF pipeline stage: fetch, cache, and normalize
 statewide ballot-measure PDFs for ANY state that has a registered source
-and parsing strategy — no API key, no Vote Smart.
+and parsing strategy — the only way Civitas reads ballot measures.
 
 This is deliberately NOT one parser that guesses an arbitrary state's PDF
 layout. Every state's Secretary of State (or equivalent) publishes its
@@ -261,12 +261,9 @@ MULTI_DOCUMENT_STRATEGIES = {
     "ut_general_election_certification": ut_fetch_measures,
 }
 
-# Longer than Vote Smart's 12h (MEASURE_CACHE_TTL_HOURS in
-# ballot_measures.py) — that shorter window exists because Vote Smart's
-# own feed can change under us mid-cycle; these are static PDFs a state
-# republishes wholesale on the rare occasion they change, so there is
-# nothing to catch by polling more often. Matches the platform's general
-# 72h API-cache default instead. That applies to a non-empty list only:
+# These are documents a state republishes wholesale on the rare occasion
+# they change, so there is little to catch by polling more often: the
+# platform's general 72h API-cache default. That applies to a non-empty list only:
 # an empty answer ([], a confirmed none) is cached for
 # cache.EMPTY_RESPONSE_TTL_HOURS (6h), so every nightly run re-checks it
 # and a measure certified after a "none" appears the next night. A
@@ -292,8 +289,7 @@ def is_configured(state: str) -> bool:
 
 def _to_measure(state: str, parsed: dict, election_date: str, source_url: str) -> dict:
     """One parsed proposition -> the combined raw+detail shape
-    election_pipeline._upsert_measure expects. Unlike Vote Smart (a list
-    call, then a per-item detail call), a strategy function already
+    election_pipeline._upsert_measure expects. A strategy function
     carries every field in one pass, so the same dict is passed to
     _upsert_measure as both `raw` and `detail` — there's nothing a second
     fetch would add.

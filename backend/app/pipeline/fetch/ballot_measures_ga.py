@@ -32,8 +32,11 @@ Board" — a label here, not claimed as the ballot title); the ballot
 question — the words after the answer boxes, without the quotation marks
 that enclose boxes and question together — as official_title (it is the
 text the resolution requires on the ballot, as Idaho's reader stores its
-questions); "Summary: <summary>" as official_summary. The caption,
-question and summary drafters are named together in title_authority.
+questions), with title_authority the General Assembly, whose resolution
+writes it; "Summary: <summary>" — under the booklet's own heading — as
+official_summary, in its own field because it has other drafters (the
+Attorney General, Secretary of State and Legislative Counsel, as the
+booklet's introduction names them): one quote, one drafter.
 The booklet prints no yes/no explanation and no fiscal statement; those
 stay None. All amendments are General Assembly resolutions (Georgia has
 no initiative).
@@ -55,7 +58,8 @@ challenge (403), web.archive.org was refused by its egress policy, and
 the landing page's markup could not be seen. The booklet itself is real:
 the fixture is the Secretary's file as republished by Augusta-Richmond
 County (see its _source). A failed or challenged fetch is None; the real
-page with no such link is NotYetPublished.
+page with no such link is NotYetPublished, with no deadline (the
+booklet exists only in a year with an amendment).
 """
 
 import logging
@@ -72,10 +76,7 @@ logger = logging.getLogger(__name__)
 
 LANDING_URL = "https://sos.ga.gov/page/proposed-georgia-constitution-amendments"
 ORIGIN = "Georgia General Assembly"
-TITLE_AUTHORITY = (
-    "Georgia General Assembly (ballot question); Constitutional Amendments Publication Board "
-    "(short caption); Attorney General, Secretary of State and Legislative Counsel (summary)"
-)
+TITLE_AUTHORITY = "Georgia General Assembly"
 
 COLUMNS = 4
 # The booklet's section title pages carry a dozen centred words (2026:
@@ -306,7 +307,11 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
         if "Constitution" not in page_html:
             # A challenge or error page, not the Secretary's page.
             return None
-        raise NotYetPublished(f"the Georgia Secretary of State's {year} constitutional amendments booklet")
+        # The booklet exists only in a year with an amendment on the
+        # ballot, so its absence can be the answer: no deadline.
+        raise NotYetPublished(
+            f"the Georgia Secretary of State's {year} constitutional amendments booklet", deadline_applies=False,
+        )
     raw = await get_bytes(client, url, "GA constitutional amendments booklet")
     if raw is None:
         return None

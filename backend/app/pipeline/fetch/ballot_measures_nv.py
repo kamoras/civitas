@@ -47,7 +47,8 @@ copy the fixture was made from is the Secretary's document as republished
 by Eureka County's clerk (see the fixture's _source). A challenge page,
 a page that isn't the year's petitions page, or more than one matching
 link is a failure (None) — never "not yet" and never "none"; a real
-page with no booklet link is NotYetPublished.
+page with no booklet link is NotYetPublished, with no deadline (a
+general with no statewide question may have no booklet).
 """
 
 import logging
@@ -208,7 +209,11 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
         logger.warning("NV %d petitions page is not the page this reader knows (bot challenge?)", year)
         return None
     if url is None:
-        raise NotYetPublished(f"the Nevada Secretary of State's {year} Statewide Ballot Questions booklet")
+        # Published for a general that has a statewide question; a year
+        # with none may have no booklet at all, so no deadline.
+        raise NotYetPublished(
+            f"the Nevada Secretary of State's {year} Statewide Ballot Questions booklet", deadline_applies=False,
+        )
     raw = await get_bytes(client, url, "NV statewide ballot questions booklet")
     if raw is None:
         return None

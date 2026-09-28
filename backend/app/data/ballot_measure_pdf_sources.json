@@ -1,7 +1,46 @@
 {
   "_source": "Hand-verified during research: checked each state's own Secretary of State (or equivalent) site directly for a plain, static, address-free official ballot-measure document (a voter guide/pamphlet covering proposition text), not an API, not a lookup tool.",
-  "_method": "Each entry here has a real, currently-or-recently-fetched document backing it and a registered parsing strategy in ballot_measures_pdf.py's STRATEGIES map. A state with no entry here still falls back to Vote Smart in election_pipeline._sync_ballot_measures — this file only ever ADDS coverage, it never removes a state's chance at data. Two ways to point at a state's PDF: 'url_pattern' (a {year}-substitutable formula, verified stable across two real elections) for states whose filename convention doesn't change; 'landing_page_url' + optional 'keyword' (discover_pdf_url in ballot_measures_pdf.py) for states that republish under a NEW filename every cycle but keep the same stable landing page and human-readable link text (e.g. 'Blue Book 2024') — this is what makes those entries evergreen without a human updating a URL each cycle. 'absent_until_published': true makes a 404 (url_pattern) or a crawl that read every page and found no link (landing_page_url) raise NotYetPublished — not_yet_covered, no alert — instead of reading as a failed ingest; set only where the state is known to post the document late or only in a year with a measure. A fetch that failed is still a failure. A document the state publishes for EVERY general that is still not published past its expected-by cutoff (the entry's 'expected_by_days_before', with 'expected_by_basis' citing the statute where one sets the date; otherwise election_pipeline.DEFAULT_EXPECTED_BY_DAYS_BEFORE) reads as ingest_failed. 'absence_can_mean_none': true marks a document that exists only in a year with a measure (Vermont's notice, Wyoming's propositions), whose absence never hits that cutoff.",
+  "_method": "Each entry here has a real, currently-or-recently-fetched document backing it and a registered parsing strategy in ballot_measures_pdf.py's STRATEGIES map. A state with no entry here is not read at all: election_pipeline._sync_ballot_measures records it not_yet_covered (never confirmed_none), and its page links the official lookup and gives the `reason` from 'unread' — every such state needs one there, and a state leaves 'unread' when it is registered (test_ballot_measures enforces both). Two ways to point at a state's PDF: 'url_pattern' (a {year}-substitutable formula, verified stable across two real elections) for states whose filename convention doesn't change; 'landing_page_url' + optional 'keyword' (discover_pdf_url in ballot_measures_pdf.py) for states that republish under a NEW filename every cycle but keep the same stable landing page and human-readable link text (e.g. 'Blue Book 2024') — this is what makes those entries evergreen without a human updating a URL each cycle. 'absent_until_published': true makes a 404 (url_pattern) or a crawl that read every page and found no link (landing_page_url) raise NotYetPublished — not_yet_covered, no alert — instead of reading as a failed ingest; set only where the state is known to post the document late or only in a year with a measure. A fetch that failed is still a failure. A document the state publishes for EVERY general that is still not published past its expected-by cutoff (the entry's 'expected_by_days_before', with 'expected_by_basis' citing the statute where one sets the date; otherwise election_pipeline.DEFAULT_EXPECTED_BY_DAYS_BEFORE) reads as ingest_failed. 'absence_can_mean_none': true marks a document that exists only in a year with a measure (Vermont's notice, Wyoming's propositions), whose absence never hits that cutoff.",
   "_as_of": "2026-08-07",
+  "_unread_as_of": "Each entry's `reason` is served to voters (measureCoverage.unreadReason) and must be true wherever and whenever Civitas runs — no dates, years or 'this election': either a fact about what the state publishes, or that Civitas does not read the state's list automatically yet. Never a claim about network access, which differs between servers. `dev_note` is for developers only (what was found, from where, when) and is never sent by the API.",
+  "unread": {
+    "AZ": {
+      "reason": "Civitas does not read Arizona's official measure list automatically yet.",
+      "dev_note": "2026-09-28 dev container: azsos.gov answered with a Cloudflare challenge."
+    },
+    "DC": {
+      "reason": "Civitas does not read the District of Columbia's official measure list automatically yet.",
+      "dev_note": "2026-09-28: DCBOE had posted only the proposed wording of Initiative 86, not certified ballot wording for the 2026-11-03 election. Revisit once it posts; a reader can then be registered."
+    },
+    "DE": {
+      "reason": "Delaware publishes no statewide list of certified ballot measures.",
+      "dev_note": "2026-09-28: no statewide list of certified measures on elections.delaware.gov; sample ballots refused the dev container's requests."
+    },
+    "IA": {
+      "reason": "Civitas does not read Iowa's official measure list automatically yet.",
+      "dev_note": "2026-09-28: no Secretary of State list of certified measures; voterready.iowa.gov answered the dev container with a Cloudflare challenge."
+    },
+    "NY": {
+      "reason": "Civitas does not read New York's official measure list automatically yet.",
+      "dev_note": "2026-09-28 dev container: elections.ny.gov answered with a Cloudflare challenge."
+    },
+    "OR": {
+      "reason": "Civitas does not read Oregon's official measure list automatically yet.",
+      "dev_note": "2026-09-28 dev container: the measure database required a captcha; the state voters' pamphlet was due 2026-09-29."
+    },
+    "PA": {
+      "reason": "Pennsylvania publishes no list of certified statewide ballot measures before the election.",
+      "dev_note": "2026-09-28: Pennsylvania publishes no list of certified statewide measures before the election."
+    },
+    "RI": {
+      "reason": "Civitas does not read Rhode Island's official measure list automatically yet.",
+      "dev_note": "2026-09-28 dev container: the elections site answered with a Cloudflare challenge."
+    },
+    "WI": {
+      "reason": "Civitas does not read Wisconsin's official measure list automatically yet.",
+      "dev_note": "2026-09-28 dev container: elections.wi.gov answered with a Cloudflare challenge."
+    }
+  },
   "states": {
     "CA": {
       "source_name": "California Secretary of State",

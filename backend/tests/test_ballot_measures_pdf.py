@@ -441,8 +441,8 @@ def test_to_measure_carries_the_drafters_and_an_explicit_official_title():
 
 
 def test_every_registered_state_resolves_to_a_strategy():
-    # A typo'd strategy key silently leaves a state on Vote Smart; every
-    # entry in the bundled registry must resolve.
+    # A typo'd strategy key silently leaves a state unread (not yet
+    # covered); every entry in the bundled registry must resolve.
     from app.pipeline.fetch import ballot_measure_pdf_sources as sources
 
     sources.invalidate_cache()
