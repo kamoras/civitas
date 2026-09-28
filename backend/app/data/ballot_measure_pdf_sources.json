@@ -79,7 +79,7 @@
     "AR": {
       "source_name": "Arkansas Secretary of State",
       "strategy": "ar_general_assembly_referrals",
-      "description": "Initiatives and Referenda page, section '<year> Proposed Initiatives as Certified by the General Assembly': one art. 19 s.22 public notice PDF per issue (Popular Name + Ballot Title, or Ballot Title + Ballot Question for a bond referral). The Attorney-General-certified petition section is not read (the page says a listing there is not ballot certification). Verified live 2026-09-28: Issues 1-4 on the November 3, 2026 ballot. See ballot_measures_ar.py."
+      "description": "Initiatives and Referenda page, section '<year> Proposed Initiatives as Certified by the General Assembly': one art. 19 s.22 public notice PDF per issue (Popular Name + Ballot Title, or Ballot Title + Ballot Question for a bond referral). The Attorney-General-certified petition section is never read as content (the page says a listing there is not ballot certification), and no SOS page records an initiative's certification for the ballot (checked against 2024, when citizen-initiated Issue 2 qualified and the page listed nothing) — so the referrals are returned only when that section for the year says 'None'; otherwise the state reads as not covered. Verified live 2026-09-28: Issues 1-4 on the November 3, 2026 ballot. See ballot_measures_ar.py."
     },
     "FL": {
       "source_name": "Florida Division of Elections",
