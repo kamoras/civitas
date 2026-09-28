@@ -205,16 +205,25 @@ def _switch_to_wal() -> bool:
     return False
 
 
+def _retry_wal() -> None:
+    global _wal_retry_at
+    if _switch_to_wal():
+        with _vec_lock:
+            _wal_retry_at = None
+
+
 def get_vec_conn() -> sqlite3.Connection:
     """Get or create the sqlite-vec connection (singleton, extension loaded)."""
     global _vec_conn, _wal_retry_at
     with _vec_lock:
         if _vec_conn is not None and _wal_retry_at is not None and time.monotonic() >= _wal_retry_at:
-            if _switch_to_wal():
-                _wal_retry_at = None
-                _vec_conn.execute("PRAGMA synchronous=NORMAL")  # safe now: see below
-            else:
-                _wal_retry_at = time.monotonic() + _WAL_RETRY_EVERY_S
+            # On a thread of its own: the try can wait a second, and a
+            # search holding _vec_lock mustn't. The shared connection's
+            # synchronous level stays at the safe default (FULL) until the
+            # next open — other threads use it without the lock, so it
+            # isn't changed under them.
+            _wal_retry_at = time.monotonic() + _WAL_RETRY_EVERY_S
+            threading.Thread(target=_retry_wal, daemon=True, name="vectors-wal-switch").start()
         if _vec_conn is None:
             import sqlite_vec
 

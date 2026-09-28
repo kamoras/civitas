@@ -227,24 +227,22 @@ wait_for_rollout() {
           return 0
         fi
         ;;
-      paused)
-        # This deploy's update stopped (a failure without auto-rollback).
-        log "$service rollout failed (state=$state) — Swarm paused the update"
-        return 1
-        ;;
-      rollback_started|rollback_completed|rollback_paused)
-        # Only this deploy's rollback: a state left from an earlier deploy's
-        # can still be read before Swarm flips to "updating". A rollback
-        # restores the previous spec (checked live: already at
-        # rollback_started), so while the spec still names this release's
-        # image the state can't be this deploy's — keep waiting.
-        local spec_image
-        spec_image=$(docker service inspect "$service" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' 2>/dev/null || echo "")
-        if [[ -n "${IMAGE_TAG:-}" && "${spec_image%%@*}" == *":$IMAGE_TAG" ]]; then
+      paused|rollback_started|rollback_completed|rollback_paused)
+        # Only this deploy's: a state left from an earlier update can still
+        # be read before Swarm flips to "updating". An update that started
+        # before this deploy did isn't this deploy's — keep waiting.
+        local started
+        started=$(docker service inspect "$service" \
+          --format '{{if .UpdateStatus}}{{if .UpdateStatus.StartedAt}}{{.UpdateStatus.StartedAt.Unix}}{{end}}{{end}}' 2>/dev/null || echo "")
+        if [[ "$started" =~ ^[0-9]+$ && -n "${DEPLOY_STARTED:-}" && "$started" -lt $((DEPLOY_STARTED - 5)) ]]; then
           sleep 1
           continue
         fi
-        log "$service rollout failed (state=$state) — Swarm auto-rolled back"
+        if [[ "$state" == paused ]]; then
+          log "$service rollout failed (state=$state) — Swarm paused the update"
+        else
+          log "$service rollout failed (state=$state) — Swarm auto-rolled back"
+        fi
         return 1
         ;;
     esac
@@ -288,6 +286,9 @@ if [[ "$deploy_ok" == "1" ]]; then
     # the ollama removal in #448) keeps running indefinitely as an orphan
     # instead of being torn down on the next deploy — live-verified: the
     # first post-#448 deploy left civitas_ollama at 1/1 with no prune.
+    # When this deploy's updates began: wait_for_rollout tells this
+    # deploy's failure states from ones left by an earlier update by it.
+    DEPLOY_STARTED=$(date +%s)
     docker stack deploy -c "$RESOLVED" civitas --prune --detach=true
   } >> deploy-poll.log 2>&1 || deploy_ok=0
 fi

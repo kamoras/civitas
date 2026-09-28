@@ -64,20 +64,25 @@ export function useHostHistory(token: string, initial?: HostStats) {
       }
       if (cancelled) return;
       const now = Date.now();
-      let rxRate: number | null = null;
-      let txRate: number | null = null;
+      // This container's rate from its counters, plus the rate the API
+      // containers recorded (a container sees only its own interfaces; a
+      // missing part counts as nothing, never a jump). Either alone is
+      // still a reading; neither is none.
+      let ownRx: number | null = null;
+      let ownTx: number | null = null;
       if (s.netRxBytes != null && s.netTxBytes != null) {
         const prev = prevNet.current;
         if (prev && now > prev.time) {
           const dt = (now - prev.time) / 1000;
-          // This container's rate from its counters, plus the rate the
-          // API containers recorded (a container sees only its own
-          // interfaces; a missing record counts as nothing, never a jump).
-          rxRate = Math.max(0, (s.netRxBytes - prev.rx) / dt) + (s.apiNetRxRate ?? 0);
-          txRate = Math.max(0, (s.netTxBytes - prev.tx) / dt) + (s.apiNetTxRate ?? 0);
+          ownRx = Math.max(0, (s.netRxBytes - prev.rx) / dt);
+          ownTx = Math.max(0, (s.netTxBytes - prev.tx) / dt);
         }
         prevNet.current = { rx: s.netRxBytes, tx: s.netTxBytes, time: now };
       }
+      const apiRx = s.apiNetRxRate ?? null;
+      const apiTx = s.apiNetTxRate ?? null;
+      const rxRate = ownRx == null && apiRx == null ? null : (ownRx ?? 0) + (apiRx ?? 0);
+      const txRate = ownTx == null && apiTx == null ? null : (ownTx ?? 0) + (apiTx ?? 0);
       const cpuNow =
         s.cpuBusyTicks != null && s.cpuTotalTicks != null
           ? { busy: s.cpuBusyTicks, total: s.cpuTotalTicks }

@@ -1074,8 +1074,8 @@ export interface HostStats {
   diskUsedPct: number;
   uptimeSeconds: number | null;
   /** This container's cumulative counters (the pipeline's, under Swarm). */
-  netRxBytes?: number;
-  netTxBytes?: number;
+  netRxBytes?: number | null;
+  netTxBytes?: number | null;
   /** Bytes/s the API containers recorded over their last interval; null
    * when there is no recent record (one process runs both roles). */
   apiNetRxRate?: number | null;

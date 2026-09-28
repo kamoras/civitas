@@ -102,21 +102,23 @@ def _already_sent(dedupe_key: str) -> bool:
             db.close()
 
 
-# Dedupe keys this process sent while the history couldn't be written, with
-# when: the database can't stop the next tick from sending again, so memory
-# does — once per process rather than once per watchdog tick. Kept a day
-# (every dedupe key here is at most daily), so it stays small.
-_sent_unrecorded: dict[str, float] = {}
-_UNRECORDED_KEEP_S = 86400.0
+# Dedupe keys this process sent while the history couldn't be written: the
+# database can't stop the next tick from sending again, so memory does —
+# once per process rather than once per watchdog tick. Kept until the
+# process ends (some keys are per outage or permanent, so no age is right),
+# capped so a long outage can't grow it without bound.
+_sent_unrecorded: dict[str, None] = {}
+_UNRECORDED_MAX = 1000
 
 
 def _sent_without_record(dedupe_key: str) -> bool:
-    import time
-
-    now = time.monotonic()
-    for key in [k for k, at in _sent_unrecorded.items() if now - at > _UNRECORDED_KEEP_S]:
-        del _sent_unrecorded[key]
     return dedupe_key in _sent_unrecorded
+
+
+def _remember_unrecorded(dedupe_key: str) -> None:
+    _sent_unrecorded[dedupe_key] = None
+    while len(_sent_unrecorded) > _UNRECORDED_MAX:
+        del _sent_unrecorded[next(iter(_sent_unrecorded))]  # oldest first
 
 
 def _record(subject: str, body: str, dedupe_key: str | None) -> bool:
@@ -164,9 +166,7 @@ def _record(subject: str, body: str, dedupe_key: str | None) -> bool:
     except Exception:
         logger.exception("Failed to record ops alert")
         if dedupe_key:
-            import time
-
-            _sent_unrecorded[dedupe_key] = time.monotonic()
+            _remember_unrecorded(dedupe_key)
     finally:
         if db is not None:
             db.close()

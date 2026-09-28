@@ -126,11 +126,12 @@ _last_purge = 0.0
 def use_path(path: str) -> None:
     """Point the store at `path` (tests; the path is otherwise fixed),
     closing every connection to the previous one."""
-    global _path, _generation
+    global _path, _generation, _swept_day
     with _conns_lock:
         _path = path
         _generation += 1
         _salt_cache.clear()
+        _swept_day = None
         in_use = []
         for conn, lock in _conns:
             # One in use is left to its thread, which closes it when it
@@ -325,6 +326,33 @@ def _days_before(day: str, n: int) -> str:
     return (date.fromisoformat(day) - timedelta(days=n)).isoformat()
 
 
+def _rotate(conn: sqlite3.Connection, kind: str, today: str) -> tuple[tuple | None, bytes | None, int]:
+    """In a transaction: make `kind`'s salt for `today` unless a later day's
+    exists, and delete the days it no longer keeps — together, so an ended
+    day's salt is gone only once a later day's is there to stop a worker
+    behind midnight from making it again. (today's row, yesterday's salt
+    when this kind keeps it, how many rows were deleted)."""
+    keep = _SALT_KEPT_DAYS_AFTER[kind]
+    conn.execute(
+        "INSERT OR IGNORE INTO salt_days (kind, date, salt) SELECT ?, ?, ? "
+        "WHERE NOT EXISTS (SELECT 1 FROM salt_days WHERE kind = ? AND date > ?)",
+        (kind, today, secrets.token_bytes(32), kind, today),
+    )
+    # Earlier days only, never "any other": a worker behind midnight must
+    # not delete the new day's salt another already made.
+    dropped = conn.execute(
+        "DELETE FROM salt_days WHERE kind = ? AND date < ?", (kind, _days_before(today, keep)),
+    ).rowcount
+    row = conn.execute("SELECT salt FROM salt_days WHERE kind = ? AND date = ?", (kind, today)).fetchone()
+    previous = None
+    if keep:
+        prior = conn.execute(
+            "SELECT salt FROM salt_days WHERE kind = ? AND date = ?", (kind, _days_before(today, 1)),
+        ).fetchone()
+        previous = prior[0] if prior else None
+    return row, previous, dropped
+
+
 def _salts_for(kind: str, today: str) -> tuple[bytes | None, bytes | None]:
     """`kind`'s salt for `today` (made if missing) and, for a kind kept past
     its day, yesterday's if the store has it — never made: a key under a
@@ -338,26 +366,8 @@ def _salts_for(kind: str, today: str) -> tuple[bytes | None, bytes | None]:
         cached = _salt_cache.get(kind)
         if cached is not None and cached[0] == today:
             return cached[1], cached[2]
-    keep = _SALT_KEPT_DAYS_AFTER[kind]
-    yesterday = _days_before(today, 1)
     with _Txn() as conn:
-        conn.execute(
-            "INSERT OR IGNORE INTO salt_days (kind, date, salt) SELECT ?, ?, ? "
-            "WHERE NOT EXISTS (SELECT 1 FROM salt_days WHERE kind = ? AND date > ?)",
-            (kind, today, secrets.token_bytes(32), kind, today),
-        )
-        # Earlier days only, never "any other": a worker behind midnight
-        # must not delete the new day's salt another already made.
-        dropped = conn.execute(
-            "DELETE FROM salt_days WHERE kind = ? AND date < ?", (kind, _days_before(today, keep)),
-        ).rowcount
-        row = conn.execute("SELECT salt FROM salt_days WHERE kind = ? AND date = ?", (kind, today)).fetchone()
-        previous = None
-        if keep:
-            prior = conn.execute(
-                "SELECT salt FROM salt_days WHERE kind = ? AND date = ?", (kind, yesterday),
-            ).fetchone()
-            previous = prior[0] if prior else None
+        row, previous, dropped = _rotate(conn, kind, today)
     if dropped:
         # Truncating can wait on another worker's read, so it never runs on
         # a request: the minute tick (forget_stale_salt) does it.
@@ -390,13 +400,19 @@ def _truncate_wal() -> None:
         logger.info("Throttle store WAL still in use — truncating it on the next tick")
 
 
+# The UTC day this process last rotated the store's salts (forget_stale_salt).
+_swept_day: str | None = None
+
+
 def forget_stale_salt() -> None:
     """Drop the salts nothing needs any more, each kind after its own time —
     from this process's memory, and from the store — without waiting for a
     new day's first key: with a salt gone, nothing made with it can be
-    recomputed from an address. At most once a minute (run_maintenance).
-    Creates nothing where the store doesn't exist yet."""
-    global _last_forget
+    recomputed from an address. The store is touched once per new day (and
+    while a WAL truncation is owed), not on every call; called about once a
+    minute (run_maintenance). Creates nothing where the store doesn't exist
+    yet."""
+    global _last_forget, _swept_day
     today = datetime.now(timezone.utc).date().isoformat()
     with _salt_lock:
         # A cache made yesterday also holds the day before's salt.
@@ -406,16 +422,17 @@ def forget_stale_salt() -> None:
         if now - _last_forget < _PURGE_INTERVAL_S:
             return
         _last_forget = now
-    if not os.path.exists(_path):
+        due = _swept_day != today or _truncate_pending
+    if not due or not os.path.exists(_path):
         return
     try:
-        with _Txn() as conn:
-            dropped = sum(
-                conn.execute(
-                    "DELETE FROM salt_days WHERE kind = ? AND date < ?", (kind, _days_before(today, keep)),
-                ).rowcount
-                for kind, keep in _SALT_KEPT_DAYS_AFTER.items()
-            )
+        dropped = 0
+        if _swept_day != today:
+            with _Txn() as conn:
+                # Rotated, not deleted: see _rotate.
+                for kind in _SALT_KEPT_DAYS_AFTER:
+                    dropped += _rotate(conn, kind, today)[2]
+            _swept_day = today
         if dropped or _truncate_pending:
             _truncate_wal()
     except sqlite3.Error:

@@ -307,7 +307,8 @@ class TestForgetStaleSalt:
         monkeypatch.setattr(throttle, "_last_forget", -1e9)
         throttle.forget_stale_salt()
         assert throttle._salt_cache == {}
-        assert _rows(throttle_store, "SELECT COUNT(*) FROM salt_days WHERE kind = 'key'") == [(0,)]
+        # Only the new day's (made so the old could go): the old one is gone.
+        assert _rows(throttle_store, "SELECT date FROM salt_days WHERE kind = 'key'") == [("2099-01-02",)]
 
     def test_todays_is_kept(self, throttle_store, monkeypatch):
         key = throttle.client_key("203.0.113.1", "write")
@@ -504,7 +505,9 @@ class TestAcrossMidnight:
         self._at(monkeypatch, 3, 0, 0, 30)
         monkeypatch.setattr(throttle, "_last_forget", -1e9)
         throttle.forget_stale_salt()
-        assert _rows(throttle_store, "SELECT date FROM salt_days WHERE kind = 'key'") == [("2099-01-02",)]
+        # The 1st is gone; the 2nd stays as the 3rd's previous day.
+        assert _rows(throttle_store, "SELECT date FROM salt_days WHERE kind = 'key' ORDER BY date") == [
+            ("2099-01-02",), ("2099-01-03",)]
         assert throttle.client_key("203.0.113.1", "write").previous == key
 
     def test_a_first_day_has_no_previous_key(self):
@@ -522,8 +525,8 @@ def test_the_visit_fallbacks_salt_is_gone_at_midnight_though_key_salts_stay(thro
     TestAcrossMidnight._at(monkeypatch, 2, 0, 0, 30)
     monkeypatch.setattr(throttle, "_last_forget", -1e9)
     throttle.forget_stale_salt()
-    assert _rows(throttle_store, "SELECT COUNT(*) FROM salt_days WHERE kind = 'day'") == [(0,)]
-    assert _rows(throttle_store, "SELECT date FROM salt_days WHERE kind = 'key'") == [("2099-01-01",)]  # still needed today
+    assert _rows(throttle_store, "SELECT date FROM salt_days WHERE kind = 'day'") == [("2099-01-02",)]
+    assert ("2099-01-01",) in _rows(throttle_store, "SELECT date FROM salt_days WHERE kind = 'key'")  # still needed today
     assert throttle.derived_salt("visits:2099-01-01") != first
     import os
 
@@ -556,10 +559,10 @@ async def test_maintenance_drops_stale_salts_without_any_traffic(throttle_store,
     task = asyncio.create_task(throttle.run_maintenance())
     for _ in range(100):
         await asyncio.sleep(0.01)
-        if _rows(throttle_store, "SELECT COUNT(*) FROM salt_days WHERE kind = 'day'") == [(0,)]:
+        if _rows(throttle_store, "SELECT date FROM salt_days WHERE kind = 'day'") == [("2099-01-02",)]:
             break
     task.cancel()
-    assert _rows(throttle_store, "SELECT COUNT(*) FROM salt_days WHERE kind = 'day'") == [(0,)]
+    assert _rows(throttle_store, "SELECT date FROM salt_days WHERE kind = 'day'") == [("2099-01-02",)]
 
 
 async def test_store_calls_do_not_queue_behind_the_default_executor():
@@ -627,3 +630,28 @@ def test_a_connection_opened_across_a_use_path_is_not_kept(throttle_store, tmp_p
     throttle.hit("b", "k", limit=5, period=60)
     assert calls == [throttle_store, new_store]
     assert _rows(new_store, "SELECT COUNT(*) FROM windows") == [(1,)]
+
+
+
+def test_the_sweep_never_leaves_an_ended_day_recreatable(throttle_store, monkeypatch):
+    """An ended day's salt goes only with a later day's in place: that row
+    is what stops a worker behind midnight from making the ended one again."""
+    TestAcrossMidnight._at(monkeypatch, 1, 12)
+    throttle.derived_salt("visits:2099-01-01")
+    TestAcrossMidnight._at(monkeypatch, 2, 0, 0, 30)
+    monkeypatch.setattr(throttle, "_last_forget", -1e9)
+    throttle.forget_stale_salt()
+    throttle.use_path(throttle_store)  # the lagging worker: nothing cached
+    TestAcrossMidnight._at(monkeypatch, 1, 23, 59, 59)
+    assert throttle.derived_salt("visits:2099-01-01") is None
+
+
+def test_the_sweep_writes_once_a_day(throttle_store, monkeypatch):
+    throttle.client_key("203.0.113.1", "write")
+    began = []
+    real_enter = throttle._Txn.__enter__
+    monkeypatch.setattr(throttle._Txn, "__enter__", lambda self: (began.append(1), real_enter(self))[1])
+    for _ in range(5):
+        monkeypatch.setattr(throttle, "_last_forget", -1e9)  # a minute on, each time
+        throttle.forget_stale_salt()
+    assert len(began) == 1

@@ -325,6 +325,11 @@ async def _daily_salt(date: str) -> bytes:
     return salt
 
 
+# The UTC day this process last made sure the database holds no earlier
+# day's salt (_forget_stale_salts).
+_salt_swept_day: str | None = None
+
+
 # (date, salt, whether it is the container-shared one)
 _fallback_salt: tuple[str, bytes, bool] | None = None
 
@@ -344,19 +349,19 @@ def _forget_stale_salts() -> None:
         _salt_cache = None
     if _fallback_salt is not None and _fallback_salt[0] != today:
         _fallback_salt = None
-    # And from the database: otherwise an ended day's row stays until the
-    # next day's first visit, hours later on a quiet night. Earlier days
-    # only — never today's, which another worker may already use.
-    db = None
-    try:
-        db = VisitsSessionLocal()
-        db.query(VisitSalt).filter(VisitSalt.date < today).delete()
-        db.commit()
-    except Exception:
-        logger.warning("Couldn't drop an ended day's visit salt — retried next tick", exc_info=True)
-    finally:
-        if db is not None:
-            db.close()
+    # And from the database, once per new day: otherwise an ended day's row
+    # stays until the next day's first visit, hours later on a quiet night.
+    # By making today's salt — the one step that deletes earlier days
+    # (_load_or_create_salt) — never by deleting alone: a worker that read
+    # the clock just before midnight refuses to recreate an ended day's salt
+    # only because a later day's row exists.
+    global _salt_swept_day
+    if _salt_swept_day != today:
+        try:
+            _load_or_create_salt(today)
+            _salt_swept_day = today
+        except Exception:
+            logger.warning("Couldn't drop an ended day's visit salt — retried next tick", exc_info=True)
     # The RAM store's salts, including the one the fallback derives from,
     # are dropped by the store's own maintenance (throttle.run_maintenance).
 

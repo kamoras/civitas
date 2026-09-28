@@ -137,18 +137,30 @@ def test_a_salt_from_a_day_that_ended_is_dropped(monkeypatch):
     assert visits._salt_cache is None and visits._fallback_salt is None
 
 
-def test_an_ended_days_salt_row_is_deleted_without_waiting_for_a_visit(db_session):
+def test_an_ended_days_salt_row_is_deleted_without_waiting_for_a_visit(db_session, monkeypatch):
     # A quiet night: no visit makes the new day's salt, so nothing else
-    # would delete yesterday's row for hours.
+    # would delete yesterday's row for hours. Deleted by making today's —
+    # a later day's row is what stops a worker behind midnight from
+    # recreating the ended day's salt.
     from datetime import UTC, datetime
 
+    monkeypatch.setattr(visits, "_salt_swept_day", None)
     today = datetime.now(UTC).date().isoformat()
     db_session.add(VisitSalt(date="2000-01-01", salt="aa" * 32))
-    db_session.add(VisitSalt(date=today, salt="bb" * 32))
     db_session.commit()
     with _use(db_session):
         visits._forget_stale_salts()
-    assert [d for (d,) in db_session.query(VisitSalt.date)] == [today]
+        assert [d for (d,) in db_session.query(VisitSalt.date)] == [today]
+        assert visits._load_or_create_salt("2000-01-01") is None  # the lagging worker
+
+
+def test_the_salt_sweep_writes_once_a_day_not_every_tick(db_session, monkeypatch):
+    monkeypatch.setattr(visits, "_salt_swept_day", None)
+    calls = []
+    monkeypatch.setattr(visits, "_load_or_create_salt", lambda date: calls.append(date))
+    for _ in range(5):
+        visits._forget_stale_salts()
+    assert len(calls) == 1
 
 
 def test_todays_salt_is_kept(monkeypatch):

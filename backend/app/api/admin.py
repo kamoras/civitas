@@ -259,8 +259,10 @@ def _read_system_stats() -> dict:
         stats["apiNetRxRate"] = rates["rxRate"] if rates else None
         stats["apiNetTxRate"] = rates["txRate"] if rates else None
     except Exception:
-        stats["netRxBytes"] = 0
-        stats["netTxBytes"] = 0
+        # Unknown, never zero: the dashboard would read the next good
+        # counters as a lifetime of bytes in one interval.
+        stats["netRxBytes"] = stats["netTxBytes"] = None
+        stats["apiNetRxRate"] = stats["apiNetTxRate"] = None
 
     return stats
 

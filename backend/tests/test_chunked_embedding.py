@@ -300,9 +300,13 @@ def test_a_switch_that_failed_at_open_is_retried_later(tmp_path, monkeypatch):
     if conn is None:
         conn = vs.get_vec_conn()
     monkeypatch.setattr(vs, "_wal_retry_at", 0.0)  # the minute has passed
+    started = []
+    monkeypatch.setattr(vs.threading, "Thread", lambda target, **_kw: type(
+        "T", (), {"start": lambda self: started.append(target)})())
     vs.get_vec_conn()
+    assert len(started) == 1  # handed to a thread, off the caller's path
+    started[0]()  # the thread's run
     assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     assert vs._wal_retry_at is None
-    assert conn.execute("PRAGMA synchronous").fetchone()[0] == 1  # NORMAL, once in WAL
     conn.close()
     monkeypatch.setattr(vs, "_vec_conn", None)
