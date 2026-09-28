@@ -408,7 +408,12 @@ class TestClientMatching:
         ("PEPSICO", "GIBSON, DUNN & CRUTCHER LLP (O/B/O PEPSICO, INC.)", True),
         ("COALITION OF GM CRASH VICTIMS", "HARRIS LAW FIRM OBO ROBBINS SALOMON & PATT OBO COALITION OF GM CRASH VICTIMS", True),
         ("AXNES A S", "A1.9 STRATEGIES LLC O/B/O O'BRIEN, GENTRY, & SCOTT O/B/O AXNES A/S", True),
-        ("ROBBINS SALOMON", "HARRIS LAW FIRM OBO ROBBINS SALOMON & PATT OBO COALITION OF GM CRASH VICTIMS", True),
+        # An intermediate firm in a chain is not the party the filing is for.
+        ("ROBBINS SALOMON", "HARRIS LAW FIRM OBO ROBBINS SALOMON & PATT OBO COALITION OF GM CRASH VICTIMS", False),
+        ("HARRIS LAW FIRM", "HARRIS LAW FIRM OBO ROBBINS SALOMON & PATT OBO COALITION OF GM CRASH VICTIMS", False),
+        # Both names of a d/b/a are the one entity.
+        ("CREDIT UNION NATIONAL ASSOCIATION", "CREDIT UNION NATIONAL ASSOCIATION, INC. DBA AMERICA'S CREDIT UNIONS", True),
+        ("AMERICA S CREDIT UNIONS", "CREDIT UNION NATIONAL ASSOCIATION, INC. DBA AMERICA'S CREDIT UNIONS", True),
         ("RAYTHEON", "RTX CORPORATION (FKA RAYTHEON TECHNOLOGIES CORPORATION)", False),
     ])
     def test_real_client_names_from_2025_filings(self, searched, client, same):
@@ -471,8 +476,8 @@ class TestClientsShown:
         # structured list, every one of them.
         assert d.endswith('by clients matched to a registry search for "COCA COLA": $970,000.')
         assert matches[0]["lobbyingClients"] == [
-            {"client": "THE COCA-COLA COMPANY", "amount": 900_000},
-            {"client": "COCA-COLA BOTTLING COMPANY UNITED, INC.", "amount": 70_000},
+            {"client": "THE COCA-COLA COMPANY", "amount": 900_000, "complete": True},
+            {"client": "COCA-COLA BOTTLING COMPANY UNITED, INC.", "amount": 70_000, "complete": True},
         ]
 
     @pytest.mark.asyncio
@@ -527,6 +532,11 @@ class TestFiledBy:
         ("COCA-COLA COMPANY", "THE COCA-COLA COMPANY", None),
         ("SMITH LLP O/B/O APPLE", "SMITH LLP", None),
         ("WILMERHALE ON BEHALF OF APPLE INC.", "WILMERHALE", None),
+        # The firm named before "on behalf of" isn't always the registrant,
+        # and a d/b/a never names one (review round 10).
+        ("HOLLAND & KNIGHT ON BEHALF OF PEPSICO", "CAPITOL COUNSEL LLC", "CAPITOL COUNSEL LLC"),
+        ("ACME HOLDINGS DBA WIDGETCO", "AKIN GUMP STRAUSS HAUER & FELD", "AKIN GUMP STRAUSS HAUER & FELD"),
+        ("ACME HOLDINGS DBA WIDGETCO", "WIDGETCO", None),
         ("PFIZER INC.", "ALTRIUS GROUP, LLC", "ALTRIUS GROUP, LLC"),
         ("PFIZER INC.", None, None),
     ])

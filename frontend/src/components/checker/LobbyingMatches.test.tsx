@@ -58,6 +58,17 @@ describe("LobbyingMatches", () => {
     expect(screen.getByText(/COCA-COLA CONSOLIDATED:/)).toBeTruthy();
   });
 
+  it("marks per-client amounts as floors when the year's filings were capped", () => {
+    const m = match([]);
+    m.lobbyingClients = [
+      { client: "BIG CO", amount: 3100000, complete: false },
+      { client: "BIG CO SUBSIDIARY", amount: 0, complete: false },
+    ];
+    render(<LobbyingMatches matches={[m]} />);
+    expect(screen.getByText(/BIG CO: at least/)).toBeTruthy();
+    expect(screen.getByText(/BIG CO SUBSIDIARY: none in the filings read/)).toBeTruthy();
+  });
+
   it("lists topically related bills only when there are any", () => {
     render(<LobbyingMatches matches={[match([lobbied({})])]} />);
     expect(screen.queryByText(/TOPICALLY RELATED BILLS/)).toBeNull();

@@ -225,39 +225,50 @@ def is_same_client(searched: str, client_name: str) -> bool:
     )
 
 
-# "On behalf of" as the registry spells it (and "doing business as"): every
-# name after one of these, at any position, is a name the filing is for. A
-# filing can pass through a chain of firms ("HARRIS LAW FIRM OBO ROBBINS
-# SALOMON & PATT OBO COALITION OF GM CRASH VICTIMS"), and "O/B/O" alone is
+# "On behalf of" as the registry spells it. A filing can pass through a
+# chain of firms ("HARRIS LAW FIRM OBO ROBBINS SALOMON & PATT OBO COALITION
+# OF GM CRASH VICTIMS"); the party it is for is the name after the last one,
+# and the firms before it are intermediaries, not clients. "O/B/O" alone is
 # used on 129 of 2025's filings ("GIBSON, DUNN & CRUTCHER LLP (O/B/O
 # PEPSICO, INC.)").
-_ON_BEHALF_RE = re.compile(r" (?:ON BEHALF OF|OBO|O B O|D B A|DBA) ")
+_ON_BEHALF_RE = re.compile(r" (?:ON BEHALF OF|OBO|O B O) ")
+# "Doing business as": one entity under two names, both of which are it.
+_DBA_RE = re.compile(r" (?:D B A|DBA) ")
 
 
 def _names_in_client(client_name: str) -> list[str]:
-    """Every name a registry client field carries, as name keys: the whole
-    field, each parenthesised part, and whatever follows each on-behalf-of
-    or d/b/a marker in any of them."""
+    """The names of the party a registry client field is for, as name keys.
+
+    For the whole field and each parenthesised part: the name after the last
+    on-behalf-of marker when there is one (the firms before it filed or
+    subcontracted), else the part itself; and each side of a d/b/a."""
     parts = [client_name or ""] + re.findall(r"\(([^)]*)", client_name or "")
     names: list[str] = []
     for part in parts:
-        key = _name_key(part)
-        names.append(key)
-        for m in _ON_BEHALF_RE.finditer(f" {key} "):
-            names.append(_name_key(f" {key} "[m.end():]))
-    return names
+        key = f" {_name_key(part)} "
+        last = None
+        for last in _ON_BEHALF_RE.finditer(key):
+            pass
+        party = key[last.end():] if last else key
+        names.extend(_name_key(side) for side in _DBA_RE.split(f" {party.strip()} "))
+    return [n for n in names if n]
 
 
 def _filed_by(client_name: str | None, registrant: str | None) -> str | None:
     """The registrant to name beside a filing's client, or None when it
-    would repeat what the client name already says."""
+    would repeat what the client field already says: the registrant is the
+    client itself (in-house, under any spelling), or the firm the field
+    names before "on behalf of"."""
     if not registrant:
         return None
-    client = _name_key(client_name or "")
-    if client == _name_key(registrant) or search_name(client_name or "") == search_name(registrant):
-        return None
-    if _ON_BEHALF_RE.search(f" {client} "):
-        return None
+    reg_key, reg_search = _name_key(registrant), search_name(registrant)
+    field = f" {_name_key(client_name or '')} "
+    first = _ON_BEHALF_RE.search(field)
+    named = [field[:first.start()]] if first else []
+    named += _DBA_RE.split(field) if not first else []
+    for name in named or [field]:
+        if _name_key(name) == reg_key or search_name(name) == reg_search:
+            return None
     return registrant
 
 
@@ -634,7 +645,10 @@ async def enrich_lobbying_matches_with_lda(
                     # The total's parts by the registry's client names, so
                     # the structured field isn't read as one company's.
                     m["lobbyingClients"] = [
-                        {"client": name, "amount": round(spent)} for name, spent in spend_year.clients
+                        # complete=False: the year's filings ran past the
+                        # page cap, so each amount is a floor.
+                        {"client": name, "amount": round(spent), "complete": spend_year.complete}
+                        for name, spent in spend_year.clients
                     ]
                     amount = (
                         "none reported" if spend_year.total <= 0

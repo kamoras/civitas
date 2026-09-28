@@ -58,7 +58,14 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
                     <ul className="mt-1 space-y-1 pl-3">
                       {(match.lobbyingClients ?? []).map((c) => (
                         <li key={c.client}>
-                          {c.client}: {c.amount > 0 ? formatCurrency(c.amount) : "no amount reported"}
+                          {c.client}:{" "}
+                          {c.complete === false
+                            ? c.amount > 0
+                              ? `at least ${formatCurrency(c.amount)}`
+                              : "none in the filings read"
+                            : c.amount > 0
+                              ? formatCurrency(c.amount)
+                              : "no amount reported"}
                         </li>
                       ))}
                     </ul>

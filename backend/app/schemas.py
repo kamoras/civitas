@@ -316,6 +316,8 @@ class LobbyingClientSchema(CamelModel):
     """One registry client counted in a match's lobbying spend."""
     client: str
     amount: float
+    # False when the year's filings ran past the page cap: amount is a floor.
+    complete: bool = True
 
 
 class LobbyingMatchSchema(CamelModel):

@@ -206,7 +206,9 @@ export interface LobbyingMatch {
   /** Absent from responses served before these fields existed. */
   lobbiedBills?: LobbiedBill[];
   /** lobbyingSpend by the registry's client names, largest first. */
-  lobbyingClients?: { client: string; amount: number }[];
+  /** complete=false: the year's filings ran past the page cap, so each
+   * amount is a floor. */
+  lobbyingClients?: { client: string; amount: number; complete?: boolean }[];
   /** false: the registry lookup failed, so lobbyingSpend is unknown, not $0. */
   lobbyingChecked?: boolean | null;
 }
