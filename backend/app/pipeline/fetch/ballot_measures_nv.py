@@ -36,8 +36,10 @@ The county and city questions the booklet summarises at the end are
 never read (the reading stops at its "County & City Ballot" page).
 
 Discovery: www.nvsos.gov/elections/{year}-petitions ("{year} Petitions &
-General Election Ballot Questions"), the one PDF link whose text or
-address names `year` and "ballot question". NOT VERIFIED FROM THE
+General Election Ballot Questions"): every PDF link whose text or
+address names `year` and "ballot question" is read, and the one whose
+cover is the English statewide booklet's (is_statewide_booklet) is used,
+so a Spanish edition or county summary beside it changes nothing. NOT VERIFIED FROM THE
 DEVELOPMENT ENVIRONMENT: nvsos.gov (and the Secretary's
 silverstateelection.nv.gov) answered every request from there with an
 Imperva JavaScript challenge, and web.archive.org was refused by that
@@ -45,10 +47,11 @@ environment's egress policy, so neither the page's markup nor the
 booklet's address on it could be seen. The booklet itself is real — the
 copy the fixture was made from is the Secretary's document as republished
 by Eureka County's clerk (see the fixture's _source). A challenge page,
-a page that isn't the year's petitions page, or more than one matching
-link is a failure (None) — never "not yet" and never "none"; a real
-page with no booklet link is NotYetPublished, with no deadline (a
-general with no statewide question may have no booklet).
+a page that isn't the year's petitions page, a document that can't be
+fetched, or two documents with the booklet's cover is a failure (None) —
+never "not yet" and never "none"; a real page none of whose documents is
+the booklet is NotYetPublished, with no deadline (a general with no
+statewide question may have no booklet).
 """
 
 import logging
@@ -80,23 +83,41 @@ _YES_START = "A “Yes” vote"
 _NO_START = "A “No” vote"
 
 
-def find_booklet_url(page_html: str, year: int) -> tuple[str | None, bool]:
-    """(url, page_ok). page_ok False: not the year's petitions page (a
-    bot challenge has no such title), or more than one candidate link."""
+def booklet_urls(page_html: str, year: int) -> list[str] | None:
+    """Every PDF on the year's petitions page whose text or address names
+    `year` and "ballot question", or None when this isn't that page (a
+    bot challenge has no such title). Which one is the Secretary's
+    statewide booklet is decided by reading each (is_statewide_booklet):
+    a Spanish edition or a county/city questions summary can sit beside
+    it and match the same words."""
     tree = lxml_html.fromstring(page_html)
     title = " ".join(" ".join(t.text_content().split()) for t in tree.xpath("//title"))
     if f"{year} Petitions" not in title:
-        return None, False
+        return None
     base = PETITIONS_URL.format(year=year)
-    hrefs = set()
+    urls: list[str] = []
     for a in tree.xpath("//a[@href]"):
         href = a.get("href").strip()
         haystack = f"{href} {' '.join(a.text_content().split())}".lower().replace("-", " ").replace("_", " ")
         if str(year) in haystack and "ballot question" in haystack and ".pdf" in href.lower():
-            hrefs.add(urljoin(base, href))
-    if len(hrefs) > 1:
-        return None, False
-    return (hrefs.pop() if hrefs else None), True
+            url = urljoin(base, href)
+            if url not in urls:
+                urls.append(url)
+    return urls
+
+
+def is_statewide_booklet(pages: list[str], year: int) -> bool:
+    """The English statewide booklet's cover, as the Secretary prints it
+    (2026: "S T A T E O F N E V A D A / Statewide Ballot Questions / 2026 /
+    To Appear on the November 3, 2026, General Election Ballot / I S S U E D
+    B Y ... SECRETARY OF STATE"). A Spanish edition's cover is in Spanish
+    and a county/city summary has no such cover, so neither matches."""
+    cover = " ".join((pages[0] if pages else "").split())
+    return (
+        "Statewide Ballot Questions" in cover
+        and f"To Appear on the {long_date(election_day(year))}, General Election Ballot" in cover
+        and "SECRETARY OF STATE" in cover
+    )
 
 
 def _body_lines(pages: list[str], year: int) -> list[str]:
@@ -201,24 +222,37 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
     if page_html is None:
         return None
     try:
-        url, page_ok = find_booklet_url(page_html, year)
+        urls = booklet_urls(page_html, year)
     except Exception:
         logger.exception("NV petitions page was not parseable")
         return None
-    if not page_ok:
+    if urls is None:
         logger.warning("NV %d petitions page is not the page this reader knows (bot challenge?)", year)
         return None
-    if url is None:
+    booklets = []
+    for url in urls:
+        raw = await get_bytes(client, url, "NV ballot questions document")
+        if raw is None:
+            return None
+        try:
+            pages = pdf_pages(raw)
+        except Exception:
+            logger.exception("NV ballot questions document %s was not parseable", url)
+            return None
+        if is_statewide_booklet(pages, year):
+            booklets.append((url, pages))
+    if not booklets:
         # Published for a general that has a statewide question; a year
         # with none may have no booklet at all, so no deadline.
         raise NotYetPublished(
             f"the Nevada Secretary of State's {year} Statewide Ballot Questions booklet", deadline_applies=False,
         )
-    raw = await get_bytes(client, url, "NV statewide ballot questions booklet")
-    if raw is None:
+    if len(booklets) > 1:
+        logger.warning("NV: %d documents carry the %d statewide booklet's cover — refusing", len(booklets), year)
         return None
+    url, pages = booklets[0]
     try:
-        parsed = parse_booklet(pdf_pages(raw), year)
+        parsed = parse_booklet(pages, year)
     except Exception:
         logger.exception("NV ballot questions booklet was not parseable")
         return None

@@ -28,8 +28,12 @@ Re-checked every run (an empty answer is cached only
 EMPTY_RESPONSE_TTL_HOURS), so a late-certified measure turns the next
 night's read into a refusal, not a stale "none".
 
-Discovery: the elections page's one PDF link under /<year>/ whose
-address or label reads "Sample Ballot"; none yet is NotYetPublished.
+Discovery: every PDF link under /<year>/ on the elections page whose
+address or label reads "Sample Ballot" is read, and the one whose first
+page names the state and the general-election date is used — the 2026
+link names neither ("Sample Ballot 9-9-26.pdf"), so a primary's ballot
+beside it is told apart by its content. No such ballot among them (none
+linked, or only a primary's) is NotYetPublished; two is a refusal.
 """
 
 import logging
@@ -60,20 +64,33 @@ _MEASURE_WORDS_RE = re.compile(
 )
 
 
-def find_sample_ballot_url(page_html: str, year: int) -> tuple[str | None, bool]:
+def sample_ballot_urls(page_html: str, year: int) -> list[str] | None:
+    """Every PDF under /<year>/ the elections page labels "Sample Ballot",
+    or None when this isn't that page. Which of them is the general
+    election's is decided by reading each (is_general_ballot): the 2026
+    link names neither the election nor its date ("Sample Ballot
+    9-9-26.pdf"), so a primary's sample ballot posted beside it can only
+    be told apart by what it says."""
     tree = lxml_html.fromstring(page_html)
     title = " ".join(" ".join(t.text_content().split()) for t in tree.xpath("//title"))
     if "Elections" not in title or "MS SOS" not in title:
-        return None, False
-    hrefs = set()
+        return None
+    urls = []
     for a in tree.xpath("//a[@href]"):
         href = a.get("href").strip()
         haystack = f"{unquote(href)} {a.get('aria-label') or ''} {' '.join(a.text_content().split())}".lower()
         if href.lower().endswith(".pdf") and f"/{year}/" in href and "sample ballot" in haystack:
-            hrefs.add(urljoin(ELECTIONS_URL, href))
-    if len(hrefs) > 1:
-        return None, False
-    return (hrefs.pop() if hrefs else None), True
+            url = urljoin(ELECTIONS_URL, href)
+            if url not in urls:
+                urls.append(url)
+    return urls
+
+
+def is_general_ballot(pages: list[str], year: int) -> bool:
+    """Whether this sample ballot is the statewide one for `year`'s
+    general election: its first page names the state and the date."""
+    first = " ".join((pages[0] if pages else "").split())
+    return "STATE OF MISSISSIPPI" in first and long_date(election_day(year)) in first
 
 
 def confirms_none(pages: list[str], year: int) -> bool:
@@ -81,8 +98,7 @@ def confirms_none(pages: list[str], year: int) -> bool:
     election composite with no measure on it."""
     if not pages:
         return False
-    first = " ".join(pages[0].split())
-    if "STATE OF MISSISSIPPI" not in first or long_date(election_day(year)) not in first:
+    if not is_general_ballot(pages, year):
         logger.warning("MS sample ballot does not name the %d general election", year)
         return False
     for i, page in enumerate(pages):
@@ -104,21 +120,30 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
     if page_html is None:
         return None
     try:
-        url, page_ok = find_sample_ballot_url(page_html, year)
+        urls = sample_ballot_urls(page_html, year)
     except Exception:
         logger.exception("MS elections page was not parseable")
         return None
-    if not page_ok:
-        logger.warning("MS elections page is not the page this reader knows, or links two %d sample ballots", year)
+    if urls is None:
+        logger.warning("MS elections page is not the page this reader knows")
         return None
-    if url is None:
+    generals = []
+    for url in urls:
+        raw = await get_bytes(client, url, "MS sample ballot")
+        if raw is None:
+            return None
+        try:
+            pages = pdf_pages(raw)
+        except Exception:
+            logger.exception("MS sample ballot %s was not parseable", url)
+            return None
+        if is_general_ballot(pages, year):
+            generals.append(pages)
+    if not generals:
+        # Every linked sample ballot was read and none is this general's
+        # (only a primary's, or none posted yet): not yet, nothing broken.
         raise NotYetPublished(f"the Mississippi Secretary of State's {year} general-election sample ballot")
-    raw = await get_bytes(client, url, "MS statewide sample ballot")
-    if raw is None:
+    if len(generals) > 1:
+        logger.warning("MS: %d sample ballots name the %d general election — refusing", len(generals), year)
         return None
-    try:
-        none = confirms_none(pdf_pages(raw), year)
-    except Exception:
-        logger.exception("MS sample ballot was not parseable")
-        return None
-    return [] if none else None
+    return [] if confirms_none(generals[0], year) else None

@@ -33,8 +33,9 @@ OCR — elsewhere in the same document it reads "RlLEYOWEN" and
 same rule as Oklahoma's scanned ballot titles, ballot_measures_ok.py), so
 each amendment is stored as its letter and its heading,
 "Constitutional Amendment A" (official_title None), linked to the
-certification itself. The heading pattern is strict, so an OCR misread
-there refuses the state rather than inventing a letter.
+certification itself. The heading pattern is strict and the letters must run A, B, C, ... in
+order, so an OCR misread there (a B read as E) refuses the state rather
+than storing a wrong letter.
 
 Discovery: vote.utah.gov/current-election-information/ ("<year> Election
 Cycle") links the certification as .../<year>-General-Election-
@@ -135,8 +136,14 @@ def parse_certification(text: str, year: int) -> list[dict] | None:
             # misread): refuse rather than drop or guess the letter.
             logger.warning("UT amendment heading %r not in the verified form — refusing", line)
             return None
-    if not letters or answers != len(letters) or len(set(letters)) != len(letters):
+    if not letters or answers != len(letters):
         logger.warning("UT %d: %d amendment headings, %d answer lines — refusing", year, len(letters), answers)
+        return None
+    # The letters are OCR output too. Utah letters a year's amendments
+    # A, B, C, ... in order, so anything else (a B misread as E, a
+    # skipped or repeated letter) is a misread, never stored.
+    if letters != [chr(ord("A") + i) for i in range(len(letters))]:
+        logger.warning("UT %d: amendment letters %s are not A, B, ... in order — refusing", year, letters)
         return None
     return [
         {

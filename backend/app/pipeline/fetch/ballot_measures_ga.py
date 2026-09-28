@@ -64,7 +64,7 @@ booklet exists only in a year with an amendment).
 
 import logging
 import re
-from urllib.parse import urljoin
+from urllib.parse import unquote, urljoin
 
 import httpx
 from lxml import html as lxml_html
@@ -77,6 +77,17 @@ logger = logging.getLogger(__name__)
 LANDING_URL = "https://sos.ga.gov/page/proposed-georgia-constitution-amendments"
 ORIGIN = "Georgia General Assembly"
 TITLE_AUTHORITY = "Georgia General Assembly"
+
+# Georgia generals usually also carry statute-referred "Statewide
+# Referendum Question" items (2018-2024 all did). 2024's were printed in
+# the same booklet ("PROPOSED CONSTITUTIONAL AMENDMENTS AND STATE-WIDE
+# REFERENDUM QUESTION", .../Statewide_Const_Amendments_and_Ballot_
+# Questions_Booklet.pdf), but that shape could not be fetched from the
+# development environment, so this reader cannot read referendum
+# questions. Any sign of them — on the booklet's cover, in its link, or
+# as another same-year document linked from the page — refuses the state
+# (ingest_failed) rather than publishing the amendments as the whole list.
+REFERENDUM_WORDS = ("referend", "ballot question")
 
 COLUMNS = 4
 # The booklet's section title pages carry a dozen centred words (2026:
@@ -92,14 +103,27 @@ _COPY_ON_FILE = "A copy of this entire proposed"
 
 
 def find_booklet_url(page_html: str, year: int) -> tuple[str | None, bool]:
+    """(url, page_ok): the year's one amendments booklet. page_ok False
+    when there are two, or when the page links any other `year` PDF that
+    names a referendum or ballot question — see REFERENDUM_WORDS."""
     tree = lxml_html.fromstring(page_html)
     hrefs = set()
+    others = set()
     for a in tree.xpath("//a[@href]"):
         href = a.get("href").strip()
-        haystack = f"{href} {' '.join(a.text_content().split())}".lower()
-        if ".pdf" in href.lower() and str(year) in haystack and "const" in haystack and "primary" not in haystack:
+        haystack = unquote(f"{href} {' '.join(a.text_content().split())}").lower().replace("_", " ").replace("-", " ")
+        if ".pdf" not in href.lower() or str(year) not in haystack or "primary" in haystack:
+            continue
+        if "const" in haystack and not any(w in haystack for w in REFERENDUM_WORDS):
             hrefs.add(urljoin(LANDING_URL, href))
-    if len(hrefs) > 1:
+        elif any(w in haystack for w in REFERENDUM_WORDS):
+            others.add(urljoin(LANDING_URL, href))
+    if len(hrefs) > 1 or others:
+        if others:
+            logger.warning(
+                "GA %d: a referendum / ballot-question document is linked (%s); this reader reads only the "
+                "amendments booklet — refusing rather than publishing the amendments alone", year, sorted(others),
+            )
         return None, False
     return (hrefs.pop() if hrefs else None), True
 
@@ -158,7 +182,7 @@ def parse_booklet(pages: list[dict], year: int) -> list[dict] | None:
         logger.warning("GA booklet cover does not name the %d general election", year)
         return None
     m = re.search(r"Constitutional Amendments 1-(\d+)", cover)
-    if m is None or "referendum" in cover.lower():
+    if m is None or any(w in cover.lower() for w in REFERENDUM_WORDS):
         logger.warning("GA booklet cover lists no amendment range, or a referendum this reader can't read")
         return None
     expected = int(m.group(1))

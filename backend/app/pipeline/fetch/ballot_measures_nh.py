@@ -29,7 +29,13 @@ The document, verified live 2026-09-28 (1 page):
 Both lines naming the year's general election are required. Each
 numbered question runs to its own "Yes No" line (the ballot's answer
 boxes), and whatever sits between one question's "Yes No" and the next
-number is the heading of the questions under it. Per question, verbatim:
+number is the heading of the questions under it — which must open
+"Questions ..." or "Statutory Question ..." (both verified forms), or
+the document is refused. Page furniture a longer document would carry
+("Page 1 of 2", a bare page number, the running "<year> General
+Election" header) is dropped first, so it never lands in a question or
+becomes the next heading (tested on a two-page layout built from the
+real 2026 text; every real document seen is one page). Per question, verbatim:
 the printed question from its opening quotation mark through anything
 the document prints after the closing one (the legislative vote record
 and the CACR number are printed with the question), as official_summary;
@@ -79,6 +85,8 @@ TITLE_AUTHORITY = "New Hampshire General Court, as published by the New Hampshir
 
 _NUMBERED_RE = re.compile(r"^(\d+)\.\s+(.*)$")
 _YES_NO_RE = re.compile(r"^Yes\s+No$")
+_PAGE_FURNITURE_RE = re.compile(r"^(?:Page\s+)?\d+(?:\s+of\s+\d+)?$", re.IGNORECASE)
+_HEADING_RE = re.compile(r"^(?:Statutory )?Questions? ")
 
 
 def find_questions_url(page_html: str, year: int) -> tuple[str | None, bool]:
@@ -111,11 +119,16 @@ def parse_questions(text: str, year: int) -> list[dict] | None:
         logger.warning("NH questions document lacks its %d general-election statement", year)
         return None
 
+    # A longer document's page furniture — "Page 1 of 2", a bare page
+    # number, the running "<year> General Election" header — is not part
+    # of any question or heading.
+    body_lines = [ln for ln in lines[2:] if not _PAGE_FURNITURE_RE.match(ln) and ln != lines[0]]
+
     results: list[dict] = []
     heading: str | None = None
     pending: list[str] = []
     current: tuple[str, list[str]] | None = None
-    for line in lines[2:]:
+    for line in body_lines:
         if current is not None:
             if not _YES_NO_RE.match(line):
                 current[1].append(line)
@@ -149,6 +162,14 @@ def parse_questions(text: str, year: int) -> list[dict] | None:
             logger.warning("NH numbered line %r is not a quoted question — refusing", line[:60])
             return None
         if pending:
+            # Text between questions is only ever a section heading
+            # (both verified forms: "Questions Relating to ..." and
+            # "Statutory Question required by ..."). Anything else — an
+            # unquoted paragraph, a note — is something this reader
+            # doesn't know, and refuses the document.
+            if not _HEADING_RE.match(pending[0]):
+                logger.warning("NH text %r before question %s is not a heading — refusing", pending[0][:60], m.group(1))
+                return None
             heading, pending = join_lines(pending), []
         if heading is None:
             logger.warning("NH question %s has no heading above it — refusing", m.group(1))

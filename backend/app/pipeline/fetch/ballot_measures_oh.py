@@ -34,7 +34,10 @@ question ("SHALL THE AMENDMENT BE APPROVED?") is official_summary, one
 line per bullet or numbered item as printed; the ballot's own
 'A “YES” vote means ...' / 'A “NO” vote means ...' sentences, where it
 prints them (2026 does, 2022 and 2024 did not), are yes_means /
-no_means. The answer ovals are not text.
+no_means — each running to the period that really ends it (followed by the
+end or a capital; a period ending an abbreviation such as "R.C." or
+"U.S." does not count), and one printed without the other, twice, or
+with no clear end refuses the issue. The answer ovals are not text.
 
 [] (confirmed none) only when every page of the sample ballot is one of
 the three kinds above and none is a state-issue page: the Secretary's
@@ -76,8 +79,44 @@ _ISSUE_ANYWHERE_RE = re.compile(r"\bIssue \d+\b")
 _ISSUE_RE = re.compile(r"^Issue (\d+)$")
 _PAGE_RE = re.compile(r"^Page \d+ of \d+$")
 _ITEM_RE = re.compile(r"^(•|\d+\.\s)")
-_YES_RE = re.compile(r"A “YES” vote means .*?\.")
-_NO_RE = re.compile(r"A “NO” vote means .*?\.")
+_YES_START = "A “YES” vote means "
+_NO_START = "A “NO” vote means "
+# A period that ends a word like these is an abbreviation, not the end of
+# the sentence ("R.C. 3505.062", "the U.S. Constitution", "Sec. 5").
+_ABBREVIATION_RE = re.compile(r"(?:^|\s)(?:(?:[A-Z]\.)*[A-Z]|No|Nos|Sec|Secs|Art|Ch|Const|Stat|Rev|Div|Dist|vs?)$")
+_SENTENCE_BREAK_RE = re.compile(r"\.(?=\s*$|\s+[A-Z“\"(•])")
+
+
+class AmbiguousSentence(ValueError):
+    pass
+
+
+def _sentence_from(body: str, start: int) -> str:
+    """The sentence starting at `start`: through the first period that is
+    followed by the end of the text or by whitespace and a capital (or a
+    quotation mark, bullet or parenthesis), skipping periods that end an
+    abbreviation. No such period is ambiguous."""
+    for m in _SENTENCE_BREAK_RE.finditer(body, start):
+        if _ABBREVIATION_RE.search(body[start:m.start()]):
+            continue
+        return body[start:m.end()]
+    raise AmbiguousSentence(body[start:start + 60])
+
+
+def yes_no_sentences(body: str) -> tuple[str | None, str | None]:
+    """The ballot's own 'A “YES” vote means ...' and 'A “NO” vote means
+    ...' sentences, whole, or (None, None) where it prints neither.
+    Raises AmbiguousSentence when one is printed without the other, more
+    than once, or with no clear end."""
+    found = []
+    for prefix in (_YES_START, _NO_START):
+        starts = [m.start() for m in re.finditer(re.escape(prefix), body)]
+        if len(starts) > 1:
+            raise AmbiguousSentence(prefix)
+        found.append(_sentence_from(body, starts[0]) if starts else None)
+    if (found[0] is None) != (found[1] is None):
+        raise AmbiguousSentence("one of the YES/NO sentences is missing")
+    return found[0], found[1]
 _FOOTER_KINDS = {
     "candidates": re.compile(r"provides the CORRECT TITLES? and ORDER OF OFFICES"),
     "state_issues": re.compile(r"provides the CORRECT ballot format and ballot language for the state issues?"),
@@ -271,13 +310,14 @@ def parse_state_issue_page(page: dict) -> list[dict] | None:
             logger.warning("OH Issue %s: unexpected text after its question: %r", issue["number"], rest[:3])
             return None
         body = _paragraphs(lines[by_at:q_end + 1])
-        yes = _YES_RE.findall(body)
-        no = _NO_RE.findall(body)
-        if len(yes) > 1 or len(no) > 1 or len(yes) != len(no):
-            logger.warning("OH Issue %s: yes/no sentences not in the verified form", issue["number"])
+        try:
+            yes, no = yes_no_sentences(body)
+        except AmbiguousSentence as exc:
+            logger.warning("OH Issue %s: yes/no sentences not in the verified form (%s)", issue["number"], exc)
             return None
-        for sentence in yes + no:
-            body = body.replace(sentence, "")
+        for sentence in (yes, no):
+            if sentence:
+                body = body.replace(sentence, "")
         body = "\n".join(p.strip() for p in body.split("\n") if p.strip())
         origin = re.match(r"^Proposed by (.+)$", body.split("\n")[0])
         results.append({
@@ -287,8 +327,8 @@ def parse_state_issue_page(page: dict) -> list[dict] | None:
             "origin": origin.group(1) if origin else None,
             "official_summary": f"{head.group('kind')}\n{body}",
             "fiscal_impact": None,
-            "yes_means": yes[0] if yes else None,
-            "no_means": no[0] if no else None,
+            "yes_means": yes,
+            "no_means": no,
             "title_authority": TITLE_AUTHORITY,
             "fiscal_authority": None,
         })
