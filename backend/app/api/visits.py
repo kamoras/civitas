@@ -196,7 +196,8 @@ async def run_visit_consumer() -> None:
     its own write blocks the loop the same way the old inline write did.
     """
     while True:
-        _forget_stale_salts()
+        # Off the loop: dropping the throttle's stale salt is a small write.
+        await asyncio.to_thread(_forget_stale_salts)
         try:
             event = await asyncio.wait_for(_visit_queue.get(), timeout=_STALE_SALT_CHECK_S)
         except TimeoutError:
@@ -312,6 +313,10 @@ def _forget_stale_salts() -> None:
         _salt_cache = None
     if _fallback_salt is not None and _fallback_salt[0] != today:
         _fallback_salt = None
+    # The rate limits' own salt, the same rule (api/throttle.py).
+    from app.api import throttle
+
+    throttle.forget_stale_salt()
 
 
 def _fallback_salt_for(date: str) -> bytes:

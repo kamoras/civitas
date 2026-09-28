@@ -229,10 +229,12 @@ async def get_document_comments(
         db=db,
         spend=spend_upstream,
     )
-    # Fetched live, so an error here (a rate limit, a timeout) is this
-    # moment's, not the document's. Answered 200 either way — the page
+    # Fetched live: a retryable error (a rate limit, a timeout) is this
+    # moment's, not the document's, and no cache may keep it. A permanent
+    # one (no such document) is the document's answer, cached like a good
+    # one so a repeat spends nothing. Answered 200 either way — the page
     # shows the message in place of the list.
-    if result.get("error"):
+    if result.get("retryable"):
         return uncached_json(result)
     return JSONResponse(content=result, headers={"Cache-Control": "public, max-age=300"})
 

@@ -6,7 +6,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from app.config import settings
-from app.database import SessionLocal
+from app.database import SCHEDULER_HEARTBEAT_TIER, SessionLocal
 from app.http_client import make_async_client
 from app.pipeline.senate_pipeline import run_senate_pipeline
 from app.pipeline.house_pipeline import run_house_pipeline, is_house_pipeline_running, house_pipeline_age
@@ -674,7 +674,7 @@ def stop_scheduler() -> None:
 # report: rewritten every _HEARTBEAT_MINUTES, and reported only while fresh,
 # so a pipeline service that is down stops advertising a run that won't
 # happen.
-_HEARTBEAT_TIER = "scheduler"
+_HEARTBEAT_TIER = SCHEDULER_HEARTBEAT_TIER
 _HEARTBEAT_KEY = "next-run"
 _HEARTBEAT_MINUTES = 5
 _HEARTBEAT_STALE = timedelta(minutes=3 * _HEARTBEAT_MINUTES)

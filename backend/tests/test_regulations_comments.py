@@ -63,3 +63,32 @@ def test_a_refused_budget_sends_nothing(api, db_session):
 def test_unknown_document(api):
     result = asyncio.run(rg.fetch_comments("https://www.regulations.gov/document/NOPE-1"))
     assert result["comments"] == [] and "not found" in result["error"]
+
+
+def test_an_unknown_document_is_remembered(api, db_session):
+    # A 404 is the answer about the document: asking again would only
+    # spend the shared budget.
+    charged = []
+    first = asyncio.run(rg.fetch_comments("https://www.regulations.gov/document/NOPE-1", db=db_session,
+                                          spend=charged.append))
+    again = asyncio.run(rg.fetch_comments("https://www.regulations.gov/document/NOPE-1", db=db_session,
+                                          spend=charged.append))
+    assert first["retryable"] is False and again["error"] == first["error"]
+    assert charged == [2]
+    assert sum("/documents/" in c for c in api) == 1
+
+
+@pytest.mark.parametrize("status,error", [(429, "Rate limit reached"), (503, "API error: 503")])
+def test_a_failed_lookup_is_not_taken_for_an_unknown_document(monkeypatch, db_session, status, error):
+    def handler(request):
+        return httpx.Response(status)
+
+    monkeypatch.setattr(rg.settings, "DATA_GOV_API_KEY", "k", raising=False)
+    monkeypatch.setattr(rg, "make_async_client", lambda **kw: httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    result = asyncio.run(rg.fetch_comments(URL, db=db_session))
+    assert result["error"] == error and result["retryable"] is True
+    # Not remembered as missing: the next call asks again.
+    monkeypatch.setattr(rg, "make_async_client", lambda **kw: httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda r: httpx.Response(200, json={"data": {"attributes": {"objectId": "x"}}})
+                                      if "/documents/" in r.url.path else httpx.Response(200, json={"data": [], "meta": {}}))))
+    assert "error" not in asyncio.run(rg.fetch_comments(URL, db=db_session))

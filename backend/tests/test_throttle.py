@@ -76,9 +76,25 @@ class TestHit:
         at[0] += period  # the old window has aged out entirely
         assert throttle.hit("b", "k", limit=3, period=period).allowed
 
-    def test_reset_at_is_the_end_of_the_window(self, monkeypatch):
+    def test_allowed_reset_is_when_everything_counted_has_aged_out(self, monkeypatch):
         monkeypatch.setattr(throttle.time, "time", lambda: 125.0)
-        assert throttle.hit("b", "k", limit=3, period=60).reset_at == 180
+        assert throttle.hit("b", "k", limit=3, period=60).reset_at == 240
+
+    @pytest.mark.parametrize("burst_at,limit", [(59.0, 3), (30.0, 3), (1.0, 5), (59.9, 60)])
+    def test_a_refusal_names_the_first_moment_that_works(self, monkeypatch, burst_at, limit):
+        # Waiting until the advertised moment must be enough, and a moment
+        # sooner must not: the end of the fixed window was neither.
+        period = 60.0
+        at = [120 * period + burst_at]
+        monkeypatch.setattr(throttle.time, "time", lambda: at[0])
+        for _ in range(limit):
+            assert throttle.hit("b", "k", limit=limit, period=period).allowed
+        refused = throttle.hit("b", "k", limit=limit, period=period)
+        assert not refused.allowed
+        at[0] = refused.reset_at - 0.5
+        assert not throttle.hit("b", "k", limit=limit, period=period).allowed
+        at[0] = refused.reset_at
+        assert throttle.hit("b", "k", limit=limit, period=period).allowed
 
     def test_expired_windows_are_purged(self, throttle_store, monkeypatch):
         at = [0.0]
@@ -247,3 +263,81 @@ def test_pointing_at_the_same_path_again_reconnects(throttle_store):
     throttle.hit("b", "k", limit=3, period=60)
     throttle.use_path(throttle_store)  # closes this thread's connection
     assert not throttle.hit("b", "k", limit=1, period=60).allowed  # still counting, not failing open
+
+
+def test_a_connection_whose_setup_fails_is_closed(throttle_store, monkeypatch):
+    # Not kept for the next call, so it must not stay open either.
+    opened = []
+    real_connect = sqlite3.connect
+
+    class _Failing:
+        def __init__(self, conn):
+            self.conn, self.closed = conn, False
+
+        def execute(self, sql, *args):
+            raise sqlite3.OperationalError("database is locked")
+
+        def close(self):
+            self.closed = True
+            self.conn.close()
+
+    def connect(*args, **kwargs):
+        wrapped = _Failing(real_connect(*args, **kwargs))
+        opened.append(wrapped)
+        return wrapped
+
+    monkeypatch.setattr(throttle.sqlite3, "connect", connect)
+    throttle.use_path(throttle_store)
+    assert throttle.hit("b", "k", limit=1, period=60).allowed  # fails open
+    assert opened and all(c.closed for c in opened) and throttle._conns == []
+
+
+class TestForgetStaleSalt:
+    def test_yesterdays_salt_is_dropped_without_a_new_key(self, throttle_store, monkeypatch):
+        throttle.client_key("203.0.113.1", "write")
+
+        class _Tomorrow(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return datetime(2099, 1, 2, tzinfo=timezone.utc)
+
+        monkeypatch.setattr(throttle, "datetime", _Tomorrow)
+        monkeypatch.setattr(throttle, "_last_forget", -1e9)
+        throttle.forget_stale_salt()
+        assert throttle._salt_cache is None
+        assert _rows(throttle_store, "SELECT COUNT(*) FROM salts") == [(0,)]
+
+    def test_todays_is_kept(self, throttle_store, monkeypatch):
+        key = throttle.client_key("203.0.113.1", "write")
+        monkeypatch.setattr(throttle, "_last_forget", -1e9)
+        throttle.forget_stale_salt()
+        assert throttle.client_key("203.0.113.1", "write") == key
+
+    def test_creates_no_store(self, throttle_store, monkeypatch):
+        import os
+
+        monkeypatch.setattr(throttle, "_last_forget", -1e9)
+        throttle.forget_stale_salt()
+        assert not os.path.exists(throttle_store)
+
+    def test_at_most_once_a_minute(self, throttle_store, monkeypatch):
+        throttle.client_key("203.0.113.1", "write")
+        began = []
+        real_enter = throttle._Txn.__enter__
+        monkeypatch.setattr(throttle._Txn, "__enter__", lambda self: (began.append(1), real_enter(self))[1])
+        monkeypatch.setattr(throttle, "_last_forget", -1e9)
+        for _ in range(5):
+            throttle.forget_stale_salt()
+        assert began == [1]
+
+
+def test_a_claim_that_must_not_fail_open_raises(monkeypatch, tmp_path):
+    previous = throttle._path
+    throttle.use_path(str(tmp_path / "no-such-dir" / "t.db"))
+    try:
+        with pytest.raises(throttle.Unavailable):
+            throttle.claim("pulse", "k", period=60, fail_open=False)
+        with pytest.raises(throttle.Unavailable):
+            throttle.claim("pulse", None, period=60, fail_open=False)
+    finally:
+        throttle.use_path(previous)

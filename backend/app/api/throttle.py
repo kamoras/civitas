@@ -65,10 +65,12 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
-# /dev/shm is tmpfs on Linux (and in every container); elsewhere, the temp
-# directory — a development machine without /dev/shm runs one process.
-_DEFAULT_DIR = "/dev/shm" if os.path.isdir("/dev/shm") else tempfile.gettempdir()
-_path = os.environ.get("THROTTLE_DB_PATH") or os.path.join(_DEFAULT_DIR, "civitas_throttle.db")
+# Where state shared by the processes of one container, and by nothing else,
+# lives: /dev/shm is tmpfs on Linux (and per container); elsewhere, the temp
+# directory — a development machine without /dev/shm runs one process. Also
+# where main.py keeps the pipeline-process lock.
+RAM_DIR = "/dev/shm" if os.path.isdir("/dev/shm") else tempfile.gettempdir()
+_path = os.environ.get("THROTTLE_DB_PATH") or os.path.join(RAM_DIR, "civitas_throttle.db")
 
 # On the request path: a client held for long because another worker holds
 # the lock is worse than a limit that lets one request through.
@@ -121,12 +123,18 @@ def _conn() -> sqlite3.Connection:
         # check_same_thread off only so use_path can close it; each
         # connection is still used by the one thread that opened it.
         conn = sqlite3.connect(_path, timeout=_BUSY_TIMEOUT_S, isolation_level=None, check_same_thread=False)
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            # In RAM already: a sync would buy nothing.
+            conn.execute("PRAGMA synchronous=OFF")
+            conn.executescript(_SCHEMA)
+        except sqlite3.Error:
+            # Not kept, so the next call retries — close it, or each failed
+            # setup under contention would leave one open.
+            conn.close()
+            raise
         with _conns_lock:
             _conns.append(conn)
-        conn.execute("PRAGMA journal_mode=WAL")
-        # In RAM already: a sync would buy nothing.
-        conn.execute("PRAGMA synchronous=OFF")
-        conn.executescript(_SCHEMA)
         _local.conn, _local.generation = conn, _generation
     return conn
 
@@ -147,7 +155,29 @@ class _Txn:
 class Decision:
     allowed: bool
     remaining: int
-    reset_at: int  # epoch seconds at which the current window ends
+    # Epoch seconds. Allowed: when everything counted so far has aged out
+    # of the sliding window (the limit is whole again). Refused: the
+    # earliest moment the same request would be let through — the end of
+    # the current fixed window is not it, because most of that window
+    # still counts for a while after.
+    reset_at: int
+
+
+def _retry_at(window: int, period: float, current: int, previous: int, limit: int, cost: int) -> int:
+    """When a request of `cost` refused now would next be allowed, given
+    `current` counted in this window and `previous` in the last one."""
+    start = window * period
+    room = limit - current - cost
+    if room >= 0 and previous > 0:
+        # Later in this window, once enough of the previous one has aged.
+        return math.ceil(start + (1 - room / previous) * period)
+    if limit - cost < 0:
+        return int(start + 2 * period)
+    # In the next window, where this one becomes the previous.
+    if current == 0:
+        return int(start + period)
+    fraction = max(0.0, 1 - (limit - cost) / current)
+    return math.ceil(start + (1 + fraction) * period)
 
 
 def _purge_expired(conn: sqlite3.Connection, now: float) -> None:
@@ -164,6 +194,7 @@ def _purge_expired(conn: sqlite3.Connection, now: float) -> None:
 # costs a write transaction; every other key is made without one.
 _salt_cache: tuple[str, bytes] | None = None
 _salt_lock = threading.Lock()
+_last_forget = -_PURGE_INTERVAL_S  # the first call always checks
 
 
 def _salt_for(today: str) -> bytes:
@@ -180,6 +211,30 @@ def _salt_for(today: str) -> bytes:
     with _salt_lock:
         _salt_cache = (today, salt)
     return salt
+
+
+def forget_stale_salt() -> None:
+    """Drop a salt for a day that has ended — from this process's memory,
+    and from the store — without waiting for the new day's first key.
+    Called about once a minute (visits.run_visit_consumer's idle tick): with
+    the old salt gone, no key from that day can be recomputed from an
+    address. Creates nothing where the store doesn't exist yet."""
+    global _salt_cache, _last_forget
+    today = datetime.now(timezone.utc).date().isoformat()
+    with _salt_lock:
+        if _salt_cache is not None and _salt_cache[0] != today:
+            _salt_cache = None
+        now = time.monotonic()
+        if now - _last_forget < _PURGE_INTERVAL_S:
+            return
+        _last_forget = now
+    if not os.path.exists(_path):
+        return
+    try:
+        with _Txn() as conn:
+            conn.execute("DELETE FROM salts WHERE date != ?", (today,))
+    except sqlite3.Error:
+        logger.warning("Could not drop a stale throttle salt", exc_info=True)
 
 
 def client_key(ip: str, purpose: str, scope: str = "") -> str | None:
@@ -212,9 +267,9 @@ def hit(bucket: str, key: str | None, *, limit: int, period: float, cost: int = 
     now = time.time()
     window = int(now // period)
     elapsed = (now - window * period) / period
-    reset_at = int((window + 1) * period)
+    reset_at = int((window + 2) * period)
     if key is None:
-        return Decision(True, limit, reset_at)
+        return Decision(True, limit, int((window + 1) * period))
     try:
         with _Txn() as conn:
             current = conn.execute(
@@ -227,9 +282,11 @@ def hit(bucket: str, key: str | None, *, limit: int, period: float, cost: int = 
                 "SELECT count FROM windows WHERE bucket = ? AND key = ? AND window = ?",
                 (bucket, key, window - 1),
             ).fetchone()
-            estimate = (row[0] if row else 0) * (1 - elapsed) + current
+            previous = row[0] if row else 0
+            estimate = previous * (1 - elapsed) + current
             allowed = estimate <= limit
             if not allowed:
+                reset_at = _retry_at(window, period, current - cost, previous, limit, cost)
                 conn.execute(
                     "UPDATE windows SET count = count - ? WHERE bucket = ? AND key = ? AND window = ?",
                     (cost, bucket, key, window),
@@ -237,15 +294,23 @@ def hit(bucket: str, key: str | None, *, limit: int, period: float, cost: int = 
             _purge_expired(conn, now)
     except sqlite3.Error:
         logger.warning("Throttle %r unavailable — allowing the request", bucket, exc_info=True)
-        return Decision(True, limit, reset_at)
+        return Decision(True, limit, int((window + 1) * period))
     remaining = max(0, math.floor(limit - estimate)) if allowed else 0
     return Decision(allowed, remaining, reset_at)
 
 
-def claim(bucket: str, key: str | None, *, period: float) -> bool:
+class Unavailable(RuntimeError):
+    """The store couldn't answer, for a caller that asked not to fail open."""
+
+
+def claim(bucket: str, key: str | None, *, period: float, fail_open: bool = True) -> bool:
     """Claim `key` unless it was claimed less than `period` seconds ago.
-    True when this caller got it — and for a None key (client_key failed)."""
+    True when this caller got it. When the store can't answer (or `key` is
+    None: client_key failed), True — or, with fail_open=False, Unavailable
+    for a caller whose rule matters more than its availability."""
     if key is None:
+        if not fail_open:
+            raise Unavailable(bucket)
         return True
     now = time.time()
     try:
@@ -258,7 +323,9 @@ def claim(bucket: str, key: str | None, *, period: float) -> bool:
                 (bucket, key, now, now + period, now - period),
             ).fetchone() is not None
             _purge_expired(conn, now)
-    except sqlite3.Error:
+    except sqlite3.Error as error:
+        if not fail_open:
+            raise Unavailable(bucket) from error
         logger.warning("Throttle %r unavailable — allowing the claim", bucket, exc_info=True)
         return True
     return won

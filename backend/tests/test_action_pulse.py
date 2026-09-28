@@ -104,3 +104,21 @@ async def test_a_failure_after_the_vote_commits_keeps_the_claim(db_session):
     assert again.value.status_code == 429
     db_session.expire_all()
     assert db_session.get(ActionIssue, issue_id).concerned_count == 1
+
+
+async def test_a_vote_whose_dedup_cannot_be_checked_is_refused(db_session, tmp_path):
+    # Failing open here would count unlimited votes from one client for
+    # as long as the store is down.
+    from app.api import throttle
+
+    issue_id = _issue(db_session)
+    previous = throttle._path
+    throttle.use_path(str(tmp_path / "no-such-dir" / "t.db"))
+    try:
+        with pytest.raises(HTTPException) as exc:
+            await _vote(db_session, "203.0.113.20", issue_id)
+    finally:
+        throttle.use_path(previous)
+    assert exc.value.status_code == 503
+    db_session.expire_all()
+    assert db_session.get(ActionIssue, issue_id).concerned_count in (0, None)

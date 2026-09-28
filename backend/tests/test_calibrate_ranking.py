@@ -170,3 +170,40 @@ class TestLoader:
         with pytest.raises(explore_ranking.RankingCalibrationMissing):
             explore_ranking.ranking(force_reload=True)
         explore_ranking.reset_cache()
+
+
+def test_a_recalibration_by_another_process_is_picked_up(db_session, monkeypatch):
+    """The explore pipeline recalibrates in the pipeline process; its
+    reset_cache() never reaches the API processes that run Explore search.
+    They notice the stored row change instead."""
+    import json
+    from datetime import timedelta
+
+    from sqlalchemy.orm import Session
+
+    from app.models import ApiCache
+    from app.pipeline import explore_ranking
+    from app.time_utils import utcnow
+
+    from tests.conftest import TEST_RANKING_CALIBRATION
+
+    monkeypatch.setattr("app.database.SessionLocal", lambda: Session(bind=db_session.get_bind()))
+    monkeypatch.setattr(explore_ranking, "_override", None)
+    explore_ranking.reset_cache()
+
+    def store(cap, at):
+        row = db_session.get(ApiCache, ("explore", "ranking_calibration"))
+        payload = json.dumps(json.dumps({**TEST_RANKING_CALIBRATION, "source_diversity_cap": cap}))
+        if row is None:
+            db_session.add(ApiCache(tier="explore", cache_key="ranking_calibration", data_json=payload, cached_at=at))
+        else:
+            row.data_json, row.cached_at = payload, at
+        db_session.commit()
+
+    store(3, utcnow() - timedelta(minutes=5))
+    assert explore_ranking.source_diversity_cap() == 3
+    store(7, utcnow())  # written elsewhere: no reset_cache() here
+    assert explore_ranking.source_diversity_cap() == 3  # within the check interval
+    monkeypatch.setattr(explore_ranking, "_checked_at", 0.0)
+    assert explore_ranking.source_diversity_cap() == 7
+    explore_ranking.reset_cache()

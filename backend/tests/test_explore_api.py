@@ -144,8 +144,16 @@ class TestCommentsCaching:
             return await get_document_comments(None, doc.id, page=1, page_size=25, db=db_session)
 
     async def test_a_failed_fetch_is_never_stored(self, db_session):
-        resp = await self._get(db_session, {"comments": [], "totalElements": 0, "error": "Rate limit reached"})
+        resp = await self._get(db_session, {"comments": [], "totalElements": 0, "error": "Rate limit reached",
+                                            "retryable": True})
         assert resp.headers["Cache-Control"] == "no-store"
+
+    async def test_an_unknown_document_is_cached_like_an_answer(self, db_session):
+        # Not this moment's failure: asking again can't succeed, and
+        # uncached every repeat would spend the shared budget.
+        resp = await self._get(db_session, {"comments": [], "totalElements": 0,
+                                            "error": "Document not found on Regulations.gov", "retryable": False})
+        assert resp.headers["Cache-Control"] == "public, max-age=300"
 
     async def test_a_good_fetch_is_cached_briefly(self, db_session):
         resp = await self._get(db_session, {"comments": [{"id": "1"}], "totalElements": 1})

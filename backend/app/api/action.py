@@ -520,10 +520,25 @@ async def record_pulse_vote(
     endpoint had neither).
     """
     from app.api import throttle
-    from app.api.rate_limit import client_key
+    from app.api.rate_limit import client_ip
 
-    key = await client_key(request, _PULSE_BUCKET, str(body.issue_id))
-    if not await asyncio.to_thread(throttle.claim, _PULSE_BUCKET, key, period=_PULSE_DEDUP_WINDOW):
+    ip = client_ip(request)
+
+    def _claim() -> tuple[str | None, bool]:
+        # Key and claim in one thread hop. Not fail-open: a vote whose
+        # dedup can't be checked is refused rather than counted unchecked.
+        key = throttle.client_key(ip, _PULSE_BUCKET, str(body.issue_id))
+        return key, throttle.claim(_PULSE_BUCKET, key, period=_PULSE_DEDUP_WINDOW, fail_open=False)
+
+    try:
+        key, claimed = await asyncio.to_thread(_claim)
+    except throttle.Unavailable:
+        raise HTTPException(
+            status_code=503,
+            detail="Votes can't be recorded right now; please try again shortly.",
+            headers={"Retry-After": "60"},
+        ) from None
+    if not claimed:
         raise HTTPException(
             status_code=429,
             detail="You've already registered a stance on this issue today.",

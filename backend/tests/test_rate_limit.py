@@ -22,7 +22,8 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import HTTPException
 
-from app.api.rate_limit import client_ip, client_key, write_rate_limit
+from app.api import throttle
+from app.api.rate_limit import client_ip, write_rate_limit
 
 
 def _make_request(peer_ip: str, forwarded_for: str | None = None) -> MagicMock:
@@ -107,7 +108,7 @@ class TestWriteRateLimit:
         keys = [row[0] for row in conn.execute("SELECT key FROM windows")]
         conn.close()
         assert keys and all("8.8.4.7" not in k for k in keys)
-        assert keys == [await client_key(_make_request("8.8.4.7"), "write")]
+        assert keys == [throttle.client_key("8.8.4.7", "write")]
 
 
 @pytest.mark.usefixtures("throttle_store")
@@ -130,6 +131,8 @@ class TestPublicApiRateLimit:
         assert exc.value.status_code == 429
         assert exc.value.headers["X-RateLimit-Remaining"] == "0"
         assert exc.value.headers["X-RateLimit-Reset"] == str(req.state.rl_reset)
+        # Retry-After agrees with the reset it gives, not a fixed guess.
+        assert 1 <= int(exc.value.headers["Retry-After"]) <= 120
 
     async def test_writes_do_not_use_up_the_read_limit(self):
         from types import SimpleNamespace
@@ -141,3 +144,20 @@ class TestPublicApiRateLimit:
         for _ in range(20):
             await write_rate_limit(req)
         await _rate_limit_dep(req)  # a separate bucket
+
+
+@pytest.mark.usefixtures("throttle_store")
+async def test_a_write_refusal_says_when_to_retry(monkeypatch):
+    # Retry-After is the moment the sliding estimate first lets a request
+    # through (throttle._retry_at), not a fixed period.
+    now = 1_000_000 * 60.0 + 30.0
+    monkeypatch.setattr(throttle.time, "time", lambda: now)
+    monkeypatch.setattr("app.api.rate_limit.time.time", lambda: now)
+    req = _make_request("8.8.4.12")
+    for _ in range(20):
+        await write_rate_limit(req)
+    with pytest.raises(HTTPException) as exc:
+        await write_rate_limit(req)
+    decision = throttle.hit("write", throttle.client_key("8.8.4.12", "write"), limit=20, period=60.0)
+    assert not decision.allowed
+    assert exc.value.headers["Retry-After"] == str(int(decision.reset_at - now))

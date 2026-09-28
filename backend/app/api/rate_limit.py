@@ -10,6 +10,8 @@ and the hourly upstream budget holds for the whole backend.
 
 import asyncio
 import ipaddress
+import math
+import time
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
@@ -67,12 +69,15 @@ def client_ip(request: Request) -> str:
     return peer or "unknown"
 
 
-async def client_key(request: Request, purpose: str, scope: str = "") -> str | None:
-    """The key a per-client limit counts this request's client under — an
-    HMAC of client_ip under the throttle store's own salt for the day
-    (throttle.client_key). Never the IP, never joinable to a visit; None
-    when the store can't be read, which the limits treat as "don't limit"."""
-    return await asyncio.to_thread(throttle.client_key, client_ip(request), purpose, scope)
+def retry_after(reset_at: int) -> str:
+    """Retry-After, in whole seconds, for a refusal that lifts at `reset_at`."""
+    return str(max(1, math.ceil(reset_at - time.time())))
+
+
+def limit_client(ip: str, bucket: str, *, limit: int, period: float) -> throttle.Decision:
+    """Key `ip` for `bucket` and count it, in one call — so a limited
+    request costs one thread hop, not one for the key and one for the count."""
+    return throttle.hit(bucket, throttle.client_key(ip, bucket), limit=limit, period=period)
 
 
 class _PerClientLimit:
@@ -82,15 +87,14 @@ class _PerClientLimit:
         self.bucket, self.limit, self.period, self.what = bucket, limit, period, what
 
     async def check(self, request: Request) -> None:
-        key = await client_key(request, self.bucket)
         decision = await asyncio.to_thread(
-            throttle.hit, self.bucket, key, limit=self.limit, period=self.period,
+            limit_client, client_ip(request), self.bucket, limit=self.limit, period=self.period,
         )
         if not decision.allowed:
             raise HTTPException(
                 status_code=429,
                 detail=f"Rate limit exceeded — {self.limit} {self.what} per minute per IP.",
-                headers={"Retry-After": str(int(self.period))},
+                headers={"Retry-After": retry_after(decision.reset_at)},
             )
 
 
@@ -145,7 +149,7 @@ def spend_upstream(calls: int) -> None:
         raise HTTPException(
             status_code=503,
             detail="Live lookups are paused for a few minutes; try again shortly.",
-            headers={"Retry-After": "600"},
+            headers={"Retry-After": retry_after(decision.reset_at)},
         )
 
 

@@ -52,9 +52,17 @@ _REQUIRED_KEYS = frozenset({
     "source_diversity_cap", "fingerprint", "text_shape",
 })
 
+# How often a process checks whether the stored calibration was replaced.
+# The explore pipeline recalibrates in the pipeline process, and its
+# reset_cache() reaches only that process; Explore search runs in the API
+# processes (settings.PROCESS_ROLE), which notice the new row's timestamp.
+_CHECK_STORED_EVERY_SECONDS = 30
+
 _lock = threading.Lock()
 _cached: dict | None = None
 _cached_at: float = 0.0
+_cached_stored_at = None  # the api_cache row's cached_at the cache was loaded from
+_checked_at: float = 0.0
 
 
 class RankingCalibrationMissing(RuntimeError):
@@ -81,6 +89,25 @@ def _load_from_db() -> dict | None:
     return None
 
 
+def _stored_at():
+    """When the stored calibration was written, or None."""
+    try:
+        from app.database import SessionLocal
+        from app.models import ApiCache
+
+        db = SessionLocal()
+        try:
+            return (
+                db.query(ApiCache.cached_at)
+                .filter(ApiCache.tier == _CACHE_NAMESPACE, ApiCache.cache_key == _CACHE_KEY)
+                .scalar()
+            )
+        finally:
+            db.close()
+    except Exception:
+        return None
+
+
 def _load_bundled() -> dict | None:
     try:
         return json.loads(_BUNDLED.read_text())
@@ -90,7 +117,7 @@ def _load_bundled() -> dict | None:
 
 def ranking(*, force_reload: bool = False) -> dict:
     """The calibration in force, database first, bundled file second."""
-    global _cached, _cached_at
+    global _cached, _cached_at, _cached_stored_at, _checked_at
 
     # A complete override stands alone — that is what lets the very first
     # calibration run on a corpus that has never been calibrated, with
@@ -99,7 +126,11 @@ def ranking(*, force_reload: bool = False) -> dict:
         return _override
 
     with _lock:
-        fresh = _cached is not None and (time.monotonic() - _cached_at) < _RELOAD_AFTER_SECONDS
+        now = time.monotonic()
+        fresh = _cached is not None and (now - _cached_at) < _RELOAD_AFTER_SECONDS
+        if fresh and now - _checked_at >= _CHECK_STORED_EVERY_SECONDS:
+            _checked_at = now
+            fresh = _stored_at() == _cached_stored_at
         if fresh and not force_reload:
             # Merge here too, not only on a cache miss. Overriding one key
             # against a warm cache used to be silently ignored, which would
@@ -107,6 +138,7 @@ def ranking(*, force_reload: bool = False) -> dict:
             # and report the starting point as the fitted answer.
             return {**_cached, **_override} if _override else _cached
 
+        stored_at = _stored_at()
         loaded = _load_from_db() or _load_bundled()
         if not loaded:
             raise RankingCalibrationMissing(
@@ -115,6 +147,7 @@ def ranking(*, force_reload: bool = False) -> dict:
                 "the explore pipeline, which calibrates as its last step."
             )
         _cached, _cached_at = loaded, time.monotonic()
+        _cached_stored_at, _checked_at = stored_at, _cached_at
         return {**_cached, **_override} if _override else _cached
 
 

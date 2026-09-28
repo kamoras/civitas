@@ -154,10 +154,13 @@ def _start_pipeline_side_startup_jobs() -> None:
 # count from how uvicorn was launched, each such process takes this lock and
 # a second one refuses to start. /dev/shm is per container, so a rolling
 # update's old and new tasks never contend for it.
-_ROLE_LOCK_PATH = os.path.join(
-    "/dev/shm" if os.path.isdir("/dev/shm") else __import__("tempfile").gettempdir(),
-    "civitas_pipeline_process.lock",
-)
+def _role_lock_path() -> str:
+    from app.api.throttle import RAM_DIR
+
+    return os.path.join(RAM_DIR, "civitas_pipeline_process.lock")
+
+
+_ROLE_LOCK_PATH = _role_lock_path()
 
 
 def _take_pipeline_role_lock() -> int:

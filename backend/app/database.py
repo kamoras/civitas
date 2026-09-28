@@ -1000,6 +1000,12 @@ def _init_db_locked() -> None:
     # (2026-07, see president_pipeline.py's module docstring).
 
 
+# The api_cache tier the scheduler's process records its next run under, for
+# the read-only API process to report (scheduler.get_next_run_time). Here
+# because the data reset must leave it alone.
+SCHEDULER_HEARTBEAT_TIER = "scheduler"
+
+
 # Tables a reset leaves alone: history no pipeline run can rebuild. A reset
 # clears what the pipelines derive from their sources, so the next run can
 # rebuild it with the latest code; these record what already happened.
@@ -1051,9 +1057,12 @@ def reset_all_data() -> dict:
                 # The leases (app.pipeline.lease): the reset's own, which is
                 # what holds other processes' writers off while it runs, and
                 # any other that may be live.
+                # And the scheduler's heartbeat: process coordination, not
+                # data a pipeline derives — wiped, the API would report no
+                # next run until the next beat.
                 from app.pipeline import lease
 
-                wipe = wipe.where(table.c.tier.notin_(lease.TIERS))
+                wipe = wipe.where(table.c.tier.notin_([*lease.TIERS, SCHEDULER_HEARTBEAT_TIER]))
             summary[table.name] = db.execute(wipe).rowcount
         # A kept issue's links to Explore documents name them by rowid, and
         # SQLite hands the rebuilt documents the same rowids again: left, the

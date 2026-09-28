@@ -46,8 +46,11 @@ _OBJECT_ID_CACHE_HOURS = 24 * 365
 _COMMENTS_CACHE_HOURS = 1
 
 
-async def _object_id(client: httpx.AsyncClient, api_key: str, document_id: str) -> str | None:
-    """The document's objectId, which the comments listing is keyed on."""
+async def _object_id(client: httpx.AsyncClient, api_key: str, document_id: str) -> tuple[str | None, int]:
+    """(the document's objectId, which the comments listing is keyed on,
+    or None; the HTTP status). A 404, or a document with no objectId, is
+    Regulations.gov not having it; any other status is a failure of this
+    request, not an answer about the document."""
     resp = await client.get(
         f"{REG_BASE}/documents/{document_id}",
         headers={"X-Api-Key": api_key},
@@ -55,8 +58,18 @@ async def _object_id(client: httpx.AsyncClient, api_key: str, document_id: str) 
     )
     if resp.status_code != 200:
         logger.warning("Regulations.gov document %s returned %d", document_id, resp.status_code)
-        return None
-    return ((resp.json().get("data") or {}).get("attributes") or {}).get("objectId") or None
+        return None, resp.status_code
+    return ((resp.json().get("data") or {}).get("attributes") or {}).get("objectId") or None, 200
+
+
+def _failed(error: str, *, retryable: bool) -> dict:
+    """An answer carrying no comments. `retryable` is whether asking again
+    could succeed: a timeout or a rate limit can, an unknown document
+    can't — which decides whether the answer may be cached (api/explore)."""
+    return {"comments": [], "totalElements": 0, "error": error, "retryable": retryable}
+
+
+_NOT_FOUND = "Document not found on Regulations.gov"
 
 
 async def fetch_comments(
@@ -83,11 +96,11 @@ async def fetch_comments(
     """
     api_key = settings.DATA_GOV_API_KEY
     if not api_key:
-        return {"comments": [], "totalElements": 0, "error": "API key not configured"}
+        return _failed("API key not configured", retryable=False)
 
     document_id = _extract_document_id(comment_url)
     if not document_id:
-        return {"comments": [], "totalElements": 0, "error": "Could not parse document ID"}
+        return _failed("Could not parse document ID", retryable=False)
 
     size = max(min(page_size, 25), 5)
     sort = f"{'-' if sort_order == 'desc' else ''}{sort_by}"
@@ -95,7 +108,12 @@ async def fetch_comments(
     page_key = f"comments-{document_id}-{size}-{page_number}-{sort}"
     object_id = page = None
     if db is not None:
-        object_id = (api_cache_get(db, _CACHE_TIER, id_key, max_age_hours=_OBJECT_ID_CACHE_HOURS) or {}).get("objectId")
+        known = api_cache_get(db, _CACHE_TIER, id_key, max_age_hours=_OBJECT_ID_CACHE_HOURS) or {}
+        if known.get("notFound"):
+            # Asked before, and Regulations.gov has no such document: asking
+            # again would only spend the shared budget.
+            return _failed(_NOT_FOUND, retryable=False)
+        object_id = known.get("objectId")
         page = api_cache_get(db, _CACHE_TIER, page_key, max_age_hours=_COMMENTS_CACHE_HOURS)
     if page is not None:
         return page
@@ -106,9 +124,16 @@ async def fetch_comments(
     async with make_async_client() as client:
         try:
             if not object_id:
-                object_id = await _object_id(client, api_key, document_id)
+                object_id, status = await _object_id(client, api_key, document_id)
+                if status == 429:
+                    return _failed("Rate limit reached", retryable=True)
+                if status not in (200, 404):
+                    return _failed(f"API error: {status}", retryable=True)
                 if not object_id:
-                    return {"comments": [], "totalElements": 0, "error": "Document not found on Regulations.gov"}
+                    if db is not None:
+                        api_cache_set(db, _CACHE_TIER, id_key, {"notFound": True},
+                                      normal_ttl_hours=_OBJECT_ID_CACHE_HOURS)
+                    return _failed(_NOT_FOUND, retryable=False)
                 if db is not None:
                     api_cache_set(db, _CACHE_TIER, id_key, {"objectId": object_id},
                                   normal_ttl_hours=_OBJECT_ID_CACHE_HOURS)
@@ -127,11 +152,11 @@ async def fetch_comments(
 
             if resp.status_code == 429:
                 logger.warning("Regulations.gov rate limit hit")
-                return {"comments": [], "totalElements": 0, "error": "Rate limit reached"}
+                return _failed("Rate limit reached", retryable=True)
 
             if resp.status_code != 200:
                 logger.warning("Regulations.gov returned %d", resp.status_code)
-                return {"comments": [], "totalElements": 0, "error": f"API error: {resp.status_code}"}
+                return _failed(f"API error: {resp.status_code}", retryable=True)
 
             data = resp.json()
             raw_comments = data.get("data", [])
@@ -162,10 +187,10 @@ async def fetch_comments(
 
         except httpx.TimeoutException:
             logger.warning("Regulations.gov request timed out")
-            return {"comments": [], "totalElements": 0, "error": "Request timed out"}
+            return _failed("Request timed out", retryable=True)
         except Exception as e:
             logger.warning("Regulations.gov fetch failed: %s", e)
-            return {"comments": [], "totalElements": 0, "error": "Request failed"}
+            return _failed("Request failed", retryable=True)
 
 
 async def submit_comment(
