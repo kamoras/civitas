@@ -1621,6 +1621,11 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
         # (statewide_offices_basis) is still recorded.
         if main_answered and not records and not source.get("statewide_offices_basis"):
             main_answered = False
+        # An EMPTY answer is the same: adapters return [] for "results not
+        # settled yet" (the settle_days gate) and for a cycle whose primary
+        # has not been held, and neither read a single contest. A state
+        # that has really been read has federal nominees in the same feed.
+        main_answered = bool(records)
         records = records or []
 
         # Neither a statewide executive office (Governor, AG, ...) nor a

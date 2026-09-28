@@ -25,7 +25,9 @@
     "NH governor": "Two-year term (N.H. Const. pt. II art. 42).",
     "NM public_lands_commissioner": "Four-year term (N.M. Const. art. V §1, Commissioner of Public Lands).",
     "NM governor": "Elected jointly with the lieutenant governor as one ticket (N.M. Const. art. V §1), so the ticket is stored under governor and there is no separate lt_governor contest.",
-    "HI and IL legislatures": "No upper-chamber term listed: both state senates run a 2-4-4 cycle, so a 2026 seat's term depends on its district's place in the decade."
+    "HI and IL legislatures": "No upper-chamber term listed: both state senates run a 2-4-4 cycle, so a 2026 seat's term depends on its district's place in the decade.",
+    "MA governors_council": "Eight councillors, one per council district, elected every two years (Mass. Const. amend. art. 16; Ballotpedia, Massachusetts Governor's Council).",
+    "WI legislature": "Senators serve four-year staggered terms, odd-numbered districts elected in midterm years; Assembly two (Wis. Const. art. IV, sec. 4-5)."
   },
   "statewide": {
     "AK": {"governor": 4},
@@ -102,7 +104,12 @@
       "governor": 4, "attorney_general": 4, "secretary_of_state": 4, "auditor": 4,
       "treasurer": 4, "public_lands_commissioner": 4
     },
-    "TN": {"governor": 4}
+    "TN": {"governor": 4},
+    "MA": {
+      "governor": 4, "lt_governor": 4, "attorney_general": 4, "secretary_of_commonwealth": 4,
+      "treasurer": 4, "auditor": 4, "governors_council": 2
+    },
+    "WI": {"governor": 4, "lt_governor": 4, "attorney_general": 4, "secretary_of_state": 4, "treasurer": 4}
   },
   "legislature": {
     "AK": {"upper": 4, "lower": 2},
@@ -132,7 +139,8 @@
     "PA": {"upper": 4, "lower": 2},
     "WY": {"upper": 4, "lower": 2},
     "NM": {"upper": 4, "lower": 2},
-    "TN": {"upper": 4, "lower": 2}
+    "TN": {"upper": 4, "lower": 2},
+    "WI": {"upper": 4, "lower": 2}
   },
   "judicial": {
     "FL": {"circuit": 6},

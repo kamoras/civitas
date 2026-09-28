@@ -103,6 +103,40 @@ discovery regex; here one page's outage says nothing about the other
 fetch genuinely failed still reports fetch_failed rather than a healthy
 empty state.
 
+THE STATE'S OWN WINNER MARK is a second gate after the vote count. PD43+
+tags the nominee's Totals cell `winner`, and a named write-in who
+topped the named field is not always one: the real 2026 5th
+Congressional District Republican primary lists Walter Grochowski and
+the 1st Governor's Council District Republican primary lists Mary
+Catherine Dormer (write-in, 455 votes against 1,212 "All Others"), and
+the archive marks neither as having won. Picked on votes alone, both
+were published as nominees. A pick the state has not marked names
+nobody.
+
+STATEWIDE OFFICES (`statewide_offices: true`). The same archive holds
+every office on the primary ballot, found by ONE more search with no
+office filter (`/elections/search/year_from:{year}/year_to:{year}
+/stage:Primaries`, 510 rows in 2026), whose rows name each contest's
+Office and District in the site's own words. Each row's label goes
+through parse_statewide_office: a District of "Statewide" is carried
+into it as the qualifier ("Statewide Auditor" -- the archive prints the
+office bare), and any other district as "{district} District", which is
+how the Governor's Council's eight seats read ("Governor's Council 3rd
+District"). County offices (Register of Probate, County Treasurer,
+Sheriff), District Attorneys and the legislature are refused by the
+same gates they are everywhere else. The legislature is deliberately
+not read: Massachusetts names its districts ("1st Barnstable", "Norfolk,
+Worcester & Middlesex") rather than numbering them, and the shared seat
+parser would fold every "1st <county>" district into one district "1".
+The page keeps "State legislative districts" in its omissions.
+
+Each statewide page is resolved exactly like a federal one (Totals row,
+plurality, the state's own winner mark, the same settle gate), with the
+whole printed name kept. A statewide search or page that cannot be
+fetched or read fails the whole run rather than dropping that office,
+because a missing office under the opt-in renders as "not on this
+ballot".
+
 Verified live 2026-09-08 against the real 2026 primary: Edward J.
 Markey (Senate D, real incumbent, real plurality winner of a 2-way
 field), John Deaton (Senate R, unopposed), Richard E. Neal (CD1 D, real
@@ -116,13 +150,20 @@ plurality winners there are unopposed general-election long shots, not
 incumbents).
 """
 
+import html as html_lib
 import logging
 import re
 
 import httpx
 
 from app.pipeline.fetch.http_utils import fetch_text_with_retry
-from app.pipeline.fetch.state_candidates_common import normalize_party, resolve_confirmed_nominees, surname
+from app.pipeline.fetch.state_candidates_common import (
+    clean_display_name,
+    normalize_party,
+    parse_statewide_office,
+    resolve_confirmed_nominees,
+    surname,
+)
 from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _settled
 from app.pipeline.fetch.state_election_dates import primary_date
 from app.pipeline.rate_limiter import RateLimiter
@@ -143,7 +184,18 @@ _TITLE_RE = re.compile(
 _THEAD_RE = re.compile(r"<thead>(.*?)</thead>", re.DOTALL)
 _CANDIDATE_HEADER_RE = re.compile(r'candidate-id-(\d+)"[^>]*>.*?title="([^"]+)"', re.DOTALL)
 _TOTALS_ROW_RE = re.compile(r'<tr class="total">(.*?)</tr>', re.DOTALL)
-_NUMBER_CLASS_RE = re.compile(r'class="[^"]*\bnumber_(\d+)\b')
+_TOTALS_CELL_RE = re.compile(r'class="([^"]*\bnumber_\d+\b[^"]*)"')
+_NUMBER_CLASS_RE = re.compile(r"\bnumber_(\d+)\b")
+_WINNER_CLASS_RE = re.compile(r"\bwinner\b")
+
+# One row of the all-offices search: its election id, then the Year,
+# Office, District and Stage cells in the site's own words.
+_SEARCH_ROW_RE = re.compile(
+    r'<tr id="election-id-(\d+)" class="election_item[^"]*">(.*?)END tr#election-id', re.DOTALL,
+)
+_CELL_RE = re.compile(r"<td[^>]*>([^<]*)</td>")
+_STAGE_RE = re.compile(r"^([A-Za-z][A-Za-z\s-]*?) Primary$")
+_ANY_TITLE_RE = re.compile(r"<title>PD43\+ &raquo; (\d{4}) (.+?)</title>")
 
 
 async def _discover_election_ids(client: httpx.AsyncClient, state: str, office_id: int, year: int) -> list[str] | None:
@@ -163,11 +215,14 @@ async def _discover_election_ids(client: httpx.AsyncClient, state: str, office_i
     return list(dict.fromkeys(m.group(1) for m in _VIEW_LINK_RE.finditer(html)))
 
 
-def _parse_election(html: str, election_id: str, year: int, office: str) -> tuple[int | None, str, list[tuple[str, int]]] | None:
-    """(district, party, [(surname, votes), ...]) for one election's own
-    detail page, or None if the page's title doesn't match the requested
-    year/office (a defensive cross-check on the search hop's own filter,
-    not trusted blindly) or carries no recognised party."""
+def _parse_election(
+    html: str, election_id: str, year: int, office: str,
+) -> tuple[int | None, str, list[tuple[str, int]], set[str]] | None:
+    """(district, party, [(name, votes), ...], {names the state marks as
+    the winner}) for one election's own detail page, or None if the
+    page's title doesn't match the requested year/office (a defensive
+    cross-check on the search hop's own filter, not trusted blindly) or
+    carries no recognised party."""
     title_match = _TITLE_RE.search(html)
     if title_match is None:
         return None
@@ -178,7 +233,17 @@ def _parse_election(html: str, election_id: str, year: int, office: str) -> tupl
     if party is None:
         return None
     district = int(district_text) if district_text else None
+    parsed = _parse_candidates(html, election_id, office)
+    if parsed is None:
+        return None
+    return district, party, *parsed
 
+
+def _parse_candidates(
+    html: str, election_id: str, label: str,
+) -> tuple[list[tuple[str, int]], set[str]] | None:
+    """([(name, votes), ...], {marked winners}) off one detail page's
+    header and Totals row, or None when the two do not line up."""
     # Scoped to <thead> only, never the whole page: the winning
     # candidate's own Totals-row <td> carries this SAME candidate-id
     # class (verified live), so scanning past </thead> risks the
@@ -188,16 +253,17 @@ def _parse_election(html: str, election_id: str, year: int, office: str) -> tupl
     # candidate's real id to the wrong text.
     thead_match = _THEAD_RE.search(html)
     if thead_match is None:
-        logger.warning("MA results %s: election %s has no <thead>", office, election_id)
+        logger.warning("MA results %s: election %s has no <thead>", label, election_id)
         return None
     header_pairs = _CANDIDATE_HEADER_RE.findall(thead_match.group(1))
     header_ids = [cid for cid, _name in header_pairs]
     names = dict(header_pairs)
     totals_match = _TOTALS_ROW_RE.search(html)
     if totals_match is None:
-        logger.warning("MA results %s: election %s has no Totals row", office, election_id)
+        logger.warning("MA results %s: election %s has no Totals row", label, election_id)
         return None
-    votes = _NUMBER_CLASS_RE.findall(totals_match.group(1))
+    cells = _TOTALS_CELL_RE.findall(totals_match.group(1))
+    votes = [_NUMBER_CLASS_RE.search(c).group(1) for c in cells]
     if len(votes) != len(header_ids):
         # The Totals row's own candidate columns must line up 1:1 with the
         # header's -- a mismatch means this page's markup shape drifted
@@ -207,17 +273,116 @@ def _parse_election(html: str, election_id: str, year: int, office: str) -> tupl
         # check uses).
         logger.warning(
             "MA results %s: election %s has %d candidate columns but %d Totals values",
-            office, election_id, len(header_ids), len(votes),
+            label, election_id, len(header_ids), len(votes),
         )
         return None
 
     choices = []
-    for cid, vote_text in zip(header_ids, votes):
+    marked = set()
+    for cid, vote_text, cell in zip(header_ids, votes, cells):
         # The whole name travels with the votes; the resolver reduces the
         # winner to a surname and keeps the printed name beside it.
         if surname(names[cid]) and vote_text.isdigit():
             choices.append((names[cid], int(vote_text)))
-    return district, party, choices
+            if _WINNER_CLASS_RE.search(cell):
+                marked.add(names[cid])
+    return choices, marked
+
+
+def _resolve(
+    groups: dict[tuple, tuple[list[tuple[str, int]], set[str]]],
+    runoff_threshold_pct: float | None,
+    reduce_name,
+) -> list[dict]:
+    """The shared plurality pick, then the state's own winner mark: a pick
+    the archive does not mark as the winner names nobody (see the module
+    docstring's write-in cases)."""
+    results = []
+    for key, (choices, marked) in groups.items():
+        results.extend(resolve_confirmed_nominees(
+            {key: choices}, runoff_threshold_pct,
+            name_transform=lambda name, marked=marked: reduce_name(name) if name in marked else None,
+        ))
+    return results
+
+
+def _statewide_label(office: str, district: str) -> str:
+    """The contest label parse_statewide_office reads, built from the
+    search row's own Office and District cells."""
+    if district == "Statewide":
+        return f"Statewide {office}"
+    return f"{office} {district} District"
+
+
+def _search_rows(page: str, year: int) -> list[tuple[str, str, str, str, str]]:
+    """(election id, office, district, party code, party as printed) for
+    every regular party
+    primary row of the all-offices search that links a results page."""
+    rows = []
+    for election_id, block in _SEARCH_ROW_RE.findall(page):
+        if f"elections/view/{election_id}/" not in block:
+            continue  # "No Candidates": nothing filed, no page
+        cells = [re.sub(r"\s+", " ", html_lib.unescape(c)).strip() for c in _CELL_RE.findall(block)[:4]]
+        if len(cells) < 4 or cells[0] != str(year):
+            continue
+        stage = _STAGE_RE.match(cells[3])
+        # A SPECIAL primary fills an unexpired term in a separate
+        # contest; it is not this ballot's regular race for the office.
+        if not stage or "special" in stage.group(1).lower():
+            continue
+        party = normalize_party(stage.group(1))
+        if party is None:
+            continue
+        rows.append((election_id, cells[1], cells[2], party, stage.group(1)))
+    return rows
+
+
+def _title_matches(page: str, year: int, office: str, district: str, party_word: str) -> bool:
+    """The detail page's own title names the same year, office, party and
+    district as the search row that linked it."""
+    match = _ANY_TITLE_RE.search(page)
+    if match is None or int(match.group(1)) != year:
+        return False
+    title = re.sub(r"\s+", " ", html_lib.unescape(match.group(2))).strip()
+    expected = f"{office} {party_word} Primary"
+    if district != "Statewide":
+        expected += f" {district} District"
+    return title == expected
+
+
+async def _fetch_statewide(
+    client: httpx.AsyncClient, state: str, year: int, runoff_threshold_pct: float | None,
+) -> list[dict] | None:
+    """Every statewide-office primary winner, or None when the search or
+    any statewide page could not be fetched or read."""
+    url = f"{_BASE_URL}/elections/search/year_from:{year}/year_to:{year}/stage:Primaries"
+    page = await fetch_text_with_retry(client, _rate_limiter, url, f"{state} all-offices search")
+    if page is None:
+        return None
+    groups: dict[tuple, tuple[list[tuple[str, int]], set[str]]] = {}
+    for election_id, office_text, district_text, party, party_word in _search_rows(page, year):
+        parsed_office = parse_statewide_office(_statewide_label(office_text, district_text))
+        if parsed_office is None:
+            continue
+        code, seat = parsed_office
+        detail = await fetch_text_with_retry(
+            client, _rate_limiter, f"{_BASE_URL}/elections/view/{election_id}/", f"{state} election {election_id}",
+        )
+        if detail is None:
+            logger.warning("MA statewide: election %s page fetch failed", election_id)
+            return None
+        if not _title_matches(detail, year, office_text, district_text, party_word):
+            logger.warning("MA statewide: election %s title does not match its search row", election_id)
+            return None
+        parsed = _parse_candidates(detail, election_id, office_text)
+        if parsed is None:
+            return None
+        key = (code, seat, party)
+        if key in groups:
+            logger.warning("MA statewide: election %s duplicates %s", election_id, key)
+            return None
+        groups[key] = parsed
+    return _resolve(groups, runoff_threshold_pct, clean_display_name)
 
 
 async def fetch_confirmed_candidates(
@@ -229,7 +394,7 @@ async def fetch_confirmed_candidates(
     if held and not _settled(held, settle_days):
         return []
 
-    by_group: dict[tuple[str, int | None, str], list[tuple[str, int]]] = {}
+    by_group: dict[tuple[str, int | None, str], tuple[list[tuple[str, int]], set[str]]] = {}
     any_fetch_failed = False
     for office, office_id in _OFFICE_IDS.items():
         election_ids = await _discover_election_ids(client, state, office_id, year)
@@ -257,14 +422,21 @@ async def fetch_confirmed_candidates(
             parsed = _parse_election(html, election_id, year, office)
             if parsed is None:
                 continue
-            district, party, choices = parsed
+            district, party, choices, marked = parsed
             key = (office, district, party)
             if key in by_group:
                 logger.warning("MA results: election %s duplicates an already-seen %s, keeping the first", election_id, key)
                 continue
-            by_group[key] = choices
+            by_group[key] = (choices, marked)
 
-    results = resolve_confirmed_nominees(by_group, runoff_threshold_pct, name_transform=surname)
+    results = _resolve(by_group, runoff_threshold_pct, surname)
     if not results and any_fetch_failed:
         return None
+    if source.get("statewide_offices"):
+        statewide = await _fetch_statewide(client, state, year, runoff_threshold_pct)
+        if statewide is None:
+            # A partial or missing statewide list would be synced as the
+            # whole truth and delete (or never show) real nominees.
+            return None
+        results.extend(statewide)
     return results

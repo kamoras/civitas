@@ -1060,3 +1060,21 @@ async def test_a_failed_main_source_claims_nothing_about_state_offices(db_sessio
     assert db_session.get(Candidate, "S6IL1").confirmed_general is True
     _, coverage = elections_api._statewide_section(db_session, "IL", 2026)
     assert coverage["status"] == elections_api.StatewideCoverageStatus.NOT_YET_COVERED
+
+
+async def test_an_empty_answer_claims_nothing_about_state_offices(db_session, monkeypatch):
+    # Massachusetts in miniature: its adapter returns [] while the primary
+    # is inside its settle_days window, having read nothing. Syncing that
+    # would write "checked, no Governor's race" and delete stored nominees.
+    async def no_calendar(client, cycle):
+        return {}, False
+    monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+    monkeypatch.setattr(sc, "configured_states", lambda: {"MA"})
+    monkeypatch.setitem(sc.STRATEGIES, "ma_pd43", AsyncMock(return_value=[]))
+    _race(db_session, "2026-SEN-MA", "MA")
+    db_session.commit()
+
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+    _, coverage = elections_api._statewide_section(db_session, "MA", 2026)
+    assert coverage["status"] == elections_api.StatewideCoverageStatus.NOT_YET_COVERED

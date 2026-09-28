@@ -191,6 +191,13 @@ _STATEWIDE_OFFICES = [
     # refuses those first.
     ("auditor", re.compile(
         r"\b(?:state|general)\s+auditor\b|\bAuditor\s+of\s+(?:(?:Public\s+)?Accounts|State)\b",
+    # since no county calls its auditor that.
+    # Massachusetts's results archive prints a bare "Auditor" and states
+    # its scope in its own District column, "Statewide" -- the qualifier
+    # the adapter carries into the label (state_candidates_ma).
+    ("auditor", re.compile(
+        r"\b(?:state|statewide|general)\s+auditor\b"
+        r"|\bAuditor\s+of\s+(?:Public\s+Accounts|State|the\s+Commonwealth)\b",
         re.IGNORECASE)),
     # Pennsylvania's title, word order reversed ("Auditor General"); on
     # its 2028 ballot, not 2026's, but its adapter reads every office.
@@ -286,6 +293,17 @@ _STATEWIDE_PHRASES = [
     # this cannot match ("School and" sits between the words).
     ("public_lands_commissioner", re.compile(
         r"\bCommissioner\s+of\s+Public\s+Lands\b", re.IGNORECASE)),
+    # Massachusetts's two, off its 2026 PD43+ primary archive. The
+    # Commonwealth's Secretary is its secretary of state under the name
+    # the state uses (so is Pennsylvania's, Kentucky's and Virginia's);
+    # the Governor's Council is an eight-member elected body seated by
+    # district (Mass. Const. amend. art. 16), and names the governor
+    # without being the governor's race -- which is why it is a phrase
+    # here, matched before the bare "governor" arm can see it.
+    ("secretary_of_commonwealth", re.compile(
+        r"\bSecretary\s+of\s+the\s+Commonwealth\b", re.IGNORECASE)),
+    ("governors_council", re.compile(
+        r"\bGovernor(?:'|\u2019)?s\s+Council\b", re.IGNORECASE)),
 ]
 
 # The locality markers that stay decisive even beside one of the phrases
@@ -309,9 +327,14 @@ _STATEWIDE_DISTRICT_SEATS = {
     # CONGRESSIONAL district — a seat number that has nothing to do with
     # any legislative map.
     "university_regent",
+    # Massachusetts's Governor's Council, eight councillors, one per
+    # council district (each elected by that district's voters).
+    "governors_council",
 }
 
-_STATEWIDE_SEAT_RE = re.compile(r"\bDistrict\s+(?:No\.?\s*)?0*(\d+)\b", re.IGNORECASE)
+# Massachusetts puts the ordinal first: "Governor's Council 3rd District".
+_STATEWIDE_SEAT_RE = re.compile(
+    r"\bDistrict\s+(?:No\.?\s*)?0*(\d+)\b|\b0*(\d+)(?:st|nd|rd|th)\s+District\b", re.IGNORECASE)
 
 # Ballot-question vocabulary in a contest label: New Mexico's
 # "Constitutional Amendment 1" and Louisiana's "CA No. 4" both mention the
@@ -426,6 +449,7 @@ STATEWIDE_OFFICE_LABELS = {
     "lt_governor": "Lieutenant Governor",
     "attorney_general": "Attorney General",
     "secretary_of_state": "Secretary of State",
+    "secretary_of_commonwealth": "Secretary of the Commonwealth",
     "treasurer": "State Treasurer",
     "auditor": "State Auditor",
     "controller": "State Controller",
@@ -446,6 +470,7 @@ STATEWIDE_OFFICE_LABELS = {
     "railroad_commissioner": "Railroad Commissioner",
     "land_office_commissioner": "Commissioner of the General Land Office",
     "public_lands_commissioner": "Commissioner of Public Lands",
+    "governors_council": "Governor's Council",
 }
 
 
@@ -457,7 +482,7 @@ def _statewide_seat(code: str, name: str) -> tuple[str, str | None]:
     if code not in _STATEWIDE_DISTRICT_SEATS:
         return code, None
     match = _STATEWIDE_SEAT_RE.search(name)
-    return code, (match.group(1) if match else None)
+    return code, (next(g for g in match.groups() if g) if match else None)
 
 
 def parse_statewide_office(contest_name: str) -> tuple[str, str | None] | None:
@@ -576,6 +601,10 @@ _STATE_LEG_CHAMBERS = [
     #   — U.S. Senate seats are elected statewide, never by district.
     ("upper", re.compile(r"\bSenate\s+District\b", re.IGNORECASE)),
     ("lower", re.compile(r"\bHouse\s+District\b", re.IGNORECASE)),
+    #   Wisconsin: "REPRESENTATIVE TO THE ASSEMBLY DISTRICT 20", beside
+    #   "STATE SENATOR DISTRICT 7", off its certified 2026 primary canvass
+    #   (99 Assembly contests). No federal office is called that.
+    ("lower", re.compile(r"\bRepresentative\s+to\s+the\s+Assembly\b", re.IGNORECASE)),
 ]
 
 # Some districts elect SEVERAL members from a single contest, with no
