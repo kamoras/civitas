@@ -125,10 +125,19 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
         # name and state (extract_senator_vote matches the same way).
         return member_id if chamber == "house" else (_normalize_for_match(last_name or ""), (state or "").upper())
 
-    index = {
-        key(m.get("bioguideId") or "", m.get("lastNameForVoteMatch") or "", m.get("state") or ""): i
-        for i, m in enumerate(members)
-    }
+    index: dict = defaultdict(list)
+    for i, m in enumerate(members):
+        index[key(m.get("bioguideId") or "", m.get("lastNameForVoteMatch") or "", m.get("state") or "")].append(i)
+
+    def find(p) -> int | None:
+        found_at = index.get(key(p.member_id, p.last_name, p.state)) or []
+        if len(found_at) > 1:
+            # Two senators of one state share a last name (Lindsey and
+            # Darline Graham, SC): the roll call's first name tells them apart.
+            first = _normalize_for_match(p.first_name or "")
+            found_at = [i for i in found_at if _normalize_for_match((members[i].get("name") or "").split(" ")[0]) == first]
+        return found_at[0] if len(found_at) == 1 else None
+
     parties = [(m.get("votingRecord") or {}).get("effectiveParty") or m.get("party") for m in members]
     tenures = load_leadership_tenures()
     spans = [majority_leader_spans(m.get("leadershipTitle"), tenures.get(m.get("bioguideId"))) for m in members]
@@ -137,12 +146,12 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
     positions: dict[int, list] = defaultdict(list)
     for p in db.query(
         RollCallPosition.roll_call_id, RollCallPosition.member_id, RollCallPosition.last_name,
-        RollCallPosition.state, RollCallPosition.party, RollCallPosition.position,
+        RollCallPosition.first_name, RollCallPosition.state, RollCallPosition.party, RollCallPosition.position,
     ).filter(RollCallPosition.roll_call_id.in_(list(rolls))):
         positions[p.roll_call_id].append(p)
 
     found: set[int] = set()
-    # member -> measure -> [(date, number, ref, vote, kind)], kind "with" /
+    # member -> measure -> [(date, session, number, ref, vote, kind)], kind "with" /
     # "break" / "flank".
     stages: list[dict] = [defaultdict(list) for _ in members]
     for rid, rc in rolls.items():
@@ -152,7 +161,7 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
         )
         cast = []
         for p in ps:
-            i = index.get(key(p.member_id, p.last_name, p.state))
+            i = find(p)
             if i is not None:
                 found.add(i)
             vote = _VOTES.get((p.position or "").strip().lower())

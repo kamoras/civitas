@@ -287,14 +287,23 @@ describe("MemberScorecard", () => {
           breakRate: 0.0034,
           expectedBreakRate: 0.004,
           flankBreaks: 1,
-          breakVotes: [{ vote: "Nay", rollCall: { ...recommit.rollCall!, number: 12, billId: "HR.1" } }],
+          breakVotes: [
+            { vote: "Nay", rollCall: { ...recommit.rollCall!, number: 12, billId: "HR.1" } },
+          ],
           flankBreakVotes: [{ vote: "Yea", rollCall: recommit.rollCall! }],
         },
       },
     };
     render(
-      <MemberScorecard member={member} chamber="house" breakdown={counted} district={2}
-        stateName="Tennessee" rank={{ rank: 412, of: 433 }} committees={[]} />
+      <MemberScorecard
+        member={member}
+        chamber="house"
+        breakdown={counted}
+        district={2}
+        stateName="Tennessee"
+        rank={{ rank: 412, of: 433 }}
+        committees={[]}
+      />
     );
     expect(screen.getByText("Votes against party (1)")).toBeInTheDocument();
     expect(screen.getByText("From the right flank, not counted (1)")).toBeInTheDocument();

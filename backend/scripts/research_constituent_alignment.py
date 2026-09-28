@@ -44,7 +44,6 @@ Run:
 
 import argparse
 import pathlib
-import re
 import sys
 import unicodedata
 import urllib.request
@@ -60,6 +59,7 @@ warnings.filterwarnings("ignore")
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from app.pipeline.analyze import score_calculator  # noqa: E402
+from app.pipeline.analyze.party_line_record import measure_key  # noqa: E402
 
 RAW = "https://raw.githubusercontent.com"
 DATAVERSE = "https://dataverse.harvard.edu/api/access/datafile"
@@ -513,21 +513,13 @@ def ascii_upper(s: pd.Series) -> pd.Series:
     return s.map(lambda x: unicodedata.normalize("NFD", str(x)).encode("ascii", "ignore").decode().upper())
 
 
-# Section 12: roll calls that are stages of one measure -- cloture then
-# confirmation of a nominee, cloture then passage of a bill. An amendment,
-# a motion to commit or waive, a point of order is its own question.
-MEASURE_STAGE = re.compile(r"cloture|nomination|motion to proceed|passage|pass\b|joint resolution|concurrent resolution"
-                           r"|the resolution|conference report|ratification|veto|concur", re.I)
-OWN_QUESTION = re.compile(r"amdt|amendment", re.I)
-
-
 def measure_units(R: pd.DataFrame) -> pd.Series:
-    """rollnumber -> the measure a roll call is a stage of, or the roll call
-    itself when it is its own question."""
-    q = R.vote_question.fillna("")
-    stage = q.str.contains(MEASURE_STAGE) & ~(q.str.contains(OWN_QUESTION) & ~q.str.contains("concur", case=False))
-    return pd.Series(np.where(stage & R.bill_number.notna(), R.bill_number.astype(str), "rc" + R.rollnumber.astype(str)),
-                     index=R.rollnumber)
+    """rollnumber -> the measure a roll call is a stage of (section 12: a
+    nominee's cloture and confirmation, a bill's cloture and passage), or the
+    roll call itself when it is its own question -- the pipeline's own rule
+    (party_line_record.measure_key)."""
+    keys = [measure_key(q, b if isinstance(b, str) else None) for q, b in zip(R.vote_question.fillna(""), R.bill_number)]
+    return pd.Series([k or f"rc{n}" for k, n in zip(keys, R.rollnumber)], index=R.rollnumber)
 
 
 def voteview_breaks(p, chamber_prefix, c, centerward=False, once_per_measure=False):

@@ -224,13 +224,14 @@ export default function AlignmentColumn({
           A break: most of the member&apos;s party voted one way, most of the other party the other
           way, and the member sided with the other party. Housekeeping votes (quorum calls,
           adjourning, motions to table or to recommit) don&apos;t count.
-          {counted &&
-            " Each bill or nomination counts once, however many times it came to a vote."}
+          {counted && " Each bill or nomination counts once, however many times it came to a vote."}
         </p>
       </Block>
 
       {facts && flank.length > 0 && (
-        <Block label={`From the ${FLANK[facts.party] ?? "party's"} flank, not counted (${flank.length})`}>
+        <Block
+          label={`From the ${FLANK[facts.party] ?? "party's"} flank, not counted (${flank.length})`}
+        >
           <p className="text-xs leading-relaxed text-ink-min">
             On these votes the {PARTY_SHORT[facts.party] ?? "members"} who broke sit further from
             the {OTHER_PARTY[facts.party] ?? "other party"} than the party does. How far toward the
