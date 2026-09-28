@@ -237,6 +237,7 @@ _DBA_RE = re.compile(r"(?<!\S)(?:D B A|DBA)(?!\S)")
 # phrase can also go on to name another party ("ON BEHALF OF THEIR CLIENT
 # ASLRRA", "ON BEHALF OF ITS WHOLLY OWNED SUBSIDIARY HOSPIRA"). Grammar,
 # not a classification.
+_CLIENT_WORD_RE = re.compile(r"(?<!\S)CLIENTS?(?!\S)")
 _PRONOUN_RE = re.compile(r"^\s*\(?\s*(?:ITSELF|ITS|THEMSELVES|THEIR)(?!\S)")
 _PAREN_RE = re.compile(r"\(([^()]*)\)")
 
@@ -261,9 +262,10 @@ def _split_client(client_name: str) -> tuple[str, list[str]]:
     When the party begins with a pronoun, any name ending the phrase is a
     party: every run of its last words is offered ("THEIR CLIENT ASLRRA",
     "CLIENT ASLRRA", "ASLRRA"), since where a descriptor ends and a name
-    starts can't be read from the field. After "its"/"itself" the name
-    before the marker is a party too ("ON BEHALF OF ITSELF AND ITS
-    SUBSIDIARIES"); after "their" it is the firm filing for its client.
+    starts can't be read from the field. The name before the marker is a
+    party too when the pronoun points back at it ("ON BEHALF OF ITSELF AND
+    ITS SUBSIDIARIES", "... OF THEIR MEMBERS"), not when it introduces the
+    firm's client ("... OF ITS CLIENT BOEING").
     """
     tokens = _client_tokens(client_name)
     markers = list(_MARKER_RE.finditer(tokens))
@@ -280,10 +282,13 @@ def _split_client(client_name: str) -> tuple[str, list[str]]:
     # Every trailing run, the pronoun's own word included: a client can be
     # named "ITS AMERICA".
     runs = [" ".join(words[i:]) for i in range(len(words))]
-    # "Its"/"itself" point back at the name before the marker; "their" is a
-    # firm speaking of its client ("THEIR CLIENT BOEING"), whose filing it
-    # is not.
-    own = not pronoun.group(0).strip(" (").startswith("THEIR")
+    # The pronoun points back at the name before the marker ("ITSELF", "ITS
+    # MEMBERS", "THEIR MEMBERS") unless it introduces the firm's client
+    # ("ITS CLIENT BOEING", "THEIR CLIENTS ..."), whose filing it then is.
+    # One reading this can't separate: a client whose own name begins with
+    # the pronoun, filed by a firm ("SMITH LLP ON BEHALF OF ITS AMERICA"),
+    # also offers the firm; the page shows the full client field beside it.
+    own = not _CLIENT_WORD_RE.search(party)
     return firm, ([before] if own else []) + runs
 
 

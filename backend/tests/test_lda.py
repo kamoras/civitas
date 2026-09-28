@@ -435,8 +435,12 @@ class TestClientMatching:
         ("BOEING", "CAPITOL COUNSEL LLC ON BEHALF OF THEIR CLIENT BOEING", True),
         ("HOSPIRA", "PFIZER ON BEHALF OF ITS WHOLLY OWNED SUBSIDIARY HOSPIRA", True),
         ("PFIZER", "PFIZER ON BEHALF OF ITS WHOLLY OWNED SUBSIDIARY HOSPIRA", True),
-        # "Their client": the firm is not the party (review round 14).
+        # A firm's client: the firm is not the party (review rounds 14-15).
         ("CAPITOL COUNSEL", "CAPITOL COUNSEL LLC ON BEHALF OF THEIR CLIENT BOEING", False),
+        ("AKIN GUMP", "AKIN GUMP STRAUSS HAUER & FELD LLP ON BEHALF OF ITS CLIENT BOEING", False),
+        ("BOEING", "AKIN GUMP STRAUSS HAUER & FELD LLP ON BEHALF OF ITS CLIENT BOEING", True),
+        # "Their members" points back at the association.
+        ("NATIONAL ASSOCIATION OF REALTORS", "NATIONAL ASSOCIATION OF REALTORS ON BEHALF OF THEIR MEMBERS", True),
         # A client whose name begins with the pronoun's word.
         ("ITS AMERICA", "SMITH LLP ON BEHALF OF ITS AMERICA", True),
     ])
