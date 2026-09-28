@@ -11,6 +11,7 @@ import { voteSourceUrl } from "@/lib/sources";
 import { fetchSenatorVotes, fetchRepVotes } from "@/lib/api";
 import CollapsibleSection from "../shared/CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
+import RollCallSummary from "./RollCallSummary";
 import { PARTY_BADGE, policyAreaBadgeClass } from "@/lib/partyStyles";
 import Pagination from "@/components/shared/Pagination";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
@@ -176,6 +177,8 @@ function VoteCard({ vote, expandable = false }: { vote: KeyVote; expandable?: bo
               </a>
             )}
           </div>
+
+          {vote.rollCall && <RollCallSummary rollCall={vote.rollCall} />}
 
           {vote.description && vote.description !== vote.billName && (
             <p className="text-ink">{vote.description}</p>

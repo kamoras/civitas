@@ -17,6 +17,7 @@ from app.pipeline.analyze.sponsorship_analysis import (
     describe_senator_position,
     party_ideology_bounds,
 )
+from app.services.bill_record import roll_call_summaries
 from app.services.pagination import paginate_bounds
 from app.services.score_trends import compute_score_trend_map
 from app.schemas import (
@@ -508,10 +509,9 @@ def get_senator_votes(
     if senator is None:
         return None
 
-    base_q = db.query(KeyVote).filter(
-        KeyVote.senator_id == senator_id,
-        KeyVote.vote_category == category,
-    )
+    base_q = db.query(KeyVote).filter(KeyVote.senator_id == senator_id)
+    if category != "all":
+        base_q = base_q.filter(KeyVote.vote_category == category)
 
     count_all = base_q.count()
     count_yea = base_q.filter(KeyVote.vote == "Yea").count()
@@ -534,6 +534,7 @@ def get_senator_votes(
     # among ties is unstable — without it the same vote can appear on two
     # pages (or neither) across requests.
     votes_db = query.order_by(KeyVote.date.desc(), KeyVote.id.desc()).offset((page - 1) * per_page).limit(per_page).all()
+    roll_calls = roll_call_summaries(db, [v.roll_call for v in votes_db])
 
     def _build(v: KeyVote) -> KeyVoteSchema:
         raw_areas = []
@@ -566,6 +567,7 @@ def get_senator_votes(
             party_leaning=v.party_leaning,
             voted_with_party=v.voted_with_party,
             vote_category=v.vote_category or "key",
+            roll_call=roll_calls.get(v.roll_call),
         )
 
     return PaginatedVotesSchema(

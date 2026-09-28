@@ -33,7 +33,7 @@ class DonorSchema(CamelModel):
     pac_analysis: str | None = None
     # FEC committee_type code ("Q"=Qualified/multicandidate, "N"=Nonqualified,
     # ...) for this donor's own committee, when the donor is one. Reported,
-    # not scored (the PAC-utilization signal that read it left in v6.19).
+    # not scored (the PAC-utilization signal that read it left in v6.20).
     committee_type: str | None = None
 
 
@@ -84,6 +84,10 @@ class KeyVoteSchema(CamelModel):
     party_leaning: Literal["R", "D", "bipartisan"] | None = None
     voted_with_party: bool | None = None
     vote_category: Literal["recent", "key"] = "key"
+    # The Congress record's roll call (bill_record.roll_call_summaries):
+    # date, question, result and each party's tally. None for votes stored
+    # before it was recorded.
+    roll_call: dict | None = None
 
 
 class FundingSchema(CamelModel):

@@ -342,7 +342,11 @@ export default function AboutPage() {
                 </Gist>
                 <P>
                   Measures how far a member&apos;s voting sits from what their seat asks of it — not
-                  raw defection from party. Each member&apos;s break rate on party-labeled votes is
+                  raw defection from party. A vote is party-labeled only when the parties split on
+                  its roll call (at least 65% of one party voting Yea and at most 35% of the other),
+                  and a member breaks when they vote with the other side; a vote with no recorded
+                  roll call doesn&apos;t count. Every break on a profile shows the roll call&apos;s own
+                  party tallies. Each member&apos;s break rate on party-labeled votes is
                   compared with the break rate that members of the same party and chamber show in
                   seats with the same partisan lean (Cook PVI). That expectation is measured from
                   the chamber itself every time the pipeline runs, not set by hand: a separate line
@@ -1323,19 +1327,9 @@ export default function AboutPage() {
             <P>
               When something Civitas published is wrong and cannot be corrected from its sources,
               it is withdrawn, not quietly deleted. Each withdrawal is listed with its date and
-              reason in a public retraction log in the source code, the issue&apos;s page says it was
-              withdrawn and why, and any Bluesky posts about it are removed. The first entry, on
-              27 September 2026, withdrew two issues that a since-fixed clustering step had built from
-              unrelated news stories, and four posts about them written by a language model before
-              posts were changed to quote their sources word for word.
-            </P>
-            <P>
-              The second, on 28 September 2026, withdrew 189 more of those model-written posts. Every
-              one of the 829 was checked against the articles its issue cites
-              (<code>backend/scripts/audit_bluesky_posts.py</code>), and these state a name, number or
-              official the articles never mention, or a sentence with no counterpart in them. 150
-              passed. 490 could not be checked, because at least one of their articles is from AP,
-              Politico or The Hill, which refuse automated reading; they remain up.
+              reason in a public retraction log in the source code, and the issue&apos;s page says it
+              was withdrawn and why. The first entry, on 27 September 2026, withdrew two issues that
+              a since-fixed clustering step had built from unrelated news stories.
             </P>
           </Section>
 
@@ -1868,7 +1862,7 @@ export default function AboutPage() {
                 <div className="space-y-2 mt-2">
                   <Row
                     label="Action Center issues"
-                    value="Synthesizes clustered news coverage into a structured issue: title, summary, and grounded facts"
+                    value="Locates claims in clustered news coverage; the issue's summary and its media coverage lines are quoted from the sources, each with its outlet, and the title is the top article's headline"
                   />
                   <Row
                     label="Justice profile summary"

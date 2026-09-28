@@ -120,7 +120,7 @@ _DIM_LABEL = {
 _CONSISTENCY_CHECKS: list[tuple[str, str, int, str]] = [
     ("pac_ratio", "score_funding_independence", -1,
      "PAC share of receipts (FEC)"),
-    # Raw PAC dollars as well as the share: since v6.19 the share is judged
+    # Raw PAC dollars as well as the share: since v6.20 the share is judged
     # against campaigns of the same size, which leaves the dollars as what
     # it mostly measures (Spearman -0.88 Senate, -0.79 House, 2026-09-28).
     ("pac_dollars", "score_funding_independence", -1,

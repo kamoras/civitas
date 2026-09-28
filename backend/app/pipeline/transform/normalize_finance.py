@@ -297,7 +297,7 @@ def build_top_donors(
             existing["isCommittee"] = True
             meta = committee_meta_map.get(cid)
             # Reported for every committee contributor; no score reads it
-            # since v6.19 removed the PAC-cap utilization signal.
+            # since v6.20 removed the PAC-cap utilization signal.
             if meta and meta.get("type") is not None:
                 existing["committeeType"] = meta["type"]
             if meta and meta.get("connectedOrg"):

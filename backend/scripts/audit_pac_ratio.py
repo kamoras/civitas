@@ -2,7 +2,7 @@
 bundled pre-first-run PAC-share reference.
 
 The PAC-dependency component scores a member's PAC share against the share
-campaigns of the same size typically take in their chamber (v6.19,
+campaigns of the same size typically take in their chamber (v6.20,
 score_calculator._pac_size_fit), and against the chamber median before a
 chamber has a fit.
 The pipeline measures that median from the members it is about to score on

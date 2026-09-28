@@ -44,7 +44,7 @@ targets below are this platform's own live empirical audits, not
 numbers reproduced from either paper — see _calc_funding_independence's
 own "Academic rationale" note for the fuller account. The PAC share is
 scored per chamber against the share campaigns of the same size typically
-take there (v6.19, _pac_size_fit, measured every run —
+take there (v6.20, _pac_size_fit, measured every run —
 compute_funding_reference), with the chamber median as the fallback
 before a chamber has a fit. Top-donor
 concentration is scored against the chamber's measured median, saturating
@@ -193,7 +193,7 @@ logger = logging.getLogger(__name__)
 # public changelog) in sync, and add a decision record for the new version
 # under docs/methodology/member-score/ — that is where the reasons go, not
 # here.
-ALGORITHM_VERSION = "v6.19"
+ALGORITHM_VERSION = "v6.20"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -855,14 +855,14 @@ def _calc_funding_independence(
 
       1. PAC dependency (20/53): PAC share of contributions against the
          share campaigns of the same size typically take in the chamber
-         (v6.19, _pac_size_fit): at that share it scores 50, with none 100,
+         (v6.20, _pac_size_fit): at that share it scores 50, with none 100,
          at twice it 0. Per chamber because House members rely on PAC money
          far more than senators, a structural difference, not a choice. Per
          size because PAC checks are capped by law and individual money is
          not, so a larger campaign dilutes the same PAC dollars to a smaller
          share: scored against one chamber median, FI tracked campaign size
          (r=+0.58 Senate, +0.15 House, 2026-09-28), and the PAC-cap
-         utilization factor meant to correct that (before v6.19) measured how
+         utilization factor meant to correct that (before v6.20) measured how
          close each contributing PAC came to a one-election cap, over
          totals spanning a primary and a general, rather than how much the
          campaign depended on PACs. With the size fit, r=+0.05 / -0.06.
@@ -979,7 +979,7 @@ def _pac_size_fit(sized: list[tuple[float, float]]) -> dict | None:
     Measured 2026-09-28 from the live breakdowns: slope -1.03 Senate
     (n=91; PAC dollars barely grow with campaign size, so the share mostly
     measures size), -0.48 House (n=390). See docs/methodology/member-score/
-    v6.19.md. None below _MIN_FUNDING_REFERENCE_MEMBERS usable members."""
+    v6.20.md. None below _MIN_FUNDING_REFERENCE_MEMBERS usable members."""
     logs = sorted(math.log(base) for base, _ in sized if base > 0)
     if len(logs) < _MIN_FUNDING_REFERENCE_MEMBERS:
         return None
@@ -1086,7 +1086,7 @@ def _funding_independence_core(
     pac_ratio = pac_total / total_raised
 
     # Scored against the share campaigns of the member's size typically take
-    # in their chamber (v6.19, _pac_size_fit, measured every run): the member
+    # in their chamber (v6.20, _pac_size_fit, measured every run): the member
     # at that share scores 50, none scores 100, twice it scores 0. PAC
     # checks are capped by law and individual money is not, so a larger
     # campaign dilutes the same PAC dollars to a smaller share. Scored
@@ -1096,7 +1096,7 @@ def _funding_independence_core(
     # gave, not how much the campaign depended on PACs, against a
     # one-election cap applied to totals that span a primary and a general.
     # Before a chamber has a fit, its median share is the reference, as
-    # before v6.19.
+    # before v6.20.
     chamber = _chamber_of(district)
     ref = {
         **(FUNDING_REFERENCE.load().get(chamber) or {}),

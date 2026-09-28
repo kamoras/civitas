@@ -339,7 +339,7 @@ The correct pattern, established by `_district_pvi()` /
    `/data/les_reference.json` for the API's breakdowns, with
    `app/data/les_reference.json` (`scripts/calibrate_les_credit_scale.py`)
    as the pre-first-run fallback. Funding Independence's PAC-share
-   reference (the chamber's size fit, v6.19) works the same way (`compute_funding_reference`,
+   reference (the chamber's size fit, v6.20) works the same way (`compute_funding_reference`,
    `funding_reference.json`, `scripts/audit_pac_ratio.py`), and so does
    Constituent Alignment's per-party expected break rate by seat lean
    (`compute_constituent_reference`, `constituent_reference.json`,

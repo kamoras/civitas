@@ -76,7 +76,7 @@ def _recent_fixture(n=20, breaks=2, bill_id=lambda i: f"S.{i}"):
         key = f"119-1-{i}"
         classified.append({
             "billId": bill_id(i), "rcKey": key, "policyArea": "HEALTH",
-            "partyLeaning": "R", "partyAlignmentWeight": 1.0,
+            "partyLeaning": "R", "partySplit": "R", "partyAlignmentWeight": 1.0,
         })
         rc_map[key] = _rc(119, 1, i, "Nay" if i < breaks else "Yea")
     return classified, rc_map
@@ -133,7 +133,7 @@ class TestKeyBillAlsoARecentRollCall:
         # Key bill HR.9's floor vote is recent roll call 119-1-0 (a break).
         key_bill = {
             "billId": "HR.9", "billName": "A real bill", "policyArea": "HEALTH",
-            "partyLeaning": "R", "partyAlignmentWeight": 1.0,
+            "partyLeaning": "R", "partySplit": "R", "partyAlignmentWeight": 1.0,
         }
         roll_call_data_map = {"HR.9": recent_rc_map["119-1-0"]}
 
