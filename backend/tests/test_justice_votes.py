@@ -137,3 +137,41 @@ class TestFetchCaseVotes:
 
         votes = await fetch_case_votes(client, terms=["2023"])
         assert votes == []
+
+
+class TestDuplicateJusticeInOneDecision:
+    """Live, 2025 term: Oyez lists Ketanji Brown Jackson twice in Enbridge
+    Energy v. Nessel (24-783) and Hencely v. Fluor (24-924), with Barrett
+    and Gorsuch missing. The second row broke JusticeVote's key and rolled
+    back every Sunday's justice refresh."""
+
+    async def _votes(self, decision_votes):
+        case_data = {
+            "name": "Enbridge Energy, LP v. Nessel",
+            "timeline": _decided_timeline(1700000000),
+            "decisions": [{"majority_vote": 9, "minority_vote": 0, "votes": decision_votes}],
+        }
+        client = MagicMock()
+        client.get = AsyncMock(side_effect=[
+            _cases_list_response([{"docket_number": "24-783", "href": "http://x/case"}]),
+            _case_detail_response(case_data),
+        ])
+        return await fetch_case_votes(client, terms=["2025"])
+
+    @pytest.mark.asyncio
+    async def test_identical_duplicate_rows_are_one_vote(self):
+        votes = await self._votes([
+            _vote("Sonia Sotomayor", "sonia_sotomayor", "majority", "majority"),
+            _vote("Ketanji Brown Jackson", "ketanji_brown_jackson", "majority"),
+            _vote("Ketanji Brown Jackson", "ketanji_brown_jackson", "majority"),
+        ])
+        assert sorted(v["justice_id"] for v in votes) == ["ketanji_brown_jackson", "sonia_sotomayor"]
+
+    @pytest.mark.asyncio
+    async def test_conflicting_duplicate_rows_leave_that_vote_out(self):
+        votes = await self._votes([
+            _vote("Sonia Sotomayor", "sonia_sotomayor", "majority"),
+            _vote("Ketanji Brown Jackson", "ketanji_brown_jackson", "majority"),
+            _vote("Ketanji Brown Jackson", "ketanji_brown_jackson", "minority"),
+        ])
+        assert [v["justice_id"] for v in votes] == ["sonia_sotomayor"]

@@ -122,6 +122,38 @@ async def fetch_current_justices(client: httpx.AsyncClient) -> list[dict]:
     return current
 
 
+def _one_vote_per_justice(votes: list[dict], case_id: str) -> list[tuple[str, str, str]]:
+    """(justice_id, vote, opinion_type) per justice in one decision.
+
+    Oyez sometimes lists a justice twice. For two 2025-term cases (Enbridge
+    Energy v. Nessel, 24-783; Hencely v. Fluor, 24-924) Ketanji Brown
+    Jackson appears twice and another justice not at all, and the second
+    row broke JusticeVote's (justice_id, case_id) key: every Sunday's
+    justice refresh rolled back and left all nine scorecards stale. Rows
+    that agree are one vote; rows that disagree cannot say which is right,
+    so that justice's vote in that case is left out. The missing justice's
+    vote is never reconstructed.
+    """
+    by_justice: dict[str, set[tuple[str, str]]] = {}
+    for v in votes:
+        justice_id = (v.get("member") or {}).get("identifier", "")
+        if justice_id:
+            by_justice.setdefault(justice_id, set()).add(
+                (v.get("vote", ""), v.get("opinion_type", "none") or "none")
+            )
+    kept = []
+    for justice_id, sides in by_justice.items():
+        if len(sides) > 1:
+            logger.warning("Oyez lists conflicting votes for %s in %s — leaving that vote out", justice_id, case_id)
+            continue
+        (vote, opinion), = sides
+        kept.append((justice_id, vote, opinion))
+    duplicated = sum(1 for v in votes if (v.get("member") or {}).get("identifier")) - len(by_justice)
+    if duplicated:
+        logger.warning("Oyez lists %d justice(s) more than once in %s", duplicated, case_id)
+    return kept
+
+
 async def fetch_case_votes(
     client: httpx.AsyncClient,
     terms: list[str] | None = None,
@@ -217,15 +249,7 @@ async def fetch_case_votes(
             is_unanimous = min_count == 0 and maj_count > 0
             is_close = (maj_count - min_count) <= 1 and min_count > 0
 
-            for v in votes:
-                member = v.get("member") or {}
-                justice_id = member.get("identifier", "")
-                if not justice_id:
-                    continue
-
-                vote_side = v.get("vote", "")
-                opinion = v.get("opinion_type", "none") or "none"
-
+            for justice_id, vote_side, opinion in _one_vote_per_justice(votes, case_id):
                 all_votes.append({
                     "case_id": case_id,
                     "case_name": case_name,

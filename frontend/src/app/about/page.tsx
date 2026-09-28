@@ -1026,7 +1026,9 @@ export default function AboutPage() {
             <P>
               Justices are scored on impartiality and ideological consistency using case-level
               voting data from the Oyez Project and official Supreme Court records. Case opinions
-              link directly to the official supremecourt.gov slip opinion PDFs.
+              link directly to the official supremecourt.gov slip opinion PDFs. When the source
+              lists a justice twice in one decision, the vote is counted once if the two entries
+              agree and left out if they do not; a vote the source omits is never filled in.
             </P>
             <P>
               Justice scoring evaluates whether a justice applies consistent legal principles across
@@ -1148,6 +1150,12 @@ export default function AboutPage() {
                   Troy Jackson; in South Carolina a special primary replaced the June
                   winner for Senate. Where a state&apos;s source is its certified ballot, it
                   is treated as the final word: anyone not on it is taken off the page.
+                </P>
+                <P>
+                  Where the results are found through a link on a state&apos;s own site, each linked
+                  election is checked for its own name and date before it is read. West Virginia moved
+                  its primary link to an archive of every election since 2016; the check is what picks
+                  this year&apos;s primary from it.
                 </P>
                 <P>
                   Declared write-in candidates are not printed on the ballot, so they are
