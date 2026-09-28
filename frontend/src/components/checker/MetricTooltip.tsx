@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useId, useCallback, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { SHARE_EXCLUDE_ATTR } from "@/lib/shareImage";
 
 interface MetricTooltipProps {
   text: string;
@@ -121,6 +122,8 @@ export default function MetricTooltip({ text, children }: MetricTooltipProps) {
         className="ml-0.5 -my-1.5 inline-flex h-6 w-6 items-center justify-center align-middle text-xs leading-none text-ink-min transition-colors cursor-help hover:text-phos"
         aria-label={`More info: ${text.slice(0, 60)}${text.length > 60 ? "…" : ""}`}
         aria-describedby={tooltipId}
+        // A picture can't be hovered: leave the marker out of shared images.
+        {...{ [SHARE_EXCLUDE_ATTR]: "" }}
       >
         [?]
       </button>

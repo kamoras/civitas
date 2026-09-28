@@ -23,6 +23,7 @@ import { PARTY_COLORS, PARTY_BORDER } from "@/lib/partyStyles";
 import StancePulse from "@/components/action/StancePulse";
 import { LogActionButton } from "@/components/action/CivicTracker";
 import ShareButtons from "@/components/action/ShareButtons";
+import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import BackToTop from "@/components/BackToTop";
 import {
   PolicyBadge,
@@ -183,7 +184,11 @@ function HeroIssue({
   }, [isDeepLinked]);
 
   return (
-    <article ref={heroRef} className="border border-phos/20 bg-surface p-6 sm:p-8">
+    <article
+      ref={heroRef}
+      {...{ [SHARE_SECTION_ATTR]: `issue-${issue.publicId}` }}
+      className="border border-phos/20 bg-surface p-6 sm:p-8"
+    >
       <div className="mb-4 flex flex-wrap items-center gap-3 font-mono text-xs">
         <span className="border border-phos/40 px-2 py-0.5 tracking-[0.14em] text-phos-mid">
           TOP ISSUE
@@ -256,12 +261,18 @@ function HeroIssue({
 
       <SourceList issue={issue} />
 
-      <StancePulse
-        issueId={issue.id}
-        initialConcerned={issue.concernedCount || 0}
-        initialNotPriority={issue.notPriorityCount || 0}
-      />
-      <div className="mt-3 flex items-center justify-between gap-3">
+      {/* Controls, not content: left out of a shared image of the card. */}
+      <div {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
+        <StancePulse
+          issueId={issue.id}
+          initialConcerned={issue.concernedCount || 0}
+          initialNotPriority={issue.notPriorityCount || 0}
+        />
+      </div>
+      <div
+        className="mt-3 flex items-center justify-between gap-3"
+        {...{ [SHARE_EXCLUDE_ATTR]: "" }}
+      >
         <a
           href={`/issue/${issue.publicId}`}
           className="border border-phos/40 px-3 py-1.5 font-mono text-xs uppercase tracking-[0.12em] text-phos-mid transition-colors hover:border-phos hover:text-phos"
@@ -312,7 +323,11 @@ function SecondaryIssue({
   }
 
   return (
-    <article ref={cardRef} className="border border-white/[0.09] bg-surface">
+    <article
+      ref={cardRef}
+      {...{ [SHARE_SECTION_ATTR]: `issue-${issue.publicId}` }}
+      className="border border-white/[0.09] bg-surface"
+    >
       <button
         onClick={handleToggle}
         className="flex w-full items-start justify-between gap-4 p-4 text-left sm:p-5"
@@ -504,12 +519,15 @@ function SecondaryIssue({
             className="flex items-center gap-2 flex-wrap pt-3 border-t border-white/[0.07]"
           />
 
-          <StancePulse
-            issueId={issue.id}
-            initialConcerned={issue.concernedCount || 0}
-            initialNotPriority={issue.notPriorityCount || 0}
-          />
-          <div className="mt-3 flex justify-end">
+          {/* Controls, not content: left out of a shared image of the card. */}
+          <div {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
+            <StancePulse
+              issueId={issue.id}
+              initialConcerned={issue.concernedCount || 0}
+              initialNotPriority={issue.notPriorityCount || 0}
+            />
+          </div>
+          <div className="mt-3 flex justify-end" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
             <LogActionButton issueTitle={issue.title} />
           </div>
 
@@ -797,7 +815,15 @@ function OpenCommentsBanner() {
 
 export default function ActionPage() {
   return (
-    <Suspense fallback={<PageFallback eyebrow={"Action Center · what is moving right now"} title={"Today on the record"} rows={4} />}>
+    <Suspense
+      fallback={
+        <PageFallback
+          eyebrow={"Action Center · what is moving right now"}
+          title={"Today on the record"}
+          rows={4}
+        />
+      }
+    >
       <ActionPageInner />
     </Suspense>
   );

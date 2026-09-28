@@ -6,19 +6,26 @@ import { createContext, useContext, useId, useState, type ReactNode } from "reac
  * What heading level these sections sit at.
  *
  * The level is a property of where the section is mounted, not of the section,
- * so it is read from context rather than passed down: the five components that
- * render one of these (VotingRecord, SponsoredBills, StockTrades,
- * PlatformTracker, DataHighlights) are all mounted by SenatorCard, and
+ * so it is read from context rather than passed down: the components that
+ * render one of these (VotingRecord, SponsoredBills, StockTrades, Holdings,
+ * PlatformTracker) are mounted by the member scorecard and its drawer, and
  * threading a prop through each of them to say "you are one level down from my
  * title" is more code than reading it.
  *
- * Defaults to h3, which is what every one of them rendered before the member's
- * name became the page's h1 on /politicians/[id] — after which h1 → h3 skipped
- * a level and axe-core reported `heading-order` on every profile.
+ * Defaults to h3; the scorecard's drawer sets h3 under its h2 title.
  */
 const SectionHeadingLevel = createContext<"h2" | "h3">("h3");
 
 export const SectionHeadingLevelProvider = SectionHeadingLevel.Provider;
+
+/**
+ * Sections shown open, with no toggle: inside the member scorecard's drawer
+ * a section is what the reader asked to see, so a collapsed header there
+ * would be one more click onto the thing they just clicked for.
+ */
+const SectionsOpen = createContext(false);
+
+export const SectionsOpenProvider = SectionsOpen.Provider;
 
 /** Controlled mode takes both props or neither — `open` alone would leave the
  * header toggling state nobody reads. */
@@ -61,6 +68,20 @@ export default function CollapsibleSection({
   const contentId = useId();
   const titleId = useId();
   const Heading = useContext(SectionHeadingLevel);
+  const alwaysOpen = useContext(SectionsOpen);
+
+  if (alwaysOpen) {
+    return (
+      <div>
+        <div className="w-full flex items-baseline justify-between mb-3">
+          <Heading className={`text-lg ${titleColor}`}>{title}</Heading>
+          {source && <span className="text-xs text-ink-lo hidden sm:inline">{source}</span>}
+        </div>
+        {alwaysVisible}
+        {children}
+      </div>
+    );
+  }
 
   if (!expandable) {
     return (
@@ -68,7 +89,11 @@ export default function CollapsibleSection({
         <div className="w-full flex items-baseline justify-between mb-3">
           <Heading className={`text-lg ${titleColor}`}>{title}</Heading>
           <span className="flex items-center gap-3">
-            {summary && <span className="text-xs text-ink-lo max-w-xs truncate hidden sm:inline">{summary}</span>}
+            {summary && (
+              <span className="text-xs text-ink-lo max-w-xs truncate hidden sm:inline">
+                {summary}
+              </span>
+            )}
             {source && <span className="text-xs text-ink-lo hidden sm:inline">{source}</span>}
           </span>
         </div>

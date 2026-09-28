@@ -72,6 +72,10 @@ record for its page, any bill, at `/api/bills/{id}/record`
 (`frontend/src/components/congress/`); `/congress/bills` is the in-motion list
 and `/congress/bills/{id}` any bill's page, whose vote panel loads one roll
 call's members at a time. `/bills` and `/bills/:id` redirect permanently.
+`/congress` renders per request, since `next build` has no backend to
+prerender it from. A failed fetch throws to `app/congress/error.tsx`, which
+says the record could not be reached; only the backend's 404 is "nothing
+recorded".
 
 **Bluesky.** After each sync run, `analyze/congress_bluesky.py` posts the most
 recent session day whose record the Digest has made final, if it is from the

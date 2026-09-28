@@ -192,7 +192,7 @@ logger = logging.getLogger(__name__)
 # public changelog) in sync, and add a decision record for the new version
 # under docs/methodology/member-score/ — that is where the reasons go, not
 # here.
-ALGORITHM_VERSION = "v6.18"
+ALGORITHM_VERSION = "v6.20"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -1158,6 +1158,20 @@ def _funding_independence_core(
     )
     return {
         "score": score,
+        # The numbers the scorecard's sentence states, as numbers: the page
+        # writes "11% of $1.21M in contributions came from PACs" from these,
+        # never re-deriving a share itself.
+        "facts": {
+            "contributions": round(total_raised),
+            "pacShare": round(pac_ratio, 4),
+            "smallDonorShare": round(small_pct / 100, 4),
+            "smallDonorExpectedShare": (
+                round(small_expected_pct / 100, 4) if small_expected_pct is not None else None
+            ),
+            # The House compares with the chamber median; a senator with what
+            # a state of that size is expected to raise in small gifts.
+            "smallDonorComparison": "house-median" if district is not None else "state-size",
+        },
         "components": [
             {
                 "label": "PAC dependency",
@@ -1426,8 +1440,20 @@ def party_break_rate(voting_record: dict) -> tuple[float | None, int]:
     research note validated (party-unity votes, unweighted). It used to be
     weighted by partyAlignmentWeight, the bill's CONTENT lean, with 0.0
     read as 1.0; a content-bipartisan bill that split on party lines then
-    counted a hundred times more than one with a 0.01 lean."""
+    counted a hundred times more than one with a 0.01 lean.
+
+    Since v6.20 the rate is the member's party-line record over the whole
+    Congress when the pipeline has measured it (partyLineRecord,
+    party_line_record.py): breaks toward the other party only, each measure
+    once. The stored votes are read only when it hasn't."""
     from app.pipeline.transform.normalize_votes import dedupe_votes
+
+    record = voting_record.get("partyLineRecord")
+    if isinstance(record, dict) and isinstance(record.get("votes"), int):
+        n = record["votes"]
+        if n < CONSTITUENT_MIN_VOTES:
+            return None, n
+        return len(record.get("breaks") or []) / n, n
 
     votes = dedupe_votes([
         v for v in (voting_record.get("keyVotes") or []) + (voting_record.get("recentVotes") or [])
@@ -2016,7 +2042,25 @@ def _constituent_alignment_core(
             "score": round(congruence_score, 1),
             "detail": congruence_detail,
         })
-    return {"score": score, "components": components, "vote_part_status": vote_part_status}
+    record = voting_record.get("partyLineRecord")
+    return {
+        "score": score,
+        "components": components,
+        "vote_part_status": vote_part_status,
+        # The scorecard's sentence and scale, as numbers: how many
+        # party-labeled votes, how many were breaks, and the rate same-party
+        # members of seats like this one break at (None where not measured).
+        "facts": {
+            "party": eval_party,
+            "partyVotes": n_party,
+            "breaks": round(break_rate * n_party) if break_rate is not None else None,
+            "breakRate": round(break_rate, 4) if break_rate is not None else None,
+            "expectedBreakRate": round(expected, 4) if expected is not None else None,
+            # Votes against the party from its flank (party_line_record):
+            # shown beside the breaks, not counted. None without a record.
+            "flankBreaks": len(record.get("flankBreaks") or []) if record else None,
+        },
+    }
 
 
 def _calc_funding_diversity(funding: dict) -> int:
@@ -2884,6 +2928,17 @@ def _calc_legislative_effectiveness(
     )["score"]
 
 
+def _bills_by_stage(sponsored_bills: list[dict] | None) -> list[int]:
+    """How many of a member's sponsored bills got furthest to each of the
+    five V&W stages (introduced, action in committee, action beyond
+    committee, passed a chamber, became law), by the same stage mapping
+    the score uses (_les_bill_stage)."""
+    counts = [0] * _LES_MAX_STAGE
+    for bill in sponsored_bills or []:
+        counts[_les_bill_stage(bill) - 1] += 1
+    return counts
+
+
 def _legislative_effectiveness_core(
     sponsored_bills: list[dict],
     leadership_score: float | None = None,
@@ -2984,4 +3039,4 @@ def _legislative_effectiveness_core(
                 "(median attractor = 50)"
             ),
         })
-    return {"score": score, "components": components}
+    return {"score": score, "components": components, "facts": {"billsByStage": _bills_by_stage(sponsored_bills)}}

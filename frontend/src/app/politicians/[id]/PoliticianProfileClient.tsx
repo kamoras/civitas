@@ -5,12 +5,13 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
-import SenatorCard from "@/components/checker/SenatorCard";
-import { PresidentCard } from "@/components/president/PresidentClient";
+import MemberScorecard from "@/components/scorecard/MemberScorecard";
+import PresidentScorecard from "@/components/scorecard/PresidentScorecard";
 import { JusticeCard } from "@/components/justice/JusticeClient";
 import { formerOfficeNotice } from "@/lib/officeStatus";
 import { issueDateLabel } from "@/lib/formatting";
 import type { PoliticianProfile, GovernmentDoc } from "@/types/politicians";
+import type { PresidentScoreBreakdown, RepresentationScoreBreakdown } from "@/types/scoreBreakdown";
 import type { Senator } from "@/types/senator";
 import type { President } from "@/types/president";
 import type { Justice } from "@/types/justice";
@@ -69,8 +70,20 @@ function SectionBlock({ title, children }: { title: string; children: React.Reac
   );
 }
 
-export default function PoliticianProfileClient({ profile }: { profile: PoliticianProfile }) {
+export default function PoliticianProfileClient({
+  profile,
+  breakdown = null,
+}: {
+  profile: PoliticianProfile;
+  /** The score breakdown, fetched with the profile (senators,
+   *  representatives and presidents). */
+  breakdown?: RepresentationScoreBreakdown | null;
+}) {
   const { identity, branch, activeIssues, governmentRecord, scorecard } = profile;
+  const isMember = branch === "senate" || branch === "house";
+  // Members' and presidents' scorecards set their score columns side by
+  // side, so their pages are wider than a justice's.
+  const wide = isMember || branch === "president";
 
   // Justices carry `isActive`; every other branch carries `isCurrent`.
   const hasLeftOffice =
@@ -81,7 +94,7 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
     <div className="min-h-screen bg-surface-base text-ink-hi">
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
-        <div className="max-w-4xl mx-auto">
+        <div className={`${wide ? "max-w-7xl" : "max-w-4xl"} mx-auto`}>
           {/* Breadcrumb */}
           <div className="mb-6 font-mono text-xs text-ink-min">
             <Link href="/politicians" className="hover:text-phos transition-colors">
@@ -123,27 +136,31 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
               the fallback below always catches it. */}
           {scorecard && (
             <div className="mb-6">
-              {(branch === "senate" || branch === "house") && (
+              {isMember && (
                 // Keyed by member: moving between two profiles reuses this
-                // page, and every section of the card that loads or keeps
-                // state (votes, disclosures, party breaks, score trend)
+                // page, and every part of the scorecard that loads or keeps
+                // state (votes, disclosures, the drawer, score trend)
                 // belongs to the member it was loaded for.
-                <SenatorCard
+                <MemberScorecard
                   key={`${branch}-${(scorecard as unknown as Senator).id}`}
-                  senator={scorecard as unknown as Senator}
+                  member={scorecard as unknown as Senator}
                   chamber={branch}
+                  breakdown={breakdown}
                   thumbnailUrl={identity.thumbnailUrl}
                   district={identity.district}
                   stateName={identity.stateName}
-                  isCurrent={identity.isCurrent}
                   leadershipTitle={identity.leadershipTitle}
+                  committees={identity.committees}
+                  rank={profile.chamberRank}
                   titleAs="h1"
                 />
               )}
               {branch === "president" && (
-                <PresidentCard
+                <PresidentScorecard
                   key={(scorecard as unknown as President).id}
                   president={scorecard as unknown as President}
+                  breakdown={breakdown as unknown as PresidentScoreBreakdown | null}
+                  rank={profile.chamberRank}
                   titleAs="h1"
                 />
               )}
@@ -225,27 +242,25 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
           )}
 
           {/* Committee Memberships */}
-          {(branch === "senate" || branch === "house") &&
-            identity.committees &&
-            identity.committees.length > 0 && (
-              <SectionBlock title="Committee assignments">
-                <div className="space-y-1.5">
-                  {identity.committees.map((c, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center justify-between gap-3 py-1 border-b border-white/[0.07] last:border-0"
-                    >
-                      <span className="font-mono text-xs text-ink">{c.committeeName}</span>
-                      {c.title && (
-                        <span className="font-mono text-xs tracking-widest border border-white/15 text-ink-lo px-1.5 py-0.5 shrink-0">
-                          {c.title.toUpperCase()}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </SectionBlock>
-            )}
+          {isMember && !scorecard && identity.committees && identity.committees.length > 0 && (
+            <SectionBlock title="Committee assignments">
+              <div className="space-y-1.5">
+                {identity.committees.map((c, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between gap-3 py-1 border-b border-white/[0.07] last:border-0"
+                  >
+                    <span className="font-mono text-xs text-ink">{c.committeeName}</span>
+                    {c.title && (
+                      <span className="font-mono text-xs tracking-widest border border-white/15 text-ink-lo px-1.5 py-0.5 shrink-0">
+                        {c.title.toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </SectionBlock>
+          )}
 
           {!scorecard && (
             <SectionBlock title="Scorecard">
