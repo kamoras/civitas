@@ -281,7 +281,7 @@ class TestSyncDigest:
 
         monkeypatch.setattr(ca, "sync_digest", fake_digest)
         _run(ca.sync_digests(None, db_session, date(2026, 9, 27)))
-        assert ca._date_cursor(db_session) == date(2025, 1, 4)
+        assert ca.digest_cursor(db_session) == date(2025, 1, 4)
 
 
 class TestSyncFloorLogs:
