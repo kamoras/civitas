@@ -48,6 +48,7 @@ import pdfplumber
 
 from app.pipeline.fetch.http_utils import fetch_bytes_with_retry
 from app.pipeline.fetch.state_candidates_common import (
+    ballot_list_party,
     clean_display_name,
     discover_certification_link,
     normalize_party,
@@ -67,9 +68,12 @@ _OFFICE_RE = re.compile(r"^For (.+)$")
 _DISTRICT_RE = re.compile(r"^District (\d+),\s*(.+)$")
 
 
-def _state_record(header: str, line: str, party: str | None) -> dict | None:
+def _state_record(header: str, line: str, section_party: tuple[str, str | None] | None) -> dict | None:
     """The statewide-executive or legislative record one candidate line
     under `header` makes, or None when the gates refuse the pair."""
+    if section_party is None:
+        return None
+    party, printed = section_party
     district_line = _DISTRICT_RE.match(line)
     label = f"{header} District {district_line.group(1)}" if district_line else header
     name = clean_display_name(district_line.group(2) if district_line else line)
@@ -82,7 +86,10 @@ def _state_record(header: str, line: str, party: str | None) -> dict | None:
             # A district beside an office that has none ("Secretary of
             # State, District 3") is a line this does not understand.
             return None
-        return {"office": office, "district": seat, "party": party, "last_name": name}
+        record = {"office": office, "district": seat, "party": party, "last_name": name}
+        if printed:
+            record["party_label"] = printed
+        return record
     if not district_line:
         # Every legislative seat is printed "District N, Name"; a bare
         # line under one is the next block's prose.
@@ -94,6 +101,8 @@ def _state_record(header: str, line: str, party: str | None) -> dict | None:
     record = {"office": chamber, "district": district, "party": party, "last_name": name}
     if seat is not None:
         record["seat"] = seat
+    if printed:
+        record["party_label"] = printed
     return record
 
 
@@ -103,6 +112,7 @@ def parse_certification(lines: list[str], state_offices: bool = False) -> list[d
     (see the module docstring)."""
     records: list[dict] = []
     party: str | None = None
+    state_party: tuple[str, str | None] | None = None
     in_party_section = False
     office: tuple[str, int | None] | None = None
     # The header of a state office being read, or None.
@@ -117,6 +127,11 @@ def parse_certification(lines: list[str], state_offices: bool = False) -> list[d
             # nothing after it is a partisan federal nominee.
             party = normalize_party(section.group(1), ballot_list=True)
             in_party_section = party is not None
+            # A state row under a "NONPARTISAN CANDIDATES" section is
+            # non-partisan, not independent (ballot_list_party); read only
+            # once the section is known to be a party-shaped one, so
+            # "JUDICIAL CANDIDATES" still names nobody.
+            state_party = ballot_list_party(section.group(1)) if in_party_section else None
             office = None
             state_header = None
             continue
@@ -132,7 +147,7 @@ def parse_certification(lines: list[str], state_offices: bool = False) -> list[d
         if not in_party_section:
             continue
         if state_header is not None:
-            record = _state_record(state_header, line, party)
+            record = _state_record(state_header, line, state_party)
             if record is None:
                 # Not a candidate line for this office: the block ended.
                 state_header = None

@@ -82,7 +82,7 @@ from app.pipeline.fetch.state_source_crawler import (
 from app.pipeline.candidate_dedup import normalized_surname
 from app.pipeline.fetch.state_candidates_common import (
     BALLOT_BASIS_TIER,
-    OTHER_PARTY,
+    LABELLED_PARTIES,
     PARTY_CODE_MAP,
     fec_party,
     ballot_basis_key,
@@ -1259,9 +1259,9 @@ def _confirmed_match(db: Session, cycle: int, state: str, record: dict):
 
 def _printed_party(record: dict) -> str | None:
     """The party label a state-office row keeps: the list's own printing,
-    and only under OTHER_PARTY -- a recognised party is its code, and a
+    and only under OTHER_PARTY or NONPARTISAN -- a recognised party is its code, and a
     label beside it would be a second vocabulary for the same fact."""
-    if record.get("party") != OTHER_PARTY:
+    if record.get("party") not in LABELLED_PARTIES:
         return None
     label = " ".join(str(record.get("party_label") or "").split())
     return label[:80] or None

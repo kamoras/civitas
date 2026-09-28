@@ -223,6 +223,8 @@ def test_north_dakota_reads_both_public_service_seats_and_its_districts():
         _nd("Public Service Commissioner", "", "Jill", "Kringstad", "Republican"),
         _nd("Public Service Commissioner", "", "Scot", "Kelsh", "Democratic-NPL"),
         _nd("Public Service Commissioner", "", "John", "Pederson", "Democratic-NPL", "M"),
+        _nd("Superintendent of Public Instruction", "", "Levi", "Bachmeier", "Nonpartisan"),
+        _nd("Superintendent of Public Instruction", "", "Tracy", "Foss", "Nonpartisan", "Layne"),
         _nd("State Senator", "District 03", "Bob", "Paulson", "Republican"),
         _nd("State Representative", "District 03", "Tara", "Hiatt", "Democratic-NPL"),
     ]
@@ -235,8 +237,12 @@ def test_north_dakota_reads_both_public_service_seats_and_its_districts():
         ("public_service_commission", None, "D", None, "John M Pederson"),
         ("upper", "3", "R", None, "Bob Paulson"),
         ("lower", "3", "D", None, "Tara Hiatt"),
+        # Elected on the no-party ballot: non-partisan, never "IND".
+        ("school_superintendent", None, "N", "Nonpartisan", "Levi Bachmeier"),
+        ("school_superintendent", None, "N", "Nonpartisan", "Tracy Layne Foss"),
     }
-    # The at-large House seat still reads with an empty district column.
+    # The at-large House seat still reads with an empty district column,
+    # and a federal row keeps its old reading (the matcher is unchanged).
     assert [(r["office"], r["district"], r["party"]) for r in records if r["office"] == "H"] == [("H", None, "I")]
 
 
@@ -287,7 +293,8 @@ async def test_alaska_reads_every_page_and_each_ticket_in_reading_order():
         ("governor", None, "D", None, "Jonathan S. “JKT” Kreiss-Tomkins / Zac Johnson"),
         # Page 2: the House districts past the first page.
         ("lower", "8", "R", None, "William H. “Bill” Elam"),
-        ("lower", "8", "I", None, "Frank Quinn"),
+        # Alaska prints "(Nonpartisan)" beside him: shown as printed.
+        ("lower", "8", "N", "Nonpartisan", "Frank Quinn"),
     }
     assert any("frm-page-407=2" in url for url in asked)
 
@@ -429,9 +436,12 @@ def test_florida_reads_only_qualified_state_candidates():
 async def test_florida_reads_the_same_day_special_too():
     posted = []
 
+    from app.pipeline.fetch import state_candidates_dos_canlist as canlist
+    canlist._legend_cache.clear()
+
     def handler(request):
         if request.method == "GET":
-            return httpx.Response(200, text=FL_INDEX)
+            return httpx.Response(200, text=FL_PARTIES if "dos.fl.gov" in str(request.url) else FL_INDEX)
         form = dict(httpx.QueryParams(request.content.decode()))
         posted.append((form["elecid"], form["OfficeGroup"]))
         page = {("20261103-GEN", "FED"): FL_FED, ("20261103-GEN", "CAB"): FL_CAB,
@@ -489,3 +499,82 @@ def test_a_write_in_bucket_is_never_stored_as_a_nominee(db_session):
         {"office": "treasurer", "district": None, "party": "D", "last_name": "MICHAEL W. FRERICHS"},
     ])
     assert [r.display_name for r in db_session.query(StatewideNominee)] == ["MICHAEL W. FRERICHS"]
+
+
+# ── Delaware: a party printed only as an abbreviation ────────────────
+
+def test_delaware_spells_out_the_independent_party_of_delaware():
+    """The real 2026 Auditor rows. "Ind Pty of DE" is the Independent
+    Party of Delaware (FEC IDE): a party, shown by its name -- neither a
+    bare abbreviation nor an independent."""
+    def row(office, last, ballot, party):
+        return {"Office": office, "Party": party, "Last Name": last, "BallotName": ballot,
+                "DisplayedStatus": "Qualified"}
+    rows = [
+        row("Auditor of Accounts", "York", "Lydia York", "Democratic"),
+        row("Auditor of Accounts", "Cassidy", "Austin Cassidy", "Ind Pty of DE"),
+    ]
+    assert _state(parse_certified_rows(rows, _general("DE")["format"], state_offices=True)) == {
+        ("auditor", None, "D", None, "Lydia York"),
+        ("auditor", None, "O", "Independent Party of Delaware", "Austin Cassidy"),
+    }
+
+
+# ── Florida: codes read through the Division's own party legend ──────
+
+# Trimmed from dos.fl.gov/elections/candidates-committees/political-parties/
+# as served 2026-09-28 (one entry keeps its code inside a <span>).
+FL_PARTIES = """<h2>Major Political Parties</h2><ul>
+<li><a href="https://dos.elections.myflorida.com/committees/ComDetail.asp?account=1539">Florida Democratic Party</a> (DEM)</li>
+<li><a href="https://dos.elections.myflorida.com/committees/ComDetail.asp?account=4700">Republican Party of Florida</a> (REP)</li>
+</ul><h2>Minor Political Parties</h2><ul>
+<li><a href="https://dos.elections.myflorida.com/committees/ComDetail.asp?account=88571" data-anchor="?account=88571">American Solidarity Party of Florida</a> (ASP)</li>
+<li><a href="https://dos.elections.myflorida.com/committees/ComDetail.asp?account=69767">Independent Party of Florida</a> (IND)</li>
+<li><a href="https://dos.elections.myflorida.com/committees/ComDetail.asp?account=3402">Libertarian Party of Florida</a> (LPF)</li>
+<li><a href="https://dos.elections.myflorida.com/committees/ComDetail.asp?account=89139" data-anchor="?account=89139">MGTOW Party</a><span> (MGT)</span></li>
+</ul>"""
+# The real ASP and MGT rows of the 2026 LEG report; the IND row is the
+# report's own shape with a stand-in name (no IND candidate qualified for
+# a state office in 2026).
+FL_MINOR = """<html><body>
+<b>State Senator</b>
+<table class="results"><tr><th>District</th><th>Candidate</th><th>Status</th><th>Primary</th><th>General</th></tr>
+<tr><td>6</td><td>Thornton, Joseph (ASP)</td><td>Qualified</td><td></td><td></td></tr>
+<tr><td></td><td>Doe, Pat (IND)</td><td>Qualified</td><td></td><td></td></tr>
+</table>
+<b>State Representative</b>
+<table class="results"><tr><th>District</th><th>Candidate</th><th>Status</th><th>Primary</th><th>General</th></tr>
+<tr><td>85</td><td>Metwally, Amr (MGT)</td><td>Qualified</td><td></td><td></td></tr>
+<tr><td>94</td><td>Barrow, Doug (NPA)</td><td>Qualified</td><td></td><td></td></tr>
+</table></body></html>"""
+
+
+def test_florida_party_codes_render_as_the_divisions_own_names():
+    from app.pipeline.fetch.state_candidates_dos_canlist import parse_party_legend
+    legend = parse_party_legend(FL_PARTIES)
+    assert legend["MGT"] == "MGTOW Party"
+    assert _state(parse_canlist(FL_MINOR, state_offices=True, federal=False, legend=legend)) == {
+        ("upper", "6", "O", "American Solidarity Party of Florida", "Joseph Thornton"),
+        # A party named "Independent" is still a party.
+        ("upper", "6", "O", "Independent Party of Florida", "Pat Doe"),
+        ("lower", "85", "O", "MGTOW Party", "Amr Metwally"),
+        # NPA is not on the legend: "No Party Affiliation", an independent.
+        ("lower", "94", "I", None, "Doug Barrow"),
+    }
+
+
+@pytest.mark.asyncio
+async def test_florida_without_its_legend_reads_no_state_office():
+    from app.pipeline.fetch import state_candidates_dos_canlist as canlist
+    canlist._legend_cache.clear()
+
+    def handler(request):
+        if request.method == "GET":
+            return httpx.Response(404) if "dos.fl.gov" in str(request.url) else httpx.Response(200, text=FL_INDEX)
+        return httpx.Response(200, text=FL_FED)
+
+    async with _client(handler) as client:
+        records = await fetch_canlist(client, 2026, "FL", _SOURCES["FL"]["general_list"])
+    # The federal list stands; the state offices wait for the names (the
+    # sync records nothing about them from a federal-only answer).
+    assert {r["office"] for r in records} == {"S"}

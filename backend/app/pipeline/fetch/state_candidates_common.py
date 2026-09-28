@@ -399,14 +399,30 @@ OTHER_PARTY = "O"
 # FEC's own code for "Other", sent to the page for OTHER_PARTY rows so
 # its party vocabulary stays FEC's (see state_nominee_party).
 OTHER_PARTY_FEC = "OTH"
+# A state-office candidate the list itself calls non-partisan (North
+# Dakota's Superintendent of Public Instruction, elected on the no-party
+# ballot; Alaska's and Hawaii's "Nonpartisan" candidates). NOT an
+# independent: "IND" beside a non-partisan contest's candidates is a wrong
+# fact on a ballot page. Stored with the list's own word as party_label,
+# and sent as FEC's own code for "Nonpartisan", N. Like OTHER_PARTY it is
+# deliberately not in PARTY_CODE_MAP, so federal matching never sees it
+# (a federal row still reads "Nonpartisan" as independent, as it always
+# has).
+NONPARTISAN = "N"
+NONPARTISAN_FEC = "N"
+# The codes whose rows carry the printed party as their label.
+LABELLED_PARTIES = frozenset({OTHER_PARTY, NONPARTISAN})
 
 
 def state_nominee_party(code: str | None) -> str:
     """The party a state-office nominee's stored code is sent to the page
-    as: FEC's 3-letter code, OTH for OTHER_PARTY (whose printed label goes
-    beside it), and a code the map does not know as itself."""
+    as: FEC's 3-letter code, OTH for OTHER_PARTY and N for NONPARTISAN
+    (whose printed label goes beside them), and a code the map does not
+    know as itself."""
     if code == OTHER_PARTY:
         return OTHER_PARTY_FEC
+    if code == NONPARTISAN:
+        return NONPARTISAN_FEC
     return PARTY_CODE_MAP.get(code or "", code or "")
 
 # FEC's own party codes that name one of PARTY_CODE_MAP's parties under
@@ -1001,10 +1017,17 @@ _BALLOT_LIST_PARTY_PATTERNS = [
 ]
 
 _INDEPENDENT_ABBR = frozenset({"IND", "INDEPENDENT", "UNA", "NPA", "NOP", "NP", "NOPTY", "PETITION", "DTS"})
+# "Independent" is not independent when it names a PARTY: the Independent
+# Party of Florida (the Division of Elections' IND, read live 2026-09-28
+# from its political-parties page) and of Delaware (FEC's IDE) are parties
+# with nominees, and Connecticut's Independent Party cross-endorses. So
+# "Independent Party" / "Independent Pty" is never read as no party.
 _INDEPENDENT_RE = re.compile(
-    r"\b(independent|unaffiliated|unenrolled|undeclared|no\s+party(\s+affiliation)?|non[\s-]?partisan|by\s+petition)\b",
+    r"\b(independent(?!\s+(?:party|pty)\b)|unaffiliated|unenrolled|undeclared|no\s+party(\s+affiliation)?"
+    r"|non[\s-]?partisan|by\s+petition)\b",
     re.IGNORECASE,
 )
+_NONPARTISAN_RE = re.compile(r"\bnon[\s-]?partisan\b", re.IGNORECASE)
 
 
 def normalize_party(text: str, ballot_list: bool = False) -> str | None:
@@ -1054,9 +1077,11 @@ def ballot_list_party(text: str) -> tuple[str, str | None] | None:
     party the shared vocabulary cannot name is still a party: it is kept
     as OTHER_PARTY with the label exactly as the state printed it
     ("FREEDOM AND UNITY", "Workers") rather than the row being dropped --
-    dropping it removes a real November ballot line from the page. The
-    label is returned only for OTHER_PARTY; a recognised party renders
-    through its FEC code like every other nominee.
+    dropping it removes a real November ballot line from the page. A
+    non-partisan entry ("Nonpartisan") is NONPARTISAN with its printed
+    word, never an independent. The label is returned only for those two;
+    a recognised party renders through its FEC code like every other
+    nominee.
 
     Never for primary results, and never for text that is not purely a
     party column (a section heading such as Missouri's "JUDICIAL
@@ -1064,6 +1089,10 @@ def ballot_list_party(text: str) -> tuple[str, str | None] | None:
     in it (blank, a dash, a lone code letter like Texas's "W" for
     write-in) prints no party and yields None."""
     value = " ".join((text or "").split())
+    if _NONPARTISAN_RE.search(value):
+        # Before normalize_party, which reads it as independent for the
+        # federal matcher's sake: on a state row it renders as printed.
+        return NONPARTISAN, value
     code = normalize_party(value, ballot_list=True)
     if code is not None:
         return code, None

@@ -428,6 +428,28 @@ describe("statewide executive offices", () => {
     const scott = drawer.getByText("PHIL SCOTT").closest("span")!.parentElement!;
     expect(scott.textContent).toContain("REP");
   });
+
+  it("shows a non-partisan candidate as non-partisan, not as a party code", async () => {
+    // North Dakota's real 2026 Superintendent of Public Instruction line.
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          statewideCoverage: covered.statewideCoverage,
+          statewideRaces: [
+            {
+              office: "school_superintendent",
+              label: "Superintendent of Public Instruction",
+              nominees: [{ party: "N", partyLabel: "Nonpartisan", name: "Levi Bachmeier" }],
+            },
+          ],
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide offices/);
+    const row = drawer.getByText("Levi Bachmeier").closest("span")!.parentElement!;
+    expect(row.textContent).toContain("Nonpartisan");
+    expect(row.textContent).not.toContain("IND");
+  });
 });
 
 describe("state legislature", () => {

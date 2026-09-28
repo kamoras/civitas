@@ -102,6 +102,15 @@ Optional, each because a live state needed it:
                                      elsewhere (Maryland lists the
                                      Lieutenant Governor as a "Related
                                      Candidate" of the Governor's row)
+  format.party_names                 {printed: name} for a party the list
+                                     prints only as an abbreviation, spelled
+                                     out as the party's own name so the page
+                                     shows it rather than the abbreviation
+                                     (Delaware's "Ind Pty of DE" is the
+                                     Independent Party of Delaware, FEC's
+                                     IDE); a display translation, never a
+                                     party decision -- the name still goes
+                                     through the shared party reading
   discovery.next_page_regex          the list is paged; each page's link to
                                      the next is followed until there is
                                      none (Alaska's 3 pages: its House
@@ -344,6 +353,7 @@ def parse_certified_rows(rows: list[dict], fmt: dict, state_offices: bool = Fals
         " ".join(str(k).split()).upper(): v for k, v in (fmt.get("state_office_codes") or {}).items()
     }
     mate_columns = fmt.get("running_mate_columns") or []
+    party_names = {" ".join(str(k).split()).upper(): v for k, v in (fmt.get("party_names") or {}).items()}
     if fmt.get("wrapped_columns"):
         rows = _unwrap(rows, fmt["wrapped_columns"])
     carried = ""
@@ -362,6 +372,7 @@ def parse_certified_rows(rows: list[dict], fmt: dict, state_offices: bool = Fals
         if fmt.get("party_regex"):
             found = re.search(fmt["party_regex"], party_label)
             party_label = found.group(1).strip() if found else ""
+        party_label = party_names.get(" ".join(party_label.split()).upper(), party_label)
         printed = " ".join(str(row.get(col) or "").strip() for col in fmt["name_columns"]).strip()
         printed_last = ""
         if fmt.get("name_last_first") and "," in printed:

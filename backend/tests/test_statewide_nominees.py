@@ -331,6 +331,15 @@ class TestMinorPartyLabel:
         nominee = races[0]["seats"][0]["nominees"][0]
         assert (nominee["party"], nominee["partyLabel"]) == ("OTH", "Working Families")
 
+    def test_a_non_partisan_row_keeps_its_word(self, db_session):
+        _sync_statewide_nominees(db_session, CYCLE, "ND", SOURCE, [
+            {"office": "school_superintendent", "district": None, "party": "N",
+             "last_name": "Levi Bachmeier", "party_label": "Nonpartisan"},
+        ])
+        races, _ = _statewide_section(db_session, "ND", CYCLE)
+        nominee = races[0]["nominees"][0]
+        assert (nominee["party"], nominee["partyLabel"]) == ("N", "Nonpartisan")
+
     def test_a_recognised_party_sends_a_null_label(self, db_session):
         _sync_statewide_nominees(db_session, CYCLE, "RI", SOURCE, [GOVERNOR_D])
         races, _ = _statewide_section(db_session, "RI", CYCLE)
