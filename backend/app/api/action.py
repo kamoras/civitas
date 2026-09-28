@@ -7,6 +7,7 @@ import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, field_validator
+from sqlalchemy import func
 from sqlalchemy.exc import OperationalError, TimeoutError as SATimeoutError
 from sqlalchemy.orm import Session, selectinload
 
@@ -40,10 +41,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/action")
 
-# Kept in step with nginx/civitas.conf's proxy_cache_valid for the same
-# /api/action/issues location — the browser's own HTTP cache honors this
-# header independently of nginx's, so a mismatch between the two just
-# moves the staleness window rather than closing it (2026-08 incident: a
+# The one lifetime for /api/action/issues: nginx takes its cache lifetime
+# from this header (nginx/civitas.conf has no per-route block), and so does
+# the browser's own HTTP cache — which is why it stays short (2026-08 incident: a
 # response cached before a deploy added a field crashed the whole Action
 # Center for any visitor whose BROWSER, not nginx, was still holding it).
 _ACTION_ISSUES_CACHE_TTL_S = 30
@@ -550,24 +550,41 @@ async def record_pulse_vote(
             detail="You've already registered a stance on this issue in the last 24 hours.",
         )
 
+    column = ActionIssue.concerned_count if body.stance == "concerned" else ActionIssue.not_priority_count
+
+    def _count() -> bool:
+        # One UPDATE ... SET n = n + 1: with several API workers, reading
+        # the count and writing it back plus one would let two concurrent
+        # votes both write the same total. Off the event loop: the commit
+        # can wait on the pipeline process's write lock.
+        counted = (
+            db.query(ActionIssue)
+            .filter(ActionIssue.id == body.issue_id)
+            .update({column: func.coalesce(column, 0) + 1}, synchronize_session=False)
+        )
+        db.commit()
+        return bool(counted)
+
     # Until the vote commits, a failure means no vote was recorded, so the
     # claim mustn't hold the visitor off. After it, the claim stands
     # whatever fails next: releasing it would let a retry count twice.
     try:
-        issue = db.query(ActionIssue).filter(ActionIssue.id == body.issue_id).first()
-        if not issue:
-            raise HTTPException(status_code=404, detail="Issue not found")
-
-        if body.stance == "concerned":
-            issue.concerned_count = (issue.concerned_count or 0) + 1
-        else:
-            issue.not_priority_count = (issue.not_priority_count or 0) + 1
-        db.commit()
+        counted = await asyncio.to_thread(_count)
     except BaseException:
         await asyncio.to_thread(throttle.release, _PULSE_BUCKET, key)
         raise
-    db.refresh(issue)
+    if not counted:
+        await asyncio.to_thread(throttle.release, _PULSE_BUCKET, key)
+        raise HTTPException(status_code=404, detail="Issue not found")
 
+    def _totals():
+        return (
+            db.query(ActionIssue.id, ActionIssue.concerned_count, ActionIssue.not_priority_count)
+            .filter(ActionIssue.id == body.issue_id)
+            .first()
+        )
+
+    issue = await asyncio.to_thread(_totals)
     return {
         "issueId": issue.id,
         "concernedCount": issue.concerned_count or 0,

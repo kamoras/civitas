@@ -24,7 +24,7 @@ import logging
 import pathlib
 
 from app.atomic_write import update_json_file
-from app.file_cache import files_stamp
+from app.file_cache import Stamp, Uncached, reload_if_moved
 from app.config_definitions import CONSTITUENT_REFERENCE_STATISTIC
 from app.time_utils import utcnow
 
@@ -35,9 +35,19 @@ _LIVE_DIR = pathlib.Path("/data")
 CHAMBERS = ("senate", "house")
 
 
+class _Unreadable(Exception):
+    """The file exists but couldn't be read right now."""
+
+
 def _read_json(path: pathlib.Path) -> dict:
+    """The file's JSON; {} when it is missing or not JSON. Raises
+    _Unreadable when it exists but can't be read — not the same as absent."""
     try:
         return json.loads(path.read_text())
+    except FileNotFoundError:
+        return {}
+    except OSError as error:
+        raise _Unreadable(str(error)) from error
     except Exception:
         return {}
 
@@ -57,7 +67,8 @@ class ChamberReference:
         self._statistic = statistic
         self.live_path = _LIVE_DIR / f"{name}.json"
         self.bundled_path = _BUNDLED_DIR / f"{name}.json"
-        self._cache: tuple[tuple[float | None, float | None], dict] | None = None
+        self._cache: dict | None = None
+        self._cache_stamp: Stamp = None
         self._warned: set[tuple[str, str, str | None]] = set()
 
     @property
@@ -77,10 +88,21 @@ class ChamberReference:
         Re-read whenever either file changes on disk (mtime), so the API
         worker that didn't run the pipeline doesn't keep serving the
         previous run's numbers."""
-        key = files_stamp([self.live_path, self.bundled_path])
-        if self._cache is not None and self._cache[0] == key:
-            return self._cache[1]
-        bundled, live = _read_json(self.bundled_path), _read_json(self.live_path)
+        self._cache, self._cache_stamp = reload_if_moved(
+            [self.live_path, self.bundled_path], self._cache, self._cache_stamp, self._read,
+        )
+        return self._cache
+
+    def _read(self) -> dict:
+        unreadable = False
+        files = {}
+        for source, path in (("bundled", self.bundled_path), ("live", self.live_path)):
+            try:
+                files[source] = _read_json(path)
+            except _Unreadable:
+                logger.warning("Couldn't read %s — retrying on next use", path, exc_info=True)
+                files[source], unreadable = {}, True
+        bundled, live = files["bundled"], files["live"]
         merged = {}
         for k in self.keys:
             for source, entry in (("live", live.get(k)), ("bundled", bundled.get(k))):
@@ -102,7 +124,9 @@ class ChamberReference:
                 "No %s reference (neither %s nor the bundled %s)",
                 self.name, self.live_path, self.bundled_path,
             )
-        self._cache = (key, merged)
+        if unreadable:
+            # Kept, the other file's entries would stand until one changed.
+            raise Uncached(merged)
         return merged
 
     def write(self, chamber: str, reference: dict) -> None:

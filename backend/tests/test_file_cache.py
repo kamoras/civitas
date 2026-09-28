@@ -105,3 +105,66 @@ def test_member_ideal_points_see_a_rewrite_by_another_process(tmp_path, monkeypa
     assert score_calculator._member_ideal_points("senate")["members"]["A1"] == 0.1
     _write(path, {"senate": {"members": {"A1": 0.4}}}, 2000)
     assert score_calculator._member_ideal_points("senate")["members"]["A1"] == 0.4
+
+
+class TestReloadIfMoved:
+    """The one rule every runtime-file cache goes through."""
+
+    def test_the_stamp_is_taken_before_the_read(self, tmp_path):
+        # A rewrite landing during the read must leave the next call to
+        # reload, not pin what was read under the newer stamp.
+        import os
+
+        from app.file_cache import reload_if_moved
+
+        path = tmp_path / "f.json"
+        path.write_text("1")
+        os.utime(path, (1000, 1000))
+
+        def read_then_rewritten():
+            value = path.read_text()
+            path.write_text("2")
+            os.utime(path, (2000, 2000))
+            return value
+
+        value, stamp = reload_if_moved([path], None, None, read_then_rewritten)
+        assert value == "1"
+        value, stamp = reload_if_moved([path], value, stamp, path.read_text)
+        assert value == "2"
+
+    def test_an_uncached_result_is_returned_and_retried(self, tmp_path):
+        from app.file_cache import Uncached, reload_if_moved
+
+        path = tmp_path / "f.json"
+        path.write_text("x")
+
+        def unreadable():
+            raise Uncached("fallback")
+
+        value, stamp = reload_if_moved([path], None, None, unreadable)
+        assert value == "fallback"
+        value, stamp = reload_if_moved([path], value, stamp, lambda: "read")
+        assert value == "read"
+
+
+def test_ballot_lookup_does_not_keep_the_bundled_copy_after_a_transient_read_error(tmp_path, monkeypatch):
+    import json
+
+    from app.pipeline.fetch import ballot_lookup
+
+    live = tmp_path / "ballot_lookup.json"
+    live.write_text(json.dumps({"live": True}))
+    monkeypatch.setattr(ballot_lookup, "_VOLUME_PATH", str(live))
+    monkeypatch.setattr(ballot_lookup, "_cache", None)
+    real_open = open
+    failing = [True]
+
+    def flaky_open(path, *a, **k):
+        if str(path) == str(live) and failing[0]:
+            raise PermissionError("busy")
+        return real_open(path, *a, **k)
+
+    monkeypatch.setattr("builtins.open", flaky_open)
+    assert "live" not in ballot_lookup._load()  # the bundled copy, this once
+    failing[0] = False
+    assert ballot_lookup._load() == {"live": True}  # not pinned

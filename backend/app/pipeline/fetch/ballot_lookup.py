@@ -34,7 +34,7 @@ from typing import Any
 import httpx
 
 from app.atomic_write import write_text_atomic
-from app.file_cache import Stamp, files_stamp
+from app.file_cache import Stamp, Uncached, reload_if_moved
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -56,22 +56,35 @@ _cache_stamp: Stamp = None
 _LINK_CHECK_TIMEOUT_S = 10.0
 
 
-def _load() -> dict[str, Any]:
-    global _cache, _cache_stamp
-    stamp = files_stamp([_VOLUME_PATH])
-    if _cache is not None and stamp == _cache_stamp:
-        return _cache
-    _cache_stamp = stamp
+def _read() -> dict[str, Any]:
+    """The volume copy, else the bundled one. A volume copy that exists but
+    can't be read right now falls back without being kept (file_cache.
+    Uncached): kept, the fallback would stand until the file next changed."""
+    unreadable = False
     for path in (_VOLUME_PATH, _BUNDLED_PATH):
         try:
             with open(path, encoding="utf-8") as fh:
-                _cache = json.load(fh)
-                return _cache
+                data = json.load(fh)
         except FileNotFoundError:
             continue
-        except Exception:
+        except ValueError:
+            logger.exception("Ballot lookup file %s is not valid JSON", path)
+            continue
+        except OSError:
             logger.exception("Failed to read ballot lookup file %s", path)
-    _cache = {}
+            unreadable = unreadable or path == _VOLUME_PATH
+            continue
+        if unreadable:
+            raise Uncached(data)
+        return data
+    if unreadable:
+        raise Uncached({})
+    return {}
+
+
+def _load() -> dict[str, Any]:
+    global _cache, _cache_stamp
+    _cache, _cache_stamp = reload_if_moved([_VOLUME_PATH], _cache, _cache_stamp, _read)
     return _cache
 
 

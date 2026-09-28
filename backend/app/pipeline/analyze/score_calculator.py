@@ -302,20 +302,38 @@ _state_pvi_cache: dict[str, int] | None = None
 _PVI_PERSISTENT_DIR = "/data"
 
 
-def _read_pvi_json(filename: str) -> dict:
+def _read_pvi_json(filename: str, *, report_unreadable: bool = False) -> dict:
     """Read a PVI JSON file, preferring the persistent volume's
     auto-refreshed copy (/data/, written by an automated fetch module) over
     the bundled git-tracked fallback (app/data/, updated only by manually
     running a scripts/fetch_*.py script). Same override pattern as
-    transform/committee_data.py's loader."""
+    transform/committee_data.py's loader.
+
+    report_unreadable: a persistent copy that exists but can't be read right
+    now raises file_cache.Uncached with the fallback, so a stamped cache
+    retries instead of keeping the fallback until the file next changes."""
     import json
     import pathlib
+
+    from app.file_cache import Uncached
+
     bundled_dir = pathlib.Path(__file__).resolve().parent.parent.parent / "data"
+    unreadable = False
     for directory in (pathlib.Path(_PVI_PERSISTENT_DIR), bundled_dir):
         try:
-            return json.loads((directory / filename).read_text())
+            data = json.loads((directory / filename).read_text())
+        except FileNotFoundError:
+            continue
+        except OSError:
+            unreadable = unreadable or directory != bundled_dir
+            continue
         except Exception:
             continue
+        if unreadable and report_unreadable:
+            raise Uncached(data)
+        return data
+    if unreadable and report_unreadable:
+        raise Uncached({})
     return {}
 
 
@@ -384,26 +402,36 @@ def _member_ideal_points(chamber: str) -> dict:
     """
     import pathlib
 
-    from app.file_cache import files_stamp
+    from app.file_cache import Uncached, reload_if_moved
 
     global _member_ideal_points_cache, _member_ideal_points_stamp
     path = pathlib.Path(_MEMBER_IDEAL_POINTS_PATH)
+
+    def read() -> dict:
+        import json
+
+        try:
+            return json.loads(path.read_text())
+        except FileNotFoundError:
+            pass
+        except OSError:
+            logger.warning("member_ideal_points.json unreadable — retrying on next use", exc_info=True)
+            raise Uncached({}) from None
+        except Exception:
+            pass
+        logger.warning(
+            "member_ideal_points.json unavailable — position-congruence "
+            "component will be skipped for every member until the first "
+            "successful Voteview ingest (fetch/voteview.py, runs "
+            "automatically each pipeline run)"
+        )
+        return {}
+
     # Rewritten each run in the pipeline process; read by the API processes'
     # score breakdowns (explain_scores), which reload when it moves.
-    stamp = files_stamp([path])
-    if _member_ideal_points_cache is None or stamp != _member_ideal_points_stamp:
-        import json
-        _member_ideal_points_stamp = stamp
-        try:
-            _member_ideal_points_cache = json.loads(path.read_text())
-        except Exception:
-            logger.warning(
-                "member_ideal_points.json unavailable — position-congruence "
-                "component will be skipped for every member until the first "
-                "successful Voteview ingest (fetch/voteview.py, runs "
-                "automatically each pipeline run)"
-            )
-            _member_ideal_points_cache = {}
+    _member_ideal_points_cache, _member_ideal_points_stamp = reload_if_moved(
+        [path], _member_ideal_points_cache, _member_ideal_points_stamp, read,
+    )
     chamber_data = _member_ideal_points_cache.get(chamber)
     return chamber_data if isinstance(chamber_data, dict) else {}
 
@@ -507,18 +535,25 @@ def _district_pvi() -> dict[str, int]:
     """
     import pathlib
 
-    from app.file_cache import files_stamp
+    from app.file_cache import Uncached, reload_if_moved
 
     global _district_pvi_cache, _district_pvi_stamp
-    stamp = files_stamp([pathlib.Path(_PVI_PERSISTENT_DIR) / "district_pvi.json"])
-    if _district_pvi_cache is None or stamp != _district_pvi_stamp:
-        _district_pvi_stamp = stamp
-        raw = _read_pvi_json("district_pvi.json")
+
+    def parse(raw: dict) -> dict[str, int]:
         if raw.get("districts"):
-            _district_pvi_cache = {k: int(v) for k, v in raw["districts"].items()}
-        else:
-            logger.warning("district_pvi.json unavailable — falling back to state PVI")
-            _district_pvi_cache = {}
+            return {k: int(v) for k, v in raw["districts"].items()}
+        logger.warning("district_pvi.json unavailable — falling back to state PVI")
+        return {}
+
+    def read() -> dict[str, int]:
+        try:
+            return parse(_read_pvi_json("district_pvi.json", report_unreadable=True))
+        except Uncached as unreadable:
+            raise Uncached(parse(unreadable.value)) from None
+
+    _district_pvi_cache, _district_pvi_stamp = reload_if_moved(
+        [pathlib.Path(_PVI_PERSISTENT_DIR) / "district_pvi.json"], _district_pvi_cache, _district_pvi_stamp, read,
+    )
     return _district_pvi_cache
 
 

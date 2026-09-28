@@ -124,6 +124,13 @@ class PolledRow:
         with self._lock:
             return self._value
 
+    @property
+    def stamp(self):
+        """When the row in hand was written (None: no row loaded) — for a
+        caller that wants to know whether the row changed, not its value."""
+        with self._lock:
+            return self._stamp
+
     def get(self, db=None, *, force: bool = False):
         import time
 

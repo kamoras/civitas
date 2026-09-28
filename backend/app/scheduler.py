@@ -30,7 +30,12 @@ from app.pipeline import lease
 
 logger = logging.getLogger(__name__)
 
-scheduler = AsyncIOScheduler()
+# A job whose moment passes while the event loop is busy still runs (up to
+# five minutes late, once however many moments it missed) instead of being
+# skipped: APScheduler's default grace is one second, and a skipped
+# heartbeat reads as a dead pipeline service, a skipped nightly as a lost
+# day of data.
+scheduler = AsyncIOScheduler(job_defaults={"misfire_grace_time": 300, "coalesce": True})
 
 
 def _is_stale(age: timedelta | None, threshold: timedelta) -> bool:

@@ -257,3 +257,42 @@ def test_candidate_regex_is_not_vulnerable_to_catastrophic_backtracking():
     elapsed = time.monotonic() - start
     assert result is None
     assert elapsed < 1.0, f"regex took {elapsed:.2f}s — catastrophic backtracking regressed"
+
+
+async def test_a_failure_that_would_repeat_is_remembered_not_refetched(db_session, monkeypatch):
+    """A 404 (or a PDF that parses to nothing) fails the same way on every
+    retry; the route's own failure response lasts seconds, so without this
+    each retry downloaded and parsed the whole PDF again."""
+    import httpx
+
+    monkeypatch.setattr(ballot_pdf, "source_for_town", lambda town: {
+        "url": "https://example.com/ballot.pdf", "column_bounds": [[0, 1]],
+    })
+    fetched = []
+
+    def handler(request):
+        fetched.append(request.url)
+        return httpx.Response(404)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        assert await ballot_pdf.fetch_town_ballot_pdf(client, db_session, "Somerville") is None
+        assert await ballot_pdf.fetch_town_ballot_pdf(client, db_session, "Somerville") is None
+    assert len(fetched) == 1
+
+
+async def test_a_moments_failure_is_not_remembered(db_session, monkeypatch):
+    import httpx
+
+    monkeypatch.setattr(ballot_pdf, "source_for_town", lambda town: {
+        "url": "https://example.com/ballot.pdf", "column_bounds": [[0, 1]],
+    })
+    fetched = []
+
+    def handler(request):
+        fetched.append(request.url)
+        return httpx.Response(503)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        await ballot_pdf.fetch_town_ballot_pdf(client, db_session, "Somerville")
+        await ballot_pdf.fetch_town_ballot_pdf(client, db_session, "Somerville")
+    assert len(fetched) == 2

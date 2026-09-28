@@ -25,6 +25,7 @@ from app.schemas import (
     PolicyAreaDetail,
     RelatedIssueSchema,
 )
+from app.shared_state import PolledRow, decode_json_dict
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -55,7 +56,7 @@ _refresh_in_progress = False
 _CHANGED_TIER = "bill-collection"
 _CHANGED_KEY = "changed-at"
 _CHANGED_CHECK_SECONDS = 10.0
-_last_changed_check = 0.0
+_changes = PolledRow(_CHANGED_TIER, _CHANGED_KEY, every_s=_CHANGED_CHECK_SECONDS, decode=decode_json_dict)
 
 
 def _bioguide_photo(bioguide_id: str | None) -> str | None:
@@ -243,18 +244,12 @@ def _record_change() -> None:
 
 def _changed_since(db: Session, built_at: datetime) -> bool:
     """Whether a writer in another process changed the data after `built_at`
-    (checked at most every _CHANGED_CHECK_SECONDS)."""
-    global _last_changed_check
-    from app.shared_state import read_row
-
-    now = time.monotonic()
-    if now - _last_changed_check < _CHANGED_CHECK_SECONDS:
-        return False
-    _last_changed_check = now
-    row = read_row(_CHANGED_TIER, _CHANGED_KEY, db)
-    # None (no change recorded) and UNREADABLE (a moment's lock) alike: no
-    # change to act on; the TTL still rebuilds.
-    return isinstance(row, tuple) and row[0] >= built_at
+    (checked at most every _CHANGED_CHECK_SECONDS; shared_state.PolledRow).
+    No change recorded, or none readable: no change to act on — the TTL
+    still rebuilds."""
+    _changes.get(db)
+    stamp = _changes.stamp
+    return stamp is not None and stamp >= built_at
 
 
 def _collect_bills(db: Session) -> list[_Row]:
@@ -385,6 +380,7 @@ def clear_bill_collection_cache() -> None:
     that should be visible immediately rather than waiting out the TTL)."""
     global _collect_cache
     _collect_cache = None
+    _changes.reset()
 
 
 def get_bills_in_flight(

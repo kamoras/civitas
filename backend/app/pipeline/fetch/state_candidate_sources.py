@@ -23,7 +23,7 @@ import os
 from typing import Any
 
 from app.atomic_write import LockTimeout, NotSaved, runtime_data_path, update_json_file
-from app.file_cache import Stamp, files_stamp
+from app.file_cache import Stamp, Uncached, reload_if_moved
 
 logger = logging.getLogger(__name__)
 
@@ -67,15 +67,7 @@ def _discovered_path() -> str:
     return _DISCOVERED_PATH or runtime_data_path(_DISCOVERED_FILE)
 
 
-def _load_discovered() -> dict[str, Any]:
-    global _discovered_cache, _discovered_stamp
-    path = _discovered_path()
-    # The election pipeline (the pipeline process) writes the file; the API
-    # processes read it here and reload when its mtime moves
-    # (file_cache.files_stamp) — invalidate_cache() reaches only its caller.
-    stamp = files_stamp([path])
-    if _discovered_cache is not None and stamp == _discovered_stamp:
-        return _discovered_cache
+def _read_discovered(path: str) -> dict[str, Any]:
     try:
         with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
@@ -85,12 +77,23 @@ def _load_discovered() -> dict[str, Any]:
         logger.exception("Discovered sources file %s is not valid JSON", path)
         data = {}
     except OSError:
-        # Not cached: unreadable is not empty, and the next read retries.
+        # Not kept: unreadable is not empty, and the next read retries.
         # (Writes re-read the file under their lock, so this can never be
         # written back as the whole file.)
         logger.exception("Failed to read discovered sources file %s", path)
-        return {}
-    _discovered_cache, _discovered_stamp = (data if isinstance(data, dict) else {}), stamp
+        raise Uncached({}) from None
+    return data if isinstance(data, dict) else {}
+
+
+def _load_discovered() -> dict[str, Any]:
+    global _discovered_cache, _discovered_stamp
+    path = _discovered_path()
+    # The election pipeline (the pipeline process) writes the file; the API
+    # processes read it here and reload when its mtime moves
+    # (file_cache.reload_if_moved) — invalidate_cache() reaches only its caller.
+    _discovered_cache, _discovered_stamp = reload_if_moved(
+        [path], _discovered_cache, _discovered_stamp, lambda: _read_discovered(path),
+    )
     return _discovered_cache
 
 

@@ -45,6 +45,7 @@ async def _rate_limit_dep(request: Request) -> None:
     )
     request.state.rl_remaining = decision.remaining
     request.state.rl_reset = decision.reset_at
+    request.state.rl_counted = decision.counted
     if not decision.allowed:
         raise HTTPException(
             status_code=429,
@@ -69,11 +70,13 @@ _CORS_HEADERS = {
 
 
 def _rl_headers(request: Request) -> dict:
-    return {
-        "X-RateLimit-Limit": str(_RATE_LIMIT),
-        "X-RateLimit-Remaining": str(getattr(request.state, "rl_remaining", 0)),
-        "X-RateLimit-Reset": str(getattr(request.state, "rl_reset", 0)),
-    }
+    headers = {"X-RateLimit-Limit": str(_RATE_LIMIT)}
+    # Uncounted (the limiter's store couldn't answer): no count to report,
+    # rather than a full quota that describes nothing.
+    if getattr(request.state, "rl_counted", True):
+        headers["X-RateLimit-Remaining"] = str(getattr(request.state, "rl_remaining", 0))
+        headers["X-RateLimit-Reset"] = str(getattr(request.state, "rl_reset", 0))
+    return headers
 
 
 def _pub_json(data, request: Request, max_age: int = CACHE_TTL_LIST_S) -> JSONResponse:

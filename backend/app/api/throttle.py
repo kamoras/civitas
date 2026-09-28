@@ -225,6 +225,9 @@ class Decision:
     # the current fixed window is not it, because most of that window
     # still counts for a while after.
     reset_at: int
+    # False when the store couldn't count the request (it was let through
+    # uncounted): `remaining` then describes nothing.
+    counted: bool = True
 
 
 def _retry_at(window: int, period: float, current: int, previous: int, limit: int, cost: int) -> int:
@@ -456,7 +459,7 @@ def hit(bucket: str, key: str | None, *, limit: int, period: float, cost: int = 
     elapsed = (now - window * period) / period
     reset_at = int((window + 2) * period)
     if key is None:
-        return Decision(True, limit, int((window + 1) * period))
+        return Decision(True, limit, int((window + 1) * period), counted=False)
     # Counted under today's key; read under yesterday's too (ClientKey).
     keys = (str(key), _previous_key(key) or str(key))
     try:
@@ -483,7 +486,7 @@ def hit(bucket: str, key: str | None, *, limit: int, period: float, cost: int = 
             _purge_expired(conn, now)
     except sqlite3.Error:
         logger.warning("Throttle %r unavailable — allowing the request", bucket, exc_info=True)
-        return Decision(True, limit, int((window + 1) * period))
+        return Decision(True, limit, int((window + 1) * period), counted=False)
     remaining = max(0, math.floor(limit - estimate)) if allowed else 0
     return Decision(allowed, remaining, reset_at)
 

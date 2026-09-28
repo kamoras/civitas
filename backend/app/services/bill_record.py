@@ -88,7 +88,10 @@ async def fetch_bill_record(
     type_path, number = parse_bill_id(bill_id)
     out: dict = {"unavailable": [], "not_found": False}
     keys = {part: f"bill-record-{part}-{congress}-{type_path}-{number}" for part in _PARTS}
-    cached = {part: api_cache_get(db, _CACHE_TIER, key, max_age_hours=_CACHE_HOURS) for part, key in keys.items()}
+    # One thread hop for every part's cache read: off the event loop.
+    cached = await asyncio.to_thread(
+        lambda: {part: api_cache_get(db, _CACHE_TIER, key, max_age_hours=_CACHE_HOURS) for part, key in keys.items()},
+    )
     if (cached["bill"] or {}).get("not_found"):
         out["not_found"] = True
         return out
@@ -105,7 +108,7 @@ async def fetch_bill_record(
         if data is NOT_FOUND:
             if part == "bill":
                 out["not_found"] = True
-                api_cache_set(db, _CACHE_TIER, key, {"not_found": True}, normal_ttl_hours=_CACHE_HOURS)
+                await asyncio.to_thread(api_cache_set, db, _CACHE_TIER, key, {"not_found": True}, normal_ttl_hours=_CACHE_HOURS)
                 return out
             data = {}
         if data is None:
@@ -120,7 +123,7 @@ async def fetch_bill_record(
             "text": data.get("textVersions"),
         }[part]
         out[part] = value
-        api_cache_set(db, _CACHE_TIER, key, {"value": value}, normal_ttl_hours=_CACHE_HOURS)
+        await asyncio.to_thread(api_cache_set, db, _CACHE_TIER, key, {"value": value}, normal_ttl_hours=_CACHE_HOURS)
     return out
 
 

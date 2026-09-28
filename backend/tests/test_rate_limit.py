@@ -161,3 +161,17 @@ async def test_a_write_refusal_says_when_to_retry(monkeypatch):
     decision = throttle.hit("write", throttle.client_key("8.8.4.12", "write"), limit=20, period=60.0)
     assert not decision.allowed
     assert exc.value.headers["Retry-After"] == str(int(decision.reset_at - now))
+
+
+def test_an_uncounted_public_request_reports_no_remaining_quota():
+    """A limiter that couldn't count (its store unavailable) must not
+    advertise a full quota."""
+    from types import SimpleNamespace
+
+    from app.api.public import _rl_headers
+
+    counted = SimpleNamespace(state=SimpleNamespace(rl_remaining=5, rl_reset=100, rl_counted=True))
+    uncounted = SimpleNamespace(state=SimpleNamespace(rl_remaining=60, rl_reset=100, rl_counted=False))
+    assert _rl_headers(counted)["X-RateLimit-Remaining"] == "5"
+    assert "X-RateLimit-Remaining" not in _rl_headers(uncounted)
+    assert _rl_headers(uncounted)["X-RateLimit-Limit"] == "60"

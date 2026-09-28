@@ -202,6 +202,7 @@ class TestFailsOpen:
     def test_hit(self):
         decision = throttle.hit("b", "k", limit=3, period=60)
         assert decision.allowed and decision.remaining == 3
+        assert not decision.counted
 
     def test_claim(self):
         assert throttle.claim("b", "k", period=30)

@@ -71,7 +71,7 @@ async def test_a_vote_on_a_missing_issue_does_not_use_up_the_day(db_session):
     assert again.value.status_code == 404  # not 429
 
 
-async def test_a_new_day_allows_a_new_vote(db_session, monkeypatch):
+async def test_a_vote_more_than_a_day_later_is_allowed(db_session, monkeypatch):
     from datetime import datetime, timezone
 
     from app.api import throttle
@@ -93,11 +93,16 @@ async def test_a_failure_after_the_vote_commits_keeps_the_claim(db_session):
     # The vote is counted; releasing the claim on a later error would let
     # the visitor's retry count a second one.
     issue_id = _issue(db_session)
+    real_query = db_session.query
+    calls = []
 
-    def broken_refresh(_obj):
-        raise RuntimeError("connection lost")
+    def query_then_lose_the_connection(*args, **kwargs):
+        calls.append(args)
+        if len(calls) > 1:  # the totals read, after the vote committed
+            raise RuntimeError("connection lost")
+        return real_query(*args, **kwargs)
 
-    with patch.object(db_session, "refresh", broken_refresh), pytest.raises(RuntimeError):
+    with patch.object(db_session, "query", query_then_lose_the_connection), pytest.raises(RuntimeError):
         await _vote(db_session, "203.0.113.9", issue_id)
     with pytest.raises(HTTPException) as again:
         await _vote(db_session, "203.0.113.9", issue_id)
@@ -122,3 +127,14 @@ async def test_a_vote_whose_dedup_cannot_be_checked_is_refused(db_session, tmp_p
     assert exc.value.status_code == 503
     db_session.expire_all()
     assert db_session.get(ActionIssue, issue_id).concerned_count in (0, None)
+
+
+async def test_concurrent_votes_are_all_counted(db_session, monkeypatch):
+    # Several API workers: a count read and written back plus one would let
+    # simultaneous votes both write the same total.
+    import asyncio
+
+    issue_id = _issue(db_session)
+    await asyncio.gather(*(_vote(db_session, f"203.0.113.{n}", issue_id) for n in range(20, 26)))
+    db_session.expire_all()
+    assert db_session.get(ActionIssue, issue_id).concerned_count == 6

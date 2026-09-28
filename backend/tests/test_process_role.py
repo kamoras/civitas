@@ -121,12 +121,24 @@ def test_a_request_during_the_preload_waits_for_it_rather_than_loading_twice(mon
     assert len(built) == 1
 
 
-def test_a_failed_model_preload_is_only_logged():
+def test_a_failed_model_preload_is_only_logged_and_the_other_still_loads():
     def boom():
         raise OSError("no model files")
 
-    with patch("app.pipeline.vector_store.get_similarity_model", boom):
+    loaded = []
+    with patch("app.pipeline.vector_store.get_similarity_model", boom), \
+            patch("app.pipeline.vector_store.get_embedding_model", lambda: loaded.append("primary")):
         main_module._preload_models()
+    assert loaded == ["primary"]
+
+
+def test_a_late_scheduler_job_still_runs():
+    # APScheduler's default one-second grace would skip a heartbeat or the
+    # nightly run whenever the loop was busy at its moment.
+    from app import scheduler
+
+    assert scheduler.scheduler._job_defaults["misfire_grace_time"] >= 60
+    assert scheduler.scheduler._job_defaults["coalesce"] is True
 
 
 class TestWriters:

@@ -394,6 +394,11 @@ async def get_explore_document_summary(
             ):
                 full_text += delta
                 yield _sse({"delta": delta})
+        # A reader who leaves mid-stream (GeneratorExit, not caught here)
+        # keeps the claim, on purpose: the prompt was already sent, and
+        # processing it before the first token is most of a generation's
+        # cost on this hardware — given back, a client could start and
+        # abandon generations back to back.
         except Exception:
             logger.exception("Explore doc summary streaming failed for doc_id=%s", doc_id)
             if not full_text:

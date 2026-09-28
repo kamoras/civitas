@@ -74,13 +74,14 @@ def _preload_models() -> None:
     classifies intent with. Every API worker holds its own copy; the primary
     adds ~10 MB to a worker (measured). (Until 2026-09 only the primary was
     preloaded, so the first search after a restart paid the other's load.)"""
-    try:
-        from app.pipeline.vector_store import get_embedding_model, get_similarity_model
+    from app.pipeline import vector_store
 
-        get_similarity_model()
-        get_embedding_model()
-    except Exception as e:
-        logging.getLogger("app.main").warning("Embedding model preload failed: %s", e)
+    # Each on its own: one failing must not leave the other to a request.
+    for load in (vector_store.get_similarity_model, vector_store.get_embedding_model):
+        try:
+            load()
+        except Exception as e:
+            logging.getLogger("app.main").warning("Embedding model preload failed (%s): %s", load.__name__, e)
 
 
 def _invalidate_orphaned_pipelines() -> None:

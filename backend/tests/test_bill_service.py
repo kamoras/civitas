@@ -534,7 +534,7 @@ class TestChangesFromThePipelineProcess:
         rebuilt = []
         monkeypatch.setattr(threading, "Thread", lambda target, **_kw: type(
             "T", (), {"start": lambda self: (target(), rebuilt.append(True))})())
-        monkeypatch.setattr(bill_service, "_last_changed_check", 0.0)
+        bill_service._changes.expire()
         assert get_bills_in_flight(shared_db).total == 1  # served stale, rebuild kicked off
         assert rebuilt == [True]
         assert get_bills_in_flight(shared_db).total == 2
@@ -550,7 +550,7 @@ class TestChangesFromThePipelineProcess:
         get_bills_in_flight(shared_db)
         started = []
         monkeypatch.setattr(threading, "Thread", lambda **_kw: started.append(True))
-        monkeypatch.setattr(bill_service, "_last_changed_check", 0.0)
+        bill_service._changes.expire()
         get_bills_in_flight(shared_db)
         assert started == []
 
@@ -560,7 +560,7 @@ class TestChangesFromThePipelineProcess:
         queries = []
         real = shared_db.query
         monkeypatch.setattr(shared_db, "query", lambda *a, **k: (queries.append(a), real(*a, **k))[1])
-        monkeypatch.setattr(bill_service, "_last_changed_check", 0.0)
+        bill_service._changes.expire()
         bill_service._changed_since(shared_db, bill_service.utcnow())
         bill_service._changed_since(shared_db, bill_service.utcnow())
         assert len(queries) == 1
