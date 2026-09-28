@@ -1,0 +1,18 @@
+{
+  "_about": "Content Civitas published and withdrew, with the reason. Each entry's issues are removed from the database by an Alembic data migration (named in `migration`), their pages answer 410 with the reason, and its Bluesky posts are deleted by the retraction job (app/retractions.py), which records each deletion. Entries are never removed from this file: it is the public record of what was withdrawn and why.",
+  "retractions": [
+    {
+      "date": "2026-09-27",
+      "migration": "0008",
+      "issueIds": [753, 759],
+      "publicIds": ["i612cf1a1", "i1679cbc7"],
+      "bskyPosts": [
+        "at://did:plc:s2jly6odtnwefp2aaofjzz7e/app.bsky.feed.post/3mwj3vwpk4s2x",
+        "at://did:plc:s2jly6odtnwefp2aaofjzz7e/app.bsky.feed.post/3mwivfhl73a2k",
+        "at://did:plc:s2jly6odtnwefp2aaofjzz7e/app.bsky.feed.post/3mweij36ijc22",
+        "at://did:plc:s2jly6odtnwefp2aaofjzz7e/app.bsky.feed.post/3mwbo5d3jmw2d"
+      ],
+      "reason": "Both issues were assembled by a clustering step that joined unrelated news stories into one (fixed 2026-09-27, PR #659). Issue i1679cbc7 combined floods in Bangkok, a hurricane near Hawaii, a nor'easter in the Northeast and an HIV emergency in Fiji; issue i612cf1a1, about the Trump-Xi summit, took its headline from an unrelated article and cited unrelated sources. Their Bluesky posts were written by a language model (the poster has since been changed to quote sources word for word, PR #660) and included statements no source made. The articles behind them are not stored, so they could not be corrected and were withdrawn."
+    }
+  ]
+}

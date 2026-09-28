@@ -23,6 +23,7 @@ from app.pipeline.election_pipeline import (
 from app.pipeline.analyze.action_center import get_action_refresh_state, refresh_action_issues
 from app.pipeline.congress_activity import congress_sync_age, eastern_today, is_congress_sync_running, run_congress_sync
 from app.pipeline.analyze.congress_bluesky import post_daily_congress, post_weekly_congress
+from app.retractions import delete_retracted_posts
 from app.time_utils import utcnow
 from app.background import WritesHeld, start_writer
 from app.pipeline import lease
@@ -528,6 +529,26 @@ def _congress_activity_sync() -> None:
     _start_job(_run, name="congress-activity-sync")
 
 
+def _delete_retracted_posts() -> None:
+    """Delete the Bluesky posts the retraction log lists (app/retractions.py),
+    retrying any that failed; a no-op once every one is recorded as gone."""
+    def _run():
+        with lease.job(lease.RETRACTIONS, who="Retracted post deletion") as held:
+            if not held:
+                return
+            db = SessionLocal()
+            try:
+                n = delete_retracted_posts(db)
+                if n:
+                    logger.info("Deleted %d retracted Bluesky post(s)", n)
+            except Exception:
+                logger.exception("Retracted post deletion failed")
+            finally:
+                db.close()
+
+    _start_job(_run, name="retracted-post-deletion")
+
+
 def _nightly_trigger() -> CronTrigger | None:
     """The nightly chain's trigger, from PIPELINE_CRON_SCHEDULE; None (and
     logged) when the setting isn't a five-field cron expression."""
@@ -598,6 +619,14 @@ def start_scheduler() -> None:
         _election_ballot_sync,
         CronTrigger(hour="*/6", minute="50", timezone="UTC"),
         id="election_ballot_sync",
+        replace_existing=True,
+    )
+
+    # Retracted posts — hourly at :25, a no-op once every listed post is gone.
+    scheduler.add_job(
+        _delete_retracted_posts,
+        CronTrigger(minute="25", timezone="UTC"),
+        id="retracted_post_deletion",
         replace_existing=True,
     )
 
