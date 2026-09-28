@@ -343,8 +343,8 @@ export default function ScoresChapter() {
             </Step>
             <Step n={3} title="Divide by the chamber's total at each stage">
               Few bills get far, so later stages have small totals and are worth more: a bill that
-              becomes law counts about as much as 47 introductions in the House and 67 in the
-              Senate. The stages are added up so the average member scores 1.0.
+              becomes law counts as much as dozens of introductions. The stages are added up so the
+              average member scores 1.0.
             </Step>
             <Step n={4} title="Compare with the typical member of the same status">
               Majority-party members advance bills far more often, so each member is compared with
@@ -375,11 +375,11 @@ export default function ScoresChapter() {
             Checked against Volden and Wiseman&apos;s own published scores for the 110th–118th
             Congresses, this version ranks members at a rank correlation of 0.90 in the House and
             0.97 in the Senate. The stage each bill is given was checked bill by bill against their
-            118th Congress counts (backend/scripts/research_les_stage_classifier.py): 0.94 or higher
-            at every stage. The commemorative classifier was calibrated against their commemorative
-            counts (backend/scripts/calibrate_commemorative.py): exact per-member counts for 87% of
-            the 118th House, about one false flag per 1,000 bills. The reproduction is
-            backend/scripts/research_les_stage_weighting.py.
+            118th Congress counts (backend/scripts/research_les_stage_classifier.py): at least 0.93
+            at every stage compared. The commemorative classifier was calibrated against their
+            commemorative counts (backend/scripts/calibrate_commemorative.py): exact per-member
+            counts for 87% of the 118th House, about one false flag per 1,000 bills. The
+            reproduction is backend/scripts/research_les_stage_weighting.py.
           </P>
           <P>
             One difference remains: their top &ldquo;substantive and significant&rdquo; tier (10×)
@@ -408,7 +408,7 @@ export default function ScoresChapter() {
         </More>
       </Section>
 
-      <Section id="leadership" kicker="Shown on every profile" title="Leadership and ideology">
+      <Section id="leadership" kicker="Context on the leaderboard" title="Leadership and ideology">
         <P>
           Two more figures come from the cosponsorship network — who signs onto whose bills, a
           separate network for each chamber. Leadership feeds Legislative Effectiveness; ideology is
@@ -426,10 +426,11 @@ export default function ScoresChapter() {
             the median member sits near 50 and the lowest member scores 0.
           </P>
           <P>
-            Network position takes years to build, so for members with under six years in office
-            both the score and the displayed number are pulled toward 50 in proportion to tenure. A
-            newcomer reads as &ldquo;not enough track record yet&rdquo;, not &ldquo;bad at
-            leadership&rdquo;.
+            Network position takes years to build, so for members with under six years in office,
+            the part of Legislative Effectiveness built from it — and the leader or backbencher
+            label on their profile — is pulled toward neutral in proportion to tenure. A newcomer
+            reads as &ldquo;not enough track record yet&rdquo;, not &ldquo;bad at leadership&rdquo;.
+            The leaderboard shows the unadjusted network score.
           </P>
         </Sub>
         <Sub title="Ideology (0–1) and partisan depth">
@@ -444,10 +445,11 @@ export default function ScoresChapter() {
             Partisan depth — how strongly a member leans within each policy area — comes mainly from
             their votes. The ideology score only steadies it for members with few votes, fading to
             no weight at 15. The label (deep, moderate or centrist) is the member&apos;s third
-            within their own party, so a fixed cut-off can&apos;t make one party look more extreme
-            just because the two parties sit on different ranges. The one-line description on a
-            profile (say, &ldquo;progressive Democratic leader&rdquo;) combines ideology, party and
-            a leadership tier.
+            within their own party — or &ldquo;cross-cutting&rdquo; when more than 30% of their
+            positions sit with the other party — so a fixed cut-off can&apos;t make one party look
+            more extreme just because the two parties sit on different ranges. The one-line
+            description on a profile (say, &ldquo;progressive Democratic leader&rdquo;) combines
+            ideology, party and a leadership tier.
           </P>
         </Sub>
       </Section>
@@ -491,12 +493,12 @@ export default function ScoresChapter() {
         </P>
         <P>
           These forms report each amount as a range, with no purchase price or share count, so no
-          profit or net-worth figure is produced — the ranges are shown as filed. The top range
-          (&ldquo;Over $50,000,000&rdquo;) has no ceiling and is shown as
-          &ldquo;$50,000,000+&rdquo;. The holdings chart is drawn from range midpoints and says so.
-          Asset categories come only from the type the filer declared on the form, never guessed
-          from an asset&apos;s name. A report that can&apos;t be read, such as a scanned paper
-          filing, is linked rather than machine-read.
+          profit or net-worth figure is produced — the ranges are shown as filed. A range with no
+          ceiling, such as &ldquo;Over $50,000,000&rdquo;, is shown as &ldquo;$50,000,000+&rdquo;.
+          The holdings chart sizes each asset by its range&apos;s midpoint (an open-ended range by
+          its minimum) and says so. Asset categories come only from the type the filer declared on
+          the form, never guessed from an asset&apos;s name. A report that can&apos;t be read, such
+          as a scanned paper filing, is linked rather than machine-read.
         </P>
       </Section>
     </AboutPage>

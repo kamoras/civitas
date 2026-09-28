@@ -39,9 +39,9 @@ export default function PresidentsAndJusticesChapter() {
           through the rules they started, and historians&apos; assessment. Historians count for 35%.
         </Point>
         <Point>
-          Where a president has no real data for a score — no polling before Truman, no digital
-          rulemaking record before Clinton — it reads N/A and is left out of their overall score,
-          rather than filled with a guess.
+          Where a president has no real data for a score — no digital rulemaking record before
+          Clinton, no historians&apos; rating yet for recent presidents — it reads N/A and is left
+          out of their overall score, rather than filled with a guess.
         </Point>
         <Point>
           Justices are scored on whether they side with colleagues differently depending on which
@@ -67,8 +67,9 @@ export default function PresidentsAndJusticesChapter() {
             Presidency Project at UC Santa Barbara, which aggregates AP-NORC, CNN-SSRS, Marist, Pew
             and Verasight — Gallup, the original source, stopped tracking presidential approval in
             February 2026. Presidents before Truman, from before polling, are scored on their
-            average margin of victory instead. The five who never won a presidential election in
-            their own right have neither and read N/A.
+            average margin of victory instead. The four who have neither — Tyler, Fillmore, Arthur
+            and Andrew Johnson, who never won a presidential election and served before polling —
+            read N/A.
           </P>
         </Sub>
         <Sub title="Effectiveness (21.67%)">
@@ -119,10 +120,11 @@ export default function PresidentsAndJusticesChapter() {
         <Sub title="How the parts combine">
           <P>
             Historical Legacy is held at exactly 35% whenever at least two of the other three have
-            data, and those share the rest. With only one of them available, the weights spread
-            evenly over whatever exists instead — one number isn&apos;t reliable enough to carry 65%
-            of a score (Fillmore&apos;s economy scores 100 on a Gold Rush boom he had little to do
-            with). Each president&apos;s page says how many scores their overall is built from.
+            data, and those share the rest. With only one of them available, Historical Legacy and
+            that one score share the weight in proportion to their usual weights (about 62% and 38%)
+            — one number isn&apos;t reliable enough to carry 65% of a score (Fillmore&apos;s economy
+            scores 100 on a Gold Rush boom he had little to do with). Each president&apos;s page
+            says how many scores their overall is built from.
           </P>
         </Sub>
         <More label="Why 35%, and why three scores were removed">

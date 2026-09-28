@@ -42,33 +42,33 @@ const PRINCIPLES: readonly { title: string; body: string }[] = [
   },
   {
     title: "Nothing asked about you",
-    body: "No account, no address, no ZIP code, no tracking cookies. Visits are counted in a way that can't be traced back to anyone.",
+    body: "No account, no address, no ZIP code, no tracking cookies. Visits are counted in a way that can't be traced back to anyone once the day is over.",
   },
 ];
 
 const SCORE_PARTS: readonly {
-  id: string;
+  href: string;
   name: string;
   question: string;
   high: string;
   low: string;
 }[] = [
   {
-    id: "funding",
+    href: "/about/scores#funding",
     name: "Funding Independence",
     question: "Who pays for their campaigns?",
     high: "Many small donors, money spread across many sources.",
     low: "Heavy reliance on PACs, a few big donors, or one industry.",
   },
   {
-    id: "alignment",
+    href: "/about/scores#alignment",
     name: "Constituent Alignment",
     question: "Do they vote the way their seat elected them to?",
     high: "Breaks with their party about as often as members in similar seats.",
     low: "Breaks far more often than that — or, less costly, far less.",
   },
   {
-    id: "effectiveness",
+    href: "/about/scores#effectiveness",
     name: "Legislative Effectiveness",
     question: "Do they get legislation done?",
     high: "Bills that advance and become law; cosponsors from both parties.",
@@ -147,8 +147,8 @@ export default function AboutOverview() {
         <div className="grid gap-3 sm:grid-cols-3">
           {SCORE_PARTS.map((s) => (
             <Link
-              key={s.id}
-              href={`/about/scores#${s.id}`}
+              key={s.href}
+              href={s.href}
               className="panel flex flex-col p-4 transition-colors hover:border-ink-min"
             >
               <span className="font-display text-base font-semibold text-ink-hi">{s.name}</span>
@@ -256,8 +256,8 @@ export default function AboutOverview() {
           One developer, as a hobby, on a Raspberry Pi at home. There is no company, no cloud
           service, no advertising and no outside money — Civitas takes nothing from parties,
           candidates or PACs and sells nothing. It exists partly to show that a civic accountability
-          tool doesn&apos;t need venture capital or a data center: the whole thing costs about $5–10
-          a month in electricity.
+          tool doesn&apos;t need venture capital or a data center: the whole thing uses about as
+          much electricity in a year as a refrigerator does in six weeks.
         </P>
         <div className="flex flex-wrap gap-2">
           <PillLink href={GITHUB_REPO_URL} external>

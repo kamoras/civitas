@@ -18,7 +18,10 @@ function pageSource(href: string): string {
 
 /** Every `id` a page renders: `<Section id="x">`, `<Sub id="x">`, raw `id="x"`. */
 function idsOn(href: string): Set<string> {
-  return new Set([...pageSource(href).matchAll(/\bid="([a-z0-9-]+)"/g)].map((m) => m[1]));
+  // Not `<Cite id=…>`: that names a reference slug, not an element on the page.
+  return new Set(
+    [...pageSource(href).matchAll(/(?<!<Cite )\bid="([a-z0-9-]+)"/g)].map((m) => m[1])
+  );
 }
 
 describe("ABOUT_CHAPTERS", () => {
@@ -66,14 +69,18 @@ describe("links between About pages", () => {
   // source is enough to check.
   it("only point at fragments that exist", () => {
     const pages = ["/about", ...ABOUT_CHAPTERS.map((c) => c.href)];
+    const checked: string[] = [];
     const broken: string[] = [];
     for (const from of pages) {
-      for (const m of pageSource(from).matchAll(/href=(?:"|\{`)(\/about[a-z/-]*)?#([a-z0-9-]+)/g)) {
+      for (const m of pageSource(from).matchAll(/href(?:=|: )"(\/about[a-z/-]*)?#([a-z0-9-]+)"/g)) {
         const to = m[1] ?? from;
-        if (m[2].includes("$")) continue;
+        checked.push(`${from} → ${to}#${m[2]}`);
         if (!pages.includes(to) || !idsOn(to).has(m[2])) broken.push(`${from} → ${to}#${m[2]}`);
       }
     }
+    // A pattern that stops matching would pass with nothing checked.
+    expect(checked).toContain("/about → /about/scores#funding");
+    expect(checked).toContain("/about/scores → /about/scores#leadership");
     expect(broken).toEqual([]);
   });
 

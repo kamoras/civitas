@@ -51,7 +51,7 @@ export const ABOUT_CHAPTERS: readonly AboutChapter[] = [
     href: "/about/data",
     title: "Data, AI & how it runs",
     blurb:
-      "Every data source, exactly where AI is and isn't used, what we record about visits, and the $80 computer it all runs on.",
+      "Every data source, exactly where AI is and isn't used, what we record about visits, and the single small computer it all runs on.",
   },
   {
     href: "/about/limitations",

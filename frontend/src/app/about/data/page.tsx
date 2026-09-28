@@ -51,7 +51,7 @@ export default function DataChapter() {
         </Point>
         <Point>
           No accounts, no cookies, no ad or analytics trackers. Visits are counted in a way that
-          can&apos;t be traced back to anyone, even by us.
+          can&apos;t be traced back to anyone once the day is over.
         </Point>
       </Summary>
 
@@ -116,8 +116,9 @@ export default function DataChapter() {
             </Fact>
             <Fact label="Vote Smart">Ballot measures for other states, quoted verbatim.</Fact>
             <Fact label="Census Bureau · Google Civic">
-              District boundaries, and — for the town selector only — lookups of a town hall&apos;s
-              public address, never a visitor&apos;s.
+              District boundaries; and lookups run only on addresses we chose — a town hall for the
+              town selector, a fixed public building per district to fill in candidate lists — never
+              a visitor&apos;s.
             </Fact>
             <Fact label="USAGov">
               Each state&apos;s election office, linked only after a check that the link still
@@ -180,8 +181,9 @@ export default function DataChapter() {
               the same, and short summaries of each period on the year-in-review timeline.
             </Item>
             <Item label="Developing issues">
-              A hedged draft about a bill&apos;s final passage, written from the roll-call record
-              before the news covers it, checked against that record and labelled as developing.
+              A hedged draft about a bill&apos;s final passage or a significant new federal rule,
+              written from the roll-call record or the Federal Register before the news covers it,
+              checked against that record and labelled as developing.
             </Item>
             <Item label="Explore">A summary of a document, only when you ask for one.</Item>
             <Item label="Justices">
@@ -301,13 +303,16 @@ export default function DataChapter() {
       <Section id="privacy" title="What we record about you">
         <P>
           No accounts, no cookies, no ad networks and no third-party analytics. We count visits on
-          our own server in a way designed so nobody — including us — can recover who visited:
+          our own server in a way designed so that, once a day is over, nobody — including us — can
+          recover who visited:
         </P>
         <List>
           <Item label="Daily unique visits">
             Each visitor&apos;s IP address is scrambled with a random key that exists only for the
             current day and is then deleted. Without the key, the scrambled value can&apos;t be
-            turned back into an address. Raw IP addresses and browser details are never stored.
+            turned back into an address. Raw IP addresses and browser identification strings are
+            never stored — only a coarse browser, operating system and device type (for example
+            &ldquo;Firefox, Windows, desktop&rdquo;).
           </Item>
           <Item label="Page views">A count per page type, per day.</Item>
           <Item label="Load times">
@@ -324,7 +329,7 @@ export default function DataChapter() {
       <Section id="infrastructure" title="The computer it runs on">
         <P>
           The whole of Civitas — database, models, pipeline and website — runs on one Raspberry Pi
-          5, an $80 single-board computer with 16 GB of memory and an NVMe drive, at home. It draws
+          5, a credit-card-sized computer with 16 GB of memory and an NVMe drive, at home. It draws
           about 5–12 watts; a cloud AI accelerator draws 250–400
           <Cite id="patterson2021" />. The trade is speed: the nightly pipeline takes hours rather
           than minutes, which is fine for a nightly job. See the{" "}
@@ -355,7 +360,7 @@ export default function DataChapter() {
             axe-core over the state ballot page and its research panels on every change; Lighthouse
             for contrast and load times
           </Fact>
-          <Fact label="Monthly cost">About $5–10, in electricity</Fact>
+          <Fact label="Energy">About 61 kWh a year for the whole site</Fact>
           <Fact label="Cloud services · outside funding">None · none</Fact>
         </Facts>
       </Section>

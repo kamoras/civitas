@@ -115,11 +115,11 @@ export default function NewsChapter() {
         </P>
         <P>
           One exception, labelled on the page as <strong className="text-ink-hi">Developing</strong>
-          : when the Senate or House passes a bill before the news has covered it, a short, hedged
-          draft is written from the roll-call record itself — a certified count, not an
-          interpretation — and checked against that record. It carries a note that broader coverage
-          hasn&apos;t confirmed it yet, and isn&apos;t posted anywhere else until press coverage
-          does.
+          : when the Senate or House passes a bill, or an agency publishes a significant rule,
+          before the news has covered it, a short, hedged draft is written from the roll-call record
+          or the Federal Register itself — a primary record, not an interpretation — and checked
+          against it. It carries a note that broader coverage hasn&apos;t confirmed it yet, and
+          isn&apos;t posted anywhere else until press coverage does.
         </P>
         <P>
           Recommended actions are procedural — contact your representatives, attend a public

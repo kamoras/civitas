@@ -51,8 +51,8 @@ export default function LimitationsChapter() {
           other.
         </Point>
         <Point>
-          Ballot pages can&apos;t show local contests without asking for your address, which we
-          won&apos;t do. The news sources lean center to left.
+          Ballot pages show local contests only for a few hand-picked towns; anywhere else it would
+          take your address, which we won&apos;t ask for. The news sources lean center to left.
         </Point>
       </Summary>
 
@@ -203,9 +203,10 @@ export default function LimitationsChapter() {
             Ballots are printed per precinct, so there&apos;s no single &ldquo;ballot&rdquo; for a
             whole state. Pages show federal contests, statewide measures and — where a state&apos;s
             own results name them — statewide offices, state legislative seats and judgeships.
-            County and city offices and local measures can&apos;t be shown without taking a home
-            address to a lookup service, and we won&apos;t do that. Every page lists what it omits
-            for that state and links to the election office. See{" "}
+            County and city offices and local measures are shown only for a small, hand-picked list
+            of towns (looked up from each town hall&apos;s address); anywhere else, showing them
+            would mean taking a home address to a lookup service, and we won&apos;t do that. Every
+            page lists what it omits for that state and links to the election office. See{" "}
             <A href="/about/elections">Elections &amp; ballots</A>.
           </P>
         </Limitation>
