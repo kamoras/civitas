@@ -888,6 +888,11 @@ query-independent priors.
 **What is indexed:** Senate and House floor speeches, presidential actions
 (executive orders, proclamations, memoranda), Supreme Court opinions, and
 Federal Register rulemaking documents — five source types, not bill text.
+Floor speeches come from each day's Congressional Record granules, listed in
+full: until 2026-09 only the first page of 100 was read, and GovInfo lists a
+day's House granules first, so on busy days (four of about two dozen Senate
+session days from late July to late September 2026) no Senate remarks were
+indexed. A listing that fails is retried, never taken as a day with none.
 Every document feeds three structures, all rebuilt from the
 `explore_documents` table at the end of each ingest run:
 

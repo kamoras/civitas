@@ -10,7 +10,7 @@ rebuilt from it at the end of every ingest run.
 flowchart TB
     subgraph INDEX["Indexing — during pipeline runs"]
         direction TB
-        S1["Senate floor speeches<br/>GovInfo CREC packages"]
+        S1["Senate floor speeches<br/>GovInfo CREC packages<br/>every granule page (nextPage)"]
         S2["House floor speeches<br/>GovInfo CREC packages"]
         S3["Presidential actions<br/>executive orders, proclamations, memoranda"]
         S4["Supreme Court opinions<br/>Oyez + supremecourt.gov"]
