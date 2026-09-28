@@ -883,6 +883,12 @@ def test_the_states_printed_name_is_kept_but_never_a_last_first_one(db_session):
     assert olszewski.ballot_name == 'John "Johnny O" Olszewski, Jr.'
     assert wallace.ballot_name is None
 
+    # "Last, First, Jr." is still a last-first printing, suffix or not; so is
+    # "Lee, Jr.", a surname and its suffix.
+    for printed in ("OLSZEWSKI, JOHN, JR.", "Wallace, Jr."):
+        sc._note_ballot_name(db_session, wallace, {"display_name": printed})
+        assert wallace.ballot_name is None
+
 
 from app.pipeline.fetch.state_candidates_grouped_list_pdf import (  # noqa: E402
     fetch_confirmed_candidates as fetch_grouped_list,

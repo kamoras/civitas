@@ -323,11 +323,12 @@ def _surname_fallbacks(
 _KNOWN_PARTIES = frozenset(PARTY_CODE_MAP.values())
 
 
-def _record_given(display_name: str | None, last_name: str) -> tuple[str, str]:
-    """(first given name, else "", leading initial if it leads with one) a record's display name
-    states — its surname's words, honorifics and suffixes set aside, so
-    "J. Smith" states only the initial "j", and "Smith", "Smith Jr." and
-    "Dr. Smith" state nothing."""
+def _record_given(display_name: str | None, last_name: str) -> tuple[list[str], str]:
+    """(every full given name, leading initial if it leads with one) a
+    record's display name states — its surname's words, honorifics and
+    suffixes set aside, so "J. Smith" states only the initial "j", "Mary
+    Anne Smith" both "mary" and "anne", and "Smith", "Smith Jr." and "Dr.
+    Smith" state nothing."""
     display = _without_trailing_suffix(display_name or "")
     if "," in display:
         words = _fold(display.split(",", 1)[1]).replace(".", " ").split()
@@ -336,7 +337,7 @@ def _record_given(display_name: str | None, last_name: str) -> tuple[str, str]:
         words = [w for w in _fold(display).replace(".", " ").split() if w not in surname]
     words = ["".join(ch for ch in w if ch.isalpha()) for w in words]
     words = [w for w in words if w and w not in _NOT_A_NAME]
-    full = next((w for w in words if len(w) > 1), "")
+    full = [w for w in words if len(w) > 1]
     # The leading initial, only when the name really leads with one
     # ("J. Robert Smith"): "John Smith" states "john", not just "j".
     return full, (words[0] if words and len(words[0]) == 1 else "")
@@ -363,10 +364,17 @@ def _contradicts(
         # JAMES, or J): that fits, whatever the middle name.
         return False
     if wanted:
+        if theirs_initial and _leads_with_initial(cand.name or "") and theirs_initial == wanted[0][0]:
+            # The mirror: FEC's own leading initial ("SMITH, J ROBERT") is
+            # the record's first given name's ("John Smith").
+            return False
         tokens = _given_names(cand.name or "")
         if tokens:
-            return not any(t == wanted or t.startswith(wanted) or wanted.startswith(t) for t in tokens)
-        return bool(theirs_initial) and theirs_initial != wanted[0]
+            # Any of the record's given names against any of theirs, both
+            # ways: "Maria Elvira Salazar" is FEC's "SALAZAR, ELVIRA", and
+            # "Mary Anne Smith" is "SMITH, ANNE".
+            return not any(t == w or t.startswith(w) or w.startswith(t) for t in tokens for w in wanted)
+        return bool(theirs_initial) and theirs_initial != wanted[0][0]
     if initial:  # an initial alone ("J. Smith") against theirs
         return bool(theirs_initial) and theirs_initial != initial
     return False  # no given name stated: nothing to contradict with
@@ -477,6 +485,17 @@ def _fec_style_name(display_name: str, last_name: str) -> str:
     return display_name.upper()
 
 
+def _ballot_party(record: dict) -> str:
+    """The party a ballot-only row for `record` is stored under. A party
+    the matcher has no code for (South Carolina's Workers, say) keeps the
+    state's own label rather than reading as "unknown"."""
+    return (
+        PARTY_CODE_MAP.get(record.get("party") or "")
+        or (record.get("party_label") or "").strip().upper()
+        or "UNK"
+    )
+
+
 def _keep_ballot_only(
     db: Session, race: Race, record: dict, claimed: set[str] = frozenset(),
 ) -> str | None:
@@ -504,13 +523,7 @@ def _keep_ballot_only(
         cand = Candidate(id=cid, race_id=race.id)
         db.add(cand)
     cand.name = _fec_style_name(display, record["last_name"])
-    # A party the matcher has no code for (South Carolina's Workers, say)
-    # keeps the state's own label rather than reading as "unknown".
-    cand.party = (
-        PARTY_CODE_MAP.get(record.get("party") or "")
-        or (record.get("party_label") or "").strip().upper()
-        or "UNK"
-    )
+    cand.party = _ballot_party(record)
     cand.has_raised_funds = False
     cand.incumbent_challenge = None
     cand.candidate_status = None
@@ -653,6 +666,18 @@ def _given_initial(name: str) -> str:
     return ""
 
 
+def _leads_with_initial(name: str) -> bool:
+    """Whether an FEC-style name's given half leads with a bare initial
+    ("SMITH, J ROBERT", "SMITH, T.J."), honorifics skipped."""
+    if "," not in name:
+        return False
+    for token in _fold(name.split(",", 1)[1]).replace(".", " ").split():
+        word = "".join(ch for ch in token if ch.isalpha())
+        if word and word not in _NOT_A_NAME:
+            return len(word) == 1
+    return False
+
+
 def _same_given_name(a: str, b: str) -> bool:
     """Whether two FEC-style names' given names can be the same person's:
     equal, one a short form of the other ("DAN" / "DANIEL"), or — where
@@ -667,21 +692,31 @@ def _same_given_name(a: str, b: str) -> bool:
     return bool(ia) and ia == ib
 
 
+def _surnames_agree(a: str, b: str) -> bool:
+    """Whether two folded surnames can be one person's: equal, or one the
+    last word of the other — the multi-word equivalence the matcher's first
+    two fallbacks accept ("LEGER FERNANDEZ, TERESA" printed by one source,
+    "Teresa Leger Fernandez", surname "Fernandez", by another)."""
+    return bool(a) and (a == b or a.split()[-1:] == [b] or b.split()[-1:] == [a])
+
+
 def _placeholder_for(
     db: Session, race: Race, record: dict, *,
     reference: str | None = None, claimed: set[str] = frozenset(),
 ) -> Candidate | None:
     """This race's ballot-only row for the same PERSON as `record`: same
-    party, same surname, and a given name compatible (_same_given_name)
-    with `reference` — the FEC row the record matched, when dropping — or
+    party (_ballot_party), same surname (_surnames_agree), and a given name
+    compatible (_same_given_name) with `reference` — the FEC row the record matched, when dropping — or
     with the record's own. Only a UNIQUE such row, the record's exact given
     name breaking a tie, and never one this pass already `claimed` for
     someone (Chris and Christine Smith both on one list). Nothing looser: a
     surname and party alone would take Mary Smith's row for John's."""
     display = (record.get("display_name") or "").strip()
-    party = PARTY_CODE_MAP.get(record.get("party") or "")
-    if not display or not party:
+    if not display:
         return None
+    # The party the row was stored under (_ballot_party), so an unaffiliated
+    # or third-party candidate's row is found as well as a Democrat's.
+    party = _ballot_party(record)
     wanted = _fec_style_name(display, record["last_name"])
     surname = _candidate_surname(wanted)
     rows = [
@@ -689,7 +724,7 @@ def _placeholder_for(
         .filter(Candidate.race_id == race.id, Candidate.id.startswith(BALLOT_ONLY_ID_PREFIX))
         .all()
         if c.id not in claimed and c.party == party
-        and _candidate_surname(c.name or "") == surname
+        and _surnames_agree(_candidate_surname(c.name or ""), surname)
         and (
             _same_given_name(c.name or "", wanted)
             # The FEC row's name too — another source may have spelled the
@@ -1188,7 +1223,7 @@ def _note_ballot_name(db: Session, cand: Candidate, record: dict) -> None:
     printed = clean_display_name(record.get("display_name") or "")
     if len(printed.split()) < 2:
         return
-    if "," in printed and not _SUFFIX_AFTER_COMMA_RE.search(printed):
+    if "," in _without_trailing_suffix(printed):
         return
     if cand.ballot_name != printed:
         cand.ballot_name = printed

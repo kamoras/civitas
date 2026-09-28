@@ -901,6 +901,64 @@ class TestAWeakerSourceNeverPrunesTheCertifiedBallot:
         assert sc._may_prune({"general_ballot_complete": True}, {"strategy": "tabular"}) is False
         assert sc._may_prune({"general_ballot_complete": True}, {"general_ballot_complete": True}) is True
 
+    @pytest.mark.parametrize("display, fec, matches", [
+        # Either side's given names, any of them, and FEC's own leading
+        # initial, fit — the other party's code alone is no contradiction.
+        ("John Smith", "SMITH, J ROBERT", True),
+        ("Mary Anne Smith", "SMITH, ANNE", True),
+        ("Maria Elvira Smith", "SMITH, ELVIRA", True),
+        ("Mary Smith", "SMITH, JOHN", False),
+        ("Mary Smith", "SMITH, J ROBERT", False),
+        ("J. Smith", "SMITH, MARY", False),
+        ("Mary Smith", "SMITH, J", False),
+    ])
+    def test_every_given_name_counts_on_both_sides(self, db_session, display, fec, matches):
+        _race(db_session, "2026-HOUSE-CA-12", "CA", office="H", district=12)
+        _candidate(db_session, "H1", "2026-HOUSE-CA-12", fec, party="DEM")
+        db_session.commit()
+        rows = db_session.get(Race, "2026-HOUSE-CA-12").candidates
+        found = sc._match_candidate(rows, "SMITH", "L", display)
+        assert (found is not None and found.id == "H1") is matches
+
+    @pytest.mark.parametrize("party, label", [("", "Unaffiliated"), (None, "Working Families"), ("", "")])
+    def test_a_partyless_or_unmapped_placeholder_is_still_found(self, db_session, party, label):
+        """The row is stored under the state's own label (or UNK); looking
+        it up by PARTY_CODE_MAP alone found nothing, so the person was shown
+        twice once they filed, or twice under two spellings."""
+        _race(db_session, "2026-HOUSE-NC-1", "NC", office="H", district=1)
+        db_session.commit()
+
+        def rec(name):
+            return {"office": "H", "district": 1, "party": party, "party_label": label,
+                    "last_name": "DOE", "display_name": name}
+
+        sc._apply_ballot(db_session, 2026, "NC", [rec("Jane Doe")], keep_unlisted=True, authoritative=True)
+        sc._apply_ballot(db_session, 2026, "NC", [rec("Jane Q. Doe")], keep_unlisted=True,
+                         authoritative=False, prune=False)
+        assert len([i for i in self._ids(db_session) if i.startswith("ballot:")]) == 1
+        _candidate(db_session, "H1", "2026-HOUSE-NC-1", "DOE, JANE", party="IND")
+        db_session.commit()
+        sc._apply_ballot(db_session, 2026, "NC", [rec("Jane Doe")], keep_unlisted=True,
+                         authoritative=False, prune=False)
+        assert self._ids(db_session) == ["H1"]
+
+    def test_a_multi_word_surname_placeholder_is_one_person(self, db_session):
+        """One source prints "Leger Fernandez, Teresa", another "Teresa
+        Leger Fernandez" and reads the surname as "Fernandez"."""
+        _race(db_session, "2026-HOUSE-NM-3", "NM", office="H", district=3)
+        db_session.commit()
+        sc._apply_ballot(db_session, 2026, "NM", [
+            {"office": "H", "district": 3, "party": "G", "last_name": "LEGER FERNANDEZ",
+             "display_name": "Leger Fernandez, Teresa"},
+        ], keep_unlisted=True, authoritative=True)
+        sc._apply_ballot(db_session, 2026, "NM", [
+            {"office": "H", "district": 3, "party": "G", "last_name": "FERNANDEZ",
+             "display_name": "Teresa Leger Fernandez"},
+        ], keep_unlisted=True, authoritative=False, prune=False)
+        assert len([i for i in self._ids(db_session) if i.startswith("ballot:")]) == 1
+        assert sc._surnames_agree("fernandez", "leger fernandez")
+        assert not sc._surnames_agree("fernandez", "hernandez")
+
 
 class TestAlertsAndCadence:
     def test_a_new_failure_later_in_the_day_is_not_silenced(self, monkeypatch):
