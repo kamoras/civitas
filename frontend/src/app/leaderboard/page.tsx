@@ -12,11 +12,13 @@ import BranchSelector, { type Branch } from "@/components/BranchSelector";
 import Footer from "@/components/layout/Footer";
 import PageFallback from "@/components/layout/PageFallback";
 import BackToTop from "@/components/BackToTop";
+import PresidentScorecard from "@/components/scorecard/PresidentScorecard";
 import {
   fetchLeaderboard,
   fetchRepLeaderboard,
   fetchPresidentLeaderboard,
   fetchCurrentPresident,
+  fetchPresidentScoreBreakdown,
   fetchJusticeLeaderboard,
 } from "@/lib/api";
 import { getScoreColor, getScoreBgColor } from "@/lib/representation";
@@ -269,15 +271,8 @@ function termYears(start: string, end: string | null): string {
 }
 
 // The ranked table below excludes the currently-serving president
-// entirely (see fetchCurrentPresident's comment) — this names them and
-// their scores separately, linking to their scorecard for the evidence.
-const PRESIDENT_DIMENSIONS = [
-  ["publicMandate", "Public Mandate"],
-  ["effectiveness", "Effectiveness"],
-  ["agencyAlignment", "Agency Alignment"],
-  ["historicalLegacy", "Historical Legacy"],
-] as const;
-
+// entirely (see fetchCurrentPresident's comment); their scorecard is shown
+// above it, the same one their profile opens with.
 function CurrentPresidentSpotlight({
   president,
   loading,
@@ -285,6 +280,10 @@ function CurrentPresidentSpotlight({
   president: President | null;
   loading: boolean;
 }) {
+  const breakdown = useAsyncData(
+    `president-breakdown-${president?.id ?? ""}`,
+    president ? () => fetchPresidentScoreBreakdown(president.id) : null
+  );
   if (loading) {
     return (
       <div className="panel p-6 text-center mb-6" role="status" aria-live="polite">
@@ -297,7 +296,7 @@ function CurrentPresidentSpotlight({
   if (!president) return null;
 
   return (
-    <div className="mb-6">
+    <div className="mb-10">
       <div className="mb-3 flex items-center gap-2">
         <span className="text-signal-amber text-xs animate-pulse border border-signal-amber/40 px-2 py-0.5 font-mono">
           CURRENTLY SERVING
@@ -308,40 +307,7 @@ function CurrentPresidentSpotlight({
           under one ordinal position isn&apos;t a fair fight.
         </p>
       </div>
-      <div className="panel flex flex-wrap items-center gap-x-8 gap-y-4 p-5">
-        <div className="min-w-0 flex-1">
-          <p className="font-mono text-xs text-ink-min">President no. {president.number}</p>
-          <p className="text-xl font-bold text-ink-hi">{president.name}</p>
-          <Link
-            href={`/politicians/${president.id}`}
-            className="font-mono text-[13px] text-ink-lo underline underline-offset-2 hover:text-phos"
-          >
-            Full scorecard &rarr;
-          </Link>
-        </div>
-        <dl className="flex flex-wrap gap-x-6 gap-y-2">
-          {PRESIDENT_DIMENSIONS.map(([key, label]) => {
-            const value = president.score[key];
-            return (
-              <div key={key} className="flex flex-col">
-                <dt className="font-mono text-xs text-ink-min">{label}</dt>
-                <dd
-                  className={`font-mono text-lg ${value == null ? "text-ink-min" : getScoreColor(displayScore(value))}`}
-                >
-                  {value == null ? "not rated" : displayScore(value)}
-                </dd>
-              </div>
-            );
-          })}
-        </dl>
-        {president.score.dimensionsAvailable > 0 && (
-          <p
-            className={`font-display text-5xl font-extrabold ${getScoreColor(displayScore(president.score.overall))}`}
-          >
-            {displayScore(president.score.overall)}
-          </p>
-        )}
-      </div>
+      <PresidentScorecard president={president} breakdown={breakdown.data ?? null} titleAs="h2" />
     </div>
   );
 }
