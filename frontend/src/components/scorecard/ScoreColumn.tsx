@@ -65,7 +65,9 @@ export default function ScoreColumn({
               {more.label} &rarr;
             </button>
           )}
-          <ShareSectionButton label={title} className="ml-auto" />
+          <span className="ml-auto">
+            <ShareSectionButton label={title} />
+          </span>
         </div>
       </div>
     </section>

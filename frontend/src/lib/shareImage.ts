@@ -124,6 +124,33 @@ function wrapLink(ctx: CanvasRenderingContext2D, url: string, max: number): stri
   return lines;
 }
 
+/** Word-wraps `text` into at most `maxLines` lines no wider than `max`,
+ *  the last one ellipsised if the text runs longer. */
+function wrapWords(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  max: number,
+  maxLines: number
+): string[] {
+  const lines: string[] = [];
+  let line = "";
+  const words = text.split(/\s+/).filter(Boolean);
+  for (let i = 0; i < words.length; i++) {
+    const next = line ? `${line} ${words[i]}` : words[i];
+    if (!line || ctx.measureText(next).width <= max) {
+      line = next;
+      continue;
+    }
+    if (lines.length === maxLines - 1) {
+      return [...lines, fitText(ctx, `${line} ${words.slice(i).join(" ")}`, max)];
+    }
+    lines.push(line);
+    line = words[i];
+  }
+  if (line) lines.push(fitText(ctx, line, max));
+  return lines;
+}
+
 /** Shrinks `text` with an ellipsis until it fits in `max` pixels. */
 function fitText(ctx: CanvasRenderingContext2D, text: string, max: number): string {
   if (ctx.measureText(text).width <= max) return text;
@@ -145,7 +172,11 @@ function captureDate(now: Date): string {
 export async function captureSection(
   section: HTMLElement,
   subject: ShareSubject,
-  { sectionId, withStrip = true }: { sectionId: string; withStrip?: boolean }
+  {
+    sectionId,
+    withStrip = true,
+    anchored = true,
+  }: { sectionId: string; withStrip?: boolean; anchored?: boolean }
 ): Promise<Blob> {
   const { domToCanvas } = await import("modern-screenshot");
   await document.fonts.ready;
@@ -193,18 +224,42 @@ export async function captureSection(
   }
 
   const pad = 20 * scale;
-  const stripH = withStrip ? 68 * scale : 0;
   const innerW = shot.width;
   const out = document.createElement("canvas");
   const ctx = out.getContext("2d");
   if (!ctx) throw new Error("Canvas 2D context unavailable");
+
+  // The title strip: the badge (if any) on the right, the title beside it
+  // on up to two lines — a bill's title is the part a reader recognises —
+  // and the subtitle under it. Laid out before the canvas is sized.
+  const titleFont = `800 ${26 * scale}px ${sans}`;
+  const badgeValueFont = `800 ${34 * scale}px ${sans}`;
+  const smallMono = (px: number) => `${px * scale}px ${mono}`;
+  let badgeW = 0;
+  if (subject.badge) {
+    ctx.font = badgeValueFont;
+    const valueW = ctx.measureText(subject.badge.value).width;
+    ctx.font = smallMono(11);
+    badgeW = Math.max(valueW, ctx.measureText(subject.badge.label.toUpperCase()).width);
+  }
+  const titleMax = innerW - (badgeW ? badgeW + 24 * scale : 0);
+  ctx.font = titleFont;
+  const titleLines = withStrip ? wrapWords(ctx, subject.title, titleMax, 2) : [];
+  const titleLineH = 32 * scale;
+  const subtitleBaseline = 28 * scale + (titleLines.length - 1) * titleLineH + 22 * scale;
+  const stripH = withStrip
+    ? Math.max(
+        68 * scale,
+        (subject.subtitle ? subtitleBaseline : subtitleBaseline - 22 * scale) + 18 * scale
+      )
+    : 0;
 
   // The footer's link is how the picture's recipient gets to the page, so
   // it is never cut short: it wraps, and when it and the date don't fit on
   // one line, the date drops below it. Measured before sizing the
   // canvas (resizing a canvas resets its context).
   const footFont = `${12 * scale}px ${mono}`;
-  const link = displayUrl(sectionUrl(subject.url, sectionId));
+  const link = displayUrl(anchored ? sectionUrl(subject.url, sectionId) : subject.url);
   const date = `Captured ${captureDate(new Date())}`;
   ctx.font = footFont;
   const linkLines = wrapLink(ctx, link, innerW);
@@ -224,32 +279,28 @@ export async function captureSection(
   let y = pad;
 
   if (withStrip) {
-    // Badge first, so the title knows how much room is left.
-    let badgeW = 0;
     if (subject.badge) {
-      const color = resolveClassStyle(subject.badge.colorClass, "color", inkHi);
-      ctx.font = `800 ${34 * scale}px ${sans}`;
-      const valueW = ctx.measureText(subject.badge.value).width;
-      ctx.font = `${11 * scale}px ${mono}`;
-      const labelW = ctx.measureText(subject.badge.label.toUpperCase()).width;
-      badgeW = Math.max(valueW, labelW);
       const right = pad + innerW;
       ctx.textAlign = "right";
+      ctx.font = smallMono(11);
       ctx.fillStyle = inkMin;
       ctx.fillText(subject.badge.label.toUpperCase(), right, y + 14 * scale);
-      ctx.font = `800 ${34 * scale}px ${sans}`;
-      ctx.fillStyle = color;
+      ctx.font = badgeValueFont;
+      ctx.fillStyle = resolveClassStyle(subject.badge.colorClass, "color", inkHi);
       ctx.fillText(subject.badge.value, right, y + 50 * scale);
       ctx.textAlign = "left";
     }
-    const titleMax = innerW - (badgeW ? badgeW + 24 * scale : 0);
-    ctx.font = `800 ${26 * scale}px ${sans}`;
+    ctx.font = titleFont;
     ctx.fillStyle = inkHi;
-    ctx.fillText(fitText(ctx, subject.title, titleMax), pad, y + 28 * scale);
+    titleLines.forEach((line, i) => ctx.fillText(line, pad, y + 28 * scale + i * titleLineH));
     if (subject.subtitle) {
-      ctx.font = `${12 * scale}px ${mono}`;
+      ctx.font = smallMono(12);
       ctx.fillStyle = inkLo;
-      ctx.fillText(fitText(ctx, subject.subtitle.toUpperCase(), titleMax), pad, y + 50 * scale);
+      ctx.fillText(
+        fitText(ctx, subject.subtitle.toUpperCase(), titleMax),
+        pad,
+        y + subtitleBaseline
+      );
     }
     y += stripH;
   }

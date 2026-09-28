@@ -29,6 +29,9 @@ import {
   tierCandidates,
 } from "@/lib/elections";
 import { safeHref } from "@/lib/formatting";
+import { absoluteUrl } from "@/lib/site";
+import { SHARE_EXCLUDE_ATTR } from "@/lib/shareImage";
+import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { fetchTownBallot, fetchTownsForState } from "@/lib/api";
 import type {
   RaceWithCandidates,
@@ -707,6 +710,7 @@ function OpenButton({ label, onClick }: { label: string; onClick: () => void }) 
     <button
       type="button"
       onClick={onClick}
+      {...{ [SHARE_EXCLUDE_ATTR]: "" }}
       className="min-h-[44px] w-full px-4 text-left font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
     >
       {label} →
@@ -724,7 +728,12 @@ function ContestOverview({
   onOpen: (key: string, houseRaceId?: string | null) => void;
 }) {
   const box = (children: ReactNode) => (
-    <ContestBox title={contest.title} subtitle={contest.subtitle} instruction={contest.instruction}>
+    <ContestBox
+      title={contest.title}
+      subtitle={contest.subtitle}
+      instruction={contest.instruction}
+      shareId={`contest-${contest.key}`}
+    >
       {children}
     </ContestBox>
   );
@@ -1012,7 +1021,15 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
 
   const columns: BallotContest["column"][] = ["federal", "state", "local"];
 
+  // What a shared image of any contest says it is from.
+  const shareSubject = {
+    title: `${stateName} ballot`,
+    subtitle: `${ballot.cycleYear} general election · ${ballot.electionDate}`,
+    url: absoluteUrl(`/elections/states/${ballot.state}`),
+  };
+
   return (
+    <ShareSubjectProvider subject={shareSubject}>
     <div className="min-h-screen bg-surface-base text-ink-hi">
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
@@ -1186,5 +1203,6 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
       <BackToTop />
       <Footer />
     </div>
+    </ShareSubjectProvider>
   );
 }

@@ -4,6 +4,9 @@ import { useState, type KeyboardEvent } from "react";
 import type { ActionIssue } from "@/types/action";
 import { useCopyFeedback } from "@/hooks/useCopyFeedback";
 import { BOXED_CONTROL } from "@/lib/controlStyles";
+import { SHARE_EXCLUDE_ATTR } from "@/lib/shareImage";
+import ShareSectionButton from "@/components/share/ShareSectionButton";
+import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 
 interface ShareButtonsProps {
   issue: ActionIssue;
@@ -37,7 +40,8 @@ export default function ShareButtons({
   className = "",
   shareUrl: shareUrlOverride,
 }: ShareButtonsProps) {
-  const shareUrl = shareUrlOverride ?? `https://civitas-research.org/action?issue=${issue.publicId}`;
+  const shareUrl =
+    shareUrlOverride ?? `https://civitas-research.org/action?issue=${issue.publicId}`;
   const shareText = buildShareText(issue.title, shareUrl);
   const encodedText = encodeURIComponent(shareText);
 
@@ -57,7 +61,10 @@ export default function ShareButtons({
   }
 
   return (
-    <div className={`pt-4 border-t border-white/[0.07] ${className}`}>
+    <div
+      className={`pt-4 border-t border-white/[0.07] ${className}`}
+      {...{ [SHARE_EXCLUDE_ATTR]: "" }}
+    >
       <div className="flex items-center gap-1.5 flex-wrap">
         <span className="text-xs font-mono text-ink-min mr-1">SHARE:</span>
 
@@ -123,6 +130,20 @@ export default function ShareButtons({
             </button>
           </span>
         )}
+
+        {/* An image of the issue card this row sits in (its enclosing
+            `data-share-section`); hidden where there is none. The card
+            names the issue itself, so no title strip. */}
+        <ShareSubjectProvider subject={{ title: issue.title, url: shareUrl }}>
+          <ShareSectionButton
+            label="this issue"
+            withStrip={false}
+            anchored={false}
+            className="text-xs font-mono px-2 py-1 border border-white/[0.07] text-ink-lo hover:text-phos hover:border-signal-cyan/40 transition-colors"
+          >
+            [ IMAGE ]
+          </ShareSectionButton>
+        </ShareSubjectProvider>
 
         {/* Copy link */}
         <button

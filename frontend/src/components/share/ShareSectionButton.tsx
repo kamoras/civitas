@@ -28,17 +28,26 @@ const ACTION =
  * the section's link.
  *
  * The button itself, and anything else marked `data-share-exclude`, is left
- * out of the picture. Renders nothing outside a `ShareSubjectProvider`.
+ * out of the picture. Renders nothing outside a `ShareSubjectProvider`, or
+ * where no section encloses it.
  */
 export default function ShareSectionButton({
   label,
   withStrip = true,
-  className = "",
+  anchored = true,
+  children = "Share",
+  className = `inline-flex min-h-6 items-center border px-2 font-mono text-xs uppercase tracking-[0.12em] transition-colors ${BOXED_CONTROL.unselected}`,
 }: {
   /** The section's name, for the button's accessible name and the dialog. */
   label: string;
   /** False when the section already names the page's subject itself. */
   withStrip?: boolean;
+  /** False when the page has no element to scroll to for this section: the
+   *  link is then the page's own, with no `#section`. */
+  anchored?: boolean;
+  /** The button's visible text. */
+  children?: string;
+  /** Replaces the button's default classes. */
   className?: string;
 }) {
   const subject = useShareSubject();
@@ -52,9 +61,11 @@ export default function ShareSectionButton({
   // Bumped on every open, so a capture that finishes after its dialog was
   // closed (or reopened) is dropped rather than shown.
   const generation = useRef(0);
+  const [hasSection, setHasSection] = useState(true);
 
   useEffect(() => {
     setAbilities({ copy: canCopyImage(), share: canShareImage() });
+    setHasSection(!!buttonRef.current?.closest(`[${SHARE_SECTION_ATTR}]`));
   }, []);
 
   useEffect(() => {
@@ -69,7 +80,7 @@ export default function ShareSectionButton({
     setStatus("");
   }, []);
 
-  if (!subject) return null;
+  if (!subject || !hasSection) return null;
 
   function start() {
     const section = buttonRef.current?.closest<HTMLElement>(`[${SHARE_SECTION_ATTR}]`);
@@ -80,7 +91,7 @@ export default function ShareSectionButton({
     setCapture({ state: "working" });
     setStatus("");
     setOpen(true);
-    captureSection(section, subject, { sectionId: id, withStrip })
+    captureSection(section, subject, { sectionId: id, withStrip, anchored })
       .then((blob) => {
         if (generation.current !== mine) return;
         setCapture({ state: "ready", blob, previewUrl: URL.createObjectURL(blob) });
@@ -90,7 +101,7 @@ export default function ShareSectionButton({
       });
   }
 
-  const link = subject ? sectionUrl(subject.url, sectionId || "section") : "";
+  const link = anchored ? sectionUrl(subject.url, sectionId || "section") : subject.url;
   const fileName = shareFileName(subject.url, sectionId || "section");
 
   async function copyImage() {
@@ -134,9 +145,9 @@ export default function ShareSectionButton({
         {...{ [SHARE_EXCLUDE_ATTR]: "" }}
         aria-label={`Share ${label} as an image`}
         aria-haspopup="dialog"
-        className={`inline-flex min-h-6 items-center border px-2 font-mono text-xs uppercase tracking-[0.12em] transition-colors ${BOXED_CONTROL.unselected} ${className}`}
+        className={className}
       >
-        Share
+        {children}
       </button>
 
       <Modal open={open} onClose={close} title={`Share · ${label}`}>
