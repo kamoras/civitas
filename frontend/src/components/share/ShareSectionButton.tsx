@@ -83,6 +83,13 @@ export default function ShareSectionButton({
 
   if (!subject || !hasSection) return null;
 
+  /** "Tim Burchett — Funding Independence"; just the title when the label
+   *  is the title (an Action Center card is labelled by its issue). */
+  function describe(): string {
+    if (!subject) return label;
+    return label === subject.title ? label : `${subject.title} — ${label}`;
+  }
+
   function linkFor(id: string): string {
     if (!subject || anchor === null) return subject?.url ?? "";
     return sectionUrl(subject.url, anchor ?? id);
@@ -127,7 +134,7 @@ export default function ShareSectionButton({
     if (capture.state !== "ready" || !subject) return;
     const file = new File([capture.blob], fileName, { type: "image/png" });
     try {
-      await navigator.share({ files: [file], title: `${subject.title} — ${label}`, text: link });
+      await navigator.share({ files: [file], title: describe(), text: link });
     } catch (e) {
       // Dismissing the sheet rejects with AbortError; that is not a failure.
       if (!(e instanceof DOMException && e.name === "AbortError")) {
@@ -181,7 +188,7 @@ export default function ShareSectionButton({
               // eslint-disable-next-line @next/next/no-img-element -- a local blob: preview
               <img
                 src={capture.previewUrl}
-                alt={`The image to be shared: ${label}, ${subject.title}`}
+                alt={`The image to be shared: ${describe()}`}
                 className="h-auto max-h-[50vh] w-full object-contain"
               />
             )}

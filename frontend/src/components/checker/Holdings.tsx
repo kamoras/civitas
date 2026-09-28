@@ -10,7 +10,7 @@ import MetricTooltip from "./MetricTooltip";
 import { asOfPhrase, formatBracket, OWNER_LABEL } from "@/lib/disclosures";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
-import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
+import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 
 const HOLDINGS_PER_PAGE = 15;
 // The scorecard's panel sets the list beside the pie: a page about as tall
@@ -439,6 +439,10 @@ export default function Holdings({
               <button
                 type="button"
                 onClick={() => load(1, null)}
+                // A control, not content: left out of a shared image. (The
+                // pager below stays in: without it a picture of page 1 would
+                // read as the whole list.)
+                {...{ [SHARE_EXCLUDE_ATTR]: "" }}
                 className="text-ink-lo hover:text-phos underline"
               >
                 show all

@@ -269,12 +269,20 @@ export async function captureSection(
   const titleLines = withStrip ? wrapWords(ctx, subject.title, titleMax, 2) : [];
   const titleLineH = 32 * scale;
   const subtitleBaseline = 28 * scale + (titleLines.length - 1) * titleLineH + 22 * scale;
-  const stripH = withStrip
-    ? Math.max(
-        68 * scale,
-        (subject.subtitle ? subtitleBaseline : subtitleBaseline - 22 * scale) + 18 * scale
-      )
-    : 0;
+  // Once the title has wrapped, the subtitle sits below the badge and can
+  // take the full width; it wraps to a second line rather than cut off
+  // what comes last (a president's term).
+  const subtitleMax = subtitleBaseline - 12 * scale > 56 * scale ? innerW : titleMax;
+  const subtitleLineH = 18 * scale;
+  ctx.font = smallMono(12);
+  const subtitleLines =
+    withStrip && subject.subtitle
+      ? wrapWords(ctx, subject.subtitle.toUpperCase(), subtitleMax, 2)
+      : [];
+  const stripBottom = subtitleLines.length
+    ? subtitleBaseline + (subtitleLines.length - 1) * subtitleLineH
+    : subtitleBaseline - 22 * scale;
+  const stripH = withStrip ? Math.max(68 * scale, stripBottom + 18 * scale) : 0;
 
   // The footer's link is how the picture's recipient gets to the page, so
   // it is never cut short: it wraps, and when it and the date don't fit on
@@ -315,15 +323,11 @@ export async function captureSection(
     ctx.font = titleFont;
     ctx.fillStyle = inkHi;
     titleLines.forEach((line, i) => ctx.fillText(line, pad, y + 28 * scale + i * titleLineH));
-    if (subject.subtitle) {
-      ctx.font = smallMono(12);
-      ctx.fillStyle = inkLo;
-      ctx.fillText(
-        fitText(ctx, subject.subtitle.toUpperCase(), titleMax),
-        pad,
-        y + subtitleBaseline
-      );
-    }
+    ctx.font = smallMono(12);
+    ctx.fillStyle = inkLo;
+    subtitleLines.forEach((line, i) =>
+      ctx.fillText(line, pad, y + subtitleBaseline + i * subtitleLineH)
+    );
     y += stripH;
   }
 

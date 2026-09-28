@@ -429,7 +429,7 @@ a[target="_blank"] {
    measured and cloned, it is laid out as the picture should look: controls
    that are only useful clicked are taken out of the flow rather than left as
    holes, and a column stretched to its row's height shrinks to its own
-   content (and one that scrolls, like a drawer's body, shows all of it).
+   content (and one with a height cap or its own scrollbar shows all of it).
    The dialog is already over the page, and the attribute is off
    again as soon as the clone exists. */
 [data-share-capturing] {
