@@ -306,3 +306,124 @@ class TestFetchConfirmedCandidates:
     async def test_an_unparseable_xlsx_download_fails_the_whole_fetch(self, monkeypatch):
         _patched(monkeypatch, xlsx_by_url={"US%20Senate%20DEM": b"not a real xlsx"})
         assert await me.fetch_confirmed_candidates(None, 2026, "ME", {}) is None
+
+
+# ── Statewide executive contests (Governor) ──────────────────────────
+#
+# fixtures_me_gov_dem_rcv_summary.pdf and fixtures_me_gov_rep_rcv_summary
+# .pdf are the REAL, unmodified "RCV Summary Report" PDFs for the 2026
+# Democratic and Republican governor primaries (fetched 2026-09-28 from
+# the results page's own links). The landing-page fixture carries both
+# real "Governor - ..." headings, plus the real "Senate District 4 -
+# Republican" RCV heading and the real "County Treasurer" and "District
+# Attorney" headings, none of which is a statewide executive office.
+
+GOV_DEM_PDF = (FIXTURES / "fixtures_me_gov_dem_rcv_summary.pdf").read_bytes()
+GOV_REP_PDF = (FIXTURES / "fixtures_me_gov_rep_rcv_summary.pdf").read_bytes()
+_BASE = "https://www.maine.gov/sos/sites/maine.gov.sos/files/inline-files/"
+
+
+class TestStatewideDiscovery:
+    def test_both_real_governor_tabulations_are_found(self):
+        entries = me._discover_entries(LANDING_HTML, 2026, statewide=True)
+        statewide = sorted(e for e in entries if e[1][0] not in ("S", "H"))
+        assert statewide == [
+            ("rcv", ("governor", None), "D", _BASE + "GOV%20Democratic%20RCV%20Summary%20Report.pdf"),
+            ("rcv", ("governor", None), "R", _BASE + "GOV%20Republican%20RCV%20Summary%20Reportxlsx.pdf"),
+        ]
+
+    def test_legislative_and_county_headings_are_still_refused(self):
+        urls = [url for *_, url in me._discover_entries(LANDING_HTML, 2026, statewide=True)]
+        assert not any(k in url for url in urls for k in ("SS4", "County%20Treasurer", "District%20Attorney"))
+
+
+class TestGovernorRcvWinners:
+    def test_the_real_democratic_winner_came_from_behind(self):
+        # Nirav D. Shah led every round but the last: 58,606 first
+        # choices to Hannah M. Pingree's 50,552, then 86,950 to 111,750
+        # in round 4. A first-choice plurality would name Shah.
+        assert me._parse_rcv_summary(me._pdf_text(GOV_DEM_PDF)) == "Pingree, Hannah M."
+
+    def test_the_real_republican_winner(self):
+        assert me._parse_rcv_summary(me._pdf_text(GOV_REP_PDF)) == "Charles, Robert B."
+
+    def test_names_are_put_in_reading_order(self):
+        assert me._first_last("Pingree, Hannah M.") == "Hannah M. Pingree"
+        assert me._first_last("King, Angus, III") == "Angus King III"
+        assert me._first_last("PINGREE, HANNAH M") == "HANNAH M PINGREE"
+        assert me._first_last("Plain Name") == "Plain Name"
+
+
+def _patched_by_url(monkeypatch, html=LANDING_HTML, files=None):
+    files = files or {}
+
+    async def fake_text(client, rl, url, label, **kw):
+        return html
+
+    async def fake_bytes(client, rl, url, label, **kw):
+        for needle, payload in files.items():
+            if needle in url:
+                return payload
+        if url.endswith(".pdf"):
+            return RCV_PDF
+        return _workbook([["Municipality", "NOBODY"], ["Anytown", "0"]])
+
+    monkeypatch.setattr(me, "fetch_text_with_retry", fake_text)
+    monkeypatch.setattr(me, "fetch_bytes_with_retry", fake_bytes)
+
+
+class TestFetchWithStatewideOffices:
+    @pytest.mark.asyncio
+    async def test_the_real_governor_nominees(self, monkeypatch):
+        _patched_by_url(monkeypatch, files={
+            "GOV%20Democratic": GOV_DEM_PDF, "GOV%20Republican": GOV_REP_PDF,
+        })
+        records = await me.fetch_confirmed_candidates(None, 2026, "ME", {"statewide_offices": True})
+        statewide = sorted(
+            (r["office"], r["district"], r["party"], r["last_name"])
+            for r in records if r["office"] not in ("S", "H")
+        )
+        assert statewide == [
+            ("governor", None, "D", "Hannah M. Pingree"),
+            ("governor", None, "R", "Robert B. Charles"),
+        ]
+        # The federal records are untouched by the opt-in.
+        assert {"office": "H", "district": 2, "party": "D", "last_name": "Dunlap",
+                "display_name": "Dunlap, Matthew G."} in records
+
+    @pytest.mark.asyncio
+    async def test_without_the_opt_in_no_governor_is_read(self, monkeypatch):
+        _patched_by_url(monkeypatch, files={
+            "GOV%20Democratic": GOV_DEM_PDF, "GOV%20Republican": GOV_REP_PDF,
+        })
+        records = await me.fetch_confirmed_candidates(None, 2026, "ME", {})
+        assert all(r["office"] in ("S", "H") for r in records)
+
+    @pytest.mark.asyncio
+    async def test_a_plain_count_governor_primary_is_resolved_by_votes(self, monkeypatch):
+        # A party whose field is too small for RCV is posted as a plain
+        # FINAL count under "Non-Ranked Choice Offices", as the federal
+        # ones are. Hypothetical heading and figures in the real shape.
+        html = (
+            "<h2><strong>June 9, 2026 - Primary Election - Non-Ranked Choice Offices</strong></h2>"
+            '<h3><strong>Governor</strong></h3><ul><li><a href="/x/Governor%20GRN%20-%20FINAL.xlsx">'
+            "Green Independent</a></li></ul>"
+        )
+        _patched_by_url(monkeypatch, html=html, files={"Governor%20GRN": _workbook([
+            ["DIS", "CTY", "Municipality", "SMITH, PAT A", "JONES, LEE", "BLANK", "TBC"],
+            [None, None, None, "PORTLAND", "BANGOR", None, None],
+            ["1", "CUM", "Portland", "300", "120", "5", "425"],
+            ["2", "PEN", "Bangor", "40", "90", "1", "131"],
+            [None, None, "State Totals", "340", "210", "6", "556"],
+        ])})
+        records = await me.fetch_confirmed_candidates(None, 2026, "ME", {"statewide_offices": True})
+        assert records == [{"office": "governor", "district": None, "party": "G", "last_name": "PAT A SMITH"}]
+
+    @pytest.mark.asyncio
+    async def test_an_unreadable_governor_tabulation_fails_the_whole_fetch(self, monkeypatch):
+        # Returning the federal records alone would sync Maine as
+        # "checked, no governor's race".
+        _patched_by_url(monkeypatch, files={
+            "GOV%20Democratic": b"not a pdf", "GOV%20Republican": GOV_REP_PDF,
+        })
+        assert await me.fetch_confirmed_candidates(None, 2026, "ME", {"statewide_offices": True}) is None
