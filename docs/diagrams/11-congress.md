@@ -76,7 +76,11 @@ call's members at a time. `/bills` and `/bills/:id` redirect permanently.
 **Bluesky.** After each sync run, `analyze/congress_bluesky.py` posts the most
 recent session day whose record the Digest has made final, if it is from the
 last three days and not already posted: the day report's sentence and the
-passed bills' numbers (never titles), linking to `/congress/{date}`.
+passed bills' numbers (never titles), linking to `/congress/{date}`. Once the
+week (Monday to Sunday) is over and every day either chamber met is final, it
+also posts that week: the week report's sentence and the numbers of the bills
+that became law, linking to `/congress/week/{monday}`. Only the week just
+ended is eligible.
 
 **Bill ids** are the site's (`S.3257`, `HCONRES.89`) whichever spelling the
 source used: the Record's "H. Con. Res. 89", the House roll call's

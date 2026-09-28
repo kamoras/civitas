@@ -2011,7 +2011,7 @@ export default function AboutPage() {
               />
               <Row
                 label="Congressional Record Daily Digest"
-                value="The Record's own summary of each day in each chamber (measures passed, failed and reported, nominations confirmed, committee meetings, next meeting), via GovInfo, quoted as published — both chambers. Once a day's record is final, the Civitas Bluesky account posts it: the day's one-line count summary and the numbers of the bills passed, never their titles, since an official short title can read as advocacy"
+                value="The Record's own summary of each day in each chamber (measures passed, failed and reported, nominations confirmed, committee meetings, next meeting), via GovInfo, quoted as published — both chambers. Once a day's record is final, the Civitas Bluesky account posts it: the day's one-line count summary and the numbers of the bills passed, never their titles, since an official short title can read as advocacy. Each week, once every day of it is final, it posts the week's summary and the numbers of the bills that became law"
               />
               <Row
                 label="House Clerk"
