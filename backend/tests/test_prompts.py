@@ -55,3 +55,21 @@ class TestParseExploreDocumentSummary:
         text = "SUMMARY: Text.\nKEY POINTS:\nsome preamble the model added\n- Real point\nIMPACT: X"
         result = parse_explore_document_summary(text)
         assert result["keyPoints"] == ["Real point"]
+
+
+class TestCutOff:
+    """A generation stopped at its token limit ends mid-sentence: the
+    section it was writing is dropped."""
+
+    def test_in_the_impact(self):
+        text = "SUMMARY: Whole.\nKEY POINTS:\n- One\n- Two\nIMPACT: Half a sen"
+        assert parse_explore_document_summary(text, cut_off=True) == {
+            "summary": "Whole.", "keyPoints": ["One", "Two"], "impact": "",
+        }
+
+    def test_in_the_key_points(self):
+        text = "SUMMARY: Whole.\nKEY POINTS:\n- One\n- Tw"
+        assert parse_explore_document_summary(text, cut_off=True)["keyPoints"] == ["One"]
+
+    def test_in_the_summary_leaves_nothing_usable(self):
+        assert parse_explore_document_summary("SUMMARY: Half a", cut_off=True)["summary"] == ""

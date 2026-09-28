@@ -226,6 +226,12 @@ def _call_ollama(
     return data.get("response", "")
 
 
+class StreamCutOff(Exception):
+    """Raised by stream_llm after the last delta when the generation stopped
+    at its token limit rather than finishing: the text so far ends
+    mid-sentence."""
+
+
 async def _stream_llama_server(
     system_prompt: str,
     user_prompt: str,
@@ -261,9 +267,12 @@ async def _stream_llama_server(
                 if payload == "[DONE]":
                     break
                 chunk = json.loads(payload)
-                delta = chunk["choices"][0].get("delta", {}).get("content")
+                choice = chunk["choices"][0]
+                delta = choice.get("delta", {}).get("content")
                 if delta:
                     yield delta
+                if choice.get("finish_reason") == "length":
+                    raise StreamCutOff()
 
 
 async def _stream_ollama(
@@ -302,6 +311,7 @@ async def _stream_ollama(
                 if chunk.get("done"):
                     if chunk.get("done_reason") == "length":
                         logger.warning("Ollama output truncated (done_reason=length) for model %s", model)
+                        raise StreamCutOff()
                     break
 
 
@@ -347,6 +357,9 @@ async def stream_llm(
     partial response may already be visible to the user. call_llm above
     remains the right choice for every other caller — one-shot JSON
     output, cached, retried transparently.
+
+    Raises StreamCutOff after the last delta when the output stopped at
+    `max_tokens`.
     """
     use_model = model or settings.OLLAMA_MODEL
     http_timeout = min(

@@ -21,7 +21,9 @@ import {
   fetchTimeline,
   parseExploreSummaryText,
   splitHighlights,
+  streamExploreDocumentSummary,
   submitDocumentComment,
+  summaryRetryDelayMs,
 } from "./api";
 
 describe("parseExploreSummaryText", () => {
@@ -362,5 +364,48 @@ describe("submitDocumentComment", () => {
     const result = await submitDocumentComment(7, "A comment long enough.");
     expect(result.success).toBe(false);
     expect(result.message).toMatch(/Submission failed/);
+  });
+});
+
+describe("streamExploreDocumentSummary", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const done = () =>
+    new Response('data: {"done": true, "summary": "S", "keyPoints": [], "impact": ""}\n\n', {
+      status: 200,
+      headers: { "Content-Type": "text/event-stream" },
+    });
+
+  it("asks again after a refusal that says to come back, rather than failing", async () => {
+    // Another reader's generation of the document was under way; by the
+    // retry it is cached.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("", { status: 429, headers: { "Retry-After": "10" } }))
+      .mockResolvedValueOnce(new Response("", { status: 503 }))
+      .mockResolvedValueOnce(done());
+    vi.stubGlobal("fetch", fetchMock);
+    const waits: number[] = [];
+    const result = await streamExploreDocumentSummary(1, () => {}, async (ms) => {
+      waits.push(ms);
+    });
+    expect(result.summary).toBe("S");
+    expect(waits).toEqual([10_000, 10_000]);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("still fails on a refusal that isn't one to wait out", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 404 })));
+    await expect(streamExploreDocumentSummary(1, () => {}, async () => {})).rejects.toThrow("404");
+  });
+});
+
+describe("summaryRetryDelayMs", () => {
+  it("follows Retry-After within bounds, with a default when there is none", () => {
+    expect(summaryRetryDelayMs("30")).toBe(30_000);
+    expect(summaryRetryDelayMs(null)).toBe(10_000);
+    expect(summaryRetryDelayMs("")).toBe(10_000);
+    expect(summaryRetryDelayMs("0")).toBe(1_000);
+    expect(summaryRetryDelayMs("3600")).toBe(60_000);
   });
 });

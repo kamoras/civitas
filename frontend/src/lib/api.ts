@@ -887,6 +887,18 @@ export async function fetchExploreDocument(id: number): Promise<ExploreDocumentD
   return requestJson(`${API_BASE}/explore/${id}`, "Document not found");
 }
 
+// How long a summary request keeps retrying a refusal: a generation's own
+// limit on the server (api/explore.py), plus a margin.
+const SUMMARY_RETRY_WITHIN_MS = 5 * 60 * 1000;
+
+/** Milliseconds to wait before asking again, from a Retry-After in seconds
+ *  (nginx's own 503 carries none: a short default), kept within reason. */
+export function summaryRetryDelayMs(retryAfter: string | null): number {
+  const seconds = Number(retryAfter);
+  const ms = Number.isFinite(seconds) && retryAfter !== null && retryAfter.trim() !== "" ? seconds * 1000 : 10_000;
+  return Math.min(Math.max(ms, 1_000), 60_000);
+}
+
 // Reads the SSE stream from POST /explore/:id/summary — one JSON object
 // per `data:` line, either {delta: "<chunk>"} while generating or the
 // terminal {done: true, summary, keyPoints, impact} (cache hits send only
@@ -894,11 +906,22 @@ export async function fetchExploreDocument(id: number): Promise<ExploreDocumentD
 // accumulated SO FAR after every chunk, letting the caller re-derive
 // {summary, keyPoints, impact} from partial text as it streams in —
 // this file only forwards bytes, it doesn't parse the marker format.
+//
+// A refusal that says to come back (429: another reader's generation of this
+// document is under way; 503: the site's few generations are all busy) is
+// retried after its Retry-After, for as long as a generation can take — by
+// then the other reader's summary is usually cached and comes straight back.
 export async function streamExploreDocumentSummary(
   id: number,
-  onDelta: (fullTextSoFar: string) => void
+  onDelta: (fullTextSoFar: string) => void,
+  wait: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 ): Promise<ExploreDocumentSummary> {
-  const res = await fetch(`${API_BASE}/explore/${id}/summary`, { method: "POST" });
+  const giveUpAt = Date.now() + SUMMARY_RETRY_WITHIN_MS;
+  let res = await fetch(`${API_BASE}/explore/${id}/summary`, { method: "POST" });
+  while ((res.status === 429 || res.status === 503) && Date.now() < giveUpAt) {
+    await wait(Math.min(summaryRetryDelayMs(res.headers.get("Retry-After")), Math.max(0, giveUpAt - Date.now())));
+    res = await fetch(`${API_BASE}/explore/${id}/summary`, { method: "POST" });
+  }
   if (!res.ok || !res.body) throw new Error(`Summary failed: ${res.status}`);
 
   const reader = res.body.getReader();

@@ -3,7 +3,6 @@
 import asyncio
 import json
 import logging
-import time
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -326,18 +325,19 @@ async def post_document_comment(
 # one LLM, and a client starting and abandoning generations across
 # documents must not queue up work it will never read.
 #
-# Each claim is held for the whole generation and given back when it ends
-# (_Generation). A generation is stopped at _SUMMARY_GENERATION_LIMIT_S; the
-# claims last longer, so one is never given back after it lapsed — by then
-# it could be another generation's. The claim period also bounds how long a
-# claim outlives a process that died mid-generation, and holds off a
-# document whose output couldn't be used.
+# Each claim is held for the whole generation and given back, by its token,
+# when it ends (_Generation) — never one another generation made after it
+# lapsed. A generation is stopped at _SUMMARY_GENERATION_LIMIT_S, inside the
+# claim period; the period bounds how long a claim outlives a process that
+# died mid-generation, and holds off a document whose output couldn't be
+# used.
 _SUMMARY_BUCKET = "explore-summary"
 _SLOT_BUCKET = "explore-summary-slot"
 _MAX_GENERATIONS = 2
 _SUMMARY_GENERATION_LIMIT_S = 240.0
 _SUMMARY_CLAIM_S = 300.0
 _BUSY_RETRY_AFTER_S = 30
+_HELD_RETRY_AFTER_S = 10
 # How often a stream waiting on the LLM sends an SSE comment: nginx drops a
 # proxied response that sends nothing for proxy_read_timeout (120s), which
 # a busy LLM's prompt processing can exceed before the first delta.
@@ -346,7 +346,6 @@ _SUMMARY_CACHE_KEY_VERSION = 4  # bump alongside explore_document_summary_prompt
 # Generations under way in this process, held so the event loop doesn't
 # collect a task whose reader has gone, and so shutdown can stop them.
 _generations: set[asyncio.Task] = set()
-_clock = time.monotonic
 
 
 async def stop_generations() -> None:
@@ -431,7 +430,13 @@ async def get_explore_document_summary(
             headers={"Retry-After": str(throttle.UNAVAILABLE_RETRY_AFTER_S)},
         )
     if outcome == "held":
-        raise HTTPException(status_code=429, detail="Please wait before requesting another summary")
+        # Another reader's generation of this document: cached when it
+        # ends, so a retry soon is usually served straight from the cache.
+        raise HTTPException(
+            status_code=429,
+            detail="This summary is being written; please try again shortly.",
+            headers={"Retry-After": str(_HELD_RETRY_AFTER_S)},
+        )
     if outcome == "busy":
         raise HTTPException(
             status_code=503,
@@ -477,51 +482,43 @@ class _Generation:
         self._parse = parse
         self.outcome: asyncio.Future = asyncio.get_running_loop().create_future()
         self.events: asyncio.Queue[str | None] = asyncio.Queue()
-        self._held: list[tuple[str, str]] = []
-        self._claimed_at = 0.0
+        # (bucket, key, token) for each claim held.
+        self._held: list[tuple[str, str, float]] = []
 
     def _settle(self, outcome) -> None:
         if not self.outcome.done():
             self.outcome.set_result(outcome)
 
-    async def _claim(self, bucket: str, key: str) -> bool:
+    async def _claim(self, bucket: str, keys: list[str]) -> bool:
+        """The first free one of `keys` (Unavailable when the store can't
+        answer)."""
         from app.api import throttle
 
-        if await throttle.run(throttle.claim, bucket, key, period=_SUMMARY_CLAIM_S, fail_open=False):
-            self._held.append((bucket, key))
-            return True
-        return False
-
-    async def _claim_slot(self) -> bool:
-        for slot in range(_MAX_GENERATIONS):
-            if await self._claim(_SLOT_BUCKET, str(slot)):
-                return True
-        return False
+        held = await throttle.run(throttle.hold, bucket, keys, period=_SUMMARY_CLAIM_S)
+        if held is None:
+            return False
+        self._held.append((bucket, *held))
+        return True
 
     async def _give_back(self) -> None:
-        """Give back the claims held — only while they can't have lapsed
-        (the clock was read before claiming, so this errs early): a lapsed
-        claim may be another generation's by now."""
         from app.api import throttle
 
-        if _clock() - self._claimed_at < _SUMMARY_CLAIM_S - 5:
-            for bucket, key in self._held:
-                try:
-                    await throttle.run(throttle.release, bucket, key)
-                except Exception:
-                    logger.warning("Explore summary claim %s/%s not given back", bucket, key, exc_info=True)
+        for bucket, key, token in self._held:
+            try:
+                await throttle.run(throttle.release, bucket, key, token=token)
+            except Exception:
+                logger.warning("Explore summary claim %s/%s not given back", bucket, key, exc_info=True)
         self._held.clear()
 
     async def run(self) -> None:
         from app.api import throttle
 
-        self._claimed_at = _clock()
         try:
             try:
-                if not await self._claim(_SUMMARY_BUCKET, str(self.doc_id)):
+                if not await self._claim(_SUMMARY_BUCKET, [str(self.doc_id)]):
                     self._settle("held")
                     return
-                if not await self._claim_slot():
+                if not await self._claim(_SLOT_BUCKET, [str(slot) for slot in range(_MAX_GENERATIONS)]):
                     self._settle("busy")
                     return
             except throttle.Unavailable:
@@ -545,8 +542,10 @@ class _Generation:
         once the summary is cached and the claims are given back, so a
         reader asking again the moment it arrives is served or may start
         one."""
+        from app.pipeline.analyze.ollama_client import StreamCutOff
+
         text = ""
-        complete = False
+        complete = cut_off = False
         try:
             async with asyncio.timeout(_SUMMARY_GENERATION_LIMIT_S):
                 async for delta in self._stream(
@@ -557,13 +556,18 @@ class _Generation:
                     text += delta
                     self.events.put_nowait(_sse({"delta": delta}))
             complete = True
+        except StreamCutOff:
+            # At the token limit: finished as far as it will ever get (the
+            # same prompt stops at the same place), less the section it was
+            # writing.
+            complete = cut_off = True
         except Exception:
             logger.exception("Explore doc summary streaming failed for doc_id=%s", self.doc_id)
 
-        parsed = self._parse(text) if text else {"summary": "", "keyPoints": [], "impact": ""}
-        # Only a whole generation is cached: one cut off (the LLM failed or
-        # ran out of time) is shown to its reader and made afresh for the
-        # next, never kept as the document's summary.
+        parsed = self._parse(text, cut_off=cut_off) if text else {"summary": "", "keyPoints": [], "impact": ""}
+        # Only a finished generation is cached: one that failed or ran out of
+        # time is shown to its reader and made afresh for the next, never
+        # kept as the document's summary.
         if complete and parsed["summary"]:
             await asyncio.to_thread(self._set_cached, self.prompt["promptVersion"], self.cache_key, parsed)
         if complete and not parsed["summary"]:

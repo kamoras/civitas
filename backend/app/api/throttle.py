@@ -624,14 +624,47 @@ def claim(bucket: str, key: str | None, *, period: float, fail_open: bool = True
     return won
 
 
-def release(bucket: str, key: str | None) -> None:
+def hold(bucket: str, keys: list[str], *, period: float) -> tuple[str, float] | None:
+    """Claim the first of `keys` not claimed in the last `period` seconds —
+    one transaction however many there are (a document, or one of a few
+    slots). (the key, its token) when one was free, None when all are held;
+    Unavailable when the store can't answer — for work that must not start
+    unchecked. The token gives back exactly this claim (release), never one
+    another caller made after it lapsed."""
+    now = time.time()
+    try:
+        with _Txn() as conn:
+            for key in keys:
+                won = conn.execute(
+                    "INSERT INTO claims (bucket, key, claimed_at, expires_at) VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT (bucket, key) DO UPDATE SET claimed_at = excluded.claimed_at, "
+                    "expires_at = excluded.expires_at WHERE claims.claimed_at <= ? "
+                    "RETURNING claimed_at",
+                    (bucket, key, now, now + period, now - period),
+                ).fetchone()
+                if won is not None:
+                    _purge_expired(conn, now)
+                    return key, won[0]
+            _purge_expired(conn, now)
+    except sqlite3.Error as error:
+        raise Unavailable(bucket) from error
+    return None
+
+
+def release(bucket: str, key: str | None, *, token: float | None = None) -> None:
     """Give back a claim whose work didn't happen (the issue voted on didn't
-    exist), so it doesn't hold the next attempt off."""
+    exist) or is over, so it doesn't hold the next attempt off. With
+    `token` (hold), only the claim that token names."""
     if key is None:
         return
     try:
         with _Txn() as conn:
-            conn.execute("DELETE FROM claims WHERE bucket = ? AND key = ?", (bucket, str(key)))
+            if token is None:
+                conn.execute("DELETE FROM claims WHERE bucket = ? AND key = ?", (bucket, str(key)))
+            else:
+                conn.execute(
+                    "DELETE FROM claims WHERE bucket = ? AND key = ? AND claimed_at = ?", (bucket, str(key), token),
+                )
     except sqlite3.Error:
         logger.warning("Throttle %r release failed", bucket, exc_info=True)
 

@@ -57,7 +57,7 @@ SUMMARY: <2-3 sentences: what does this document do? What is its purpose and sub
     }
 
 
-def parse_explore_document_summary(text: str) -> dict:
+def parse_explore_document_summary(text: str, *, cut_off: bool = False) -> dict:
     """Split the plain-text SUMMARY/KEY POINTS/IMPACT format back into fields.
 
     Shared by explore.py's streaming endpoint (re-parsed on every chunk to
@@ -78,5 +78,16 @@ def parse_explore_document_summary(text: str) -> dict:
     ]
 
     impact = impact_part.strip()
+
+    if cut_off:
+        # The generation stopped at its token limit: the section it was
+        # writing ends mid-sentence, so it is dropped — the impact, else the
+        # last key point, else the summary itself (nothing usable).
+        if SUMMARY_IMPACT_MARKER in text:
+            impact = ""
+        elif SUMMARY_KEY_POINTS_MARKER in text:
+            key_points = key_points[:-1]
+        else:
+            summary = ""
 
     return {"summary": summary, "keyPoints": key_points, "impact": impact}

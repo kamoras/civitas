@@ -142,6 +142,7 @@ class TestSummaryEndpointGuards:
             with pytest.raises(HTTPException) as exc_info:
                 await get_explore_document_summary(doc.id, None, db=db_session)
             assert exc_info.value.status_code == 429
+            assert exc_info.value.headers["Retry-After"] == "10"  # the page asks again
             finish.set()
             await _collect_sse_events(first)
             await asyncio.gather(*list(explore._generations))
@@ -310,22 +311,46 @@ class TestSummaryEndpointGuards:
             # And the next reader may make it afresh at once.
             await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
 
-    async def test_a_lapsed_claim_is_not_given_back(self, db_session, monkeypatch):
-        # By then it may be another generation's.
-        from app.api import explore, throttle
+    async def test_a_generation_at_its_token_limit_is_cached_without_the_cut_section(self, db_session):
+        # The same prompt stops at the same place every time: what came out
+        # is kept, less the sentence it stopped in.
+        from app.pipeline.analyze.ollama_client import StreamCutOff
 
         doc = _make_doc(db_session)
-        clock = iter([0.0])
-        monkeypatch.setattr(explore, "_clock", lambda: next(clock, explore._SUMMARY_CLAIM_S))
-        released = []
-        monkeypatch.setattr(throttle, "release", lambda *a: released.append(a))
+
+        async def _at_limit(*_args, **_kwargs):
+            yield "SUMMARY: Whole.\nKEY POINTS:\n- One\nIMPACT: Half a sen"
+            raise StreamCutOff()
+
         with (
             patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
-            patch("app.pipeline.analyze.ollama_client.stream_llm", _fake_stream),
-            patch("app.pipeline.analyze.ollama_client.set_cached_llm_result"),
+            patch("app.pipeline.analyze.ollama_client.stream_llm", _at_limit),
+            patch("app.pipeline.analyze.ollama_client.set_cached_llm_result") as mock_set_cache,
         ):
-            await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
-        assert released == []
+            events = await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+        kept = {"summary": "Whole.", "keyPoints": ["One"], "impact": ""}
+        assert events[-1] == {"done": True, **kept}
+        assert mock_set_cache.call_args.args[2] == kept
+
+    async def test_a_lapsed_claim_is_given_back_only_by_its_holder(self, db_session):
+        # Once lapsed it may be another generation's: the late holder's
+        # release must leave the new one alone.
+        from app.api import throttle
+
+        first = throttle.hold("explore-summary", ["7"], period=300)
+        second = throttle.hold("explore-summary", ["7"], period=0)  # first's reads as lapsed
+        assert first and second and first[1] != second[1]
+        throttle.release("explore-summary", "7", token=first[1])
+        assert throttle.hold("explore-summary", ["7"], period=300) is None
+        throttle.release("explore-summary", "7", token=second[1])
+        assert throttle.hold("explore-summary", ["7"], period=300) is not None
+
+    async def test_the_cap_takes_the_first_free_slot_in_one_step(self, db_session):
+        from app.api import throttle
+
+        assert throttle.hold("slots", ["0", "1"], period=300)[0] == "0"
+        assert throttle.hold("slots", ["0", "1"], period=300)[0] == "1"
+        assert throttle.hold("slots", ["0", "1"], period=300) is None
 
     async def test_a_summary_made_while_claiming_is_served_not_made_again(self, db_session):
         doc = _make_doc(db_session)
