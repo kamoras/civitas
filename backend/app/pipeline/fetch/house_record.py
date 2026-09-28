@@ -12,11 +12,11 @@ from sqlalchemy.orm import Session
 
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.congressional_record import (
-    _fetch_json,
     _strip_html,
     _fetch_htm,
     SPEAKER_RE,
     fetch_crec_packages,
+    list_package_granules,
     speaker_of,
 )
 
@@ -36,23 +36,20 @@ async def fetch_house_granules(
     client: httpx.AsyncClient,
     db: Session,
     package_id: str,
-) -> list[dict]:
-    """List House-section granules within a daily CREC package."""
-    cache_key = f"crec-house-gran-{package_id}"
+) -> list[dict] | None:
+    """List House-section granules within a daily CREC package, or None
+    when the listing could not be fetched (not cached, retried next run)."""
+    cache_key = f"crec-house-gran-v2-{package_id}"  # v2: every page, not the first 100
     cached = api_cache_get(db, "govinfo", cache_key)
     if cached is not None:
         return cached
 
-    data = await _fetch_json(
-        client,
-        f"{GOVINFO_API_BASE}/packages/{package_id}/granules?pageSize=100&offsetMark=*",
-    )
-    if not data:
-        api_cache_set(db, "govinfo", cache_key, [])
-        return []
+    listed = await list_package_granules(client, package_id)
+    if listed is None:
+        return None
 
     granules: list[dict] = []
-    for g in data.get("granules", []):
+    for g in listed:
         gc = (g.get("granuleClass") or "").upper()
         if "HOUSE" not in gc or "SENATE" in gc:
             continue
@@ -132,7 +129,7 @@ async def fetch_house_floor_remarks(
     Each dict has keys: speaker, text, date, title — ready for explore
     document ingestion.
     """
-    cache_key = f"house-floor-remarks-{days_back}d-v2"  # v2: "NAME of State" speakers
+    cache_key = f"house-floor-remarks-{days_back}d-v3"  # v3: every House granule is listed
     cached = api_cache_get(db, "govinfo", cache_key)
     if cached is not None:
         return cached
@@ -140,11 +137,15 @@ async def fetch_house_floor_remarks(
     packages = await fetch_crec_packages(client, db, days_back)
 
     all_remarks: list[dict] = []
+    complete = True
 
     for pkg_id in packages:
         date_str = pkg_id.replace("CREC-", "")
 
         granules = await fetch_house_granules(client, db, pkg_id)
+        if granules is None:
+            complete = False  # this run's result is partial: not cached
+            continue
         if not granules:
             continue
 
@@ -164,5 +165,6 @@ async def fetch_house_floor_remarks(
                 })
 
     logger.info("Fetched %d House floor remarks", len(all_remarks))
-    api_cache_set(db, "govinfo", cache_key, all_remarks)
+    if complete:
+        api_cache_set(db, "govinfo", cache_key, all_remarks)
     return all_remarks

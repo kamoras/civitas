@@ -110,6 +110,7 @@ const week: PeriodReport = {
   },
   days: ["21", "22", "23", "24", "25", "26", "27"].map((d) => ({
     date: `2026-09-${d}`,
+    noRecordPublished: d === "26",
     senate: { inSession: d !== "21", recorded: true, convenedAt: null, adjournedAt: null, minutesInSession: null, counts },
     house: { inSession: d === "21" || d === "24", recorded: true, convenedAt: null, adjournedAt: null, minutesInSession: 3, counts },
   })),
@@ -129,6 +130,8 @@ describe("week report", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Week of September 21, 2026" })).toBeTruthy();
     expect(screen.getByRole("link", { name: /Thu, Sep 24/ }).getAttribute("href")).toBe("/congress/2026-09-24");
     expect(screen.getByRole("link", { name: "S. 3257" }).getAttribute("href")).toBe("/congress/bills/S.3257");
+    // A day with no Congressional Record says so, rather than a dash.
+    expect(within(screen.getByRole("link", { name: /Sat, Sep 26/ })).getAllByText("No Record")).toHaveLength(2);
   });
 
   it("has no axe violations", async () => {

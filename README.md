@@ -536,6 +536,8 @@ What each chamber did each day, for the Congress reports. Every half hour (`cong
 
 **A file is not a session.** On a day the Senate does not meet it still publishes its floor file, holding only when it reconvenes; the sync reads that as not in session (it first read as "The Senate met" for Friday and Saturday, 2026-09-25/26), and re-reads every not-yet-final day of the last week so a wrong row corrects itself.
 
+**No Record, said plainly.** GPO publishes the Congressional Record for every day either chamber is in session. A past day with no Record (behind the back-fill cursor, which stops before any day it could not read, or found absent at least three days on) reads "No Congressional Record was published for this day" rather than "no record yet", and the week and month strips say "No Record". It states the fact and not "neither chamber met": GPO very rarely prints two small consecutive days as one issue.
+
 **A missing file is not a failed fetch.** A 404, or senate.gov's redirect of a missing file to its "not found" page, means the chamber has nothing for that day. Anything else writes nothing, so a day is never made final from part of its Digest, and the back-fill stops before a failed day to retry it.
 
 ---
@@ -888,6 +890,11 @@ query-independent priors.
 **What is indexed:** Senate and House floor speeches, presidential actions
 (executive orders, proclamations, memoranda), Supreme Court opinions, and
 Federal Register rulemaking documents — five source types, not bill text.
+Floor speeches come from each day's Congressional Record granules, listed in
+full: until 2026-09 only the first page of 100 was read, and GovInfo lists a
+day's House granules first, so on busy days (four of about two dozen Senate
+session days from late July to late September 2026) no Senate remarks were
+indexed. A listing that fails is retried, never taken as a day with none.
 Every document feeds three structures, all rebuilt from the
 `explore_documents` table at the end of each ingest run:
 

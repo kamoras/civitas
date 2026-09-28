@@ -133,30 +133,49 @@ async def fetch_crec_packages(
     return packages
 
 
+async def list_package_granules(client: httpx.AsyncClient, package_id: str) -> list[dict] | None:
+    """Every granule of a CREC package, following GovInfo's nextPage, or
+    None when any page could not be fetched.
+
+    One page of 100 used to be all that was read, and GovInfo lists a
+    day's House granules first: CREC-2026-09-24 has 274 granules and its
+    first 100 are all House, so the Senate's 77 were never seen. A failed
+    listing is None, never [], so an outage cannot read as a day with no
+    floor remarks."""
+    url: str | None = f"{GOVINFO_API_BASE}/packages/{package_id}/granules?pageSize=1000&offsetMark=*"
+    granules: list[dict] = []
+    while url:
+        data = await _fetch_json(client, url)
+        if data is None:
+            return None
+        granules += data.get("granules", [])
+        nxt = data.get("nextPage")
+        # The key goes back on in _fetch_json; a logged URL never carries it.
+        url = str(httpx.URL(nxt).copy_remove_param("api_key")) if nxt else None
+    return granules
+
+
 async def fetch_senate_granules(
     client: httpx.AsyncClient,
     db: Session,
     package_id: str,
-) -> list[dict]:
-    """List Senate-section granules within a daily CREC package.
+) -> list[dict] | None:
+    """List Senate-section granules within a daily CREC package, or None
+    when the listing could not be fetched (not cached, retried next run).
 
     Filters to granules whose ``granuleClass`` contains ``SENATE``.
     """
-    cache_key = f"crec-senate-gran-{package_id}"
+    cache_key = f"crec-senate-gran-v2-{package_id}"  # v2: every page, not the first 100
     cached = api_cache_get(db, "govinfo", cache_key)
     if cached is not None:
         return cached
 
-    data = await _fetch_json(
-        client,
-        f"{GOVINFO_API_BASE}/packages/{package_id}/granules?pageSize=100&offsetMark=*",
-    )
-    if not data:
-        api_cache_set(db, "govinfo", cache_key, [])
-        return []
+    listed = await list_package_granules(client, package_id)
+    if listed is None:
+        return None
 
     granules: list[dict] = []
-    for g in data.get("granules", []):
+    for g in listed:
         gc = (g.get("granuleClass") or "").upper()
         if "SENATE" not in gc:
             continue
@@ -278,7 +297,7 @@ async def fetch_floor_remarks(
         max_granules_per_day: Cap on granule fetches per daily package
             to keep API request volume manageable.
     """
-    cache_key = f"floor-remarks-{days_back}d-v2"  # v2: "NAME of State" speakers
+    cache_key = f"floor-remarks-{days_back}d-v3"  # v3: every Senate granule is listed
     cached = api_cache_get(db, "govinfo", cache_key)
     if cached is not None:
         return cached
@@ -287,11 +306,15 @@ async def fetch_floor_remarks(
 
     remarks: dict[str, list[dict]] = {}
     days_processed = 0
+    complete = True
 
     for pkg_id in packages:
         date_str = pkg_id.replace("CREC-", "")
 
         granules = await fetch_senate_granules(client, db, pkg_id)
+        if granules is None:
+            complete = False  # this run's result is partial: not cached
+            continue
         if not granules:
             continue
 
@@ -317,5 +340,6 @@ async def fetch_floor_remarks(
         "Parsed floor remarks: %d speakers, %d days, %d total remarks",
         len(remarks), days_processed, total_remarks,
     )
-    api_cache_set(db, "govinfo", cache_key, remarks)
+    if complete:
+        api_cache_set(db, "govinfo", cache_key, remarks)
     return remarks
