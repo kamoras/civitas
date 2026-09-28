@@ -51,6 +51,7 @@ from app.pipeline.fetch.http_utils import (
     fetch_with_retry,
 )
 from app.pipeline.fetch.state_candidates_common import (
+    ballot_list_party,
     clean_display_name,
     normalize_party,
     parse_office,
@@ -130,14 +131,17 @@ def _state_office_record(row: dict) -> dict | None:
         if legislative is None:
             return None
         office, district, seat = legislative
-    # StatewideNominee/StateLegNominee store a party CODE, never null. A
-    # party the shared vocabulary cannot name (South Carolina's Workers
-    # Party has no FEC code either) is left out rather than guessed.
-    party = normalize_party(row.get("Party") or "", ballot_list=True)
+    # The Party column of a certified November list: a party the shared
+    # vocabulary cannot name (South Carolina's Workers Party, which has no
+    # FEC code either) is kept under OTHER_PARTY with its printed label,
+    # never dropped and never guessed into a code.
+    party = ballot_list_party(row.get("Party") or "")
     name = clean_display_name(row.get("Name on Ballot") or "")
     if not party or not name:
         return None
-    record = {"office": office, "district": district, "party": party, "last_name": name}
+    record = {"office": office, "district": district, "party": party[0], "last_name": name}
+    if party[1]:
+        record["party_label"] = party[1]
     if seat is not None:
         record["seat"] = seat
     return record
@@ -257,7 +261,7 @@ async def fetch_confirmed_candidates(
     if left_out:
         logger.info(
             "%s candidate tracking: %d state-office rows left out (a county-associated "
-            "statewide label, or a party with no code)", state, left_out,
+            "statewide label, or a row with no name or no party printed)", state, left_out,
         )
     logger.info(
         "%s candidate tracking: %d federal candidates, %d state-office (election %s)",

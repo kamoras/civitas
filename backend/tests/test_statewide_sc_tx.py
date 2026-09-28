@@ -128,10 +128,15 @@ async def test_sc_reads_every_executive_contest_from_one_search():
     assert house == {
         ("1", "R", "Bill Whitmire"), ("1", "D", "Jasmine Williams"),
         ("11", "D", "Jessica Beasley"), ("11", "R", "Craig Gagnon"), ("11", "U", "E T Stone"),
-        # Kiral Mace (Workers) is left out: that party has no code to
-        # store the row under, and a guessed one would be a wrong fact.
         ("26", "D", "Jenny Desch"), ("26", "R", "David W Martin"),
+        # Kiral Mace (Workers): a party with no code of ours or FEC's, so
+        # the neutral "O", with the party kept exactly as printed.
+        ("26", "O", "Kiral Mace"),
     }
+    mace = next(r for r in records if r["last_name"] == "Kiral Mace")
+    assert mace["party_label"] == "Workers"
+    # A recognised party is its code alone.
+    assert all("party_label" not in r for r in records if r["office"] == "lower" and r["party"] != "O")
     # The federal rows still come through, from the same search.
     federal = {(r["office"], r["display_name"]) for r in records if r["office"] == "S"}
     assert federal == {("S", "Annie Andrews"), ("S", "Darline Graham"),

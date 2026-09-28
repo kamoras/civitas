@@ -1040,11 +1040,11 @@ async def test_a_list_rendered_per_contest_chosen_from_a_dropdown():
 
 
 async def test_a_failed_main_source_claims_nothing_about_state_offices(db_session, monkeypatch):
-    # Illinois in miniature: its results export (the only source of its
-    # executive and legislative contests) fails, while the certified
-    # federal list still answers. Syncing the empty statewide list would
-    # write a marker, and the page would call "we could not read it"
-    # a confirmed absence of a governor's race.
+    # Illinois in miniature: its results export fails, while its certified
+    # list answers with federal rows only. (Its general_list now carries
+    # the state offices itself, so this is the list reading none.) Syncing
+    # the empty statewide list would write a marker, and the page would
+    # call "we could not read it" a confirmed absence of a governor's race.
     async def no_calendar(client, cycle):
         return {}, False
     monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)

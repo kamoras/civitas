@@ -60,7 +60,7 @@ from app.pipeline.fetch.state_candidates_common import (
     JUDICIAL_MARKER_TIER,
     JUDICIAL_MARKER_TTL_HOURS,
     judicial_marker_key,
-    PARTY_CODE_MAP,
+    state_nominee_party,
     fec_party,
     STATE_LEG_CHAMBER_LABELS,
     district_label,
@@ -775,7 +775,11 @@ def _statewide_section(db: Session, state: str, cycle: int) -> tuple[list[dict],
             # through the exact same majorPartyOf() every federal
             # candidate already goes through — a second party vocabulary
             # on one page is how the two drift apart.
-            "party": PARTY_CODE_MAP.get(row.party, row.party),
+            "party": state_nominee_party(row.party),
+            # The party as the state printed it, for a party the shared
+            # codes cannot name (party "OTH"); null otherwise. The page
+            # shows it in place of the code.
+            "partyLabel": row.party_label,
             "name": row.display_name or row.last_name,
         })
 
@@ -850,7 +854,8 @@ def _state_leg_section(db: Session, state: str, cycle: int, marker: dict | None)
     seats: dict[tuple[str, str, str | None], list[dict]] = {}
     for row in rows:
         seats.setdefault((row.chamber, row.district, row.seat), []).append({
-            "party": PARTY_CODE_MAP.get(row.party, row.party),
+            "party": state_nominee_party(row.party),
+            "partyLabel": row.party_label,
             "name": row.display_name,
         })
 
@@ -943,7 +948,8 @@ def _judicial_section(
     seats: dict[tuple[str, str | None, str | None], list[dict]] = {}
     for row in rows:
         seats.setdefault((row.court, row.district, row.seat), []).append({
-            "party": PARTY_CODE_MAP.get(row.party, row.party),
+            "party": state_nominee_party(row.party),
+            "partyLabel": row.party_label,
             "name": row.display_name,
         })
 

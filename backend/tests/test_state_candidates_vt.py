@@ -328,7 +328,19 @@ def _patched_statewide(monkeypatch, *, general=STATEWIDE_GENERAL, primary=STATEW
 
 
 def _seats(records):
-    return {(r["office"], r["party"]): r["last_name"] for r in records if r["office"] not in ("S", "H")}
+    """(office, party) -> name for the recognised parties; OTHER_PARTY
+    lines share one code, so _others reads them by printed label."""
+    return {
+        (r["office"], r["party"]): r["last_name"] for r in records
+        if r["office"] not in ("S", "H") and r["party"] != "O"
+    }
+
+
+def _others(records):
+    return {
+        (r["office"], r["party_label"], r["last_name"]) for r in records
+        if r["office"] not in ("S", "H") and r["party"] == "O"
+    }
 
 
 class TestBallotFinal:
@@ -358,13 +370,25 @@ class TestGeneralBallotStatewide:
             ("auditor", "R"): "IVAR KRONICK",
             ("attorney_general", "D"): "CHARITY R. CLARK",
             ("attorney_general", "R"): "EDWIN HOWELL KEMON",
+            # Progressive has an FEC code of its own (PRO); on a ballot
+            # list it is read, on primary results it never is.
+            ("treasurer", "P"): "ZACHARY HAMPL",
+            ("secretary_of_state", "P"): "RACHEL SHAW",
         }
 
-    def test_a_party_with_no_code_is_left_out_not_mislabelled(self):
-        names = {r["last_name"] for r in vtm._general_ballot_statewide(STATEWIDE_GENERAL)}
-        # Peace and Justice, Freedom and Unity, Progressive -- all really
-        # on the ballot, none representable by the shared party codes.
-        assert not names & {"JUNE GOODBAND", "DEAN ROY", "ZACHARY HAMPL", "RACHEL SHAW"}
+    def test_a_party_with_no_code_keeps_its_printed_label(self):
+        """Peace and Justice and Freedom and Unity are really on the 2026
+        ballot and have no FEC code: kept as the state printed them, not
+        dropped and not guessed into a code."""
+        records = vtm._general_ballot_statewide(STATEWIDE_GENERAL)
+        assert _others(records) == {
+            ("governor", "PEACE AND JUSTICE", "JUNE GOODBAND"),
+            ("governor", "FREEDOM AND UNITY", "DEAN ROY"),
+        }
+        # The real report's 17 ballot lines, every one kept.
+        assert len(records) == 17
+        # A recognised party carries no label: its code is the whole fact.
+        assert all("party_label" not in r for r in records if r["party"] != "O")
 
     def test_no_district_on_any_vermont_executive_office(self):
         assert {r["district"] for r in vtm._general_ballot_statewide(STATEWIDE_GENERAL)} == {None}
@@ -381,7 +405,8 @@ class TestStatewideFetch:
         assert seats[("treasurer", "R")] == "LYNN LAFLEUR"
         assert seats[("auditor", "R")] == "IVAR KRONICK"
         assert seats[("attorney_general", "R")] == "EDWIN HOWELL KEMON"
-        assert len(seats) == 13
+        assert len(seats) == 15
+        assert len(_others(records)) == 2
         # The federal seat is still read from the primary, unchanged.
         assert {"office": "H", "district": None, "party": "D", "last_name": "BALINT",
                 "display_name": "BECCA BALINT"} in records

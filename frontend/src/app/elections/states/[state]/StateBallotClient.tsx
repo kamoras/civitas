@@ -55,7 +55,10 @@ function NomineeName({ nominee }: { nominee: StatewideNominee }) {
   const major = majorPartyOf(nominee);
   return (
     <span className="inline-flex items-baseline gap-1">
-      <span className="font-mono text-[10px] text-ink-min">{nominee.party}</span>
+      {/* A party with no code of ours or FEC's is shown as the state
+          printed it: "OTH" alone would tell a reader nothing about which
+          party this line is. */}
+      <span className="font-mono text-[10px] text-ink-min">{nominee.partyLabel || nominee.party}</span>
       <span
         className={
           major === "DEM" ? "text-dem-blue" : major === "REP" ? "text-rep-red" : "text-ink"

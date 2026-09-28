@@ -82,6 +82,7 @@ from app.pipeline.fetch.state_source_crawler import (
 from app.pipeline.candidate_dedup import normalized_surname
 from app.pipeline.fetch.state_candidates_common import (
     BALLOT_BASIS_TIER,
+    OTHER_PARTY,
     PARTY_CODE_MAP,
     fec_party,
     ballot_basis_key,
@@ -1256,6 +1257,16 @@ def _confirmed_match(db: Session, cycle: int, state: str, record: dict):
     )
 
 
+def _printed_party(record: dict) -> str | None:
+    """The party label a state-office row keeps: the list's own printing,
+    and only under OTHER_PARTY -- a recognised party is its code, and a
+    label beside it would be a second vocabulary for the same fact."""
+    if record.get("party") != OTHER_PARTY:
+        return None
+    label = " ".join(str(record.get("party_label") or "").split())
+    return label[:80] or None
+
+
 def _sync_statewide_nominees(
     db: Session, cycle: int, state: str, source: dict, records: list[dict],
 ) -> int:
@@ -1286,6 +1297,11 @@ def _sync_statewide_nominees(
         office, party = record["office"], record["party"]
         district = record["district"]
         name = record["last_name"]
+        if _NOT_A_PERSON_RE.search(name or ""):
+            # A results file's bucket won the contest ("Write-in" took
+            # Illinois's 2026 Republican primary for Treasurer, where no
+            # Republican filed): the seat has no nominee to name.
+            continue
         # See the identical guard in _sync_state_leg_nominees: with
         # autoflush=False a duplicate key in one run queues two rows and
         # fails the unique constraint at commit.
@@ -1314,6 +1330,7 @@ def _sync_statewide_nominees(
         # reduced it with clean_display_name rather than surname (see
         # state_candidates_enhanced_voting), so it holds the whole
         # printed name, which is what gets rendered.
+        row.party_label = _printed_party(record)
         row.source_name = str(source.get("source_name") or source.get("strategy") or "")
         row.updated_at = utcnow()
         keep.add((office, district, party, name))
@@ -1376,6 +1393,11 @@ def _sync_state_leg_nominees(
         chamber, district, party = record["office"], record["district"], record["party"]
         seat = record.get("seat")
         name = record["last_name"]
+        if _NOT_A_PERSON_RE.search(name or ""):
+            # A results file's bucket won the contest ("Write-in" took
+            # Illinois's 2026 Republican primary for Treasurer, where no
+            # Republican filed): the seat has no nominee to name.
+            continue
         # A key already handled in THIS run. The query below cannot see a
         # row added moments ago because SessionLocal sets autoflush=False,
         # so a feed that lists one nominee twice would queue two identical
@@ -1404,6 +1426,7 @@ def _sync_state_leg_nominees(
                 district=district, seat=seat, party=party, display_name=name,
             )
             db.add(row)
+        row.party_label = _printed_party(record)
         row.source_name = str(source.get("source_name") or source.get("strategy") or "")
         row.updated_at = utcnow()
         keep.add((chamber, district, seat, party, name))
@@ -1449,6 +1472,11 @@ def _sync_judicial_nominees(
         court, party = record["office"], record["party"]
         district, seat = record["district"], record.get("seat")
         name = record["last_name"]
+        if _NOT_A_PERSON_RE.search(name or ""):
+            # A results file's bucket won the contest ("Write-in" took
+            # Illinois's 2026 Republican primary for Treasurer, where no
+            # Republican filed): the seat has no nominee to name.
+            continue
         # Same autoflush=False guard as both siblings above.
         if (court, district, seat, party, name) in keep:
             continue
@@ -1471,6 +1499,7 @@ def _sync_judicial_nominees(
                 seat=seat, party=party, display_name=name,
             )
             db.add(row)
+        row.party_label = _printed_party(record)
         row.source_name = str(source.get("source_name") or source.get("strategy") or "")
         row.updated_at = utcnow()
         keep.add((court, district, seat, party, name))
@@ -1643,8 +1672,14 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
             state_source = general
             state_records = general_records or []
             # Empty is not an answer here either: a certified list with no
-            # contest on it has not been published yet.
-            state_answered = bool(general_records)
+            # contest on it has not been published yet. Nor is a list that
+            # answered with federal rows only -- under the opt-in its state
+            # offices were supposed to be read, and none were, so there is
+            # nothing to say about them (a synced empty list would read as
+            # a confirmed absence of every executive contest).
+            state_answered = any(
+                r["office"] not in ("S", "H") for r in general_records or []
+            )
         statewide = [r for r in state_records if r["office"] in STATEWIDE_OFFICE_LABELS]
         state_leg = [r for r in state_records if r["office"] in STATE_LEG_CHAMBER_LABELS]
         judicial = [r for r in records if r["office"] in JUDICIAL_COURT_LABELS]
