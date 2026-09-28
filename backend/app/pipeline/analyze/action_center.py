@@ -46,6 +46,7 @@ from app.models import (
     Senator,
 )
 from app.pipeline.analyze import action_metrics
+from app.pipeline.analyze import action_thresholds
 from app.pipeline.analyze.bluesky_spotlight import post_daily_spotlight
 from app.pipeline.analyze.early_signal import (
     CONFIRMATION_WINDOW_HOURS,
@@ -154,7 +155,7 @@ _US_CIVIC_PROTOTYPES = [
 # against the prototypes, non-civic (sports/entertainment/lifestyle)
 # 0.027-0.053 — threshold sits mid-gap with wide margin on both sides.
 POLICY_RELEVANCE_THRESHOLD = 0.20
-CLUSTER_TITLE_THRESHOLD = 0.40
+# The clustering cut is calibrated, not typed: action_thresholds.get("cluster_title").
 # How many candidate clusters get an LLM generation attempt per hourly run.
 # 2026-08: lowered from 4 to 2 as a deliberate capacity choice, not a
 # recalibrated quality threshold — there's a real difference between the
@@ -207,17 +208,11 @@ _RETIREMENT_GRACE_HOURS = 24
 # the primary same-story decider; this fires only when signatures are
 # unavailable. (The old 0.82 was calibrated to the retrieval model's
 # compressed 0.74+ band and is meaningless on this scale.)
-TOPIC_CHANGE_THRESHOLD = 0.65
+TOPIC_CHANGE_THRESHOLD = 0.65  # typed, measured by hand; not yet calibrated
 
-# Near-identical-title floor for treating a title-cosine match as
-# conclusive on its own, bypassing signature overlap entirely. Measured
-# against 120 real production issues: pairs scoring >= 0.94 were reliably
-# a genuine same-development duplicate (a reworded headline for the same
-# story), while pairs scoring <= 0.883 included legitimately DIFFERENT
-# developments in the same ongoing saga (e.g. a bill's separate House and
-# Senate votes, or sequential distinct court rulings) that must stay
-# separate rows. 0.92 sits in that gap with margin on both sides.
-_NEAR_IDENTICAL_TITLE_THRESHOLD = 0.92
+# Where title cosine alone decides "same story" is calibrated, not typed:
+# action_thresholds.get("near_identical"), fitted for precision against the
+# signature test (was a hand-measured 0.92 on 120 issues, 2026-07).
 
 
 def _full_story_should_invalidate(
@@ -652,7 +647,7 @@ def _same_story(
     """
     if _is_exact_content_duplicate(title, facts, cand_title, cand_facts):
         return True
-    if sim >= _NEAR_IDENTICAL_TITLE_THRESHOLD:
+    if sim >= action_thresholds.get("near_identical"):
         return True
     if sig is None:
         sig = _issue_signature(title, facts)
@@ -1340,6 +1335,19 @@ def _center_titles(embeddings: np.ndarray, mean: np.ndarray) -> np.ndarray:
     return centered / np.where(norms < 1e-9, 1.0, norms)
 
 
+def _record_title_pairs(items: list[tuple[NewsArticle, np.ndarray]], centered: np.ndarray) -> None:
+    """Every pair of today's articles, labelled for cluster_title's
+    calibration: their day-centered title similarity, and whether their
+    named entities and numbers overlap — a label title similarity cannot
+    produce about itself (see action_thresholds)."""
+    sigs = [_issue_signature(a.title, [a.summary or ""]) for a, _ in items]
+    sims = centered @ centered.T
+    for i in range(len(items)):
+        for j in range(i + 1, len(items)):
+            if sigs[i] and sigs[j]:
+                action_thresholds.record("cluster_title", float(sims[i, j]), _signatures_match(sigs[i], sigs[j]))
+
+
 def _cluster_articles(
     items: list[tuple[NewsArticle, np.ndarray]],
 ) -> list[list[NewsArticle]]:
@@ -1383,14 +1391,14 @@ def _cluster_articles(
     distance = np.clip(1.0 - centered @ centered.T, 0.0, None)
     labels = fcluster(
         linkage(squareform(distance, checks=False), method="complete"),
-        t=1.0 - CLUSTER_TITLE_THRESHOLD, criterion="distance",
+        t=1.0 - action_thresholds.get("cluster_title"), criterion="distance",
     )
     groups: dict[int, list[NewsArticle]] = {}
     for (article, _), label in zip(items, labels):
         groups.setdefault(int(label), []).append(article)
     logger.info(
         "Clustering (complete linkage, threshold=%.2f): %d articles → %d clusters",
-        CLUSTER_TITLE_THRESHOLD, len(items), len(groups),
+        action_thresholds.get("cluster_title"), len(items), len(groups),
     )
     return list(groups.values())
 
@@ -2986,12 +2994,14 @@ def _save_timeline_entry(today: str, db: Session) -> None:
     logger.info("Timeline entry saved for %s: %s", today, top_issue.title[:60])
 
 
-_MONITOR_ISSUE_SIM = 0.70        # issue vs monitor-description (headline vs long text)
+# The issue-to-monitor and monitor-merge floors are calibrated against the
+# LLM gates' own verdicts (action_thresholds.get("monitor_issue" /
+# "monitor_merge")). The three below are still typed and unmeasured; the
+# gates' logged verdicts are what a measurement of them would read.
 _MONITOR_ISSUE_TITLE_SIM = 0.62
 _MONITOR_ISSUE_SIM_HIGH = 0.80   # above this: skip LLM gate, auto-match
-_MONITOR_MERGE_SIM = 0.42
 # Above this, two monitors are similar enough to merge outright without the
-# LLM verification step below _MONITOR_MERGE_SIM uses — was a bare 0.55
+# LLM verification step below the monitor_merge floor uses — was a bare 0.55
 # duplicated at both monitor-merge call sites with no name or rationale.
 _MONITOR_AUTO_MERGE_SIM = 0.55
 # Headline-to-headline floor is ~0.74; use 0.83 to distinguish same-topic from
@@ -3257,6 +3267,7 @@ def _merge_similar_monitors(monitors: list[NationalMonitor], model, db: Session)
         normalize_embeddings=True,
     )
     merged_ids: set[int] = set()
+    below: list[tuple[float, int, int]] = []
     for a_idx in range(len(monitors)):
         if monitors[a_idx].id in merged_ids:
             continue
@@ -3269,8 +3280,11 @@ def _merge_similar_monitors(monitors: list[NationalMonitor], model, db: Session)
             should_merge = False
             if full_sim >= _MONITOR_AUTO_MERGE_SIM or title_sim >= _MONITOR_AUTO_MERGE_SIM:
                 should_merge = True
-            elif full_sim >= _MONITOR_MERGE_SIM or title_sim >= _MONITOR_MERGE_SIM:
+            elif max(full_sim, title_sim) >= action_thresholds.get("monitor_merge"):
                 should_merge = _should_merge_monitors_llm(monitors[a_idx], monitors[b_idx], db)
+                action_thresholds.record("monitor_merge", max(full_sim, title_sim), should_merge)
+            else:
+                below.append((max(full_sim, title_sim), a_idx, b_idx))
 
             if should_merge:
                 keep = monitors[a_idx]
@@ -3289,6 +3303,15 @@ def _merge_similar_monitors(monitors: list[NationalMonitor], model, db: Session)
                     # loop.)
                     break
 
+    # The gate only ever sees pairs above the floor, so ask it once about
+    # the closest pair below — the only evidence that can lower the floor
+    # (see action_thresholds). Recorded, never acted on.
+    below = [b for b in below if not {monitors[b[1]].id, monitors[b[2]].id} & merged_ids]
+    if below:
+        sim, a_idx, b_idx = max(below)
+        action_thresholds.record(
+            "monitor_merge", sim, _should_merge_monitors_llm(monitors[a_idx], monitors[b_idx], db),
+        )
     return bool(merged_ids)
 
 
@@ -3438,19 +3461,21 @@ def _update_national_monitors(today: str, db: Session) -> None:
         sims = today_embeddings @ monitor_embeddings.T
         title_sims = today_embeddings @ monitor_title_embeddings.T
 
+        below: list[tuple[float, int, int]] = []
         for i, issue in enumerate(today_issues):
             for j, monitor in enumerate(existing_monitors):
                 full_sim = float(sims[i][j])
                 title_sim = float(title_sims[i][j])
-                if full_sim < _MONITOR_ISSUE_SIM:
-                    continue
                 if title_sim < _MONITOR_ISSUE_TITLE_SIM:
+                    continue
+                if full_sim < action_thresholds.get("monitor_issue"):
+                    below.append((full_sim, i, j))
                     continue
                 # LLM gate for borderline matches: require high confidence or LLM approval
                 if full_sim < _MONITOR_ISSUE_SIM_HIGH:
-                    if not _should_match_monitor_llm(
-                        issue.title, issue.summary or "", monitor, db
-                    ):
+                    approved = _should_match_monitor_llm(issue.title, issue.summary or "", monitor, db)
+                    action_thresholds.record("monitor_issue", full_sim, approved)
+                    if not approved:
                         continue
 
                 issue_monitor_slugs.setdefault(i, []).append(monitor.slug)
@@ -3492,6 +3517,14 @@ def _update_national_monitors(today: str, db: Session) -> None:
                 matched_issues.add(i)
                 logger.info("Monitor updated: '%s' <- '%s'",
                             monitor.title, issue.title[:60])
+
+        # Same probe as _merge_similar_monitors: the closest pair the floor
+        # turned away, recorded and never acted on.
+        if below:
+            sim, i, j = max(below)
+            action_thresholds.record("monitor_issue", sim, _should_match_monitor_llm(
+                today_issues[i].title, today_issues[i].summary or "", existing_monitors[j], db,
+            ))
 
     # Tag issues with their related monitor slugs
     for i, issue in enumerate(today_issues):
@@ -3560,7 +3593,7 @@ def _update_national_monitors(today: str, db: Session) -> None:
 
             if mon_embs is not None:
                 dup_sims = today_embeddings[i] @ mon_embs.T
-                if float(dup_sims.max()) >= _MONITOR_ISSUE_SIM:
+                if float(dup_sims.max()) >= action_thresholds.get("monitor_issue"):
                     continue
 
             # --- LLM Metadata Generation ---
@@ -3811,7 +3844,10 @@ def _find_matching_issue(
         # producers" vs "producers"/"ranchers", needs the near-identical-
         # title check to still catch it since that sinks signature overlap
         # below _signatures_match's floor).
-        if _same_story(sim, title, facts, candidate.title, cand_facts, sig=new_sig):
+        cand_sig = _issue_signature(candidate.title, cand_facts)
+        if new_sig and cand_sig:
+            action_thresholds.record("near_identical", sim, _signatures_match(new_sig, cand_sig))
+        if _same_story(sim, title, facts, candidate.title, cand_facts, sig=new_sig, cand_sig=cand_sig):
             return candidate
     return None
 
@@ -3914,6 +3950,11 @@ def _run_refresh(db: Session) -> int:
 
     logger.info("Action center refresh starting for %s", today)
     action_metrics.reset()
+    try:
+        action_thresholds.calibrate(db)
+    except Exception:
+        logger.exception("Action threshold calibration failed — keeping the previous values")
+        db.rollback()
     _set_refresh_state(
         is_running=True, stage="primary_source_signals", stage_detail=None,
         started_at=utcnow(),
@@ -3990,7 +4031,9 @@ def _run_refresh(db: Session) -> int:
     # The day's mean title embedding: the "generic news headline" direction
     # clustering subtracted. Every per-cluster check below measures in that
     # same space (see the coherence filter for why not the cluster's own).
-    day_title_mean = _embed_texts([a.title for a, _ in relevant]).mean(axis=0)
+    title_embs = _embed_texts([a.title for a, _ in relevant])
+    day_title_mean = title_embs.mean(axis=0)
+    _record_title_pairs(relevant, _center_titles(title_embs, day_title_mean))
 
     # 5. Rank clusters using coverage breadth + trending relevance
     _set_refresh_state(stage="rank")

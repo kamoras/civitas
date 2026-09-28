@@ -1410,6 +1410,15 @@ export default function AboutPage() {
                   the topic itself, and it threw away most of each story&apos;s coverage.
                 </P>
                 <P>
+                  How alike two headlines must be to count as one story, when a new issue is the
+                  same story as an existing one, and when an issue belongs to a long-running topic
+                  are learned from the pipeline&apos;s own record, not set by hand. Every run records
+                  pairs it compared together with an independent verdict on them (whether they
+                  name the same people, places and numbers, or what a separate check decided), and
+                  once a day each cut-off is moved to where those verdicts say it belongs, but only
+                  once there are enough of them to trust.
+                </P>
+                <P>
                   Articles join one story only if every one of them resembles every other. The
                   earlier rule asked only that each article resemble one other, so stories chained
                   together by theme: on 27 September 2026 an issue titled for floods in Bangkok led
