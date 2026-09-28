@@ -731,18 +731,20 @@ export default function AboutPage() {
               <a href="#state-ballots" className="underline underline-offset-2 hover:text-phos">State Ballots &amp; Ballot Measures</a>.
             </P>
             <Gist>
-              Ballot-measure coverage depends on an optional third-party source, and some
-              states may show as not yet covered.
+              Ballot measures are read from each state&apos;s own official list where we can
+              reach one; a handful of states still come from a third-party source.
             </Gist>
             <P>
-              Measures come from Vote Smart&apos;s public API. Where a state has not been
-              ingested, or an ingest failed, the page says exactly that rather than showing
-              an empty section — an empty section would read as &ldquo;this state has no
-              measures&rdquo;, which is a materially different and potentially damaging claim.
-              The fix is per-state ingestion directly from Secretary of State offices, which
-              is authoritative but needs roughly fifty separate adapters against fifty
-              independently-redesigned government sites. Until then, the official lookup link
-              on every state page is the complete answer and the measures are a convenience.
+              Most states&apos; measures are now read directly from the state itself — its
+              Secretary of State, elections board or legislature — with the title, summary,
+              fiscal statement and yes/no wording quoted exactly as the state published them
+              and the drafter named. A state whose official site blocks automated access, or
+              publishes no list of what it has certified, still comes from Vote Smart&apos;s
+              public API, and each measure says which source it came from. A state is only
+              shown as having no measures when an official source establishes that; a guide
+              that has not been published yet reads as not yet covered, never as
+              &ldquo;none&rdquo;. The official lookup link on every state page remains the
+              complete answer.
             </P>
           </Section>
 
@@ -2117,12 +2119,12 @@ export default function AboutPage() {
                 value="Declared candidates for every federal race in the cycle, plus per-candidate fundraising totals, cash on hand, and disbursements"
               />
               <Row
-                label="Vote Smart (votesmart.org)"
-                value="Statewide ballot measures — official ballot title, official summary, fiscal impact, and the state's own yes/no descriptions, stored and displayed verbatim. Free API from a nonpartisan nonprofit; optional, and the feature reports which states it lacks rather than implying they have no measures"
+                label="State election offices"
+                value="Statewide ballot measures, read directly from each state's own certified list, voter guide or ballot notice — official title, summary, fiscal statement and the state's own yes/no wording, stored and displayed verbatim with the drafter named, and linked from every measure"
               />
               <Row
-                label="Secretary of State offices"
-                value="The authoritative source for ballot text, linked from every measure. Direct per-state ingestion is the intended upgrade to Vote Smart"
+                label="Vote Smart (votesmart.org)"
+                value="Statewide ballot measures for the states whose own sites cannot be read automatically, stored and displayed verbatim. Free API from a nonpartisan nonprofit; optional, and the feature reports which states it lacks rather than implying they have no measures"
               />
               <Row
                 label="Google Civic Information API"

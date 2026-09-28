@@ -585,6 +585,7 @@ async def _sync_pdf_measures(
         source_for_state,
     )
     from app.pipeline.fetch.ballot_measures_pdf import fetch_state_measures_pdf
+    from app.pipeline.fetch.ballot_measure_text import NotYetPublished
 
     year = int(election_day[:4])
     synced = failed = marked_removed = 0
@@ -592,6 +593,16 @@ async def _sync_pdf_measures(
         source_name = source_for_state(state)["source_name"]
         try:
             listed = await fetch_state_measures_pdf(client, db, state, year, election_day)
+        except NotYetPublished as awaited:
+            # Not a failure and not an answer: the state has not published
+            # the document yet. No alert, and no claim either way.
+            logger.info("Ballot measures for %s not published yet: %s", state, awaited)
+            _set_coverage(
+                db, state, election_day, MeasureCoverage.NOT_YET_COVERED,
+                source_name=source_name, error=f"not yet published: {awaited}",
+            )
+            db.commit()
+            continue
         except Exception:
             logger.exception("PDF measure fetch raised for %s", state)
             listed = None

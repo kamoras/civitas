@@ -13,7 +13,7 @@ import type { BallotMeasure } from "@/types/election";
  */
 export default function BallotMeasureCard({ measure }: { measure: BallotMeasure }) {
   const removed = measure.status === "removed" || measure.status === "withdrawn";
-  // Vote Smart-sourced, not user-controlled, but still external data
+  // State- or Vote Smart-sourced, not user-controlled, but still external data
   // rendered as an href — same guard CoverageFeed.tsx uses for article
   // URLs from the news-feed pipeline, for the same reason (reject
   // javascript:/data: before it reaches a real <a>).

@@ -21,3 +21,13 @@ def join_lines(text: str | list[str]) -> str | None:
     if isinstance(text, list):
         text = "\n".join(text)
     return clean_text(_WRAPPED_HYPHEN_RE.sub("", text))
+
+
+class NotYetPublished(Exception):
+    """Raised by a state's measure reader when the document it reads for
+    this election has not been published YET — Maine's Citizen's Guide
+    appears weeks before November, and West Virginia only posts a notice
+    in a year with an amendment. That is neither a failure (nothing is
+    broken, so it must not page anyone) nor an answer (the state may still
+    have measures), so it is recorded as not yet covered and checked again
+    next run. The message says what is awaited, for the log."""

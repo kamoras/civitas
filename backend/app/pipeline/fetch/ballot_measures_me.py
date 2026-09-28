@@ -56,6 +56,7 @@ import httpx
 import pdfplumber
 
 from app.pipeline.fetch.ballot_measure_pdf_geometry import clean_text
+from app.pipeline.fetch.ballot_measure_text import NotYetPublished
 from app.pipeline.fetch.http_utils import fetch_bytes_with_retry, fetch_text_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -233,8 +234,9 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
     fetched, or read completely. Never [] — see module docstring."""
     guide_url = await _find_guide(client, year)
     if guide_url is None:
-        logger.info("ME %d Citizen's Guide not found (not yet published?)", year)
-        return None
+        # The guide is published weeks before November; until then Maine's
+        # ballot is simply not known yet.
+        raise NotYetPublished(f"Maine Citizen's Guide for {year}")
     raw = await fetch_bytes_with_retry(client, _rate_limiter, guide_url, f"ME {year} Citizen's Guide")
     if raw is None:
         return None

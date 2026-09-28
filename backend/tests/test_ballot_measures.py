@@ -479,6 +479,30 @@ async def test_sync_pdf_measures_upserts_directly_from_one_pdf_pass(monkeypatch,
 
 
 @pytest.mark.asyncio
+async def test_sync_pdf_measures_records_not_yet_published_without_failing(monkeypatch, db_session):
+    """Maine's guide appears weeks before November. Until then the state
+    is not yet covered — not ingest_failed (nothing is broken, so nothing
+    should page anyone) and never confirmed_none."""
+    from app.pipeline.fetch import ballot_measure_pdf_sources, ballot_measures_pdf
+    from app.pipeline.fetch.ballot_measure_text import NotYetPublished
+
+    monkeypatch.setattr(ballot_measure_pdf_sources, "configured_states", lambda: {"CA"})
+    monkeypatch.setattr(ballot_measure_pdf_sources, "source_for_state", lambda state: _fake_pdf_source())
+
+    async def fake_fetch(client, db, state, year, election_date):
+        raise NotYetPublished("guide for 2026")
+
+    monkeypatch.setattr(ballot_measures_pdf, "fetch_state_measures_pdf", fake_fetch)
+    result = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    assert result == (0, 0, 0)
+
+    coverage = db_session.query(MeasureCoverage).filter(
+        MeasureCoverage.state == "CA", MeasureCoverage.election_date == "2026-11-03",
+    ).one()
+    assert coverage.status == MeasureCoverage.NOT_YET_COVERED
+    assert "not yet published" in coverage.error_detail
+
+
 async def test_sync_pdf_measures_marks_ingest_failed_on_fetch_failure(monkeypatch, db_session):
     from app.pipeline.fetch import ballot_measure_pdf_sources, ballot_measures_pdf
 

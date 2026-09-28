@@ -16,6 +16,8 @@ from pathlib import Path
 
 import pytest
 
+from app.pipeline.fetch.ballot_measure_text import NotYetPublished
+
 from app.pipeline.fetch import (
     ballot_measures_al as al,
     ballot_measures_ar as ar,
@@ -403,8 +405,17 @@ class TestWestVirginia:
 
     @pytest.mark.asyncio
     async def test_no_notice_is_not_covered_never_none(self, monkeypatch):
+        """A year with no notice is not yet published — never confirmed
+        none, and not a failure to alert on either."""
         empty_year_listing = self.fx["listing_html"].replace("Public Notice", "Notice")
-        _stub_fetch(monkeypatch, wv, {wv.LISTING_URL.format(page=0): empty_year_listing})
+        _stub_fetch(monkeypatch, wv, {
+            wv.LISTING_URL.format(page=p): empty_year_listing for p in range(wv.MAX_PAGES)
+        })
+        with pytest.raises(NotYetPublished):
+            await wv.fetch_measures(None, 2026)
+
+    async def test_an_unreachable_listing_is_a_failure(self, monkeypatch):
+        _stub_fetch(monkeypatch, wv, {})
         assert await wv.fetch_measures(None, 2026) is None
 
 

@@ -41,6 +41,7 @@ import pdfplumber
 
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.ballot_measure_pdf_sources import source_for_state
+from app.pipeline.fetch.ballot_measure_text import NotYetPublished
 from app.pipeline.fetch.ballot_measures_al import fetch_measures as al_fetch_measures
 from app.pipeline.fetch.ballot_measures_ar import fetch_measures as ar_fetch_measures
 from app.pipeline.fetch.ballot_measures_ca import parse_document as parse_ca_document
@@ -315,6 +316,8 @@ async def fetch_state_measures_pdf(
     if multi_strategy is not None:
         try:
             pairs = await multi_strategy(client, year)
+        except NotYetPublished:
+            raise
         except Exception:
             logger.exception("Multi-document ballot measure fetch failed for %s %d", state, year)
             return None

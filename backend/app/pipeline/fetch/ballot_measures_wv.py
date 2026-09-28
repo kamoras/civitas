@@ -43,6 +43,7 @@ import httpx
 from lxml import html as lxml_html
 
 from app.pipeline.fetch.ballot_measure_pdf_geometry import clean_text
+from app.pipeline.fetch.ballot_measure_text import NotYetPublished
 from app.pipeline.fetch.ballot_measures_state_common import get_text
 
 logger = logging.getLogger(__name__)
@@ -130,8 +131,9 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
             break
 
     if not notices:
-        logger.warning("WV: no amendment public notice found for %d — not a confirmation of none", year)
-        return None
+        # West Virginia posts a notice only in a year WITH an amendment, so
+        # its absence can never confirm none — nor is it a failure.
+        raise NotYetPublished(f"West Virginia amendment public notice for {year}")
 
     results: dict[str, tuple[dict, str]] = {}
     for url in notices:

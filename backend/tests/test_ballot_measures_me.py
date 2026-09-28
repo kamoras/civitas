@@ -16,7 +16,10 @@ Election", fetched live 2026-09-28 from maine.gov:
 import json
 from pathlib import Path
 
+import pytest
+
 from app.pipeline.fetch import ballot_measures_me as me
+from app.pipeline.fetch.ballot_measure_text import NotYetPublished
 
 FIXTURE = json.loads((Path(__file__).parent / "fixtures_me_citizens_guide.json").read_text())
 GUIDE_2024 = "\n".join(FIXTURE["2024"])
@@ -96,11 +99,12 @@ class TestDiscovery:
 
 
 class TestFetchMeasures:
-    async def test_guide_not_published_is_none_never_empty(self, monkeypatch):
+    async def test_guide_not_published_is_not_yet_published_never_empty(self, monkeypatch):
         async def fake_text(client, limiter, url, label, **kw):
             return "<a href='/sos/news/other'>other</a>"
         monkeypatch.setattr(me, "fetch_text_with_retry", fake_text)
-        assert await me.fetch_measures(None, 2026) is None
+        with pytest.raises(NotYetPublished):
+            await me.fetch_measures(None, 2026)
 
     async def test_full_flow_with_the_real_2024_guide(self, monkeypatch):
         guide = "https://www.maine.gov/sos/x/Citizens-20Guide-2011.5.2024-20FINAL.pdf"
