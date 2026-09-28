@@ -536,7 +536,7 @@ async def test_florida_reads_the_same_day_special_too():
 
     def handler(request):
         if request.method == "GET":
-            return httpx.Response(200, text=FL_PARTIES if "dos.fl.gov" in str(request.url) else FL_INDEX)
+            return httpx.Response(200, text=FL_PARTIES if request.url.host == "dos.fl.gov" else FL_INDEX)
         form = dict(httpx.QueryParams(request.content.decode()))
         posted.append((form["elecid"], form["OfficeGroup"]))
         page = {("20261103-GEN", "FED"): FL_FED, ("20261103-GEN", "CAB"): FL_CAB,
@@ -678,7 +678,7 @@ async def test_florida_without_its_legend_reads_no_state_office():
 
     def handler(request):
         if request.method == "GET":
-            return httpx.Response(404) if "dos.fl.gov" in str(request.url) else httpx.Response(200, text=FL_INDEX)
+            return httpx.Response(404) if request.url.host == "dos.fl.gov" else httpx.Response(200, text=FL_INDEX)
         return httpx.Response(200, text=FL_FED)
 
     async with _client(handler) as client:
