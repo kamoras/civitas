@@ -21,8 +21,10 @@ invented:
 import logging
 import re
 from collections.abc import Callable
+from datetime import UTC, date, datetime, timedelta
 from urllib.parse import urljoin
 
+from app.pipeline.fetch.fec import general_election_day
 from app.pipeline.fetch.http_utils import fetch_text_with_retry
 
 logger = logging.getLogger(__name__)
@@ -595,6 +597,46 @@ STATEWIDE_OFFICE_LABELS = {
     "executive_council": "Executive Council",
     "public_education_commission": "Public Education Commission",
 }
+
+
+# The federal floor for when a November ballot is printed and final: UOCAVA
+# requires absentee ballots to be TRANSMITTED to military and overseas
+# voters no later than 45 days before a federal election (52 U.S.C.
+# 20302(a)(8)(A)). A statute, not a calibration -- and the ballot a state
+# has already mailed is the ballot. Vermont's reader switches from primary
+# winners to its general report at this point; every certified list uses
+# it to tell "not published yet" from "broken" (not_yet).
+BALLOT_FINAL_DAYS_BEFORE = 45
+
+
+def ballot_final(held: str, today: date | None = None) -> bool:
+    """True once the general election on `held` is within the UOCAVA
+    transmission window (BALLOT_FINAL_DAYS_BEFORE), i.e. the ballot has
+    been mailed and is what voters will see. An unparseable date is never
+    final."""
+    try:
+        election_day = date.fromisoformat(str(held or "")[:10])
+    except ValueError:
+        return False
+    today = today or datetime.now(UTC).date()
+    return today >= election_day - timedelta(days=BALLOT_FINAL_DAYS_BEFORE)
+
+
+def not_yet(year: int, state: str, why: str, today: date | None = None) -> list | None:
+    """The answer for a certified list that is not the November ballot yet
+    (its page names another election, it still holds primary filers): []
+    -- healthy, "not published yet" -- until the ballot must be final, and
+    None from then on. By then every state has mailed its ballot, so a list
+    still not answering is broken (a moved page, a changed layout), and
+    None is what reports fetch_failed and raises the alarm; [] all cycle
+    long would be indistinguishable from "not yet" forever."""
+    held = general_election_day(year).isoformat()
+    if ballot_final(held, today):
+        logger.warning("%s %d certified list is still not the ballot %d days before the election: %s",
+                       state, year, BALLOT_FINAL_DAYS_BEFORE, why)
+        return None
+    logger.info("%s %d certified list is not the ballot yet: %s", state, year, why)
+    return []
 
 
 class SourceRecords(list):

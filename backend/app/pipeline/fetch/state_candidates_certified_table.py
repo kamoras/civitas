@@ -203,7 +203,9 @@ from app.pipeline.fetch.state_candidates_common import (
     ballot_list_party,
     clean_display_name,
     discover_certification_link,
+    NONPARTISAN,
     federal_only,
+    not_yet,
     normalize_party,
     parse_office,
     parse_state_leg_office,
@@ -635,10 +637,10 @@ async def fetch_confirmed_candidates(
         if payloads is None:
             return None
         if not payloads:
-            return []
+            return not_yet(year, state, "the page does not name this year's election")
         return _records(
             state, [row for p in payloads for row in (_rows(p, url, fmt) or [])], fmt,
-            bool(source.get("statewide_offices")),
+            bool(source.get("statewide_offices")), year,
         )
 
     page_url = discovery.get("page_url")
@@ -674,14 +676,15 @@ async def fetch_confirmed_candidates(
         if payloads is None:
             return None
         if not payloads:
-            return []  # not published for this year yet: every file is required
+            # Not published for this year yet: every file is required.
+            return not_yet(year, state, f"{url} does not name this year's election")
         for payload in payloads:
             part = _rows(payload, url, fmt)
             if not part:
                 logger.warning("%s certified list %s did not parse", state, url)
                 return None
             rows += part
-    return _records(state, rows, fmt, bool(source.get("statewide_offices")))
+    return _records(state, rows, fmt, bool(source.get("statewide_offices")), year)
 
 
 async def _download(
@@ -772,14 +775,19 @@ async def _pages(
         payloads.append(current)
 
 
-def _records(state: str, rows: list[dict], fmt: dict, state_offices: bool = False) -> list[dict] | None:
+def _records(
+    state: str, rows: list[dict], fmt: dict, state_offices: bool = False, year: int | None = None,
+) -> list[dict] | None:
     over = _overfilled(rows, fmt)
+    if over == _NO_SEAT_COUNT:
+        logger.warning("%s certified list prints no seat count where one was configured -- layout changed?", state)
+        return None
     if over:
         # A list that still holds more of one party's candidates for an
         # office than it has seats is not the November ballot yet -- it is
-        # the filings before a primary settles them. Not yet, not broken.
-        logger.info("%s certified list is not the November ballot yet: %s", state, over)
-        return []
+        # the filings before a primary settles them. Not yet, not broken --
+        # until the ballot must be final (not_yet).
+        return not_yet(year, state, over) if year is not None else []
     records = parse_certified_rows(rows, fmt, state_offices)
     federal = [r for r in records if r["office"] in ("S", "H")]
     if not federal:
@@ -796,13 +804,20 @@ def _records(state: str, rows: list[dict], fmt: dict, state_offices: bool = Fals
     return records
 
 
+_NO_SEAT_COUNT = "no seat count"
+
+
 def _overfilled(rows: list[dict], fmt: dict) -> str | None:
     """The first office on the list holding more candidates of one party
     than it has seats, or None. Needs format.seats_regex, whose first group
     is the seat count printed in the office cell (Michigan's "(1) Position",
     "(2) Positions"). Read only where a gate reads the office (a judgeship
     is non-partisan), only for rows the status filter keeps, and never for
-    independents, several of whom may run for one seat."""
+    independents, several of whom may run for one seat.
+
+    _NO_SEAT_COUNT when an office the gates read prints no seat count at
+    all: the layout changed, and a check that quietly turned itself off
+    would let a pre-primary filing list through as the certified ballot."""
     seats_re = fmt.get("seats_regex")
     if not seats_re:
         return None
@@ -812,15 +827,15 @@ def _overfilled(rows: list[dict], fmt: dict) -> str | None:
         if statuses and str(row.get(fmt.get("status_column") or "") or "").strip().upper() not in statuses:
             continue
         cell = " ".join(str(row.get(fmt["office_column"]) or "").split())
-        seats = re.search(seats_re, cell)
-        if not seats:
-            continue
         label = cell
         if fmt.get("office_regex"):
             found = re.search(fmt["office_regex"], cell)
             label = found.group(1).strip() if found else cell
         if not (parse_office(label) or parse_statewide_office(label) or parse_state_leg_office(label)):
             continue
+        seats = re.search(seats_re, cell)
+        if not seats:
+            return _NO_SEAT_COUNT
         party = " ".join(
             str(row[col]).strip() for col in _party_columns(fmt) if str(row.get(col) or "").strip()
         ).upper()
@@ -834,18 +849,24 @@ def _overfilled(rows: list[dict], fmt: dict) -> str | None:
 
 
 def _slate_gaps(records: list[dict], fmt: dict) -> list[str]:
-    """What format.slate_complete says the list still lacks: for every
-    party with a candidate for its `office`, a candidate for each office in
-    `requires`. Michigan's parties nominate their Secretary of State and
-    Attorney General at conventions held weeks after the primary (2026:
-    August 24 and 31), and until they do the list names the Governor's
-    ticket without them -- publishing it then would record those offices
-    as the whole ballot. Read from the list itself, never a date: a party
-    that genuinely fields a governor but no attorney general would hold the
-    state offices back, which is the safe way to be wrong."""
+    """What format.slate_complete says the list still lacks. Michigan's
+    parties nominate their Secretary of State and Attorney General at
+    conventions held weeks after the primary (2026: August 24 and 31), and
+    until they do the list names the Governor's ticket without them --
+    publishing it then would record those offices as the whole ballot.
+
+    Read from the list itself, never a date: a party with a candidate for
+    `office` that ALREADY lists one of the `requires` offices -- it holds
+    conventions for them -- must list all of them. A party that lists none
+    (an independent governor's petition ticket, a minor party that fields
+    only a governor) is never waited for: it may never field one, and
+    waiting would hold every state office back all cycle. Independents
+    and non-partisan rows have no slate at all."""
     rule = fmt.get("slate_complete") or {}
     if not rule.get("office"):
         return []
+    requires = list(rule.get("requires") or [])
+
     def key(r):
         return (r.get("party"), r.get("party_label"))
     have: dict[str, set] = {}
@@ -853,7 +874,10 @@ def _slate_gaps(records: list[dict], fmt: dict) -> list[str]:
         have.setdefault(r["office"], set()).add(key(r))
     gaps = []
     for party in sorted(have.get(rule["office"], set()), key=str):
-        for office in rule.get("requires") or []:
-            if party not in have.get(office, set()):
-                gaps.append(f"{party[1] or party[0]} {office}")
+        if party[0] in ("I", NONPARTISAN, "", None):
+            continue
+        listed = [office for office in requires if party in have.get(office, set())]
+        if not listed:
+            continue
+        gaps += [f"{party[1] or party[0]} {office}" for office in requires if office not in listed]
     return gaps

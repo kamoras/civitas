@@ -25,6 +25,7 @@ import httpx
 import pytest
 
 from app.pipeline.fetch import state_candidates as sc
+from app.pipeline.fetch import state_candidates_common as common
 from app.pipeline.fetch.state_candidates_certified_table import (
     _rows,
     fetch_confirmed_candidates,
@@ -110,7 +111,9 @@ def test_a_name_with_its_own_comma_keeps_it():
 
 
 @pytest.mark.asyncio
-async def test_the_fixed_address_is_read_only_for_this_years_november_list():
+async def test_the_fixed_address_is_read_only_for_this_years_november_list(monkeypatch):
+    # Early in the cycle: the ballot need not be final yet.
+    monkeypatch.setattr(common, "ballot_final", lambda held, today=None: False)
     """The address always shows the NEXT election; in August it was the
     runoff's list, whose candidates are not November's."""
     august = PAGE.replace(b"NOVEMBER / 2026 LIST OF ELECTIONS", b"AUGUST / 2026 LIST OF ELECTIONS")
@@ -138,3 +141,22 @@ def test_the_entry_is_the_ballot_and_google_only_supplements_it():
     assert SOURCE["general_ballot_complete"] is True
     assert SOURCE["statewide_offices"] is True
     assert SOURCE["general_list"]["strategy"] == "google_civic"
+
+
+@pytest.mark.asyncio
+async def test_a_list_still_not_published_once_ballots_are_mailed_is_a_failure(monkeypatch):
+    """45 days out (UOCAVA) every state has mailed its ballot. A page that
+    still names another election then is a moved or broken page, and must
+    report fetch_failed rather than "not yet" for the rest of the cycle."""
+    august = PAGE.replace(b"NOVEMBER / 2026 LIST OF ELECTIONS", b"AUGUST / 2026 LIST OF ELECTIONS")
+    monkeypatch.setattr(common, "ballot_final", lambda held, today=None: True)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(
+        lambda request: httpx.Response(200, content=august),
+    )) as client:
+        assert await fetch_confirmed_candidates(client, 2026, "OK", SOURCE) is None
+
+
+def test_not_yet_turns_into_a_failure_45_days_before_the_general():
+    from datetime import date
+    assert common.not_yet(2026, "OK", "test", today=date(2026, 9, 18)) == []
+    assert common.not_yet(2026, "OK", "test", today=date(2026, 9, 19)) is None   # Nov 3 - 45 days

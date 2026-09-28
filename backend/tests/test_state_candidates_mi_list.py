@@ -28,6 +28,7 @@ import pytest
 
 from app.pipeline.fetch import state_candidates as sc
 from app.pipeline.fetch import state_candidates_certified_table as ct
+from app.pipeline.fetch import state_candidates_common as common
 from app.pipeline.fetch.state_candidates_certified_table import (
     _rows,
     fetch_confirmed_candidates,
@@ -127,16 +128,28 @@ def _grid():
 _US_HOUSE_1 = "1st District Representative in Congress 2 Year Term (1) Position"
 
 
-def test_a_list_still_holding_primary_filers_is_not_the_ballot_yet():
+def test_a_list_still_holding_primary_filers_is_not_the_ballot_yet(monkeypatch):
     """The report exists all cycle and lists every filer from filing day,
     so before the August primary is canvassed a party can hold two
     candidates for one seat. That list is not the November ballot: it is
-    answered [] (not yet) -- never read, never a failure."""
+    answered [] (not yet) -- until the ballot must be final, when a list
+    still holding primary filers is broken (None, fetch_failed)."""
     rows = _grid()
     loser = {"Party / Incumbent": "Democratic Party", "Candidate Name": "Doe, Jane",   # an extra D filer
              "Filed On": "04/21/2026", "Filing Method": "Petitions", "heading": _US_HOUSE_1}
-    assert ct._records("MI", rows, SOURCE["format"], True) not in ([], None)
-    assert ct._records("MI", [*rows, loser], SOURCE["format"], True) == []
+    assert ct._records("MI", rows, SOURCE["format"], True, 2026) not in ([], None)
+    monkeypatch.setattr(common, "ballot_final", lambda held, today=None: False)
+    assert ct._records("MI", [*rows, loser], SOURCE["format"], True, 2026) == []
+    monkeypatch.setattr(common, "ballot_final", lambda held, today=None: True)
+    assert ct._records("MI", [*rows, loser], SOURCE["format"], True, 2026) is None
+
+
+def test_a_layout_with_no_seat_count_is_a_failure_not_an_open_gate():
+    """If the report stops printing "(N) Position(s)", the over-fill check
+    cannot run; reading on would let a pre-primary filing list through as
+    the ballot."""
+    rows = [{**r, "heading": r["heading"].replace(" (1) Position", "")} for r in _grid()]
+    assert ct._records("MI", rows, SOURCE["format"], True, 2026) is None
 
 
 def test_independents_and_multi_seat_boards_are_not_overfilled():
@@ -180,6 +193,21 @@ async def test_the_listing_is_fetched_by_year_and_another_years_is_not_yet():
     assert seen[0] == ("https://mi-boe.entellitrak.com/etk-mi-boe-prod/page.request.do"
                        "?page=page.miboePublicReport&electionType=GEN&electionYear=2026")
     assert later == []   # the page names November 3, 2026: not published for 2028 yet
+
+
+def test_an_independent_governor_ticket_never_holds_the_state_offices():
+    """A petition independent (or a minor party fielding only a governor)
+    has no convention slate; waiting for its Secretary of State would hold
+    every state office back all cycle, silently."""
+    indie = {"Party / Incumbent": "No Party Affiliation", "Candidate Name": "Roe, Sam / Poe, Ann",
+             "Filed On": "07/16/2026", "Filing Method": "Petitions",
+             "heading": "Governor / Lt. Governor 4 Year Term (1) Position"}
+    lone = {"Party / Incumbent": "Working Class Party", "Candidate Name": "Hale, Pat / Doe, Kim",
+            "Filed On": "06/08/2026", "Filing Method": "Convention",
+            "heading": "Governor / Lt. Governor 4 Year Term (1) Position"}
+    records = ct._records("MI", [*_grid(), indie, lone], SOURCE["format"], True, 2026)
+    assert not getattr(records, "state_offices_incomplete", False)
+    assert ("governor", "I") in {(r["office"], r["party"]) for r in records}
 
 
 def test_the_entry_is_the_ballot_and_google_only_supplements_it():
