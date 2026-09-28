@@ -113,8 +113,8 @@ def normalize_finance(
         ai_classifications: Optional AI classifications for donors (type + industry).
         committee_meta_map: Optional contributor_id -> the FEC committee
             master's {"type", "designation", "connectedOrg"} (see
-            fec.resolve_committee_meta). The type ("Q" multicandidate, "N"
-            not) feeds the PAC-utilization signal. A committee the FEC registers as a
+            fec.resolve_committee_meta). The type is reported on the donor
+            (not scored). A committee the FEC registers as a
             party, candidate, joint-fundraising or leadership committee is
             political money (industry POLITICAL) whatever its name reads
             like, and a PAC's connected organization names who sponsors it.
@@ -209,8 +209,8 @@ def build_top_donors(
     committee_meta_map: contributor_id -> the FEC committee master's
     {"type", "designation", "connectedOrg"} (see fec.resolve_committee_meta)
     for each PAC that appears in pac_receipts. The type ("Q"=Qualified/
-    multicandidate, "N"=Nonqualified) feeds the PAC-utilization signal in
-    score_calculator._funding_independence_core.
+    multicandidate, "N"=Nonqualified, ...) is reported on the donor, and
+    type and designation decide the political-committee rule.
     """
     donor_map: dict[str, dict] = {}
     ai_classifications = ai_classifications or {}
@@ -296,14 +296,9 @@ def build_top_donors(
             # anyone (fetch/lda.py), so a search under it proves nothing.
             existing["isCommittee"] = True
             meta = committee_meta_map.get(cid)
-            # The PAC-cap signal in _funding_independence_core still reads
-            # the type only for "COM" rows, as before. Given every committee
-            # row's type, that signal's formula moves Funding Independence
-            # by up to 18 points (Sanders and Warren, whose few PACs give
-            # the maximum, measured on the September 2026 Senate): a flaw in
-            # the formula, reworked with this gate in the PAC-dependency
-            # change that follows, not switched on here.
-            if meta and meta.get("type") is not None and r.get("entity_type") == "COM":
+            # Reported for every committee contributor; no score reads it
+            # since v6.19 removed the PAC-cap utilization signal.
+            if meta and meta.get("type") is not None:
                 existing["committeeType"] = meta["type"]
             if meta and meta.get("connectedOrg"):
                 existing["connectedOrg"] = meta["connectedOrg"]

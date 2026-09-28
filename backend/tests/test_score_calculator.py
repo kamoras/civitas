@@ -1,6 +1,8 @@
 """Tests for the five representation sub-score calculations."""
 
 
+import math
+
 from app.models import Senator
 from app.pipeline.analyze import score_calculator
 from app.pipeline.analyze.score_calculator import (
@@ -112,7 +114,10 @@ class TestFundingIndependence:
 
         Share alone gave mega-fundraisers near-perfect PAC scores because
         capped PAC checks shrink as a fraction of unbounded individual
-        money (audit: FI vs log(raised) r=+0.68).
+        money (FI vs log campaign size r=+0.58 Senate, 2026-09-28). Against
+        the chamber's size fit (here: PAC dollars flat with size, as the
+        Senate measured), the same 5% share is ten times the typical share
+        at $100M and only the typical one at $10M.
         """
         small_campaign = {
             "totalRaised": 10_000_000,
@@ -126,7 +131,16 @@ class TestFundingIndependence:
             "smallDonorPercentage": 15,
             "topDonors": [],
         }
-        assert _calc_funding_independence(mega_campaign) < _calc_funding_independence(small_campaign)
+        # Flat PAC dollars ($500K) across sizes: log share slope -1.
+        ref = {"senate": {
+            "pac_ratio_median": 0.05, "pac_size_slope": -1.0,
+            "pac_size_intercept": math.log(500_000), "pac_size_log_lo": math.log(1e6),
+            "pac_size_log_hi": math.log(2e8),
+        }}
+        assert (
+            _calc_funding_independence(mega_campaign, reference=ref)
+            < _calc_funding_independence(small_campaign, reference=ref)
+        )
 
     def test_own_committees_excluded_from_concentration(self):
         """Transfers from the candidate's own committees are not donors.
@@ -185,81 +199,6 @@ class TestFundingIndependence:
         assert score_low > score_high
         assert score_low - score_high >= 10
 
-    def test_pac_utilization_signal_maxed_out_scores_lower(self):
-        """PACs uniformly maxing out their legal per-election cap should
-        score worse than PACs giving only a token amount, holding the
-        overall PAC ratio and dollar total identical — the whole point of
-        replacing the old absolute-dollar penalty."""
-        base = {
-            "totalRaised": 1_000_000,
-            "totalFromPACs": 100_000,
-            "smallDonorPercentage": 20,
-        }
-        maxed_out = {
-            **base,
-            "topDonors": [
-                {"total": 5_000, "committeeType": "Q"} for _ in range(20)
-            ],
-        }
-        token_amounts = {
-            **base,
-            "topDonors": [
-                {"total": 500, "committeeType": "Q"} for _ in range(200)
-            ],
-        }
-        score_maxed = _calc_funding_independence(maxed_out)
-        score_token = _calc_funding_independence(token_amounts)
-        assert score_token > score_maxed
-
-    def test_pac_utilization_respects_committee_type_cap(self):
-        """A nonmulticandidate PAC (lower cap) giving the same dollar amount
-        as a multicandidate PAC should register as MORE utilized (closer to
-        its smaller cap), and therefore score worse."""
-        base = {"totalRaised": 1_000_000, "totalFromPACs": 100_000, "smallDonorPercentage": 20}
-        multicandidate = {**base, "topDonors": [{"total": 3_500, "committeeType": "Q"}]}
-        nonmulticandidate = {**base, "topDonors": [{"total": 3_500, "committeeType": "N"}]}
-        score_multi = _calc_funding_independence(multicandidate)
-        score_non = _calc_funding_independence(nonmulticandidate)
-        assert score_non < score_multi
-
-    def test_pac_utilization_excludes_non_pac_committee_types(self):
-        """A large joint-fundraising-committee transfer (committee_type
-        e.g. "Y" for party, or any code that isn't "Q"/"N") is not a PAC
-        subject to the $5,000/$3,500 caps — it must not be swept into the
-        nonqualified bucket, where a $110K JFC transfer would misleadingly
-        register as "maxed out." With only a non-PAC committee type
-        present, this should behave identically to having no PAC data at
-        all (the dollar-based fallback)."""
-        funding_with_jfc_only = {
-            "totalRaised": 5_000_000,
-            "totalFromPACs": 2_000_000,
-            "topDonors": [{"total": 110_000, "committeeType": "Y"}],
-        }
-        funding_with_no_committee_data = {
-            "totalRaised": 5_000_000,
-            "totalFromPACs": 2_000_000,
-            "topDonors": [{"total": 50_000} for _ in range(10)],  # sums differently but both hit the fallback
-        }
-        jfc_breakdown = _funding_independence_core(funding_with_jfc_only)
-        no_data_breakdown = _funding_independence_core(funding_with_no_committee_data)
-        # Both fall back to the identical dollar-based volume_factor
-        # (driven only by totalFromPACs, which is the same in both cases).
-        assert "no PAC committee-type data" in jfc_breakdown["components"][0]["detail"]
-        assert "no PAC committee-type data" in no_data_breakdown["components"][0]["detail"]
-
-    def test_pac_utilization_falls_back_without_committee_type_data(self):
-        """No contributing PAC has a resolved committee type — degrades to
-        the original dollar-based penalty rather than skipping the
-        correction (same score as before this feature existed)."""
-        funding = {
-            "totalRaised": 5_000_000,
-            "totalFromPACs": 2_000_000,
-            "topDonors": [{"total": 50_000} for _ in range(10)],  # no committeeType key
-        }
-        breakdown = _funding_independence_core(funding)
-        detail = breakdown["components"][0]["detail"]
-        assert "no PAC committee-type data" in detail
-
     def test_concentration_is_scored_against_the_chamber_median(self, pinned_funding_reference):
         """v6.13: the anchors used to be hand-typed (0.15 -> 100, 0.40 -> 0,
         fitted to a 2026-07 snapshot; an earlier set had drifted until the
@@ -289,35 +228,6 @@ class TestFundingIndependence:
         assert _concentration_score(median - spread) == 100.0
         assert _concentration_score(0.95) == 0.0  # never negative
         assert _concentration_score(median - 0.05) > _concentration_score(median + 0.05)
-
-    def test_pac_fallback_scales_to_twice_the_chamber_median(self):
-        """Without a resolved PAC committee type, PAC volume is judged
-        against twice the chamber's median PAC dollars — measured each run
-        since v6.13 (pinned here to the 2026-07 median, $662,750). It used
-        to be a hand-typed cap, one version of which had drifted to ~3x the
-        real median."""
-        def _pac_score_at(pac_total: int) -> float:
-            # totalRaised scales with pac_total so pac_ratio (and thus the
-            # ratio-score half of this component) stays constant at 10% —
-            # isolating the volume_factor this test actually targets.
-            funding = {
-                "totalRaised": pac_total * 10 if pac_total else 5_000_000,
-                "totalFromPACs": pac_total,
-                "topDonors": [{"total": 50_000} for _ in range(10)],  # no committeeType -> fallback path
-            }
-            return _funding_independence_core(funding)["components"][0]["score"]
-
-        zero_pac = _pac_score_at(0)
-        at_new_median = _pac_score_at(662_750)
-        at_or_above_cap = _pac_score_at(1_325_000)
-        well_above_cap = _pac_score_at(13_250_000)
-
-        # $0 PAC money -> no volume-factor penalty at all (still the ratio
-        # score, but volume_factor itself is 1.0).
-        assert zero_pac > at_new_median > at_or_above_cap
-        # Anything at or beyond the cap floors at the same penalized value —
-        # no further differentiation past the cap, same shape as before.
-        assert at_or_above_cap == well_above_cap
 
     def test_small_state_not_penalized_for_identical_raw_percentage(self):
         """The core regression test: WY (population 0.6M, one of the

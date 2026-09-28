@@ -242,11 +242,18 @@ export default function AboutPage() {
                   and grassroots the money, the higher this score — regardless of party or chamber.
                 </Gist>
                 <P>
-                  Measures four things: (1) PAC dependency — a blend of the share of funding
-                  from PACs and how close contributing PACs are to their legal per-election cap,
-                  measured against the chamber&apos;s own median member (re-measured every update),
-                  since Senate and House candidates rely on PAC money at structurally different
-                  rates; (2) the share of funding from small (&lt;$200,
+                  Measures four things: (1) PAC dependency — the share of funding from PACs,
+                  measured against the share campaigns of the same size typically take in the
+                  member&apos;s chamber (re-measured every update). Per chamber, since Senate and
+                  House candidates rely on PAC money at structurally different rates; per size,
+                  since PAC checks are capped by law and individual money is not, so a bigger
+                  campaign dilutes the same PAC dollars to a smaller share. Measured in September
+                  2026, a senator&apos;s PAC dollars barely grow with campaign size, and scored
+                  against one chamber-wide median the share tracked size (a correlation of 0.58
+                  between this score and campaign size in the Senate; 0.11 with the adjustment).
+                  Each member is compared only with their own chamber, whose members&apos; funding
+                  covers the same span of time (six years of fundraising for a senator&apos;s
+                  election, two for a House member&apos;s); (2) the share of funding from small (&lt;$200,
                   unitemized) donors — the broadest possible funding base. Both shares are of
                   contributions (money given by individuals, PACs, party committees, or the
                   candidate), not total receipts: receipts also count transfers in from joint
@@ -568,30 +575,6 @@ export default function AboutPage() {
               disclosure. Where it isn&apos;t — no dataset exists, or fixing it would require an
               editorial judgment call the platform&apos;s no-hardcoded-conclusions rule resists — we
               name the specific reason why, so it can be revisited if that changes.
-            </P>
-            <Gist>
-              a bigger campaign naturally looks more &quot;independent&quot; by percentage even with
-              the same PAC dollars, simply because the total got bigger. We also check absolute PAC
-              dollars, but no single number fully separates &quot;independent&quot; from
-              &quot;big.&quot;
-            </Gist>
-            <P>
-              <em className="text-ink">Fundraising scale still matters.</em> Larger campaigns
-              naturally have smaller PAC <em>shares</em> because PAC checks are legally capped while
-              individual money is not. We mitigate this by scoring absolute PAC dollars alongside
-              the share, but no single number fully separates &quot;independent&quot; from
-              &quot;big.&quot;
-            </P>
-            <Gist>
-              election cycles run different lengths for different members (and for the House vs. the
-              Senate), so funding scores are technically comparing different-sized snapshots of time
-              across members.
-            </Gist>
-            <P>
-              <em className="text-ink">Comparison windows differ by chamber.</em> Funding metrics
-              cover a member&apos;s most recent completed election — the campaign that won them
-              their current seat, six years of fundraising for a senator and two for a House
-              member — so cross-chamber comparisons weigh different spans of time.
             </P>
             <Gist>
               we estimate what a senator&apos;s state &quot;expects&quot; from how the state votes

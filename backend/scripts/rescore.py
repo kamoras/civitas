@@ -288,6 +288,7 @@ def main() -> int:
         scored_rate, n_scored = party_break_rate(payload["votingRecord"])
         metrics = {
             "pac_ratio": funding["totalFromPACs"] / base if base > 0 else None,
+            "pac_dollars": funding["totalFromPACs"] if base > 0 else None,
             "small_donor_pct": funding["smallDonorPercentage"] if base > 0 else None,
             **constituent_metrics(
                 scored_rate, n_scored, s["state"], s["party"],
