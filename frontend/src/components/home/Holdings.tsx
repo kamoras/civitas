@@ -61,7 +61,7 @@ export default function Holdings() {
       </p>
 
       <Link
-        href="/about"
+        href="/about/scores"
         className="mt-3 inline-block border-b border-phos-mid/40 font-mono text-xs tracking-[0.1em] text-phos-mid hover:text-phos"
       >
         HOW SCORES ARE COMPUTED →

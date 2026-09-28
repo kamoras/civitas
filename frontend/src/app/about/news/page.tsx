@@ -1,0 +1,207 @@
+import { pageMetadata } from "@/lib/site";
+import {
+  AboutPage,
+  Summary,
+  Point,
+  Section,
+  P,
+  List,
+  Item,
+  More,
+} from "@/components/about/AboutPage";
+
+export const metadata = pageMetadata({
+  title: "How the Action Center and Congress Reports Work",
+  description:
+    "How Civitas picks the day's civic news and keeps it in its sources' own words, how daily Congress reports are built from the Congressional Record, and how corrections are handled.",
+  path: "/about/news",
+});
+
+export default function NewsChapter() {
+  return (
+    <AboutPage
+      href="/about/news"
+      eyebrow="Methodology · news & the record"
+      title="News & Congress reports"
+      lede={
+        <p>
+          The Action Center shows the day&apos;s most important civic stories; the Congress pages
+          show what each chamber did. Neither is written by us or by a model — both quote their
+          sources.
+        </p>
+      }
+    >
+      <Summary>
+        <Point>
+          News comes from seven newsrooms, checked hourly. The mix runs from center to lean-left,
+          with no right-of-center outlet at present — a limitation, stated.
+        </Point>
+        <Point>
+          A model is used to find a claim in an article, not to write one. Every news sentence you
+          read is copied word for word from its source and names the outlet; the one exception is
+          labelled &ldquo;Developing&rdquo;.
+        </Point>
+        <Point>
+          When a story has no sentence that passes those checks, nothing is published for it.
+        </Point>
+        <Point>
+          Congress reports come from the Congressional Record&apos;s own daily summary, in its own
+          wording.
+        </Point>
+        <Point>
+          Anything withdrawn is logged publicly with its date and reason, not quietly deleted.
+        </Point>
+      </Summary>
+
+      <Section id="action-center" title="How the Action Center picks stories">
+        <P>
+          Eight feeds from seven newsrooms — AP News, NPR (Politics and World, counted as one), PBS
+          NewsHour, BBC World, The Hill, Politico and Roll Call — are read every hour, with opinion
+          sections filtered out. Articles are kept if they&apos;re about U.S. policy, and grouped
+          into stories by headline similarity.
+        </P>
+        <P>
+          Stories are then ranked: 40% civic actionability (are officials named, does it resemble
+          the government documents we index), 35% breadth (how many independent newsrooms cover it)
+          and 25% whether people are talking about it on Google Trends and Bluesky. Trending counts
+          least because it is the most volatile. At most two issues publish per hourly run, in rank
+          order; if a top story fails the checks below, the next one is tried.
+        </P>
+        <More label="How stories are grouped, and why it errs toward keeping them apart">
+          <P>
+            Headlines are compared after removing what every headline that day has in common, so
+            only the topic counts. Articles join a story only if every one resembles every other. An
+            earlier rule asked only that each resemble one other, so stories chained together by
+            theme: on 27 September 2026 an issue titled for floods in Bangkok led with a hurricane
+            near Hawaii and listed facts about a nor&apos;easter and an epidemic in Fiji. Headline
+            similarity can&apos;t reliably tell the same event from the same kind of event, so
+            grouping errs toward keeping stories apart — an issue may cite fewer sources, which is a
+            smaller error than one built from unrelated stories.
+          </P>
+          <P>
+            How alike two headlines must be, when a new issue is the same story as an existing one,
+            and when an issue belongs to a long-running topic are learned from the pipeline&apos;s
+            own record: each run records pairs it compared with an independent verdict (do they name
+            the same people, places and numbers), and once a day each cut-off moves to where those
+            verdicts say it belongs, once there are enough to trust. Multi-story briefings
+            (&ldquo;Up First&rdquo;, &ldquo;Morning news brief&rdquo;) are dropped at the door,
+            because once several stories share one article they can&apos;t be separated later.
+          </P>
+          <P>
+            Reddit was a trending source until September 2026, when it began requiring a login this
+            site doesn&apos;t have. It was retired rather than left returning nothing — a dead
+            source that looks like a quiet one is worse than none.
+          </P>
+        </More>
+      </Section>
+
+      <Section id="quoted" title="The model doesn’t write the sentence">
+        <P>
+          A model is asked only to locate an assertion in one article — who did something, and what
+          they did. The site then checks that both parts appear in the article word for word, that
+          the article asserts one of the other rather than merely containing both, and that the span
+          runs to the end of its clause. Only then is the sentence shown, in the source&apos;s own
+          words, naming the outlet. The headline is the top article&apos;s real headline, and an
+          issue&apos;s full story is every checked sentence, listed under the outlet that reported
+          it.
+        </P>
+        <P>
+          This replaced asking a model to write neutrally and checking whether it had. That approach
+          published an endorsement, and turned officials calling for an end to a war into a report
+          that the war had ended. A paraphrase can be faithful to its source and still unfit to
+          repeat; copying can&apos;t invent a word that isn&apos;t there. The cost is silence: a
+          story with no attributable claim produces no issue, and some days carry fewer issues than
+          others.
+        </P>
+        <P>
+          One exception, labelled on the page as <strong className="text-ink-hi">Developing</strong>
+          : when the Senate or House passes a bill before the news has covered it, a short, hedged
+          draft is written from the roll-call record itself — a certified count, not an
+          interpretation — and checked against that record. It carries a note that broader coverage
+          hasn&apos;t confirmed it yet, and isn&apos;t posted anywhere else until press coverage
+          does.
+        </P>
+        <P>
+          Recommended actions are procedural — contact your representatives, attend a public
+          hearing, read the primary sources — built from real bill and source links, never advocacy
+          for or against a position.
+        </P>
+        <More label="Keeping the hourly refresh running">
+          <P>
+            Only one refresh runs at a time, even while a deploy briefly runs two copies of the
+            site. The run holding that turn renews its claim every minute, and a claim unrenewed for
+            ten minutes is released. A claim used to last four hours whether or not its run was
+            alive, so a deploy that stopped a refresh silenced the next four — on 26 September 2026,
+            a day of steady deploys, no issue was published at all. Deploys now wait for a refresh
+            under way, up to a limit, and each write is saved before the next model call so the
+            renewal always gets its turn.
+          </P>
+        </More>
+      </Section>
+
+      <Section id="action-tabs" title="The rest of the Action Center">
+        <List>
+          <Item label="National monitors">
+            When a story persists across several days, it becomes a monitor with its own sourced
+            timeline. Separate stories about the same underlying event are merged; a monitor goes
+            quiet (&ldquo;watching&rdquo;) when coverage fades and wakes when it returns.
+          </Item>
+          <Item label="Year in review">
+            Each day&apos;s top issue is kept permanently, building a month-by-month timeline with
+            the top themes for each month and the year.
+          </Item>
+          <Item label="Government activity">
+            The latest floor speeches, executive orders, proposed rules and court opinions, one tab
+            per branch.
+          </Item>
+          <Item label="Elections">
+            Upcoming election dates, Senate races with incumbents&apos; scores, and a map into each
+            state&apos;s ballot page.
+          </Item>
+          <Item label="World">
+            A globe of U.S.-related international coverage, sized by article count, linking to the
+            original reporting.
+          </Item>
+        </List>
+        <P>
+          When a scored politician is part of a story, it links to their scorecard; related
+          government documents are matched from the Explore index.
+        </P>
+      </Section>
+
+      <Section id="congress-reports" title="Congress reports">
+        <P>
+          The Congress pages answer what the Senate and House did on a given day, week or month,
+          from the Congressional Record&apos;s Daily Digest — the Record&apos;s own summary of each
+          day, published by the Government Publishing Office the next day. Until it appears, the
+          page shows each chamber&apos;s live floor log. Record votes come from each chamber&apos;s
+          roll-call files, with every member&apos;s vote, back to the start of the 119th Congress.
+        </P>
+        <P>
+          Every entry uses the Record&apos;s own wording. The one-line summary at the top is filled
+          from counts by a fixed template (&ldquo;The Senate passed 3 bills, agreed to 4 resolutions
+          and took 3 record votes&rdquo;) and never describes what a bill does. A chamber that
+          didn&apos;t meet shows as not in session; a source that couldn&apos;t be read shows as
+          unavailable, never as an empty day. Every bill named links to its page — summary,
+          sponsors, full history, text and every recorded vote — including bills whose sponsors have
+          left.
+        </P>
+        <P>
+          Once a day&apos;s Record is final, the Civitas Bluesky account posts that day&apos;s count
+          summary and the numbers of bills passed — never their titles, since an official short
+          title can read as advocacy — and each week, the bills that became law.
+        </P>
+      </Section>
+
+      <Section id="retractions" title="Corrections and retractions">
+        <P>
+          When something Civitas published is wrong and can&apos;t be corrected from its sources, it
+          is withdrawn, not quietly deleted. Each withdrawal is listed with its date and reason in a
+          public retraction log in the source code, and the issue&apos;s page says it was withdrawn
+          and why. The first entry, on 27 September 2026, withdrew two issues that a since-fixed
+          grouping step had built from unrelated stories.
+        </P>
+      </Section>
+    </AboutPage>
+  );
+}
