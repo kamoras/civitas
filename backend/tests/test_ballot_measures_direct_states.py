@@ -141,6 +141,30 @@ class TestArkansas:
         # "FOR Issuance ..." is a ballot choice, not an explanation.
         assert four["yes_means"] is None
 
+    def test_citizen_initiative_possible_means_refuse_not_confirm(self):
+        html = self.fx["landing_html"]
+        # 2026's Attorney General section says "None", so the referrals
+        # are the whole ballot (the passing case above). A petition listed
+        # there could be on the ballot and nothing here can confirm it —
+        # refuse rather than return a possibly incomplete list.
+        listed = html.replace(
+            "<p>None for the 2026 General Election</p>",
+            '<p><a href="/uploads/elections/Some_Initiative.pdf">An Amendment Proposed by Petition</a></p>',
+        )
+        assert listed != html
+        assert ar.issue_links(listed, ar.LANDING_URL, 2026) is None
+        # No Attorney General section for the year at all: unknown.
+        no_section = html.replace("2026 Proposed Initiatives as Certified by the Attorney General", "Proposed Initiatives")
+        assert ar.issue_links(no_section, ar.LANDING_URL, 2026) is None
+
+    def test_real_2024_page_never_listed_its_certified_initiative(self):
+        # Archived 2024-10-16, when citizen-initiated Issue 2 (casinos) had
+        # been certified sufficient since July 31: the page lists no ballot
+        # issue at all, so it can't be the record of initiative
+        # certification — and the reader says "not covered", not "none".
+        assert "Issue 2" not in self.fx["landing_html_2024_10_16"]
+        assert ar.issue_links(self.fx["landing_html_2024_10_16"], ar.LANDING_URL, 2024) is None
+
     def test_refuses_another_election(self):
         assert ar.parse_notice(self.fx["notices"]["2"], "2", 2028) is None
         assert ar.parse_notice(self.fx["notices"]["2"], "3", 2026) is None
