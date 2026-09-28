@@ -63,6 +63,7 @@ import httpx
 
 from app.pipeline.fetch.http_utils import BROWSER_JSON_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
+    runoff_threshold,
     clean_display_name, federal_record, normalize_party, parse_office,
     parse_state_leg_office, parse_statewide_office, pick_nominees,
 )
@@ -197,7 +198,7 @@ async def fetch_confirmed_candidates(
     expected to be null; it is still read from config rather than assumed,
     exactly as the other adapters do.
     """
-    threshold = source.get("runoff_threshold_pct")
+    threshold = runoff_threshold(source)
     election_id = await _primary_election_id(client, year)
     if not election_id:
         logger.warning("No %d primary indexed yet for PA — skipping", year)

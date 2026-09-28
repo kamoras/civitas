@@ -141,6 +141,7 @@ import httpx
 from app.election_calendar import next_election_day
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
+    runoff_threshold,
     JUDICIAL_RESOLUTION_DECIDED_EARLY,
     JUDICIAL_RESOLUTION_ELECTS,
     clean_display_name,
@@ -858,7 +859,7 @@ async def fetch_confirmed_candidates(
     Civitas's FEC-derived Candidate rows by state_candidates.py, not here.
     """
     st = state.upper()
-    threshold = source.get("runoff_threshold_pct")
+    threshold = runoff_threshold(source)
     advance_count = int(source.get("advance_count") or 1)
     fmt = source.get("format") or {}
 

@@ -1382,6 +1382,33 @@ JUDICIAL_RESOLUTION_ELECTS = "elects"
 JUDICIAL_RESOLUTION_DECIDED_EARLY = "decided_before_general"
 
 
+class InclusiveThreshold(float):
+    """A runoff threshold a leader clears by REACHING it, not only by
+    passing it. See runoff_threshold."""
+
+
+def runoff_threshold(source: dict | None) -> float | None:
+    """The state's primary threshold from its source entry, carrying how
+    it is met. Every caller reads it through here, so whether a leader is
+    named -- and whether a contest counts as owed a runoff, which is the
+    same pick_nominees call without it -- agrees everywhere.
+
+    A threshold is STRICT by default: a majority is more than half (GA
+    O.C.G.A. 21-2-501, TX Elec. Code 172.003, AL Code 17-13-18, AR Code
+    7-7-202, MS Code 23-15-305), and North Carolina's substantial
+    plurality is "any excess of" thirty percent of the votes (G.S.
+    163-111(a)(1)). `runoff_threshold_inclusive: true` makes it
+    inclusive, for Iowa alone: "thirty-five percent or more of the votes
+    cast" (Iowa Code 43.52(1)). A leader at exactly 50.0% in Georgia is
+    withheld; at exactly 35.0% in Iowa, named."""
+    value = (source or {}).get("runoff_threshold_pct")
+    if value is None:
+        return None
+    if (source or {}).get("runoff_threshold_inclusive"):
+        return InclusiveThreshold(value)
+    return float(value)
+
+
 def pick_nominees(
     choices: list[tuple[str, int]],
     runoff_threshold_pct: float | None = None,
@@ -1478,7 +1505,12 @@ def pick_nominees(
         # ponytail: withholds the contest until the leader clears the bar;
         # the upgrade is fetching that state's second-primary/runoff feed
         # and merging it in.
-        out = [(n, p) for n, p in out if p >= runoff_threshold_pct]
+        # Strict unless the state's own rule says "or more" (see
+        # runoff_threshold): a leader at exactly 50.0% has no majority.
+        if isinstance(runoff_threshold_pct, InclusiveThreshold):
+            out = [(n, p) for n, p in out if p >= runoff_threshold_pct]
+        else:
+            out = [(n, p) for n, p in out if p > runoff_threshold_pct]
     return out
 
 

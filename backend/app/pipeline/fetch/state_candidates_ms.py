@@ -83,6 +83,7 @@ from urllib.parse import urljoin
 import httpx
 import pdfplumber
 
+from app.pipeline.fetch.state_candidates_common import runoff_threshold
 from app.pipeline.fetch.ballot_measure_pdf_geometry import rows
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import normalize_party, resolve_confirmed_nominees, surname
@@ -214,7 +215,7 @@ def _parse_recap_pdf(content: bytes, runoff_threshold_pct: float | None) -> list
 async def fetch_confirmed_candidates(
     client: httpx.AsyncClient, year: int, state: str, source: dict,  # noqa: ARG001 — state unused, this strategy is MS-only by construction
 ) -> list[dict] | None:
-    threshold = source.get("runoff_threshold_pct")
+    threshold = runoff_threshold(source)
     urls: dict[str, str] = {}
     for party_label in ("republican", "democratic"):
         pdf_url = await _discover_pdf_url(client, year, party_label)

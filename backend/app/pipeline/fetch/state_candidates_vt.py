@@ -140,6 +140,7 @@ import httpx
 
 from app.pipeline.fetch.http_utils import fetch_json_with_retry
 from app.pipeline.fetch.state_candidates_common import (
+    runoff_threshold,
     SourceRecords,
     DiscoveryFailed,
     ballot_list_party,
@@ -406,7 +407,7 @@ async def _statewide_records(
             return None
         by_group = _fetch_federal_choices(report, parse=parse_statewide_office)
         records = resolve_confirmed_nominees(
-            by_group, source.get("runoff_threshold_pct"), name_transform=clean_display_name,
+            by_group, runoff_threshold(source), name_transform=clean_display_name,
         )
     if not records:
         logger.warning("VT results: no statewide contest in either the general ballot or the primary")
@@ -437,7 +438,7 @@ async def fetch_confirmed_candidates(
     if not isinstance(report, dict):
         return None
 
-    runoff_threshold_pct = source.get("runoff_threshold_pct")
+    runoff_threshold_pct = runoff_threshold(source)
     by_group = _fetch_federal_choices(report)
     records = resolve_confirmed_nominees(by_group, runoff_threshold_pct, name_transform=surname)
     if source.get("statewide_offices"):

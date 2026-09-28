@@ -80,6 +80,7 @@ import xlrd
 
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_text_with_retry, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
+    runoff_threshold,
     clean_display_name,
     federal_record,
     normalize_party,
@@ -399,7 +400,7 @@ async def _regular_nominees(
     primary = await _totals(primary_link, "primary")
     if primary is None:
         return None
-    threshold = spec.get("runoff_threshold_pct")
+    threshold = runoff_threshold(spec)
     runoff = None
     if runoff_link is not None:
         runoff = await _totals(runoff_link, "runoff")

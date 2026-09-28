@@ -158,6 +158,7 @@ import httpx
 
 from app.pipeline.fetch.http_utils import fetch_text_with_retry
 from app.pipeline.fetch.state_candidates_common import (
+    runoff_threshold,
     clean_display_name,
     normalize_party,
     parse_statewide_office,
@@ -388,7 +389,7 @@ async def _fetch_statewide(
 async def fetch_confirmed_candidates(
     client: httpx.AsyncClient, year: int, state: str, source: dict,
 ) -> list[dict] | None:
-    runoff_threshold_pct = source.get("runoff_threshold_pct")
+    runoff_threshold_pct = runoff_threshold(source)
     settle_days = source.get("settle_days", DEFAULT_SETTLE_DAYS)
     held = primary_date(state, year)
     if held and not _settled(held, settle_days):

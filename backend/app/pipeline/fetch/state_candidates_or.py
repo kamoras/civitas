@@ -118,6 +118,7 @@ import pdfplumber
 
 from app.pipeline.fetch.http_utils import fetch_bytes_with_retry, fetch_json_with_retry
 from app.pipeline.fetch.state_candidates_common import (
+    runoff_threshold,
     JUDICIAL_RESOLUTION_DECIDED_EARLY,
     JUDICIAL_RESOLUTION_ELECTS,
     JUDICIAL_RESOLUTION_SOLE_CANDIDATE,
@@ -493,7 +494,7 @@ def _statewide_nominees(contests: dict, source: dict) -> list[dict]:
     missing from the result is recorded as a confirmed absence, so a
     skipped Governor page would tell a reader Oregon elects no governor.
     Failing the fetch leaves the last good sync standing instead."""
-    threshold = source.get("runoff_threshold_pct")
+    threshold = runoff_threshold(source)
     records: list[dict] = []
     for (office, seat), blocks in contests.items():
         if blocks is None:
@@ -566,7 +567,7 @@ async def fetch_confirmed_candidates(
     for office, district, party, name, votes in _federal_contests(pdf_bytes):
         by_group.setdefault((office, district, party), []).append((name, votes))
 
-    runoff_threshold_pct = source.get("runoff_threshold_pct")
+    runoff_threshold_pct = runoff_threshold(source)
     results = resolve_confirmed_nominees(by_group, runoff_threshold_pct)
     if source.get("statewide_offices"):
         try:

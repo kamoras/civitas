@@ -97,6 +97,7 @@ import httpx
 
 from app.pipeline.fetch.http_utils import fetch_json_with_retry
 from app.pipeline.fetch.state_candidates_common import (
+    runoff_threshold,
     clean_display_name,
     federal_only,
     federal_record,
@@ -235,7 +236,7 @@ async def fetch_confirmed_candidates(
     # genuinely diverge.
     results_scope = source.get("results_scope", contest_type_filter)
 
-    threshold = source.get("runoff_threshold_pct")
+    threshold = runoff_threshold(source)
     settle_days = source.get("settle_days", DEFAULT_SETTLE_DAYS)
     primary, runoff = await _discover_elections(client, state, base_url, cid, primary_re, runoff_re, year)
     if primary is None:

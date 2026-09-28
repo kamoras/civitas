@@ -1334,3 +1334,48 @@ class TestStatewidePhrasesRefuseLocalBodies:
     ])
     def test_the_state_labels_still_parse(self, label, expected):
         assert common.parse_statewide_office(label) == expected
+
+
+class TestThresholdBoundary:
+    """A leader exactly AT the threshold. A majority is more than half
+    (GA O.C.G.A. 21-2-501, TX Elec. Code 172.003, ...); North Carolina's
+    substantial plurality is "any excess of" thirty percent (G.S.
+    163-111); Iowa's is "thirty-five percent or more" (Iowa Code 43.52),
+    the one inclusive rule. Read from each state's real source entry."""
+
+    _SOURCES = __import__("json").loads(
+        (__import__("pathlib").Path(__file__).resolve().parents[1]
+         / "app" / "data" / "state_candidate_sources.json").read_text()
+    )["states"]
+
+    def _pick(self, source, leader, rest):
+        return common.pick_nominee([("Leader", leader), *rest], common.runoff_threshold(source))
+
+    def test_exactly_half_is_no_majority_in_georgia(self):
+        assert self._pick(self._SOURCES["GA"], 500, [("B", 300), ("C", 200)]) is None
+        assert self._pick(self._SOURCES["GA"], 501, [("B", 300), ("C", 199)])[0] == "Leader"
+
+    def test_exactly_half_is_no_majority_in_texas(self):
+        # Texas's own entry reads its certified list (no threshold); its
+        # primary rule is the 50% majority of Tex. Elec. Code 172.003.
+        assert self._pick({"runoff_threshold_pct": 50}, 50, [("B", 30), ("C", 20)]) is None
+
+    def test_exactly_thirty_percent_is_not_a_substantial_plurality_in_north_carolina(self):
+        assert self._pick(self._SOURCES["NC"], 300, [("B", 290), ("C", 210), ("D", 200)]) is None
+
+    def test_exactly_thirty_five_percent_nominates_in_iowa(self):
+        assert self._SOURCES["IA"]["runoff_threshold_inclusive"] is True
+        won = self._pick(self._SOURCES["IA"], 350, [("B", 330), ("C", 320)])
+        assert won and won[0] == "Leader"
+
+    def test_only_iowa_is_inclusive(self):
+        assert [s for s, e in self._SOURCES.items() if e.get("runoff_threshold_inclusive")] == ["IA"]
+
+    def test_owed_a_runoff_agrees_with_withheld_at_the_boundary(self):
+        # Georgia's 50/50/0 Lieutenant Governor is withheld AND owed a runoff.
+        from app.pipeline.fetch import state_candidates_tabular as tb
+
+        votes = [("Leader", 500), ("B", 300), ("C", 200)]
+        threshold = common.runoff_threshold(self._SOURCES["GA"])
+        assert common.pick_nominees(votes, threshold) == []
+        assert tb._owed_a_runoff(votes, None, 1) is True

@@ -48,6 +48,7 @@ import re
 
 import httpx
 
+from app.pipeline.fetch.state_candidates_common import runoff_threshold
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import federal_record, normalize_party, pick_nominee, surname
 from app.pipeline.fetch.state_candidates_tabular import (
@@ -169,7 +170,7 @@ async def fetch_confirmed_candidates(
 
     results = []
     for (office, district, party), choices in race_choices.items():
-        won = pick_nominee(choices, runoff_threshold_pct=source.get("runoff_threshold_pct"))
+        won = pick_nominee(choices, runoff_threshold_pct=runoff_threshold(source))
         record = federal_record(office, district, party, won[0]) if won else None
         if record:
             results.append(record)
