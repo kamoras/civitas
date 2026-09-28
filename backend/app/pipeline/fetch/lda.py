@@ -232,43 +232,54 @@ def is_same_client(searched: str, client_name: str) -> bool:
 # used on 129 of 2025's filings ("GIBSON, DUNN & CRUTCHER LLP (O/B/O
 # PEPSICO, INC.)").
 _ON_BEHALF_RE = re.compile(r" (?:ON BEHALF OF|OBO|O B O) ")
+# The same markers in the raw field, where parentheses still show which
+# party they belong to.
+_RAW_ON_BEHALF_RE = re.compile(r"(?<![A-Z0-9])(?:ON\s+BEHALF\s+OF|OBO|O/B/O)(?![A-Z0-9])")
 # "Doing business as": one entity under two names, both of which are it.
 _DBA_RE = re.compile(r" (?:D B A|DBA) ")
 
 
-def _names_in_client(client_name: str) -> list[str]:
-    """The names of the party a registry client field is for, as name keys.
+def _party_part(client_name: str) -> str:
+    """The part of a raw client field naming the party the filing is for:
+    after the last on-behalf-of marker when there is one (everything before
+    it, parentheses included, belongs to the filing firms: "BROWNSTEIN
+    (BHFS, LLP) OBO APOLLO GLOBAL MANAGEMENT"), else the whole field."""
+    raw = (client_name or "").upper()
+    last = None
+    for last in _RAW_ON_BEHALF_RE.finditer(raw):
+        pass
+    return raw[last.end():] if last else raw
 
-    For the whole field and each parenthesised part: the name after the last
-    on-behalf-of marker when there is one (the firms before it filed or
-    subcontracted), else the part itself; and each side of a d/b/a."""
-    parts = [client_name or ""] + re.findall(r"\(([^)]*)", client_name or "")
+
+def _names_in_client(client_name: str) -> list[str]:
+    """The names of the party a registry client field is for, as name keys:
+    the party part (_party_part), each parenthesised part inside it (a
+    registrant filing as "THE LIVINGSTON GROUP, LLC (VERIZON COMMUNICATIONS,
+    INC.)"), and each side of a d/b/a."""
+    party = _party_part(client_name)
+    parts = [party] + re.findall(r"\(([^)]*)", party)
     names: list[str] = []
     for part in parts:
-        key = f" {_name_key(part)} "
-        last = None
-        for last in _ON_BEHALF_RE.finditer(key):
-            pass
-        party = key[last.end():] if last else key
-        names.extend(_name_key(side) for side in _DBA_RE.split(f" {party.strip()} "))
+        names.extend(_name_key(side) for side in _DBA_RE.split(f" {_name_key(part)} "))
     return [n for n in names if n]
 
 
 def _filed_by(client_name: str | None, registrant: str | None) -> str | None:
     """The registrant to name beside a filing's client, or None when it
     would repeat what the client field already says: the registrant is the
-    client itself (in-house, under any spelling), or the firm the field
-    names before "on behalf of"."""
+    whole field, or the firm part before "on behalf of", or either name of a
+    d/b/a in it, under any spelling."""
     if not registrant:
         return None
     reg_key, reg_search = _name_key(registrant), search_name(registrant)
-    field = f" {_name_key(client_name or '')} "
-    first = _ON_BEHALF_RE.search(field)
-    named = [field[:first.start()]] if first else []
-    named += _DBA_RE.split(field) if not first else []
-    for name in named or [field]:
-        if _name_key(name) == reg_key or search_name(name) == reg_search:
-            return None
+    raw = (client_name or "").upper()
+    first = _RAW_ON_BEHALF_RE.search(raw)
+    firm = raw[:first.start()] if first else raw
+    candidates = [raw, firm] + re.findall(r"\(([^)]*)", firm)
+    for candidate in candidates:
+        for name in [_name_key(candidate)] + _DBA_RE.split(f" {_name_key(candidate)} "):
+            if name.strip() and (_name_key(name) == reg_key or search_name(name) == reg_search):
+                return None
     return registrant
 
 
@@ -650,11 +661,15 @@ async def enrich_lobbying_matches_with_lda(
                         {"client": name, "amount": round(spent), "complete": spend_year.complete}
                         for name, spent in spend_year.clients
                     ]
-                    amount = (
-                        "none reported" if spend_year.total <= 0
-                        else f"${spend_year.total:,.0f}" if spend_year.complete
-                        else f"at least ${spend_year.total:,.0f}"
-                    )
+                    if spend_year.complete:
+                        amount = f"${spend_year.total:,.0f}" if spend_year.total > 0 else "none reported"
+                    else:
+                        # The year ran past the page cap: the rest of the
+                        # search, possibly the donor's own filings, is unread.
+                        amount = (
+                            f"at least ${spend_year.total:,.0f}" if spend_year.total > 0
+                            else "none in the filings read, which stop before the end of the search"
+                        )
                     # The name searched, not the donor's full name: a client
                     # matched to it may be a separate company, which is why
                     # every client counted is listed (lobbyingClients).

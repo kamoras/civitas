@@ -415,6 +415,12 @@ class TestClientMatching:
         ("CREDIT UNION NATIONAL ASSOCIATION", "CREDIT UNION NATIONAL ASSOCIATION, INC. DBA AMERICA'S CREDIT UNIONS", True),
         ("AMERICA S CREDIT UNIONS", "CREDIT UNION NATIONAL ASSOCIATION, INC. DBA AMERICA'S CREDIT UNIONS", True),
         ("RAYTHEON", "RTX CORPORATION (FKA RAYTHEON TECHNOLOGIES CORPORATION)", False),
+        # Parentheses in the filing firm's part are the firm's (review 11).
+        ("BHFS", "BROWNSTEIN (BHFS, LLP) OBO APOLLO GLOBAL MANAGEMENT", False),
+        ("APOLLO GLOBAL MANAGEMENT", "BROWNSTEIN (BHFS, LLP) OBO APOLLO GLOBAL MANAGEMENT", True),
+        ("ONE STRATEGIES", "STATE STREET STRATEGIES (DBA ONE+ STRATEGIES) OBO VIVEK SHARMA", False),
+        ("RELIANCE INDUSTRIES", "EVERSHEDS SUTHERLAND (US) LLP ON BEHALF OF RELIANCE INDUSTRIES LTD.", True),
+        ("US", "EVERSHEDS SUTHERLAND (US) LLP ON BEHALF OF RELIANCE INDUSTRIES LTD.", False),
     ])
     def test_real_client_names_from_2025_filings(self, searched, client, same):
         assert lda.is_same_client(searched, client) is same
@@ -537,6 +543,11 @@ class TestFiledBy:
         ("HOLLAND & KNIGHT ON BEHALF OF PEPSICO", "CAPITOL COUNSEL LLC", "CAPITOL COUNSEL LLC"),
         ("ACME HOLDINGS DBA WIDGETCO", "AKIN GUMP STRAUSS HAUER & FELD", "AKIN GUMP STRAUSS HAUER & FELD"),
         ("ACME HOLDINGS DBA WIDGETCO", "WIDGETCO", None),
+        # Live 2025 in-house d/b/a filings (review round 11).
+        ("ACME HOLDINGS DBA WIDGETCO", "ACME HOLDINGS DBA WIDGETCO", None),
+        ("DOW CHEMICAL COMPANY DBA DOW", "THE DOW CHEMICAL COMPANY, DBA DOW", None),
+        ("FAIR ISAAC CORPORATION (DBA FICO)", "FAIR ISAAC CORPORATION (DBA FICO)", None),
+        ("BLUE CIRCLE STRATEGIES DBA ATLANTIC STRATEGIES OBO ECON DEV COMMN OF CHARLES CO", "BLUE CIRCLE STRATEGIES", None),
         ("PFIZER INC.", "ALTRIUS GROUP, LLC", "ALTRIUS GROUP, LLC"),
         ("PFIZER INC.", None, None),
     ])
@@ -559,6 +570,16 @@ async def test_a_checked_zero_is_said(db_session):
     with patch.object(lda, "fetch_lobbying_activity", new=AsyncMock(return_value=_activity(0.0))):
         await enrich_lobbying_matches_with_lda(matches, db_session, 2025, congress=119)
     assert matches[0]["description"].endswith('registry search for "SMALL ORG": none reported.')
+
+
+@pytest.mark.asyncio
+async def test_a_capped_zero_says_the_search_was_not_read_to_the_end(db_session):
+    matches = [{"lobbyistOrg": "United", "description": ""}]
+    capped = LobbyingActivity(total=0.0, complete=False)
+    with patch.object(lda, "fetch_lobbying_activity", new=AsyncMock(return_value=capped)):
+        await enrich_lobbying_matches_with_lda(matches, db_session, 2025, congress=119)
+    assert "none in the filings read, which stop before the end of the search" in matches[0]["description"]
+    assert "none reported" not in matches[0]["description"]
 
 
 def test_the_cap_counts_bills_not_client_rows():
