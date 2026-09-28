@@ -140,14 +140,17 @@ updates:
       - dependencies
       - javascript
     ignore:
-      # TypeScript 7 (2026-09-28): the native-compiler major. typescript-eslint
-      # — pulled in by eslint-config-next — declares `typescript >=4.8.4
-      # <6.1.0` on its latest release (8.71.0), so a TS 7 bump would lint
-      # against an unsupported compiler. Remove this entry once
-      # typescript-eslint's peer range admits 7.x (`npm view typescript-eslint
-      # peerDependencies`), and bump both together.
+      # TypeScript (2026-09-28): typescript-eslint — pulled in by
+      # eslint-config-next — declares `typescript >=4.8.4 <6.1.0` on every
+      # release up to the newest published one (8.71.0), so anything past
+      # 6.0.x, the 7.x native-compiler major or a 6.1 minor alike, would lint
+      # against an unsupported compiler. package.json holds `~6.0.3` for the
+      # same reason, so a fresh install can't drift there either. Lift both
+      # (this entry and the tilde) once typescript-eslint's peer range admits
+      # the new version — `npm view typescript-eslint peerDependencies` —
+      # and bump typescript-eslint alongside it.
       - dependency-name: "typescript"
-        update-types: ["version-update:semver-major"]
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   - package-ecosystem: github-actions
     directory: /
