@@ -318,7 +318,11 @@ def _contradicts(cand: Candidate, party_code: str, display_name: str | None) -> 
     # says nothing either way.
     if not expected or theirs not in _KNOWN_PARTIES or theirs == expected:
         return False
-    wanted = _first_name_key(display_name or "")
+    display = (display_name or "").strip()
+    # A display name that is a surname alone ("Smith", as Oregon prints
+    # them) has no given name to contradict anyone with.
+    words = [w for w in re.split(r"[\s,]+", display) if any(ch.isalpha() for ch in w)]
+    wanted = _first_name_key(display) if len(words) >= 2 else ""
     if not wanted:
         return False
     tokens = _given_names(cand.name or "")
@@ -345,9 +349,23 @@ def _match_by_surname(
     display_name: str | None = None,
 ) -> Candidate | None:
     target = _candidate_surname(last_name)
-    matches = [c for c in candidates if _candidate_surname(c.name) == target]
+
+    def plausible(tier: list[Candidate]) -> list[Candidate]:
+        # A tier whose every candidate is plainly someone else (_contradicts)
+        # says nothing, and the next rule is tried: John Hinson, Libertarian,
+        # on the exact surname must not hide Ashley Hinson filed under her
+        # married name. A tier with anyone plausible is judged whole, as
+        # before — dropping only the implausible could turn an ambiguous
+        # pair into a false unique match.
+        return [] if tier and all(_contradicts(c, party_code, display_name) for c in tier) else tier
+
+    matches = plausible([c for c in candidates if _candidate_surname(c.name) == target])
     if not matches:
-        matches = _surname_fallbacks(candidates, target, display_name)
+        # The fallback rules see only plausible people: the one that reads a
+        # surname's last word would otherwise find John Hinson again.
+        matches = _surname_fallbacks(
+            [c for c in candidates if not _contradicts(c, party_code, display_name)], target, display_name,
+        )
     if len(matches) == 1:
         return matches[0]
     if not matches:

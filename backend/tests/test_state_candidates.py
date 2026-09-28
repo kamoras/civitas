@@ -747,6 +747,28 @@ class TestAWeakerSourceNeverPrunesTheCertifiedBallot:
         assert "ballot:2026-HOUSE-CA-8:mary-smith" in self._ids(db_session)
         assert db_session.get(Candidate, "H1").confirmed_general is not True
 
+    def test_a_refused_exact_surname_does_not_hide_a_fallback_match(self, db_session):
+        """Iowa: FEC files Ashley Hinson under her married name ("ARENHOLZ,
+        ASHLEY HINSON"), found by a fallback rule; a Libertarian John Hinson
+        on the exact surname is plainly not her, and must not end the
+        search."""
+        _race(db_session, "2026-SEN-IA", "IA", office="S")
+        _candidate(db_session, "S1", "2026-SEN-IA", "HINSON, JOHN", party="LIB")
+        _candidate(db_session, "S2", "2026-SEN-IA", "ARENHOLZ, ASHLEY HINSON", party="REP", has_raised_funds=True)
+        db_session.commit()
+        ashley = {"office": "S", "district": None, "party": "R", "last_name": "HINSON",
+                  "display_name": "Ashley Hinson"}
+        sc._apply_ballot(db_session, 2026, "IA", [ashley], keep_unlisted=True, authoritative=True)
+        assert db_session.get(Candidate, "S2").confirmed_general is True
+        assert not any(i.startswith("ballot:") for i in self._ids(db_session))
+
+    def test_a_surname_alone_has_no_given_name_to_contradict(self, db_session):
+        _race(db_session, "2026-HOUSE-OR-1", "OR", office="H", district=1)
+        _candidate(db_session, "H1", "2026-HOUSE-OR-1", "SMITH, JOHN", party="DEM")
+        db_session.commit()
+        rows = db_session.get(Race, "2026-HOUSE-OR-1").candidates
+        assert sc._match_candidate(rows, "Smith", "I", "Smith").id == "H1"
+
     def test_a_nickname_or_a_recoded_party_alone_still_matches(self, db_session):
         _race(db_session, "2026-HOUSE-CA-6", "CA", office="H", district=6)
         _candidate(db_session, "H1", "2026-HOUSE-CA-6", "JONES, JAMES", party="DEM")
