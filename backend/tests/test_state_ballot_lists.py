@@ -1037,3 +1037,26 @@ async def test_a_list_rendered_per_contest_chosen_from_a_dropdown():
         assert await fetch_certified_table(client, 2026, "ND", source(["United States Senator"])) is None
     assert posted == ["__VIEWSTATE=vs&contest=22055&search=Search"]
     assert [(r["office"], r["display_name"], r["party"]) for r in got] == [("H", "Helene Neville", "I")]
+
+
+async def test_a_failed_main_source_claims_nothing_about_state_offices(db_session, monkeypatch):
+    # Illinois in miniature: its results export (the only source of its
+    # executive and legislative contests) fails, while the certified
+    # federal list still answers. Syncing the empty statewide list would
+    # write a marker, and the page would call "we could not read it"
+    # a confirmed absence of a governor's race.
+    async def no_calendar(client, cycle):
+        return {}, False
+    monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+    monkeypatch.setattr(sc, "configured_states", lambda: {"IL"})
+    monkeypatch.setitem(sc.STRATEGIES, "tabular", AsyncMock(return_value=None))
+    monkeypatch.setitem(sc.STRATEGIES, "grouped_list_pdf", AsyncMock(return_value=[_rec("S", None, "D", "Stratton", "Juliana Stratton")]))
+    _race(db_session, "2026-SEN-IL", "IL")
+    _db_cand(db_session, "S6IL1", "2026-SEN-IL", "STRATTON, JULIANA", "DEM")
+    db_session.commit()
+
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+
+    assert db_session.get(Candidate, "S6IL1").confirmed_general is True
+    _, coverage = elections_api._statewide_section(db_session, "IL", 2026)
+    assert coverage["status"] == elections_api.StatewideCoverageStatus.NOT_YET_COVERED

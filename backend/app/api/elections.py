@@ -811,6 +811,10 @@ def _statewide_section(db: Session, state: str, cycle: int) -> tuple[list[dict],
         "status": status,
         "sourceName": (marker or {}).get("sourceName") or None,
         "checkedAt": (marker or {}).get("checkedAt") or None,
+        # Why "none" is known when the feed was never read for these
+        # offices — see _sync_statewide_nominees. Null for every state
+        # whose own results were parsed.
+        "basis": (marker or {}).get("basis") or None,
     }
 
 

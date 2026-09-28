@@ -540,3 +540,66 @@ class TestJudicialCoverageStatus:
         assert _sync_judicial_nominees(
             db_session, CYCLE, "GA", {**SOURCE, "judicial_offices": False}, []) == 0
         assert _judicial_marker(db_session, "GA", CYCLE) is None
+
+
+class TestCalendarBasis:
+    """A state that elects no executive officers this cycle (Virginia
+    chooses its governor in odd years) can say so without its feed ever
+    being read for those offices — but the page must then say WHY it
+    knows, not "as published by" a source that was never read for them."""
+
+    BASIS = "Virginia elects its Governor in odd-numbered years."
+
+    def test_the_basis_rides_the_marker_to_the_page(self, db_session):
+        source = {**SOURCE, "source_name": "Virginia Department of Elections",
+                  "statewide_offices_basis": self.BASIS}
+        _sync_statewide_nominees(db_session, CYCLE, "VA", source, [])
+        races, coverage = _statewide_section(db_session, "VA", CYCLE)
+        assert races == []
+        assert coverage["status"] == StatewideCoverageStatus.CONFIRMED_NONE
+        assert coverage["basis"] == self.BASIS
+
+    def test_a_state_whose_feed_was_read_carries_no_basis(self, db_session):
+        _sync_statewide_nominees(db_session, CYCLE, "RI", SOURCE, [])
+        _, coverage = _statewide_section(db_session, "RI", CYCLE)
+        assert coverage["basis"] is None
+
+    def test_a_basis_says_nothing_about_the_legislature(self, db_session):
+        """Kentucky elects its governor in odd years but its House every
+        even year. The calendar settles the executive offices only; with
+        no legislative rows the chamber stays in the page's omissions."""
+        source = {**SOURCE, "statewide_offices_basis": self.BASIS}
+        _sync_statewide_nominees(db_session, CYCLE, "KY", source, [])
+        _sync_state_leg_nominees(db_session, CYCLE, "KY", source, [])
+        assert _state_leg_section(db_session, "KY", CYCLE, _statewide_marker(db_session, "KY", CYCLE)) == []
+
+
+class TestSourcesFileOptIns:
+    """The opt-in is a claim about the state's feed, so the sources file
+    must never make it for an adapter that cannot read executive
+    contests at all — unless the state's calendar says there are none."""
+
+    # Adapters that pass contest labels through parse_statewide_office.
+    READS_STATEWIDE = {"clarity", "enhanced_voting", "sd_vip", "tabular", "tally_enr", "totalvote_enr"}
+
+    def _states(self):
+        import json
+        from pathlib import Path
+        path = Path(__file__).resolve().parents[1] / "app" / "data" / "state_candidate_sources.json"
+        return json.loads(path.read_text())["states"]
+
+    def test_every_opt_in_is_read_or_explained(self):
+        for state, entry in self._states().items():
+            if entry.get("statewide_offices"):
+                assert entry["strategy"] in self.READS_STATEWIDE or entry.get("statewide_offices_basis"), state
+
+    def test_a_basis_is_never_set_without_the_opt_in(self):
+        for state, entry in self._states().items():
+            if entry.get("statewide_offices_basis"):
+                assert entry.get("statewide_offices") is True, state
+
+    def test_the_readers_list_matches_the_code(self):
+        import inspect
+        from app.pipeline.fetch import state_candidates as sc
+        for strategy in self.READS_STATEWIDE:
+            assert "parse_statewide_office" in inspect.getsource(inspect.getmodule(sc.STRATEGIES[strategy])), strategy

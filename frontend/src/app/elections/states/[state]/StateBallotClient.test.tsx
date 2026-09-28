@@ -684,3 +684,35 @@ describe("state office terms", () => {
     expect(drawer.getByText(/STATE SENATE — 1 SEAT CONTESTED/).textContent).toContain("4-YEAR TERMS");
   });
 });
+
+describe("a state with no executive offices up this cycle", () => {
+  const basis = "Virginia elects its Governor in odd-numbered years (next in 2029), so none is on a 2026 ballot.";
+
+  it("says why it knows, instead of crediting a feed nobody read for these offices", async () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          statewideRaces: [],
+          statewideCoverage: { status: "confirmed_none", sourceName: "Virginia Department of Elections", checkedAt: null, basis },
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide offices/);
+    expect(drawer.getByText(basis)).toBeInTheDocument();
+    expect(drawer.getByText(/From the state's election calendar/)).toBeInTheDocument();
+    expect(drawer.queryByText(/as published by/)).not.toBeInTheDocument();
+  });
+
+  it("credits the source as before when a feed was read", async () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          statewideRaces: [],
+          statewideCoverage: { status: "confirmed_none", sourceName: "Ohio Secretary of State", checkedAt: null },
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide offices/);
+    expect(drawer.getByText(/as published by Ohio Secretary of State/)).toBeInTheDocument();
+  });
+});

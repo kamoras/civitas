@@ -279,10 +279,18 @@ function StatewideExecutiveDetail({ ballot }: { ballot: StateBallot }) {
           ))}
         </div>
       )}
+      {statewideCoverage.basis && statewideRaces.length === 0 && (
+        // Why "none" is known for a state whose feed was never read for
+        // these offices. Shown instead of the attribution line below,
+        // which would claim a reading that never happened.
+        <p className="mt-2 text-xs text-ink-lo">{statewideCoverage.basis}</p>
+      )}
       <p className="mt-3 text-[10px] text-ink-min">
-        {statewideCoverage.sourceName
-          ? `Nominees as published by ${statewideCoverage.sourceName}`
-          : "Nominees as published by the state"}
+        {statewideCoverage.basis && statewideRaces.length === 0
+          ? "From the state's election calendar"
+          : statewideCoverage.sourceName
+            ? `Nominees as published by ${statewideCoverage.sourceName}`
+            : "Nominees as published by the state"}
         {statewideCoverage.checkedAt
           ? ` · last checked ${statewideCoverage.checkedAt.slice(0, 10)}`
           : ""}

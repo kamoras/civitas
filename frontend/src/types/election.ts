@@ -283,6 +283,12 @@ export interface StatewideCoverage {
   status: "covered" | "confirmed_none" | "not_yet_covered";
   sourceName: string | null;
   checkedAt: string | null;
+  /** Set only when "none" rests on the state's constitutional calendar
+   * (Virginia elects its governor in odd years) rather than on a feed
+   * that was read for these offices — the sentence saying so, shown in
+   * place of "as published by". Optional: an API older than this field
+   * omits it. */
+  basis?: string | null;
 }
 
 /** Where to go for the parts of the ballot this page cannot show. */

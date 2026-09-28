@@ -252,6 +252,11 @@ _STATEWIDE_PHRASES = [
     ("state_lands_commissioner", re.compile(
         r"\bComm(?:issioner)?\.?\s+of\s+State\s+Lands\b"
         r"|\bState\s+Lands\s+Commissioner\b", re.IGNORECASE)),
+    # South Dakota's two, off its 2026 certified candidate list.
+    ("school_public_lands_commissioner", re.compile(
+        r"\bCommissioner\s+of\s+School\s+and\s+Public\s+Lands\b", re.IGNORECASE)),
+    ("public_utilities_commission", re.compile(
+        r"\bPublic\s+Utilities\s+Commission(?:er)?\b", re.IGNORECASE)),
 ]
 
 # The locality markers that stay decisive even beside one of the phrases
@@ -278,6 +283,15 @@ _STATEWIDE_DISTRICT_SEATS = {
 }
 
 _STATEWIDE_SEAT_RE = re.compile(r"\bDistrict\s+(?:No\.?\s*)?0*(\d+)\b", re.IGNORECASE)
+
+# Ballot-question vocabulary in a contest label: New Mexico's
+# "Constitutional Amendment 1" and Louisiana's "CA No. 4" both mention the
+# governor.
+_BALLOT_QUESTION_RE = re.compile(
+    r"\b(?:amendment|proposition|referendum|initiative|question|measure|bond\s+issue)\b"
+    r"|\bC\.?\s?A\.?\s+No\b",
+    re.IGNORECASE,
+)
 
 _STRICT_LOCAL_RE = re.compile(
     r"\b(?:county|city|town|township|ward|borough|parish|village|precinct|municipal)\b|:",
@@ -391,6 +405,8 @@ STATEWIDE_OFFICE_LABELS = {
     "university_regent": "University Regent",
     "tax_commissioner": "Tax Commissioner",
     "state_lands_commissioner": "Commissioner of State Lands",
+    "school_public_lands_commissioner": "Commissioner of School and Public Lands",
+    "public_utilities_commission": "Public Utilities Commission",
 }
 
 
@@ -414,6 +430,11 @@ def parse_statewide_office(contest_name: str) -> tuple[str, str | None] | None:
     not a superset of it, and a caller asks whichever question it means.
     """
     name = contest_name or ""
+    # A ballot question naming an office ("Constitutional Amendment 1 ...
+    # the governor shall ...") is not a contest for it. They were only
+    # dropped before because no party could be attributed to them.
+    if _BALLOT_QUESTION_RE.search(name):
+        return None
     # Checked first — see _STATEWIDE_PHRASES for why these cannot go
     # through the general locality gate below.
     for code, pattern in _STATEWIDE_PHRASES:

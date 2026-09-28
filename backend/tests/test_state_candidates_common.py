@@ -1069,3 +1069,54 @@ class TestDecidedBeforeGeneral:
     def test_it_does_not_touch_a_state_without_the_value(self):
         assert [n for n, _ in common.pick_nominees(self.NO_MAJORITY, None, 2)] == [
             "David Stevens", "Jaime Michelle Hawk"]
+
+
+class TestStatewideOfficeBallotQuestions:
+    """A ballot question that names an office is not that office's
+    contest. Real shapes: South Dakota and Missouri print amendments
+    whose titles mention the governor's powers."""
+
+    def test_an_amendment_about_the_governor_is_not_the_governors_race(self):
+        for label in (
+            "Constitutional Amendment 1 - Governor appointments",
+            "Proposition A: Attorney General term limits",
+            "Referendum on the Secretary of State's duties",
+            "Initiated Measure 28 - State Treasurer",
+            "Question 2 - Lieutenant Governor succession",
+        ):
+            assert common.parse_statewide_office(label) is None, label
+
+    def test_the_offices_themselves_still_parse(self):
+        assert common.parse_statewide_office("Governor and Lieutenant Governor") == ("governor", None)
+        assert common.parse_statewide_office("Lieutenant Governor") == ("lt_governor", None)
+
+
+class TestSouthDakotaOffices:
+    """Real contest labels off South Dakota's 2026 VIP primary feed."""
+
+    def test_school_and_public_lands(self):
+        assert common.parse_statewide_office("Commissioner of School and Public Lands") == (
+            "school_public_lands_commissioner", None)
+
+    def test_public_utilities_commission(self):
+        assert common.parse_statewide_office("Public Utilities Commissioner") == (
+            "public_utilities_commission", None)
+
+    def test_every_new_office_has_a_label(self):
+        for code in ("school_public_lands_commissioner", "public_utilities_commission"):
+            assert code in common.STATEWIDE_OFFICE_LABELS
+
+
+class TestIllinoisOffices:
+    """Real contest names off Illinois's 2026 by-office CSV exports, which
+    print them in capitals."""
+
+    def test_uppercase_labels(self):
+        for label, code in (
+            ("GOVERNOR AND LIEUTENANT GOVERNOR", "governor"),
+            ("ATTORNEY GENERAL", "attorney_general"),
+            ("SECRETARY OF STATE", "secretary_of_state"),
+            ("COMPTROLLER", "comptroller"),
+            ("TREASURER", "treasurer"),
+        ):
+            assert common.parse_statewide_office(label) == (code, None), label

@@ -714,17 +714,20 @@ export default function AboutPage() {
 
             <Gist>
               State ballot pages show the statewide slice of a ballot — Senate and House
-              contests and statewide measures. They do not show your governor&apos;s race,
-              your state legislature, your county and city offices, or local measures.
+              contests, statewide executive offices, and statewide measures. They do not show
+              your county and city offices or local measures, and in some states not yet your
+              state legislature.
             </Gist>
             <P>
-              Two separate causes, one fixable and one not. The governor&apos;s race and other
-              statewide executive contests — 36 governorships, 30 attorneys general and
-              more in 2026 — are missing because this platform has no state-office data
-              source at all yet. That is an ingestion gap, and it is fixable. Everything
-              below the state level is missing for a structural reason: ballots are printed
-              per precinct, so there is no such artifact as &ldquo;the ballot&rdquo; for a
-              whole state, and the only way to show your actual ballot is to take your home
+              Statewide executive offices — the governor&apos;s race, attorney general and the
+              rest — are read from each state&apos;s own results feed, and a state whose
+              governor is not up this year says so, with the calendar that decides it. A state
+              whose feed has not been read for these offices yet says that instead, rather than
+              showing an empty section that would read as &ldquo;no governor&apos;s
+              race&rdquo;. Everything below the state level is missing for a structural reason:
+              ballots are printed per precinct, so there is no such artifact as &ldquo;the
+              ballot&rdquo; for a whole state, and the only way to show your actual ballot is to
+              take your home
               address and send it to a third-party lookup service. We are not going to do
               that, so instead every page enumerates what it omits and links you to your own
               election office. See{" "}
