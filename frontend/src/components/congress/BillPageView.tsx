@@ -10,6 +10,11 @@ import { PARTY_COLORS } from "@/lib/partyStyles";
 import { CHAMBER_NAME, dayHref, longDate, shortDate } from "@/lib/congress";
 import { CongressTabs } from "./CongressNav";
 import VotePanel from "./VotePanel";
+import ShareSectionButton from "@/components/share/ShareSectionButton";
+import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
+import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
+import { absoluteUrl } from "@/lib/site";
+import { ordinal } from "@/components/scorecard/format";
 
 const PART_NAME: Record<string, string> = {
   bill: "the bill's details",
@@ -35,14 +40,31 @@ function Person({ p }: { p: BillPerson }) {
   );
 }
 
-function SectionHead({ id, title, count }: { id: string; title: string; count?: string | number }) {
+function SectionHead({
+  id,
+  title,
+  count,
+  shareable = false,
+}: {
+  id: string;
+  title: string;
+  count?: string | number;
+  /** Offer this section as a shared image (the section must carry `data-share-section`). */
+  shareable?: boolean;
+}) {
   return (
-    <h2 id={id} className="scroll-mt-28 font-display text-2xl font-extrabold text-ink-hi">
-      {title}
-      {count !== undefined && <span className="ml-2 font-mono text-sm font-normal text-ink-min">{count}</span>}
-    </h2>
+    <div className="flex items-baseline justify-between gap-3">
+      <h2 id={id} className="scroll-mt-28 font-display text-2xl font-extrabold text-ink-hi">
+        {title}
+        {count !== undefined && <span className="ml-2 font-mono text-sm font-normal text-ink-min">{count}</span>}
+      </h2>
+      {shareable && <ShareSectionButton label={title} />}
+    </div>
   );
 }
+
+/** A section's share-image attributes: the id is the section's anchor. */
+const shareSection = (id: string) => ({ [SHARE_SECTION_ATTR]: id });
 
 export default function BillPageView({
   billId,
@@ -60,8 +82,17 @@ export default function BillPageView({
   const reportedDays = new Set((record?.days ?? []).map((d) => d.date));
   const unavailable = record?.unavailable ?? [];
   const stage = detail ? billStageStyle(detail.stage) : null;
+  // What a shared image of any section says it is from.
+  const shareSubject = {
+    title: title ? `${label}: ${title}` : label,
+    subtitle: [record?.congress ? `${ordinal(record.congress)} Congress` : null, stageName ?? detail?.stage]
+      .filter(Boolean)
+      .join(" · "),
+    url: absoluteUrl(`/congress/bills/${encodeURIComponent(billId)}`),
+  };
 
   return (
+    <ShareSubjectProvider subject={shareSubject}>
     <div className="min-h-screen bg-surface-base font-sans text-ink-hi">
       <Navbar />
       <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
@@ -75,13 +106,21 @@ export default function BillPageView({
             <span aria-current="page">{label}</span>
           </nav>
 
-          <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_22rem]">
+          <div
+            id="overview"
+            {...shareSection("overview")}
+            className="grid scroll-mt-28 gap-10 lg:grid-cols-[minmax(0,1fr)_22rem]"
+          >
             <header className="flex min-w-0 flex-col gap-4">
-              <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-lo">
-                {label}
-                {record?.congress ? ` · ${record.congress}th Congress` : ""}
-                {record?.originChamber ? ` · ${record.originChamber}` : ""}
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-lo">
+                  {label}
+                  {record?.congress ? ` · ${ordinal(record.congress)} Congress` : ""}
+                  {record?.originChamber ? ` · ${record.originChamber}` : ""}
+                </p>
+                {/* The header names the bill itself: no title strip. */}
+                <ShareSectionButton label="Bill overview" withStrip={false} />
+              </div>
               <h1 className="font-display text-3xl font-extrabold leading-tight text-ink-hi sm:text-4xl">{title}</h1>
               <div className="flex flex-wrap items-center gap-2">
                 {detail && stage && (
@@ -178,8 +217,8 @@ export default function BillPageView({
 
           <div className="mt-8 grid gap-12 lg:grid-cols-[minmax(0,1fr)_22rem]">
             <div className="flex min-w-0 flex-col gap-12">
-              <section className="flex flex-col gap-3">
-                <SectionHead id="summary" title="Summary" />
+              <section className="flex flex-col gap-3" {...shareSection("summary")}>
+                <SectionHead id="summary" title="Summary" shareable />
                 {record?.summary ? (
                   <>
                     <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
@@ -200,8 +239,13 @@ export default function BillPageView({
                 )}
               </section>
 
-              <section className="flex flex-col gap-3">
-                <SectionHead id="votes" title="Votes" count={record ? `${record.votes.length} recorded` : undefined} />
+              <section className="flex flex-col gap-3" {...shareSection("votes")}>
+                <SectionHead
+                  id="votes"
+                  title="Votes"
+                  count={record ? `${record.votes.length} recorded` : undefined}
+                  shareable
+                />
                 <VotePanel votes={record?.votes ?? []} congress={record?.congress ?? detail?.congress ?? 0} />
               </section>
 
@@ -306,5 +350,6 @@ export default function BillPageView({
       <BackToTop />
       <Footer />
     </div>
+    </ShareSubjectProvider>
   );
 }

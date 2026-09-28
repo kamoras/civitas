@@ -22,6 +22,7 @@ import { safeHref } from "@/lib/formatting";
 import { PARTY_COLORS, PARTY_BORDER } from "@/lib/partyStyles";
 import { ACTION_CENTER_MONITORS_HREF } from "@/lib/routes";
 import type { ActionIssue, ActionItem, RelatedBill } from "@/types/action";
+import { SHARE_EXCLUDE_ATTR } from "@/lib/shareImage";
 
 /** An issue's rights-cleared source photo, in the two sizes it renders at.
  *
@@ -55,13 +56,17 @@ export function IssueImage({ issue, size = "full" }: { issue: ActionIssue; size?
       <img
         src={issue.imageUrl}
         alt={alt}
+        // A shared image of the card leaves the photo out: it's on the
+        // publisher's host, which a capture never requests (lib/shareImage.ts).
+        {...{ [SHARE_EXCLUDE_ATTR]: "" }}
         className="h-16 w-16 shrink-0 border border-white/[0.07] object-cover sm:h-20 sm:w-20"
       />
     );
   }
 
   return (
-    <figure className="mb-6">
+    // Left out of shared images, as above.
+    <figure className="mb-6" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
       {/* eslint-disable-next-line @next/next/no-img-element -- external, varied source-article hosts; not worth per-host next/image remotePatterns */}
       <img
         src={issue.imageUrl}

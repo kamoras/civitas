@@ -195,6 +195,14 @@ export function buildBallotContests(ballot: StateBallot, hasTowns: boolean): Bal
   return contests;
 }
 
+/** The link fragment that opens a contest (read back by `contestForHash`):
+ * the race's own `#race-{id}` where the contest is one race (or a House
+ * district was picked), else `#ballot-{key}`. */
+export function contestHash(contest: BallotContest, houseRaceId: string | null = null): string {
+  if (houseRaceId) return `#race-${houseRaceId}`;
+  return contest.race ? `#race-${contest.race.id}` : `#ballot-${contest.key}`;
+}
+
 /** Which contest a `#race-{id}` link (old /elections/{raceId} redirects,
  * Bluesky posts) or a `#ballot-{key}` link points at, and for a House
  * link, which district. */
