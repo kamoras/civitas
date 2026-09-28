@@ -315,7 +315,7 @@ export async function fetchRepLeaderboard(
 async function fetchPaginatedVotes(
   chamber: Chamber,
   entityId: string,
-  options?: { category?: "recent" | "key"; page?: number; perPage?: number; filter?: string }
+  options?: { category?: "recent" | "key" | "all"; page?: number; perPage?: number; filter?: string }
 ): Promise<PaginatedVotes> {
   const params = new URLSearchParams();
   if (options?.category) params.set("category", options.category);
@@ -330,14 +330,14 @@ async function fetchPaginatedVotes(
 
 export async function fetchRepVotes(
   repId: string,
-  options?: { category?: "recent" | "key"; page?: number; perPage?: number; filter?: string }
+  options?: { category?: "recent" | "key" | "all"; page?: number; perPage?: number; filter?: string }
 ): Promise<PaginatedVotes> {
   return fetchPaginatedVotes(Chamber.House, repId, options);
 }
 
 export async function fetchSenatorVotes(
   senatorId: string,
-  options?: { category?: "recent" | "key"; page?: number; perPage?: number; filter?: string }
+  options?: { category?: "recent" | "key" | "all"; page?: number; perPage?: number; filter?: string }
 ): Promise<PaginatedVotes> {
   return fetchPaginatedVotes(Chamber.Senate, senatorId, options);
 }

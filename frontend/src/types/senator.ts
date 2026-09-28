@@ -171,6 +171,32 @@ export interface KeyVote {
   partyLeaning: "R" | "D" | "bipartisan" | null;
   votedWithParty: boolean | null;
   voteCategory: "recent" | "key";
+  /** The Congress record's own roll call: its question, date and how each
+   *  party voted. Null for votes stored before it was recorded. */
+  rollCall?: VoteRollCall | null;
+}
+
+export interface VoteRollCallParty {
+  party: string;
+  yea: number;
+  nay: number;
+  present: number;
+  notVoting: number;
+}
+
+export interface VoteRollCall {
+  chamber: "house" | "senate";
+  congress: number;
+  session: number;
+  number: number;
+  date: string;
+  question: string;
+  title: string;
+  result: string;
+  billId: string | null;
+  billLabel: string | null;
+  sourceUrl: string;
+  parties: VoteRollCallParty[];
 }
 
 export interface LobbyingMatch {

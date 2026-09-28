@@ -190,6 +190,39 @@ def party_breakdown(positions: list[RollCallPosition]) -> list[dict]:
     return sorted(parties.values(), key=lambda r: (order.get(r["party"], 9), r["party"]))
 
 
+def roll_call_summaries(db: Session, refs: list[str | None]) -> dict[str, dict]:
+    """The Congress record's own account of each roll call a member's vote
+    row names (key_votes.roll_call, "house-119-2-221"): its date, question,
+    result, bill, and how each party voted — what a reader needs to see
+    why a vote counts as a break with the party. Keyed by ref; a ref the
+    record doesn't hold is left out."""
+    wanted: dict[tuple, str] = {}
+    for ref in refs:
+        parts = (ref or "").split("-")
+        if len(parts) == 4 and all(x.isdigit() for x in parts[1:]):
+            wanted[(parts[0], int(parts[1]), int(parts[2]), int(parts[3]))] = ref
+    if not wanted:
+        return {}
+    rows = db.query(RollCall).filter(
+        RollCall.chamber.in_({k[0] for k in wanted}),
+        RollCall.congress.in_({k[1] for k in wanted}),
+        RollCall.number.in_({k[3] for k in wanted}),
+    ).all()
+    rows = [rc for rc in rows if (rc.chamber, rc.congress, rc.session, rc.number) in wanted]
+    positions: dict[int, list[RollCallPosition]] = {}
+    for p in db.query(RollCallPosition).filter(RollCallPosition.roll_call_id.in_([rc.id for rc in rows])):
+        positions.setdefault(p.roll_call_id, []).append(p)
+    return {
+        wanted[(rc.chamber, rc.congress, rc.session, rc.number)]: {
+            "chamber": rc.chamber, "congress": rc.congress, "session": rc.session, "number": rc.number,
+            "date": rc.date, "question": rc.question, "title": rc.title, "result": rc.result,
+            "billId": rc.bill_id, "billLabel": bill_label(rc.bill_id), "sourceUrl": rc.source_url,
+            "parties": party_breakdown(positions.get(rc.id, [])),
+        }
+        for rc in rows
+    }
+
+
 def vote_detail(db: Session, rc: RollCall, links: MemberLinks | None = None) -> dict:
     links = links or MemberLinks(db)
     positions = db.query(RollCallPosition).filter_by(roll_call_id=rc.id).all()
