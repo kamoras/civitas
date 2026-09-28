@@ -297,7 +297,8 @@ async def _daily_salt(date: str) -> bytes:
         # who span the outage and the recovery still count twice: no salt
         # matching the shared one exists while it can't be read.
         logger.warning("Visit salt unavailable — using a fallback salt", exc_info=True)
-        return _fallback_salt_for(date)
+        # Reads the RAM store on first use in a day: off the event loop.
+        return await asyncio.to_thread(_fallback_salt_for, date)
     _salt_cache = (date, salt)
     return salt
 

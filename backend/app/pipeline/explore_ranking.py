@@ -132,43 +132,53 @@ def ranking(*, force_reload: bool = False) -> dict:
     if _override is not None and set(_override) >= _REQUIRED_KEYS:
         return _override
 
-    # The replaced-row check queries the database, so it runs outside _lock:
-    # every search thread waits on that lock.
+    # Every database read here happens outside _lock, which every search
+    # thread takes: under it, one slow read would hold all searches up.
     now = time.monotonic()
-    replaced = False
     with _lock:
-        check = _cached is not None and now - _checked_at >= _CHECK_STORED_EVERY_SECONDS
-        if check:
-            _checked_at = now
-    if check:
-        stored = _stored_at()
-        replaced = stored is not _UNKNOWN and stored != _cached_stored_at
+        cached, cached_at, cached_stored = _cached, _cached_at, _cached_stored_at
+        expired = cached is None or now - cached_at >= _RELOAD_AFTER_SECONDS or force_reload
+        due = expired or now - _checked_at >= _CHECK_STORED_EVERY_SECONDS
+        if due:
+            _checked_at = now  # one thread checks; the rest keep serving
+    if not due:
+        return _with_override(cached)
 
-    with _lock:
-        fresh = _cached is not None and (now - _cached_at) < _RELOAD_AFTER_SECONDS and not replaced
-        if fresh and not force_reload:
-            # Merge here too, not only on a cache miss. Overriding one key
-            # against a warm cache used to be silently ignored, which would
-            # have made a weight sweep compare a trial value against itself
-            # and report the starting point as the fitted answer.
-            return {**_cached, **_override} if _override else _cached
-
-        stored_at = _stored_at()
-        if stored_at is _UNKNOWN and _cached is not None and not force_reload:
+    stored = _stored_at()
+    if cached is not None and not force_reload:
+        if stored is _UNKNOWN:
             # The database can't be read right now: keep what we have
             # rather than fall back to the bundled calibration.
-            return {**_cached, **_override} if _override else _cached
-        loaded = _load_from_db() or _load_bundled()
-        if not loaded:
-            raise RankingCalibrationMissing(
-                "No explore ranking calibration available. Run "
-                "backend/scripts/calibrate_explore_ranking.py --write, or run "
-                "the explore pipeline, which calibrates as its last step."
-            )
+            return _with_override(cached)
+        if not expired and stored == cached_stored:
+            return _with_override(cached)
+
+    from_db = _load_from_db() if stored not in (None, _UNKNOWN) else None
+    if from_db is None and stored not in (None, _UNKNOWN) and cached is not None and not force_reload:
+        # A stored calibration exists but couldn't be read: the one in hand
+        # is better than the bundled one, and the next check tries again.
+        return _with_override(cached)
+    loaded = from_db or _load_bundled()
+    if not loaded:
+        raise RankingCalibrationMissing(
+            "No explore ranking calibration available. Run "
+            "backend/scripts/calibrate_explore_ranking.py --write, or run "
+            "the explore pipeline, which calibrates as its last step."
+        )
+    with _lock:
         _cached, _cached_at = loaded, time.monotonic()
-        _cached_stored_at = None if stored_at is _UNKNOWN else stored_at
-        _checked_at = _cached_at
-        return {**_cached, **_override} if _override else _cached
+        # Stamped with the row only when it came from the row: a bundled
+        # stand-in stays "not the stored one", so the next check reloads.
+        _cached_stored_at = stored if from_db is not None else None
+    return _with_override(loaded)
+
+
+def _with_override(calibration: dict) -> dict:
+    # Merged on every return, not only a cache miss. Overriding one key
+    # against a warm cache used to be silently ignored, which would have
+    # made a weight sweep compare a trial value against itself and report
+    # the starting point as the fitted answer.
+    return {**calibration, **_override} if _override else calibration
 
 
 _override: dict | None = None

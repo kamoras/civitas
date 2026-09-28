@@ -231,12 +231,13 @@ async def get_document_comments(
     )
     # Fetched live: a retryable error (a rate limit, a timeout) is this
     # moment's, not the document's, and no cache may keep it. A permanent
-    # one (no such document) is the document's answer, cached like a good
-    # one so a repeat spends nothing. Answered 200 either way — the page
+    # one (no such document, a refused id) is the same answer next time,
+    # cached like a good one so a repeat spends nothing. Answered 200 either way — the page
     # shows the message in place of the list.
     if result.get("retryable"):
         return uncached_json(result)
-    return JSONResponse(content=result, headers={"Cache-Control": "public, max-age=300"})
+    # Cached for the middleware's default lifetime (api/cache_headers.py).
+    return JSONResponse(content=result)
 
 
 class CommentSubmission(BaseModel):

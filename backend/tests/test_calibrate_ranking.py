@@ -216,9 +216,12 @@ def test_a_moment_the_database_is_unreadable_keeps_the_calibration(db_session, m
 
     from tests.conftest import TEST_RANKING_CALIBRATION
 
+    from datetime import datetime
+
     monkeypatch.setattr(explore_ranking, "_override", None)
     explore_ranking.reset_cache()
-    monkeypatch.setattr(explore_ranking, "_stored_at", lambda: None)
+    stored = datetime(2026, 9, 1)
+    monkeypatch.setattr(explore_ranking, "_stored_at", lambda: stored)
     monkeypatch.setattr(explore_ranking, "_load_from_db",
                         lambda: {**TEST_RANKING_CALIBRATION, "source_diversity_cap": 9})
     assert explore_ranking.source_diversity_cap() == 9
@@ -226,4 +229,33 @@ def test_a_moment_the_database_is_unreadable_keeps_the_calibration(db_session, m
     monkeypatch.setattr(explore_ranking, "_load_from_db", lambda: None)  # would fall back to bundled
     monkeypatch.setattr(explore_ranking, "_checked_at", 0.0)
     assert explore_ranking.source_diversity_cap() == 9
+    explore_ranking.reset_cache()
+
+
+def test_a_stored_calibration_that_cannot_be_read_is_not_replaced_by_the_bundled_one(monkeypatch):
+    # The row changed (a recalibration elsewhere) but reading it failed:
+    # keep the calibration in hand, stamped as the old row, so the next
+    # check tries the new one again — never the bundled one stamped as new.
+    from datetime import datetime
+
+    from app.pipeline import explore_ranking
+
+    from tests.conftest import TEST_RANKING_CALIBRATION
+
+    monkeypatch.setattr(explore_ranking, "_override", None)
+    explore_ranking.reset_cache()
+    monkeypatch.setattr(explore_ranking, "_stored_at", lambda: datetime(2026, 9, 1))
+    monkeypatch.setattr(explore_ranking, "_load_from_db",
+                        lambda: {**TEST_RANKING_CALIBRATION, "source_diversity_cap": 9})
+    assert explore_ranking.source_diversity_cap() == 9
+
+    monkeypatch.setattr(explore_ranking, "_stored_at", lambda: datetime(2026, 9, 2))
+    monkeypatch.setattr(explore_ranking, "_load_from_db", lambda: None)
+    monkeypatch.setattr(explore_ranking, "_checked_at", 0.0)
+    assert explore_ranking.source_diversity_cap() == 9  # not the bundled one
+
+    monkeypatch.setattr(explore_ranking, "_load_from_db",
+                        lambda: {**TEST_RANKING_CALIBRATION, "source_diversity_cap": 11})
+    monkeypatch.setattr(explore_ranking, "_checked_at", 0.0)
+    assert explore_ranking.source_diversity_cap() == 11  # and the new row once readable
     explore_ranking.reset_cache()

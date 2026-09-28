@@ -153,8 +153,9 @@ class TestCommentsCaching:
         # uncached every repeat would spend the shared budget.
         resp = await self._get(db_session, {"comments": [], "totalElements": 0,
                                             "error": "Document not found on Regulations.gov", "retryable": False})
-        assert resp.headers["Cache-Control"] == "public, max-age=300"
+        assert "Cache-Control" not in resp.headers  # cacheable, like an answer
 
-    async def test_a_good_fetch_is_cached_briefly(self, db_session):
+    async def test_a_good_fetch_is_cacheable(self, db_session):
+        # No header of its own: the middleware's default applies.
         resp = await self._get(db_session, {"comments": [{"id": "1"}], "totalElements": 1})
-        assert resp.headers["Cache-Control"] == "public, max-age=300"
+        assert "Cache-Control" not in resp.headers

@@ -287,6 +287,7 @@ def test_a_connection_whose_setup_fails_is_closed(throttle_store, monkeypatch):
         return wrapped
 
     monkeypatch.setattr(throttle.sqlite3, "connect", connect)
+    monkeypatch.setattr(throttle, "_BUSY_TIMEOUT_S", 0.05)  # the WAL switch's retry window
     throttle.use_path(throttle_store)
     assert throttle.hit("b", "k", limit=1, period=60).allowed  # fails open
     assert opened and all(c.closed for c in opened) and throttle._conns == []
@@ -358,8 +359,84 @@ def test_a_dropped_salt_leaves_no_bytes_behind(throttle_store, monkeypatch):
 
     monkeypatch.setattr(throttle, "datetime", _Tomorrow)
     throttle.client_key("203.0.113.1", "write")
+    monkeypatch.setattr(throttle, "_last_forget", -1e9)
+    throttle.forget_stale_salt()  # the minute tick truncates the WAL
     for suffix in ("", "-wal"):
         path = throttle_store + suffix
         if os.path.exists(path):
             with open(path, "rb") as fh:
                 assert old_salt not in fh.read(), path
+
+
+def test_a_failed_commit_does_not_leave_the_connection_in_a_transaction(throttle_store, monkeypatch):
+    # Reused mid-transaction, the connection's next BEGIN would fail and
+    # the write lock it holds would stall every other worker.
+    throttle.hit("b", "k", limit=10, period=60)
+    conn = throttle._conn()
+
+    class _CommitFails:
+        def __init__(self, inner):
+            self.inner = inner
+
+        def execute(self, sql, *args):
+            if sql == "COMMIT":
+                raise sqlite3.OperationalError("database is locked")
+            return self.inner.execute(sql, *args)
+
+        @property
+        def in_transaction(self):
+            return self.inner.in_transaction
+
+        def close(self):
+            self.inner.close()
+
+    monkeypatch.setattr(throttle._local, "conn", _CommitFails(conn))
+    assert throttle.hit("b", "k", limit=10, period=60).allowed  # fails open
+    assert not conn.in_transaction
+    monkeypatch.undo()
+    throttle.use_path(throttle_store)
+    assert throttle.hit("b", "k", limit=10, period=60).remaining == 8  # the store still works
+
+
+def test_a_truncation_blocked_by_a_reader_is_retried(throttle_store, monkeypatch):
+    import os
+
+    throttle.client_key("203.0.113.1", "write")
+    reader = sqlite3.connect(throttle_store, isolation_level=None)
+    reader.execute("BEGIN")
+    reader.execute("SELECT * FROM salts").fetchall()  # holds a read snapshot
+
+    class _Tomorrow(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2099, 1, 2, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(throttle, "datetime", _Tomorrow)
+    monkeypatch.setattr(throttle, "_BUSY_TIMEOUT_S", 0.1)
+    throttle.use_path(throttle_store)  # reconnect with the short timeout
+    throttle.client_key("203.0.113.1", "write")  # drops yesterday's salt
+    monkeypatch.setattr(throttle, "_last_forget", -1e9)
+    throttle.forget_stale_salt()  # blocked by the reader
+    assert throttle._truncate_pending
+    reader.execute("COMMIT")
+    reader.close()
+    monkeypatch.setattr(throttle, "_last_forget", -1e9)
+    throttle.forget_stale_salt()
+    assert not throttle._truncate_pending
+    assert os.path.getsize(throttle_store + "-wal") == 0
+
+
+def test_a_new_days_first_key_never_waits_on_a_checkpoint(throttle_store, monkeypatch):
+    # The request path: truncation is left to the minute tick.
+    throttle.client_key("203.0.113.1", "write")
+
+    class _Tomorrow(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2099, 1, 2, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(throttle, "datetime", _Tomorrow)
+    checkpoints = []
+    monkeypatch.setattr(throttle, "_truncate_wal", lambda: checkpoints.append(1))
+    throttle.client_key("203.0.113.1", "write")
+    assert checkpoints == [] and throttle._truncate_pending

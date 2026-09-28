@@ -159,8 +159,27 @@ def _conn() -> sqlite3.Connection:
     return conn
 
 
+def _discard(conn: sqlite3.Connection) -> None:
+    """Close a connection that can't be trusted any more, and forget it, so
+    this thread's next call opens a fresh one."""
+    with _conns_lock:
+        if conn in _conns:
+            _conns.remove(conn)
+    try:
+        conn.close()
+    except sqlite3.Error:
+        pass
+    if getattr(_local, "conn", None) is conn:
+        _local.conn = None
+
+
 class _Txn:
-    """BEGIN IMMEDIATE ... COMMIT, rolled back on any error."""
+    """BEGIN IMMEDIATE ... COMMIT, rolled back on any error.
+
+    A COMMIT that fails (busy) leaves the transaction open, holding the
+    store's write lock: it is rolled back, and a connection that still can't
+    leave its transaction is discarded — reused, its next BEGIN would fail
+    and every other worker would wait on the lock it holds."""
 
     def __enter__(self) -> sqlite3.Connection:
         self.conn = _conn()
@@ -168,7 +187,18 @@ class _Txn:
         return self.conn
 
     def __exit__(self, exc_type, *_exc) -> None:
-        self.conn.execute("ROLLBACK" if exc_type else "COMMIT")
+        try:
+            self.conn.execute("ROLLBACK" if exc_type else "COMMIT")
+        except sqlite3.Error:
+            try:
+                if self.conn.in_transaction:
+                    self.conn.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            if self.conn.in_transaction:
+                _discard(self.conn)
+            if exc_type is None:
+                raise
 
 
 @dataclass(frozen=True)
@@ -229,19 +259,32 @@ def _salt_for(today: str) -> bytes:
         dropped = conn.execute("DELETE FROM salts WHERE date != ?", (today,)).rowcount
         salt = conn.execute("SELECT salt FROM salts WHERE date = ?", (today,)).fetchone()[0]
     if dropped:
-        _truncate_wal()
+        # Truncating can wait on another worker's read, so it never runs on
+        # a request: the minute tick (forget_stale_salt) does it.
+        global _truncate_pending
+        _truncate_pending = True
     with _salt_lock:
         _salt_cache = (today, salt)
     return salt
 
 
+_truncate_pending = False
+
+
 def _truncate_wal() -> None:
     """Checkpoint the WAL and truncate it to nothing: its frames still hold
-    the page a deleted salt was on."""
+    the page a deleted salt was on. Another worker's open read blocks it —
+    reported in the result, not raised — in which case the next
+    forget_stale_salt tick tries again."""
+    global _truncate_pending
     try:
-        _conn().execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        busy = _conn().execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0]
     except sqlite3.Error:
+        busy = 1
         logger.warning("Could not truncate the throttle store's WAL", exc_info=True)
+    _truncate_pending = bool(busy)
+    if busy:
+        logger.info("Throttle store WAL still in use — truncating it on the next tick")
 
 
 def forget_stale_salt() -> None:
@@ -264,7 +307,7 @@ def forget_stale_salt() -> None:
     try:
         with _Txn() as conn:
             dropped = conn.execute("DELETE FROM salts WHERE date != ?", (today,)).rowcount
-        if dropped:
+        if dropped or _truncate_pending:
             _truncate_wal()
     except sqlite3.Error:
         logger.warning("Could not drop a stale throttle salt", exc_info=True)

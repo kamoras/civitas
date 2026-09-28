@@ -108,3 +108,19 @@ def test_an_unknown_document_is_asked_about_again_after_a_few_hours(api, db_sess
     before = sum("/documents/" in c for c in api)
     asyncio.run(rg.fetch_comments("https://www.regulations.gov/document/NOPE-1", db=db_session))
     assert sum("/documents/" in c for c in api) == before + 1
+
+
+@pytest.mark.parametrize("status,retryable,remembered", [
+    (400, False, False), (403, False, False), (410, False, True), (500, True, False), (503, True, False),
+])
+def test_a_failed_lookup_is_classified_by_what_asking_again_could_do(monkeypatch, db_session, status, retryable,
+                                                                    remembered):
+    from app.models import ApiCache
+
+    monkeypatch.setattr(rg.settings, "DATA_GOV_API_KEY", "k", raising=False)
+    monkeypatch.setattr(rg, "make_async_client",
+                        lambda **kw: httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(status))))
+    result = asyncio.run(rg.fetch_comments(URL, db=db_session))
+    assert result["retryable"] is retryable
+    missing = db_session.query(ApiCache).filter(ApiCache.cache_key.like("objectid-missing-%")).count()
+    assert bool(missing) is remembered

@@ -48,9 +48,9 @@ _COMMENTS_CACHE_HOURS = 1
 
 async def _object_id(client: httpx.AsyncClient, api_key: str, document_id: str) -> tuple[str | None, int]:
     """(the document's objectId, which the comments listing is keyed on,
-    or None; the HTTP status). A 404, or a document with no objectId, is
-    Regulations.gov not having it; any other status is a failure of this
-    request, not an answer about the document."""
+    or None; the HTTP status). A 404 or 410, or a document with no
+    objectId, is Regulations.gov not having it; any other status is not an
+    answer about whether the document exists."""
     resp = await client.get(
         f"{REG_BASE}/documents/{document_id}",
         headers={"X-Api-Key": api_key},
@@ -60,6 +60,13 @@ async def _object_id(client: httpx.AsyncClient, api_key: str, document_id: str) 
         logger.warning("Regulations.gov document %s returned %d", document_id, resp.status_code)
         return None, resp.status_code
     return ((resp.json().get("data") or {}).get("attributes") or {}).get("objectId") or None, 200
+
+
+def _retryable(status: int) -> bool:
+    """Whether a failed status could succeed if asked again: a rate limit or
+    a server error can; any other refusal (a malformed id, a bad key) is
+    the same answer next time."""
+    return status == 429 or status >= 500
 
 
 def _failed(error: str, *, retryable: bool) -> dict:
@@ -133,8 +140,8 @@ async def fetch_comments(
                 object_id, status = await _object_id(client, api_key, document_id)
                 if status == 429:
                     return _failed("Rate limit reached", retryable=True)
-                if status not in (200, 404):
-                    return _failed(f"API error: {status}", retryable=True)
+                if status not in (200, 404, 410):
+                    return _failed(f"API error: {status}", retryable=_retryable(status))
                 if not object_id:
                     if db is not None:
                         api_cache_set(db, _CACHE_TIER, missing_key, {"notFound": True},
@@ -162,7 +169,7 @@ async def fetch_comments(
 
             if resp.status_code != 200:
                 logger.warning("Regulations.gov returned %d", resp.status_code)
-                return _failed(f"API error: {resp.status_code}", retryable=True)
+                return _failed(f"API error: {resp.status_code}", retryable=_retryable(resp.status_code))
 
             data = resp.json()
             raw_comments = data.get("data", [])
