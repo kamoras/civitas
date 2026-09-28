@@ -116,6 +116,12 @@ async def fetch_bill_record(
             if cached[part] is not None:
                 out[part] = cached[part].get("value")
                 continue
+            if part != "bill" and "bill" in out["unavailable"]:
+                # The bill request itself failed (an outage, most likely):
+                # the rest would fail the same way — not fetched, not charged.
+                out[part] = None
+                out["unavailable"].append(part)
+                continue
             if part != "bill" and not rest_charged:
                 rest_charged = True
                 await charge(sum(1 for p in missing if p != "bill"))

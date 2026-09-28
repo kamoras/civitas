@@ -420,9 +420,12 @@ def check_pipeline_service_alive() -> None:
                 f"{_heartbeat_unreadable_since:%Y-%m-%d %H:%M} UTC, so it can't tell whether that "
                 "service is running. Check the heartbeat file (scheduler_heartbeat.json on the data "
                 "volume both services mount) and the backend's logs.",
-                # Once per unreadable spell (keyed by when it began), not
-                # per day: a second spell the same day alerts too.
-                dedupe_key=f"pipeline-heartbeat-unreadable-{_heartbeat_unreadable_since:%Y-%m-%dT%H:%M:%S}",
+                # Per day, not per spell: when a spell began is each
+                # process's own observation (each API worker, each task
+                # after a rollout), so a key built from it would page once
+                # per process. The silent alert below can key per outage
+                # because its key comes from the file itself.
+                dedupe_key=f"pipeline-heartbeat-unreadable-{now:%Y-%m-%d}",
             )
         return
     _heartbeat_unreadable_since = None

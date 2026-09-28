@@ -191,21 +191,18 @@ _WAL_RETRY_EVERY_S = 60
 _wal_retry_at: float | None = None  # None: in WAL (or not yet opened)
 
 
-def _enable_wal(conn: sqlite3.Connection) -> bool:
-    """Switch the file to WAL if it isn't already; whether it is now. The
-    switch needs the file to itself, so while another process holds a
-    transaction on it it would wait out the whole busy timeout — here under
-    _vec_lock, holding every search up — and then fail. It waits a second
-    instead and, failing, goes on in the current mode; get_vec_conn tries
-    again a minute later, until it takes."""
-    conn.execute("PRAGMA busy_timeout = 1000")
-    try:
-        return conn.execute("PRAGMA journal_mode=WAL").fetchone()[0].lower() == "wal"
-    except sqlite3.OperationalError:
-        logger.info("Vector store busy — WAL switch retried in %ds", _WAL_RETRY_EVERY_S)
-        return False
-    finally:
-        conn.execute(f"PRAGMA busy_timeout = {int(SQLITE_BUSY_TIMEOUT_S * 1000)}")
+def _switch_to_wal() -> bool:
+    """Switch the file to WAL (sqlite_wal.switch_to_wal), waiting a second
+    at most: waiting out the whole busy timeout while another process holds
+    a transaction would hold every search up behind _vec_lock. Failing, the
+    store goes on in its current mode; get_vec_conn tries again a minute
+    later, until it takes."""
+    from app.sqlite_wal import switch_to_wal
+
+    if switch_to_wal(_VECTOR_DB_PATH, 1.0):
+        return True
+    logger.info("Vector store busy — WAL switch retried in %ds", _WAL_RETRY_EVERY_S)
+    return False
 
 
 def get_vec_conn() -> sqlite3.Connection:
@@ -213,7 +210,7 @@ def get_vec_conn() -> sqlite3.Connection:
     global _vec_conn, _wal_retry_at
     with _vec_lock:
         if _vec_conn is not None and _wal_retry_at is not None and time.monotonic() >= _wal_retry_at:
-            _wal_retry_at = None if _enable_wal(_vec_conn) else time.monotonic() + _WAL_RETRY_EVERY_S
+            _wal_retry_at = None if _switch_to_wal() else time.monotonic() + _WAL_RETRY_EVERY_S
         if _vec_conn is None:
             import sqlite_vec
 
@@ -227,7 +224,7 @@ def get_vec_conn() -> sqlite3.Connection:
             # every reader off until it commits. Persistent in the file, so
             # after the first switch this is a no-op — and every connection,
             # this one included, follows a switch made by another.
-            _wal_retry_at = None if _enable_wal(conn) else time.monotonic() + _WAL_RETRY_EVERY_S
+            _wal_retry_at = None if _switch_to_wal() else time.monotonic() + _WAL_RETRY_EVERY_S
             conn.execute("PRAGMA synchronous=NORMAL")
             conn.enable_load_extension(True)
             sqlite_vec.load(conn)

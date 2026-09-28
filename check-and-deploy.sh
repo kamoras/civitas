@@ -228,6 +228,16 @@ wait_for_rollout() {
         fi
         ;;
       rollback_started|rollback_completed|paused)
+        # Only this deploy's rollback: a state left from an earlier deploy's
+        # can still be read before Swarm flips to "updating". A rollback
+        # restores the previous spec, so while the spec still names this
+        # release's image the state can't be this deploy's — keep waiting.
+        local spec_image
+        spec_image=$(docker service inspect "$service" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' 2>/dev/null || echo "")
+        if [[ -n "${IMAGE_TAG:-}" && "${spec_image%%@*}" == *":$IMAGE_TAG" ]]; then
+          sleep 1
+          continue
+        fi
         log "$service rollout failed (state=$state) — Swarm auto-rolled back"
         return 1
         ;;

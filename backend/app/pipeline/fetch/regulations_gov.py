@@ -141,12 +141,21 @@ async def fetch_comments(
         object_id = (known_id or {}).get("objectId")
     if page is not None:
         return page
-    if spend is not None:
-        await spend(1 if object_id else 2)
+    async def charge() -> None:
+        # One unit before each request: the objectId lookup can end the call
+        # (not found, refused), and the page it would have paid for with it
+        # was never asked for. A refusal is the caller's answer (a 503), so
+        # it passes through the handlers below untouched.
+        if spend is not None:
+            try:
+                await spend(1)
+            except Exception as refusal:
+                raise _Refused(refusal) from refusal
 
     async with make_async_client() as client:
         try:
             if not object_id:
+                await charge()
                 object_id, status = await _object_id(client, api_key, document_id)
                 if status == 429:
                     return _failed("Rate limit reached", retryable=True)
@@ -163,6 +172,7 @@ async def fetch_comments(
                         db, _CACHE_TIER, id_key, {"objectId": object_id}, normal_ttl_hours=_OBJECT_ID_CACHE_HOURS,
                     )
 
+            await charge()
             resp = await client.get(
                 f"{REG_BASE}/comments",
                 params={
@@ -210,12 +220,22 @@ async def fetch_comments(
                 await api_cache_set_async(db, _CACHE_TIER, page_key, result, normal_ttl_hours=_COMMENTS_CACHE_HOURS)
             return result
 
+        except _Refused as refused:
+            raise refused.refusal from None
         except httpx.TimeoutException:
             logger.warning("Regulations.gov request timed out")
             return _failed("Request timed out", retryable=True)
         except Exception as e:
             logger.warning("Regulations.gov fetch failed: %s", e)
             return _failed("Request failed", retryable=True)
+
+
+class _Refused(Exception):
+    """The upstream budget refused a request (fetch_comments' charge)."""
+
+    def __init__(self, refusal: Exception):
+        super().__init__(str(refusal))
+        self.refusal = refusal
 
 
 async def submit_comment(

@@ -48,7 +48,7 @@ def test_object_id_and_pages_are_cached(api, db_session):
     asyncio.run(rg.fetch_comments(URL, db=db_session, spend=_charging(charged)))
     asyncio.run(rg.fetch_comments(URL, db=db_session, spend=_charging(charged)))       # page cached
     asyncio.run(rg.fetch_comments(URL, page_number=2, db=db_session, spend=_charging(charged)))  # objectId cached
-    assert charged == [2, 1]
+    assert charged == [1, 1, 1]  # objectId, page 1; page 2 (objectId cached)
     assert sum("/documents/" in c for c in api) == 1
 
 
@@ -74,7 +74,7 @@ def test_an_unknown_document_is_remembered(api, db_session):
     again = asyncio.run(rg.fetch_comments("https://www.regulations.gov/document/NOPE-1", db=db_session,
                                           spend=_charging(charged)))
     assert first["retryable"] is False and again["error"] == first["error"]
-    assert charged == [2]
+    assert charged == [1]  # the one lookup it made, not the page it never asked for
     assert sum("/documents/" in c for c in api) == 1
 
 

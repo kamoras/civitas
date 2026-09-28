@@ -145,29 +145,16 @@ def use_path(path: str) -> None:
         _conns[:] = in_use
 
 
-def _enable_wal(conn: sqlite3.Connection) -> None:
-    """Switch the store to WAL. Two workers creating it at the same moment
-    race for the switch, and SQLite can refuse the loser at once rather than
-    wait on the busy timeout — so retry for as long as that timeout, and
-    accept a file another process has already switched."""
-    deadline = time.monotonic() + _BUSY_TIMEOUT_S
-    while True:
-        try:
-            if conn.execute("PRAGMA journal_mode=WAL").fetchone()[0] == "wal":
-                return
-        except sqlite3.OperationalError:
-            pass
-        if time.monotonic() >= deadline:
-            raise sqlite3.OperationalError("throttle store: could not switch to WAL")
-        time.sleep(0.01)
-
-
 def _open(path: str) -> sqlite3.Connection:
+    from app.sqlite_wal import switch_to_wal
+
+    # Two workers creating the store at once race for the switch.
+    if not switch_to_wal(path, _BUSY_TIMEOUT_S):
+        raise sqlite3.OperationalError("throttle store: could not switch to WAL")
     # check_same_thread off only so use_path can close it; each connection
     # is otherwise used by the one thread that opened it.
     conn = sqlite3.connect(path, timeout=_BUSY_TIMEOUT_S, isolation_level=None, check_same_thread=False)
     try:
-        _enable_wal(conn)
         # In RAM already: a sync would buy nothing.
         conn.execute("PRAGMA synchronous=OFF")
         # A deleted salt must be gone, not left in a freed page

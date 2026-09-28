@@ -281,3 +281,14 @@ def _charging(charged: list):
     async def spend(n):
         charged.append(n)
     return spend
+
+
+def test_a_failed_bill_request_stops_there(senate, monkeypatch):
+    """An outage: the other four requests would fail the same way, and the
+    budget must not be charged for them."""
+    fake, calls = _answers(fail={"bill"})
+    monkeypatch.setattr(br, "_congress_get", fake)
+    charged = []
+    raw = asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668", spend=_charging(charged)))
+    assert len(calls) == 1 and charged == [1]
+    assert set(raw["unavailable"]) == {"bill", "summaries", "actions", "cosponsors", "text"}

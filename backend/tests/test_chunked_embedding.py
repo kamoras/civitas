@@ -264,17 +264,15 @@ def test_a_busy_file_does_not_hold_the_first_search_up(tmp_path, monkeypatch):
     writer.execute("CREATE TABLE t (x)")
     writer.execute("BEGIN EXCLUSIVE")
     try:
-        reader = sqlite3.connect(path, isolation_level=None)
+        monkeypatch.setattr(vs, "_VECTOR_DB_PATH", path)
         started = time.monotonic()
-        vs._enable_wal(reader)
+        assert not vs._switch_to_wal()  # busy: gives up quickly
         assert time.monotonic() - started < 5
-        assert reader.execute("PRAGMA busy_timeout").fetchone()[0] == int(vs.SQLITE_BUSY_TIMEOUT_S * 1000)
-        reader.close()
     finally:
         writer.execute("ROLLBACK")
         writer.close()
+    assert vs._switch_to_wal()  # free now: switches
     follower = sqlite3.connect(path)
-    vs._enable_wal(follower)  # free now: switches
     assert follower.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     follower.close()
 
