@@ -244,7 +244,8 @@ CONSTITUENT_FULL_CONFIDENCE_VOTES = 20
 SATURATION_QUANTILE = 0.9
 
 # What a Constituent Alignment reference is measured on: the unweighted
-# break rate (party_break_rate) over records with at least
+# break rate (party_break_rate; since v6.20 over the whole Congress, each
+# measure once, breaks toward the other party only) over records with at least
 # CONSTITUENT_FULL_CONFIDENCE_VOTES party-labeled votes, its expectation a
 # fractional-logit fit, its scale per party the SATURATION_QUANTILE of the
 # Pearson residual per vote (written exactly, so any change to either constant
@@ -253,5 +254,5 @@ SATURATION_QUANTILE = 0.9
 # expectation and percentage-point scale, v6.13's content-weighted rate,
 # another threshold or quantile — is not scored against.
 CONSTITUENT_REFERENCE_STATISTIC = (
-    f"unweighted-break-rate/logit/party-residual/n>={CONSTITUENT_FULL_CONFIDENCE_VOTES}/q={SATURATION_QUANTILE!r}"
+    f"congress-centerward-per-measure-break-rate/logit/party-residual/n>={CONSTITUENT_FULL_CONFIDENCE_VOTES}/q={SATURATION_QUANTILE!r}"
 )

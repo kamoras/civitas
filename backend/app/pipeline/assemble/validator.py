@@ -180,6 +180,9 @@ def validate_senator(senator: dict) -> dict:
         # The party an Independent caucuses with (normalize_votes); kept so
         # it is persisted and the score breakdown scores them the same way.
         "effectiveParty": vr.get("effectiveParty") if vr.get("effectiveParty") in ("D", "R") else None,
+        # The whole Congress's party-line record (party_line_record), persisted
+        # for the score breakdown and the scorecard's list of breaks.
+        "partyLineRecord": vr.get("partyLineRecord") if isinstance(vr.get("partyLineRecord"), dict) else None,
         "recentVotes": [
             _validate_vote(v, "recent")
             for v in (vr.get("recentVotes") or [])

@@ -24,6 +24,18 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.20",
+    date: "2026-09-29",
+    title: "Breaks with the party: the whole Congress, toward the other party, each measure once",
+    tldr: "How often a member breaks with their party is now counted over every roll call of the current Congress, not the latest 120. A vote against the party counts only when it goes toward the other party; a vote from the party's own flank is listed but not counted, because how far toward the flank a member sits is already scored. A nomination or bill voted on several times, such as cloture and then confirmation, counts once.",
+    changes: [
+      "A break counts when, on that roll call, the party's members who broke sit on average nearer the other party (DW-NOMINATE) than the party does.",
+      "Tim Burchett (R-TN-2) had 6 breaks in 76 sampled votes (7.9%). Over the whole Congress, counting only breaks toward Democrats and each measure once, it is 2 of 298 (0.7%), the House Republican median; 14 more votes came from the party's right flank.",
+      "Tested against Senate general elections and House primaries (research note, sections 11 and 12): at least as predictive as counting every break, and counting each measure once changes nothing measurable.",
+      "In the 119th Senate 37% of roll calls repeat a measure already voted on, nearly all of them cloture on nominations.",
+    ],
+  },
+  {
     version: "v6.19",
     date: "2026-09-28",
     title: "Housekeeping votes no longer count as breaks with the party",
