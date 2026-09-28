@@ -3,6 +3,10 @@ import type { Justice, JusticeLoyalty } from "@/types/justice";
 import { displayScore } from "@/lib/formatting";
 import { getJusticeLabel, getScoreBgColor, getScoreColor } from "@/lib/representation";
 import { SectionHeadingLevelProvider } from "@/components/shared/CollapsibleSection";
+import ShareSectionButton from "@/components/share/ShareSectionButton";
+import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
+import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR, type ShareSubject } from "@/lib/shareImage";
+import { absoluteUrl } from "@/lib/site";
 import ScoreColumn from "./ScoreColumn";
 
 const PARTY: Record<string, { label: string; text: string; border: string }> = {
@@ -77,7 +81,7 @@ function LoyaltyColumn({ justice }: { justice: Justice }) {
   const score = justice.score.loyalty;
   const appointer = justice.appointingPresident ?? "the appointing president";
   return (
-    <ScoreColumn title="Independence from the appointing president" score={score}>
+    <ScoreColumn title="Independence from the appointing president" shareId="loyalty" score={score}>
       {l && score != null ? (
         <>
           <p className="text-base leading-relaxed text-ink">
@@ -110,7 +114,7 @@ function IdeologyColumn({ points }: { points: [number, number][] }) {
   const first = points[0];
   const last = points[points.length - 1];
   return (
-    <ScoreColumn title="Ideology" score={null} aside="Not scored">
+    <ScoreColumn title="Ideology" shareId="ideology" score={null} aside="Not scored">
       {last ? (
         <p className="text-base leading-relaxed text-ink">
           Martin-Quinn position {last[1] > 0 ? "+" : ""}
@@ -143,7 +147,7 @@ function RecordColumn({ justice: j }: { justice: Justice }) {
     ["Concurrences written", `${j.authoredConcurrence}`],
   ];
   return (
-    <ScoreColumn title="Voting record" score={null} aside="Not scored">
+    <ScoreColumn title="Voting record" shareId="voting-record" score={null} aside="Not scored">
       <p className="text-base leading-relaxed text-ink">
         {j.casesDecided} cases decided in the recent terms Oyez records.
       </p>
@@ -185,120 +189,150 @@ export default function JusticeScorecard({
   const overall = j.score.overall == null ? null : displayScore(j.score.overall);
   const since = formatDate(j.dateStart);
   const agreement = Object.entries(j.agreementMatrix).sort(([, a], [, b]) => b - a);
+  // What every section's share image says it is from, as on the member and
+  // president scorecards.
+  const shareSubject: ShareSubject = {
+    title: j.name,
+    subtitle: [j.roleTitle, j.appointingPresident && `appointed by ${j.appointingPresident}`]
+      .filter(Boolean)
+      .join(" · "),
+    badge:
+      overall == null
+        ? undefined
+        : { label: "Judicial score", value: String(overall), colorClass: getScoreColor(overall) },
+    url: absoluteUrl(`/politicians/${encodeURIComponent(j.id)}`),
+  };
 
   return (
     <SectionHeadingLevelProvider value="h3">
-      <div className="flex flex-col gap-6">
-        <header
-          className={`grid gap-6 border border-white/25 border-t-[3px] bg-surface px-5 py-6 font-sans sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] ${party.border}`}
-        >
-          <div className="flex min-w-0 gap-5">
-            {j.thumbnailUrl && (
-              // eslint-disable-next-line @next/next/no-img-element -- external, varied justice-photo hosts; not worth per-host next/image remotePatterns
-              <img
-                src={j.thumbnailUrl}
-                alt=""
-                className={`h-28 w-24 shrink-0 border-2 object-cover ${party.border}`}
-              />
-            )}
-            <div className="flex min-w-0 flex-col gap-2">
-              <Title className="break-words text-3xl font-extrabold leading-tight text-ink-hi sm:text-4xl">
-                {j.name}
-              </Title>
-              <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
-                {j.roleTitle}
-                {j.appointingPresident && (
-                  <>
-                    {" "}
-                    · appointed by {j.appointingPresident}
-                    {party.label && <span className={party.text}> ({party.label})</span>}
-                  </>
-                )}
-                {since && ` · since ${since}`}
-              </p>
-              <p className="flex flex-wrap gap-x-4 gap-y-1">
-                <a href="https://www.oyez.org" className={LINK}>
-                  Oyez
-                </a>
-                <a href="http://scdb.la.psu.edu" className={LINK}>
-                  Supreme Court Database
-                </a>
-                <a href="https://mqscores.wustl.edu" className={LINK}>
-                  Martin-Quinn scores
-                </a>
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-col gap-2 border-t border-white/[0.12] pt-5 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
-            <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-              Judicial Score
-            </p>
-            {overall == null ? (
-              <p className="font-display text-2xl font-extrabold text-ink-min">Not yet measured</p>
-            ) : (
-              <div className="flex items-baseline gap-4">
-                <span
-                  className={`font-display text-7xl font-extrabold leading-none ${getScoreColor(overall)}`}
-                >
-                  {overall}
-                </span>
-                <div className="flex flex-col gap-1">
-                  <span className={`font-mono text-sm tracking-[0.1em] ${getScoreColor(overall)}`}>
-                    {getJusticeLabel(overall)}
-                  </span>
-                  {rank && (
-                    <Link href="/leaderboard?branch=scotus" className={LINK}>
-                      #{rank.rank} of {rank.of} justices
-                    </Link>
-                  )}
-                </div>
-              </div>
-            )}
-            <p className="text-sm leading-relaxed text-ink-lo">
-              Higher means the justice sided with the federal government about as often under the
-              president who made the appointment as under any other. It measures independence from
-              that president, not whether a ruling was right.
-            </p>
-          </div>
-        </header>
-
-        <div className="grid items-stretch gap-5 lg:grid-cols-3">
-          <LoyaltyColumn justice={j} />
-          <IdeologyColumn points={j.idealPoints} />
-          <RecordColumn justice={j} />
-        </div>
-
-        {agreement.length > 0 && (
-          <section
-            className="flex flex-col gap-4 border border-white/25 bg-surface px-5 py-5 font-sans"
-            aria-labelledby="agreement-heading"
+      <ShareSubjectProvider subject={shareSubject}>
+        <div className="flex flex-col gap-6">
+          <header
+            id="overview"
+            {...{ [SHARE_SECTION_ATTR]: "overview" }}
+            className={`grid scroll-mt-[var(--header-clearance)] gap-6 border border-white/25 border-t-[3px] bg-surface px-5 py-6 font-sans sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] ${party.border}`}
           >
-            <div>
-              <h2 id="agreement-heading" className="text-[19px] font-bold text-ink-hi">
-                Agreement with each justice
-              </h2>
-              <p className="mt-1 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-                Share of the cases both decided the same way · not scored
-              </p>
+            <div className="flex min-w-0 gap-5">
+              {j.thumbnailUrl && (
+                // eslint-disable-next-line @next/next/no-img-element -- external, varied justice-photo hosts; not worth per-host next/image remotePatterns
+                <img
+                  src={j.thumbnailUrl}
+                  alt=""
+                  className={`h-28 w-24 shrink-0 border-2 object-cover ${party.border}`}
+                />
+              )}
+              <div className="flex min-w-0 flex-col gap-2">
+                <Title className="break-words text-3xl font-extrabold leading-tight text-ink-hi sm:text-4xl">
+                  {j.name}
+                </Title>
+                <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
+                  {j.roleTitle}
+                  {j.appointingPresident && (
+                    <>
+                      {" "}
+                      · appointed by {j.appointingPresident}
+                      {party.label && <span className={party.text}> ({party.label})</span>}
+                    </>
+                  )}
+                  {since && ` · since ${since}`}
+                </p>
+                <p className="flex flex-wrap gap-x-4 gap-y-1" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
+                  <a href="https://www.oyez.org" className={LINK}>
+                    Oyez
+                  </a>
+                  <a href="http://scdb.la.psu.edu" className={LINK}>
+                    Supreme Court Database
+                  </a>
+                  <a href="https://mqscores.wustl.edu" className={LINK}>
+                    Martin-Quinn scores
+                  </a>
+                </p>
+              </div>
             </div>
-            <dl className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
-              {agreement.map(([id, share]) => (
-                <div key={id} className="flex items-center gap-3">
-                  <dt className="w-40 truncate text-sm text-ink">{titleCase(id)}</dt>
-                  <dd className="flex flex-1 items-center gap-3">
-                    <span className="h-1.5 flex-1 bg-white/10" aria-hidden="true">
-                      <span className="block h-full bg-ink-lo" style={{ width: `${share}%` }} />
+            <div className="flex flex-col gap-2 border-t border-white/[0.12] pt-5 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
+              <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+                Judicial Score
+              </p>
+              {overall == null ? (
+                <p className="font-display text-2xl font-extrabold text-ink-min">
+                  Not yet measured
+                </p>
+              ) : (
+                <div className="flex items-baseline gap-4">
+                  <span
+                    className={`font-display text-7xl font-extrabold leading-none ${getScoreColor(overall)}`}
+                  >
+                    {overall}
+                  </span>
+                  <div className="flex flex-col gap-1">
+                    <span
+                      className={`font-mono text-sm tracking-[0.1em] ${getScoreColor(overall)}`}
+                    >
+                      {getJusticeLabel(overall)}
                     </span>
-                    <span className="w-12 text-right font-mono text-sm tabular-nums text-ink-hi">
-                      {Math.round(share)}%
-                    </span>
-                  </dd>
+                    {rank && (
+                      <Link href="/leaderboard?branch=scotus" className={LINK}>
+                        #{rank.rank} of {rank.of} justices
+                      </Link>
+                    )}
+                  </div>
                 </div>
-              ))}
-            </dl>
-          </section>
-        )}
-      </div>
+              )}
+              <p className="text-sm leading-relaxed text-ink-lo">
+                Higher means the justice sided with the federal government about as often under the
+                president who made the appointment as under any other. It measures independence from
+                that president, not whether a ruling was right.
+              </p>
+              {/* The header names the justice itself: no title strip. */}
+              <div className="flex justify-end">
+                <ShareSectionButton label="Scorecard summary" withStrip={false} />
+              </div>
+            </div>
+          </header>
+
+          <div className="grid items-stretch gap-5 lg:grid-cols-3">
+            <LoyaltyColumn justice={j} />
+            <IdeologyColumn points={j.idealPoints} />
+            <RecordColumn justice={j} />
+          </div>
+
+          {agreement.length > 0 && (
+            <section
+              id="agreement"
+              {...{ [SHARE_SECTION_ATTR]: "agreement" }}
+              className="flex scroll-mt-[var(--header-clearance)] flex-col gap-4 border border-white/25 bg-surface px-5 py-5 font-sans"
+              aria-labelledby="agreement-heading"
+            >
+              <div>
+                <h2 id="agreement-heading" className="text-[19px] font-bold text-ink-hi">
+                  Agreement with each justice
+                </h2>
+                <p className="mt-1 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+                  Share of the cases both decided the same way · not scored
+                </p>
+              </div>
+              <dl className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
+                {agreement.map(([id, share]) => (
+                  <div key={id} className="flex items-center gap-3">
+                    <dt className="w-40 truncate text-sm text-ink">{titleCase(id)}</dt>
+                    <dd className="flex flex-1 items-center gap-3">
+                      <span className="h-1.5 flex-1 bg-white/10" aria-hidden="true">
+                        <span className="block h-full bg-ink-lo" style={{ width: `${share}%` }} />
+                      </span>
+                      <span className="w-12 text-right font-mono text-sm tabular-nums text-ink-hi">
+                        {Math.round(share)}%
+                      </span>
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <div className="flex justify-end">
+                <ShareSectionButton label="Agreement with each justice" />
+              </div>
+            </section>
+          )}
+        </div>
+      </ShareSubjectProvider>
     </SectionHeadingLevelProvider>
   );
 }
