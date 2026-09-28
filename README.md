@@ -205,7 +205,7 @@ not for scoring.
 ### Phase 5 — JUSTICES
 
 Fetches and scores Supreme Court justices from Oyez (`justice_analyzer.py`), weekly on Sunday UTC (or whenever the table is empty — the uncached per-case crawl takes hours):
-- Pulls each justice's votes in the Court's decided cases
+- Pulls each justice's votes in the Court's decided cases. Oyez sometimes lists one justice twice in a decision (Ketanji Brown Jackson in two 2025-term cases, with Barrett and Gorsuch missing): identical rows count once, conflicting ones leave that vote out, and a missing justice's vote is never filled in. The duplicate had broken the one-vote-per-case key, so every Sunday refresh rolled back and the scorecards went stale with no alert. Now any pipeline step that fails and is carried past (`ProgressTracker.fail`) sends an ops alert, deduplicated per pipeline, step and day.
 - Scores consistency: how little a justice's agreement differs between their appointing party's bloc and the other, weighted toward close decisions
 - Scores independence: per non-unanimous case, the share of the opposing bloc on the justice's side times the share of their own bloc against it, averaged
 - Both are shrunk toward 50 when backed by few cases; a 9-justice profile summary is the one LLM step

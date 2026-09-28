@@ -15,6 +15,7 @@ from datetime import timedelta
 import pytest
 
 from app.models import HousePipelineRun, PipelinePhaseTiming, PipelineRun
+from app.pipeline import progress_tracker
 from app.pipeline.progress_tracker import ProgressTracker
 from app.time_utils import utcnow
 
@@ -82,6 +83,19 @@ def test_skipped_and_failed_steps_are_recorded_with_their_status(db_session):
     # report. Recording 0 here would understate a run's true phase totals.
     assert by_key["fetch_a"].duration_seconds is None
     assert by_key["fetch_b"].duration_seconds is not None
+
+
+def test_a_failed_step_alerts_the_operator(monkeypatch, db_session):
+    """Callers log and carry on, and the run still ends "completed" —
+    Supplementary's justice step failed silently every Sunday that way."""
+    sent = []
+    monkeypatch.setattr(progress_tracker, "send_ops_alert", lambda subject, body, **kw: sent.append((subject, kw["dedupe_key"])))
+    tracker = _tracker(db_session, PipelineRun(status="running"))
+    tracker.begin("fetch_b")
+    tracker.fail("fetch_b")
+    assert len(sent) == 1
+    assert sent[0][0] == "PipelineRun: step fetch_b failed"
+    assert sent[0][1].startswith("step-failed-PipelineRun-fetch_b-")
 
 
 def test_skip_after_begin_still_gets_a_completed_timestamp(db_session):
