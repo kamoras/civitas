@@ -1617,8 +1617,22 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
         # own feed is the record, stored as-is. Split first rather than
         # branching inside the federal loop, which otherwise counts every
         # one of them as `unmatched` against a Race id that cannot exist.
-        statewide = [r for r in records if r["office"] in STATEWIDE_OFFICE_LABELS]
-        state_leg = [r for r in records if r["office"] in STATE_LEG_CHAMBER_LABELS]
+        #
+        # A certified November list that opts in with its OWN
+        # statewide_offices is the source for these instead: it is the
+        # ballot itself, independents included, where primary results can
+        # only name each party's winner (and New Mexico's results portal
+        # no longer serves its primary at all). Only when it answered —
+        # a list that is down says nothing this run, and the main
+        # source's reading would be a different claim from a different
+        # document.
+        state_source, state_records, state_answered = source, records, main_answered
+        if general and general.get("statewide_offices"):
+            state_source = general
+            state_records = general_records or []
+            state_answered = general_records is not None
+        statewide = [r for r in state_records if r["office"] in STATEWIDE_OFFICE_LABELS]
+        state_leg = [r for r in state_records if r["office"] in STATE_LEG_CHAMBER_LABELS]
         judicial = [r for r in records if r["office"] in JUDICIAL_COURT_LABELS]
         records = [
             r for r in records
@@ -1626,12 +1640,12 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
             and r["office"] not in STATE_LEG_CHAMBER_LABELS
             and r["office"] not in JUDICIAL_COURT_LABELS
         ]
+        statewide_count = state_leg_count = judicial_count = 0
+        if state_answered:
+            statewide_count = _sync_statewide_nominees(db, cycle, state, state_source, statewide)
+            state_leg_count = _sync_state_leg_nominees(db, cycle, state, state_source, state_leg)
         if main_answered:
-            statewide_count = _sync_statewide_nominees(db, cycle, state, source, statewide)
-            state_leg_count = _sync_state_leg_nominees(db, cycle, state, source, state_leg)
             judicial_count = _sync_judicial_nominees(db, cycle, state, source, judicial)
-        else:
-            statewide_count = state_leg_count = judicial_count = 0
 
         # A state with its own general FILING list gets its November ballot
         # from that list (sync_ballot_filings), which is what may speak for

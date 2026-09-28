@@ -257,6 +257,11 @@ _STATEWIDE_PHRASES = [
         r"\bCommissioner\s+of\s+School\s+and\s+Public\s+Lands\b", re.IGNORECASE)),
     ("public_utilities_commission", re.compile(
         r"\bPublic\s+Utilities\s+Commission(?:er)?\b", re.IGNORECASE)),
+    # New Mexico's land office, off its 2026 general candidate list. Not
+    # South Dakota's "Commissioner of School and Public Lands" above, which
+    # this cannot match ("School and" sits between the words).
+    ("public_lands_commissioner", re.compile(
+        r"\bCommissioner\s+of\s+Public\s+Lands\b", re.IGNORECASE)),
 ]
 
 # The locality markers that stay decisive even beside one of the phrases
@@ -407,6 +412,7 @@ STATEWIDE_OFFICE_LABELS = {
     "state_lands_commissioner": "Commissioner of State Lands",
     "school_public_lands_commissioner": "Commissioner of School and Public Lands",
     "public_utilities_commission": "Public Utilities Commission",
+    "public_lands_commissioner": "Commissioner of Public Lands",
 }
 
 
@@ -601,6 +607,14 @@ _STATE_LEG_ORDINAL_DISTRICT_RE = re.compile(
 # refuses that label anyway; this pattern does not rely on it).
 _STATE_LEG_LETTER_DISTRICT_RE = re.compile(
     r"\bDist(?:rict)?\.?\s+([A-Za-z])\b", re.IGNORECASE,
+)
+
+# Wyoming prints the number with no "District" at all: "STATE SENATOR 11",
+# "STATE REPRESENTATIVE 01" (its 2026 general candidate roster). Anchored
+# to the WHOLE label, so a number anywhere else in a longer contest name
+# is never read as a seat.
+_STATE_LEG_BARE_NUMBER_RE = re.compile(
+    r"^\s*State\s+(?:Senator|Representative)\s+0*(\d+)\s*$", re.IGNORECASE,
 )
 
 # SOME STATES ELECT SEVERAL MEMBERS FROM ONE DISTRICT, and the seat is
@@ -801,8 +815,11 @@ def parse_state_leg_office(contest_name: str) -> tuple[str, str, str | None] | N
                 number = district.group(1) + district.group(2).upper()
             else:
                 ordinal = _STATE_LEG_ORDINAL_DISTRICT_RE.search(name)
+                bare = _STATE_LEG_BARE_NUMBER_RE.search(name)
                 if ordinal:
                     number = ordinal.group(1)
+                elif bare:
+                    number = bare.group(1)
                 else:
                     # Last, so a numeric district is never read as a letter.
                     letter = _STATE_LEG_LETTER_DISTRICT_RE.search(name)
