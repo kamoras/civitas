@@ -36,23 +36,21 @@ def _load_json_cache(filename: str, json_key: str, missing_data_context: str) ->
     auto-refreshed copy (/data/) over the git-tracked bundled fallback
     (app/data/), or an empty dict (logged) if neither exists yet. Shared by
     both loaders below."""
-    from app.file_cache import read_json
+    from app.file_cache import read_json_preferring
 
-    unreadable = False
-    for directory in (_PERSISTENT_DATA_DIR, _DATA_DIR):
-        try:
-            data = read_json(directory / filename)
-        except OSError:
-            # Exists but can't be read right now: not the same as absent.
-            logger.warning("Couldn't read %s — retrying on next use", directory / filename, exc_info=True)
-            unreadable = True
-            continue
-        if isinstance(data, dict) and isinstance(data.get(json_key), dict):
-            if unreadable:
-                raise Uncached(data[json_key])  # the fallback, this once
-            return data[json_key]
-    if unreadable:
-        raise Uncached({})
+    def has_section(data) -> bool:
+        return isinstance(data, dict) and isinstance(data.get(json_key), dict)
+
+    try:
+        data = read_json_preferring(
+            _PERSISTENT_DATA_DIR / filename, _DATA_DIR / filename, default=None, accept=has_section,
+        )
+    except Uncached as unreadable:
+        # The volume copy exists but can't be read right now: the fallback's
+        # section, this once (Uncached again, for the caller's cache).
+        raise Uncached(unreadable.value[json_key] if unreadable.value else {}) from None
+    if data is not None:
+        return data[json_key]
     logger.warning(
         "%s unavailable in /data or the bundled fallback — %s until the "
         "first successful committee_leadership refresh",

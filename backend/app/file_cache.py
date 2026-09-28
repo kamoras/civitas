@@ -84,11 +84,12 @@ def read_json(path: str | os.PathLike):
         return None
 
 
-def read_json_preferring(*paths: str | os.PathLike, default):
-    """The first of `paths` that holds JSON — a runtime copy ahead of its
-    bundled fallback — else `default`. When one ahead of it exists but
-    couldn't be read, the result is raised as Uncached: it stands in for a
-    file that will be readable again, so a stamped cache retries."""
+def read_json_preferring(*paths: str | os.PathLike, default, accept=None):
+    """The first of `paths` that holds JSON (and passes `accept`, when given)
+    — a runtime copy ahead of its bundled fallback — else `default`. When
+    one ahead of it exists but couldn't be read, the result is raised as
+    Uncached: it stands in for a file that will be readable again, so a
+    cache retries rather than keeping it."""
     unreadable = False
     for path in paths:
         try:
@@ -97,10 +98,24 @@ def read_json_preferring(*paths: str | os.PathLike, default):
             logger.warning("Couldn't read %s — retrying on next use", path, exc_info=True)
             unreadable = True
             continue
-        if data is not None:
+        if data is not None and (accept is None or accept(data)):
             if unreadable:
                 raise Uncached(data)
             return data
     if unreadable:
         raise Uncached(default)
     return default
+
+
+def load_json_once(cached, *paths: str | os.PathLike):
+    """For a module cache loaded once from a runtime copy else its bundled
+    fallback (files nothing rewrites while the process runs): returns
+    (the dict to use now, the dict to keep — None when it stood in for an
+    unreadable file, so the next call reads again)."""
+    if cached is not None:
+        return cached, cached
+    try:
+        data = read_json_preferring(*paths, default={}, accept=lambda d: isinstance(d, dict))
+    except Uncached as unreadable:
+        return unreadable.value, None
+    return data, data

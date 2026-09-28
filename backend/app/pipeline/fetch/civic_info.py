@@ -54,13 +54,12 @@ still read defensively (`_text`) regardless: an upstream shape change
 later should cost us a field, not the whole lookup.
 """
 
-import asyncio
 import logging
 
 import httpx
 
 from app.config import settings
-from app.pipeline.cache import api_cache_get, api_cache_set
+from app.pipeline.cache import api_cache_get_async, api_cache_set_async
 from app.pipeline.fetch.town_directory import address_for_town
 
 logger = logging.getLogger(__name__)
@@ -184,7 +183,7 @@ async def fetch_town_ballot(
         return None
 
     cache_key = f"civic-town-{state.upper()}-{town.casefold()}"
-    cached = await asyncio.to_thread(api_cache_get, db, "google_civic", cache_key, max_age_hours=TOWN_CACHE_TTL_HOURS)
+    cached = await api_cache_get_async(db, "google_civic", cache_key, max_age_hours=TOWN_CACHE_TTL_HOURS)
     if cached is not None:
         return _to_result(cached, address)
 
@@ -211,7 +210,7 @@ async def fetch_town_ballot(
         logger.exception("Civic Info lookup failed for %s, %s", town, state)
         return None
 
-    await asyncio.to_thread(api_cache_set, db, "google_civic", cache_key, payload, normal_ttl_hours=TOWN_CACHE_TTL_HOURS)
+    await api_cache_set_async(db, "google_civic", cache_key, payload, normal_ttl_hours=TOWN_CACHE_TTL_HOURS)
     return _to_result(payload, address)
 
 

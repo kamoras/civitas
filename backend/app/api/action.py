@@ -530,74 +530,67 @@ async def record_pulse_vote(
 
     ip = client_ip(request)
 
-    def _claim() -> tuple[str | None, bool]:
-        # Key and claim in one thread hop. Not fail-open: a vote whose
-        # dedup can't be checked is refused rather than counted unchecked.
+    column = ActionIssue.concerned_count if body.stance == "concerned" else ActionIssue.not_priority_count
+
+    def _vote():
+        """The whole vote in one thread hop — claim, count, totals — so a
+        cancelled request (a disconnect) can't land between the claim and
+        the count and leave a claim with no vote behind it. Returns the
+        totals row, None when the issue doesn't exist, or "duplicate"."""
+        # Not fail-open: a vote whose dedup can't be checked is refused
+        # rather than counted unchecked (Unavailable, raised to the caller).
         key = throttle.client_key(ip, _PULSE_BUCKET, str(body.issue_id))
-        return key, throttle.claim(_PULSE_BUCKET, key, period=_PULSE_DEDUP_WINDOW, fail_open=False)
+        if not throttle.claim(_PULSE_BUCKET, key, period=_PULSE_DEDUP_WINDOW, fail_open=False):
+            return "duplicate"
+        # A session of its own on the request's engine: the request's is
+        # closed by get_db's cleanup when the request is cancelled, which
+        # would otherwise happen under this thread mid-commit.
+        own = Session(bind=db.get_bind())
+        try:
+            # Until the vote commits, a failure means no vote was recorded,
+            # so the claim mustn't hold the visitor off. After it, the claim
+            # stands whatever fails next: releasing it would let a retry
+            # count twice.
+            try:
+                # One UPDATE ... SET n = n + 1: with several API workers,
+                # reading the count and writing it back plus one would let
+                # two concurrent votes both write the same total.
+                counted = (
+                    own.query(ActionIssue)
+                    .filter(ActionIssue.id == body.issue_id)
+                    .update({column: func.coalesce(column, 0) + 1}, synchronize_session=False)
+                )
+                own.commit()
+            except BaseException:
+                throttle.release(_PULSE_BUCKET, key)
+                raise
+            if not counted:
+                throttle.release(_PULSE_BUCKET, key)
+                return None
+            # Counted, then possibly removed by the pipeline's refresh before
+            # this read: None, a 404 — gone now, whatever it held.
+            return (
+                own.query(ActionIssue.id, ActionIssue.concerned_count, ActionIssue.not_priority_count)
+                .filter(ActionIssue.id == body.issue_id)
+                .first()
+            )
+        finally:
+            own.close()
 
     try:
-        key, claimed = await asyncio.to_thread(_claim)
+        issue = await asyncio.to_thread(_vote)
     except throttle.Unavailable:
         raise HTTPException(
             status_code=503,
             detail="Votes can't be recorded right now; please try again shortly.",
             headers={"Retry-After": str(throttle.UNAVAILABLE_RETRY_AFTER_S)},
         ) from None
-    if not claimed:
+    if issue == "duplicate":
         raise HTTPException(
             status_code=429,
             detail="You've already registered a stance on this issue in the last 24 hours.",
         )
-
-    column = ActionIssue.concerned_count if body.stance == "concerned" else ActionIssue.not_priority_count
-
-    def _count() -> bool:
-        # One UPDATE ... SET n = n + 1: with several API workers, reading
-        # the count and writing it back plus one would let two concurrent
-        # votes both write the same total. Off the event loop: the commit
-        # can wait on the pipeline process's write lock.
-        #
-        # Until the vote commits, a failure means no vote was recorded, so
-        # the claim mustn't hold the visitor off. After it, the claim stands
-        # whatever fails next: releasing it would let a retry count twice.
-        # Decided here, in the thread that commits, not by the awaiting
-        # request: a request cancelled mid-commit (a disconnect) doesn't
-        # stop this thread, which may still count the vote.
-        # A session of its own, on the request's engine: the request's is
-        # closed by get_db's cleanup when the request is cancelled, which
-        # would otherwise happen under this thread mid-commit.
-        own = Session(bind=db.get_bind())
-        try:
-            counted = (
-                own.query(ActionIssue)
-                .filter(ActionIssue.id == body.issue_id)
-                .update({column: func.coalesce(column, 0) + 1}, synchronize_session=False)
-            )
-            own.commit()
-        except BaseException:
-            throttle.release(_PULSE_BUCKET, key)
-            raise
-        finally:
-            own.close()
-        if not counted:
-            throttle.release(_PULSE_BUCKET, key)
-        return bool(counted)
-
-    if not await asyncio.to_thread(_count):
-        raise HTTPException(status_code=404, detail="Issue not found")
-
-    def _totals():
-        return (
-            db.query(ActionIssue.id, ActionIssue.concerned_count, ActionIssue.not_priority_count)
-            .filter(ActionIssue.id == body.issue_id)
-            .first()
-        )
-
-    issue = await asyncio.to_thread(_totals)
     if issue is None:
-        # Counted, then removed by the pipeline's refresh before the totals
-        # were read: gone now, whatever it held.
         raise HTTPException(status_code=404, detail="Issue not found")
     return {
         "issueId": issue.id,

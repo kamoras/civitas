@@ -9,7 +9,7 @@ import logging
 import os
 from typing import Any
 
-from app.file_cache import Uncached, read_json_preferring
+from app.file_cache import load_json_once
 
 logger = logging.getLogger(__name__)
 
@@ -22,17 +22,8 @@ _cache: dict[str, Any] | None = None
 
 def _load() -> dict[str, Any]:
     global _cache
-    if _cache is not None:
-        return _cache
-    try:
-        data = read_json_preferring(_VOLUME_PATH, _BUNDLED_PATH, default={})
-    except Uncached as unreadable:
-        # A volume copy that exists but can't be read right now: its
-        # fallback serves this once, and the next call reads again —
-        # kept, it would stand for the life of the process.
-        return unreadable.value if isinstance(unreadable.value, dict) else {}
-    _cache = data if isinstance(data, dict) else {}
-    return _cache
+    data, _cache = load_json_once(_cache, _VOLUME_PATH, _BUNDLED_PATH)
+    return data
 
 
 def invalidate_cache() -> None:

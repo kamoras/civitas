@@ -339,9 +339,17 @@ def _state_pvi() -> dict[str, int]:
     Missing data is never punitive — the same degrade-gracefully
     convention as every other loader in this file.
     """
+    from app.file_cache import Uncached
+
     global _state_pvi_cache
     if _state_pvi_cache is None:
-        raw = _read_pvi_json("state_pvi.json")
+        try:
+            raw = _read_pvi_json("state_pvi.json", report_unreadable=True)
+        except Uncached as unreadable:
+            # A volume copy that exists but can't be read right now: its
+            # fallback serves this once, not for the life of the process.
+            raw = unreadable.value
+            return {k: int(v) for k, v in (raw.get("states") or {}).items()}
         if raw.get("states"):
             _state_pvi_cache = {k: int(v) for k, v in raw["states"].items()}
         else:

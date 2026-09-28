@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.http_client import make_async_client
-from app.pipeline.cache import api_cache_get, api_cache_set
+from app.pipeline.cache import api_cache_get, api_cache_set_async, off_loop
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
 
 logger = logging.getLogger(__name__)
@@ -125,15 +125,15 @@ async def fetch_comments(
     page_key = f"comments-{document_id}-{size}-{page_number}-{sort}"
     object_id = page = None
     if db is not None:
-        def cached():
+        def cached(session):
             return (
-                api_cache_get(db, _CACHE_TIER, missing_key, max_age_hours=_NOT_FOUND_CACHE_HOURS),
-                api_cache_get(db, _CACHE_TIER, id_key, max_age_hours=_OBJECT_ID_CACHE_HOURS),
-                api_cache_get(db, _CACHE_TIER, page_key, max_age_hours=_COMMENTS_CACHE_HOURS),
+                api_cache_get(session, _CACHE_TIER, missing_key, max_age_hours=_NOT_FOUND_CACHE_HOURS),
+                api_cache_get(session, _CACHE_TIER, id_key, max_age_hours=_OBJECT_ID_CACHE_HOURS),
+                api_cache_get(session, _CACHE_TIER, page_key, max_age_hours=_COMMENTS_CACHE_HOURS),
             )
 
         # One thread hop for the three reads: off the event loop.
-        missing, known_id, page = await asyncio.to_thread(cached)
+        missing, known_id, page = await off_loop(db, cached)
         if missing:
             # Asked recently, and Regulations.gov had no such document:
             # asking again so soon would only spend the shared budget.
@@ -155,12 +155,14 @@ async def fetch_comments(
                     return _failed(f"API error: {status}", retryable=_retryable(status))
                 if not object_id:
                     if db is not None:
-                        await asyncio.to_thread(api_cache_set, db, _CACHE_TIER, missing_key, {"notFound": True},
-                                      normal_ttl_hours=_NOT_FOUND_CACHE_HOURS)
+                        await api_cache_set_async(
+                            db, _CACHE_TIER, missing_key, {"notFound": True}, normal_ttl_hours=_NOT_FOUND_CACHE_HOURS,
+                        )
                     return _failed(_NOT_FOUND, retryable=False)
                 if db is not None:
-                    await asyncio.to_thread(api_cache_set, db, _CACHE_TIER, id_key, {"objectId": object_id},
-                                  normal_ttl_hours=_OBJECT_ID_CACHE_HOURS)
+                    await api_cache_set_async(
+                        db, _CACHE_TIER, id_key, {"objectId": object_id}, normal_ttl_hours=_OBJECT_ID_CACHE_HOURS,
+                    )
 
             resp = await client.get(
                 f"{REG_BASE}/comments",
@@ -206,7 +208,7 @@ async def fetch_comments(
                 "pageNumber": page_number,
             }
             if db is not None:
-                await asyncio.to_thread(api_cache_set, db, _CACHE_TIER, page_key, result, normal_ttl_hours=_COMMENTS_CACHE_HOURS)
+                await api_cache_set_async(db, _CACHE_TIER, page_key, result, normal_ttl_hours=_COMMENTS_CACHE_HOURS)
             return result
 
         except httpx.TimeoutException:

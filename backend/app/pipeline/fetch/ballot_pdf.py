@@ -64,7 +64,7 @@ import httpx
 import pdfplumber
 import io
 
-from app.pipeline.cache import api_cache_get, api_cache_set
+from app.pipeline.cache import api_cache_get, api_cache_set_async, off_loop
 from app.pipeline.fetch.ballot_pdf_sources import source_for_town
 
 logger = logging.getLogger(__name__)
@@ -246,14 +246,14 @@ async def fetch_town_ballot_pdf(
     cache_key = f"ballot-pdf-{source['url']}"
     failed_key = f"ballot-pdf-failed-{source['url']}"
 
-    def cached_reads():
+    def cached_reads(session):
         return (
-            api_cache_get(db, "ballot_pdf", cache_key, max_age_hours=CACHE_TTL_HOURS),
-            api_cache_get(db, "ballot_pdf", failed_key, max_age_hours=_FAILED_TTL_HOURS),
+            api_cache_get(session, "ballot_pdf", cache_key, max_age_hours=CACHE_TTL_HOURS),
+            api_cache_get(session, "ballot_pdf", failed_key, max_age_hours=_FAILED_TTL_HOURS),
         )
 
     # Off the event loop, like every database call on this request path.
-    cached, failed = await asyncio.to_thread(cached_reads)
+    cached, failed = await off_loop(db, cached_reads)
     if cached is not None:
         contests = cached.get("contests")
         return {"contests": contests, "sourceUrl": source["url"]} if contests is not None else None
@@ -263,8 +263,8 @@ async def fetch_town_ballot_pdf(
         return None
 
     async def remember_failure(reason: str) -> None:
-        await asyncio.to_thread(
-            api_cache_set, db, "ballot_pdf", failed_key, {"failed": reason}, normal_ttl_hours=_FAILED_TTL_HOURS,
+        await api_cache_set_async(
+            db, "ballot_pdf", failed_key, {"failed": reason}, normal_ttl_hours=_FAILED_TTL_HOURS,
         )
 
     try:
@@ -300,8 +300,8 @@ async def fetch_town_ballot_pdf(
         await remember_failure("no contests parsed")
         return None
 
-    await asyncio.to_thread(
-        api_cache_set, db, "ballot_pdf", cache_key, {"contests": contests}, normal_ttl_hours=CACHE_TTL_HOURS,
+    await api_cache_set_async(
+        db, "ballot_pdf", cache_key, {"contests": contests}, normal_ttl_hours=CACHE_TTL_HOURS,
     )
     return {"contests": contests, "sourceUrl": source["url"]}
 

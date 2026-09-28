@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.models import RollCall, RollCallPosition, Representative, Senator
 from app.config import settings
-from app.pipeline.cache import api_cache_get, api_cache_set
+from app.pipeline.cache import api_cache_get, api_cache_set_async, off_loop
 from app.pipeline.fetch.congress import CONGRESS_API_BASE, _rate_limiter, congress_gov_bill_url
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.services.congress_service import bill_days, bill_label
@@ -89,8 +89,10 @@ async def fetch_bill_record(
     out: dict = {"unavailable": [], "not_found": False}
     keys = {part: f"bill-record-{part}-{congress}-{type_path}-{number}" for part in _PARTS}
     # One thread hop for every part's cache read: off the event loop.
-    cached = await asyncio.to_thread(
-        lambda: {part: api_cache_get(db, _CACHE_TIER, key, max_age_hours=_CACHE_HOURS) for part, key in keys.items()},
+    cached = await off_loop(
+        db, lambda session: {
+            part: api_cache_get(session, _CACHE_TIER, key, max_age_hours=_CACHE_HOURS) for part, key in keys.items()
+        },
     )
     if (cached["bill"] or {}).get("not_found"):
         out["not_found"] = True
@@ -108,7 +110,7 @@ async def fetch_bill_record(
         if data is NOT_FOUND:
             if part == "bill":
                 out["not_found"] = True
-                await asyncio.to_thread(api_cache_set, db, _CACHE_TIER, key, {"not_found": True}, normal_ttl_hours=_CACHE_HOURS)
+                await api_cache_set_async(db, _CACHE_TIER, key, {"not_found": True}, normal_ttl_hours=_CACHE_HOURS)
                 return out
             data = {}
         if data is None:
@@ -123,7 +125,7 @@ async def fetch_bill_record(
             "text": data.get("textVersions"),
         }[part]
         out[part] = value
-        await asyncio.to_thread(api_cache_set, db, _CACHE_TIER, key, {"value": value}, normal_ttl_hours=_CACHE_HOURS)
+        await api_cache_set_async(db, _CACHE_TIER, key, {"value": value}, normal_ttl_hours=_CACHE_HOURS)
     return out
 
 

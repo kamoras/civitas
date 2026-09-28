@@ -96,41 +96,61 @@ def api_cache_set(
     contention) stuck that filing's cache empty for a month instead of
     retrying within EMPTY_RESPONSE_TTL_HOURS.
     """
-    entry = (
-        db.query(ApiCache)
-        .filter(ApiCache.tier == tier, ApiCache.cache_key == key)
-        .first()
-    )
-    is_empty = not data
-    if is_empty and entry and json.loads(entry.data_json):
-        return  # keep the existing non-empty payload
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
+    is_empty = not data
     cached_at = utcnow()
     if is_empty:
         normal_ttl = normal_ttl_hours if normal_ttl_hours is not None else settings.PIPELINE_CACHE_TTL_HOURS
         shorten = max(normal_ttl - EMPTY_RESPONSE_TTL_HOURS, 0)
         cached_at -= timedelta(hours=shorten)
 
-    data_json = json.dumps(data, default=str)
-    if entry:
-        entry.data_json = data_json
-        entry.cached_at = cached_at
-    else:
-        # An upsert, not an insert: another process (the API workers, the
-        # pipeline) may have written this key since the read above, and a
-        # plain insert would then fail on the primary key. An empty payload
-        # still never replaces a non-empty one written meanwhile.
-        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-
-        upsert = sqlite_insert(ApiCache).values(
-            tier=tier, cache_key=key, data_json=data_json, cached_at=cached_at,
-        )
-        db.execute(upsert.on_conflict_do_update(
-            index_elements=["tier", "cache_key"],
-            set_={"data_json": upsert.excluded.data_json, "cached_at": upsert.excluded.cached_at},
-            where=ApiCache.data_json.in_(_EMPTY_JSON) if is_empty else None,
-        ))
+    # One statement, so the rule is decided by the database at write time:
+    # another process (the API workers, the pipeline) may write this key
+    # between any read here and the write. An empty payload replaces only
+    # an empty one — never a non-empty payload, however recently written.
+    upsert = sqlite_insert(ApiCache).values(
+        tier=tier, cache_key=key, data_json=json.dumps(data, default=str), cached_at=cached_at,
+    )
+    db.execute(upsert.on_conflict_do_update(
+        index_elements=["tier", "cache_key"],
+        set_={"data_json": upsert.excluded.data_json, "cached_at": upsert.excluded.cached_at},
+        where=ApiCache.data_json.in_(_EMPTY_JSON) if is_empty else None,
+    ))
     db.commit()
+
+
+async def api_cache_get_async(db: Session, tier: str, key: str, **kwargs):
+    """api_cache_get for a request path: on a worker thread, on a session of
+    its own bound to `db`'s engine. The request's session is closed by
+    get_db's cleanup if the request is cancelled — under a thread still
+    using it."""
+    import asyncio
+
+    return await asyncio.to_thread(_on_own_session, db, api_cache_get, tier, key, **kwargs)
+
+
+async def api_cache_set_async(db: Session, tier: str, key: str, data, **kwargs) -> None:
+    """api_cache_set for a request path; see api_cache_get_async."""
+    import asyncio
+
+    await asyncio.to_thread(_on_own_session, db, api_cache_set, tier, key, data, **kwargs)
+
+
+async def off_loop(db: Session, fn):
+    """Run fn(session) on a worker thread, on a session of its own bound to
+    `db`'s engine — several cache reads in one hop; see api_cache_get_async."""
+    import asyncio
+
+    return await asyncio.to_thread(_on_own_session, db, fn)
+
+
+def _on_own_session(db: Session, fn, *args, **kwargs):
+    own = Session(bind=db.get_bind())
+    try:
+        return fn(own, *args, **kwargs)
+    finally:
+        own.close()
 
 
 def analysis_cache_get(
