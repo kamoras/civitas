@@ -237,7 +237,10 @@ _DBA_RE = re.compile(r"(?<!\S)(?:D B A|DBA)(?!\S)")
 # phrase can also go on to name another party ("ON BEHALF OF THEIR CLIENT
 # ASLRRA", "ON BEHALF OF ITS WHOLLY OWNED SUBSIDIARY HOSPIRA"). Grammar,
 # not a classification.
-_CLIENT_WORD_RE = re.compile(r"(?<!\S)CLIENTS?(?!\S)")
+# "Its client ..." / "their clients ...": the pronoun introduces the firm's
+# client. Only when CLIENT(S) is the next word: "ITSELF AND ITS CLIENTS"
+# still points back at the filer first.
+_CLIENT_OF_FIRM_RE = re.compile(r"^\s*\(?\s*(?:ITS|THEIR)\s+CLIENTS?(?!\S)")
 _PRONOUN_RE = re.compile(r"^\s*\(?\s*(?:ITSELF|ITS|THEMSELVES|THEIR)(?!\S)")
 _PAREN_RE = re.compile(r"\(([^()]*)\)")
 
@@ -288,7 +291,7 @@ def _split_client(client_name: str) -> tuple[str, list[str]]:
     # One reading this can't separate: a client whose own name begins with
     # the pronoun, filed by a firm ("SMITH LLP ON BEHALF OF ITS AMERICA"),
     # also offers the firm; the page shows the full client field beside it.
-    own = not _CLIENT_WORD_RE.search(party)
+    own = not _CLIENT_OF_FIRM_RE.match(party)
     return firm, ([before] if own else []) + runs
 
 

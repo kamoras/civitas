@@ -441,6 +441,10 @@ class TestClientMatching:
         ("BOEING", "AKIN GUMP STRAUSS HAUER & FELD LLP ON BEHALF OF ITS CLIENT BOEING", True),
         # "Their members" points back at the association.
         ("NATIONAL ASSOCIATION OF REALTORS", "NATIONAL ASSOCIATION OF REALTORS ON BEHALF OF THEIR MEMBERS", True),
+        # A reflexive phrase that also mentions clients is still the
+        # filer's own (review round 16).
+        ("ACME CONSULTING", "ACME CONSULTING ON BEHALF OF ITSELF AND ITS CLIENTS", True),
+        ("X ASSOCIATION", "X ASSOCIATION ON BEHALF OF ITS MEMBERS AND THEIR CLIENTS", True),
         # A client whose name begins with the pronoun's word.
         ("ITS AMERICA", "SMITH LLP ON BEHALF OF ITS AMERICA", True),
     ])
