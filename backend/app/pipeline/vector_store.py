@@ -82,6 +82,9 @@ _VECTOR_DB_PATH = os.environ.get("VECTOR_DB_PATH", "/data/vectors.db")
 
 _model: "SentenceTransformer | None" = None
 _similarity_model: "SentenceTransformer | None" = None
+# One load at a time: a request that arrives while startup's preload is
+# still loading a model waits for it rather than loading a second copy.
+_model_load_lock = threading.Lock()
 _vec_conn: "sqlite3.Connection | None" = None
 _vec_lock = threading.Lock()
 
@@ -90,8 +93,10 @@ def get_embedding_model() -> SentenceTransformer:
     """Get or load the PRIMARY (classification-side) model (singleton)."""
     global _model
     if _model is None:
-        logger.info("Loading sentence-transformers model: %s", EMBEDDING_MODEL_NAME)
-        _model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+        with _model_load_lock:
+            if _model is None:
+                logger.info("Loading sentence-transformers model: %s", EMBEDDING_MODEL_NAME)
+                _model = SentenceTransformer(EMBEDDING_MODEL_NAME)
     return _model
 
 
@@ -136,8 +141,10 @@ def get_similarity_model() -> SentenceTransformer:
     """
     global _similarity_model
     if _similarity_model is None:
-        logger.info("Loading similarity model: %s", _SIMILARITY_MODEL_NAME)
-        _similarity_model = SentenceTransformer(_SIMILARITY_MODEL_NAME)
+        with _model_load_lock:
+            if _similarity_model is None:
+                logger.info("Loading similarity model: %s", _SIMILARITY_MODEL_NAME)
+                _similarity_model = SentenceTransformer(_SIMILARITY_MODEL_NAME)
     return _similarity_model
 
 

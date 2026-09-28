@@ -782,10 +782,6 @@ _next_election_day = next_election_day
 _seats_up_for_year = seats_up_for_year
 
 
-# (the district PVI map the counts were taken from, the counts)
-_house_districts_cache: tuple[object, dict[str, int]] | None = None
-
-
 def _house_districts() -> dict[str, int]:
     """Per-state House district count, derived by counting district_pvi.json's
     own "ST-N" keys (2026-07 data-hygiene fix) — this used to be a second,
@@ -793,20 +789,14 @@ def _house_districts() -> dict[str, int]:
     district_pvi.json already encodes, with no mechanism keeping the two in
     sync. Verified identical to the prior hardcoded dict before replacing it.
 
-    Cached against the map object it was counted from: _district_pvi()
-    returns the same one until the pipeline process rewrites the file, and
-    a new one after (score_calculator reloads it by its stamp)."""
-    global _house_districts_cache
+    Counted on every call, not cached: the pipeline process rewrites the
+    file (score_calculator reloads it by its stamp), and counting 435 keys
+    costs microseconds on a route nginx caches anyway."""
     from collections import Counter
 
-    from app.pipeline.analyze.score_calculator import _district_pvi
+    from app.pipeline.analyze.score_calculator import get_district_pvi_map
 
-    source = _district_pvi()
-    cached = _house_districts_cache
-    if cached is None or cached[0] is not source:
-        cached = (source, dict(Counter(k.rsplit("-", 1)[0] for k in source)))
-        _house_districts_cache = cached
-    return cached[1]
+    return dict(Counter(k.rsplit("-", 1)[0] for k in get_district_pvi_map()))
 
 
 @router.get("/my-reps")

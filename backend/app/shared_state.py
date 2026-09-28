@@ -74,12 +74,18 @@ def write_row(db, tier: str, key: str, value: Any, *, at: datetime) -> None:
     )
 
 
+# How soon a PolledRow holding nothing retries a read that met a lock.
+_RETRY_EMPTY_S = 1.0
+
+
 class PolledRow:
     """A value another process writes to one row, as this process last read
     it — reloaded when the row's written-at stamp moves, checked at most
     every `every_s` seconds. The one rule for every such cache:
 
-    - an unreadable database (a moment's lock) keeps the value in hand;
+    - an unreadable database (a moment's lock) keeps the value in hand —
+      and with none in hand, is tried again within a second, not left to
+      the next full interval;
     - a row that changed but won't decode keeps it too, unstamped, so the
       next check tries again;
     - no row at all is None: the caller falls back (a bundled file, a
@@ -98,12 +104,15 @@ class PolledRow:
         self.tier, self.key, self.every_s, self.decode = tier, key, every_s, decode
         self._reader = reader or (lambda db: read_row(tier, key, db))
         self._lock = threading.Lock()
+        self._generation = 0
         self.reset()
 
     def reset(self) -> None:
-        """Forget the value: the next get() reads the row."""
+        """Forget the value: the next get() reads the row. A read already
+        under way when this runs doesn't put its value back."""
         with self._lock:
             self._value, self._stamp, self._checked_at = None, None, None
+            self._generation += 1
 
     def expire(self) -> None:
         """Make the next get() check the row (tests; a forced reload)."""
@@ -123,12 +132,16 @@ class PolledRow:
             due = force or self._checked_at is None or now - self._checked_at >= self.every_s
             if due:
                 self._checked_at = now  # one thread checks; the rest keep serving
-            value, stamp = self._value, self._stamp
+            value, stamp, generation = self._value, self._stamp, self._generation
         if not due:
             return value
 
         row = self._reader(db)
         if row is UNREADABLE:
+            if value is None:
+                with self._lock:
+                    if self._generation == generation and self._checked_at == now:
+                        self._checked_at = now - self.every_s + _RETRY_EMPTY_S
             return value
         if row is None:
             value, stamp = None, None
@@ -139,7 +152,8 @@ class PolledRow:
             else:
                 value, stamp = decoded, row[0]
         with self._lock:
-            self._value, self._stamp = value, stamp
+            if self._generation == generation:
+                self._value, self._stamp = value, stamp
         return value
 
 

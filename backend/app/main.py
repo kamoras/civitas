@@ -66,17 +66,19 @@ async def _bootstrap_explore() -> None:
         logging.getLogger("app.main").warning("Explore bootstrap failed: %s", e)
 
 
-def _preload_search_model() -> None:
-    """Load the model Explore search encodes queries with
-    (vector_store.search_explore_documents) so the first search after a
-    restart doesn't pay the load. Only that one: every API worker holds its
-    own copy of whatever it loads, and the primary model serves only
-    /api/qa, which loads it on first use. (This preloaded the primary alone
-    until 2026-09 — the one search doesn't use.)"""
+def _preload_models() -> None:
+    """Load both embedding models at startup, so no read request loads one
+    (AGENTS.md: "never load the embedding model or LLM on API read
+    requests"): the similarity model Explore search encodes queries with
+    (vector_store.search_explore_documents) and the primary one /api/qa
+    classifies intent with. Every API worker holds its own copy; the primary
+    adds ~10 MB to a worker (measured). (Until 2026-09 only the primary was
+    preloaded, so the first search after a restart paid the other's load.)"""
     try:
-        from app.pipeline.vector_store import get_similarity_model
+        from app.pipeline.vector_store import get_embedding_model, get_similarity_model
 
         get_similarity_model()
+        get_embedding_model()
     except Exception as e:
         logging.getLogger("app.main").warning("Embedding model preload failed: %s", e)
 
@@ -246,7 +248,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         from app.services.bill_service import warm_bill_collection_cache
         warm_bill_collection_cache()
         loop = asyncio.get_running_loop()
-        loop.run_in_executor(None, _preload_search_model)
+        loop.run_in_executor(None, _preload_models)
 
     bootstrap_task = None
     if runs_pipelines:

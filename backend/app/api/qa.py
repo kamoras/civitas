@@ -34,8 +34,6 @@ async def ask(
     path is servable on the current hardware and whether the intent gate
     is set correctly against real questions rather than invented ones.
 
-    On a worker thread, like Explore search: the first question a worker
-    answers loads the primary embedding model (only the search model is
-    preloaded — main._preload_search_model), and every question encodes.
+    On a worker thread, like Explore search: every question encodes.
     """
     return await asyncio.to_thread(answer_question, db, q, limit=limit)

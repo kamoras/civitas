@@ -97,3 +97,29 @@ class TestPolledRow:
         rows[0] = None
         polled.expire()
         assert polled.get() is None
+
+    def test_a_first_read_that_meets_a_lock_is_retried_soon(self, monkeypatch):
+        import time as time_module
+
+        rows = [UNREADABLE]
+        polled, reads = self._polled(rows)
+        clock = [1000.0]
+        monkeypatch.setattr(time_module, "monotonic", lambda: clock[0])
+        assert polled.get() is None
+        rows[0] = (datetime(2026, 1, 1), {"a": 1})
+        clock[0] += 1.5  # well inside the 30s interval
+        assert polled.get() == {"a": 1}
+        assert len(reads) == 2
+
+    def test_a_reset_during_a_read_is_not_undone(self):
+        from app.shared_state import PolledRow, decode_json_dict
+
+        polled = None
+
+        def reader(_db):
+            polled.reset()  # the writer's reset_cache(), mid-read
+            return (datetime(2026, 1, 1), {"old": True})
+
+        polled = PolledRow("t", "k", every_s=30, decode=decode_json_dict, reader=reader)
+        assert polled.get() == {"old": True}  # this caller still gets what it read
+        assert polled.current() is None  # but it isn't kept

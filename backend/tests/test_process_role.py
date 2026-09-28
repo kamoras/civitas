@@ -71,7 +71,7 @@ class TestStartup:
     async def test_api_starts_only_the_read_side(self, started, role):
         role("api")
         assert await self._run(started) == {
-            "init-db", "bill-cache", "_preload_search_model", "visit-consumer",
+            "init-db", "bill-cache", "_preload_models", "visit-consumer",
         }
 
     async def test_worker_starts_only_the_pipeline_side(self, started, role):
@@ -83,20 +83,42 @@ class TestStartup:
     async def test_all_starts_both(self, started, role):
         role("all")
         assert await self._run(started) == {
-            "init-db", "sweep", "scheduler", "bill-cache", "_preload_search_model",
+            "init-db", "sweep", "scheduler", "bill-cache", "_preload_models",
             "explore-bootstrap", "startup-jobs", "visit-consumer",
         }
 
 
-def test_only_the_search_model_is_preloaded():
-    # Explore search encodes with the similarity model. Every API worker
-    # holds its own copy of whatever is preloaded, and the primary model
-    # serves only /api/qa, so it loads on first use instead.
+def test_both_embedding_models_are_preloaded():
+    # No read request may load a model (AGENTS.md): Explore search encodes
+    # with the similarity model, /api/qa with the primary one.
     loaded: list[str] = []
     with patch("app.pipeline.vector_store.get_similarity_model", lambda: loaded.append("similarity")), \
             patch("app.pipeline.vector_store.get_embedding_model", lambda: loaded.append("primary")):
-        main_module._preload_search_model()
-    assert loaded == ["similarity"]
+        main_module._preload_models()
+    assert loaded == ["similarity", "primary"]
+
+
+def test_a_request_during_the_preload_waits_for_it_rather_than_loading_twice(monkeypatch):
+    import threading
+    import time
+
+    from app.pipeline import vector_store
+
+    built = []
+
+    def slow_model(name):
+        built.append(name)
+        time.sleep(0.2)
+        return object()
+
+    monkeypatch.setattr(vector_store, "_model", None)
+    monkeypatch.setattr(vector_store, "SentenceTransformer", slow_model)
+    threads = [threading.Thread(target=vector_store.get_embedding_model) for _ in range(3)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert len(built) == 1
 
 
 def test_a_failed_model_preload_is_only_logged():
@@ -104,7 +126,7 @@ def test_a_failed_model_preload_is_only_logged():
         raise OSError("no model files")
 
     with patch("app.pipeline.vector_store.get_similarity_model", boom):
-        main_module._preload_search_model()
+        main_module._preload_models()
 
 
 class TestWriters:
@@ -381,8 +403,31 @@ class TestPipelineServiceLiveness:
         from app.shared_state import UNREADABLE
 
         monkeypatch.setattr("app.shared_state.read_row", lambda *a, **k: UNREADABLE)
+        monkeypatch.setattr("app.ops_alerts._heartbeat_unreadable_since", None)
         check_pipeline_service_alive()
         assert sent == []
+
+    def test_a_heartbeat_unreadable_for_as_long_as_silence_is_allowed_alerts(self, sent, monkeypatch):
+        from app import ops_alerts
+        from app.shared_state import UNREADABLE
+        from app.time_utils import utcnow
+
+        monkeypatch.setattr("app.shared_state.read_row", lambda *a, **k: UNREADABLE)
+        monkeypatch.setattr(
+            ops_alerts, "_heartbeat_unreadable_since",
+            utcnow() - ops_alerts.PIPELINE_SERVICE_SILENT_AFTER - timedelta(minutes=1),
+        )
+        ops_alerts.check_pipeline_service_alive()
+        assert sent == ["Pipeline heartbeat unreadable"]
+
+    def test_a_readable_heartbeat_ends_the_unreadable_run(self, db_session, sent, monkeypatch):
+        from app import ops_alerts
+        from app.time_utils import utcnow
+
+        monkeypatch.setattr(ops_alerts, "_heartbeat_unreadable_since", utcnow() - timedelta(days=1))
+        self._beat(db_session, timedelta(minutes=1))
+        ops_alerts.check_pipeline_service_alive()
+        assert sent == [] and ops_alerts._heartbeat_unreadable_since is None
 
     def test_one_worker_checks_each_round(self, sent, monkeypatch):
         """Every API worker runs the watch at the same moments; a round goes

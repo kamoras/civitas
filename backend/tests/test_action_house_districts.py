@@ -38,10 +38,10 @@ class TestHouseDistricts:
         assert _house_districts()["MT"] == 1
 
 
-def test_counted_once_per_district_pvi_load(monkeypatch):
-    from app.pipeline.analyze import score_calculator
 
+def test_a_count_is_a_copy_the_caller_may_keep():
+    # Counted per call from the public copy-returning accessor: nothing a
+    # caller does to the result reaches score_calculator's own cache.
     first = _house_districts()
-    assert _house_districts() is first  # the same load: not recounted
-    monkeypatch.setattr(score_calculator, "_district_pvi_cache", None)  # a reload
-    assert _house_districts() is not first
+    first["CA"] = 0
+    assert _house_districts()["CA"] == 52

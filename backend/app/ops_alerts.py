@@ -334,6 +334,11 @@ def check_pipeline_overrun() -> None:
 PIPELINE_SERVICE_SILENT_AFTER = timedelta(minutes=30)
 
 
+# When this process first failed to read the heartbeat, in the current
+# unbroken run of failures (None: the last read succeeded).
+_heartbeat_unreadable_since: datetime | None = None
+
+
 def check_pipeline_service_alive() -> None:
     """Watchdog run by the read-only API process: alert when the pipeline
     service's scheduler has stopped writing its heartbeat.
@@ -347,9 +352,27 @@ def check_pipeline_service_alive() -> None:
     from app.database import SCHEDULER_HEARTBEAT_KEY, SCHEDULER_HEARTBEAT_TIER
     from app.shared_state import UNREADABLE, read_row
 
+    global _heartbeat_unreadable_since
     row = read_row(SCHEDULER_HEARTBEAT_TIER, SCHEDULER_HEARTBEAT_KEY)
     if row is UNREADABLE:
-        return  # not evidence of anything; the next tick asks again
+        # One unreadable round is a moment's lock, not evidence of anything.
+        # A database this process can't read for as long as the pipeline is
+        # allowed to be silent is its own fault — and would otherwise hide a
+        # dead pipeline service indefinitely.
+        now = utcnow()
+        if _heartbeat_unreadable_since is None:
+            _heartbeat_unreadable_since = now
+        logger.warning("Pipeline heartbeat unreadable (since %s)", f"{_heartbeat_unreadable_since:%H:%M} UTC")
+        if now - _heartbeat_unreadable_since >= PIPELINE_SERVICE_SILENT_AFTER:
+            send_ops_alert(
+                "Pipeline heartbeat unreadable",
+                f"The API process has not been able to read the pipeline service's heartbeat since "
+                f"{_heartbeat_unreadable_since:%Y-%m-%d %H:%M} UTC, so it can't tell whether that "
+                "service is running. Check the backend's logs for database errors.",
+                dedupe_key=f"pipeline-heartbeat-unreadable-{now:%Y-%m-%d}",
+            )
+        return
+    _heartbeat_unreadable_since = None
     last = row[0] if isinstance(row, tuple) else None
     if last is not None and last >= utcnow() - PIPELINE_SERVICE_SILENT_AFTER:
         return

@@ -508,3 +508,25 @@ class TestAcrossMidnight:
 
     def test_a_first_day_has_no_previous_key(self):
         assert throttle.client_key("203.0.113.1", "write").previous is None
+
+
+def test_the_visit_fallbacks_salt_is_gone_at_midnight_though_key_salts_stay(throttle_store, monkeypatch):
+    """derived_salt salts the visit counter's fallback hashes, which AGENTS.md
+    §8 promises can't be recomputed once their day ends — so it can't share
+    the key salts' extra day."""
+    TestAcrossMidnight._at(monkeypatch, 1, 12)
+    throttle.client_key("203.0.113.1", "write")
+    first = throttle.derived_salt("visits:2099-01-01")
+    day_salt = _rows(throttle_store, "SELECT salt FROM day_salts")[0][0]
+    TestAcrossMidnight._at(monkeypatch, 2, 0, 0, 30)
+    monkeypatch.setattr(throttle, "_last_forget", -1e9)
+    throttle.forget_stale_salt()
+    assert _rows(throttle_store, "SELECT COUNT(*) FROM day_salts") == [(0,)]
+    assert _rows(throttle_store, "SELECT date FROM salts") == [("2099-01-01",)]  # still needed today
+    assert throttle.derived_salt("visits:2099-01-01") != first
+    import os
+
+    for suffix in ("", "-wal"):
+        if os.path.exists(throttle_store + suffix):
+            with open(throttle_store + suffix, "rb") as fh:
+                assert day_salt not in fh.read()

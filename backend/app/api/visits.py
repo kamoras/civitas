@@ -295,8 +295,8 @@ async def _daily_salt(date: str) -> bytes:
         # Degrade to a fallback salt; nothing reversible is ever stored. The
         # shared salt is retried on the next call (this isn't cached as it).
         # One fallback for the whole container for the day where possible —
-        # derived from the rate limits' RAM salt, which every worker shares
-        # — so a visitor during the outage counts once, not once per worker
+        # derived from a RAM salt every worker shares (throttle.derived_salt,
+        # deleted when the day ends) — so a visitor during the outage counts once, not once per worker
         # (a fresh salt per call made every visit a new unique). Visitors
         # who span the outage and the recovery still count twice: no salt
         # matching the shared one exists while it can't be read.
@@ -326,15 +326,16 @@ def _forget_stale_salts() -> None:
         _salt_cache = None
     if _fallback_salt is not None and _fallback_salt[0] != today:
         _fallback_salt = None
-    # The rate limits' own salt, the same rule (api/throttle.py).
+    # The RAM store's salts, including the one the fallback derives from
+    # (api/throttle.py).
     from app.api import throttle
 
     throttle.forget_stale_salt()
 
 
 def _fallback_salt_for(date: str) -> bytes:
-    """The container's shared fallback (derived from the rate limits' RAM
-    salt) — or, while that store is down too, this process's own, kept
+    """The container's shared fallback (throttle.derived_salt: a RAM salt
+    deleted when the day ends) — or, while that store is down too, this process's own, kept
     only until the shared one can be made: a private salt kept all day
     would count this worker's visitors apart from every other worker's."""
     global _fallback_salt

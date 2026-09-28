@@ -25,7 +25,9 @@ counted under both its keys, so a rule doesn't restart at 00:00 UTC — a
 pulse vote at 23:59 must still hold off a second one a minute later, as
 the per-process dicts' rolling 24 hours did (and a rate window straddling
 midnight must still count both halves). No rule here is longer than a day,
-so that is as long as an old key can matter.
+so that is as long as an old key can matter. derived_salt uses a salt of
+its own that is deleted when its day ends: what it salts (the visit
+counter's fallback) promises no longer.
 
 Tables:
 
@@ -97,6 +99,7 @@ CREATE TABLE IF NOT EXISTS claims (
     PRIMARY KEY (bucket, key)
 );
 CREATE TABLE IF NOT EXISTS salts (date TEXT PRIMARY KEY, salt BLOB NOT NULL);
+CREATE TABLE IF NOT EXISTS day_salts (date TEXT PRIMARY KEY, salt BLOB NOT NULL);
 CREATE INDEX IF NOT EXISTS windows_expiry ON windows (expires_at);
 CREATE INDEX IF NOT EXISTS claims_expiry ON claims (expires_at);
 """
@@ -116,11 +119,11 @@ _last_purge = 0.0
 def use_path(path: str) -> None:
     """Point the store at `path` (tests; the path is otherwise fixed),
     closing every connection to the previous one."""
-    global _path, _generation, _salt_cache
+    global _path, _generation, _salt_cache, _day_salt_cache
     with _conns_lock:
         _path = path
         _generation += 1
-        _salt_cache = None
+        _salt_cache = _day_salt_cache = None
         for conn in _conns:
             conn.close()
         _conns.clear()
@@ -253,6 +256,8 @@ def _purge_expired(conn: sqlite3.Connection, now: float) -> None:
 # store, per process. Only a new day costs a write transaction; every other
 # key is made without one.
 _salt_cache: tuple[str, bytes, bytes | None] | None = None
+# (date, salt) of derived_salt's own salt, per process.
+_day_salt_cache: tuple[str, bytes] | None = None
 _salt_lock = threading.Lock()
 _last_forget = -_PURGE_INTERVAL_S  # the first call always checks
 
@@ -308,17 +313,20 @@ def _truncate_wal() -> None:
 
 
 def forget_stale_salt() -> None:
-    """Drop the salts no rule needs any more (a day's, once the day after it
-    has ended) — from this process's memory, and from the store — without
-    waiting for a new day's first key. Called about once a minute
-    (visits.run_visit_consumer's idle tick): with the salt gone, no key
-    made with it can be recomputed from an address. Creates nothing where
-    the store doesn't exist yet."""
-    global _salt_cache, _last_forget
+    """Drop the salts nothing needs any more (a key salt once the day after
+    its own has ended, derived_salt's once its day has) — from this
+    process's memory, and from the store — without waiting for a new day's
+    first key. Called about once a minute (visits.run_visit_consumer's idle
+    tick): with a salt gone, nothing made with it can be recomputed from an
+    address. Creates nothing where the store doesn't exist yet."""
+    global _salt_cache, _day_salt_cache, _last_forget
     today = datetime.now(timezone.utc).date().isoformat()
     with _salt_lock:
+        # A cache made yesterday also holds the day before's salt.
         if _salt_cache is not None and _salt_cache[0] != today:
             _salt_cache = None
+        if _day_salt_cache is not None and _day_salt_cache[0] != today:
+            _day_salt_cache = None
         now = time.monotonic()
         if now - _last_forget < _PURGE_INTERVAL_S:
             return
@@ -328,20 +336,42 @@ def forget_stale_salt() -> None:
     try:
         with _Txn() as conn:
             dropped = conn.execute("DELETE FROM salts WHERE date < ?", (_yesterday(today),)).rowcount
+            dropped += conn.execute("DELETE FROM day_salts WHERE date < ?", (today,)).rowcount
         if dropped or _truncate_pending:
             _truncate_wal()
     except sqlite3.Error:
         logger.warning("Could not drop a stale throttle salt", exc_info=True)
 
 
+def _day_salt_for(today: str) -> bytes:
+    """derived_salt's own salt for `today`, which — unlike the key salts —
+    is deleted as soon as its day ends."""
+    global _day_salt_cache
+    with _salt_lock:
+        if _day_salt_cache is not None and _day_salt_cache[0] == today:
+            return _day_salt_cache[1]
+    with _Txn() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO day_salts (date, salt) VALUES (?, ?)", (today, secrets.token_bytes(32)),
+        )
+        dropped = conn.execute("DELETE FROM day_salts WHERE date < ?", (today,)).rowcount
+        salt = conn.execute("SELECT salt FROM day_salts WHERE date = ?", (today,)).fetchone()[0]
+    if dropped:
+        global _truncate_pending
+        _truncate_pending = True
+    with _salt_lock:
+        _day_salt_cache = (today, salt)
+    return salt
+
+
 def derived_salt(purpose: str) -> bytes | None:
-    """A salt for today, the same in every process of this container, that
-    lives only as long as the store's own (RAM, this UTC day): for a caller
-    whose shared salt is unavailable (visits' fallback). None if the store
-    can't be read either."""
+    """A salt for today, the same in every process of this container, in RAM
+    and deleted when this UTC day ends: for a caller whose shared salt is
+    unavailable (visits' fallback). Not derived from the key salts, which
+    outlive their day. None if the store can't be read either."""
     today = datetime.now(timezone.utc).date().isoformat()
     try:
-        salt, _previous = _salts_for(today)
+        salt = _day_salt_for(today)
     except sqlite3.Error:
         return None
     return hmac.new(salt, f"derived\x00{purpose}".encode(), hashlib.sha256).digest()
