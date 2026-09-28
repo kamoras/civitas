@@ -187,10 +187,10 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
             </article>
           ) : null}
 
-          {/* Key facts */}
+          {/* Media coverage: lines quoted from the sources, each with its outlet */}
           {issue.facts?.length > 0 && (
             <section className="mb-10">
-              <h2 className="text-xs text-ink-min mb-4 tracking-widest">KEY FACTS</h2>
+              <h2 className="text-xs text-ink-min mb-4 tracking-widest">MEDIA COVERAGE</h2>
               <ul className="space-y-3">
                 {issue.facts.map((fact, i) => (
                   <li key={i} className="flex gap-3 text-sm text-ink">

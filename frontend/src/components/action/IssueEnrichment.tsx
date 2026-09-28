@@ -43,7 +43,7 @@ import type { ActionIssue, ActionItem, RelatedBill } from "@/types/action";
  *  oversight.
  *
  *  Design: font-mono/tracked-uppercase/text-ink-min matches every other
- *  small label on this page (SOURCES:, KEY FACTS) — this is that same
+ *  small label on this page (SOURCES:, MEDIA COVERAGE) — this is that same
  *  register, not a one-off caption style. */
 export function IssueImage({ issue, size = "full" }: { issue: ActionIssue; size?: "full" | "thumbnail" }) {
   if (!issue.imageUrl) return null;
