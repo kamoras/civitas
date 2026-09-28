@@ -1382,6 +1382,13 @@ JUDICIAL_RESOLUTION_ELECTS = "elects"
 JUDICIAL_RESOLUTION_DECIDED_EARLY = "decided_before_general"
 
 
+# The source-entry keys that say how a primary resolves. Anything that
+# copies a state's rules into another entry (the weekly crawler building a
+# replacement source) must copy all of them, or a discovered source reads
+# Iowa's "thirty-five percent or more" as strictly more.
+NOMINATION_RULE_KEYS = ("runoff_threshold_pct", "runoff_threshold_inclusive", "advance_count")
+
+
 class InclusiveThreshold(float):
     """A runoff threshold a leader clears by REACHING it, not only by
     passing it. See runoff_threshold."""

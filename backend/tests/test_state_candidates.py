@@ -9,6 +9,7 @@ import pytest
 
 from app.models import Candidate, Race
 from app.pipeline.fetch import state_candidates as sc
+from app.pipeline.fetch.state_candidates_common import InclusiveThreshold, runoff_threshold
 from app.pipeline.fetch.state_candidate_sources import configured_states
 
 
@@ -205,6 +206,39 @@ class TestCrawlAdoption:
         # Georgia nominates on a majority — that rule is law, and must be
         # carried into whatever replacement gets found.
         assert seen_rules["runoff_threshold_pct"] == 50.0
+
+    async def test_a_replacement_keeps_iowas_inclusive_threshold(
+        self, db_session, monkeypatch,
+    ):
+        """Iowa nominates at "thirty-five percent or more" (Iowa Code
+        43.52), the one threshold met by reaching it rather than exceeding
+        it. A replacement source that lost that flag would withhold a
+        leader at exactly 35%."""
+        seen_rules = {}
+
+        async def fake_discover(client, state, cycle, rules=None):
+            seen_rules.update(rules or {})
+            return None
+
+        async def broken(client, cycle, state, source):
+            return None
+
+        async def no_filings(client, state, cycle):
+            return None
+
+        async def no_calendar(client, cycle):
+            return {}, False
+
+        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+        monkeypatch.setattr(sc, "discover_source", fake_discover)
+        monkeypatch.setattr(sc, "discover_filings", no_filings)
+        monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"IA": ["sos.iowa.gov"]})
+        monkeypatch.setattr(sc, "STRATEGIES", {"clarity": broken})
+        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert "IA" in outcomes
+        assert seen_rules["runoff_threshold_pct"] == 35.0
+        assert seen_rules["runoff_threshold_inclusive"] is True
+        assert isinstance(runoff_threshold(seen_rules), InclusiveThreshold)
 
 
 class TestForgetsBrokenDiscoveries:

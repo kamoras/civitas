@@ -83,6 +83,7 @@ from app.pipeline.candidate_dedup import normalized_surname
 from app.pipeline.fetch.state_candidates_common import (
     BALLOT_BASIS_TIER,
     LABELLED_PARTIES,
+    NOMINATION_RULE_KEYS,
     PARTY_CODE_MAP,
     fec_party,
     ballot_basis_key,
@@ -991,7 +992,7 @@ async def _crawl_state(
             )
     rules = {
         k: v for k, v in (hand or {}).items()
-        if k in ("runoff_threshold_pct", "advance_count")
+        if k in NOMINATION_RULE_KEYS
     }
     earlier = outcome
     outcome = await _crawl_results_source(db, client, cycle, state, rules, record, now)
