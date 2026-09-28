@@ -50,8 +50,8 @@ async def test_api_is_asked_only_for_committees_the_master_lacks(db_session):
     master = parse_committee_master(CM_ROWS)
     party = {"type": "Y", "designation": "U", "connectedOrg": None}
     with patch("app.pipeline.fetch.fec.fetch_committee_meta", new=AsyncMock(return_value=party)) as api:
-        types, metas = await resolve_committee_meta(None, db_session, {"C00104299", "C09999999"}, master)
-    assert types == {"C00104299": "Q", "C09999999": "Y"}
+        metas = await resolve_committee_meta(None, db_session, {"C00104299", "C09999999"}, master)
+    assert {cid: m["type"] for cid, m in metas.items()} == {"C00104299": "Q", "C09999999": "Y"}
     # The fallback's designation reaches the political-committee rule too.
     assert is_political_committee(metas["C09999999"])
     api.assert_awaited_once()

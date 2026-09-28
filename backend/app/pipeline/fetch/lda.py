@@ -138,6 +138,14 @@ def _filing_mentions(results: list[dict]) -> list[dict]:
     return out
 
 
+def _year_is_closed(year: int) -> bool:
+    """Whether a filing year's reports are all in: the fourth-quarter
+    report is due January 20 of the next year (2 U.S.C. 1604(a)), so until
+    February a finished year is still growing."""
+    now = utcnow()
+    return year < now.year - 1 or (year == now.year - 1 and now.month >= 2)
+
+
 def _cache_key(org_key: str, year: int) -> str:
     # Include a stable hash of the full org key so two different orgs that
     # share an 80-char prefix (e.g. federal vs. state PAC variants of one
@@ -157,10 +165,11 @@ async def fetch_lobbying_activity(
     it can't be mistaken for, or remembered as, "no lobbying".
     """
     org_key = (org_name or "").strip().upper()
-    if len(org_key) < 3:
-        return LobbyingActivity(total=0.0)
+    if len(org_key) < 2:
+        # Nothing to search for: unknown, not a verified zero.
+        return None
 
-    ttl = _FINISHED_YEAR_CACHE_HOURS if year < utcnow().year else _CURRENT_YEAR_CACHE_HOURS
+    ttl = _FINISHED_YEAR_CACHE_HOURS if _year_is_closed(year) else _CURRENT_YEAR_CACHE_HOURS
     cache_key = _cache_key(org_key, year)
     cached = api_cache_get(db, "lda", cache_key, max_age_hours=ttl)
     if cached is not None:
@@ -232,18 +241,30 @@ async def fetch_lobbying_activity(
 
 
 def _voted_bills(votes: list[dict] | None) -> dict[str, dict]:
-    """The member's Yea/Nay votes by bill, latest first per bill, keyed the
-    way bill_mentions names bills ("HR.1492"). A vote's billId comes in the
-    Senate's spelling ("H.R. 1492", "S. 4668") or the site's ("HR.1492"); a
-    recent House roll call's billId is synthetic ("HouseRC-2026-309"), so
-    the House pipeline carries the roll call's own measure as `measureId`.
-    Nominations and amendment roll calls name no bill and are skipped."""
+    """The member's Yea/Nay vote on each bill, keyed the way bill_mentions
+    names bills ("HR.1492"): the latest vote on passage when there is one,
+    else the latest vote of any kind (motionType then says which).
+
+    A vote's billId comes in the Senate's spelling ("H.R. 1492", "S. 4668")
+    or the site's ("HR.1492"); a recent House roll call's billId is
+    synthetic ("HouseRC-2026-309"), so the House pipeline carries the roll
+    call's own measure as `measureId`. Cloture, amendment and recommit votes
+    carry the bill they were on, which is why passage is preferred: the
+    member's Nay on a motion to recommit is not their vote on the bill.
+    Dates come as ISO (House, key votes) or Senate.gov's "October 14, 2025,
+    05:34 PM", so they are compared as vote_date_iso. Nominations name no
+    bill and are skipped."""
+    from app.pipeline.transform.normalize_votes import vote_date_iso
+
+    def rank(v: dict) -> tuple[bool, str]:
+        return (v.get("motionType") == "passage", vote_date_iso(v.get("date")) or "")
+
     out: dict[str, dict] = {}
-    for v in sorted(votes or [], key=lambda v: v.get("date") or "", reverse=True):
+    for v in votes or []:
         if v.get("vote") not in ("Yea", "Nay"):
             continue
         key = v.get("measureId") or bill_id_from_number(v.get("billId"))
-        if key and key not in out:
+        if key and (key not in out or rank(v) > rank(out[key])):
             out[key] = v
     return out
 
@@ -296,13 +317,26 @@ async def _title_pool(client: httpx.AsyncClient, db: Session, congress: int) -> 
     pool = TitlePool({k: [v] for k, v in titles.items()}) if titles else None
     _pools[congress] = (pool, now)
     _verdicts.clear()
+    if pool is None:
+        # Without the pool no filing is linked to any bill, which reads on
+        # the page exactly like "no filing names one". Say so once a day.
+        from app.ops_alerts import send_ops_alert
+
+        send_ops_alert(
+            "Lobbying bill links paused: bill list unavailable",
+            f"The Congress.gov bill list for congress {congress} could not be read in full, so "
+            "no donor-vote connection can link a bill named in a lobbying filing until it can "
+            "(fetch_congress_bill_titles; see the server logs).",
+            dedupe_key=f"lda-title-pool-{congress}-{now:%Y-%m-%d}",
+        )
     return pool
 
 
-# names_bill verdicts for the run, keyed by (congress, bill, before, after):
+# names_bill verdicts for the run, keyed by (congress, bill, before, after,
+# titles):
 # a trade group heading a hundred House members' matches names the same
 # bills in the same words for every one of them. Cleared with the pool.
-_verdicts: dict[tuple[int, str, str, str], bool] = {}
+_verdicts: dict[tuple[int, str, str, str, tuple[str, ...]], bool] = {}
 
 
 def _congress_years(congress: int) -> list[int]:
@@ -353,7 +387,9 @@ async def lobbied_bills_for(
             titles.append(vote["billName"])
         matching = []
         for m in mentions:
-            key = (congress, bill_key, m.get("before", ""), m.get("after", ""))
+            # The titles are part of the key: the vote's own billName is
+            # appended to them, and it differs between chambers and votes.
+            key = (congress, bill_key, m.get("before", ""), m.get("after", ""), tuple(titles))
             if key not in _verdicts:
                 _verdicts[key] = names_bill(key[2], key[3], titles, bill_key, pool, previous)
             if _verdicts[key]:
@@ -367,6 +403,9 @@ async def lobbied_bills_for(
             "label": bill_label(bill_key) or bill_key,
             "billName": (vote.get("billName") or "")[:160],
             "vote": vote.get("vote"),
+            # None or "passage" when the vote shown is on the bill itself;
+            # otherwise which motion it was ("cloture", "amendment" ...).
+            "motionType": vote.get("motionType"),
             "filingYear": year or None,
             "filingUrl": newest.get("url"),
             "registrant": newest.get("registrant"),

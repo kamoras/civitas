@@ -100,7 +100,6 @@ def normalize_finance(
     aggregated_contributors: list[dict],
     ai_classifications: dict[str, dict] | None = None,
     db_session=None,
-    committee_type_map: dict[str, str | None] | None = None,
     committee_meta_map: dict[str, dict] | None = None,
 ) -> dict:
     """Normalize FEC financial data into the Senator funding shape.
@@ -112,12 +111,10 @@ def normalize_finance(
         pac_receipts: PAC/committee contribution receipts (Schedule A, is_individual=false).
         aggregated_contributors: Top contributors by total.
         ai_classifications: Optional AI classifications for donors (type + industry).
-        committee_type_map: Optional contributor_id -> FEC committee_type code,
-            pre-resolved by the caller (see fec.resolve_committee_meta). Passed
-            through to build_top_donors for the PAC-utilization signal.
         committee_meta_map: Optional contributor_id -> the FEC committee
             master's {"type", "designation", "connectedOrg"} (see
-            fec.fetch_committee_master). A committee the FEC registers as a
+            fec.resolve_committee_meta). The type ("Q" multicandidate, "N"
+            not) feeds the PAC-utilization signal. A committee the FEC registers as a
             party, candidate, joint-fundraising or leadership committee is
             political money (industry POLITICAL) whatever its name reads
             like, and a PAC's connected organization names who sponsors it.
@@ -151,7 +148,6 @@ def normalize_finance(
         candidate_name,
         ai_classifications=ai_classifications,
         db_session=db_session,
-        committee_type_map=committee_type_map,
         committee_meta_map=committee_meta_map,
     )
 
@@ -202,7 +198,6 @@ def build_top_donors(
     candidate_name: str,
     ai_classifications: dict[str, dict] | None = None,
     db_session=None,
-    committee_type_map: dict[str, str | None] | None = None,
     committee_meta_map: dict[str, dict] | None = None,
 ) -> list[dict]:
     """Build top donors list prioritizing PAC/corporate money.
@@ -211,15 +206,14 @@ def build_top_donors(
     When no AI classification exists, falls back to the embedding-based
     industry classifier and semantic donor-type classifier.
 
-    committee_type_map: contributor_id -> FEC committee_type code ("Q"=
-    Qualified/multicandidate, "N"=Nonqualified), pre-resolved by the caller
-    (see fec.resolve_committee_meta) for each PAC that appears in
-    pac_receipts. Feeds the PAC-utilization signal in
+    committee_meta_map: contributor_id -> the FEC committee master's
+    {"type", "designation", "connectedOrg"} (see fec.resolve_committee_meta)
+    for each PAC that appears in pac_receipts. The type ("Q"=Qualified/
+    multicandidate, "N"=Nonqualified) feeds the PAC-utilization signal in
     score_calculator._funding_independence_core.
     """
     donor_map: dict[str, dict] = {}
     ai_classifications = ai_classifications or {}
-    committee_type_map = committee_type_map or {}
     committee_meta_map = committee_meta_map or {}
 
     # Pre-compute embedding-based skip sets for employers and memo texts.
@@ -301,11 +295,8 @@ def build_top_donors(
         # (see senate_pipeline.py / house_pipeline.py).
         if r.get("entity_type") == "COM" and r.get("contributor_id"):
             meta = committee_meta_map.get(r["contributor_id"])
-            ctype = committee_type_map.get(r["contributor_id"])
-            if ctype is None and meta:
-                ctype = meta.get("type")
-            if ctype is not None:
-                existing["committeeType"] = ctype
+            if meta and meta.get("type") is not None:
+                existing["committeeType"] = meta["type"]
             if meta and meta.get("connectedOrg"):
                 existing["connectedOrg"] = meta["connectedOrg"]
             # Tier 1 (FEC structured metadata) outranks the name classifier:

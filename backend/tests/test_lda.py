@@ -339,3 +339,40 @@ class TestAlert:
             send.assert_not_called()
             alert_if_lda_down({"lookups": 3, "failed": 3}, "senate")
             send.assert_called_once()
+
+
+class TestVotedBills:
+    def test_passage_wins_over_a_later_procedural_vote(self):
+        votes = [
+            {"billId": "HouseRC-2025-10", "measureId": "HR.1", "vote": "Yea", "date": "2025-05-22", "motionType": "passage"},
+            {"billId": "HouseRC-2025-11", "measureId": "HR.1", "vote": "Nay", "date": "2025-07-03", "motionType": "procedural"},
+        ]
+        assert lda._voted_bills(votes)["HR.1"]["vote"] == "Yea"
+
+    def test_senate_text_dates_order_by_date_not_alphabet(self):
+        # "September ..." sorts after "October ..." as a string.
+        votes = [
+            {"billId": "H.R. 4", "vote": "Nay", "date": "September 18, 2025, 05:34 PM", "motionType": "cloture"},
+            {"billId": "H.R. 4", "vote": "Yea", "date": "October 2, 2025, 11:00 AM", "motionType": "cloture"},
+        ]
+        assert lda._voted_bills(votes)["HR.4"]["vote"] == "Yea"
+
+    def test_the_shown_vote_says_what_it_decided(self):
+        votes = [{"billId": "S. 1040", "vote": "Nay", "date": "2025-07-01", "motionType": "cloture"}]
+        assert lda._voted_bills(votes)["S.1040"]["motionType"] == "cloture"
+
+
+class TestCacheWindow:
+    def test_a_finished_year_is_open_until_q4_reports_are_due(self):
+        from datetime import datetime
+
+        with patch.object(lda, "utcnow", return_value=datetime(2027, 1, 10)):
+            assert not lda._year_is_closed(2026)
+            assert lda._year_is_closed(2025)
+        with patch.object(lda, "utcnow", return_value=datetime(2027, 2, 1)):
+            assert lda._year_is_closed(2026)
+
+
+@pytest.mark.asyncio
+async def test_an_empty_client_name_is_unknown_not_zero(db_session):
+    assert await fetch_lobbying_activity(MagicMock(), db_session, " ", 2025) is None

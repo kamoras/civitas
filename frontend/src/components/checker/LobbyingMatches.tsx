@@ -58,7 +58,15 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
                             ) : (
                               <span className="text-ink">{b.label || b.billId}</span>
                             )}
-                            {b.vote && <> · voted {b.vote}</>}
+                            {b.vote && (
+                              <>
+                                {" "}
+                                · voted {b.vote}
+                                {b.motionType && b.motionType !== "passage" && b.motionType !== "unknown"
+                                  ? ` (on ${b.motionType === "procedural" ? "a procedural motion" : b.motionType === "amendment" ? "an amendment" : b.motionType})`
+                                  : ""}
+                              </>
+                            )}
                             {filing && (
                               <>
                                 {" · "}

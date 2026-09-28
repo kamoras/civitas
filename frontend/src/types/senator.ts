@@ -180,6 +180,9 @@ export interface LobbiedBill {
   label: string;
   billName: string;
   vote: string | null;
+  /** What the vote shown decided: absent or "passage" for the bill itself,
+   * else the motion ("cloture", "amendment", "procedural"). */
+  motionType?: string | null;
   filingYear: number | null;
   filingUrl: string | null;
   registrant: string | null;

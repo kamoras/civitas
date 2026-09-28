@@ -796,8 +796,9 @@ def committee_master_cycles(today: date | None = None) -> list[int]:
 
 async def resolve_committee_meta(
     client: httpx.AsyncClient, db: Session, committee_ids: set[str], master: dict[str, dict],
-) -> tuple[dict[str, str | None], dict[str, dict]]:
-    """(committee_type_map, committee_meta_map) for the contributing PACs.
+) -> dict[str, dict]:
+    """{committee_id: {"type", "designation", "connectedOrg"}} for the
+    contributing PACs; a committee found nowhere is left out.
 
     The bulk master answers almost every committee; the per-committee API
     (fetch_committee_meta) is asked only for one the master lacks, such as a
@@ -805,14 +806,12 @@ async def resolve_committee_meta(
     the bulk files couldn't be downloaded. Either way the political-committee
     rule sees a type and designation.
     """
-    types: dict[str, str | None] = {}
     metas: dict[str, dict] = {}
     for cid in committee_ids:
         meta = master.get(cid) or await fetch_committee_meta(client, db, cid)
-        types[cid] = (meta or {}).get("type")
         if meta:
             metas[cid] = meta
-    return types, metas
+    return metas
 
 
 def is_political_committee(meta: dict | None) -> bool:

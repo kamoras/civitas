@@ -44,10 +44,10 @@ export function currentCongressLabel(): string {
  * ID alone is ambiguous across congresses, and linking a prior-congress
  * bill under the current congress produces a wrong or dead page.
  */
-/** "H.R. 7147" / "S. 1234" / "HR.7147" -> "HR.7147": one spelling per bill,
- * so lists built from differently spelled sources can be compared. */
-function canonicalBillId(billId: string): string {
-  return billId
+export function billUrl(billId: string, congress?: number | null): string {
+  if (!billId) return "";
+
+  const normalized = billId
     .replace(/^H\.R\.\s*/i, "HR.")
     .replace(/^S\.\s*/i, "S.")
     .replace(/^H\.J\.Res\.\s*/i, "HJRES.")
@@ -56,12 +56,6 @@ function canonicalBillId(billId: string): string {
     .replace(/^S\.Con\.Res\.\s*/i, "SCONRES.")
     .replace(/^H\.Res\.\s*/i, "HRES.")
     .replace(/^S\.Res\.\s*/i, "SRES.");
-}
-
-export function billUrl(billId: string, congress?: number | null): string {
-  if (!billId) return "";
-
-  const normalized = canonicalBillId(billId);
 
   const parts = normalized.split(".");
   if (parts.length < 2) return "";

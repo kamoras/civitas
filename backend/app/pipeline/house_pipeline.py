@@ -316,6 +316,16 @@ async def run_house_pipeline() -> dict:
                 })
 
             classified_recent = await classify_all_bills(recent_for_classification, db)
+
+            # What each roll call decided (passage, amendment, a motion to
+            # recommit ...), from the Clerk's vote-question by the Senate's
+            # classifier: a lobbying link shows a member's vote on a bill and
+            # must say when it wasn't the vote on passage.
+            from app.pipeline.analyze.bill_learning import classify_motion_type
+            recent_rc_motion = {
+                bid: (classify_motion_type(rc.get("question") or "") if rc.get("question") else None)
+                for bid, rc in recent_rc_map.items()
+            }
             logger.info("Classified %d recent House votes", len(classified_recent))
 
             # Refine LLM party leanings with actual roll-call splits.
@@ -722,6 +732,7 @@ async def run_house_pipeline() -> dict:
                             "measureId": bill_id_from_number(
                                 (recent_rc_map.get(rv.get("billId", "")) or {}).get("documentName"),
                             ),
+                            "motionType": recent_rc_motion.get(rv.get("billId", "")),
                         })
 
                     rep["votingRecord"] = voting_data
@@ -767,14 +778,13 @@ async def run_house_pipeline() -> dict:
                             r["contributor_id"] for r in raw_pac_receipts
                             if r.get("entity_type") == "COM" and r.get("contributor_id")
                         }
-                        committee_type_map, committee_meta_map = await resolve_committee_meta(
+                        committee_meta_map = await resolve_committee_meta(
                             client, db, pac_committee_ids, committee_master,
                         )
 
                         finance_data = normalize_finance(
                             fec_candidate, financials, raw_receipts, raw_pac_receipts,
                             aggregated, db_session=db,
-                            committee_type_map=committee_type_map,
                             committee_meta_map=committee_meta_map,
                         )
                         rep["funding"] = finance_data

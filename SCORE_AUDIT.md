@@ -466,7 +466,7 @@ After running the audit, use this framework to decide what to change:
 |---|---|---|
 | stdev < 8 on any dimension | Formula too narrow, or defaults dominate | Recalibrate multipliers; check default values |
 | mean > 65 on any dimension | Missing data treated as positive | Change "no data" default from positive to neutral (50) |
-| FI > 85 for high-fundraising senators | PAC committee types unresolved, so the dollar fallback applied | Check donors.committee_type coverage; verify fetch_committee_type. (Outside spending is deliberately not scored since v6.13 — see docs/research/funding-independence.md) |
+| FI > 85 for high-fundraising senators | PAC committee types unresolved, so the dollar fallback applied | Check donors.committee_type coverage; verify the FEC committee master loaded (fetch_committee_master) and, for committees it lacks, resolve_committee_meta's API fallback. (Outside spending is deliberately not scored since v6.13 — see docs/research/funding-independence.md) |
 | Derived consistency check ✗ | Vote/finance matching broken, or algorithm regression | The failure's rationale names the raw metric that decoupled; check key_votes/donor tables and the corresponding fetch |
 | >20% senators in data desert | API fetch failure | Check API cache, rate limits, name matching |
 | High score variance (>15 pts) on specific senator | Inconsistent vote/FEC matching | Add name normalization or use bioguide_id as primary key |

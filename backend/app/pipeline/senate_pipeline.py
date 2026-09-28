@@ -455,6 +455,9 @@ _COORDINATION_PATHS = {
 _NOT_ANALYSIS_PATHS = {
     "pipeline/holdings_pipeline.py",
     "pipeline/filer_matching.py",
+    # Which bills a lobbying filing names: shown beside donor-vote
+    # connections, read by no classifier or score.
+    "pipeline/analyze/lobbying_records.py",
     *_COORDINATION_PATHS,
 }
 
@@ -1418,7 +1421,7 @@ async def run_senate_pipeline(
             committee_master = await fetch_committee_master(
                 client, db, committee_master_cycles(),
             )
-            committee_type_map, committee_meta_map = await resolve_committee_meta(
+            committee_meta_map = await resolve_committee_meta(
                 client, db, pac_committee_ids, committee_master,
             )
 
@@ -1593,7 +1596,6 @@ async def run_senate_pipeline(
                         fec.get("aggregated") or [],
                         ai_classifications=ai_classifications,
                         db_session=db,
-                        committee_type_map=committee_type_map,
                         committee_meta_map=committee_meta_map,
                     )
                 else:
