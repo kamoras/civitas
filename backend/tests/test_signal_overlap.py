@@ -128,7 +128,7 @@ def test_chamber_breakdowns_runs_against_the_schema(db_session, chamber):
     assert signal_overlap.chamber_breakdowns(db_session, chamber) == []
 
 
-def test_measures_scored_members_through_the_api_breakdown(db_session):
+def test_measures_current_members_through_the_api_breakdown(db_session):
     from app.models import Senator
 
     for i, (leadership, coalition) in enumerate([(0.2, 0.3), (0.5, 0.6), (0.8, 0.4)]):
@@ -136,8 +136,11 @@ def test_measures_scored_members_through_the_api_breakdown(db_session):
             id=f"S{i}", name=f"Senator {i}", party="D", state="VT", score_legislative_effectiveness=60,
             leadership_score=leadership, attracted_bipartisanship_score=coalition, years_in_office=10,
         ))
-    # Not yet scored: every score still the column default.
-    db_session.add(Senator(id="S9", name="Senator 9", party="R", state="WY", leadership_score=0.9))
+    # Departed (in the removal grace window): not in the population.
+    db_session.add(Senator(
+        id="S9", name="Senator 9", party="R", state="WY", is_current=False, years_in_office=10,
+        leadership_score=0.9, attracted_bipartisanship_score=0.9,
+    ))
     db_session.commit()
     got = measure(signal_overlap.chamber_breakdowns(db_session, "senate"))
     assert got["effectiveness"]["n"] == 3

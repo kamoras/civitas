@@ -42,7 +42,9 @@ def fetch_breakdowns(branch: str) -> list[dict]:
     listing = _fetch_json(f"{API_BASE}/politicians?branch={branch}")
     out = []
     for d in listing:
-        if not d.get("hasScorecard"):
+        # The pipeline measures currently serving members only; the listing
+        # also has departed members inside the removal grace window.
+        if not d.get("hasScorecard") or d.get("isCurrent") is False:
             continue
         try:
             out.append(_fetch_json(f"{API_BASE}/{kind}/{d['id']}/score-breakdown"))

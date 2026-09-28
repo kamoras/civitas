@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 # The last run's measurement per chamber (/data/signal_overlap.json), over
 # the bundled one scripts/check_signal_correlations.py --write records.
-SIGNAL_OVERLAP = ChamberReference("signal_overlap")
+SIGNAL_OVERLAP = ChamberReference("signal_overlap", required=False)
 
 ACTION_R = 0.60
 WATCH_R = 0.40
@@ -103,8 +103,9 @@ def measure(breakdowns: list[dict]) -> dict:
 
 
 def chamber_breakdowns(db, chamber: str) -> list[dict]:
-    """Every currently serving, scored member's score breakdown, as the API
-    serves it. A member whose breakdown fails is skipped (logged): one bad record
+    """Every currently serving member's score breakdown, as the API serves
+    it (a member's row is written by the scoring pass, so every one has
+    scores). A member whose breakdown fails is skipped (logged): one bad record
     shouldn't blind the check to the rest."""
     if chamber == "senate":
         from app.models import Senator as model
@@ -114,18 +115,7 @@ def chamber_breakdowns(db, chamber: str) -> list[dict]:
         from app.services.representative_service import get_representative_score_breakdown as breakdown_of
     else:
         raise ValueError(f"no signal-overlap check for {chamber!r}")
-    scores = (
-        model.score_funding_independence, model.score_promise_persistence,
-        model.score_constituent_alignment, model.score_funding_diversity,
-        model.score_legislative_effectiveness,
-    )
-    # Members not yet scored (every score still 0, the column default; a
-    # scored component is never 0 across the board) would add neutral
-    # placeholders to the population, the same rule as hasScorecard.
-    ids = [
-        row[0] for row in db.query(model.id, *scores).filter(model.is_current.is_(True)).all()
-        if any(row[1:])
-    ]
+    ids = [row[0] for row in db.query(model.id).filter(model.is_current.is_(True)).all()]
     out = []
     for member_id in ids:
         try:
