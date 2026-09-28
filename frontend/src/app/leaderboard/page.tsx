@@ -12,13 +12,12 @@ import BranchSelector, { type Branch } from "@/components/BranchSelector";
 import Footer from "@/components/layout/Footer";
 import PageFallback from "@/components/layout/PageFallback";
 import BackToTop from "@/components/BackToTop";
-import PresidentScorecard from "@/components/scorecard/PresidentScorecard";
+import PresidentSummary from "@/components/scorecard/PresidentSummary";
 import {
   fetchLeaderboard,
   fetchRepLeaderboard,
   fetchPresidentLeaderboard,
   fetchCurrentPresident,
-  fetchPresidentScoreBreakdown,
   fetchJusticeLeaderboard,
 } from "@/lib/api";
 import { getScoreColor, getScoreBgColor } from "@/lib/representation";
@@ -271,8 +270,8 @@ function termYears(start: string, end: string | null): string {
 }
 
 // The ranked table below excludes the currently-serving president
-// entirely (see fetchCurrentPresident's comment); their scorecard is shown
-// above it, the same one their profile opens with.
+// entirely (see fetchCurrentPresident's comment); a summary of their
+// scorecard is shown above it, linking to the full one.
 function CurrentPresidentSpotlight({
   president,
   loading,
@@ -280,10 +279,6 @@ function CurrentPresidentSpotlight({
   president: President | null;
   loading: boolean;
 }) {
-  const breakdown = useAsyncData(
-    `president-breakdown-${president?.id ?? ""}`,
-    president ? () => fetchPresidentScoreBreakdown(president.id) : null
-  );
   if (loading) {
     return (
       <div className="panel p-6 text-center mb-6" role="status" aria-live="polite">
@@ -307,7 +302,7 @@ function CurrentPresidentSpotlight({
           under one ordinal position isn&apos;t a fair fight.
         </p>
       </div>
-      <PresidentScorecard president={president} breakdown={breakdown.data ?? null} titleAs="h2" />
+      <PresidentSummary president={president} />
     </div>
   );
 }
