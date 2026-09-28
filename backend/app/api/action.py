@@ -640,9 +640,14 @@ async def get_country_news(response: Response):
     # read — this bounds how often that external feed gets hit, not how
     # fresh the DB is.
     response.headers["Cache-Control"] = "public, max-age=600"
+    from app.api.response_helpers import retry_soon_json
     from app.pipeline.fetch.news_feeds import fetch_news_articles
 
     articles = await asyncio.to_thread(fetch_news_articles)
+    if not articles:
+        # Every feed failed (a working feed always has items): an outage,
+        # not a quiet news day — never kept for the success's ten minutes.
+        return retry_soon_json({"countries": []})
     countries = _extract_country_mentions(articles)
     return {"countries": countries}
 

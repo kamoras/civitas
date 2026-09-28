@@ -201,8 +201,7 @@ async def run_visit_consumer() -> None:
         now = time.monotonic()
         if now - last_check >= _STALE_SALT_CHECK_S:
             last_check = now
-            # Off the loop: dropping the throttle's stale salt is a write.
-            await asyncio.to_thread(_forget_stale_salts)
+            _forget_stale_salts()  # memory only: no I/O
         try:
             event = await asyncio.wait_for(_visit_queue.get(), timeout=_STALE_SALT_CHECK_S)
         except TimeoutError:
@@ -262,16 +261,27 @@ def _parse_device(ua: str) -> str:
 _salt_cache: tuple[str, bytes] | None = None
 
 
-def _load_or_create_salt(date: str) -> bytes:
+def _load_or_create_salt(date: str) -> bytes | None:
     """The shared salt for `date`, creating it if this is the first visit
     of the day. Every other day's salt is deleted in the same transaction —
     once a day's salt is gone, that day's hashes can't be recomputed from
-    an IP by anyone."""
+    an IP by anyone.
+
+    None when another worker has already made a later day's salt: this one
+    read the clock just before midnight, and making `date`'s again would
+    bring back a salt that was deleted."""
+    from sqlalchemy import exists, literal, select
+
     db = VisitsSessionLocal()
     try:
         db.execute(
             sqlite_insert(VisitSalt)
-            .values(date=date, salt=secrets.token_hex(32))
+            .from_select(
+                ["date", "salt"],
+                select(literal(date), literal(secrets.token_hex(32))).where(
+                    ~exists().where(VisitSalt.date > date),
+                ),
+            )
             .on_conflict_do_nothing(index_elements=["date"])
         )
         # Earlier days only: with several API workers, one that read the
@@ -280,7 +290,8 @@ def _load_or_create_salt(date: str) -> bytes:
         # same visitor differently all day.
         db.query(VisitSalt).filter(VisitSalt.date < date).delete()
         db.commit()
-        return bytes.fromhex(db.query(VisitSalt.salt).filter(VisitSalt.date == date).scalar())
+        salt = db.query(VisitSalt.salt).filter(VisitSalt.date == date).scalar()
+        return bytes.fromhex(salt) if salt is not None else None
     finally:
         db.close()
 
@@ -296,13 +307,19 @@ async def _daily_salt(date: str) -> bytes:
         # shared salt is retried on the next call (this isn't cached as it).
         # One fallback for the whole container for the day where possible —
         # derived from a RAM salt every worker shares (throttle.derived_salt,
-        # deleted when the day ends) — so a visitor during the outage counts once, not once per worker
-        # (a fresh salt per call made every visit a new unique). Visitors
+        # deleted when the day ends) — so a visitor during the outage counts
+        # once, not once per worker (a fresh salt per call made every visit a
+        # new unique). Visitors
         # who span the outage and the recovery still count twice: no salt
         # matching the shared one exists while it can't be read.
         logger.warning("Visit salt unavailable — using a fallback salt", exc_info=True)
         # Reads the RAM store on first use in a day: off the event loop.
         return await asyncio.to_thread(_fallback_salt_for, date)
+    if salt is None:
+        # The day ended a moment ago and its salt is gone: this visit, from
+        # its last instant, is hashed with a salt nobody keeps — it may count
+        # as one more unique for that day, never as a recoverable address.
+        return secrets.token_bytes(32)
     _salt_cache = (date, salt)
     return salt
 
@@ -326,11 +343,8 @@ def _forget_stale_salts() -> None:
         _salt_cache = None
     if _fallback_salt is not None and _fallback_salt[0] != today:
         _fallback_salt = None
-    # The RAM store's salts, including the one the fallback derives from
-    # (api/throttle.py).
-    from app.api import throttle
-
-    throttle.forget_stale_salt()
+    # The RAM store's salts, including the one the fallback derives from,
+    # are dropped by the store's own maintenance (throttle.run_maintenance).
 
 
 def _fallback_salt_for(date: str) -> bytes:

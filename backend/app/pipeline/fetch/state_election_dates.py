@@ -126,11 +126,14 @@ def invalidate_cache() -> None:
 def _update(change) -> None:
     """Apply `change` (dict -> dict) to the file as it is on disk now, under
     its lock, so no concurrent writer's change is lost. Raises NotSaved."""
-    global _cache, _cache_stamp
+    global _cache
     path = _path()
     try:
-        _cache = update_json_file(path, change, indent=2, sort_keys=True)
-        _cache_stamp = files_stamp([path])
+        update_json_file(path, change, indent=2, sort_keys=True)
+        # Re-read on next use rather than stamp what was written: a stat
+        # taken after the write could already describe a later writer's
+        # file, and would pin this older copy until the next change.
+        _cache = None
     except (OSError, LockTimeout) as error:
         raise NotSaved(f"election dates not saved to {path}: {error}") from error
 

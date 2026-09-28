@@ -178,13 +178,13 @@ class TestClientKey:
 
         monkeypatch.setattr(throttle, "datetime", _Tomorrow)
         assert throttle.client_key("203.0.113.1", "pulse", "1") != key
-        assert _rows(throttle_store, "SELECT date FROM salts") == [("2099-01-02",)]
+        assert _rows(throttle_store, "SELECT date FROM salt_days WHERE kind = 'key'") == [("2099-01-02",)]
 
     def test_not_the_visitor_hash_a_visit_stores(self):
         from app.api.visits import _visitor_hash
 
         key = throttle.client_key("203.0.113.1", "write")
-        for (visit_salt,) in _rows(throttle._path, "SELECT salt FROM salts"):
+        for (visit_salt,) in _rows(throttle._path, "SELECT salt FROM salt_days WHERE kind = 'key'"):
             assert _visitor_hash("203.0.113.1", visit_salt) != key
 
 
@@ -305,8 +305,8 @@ class TestForgetStaleSalt:
         monkeypatch.setattr(throttle, "datetime", _Tomorrow)
         monkeypatch.setattr(throttle, "_last_forget", -1e9)
         throttle.forget_stale_salt()
-        assert throttle._salt_cache is None
-        assert _rows(throttle_store, "SELECT COUNT(*) FROM salts") == [(0,)]
+        assert throttle._salt_cache == {}
+        assert _rows(throttle_store, "SELECT COUNT(*) FROM salt_days WHERE kind = 'key'") == [(0,)]
 
     def test_todays_is_kept(self, throttle_store, monkeypatch):
         key = throttle.client_key("203.0.113.1", "write")
@@ -350,7 +350,7 @@ def test_a_dropped_salt_leaves_no_bytes_behind(throttle_store, monkeypatch):
     import os
 
     throttle.client_key("203.0.113.1", "write")
-    old_salt = _rows(throttle_store, "SELECT salt FROM salts")[0][0]
+    old_salt = _rows(throttle_store, "SELECT salt FROM salt_days WHERE kind = 'key'")[0][0]
 
     class _Tomorrow(datetime):
         @classmethod
@@ -404,7 +404,7 @@ def test_a_truncation_blocked_by_a_reader_is_retried(throttle_store, monkeypatch
     throttle.client_key("203.0.113.1", "write")
     reader = sqlite3.connect(throttle_store, isolation_level=None)
     reader.execute("BEGIN")
-    reader.execute("SELECT * FROM salts").fetchall()  # holds a read snapshot
+    reader.execute("SELECT * FROM salt_days").fetchall()  # holds a read snapshot
 
     class _Tomorrow(datetime):
         @classmethod
@@ -499,11 +499,11 @@ class TestAcrossMidnight:
         self._at(monkeypatch, 2, 12)
         key = throttle.client_key("203.0.113.1", "write")
         assert key.previous is not None
-        assert _rows(throttle_store, "SELECT date FROM salts ORDER BY date") == [("2099-01-01",), ("2099-01-02",)]
+        assert _rows(throttle_store, "SELECT date FROM salt_days WHERE kind = 'key' ORDER BY date") == [("2099-01-01",), ("2099-01-02",)]
         self._at(monkeypatch, 3, 0, 0, 30)
         monkeypatch.setattr(throttle, "_last_forget", -1e9)
         throttle.forget_stale_salt()
-        assert _rows(throttle_store, "SELECT date FROM salts") == [("2099-01-02",)]
+        assert _rows(throttle_store, "SELECT date FROM salt_days WHERE kind = 'key'") == [("2099-01-02",)]
         assert throttle.client_key("203.0.113.1", "write").previous == key
 
     def test_a_first_day_has_no_previous_key(self):
@@ -517,12 +517,12 @@ def test_the_visit_fallbacks_salt_is_gone_at_midnight_though_key_salts_stay(thro
     TestAcrossMidnight._at(monkeypatch, 1, 12)
     throttle.client_key("203.0.113.1", "write")
     first = throttle.derived_salt("visits:2099-01-01")
-    day_salt = _rows(throttle_store, "SELECT salt FROM day_salts")[0][0]
+    day_salt = _rows(throttle_store, "SELECT salt FROM salt_days WHERE kind = 'day'")[0][0]
     TestAcrossMidnight._at(monkeypatch, 2, 0, 0, 30)
     monkeypatch.setattr(throttle, "_last_forget", -1e9)
     throttle.forget_stale_salt()
-    assert _rows(throttle_store, "SELECT COUNT(*) FROM day_salts") == [(0,)]
-    assert _rows(throttle_store, "SELECT date FROM salts") == [("2099-01-01",)]  # still needed today
+    assert _rows(throttle_store, "SELECT COUNT(*) FROM salt_days WHERE kind = 'day'") == [(0,)]
+    assert _rows(throttle_store, "SELECT date FROM salt_days WHERE kind = 'key'") == [("2099-01-01",)]  # still needed today
     assert throttle.derived_salt("visits:2099-01-01") != first
     import os
 
@@ -530,3 +530,32 @@ def test_the_visit_fallbacks_salt_is_gone_at_midnight_though_key_salts_stay(thro
         if os.path.exists(throttle_store + suffix):
             with open(throttle_store + suffix, "rb") as fh:
                 assert day_salt not in fh.read()
+
+
+def test_a_worker_behind_midnight_never_brings_back_a_deleted_day_salt(throttle_store, monkeypatch):
+    # The visit fallback's salt is deleted when its day ends; a worker that
+    # read the clock just before midnight must not make that day's again.
+    TestAcrossMidnight._at(monkeypatch, 1, 23)
+    throttle.derived_salt("visits:2099-01-01")
+    TestAcrossMidnight._at(monkeypatch, 2, 0)
+    throttle.derived_salt("visits:2099-01-02")  # drops the 1st's
+    throttle.use_path(throttle_store)  # the lagging worker: nothing cached
+    TestAcrossMidnight._at(monkeypatch, 1, 23, 59, 59)
+    assert throttle.derived_salt("visits:2099-01-01") is None
+    assert _rows(throttle_store, "SELECT date FROM salt_days WHERE kind = 'day'") == [("2099-01-02",)]
+
+
+async def test_maintenance_drops_stale_salts_without_any_traffic(throttle_store, monkeypatch):
+    import asyncio
+
+    TestAcrossMidnight._at(monkeypatch, 1, 12)
+    throttle.derived_salt("visits:2099-01-01")
+    TestAcrossMidnight._at(monkeypatch, 2, 0, 0, 30)
+    monkeypatch.setattr(throttle, "_last_forget", -1e9)
+    task = asyncio.create_task(throttle.run_maintenance())
+    for _ in range(100):
+        await asyncio.sleep(0.01)
+        if _rows(throttle_store, "SELECT COUNT(*) FROM salt_days WHERE kind = 'day'") == [(0,)]:
+            break
+    task.cancel()
+    assert _rows(throttle_store, "SELECT COUNT(*) FROM salt_days WHERE kind = 'day'") == [(0,)]

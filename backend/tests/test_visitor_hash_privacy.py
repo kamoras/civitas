@@ -165,8 +165,19 @@ def test_a_salt_outage_falls_back_to_one_salt_for_every_worker(monkeypatch, thro
 def test_a_worker_behind_midnight_keeps_the_new_days_visit_salt(db_session):
     with _use(db_session):
         tomorrow = visits._load_or_create_salt("2099-01-02")
-        visits._load_or_create_salt("2099-01-01")  # a worker that read the clock just before midnight
+        # A worker that read the clock just before midnight: it gets no salt
+        # for the day that has ended, rather than bringing a deleted one back.
+        assert visits._load_or_create_salt("2099-01-01") is None
         assert visits._load_or_create_salt("2099-01-02") == tomorrow
+        assert [d for (d,) in db_session.query(VisitSalt.date)] == ["2099-01-02"]
+
+
+def test_a_visit_from_a_day_just_ended_is_hashed_but_nothing_is_kept(db_session, monkeypatch):
+    monkeypatch.setattr(visits, "_salt_cache", None)
+    with _use(db_session):
+        visits._load_or_create_salt("2099-01-02")
+        salt = asyncio.run(_daily_salt("2099-01-01"))
+    assert len(salt) == 32 and visits._salt_cache is None
 
 
 def test_a_private_fallback_gives_way_to_the_shared_one(monkeypatch):

@@ -6,7 +6,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from app.config import settings
-from app.database import SCHEDULER_HEARTBEAT_KEY, SCHEDULER_HEARTBEAT_TIER, SessionLocal
+from app.database import SessionLocal
 from app.http_client import make_async_client
 from app.pipeline.senate_pipeline import run_senate_pipeline
 from app.pipeline.house_pipeline import run_house_pipeline, is_house_pipeline_running, house_pipeline_age
@@ -697,9 +697,45 @@ def stop_scheduler() -> None:
 # that doesn't run the scheduler (the read-only API, PROCESS_ROLE=api) to
 # report: rewritten every _HEARTBEAT_MINUTES, and reported only while fresh,
 # so a pipeline service that is down stops advertising a run that won't
-# happen.
+# happen. A file on the data volume both services mount, not a database
+# row: a beat must not depend on the database's write lock, which a long
+# pipeline transaction can hold past the busy timeout — a heartbeat that
+# can't be written reads as a service that is gone (the liveness alert,
+# ops_alerts.check_pipeline_service_alive).
 _HEARTBEAT_MINUTES = 5
 _HEARTBEAT_STALE = timedelta(minutes=3 * _HEARTBEAT_MINUTES)
+
+
+def heartbeat_path() -> str:
+    from app.atomic_write import runtime_data_path
+
+    return runtime_data_path("scheduler_heartbeat.json")
+
+
+def read_heartbeat():
+    """(when the scheduler last beat, what it recorded), None when it never
+    has, or shared_state.UNREADABLE when the file can't be read."""
+    import json
+    import os
+    from datetime import datetime, timezone
+
+    from app.shared_state import UNREADABLE
+
+    path = heartbeat_path()
+    try:
+        with open(path) as fh:
+            beat = datetime.fromtimestamp(os.fstat(fh.fileno()).st_mtime, timezone.utc).replace(tzinfo=None)
+            text = fh.read()
+    except FileNotFoundError:
+        return None
+    except OSError:
+        logger.warning("Scheduler heartbeat unreadable", exc_info=True)
+        return UNREADABLE
+    try:
+        value = json.loads(text)
+    except ValueError:
+        value = None
+    return beat, value
 
 
 def _live_next_run() -> str | None:
@@ -710,12 +746,11 @@ def _live_next_run() -> str | None:
 
 
 def _record_next_run() -> None:
-    from app.database import session_scope
-    from app.shared_state import write_row
+    import json
 
-    with session_scope() as db:
-        write_row(db, SCHEDULER_HEARTBEAT_TIER, SCHEDULER_HEARTBEAT_KEY, {"nextRun": _live_next_run()}, at=utcnow())
-        db.commit()
+    from app.atomic_write import write_text_atomic
+
+    write_text_atomic(heartbeat_path(), json.dumps({"nextRun": _live_next_run()}))
 
 
 def _heartbeat() -> None:
@@ -734,9 +769,7 @@ def get_next_run_time() -> str | None:
     """
     if scheduler.running:
         return _live_next_run()
-    from app.shared_state import read_row
-
-    row = read_row(SCHEDULER_HEARTBEAT_TIER, SCHEDULER_HEARTBEAT_KEY)
+    row = read_heartbeat()
     if not isinstance(row, tuple) or row[0] < utcnow() - _HEARTBEAT_STALE:
         return None
     value = row[1]

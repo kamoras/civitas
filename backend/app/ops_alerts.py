@@ -349,11 +349,11 @@ def check_pipeline_service_alive() -> None:
     when it goes: a crash loop past Swarm's restart limit would stop every
     nightly run with no page and no alert. Once a day at most.
     """
-    from app.database import SCHEDULER_HEARTBEAT_KEY, SCHEDULER_HEARTBEAT_TIER
-    from app.shared_state import UNREADABLE, read_row
+    from app.scheduler import read_heartbeat
+    from app.shared_state import UNREADABLE
 
     global _heartbeat_unreadable_since
-    row = read_row(SCHEDULER_HEARTBEAT_TIER, SCHEDULER_HEARTBEAT_KEY)
+    row = read_heartbeat()
     if row is UNREADABLE:
         # One unreadable round is a moment's lock, not evidence of anything.
         # A database this process can't read for as long as the pipeline is
@@ -368,7 +368,7 @@ def check_pipeline_service_alive() -> None:
                 "Pipeline heartbeat unreadable",
                 f"The API process has not been able to read the pipeline service's heartbeat since "
                 f"{_heartbeat_unreadable_since:%Y-%m-%d %H:%M} UTC, so it can't tell whether that "
-                "service is running. Check the backend's logs for database errors.",
+                "service is running. Check the backend's logs and the data volume.",
                 dedupe_key=f"pipeline-heartbeat-unreadable-{now:%Y-%m-%d}",
             )
         return

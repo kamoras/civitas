@@ -258,8 +258,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         bootstrap_task = asyncio.create_task(_bootstrap_explore())
         _start_pipeline_side_startup_jobs()
 
+    from app.api.throttle import run_maintenance
     from app.api.visits import run_visit_consumer
     visit_consumer_task = asyncio.create_task(run_visit_consumer())
+    # Drops the rate-limit store's salts on time, traffic or not.
+    throttle_task = asyncio.create_task(run_maintenance())
     # Only a separate API process can notice the pipeline process is gone:
     # with both in one process, a dead scheduler means a dead site.
     liveness_task = asyncio.create_task(_watch_pipeline_service()) if role == "api" else None
@@ -267,6 +270,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
     visit_consumer_task.cancel()
+    throttle_task.cancel()
     if liveness_task is not None:
         liveness_task.cancel()
     if bootstrap_task is not None:

@@ -98,8 +98,10 @@ CREATE TABLE IF NOT EXISTS claims (
     claimed_at REAL NOT NULL, expires_at REAL NOT NULL,
     PRIMARY KEY (bucket, key)
 );
-CREATE TABLE IF NOT EXISTS salts (date TEXT PRIMARY KEY, salt BLOB NOT NULL);
-CREATE TABLE IF NOT EXISTS day_salts (date TEXT PRIMARY KEY, salt BLOB NOT NULL);
+CREATE TABLE IF NOT EXISTS salt_days (
+    kind TEXT NOT NULL, date TEXT NOT NULL, salt BLOB NOT NULL,
+    PRIMARY KEY (kind, date)
+);
 CREATE INDEX IF NOT EXISTS windows_expiry ON windows (expires_at);
 CREATE INDEX IF NOT EXISTS claims_expiry ON claims (expires_at);
 """
@@ -119,11 +121,11 @@ _last_purge = 0.0
 def use_path(path: str) -> None:
     """Point the store at `path` (tests; the path is otherwise fixed),
     closing every connection to the previous one."""
-    global _path, _generation, _salt_cache, _day_salt_cache
+    global _path, _generation
     with _conns_lock:
         _path = path
         _generation += 1
-        _salt_cache = _day_salt_cache = None
+        _salt_cache.clear()
         for conn in _conns:
             conn.close()
         _conns.clear()
@@ -252,45 +254,69 @@ def _purge_expired(conn: sqlite3.Connection, now: float) -> None:
     conn.execute("DELETE FROM claims WHERE expires_at < ?", (now,))
 
 
-# (date, that day's salt, the previous day's or None) as last read from the
-# store, per process. Only a new day costs a write transaction; every other
-# key is made without one.
-_salt_cache: tuple[str, bytes, bytes | None] | None = None
-# (date, salt) of derived_salt's own salt, per process.
-_day_salt_cache: tuple[str, bytes] | None = None
+# The store's salts, one table for both kinds, each kept for its own time:
+#   key  client_key's: kept through the day after its own, so a rule can
+#        count a client's previous-day key and nothing restarts at midnight.
+#   day  derived_salt's (the visit counter's fallback): deleted when its day
+#        ends, the promise AGENTS.md §8 makes for visit hashes.
+_KEY_SALT, _DAY_SALT = "key", "day"
+_SALT_KEPT_DAYS_AFTER = {_KEY_SALT: 1, _DAY_SALT: 0}
+
+# kind -> (date, that day's salt, the previous day's or None) as last read
+# from the store, per process. Only a new day costs a write transaction;
+# every other key is made without one.
+_salt_cache: dict[str, tuple[str, bytes, bytes | None]] = {}
 _salt_lock = threading.Lock()
 _last_forget = -_PURGE_INTERVAL_S  # the first call always checks
 
 
-def _yesterday(today: str) -> str:
-    return (date.fromisoformat(today) - timedelta(days=1)).isoformat()
+def _days_before(day: str, n: int) -> str:
+    return (date.fromisoformat(day) - timedelta(days=n)).isoformat()
 
 
-def _salts_for(today: str) -> tuple[bytes, bytes | None]:
-    """Today's salt (made if missing) and yesterday's, if the store has it.
-    Never makes yesterday's: a key under a salt nobody counted with would
-    only find nothing."""
-    global _salt_cache
+def _salts_for(kind: str, today: str) -> tuple[bytes | None, bytes | None]:
+    """`kind`'s salt for `today` (made if missing) and, for a kind kept past
+    its day, yesterday's if the store has it — never made: a key under a
+    salt nobody counted with would only find nothing.
+
+    (None, None) when another worker has already moved past `today`: this
+    one read the clock just before midnight. Making the day's salt again
+    then would bring back a salt that was deleted — so it doesn't, and the
+    caller treats it as the store being unavailable."""
     with _salt_lock:
-        if _salt_cache is not None and _salt_cache[0] == today:
-            return _salt_cache[1], _salt_cache[2]
-    yesterday = _yesterday(today)
+        cached = _salt_cache.get(kind)
+        if cached is not None and cached[0] == today:
+            return cached[1], cached[2]
+    keep = _SALT_KEPT_DAYS_AFTER[kind]
+    yesterday = _days_before(today, 1)
     with _Txn() as conn:
         conn.execute(
-            "INSERT OR IGNORE INTO salts (date, salt) VALUES (?, ?)", (today, secrets.token_bytes(32)),
+            "INSERT OR IGNORE INTO salt_days (kind, date, salt) SELECT ?, ?, ? "
+            "WHERE NOT EXISTS (SELECT 1 FROM salt_days WHERE kind = ? AND date > ?)",
+            (kind, today, secrets.token_bytes(32), kind, today),
         )
-        dropped = conn.execute("DELETE FROM salts WHERE date < ?", (yesterday,)).rowcount
-        salt = conn.execute("SELECT salt FROM salts WHERE date = ?", (today,)).fetchone()[0]
-        row = conn.execute("SELECT salt FROM salts WHERE date = ?", (yesterday,)).fetchone()
-        previous = row[0] if row else None
+        # Earlier days only, never "any other": a worker behind midnight
+        # must not delete the new day's salt another already made.
+        dropped = conn.execute(
+            "DELETE FROM salt_days WHERE kind = ? AND date < ?", (kind, _days_before(today, keep)),
+        ).rowcount
+        row = conn.execute("SELECT salt FROM salt_days WHERE kind = ? AND date = ?", (kind, today)).fetchone()
+        previous = None
+        if keep:
+            prior = conn.execute(
+                "SELECT salt FROM salt_days WHERE kind = ? AND date = ?", (kind, yesterday),
+            ).fetchone()
+            previous = prior[0] if prior else None
     if dropped:
         # Truncating can wait on another worker's read, so it never runs on
         # a request: the minute tick (forget_stale_salt) does it.
         global _truncate_pending
         _truncate_pending = True
+    if row is None:
+        return None, None
     with _salt_lock:
-        _salt_cache = (today, salt, previous)
-    return salt, previous
+        _salt_cache[kind] = (today, row[0], previous)
+    return row[0], previous
 
 
 _truncate_pending = False
@@ -313,20 +339,17 @@ def _truncate_wal() -> None:
 
 
 def forget_stale_salt() -> None:
-    """Drop the salts nothing needs any more (a key salt once the day after
-    its own has ended, derived_salt's once its day has) — from this
-    process's memory, and from the store — without waiting for a new day's
-    first key. Called about once a minute (visits.run_visit_consumer's idle
-    tick): with a salt gone, nothing made with it can be recomputed from an
-    address. Creates nothing where the store doesn't exist yet."""
-    global _salt_cache, _day_salt_cache, _last_forget
+    """Drop the salts nothing needs any more, each kind after its own time —
+    from this process's memory, and from the store — without waiting for a
+    new day's first key: with a salt gone, nothing made with it can be
+    recomputed from an address. At most once a minute (run_maintenance).
+    Creates nothing where the store doesn't exist yet."""
+    global _last_forget
     today = datetime.now(timezone.utc).date().isoformat()
     with _salt_lock:
         # A cache made yesterday also holds the day before's salt.
-        if _salt_cache is not None and _salt_cache[0] != today:
-            _salt_cache = None
-        if _day_salt_cache is not None and _day_salt_cache[0] != today:
-            _day_salt_cache = None
+        for kind in [k for k, cached in _salt_cache.items() if cached[0] != today]:
+            del _salt_cache[kind]
         now = time.monotonic()
         if now - _last_forget < _PURGE_INTERVAL_S:
             return
@@ -335,44 +358,44 @@ def forget_stale_salt() -> None:
         return
     try:
         with _Txn() as conn:
-            dropped = conn.execute("DELETE FROM salts WHERE date < ?", (_yesterday(today),)).rowcount
-            dropped += conn.execute("DELETE FROM day_salts WHERE date < ?", (today,)).rowcount
+            dropped = sum(
+                conn.execute(
+                    "DELETE FROM salt_days WHERE kind = ? AND date < ?", (kind, _days_before(today, keep)),
+                ).rowcount
+                for kind, keep in _SALT_KEPT_DAYS_AFTER.items()
+            )
         if dropped or _truncate_pending:
             _truncate_wal()
     except sqlite3.Error:
         logger.warning("Could not drop a stale throttle salt", exc_info=True)
 
 
-def _day_salt_for(today: str) -> bytes:
-    """derived_salt's own salt for `today`, which — unlike the key salts —
-    is deleted as soon as its day ends."""
-    global _day_salt_cache
-    with _salt_lock:
-        if _day_salt_cache is not None and _day_salt_cache[0] == today:
-            return _day_salt_cache[1]
-    with _Txn() as conn:
-        conn.execute(
-            "INSERT OR IGNORE INTO day_salts (date, salt) VALUES (?, ?)", (today, secrets.token_bytes(32)),
-        )
-        dropped = conn.execute("DELETE FROM day_salts WHERE date < ?", (today,)).rowcount
-        salt = conn.execute("SELECT salt FROM day_salts WHERE date = ?", (today,)).fetchone()[0]
-    if dropped:
-        global _truncate_pending
-        _truncate_pending = True
-    with _salt_lock:
-        _day_salt_cache = (today, salt)
-    return salt
+async def run_maintenance() -> None:
+    """Drop stale salts about once a minute, for the process's lifetime
+    (main.lifespan starts it in every role). Without it, a store with no
+    traffic after midnight would keep a salt past its time: the deletions
+    in _salts_for run only when a new day's first key is made."""
+    import asyncio
+
+    while True:
+        try:
+            await asyncio.to_thread(forget_stale_salt)
+        except Exception:
+            logger.warning("Throttle maintenance failed", exc_info=True)
+        await asyncio.sleep(_PURGE_INTERVAL_S)
 
 
 def derived_salt(purpose: str) -> bytes | None:
     """A salt for today, the same in every process of this container, in RAM
     and deleted when this UTC day ends: for a caller whose shared salt is
     unavailable (visits' fallback). Not derived from the key salts, which
-    outlive their day. None if the store can't be read either."""
+    outlive their day. None if the store can't give one either."""
     today = datetime.now(timezone.utc).date().isoformat()
     try:
-        salt = _day_salt_for(today)
+        salt, _previous = _salts_for(_DAY_SALT, today)
     except sqlite3.Error:
+        return None
+    if salt is None:
         return None
     return hmac.new(salt, f"derived\x00{purpose}".encode(), hashlib.sha256).digest()
 
@@ -403,9 +426,11 @@ def client_key(ip: str, purpose: str, scope: str = "") -> ClientKey | None:
     which would count every affected client as one."""
     today = datetime.now(timezone.utc).date().isoformat()
     try:
-        salt, previous = _salts_for(today)
+        salt, previous = _salts_for(_KEY_SALT, today)
     except sqlite3.Error:
         logger.warning("Throttle salt unavailable — not limiting this request", exc_info=True)
+        return None
+    if salt is None:
         return None
     message = f"{purpose}\x00{ip}\x00{scope}".encode()
     key = ClientKey(_hmac_key(salt, message))

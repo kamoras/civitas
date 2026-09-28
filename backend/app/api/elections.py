@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import and_, not_
 from sqlalchemy.orm import Session, selectinload
 
-from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cached_json, uncached_json
+from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cached_json, retry_soon_json
 from app.database import get_db
 from app.office_terms import term_years
 from app.election_calendar import (
@@ -1326,7 +1326,7 @@ async def town_ballot(state: str, town: str, db: Session = Depends(get_db)):
             # ingest failure, not a reason to silently fall through to
             # the approximation below — that would quietly downgrade a
             # known-real source to a guess without saying so.
-            return uncached_json(_uncovered_town_ballot("ingest_failed"))
+            return retry_soon_json(_uncovered_town_ballot("ingest_failed"))
 
         if not civic_is_configured() or address_for_town(state, town) is None:
             return cached_json(_uncovered_town_ballot("not_yet_covered"), max_age=CACHE_TTL_DETAIL_S)
@@ -1334,7 +1334,7 @@ async def town_ballot(state: str, town: str, db: Session = Depends(get_db)):
         result = await fetch_town_ballot(client, db, state, town)
 
     if result is None:
-        return uncached_json(_uncovered_town_ballot("ingest_failed"))
+        return retry_soon_json(_uncovered_town_ballot("ingest_failed"))
     return cached_json({
         "status": "covered",
         "address": result["address"],

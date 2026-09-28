@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.api.auth import check_pipeline_token
 from app.api.public import RateLimit
 from app.api.rate_limit import UpstreamRouteLimit, WriteRateLimit, spend_upstream
-from app.api.response_helpers import uncached_json
+from app.api.response_helpers import retry_soon_json
 from app.database import get_db
 from app.models import ExploreDocument
 from app.services.explore_search import hybrid_search
@@ -235,7 +235,7 @@ async def get_document_comments(
     # cached like a good one so a repeat spends nothing. Answered 200 either way — the page
     # shows the message in place of the list.
     if result.get("retryable"):
-        return uncached_json(result)
+        return retry_soon_json(result)
     # Cached for the middleware's default lifetime (api/cache_headers.py).
     return JSONResponse(content=result)
 
@@ -341,23 +341,6 @@ async def get_explore_document_summary(
     immediately, as a single event, with no intermediate deltas).
     """
     from app.api import throttle
-
-    # Fail closed: this cooldown is what stands between a repeated POST and
-    # a fresh generation on the device's one LLM, so a store that can't
-    # answer refuses the request rather than letting every one through.
-    try:
-        claimed = await asyncio.to_thread(
-            throttle.claim, _SUMMARY_BUCKET, str(doc_id), period=_SUMMARY_COOLDOWN, fail_open=False,
-        )
-    except throttle.Unavailable:
-        raise HTTPException(
-            status_code=503,
-            detail="Summaries are unavailable right now; please try again shortly.",
-            headers={"Retry-After": "60"},
-        ) from None
-    if not claimed:
-        raise HTTPException(status_code=429, detail="Please wait before requesting another summary")
-
     from app.pipeline.analyze.ollama_client import get_cached_llm_result, set_cached_llm_result, stream_llm
     from app.pipeline.analyze.prompts import explore_document_summary_prompt, parse_explore_document_summary
 
@@ -376,12 +359,32 @@ async def get_explore_document_summary(
     prompt = explore_document_summary_prompt(doc_dict)
     cache_key = {"doc_id": doc_id, "v": _SUMMARY_CACHE_KEY_VERSION}
 
-    async def event_stream():
-        cached = await asyncio.to_thread(get_cached_llm_result, prompt["promptVersion"], cache_key)
-        if cached is not None:
+    # A summary already made costs nothing to hand out: no cooldown.
+    cached = await asyncio.to_thread(get_cached_llm_result, prompt["promptVersion"], cache_key)
+    if cached is not None:
+        async def cached_stream():
             yield _sse({"done": True, **cached})
-            return
 
+        return StreamingResponse(cached_stream(), media_type="text/event-stream")
+
+    # The cooldown guards a fresh generation only, and fails closed: it is
+    # what stands between a repeated POST and a new generation on the
+    # device's one LLM, so a store that can't answer refuses the request
+    # rather than letting every one through.
+    try:
+        claimed = await asyncio.to_thread(
+            throttle.claim, _SUMMARY_BUCKET, str(doc_id), period=_SUMMARY_COOLDOWN, fail_open=False,
+        )
+    except throttle.Unavailable:
+        raise HTTPException(
+            status_code=503,
+            detail="Summaries are unavailable right now; please try again shortly.",
+            headers={"Retry-After": "60"},
+        ) from None
+    if not claimed:
+        raise HTTPException(status_code=429, detail="Please wait before requesting another summary")
+
+    async def event_stream():
         full_text = ""
         try:
             async for delta in stream_llm(
@@ -394,6 +397,8 @@ async def get_explore_document_summary(
         except Exception:
             logger.exception("Explore doc summary streaming failed for doc_id=%s", doc_id)
             if not full_text:
+                # Nothing was generated: the next reader may try at once.
+                await asyncio.to_thread(throttle.release, _SUMMARY_BUCKET, str(doc_id))
                 yield _sse({"done": True, "summary": "", "keyPoints": [], "impact": ""})
                 return
 

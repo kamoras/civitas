@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.rate_limit import UpstreamRouteLimit, spend_upstream
-from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, cached_json, uncached_json
+from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, cached_json, retry_soon_json
 from app.database import get_db
 from app.http_client import make_async_client
 from app.pipeline.fetch.congress import expected_current_congress
@@ -81,5 +81,5 @@ async def get_bill_record(
     if raw["unavailable"]:
         # Some part timed out or failed upstream just now; cached, every
         # reader would get the gap until it expired.
-        return uncached_json(record)
+        return retry_soon_json(record)
     return _cached_json(record, max_age=CACHE_TTL_DETAIL_S)

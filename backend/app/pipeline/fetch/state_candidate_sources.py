@@ -98,11 +98,14 @@ def _update_discovered(change) -> None:
     """Apply `change` to the discovered file as it is on disk now, under its
     lock, so neither the crawl nor a sync in another process loses the
     other's write. Raises NotSaved."""
-    global _discovered_cache, _discovered_stamp
+    global _discovered_cache
     path = _discovered_path()
     try:
-        _discovered_cache = update_json_file(path, change, indent=2, sort_keys=True)
-        _discovered_stamp = files_stamp([path])
+        update_json_file(path, change, indent=2, sort_keys=True)
+        # Re-read on next use rather than stamp what was written: a stat
+        # taken after the write could already describe a later writer's
+        # file, and would pin this older copy until the next change.
+        _discovered_cache = None
     except (OSError, LockTimeout) as error:
         raise NotSaved(f"discovered sources not saved to {path}: {error}") from error
 

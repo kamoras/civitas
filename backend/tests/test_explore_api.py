@@ -119,15 +119,51 @@ class TestSummaryEndpointGuards:
             await get_explore_document_summary(999999, None, db=db_session)
         assert exc_info.value.status_code == 404
 
-    async def test_cooldown_blocks_repeat_request_for_same_doc(self, db_session):
+    async def test_cooldown_blocks_repeat_generation_for_same_doc(self, db_session):
         from fastapi import HTTPException
 
         doc = _make_doc(db_session)
-        with patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value={"summary": "s", "keyPoints": [], "impact": ""}):
-            await get_explore_document_summary(doc.id, None, db=db_session)
+        with (
+            patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
+            patch("app.pipeline.analyze.ollama_client.stream_llm", _fake_stream),
+            patch("app.pipeline.analyze.ollama_client.set_cached_llm_result"),
+        ):
+            await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
             with pytest.raises(HTTPException) as exc_info:
                 await get_explore_document_summary(doc.id, None, db=db_session)
         assert exc_info.value.status_code == 429
+
+    async def test_a_summary_already_made_is_never_held_off(self, db_session):
+        doc = _make_doc(db_session)
+        cached = {"summary": "s", "keyPoints": [], "impact": ""}
+        with patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=cached):
+            for _ in range(3):
+                events = await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+                assert events == [{"done": True, **cached}]
+
+    async def test_a_missing_document_takes_no_cooldown(self, db_session):
+        from fastapi import HTTPException
+
+        from app.api import throttle
+
+        with pytest.raises(HTTPException):
+            await get_explore_document_summary(999999, None, db=db_session)
+        assert throttle.claim("explore-summary", "999999", period=30)
+
+    async def test_a_failed_generation_gives_the_cooldown_back(self, db_session):
+        doc = _make_doc(db_session)
+
+        async def _raising_stream(*_args, **_kwargs):
+            raise ConnectionError("backend unreachable")
+            yield  # pragma: no cover
+
+        with (
+            patch("app.pipeline.analyze.ollama_client.get_cached_llm_result", return_value=None),
+            patch("app.pipeline.analyze.ollama_client.stream_llm", _raising_stream),
+        ):
+            await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
+            # The next reader may try at once rather than meet a 429.
+            await _collect_sse_events(await get_explore_document_summary(doc.id, None, db=db_session))
 
     async def test_an_unavailable_cooldown_refuses_rather_than_generates(self, db_session, tmp_path):
         """The cooldown fails closed: without it every POST is a fresh
@@ -161,7 +197,7 @@ class TestCommentsCaching:
     async def test_a_failed_fetch_is_never_stored(self, db_session):
         resp = await self._get(db_session, {"comments": [], "totalElements": 0, "error": "Rate limit reached",
                                             "retryable": True})
-        assert resp.headers["Cache-Control"] == "no-store"
+        assert resp.headers["Cache-Control"] == "public, max-age=30"
 
     async def test_an_unknown_document_is_cached_like_an_answer(self, db_session):
         # Not this moment's failure: asking again can't succeed, and

@@ -159,29 +159,18 @@ class TestWriters:
         assert "pipeline service" in resp.json()["detail"]
 
 
+@pytest.fixture(autouse=True)
+def _heartbeat_file(tmp_path, monkeypatch):
+    """The scheduler heartbeat in a file of the test's own."""
+    monkeypatch.setattr("app.scheduler.heartbeat_path", lambda: str(tmp_path / "scheduler_heartbeat.json"))
+
+
 class TestNextRunTime:
     """The API process runs no scheduler: it reports the next run from the
     heartbeat the pipeline process's scheduler keeps, and nothing once that
     goes stale — a pipeline service that is down has no next run."""
 
-    @pytest.fixture()
-    def shared_db(self, db_session, monkeypatch):
-        from contextlib import contextmanager
-
-        from sqlalchemy.orm import Session
-
-        @contextmanager
-        def _scope():
-            session = Session(bind=db_session.get_bind())
-            try:
-                yield session
-            finally:
-                session.close()
-
-        monkeypatch.setattr("app.database.session_scope", _scope)
-        return db_session
-
-    def test_reported_while_the_heartbeat_is_fresh(self, shared_db, monkeypatch):
+    def test_reported_while_the_heartbeat_is_fresh(self, monkeypatch):
         from app import scheduler
 
         monkeypatch.setattr(scheduler, "_live_next_run", lambda: "2026-09-29T03:00:00+00:00")
@@ -189,7 +178,7 @@ class TestNextRunTime:
         assert not scheduler.scheduler.running
         assert scheduler.get_next_run_time() == "2026-09-29T03:00:00+00:00"
 
-    def test_none_once_the_heartbeat_is_stale(self, shared_db, monkeypatch):
+    def test_none_once_the_heartbeat_is_stale(self, monkeypatch):
         from app import scheduler
 
         monkeypatch.setattr(scheduler, "_live_next_run", lambda: "2026-09-29T03:00:00+00:00")
@@ -198,7 +187,7 @@ class TestNextRunTime:
         monkeypatch.setattr(scheduler, "utcnow", lambda: later)
         assert scheduler.get_next_run_time() is None
 
-    def test_none_without_any_heartbeat(self, shared_db):
+    def test_none_without_any_heartbeat(self):
         from app import scheduler
 
         assert scheduler.get_next_run_time() is None
@@ -321,6 +310,29 @@ def test_the_heartbeat_is_not_a_registered_writer(monkeypatch):
     assert seen == [[]]
 
 
+def test_the_heartbeat_never_touches_the_database(monkeypatch):
+    # A long pipeline transaction holding the write lock must not stop the
+    # beat: a missed beat reads as a pipeline service that is gone.
+    from app import scheduler
+
+    def no_database():
+        raise AssertionError("the heartbeat opened a database session")
+
+    monkeypatch.setattr("app.database.SessionLocal", no_database)
+    monkeypatch.setattr(scheduler, "_live_next_run", lambda: None)
+    scheduler._record_next_run()
+    beat, value = scheduler.read_heartbeat()
+    assert value == {"nextRun": None}
+
+
+def test_an_unreadable_heartbeat_file_is_unreadable_not_missing(tmp_path, monkeypatch):
+    from app import scheduler
+    from app.shared_state import UNREADABLE
+
+    monkeypatch.setattr(scheduler, "heartbeat_path", lambda: str(tmp_path))  # a directory
+    assert scheduler.read_heartbeat() is UNREADABLE
+
+
 def test_a_failed_heartbeat_is_only_logged(monkeypatch):
     from app import scheduler
 
@@ -352,43 +364,34 @@ class TestPipelineServiceLiveness:
     stays up without it, and every other watchdog runs inside it."""
 
     @pytest.fixture()
-    def sent(self, db_session, monkeypatch):
-        from contextlib import contextmanager
-
-        from sqlalchemy.orm import Session
-
-        @contextmanager
-        def _scope():
-            session = Session(bind=db_session.get_bind())
-            try:
-                yield session
-            finally:
-                session.close()
-
-        monkeypatch.setattr("app.database.session_scope", _scope)
+    def sent(self, monkeypatch):
         alerts = []
         monkeypatch.setattr("app.ops_alerts.send_ops_alert", lambda subject, body, **kw: alerts.append(subject))
         return alerts
 
-    def _beat(self, db_session, age):
-        from app.database import SCHEDULER_HEARTBEAT_KEY, SCHEDULER_HEARTBEAT_TIER
-        from app.shared_state import write_row
-        from app.time_utils import utcnow
+    def _beat(self, age):
+        import os
+        import time
 
-        write_row(db_session, SCHEDULER_HEARTBEAT_TIER, SCHEDULER_HEARTBEAT_KEY, {}, at=utcnow() - age)
-        db_session.commit()
+        from app import scheduler
 
-    def test_a_fresh_heartbeat_is_quiet(self, db_session, sent):
+        path = scheduler.heartbeat_path()
+        with open(path, "w") as fh:
+            fh.write("{}")
+        beat = time.time() - age.total_seconds()
+        os.utime(path, (beat, beat))
+
+    def test_a_fresh_heartbeat_is_quiet(self, sent):
         from app.ops_alerts import check_pipeline_service_alive
 
-        self._beat(db_session, timedelta(minutes=4))
+        self._beat(timedelta(minutes=4))
         check_pipeline_service_alive()
         assert sent == []
 
-    def test_a_stale_heartbeat_alerts(self, db_session, sent):
+    def test_a_stale_heartbeat_alerts(self, sent):
         from app.ops_alerts import PIPELINE_SERVICE_SILENT_AFTER, check_pipeline_service_alive
 
-        self._beat(db_session, PIPELINE_SERVICE_SILENT_AFTER + timedelta(minutes=1))
+        self._beat(PIPELINE_SERVICE_SILENT_AFTER + timedelta(minutes=1))
         check_pipeline_service_alive()
         assert sent == ["Pipeline service is not running"]
 
@@ -402,7 +405,7 @@ class TestPipelineServiceLiveness:
         from app.ops_alerts import check_pipeline_service_alive
         from app.shared_state import UNREADABLE
 
-        monkeypatch.setattr("app.shared_state.read_row", lambda *a, **k: UNREADABLE)
+        monkeypatch.setattr("app.scheduler.read_heartbeat", lambda: UNREADABLE)
         monkeypatch.setattr("app.ops_alerts._heartbeat_unreadable_since", None)
         check_pipeline_service_alive()
         assert sent == []
@@ -412,7 +415,7 @@ class TestPipelineServiceLiveness:
         from app.shared_state import UNREADABLE
         from app.time_utils import utcnow
 
-        monkeypatch.setattr("app.shared_state.read_row", lambda *a, **k: UNREADABLE)
+        monkeypatch.setattr("app.scheduler.read_heartbeat", lambda: UNREADABLE)
         monkeypatch.setattr(
             ops_alerts, "_heartbeat_unreadable_since",
             utcnow() - ops_alerts.PIPELINE_SERVICE_SILENT_AFTER - timedelta(minutes=1),
@@ -420,12 +423,12 @@ class TestPipelineServiceLiveness:
         ops_alerts.check_pipeline_service_alive()
         assert sent == ["Pipeline heartbeat unreadable"]
 
-    def test_a_readable_heartbeat_ends_the_unreadable_run(self, db_session, sent, monkeypatch):
+    def test_a_readable_heartbeat_ends_the_unreadable_run(self, sent, monkeypatch):
         from app import ops_alerts
         from app.time_utils import utcnow
 
         monkeypatch.setattr(ops_alerts, "_heartbeat_unreadable_since", utcnow() - timedelta(days=1))
-        self._beat(db_session, timedelta(minutes=1))
+        self._beat(timedelta(minutes=1))
         ops_alerts.check_pipeline_service_alive()
         assert sent == [] and ops_alerts._heartbeat_unreadable_since is None
 

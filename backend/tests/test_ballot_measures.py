@@ -538,5 +538,5 @@ async def test_a_town_ballot_that_failed_to_load_is_never_stored(monkeypatch, db
 
     monkeypatch.setattr(elections, "fetch_town_ballot", failed)
     resp = await elections.town_ballot("MA", "Somerville", db=db_session)
-    assert resp.headers["Cache-Control"] == "no-store"
+    assert resp.headers["Cache-Control"] == "public, max-age=30"
     assert b"ingest_failed" in resp.body

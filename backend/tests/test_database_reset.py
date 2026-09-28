@@ -887,21 +887,6 @@ def test_a_run_whose_lease_was_lost_before_its_row_does_not_start(db_session):
     assert db_session.query(models.PipelineRun).count() == 0
 
 
-def test_a_reset_keeps_the_scheduler_heartbeat(db_session, monkeypatch):
-    # Process coordination, not data a pipeline derives: wiped, the API
-    # process would report no next run until the next beat.
-    from app.database import SCHEDULER_HEARTBEAT_TIER
-
-    db_session.add(models.ApiCache(tier=SCHEDULER_HEARTBEAT_TIER, cache_key="next-run", data_json="{}"))
-    db_session.add(models.ApiCache(tier="congress", cache_key="x", data_json="{}"))
-    db_session.commit()
-    monkeypatch.setattr("app.database.SessionLocal", lambda: db_session)
-    with patch("app.pipeline.vector_store.reset_vector_db"):
-        reset_all_data()
-    tiers = {row.tier for row in db_session.query(models.ApiCache).all()}
-    assert tiers == {SCHEDULER_HEARTBEAT_TIER}
-
-
 async def test_a_reset_tells_the_api_processes_their_bills_are_stale(db_session, monkeypatch):
     # They hold a collection built from what was just wiped.
     from app.api.admin import admin_reset_data

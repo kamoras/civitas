@@ -196,7 +196,7 @@ class TestRoutes:
         finally:
             app.dependency_overrides.clear()
         assert r.status_code == 200 and r.json()["unavailable"] == ["actions"]
-        assert r.headers["Cache-Control"] == "no-store"
+        assert r.headers["Cache-Control"] == "public, max-age=30"
 
     def test_a_congress_that_has_not_convened_is_refused(self, client):
         assert client.get("/api/bills/S.1/record?congress=200").status_code == 404

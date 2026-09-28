@@ -33,12 +33,20 @@ def cached_json(data, max_age: int = CACHE_TTL_LIST_S) -> JSONResponse:
     )
 
 
-def uncached_json(data) -> JSONResponse:
+# How long a failed live fetch may be reused. Short, because the failure is
+# this moment's, not the resource's; shared rather than no-store, because
+# during an outage every reader's refresh would otherwise reach the upstream
+# again — this bounds that to one request per URL per period, across all
+# visitors (nginx caches it; no stale-while-revalidate, so it is never
+# served past this).
+FAILURE_RETRY_S = 30
+
+
+def retry_soon_json(data) -> JSONResponse:
     """A response that reports a failed live fetch — part of an upstream
-    record missing, a ballot that couldn't be read. It is this request's
-    failure, not the resource's state, so no cache (nginx's, a CDN's, the
-    browser's) may keep it and hand it to the next reader."""
-    return JSONResponse(content=data, headers={"Cache-Control": "no-store"})
+    record missing, a ballot that couldn't be read, news feeds down: cached
+    for FAILURE_RETRY_S only, never for a success's lifetime."""
+    return JSONResponse(content=data, headers={"Cache-Control": f"public, max-age={FAILURE_RETRY_S}"})
 
 
 # Default score_1..score_5 -> dimension-name mapping (senators/reps share

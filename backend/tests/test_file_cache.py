@@ -58,18 +58,30 @@ def test_election_dates_see_a_rewrite_by_another_process(tmp_path, monkeypatch):
     assert dates.primary_date("TX", 2026) == "2026-03-03"
 
 
-def test_a_writers_own_save_needs_no_reload(tmp_path, monkeypatch):
+def test_a_write_landing_between_a_save_and_its_stat_is_not_masked(tmp_path, monkeypatch):
+    # Another writer's change lands after this process's save and before it
+    # could stat the file: stamping then would pin this process's older copy
+    # under the newer file's stamp until the next change.
+    import json
+
     from app.pipeline.fetch import state_election_dates as dates
 
     path = tmp_path / "dates.json"
     monkeypatch.setattr(dates, "_PATH", str(path))
     monkeypatch.setattr(dates, "_cache", None)
+    real_update = dates.update_json_file
+
+    def update_then_another_writer(*args, **kwargs):
+        mine = real_update(*args, **kwargs)
+        theirs = json.loads(path.read_text())
+        theirs["2026-OH"] = {"primary": "2026-05-05"}
+        path.write_text(json.dumps(theirs))
+        return mine
+
+    monkeypatch.setattr(dates, "update_json_file", update_then_another_writer)
     dates.save("TX", 2026, {"primary": "2026-03-03"})
-    reads = []
-    real_open = open
-    monkeypatch.setattr("builtins.open", lambda *a, **k: (reads.append(a), real_open(*a, **k))[1])
+    assert dates.primary_date("OH", 2026) == "2026-05-05"
     assert dates.primary_date("TX", 2026) == "2026-03-03"
-    assert reads == []
 
 
 def test_district_pvi_sees_a_rewrite_by_another_process(tmp_path, monkeypatch):
