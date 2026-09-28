@@ -39,14 +39,25 @@ def retraction_for_issue(issue_id: str) -> dict | None:
     return None
 
 
-def _delete_post(uri: str) -> bool:
-    """Delete one of the account's posts. True when it is gone, including
-    already gone; False when the deletion failed and should be retried."""
+def _client():
+    """A logged-in Bluesky client, or None when login fails (retried next run).
+    One login per run: Bluesky allows about 30 sessions per five minutes, and
+    an entry can list hundreds of posts."""
     from atproto import Client  # imported here like publish_post: a missing package only fails this job
 
     try:
         client = Client()
         client.login(settings.BSKY_HANDLE, settings.BSKY_APP_PASSWORD)
+        return client
+    except Exception as exc:
+        logger.warning("Could not log in to delete retracted posts: %s", exc)
+        return None
+
+
+def _delete_post(client, uri: str) -> bool:
+    """Delete one of the account's posts. True when it is gone, including
+    already gone; False when the deletion failed and should be retried."""
+    try:
         client.delete_post(uri)
         return True
     except Exception as exc:
@@ -62,13 +73,19 @@ def delete_retracted_posts(db: Session) -> int:
     many were deleted this run. No credentials, nothing to do."""
     if not settings.BSKY_HANDLE or not settings.BSKY_APP_PASSWORD:
         return 0
+    pending = [
+        uri for entry in entries() for uri in entry["bskyPosts"]
+        if not api_cache_get(db, _CACHE_TIER, uri, max_age_hours=_KEEP_HOURS)
+    ]
+    if not pending:
+        return 0
+    client = _client()
+    if client is None:
+        return 0
     deleted = 0
-    for entry in entries():
-        for uri in entry["bskyPosts"]:
-            if api_cache_get(db, _CACHE_TIER, uri, max_age_hours=_KEEP_HOURS):
-                continue
-            if _delete_post(uri):
-                api_cache_set(db, _CACHE_TIER, uri, {"deleted": True}, normal_ttl_hours=_KEEP_HOURS)
-                deleted += 1
-                logger.info("Deleted retracted Bluesky post %s", uri)
+    for uri in pending:
+        if _delete_post(client, uri):
+            api_cache_set(db, _CACHE_TIER, uri, {"deleted": True}, normal_ttl_hours=_KEEP_HOURS)
+            deleted += 1
+            logger.info("Deleted retracted Bluesky post %s", uri)
     return deleted
