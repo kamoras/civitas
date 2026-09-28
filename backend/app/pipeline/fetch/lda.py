@@ -353,11 +353,13 @@ def _client_name(filing: dict) -> str:
     return (filing.get("client") or {}).get("name", "")
 
 
-def _cache_key(org_key: str, year: int) -> str:
+def _cache_key(org_key: str, year: int, queries: list[str] | None = None) -> str:
     # Include a stable hash of the full org key so two different orgs that
     # share an 80-char prefix (e.g. federal vs. state PAC variants of one
-    # sponsor) can't collide onto one cached figure.
-    key_hash = hashlib.sha256(org_key.encode()).hexdigest()[:12]
+    # sponsor) can't collide onto one cached figure. The searches run are in
+    # it too: "LOWE'S" is searched two ways and "LOWES" one, and the results
+    # differ.
+    key_hash = hashlib.sha256("|".join(queries or [org_key]).encode()).hexdigest()[:12]
     return f"lda-activity-v8-{year}-{org_key[:60]}-{key_hash}"
 
 
@@ -422,7 +424,15 @@ async def fetch_lobbying_activity(
         return None
 
     ttl = _FINISHED_YEAR_CACHE_HOURS if _year_is_closed(year) else _CURRENT_YEAR_CACHE_HOURS
-    cache_key = _cache_key(org_key, year)
+    # The registry's search reads "AMERICA'S" and "AMERICAS" as different
+    # words, and filers use both, so a name with an apostrophe is searched
+    # both ways and the results pooled.
+    queries = [org_key]
+    if _APOSTROPHE_RE.search(org_name or ""):
+        spaced = search_name(_APOSTROPHE_RE.sub(" ", org_name))
+        if spaced != org_key:
+            queries.append(spaced)
+    cache_key = _cache_key(org_key, year, queries)
     stamp = api_cache_stamp(db, "lda", cache_key, max_age_hours=ttl)
     if stamp is not None:
         held = _activities.get(cache_key)
@@ -434,14 +444,6 @@ async def fetch_lobbying_activity(
                 org_key, cached.get("filings") or [], bool(cached.get("complete", True)),
             ))
 
-    # The registry's search reads "AMERICA'S" and "AMERICAS" as different
-    # words, and filers use both, so a name with an apostrophe is searched
-    # both ways and the results pooled.
-    queries = [org_key]
-    if _APOSTROPHE_RE.search(org_name or ""):
-        spaced = search_name(_APOSTROPHE_RE.sub(" ", org_name))
-        if spaced != org_key:
-            queries.append(spaced)
     compact: list[dict] = []
     complete = True
     for query in queries:

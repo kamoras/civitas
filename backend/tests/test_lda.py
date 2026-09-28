@@ -383,6 +383,17 @@ class TestFetch:
         assert act.total == 100_000.0  # each filing once
 
     @pytest.mark.asyncio
+    async def test_one_spellings_search_is_not_served_for_the_other(self, db_session):
+        # "AMERICAS" and "AMERICA'S" share a search name, but only the second
+        # is searched both ways; the first's cached result must not stand in.
+        client = MagicMock()
+        client.get = AsyncMock(return_value=self._response(200, {"next": None, "results": []}))
+        with patch.object(lda._rate_limiter, "acquire", new=AsyncMock()):
+            await fetch_lobbying_activity(client, db_session, "Americas Credit Unions", 2025)
+            await fetch_lobbying_activity(client, db_session, "America's Credit Unions", 2025)
+        assert client.get.await_count == 3
+
+    @pytest.mark.asyncio
     async def test_either_spellings_search_failing_is_a_failure(self, db_session):
         client = MagicMock()
         client.get = AsyncMock(side_effect=[self._response(200, {"next": None, "results": []}), self._response(500)])

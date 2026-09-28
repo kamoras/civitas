@@ -94,6 +94,22 @@ async def test_a_sponsor_citing_a_pacs_earlier_name_resolves_across_cycles(db_se
     assert client.get.await_count == 2
 
 
+def test_a_committee_gone_before_the_citing_registration_is_not_followed():
+    # cm20 had a type-O super PAC named like the Coalition for a Prosperous
+    # America; a 2026 PAC naming the coalition means the organization.
+    from app.pipeline.fetch.fec import parse_committee_rows, resolve_connected_orgs
+
+    rows = parse_committee_rows("\n".join([
+        "C00678433|COALITION FOR A PROSPEROUS AMERICA|X|A||C|DC|1|U|O|||||",
+        "C00929547|MAKE IT HERE PAC (COALITION FOR A PROSPEROUS AMERICA PAC)|X|A||C|DC|1|U|Q||M|T|COALITION FOR A PROSPEROUS AMERICA|",
+    ]))
+    resolved = resolve_connected_orgs(rows, last_cycle={"C00678433": 2020, "C00929547": 2026})
+    assert resolved["C00929547"]["connectedOrg"] == "COALITION FOR A PROSPEROUS AMERICA"
+    # Registered in the same cycle, the super PAC would be the one meant.
+    same = resolve_connected_orgs(rows, last_cycle={"C00678433": 2026, "C00929547": 2026})
+    assert same["C00929547"]["connectedOrg"] is None
+
+
 def test_a_sponsor_loop_names_no_sponsor():
     master = parse_committee_master(CHAIN_ROWS)
     assert master["C00000001"]["connectedOrg"] is None

@@ -750,11 +750,17 @@ def parse_committee_rows(text: str) -> dict[str, dict]:
 
 
 def resolve_connected_orgs(
-    rows: dict[str, dict], names: dict[str, set[str]] | None = None,
+    rows: dict[str, dict],
+    names: dict[str, set[str]] | None = None,
+    last_cycle: dict[str, int] | None = None,
 ) -> dict[str, dict]:
     """{committee_id: {"type", "designation", "connectedOrg"}} from
     parse_committee_rows output. `names` adds every earlier name a committee
     has registered under, since a sponsor can cite a PAC by an old one.
+    `last_cycle` is the latest cycle each committee is registered in: a
+    committee last seen before the registration citing it can't be the one
+    it means (a 2020-only super PAC sharing the Coalition for a Prosperous
+    America's name, cited in 2026).
 
     The connected organization is a PAC's sponsor only for a separate
     segregated fund, which is exactly the committee the FEC gives an
@@ -773,7 +779,7 @@ def resolve_connected_orgs(
     American Bankers Association's), that PAC's sponsor is followed. Chains
     can loop (MINEPAC <-> COALPAC) or end at a committee with no sponsor,
     which leaves none. Measured over the 2020-2026 files, 41 of cm26's
-    sponsors resolve to an organization this way and 18 to none (a PAC
+    sponsors resolve to an organization this way and 17 to none (a PAC
     naming itself under another alias among them).
     """
     all_names = {cid: {row["name"]} | (names or {}).get(cid, set()) for cid, row in rows.items()}
@@ -782,15 +788,18 @@ def resolve_connected_orgs(
         for key in {_committee_name_key(n) for n in own}:
             by_name.setdefault(key, []).append(cid)
 
+    cycle_of = last_cycle or {}
+
     def resolve(cid: str) -> str | None:
         org = rows[cid]["sponsor"]
+        cited_in = cycle_of.get(cid, 0)
         # Its current name only: a PAC once registered under its sponsor's
         # name ("PRINTING UNITED ALLIANCE") still names that sponsor.
         if org is None or _exact_name_key(org) == _exact_name_key(rows[cid]["name"]):
             return None  # names itself
         seen = {cid}
         while True:
-            matches = by_name.get(_committee_name_key(org), [])
+            matches = [m for m in by_name.get(_committee_name_key(org), []) if cycle_of.get(m, 0) >= cited_in]
             named = [m for m in matches if m not in seen]
             if len(seen) > 1 and len(named) < len(matches):
                 return None  # back to a committee already followed: a loop
@@ -836,6 +845,7 @@ async def fetch_committee_master(
 
     merged: dict[str, dict] = {}
     names: dict[str, set[str]] = {}
+    last_cycle: dict[str, int] = {}
     for cycle in sorted(set(cycles)):
         # The file as registered is cached, not the resolution: bump the
         # version whenever parse_committee_rows' output changes.
@@ -862,8 +872,9 @@ async def fetch_committee_master(
             )
         for cid, row in cached.items():
             names.setdefault(cid, set()).add(row["name"])
+            last_cycle[cid] = cycle
         merged.update(cached)
-    return resolve_connected_orgs(merged, names)
+    return resolve_connected_orgs(merged, names, last_cycle)
 
 
 # Committee types and designations the FEC itself defines as political
