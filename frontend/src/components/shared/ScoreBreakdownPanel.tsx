@@ -22,8 +22,7 @@ interface ScoreBreakdownPanelProps {
 }
 
 // Loosely typed on purpose: senator/rep/president dimensions share
-// {score, components, note?} but president also has {score, seedOnly},
-// and justice's breakdown sub-objects are a free-form {detail, ...numbers}
+// {score, components, note?}, and justice's breakdown sub-objects are a free-form {detail, ...numbers}
 // bag (analyze_justice_votes' math doesn't decompose into weighted
 // components the way the other three do) — forcing one rigid shape onto
 // all four would fight the data more than it would help render it.
@@ -31,7 +30,6 @@ interface FetchedDimension {
   score?: number;
   components?: ScoreBreakdownComponent[];
   note?: string;
-  seedOnly?: boolean;
   detail?: string;
   [key: string]: unknown;
 }
@@ -103,14 +101,6 @@ function ComponentRow({ c }: { c: ScoreBreakdownComponent }) {
 }
 
 function DimensionBody({ dimension }: { dimension: FetchedDimension }) {
-  if (dimension.seedOnly) {
-    return (
-      <p className="text-ink-lo italic">
-        Editorial estimate — not computed from a live formula. See the methodology page for
-        sourcing.
-      </p>
-    );
-  }
   if (dimension.components && dimension.components.length > 0) {
     return (
       <div>

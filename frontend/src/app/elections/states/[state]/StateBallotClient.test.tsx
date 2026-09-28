@@ -366,6 +366,18 @@ describe("statewide executive offices", () => {
     expect(drawer.queryByText("John Stephen")).not.toBeInTheDocument();
   });
 
+  it("groups a body's seats in the ballot box, which is shared as an image on its own", () => {
+    const seats = [council("1", ["Albany"], "Joseph D. Kenney"), council("2", ["Concord"], "Tobin Menard")];
+    render(<StateBallotClient ballot={ballot({ ...covered, statewideRaces: [...covered.statewideRaces, ...seats] })} />);
+    const box = within(screen.getByTestId("ballot-columns"));
+    // Governor, Secretary of State and the Council: three offices, not four rows.
+    expect(box.getByText(/^3 offices · from primary results$/)).toBeInTheDocument();
+    expect(box.getByText(/Executive Council/)).toBeInTheDocument();
+    expect(box.getByText(/You vote in your district's seat only/)).toBeInTheDocument();
+    expect(box.getByText("District 2")).toBeInTheDocument();
+    expect(box.getByText("Tobin Menard")).toBeInTheDocument();
+  });
+
   it("points a district seat with no published towns to the official lookup", async () => {
     const seat = { ...council("2", [], "Dennis McCann"), office: "public_service_commission-2",
       label: "Public Service Commission, District 2", officeCode: "public_service_commission",

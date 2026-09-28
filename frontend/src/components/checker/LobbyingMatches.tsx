@@ -1,6 +1,7 @@
+import Link from "next/link";
 import { LobbyingMatch } from "@/types/senator";
-import { formatCurrency, safeHref } from "@/lib/formatting";
-import { billUrl } from "@/lib/sources";
+import { formatCurrency } from "@/lib/formatting";
+import { billPageHref } from "@/lib/congress";
 
 interface LobbyingMatchesProps {
   matches: LobbyingMatch[];
@@ -32,17 +33,15 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
               <div className="flex items-center gap-1 flex-wrap">
                 <span>TOPICALLY RELATED BILLS:</span>
                 {match.billsInfluenced.map((b, j) => {
-                  const url = billUrl(b);
-                  return url ? (
-                    <a
+                  const href = billPageHref(b);
+                  return href ? (
+                    <Link
                       key={j}
-                      href={safeHref(url) || "#"}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      href={href}
                       className="text-ink-lo hover:text-phos underline underline-offset-2 transition-colors"
                     >
                       {b}
-                    </a>
+                    </Link>
                   ) : (
                     <span key={j}>{b}</span>
                   );
