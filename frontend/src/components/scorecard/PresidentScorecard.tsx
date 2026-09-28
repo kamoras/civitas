@@ -108,9 +108,11 @@ function MandateColumn({
           presidents average {one(f.marginMean)}.
         </Lede>
       ) : (
-        <Lede>
-          {dim?.note ?? "Never won a presidential election in their own right, so not scored."}
-        </Lede>
+        score == null && (
+          <Lede>
+            {dim?.note ?? "Never won a presidential election in their own right, so not scored."}
+          </Lede>
+        )
       )}
       {dim && <ComponentBars components={dim.components} />}
       <Facts
@@ -139,16 +141,18 @@ function EffectivenessColumn({
   const jobs = f?.jobsPerYear != null && f.jobsMean != null && f.jobsMillions != null;
   return (
     <ScoreColumn title="Effectiveness" shareId="effectiveness" weight={weight} score={score}>
-      <Lede>
-        {jobs &&
-          `${signed(f!.jobsMillions!)} million jobs, ${f!.jobsPerYear!.toFixed(2)} million a year once the first year is set aside. Presidencies since 1939 average ${f!.jobsMean!.toFixed(2)} million. `}
-        {f?.gdpGrowth != null && f.gdpMean != null
-          ? `Real growth averaged ${one(f.gdpGrowth)}% a year, first year excluded; presidencies ${f.gdpSince ? "since" : "before"} 1947 average ${one(f.gdpMean)}%.`
-          : isCurrent
-            ? "GDP growth is measured from the second full year of a term."
-            : "No GDP figure for this term."}
-        {!jobs && f?.gdpGrowth == null && !isCurrent && " Payroll jobs are counted from 1939."}
-      </Lede>
+      {(f || score == null) && (
+        <Lede>
+          {jobs &&
+            `${signed(f!.jobsMillions!)} million jobs, ${f!.jobsPerYear!.toFixed(2)} million a year once the first year is set aside. Presidencies since 1939 average ${f!.jobsMean!.toFixed(2)} million. `}
+          {f?.gdpGrowth != null && f.gdpMean != null
+            ? `Real growth averaged ${one(f.gdpGrowth)}% a year, first year excluded; presidencies ${f.gdpSince ? "since" : "before"} 1947 average ${one(f.gdpMean)}%.`
+            : isCurrent
+              ? "GDP growth is measured from the second full year of a term."
+              : "No GDP figure for this term."}
+          {!jobs && f?.gdpGrowth == null && !isCurrent && " Payroll jobs are counted from 1939."}
+        </Lede>
+      )}
       {jobs && (
         <ComparisonScale
           value={f!.jobsPerYear!}
@@ -204,7 +208,9 @@ function AgencyColumn({
           )}
         </>
       ) : (
-        <Lede>The Federal Register&apos;s rulemaking records begin in 1994, so not scored.</Lede>
+        score == null && (
+          <Lede>The Federal Register&apos;s rulemaking records begin in 1994, so not scored.</Lede>
+        )
       )}
       {dim && <ComponentBars components={dim.components} />}
     </ScoreColumn>
@@ -234,10 +240,12 @@ function LegacyColumn({
           {Math.round(f.pointsMean)}.
         </Lede>
       ) : (
-        <Lede>
-          Not rated. C-SPAN&apos;s Presidential Historians Survey rates completed terms, and its
-          2025 survey was postponed.
-        </Lede>
+        score == null && (
+          <Lede>
+            Not rated. C-SPAN&apos;s Presidential Historians Survey rates completed terms, and its
+            2025 survey was postponed.
+          </Lede>
+        )
       )}
       {f?.otherTerms?.map((t) => (
         <p key={t.id} className="text-sm text-ink-lo">
