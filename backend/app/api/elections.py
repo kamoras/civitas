@@ -1099,6 +1099,11 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
             "checkedAt": _iso_utc(coverage.last_success_at) if coverage and coverage.last_success_at else None,
             # When a read was last attempted, failures included.
             "lastAttemptAt": _iso_utc(coverage.checked_at) if coverage else None,
+            # Whose determination the status is: "source" (the state's own
+            # document said so) or "operator" (our operator accepted the
+            # absence after checking — admin accept-absence). The note
+            # itself stays internal.
+            "basis": "operator" if coverage and coverage.operator_note else "source",
         },
         "officialLookup": lookup_for_state(state),
         "statewideRaces": statewide_races,

@@ -194,6 +194,9 @@ export interface MeasureCoverage {
   checkedAt: string | null;
   /** When a read was last attempted, failures included. */
   lastAttemptAt: string | null;
+  /** Whose determination the status is: the state's own source, or our
+   * operator's (a "none" accepted after the source stopped publishing). */
+  basis?: "source" | "operator";
 }
 
 /** One statewide executive contest (Governor, Attorney General, ...) and

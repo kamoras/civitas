@@ -1180,12 +1180,13 @@ async def test_an_operator_can_accept_a_states_absence(monkeypatch, db_session):
     assert failed == 1  # the honest nightly alarm, before anyone checks
 
     with pytest.raises(HTTPException):
-        admin_accept_measure_absence("ZZ", "2026-11-03", note="checked the SOS release", db=db_session)
+        admin_accept_measure_absence("ZZ", "2026-11-03", note="checked the SOS release", force=False, db=db_session)
     with pytest.raises(HTTPException):
-        admin_accept_measure_absence("CA", "11/03/2026", note="checked the SOS release", db=db_session)
+        admin_accept_measure_absence("CA", "11/03/2026", note="checked the SOS release", force=False, db=db_session)
     monkeypatch.setattr(ballot_measure_pdf_sources, "source_for_state", lambda st: _fake_pdf_source())
     result = admin_accept_measure_absence(
-        "CA", "2026-11-03", note="SOS release 2026-10-02: measure 1 struck by court order", db=db_session,
+        "CA", "2026-11-03", note="SOS release 2026-10-02: measure 1 struck by court order", force=False,
+        db=db_session,
     )
     assert result["markedRemoved"] == 1
     row = _coverage(db_session)
@@ -1219,3 +1220,104 @@ async def test_the_previous_sources_coverage_keeps_its_name_until_this_one_answe
     row = _coverage(db_session)
     assert row.status == MeasureCoverage.NOT_YET_COVERED
     assert row.source_name == "Vote Smart"
+
+
+
+# ── round 5 ──────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_an_accepted_absence_survives_a_failed_night(monkeypatch, db_session):
+    """The regression: one failed fetch after accept-absence left the state
+    in ingest_failed for good — every later "document absent" night kept
+    it there with nothing paged. The failure itself still alerts that
+    night; the next absent night restores the operator's answer."""
+    from app.pipeline.fetch.ballot_measure_text import NotYetPublished
+
+    nyp = NotYetPublished("doc", deadline_applies=False)
+    _direct_source(monkeypatch, [["1"], None, nyp, nyp])
+    await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    election_pipeline.accept_state_absence(
+        db_session, "CA", "2026-11-03", "Example Elections Office", "SOS release: struck", force=True,
+    )
+    failing: list[str] = []
+    await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03", failing)
+    assert failing == ["CA"] and _coverage(db_session).status == MeasureCoverage.INGEST_FAILED
+    assert _coverage(db_session).operator_note == "SOS release: struck"
+    for _ in range(2):
+        failing = []
+        await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03", failing)
+        assert failing == []
+        row = _coverage(db_session)
+        assert row.status == MeasureCoverage.CONFIRMED_NONE
+        assert "SOS release: struck" in row.error_detail
+
+
+def test_accept_absence_refuses_a_freshly_covered_state_without_force(db_session):
+    """The regression: accept-absence marked a freshly read, certified
+    measure removed (e.g. the wrong state typed)."""
+    import json
+
+    _measure(db_session, "FL-2026-11-03-1", state="FL", number="1", source_name="Florida DOS")
+    election_pipeline._set_coverage(db_session, "FL", "2026-11-03", MeasureCoverage.COVERED, 1, source_name="Florida DOS")
+    db_session.commit()
+    with pytest.raises(election_pipeline.AbsenceRefused):
+        election_pipeline.accept_state_absence(db_session, "FL", "2026-11-03", "Florida DOS", "wrong state?")
+    assert db_session.query(BallotMeasure).one().status == "certified"
+    election_pipeline.accept_state_absence(
+        db_session, "FL", "2026-11-03", "Florida DOS", "court order, checked", force=True,
+    )
+    row = _coverage(db_session, "FL")
+    [action] = json.loads(row.operator_actions)
+    assert action["note"] == "court order, checked" and action["force"] is True and action["marked"] == 1
+
+
+def test_the_admin_endpoint_answers_409_without_force(monkeypatch, db_session):
+    from app.api.admin import admin_accept_measure_absence
+    from app.pipeline.fetch import ballot_measure_pdf_sources
+
+    monkeypatch.setattr(ballot_measure_pdf_sources, "source_for_state", lambda st: _fake_pdf_source())
+    election_pipeline._set_coverage(
+        db_session, "CA", "2026-11-03", MeasureCoverage.COVERED, 1, source_name="Example Elections Office",
+    )
+    db_session.commit()
+    with pytest.raises(HTTPException) as exc:
+        admin_accept_measure_absence("CA", "2026-11-03", note="checked the SOS release", force=False, db=db_session)
+    assert exc.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_the_audit_trail_survives_the_readers_next_answer(monkeypatch, db_session):
+    import json
+
+    _direct_source(monkeypatch, [["1"]])
+    election_pipeline.accept_state_absence(db_session, "CA", "2026-11-03", "Example Elections Office", "checked")
+    await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    row = _coverage(db_session)
+    assert row.status == MeasureCoverage.COVERED and row.operator_note is None
+    assert len(json.loads(row.operator_actions)) == 1
+
+
+def test_accept_absence_marks_every_sources_rows(db_session):
+    """The regression: only the registry source's rows were marked, so a
+    Vote Smart row still on file rendered as current under "none"."""
+    _measure(db_session, "vs-1", state="CA", source_name="Vote Smart")
+    _measure(db_session, "vs-other-election", state="CA", date="2026-06-02", source_name="Vote Smart")
+    db_session.commit()
+    marked = election_pipeline.accept_state_absence(
+        db_session, "CA", "2026-11-03", "Example Elections Office", "checked the release",
+    )
+    assert marked == 1
+    status = {m.id: m.status for m in db_session.query(BallotMeasure).all()}
+    assert status == {"vs-1": "removed", "vs-other-election": "certified"}
+
+
+def test_the_api_says_whose_determination_a_none_is(db_session):
+    election = _page_election()
+    election_pipeline._set_coverage(db_session, "GA", election, MeasureCoverage.CONFIRMED_NONE, source_name="GA SoS")
+    db_session.commit()
+    assert _body(elections.state_ballot("GA", db=db_session))["measureCoverage"]["basis"] == "source"
+    election_pipeline.accept_state_absence(db_session, "GA", election, "GA SoS", "private operator note")
+    cov = _body(elections.state_ballot("GA", db=db_session))["measureCoverage"]
+    assert cov["basis"] == "operator"
+    assert "private operator note" not in json.dumps(cov)

@@ -772,24 +772,53 @@ def _mark_removed(db: Session, state: str, election_day: str, source_name: str, 
     return marked
 
 
-def accept_state_absence(db: Session, state: str, election_day: str, source_name: str, note: str) -> int:
+class AbsenceRefused(Exception):
+    """accept_state_absence declined without force (see its docstring)."""
+
+
+def accept_state_absence(
+    db: Session, state: str, election_day: str, source_name: str, note: str, *, force: bool = False,
+) -> int:
     """The operator's path for a measure gone from a source that can only
     report its document missing (Michigan's November document disappears
-    when its only proposal is struck): mark `source_name`'s rows for the
-    election removed and record confirmed none with the operator's note.
-    The nightly sync leaves that standing while the reader keeps reporting
-    the document missing, and a real answer from the reader replaces it.
-    Returns rows marked removed."""
+    when its only proposal is struck): mark EVERY row for the state and
+    election removed — any source's, so a Vote Smart row still on file
+    can't go on rendering as current under an operator's "none" — and
+    record confirmed none with the operator's note. The nightly sync
+    restores that answer whenever the reader reports the document absent,
+    and a real answer from the reader replaces it. Returns rows marked.
+
+    Refused (AbsenceRefused) unless `force` while the latest read of this
+    source covered the state for this election — that is a freshly read,
+    certified list, and removing it is almost certainly the wrong state or
+    election. Every action is logged at WARNING and appended to
+    operator_actions, which nothing clears.
+    """
+    import json
+
     from app.models import BallotMeasure, MeasureCoverage
 
-    ids = {
-        mid for (mid,) in db.query(BallotMeasure.id).filter(
-            BallotMeasure.state == state,
-            BallotMeasure.election_date == election_day,
-            BallotMeasure.source_name == source_name,
+    prior = _coverage_row(db, state, election_day)
+    if (
+        not force and prior is not None and prior.status == MeasureCoverage.COVERED
+        and prior.source_name == source_name
+    ):
+        raise AbsenceRefused(
+            f"{source_name}'s latest read covered {state} for {election_day}; pass force=true to override"
         )
-    }
-    marked = _mark_removed(db, state, election_day, source_name, ids)
+    logger.warning(
+        "Operator accepted the absence of %s's measures for %s (force=%s): %s",
+        state, election_day, force, note,
+    )
+    marked = 0
+    for row in db.query(BallotMeasure).filter(
+        BallotMeasure.state == state,
+        BallotMeasure.election_date == election_day,
+        BallotMeasure.status != "removed",
+    ):
+        row.status = "removed"
+        row.as_of = utcnow()
+        marked += 1
     _set_coverage(
         db, state, election_day, MeasureCoverage.CONFIRMED_NONE,
         count=0, source_name=source_name, error=f"operator accepted absence: {note}",
@@ -797,6 +826,9 @@ def accept_state_absence(db: Session, state: str, election_day: str, source_name
     row = _coverage_row(db, state, election_day)
     row.operator_note = note
     row.pending_shrink, row.shrink_streak = None, 0
+    actions = json.loads(row.operator_actions) if row.operator_actions else []
+    actions.append({"at": utcnow().isoformat(), "note": note, "force": force, "marked": marked})
+    row.operator_actions = json.dumps(actions)
     db.commit()
     return marked
 
@@ -905,9 +937,17 @@ async def _sync_pdf_measures(
                 marked_removed += _mark_removed(db, state, election_day, source_name, struck)
                 db.commit()
             if prior is not None and prior.operator_note:
-                # An operator accepted this absence (admin accept-absence);
-                # the reader still finding nothing is that answer standing.
-                prior.checked_at = utcnow()
+                # An operator accepted this absence (admin accept-absence),
+                # and the reader again finds the document absent: that
+                # answer stands — restored, whatever last night's status
+                # was. operator_note is the durable fact; a night whose
+                # fetch genuinely failed (ingest_failed, alerted) doesn't
+                # clear it, only a real answer from the reader does.
+                _set_coverage(
+                    db, state, election_day, MeasureCoverage.CONFIRMED_NONE,
+                    count=0, source_name=prior.source_name,
+                    error=f"operator accepted absence: {prior.operator_note}",
+                )
                 db.commit()
                 continue
             explained_all = bool(struck) and not _live_ids(db, state, source_name, {election_day})

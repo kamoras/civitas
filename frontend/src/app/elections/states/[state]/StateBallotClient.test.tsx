@@ -668,6 +668,44 @@ describe("ballot measures", () => {
     expect(drawer.queryByText(/2026-09-20/)).not.toBeInTheDocument();
   });
 
+  it("words a list the source itself dropped accurately, not as a missing list", async () => {
+    // Round 5: Oklahoma's register was read and no longer dates its only
+    // State Question for this ballot; "could not find the published list"
+    // was false.
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures: [{ ...measure, status: "removed" }],
+          measureCoverage: {
+            status: "not_yet_covered", sourceName: "Ohio SoS",
+            checkedAt: "2026-09-20T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
+          },
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    const notice = drawer.getByRole("status");
+    expect(notice).toHaveTextContent("OH's latest list no longer includes the measures below");
+    expect(notice).not.toHaveTextContent("could not find");
+  });
+
+  it("presents an operator's none as ours, never as the state's", async () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measureCoverage: {
+            status: "confirmed_none", sourceName: "Ohio SoS", basis: "operator",
+            checkedAt: "2026-09-28T00:00:00Z", lastAttemptAt: "2026-09-28T00:00:00Z",
+          },
+        })}
+      />,
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    expect(drawer.getByText(/This is our operator's determination/)).toBeInTheDocument();
+    expect(drawer.getByText(/not a list published by the state/)).toBeInTheDocument();
+    expect(drawer.queryByText(/Per Ohio SoS/)).not.toBeInTheDocument();
+  });
+
   it("shows no stale notice when the latest read worked", async () => {
     render(
       <StateBallotClient

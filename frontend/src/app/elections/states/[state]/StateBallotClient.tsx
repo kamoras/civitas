@@ -328,6 +328,14 @@ function StateOfficesNotLoaded({ ballot, lookupHref }: { ballot: StateBallot; lo
  * ingested — 17 amendments and all — would silently tell a voter there is
  * nothing to research.
  */
+/** A "none" that is our operator's determination (admin accept-absence)
+ * — after the state's source stopped publishing its list — worded so it
+ * can never read as the state's own statement. */
+const OPERATOR_NONE_TEXT = (state: string) =>
+  `No statewide ballot measures remain on ${state}'s ballot as far as Civitas can tell. This is our ` +
+  `operator's determination, made after checking the state's own announcements when its published ` +
+  `list stopped being available — not a list published by the state.`;
+
 function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHref: string }) {
   const { measures, measureCoverage, state } = ballot;
 
@@ -343,13 +351,42 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
     // its own office, the cards are still Vote Smart's. A read date is only
     // shown when it is that same source's.
     const sources = [...new Set(measures.map((m) => m.sourceName).filter(Boolean))];
+    // Every card is a measure no longer on the ballot (the source dropped
+    // it, or an operator accepted its absence) — the notices below then
+    // describe that, rather than a list that couldn't be read.
+    const allRemoved = measures.every((m) => m.status === "removed" || m.status === "withdrawn");
+    const operatorNone = measureCoverage.status === "confirmed_none" && measureCoverage.basis === "operator";
     const readDate =
       sources.length === 1 && sources[0] === measureCoverage.sourceName && measureCoverage.checkedAt
         ? measureCoverage.checkedAt.slice(0, 10)
         : null;
     return (
       <div className="space-y-3">
-        {stale && (
+        {stale && allRemoved && (
+          // The latest read worked and dropped these; it names nothing
+          // else for this ballot yet (Oklahoma's register re-dating its
+          // only State Question). "Could not find the list" would be false.
+          <div role="status" className="border border-signal-amber/40 bg-signal-amber/10 p-3">
+            <p className="text-xs text-signal-amber">
+              {state}&apos;s latest list no longer includes the measures below, and names none for this
+              ballot yet
+              {measureCoverage.lastAttemptAt ? ` (checked ${measureCoverage.lastAttemptAt.slice(0, 10)})` : ""}. This
+              does <strong>not</strong> mean there are none — check the{" "}
+              <a href={lookupHref} target="_blank" rel="noopener noreferrer" className="text-signal-cyan hover:text-phos">
+                official lookup ↗
+              </a>
+              .
+            </p>
+          </div>
+        )}
+        {operatorNone && (
+          <div role="status" className="border border-white/15 p-3">
+            <p className="text-xs text-ink">
+              {OPERATOR_NONE_TEXT(state)}
+            </p>
+          </div>
+        )}
+        {stale && !allRemoved && (
           <div role="status" className="border border-signal-amber/40 bg-signal-amber/10 p-3">
             <p className="text-xs text-signal-amber">
               {measureCoverage.status === "ingest_failed"
@@ -374,6 +411,21 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
           record from {sources.length ? sources.join(" and ") : "the source"}
           {readDate ? ` · last read successfully ${readDate}` : ""}
           . Local measures on your ballot are not shown here.
+        </p>
+      </div>
+    );
+  }
+
+  if (measureCoverage.status === "confirmed_none" && measureCoverage.basis === "operator") {
+    return (
+      <div className="border border-white/15 p-4">
+        <p className="text-sm text-ink">{OPERATOR_NONE_TEXT(state)}</p>
+        <p className="text-[10px] text-ink-min mt-2">
+          Check the{" "}
+          <a href={lookupHref} target="_blank" rel="noopener noreferrer" className="text-signal-cyan hover:text-phos">
+            official lookup ↗
+          </a>{" "}
+          for everything on your ballot.
         </p>
       </div>
     );

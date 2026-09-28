@@ -1618,6 +1618,9 @@ class MeasureCoverage(Base):
     # (admin accept-absence): who/why, verbatim. A reader answering again
     # clears it.
     operator_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Every accept-absence action ever taken for this state/election (JSON
+    # list of {at, note, force, marked}) — the audit trail. Never cleared.
+    operator_actions: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class PipelinePhaseTiming(Base):
