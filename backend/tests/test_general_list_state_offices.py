@@ -362,9 +362,9 @@ async def test_alaska_reads_every_page_and_each_ticket_in_reading_order():
     async with _client(handler) as client:
         records = await fetch_certified(client, 2026, "AK", _general("AK"))
     assert _state(records) == {
-        ("governor", None, "R", None, "Dave Bronson / Josh Church"),
+        ("governor", None, "R", None, "Dave Bronson and Josh Church"),
         # The ticket's party is the governor's registration, the first one.
-        ("governor", None, "D", None, "Jonathan S. “JKT” Kreiss-Tomkins / Zac Johnson"),
+        ("governor", None, "D", None, "Jonathan S. “JKT” Kreiss-Tomkins and Zac Johnson"),
         # Page 2: the House districts past the first page.
         ("lower", "8", "R", None, "William H. “Bill” Elam"),
         # Alaska prints "(Nonpartisan)" beside him: shown as printed.
@@ -400,7 +400,8 @@ def _line(top, *cells):
 IL_EXEC = [
     *_line(40, (230, "GOVERNOR"), (300, "AND"), (330, "LIEUTENANT"), (420, "GOVERNOR")),
     *_line(55, (18, "DEMOCRATIC"), (155, "JB"), (175, "Pritzker"), (448, "10/27/2025")),
-    # The running mate's line: nothing to the left, no office named.
+    # The running mate's line: nothing to the left, the governor's surname
+    # in parentheses.
     *_line(62, (155, "Christian"), (230, "Mitchell"), (300, "(Pritzker)"), (448, "10/27/2025")),
     *_line(70, (18, "GREEN"), (155, "Griselda"), (225, "Romero"), (448, "5/26/2026")),
     *_line(78, (155, "5550"), (190, "Abbey"), (240, "Dr"), (300, "REMOVED"), (360, "7/14/2026")),
@@ -426,7 +427,9 @@ IL_LEG = [
 def test_illinois_reads_its_state_offices_and_drops_the_struck():
     fmt = _general("IL")["format"]
     assert _state(parse_grouped_list([IL_EXEC], fmt, state_offices=True)) == {
-        ("governor", None, "D", None, "JB Pritzker"),
+        # The running mate's line names its governor in parentheses and
+        # joins that ticket (Ill. Const. art. V sec. 4: elected jointly).
+        ("governor", None, "D", None, "JB Pritzker and Christian Mitchell"),
         ("governor", None, "I", None, "Collin Corbett"),
         # Still the governor's race: an address never moves the office.
         ("governor", None, "L", None, "Pat Doe"),
@@ -491,10 +494,10 @@ FL_INDEX = '<select name="elecid"><option value="20261103-GEN">2026 Election</op
 
 def test_florida_reads_only_qualified_state_candidates():
     assert _state(parse_canlist(FL_CAB, state_offices=True, federal=False)) == {
-        ("governor", None, "R", None, "Byron Donalds"),
+        ("governor", None, "R", None, "Byron Donalds and Bryan Avila"),
         # LPF is the Libertarian Party of Florida's own code.
-        ("governor", None, "L", None, "Scott Eckhard Jewett"),
-        ("governor", None, "I", None, "Frank J. Russo"),
+        ("governor", None, "L", None, "Scott Eckhard Jewett and Nicole Skelly"),
+        ("governor", None, "I", None, "Frank J. Russo and Rachel Rodriguez"),
         # Unopposed for their nominations, so absent from primary results.
         ("attorney_general", None, "D", None, "Jose Javier Rodriguez"),
         ("attorney_general", None, "R", None, "James Uthmeier"),

@@ -25,8 +25,9 @@ parse_state_leg_office), after `heading_labels` -- a list of [regex,
 replacement] pairs spelling out a state's own terse headings, since
 Illinois numbers its seats "2ND SENATE" / "118TH REPRESENTATIVE", which
 no shared parser should be taught to guess. A running mate's line
-("Christian Mitchell (Pritzker)") has no party to its left and names no
-office, so, like an address line, it is passed over. Every candidate not
+("Christian Mitchell (Pritzker)") has no party to its left and names its
+governor's surname in parentheses; it is joined to that governor's record
+as the ticket the ballot prints ("JB Pritzker and Christian Mitchell"). Every candidate not
 struck off is on the November ballot, independents included; a party the
 shared codes cannot name keeps its printed label (ballot_list_party).
 
@@ -102,6 +103,8 @@ def parse_grouped_list(pages: list[list[dict]], fmt: dict, state_offices: bool =
     state_office: tuple[str, str | None, str | None] | None = None
     for i, line in enumerate(lines):
         party_text = " ".join(w["text"] for w in line if w["x0"] < name_x - 1)
+        if not party_text and state_office is not None and _joins_ticket(lines, i, line, records, name_x, date_x, removed):
+            continue
         if not party_text:
             # Only a line that names an office moves to it. A page's own
             # header ("ILLINOIS STATE BOARD OF ELECTIONS") and an address
@@ -144,6 +147,38 @@ def parse_grouped_list(pages: list[list[dict]], fmt: dict, state_offices: bool =
             "party_label": party_text,
         })
     return records
+
+
+# A running mate's line: the mate's name, then the governor's surname in
+# parentheses -- "Christian Mitchell (Pritzker)", "Aaron B. Del Mar
+# (Bailey)" on Illinois's 2026 list.
+_MATE_RE = re.compile(r"^(?P<name>.+?)\s*\((?P<governor>[^()]+)\)$")
+
+
+def _joins_ticket(
+    lines: list[list[dict]], i: int, line: list[dict], records: list[dict],
+    name_x: float, date_x: float, removed: re.Pattern,
+) -> bool:
+    """Append the running mate on line `i` to the governor above it, when
+    it is one: a dated candidate line with no party, naming in parentheses
+    the surname of the governor record just made. Illinois elects the two
+    jointly (Ill. Const. art. V sec. 4), so the ticket is shown as the pair.
+    A mate of a governor struck from the ballot names someone who was not
+    recorded, and is passed over like an address line."""
+    if not records or records[-1]["office"] != "governor":
+        return False
+    if not any(w["x0"] >= date_x - 1 and _DATE_RE.match(w["text"]) for w in line):
+        return False
+    text = " ".join(w["text"] for w in line if name_x - 1 <= w["x0"] < date_x - 1)
+    m = _MATE_RE.match(text)
+    governor = records[-1]["last_name"].split()
+    if not m or not governor or m.group("governor").strip().casefold() != governor[-1].casefold():
+        return False
+    mate = clean_display_name(m.group("name"))
+    if len(mate.split()) < 2 or " and " in records[-1]["last_name"] or _struck(lines, i, name_x, removed):
+        return False
+    records[-1]["last_name"] = f"{records[-1]['last_name']} and {mate}"
+    return True
 
 
 def _struck(lines: list[list[dict]], i: int, name_x: float, removed: re.Pattern) -> bool:

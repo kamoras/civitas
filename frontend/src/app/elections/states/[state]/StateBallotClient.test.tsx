@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import StateBallotClient from "./StateBallotClient";
 import type { RaceWithCandidates, StateBallot } from "@/types/election";
@@ -336,6 +336,54 @@ describe("statewide executive offices", () => {
     render(<StateBallotClient ballot={ballot(covered)} />);
     const drawer = await openContest(/Statewide offices/);
     expect(drawer.getByText(/an office may be missing, or missing a party's nominee/)).toBeInTheDocument();
+  });
+
+  const council = (district: string, towns: string[], name: string) => ({
+    office: `executive_council-${district}`,
+    label: `Executive Council, District ${district}`,
+    officeCode: "executive_council",
+    officeLabel: "Executive Council",
+    seat: district,
+    electedBy: "district" as const,
+    areas: towns,
+    termYears: 2,
+    nominees: [{ party: "REP", name }],
+  });
+
+  it("says a district-elected body's voter votes in one seat, and finds it by town", async () => {
+    const seats = [
+      council("1", ["Albany", "Alexandria"], "Joseph D. Kenney"),
+      council("2", ["Acworth", "Concord"], "Tobin Menard"),
+      council("3", ["Atkinson"], "Janet Stevens"),
+      council("4", ["Allenstown", "Auburn"], "John Stephen"),
+    ];
+    render(<StateBallotClient ballot={ballot({ ...covered, statewideRaces: [...covered.statewideRaces, ...seats] })} />);
+    const drawer = await openContest(/Statewide offices/);
+    expect(drawer.getByText(/EXECUTIVE COUNCIL — 4 SEATS/)).toBeInTheDocument();
+    expect(drawer.getByText(/Each voter votes in one district's seat only/)).toBeInTheDocument();
+    fireEvent.change(drawer.getByLabelText(/Filter Executive Council seats/), { target: { value: "concord" } });
+    expect(drawer.getByText("Tobin Menard")).toBeInTheDocument();
+    expect(drawer.queryByText("John Stephen")).not.toBeInTheDocument();
+  });
+
+  it("points a district seat with no published towns to the official lookup", async () => {
+    const seat = { ...council("2", [], "Dennis McCann"), office: "public_service_commission-2",
+      label: "Public Service Commission, District 2", officeCode: "public_service_commission",
+      officeLabel: "Public Service Commission" };
+    render(<StateBallotClient ballot={ballot({ ...covered, statewideRaces: [seat] })} />);
+    const drawer = await openContest(/Statewide offices/);
+    expect(drawer.getByText(/Find yours with/)).toBeInTheDocument();
+    expect(drawer.getByRole("link", { name: "the official lookup" })).toBeInTheDocument();
+  });
+
+  it("says every voter votes for each seat of a statewide-elected body", async () => {
+    const seat = { ...council("3", [], "Tim Echols"), office: "public_service_commission-3",
+      label: "Public Service Commission, District 3", officeCode: "public_service_commission",
+      officeLabel: "Public Service Commission", electedBy: "statewide" as const };
+    render(<StateBallotClient ballot={ballot({ ...covered, statewideRaces: [seat] })} />);
+    const drawer = await openContest(/Statewide offices/);
+    expect(drawer.getByText(/Every voter in the state votes for each seat/)).toBeInTheDocument();
+    expect(drawer.queryByText(/one district's seat only/)).not.toBeInTheDocument();
   });
 
   it("says a certified ballot list is the whole list", async () => {

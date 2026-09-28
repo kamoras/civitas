@@ -172,6 +172,28 @@ STRATEGIES = {
     "enhanced_voting": _fetch_enhanced_voting,
 }
 
+# The strategies whose rows are a state's list of who is on the November
+# ballot -- every qualified candidate, independents included -- rather
+# than primary results, which name only each party's contested winners.
+# Decides whether the page may call a state-office section the whole
+# ballot (the markers' ballotList). A property of the DOCUMENT read, never
+# of general_ballot_complete: that flag describes a state's federal
+# ballot, and North Carolina sets it for its federal FILING list while its
+# state offices come from primary results. A strategy that can read either
+# kind says which per run (SourceRecords.ballot_list -- Vermont's reads
+# the general report once final, primary winners before). Not listed:
+# nj_certification (party nominees only) and every results reader.
+BALLOT_LIST_STRATEGIES = frozenset({
+    "certified_table",    # the certified general lists (AK CO DE HI IA MD ME ND NE NM TN WY)
+    "grouped_list_pdf",   # Illinois's website candidate list
+    "dos_canlist",        # Florida's general candidate list
+    "certified_pdf",      # Missouri's certification of candidates
+    "vrems",              # South Carolina's candidate tracking, general election
+    "sd_vip",             # South Dakota's general candidate list
+    "tx_civix",           # Texas's general-election candidate portal
+    "voterportal",        # Louisiana's staged November ballot
+})
+
 
 
 def is_configured(state: str) -> bool:
@@ -1456,6 +1478,7 @@ def _sync_state_leg_nominees(
 
 def _sync_judicial_nominees(
     db: Session, cycle: int, state: str, source: dict, records: list[dict],
+    *, ballot_list: bool = False,
 ) -> int:
     """Persist this state's judicial nominees. Returns how many were stored.
 
@@ -1537,7 +1560,7 @@ def _sync_judicial_nominees(
             "count": len(keep),
             "sourceName": str(source.get("source_name") or ""),
             # See the statewide marker's field of the same name.
-            "ballotList": bool(source.get("general_ballot_complete")),
+            "ballotList": ballot_list,
         },
         normal_ttl_hours=JUDICIAL_MARKER_TTL_HOURS,
     )
@@ -1545,11 +1568,15 @@ def _sync_judicial_nominees(
     return len(keep)
 
 
-def _is_ballot_list(state_source: dict, general: dict | None) -> bool:
-    """Whether `state_source` lists everyone on the November ballot (a
-    certified general_list, or a main source marked
-    general_ballot_complete) rather than primary results."""
-    return state_source is general or bool(state_source.get("general_ballot_complete"))
+def _is_ballot_list(source: dict, records: list[dict]) -> bool:
+    """Whether the state-office rows `records` (read from `source`) are
+    the state's list of who is on the November ballot rather than primary
+    results: the adapter's own answer for this run when it gave one, else
+    its strategy's (BALLOT_LIST_STRATEGIES)."""
+    said = getattr(records, "ballot_list", None)
+    if said is not None:
+        return bool(said)
+    return source.get("strategy") in BALLOT_LIST_STRATEGIES
 
 
 def _state_office_source(
@@ -1586,6 +1613,9 @@ def _state_office_source(
         db, STATEWIDE_MARKER_TIER, statewide_marker_key(state, cycle),
         max_age_hours=STATEWIDE_MARKER_TTL_HOURS,
     ) or {}
+    # The lock is the marker's sourceName, so renaming the list's
+    # source_name in the sources file mid-cycle unlocks it until the list
+    # next answers: primary results would stand in again for those nights.
     list_name = str(general.get("source_name") or "")
     if list_name and marker.get("sourceName") == list_name:
         return general, [], False
@@ -1709,6 +1739,11 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
         # (statewide_offices_basis) is still recorded.
         if main_answered and not records and not source.get("statewide_offices_basis"):
             main_answered = False
+        # The adapter's federal rows are settled but its state-office read
+        # is not (a party's primary or a runoff still settling -- see
+        # SourceRecords): the federal rows are applied as usual, and the
+        # main source says nothing about the state offices this run.
+        main_state_answered = main_answered and not getattr(records, "state_offices_incomplete", False)
         records = records or []
 
         # Neither a statewide executive office (Governor, AG, ...) nor a
@@ -1724,8 +1759,9 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
         # only name each party's winner (and New Mexico's results portal
         # no longer serves its primary at all). See _state_office_source
         # for when the main source's primary results stand in for it.
+        main_records = records
         state_source, state_records, state_answered = _state_office_source(
-            db, cycle, state, source, records, main_answered, general, general_records,
+            db, cycle, state, source, records, main_state_answered, general, general_records,
         )
         statewide = [r for r in state_records if r["office"] in STATEWIDE_OFFICE_LABELS]
         if configured.get("joint_governor_ticket"):
@@ -1744,11 +1780,13 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
         if state_answered:
             statewide_count = _sync_statewide_nominees(
                 db, cycle, state, state_source, statewide,
-                ballot_list=_is_ballot_list(state_source, general),
+                ballot_list=_is_ballot_list(state_source, state_records),
             )
             state_leg_count = _sync_state_leg_nominees(db, cycle, state, state_source, state_leg)
-        if main_answered:
-            judicial_count = _sync_judicial_nominees(db, cycle, state, source, judicial)
+        if main_state_answered:
+            judicial_count = _sync_judicial_nominees(
+                db, cycle, state, source, judicial, ballot_list=_is_ballot_list(source, main_records),
+            )
 
         # A state with its own general FILING list gets its November ballot
         # from that list (sync_ballot_filings), which is what may speak for

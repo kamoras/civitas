@@ -140,6 +140,7 @@ import httpx
 
 from app.pipeline.fetch.http_utils import fetch_json_with_retry
 from app.pipeline.fetch.state_candidates_common import (
+    SourceRecords,
     DiscoveryFailed,
     ballot_list_party,
     clean_display_name,
@@ -390,7 +391,7 @@ async def _statewide_records(
             return None
         records = _general_ballot_statewide(report)
         if records:
-            return records
+            return SourceRecords(records, ballot_list=True)
         logger.warning("VT results: final general ballot lists no statewide contest -- using primary winners")
 
     try:
@@ -410,7 +411,7 @@ async def _statewide_records(
     if not records:
         logger.warning("VT results: no statewide contest in either the general ballot or the primary")
         return None
-    return records
+    return SourceRecords(records, ballot_list=False)
 
 
 async def fetch_confirmed_candidates(
@@ -443,5 +444,7 @@ async def fetch_confirmed_candidates(
         statewide = await _statewide_records(client, state, year, guid, source)
         if statewide is None:
             return None
-        records += statewide
+        # Which document the state offices came from travels with them:
+        # the page says whether their names are the whole ballot.
+        return SourceRecords(records + statewide, ballot_list=statewide.ballot_list)
     return records

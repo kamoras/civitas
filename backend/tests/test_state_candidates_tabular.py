@@ -344,6 +344,7 @@ class TestRunoffOverride:
         dem = (
             "Contest Name\tChoice\tChoice Party\tTotal Votes\n"
             "Governor\tAbigail Spanberger\tDemocratic\t900\n"
+            "Member, U.S. House of Representatives District 2\tElaine Luria\tDemocratic\t900\n"
         ).encode()
 
         async def fake_discover(client, state, year, discovery):
@@ -367,12 +368,17 @@ class TestRunoffOverride:
     @pytest.mark.asyncio
     async def test_one_stage_pending_publishes_no_state_offices(self, monkeypatch):
         """Read alone, the settled party's election would be taken for
-        the whole ballot and the pending party's nominees deleted."""
-        assert await self._run_one_pending(monkeypatch, {"statewide_offices": True}) is None
+        the whole ballot and the pending party's nominees deleted. Its
+        federal rows still stand."""
+        result = await self._run_one_pending(monkeypatch, {"statewide_offices": True})
+        assert [(r["office"], r["last_name"]) for r in result] == [("H", "Luria")]
+        assert result.state_offices_incomplete is True
 
     @pytest.mark.asyncio
     async def test_one_stage_pending_still_confirms_federal_only(self, monkeypatch):
-        assert await self._run_one_pending(monkeypatch, {}) == []
+        result = await self._run_one_pending(monkeypatch, {})
+        assert [(r["office"], r["last_name"]) for r in result] == [("H", "Luria")]
+        assert not getattr(result, "state_offices_incomplete", False)
 
 
 class TestHouseFromColumns:

@@ -139,6 +139,13 @@ def _state_office_record(row: dict) -> dict | None:
     name = clean_display_name(row.get("Name on Ballot") or "")
     if not party or not name:
         return None
+    # A joint ticket's second name is its own column ("Governor and
+    # Lieutenant Governor": Alan Wilson, "Mike Reichenbach (Active)"); the
+    # ballot prints the pair, so the page does too -- "Alan Wilson and
+    # Mike Reichenbach", the way Maryland's list reads.
+    mate = clean_display_name(row.get("Running Mate") or "")
+    if mate:
+        name = f"{name} and {mate}"
     record = {"office": office, "district": district, "party": party[0], "last_name": name}
     if party[1]:
         record["party_label"] = party[1]

@@ -416,10 +416,15 @@ class TestUnsettledRunoff:
 
         monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
 
-    async def test_with_state_offices_nothing_is_published(self, monkeypatch):
+    async def test_with_state_offices_only_the_federal_rows_are_published(self, monkeypatch):
+        # The settled primary's federal nominees stand (None used to throw
+        # them away and report Arkansas as a failed fetch); its state rows
+        # are left out and the read is marked state-office incomplete.
         self._patched(monkeypatch)
         source = {**AR_SOURCE, "statewide_offices": True}
-        assert await tenr.fetch_confirmed_candidates(None, 2026, "AR", source) is None
+        result = await tenr.fetch_confirmed_candidates(None, 2026, "AR", source)
+        assert len(result) == 5 and all(r["office"] in ("S", "H") for r in result)
+        assert result.state_offices_incomplete is True
 
     async def test_federal_only_still_reads_the_settled_primary(self, monkeypatch):
         # Federal rows are applied non-authoritatively, so the settled

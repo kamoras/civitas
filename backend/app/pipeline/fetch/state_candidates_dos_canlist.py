@@ -28,8 +28,8 @@ Officer", "State Senator" + its District column) read through the shared
 gates. Only "Qualified" is the ballot here: a state candidate the report
 calls "Unopposed" was elected when qualifying closed and is not printed,
 and a legislative section that counts seats contested must not count
-theirs. A governor's line names the running mate after a slash; the
-governor is the one shown, as for every other state. Florida's primaries
+theirs. A governor's line names the running mate after a slash, and the
+pair is shown as the ticket it is ("David Jolly and Gwen Graham"). Florida's primaries
 cannot supply this: it cancels a primary nobody contests, so its 2026
 results never mention an Attorney General at all (James Uthmeier and Jose
 Javier Rodriguez were both unopposed for their nominations).
@@ -73,6 +73,8 @@ logger = logging.getLogger(__name__)
 _rate_limiter = RateLimiter(rps=1.0)
 
 _NAME_RE = re.compile(r"^(?P<last>[^,]+),\s*(?P<first>.*?)\s*\((?P<party>[A-Z]{2,4})\)")
+# The running mate after a governor's name: "/ Graham, Gwen".
+_MATE_RE = re.compile(r"^\s*/\s*(?P<last>[^,/]+),\s*(?P<first>[^/]+?)\s*$")
 # "Unopposed" is a candidate Florida deems elected without printing them
 # (Maxwell Frost, FL-10, 2026): the seat's only candidate, so shown as such
 # rather than falling back to every FEC filer who withdrew.
@@ -109,6 +111,14 @@ def _state_record(
     name = clean_display_name(f"{m.group('first')} {m.group('last').strip()}".replace("*Incumbent", ""))
     if party is None or len(name.split()) < 2:
         return None
+    # A governor's line names the running mate after a slash, last name
+    # first ("Jolly, David (DEM) / Graham, Gwen"): Florida elects the two
+    # as one ticket (Fla. Const. art. IV sec. 5), so the pair is shown.
+    mate = _MATE_RE.search(name_cell[m.end():])
+    if mate:
+        mate_name = clean_display_name(f"{mate.group('first')} {mate.group('last').strip()}")
+        if len(mate_name.split()) >= 2:
+            name = f"{name} and {mate_name}"
     record = {"office": office, "district": seat_district, "party": party[0], "last_name": name}
     if seat is not None:
         record["seat"] = seat

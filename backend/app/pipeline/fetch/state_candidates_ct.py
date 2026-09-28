@@ -102,6 +102,7 @@ from pdfplumber.utils import extract_words
 from app.pipeline.fetch.http_utils import fetch_json_with_retry, fetch_text_with_retry, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     clean_display_name,
+    federal_only,
     federal_record,
     normalize_party,
     office_from_columns,
@@ -390,7 +391,7 @@ def _merge_statewide(
     """The statewide ballot: an office a party PRIMARIED is decided by that
     primary's result; any other office goes to the party's endorsed
     candidate. Only called once every primary that was held has settled
-    (fetch_confirmed_candidates returns None before then), and two
+    (before then the state offices are marked incomplete), and two
     endorsements for one party's office publish neither."""
     by_seat: dict[tuple[str, str | None, str], list[str]] = {}
     for rec in endorsed:
@@ -426,16 +427,6 @@ async def fetch_confirmed_candidates(
         party for primary, party in ((dem, "D"), (rep, "R"))
         if primary is not None and not _settled(primary["date"], settle_days)
     }
-    if pending:
-        # None, never a partial answer, while a primary that was held is
-        # still inside its settle window -- the same rule Alabama follows
-        # while a runoff is owed. Publishing the settled party alone would
-        # be read as the whole ballot: the caller records the state as
-        # checked and deletes every stored nominee absent from the list,
-        # so the pending party's nominees (endorsed or primaried) would
-        # vanish and the page would call the result covered.
-        logger.info("CT: the %d %s primary has not settled yet", year, "/".join(sorted(pending)))
-        return None
 
     results: list[dict] = []
     statewide_results: list[dict] = []
@@ -443,13 +434,27 @@ async def fetch_confirmed_candidates(
     for primary, party in ((dem, "D"), (rep, "R")):
         if primary is None:
             continue  # this party held no primary: every endorsement stands
-        party_results = await _party_results(client, primary["id"], year, statewide=statewide)
+        if party in pending:
+            continue  # too soon to trust the count
+        party_results = await _party_results(client, primary["id"], year, statewide=statewide and not pending)
         if party_results is None:
             return None
         records, contested = party_results
         results.extend(r for r in records if r["office"] == "H")
         statewide_results.extend(r for r in records if r["office"] != "H")
         primaried[party] = contested
+
+    if pending:
+        # A primary that was held is still inside its settle window. The
+        # settled party's House nominees stand, but its statewide list
+        # alone would be taken for the whole ballot -- the sync deletes
+        # every stored nominee it does not name and records the state as
+        # checked -- so the pending party's nominees (endorsed or
+        # primaried) would vanish. The state offices are marked
+        # incomplete instead, the same rule Alabama follows while a
+        # runoff is owed.
+        logger.info("CT: the %d %s primary has not settled yet", year, "/".join(sorted(pending)))
+        return federal_only(results) if statewide else results
 
     if statewide:
         endorsed = await _endorsed_nominees(client, year, source.get("endorsements") or {})

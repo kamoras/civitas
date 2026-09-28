@@ -140,6 +140,54 @@ def _state_leg_towns() -> dict[str, list[str]]:
     return _state_leg_towns_cache
 
 
+_STATEWIDE_SEATS_PATH = pathlib.Path(__file__).resolve().parent.parent / "data" / "statewide_seats.json"
+_STATEWIDE_TOWNS_PATH = pathlib.Path(__file__).resolve().parent.parent / "data" / "statewide_district_towns.json"
+_statewide_seats_cache: dict[str, dict] | None = None
+_statewide_towns_cache: dict[str, list[str]] | None = None
+
+
+def _statewide_seats() -> dict[str, dict]:
+    """{state: {office: {"electedBy": ..., "districts": ...}}} for the
+    statewide bodies the page lists seat by seat -- whether each voter
+    votes in one district's seat or in every seat. A cited constitutional
+    fact per state (data/statewide_seats.json), never read off a label.
+    Empty dict if the file is missing: the page then says neither."""
+    global _statewide_seats_cache
+    if _statewide_seats_cache is None:
+        try:
+            _statewide_seats_cache = json.loads(_STATEWIDE_SEATS_PATH.read_text())["states"]
+        except Exception:
+            logger.exception("statewide_seats.json unavailable")
+            _statewide_seats_cache = {}
+    return _statewide_seats_cache
+
+
+def _statewide_district_towns() -> dict[str, list[str]]:
+    """"{ST}-{office}-{n}" -> the towns a district-elected statewide seat
+    covers, from the state's own results for that contest
+    (scripts/fetch_statewide_district_towns.py). Empty dict if missing."""
+    global _statewide_towns_cache
+    if _statewide_towns_cache is None:
+        try:
+            _statewide_towns_cache = json.loads(_STATEWIDE_TOWNS_PATH.read_text())["districts"]
+        except Exception:
+            logger.exception("statewide_district_towns.json unavailable")
+            _statewide_towns_cache = {}
+    return _statewide_towns_cache
+
+
+def _seat_places(state: str, code: str, district: str | None, spec: dict) -> list[str]:
+    """The places a district-elected seat covers, where they are known:
+    the county crosswalk for a body whose districts are the congressional
+    ones (Colorado's), the body's own town list otherwise. Empty when the
+    state publishes none -- never a guess."""
+    if not district or not district.isdigit() or spec.get("electedBy") != "district":
+        return []
+    if spec.get("districts") == "congressional":
+        return list(_district_counties().get(f"{state}-{int(district)}") or [])
+    return list(_statewide_district_towns().get(f"{state}-{code}-{int(district)}") or [])
+
+
 router = APIRouter(prefix="/elections")
 
 
@@ -785,10 +833,11 @@ def _statewide_section(db: Session, state: str, cycle: int) -> tuple[list[dict],
 
     # STATEWIDE_OFFICE_LABELS is insertion-ordered by seniority of the
     # office, which is the order a state prints them on the real ballot.
-    # A statewide body seated by district (Georgia's Public Service
-    # Commission) contributes one entry per seat, labelled with it —
-    # otherwise District 3 and District 5 render as one indistinguishable
-    # "Public Service Commission" row.
+    # A statewide body with seats contributes one entry per seat, labelled
+    # with it -- otherwise District 3 and District 5 render as one
+    # indistinguishable row -- and says how it is elected (electedBy):
+    # Georgia's PSC seats are voted on by every voter, New Hampshire's
+    # Executive Council seats each by one district's.
     races = [
         {
             "office": code if district is None else f"{code}-{district}",
@@ -802,6 +851,23 @@ def _statewide_section(db: Session, state: str, cycle: int) -> tuple[list[dict],
             "nominees": sorted(by_office[(code, district)], key=lambda n: n["party"]),
             # Null when data/office_terms.json does not list this office.
             "termYears": term_years("statewide", state, code),
+            # For a seat: "district" when each voter votes in one district's
+            # seat only (the page helps them find theirs), "statewide" when
+            # every voter votes for each seat (Georgia's PSC). Null for an
+            # office with no seat, or one data/statewide_seats.json does not
+            # cite -- never read off the label.
+            "electedBy": (
+                (_statewide_seats().get(state) or {}).get(code, {}).get("electedBy")
+                if district is not None else None
+            ),
+            # The seat as the page shows it ("3", "Place 1"), and the places
+            # a district seat covers, for the same filter the legislature
+            # uses. Empty when the state publishes no list.
+            "seat": district,
+            # The office itself, for grouping its seats under one heading.
+            "officeCode": code,
+            "officeLabel": label,
+            "areas": _seat_places(state, code, district, (_statewide_seats().get(state) or {}).get(code, {})),
         }
         for code, label in STATEWIDE_OFFICE_LABELS.items()
         for district in sorted(

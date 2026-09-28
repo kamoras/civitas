@@ -205,6 +205,20 @@ export interface StatewideRace {
    * data/office_terms.json; null where that file does not list it (never a
    * default). Optional: an older backend omits it. */
   termYears?: number | null;
+  /** The office this row is a seat of ("executive_council") and its bare
+   * label, for grouping a body's seats under one heading. Optional: an
+   * older backend omits them. */
+  officeCode?: string;
+  officeLabel?: string;
+  /** The seat ("3", "Place 1"); null for an office with no seats. */
+  seat?: string | null;
+  /** "district": each voter votes in one district's seat only.
+   * "statewide": every voter votes for each seat (Georgia's PSC).
+   * Null where the backend cites neither (data/statewide_seats.json). */
+  electedBy?: "district" | "statewide" | null;
+  /** Towns or counties a district seat covers, where the state publishes
+   * them; empty otherwise. */
+  areas?: string[];
 }
 
 export interface StatewideNominee {

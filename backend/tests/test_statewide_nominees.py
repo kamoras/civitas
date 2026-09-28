@@ -731,3 +731,82 @@ def test_one_rule_for_district_seated_bodies():
     assert parse_statewide_office("Governor's Council 3rd District") == ("governors_council", "3")
     for state in ("LA", "MT"):
         assert sources[state]["statewide_omits"] == ["Public Service Commission districts"], state
+
+
+class TestHowASeatIsElected:
+    """A district-elected seat and a statewide-elected one read alike
+    ("…, District 3"), so the page is told which it is -- from cited data,
+    never the label -- and, where the state publishes them, the places a
+    district seat covers."""
+
+    def _races(self, db_session, state, rows):
+        _sync_statewide_nominees(db_session, CYCLE, state, SOURCE, rows)
+        races, _ = _statewide_section(db_session, state, CYCLE)
+        return {r["office"]: r for r in races}
+
+    def test_new_hampshires_council_seat_is_district_elected_with_its_towns(self, db_session):
+        races = self._races(db_session, "NH", [
+            {"office": "executive_council", "district": "4", "party": "R", "last_name": "John Stephen"},
+            {"office": "governor", "district": None, "party": "R", "last_name": "Kelly Ayotte"},
+        ])
+        seat = races["executive_council-4"]
+        assert seat["electedBy"] == "district" and seat["seat"] == "4"
+        # From the state's own District 4 results workbook.
+        assert "Allenstown" in seat["areas"] and "Albany" not in seat["areas"]  # Albany is District 1
+        assert races["governor"]["electedBy"] is None and races["governor"]["areas"] == []
+
+    def test_georgias_psc_seat_is_elected_statewide(self, db_session):
+        races = self._races(db_session, "GA", [
+            {"office": "public_service_commission", "district": "3", "party": "D", "last_name": "A Name"},
+        ])
+        seat = races["public_service_commission-3"]
+        assert seat["electedBy"] == "statewide" and seat["areas"] == []
+
+    def test_colorados_regent_districts_are_its_congressional_districts(self, db_session):
+        races = self._races(db_session, "CO", [
+            {"office": "university_regent", "district": "3", "party": "D", "last_name": "A Regent"},
+        ])
+        seat = races["university_regent-3"]
+        assert seat["electedBy"] == "district"
+        assert "Alamosa County" in seat["areas"]
+
+    def test_an_office_the_data_does_not_cite_says_nothing(self, db_session):
+        races = self._races(db_session, "ND", [
+            {"office": "public_service_commission", "district": "2", "party": "R", "last_name": "A Name"},
+        ])
+        assert races["public_service_commission-2"]["electedBy"] is None
+
+
+def test_every_seated_office_the_page_can_show_is_cited():
+    """Each state/office in statewide_seats.json names a real seated
+    office and one of the two answers, with its citation."""
+    import json
+    from pathlib import Path
+
+    from app.pipeline.fetch.state_candidates_common import _STATEWIDE_DISTRICT_SEATS
+
+    data = json.loads((Path(__file__).resolve().parents[1] / "app" / "data" / "statewide_seats.json").read_text())
+    for state, offices in data["states"].items():
+        for code, spec in offices.items():
+            assert code in _STATEWIDE_DISTRICT_SEATS, (state, code)
+            assert spec["electedBy"] in ("district", "statewide"), (state, code)
+            assert f"{state} {code}" in data["_sources"], (state, code)
+
+
+def test_statewide_district_towns_is_generated_data_for_district_seats_only():
+    """statewide_district_towns.json names where it came from (AGENTS.md
+    3a) and covers only offices statewide_seats.json says are elected by
+    district: a statewide-elected seat has no 'your district' to find."""
+    import json
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1] / "app" / "data"
+    towns = json.loads((root / "statewide_district_towns.json").read_text())
+    seats = json.loads((root / "statewide_seats.json").read_text())["states"]
+    assert "fetch_statewide_district_towns.py" in towns["_source"]
+    for key, places in towns["districts"].items():
+        state, code, _n = key.split("-")
+        assert seats[state][code]["electedBy"] == "district", key
+        assert places and all(p.strip() for p in places), key
+    assert len([k for k in towns["districts"] if k.startswith("NH-")]) == 5
+    assert len([k for k in towns["districts"] if k.startswith("MA-")]) == 8

@@ -98,6 +98,7 @@ import httpx
 from app.pipeline.fetch.http_utils import fetch_json_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     clean_display_name,
+    federal_only,
     federal_record,
     normalize_party,
     parse_office,
@@ -240,15 +241,17 @@ async def fetch_confirmed_candidates(
     if primary is None:
         return []  # not published yet this cycle — healthy unknown
 
-    if (state_offices and runoff is not None and _settled(primary["date"], settle_days)
-            and not _settled(runoff["date"], settle_days)):
-        # The primary has settled and its runoff has not. Every office the
-        # runoff decides would be missing from a read of the primary alone,
-        # and under the state-office opt-in the caller takes this list for
-        # the whole ballot (deleting what it does not name). None until the
-        # runoff settles, as Alabama does while a runoff is owed.
-        logger.info("%s: the %d runoff has not settled yet", state, year)
-        return None
+    # The primary has settled and its runoff has not. Every office the
+    # runoff decides is missing from a read of the primary alone, and under
+    # the state-office opt-in the sync would take that list for the whole
+    # ballot (deleting what it does not name). The primary's federal rows
+    # stand -- a runoff-owed federal seat names nobody from it anyway --
+    # and the state offices are marked incomplete (federal_only), as
+    # Alabama withholds them while a runoff is owed.
+    runoff_pending = (
+        state_offices and runoff is not None and _settled(primary["date"], settle_days)
+        and not _settled(runoff["date"], settle_days)
+    )
 
     by_seat: dict[tuple, list[tuple[str, float]]] = {}
     # Runoff processed second so its answer for a seat overrides the primary's.
@@ -329,4 +332,7 @@ async def fetch_confirmed_candidates(
             if st_seat is not None:
                 record["seat"] = st_seat
             records.append(record)
+    if runoff_pending:
+        logger.info("%s: the %d runoff has not settled yet -- state offices incomplete", state, year)
+        return federal_only(records)
     return records

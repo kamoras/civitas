@@ -142,6 +142,7 @@ from app.election_calendar import next_election_day
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     clean_display_name,
+    federal_only,
     normalize_party,
     office_from_columns,
     parse_office,
@@ -866,17 +867,15 @@ async def fetch_confirmed_candidates(
         return None
     usable = [s for s in stages if s.get("url") and not _withheld(s, discovery)]
     state_offices = bool(source.get("statewide_offices"))
-    if state_offices and usable and len(usable) < len(stages):
-        # Some stages settled, others not: one party's election certified
-        # and the other's still counting (Virginia runs one per party), or
-        # a primary settled with its runoff still open. Under the state-
-        # office opt-in a partial read would be taken for the whole ballot
-        # -- the caller deletes every stored nominee it does not list and
-        # records the state as checked -- so the pending stage's nominees
-        # would vanish. Nothing is said until every stage has settled, the
-        # rule Alabama and Connecticut follow too.
-        logger.info("%s: %d of %d %d stages not settled yet", st, len(stages) - len(usable), len(stages), year)
-        return None
+    # Some stages settled, others not: one party's election certified and
+    # the other's still counting (Virginia runs one per party), or a
+    # primary settled with its runoff still open. The settled stages'
+    # federal rows stand; under the state-office opt-in their state rows
+    # would be taken for the whole ballot -- the sync deletes every stored
+    # nominee it does not list and records the state as checked -- so the
+    # state offices are marked incomplete instead (federal_only), the rule
+    # Alabama and Connecticut follow too.
+    partial = bool(usable) and len(usable) < len(stages)
     if not usable:
         logger.info(
             "%s has %d %d election(s) published but none settled enough to name "
@@ -931,11 +930,13 @@ async def fetch_confirmed_candidates(
         # Withheld is healthy and empty; nothing parsed at all is a
         # failure. Same distinction the discovery gate makes.
         return [] if withheld_any else None
-    if withheld_any and state_offices:
-        # The same partial read as above, found only once a file dated
-        # itself: see the check before the loop.
-        return None
-    return [record for records in by_seat.values() for record in records]
+    records = [record for records in by_seat.values() for record in records]
+    if state_offices and (partial or withheld_any):
+        # The same partial read as above, withheld_any found only once a
+        # file dated itself.
+        logger.info("%s %d: a stage has not settled yet -- state offices incomplete", st, year)
+        return federal_only(records)
+    return records
 
 
 def _collect(

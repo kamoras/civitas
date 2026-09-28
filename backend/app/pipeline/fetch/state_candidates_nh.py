@@ -84,8 +84,10 @@ its district -- the rule for every statewide body seated by district
 (Massachusetts's Governor's Council, Colorado's and Utah's boards,
 Nebraska's Public Service Commission), shown the way the legislature is:
 each councillor is elected by the voters of one district only (N.H.
-Const. Pt. II Art. 60; RSA 662:2 draws the five districts), and the
-district label is what tells a reader which seat is theirs. Each party
+Const. Pt. II Art. 60; RSA 662:2 draws the five districts), so the page
+says each voter votes in one seat (data/statewide_seats.json) and lists
+the towns each district covers (statewide_district_towns.json, read from
+these same workbooks) for the reader to find theirs. Each party
 page links one "Executive Council District N" workbook per district --
 the whole district, town by town, with a TOTALS row, so there is no
 per-county file to refuse and no "Summary" in its name -- read under the

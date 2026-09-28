@@ -584,6 +584,40 @@ STATEWIDE_OFFICE_LABELS = {
 }
 
 
+class SourceRecords(list):
+    """A strategy's records, plus two facts about them that the rows alone
+    cannot carry. Returned only where an adapter knows one; a plain list
+    means neither.
+
+    `state_offices_incomplete`: the federal rows are good (every stage
+    they come from has settled), but the STATE-office read is partial --
+    one party's primary or a runoff is still settling -- so the sync must
+    not treat its statewide, legislative or judicial rows (or their
+    absence) as the ballot. The adapter leaves those rows out entirely.
+    None for the whole read would throw the settled federal nominees away
+    too, report the state as a failed fetch, and send the sync to the
+    crawler's spare source.
+
+    `ballot_list`: whether the state-office rows come from the state's
+    list of who is on the November ballot (True) or from primary results
+    (False), for an adapter that can read either (Vermont's, which reads
+    the general report once it is final). None leaves the answer to the
+    strategy (state_candidates.BALLOT_LIST_STRATEGIES)."""
+
+    def __init__(self, items=(), *, state_offices_incomplete: bool = False, ballot_list: bool | None = None):
+        super().__init__(items)
+        self.state_offices_incomplete = state_offices_incomplete
+        self.ballot_list = ballot_list
+
+
+def federal_only(records: list[dict]) -> SourceRecords:
+    """`records` cut to their federal rows and marked state-office
+    incomplete (see SourceRecords)."""
+    return SourceRecords(
+        (r for r in records if r["office"] in ("S", "H")), state_offices_incomplete=True,
+    )
+
+
 def join_governor_tickets(records: list[dict]) -> list[dict]:
     """`records` with each lieutenant governor joined to their governor as
     one ticket ("Phil Weiser and Lesley Dahlkemper"), for a state that

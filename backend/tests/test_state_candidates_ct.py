@@ -236,8 +236,7 @@ class TestFetchConfirmedCandidates:
 
         monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
         result = await ct.fetch_confirmed_candidates(None, future_year, "CT", {"settle_days": 21})
-        # None, not []: a held primary still settling is not an answer.
-        assert result is None
+        assert result == []
         assert all(u.endswith("Elections.json") for u in requested)
 
     async def test_one_party_pending_and_the_other_holding_no_primary_publishes_nothing(self, monkeypatch):
@@ -267,7 +266,45 @@ class TestFetchConfirmedCandidates:
         monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
         monkeypatch.setattr(ct, "fetch_with_retry", fake)
         source = {"settle_days": 21, "statewide_offices": True, "endorsements": ENDORSEMENTS}
-        assert await ct.fetch_confirmed_candidates(None, future_year, "CT", source) is None
+        result = await ct.fetch_confirmed_candidates(None, future_year, "CT", source)
+        # No state-office row, and the sync is told the read is partial.
+        assert result == [] and result.state_offices_incomplete is True
+        assert not any("endorsement" in u for u in requested)
+
+    async def test_the_settled_partys_house_nominees_stand_while_the_other_settles(self, monkeypatch):
+        # The real 2026 Republican primary has settled; the Democratic one
+        # is (made) still settling. The Republican House nominees are
+        # confirmed -- withholding them too made the whole state a failed
+        # fetch -- while the state offices are marked incomplete.
+        real_find = ct._find_primary
+
+        def dem_settles_later(elections, year, phrase):
+            found = real_find(elections, year, phrase)
+            if found and phrase.startswith("Democratic"):
+                found = {**found, "date": "2099-08-11"}
+            return found
+
+        monkeypatch.setattr(ct, "_find_primary", dem_settles_later)
+
+        async def fake(client, rl, method, url, **kw):
+            if url.endswith("Elections.json"):
+                return _resp(ELECTIONS)
+            if f"/election/{REP_ID}/Version.json" in url:
+                return _resp({"Version": 10237})
+            if f"/election/{REP_ID}/10237/Lookupdata.json" in url:
+                return _resp(REP_LOOKUP)
+            if f"/election/{REP_ID}/10237/stateVotes_Electiondata.json" in url:
+                return _resp(REP_VOTES)
+            raise AssertionError(f"unexpected URL: {url}")
+
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
+        monkeypatch.setattr(ct, "fetch_with_retry", fake)
+        source = {"settle_days": 21, "statewide_offices": True, "endorsements": ENDORSEMENTS}
+        result = await ct.fetch_confirmed_candidates(None, 2026, "CT", source)
+        assert sorted((r["office"], r["party"], r["last_name"]) for r in result) == [
+            ("H", "R", "Goldstein"), ("H", "R", "Shea"),
+        ]
+        assert result.state_offices_incomplete is True
 
 
 # ── Statewide offices: primary results + convention endorsements ─────

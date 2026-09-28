@@ -385,3 +385,90 @@ async def test_a_joint_ticket_is_stored_as_one_governor_contest(colorado, monkey
     assert {(r.office, r.display_name) for r in colorado.query(StatewideNominee)} == {
         ("governor", "Phil Weiser and Lesley Dahlkemper"),
     }
+
+
+# ── ballotList: where the STATE-office rows came from ────────────────
+
+def _state_fixture(db_session, monkeypatch, state, race_id, district):
+    async def no_calendar(client, cycle):
+        return {}, False
+    monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+    monkeypatch.setattr(sc, "configured_states", lambda: {state})
+    db_session.add(Race(id=race_id, cycle_year=2026, office="H", state=state, district=district,
+                        is_special=False))
+    db_session.commit()
+
+
+@pytest.mark.asyncio
+async def test_north_carolinas_primary_results_are_not_called_the_ballot(db_session, monkeypatch):
+    """North Carolina's general_ballot_complete describes its federal FILING
+    list (sync_ballot_filings). Its state offices and judgeships come from
+    primary results, so the page must not call them every candidate on the
+    November ballot."""
+    from app.api.elections import _judicial_marker
+
+    assert _SOURCES["NC"].get("general_ballot_complete") and _SOURCES["NC"]["strategy"] == "tabular"
+    _state_fixture(db_session, monkeypatch, "NC", "2026-HOUSE-NC-1", 1)
+    monkeypatch.setitem(sc.STRATEGIES, "tabular", AsyncMock(return_value=[
+        _rec("H", 1, "D", "Davis", "Don Davis"),
+        _rec("lower", "5", "R", "A Primary Winner"),
+        {"office": "appeals", "district": None, "seat": "Seat 1", "party": "D", "last_name": "A Judge"},
+    ]))
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+    assert _statewide_marker(db_session, "NC", 2026)["ballotList"] is False
+    assert _judicial_marker(db_session, "NC", 2026)["ballotList"] is False
+
+
+@pytest.mark.asyncio
+async def test_a_certified_list_strategy_is_the_ballot(db_session, monkeypatch):
+    # South Carolina's main source is its candidate-tracking list.
+    assert _SOURCES["SC"]["strategy"] == "vrems"
+    _state_fixture(db_session, monkeypatch, "SC", "2026-HOUSE-SC-1", 1)
+    monkeypatch.setitem(sc.STRATEGIES, "vrems", AsyncMock(return_value=[
+        _rec("H", 1, "R", "Dykes", "Mark Dykes"),
+        _rec("governor", None, "R", "Alan Wilson and Mike Reichenbach"),
+    ]))
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+    assert _statewide_marker(db_session, "SC", 2026)["ballotList"] is True
+
+
+@pytest.mark.parametrize("from_general", [True, False])
+@pytest.mark.asyncio
+async def test_vermont_says_per_run_which_document_it_read(db_session, monkeypatch, from_general):
+    from app.pipeline.fetch.state_candidates_common import SourceRecords
+
+    _state_fixture(db_session, monkeypatch, "VT", "2026-HOUSE-VT-0", 0)
+    monkeypatch.setitem(sc.STRATEGIES, "vt_enr", AsyncMock(return_value=SourceRecords([
+        _rec("H", None, "D", "Balint", "Becca Balint"),
+        _rec("governor", None, "R", "Phil Scott"),
+    ], ballot_list=from_general)))
+    await sc.sync_confirmed_candidates(db_session, None, 2026)
+    assert _statewide_marker(db_session, "VT", 2026)["ballotList"] is from_general
+
+
+# ── a partial state-office read keeps its settled federal rows ───────
+
+@pytest.mark.asyncio
+async def test_an_incomplete_state_office_read_confirms_federal_and_keeps_state_rows(db_session, monkeypatch):
+    """Georgia-style: the primary settled, its runoff has not. The federal
+    nominees are confirmed and the state is 'ok'; the stored state offices
+    and judgeships are left exactly as they were, not deleted or marked
+    checked from a partial list."""
+    from app.api.elections import _judicial_marker
+    from app.models import Candidate
+    from app.pipeline.fetch.state_candidates_common import SourceRecords
+
+    _state_fixture(db_session, monkeypatch, "GA", "2026-HOUSE-GA-1", 1)
+    db_session.add(Candidate(id="H6GA01000", name="CARTER, BUDDY", party="REP", race_id="2026-HOUSE-GA-1"))
+    db_session.add(StatewideNominee(state="GA", cycle_year=2026, office="lt_governor", district=None,
+                                    party="R", display_name="Stored Earlier"))
+    db_session.commit()
+    monkeypatch.setitem(sc.STRATEGIES, "tabular", AsyncMock(return_value=SourceRecords(
+        [_rec("H", 1, "R", "Carter", "Buddy Carter")], state_offices_incomplete=True,
+    )))
+    results = await sc.sync_confirmed_candidates(db_session, None, 2026)
+    assert results["GA"]["status"] == "ok", results
+    assert results["GA"]["confirmed"] == 1, results
+    assert [r.display_name for r in db_session.query(StatewideNominee)] == ["Stored Earlier"]
+    assert _statewide_marker(db_session, "GA", 2026) is None
+    assert _judicial_marker(db_session, "GA", 2026) is None

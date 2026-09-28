@@ -36,6 +36,7 @@ import type {
   StateLegChamber,
   StateLegDistrict,
   StatewideNominee,
+  StatewideRace,
   TownBallot,
   TownEntry,
 } from "@/types/election";
@@ -255,6 +256,138 @@ function JudicialDetail({ ballot }: { ballot: StateBallot }) {
 const PRIMARY_RESULTS_CAVEAT =
   "Names come from primary results, which often omit a nominee who ran unopposed and never include independent or minor-party candidates — so an office may be missing, or missing a party's nominee.";
 
+type StatewideGroup = { key: string; race?: StatewideRace; seats?: StatewideRace[] };
+
+/** Rows in the backend's order, with every seat of one body (the rows
+ * sharing an officeCode that carry a seat) gathered under that body. */
+function groupStatewideRaces(races: StatewideRace[]): StatewideGroup[] {
+  const groups: StatewideGroup[] = [];
+  for (const race of races) {
+    const last = groups[groups.length - 1];
+    if (race.seat && race.officeCode) {
+      if (last?.seats && last.seats[0].officeCode === race.officeCode) {
+        last.seats.push(race);
+      } else {
+        groups.push({ key: race.officeCode, seats: [race] });
+      }
+    } else {
+      groups.push({ key: race.office, race });
+    }
+  }
+  return groups;
+}
+
+function StatewideOfficeRow({ race }: { race: StatewideRace }) {
+  return (
+    <div className="grid grid-cols-1 gap-1 border border-white/[0.09] bg-surface px-3 py-2.5 sm:grid-cols-[minmax(0,180px)_1fr] sm:gap-3">
+      <span className="font-mono text-xs text-ink-lo sm:self-center">
+        {race.label}
+        {termPhrase(race.termYears) && (
+          <span className="block text-ink-min">{termPhrase(race.termYears)}</span>
+        )}
+      </span>
+      <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+        {race.nominees.map((n) => (
+          <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
+        ))}
+      </span>
+    </div>
+  );
+}
+
+/** Every seat of one statewide body on this ballot. How the body is
+ * elected is stated, never implied by the layout: where each voter votes
+ * in one district's seat (New Hampshire's Executive Council), the reader
+ * is told so and helped to find theirs — by the towns it covers where the
+ * state publishes them, the official lookup otherwise; where every voter
+ * votes for each seat (Georgia's PSC, whose districts are residency
+ * requirements), the reader is told that instead. */
+function StatewideSeatGroup({ seats, lookupHref }: { seats: StatewideRace[]; lookupHref: string }) {
+  const [filter, setFilter] = useState("");
+  const first = seats[0];
+  const label = first.officeLabel || first.label;
+  const byDistrict = first.electedBy === "district";
+  const hasAreas = seats.some((s) => (s.areas ?? []).length > 0);
+  const shown = seats.filter((s) =>
+    matchesDistrictQuery({ district: s.seat ?? null, areas: s.areas ?? [], candidates: s.nominees }, filter)
+  );
+  const seatWord = /^\d/.test(first.seat ?? "") ? "District" : "";
+
+  return (
+    <div className="border border-white/[0.09] bg-surface px-3 py-2.5">
+      <h3 className="font-mono text-xs text-ink-lo">
+        {label.toUpperCase()} — {seats.length} {seats.length === 1 ? "SEAT" : "SEATS"}
+        {termPhrase(first.termYears) && (
+          <span className="text-ink-min"> · {termPhrase(first.termYears)!.toUpperCase()}</span>
+        )}
+      </h3>
+      {byDistrict && (
+        <p className="mt-1 text-xs text-ink-lo">
+          Each voter votes in one district&apos;s seat only.{" "}
+          {hasAreas ? (
+            "Filter by your town to find yours, or "
+          ) : (
+            "Find yours with "
+          )}
+          <a href={lookupHref} target="_blank" rel="noopener noreferrer" className="text-signal-cyan hover:text-phos">
+            {hasAreas ? "check the official lookup" : "the official lookup"}
+          </a>
+          .
+        </p>
+      )}
+      {first.electedBy === "statewide" && (
+        <p className="mt-1 text-xs text-ink-lo">
+          Every voter in the state votes for each seat; a seat&apos;s number only says which one it is.
+        </p>
+      )}
+      {byDistrict && hasAreas && seats.length > 3 && (
+        <div className="mt-2">
+          <input
+            type="search"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filter by town, candidate, or district number"
+            aria-label={`Filter ${label} seats by town, candidate, or district number`}
+            className="w-full min-w-0 border border-white/15 bg-surface-base px-3 py-2 font-mono text-xs text-ink-hi placeholder:text-ink-min"
+          />
+          <p role="status" aria-live="polite" className="sr-only">
+            {filter.trim() ? `${shown.length} of ${seats.length} ${label} seats match ${filter}` : ""}
+          </p>
+        </div>
+      )}
+      <div className="mt-2 space-y-1">
+        {shown.map((s) => (
+          <div
+            key={s.office}
+            className="grid grid-cols-[minmax(42px,auto)_1fr] items-baseline gap-3 border border-white/[0.06] px-3 py-2"
+          >
+            <span className="font-mono text-xs text-ink-hi">
+              {seatWord ? `${seatWord} ${s.seat}` : s.seat}
+            </span>
+            <span className="min-w-0">
+              {districtAreaLabel(s.areas ?? [], 3, false) && (
+                <span className="block truncate text-[11px] text-ink-min">
+                  {districtAreaLabel(s.areas ?? [], 3, false)}
+                </span>
+              )}
+              <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+                {s.nominees.map((n) => (
+                  <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
+                ))}
+              </span>
+            </span>
+          </div>
+        ))}
+        {shown.length === 0 && (
+          <p className="border border-white/[0.09] p-4 text-xs text-ink-min">
+            No {label} seat matches “{filter}”. Try your town, a candidate&apos;s name, or a district number.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** The state's own executive officers — Governor, Lieutenant Governor,
  * Attorney General, Secretary of State, Treasurer — where its feed
  * publishes them. "This state elects none this cycle" gets real words.
@@ -263,7 +396,7 @@ const PRIMARY_RESULTS_CAVEAT =
  * FEC filing, so there is no money, no score and nothing to click
  * through to. Showing a name and a party is the whole of what's true.
  */
-function StatewideExecutiveDetail({ ballot }: { ballot: StateBallot }) {
+function StatewideExecutiveDetail({ ballot, lookupHref }: { ballot: StateBallot; lookupHref: string }) {
   const { statewideRaces, statewideCoverage, state } = ballot;
   return (
     <div>
@@ -273,24 +406,13 @@ function StatewideExecutiveDetail({ ballot }: { ballot: StateBallot }) {
         </p>
       ) : (
         <div className="space-y-1.5">
-          {statewideRaces.map((race) => (
-            <div
-              key={race.office}
-              className="grid grid-cols-1 gap-1 border border-white/[0.09] bg-surface px-3 py-2.5 sm:grid-cols-[minmax(0,180px)_1fr] sm:gap-3"
-            >
-              <span className="font-mono text-xs text-ink-lo sm:self-center">
-                {race.label}
-                {termPhrase(race.termYears) && (
-                  <span className="block text-ink-min">{termPhrase(race.termYears)}</span>
-                )}
-              </span>
-              <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
-                {race.nominees.map((n) => (
-                  <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
-                ))}
-              </span>
-            </div>
-          ))}
+          {groupStatewideRaces(statewideRaces).map((group) =>
+            group.seats ? (
+              <StatewideSeatGroup key={group.key} seats={group.seats} lookupHref={lookupHref} />
+            ) : (
+              <StatewideOfficeRow key={group.key} race={group.race!} />
+            )
+          )}
         </div>
       )}
       {statewideCoverage.basis && statewideRaces.length === 0 && (
@@ -1020,7 +1142,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
           />
         );
       case "statewide":
-        return <StatewideExecutiveDetail ballot={ballot} />;
+        return <StatewideExecutiveDetail ballot={ballot} lookupHref={lookupHref} />;
       case "stateleg":
         return <StateLegislatureDetail ballot={ballot} />;
       case "judicial":

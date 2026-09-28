@@ -105,10 +105,10 @@ async def test_sc_reads_every_executive_contest_from_one_search():
     assert asked == ["-1"]
     offices = _by_office(r for r in records if r["office"] in STATEWIDE_OFFICE_LABELS)
     assert offices == {
-        # The joint ticket is the governor's contest; the running mate is
-        # not a separate one.
-        "governor": {("U", "Michael Addison"), ("G", "Walid Hakim"),
-                     ("D", "Jermaine Johnson"), ("R", "Alan Wilson")},
+        # The joint ticket is the governor's contest, printed as the pair
+        # from the list's own Running Mate column.
+        "governor": {("U", "Michael Addison and Candace Brewer"), ("G", "Walid Hakim and Arnold E Karr"),
+                     ("D", "Jermaine Johnson and Sam Skardon"), ("R", "Alan Wilson and Mike Reichenbach")},
         "secretary_of_state": {("D", "Jason Belton"), ("R", "Mark Hammond")},
         "treasurer": {("D", "Vincent Coe"), ("R", "Curtis Loftis")},
         "attorney_general": {("D", "Richard Hricik"), ("R", "David Stumbo")},

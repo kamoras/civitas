@@ -382,7 +382,8 @@ def parse_certified_rows(rows: list[dict], fmt: dict, state_offices: bool = Fals
             # Annotations go first: a ticket's registrations share one
             # parenthesis ("(Registered Democrat / Nonpartisan)").
             parts = [_reading_order(part) for part in clean_display_name(printed).split("/")]
-            printed = " / ".join(name for name, _ in parts)
+            # Joined " and ", the way every other ticket on the page reads.
+            printed = " and ".join(name for name, _ in parts)
             printed_last = parts[0][1]
         display = clean_display_name(printed)
         if fill_down:
