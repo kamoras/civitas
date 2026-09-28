@@ -223,8 +223,14 @@ _NOT_A_NAME = frozenset({
 def _without_trailing_suffix(name: str) -> str:
     """"John A. Olszewski, Jr." without its ", Jr.": a comma before a
     generational suffix is not the "Last, First" comma, and read as one it
-    left the name with no given name at all."""
-    return _SUFFIX_AFTER_COMMA_RE.sub("", name.strip())
+    left the name with no given name at all. Only after more than one word:
+    "LEE, JR." is a surname and its suffix, and stripped it would read its
+    surname as a given name."""
+    name = name.strip()
+    suffix = _SUFFIX_AFTER_COMMA_RE.search(name)
+    if suffix and len(name[: suffix.start()].split()) > 1:
+        return name[: suffix.start()]
+    return name
 
 
 def _given_names(name: str) -> list[str]:
@@ -318,7 +324,7 @@ _KNOWN_PARTIES = frozenset(PARTY_CODE_MAP.values())
 
 
 def _record_given(display_name: str | None, last_name: str) -> tuple[str, str]:
-    """(first given name, else "", its initial) a record's display name
+    """(first given name, else "", leading initial if it leads with one) a record's display name
     states — its surname's words, honorifics and suffixes set aside, so
     "J. Smith" states only the initial "j", and "Smith", "Smith Jr." and
     "Dr. Smith" state nothing."""
@@ -331,7 +337,9 @@ def _record_given(display_name: str | None, last_name: str) -> tuple[str, str]:
     words = ["".join(ch for ch in w if ch.isalpha()) for w in words]
     words = [w for w in words if w and w not in _NOT_A_NAME]
     full = next((w for w in words if len(w) > 1), "")
-    return full, (words[0][0] if words else "")
+    # The leading initial, only when the name really leads with one
+    # ("J. Robert Smith"): "John Smith" states "john", not just "j".
+    return full, (words[0] if words and len(words[0]) == 1 else "")
 
 
 def _contradicts(
@@ -358,7 +366,7 @@ def _contradicts(
         tokens = _given_names(cand.name or "")
         if tokens:
             return not any(t == wanted or t.startswith(wanted) or wanted.startswith(t) for t in tokens)
-        return bool(theirs_initial) and theirs_initial != initial
+        return bool(theirs_initial) and theirs_initial != wanted[0]
     if initial:  # an initial alone ("J. Smith") against theirs
         return bool(theirs_initial) and theirs_initial != initial
     return False  # no given name stated: nothing to contradict with

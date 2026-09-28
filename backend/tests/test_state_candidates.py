@@ -822,6 +822,33 @@ class TestAWeakerSourceNeverPrunesTheCertifiedBallot:
         assert sc._match_candidate(rows, "SMITH", "L", "J. Robert Smith").id == "H1"
         assert sc._match_candidate(rows, "SMITH", "L", "M. Robert Smith") is None
 
+    @pytest.mark.parametrize("record_party, display, fec", [
+        ("L", "John Smith", "SMITH, JANE"),
+        ("R", "Mary Smith", "SMITH, MARK"),
+    ])
+    def test_a_shared_first_letter_is_not_a_shared_name(self, db_session, record_party, display, fec):
+        _race(db_session, "2026-HOUSE-CA-10", "CA", office="H", district=10)
+        _candidate(db_session, "H1", "2026-HOUSE-CA-10", fec, party="DEM")
+        db_session.commit()
+        rows = db_session.get(Race, "2026-HOUSE-CA-10").candidates
+        assert sc._match_candidate(rows, "SMITH", record_party, display) is None
+
+    def test_a_surname_and_suffix_alone_has_no_given_name(self, db_session):
+        """"Lee Jr." (no FEC row) is not Leeann Lee: a later FEC match for
+        her must not take his placeholder."""
+        _race(db_session, "2026-HOUSE-CA-11", "CA", office="H", district=11)
+        db_session.commit()
+        lee = {"office": "H", "district": 11, "party": "R", "last_name": "LEE", "display_name": "Lee Jr."}
+        sc._apply_ballot(db_session, 2026, "CA", [lee], keep_unlisted=True, authoritative=True)
+        placeholder = [i for i in self._ids(db_session) if i.startswith("ballot:")]
+        assert placeholder
+        _candidate(db_session, "H1", "2026-HOUSE-CA-11", "LEE, LEEANN", party="REP")
+        db_session.commit()
+        leeann = {"office": "H", "district": 11, "party": "R", "last_name": "LEE", "display_name": "Leeann Lee"}
+        sc._apply_ballot(db_session, 2026, "CA", [leeann], keep_unlisted=True, authoritative=False, prune=False)
+        assert placeholder[0] in self._ids(db_session)
+        assert sc._given_names("SMITH, JR") == []
+
     def test_a_nickname_or_a_recoded_party_alone_still_matches(self, db_session):
         _race(db_session, "2026-HOUSE-CA-6", "CA", office="H", district=6)
         _candidate(db_session, "H1", "2026-HOUSE-CA-6", "JONES, JAMES", party="DEM")
