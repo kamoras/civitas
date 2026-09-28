@@ -119,8 +119,13 @@ def test_no_scoring_code_imports_the_check():
         if py.name in allowed:
             continue
         for node in ast.walk(ast.parse(py.read_text())):
-            if isinstance(node, ast.ImportFrom) and node.module:
-                assert "signal_overlap" not in node.module, py
+            if isinstance(node, ast.ImportFrom):
+                names = [node.module or ""] + [f"{node.module}.{a.name}" for a in node.names]
+            elif isinstance(node, ast.Import):
+                names = [a.name for a in node.names]
+            else:
+                continue
+            assert not any("signal_overlap" in n for n in names), py
 
 
 @pytest.mark.parametrize("chamber", ["senate", "house"])
