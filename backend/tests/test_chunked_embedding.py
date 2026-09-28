@@ -303,5 +303,6 @@ def test_a_switch_that_failed_at_open_is_retried_later(tmp_path, monkeypatch):
     vs.get_vec_conn()
     assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     assert vs._wal_retry_at is None
+    assert conn.execute("PRAGMA synchronous").fetchone()[0] == 1  # NORMAL, once in WAL
     conn.close()
     monkeypatch.setattr(vs, "_vec_conn", None)

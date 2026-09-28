@@ -137,6 +137,20 @@ def test_a_salt_from_a_day_that_ended_is_dropped(monkeypatch):
     assert visits._salt_cache is None and visits._fallback_salt is None
 
 
+def test_an_ended_days_salt_row_is_deleted_without_waiting_for_a_visit(db_session):
+    # A quiet night: no visit makes the new day's salt, so nothing else
+    # would delete yesterday's row for hours.
+    from datetime import UTC, datetime
+
+    today = datetime.now(UTC).date().isoformat()
+    db_session.add(VisitSalt(date="2000-01-01", salt="aa" * 32))
+    db_session.add(VisitSalt(date=today, salt="bb" * 32))
+    db_session.commit()
+    with _use(db_session):
+        visits._forget_stale_salts()
+    assert [d for (d,) in db_session.query(VisitSalt.date)] == [today]
+
+
 def test_todays_salt_is_kept(monkeypatch):
     from datetime import UTC, datetime
 

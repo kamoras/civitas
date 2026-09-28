@@ -201,7 +201,8 @@ async def run_visit_consumer() -> None:
         now = time.monotonic()
         if now - last_check >= _STALE_SALT_CHECK_S:
             last_check = now
-            _forget_stale_salts()  # memory only: no I/O
+            # Off the loop: it deletes an ended day's salt row too.
+            await asyncio.to_thread(_forget_stale_salts)
         try:
             event = await asyncio.wait_for(_visit_queue.get(), timeout=_STALE_SALT_CHECK_S)
         except TimeoutError:
@@ -333,16 +334,29 @@ _STALE_SALT_CHECK_S = 60.0
 
 
 def _forget_stale_salts() -> None:
-    """Drop any salt this process holds for a day that has ended. The shared
-    salt's row is deleted when a new day's is made; without this, a worker
-    that saw no traffic since would keep yesterday's in memory — and with
-    it, the means to recompute yesterday's visitor hashes (AGENTS.md §8)."""
+    """Drop any salt for a day that has ended — from this process's memory,
+    and the shared row from the visits database — without waiting for a new
+    day's first visit: until then, anyone holding it could recompute
+    yesterday's visitor hashes (AGENTS.md §8)."""
     global _salt_cache, _fallback_salt
     today = datetime.now(UTC).date().isoformat()
     if _salt_cache is not None and _salt_cache[0] != today:
         _salt_cache = None
     if _fallback_salt is not None and _fallback_salt[0] != today:
         _fallback_salt = None
+    # And from the database: otherwise an ended day's row stays until the
+    # next day's first visit, hours later on a quiet night. Earlier days
+    # only — never today's, which another worker may already use.
+    db = None
+    try:
+        db = VisitsSessionLocal()
+        db.query(VisitSalt).filter(VisitSalt.date < today).delete()
+        db.commit()
+    except Exception:
+        logger.warning("Couldn't drop an ended day's visit salt — retried next tick", exc_info=True)
+    finally:
+        if db is not None:
+            db.close()
     # The RAM store's salts, including the one the fallback derives from,
     # are dropped by the store's own maintenance (throttle.run_maintenance).
 

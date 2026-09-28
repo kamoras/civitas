@@ -158,7 +158,14 @@ class PolledRow:
                 return self.current()
             return value
 
-        row = self._reader(db)
+        try:
+            row = self._reader(db)
+        except Exception:
+            # A reader that raises is read as unreadable (below): waiters
+            # stop waiting, and it is retried soon rather than at the next
+            # full interval.
+            logger.warning("Reading %s/%s failed", self.tier, self.key, exc_info=True)
+            row = UNREADABLE
         if row is UNREADABLE:
             if value is None:
                 with self._lock:
@@ -173,7 +180,10 @@ class PolledRow:
         if row is None:
             value, stamp = None, None
         elif row[0] != stamp or value is None:
-            decoded = self.decode(row[1])
+            try:
+                decoded = self.decode(row[1])
+            except Exception:
+                decoded = None
             if decoded is None:
                 logger.warning("Stored %s/%s couldn't be decoded — keeping the value in hand", self.tier, self.key)
             else:

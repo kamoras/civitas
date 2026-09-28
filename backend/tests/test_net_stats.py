@@ -49,3 +49,16 @@ def test_a_stale_record_is_no_rate(tmp_path, monkeypatch):
 def test_own_totals_reads_proc_net_dev():
     rx, tx = net_stats.own_totals()
     assert rx >= 0 and tx >= 0
+
+
+def test_an_unreadable_sample_is_skipped_not_zeroed(tmp_path, monkeypatch):
+    # Zeros would make the next good read a lifetime of bytes in a minute.
+    _at(monkeypatch, tmp_path)
+    totals = iter([(1000, 100), None, (4000, 700)])
+    clock = iter([10.0, 13.0])
+    monkeypatch.setattr(net_stats, "own_totals", lambda: next(totals))
+    monkeypatch.setattr(net_stats.time, "monotonic", lambda: next(clock))
+    net_stats.record_api_rate()
+    assert not net_stats.record_api_rate()  # unreadable: skipped
+    assert net_stats.record_api_rate()
+    assert net_stats.api_rates() == {"rxRate": 1000.0, "txRate": 200.0}

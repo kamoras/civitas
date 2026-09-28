@@ -104,9 +104,14 @@ def _invalidate_orphaned_pipelines() -> None:
 
 
 # How often the API process checks that the pipeline service is alive, and
-# how long it waits after its own start first — at a deploy, both restart.
+# how long it waits after its own start first. Short: the staleness is
+# measured from the heartbeat file's own time (ops_alerts'
+# PIPELINE_SERVICE_SILENT_AFTER), and a restarted pipeline beats at once, so
+# the wait only covers the two services starting together. A long one would
+# restart with every deploy — on a day of frequent deploys, the check would
+# never run at all.
 _LIVENESS_EVERY_S = 300
-_LIVENESS_GRACE_S = 1800
+_LIVENESS_GRACE_S = 120
 
 
 async def _watch_pipeline_service() -> None:
@@ -180,13 +185,23 @@ def _start_pipeline_side_startup_jobs() -> None:
 # update's old and new tasks never contend for it.
 def _role_lock_path() -> str:
     """Per container (RAM_DIR) and per database: two processes on different
-    databases — a second local dev server — share no run state to protect."""
+    databases — a second local dev server — share no run state to protect.
+    The database is its resolved file, not the URL: the default URL is a
+    relative path, the same string for every checkout's own ./data."""
     import hashlib
+
+    from sqlalchemy.engine import make_url
 
     from app.api.throttle import RAM_DIR
 
-    database = hashlib.sha256(settings.DATABASE_URL.encode()).hexdigest()[:12]
-    return os.path.join(RAM_DIR, f"civitas_pipeline_process-{database}.lock")
+    try:
+        database = make_url(settings.DATABASE_URL).database or ""
+    except Exception:
+        database = settings.DATABASE_URL
+    if database and database != ":memory:":
+        database = os.path.realpath(database)
+    digest = hashlib.sha256(database.encode()).hexdigest()[:12]
+    return os.path.join(RAM_DIR, f"civitas_pipeline_process-{digest}.lock")
 
 
 _ROLE_LOCK_PATH = _role_lock_path()
@@ -218,12 +233,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     global PROCESS_STARTED_AT
     from datetime import datetime, timezone
     PROCESS_STARTED_AT = datetime.now(timezone.utc).isoformat()
-    init_db()
     role = settings.PROCESS_ROLE
     serves_reads = role in ("all", "api")
     runs_pipelines = role in ("all", "worker")
     logging.getLogger("app.main").info("Backend process role: %s", role)
+    # Before init_db: in a pipeline-side role it already starts background
+    # work (the keyword index backfill), which a second such process must
+    # not start before it refuses.
     role_lock = _take_pipeline_role_lock() if runs_pipelines else None
+    init_db()
 
     if runs_pipelines:
         # Only the process that runs pipelines may sweep their rows: the

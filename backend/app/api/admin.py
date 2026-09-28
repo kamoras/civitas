@@ -254,7 +254,7 @@ def _read_system_stats() -> dict:
         # its own interfaces). The dashboard adds the two rates.
         from app.net_stats import api_rates, own_totals
 
-        stats["netRxBytes"], stats["netTxBytes"] = own_totals()
+        stats["netRxBytes"], stats["netTxBytes"] = own_totals() or (None, None)
         rates = api_rates()
         stats["apiNetRxRate"] = rates["rxRate"] if rates else None
         stats["apiNetTxRate"] = rates["txRate"] if rates else None

@@ -495,3 +495,34 @@ def test_a_second_outage_the_same_day_alerts_again(monkeypatch, tmp_path):
         monkeypatch.setattr("app.scheduler.read_heartbeat", lambda last=last: (last, {}))
         ops_alerts.check_pipeline_service_alive()
     assert len(keys) == 2 and keys[0] != keys[1]
+
+
+def test_the_lock_follows_the_database_file_not_the_url(monkeypatch, tmp_path):
+    # The default URL is relative: two checkouts, two ./data/civitas.db
+    # files, one URL string.
+    monkeypatch.setattr(settings, "DATABASE_URL", "sqlite:///data/civitas.db")
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    monkeypatch.chdir(tmp_path / "a")
+    first = main_module._role_lock_path()
+    monkeypatch.chdir(tmp_path / "b")
+    assert main_module._role_lock_path() != first
+
+
+async def test_the_pipeline_lock_is_taken_before_init_db(monkeypatch):
+    # init_db already starts background work in a pipeline-side role.
+    order = []
+    monkeypatch.setattr(settings, "PROCESS_ROLE", "worker")
+    monkeypatch.setattr(main_module, "_take_pipeline_role_lock", lambda: order.append("lock") or None)
+
+    def init():
+        order.append("init_db")
+        raise RuntimeError("stop here")
+
+    monkeypatch.setattr(main_module, "init_db", init)
+    try:
+        async with main_module.lifespan(main_module.app):
+            pass
+    except RuntimeError:
+        pass
+    assert order == ["lock", "init_db"]

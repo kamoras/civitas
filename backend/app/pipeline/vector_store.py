@@ -210,7 +210,11 @@ def get_vec_conn() -> sqlite3.Connection:
     global _vec_conn, _wal_retry_at
     with _vec_lock:
         if _vec_conn is not None and _wal_retry_at is not None and time.monotonic() >= _wal_retry_at:
-            _wal_retry_at = None if _switch_to_wal() else time.monotonic() + _WAL_RETRY_EVERY_S
+            if _switch_to_wal():
+                _wal_retry_at = None
+                _vec_conn.execute("PRAGMA synchronous=NORMAL")  # safe now: see below
+            else:
+                _wal_retry_at = time.monotonic() + _WAL_RETRY_EVERY_S
         if _vec_conn is None:
             import sqlite_vec
 
@@ -225,7 +229,11 @@ def get_vec_conn() -> sqlite3.Connection:
             # after the first switch this is a no-op — and every connection,
             # this one included, follows a switch made by another.
             _wal_retry_at = None if _switch_to_wal() else time.monotonic() + _WAL_RETRY_EVERY_S
-            conn.execute("PRAGMA synchronous=NORMAL")
+            # NORMAL only in WAL, where it is durable against a crash; in the
+            # rollback journal it can corrupt the file on power loss, so the
+            # default (FULL) stands until the switch takes.
+            if _wal_retry_at is None:
+                conn.execute("PRAGMA synchronous=NORMAL")
             conn.enable_load_extension(True)
             sqlite_vec.load(conn)
             conn.enable_load_extension(False)

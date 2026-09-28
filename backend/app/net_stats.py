@@ -31,9 +31,10 @@ _RECORD = "api_network.json"
 _previous: tuple[int, int, float] | None = None
 
 
-def own_totals() -> tuple[int, int]:
+def own_totals() -> tuple[int, int] | None:
     """(received, sent) bytes on this container's interfaces, loopback
-    excluded; (0, 0) when they can't be read."""
+    excluded; None when they can't be read — never zeros, which the next
+    good read would turn into a lifetime's bytes in one interval."""
     rx = tx = 0
     try:
         with open("/proc/net/dev") as f:
@@ -47,7 +48,7 @@ def own_totals() -> tuple[int, int]:
                 rx += int(cols[0])
                 tx += int(cols[8])
     except (OSError, ValueError, IndexError):
-        return 0, 0
+        return None
     return rx, tx
 
 
@@ -57,7 +58,10 @@ def record_api_rate() -> bool:
     from app.shared_state import write_record
 
     global _previous
-    rx, tx = own_totals()
+    totals = own_totals()
+    if totals is None:
+        return False  # this sample is lost; the previous one stands
+    rx, tx = totals
     now = time.monotonic()
     previous, _previous = _previous, (rx, tx, now)
     if previous is None or now <= previous[2] or rx < previous[0] or tx < previous[1]:
@@ -108,8 +112,9 @@ async def run_recorder() -> None:
                 # Keep this worker's own sample current, so the round it
                 # wins measures a recent interval rather than a long one.
                 global _previous
-                rx, tx = own_totals()
-                _previous = (rx, tx, time.monotonic())
+                totals = own_totals()
+                if totals is not None:
+                    _previous = (*totals, time.monotonic())
         except Exception:
             logger.debug("Couldn't record the API's network rate", exc_info=True)
         await asyncio.sleep(RECORD_EVERY_S)

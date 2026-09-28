@@ -187,3 +187,20 @@ def test_callers_during_the_first_read_wait_for_it(monkeypatch):
     results.append(polled.get())  # arrives mid-read
     first.join()
     assert results == [{"a": 1}, {"a": 1}]
+
+
+def test_a_reader_that_raises_is_read_as_unreadable():
+    """Waiters must not each wait out the first-read wait for a read that
+    already failed, and the failure must not escape into a search."""
+    import time
+
+    from app.shared_state import PolledRow, decode_json_dict
+
+    def broken(_db):
+        raise RuntimeError("no such table")
+
+    polled = PolledRow("t", "k", every_s=30, decode=decode_json_dict, reader=broken)
+    assert polled.get() is None
+    start = time.monotonic()
+    assert polled.get() is None  # no 2 s wait: the first read answered "nothing"
+    assert time.monotonic() - start < 1
