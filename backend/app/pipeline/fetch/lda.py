@@ -178,10 +178,15 @@ def _name_key(name: str) -> str:
     return " ".join(words[1:] if words[:1] == ["THE"] else words)
 
 
+# A parenthesised part of a name is an alias or abbreviation: "AMERICAN
+# BANKERS ASSOCIATION (ABA)" files as "AMERICAN BANKERS ASSOCIATION".
+_ALIAS_RE = re.compile(r"\([^()]*\)")
+
+
 def search_name(org_name: str) -> str:
     """The name to search the registry for: the organization's name without
-    trailing legal-form words."""
-    words = _name_key(org_name).split()
+    parenthesised aliases or trailing legal-form words."""
+    words = _name_key(_ALIAS_RE.sub(" ", org_name or "")).split() or _name_key(org_name).split()
     # "ELI LILLY AND COMPANY" and "ELI LILLY & COMPANY" are one name; the
     # ampersand is already gone as punctuation, so a dangling AND goes too.
     while len(words) > 1 and (words[-1] in _LEGAL_FORM_WORDS or words[-1] == "AND"):
@@ -784,8 +789,8 @@ async def enrich_lobbying_matches_with_lda(
                     m["description"] = (
                         m.get("description", "")
                         + f" No lobbying registry client matched \"{search_name(org)}\", the committee's"
-                        " own name; the registry lists a PAC's sponsor, which the FEC does not name"
-                        " separately for this committee, so its lobbying is unknown."
+                        " own name. The registry lists a PAC's sponsoring organization, and none was"
+                        " available for this committee, so its lobbying is unknown."
                     )
                 elif spend_year is not None:
                     m["lobbyingSpend"] = round(spend_year.total)

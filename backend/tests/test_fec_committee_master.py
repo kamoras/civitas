@@ -23,6 +23,39 @@ CM_ROWS = "\n".join([
     "short|line",
 ])
 
+# A sponsor chain (cm26, 2026-09): the Ohio bankers' PAC names the ABA's
+# PAC, whose sponsor is the association, which also files in its own name
+# (type E). Two PACs naming each other are a loop.
+CHAIN_ROWS = "\n".join([
+    "C00074799|OHIO BANKERS LEAGUE POLITICAL ACTION COMMITTEE (FEDERAL)|X|A||C|OH|1|U|Q||M|T|AMERICAN BANKERS ASSOCIATION PAC (BANKPAC)|",
+    "C00035253|OREGON BANKERS ASSOCIATION POLITICAL ACTION COMMITTEE|X|A||C|OR|1|U|Q||M|T|AMERICAN BANKERS ASSOCIATION PAC|",
+    "C00004275|AMERICAN BANKERS ASSOCIATION PAC (BANKPAC)|X|A||C|DC|1|B|Q||M|T|AMERICAN BANKERS ASSOCIATION (ABA)|",
+    "C30002851|AMERICAN BANKERS ASSOCIATION|X|A||C|DC|1|U|E||||NONE|",
+    "C00048181|WISCONSIN BANKERS ASSOCIATION (WISBANKPAC)|X|A||C|WI|1|B|Q||M|T|WISCONSIN BANKERS ASSOCIATION|",
+    "C00000001|COALPAC, A POLITICAL ACTION COMMITTEE OF THE NATIONAL MINING ASSOCIATION|X|A||C|DC|1|B|Q||M|T|MINEPAC, A POLITICAL ACTION COMMITTEE OF THE NATIONAL MINING ASSOCIATION|",
+    "C00000002|MINEPAC, A POLITICAL ACTION COMMITTEE OF THE NATIONAL MINING ASSOCIATION|X|A||C|DC|1|B|Q||M|T|COALPAC, A POLITICAL ACTION COMMITTEE OF THE NATIONAL MINING ASSOCIATION|",
+])
+
+
+def test_a_sponsor_that_is_a_pac_is_followed_to_its_sponsor():
+    master = parse_committee_master(CHAIN_ROWS)
+    # Named with or without the alias, the ABA's PAC leads to the ABA; its
+    # own type-E registration is the organization, not another PAC.
+    assert master["C00074799"]["connectedOrg"] == "AMERICAN BANKERS ASSOCIATION (ABA)"
+    assert master["C00035253"]["connectedOrg"] == "AMERICAN BANKERS ASSOCIATION (ABA)"
+    assert master["C00004275"]["connectedOrg"] == "AMERICAN BANKERS ASSOCIATION (ABA)"
+
+
+def test_a_sponsor_matching_only_the_committees_own_alias_is_the_organization():
+    master = parse_committee_master(CHAIN_ROWS)
+    assert master["C00048181"]["connectedOrg"] == "WISCONSIN BANKERS ASSOCIATION"
+
+
+def test_a_sponsor_loop_names_no_sponsor():
+    master = parse_committee_master(CHAIN_ROWS)
+    assert master["C00000001"]["connectedOrg"] is None
+    assert master["C00000002"]["connectedOrg"] is None
+
 
 def test_parse_reads_type_designation_and_connected_org():
     master = parse_committee_master(CM_ROWS)

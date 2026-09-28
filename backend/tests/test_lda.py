@@ -425,6 +425,14 @@ class TestClientMatching:
         assert lda.search_name("The Boeing Company") == "BOEING"
         assert lda.search_name("Inc") == "INC"
 
+    def test_the_search_name_drops_a_parenthesised_alias(self):
+        # The registry files the association without its abbreviation; with
+        # it, the search found only a different association's filings.
+        assert lda.search_name("AMERICAN BANKERS ASSOCIATION (ABA)") == "AMERICAN BANKERS ASSOCIATION"
+        assert lda.is_same_client(lda.search_name("AMERICAN BANKERS ASSOCIATION (ABA)"), "AMERICAN BANKERS ASSOCIATION")
+        # A name that is all alias keeps it.
+        assert lda.search_name("(ABA)") == "ABA"
+
     @pytest.mark.parametrize("searched,client,same", [
         ("APPLE", "APPLE INC.", True),
         ("APPLE", "APPLETON INTERNATIONAL AIRPORT", False),
