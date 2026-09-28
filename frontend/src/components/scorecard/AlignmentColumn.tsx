@@ -78,9 +78,9 @@ function tally(p: { yea: number; nay: number }): string {
 }
 
 /** One vote against the party, as the chamber recorded it: what was voted
- *  on, the member's vote, and how each party split (the Congress record's
- *  counts, served with the vote). A vote stored before its roll call was
- *  recorded shows its bill and date alone. */
+ *  on (linked to the bill's page), the member's vote, and how each party
+ *  split (the Congress record's counts, served with the vote). A vote
+ *  stored before its roll call was recorded shows its bill and date alone. */
 function BreakRow({ vote }: { vote: KeyVote }) {
   const rc = vote.rollCall;
   const parties = rc?.parties.filter((p) => PARTY_SHORT[p.party] && p.yea + p.nay > 0) ?? [];
@@ -88,9 +88,21 @@ function BreakRow({ vote }: { vote: KeyVote }) {
     <li className="flex flex-col gap-1 border-b border-white/[0.06] pb-2.5">
       <div className="flex items-start justify-between gap-3 text-sm">
         <span className="min-w-0 text-ink-hi">
-          <span className="line-clamp-2" title={rc?.title || vote.billName}>
-            {voteTitle(rc?.title, rc?.billLabel, vote.billName)}
-          </span>
+          {rc?.billId ? (
+            // The bill's own page: its text, sponsor and every vote on it.
+            <Link
+              href={`/congress/bills/${encodeURIComponent(rc.billId)}`}
+              className="line-clamp-2 underline decoration-white/20 underline-offset-2 hover:text-phos"
+              title={rc.title || vote.billName}
+            >
+              {voteTitle(rc.title, rc.billLabel, vote.billName)}
+            </Link>
+          ) : (
+            // A nomination or a procedural question: no bill to open.
+            <span className="line-clamp-2" title={rc?.title || vote.billName}>
+              {voteTitle(rc?.title, rc?.billLabel, vote.billName)}
+            </span>
+          )}
           {rc?.question && <span className="block text-[13px] text-ink-lo">{rc.question}</span>}
         </span>
         <span className="shrink-0 border border-signal-red/45 px-1.5 py-px font-mono text-xs text-signal-red">
