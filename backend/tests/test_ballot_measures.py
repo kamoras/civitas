@@ -521,3 +521,19 @@ async def test_sync_ballot_measures_runs_pdf_states_even_without_a_votesmart_key
     assert result["skipped_other_states"] is True
     assert result["synced"] == 1
     assert db_session.query(BallotMeasure).filter(BallotMeasure.state == "CA").count() == 1
+
+
+def test_upsert_stores_title_and_fiscal_drafters(db_session):
+    # The columns existed and the API served them, but nothing wrote them.
+    election_pipeline._upsert_measure(
+        db_session,
+        {"id": "SD-2026-11-03-I", "state": "SD", "number": "I", "title": "Constitutional Amendment I",
+         "election_date": "2026-11-03"},
+        {"official_title": "An Amendment ...", "title_authority": "South Dakota Attorney General",
+         "fiscal_authority": "North Dakota Legislative Council"},
+        "South Dakota Secretary of State",
+    )
+    db_session.commit()
+    m = db_session.query(BallotMeasure).one()
+    assert m.title_authority == "South Dakota Attorney General"
+    assert m.fiscal_authority == "North Dakota Legislative Council"

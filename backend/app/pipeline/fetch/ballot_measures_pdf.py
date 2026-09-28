@@ -47,6 +47,15 @@ from app.pipeline.fetch.ballot_measures_la import parse_document as parse_la_doc
 from app.pipeline.fetch.ballot_measures_ma import parse_information_for_voters as parse_ma_document
 from app.pipeline.fetch.ballot_measures_mo import fetch_measures as mo_fetch_measures
 from app.pipeline.fetch.ballot_measures_va import fetch_measures as va_fetch_measures
+from app.pipeline.fetch.ballot_measures_il import fetch_measures as il_fetch_measures
+from app.pipeline.fetch.ballot_measures_in import fetch_measures as in_fetch_measures
+from app.pipeline.fetch.ballot_measures_ks import fetch_measures as ks_fetch_measures
+from app.pipeline.fetch.ballot_measures_mi import fetch_measures as mi_fetch_measures
+from app.pipeline.fetch.ballot_measures_mn import fetch_measures as mn_fetch_measures
+from app.pipeline.fetch.ballot_measures_nd import fetch_measures as nd_fetch_measures
+from app.pipeline.fetch.ballot_measures_ne import fetch_measures as ne_fetch_measures
+from app.pipeline.fetch.ballot_measures_ok import fetch_measures as ok_fetch_measures
+from app.pipeline.fetch.ballot_measures_sd import fetch_measures as sd_fetch_measures
 
 logger = logging.getLogger(__name__)
 
@@ -157,6 +166,15 @@ STRATEGIES = {
 MULTI_DOCUMENT_STRATEGIES = {
     "va_referenda": va_fetch_measures,
     "mo_ballot_measures": mo_fetch_measures,
+    "il_voters_guide_questions": il_fetch_measures,
+    "in_legislation_summary": in_fetch_measures,
+    "ks_proposed_amendments": ks_fetch_measures,
+    "mi_ballot_questions": mi_fetch_measures,
+    "mn_constitutional_amendments": mn_fetch_measures,
+    "nd_measures_on_ballot": nd_fetch_measures,
+    "ne_ballot_measures": ne_fetch_measures,
+    "ok_state_questions": ok_fetch_measures,
+    "sd_ballot_questions": sd_fetch_measures,
 }
 
 # Longer than Vote Smart's 12h (MEASURE_CACHE_TTL_HOURS in
@@ -191,13 +209,19 @@ def _to_measure(state: str, parsed: dict, election_date: str, source_url: str) -
         "election_date": election_date,
         "number": parsed["number"],
         "title": parsed["title"] or f"Proposition {parsed['number']}",
-        "official_title": parsed["title"],
+        # A strategy whose `title` is a label rather than the ballot's own
+        # title (Oklahoma's register subject line, South Dakota's "Amendment
+        # I" beside the Attorney General's title) passes official_title
+        # explicitly; the card renders it as "OFFICIAL BALLOT TITLE".
+        "official_title": parsed.get("official_title", parsed["title"]),
         "official_summary": parsed["official_summary"],
         "fiscal_impact": parsed["fiscal_impact"],
         "yes_means": parsed["yes_means"],
         "no_means": parsed["no_means"],
         "measure_type": None,
         "origin": parsed["origin"],
+        "title_authority": parsed.get("title_authority"),
+        "fiscal_authority": parsed.get("fiscal_authority"),
         "source_url": source_url,
     }
 
