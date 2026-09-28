@@ -2272,6 +2272,7 @@ export default function AboutPage() {
                 value="Nightly at 3:00 AM via APScheduler; in the 60 days before an election, ballot lists every 6 hours and race coverage every 15 minutes"
               />
               <Row label="Data Caching" value="72-hour TTL with persistent SQLite cache" />
+              <Row label="HTTP Caching" value="ETag hashed from the uncompressed response body; a matching revalidation gets a 304" />
               <Row
                 label="Learning Store"
                 value="SQLite table for persistent classification memory, version-aware invalidation on code change"
