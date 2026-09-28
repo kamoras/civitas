@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import type { BallotContest } from "@/lib/ballotContests";
+import { useModalDialog } from "@/lib/useModalDialog";
 
 const COLUMN_LABEL: Record<BallotContest["column"], string> = {
   federal: "FEDERAL",
@@ -36,54 +37,14 @@ export default function ContestDrawer({
   onClose: () => void;
   children: ReactNode;
 }) {
-  const panel = useRef<HTMLDivElement>(null);
+  const panel = useModalDialog(onClose);
   const heading = useRef<HTMLHeadingElement>(null);
-  const opener = useRef<Element | null>(null);
-
-  // Opened: remember what had focus, lock the page behind, focus the
-  // title. Closed: unlock and hand focus back.
-  useEffect(() => {
-    opener.current = document.activeElement;
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = overflow;
-      if (opener.current instanceof HTMLElement) opener.current.focus();
-    };
-  }, []);
 
   // Each contest starts at its top, with its title announced.
   useEffect(() => {
     heading.current?.focus();
     panel.current?.querySelector("[data-drawer-body]")?.scrollTo?.({ top: 0 });
-  }, [contest.key]);
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose();
-        return;
-      }
-      if (e.key !== "Tab" || !panel.current) return;
-      const focusable = panel.current.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])',
-      );
-      const visible = Array.from(focusable).filter((el) => !el.closest("[hidden]"));
-      if (visible.length === 0) return;
-      const first = visible[0];
-      const last = visible[visible.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [contest.key, panel]);
 
   return (
     <div className="fixed inset-0 z-[60] flex justify-end">
