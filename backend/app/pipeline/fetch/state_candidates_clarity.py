@@ -112,6 +112,26 @@ _PRESIDENTIAL_RE = re.compile(r"presidential", re.IGNORECASE)
 _PRIMARY_RE = re.compile(r"primary", re.IGNORECASE)
 
 
+async def _election_meta(client: httpx.AsyncClient, state: str, eid: str) -> dict | None:
+    """An election's own name and date, in elections.json's shape, read
+    from its settings file — for a state whose listing gives only ids."""
+    resp = await _get(client, f"{CLARITY_BASE}/{state}/{eid}/current_ver.txt", f"{state} Clarity version {eid}")
+    version = resp.text.strip() if resp is not None else ""
+    if not version.isdigit():
+        return None
+    resp = await _get(
+        client, f"{CLARITY_BASE}/{state}/{eid}/{version}/json/en/electionsettings.json",
+        f"{state} Clarity settings {eid}",
+    )
+    try:
+        details = (resp.json().get("settings") or {}).get("electiondetails") or {} if resp is not None else {}
+    except ValueError:
+        return None
+    if not details.get("electiondate"):
+        return None
+    return {"Date": details["electiondate"], "ElectionName": details.get("internalname") or ""}
+
+
 def _is_primary(election: dict, year: int) -> bool:
     """This cycle's regular (non-presidential) primary. Scoped by the
     `Date` YEAR rather than trusting the name to carry it, and excluding
@@ -178,19 +198,24 @@ async def _discover_election_id(
         if not ids:
             logger.warning("No Clarity results link found on %s's own elections page", state)
             return None
-        # Every DISTINCT id found, not just the first: this page carries
-        # no date to scope by (unlike elections.json's own Date field),
-        # so if it ever lists more than one election's link (an archived-
-        # results section added above the current one, say), there is no
-        # way to tell which is this cycle's without guessing — refuse
-        # rather than silently trust document order.
-        if len(ids) > 1:
+        # The page carries no dates, so each linked election is scoped by its
+        # OWN settings — the same name/date test elections.json gets. West
+        # Virginia's current-elections page dropped its primary link once
+        # the general approached, and the page that still links it is the
+        # results archive, which lists every election back to 2016; a lone
+        # stale link would otherwise be trusted too.
+        current = []
+        for eid in sorted(ids):
+            meta = await _election_meta(client, state, eid)
+            if meta is not None and _is_primary(meta, year):
+                current.append(eid)
+        if len(current) != 1:
             logger.warning(
-                "%s's elections page lists %d different Clarity ids — refusing to guess which is current",
-                state, len(ids),
+                "%s's elections page links %d Clarity elections, %d of them this cycle's primary — "
+                "refusing to guess", state, len(ids), len(current),
             )
             return None
-        return next(iter(ids))
+        return current[0]
 
     resp = await _get(client, f"{CLARITY_BASE}/{state}/elections.json", f"{state} Clarity elections")
     if resp is None:
