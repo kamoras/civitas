@@ -160,3 +160,10 @@ def test_a_salt_outage_falls_back_to_one_salt_for_every_worker(monkeypatch, thro
     monkeypatch.setattr(visits, "_fallback_salt", None)
     worker_b = asyncio.run(_daily_salt(today))
     assert worker_a == worker_b
+
+
+def test_a_worker_behind_midnight_keeps_the_new_days_visit_salt(db_session):
+    with _use(db_session):
+        tomorrow = visits._load_or_create_salt("2099-01-02")
+        visits._load_or_create_salt("2099-01-01")  # a worker that read the clock just before midnight
+        assert visits._load_or_create_salt("2099-01-02") == tomorrow

@@ -96,3 +96,25 @@ class TestIsRelevant:
         monkeypatch.setattr(rr, "score_pairs", lambda *a: called.append(1) or [1.0])
         assert rr.is_relevant(_Empty(), race, db_session) is False
         assert not called  # short-circuits before loading any model
+
+
+def test_a_recalibration_by_another_process_is_picked_up(db_session, monkeypatch):
+    # The pipeline process re-derives the threshold; its reset_cache()
+    # never reaches the API processes gating the elections feed.
+    import json
+    from datetime import timedelta
+
+    from app.models import ApiCache
+    from app.pipeline.cache import api_cache_set
+    from app.time_utils import utcnow
+
+    api_cache_set(db_session, rr._CACHE_NAMESPACE, rr._CACHE_KEY, json.dumps({"threshold": 0.42}))
+    db_session.commit()
+    assert rr.threshold(db_session) == 0.42
+    row = db_session.get(ApiCache, (rr._CACHE_NAMESPACE, rr._CACHE_KEY))
+    row.data_json = json.dumps(json.dumps({"threshold": 0.55}))
+    row.cached_at = utcnow() + timedelta(seconds=1)
+    db_session.commit()  # written elsewhere: no reset_cache() here
+    assert rr.threshold(db_session) == 0.42  # within the check interval
+    monkeypatch.setattr(rr, "_checked_at", 0.0)
+    assert rr.threshold(db_session) == 0.55

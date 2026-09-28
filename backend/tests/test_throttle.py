@@ -440,3 +440,24 @@ def test_a_new_days_first_key_never_waits_on_a_checkpoint(throttle_store, monkey
     monkeypatch.setattr(throttle, "_truncate_wal", lambda: checkpoints.append(1))
     throttle.client_key("203.0.113.1", "write")
     assert checkpoints == [] and throttle._truncate_pending
+
+
+def test_a_worker_behind_midnight_keeps_the_new_days_salt(throttle_store, monkeypatch):
+    # Worker B made (and cached) tomorrow's salt; worker A read the clock
+    # just before midnight. A must not delete it, or the workers would key
+    # the same client differently all day.
+    def on(day):
+        class _At(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return datetime(2099, 1, day, 23 if day == 1 else 0, tzinfo=timezone.utc)
+        return _At
+
+    monkeypatch.setattr(throttle, "datetime", on(2))
+    tomorrow = throttle.client_key("203.0.113.1", "write")
+    throttle.use_path(throttle_store)  # another process: no cached salt
+    monkeypatch.setattr(throttle, "datetime", on(1))
+    throttle.client_key("203.0.113.1", "write")  # the lagging worker
+    throttle.use_path(throttle_store)
+    monkeypatch.setattr(throttle, "datetime", on(2))
+    assert throttle.client_key("203.0.113.1", "write") == tomorrow

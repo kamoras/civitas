@@ -155,9 +155,14 @@ def _start_pipeline_side_startup_jobs() -> None:
 # a second one refuses to start. /dev/shm is per container, so a rolling
 # update's old and new tasks never contend for it.
 def _role_lock_path() -> str:
+    """Per container (RAM_DIR) and per database: two processes on different
+    databases — a second local dev server — share no run state to protect."""
+    import hashlib
+
     from app.api.throttle import RAM_DIR
 
-    return os.path.join(RAM_DIR, "civitas_pipeline_process.lock")
+    database = hashlib.sha256(settings.DATABASE_URL.encode()).hexdigest()[:12]
+    return os.path.join(RAM_DIR, f"civitas_pipeline_process-{database}.lock")
 
 
 _ROLE_LOCK_PATH = _role_lock_path()

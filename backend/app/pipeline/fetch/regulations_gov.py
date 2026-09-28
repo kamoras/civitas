@@ -63,10 +63,12 @@ async def _object_id(client: httpx.AsyncClient, api_key: str, document_id: str) 
 
 
 def _retryable(status: int) -> bool:
-    """Whether a failed status could succeed if asked again: a rate limit or
-    a server error can; any other refusal (a malformed id, a bad key) is
+    """Whether a failed status could succeed if asked again without the
+    document changing: a rate limit or a server error can, and so can a
+    refused key (401/403) — the operator's to fix, and once fixed a cached
+    refusal would keep being served. Any other refusal (a malformed id) is
     the same answer next time."""
-    return status == 429 or status >= 500
+    return status in (401, 403, 429) or status >= 500
 
 
 def _failed(error: str, *, retryable: bool) -> dict:
@@ -109,7 +111,8 @@ async def fetch_comments(
     """
     api_key = settings.DATA_GOV_API_KEY
     if not api_key:
-        return _failed("API key not configured", retryable=False)
+        # The operator's to fix: not an answer about the document.
+        return _failed("API key not configured", retryable=True)
 
     document_id = _extract_document_id(comment_url)
     if not document_id:

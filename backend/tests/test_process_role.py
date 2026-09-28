@@ -307,3 +307,19 @@ def test_a_failed_heartbeat_is_only_logged(monkeypatch):
 
     monkeypatch.setattr(scheduler, "_record_next_run", boom)
     scheduler._heartbeat()
+
+
+def test_the_lock_is_per_database(monkeypatch):
+    # A second local dev server on another database has no run state to
+    # protect from this one.
+    first = main_module._role_lock_path()
+    monkeypatch.setattr(settings, "DATABASE_URL", "sqlite:////tmp/other.db")
+    assert main_module._role_lock_path() != first
+
+
+def test_the_test_run_has_its_own_ram_dir():
+    import os
+
+    from app.api.throttle import RAM_DIR
+
+    assert RAM_DIR == os.environ["CIVITAS_RAM_DIR"] and RAM_DIR != "/dev/shm"

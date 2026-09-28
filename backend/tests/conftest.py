@@ -3,6 +3,10 @@
 import os
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
+# The per-container RAM directory (api/throttle.RAM_DIR: the throttle store,
+# the pipeline-process lock) — one per test run, so a local dev server's, or
+# a parallel run's, never meets this one's.
+os.environ.setdefault("CIVITAS_RAM_DIR", __import__("tempfile").mkdtemp(prefix="civitas-tests-"))
 
 import pytest
 from sqlalchemy import create_engine

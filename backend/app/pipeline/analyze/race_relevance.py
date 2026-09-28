@@ -48,6 +48,7 @@ because a stale threshold gates better than none.
 """
 
 import json
+import time
 import logging
 
 logger = logging.getLogger(__name__)
@@ -66,11 +67,18 @@ BOOTSTRAP_THRESHOLD = 0.276
 _TEXT_CHARS = 600
 
 _cached: dict | None = None
+# The calibration is re-derived in the pipeline process, whose reset_cache()
+# reaches only itself; the elections API (PROCESS_ROLE=api) reads it. So a
+# process holding a calibration checks, at most this often, whether the
+# stored row was replaced, and reloads when it was.
+_CHECK_STORED_EVERY_SECONDS = 30
+_cached_stored_at = None
+_checked_at = 0.0
 
 
 def reset_cache() -> None:
-    global _cached
-    _cached = None
+    global _cached, _cached_stored_at, _checked_at
+    _cached, _cached_stored_at, _checked_at = None, None, 0.0
 
 
 def race_descriptor(race) -> str:
@@ -127,15 +135,39 @@ def otsu_threshold(values: list[float], bins: int = 256) -> float | None:
     return best_t
 
 
+def _stored_at(db):
+    """When the stored calibration was written; None when there is none or
+    the database can't be asked right now (either way: no change to act on)."""
+    from app.models import ApiCache
+
+    try:
+        return (
+            db.query(ApiCache.cached_at)
+            .filter(ApiCache.tier == _CACHE_NAMESPACE, ApiCache.cache_key == _CACHE_KEY)
+            .scalar()
+        )
+    except Exception:
+        return None
+
+
 def threshold(db=None) -> float:
-    global _cached
+    global _cached, _cached_stored_at, _checked_at
+    if _cached is not None and db is not None:
+        now = time.monotonic()
+        if now - _checked_at >= _CHECK_STORED_EVERY_SECONDS:
+            _checked_at = now
+            stored = _stored_at(db)
+            if stored is not None and stored != _cached_stored_at:
+                _cached = None  # replaced elsewhere: reload below
     if _cached is None and db is not None:
         from app.pipeline.cache import api_cache_get
 
+        stored = _stored_at(db)
         raw = api_cache_get(db, _CACHE_NAMESPACE, _CACHE_KEY)
         if raw:
             try:
                 _cached = json.loads(raw)
+                _cached_stored_at, _checked_at = stored, time.monotonic()
             except ValueError:
                 logger.warning("Race-relevance calibration unreadable — using bootstrap")
     if _cached:

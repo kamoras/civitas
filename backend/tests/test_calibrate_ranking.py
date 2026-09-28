@@ -259,3 +259,22 @@ def test_a_stored_calibration_that_cannot_be_read_is_not_replaced_by_the_bundled
     monkeypatch.setattr(explore_ranking, "_checked_at", 0.0)
     assert explore_ranking.source_diversity_cap() == 11  # and the new row once readable
     explore_ranking.reset_cache()
+
+
+def test_a_forced_reload_during_a_lock_keeps_the_calibration(monkeypatch):
+    from datetime import datetime
+
+    from app.pipeline import explore_ranking
+
+    from tests.conftest import TEST_RANKING_CALIBRATION
+
+    monkeypatch.setattr(explore_ranking, "_override", None)
+    explore_ranking.reset_cache()
+    monkeypatch.setattr(explore_ranking, "_stored_at", lambda: datetime(2026, 9, 1))
+    monkeypatch.setattr(explore_ranking, "_load_from_db",
+                        lambda: {**TEST_RANKING_CALIBRATION, "source_diversity_cap": 9})
+    assert explore_ranking.source_diversity_cap() == 9
+    monkeypatch.setattr(explore_ranking, "_stored_at", lambda: explore_ranking._UNKNOWN)
+    monkeypatch.setattr(explore_ranking, "_load_from_db", lambda: None)
+    assert explore_ranking.ranking(force_reload=True)["source_diversity_cap"] == 9
+    explore_ranking.reset_cache()

@@ -274,7 +274,11 @@ def _load_or_create_salt(date: str) -> bytes:
             .values(date=date, salt=secrets.token_hex(32))
             .on_conflict_do_nothing(index_elements=["date"])
         )
-        db.query(VisitSalt).filter(VisitSalt.date != date).delete()
+        # Earlier days only: with several API workers, one that read the
+        # clock just before midnight must not delete the new day's salt
+        # another already made and cached — the two would then hash the
+        # same visitor differently all day.
+        db.query(VisitSalt).filter(VisitSalt.date < date).delete()
         db.commit()
         return bytes.fromhex(db.query(VisitSalt.salt).filter(VisitSalt.date == date).scalar())
     finally:

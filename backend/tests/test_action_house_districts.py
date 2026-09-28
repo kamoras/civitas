@@ -36,3 +36,12 @@ class TestHouseDistricts:
         path.write_text(json.dumps({"districts": {"MT-1": 5}}))
         os.utime(path, (2000, 2000))
         assert _house_districts()["MT"] == 1
+
+
+def test_counted_once_per_district_pvi_load(monkeypatch):
+    from app.pipeline.analyze import score_calculator
+
+    first = _house_districts()
+    assert _house_districts() is first  # the same load: not recounted
+    monkeypatch.setattr(score_calculator, "_district_pvi_cache", None)  # a reload
+    assert _house_districts() is not first

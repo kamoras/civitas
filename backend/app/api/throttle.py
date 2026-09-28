@@ -69,7 +69,10 @@ logger = logging.getLogger(__name__)
 # lives: /dev/shm is tmpfs on Linux (and per container); elsewhere, the temp
 # directory — a development machine without /dev/shm runs one process. Also
 # where main.py keeps the pipeline-process lock.
-RAM_DIR = "/dev/shm" if os.path.isdir("/dev/shm") else tempfile.gettempdir()
+# CIVITAS_RAM_DIR overrides it (the test suite gives each run its own).
+RAM_DIR = os.environ.get("CIVITAS_RAM_DIR") or (
+    "/dev/shm" if os.path.isdir("/dev/shm") else tempfile.gettempdir()
+)
 _path = os.environ.get("THROTTLE_DB_PATH") or os.path.join(RAM_DIR, "civitas_throttle.db")
 
 # On the request path: a client held for long because another worker holds
@@ -256,7 +259,7 @@ def _salt_for(today: str) -> bytes:
         conn.execute(
             "INSERT OR IGNORE INTO salts (date, salt) VALUES (?, ?)", (today, secrets.token_bytes(32)),
         )
-        dropped = conn.execute("DELETE FROM salts WHERE date != ?", (today,)).rowcount
+        dropped = conn.execute("DELETE FROM salts WHERE date < ?", (today,)).rowcount
         salt = conn.execute("SELECT salt FROM salts WHERE date = ?", (today,)).fetchone()[0]
     if dropped:
         # Truncating can wait on another worker's read, so it never runs on
@@ -306,7 +309,7 @@ def forget_stale_salt() -> None:
         return
     try:
         with _Txn() as conn:
-            dropped = conn.execute("DELETE FROM salts WHERE date != ?", (today,)).rowcount
+            dropped = conn.execute("DELETE FROM salts WHERE date < ?", (today,)).rowcount
         if dropped or _truncate_pending:
             _truncate_wal()
     except sqlite3.Error:
@@ -330,7 +333,9 @@ def client_key(ip: str, purpose: str, scope: str = "") -> str | None:
     """The key a per-client limit counts `ip` under, for `purpose` (and
     `scope` within it: the issue a pulse vote is on). Keyed by a salt that
     exists for the current UTC day only; the previous day's is deleted when
-    the first key of a new day is made.
+    the first key of a new day is made. Only earlier days are deleted, never
+    "any other": a worker that read the clock just before midnight must not
+    delete the new day's salt another worker already made (and cached).
 
     None when the store can't be read: hit and claim then let the request
     through, as they would on their own failure — never one shared key,

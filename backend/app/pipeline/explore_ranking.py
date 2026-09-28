@@ -145,16 +145,17 @@ def ranking(*, force_reload: bool = False) -> dict:
         return _with_override(cached)
 
     stored = _stored_at()
-    if cached is not None and not force_reload:
+    if cached is not None:
         if stored is _UNKNOWN:
             # The database can't be read right now: keep what we have
-            # rather than fall back to the bundled calibration.
+            # rather than fall back to the bundled calibration — forced or
+            # not, a moment's lock is no reason to rank worse.
             return _with_override(cached)
         if not expired and stored == cached_stored:
             return _with_override(cached)
 
     from_db = _load_from_db() if stored not in (None, _UNKNOWN) else None
-    if from_db is None and stored not in (None, _UNKNOWN) and cached is not None and not force_reload:
+    if from_db is None and stored not in (None, _UNKNOWN) and cached is not None:
         # A stored calibration exists but couldn't be read: the one in hand
         # is better than the bundled one, and the next check tries again.
         return _with_override(cached)

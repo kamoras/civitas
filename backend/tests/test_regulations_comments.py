@@ -111,7 +111,8 @@ def test_an_unknown_document_is_asked_about_again_after_a_few_hours(api, db_sess
 
 
 @pytest.mark.parametrize("status,retryable,remembered", [
-    (400, False, False), (403, False, False), (410, False, True), (500, True, False), (503, True, False),
+    (400, False, False), (401, True, False), (403, True, False), (410, False, True), (500, True, False),
+    (503, True, False),
 ])
 def test_a_failed_lookup_is_classified_by_what_asking_again_could_do(monkeypatch, db_session, status, retryable,
                                                                     remembered):
@@ -124,3 +125,8 @@ def test_a_failed_lookup_is_classified_by_what_asking_again_could_do(monkeypatch
     assert result["retryable"] is retryable
     missing = db_session.query(ApiCache).filter(ApiCache.cache_key.like("objectid-missing-%")).count()
     assert bool(missing) is remembered
+
+
+def test_no_key_configured_is_never_cached(monkeypatch):
+    monkeypatch.setattr(rg.settings, "DATA_GOV_API_KEY", "", raising=False)
+    assert asyncio.run(rg.fetch_comments(URL))["retryable"] is True
