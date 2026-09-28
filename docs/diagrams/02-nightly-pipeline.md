@@ -7,6 +7,11 @@ trades → Election.** A failure partway down means nothing after it runs, and
 leaves no run row behind to look wrong; `ops_alerts.check_pipeline_staleness`
 is what notices.
 
+The opposite case — a step that fails inside a run that carries on and ends
+"completed" — alerts from `ProgressTracker.fail`. Supplementary's weekly justice
+step failed that way on Sundays, invisibly, until the scorecards were seen to
+be stale.
+
 ```mermaid
 flowchart TB
     START(["APScheduler cron tick"]) --> LOCK{"a running row in<br/>this pipeline's run table?"}
@@ -29,7 +34,7 @@ flowchart TB
         P1 --> P2 --> P2B --> P3 --> P7
     end
 
-    P7 --> SUPP["<b>Supplementary pipeline</b><br/>EXPLORE: speeches, presidential actions,<br/>SCOTUS opinions, FR rulemaking → sqlite-vec + FTS5<br/>JUSTICES (weekly, Sunday) · committee leadership<br/>district PVI · PRESIDENTS"]
+    P7 --> SUPP["<b>Supplementary pipeline</b><br/>EXPLORE: speeches, presidential actions,<br/>SCOTUS opinions, FR rulemaking → sqlite-vec + FTS5<br/>JUSTICES (weekly, Sunday; duplicate Oyez vote rows collapsed) · committee leadership<br/>district PVI · PRESIDENTS"]
     SUPP --> HOUSE["<b>House pipeline</b><br/>the same phases for 435 members<br/>no LLM call"]
     HOUSE --> STOCK["<b>Stock trades pipeline</b><br/>STOCK Act PTR ingestion<br/>House Clerk + Senate eFD + OGE 278-T"]
     STOCK --> ELECT["<b>Election pipeline</b><br/>roster → financials → ballots → coverage"]

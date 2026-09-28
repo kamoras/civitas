@@ -21,6 +21,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from app.ops_alerts import send_ops_alert
 from app.pipeline import rate_limiter
 from app.time_utils import utcnow
 
@@ -118,6 +119,18 @@ class ProgressTracker:
             step["detail"] = detail
         self._flush()
         self._record_timing(step)
+        # Every caller logs the exception and carries on, and the run still
+        # ends "completed" — so without this a failed step is visible only
+        # to someone reading that night's logs. Supplementary's justice step
+        # failed that way every Sunday (a duplicate Oyez vote row) with no
+        # one told, until the scorecards were noticed to be stale.
+        pipeline = type(self._run).__name__
+        send_ops_alert(
+            f"{pipeline}: step {key} failed",
+            f"{pipeline} step '{key}' failed and the run continued without it"
+            + (f": {detail}" if detail else "") + ". The traceback is in that run's logs.",
+            dedupe_key=f"step-failed-{pipeline}-{key}-{utcnow():%Y-%m-%d}",
+        )
 
     def _flush(self) -> None:
         ordered = [self._steps[k] for k, _, _ in self._steps_def]
