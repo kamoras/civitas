@@ -47,6 +47,10 @@ from app.pipeline.fetch.ballot_measures_la import parse_document as parse_la_doc
 from app.pipeline.fetch.ballot_measures_ma import parse_information_for_voters as parse_ma_document
 from app.pipeline.fetch.ballot_measures_mo import fetch_measures as mo_fetch_measures
 from app.pipeline.fetch.ballot_measures_va import fetch_measures as va_fetch_measures
+from app.pipeline.fetch.ballot_measures_ct import fetch_measures as ct_fetch_measures
+from app.pipeline.fetch.ballot_measures_me import fetch_measures as me_fetch_measures
+from app.pipeline.fetch.ballot_measures_nj import fetch_measures as nj_fetch_measures
+from app.pipeline.fetch.ballot_measures_vt import parse_document as parse_vt_document
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +147,7 @@ STRATEGIES = {
     "ma_information_for_voters": parse_ma_document,
     "co_quick_ballot_reference": parse_co_document,
     "la_proposed_amendments": parse_la_document,
+    "vt_constitutional_amendment_notice": parse_vt_document,
 }
 
 # A strategy here doesn't fit STRATEGIES' `pdf.pages -> list[dict]`
@@ -157,6 +162,9 @@ STRATEGIES = {
 MULTI_DOCUMENT_STRATEGIES = {
     "va_referenda": va_fetch_measures,
     "mo_ballot_measures": mo_fetch_measures,
+    "ct_sample_ballots": ct_fetch_measures,
+    "me_citizens_guide": me_fetch_measures,
+    "nj_public_questions": nj_fetch_measures,
 }
 
 # Longer than Vote Smart's 12h (MEASURE_CACHE_TTL_HOURS in

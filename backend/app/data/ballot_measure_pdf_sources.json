@@ -45,6 +45,31 @@
       "source_name": "Missouri Secretary of State",
       "strategy": "mo_ballot_measures",
       "description": "No PDF at all — the certified measures are published directly as HTML at a stable, evergreen url_pattern (sos.mo.gov/petitions/{year}ballotmeasures), verified live across 3 real cycles (2022/2024/2026, all 200 OK). The page carries both the state's August primary measures and its November general measures under two 'The following ballot measures ... <election>' headings; this strategy reads only the general-election section. Verified live 2026-09-03 against all 3 real measures on the November 3, 2026 ballot (reproductive rights/abortion repeal, a new state endowment fund, county sheriff elections): 3/3 parse with real 'Official Ballot Title' summaries, real fiscal notes, AND real 'A yes vote will.../A no vote will...' framing (Fair Ballot Language) — richer data than most states registered so far. Survived a real site inconsistency found in the process: Amendment 8's own heading paragraph sits as the last child of Amendment 7's <div>, not the first child of its own — this strategy flattens elements across div boundaries before splitting on the heading text itself, unaffected by that. Origin is read per-measure from its own 'Proposed by ...' line, not hardcoded fixed, since Missouri has a real citizen-initiative process for constitutional amendments (unlike LA/VA)."
+    },
+    "CT": {
+      "source_name": "Connecticut Secretary of the State",
+      "strategy": "ct_sample_ballots",
+      "description": "Proves absence only: the Secretary of the State's official town sample ballots for the November state election (index: portal.ct.gov/sots/election-services/town-ballots/ballots; the year's page is found by slug, which changes shape between cycles). A statewide question (legislature-referred amendment or the convention question — Connecticut has no initiative) is printed on every town's ballot, so one complete ('Sheet 1 of 1') state-election ballot with no question column proves there is none; returns [] then, else None (a ballot with a question may be local — 2026 Burlington's is). Never returns a measure. Verified live 2026-09-28: 15 of 19 posted 2026 ballots carry no question column (Eastford first); run against 2024 (whose no-excuse-absentee amendment is on every town's ballot), none of the first 12 ballots is question-free and the check correctly refuses to conclude."
+    },
+    "NJ": {
+      "source_name": "New Jersey Division of Elections",
+      "strategy": "nj_public_questions",
+      "description": "The Division's per-year page nj.gov/state/elections/election-information-{year}.shtml (stable 2019-2026) and the one-page 'Public Question No. N - English' PDFs it links; interpretive statement stored verbatim, YES/NO ballot-box column cropped off. HTML comments are stripped first: the page template carries a commented-out, re-dated 2023 question block every year (2024-2026 all verified) whose PDFs 404. [] only when the page visibly carries this year's general-election candidate certification and no question link. Parser verified on the real 2019, 2020 and 2021 PDFs (4 questions). 2026 (live 2026-09-28): certification posted 09/04/26, no public question."
+    },
+    "VT": {
+      "landing_page_url": "https://legislature.vermont.gov/home/noteworthy/announcements",
+      "keyword": [
+        "const",
+        "amendment"
+      ],
+      "source_name": "Vermont General Assembly",
+      "strategy": "vt_constitutional_amendment_notice",
+      "description": "The General Assembly's statutory notice of proposed constitutional amendments (17 V.S.A. ch. 32), a PDF linked from the Legislature's Announcements page with the election year in its filename; per proposal, the Assembly's one-sentence plain-language description is stored verbatim. Verified live 2026-09-28 against the 2026 notice: Proposal 3 (collective bargaining) and Proposal 4 (equal protection), matching the Governor's 2026-07-27 proclamations. Vermont has no initiative; no yes/no framing or fiscal statement is published, so those stay null."
+    },
+    "ME": {
+      "source_name": "Maine Secretary of State",
+      "strategy": "me_citizens_guide",
+      "description": "The 'Maine Citizen's Guide to the Referendum Election' (SOS with the Attorney General, Treasurer and Office of Fiscal and Program Review), found from the Upcoming Elections page / the SOS news release announcing it because its filename changes every year. Reads the AG's Intent and Content (official_summary) and verbatim 'A “YES” vote ...'/'A “NO” vote ...' sentences, plus Treasurer debt service and OFPR fiscal impact. Verified against the real 2024 (5 questions) and 2025 (2 questions) guides; the parsed list must match the guide's own question listing. 2026 guide not yet published as of 2026-09-28, so this reads not-yet-covered rather than guessing."
     }
   }
 }
