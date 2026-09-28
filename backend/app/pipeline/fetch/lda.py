@@ -225,61 +225,81 @@ def is_same_client(searched: str, client_name: str) -> bool:
     )
 
 
-# "On behalf of" as the registry spells it. A filing can pass through a
-# chain of firms ("HARRIS LAW FIRM OBO ROBBINS SALOMON & PATT OBO COALITION
-# OF GM CRASH VICTIMS"); the party it is for is the name after the last one,
-# and the firms before it are intermediaries, not clients. "O/B/O" alone is
-# used on 129 of 2025's filings ("GIBSON, DUNN & CRUTCHER LLP (O/B/O
-# PEPSICO, INC.)").
-_ON_BEHALF_RE = re.compile(r" (?:ON BEHALF OF|OBO|O B O) ")
-# The same markers in the raw field, where parentheses still show which
-# party they belong to.
-_RAW_ON_BEHALF_RE = re.compile(r"(?<![A-Z0-9])(?:ON\s+BEHALF\s+OF|OBO|O/B/O)(?![A-Z0-9])")
-# "Doing business as": one entity under two names, both of which are it.
-_DBA_RE = re.compile(r" (?:D B A|DBA) ")
+# How the registry's client field is read. One tokenizer and one split,
+# shared by the client test and the filer display, so the two can't drift:
+# punctuation becomes spaces (every spelling of a marker — "O/B/O", "O.B.O.",
+# "ON-BEHALF-OF" — reads the same) while parentheses are kept as tokens, so
+# a parenthesised part still belongs to the side of the marker it was on.
+_MARKER_RE = re.compile(r"(?<!\S)(?:ON BEHALF OF|OBO|O B O)(?!\S)")
+_DBA_RE = re.compile(r"(?<!\S)(?:D B A|DBA)(?!\S)")
+# "ON BEHALF OF ITSELF AND ITS SUBSIDIARIES", "... OF ITS MEMBERS": the
+# filing is the named organization's own. Grammar, not a classification.
+_SELF_REFERENCE_RE = re.compile(r"^\s*\(?\s*(?:ITSELF|ITS|THEMSELVES|THEIR)(?!\S)")
+_PAREN_RE = re.compile(r"\(([^()]*)\)")
 
 
-def _party_part(client_name: str) -> str:
-    """The part of a raw client field naming the party the filing is for:
-    after the last on-behalf-of marker when there is one (everything before
-    it, parentheses included, belongs to the filing firms: "BROWNSTEIN
-    (BHFS, LLP) OBO APOLLO GLOBAL MANAGEMENT"), else the whole field."""
-    raw = (client_name or "").upper()
-    last = None
-    for last in _RAW_ON_BEHALF_RE.finditer(raw):
-        pass
-    return raw[last.end():] if last else raw
+def _client_tokens(text: str) -> str:
+    """Upper-case words and digits, with "(" and ")" kept as their own
+    tokens: "SMITH LLP (O.B.O. APPLE, INC.)" -> "SMITH LLP ( O B O APPLE INC )"."""
+    spaced = re.sub(r"[^A-Z0-9()]+", " ", (text or "").upper())
+    return " ".join(spaced.replace("(", " ( ").replace(")", " ) ").split())
+
+
+def _split_client(client_name: str) -> tuple[str, str]:
+    """(filing firm part, party part) of a client field, as tokens.
+
+    A filing can pass through a chain of firms ("HARRIS LAW FIRM OBO ROBBINS
+    SALOMON & PATT OBO COALITION OF GM CRASH VICTIMS"): the firm part is
+    what precedes the first on-behalf-of marker and the party is what
+    follows the last, unless that is a self-reference ("... ON BEHALF OF
+    ITSELF"), when the party is the name before it. "O/B/O" alone is used on
+    129 of 2025's filings ("GIBSON, DUNN & CRUTCHER LLP (O/B/O PEPSICO,
+    INC.)"). With no marker there is no firm part and the field is the
+    party."""
+    tokens = _client_tokens(client_name)
+    markers = list(_MARKER_RE.finditer(tokens))
+    if not markers:
+        return "", tokens
+    party = tokens[markers[-1].end():]
+    if _SELF_REFERENCE_RE.match(party):
+        start = markers[-2].end() if len(markers) > 1 else 0
+        party = tokens[start:markers[-1].start()]
+    return tokens[:markers[0].start()], party
+
+
+def _names_of(part: str) -> list[str]:
+    """Name keys a token part carries: the part, each parenthesised piece
+    of it, and each side of a d/b/a in any of those."""
+    pieces = [part] + _PAREN_RE.findall(part)
+    names: list[str] = []
+    for piece in pieces:
+        names.append(_name_key(piece))
+        names.extend(_name_key(side) for side in _DBA_RE.split(piece))
+    return [n for n in dict.fromkeys(names) if n]
 
 
 def _names_in_client(client_name: str) -> list[str]:
-    """The names of the party a registry client field is for, as name keys:
-    the party part (_party_part), each parenthesised part inside it (a
-    registrant filing as "THE LIVINGSTON GROUP, LLC (VERIZON COMMUNICATIONS,
-    INC.)"), and each side of a d/b/a."""
-    party = _party_part(client_name)
-    parts = [party] + re.findall(r"\(([^)]*)", party)
-    names: list[str] = []
-    for part in parts:
-        names.extend(_name_key(side) for side in _DBA_RE.split(f" {_name_key(part)} "))
-    return [n for n in names if n]
+    """The names of the party a registry client field is for (_split_client),
+    with a registrant filing as "THE LIVINGSTON GROUP, LLC (VERIZON
+    COMMUNICATIONS, INC.)" read as naming Verizon."""
+    return _names_of(_split_client(client_name)[1])
 
 
 def _filed_by(client_name: str | None, registrant: str | None) -> str | None:
-    """The registrant to name beside a filing's client, or None when it
-    would repeat what the client field already says: the registrant is the
-    whole field, or the firm part before "on behalf of", or either name of a
-    d/b/a in it, under any spelling."""
+    """The registrant to name beside a filing's client, or None when the
+    client field already names it: as the firm part before "on behalf of",
+    as the text before a parenthesised client ("THE LIVINGSTON GROUP, LLC
+    (VERIZON ...)"), as the whole field (in-house), or as either name of a
+    d/b/a in any of those."""
     if not registrant:
         return None
     reg_key, reg_search = _name_key(registrant), search_name(registrant)
-    raw = (client_name or "").upper()
-    first = _RAW_ON_BEHALF_RE.search(raw)
-    firm = raw[:first.start()] if first else raw
-    candidates = [raw, firm] + re.findall(r"\(([^)]*)", firm)
-    for candidate in candidates:
-        for name in [_name_key(candidate)] + _DBA_RE.split(f" {_name_key(candidate)} "):
-            if name.strip() and (_name_key(name) == reg_key or search_name(name) == reg_search):
-                return None
+    firm, party = _split_client(client_name or "")
+    whole = _client_tokens(client_name or "")
+    parts = [firm] if firm else [whole, whole.split("(")[0]]
+    for name in (n for part in parts for n in _names_of(part)):
+        if name == reg_key or search_name(name) == reg_search:
+            return None
     return registrant
 
 
@@ -292,7 +312,7 @@ def _cache_key(org_key: str, year: int) -> str:
     # share an 80-char prefix (e.g. federal vs. state PAC variants of one
     # sponsor) can't collide onto one cached figure.
     key_hash = hashlib.sha256(org_key.encode()).hexdigest()[:12]
-    return f"lda-activity-v6-{year}-{org_key[:60]}-{key_hash}"
+    return f"lda-activity-v7-{year}-{org_key[:60]}-{key_hash}"
 
 
 async def fetch_lobbying_activity(
@@ -314,12 +334,7 @@ async def fetch_lobbying_activity(
     cache_key = _cache_key(org_key, year)
     cached = api_cache_get(db, "lda", cache_key, max_age_hours=ttl)
     if cached is not None:
-        return LobbyingActivity(
-            total=float(cached.get("total", 0.0)),
-            mentions=cached.get("mentions") or [],
-            complete=bool(cached.get("complete", True)),
-            clients=[tuple(c) for c in cached.get("clients") or []],
-        )
+        return _activity_from(org_key, cached.get("filings") or [], bool(cached.get("complete", True)))
 
     # Follow pagination: a heavy-lobbying client can file dozens to
     # low-hundreds of filings a year (multiple outside firms × quarterly
@@ -353,37 +368,64 @@ async def fetch_lobbying_activity(
         logger.warning("LDA fetch failed for %s: %s", org_key, exc)
         return None
 
-    own = [f for f in filings if is_same_client(org_key, _client_name(f))]
-    total = _sum_filing_amounts(own)
-    mentions = _filing_mentions(own)
-    by_client: dict[str, float] = {}
-    for f in own:
-        by_client[_client_name(f)] = by_client.get(_client_name(f), 0.0) + _sum_filing_amounts([f])
-    clients = sorted(by_client.items(), key=lambda c: (-c[1], c[0]))
     complete = not (url and pages >= _MAX_PAGES)
     if not complete:
         logger.warning(
             "LDA activity for %s (%d) hit the %d-page cap — total may be a lower bound",
             org_key, year, _MAX_PAGES,
         )
+    # The search results are cached as they came (only the fields read), and
+    # which of them are the organization's is decided on every read: a
+    # change to the matching rules applies at once, not when a 30-day entry
+    # expires.
+    compact = [_compact_filing(f) for f in filings]
+    api_cache_set(db, "lda", cache_key, {"filings": compact, "complete": complete}, normal_ttl_hours=ttl)
+    return _activity_from(org_key, compact, complete)
+
+
+def _compact_filing(filing: dict) -> dict:
+    """The fields of a filing this module reads, in the API's own shape."""
+    return {
+        "client": {"name": _client_name(filing)},
+        "registrant": {"name": (filing.get("registrant") or {}).get("name") or ""},
+        "filing_type": filing.get("filing_type"),
+        "income": filing.get("income"),
+        "expenses": filing.get("expenses"),
+        "filing_year": filing.get("filing_year"),
+        "filing_document_url": filing.get("filing_document_url"),
+        "dt_posted": filing.get("dt_posted"),
+        "lobbying_activities": [
+            {"description": a.get("description") or ""} for a in filing.get("lobbying_activities") or []
+        ],
+    }
+
+
+def _activity_from(org_key: str, filings: list[dict], complete: bool) -> LobbyingActivity:
+    """The organization's activity in one year's search results: the filings
+    whose client matches (is_same_client), their total by client, and the
+    bills they name."""
+    own = [f for f in filings if is_same_client(org_key, _client_name(f))]
+    by_client: dict[str, float] = {}
+    for f in own:
+        by_client[_client_name(f)] = by_client.get(_client_name(f), 0.0) + _sum_filing_amounts([f])
+    clients = sorted(by_client.items(), key=lambda c: (-c[1], c[0]))
     # Quarterly reports repeat the same description word for word: keep one
     # entry per wording (the matcher's unit of work) carrying every filing
     # that used it, so the page can link the latest and count the rest.
     merged: dict[tuple[str, str, str], dict] = {}
-    for m in mentions:
+    for m in _filing_mentions(own):
         key = (m["billId"], " ".join(m["before"].split()), " ".join(m["after"].split()))
         if key in merged:
             known = {f["url"] for f in merged[key]["filings"]}
             merged[key]["filings"].extend(f for f in m["filings"] if f["url"] not in known)
         else:
             merged[key] = m
-    mentions = list(merged.values())[:_MAX_MENTIONS]
-    api_cache_set(
-        db, "lda", cache_key,
-        {"total": round(total, 2), "mentions": mentions, "complete": complete, "clients": clients},
-        normal_ttl_hours=ttl,
+    return LobbyingActivity(
+        total=_sum_filing_amounts(own),
+        mentions=list(merged.values())[:_MAX_MENTIONS],
+        complete=complete,
+        clients=clients,
     )
-    return LobbyingActivity(total=total, mentions=mentions, complete=complete, clients=clients)
 
 
 def _voted_bills(votes: list[dict] | None) -> dict[str, dict]:

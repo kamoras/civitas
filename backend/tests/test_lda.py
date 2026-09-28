@@ -421,6 +421,14 @@ class TestClientMatching:
         ("ONE STRATEGIES", "STATE STREET STRATEGIES (DBA ONE+ STRATEGIES) OBO VIVEK SHARMA", False),
         ("RELIANCE INDUSTRIES", "EVERSHEDS SUTHERLAND (US) LLP ON BEHALF OF RELIANCE INDUSTRIES LTD.", True),
         ("US", "EVERSHEDS SUTHERLAND (US) LLP ON BEHALF OF RELIANCE INDUSTRIES LTD.", False),
+        # Every punctuation of the marker (review round 12).
+        ("APPLE", "SMITH LLP O.B.O. APPLE INC.", True),
+        ("SMITH", "SMITH LLP O.B.O. APPLE INC.", False),
+        ("APPLE", "SMITH LLP ON-BEHALF-OF APPLE INC.", True),
+        ("APPLE", "SMITH LLP O / B / O APPLE INC.", True),
+        # "On behalf of itself": the organization's own filing.
+        ("APPLE", "APPLE INC. (ON BEHALF OF ITSELF AND ITS SUBSIDIARIES)", True),
+        ("AMERICAN HOSPITAL ASSOCIATION", "AMERICAN HOSPITAL ASSOCIATION ON BEHALF OF ITS MEMBERS", True),
     ])
     def test_real_client_names_from_2025_filings(self, searched, client, same):
         assert lda.is_same_client(searched, client) is same
@@ -548,6 +556,9 @@ class TestFiledBy:
         ("DOW CHEMICAL COMPANY DBA DOW", "THE DOW CHEMICAL COMPANY, DBA DOW", None),
         ("FAIR ISAAC CORPORATION (DBA FICO)", "FAIR ISAAC CORPORATION (DBA FICO)", None),
         ("BLUE CIRCLE STRATEGIES DBA ATLANTIC STRATEGIES OBO ECON DEV COMMN OF CHARLES CO", "BLUE CIRCLE STRATEGIES", None),
+        ("SMITH LLP O.B.O. APPLE INC.", "SMITH LLP", None),
+        # A registrant filing as "REGISTRANT (CLIENT)" (review round 12).
+        ("THE LIVINGSTON GROUP, LLC (VERIZON COMMUNICATIONS, INC.)", "THE LIVINGSTON GROUP, LLC", None),
         ("PFIZER INC.", "ALTRIUS GROUP, LLC", "ALTRIUS GROUP, LLC"),
         ("PFIZER INC.", None, None),
     ])
@@ -587,3 +598,18 @@ def test_the_cap_counts_bills_not_client_rows():
     capped = lda._cap_bills(rows)
     assert len({b["billId"] for b in capped}) == lda.MAX_LOBBIED_BILLS
     assert len(capped) == 2 * lda.MAX_LOBBIED_BILLS
+
+
+@pytest.mark.asyncio
+async def test_the_cache_holds_search_results_and_the_rules_apply_on_read(db_session):
+    """A change to the client rules must take effect on cached years too."""
+    from app.pipeline.cache import api_cache_set
+
+    filings = [
+        {"client": {"name": "BROWNSTEIN (BHFS, LLP) OBO APOLLO GLOBAL MANAGEMENT"}, "filing_type": "Q1", "income": "5000"},
+        {"client": {"name": "BHFS HOLDINGS"}, "filing_type": "Q1", "income": "700"},
+    ]
+    api_cache_set(db_session, "lda", lda._cache_key("BHFS", 2024), {"filings": filings, "complete": True})
+    act = await fetch_lobbying_activity(MagicMock(), db_session, "BHFS", 2024)
+    assert act.total == 700.0
+    assert act.clients == [("BHFS HOLDINGS", 700.0)]
