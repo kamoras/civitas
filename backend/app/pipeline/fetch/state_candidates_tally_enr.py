@@ -254,10 +254,13 @@ async def fetch_confirmed_candidates(
     )
 
     by_seat: dict[tuple, list[tuple[str, float]]] = {}
+    short: set = set()  # state-office contests the primary left to a runoff
+    runoff_read = False
     # Runoff processed second so its answer for a seat overrides the primary's.
     for election, stage_threshold in ((primary, threshold), (runoff, None)):
         if election is None or not _settled(election["date"], settle_days):
             continue  # no stage yet, or this stage's count isn't settled
+        runoff_read = runoff_read or election is runoff
         fetched = await _federal_contests_and_results(
             client, state, base_url, cid, election["id"], contest_type_filter,
             results_scope, year, state_offices,
@@ -319,6 +322,8 @@ async def fetch_confirmed_candidates(
             won = pick_nominees(choices, stage_threshold, advance)
             if won:
                 by_seat[key] = [(n, pct) for n, pct in won if n]
+            elif stage_threshold is not None and not federal_race and pick_nominees(choices, None, advance):
+                short.add(key)
 
     records = []
     for (o, d, p, st_seat), winners in by_seat.items():
@@ -332,7 +337,13 @@ async def fetch_confirmed_candidates(
             if st_seat is not None:
                 record["seat"] = st_seat
             records.append(record)
-    if runoff_pending:
+    # A primary contest fell short of the threshold and no settled runoff
+    # was read -- the runoff election is not even listed yet. Same outcome
+    # as runoff_pending: without it the primary alone, missing every office
+    # still owed a runoff, would be published as the ballot and frozen
+    # (Alabama's _runoff_owed). Only for a state that has a runoff stage.
+    runoff_owed = state_offices and runoff_re is not None and bool(short) and not runoff_read
+    if runoff_pending or runoff_owed:
         logger.info("%s: the %d runoff has not settled yet -- state offices incomplete", state, year)
         return federal_only(records)
     return records

@@ -155,6 +155,21 @@ def parse_grouped_list(pages: list[list[dict]], fmt: dict, state_offices: bool =
 _MATE_RE = re.compile(r"^(?P<name>.+?)\s*\((?P<governor>[^()]+)\)$")
 
 
+_GENERATIONAL = {"jr", "sr", "ii", "iii", "iv", "v"}
+
+
+def _names_governor(governor: str, named: str) -> bool:
+    """Whether `named` (the parenthesis on a mate's line) is the governor's
+    surname: the words that end his name once a generational suffix is
+    dropped -- "John Smith Jr." is "(Smith)", "Aaron B. Del Mar" would be
+    "(Del Mar)"."""
+    words = [w.strip(".,").casefold() for w in governor.split()]
+    while words and words[-1] in _GENERATIONAL:
+        words.pop()
+    wanted = [w.strip(".,").casefold() for w in named.split()]
+    return bool(wanted) and len(wanted) < len(words) and words[-len(wanted):] == wanted
+
+
 def _joins_ticket(
     lines: list[list[dict]], i: int, line: list[dict], records: list[dict],
     name_x: float, date_x: float, removed: re.Pattern,
@@ -171,8 +186,7 @@ def _joins_ticket(
         return False
     text = " ".join(w["text"] for w in line if name_x - 1 <= w["x0"] < date_x - 1)
     m = _MATE_RE.match(text)
-    governor = records[-1]["last_name"].split()
-    if not m or not governor or m.group("governor").strip().casefold() != governor[-1].casefold():
+    if not m or not _names_governor(records[-1]["last_name"], m.group("governor")):
         return False
     mate = clean_display_name(m.group("name"))
     if len(mate.split()) < 2 or " and " in records[-1]["last_name"] or _struck(lines, i, name_x, removed):

@@ -366,6 +366,39 @@ class TestRunoffOverride:
         })
 
     @pytest.mark.asyncio
+    async def test_a_runoff_owed_but_not_yet_listed_marks_the_state_offices_incomplete(self, monkeypatch):
+        """Georgia-style: the primary has settled and the runoff election
+        is not listed yet. A state contest short of the majority is owed
+        it, so the primary alone is not the state-office ballot."""
+        primary = (
+            "Contest Name\tChoice\tChoice Party\tTotal Votes\n"
+            "US Senate - Rep\tMike Collins\tREP\t600000\n"
+            "US Senate - Rep\tDerek Dooley\tREP\t300000\n"
+            "Lieutenant Governor - Rep\tBurt Jones\tREP\t400\n"
+            "Lieutenant Governor - Rep\tSomeone Else\tREP\t350\n"
+            "Lieutenant Governor - Rep\tA Third\tREP\t250\n"
+        ).encode()
+
+        async def fake_discover(client, state, year, discovery):
+            return [{"url": "https://example.gov/p", "runoff": False}]
+
+        async def fake_get(client, url, label):
+            return _Resp(content=primary)
+
+        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
+        monkeypatch.setattr(tb, "_get", fake_get)
+        source = {"runoff_threshold_pct": 50.0, "format": self._FMT, "statewide_offices": True,
+                  "discovery": {"runoff_name_regex": "General Primary Runoff"}}
+        result = await tb.fetch_confirmed_candidates(None, 2026, "GA", source)
+        assert [(r["office"], r["last_name"]) for r in result] == [("S", "Collins")]
+        assert result.state_offices_incomplete is True
+        # A state with no runoff stage (North Carolina's second primary is
+        # only on request) is not held open by a short contest.
+        no_stage = {**source, "discovery": {}}
+        result = await tb.fetch_confirmed_candidates(None, 2026, "NC", no_stage)
+        assert not getattr(result, "state_offices_incomplete", False)
+
+    @pytest.mark.asyncio
     async def test_one_stage_pending_publishes_no_state_offices(self, monkeypatch):
         """Read alone, the settled party's election would be taken for
         the whole ballot and the pending party's nominees deleted. Its

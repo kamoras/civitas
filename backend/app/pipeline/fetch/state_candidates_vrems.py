@@ -40,6 +40,7 @@ Fripp Island Public Service Commission") names Beaufort there.
 """
 
 import logging
+import re
 
 import httpx
 from lxml import html as lxml_html
@@ -113,6 +114,26 @@ def _search_form(page: str) -> tuple[dict, list[str], str | None] | None:
     return hidden, offices, every
 
 
+# A running mate's cell carries the mate's own filing status after the
+# name: "Mike Reichenbach (Active)".
+_MATE_STATUS_RE = re.compile(r"^(?P<name>.*?)\s*\((?P<status>[^()]*)\)\s*$")
+
+
+def _active_mate(cell: str) -> str:
+    """The running mate's name when they are still on the ticket: the cell
+    names no status, or says "Active". A withdrawn (or any other status)
+    mate is not on the ballot beside the governor, so is not joined --
+    clean_display_name would strip "(Withdrawn)" as an annotation and
+    keep the name."""
+    cell = " ".join(cell.split())
+    m = _MATE_STATUS_RE.match(cell)
+    if m:
+        if m.group("status").strip().lower() != "active":
+            return ""
+        cell = m.group("name")
+    return clean_display_name(cell)
+
+
 def _state_office_record(row: dict) -> dict | None:
     """A statewide-executive or state-legislative record for one Active
     result row, or None. Only called for a state that opted in."""
@@ -143,7 +164,7 @@ def _state_office_record(row: dict) -> dict | None:
     # Lieutenant Governor": Alan Wilson, "Mike Reichenbach (Active)"); the
     # ballot prints the pair, so the page does too -- "Alan Wilson and
     # Mike Reichenbach", the way Maryland's list reads.
-    mate = clean_display_name(row.get("Running Mate") or "")
+    mate = _active_mate(row.get("Running Mate") or "")
     if mate:
         name = f"{name} and {mate}"
     record = {"office": office, "district": district, "party": party[0], "last_name": name}

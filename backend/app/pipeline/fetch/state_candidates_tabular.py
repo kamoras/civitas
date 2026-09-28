@@ -891,6 +891,8 @@ async def fetch_confirmed_candidates(
     by_seat: dict[tuple, list[dict]] = {}
     parsed_any = False
     withheld_any = False
+    short: set = set()
+    runoff_read = False
 
     for stage in usable:
         resp = await _get(client, stage["url"], f"{st} results export")
@@ -917,6 +919,7 @@ async def fetch_confirmed_candidates(
                 withheld_any = True
                 continue
         parsed_any = True
+        runoff_read = runoff_read or bool(stage["runoff"])
         _collect(
             rows, fmt, by_seat,
             None if stage["runoff"] else threshold,
@@ -924,6 +927,7 @@ async def fetch_confirmed_candidates(
             state_offices=state_offices,
             judicial_resolution=source.get("judicial_resolution"),
             judicial_advance_count=source.get("judicial_advance_count"),
+            short=None if stage["runoff"] else short,
         )
 
     if not parsed_any:
@@ -931,7 +935,17 @@ async def fetch_confirmed_candidates(
         # failure. Same distinction the discovery gate makes.
         return [] if withheld_any else None
     records = [record for records in by_seat.values() for record in records]
-    if state_offices and (partial or withheld_any):
+    # A runoff is owed and no settled runoff has been read: the runoff
+    # election is not listed yet, or lists no results file. The stages
+    # above cannot see it, so without this the primary alone -- missing
+    # every office short of the threshold -- would be published as the
+    # ballot and frozen there (Alabama's _runoff_owed, for every state
+    # that configures a runoff stage). Only where one is configured: North
+    # Carolina's second primary happens only if the runner-up asks for
+    # one, so a short contest there may never be decided by another stage
+    # (the page's primary-results caveat covers its missing nominee).
+    runoff_owed = bool(short) and bool(discovery.get("runoff_name_regex")) and not runoff_read
+    if state_offices and (partial or withheld_any or runoff_owed):
         # The same partial read as above, withheld_any found only once a
         # file dated itself.
         logger.info("%s %d: a stage has not settled yet -- state offices incomplete", st, year)
@@ -948,9 +962,12 @@ def _collect(
     state_offices: bool = False,
     judicial_resolution: str | None = None,
     judicial_advance_count: int | None = None,
+    short: set | None = None,
 ) -> None:
     """Fold one results file into `by_seat`, replacing (not appending to)
-    any seat it covers so a later stage's answer wins outright."""
+    any seat it covers so a later stage's answer wins outright. `short`, when
+    given, collects each STATE-office contest whose leader fell short of the
+    threshold -- a nomination a runoff still has to decide."""
     for contest, entry in _tally(rows, fmt).items():
         seat = None
         parsed = entry["office"] or parse_office(contest)
@@ -1023,6 +1040,9 @@ def _collect(
             judicial_resolution=majority_rule,
         )
         if not won:
+            if (short is not None and threshold is not None and not federal
+                    and pick_nominees(list(entry["votes"].items()), None, seats_filled or effective_advance)):
+                short.add((office, district, seat, contest_party))
             continue
 
         records = []

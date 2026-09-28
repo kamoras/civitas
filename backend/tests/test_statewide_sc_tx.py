@@ -248,3 +248,19 @@ async def test_tx_without_the_opt_in_reads_only_federal_rows():
     async with _tx_client() as client:
         records = await tx.fetch_confirmed_candidates(client, 2026, "TX", {})
     assert records and {r["office"] for r in records} == {"S"}
+
+
+def test_sc_joins_only_a_running_mate_still_on_the_ticket():
+    """The Running Mate cell carries the mate's own status. "(Active)" is
+    on the ballot; a withdrawn mate is not, and clean_display_name alone
+    would strip "(Withdrawn)" and join the name anyway."""
+    from app.pipeline.fetch.state_candidates_vrems import _state_office_record
+
+    def row(mate):
+        return {"Office": "Governor and Lieutenant Governor", "Associated Counties": "",
+                "Name on Ballot": "Alan Wilson", "Running Mate": mate, "Party": "Republican"}
+
+    assert _state_office_record(row("Mike Reichenbach (Active)"))["last_name"] == "Alan Wilson and Mike Reichenbach"
+    assert _state_office_record(row("Mike Reichenbach"))["last_name"] == "Alan Wilson and Mike Reichenbach"
+    assert _state_office_record(row("Mike Reichenbach (Withdrawn)"))["last_name"] == "Alan Wilson"
+    assert _state_office_record(row(""))["last_name"] == "Alan Wilson"

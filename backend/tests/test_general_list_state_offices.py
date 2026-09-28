@@ -424,6 +424,24 @@ IL_LEG = [
 ]
 
 
+def test_a_suffixed_governor_keeps_his_running_mate():
+    """The mate's line names the surname without the generational suffix:
+    "John Q. Smith Jr." is "(Smith)", and a two-word surname is matched
+    whole."""
+    fmt = _general("IL")["format"]
+    page = [
+        *_line(40, (230, "GOVERNOR"), (300, "AND"), (330, "LIEUTENANT"), (420, "GOVERNOR")),
+        *_line(55, (18, "REPUBLICAN"), (155, "John"), (180, "Q."), (195, "Smith"), (230, "Jr."), (448, "10/27/2025")),
+        *_line(62, (155, "Pat"), (180, "Jones"), (230, "(Smith)"), (448, "10/27/2025")),
+        *_line(70, (18, "GREEN"), (155, "Ana"), (180, "Del"), (200, "Mar"), (448, "5/26/2026")),
+        *_line(78, (155, "Lee"), (180, "Park"), (230, "(Del"), (260, "Mar)"), (448, "5/26/2026")),
+    ]
+    assert _state(parse_grouped_list([page], fmt, state_offices=True)) == {
+        ("governor", None, "R", None, "John Q. Smith Jr. and Pat Jones"),
+        ("governor", None, "G", None, "Ana Del Mar and Lee Park"),
+    }
+
+
 def test_illinois_reads_its_state_offices_and_drops_the_struck():
     fmt = _general("IL")["format"]
     assert _state(parse_grouped_list([IL_EXEC], fmt, state_offices=True)) == {

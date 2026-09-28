@@ -810,3 +810,27 @@ def test_statewide_district_towns_is_generated_data_for_district_seats_only():
         assert places and all(p.strip() for p in places), key
     assert len([k for k in towns["districts"] if k.startswith("NH-")]) == 5
     assert len([k for k in towns["districts"] if k.startswith("MA-")]) == 8
+
+
+def test_every_district_town_is_an_official_place_name():
+    """A reader types the real name. PD43 prints "N. Andover" and "W.
+    Springfield", New Hampshire's workbooks "At.& Gil. Ac. Gt.": each must
+    have been resolved to its Census county-subdivision name (a city ward
+    keeps its ward), or typing the town finds nothing -- or the neighbour."""
+    import json
+    import re
+    from pathlib import Path
+
+    towns = json.loads(
+        (Path(__file__).resolve().parents[1] / "app" / "data" / "statewide_district_towns.json").read_text()
+    )
+    official = {state: set(names) for state, names in towns["officialPlaces"].items()}
+    for key, places in towns["districts"].items():
+        for place in places:
+            base = re.sub(r"\s+Ward\s+\d+$", "", place)
+            assert base in official[key[:2]], (key, place)
+            assert "." not in place and "&" not in place, (key, place)
+    everywhere = {p for places in towns["districts"].values() for p in places}
+    for name in ("North Andover", "West Springfield", "North Attleborough", "South Hadley",
+                 "Atkinson and Gilmanton Academy grant"):
+        assert name in everywhere, name
