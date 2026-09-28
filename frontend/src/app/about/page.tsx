@@ -735,18 +735,18 @@ export default function AboutPage() {
               <a href="#state-ballots" className="underline underline-offset-2 hover:text-phos">State Ballots &amp; Ballot Measures</a>.
             </P>
             <Gist>
-              Ballot measures are read directly from each state. A state whose official site
-              can&apos;t be read automatically, or which publishes no list, shows as not yet
-              covered, with its official lookup link.
+              Ballot measures are read directly from each state. A state we don&apos;t read
+              automatically yet, or which publishes no list, shows as not yet covered, with
+              its official lookup link.
             </Gist>
             <P>
               Every measure on these pages is read directly from the state itself — its
               Secretary of State, elections board or legislature — with the title, summary,
               fiscal statement and yes/no wording quoted exactly as the state published them
               and the drafter named. We use no third-party source for measures. Some states
-              can&apos;t be read that way: their official sites block automated access, or
-              they publish no list of what they have certified. Those pages say the state is
-              not yet covered, give that reason, and link the state&apos;s own official ballot
+              we don&apos;t read automatically yet, and a few publish no official list of what
+              they have certified. Those pages say the state is not yet covered, say which of
+              the two it is, and link the state&apos;s own official ballot
               lookup — they never read as having no measures. A state is only shown as having
               none when its official source establishes that; a guide that has not been
               published yet also reads as not yet covered. The official lookup link on every
@@ -2116,7 +2116,7 @@ export default function AboutPage() {
               />
               <Row
                 label="State election offices"
-                value="Statewide ballot measures, read directly from each state's own certified list, voter guide or ballot notice — official title, summary, fiscal statement and the state's own yes/no wording, stored and displayed verbatim with the drafter named, and linked from every measure. The only source for measures: a state whose site can't be read automatically, or which publishes no list, is shown as not yet covered with its official lookup link"
+                value="Statewide ballot measures, read directly from each state's own certified list, voter guide or ballot notice — official title, summary, fiscal statement and the state's own yes/no wording, stored and displayed verbatim with the drafter named, and linked from every measure. The only source for measures: a state we don't read automatically yet, or which publishes no list, is shown as not yet covered with its official lookup link"
               />
               <Row
                 label="Google Civic Information API"

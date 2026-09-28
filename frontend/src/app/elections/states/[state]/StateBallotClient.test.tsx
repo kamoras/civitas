@@ -599,7 +599,7 @@ describe("ballot measures", () => {
   });
 
   it("gives an unread state's own reason, with the official lookup", async () => {
-    const reason = "The Ohio Secretary of State's website blocks our server, so its list of measures can't be read automatically.";
+    const reason = "Civitas does not read Ohio's official measure list automatically yet.";
     render(
       <StateBallotClient
         ballot={ballot({
@@ -612,7 +612,7 @@ describe("ballot measures", () => {
     );
     const drawer = await openContest(/Statewide ballot measures/);
     expect(drawer.getByText(/OH's statewide ballot measures are not yet covered/)).toBeInTheDocument();
-    expect(drawer.getByText(/blocks our server/)).toBeInTheDocument();
+    expect(drawer.getByText(/does not read Ohio's official measure list automatically yet/)).toBeInTheDocument();
     expect(drawer.queryByText(/no measures|none on the ballot/i)).not.toBeInTheDocument();
     expect(drawer.getByRole("link", { name: /official lookup/ })).toHaveAttribute("href", expect.stringMatching(/^https:/));
   });

@@ -1386,7 +1386,26 @@ def test_every_unread_state_has_a_reason_and_no_read_state_claims_one():
     expected = (election_pipeline.STATES_WITH_FEDERAL_RACES | {"DC"}) - sources.configured_states()
     assert unread == expected
     assert not unread & sources.configured_states()
-    assert all(len(reason) > 20 for reason in registry["unread"].values())
+    for state, entry in registry["unread"].items():
+        assert set(entry) == {"reason", "dev_note"}, state
+        assert len(entry["reason"]) > 20 and entry["dev_note"], state
+
+
+def test_unread_reasons_make_no_claim_about_network_access():
+    """A reason is shown on the production page, which runs on a
+    different network than the machine that checked the state: "blocks
+    automated access" can be false there. Only facts about what the state
+    publishes, or that Civitas doesn't read it yet, are true everywhere.
+    The technical finding lives in dev_note, which is never served."""
+    from app.pipeline.fetch import ballot_measure_pdf_sources as sources
+
+    sources.invalidate_cache()
+    network_words = ("block", "cloudflare", "imperva", "akamai", "captcha", "firewall",
+                     "our server", "ip ", "refused", "reach", "automated access", "can't be read")
+    for state, entry in sources._load()["unread"].items():
+        reason = entry["reason"].lower()
+        assert not [w for w in network_words if w in reason], (state, reason)
+        assert ("does not read" in reason and "automatically yet" in reason) or "publish" in reason or "posted" in reason, state
 
 
 def test_the_page_gives_an_unread_states_reason(db_session):
@@ -1395,7 +1414,10 @@ def test_the_page_gives_an_unread_states_reason(db_session):
     sources.invalidate_cache()
     ga = _body(elections.state_ballot("GA", db=db_session))["measureCoverage"]
     assert ga["status"] == MeasureCoverage.NOT_YET_COVERED
-    assert "blocks automated access" in ga["unreadReason"]
+    assert ga["unreadReason"] == "Civitas does not read Georgia's official measure list automatically yet."
+    assert "dev_note" not in json.dumps(ga) and "Cloudflare" not in json.dumps(ga)
+    ms = _body(elections.state_ballot("MS", db=db_session))["measureCoverage"]
+    assert ms["unreadReason"].startswith("Mississippi publishes no official list")
     assert _body(elections.state_ballot("CA", db=db_session))["measureCoverage"]["unreadReason"] is None
 
 

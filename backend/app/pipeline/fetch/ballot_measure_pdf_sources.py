@@ -58,10 +58,13 @@ def configured_states() -> set[str]:
 
 
 def unread_reason(state: str) -> str | None:
-    """Why `state`'s measures are not read — the registry's 'unread' entry,
-    written for a voter and shown on the state's page. None for a state
-    with a registered source (it is read; the registry's 'states' wins)."""
+    """Why `state`'s measures are not read — the `reason` of its registry
+    'unread' entry, written for a voter and shown on the state's page.
+    Only `reason` leaves this function: the entry's `dev_note` records what
+    a developer found from one particular network and is never served.
+    None for a state with a registered source (the registry's 'states'
+    wins)."""
     if source_for_state(state) is not None:
         return None
-    data = _load()
-    return (data.get("unread") or {}).get(state.upper())
+    entry = ((_load().get("unread") or {}).get(state.upper())) or {}
+    return entry.get("reason") if isinstance(entry, dict) else None

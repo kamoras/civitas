@@ -1188,7 +1188,7 @@ def _record_unread_state(db: Session, state: str, election_day: str) -> None:
 
     from app.pipeline.fetch.ballot_measure_pdf_sources import unread_reason
 
-    reason = unread_reason(state) or "the state's official list can't be read automatically, or none is published"
+    reason = unread_reason(state) or "Civitas does not read this state's official measure list automatically yet."
     _set_coverage(
         db, state, election_day, MeasureCoverage.NOT_YET_COVERED, error=f"no direct source: {reason}",
     )
@@ -1213,9 +1213,9 @@ async def _sync_ballot_measures(db: Session, client: httpx.AsyncClient, cycle: i
 
     The distinction this function exists to preserve: a state with no
     measures and a state we don't know about must never render the same
-    way. A state with no registered direct source — its official site
-    can't be read automatically, or it publishes no list of what is
-    certified — is recorded NOT_YET_COVERED, never CONFIRMED_NONE (nothing
+    way. A state with no registered direct source — Civitas does not
+    read its official list automatically yet, or it publishes no list of
+    what is certified — is recorded NOT_YET_COVERED, never CONFIRMED_NONE (nothing
     was checked), and raises no alert (nothing broke): its page says so and
     links the official lookup.
     """
