@@ -172,9 +172,15 @@ _LEGAL_FORM_WORDS = frozenset({
 })
 
 
+# An apostrophe is dropped rather than read as a word break: the registry
+# spells one client both "AMERICA'S CREDIT UNIONS" and "AMERICAS CREDIT
+# UNIONS".
+_APOSTROPHE_RE = re.compile(r"['\u2019]")
+
+
 def _name_key(name: str) -> str:
     """Upper-case words and digits only, a leading "THE" dropped."""
-    words = re.sub(r"[^A-Z0-9]+", " ", (name or "").upper()).split()
+    words = re.sub(r"[^A-Z0-9]+", " ", _APOSTROPHE_RE.sub("", (name or "").upper())).split()
     return " ".join(words[1:] if words[:1] == ["THE"] else words)
 
 
@@ -183,10 +189,11 @@ def _name_key(name: str) -> str:
 _ALIAS_RE = re.compile(r"\([^()]*\)")
 
 
-def search_name(org_name: str) -> str:
+def search_name(org_name: str, keep_aliases: bool = False) -> str:
     """The name to search the registry for: the organization's name without
     parenthesised aliases or trailing legal-form words."""
-    words = _name_key(_ALIAS_RE.sub(" ", org_name or "")).split() or _name_key(org_name).split()
+    bare = org_name if keep_aliases else _ALIAS_RE.sub(" ", org_name or "")
+    words = _name_key(bare).split() or _name_key(org_name).split()
     # "ELI LILLY AND COMPANY" and "ELI LILLY & COMPANY" are one name; the
     # ampersand is already gone as punctuation, so a dangling AND goes too.
     while len(words) > 1 and (words[-1] in _LEGAL_FORM_WORDS or words[-1] == "AND"):
@@ -256,7 +263,7 @@ _PAREN_RE = re.compile(r"\(([^()]*)\)")
 def _client_tokens(text: str) -> str:
     """Upper-case words and digits, with "(" and ")" kept as their own
     tokens: "SMITH LLP (O.B.O. APPLE, INC.)" -> "SMITH LLP ( O B O APPLE INC )"."""
-    spaced = re.sub(r"[^A-Z0-9()]+", " ", (text or "").upper())
+    spaced = re.sub(r"[^A-Z0-9()]+", " ", _APOSTROPHE_RE.sub("", (text or "").upper()))
     return " ".join(spaced.replace("(", " ( ").replace(")", " ) ").split())
 
 
@@ -329,12 +336,15 @@ def _filed_by(client_name: str | None, registrant: str | None) -> str | None:
     d/b/a in any of those."""
     if not registrant:
         return None
-    reg_key, reg_search = _name_key(registrant), search_name(registrant)
+    reg_key = _name_key(registrant)
+    # With and without aliases: "HOLLAND & KNIGHT (HK)" in the client field
+    # is the registrant "HOLLAND & KNIGHT (HK) LLP" either way.
+    reg_search = {k: search_name(registrant, keep_aliases=k) for k in (False, True)}
     firm, _ = _split_client(client_name or "")
     whole = _client_tokens(client_name or "")
     parts = [firm] if firm else [whole, whole.split("(")[0]]
     for name in (n for part in parts for n in _names_of(part)):
-        if name == reg_key or search_name(name) == reg_search:
+        if name == reg_key or any(search_name(name, keep_aliases=k) == v for k, v in reg_search.items()):
             return None
     return registrant
 
@@ -348,7 +358,52 @@ def _cache_key(org_key: str, year: int) -> str:
     # share an 80-char prefix (e.g. federal vs. state PAC variants of one
     # sponsor) can't collide onto one cached figure.
     key_hash = hashlib.sha256(org_key.encode()).hexdigest()[:12]
-    return f"lda-activity-v7-{year}-{org_key[:60]}-{key_hash}"
+    return f"lda-activity-v8-{year}-{org_key[:60]}-{key_hash}"
+
+
+async def _search_filings(client: httpx.AsyncClient, query: str, year: int) -> tuple[list[dict], bool] | None:
+    """Every filing a client_name search returns for the year, and whether
+    the page cap left some unread; None when the search failed.
+
+    Follows pagination: a heavy-lobbying client can file dozens to
+    low-hundreds of filings a year (multiple outside firms x quarterly
+    reports + in-house). Summing only the first page systematically
+    UNDERcounted exactly the biggest spenders, and the figure is shown
+    verbatim in user-facing text. Bounded to keep one pathological org from
+    stalling the enrichment loop; the cap is logged if hit so a silent
+    truncation can't masquerade as a complete total.
+    """
+    filings: list[dict] = []
+    url: str | None = f"{LDA_API_BASE}/filings/"
+    params: dict | None = {"client_name": query, "filing_year": year, "page_size": 25}
+    headers = {"Authorization": f"Token {settings.LDA_API_KEY}"} if settings.LDA_API_KEY else None
+    pages = 0
+    try:
+        while url and pages < _MAX_PAGES:
+            await _rate_limiter.acquire()
+            resp = await client.get(
+                url, params=params, headers=headers, timeout=DEFAULT_FETCH_TIMEOUT_S,
+                follow_redirects=True,
+            )
+            if resp.status_code == 429:
+                logger.warning("LDA rate limited for %s — skipping (uncached)", query)
+                return None
+            resp.raise_for_status()
+            data = resp.json()
+            filings.extend(data.get("results", []))
+            url = data.get("next")  # absolute URL from the API, or None
+            params = None  # `next` already encodes the query
+            pages += 1
+    except Exception as exc:
+        logger.warning("LDA fetch failed for %s: %s", query, exc)
+        return None
+    complete = not (url and pages >= _MAX_PAGES)
+    if not complete:
+        logger.warning(
+            "LDA activity for %s (%d) hit the %d-page cap — total may be a lower bound",
+            query, year, _MAX_PAGES,
+        )
+    return filings, complete
 
 
 async def fetch_lobbying_activity(
@@ -379,49 +434,30 @@ async def fetch_lobbying_activity(
                 org_key, cached.get("filings") or [], bool(cached.get("complete", True)),
             ))
 
-    # Follow pagination: a heavy-lobbying client can file dozens to
-    # low-hundreds of filings a year (multiple outside firms × quarterly
-    # reports + in-house). Summing only the first page systematically
-    # UNDERcounted exactly the biggest spenders — and the figure is shown
-    # verbatim in user-facing text. Bounded to keep one pathological org
-    # from stalling the enrichment loop; the cap is logged if hit so a
-    # silent truncation can't masquerade as a complete total.
-    filings: list[dict] = []
-    url: str | None = f"{LDA_API_BASE}/filings/"
-    params: dict | None = {"client_name": org_key, "filing_year": year, "page_size": 25}
-    headers = {"Authorization": f"Token {settings.LDA_API_KEY}"} if settings.LDA_API_KEY else None
-    pages = 0
-    try:
-        while url and pages < _MAX_PAGES:
-            await _rate_limiter.acquire()
-            resp = await client.get(
-                url, params=params, headers=headers, timeout=DEFAULT_FETCH_TIMEOUT_S,
-                follow_redirects=True,
-            )
-            if resp.status_code == 429:
-                logger.warning("LDA rate limited for %s — skipping (uncached)", org_key)
-                return None
-            resp.raise_for_status()
-            data = resp.json()
-            filings.extend(data.get("results", []))
-            url = data.get("next")  # absolute URL from the API, or None
-            params = None  # `next` already encodes the query
-            pages += 1
-    except Exception as exc:
-        logger.warning("LDA fetch failed for %s: %s", org_key, exc)
-        return None
+    # The registry's search reads "AMERICA'S" and "AMERICAS" as different
+    # words, and filers use both, so a name with an apostrophe is searched
+    # both ways and the results pooled.
+    queries = [org_key]
+    if _APOSTROPHE_RE.search(org_name or ""):
+        spaced = search_name(_APOSTROPHE_RE.sub(" ", org_name))
+        if spaced != org_key:
+            queries.append(spaced)
+    compact: list[dict] = []
+    complete = True
+    for query in queries:
+        found = await _search_filings(client, query, year)
+        if found is None:
+            return None
+        filings, query_complete = found
+        complete = complete and query_complete
+        for f in map(_compact_filing, filings):
+            if f not in compact:
+                compact.append(f)
 
-    complete = not (url and pages >= _MAX_PAGES)
-    if not complete:
-        logger.warning(
-            "LDA activity for %s (%d) hit the %d-page cap — total may be a lower bound",
-            org_key, year, _MAX_PAGES,
-        )
     # The search results are cached as they came (only the fields read), and
     # which of them are the organization's is decided on every read: a
     # change to the matching rules applies at once, not when a 30-day entry
     # expires.
-    compact = [_compact_filing(f) for f in filings]
     api_cache_set(db, "lda", cache_key, {"filings": compact, "complete": complete}, normal_ttl_hours=ttl)
     return _remember(cache_key, api_cache_stamp(db, "lda", cache_key, max_age_hours=ttl),
                      _activity_from(org_key, compact, complete))

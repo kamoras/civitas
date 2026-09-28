@@ -711,20 +711,50 @@ _ORGANIZATION_FILER_TYPES = frozenset({"C", "E", "I"})
 
 
 def _exact_name_key(name: str) -> str:
-    """A name compared ignoring case and punctuation only."""
-    return " ".join(re.sub(r"[^A-Z0-9]+", " ", (name or "").upper()).split())
+    """A name compared ignoring case and punctuation only. An apostrophe is
+    dropped, not a word break: "AMERICA'S" is spelled "AMERICAS" too."""
+    unquoted = re.sub(r"['\u2019]", "", (name or "").upper())
+    return " ".join(re.sub(r"[^A-Z0-9]+", " ", unquoted).split())
+
+
+_ALIAS_RE = re.compile(r"\([^()]*\)")
 
 
 def _committee_name_key(name: str) -> str:
     """A committee name compared ignoring case, punctuation and parenthesised
     aliases: registrations cite "AMERICAN BANKERS ASSOCIATION PAC" and
     "AMERICAN BANKERS ASSOCIATION PAC (BANKPAC)" for one committee."""
-    return _exact_name_key(re.sub(r"\([^()]*\)", " ", name or ""))
+    return _exact_name_key(_ALIAS_RE.sub(" ", name or ""))
 
 
-def parse_committee_master(text: str) -> dict[str, dict]:
-    """cm.txt -> {committee_id: {"type", "designation", "connectedOrg"}}.
-    Empty fields become None; a malformed short line is skipped.
+def parse_committee_rows(text: str) -> dict[str, dict]:
+    """cm.txt -> {committee_id: {"name", "type", "designation", "sponsor"}},
+    the file as registered: "sponsor" is the connected organization as
+    stated, for a separate segregated fund only (see
+    resolve_connected_orgs). Empty fields become None; a malformed short
+    line is skipped."""
+    out: dict[str, dict] = {}
+    for line in text.splitlines():
+        cols = line.split("|")
+        if len(cols) <= _CM_CONNECTED_ORG or not cols[_CM_ID]:
+            continue
+        org = cols[_CM_CONNECTED_ORG].strip()
+        sponsored = bool(cols[_CM_ORG_TYPE].strip()) and org.upper() not in ("", "NONE")
+        out[cols[_CM_ID]] = {
+            "name": cols[_CM_NAME].strip(),
+            "type": cols[_CM_TYPE] or None,
+            "designation": cols[_CM_DESIGNATION] or None,
+            "sponsor": org if sponsored else None,
+        }
+    return out
+
+
+def resolve_connected_orgs(
+    rows: dict[str, dict], names: dict[str, set[str]] | None = None,
+) -> dict[str, dict]:
+    """{committee_id: {"type", "designation", "connectedOrg"}} from
+    parse_committee_rows output. `names` adds every earlier name a committee
+    has registered under, since a sponsor can cite a PAC by an old one.
 
     The connected organization is a PAC's sponsor only for a separate
     segregated fund, which is exactly the committee the FEC gives an
@@ -734,58 +764,58 @@ def parse_committee_master(text: str) -> dict[str, dict]:
     VICTORY") or the form's "NONE" placeholder (28,595 of the 2020-2026
     files' rows), neither of which is a lobbying client. A fund that names
     itself as its own connected organization (157 of cm26's 2,067 sponsored
-    committees) names no sponsor either. A sponsor that is itself a PAC is
-    followed to that PAC's sponsor (in cm26, 40 resolve to an organization
-    and 15 to none).
+    committees) names no sponsor either.
+
+    A sponsor can be named by a name that is also a committee's. When that
+    committee files for an organization itself (_ORGANIZATION_FILER_TYPES:
+    the NEA's, the AFL-CIO's, the ABA's own registrations), it is the
+    sponsor. When it is another PAC (a state bankers' PAC naming the
+    American Bankers Association's), that PAC's sponsor is followed. Chains
+    can loop (MINEPAC <-> COALPAC) or end at a committee with no sponsor,
+    which leaves none. Measured over the 2020-2026 files, 41 of cm26's
+    sponsors resolve to an organization this way and 18 to none (a PAC
+    naming itself under another alias among them).
     """
-    rows = [cols for cols in (line.split("|") for line in text.splitlines())
-            if len(cols) > _CM_CONNECTED_ORG and cols[_CM_ID]]
+    all_names = {cid: {row["name"]} | (names or {}).get(cid, set()) for cid, row in rows.items()}
+    by_name: dict[str, list[str]] = {}
+    for cid, own in all_names.items():
+        for key in {_committee_name_key(n) for n in own}:
+            by_name.setdefault(key, []).append(cid)
 
-    def stated_sponsor(cols: list[str]) -> str | None:
-        org = cols[_CM_CONNECTED_ORG].strip()
-        if not cols[_CM_ORG_TYPE].strip() or org.upper() in ("", "NONE"):
-            return None
-        return org
-
-    # A sponsor can be named by a name that is also a committee's. When that
-    # committee files for an organization itself (_ORGANIZATION_FILER_TYPES:
-    # the NEA's, the AFL-CIO's, the ABA's own registrations), it is the
-    # sponsor. When it is another PAC (a state bankers' PAC naming the
-    # American Bankers Association's), that PAC's sponsor is followed.
-    # Chains can loop (MINEPAC <-> COALPAC) or end at a committee with no
-    # sponsor, which leaves none.
-    by_name: dict[str, list[list[str]]] = {}
-    for cols in rows:
-        by_name.setdefault(_committee_name_key(cols[_CM_NAME]), []).append(cols)
-
-    def resolve(cols: list[str]) -> str | None:
-        org = stated_sponsor(cols)
-        if org is None or _exact_name_key(org) == _exact_name_key(cols[_CM_NAME]):
+    def resolve(cid: str) -> str | None:
+        org = rows[cid]["sponsor"]
+        # Its current name only: a PAC once registered under its sponsor's
+        # name ("PRINTING UNITED ALLIANCE") still names that sponsor.
+        if org is None or _exact_name_key(org) == _exact_name_key(rows[cid]["name"]):
             return None  # names itself
-        seen = {cols[_CM_ID]}
+        seen = {cid}
         while True:
             matches = by_name.get(_committee_name_key(org), [])
-            named = [c for c in matches if c[_CM_ID] not in seen]
+            named = [m for m in matches if m not in seen]
             if len(seen) > 1 and len(named) < len(matches):
                 return None  # back to a committee already followed: a loop
-            # Before any hop, a match on the committee's own name without its
-            # alias ("X" for "X (XPAC)") is the organization.
-            if not named or any(c[_CM_TYPE] in _ORGANIZATION_FILER_TYPES for c in named):
+            if not named:
+                # Only the committee itself matches, by its name without an
+                # alias: "X" for "X (XPAC)" is the organization, while
+                # "X PAC (XX-PAC)" for "X PAC (X-PAC)" is itself again.
+                return None if matches and _ALIAS_RE.search(org) else org
+            if any(rows[m]["type"] in _ORGANIZATION_FILER_TYPES for m in named):
                 return org
-            target = named[0]
-            seen.add(target[_CM_ID])
-            org = stated_sponsor(target)
+            seen.add(named[0])
+            org = rows[named[0]]["sponsor"]
             if org is None:
                 return None
 
-    out: dict[str, dict] = {}
-    for cols in rows:
-        out[cols[_CM_ID]] = {
-            "type": cols[_CM_TYPE] or None,
-            "designation": cols[_CM_DESIGNATION] or None,
-            "connectedOrg": resolve(cols),
-        }
-    return out
+    return {
+        cid: {"type": row["type"], "designation": row["designation"], "connectedOrg": resolve(cid)}
+        for cid, row in rows.items()
+    }
+
+
+def parse_committee_master(text: str) -> dict[str, dict]:
+    """One cycle's cm.txt -> {committee_id: {"type", "designation",
+    "connectedOrg"}}, resolved within that file (resolve_connected_orgs)."""
+    return resolve_connected_orgs(parse_committee_rows(text))
 
 
 async def fetch_committee_master(
@@ -793,7 +823,9 @@ async def fetch_committee_master(
 ) -> dict[str, dict]:
     """Committee type, designation and connected organization for every
     committee registered in any of `cycles` (even years). Later cycles win
-    for a committee in several, since a registration can be amended.
+    for a committee in several, since a registration can be amended, and
+    sponsors are resolved once over all of them, so a sponsor citing a PAC
+    by a name it has since changed still resolves.
 
     Best-effort per cycle: a failed download leaves that cycle out (logged)
     rather than failing the run, and callers fall back to the per-committee
@@ -803,10 +835,11 @@ async def fetch_committee_master(
     import zipfile
 
     merged: dict[str, dict] = {}
+    names: dict[str, set[str]] = {}
     for cycle in sorted(set(cycles)):
-        # The parsed map is cached: bump the version whenever
-        # parse_committee_master's output changes.
-        cache_key = f"committee-master-v3-{cycle}"
+        # The file as registered is cached, not the resolution: bump the
+        # version whenever parse_committee_rows' output changes.
+        cache_key = f"committee-master-rows-v1-{cycle}"
         cached = api_cache_get(
             db, "fec", cache_key, max_age_hours=COMMITTEE_MASTER_CACHE_TTL_HOURS,
         )
@@ -822,13 +855,15 @@ async def fetch_committee_master(
             except Exception as exc:
                 logger.warning("FEC committee master %d unavailable: %s", cycle, exc)
                 continue
-            cached = parse_committee_master(text)
+            cached = parse_committee_rows(text)
             api_cache_set(
                 db, "fec", cache_key, cached,
                 normal_ttl_hours=COMMITTEE_MASTER_CACHE_TTL_HOURS,
             )
+        for cid, row in cached.items():
+            names.setdefault(cid, set()).add(row["name"])
         merged.update(cached)
-    return merged
+    return resolve_connected_orgs(merged, names)
 
 
 # Committee types and designations the FEC itself defines as political

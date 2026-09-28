@@ -365,6 +365,31 @@ class TestFetch:
         assert retry is not None and retry.total == 0.0
 
     @pytest.mark.asyncio
+    async def test_an_apostrophe_name_is_searched_both_ways_and_pooled(self, db_session):
+        with_apostrophe = {"client": {"name": "AMERICA'S CREDIT UNIONS"}, "filing_type": "Q1", "income": "90000",
+                           "filing_document_url": "https://lda.gov/f/a/print/"}
+        without = {"client": {"name": "CREDIT UNION NATIONAL ASSOCIATION, INC. DBA AMERICAS CREDIT UNIONS"},
+                   "filing_type": "Q2", "income": "10000", "filing_document_url": "https://lda.gov/f/b/print/"}
+        client = MagicMock()
+        client.get = AsyncMock(side_effect=[
+            self._response(200, {"next": None, "results": [without]}),
+            # The other spelling's search finds the first filing again.
+            self._response(200, {"next": None, "results": [with_apostrophe, without]}),
+        ])
+        with patch.object(lda._rate_limiter, "acquire", new=AsyncMock()):
+            act = await fetch_lobbying_activity(client, db_session, "America's Credit Unions", 2025)
+        queries = [c.kwargs["params"]["client_name"] for c in client.get.await_args_list]
+        assert queries == ["AMERICAS CREDIT UNIONS", "AMERICA S CREDIT UNIONS"]
+        assert act.total == 100_000.0  # each filing once
+
+    @pytest.mark.asyncio
+    async def test_either_spellings_search_failing_is_a_failure(self, db_session):
+        client = MagicMock()
+        client.get = AsyncMock(side_effect=[self._response(200, {"next": None, "results": []}), self._response(500)])
+        with patch.object(lda._rate_limiter, "acquire", new=AsyncMock()):
+            assert await fetch_lobbying_activity(client, db_session, "America's Credit Unions", 2025) is None
+
+    @pytest.mark.asyncio
     async def test_rate_limit_is_a_failure(self, db_session):
         client = MagicMock()
         client.get = AsyncMock(return_value=self._response(429))
@@ -425,6 +450,14 @@ class TestClientMatching:
         assert lda.search_name("The Boeing Company") == "BOEING"
         assert lda.search_name("Inc") == "INC"
 
+    def test_the_search_name_drops_an_apostrophe_rather_than_splitting_a_word(self):
+        assert lda.search_name("AMERICA'S CREDIT UNIONS") == "AMERICAS CREDIT UNIONS"
+        assert lda.search_name("AMERICA\u2019S CREDIT UNIONS") == "AMERICAS CREDIT UNIONS"
+
+    def test_a_registrant_named_with_its_alias_is_not_repeated(self):
+        assert lda._filed_by("HOLLAND & KNIGHT (HK) ON BEHALF OF ACME INC", "HOLLAND & KNIGHT (HK) LLP") is None
+        assert lda._filed_by("HOLLAND & KNIGHT ON BEHALF OF ACME INC", "HOLLAND & KNIGHT (HK) LLP") is None
+
     def test_the_search_name_drops_a_parenthesised_alias(self):
         # The registry files the association without its abbreviation; with
         # it, the search found only a different association's filings.
@@ -454,7 +487,9 @@ class TestClientMatching:
         ("HARRIS LAW FIRM", "HARRIS LAW FIRM OBO ROBBINS SALOMON & PATT OBO COALITION OF GM CRASH VICTIMS", False),
         # Both names of a d/b/a are the one entity.
         ("CREDIT UNION NATIONAL ASSOCIATION", "CREDIT UNION NATIONAL ASSOCIATION, INC. DBA AMERICA'S CREDIT UNIONS", True),
-        ("AMERICA S CREDIT UNIONS", "CREDIT UNION NATIONAL ASSOCIATION, INC. DBA AMERICA'S CREDIT UNIONS", True),
+        ("AMERICAS CREDIT UNIONS", "CREDIT UNION NATIONAL ASSOCIATION, INC. DBA AMERICA'S CREDIT UNIONS", True),
+        # The same client filed without the apostrophe.
+        ("AMERICAS CREDIT UNIONS", "CREDIT UNION NATIONAL ASSOCIATION, INC. DBA AMERICAS CREDIT UNIONS", True),
         ("RAYTHEON", "RTX CORPORATION (FKA RAYTHEON TECHNOLOGIES CORPORATION)", False),
         # Parentheses in the filing firm's part are the firm's (review 11).
         ("BHFS", "BROWNSTEIN (BHFS, LLP) OBO APOLLO GLOBAL MANAGEMENT", False),

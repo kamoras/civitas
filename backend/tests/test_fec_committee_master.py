@@ -8,6 +8,7 @@ import pytest
 
 from app.pipeline.fetch.fec import (
     committee_master_cycles,
+    fetch_committee_master,
     is_political_committee,
     parse_committee_master,
     resolve_committee_meta,
@@ -49,6 +50,48 @@ def test_a_sponsor_that_is_a_pac_is_followed_to_its_sponsor():
 def test_a_sponsor_matching_only_the_committees_own_alias_is_the_organization():
     master = parse_committee_master(CHAIN_ROWS)
     assert master["C00048181"]["connectedOrg"] == "WISCONSIN BANKERS ASSOCIATION"
+
+
+def test_a_pac_naming_itself_under_another_alias_names_no_sponsor():
+    # cm26: C00343590 is "(MCA-PAC)" and names "(MCAA-PAC)" as its sponsor.
+    master = parse_committee_master(
+        "C00343590|MECHANICAL CONTRACTORS ASSOCIATION OF AMERICA POLITICAL ACTION COMMITTEE (MCA-PAC)"
+        "|X|A||C|MD|1|B|Q||M|T|MECHANICAL CONTRACTORS ASSOCIATION OF AMERICA POLITICAL ACTION COMMITTEE (MCAA-PAC)|"
+    )
+    assert master["C00343590"]["connectedOrg"] is None
+
+
+@pytest.mark.asyncio
+async def test_a_sponsor_citing_a_pacs_earlier_name_resolves_across_cycles(db_session):
+    # cm24 names C00007880 by its old name, cm26 by its new one; the
+    # California league's cm26 registration still cites the old name.
+    import io
+    import zipfile
+    from unittest.mock import MagicMock
+
+    def cm_zip(rows: list[str]) -> bytes:
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("cm.txt", "\n".join(rows))
+        return buf.getvalue()
+
+    old_name = "AMERICA'S CREDIT UNIONS PAC OF CREDIT UNION NATIONAL ASSOCIATION, INC."
+    cm24 = cm_zip([f"C00007880|{old_name}|X|A||C|DC|1|B|Q||M|T|AMERICA'S CREDIT UNIONS|"])
+    cm26 = cm_zip([
+        "C00007880|AMERICA'S CREDIT UNIONS PAC|X|A||C|DC|1|B|Q||M|T|AMERICA'S CREDIT UNIONS|",
+        f"C00235929|CALIFORNIA'S CREDIT UNIONS POLITICAL ACTION COMMITTEE|X|A||C|CA|1|U|Q||M|T|{old_name}|",
+    ])
+    client = MagicMock()
+    client.get = AsyncMock(side_effect=[
+        MagicMock(content=cm24, raise_for_status=MagicMock()),
+        MagicMock(content=cm26, raise_for_status=MagicMock()),
+    ])
+    master = await fetch_committee_master(client, db_session, [2024, 2026])
+    assert master["C00235929"]["connectedOrg"] == "AMERICA'S CREDIT UNIONS"
+    # Served from the cache the second time, resolved the same way.
+    again = await fetch_committee_master(client, db_session, [2024, 2026])
+    assert again["C00235929"]["connectedOrg"] == "AMERICA'S CREDIT UNIONS"
+    assert client.get.await_count == 2
 
 
 def test_a_sponsor_loop_names_no_sponsor():
