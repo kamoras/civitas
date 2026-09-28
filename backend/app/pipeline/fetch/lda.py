@@ -44,7 +44,7 @@ import hashlib
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import httpx
 from sqlalchemy.orm import Session
@@ -232,9 +232,12 @@ def is_same_client(searched: str, client_name: str) -> bool:
 # a parenthesised part still belongs to the side of the marker it was on.
 _MARKER_RE = re.compile(r"(?<!\S)(?:ON BEHALF OF|OBO|O B O)(?!\S)")
 _DBA_RE = re.compile(r"(?<!\S)(?:D B A|DBA)(?!\S)")
-# "ON BEHALF OF ITSELF AND ITS SUBSIDIARIES", "... OF ITS MEMBERS": the
-# filing is the named organization's own. Grammar, not a classification.
-_SELF_REFERENCE_RE = re.compile(r"^\s*\(?\s*(?:ITSELF|ITS|THEMSELVES|THEIR)(?!\S)")
+# A pronoun right after the last marker points back at the name before it:
+# "ON BEHALF OF ITSELF AND ITS SUBSIDIARIES", "... OF ITS MEMBERS". The
+# phrase can also go on to name another party ("ON BEHALF OF THEIR CLIENT
+# ASLRRA", "ON BEHALF OF ITS WHOLLY OWNED SUBSIDIARY HOSPIRA"). Grammar,
+# not a classification.
+_PRONOUN_RE = re.compile(r"^\s*\(?\s*(?:ITSELF|ITS|THEMSELVES|THEIR)(?!\S)")
 _PAREN_RE = re.compile(r"\(([^()]*)\)")
 
 
@@ -245,26 +248,34 @@ def _client_tokens(text: str) -> str:
     return " ".join(spaced.replace("(", " ( ").replace(")", " ) ").split())
 
 
-def _split_client(client_name: str) -> tuple[str, str]:
-    """(filing firm part, party part) of a client field, as tokens.
+def _split_client(client_name: str) -> tuple[str, list[str]]:
+    """(filing firm part, party parts) of a client field, as tokens.
 
     A filing can pass through a chain of firms ("HARRIS LAW FIRM OBO ROBBINS
     SALOMON & PATT OBO COALITION OF GM CRASH VICTIMS"): the firm part is
     what precedes the first on-behalf-of marker and the party is what
-    follows the last, unless that is a self-reference ("... ON BEHALF OF
-    ITSELF"), when the party is the name before it. "O/B/O" alone is used on
-    129 of 2025's filings ("GIBSON, DUNN & CRUTCHER LLP (O/B/O PEPSICO,
-    INC.)"). With no marker there is no firm part and the field is the
-    party."""
+    follows the last. "O/B/O" alone is used on 129 of 2025's filings
+    ("GIBSON, DUNN & CRUTCHER LLP (O/B/O PEPSICO, INC.)"). With no marker
+    there is no firm part and the field is the party.
+
+    When the party begins with a pronoun ("ITSELF", "ITS MEMBERS", "THEIR
+    CLIENT ASLRRA"), the name before the marker is a party, and so is any
+    name ending the phrase: every run of its last words is offered ("CLIENT
+    ASLRRA", "ASLRRA"), since where a descriptor ends and a name starts
+    can't be read from the field.
+    """
     tokens = _client_tokens(client_name)
     markers = list(_MARKER_RE.finditer(tokens))
     if not markers:
-        return "", tokens
+        return "", [tokens]
+    firm = tokens[:markers[0].start()]
     party = tokens[markers[-1].end():]
-    if _SELF_REFERENCE_RE.match(party):
-        start = markers[-2].end() if len(markers) > 1 else 0
-        party = tokens[start:markers[-1].start()]
-    return tokens[:markers[0].start()], party
+    if not _PRONOUN_RE.match(party):
+        return firm, [party]
+    start = markers[-2].end() if len(markers) > 1 else 0
+    before = tokens[start:markers[-1].start()]
+    words = party.replace("(", " ").replace(")", " ").split()[1:]
+    return firm, [before] + [" ".join(words[i:]) for i in range(len(words))]
 
 
 def _names_of(part: str) -> list[str]:
@@ -282,7 +293,7 @@ def _names_in_client(client_name: str) -> list[str]:
     """The names of the party a registry client field is for (_split_client),
     with a registrant filing as "THE LIVINGSTON GROUP, LLC (VERIZON
     COMMUNICATIONS, INC.)" read as naming Verizon."""
-    return _names_of(_split_client(client_name)[1])
+    return [n for part in _split_client(client_name)[1] for n in _names_of(part)]
 
 
 def _filed_by(client_name: str | None, registrant: str | None) -> str | None:
@@ -294,7 +305,7 @@ def _filed_by(client_name: str | None, registrant: str | None) -> str | None:
     if not registrant:
         return None
     reg_key, reg_search = _name_key(registrant), search_name(registrant)
-    firm, party = _split_client(client_name or "")
+    firm, _ = _split_client(client_name or "")
     whole = _client_tokens(client_name or "")
     parts = [firm] if firm else [whole, whole.split("(")[0]]
     for name in (n for part in parts for n in _names_of(part)):
@@ -332,9 +343,14 @@ async def fetch_lobbying_activity(
 
     ttl = _FINISHED_YEAR_CACHE_HOURS if _year_is_closed(year) else _CURRENT_YEAR_CACHE_HOURS
     cache_key = _cache_key(org_key, year)
+    held = _activities.get(cache_key)
+    if held and held[1] == utcnow().date():
+        return held[0]
     cached = api_cache_get(db, "lda", cache_key, max_age_hours=ttl)
     if cached is not None:
-        return _activity_from(org_key, cached.get("filings") or [], bool(cached.get("complete", True)))
+        return _remember(cache_key, _activity_from(
+            org_key, cached.get("filings") or [], bool(cached.get("complete", True)),
+        ))
 
     # Follow pagination: a heavy-lobbying client can file dozens to
     # low-hundreds of filings a year (multiple outside firms × quarterly
@@ -380,7 +396,19 @@ async def fetch_lobbying_activity(
     # expires.
     compact = [_compact_filing(f) for f in filings]
     api_cache_set(db, "lda", cache_key, {"filings": compact, "complete": complete}, normal_ttl_hours=ttl)
-    return _activity_from(org_key, compact, complete)
+    return _remember(cache_key, _activity_from(org_key, compact, complete))
+
+
+# Derived activity for the day, by cache key: one trade group can head a
+# hundred members' matches, and re-reading and re-matching its search
+# results for each would repeat the same work. A new day re-derives, so a
+# rule change or a refreshed cache entry shows up by the next run.
+_activities: dict[str, tuple[LobbyingActivity, date]] = {}
+
+
+def _remember(cache_key: str, activity: LobbyingActivity) -> LobbyingActivity:
+    _activities[cache_key] = (activity, utcnow().date())
+    return activity
 
 
 def _compact_filing(filing: dict) -> dict:

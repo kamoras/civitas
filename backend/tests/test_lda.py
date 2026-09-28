@@ -57,6 +57,7 @@ async def _titles(client, db, congress, bill_key):
 @pytest.fixture(autouse=True)
 def _fresh_verdicts():
     lda._verdicts.clear()
+    lda._activities.clear()
     yield
 
 
@@ -429,6 +430,11 @@ class TestClientMatching:
         # "On behalf of itself": the organization's own filing.
         ("APPLE", "APPLE INC. (ON BEHALF OF ITSELF AND ITS SUBSIDIARIES)", True),
         ("AMERICAN HOSPITAL ASSOCIATION", "AMERICAN HOSPITAL ASSOCIATION ON BEHALF OF ITS MEMBERS", True),
+        # A pronoun phrase that goes on to name the client (review round 13).
+        ("ASLRRA", "CHAMBERS CONLON & HARTWELL LLC ON BEHALF OF THEIR CLIENT ASLRRA", True),
+        ("BOEING", "CAPITOL COUNSEL LLC ON BEHALF OF THEIR CLIENT BOEING", True),
+        ("HOSPIRA", "PFIZER ON BEHALF OF ITS WHOLLY OWNED SUBSIDIARY HOSPIRA", True),
+        ("PFIZER", "PFIZER ON BEHALF OF ITS WHOLLY OWNED SUBSIDIARY HOSPIRA", True),
     ])
     def test_real_client_names_from_2025_filings(self, searched, client, same):
         assert lda.is_same_client(searched, client) is same
@@ -613,3 +619,15 @@ async def test_the_cache_holds_search_results_and_the_rules_apply_on_read(db_ses
     act = await fetch_lobbying_activity(MagicMock(), db_session, "BHFS", 2024)
     assert act.total == 700.0
     assert act.clients == [("BHFS HOLDINGS", 700.0)]
+
+
+@pytest.mark.asyncio
+async def test_a_days_reads_of_one_search_are_derived_once(db_session):
+    from app.pipeline.cache import api_cache_set
+
+    api_cache_set(db_session, "lda", lda._cache_key("PFIZER", 2024),
+                  {"filings": [{"client": {"name": "PFIZER INC."}, "filing_type": "Q1", "income": "5"}], "complete": True})
+    with patch.object(lda, "_activity_from", wraps=lda._activity_from) as derive:
+        first = await fetch_lobbying_activity(MagicMock(), db_session, "Pfizer", 2024)
+        second = await fetch_lobbying_activity(MagicMock(), db_session, "Pfizer", 2024)
+    assert first is second and derive.call_count == 1
