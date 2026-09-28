@@ -200,15 +200,25 @@ fi
 # makes this about the new release: during a start-first update the old
 # task is Running too, and wait_for_rollout's state check alone relies on
 # Swarm having flipped UpdateStatus to "updating" before its first read.
-# `docker service ps` prints images without their @digest, so the spec's
-# is stripped to match.
+# The two sides are compared in one form (normalize_image).
+# An image reference in one form: `docker service ps` prints the short one,
+# the spec may hold a digest or the registry-qualified one.
+normalize_image() {
+  local ref="${1%%@*}"
+  ref="${ref#docker.io/}"
+  ref="${ref#library/}"
+  echo "$ref"
+}
+
 service_is_up() {
   local service="$1" desired image running
   desired=$(docker service inspect "$service" --format '{{.Spec.Mode.Replicated.Replicas}}' 2>/dev/null) || return 1
   image=$(docker service inspect "$service" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' 2>/dev/null) || return 1
-  image="${image%%@*}"
+  image=$(normalize_image "$image")
   running=$(docker service ps "$service" --filter desired-state=running --format '{{.Image}}|{{.CurrentState}}' 2>/dev/null \
-    | awk -F'|' -v img="$image" '$1 == img && $2 ~ /^Running/ { n++ } END { print n + 0 }')
+    | while IFS='|' read -r task_image task_state; do
+        [[ "$(normalize_image "$task_image")" == "$image" && "$task_state" == Running* ]] && echo x
+      done | wc -l)
   [[ -n "$image" && "$desired" =~ ^[0-9]+$ && "$desired" -gt 0 && "$running" -ge "$desired" ]]
 }
 

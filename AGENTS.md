@@ -994,10 +994,12 @@ the pending list).
   - Two backend *processes* also meet during a Swarm start-first rollout,
     when the old and new tasks overlap on the same database, which is what
     the `init_db` lock and the `IF NOT EXISTS` DDL guard against
-  - Nginx rate-limits every API route (`limit_req_zone`) and caches every
-    response the backend marks cacheable, for as long as its
-    `Cache-Control` says (`api/cache_headers.py`) — no per-route cache block
-    needed. Only `/api/config` sets its own lifetime there, and
+  - Nginx rate-limits the API (`limit_req_zone`) — except reads of the
+    routes every page loads (the `$api_limit_key` map: the limit is checked
+    before the cache, so it would refuse cache hits), `/api/config`,
+    `/api/og` and `/api/admin/` — and caches every response the backend
+    marks cacheable, for as long as its `Cache-Control` says
+    (`api/cache_headers.py`) — no per-route cache block needed. Only `/api/config` sets its own lifetime there, and
     `/api/public/` is deliberately uncached (its responses carry the
     caller's own rate-limit counts)
 

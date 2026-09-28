@@ -3,9 +3,9 @@
 A container sees only its own interfaces (its network namespace). Under
 Swarm the admin API is served by the pipeline service, whose counters are
 the pipeline's own upstream fetches; the visitors' traffic goes through the
-API containers. So the API records its container's *rate* — bytes per
-second over its own last interval — to a record on the data volume both
-services mount, and the admin endpoint reports it beside its own cumulative
+API containers. So each API container records its *rate* — bytes per
+second over its own last interval — to a record of its own on the data
+volume both services mount, and the admin endpoint reports it beside its own cumulative
 counters (the dashboard turns those into a rate and adds the API's).
 
 A rate, not the API's cumulative counters: a sum of counters from
@@ -25,7 +25,12 @@ logger = logging.getLogger(__name__)
 # record may be before the API is taken for gone.
 RECORD_EVERY_S = 60
 _STALE_AFTER_S = 3 * RECORD_EVERY_S
-_RECORD = "api_network.json"
+# One record per API container (named by its hostname, which Docker sets to
+# the container's id): during a rolling update the old and new containers
+# both serve, and one shared record would hold whichever wrote last.
+_RECORD_PREFIX = "api_network-"
+# A container's record this old is gone for good (a replaced task): deleted.
+_FORGET_AFTER_S = 24 * 3600
 
 # This process's previous sample: (rx, tx, monotonic time).
 _previous: tuple[int, int, float] | None = None
@@ -75,25 +80,45 @@ def record_api_rate() -> bool:
 
 
 def api_rates() -> dict | None:
-    """{"rxRate", "txRate"} the API recorded recently, or None."""
-    from app.shared_state import read_record
+    """{"rxRate", "txRate"}: the sum over the API containers that recorded
+    recently (both, while a rolling update overlaps them), or None."""
+    import glob
+    import os
+
+    from app.shared_state import read_record, record_path
     from app.time_utils import utcnow
 
-    record = read_record(_record_path())
-    if not isinstance(record, tuple) or not isinstance(record[1], dict):
-        return None
-    if (utcnow() - record[0]).total_seconds() > _STALE_AFTER_S:
-        return None
-    try:
-        return {"rxRate": float(record[1]["rxRate"]), "txRate": float(record[1]["txRate"])}
-    except (KeyError, TypeError, ValueError):
-        return None
+    rx = tx = 0.0
+    found = False
+    for path in glob.glob(record_path(f"{_RECORD_PREFIX}*.json")):
+        record = read_record(path)
+        if not isinstance(record, tuple):
+            continue
+        age = (utcnow() - record[0]).total_seconds()
+        if age > _FORGET_AFTER_S:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+            continue
+        if age > _STALE_AFTER_S or not isinstance(record[1], dict):
+            continue
+        try:
+            rx += float(record[1]["rxRate"])
+            tx += float(record[1]["txRate"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        found = True
+    return {"rxRate": rx, "txRate": tx} if found else None
 
 
 def _record_path() -> str:
+    """This container's record."""
+    import socket
+
     from app.shared_state import record_path
 
-    return record_path(_RECORD)
+    return record_path(f"{_RECORD_PREFIX}{socket.gethostname()}.json")
 
 
 async def run_recorder() -> None:

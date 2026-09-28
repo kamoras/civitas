@@ -204,3 +204,18 @@ def test_a_reader_that_raises_is_read_as_unreadable():
     start = time.monotonic()
     assert polled.get() is None  # no 2 s wait: the first read answered "nothing"
     assert time.monotonic() - start < 1
+
+
+def test_an_undecodable_row_is_warned_about_once_per_version(caplog):
+    from app.shared_state import PolledRow, decode_json_dict
+
+    rows = [(datetime(2026, 1, 1), "[1, 2]")]  # not a dict
+    polled = PolledRow("t", "k", every_s=30, decode=decode_json_dict, reader=lambda _db: rows[0])
+    with caplog.at_level("WARNING"):
+        for _ in range(4):
+            polled.expire()
+            polled.get()
+        rows[0] = (datetime(2026, 1, 2), "[3]")
+        polled.expire()
+        polled.get()
+    assert sum("couldn't be decoded" in r.message for r in caplog.records) == 2

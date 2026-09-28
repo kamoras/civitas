@@ -111,6 +111,7 @@ class PolledRow:
         self._reader = reader or (lambda db: read_row(tier, key, db))
         self._lock = threading.Lock()
         self._generation = 0
+        self._warned_stamp = None
         # Set once a read has answered (a value, or no row): until then
         # there is nothing to serve, only a read to wait for.
         self._answered = threading.Event()
@@ -185,7 +186,11 @@ class PolledRow:
             except Exception:
                 decoded = None
             if decoded is None:
-                logger.warning("Stored %s/%s couldn't be decoded — keeping the value in hand", self.tier, self.key)
+                # Once per written version: it is re-tried every check, and
+                # a warning each time would drown out everything else.
+                if self._warned_stamp != row[0]:
+                    self._warned_stamp = row[0]
+                    logger.warning("Stored %s/%s couldn't be decoded — keeping the value in hand", self.tier, self.key)
             else:
                 value, stamp = decoded, row[0]
         with self._lock:

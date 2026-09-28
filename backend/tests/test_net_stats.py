@@ -9,8 +9,9 @@ from app import net_stats
 from app.shared_state import write_record
 
 
-def _at(monkeypatch, tmp_path):
-    monkeypatch.setattr(net_stats, "_record_path", lambda: str(tmp_path / "api_network.json"))
+def _at(monkeypatch, tmp_path, host="c1"):
+    monkeypatch.setattr("app.shared_state.record_path", lambda name: str(tmp_path / name))
+    monkeypatch.setattr("socket.gethostname", lambda: host)
     monkeypatch.setattr(net_stats, "_previous", None)
 
 
@@ -39,7 +40,7 @@ def test_a_counter_that_went_backwards_records_nothing(tmp_path, monkeypatch):
 
 def test_a_stale_record_is_no_rate(tmp_path, monkeypatch):
     _at(monkeypatch, tmp_path)
-    path = tmp_path / "api_network.json"
+    path = tmp_path / "api_network-c1.json"
     write_record(str(path), {"rxRate": 5.0, "txRate": 1.0})
     old = time.time() - 3600
     os.utime(path, (old, old))
@@ -62,3 +63,19 @@ def test_an_unreadable_sample_is_skipped_not_zeroed(tmp_path, monkeypatch):
     assert not net_stats.record_api_rate()  # unreadable: skipped
     assert net_stats.record_api_rate()
     assert net_stats.api_rates() == {"rxRate": 1000.0, "txRate": 200.0}
+
+
+def test_two_containers_overlapping_in_a_rollout_are_summed(tmp_path, monkeypatch):
+    _at(monkeypatch, tmp_path)
+    write_record(str(tmp_path / "api_network-old.json"), {"rxRate": 100.0, "txRate": 10.0})
+    write_record(str(tmp_path / "api_network-new.json"), {"rxRate": 50.0, "txRate": 5.0})
+    assert net_stats.api_rates() == {"rxRate": 150.0, "txRate": 15.0}
+
+
+def test_a_long_gone_containers_record_is_deleted(tmp_path, monkeypatch):
+    _at(monkeypatch, tmp_path)
+    old = tmp_path / "api_network-replaced.json"
+    write_record(str(old), {"rxRate": 1.0, "txRate": 1.0})
+    past = time.time() - 3 * 86400
+    os.utime(old, (past, past))
+    assert net_stats.api_rates() is None and not old.exists()
