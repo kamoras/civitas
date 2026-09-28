@@ -215,8 +215,17 @@ _STATEWIDE_PRIMARY = {
     ("PROPOSED STATEWIDE AMENDMENT 1", ""): {"Yes": 900000, "No": 100000},
     ("STATE SENATOR, DISTRICT 10 (REP)", "REP"): {"Andrew Jones": 8325, "Amy Dozier Minton": 7141},
     ("UNITED STATES REPRESENTATIVE, 1ST CONGRESSIONAL DISTRICT (REP)", "REP"): {"Jerry Carl": 32714, "Rhett Marques": 25235},
+    ("UNITED STATES SENATOR (REP)", "REP"): {
+        "Barry Moore": 189067, "Jared Hudson": 123672, "Steve Marshall": 118361, "Rodney Walker": 19697,
+        "Seth Burton": 15142, "Dale Shelton Deas Jr.": 10118, "Morgan Murphy": 6485,
+    },
+    ("UNITED STATES SENATOR (DEM)", "DEM"): {
+        "Everett Wess": 134895, "Dakarai Larriett": 99260, "Mark S. Wheeler II": 59354, "Kyle Sweetser": 47425,
+    },
 }
 _STATEWIDE_RUNOFF = {
+    ("UNITED STATES SENATOR (REP)", "REP"): {"Barry Moore": 173673, "Jared Hudson": 137552},
+    ("UNITED STATES SENATOR (DEM)", "DEM"): {"Everett Wess": 50428, "Dakarai Larriett": 41985},
     ("LIEUTENANT GOVERNOR (REP)", "REP"): {"John Wahl": 175911, "Wes Allen": 132890},
     ("PUBLIC SERVICE COMMISSION, PLACE 2 (REP)", "REP"): {"Jim Zig Zeigler": 152845, "Chris Beeker": 144868},
 }
@@ -262,6 +271,28 @@ class TestResolveStatewide:
         assert ("lt_governor", None, "R", "John Wahl") not in resolved
         assert ("public_service_commission", "Place 2", "R", "Jim Zig Zeigler") not in resolved
 
+    def test_real_2026_senate_nominees_come_from_the_runoffs(self):
+        # Neither leader cleared a majority (Moore 39.2%, Wess 39.6%);
+        # both runoffs named them. The voided pre-redistricting CD1
+        # primary in the same file is still refused.
+        resolved = [
+            (r["office"], r["district"], r["party"], r["last_name"], r.get("display_name"))
+            for r in al.resolve_statewide(_STATEWIDE_PRIMARY, _STATEWIDE_RUNOFF, 50, senate=True)
+            if r["office"] in ("S", "H")
+        ]
+        assert sorted(resolved) == [
+            ("S", None, "D", "Wess", "Everett Wess"),
+            ("S", None, "R", "Moore", "Barry Moore"),
+        ]
+
+    def test_the_senate_is_read_only_when_asked(self):
+        assert not any(r[0] == "S" for r in self._resolved(_STATEWIDE_RUNOFF))
+
+    def test_a_senate_runoff_owed_but_unposted_is_owed(self):
+        senate_only = {k: v for k, v in _STATEWIDE_PRIMARY.items() if "SENATOR (" in k[0] and "UNITED" in k[0]}
+        assert al._runoff_owed(senate_only, 50, senate=True)
+        assert not al._runoff_owed(senate_only, 50, senate=False)
+
     def test_a_runoff_winner_who_was_not_on_the_primary_ballot_is_refused(self):
         runoff = {("LIEUTENANT GOVERNOR (REP)", "REP"): {"Somebody Else": 9, "John Wahl": 1}}
         assert not any(r[0] == "lt_governor" for r in self._resolved(runoff))
@@ -295,6 +326,17 @@ class TestStatewideFetch:
         assert ("attorney_general", "R", "Katherine Robertson") in offices
         assert ("governor", "R", "Thomas Tuberville") in offices
         assert not any(r["office"] in ("upper", "lower") for r in result)
+
+    async def test_read_senate_adds_the_senate_as_a_federal_record(self, monkeypatch):
+        self._patched(monkeypatch)
+        spec = {**_STATE_OFFICES, "read_senate": True}
+        result = await al.fetch_confirmed_candidates(None, 2026, "AL", {**_SOURCE, "state_office_results": spec})
+        senate = [r for r in result if r["office"] == "S"]
+        assert senate and all(r["district"] is None and r.get("display_name") for r in senate)
+        # Without the statewide opt-in only the Senate rides along, and the
+        # House still comes from the special primary alone.
+        assert {r["office"] for r in result} == {"H", "S"}
+        assert sorted(r["district"] for r in result if r["office"] == "H") == [1, 2, 6, 6, 7]
 
     async def test_without_the_opt_in_no_state_office_is_read(self, monkeypatch):
         self._patched(monkeypatch)
