@@ -114,16 +114,23 @@ async def test_the_fixed_address_is_read_only_for_this_years_november_list():
     """The address always shows the NEXT election; in August it was the
     runoff's list, whose candidates are not November's."""
     august = PAGE.replace(b"NOVEMBER / 2026 LIST OF ELECTIONS", b"AUGUST / 2026 LIST OF ELECTIONS")
-    for page, expected in ((PAGE, True), (august, False)):
-        async with httpx.AsyncClient(transport=httpx.MockTransport(
-            lambda request, page=page: httpx.Response(200, content=page),
-        )) as client:
-            records = await fetch_confirmed_candidates(client, 2026, "OK", SOURCE)
-        assert (records is not None) is expected
     async with httpx.AsyncClient(transport=httpx.MockTransport(
         lambda request: httpx.Response(200, content=PAGE),
     )) as client:
-        assert await fetch_confirmed_candidates(client, 2028, "OK", SOURCE) is None
+        assert await fetch_confirmed_candidates(client, 2026, "OK", SOURCE)
+        # Another cycle's list: not published yet -- an empty answer, not a
+        # failed fetch (which would report fetch_failed nightly and send the
+        # sync to the crawler's spare source for months).
+        assert await fetch_confirmed_candidates(client, 2028, "OK", SOURCE) == []
+    async with httpx.AsyncClient(transport=httpx.MockTransport(
+        lambda request: httpx.Response(200, content=august),
+    )) as client:
+        assert await fetch_confirmed_candidates(client, 2026, "OK", SOURCE) == []
+    async with httpx.AsyncClient(transport=httpx.MockTransport(
+        lambda request: httpx.Response(200, content=b"<html>a page with no list at all</html>"),
+    )) as client:
+        # Still a page that names no election: not yet.
+        assert await fetch_confirmed_candidates(client, 2026, "OK", SOURCE) == []
 
 
 def test_the_entry_is_the_ballot_and_google_only_supplements_it():

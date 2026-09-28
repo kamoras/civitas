@@ -7,7 +7,8 @@ tests/fixtures_mi_candidate_listing_2026.html is the real report
 2026-09-28; "721 Candidates as of Fri Sep 04"), with every office but a
 dozen removed and its script/style blocks dropped -- the retained rows
 are the state's own markup. It keeps the offices that test each gate:
-a joint Governor ticket, a convention-nominated Attorney General, the
+a joint Governor ticket, the convention-nominated Secretary of State
+and Attorney General, the
 Senate race, three House districts (one with four DISQ rows, one headed
 "Files In WAYNE County"), two statewide boards of which one must be
 refused ("Governor of Wayne State University" is not the governor),
@@ -20,7 +21,6 @@ McKinney unseated Shri Thanedar in the 13th; William Lawrence won the
 """
 
 import json
-from datetime import date
 from pathlib import Path
 
 import httpx
@@ -120,14 +120,53 @@ def test_university_boards_are_never_the_governor():
     assert parse_state_leg_office("1st District Representative in State Legislature") == ("lower", "1", None)
 
 
-def _settled(monkeypatch, held):
-    monkeypatch.setattr(ct, "primary_date", lambda state, year: held)
+def _grid():
+    return report_grid_rows(PAGE, ["Status", "Party / Incumbent", "Candidate Name"])
+
+
+_US_HOUSE_1 = "1st District Representative in Congress 2 Year Term (1) Position"
+
+
+def test_a_list_still_holding_primary_filers_is_not_the_ballot_yet():
+    """The report exists all cycle and lists every filer from filing day,
+    so before the August primary is canvassed a party can hold two
+    candidates for one seat. That list is not the November ballot: it is
+    answered [] (not yet) -- never read, never a failure."""
+    rows = _grid()
+    loser = {"Party / Incumbent": "Democratic Party", "Candidate Name": "Doe, Jane",   # an extra D filer
+             "Filed On": "04/21/2026", "Filing Method": "Petitions", "heading": _US_HOUSE_1}
+    assert ct._records("MI", rows, SOURCE["format"], True) not in ([], None)
+    assert ct._records("MI", [*rows, loser], SOURCE["format"], True) == []
+
+
+def test_independents_and_multi_seat_boards_are_not_overfilled():
+    rows = _grid()
+    # Two No Party Affiliation candidates may run for one seat.
+    extra = {"Party / Incumbent": "No Party Affiliation", "Candidate Name": "Roe, Sam",
+             "Filed On": "07/16/2026", "Filing Method": "Petitions", "heading": _US_HOUSE_1}
+    assert ct._overfilled([*rows, extra], SOURCE["format"]) is None
+    # "(2) Positions": two Democrats for the Regents is the ballot (it is in the fixture).
+    assert ct._overfilled(rows, SOURCE["format"]) is None
+
+
+def test_state_offices_wait_for_the_convention_nominees():
+    """2026-08-25..08-30: the Republicans had nominated (08-24), the
+    Democrats' convention was 08-31. The list named Benson/Brinks but no
+    Democratic Secretary of State, so only federal rows are read and the
+    state offices are marked incomplete (the sync keeps what it had)."""
+    rows = [r for r in _grid() if not (r["heading"].startswith("Attorney General")
+                                       and r.get("Party / Incumbent") == "Democratic Party")]
+    records = ct._records("MI", rows, SOURCE["format"], True)
+    assert records.state_offices_incomplete is True
+    assert {r["office"] for r in records} == {"S", "H"}
+    assert ("S", "Abdul El-Sayed") in {(r["office"], r["display_name"]) for r in records}
+    complete = ct._records("MI", _grid(), SOURCE["format"], True)
+    assert not getattr(complete, "state_offices_incomplete", False)
+    assert "attorney_general" in {r["office"] for r in complete}
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("held, expected", [("2026-08-04", True), (None, False), ("2099-08-04", False)])
-async def test_read_only_once_the_primary_has_settled(monkeypatch, held, expected):
-    _settled(monkeypatch, held)
+async def test_the_listing_is_fetched_by_year_and_another_years_is_not_yet():
     seen = []
 
     def handler(request):
@@ -136,24 +175,11 @@ async def test_read_only_once_the_primary_has_settled(monkeypatch, held, expecte
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         records = await fetch_confirmed_candidates(client, 2026, "MI", SOURCE)
-    assert (records is not None) is expected
-    if expected:
-        assert seen == [
-            "https://mi-boe.entellitrak.com/etk-mi-boe-prod/page.request.do"
-            "?page=page.miboePublicReport&electionType=GEN&electionYear=2026"
-        ]
-    else:
-        assert seen == []
-
-
-@pytest.mark.asyncio
-async def test_another_years_report_is_refused(monkeypatch):
-    _settled(monkeypatch, "2028-08-01")
-    monkeypatch.setattr(ct, "date", type("D", (date,), {"today": classmethod(lambda cls: date(2028, 10, 1))}))
-    async with httpx.AsyncClient(transport=httpx.MockTransport(
-        lambda request: httpx.Response(200, content=PAGE),
-    )) as client:
-        assert await fetch_confirmed_candidates(client, 2028, "MI", SOURCE) is None
+        later = await fetch_confirmed_candidates(client, 2028, "MI", SOURCE)
+    assert records
+    assert seen[0] == ("https://mi-boe.entellitrak.com/etk-mi-boe-prod/page.request.do"
+                       "?page=page.miboePublicReport&electionType=GEN&electionYear=2026")
+    assert later == []   # the page names November 3, 2026: not published for 2028 yet
 
 
 def test_the_entry_is_the_ballot_and_google_only_supplements_it():

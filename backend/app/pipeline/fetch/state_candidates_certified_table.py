@@ -54,12 +54,6 @@ Optional, each because a live state needed it:
                                      is honoured on a discovered page too
   discovery.url with {year}          the fixed address names the election's
                                      year (Michigan's candidate report)
-  discovery.after_primary_days       read only this many days after the
-                                     state's primary (the FEC calendar's
-                                     date): Michigan's general listing is
-                                     one report filled in as candidates
-                                     file, so before its primary it could
-                                     hold every primary filer
   discovery.form_button              the list is the page's own "Export to CSV"
                                      button (Hawaii's candidate report): the
                                      page's form is posted back with that
@@ -146,6 +140,18 @@ Optional, each because a live state needed it:
                                      Year Term (1) Position Files In WAYNE
                                      County"); a cell it does not match is
                                      read whole
+  format.seats_regex                 the office cell prints its seat count
+                                     (first group; Michigan's "(2)
+                                     Positions"): a list still holding more
+                                     of one party's candidates than seats
+                                     is not the ballot yet, answered []
+  format.slate_complete              {office, requires}: every party with a
+                                     candidate for `office` must have one
+                                     for each of `requires` before state
+                                     offices are read (Michigan's
+                                     convention-nominated SoS and AG); until
+                                     then only federal rows are returned,
+                                     marked state_offices_incomplete
   format.name_regex                  the name is inside a longer cell; the
                                      regex's first group is the name
                                      (Oklahoma prints "KEVIN HERN,
@@ -180,7 +186,6 @@ import html
 import io
 import logging
 import re
-from datetime import date, timedelta
 from urllib.parse import urljoin
 
 import httpx
@@ -198,13 +203,13 @@ from app.pipeline.fetch.state_candidates_common import (
     ballot_list_party,
     clean_display_name,
     discover_certification_link,
+    federal_only,
     normalize_party,
     parse_office,
     parse_state_leg_office,
     parse_statewide_office,
     surname,
 )
-from app.pipeline.fetch.state_election_dates import primary_date
 from app.pipeline.fetch.state_candidates_tabular import _html_rows, _xlsx_rows
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -624,14 +629,13 @@ async def fetch_confirmed_candidates(
         logger.warning("%s certified_table statewide_offices needs format.office_parse or state_office_codes", state)
         return None
 
-    if not _primary_settled(discovery, year, state):
-        return None
-
     if discovery.get("url"):
         url = discovery["url"].replace("{year}", str(year))
         payloads = await _download(client, url, discovery, year, state)
         if payloads is None:
             return None
+        if not payloads:
+            return []
         return _records(
             state, [row for p in payloads for row in (_rows(p, url, fmt) or [])], fmt,
             bool(source.get("statewide_offices")),
@@ -669,6 +673,8 @@ async def fetch_confirmed_candidates(
         payloads = await _download(client, url, discovery, year, state)
         if payloads is None:
             return None
+        if not payloads:
+            return []  # not published for this year yet: every file is required
         for payload in payloads:
             part = _rows(payload, url, fmt)
             if not part:
@@ -678,41 +684,21 @@ async def fetch_confirmed_candidates(
     return _records(state, rows, fmt, bool(source.get("statewide_offices")))
 
 
-def _primary_settled(discovery: dict, year: int, state: str) -> bool:
-    """Whether the list may be read yet. With discovery.after_primary_days,
-    only that many days after the state's primary (the national FEC
-    calendar's date, state_election_dates): a general-election listing
-    that also exists before the primary -- Michigan's is one report per
-    election, filled in as candidates file -- could otherwise name every
-    primary filer as a November candidate. No known date is no read: a
-    list that confirmed the wrong people is worse than one read late."""
-    days = discovery.get("after_primary_days")
-    if days is None:
-        return True
-    held = primary_date(state, year)
-    if not held:
-        logger.info("%s %d primary date unknown; the general list is not read yet", state, year)
-        return False
-    if date.today() < date.fromisoformat(held) + timedelta(days=int(days)):
-        logger.info("%s %d general list waits until %d days after the %s primary", state, year, days, held)
-        return False
-    return True
-
-
 async def _download(
     client: httpx.AsyncClient, url: str, discovery: dict, year: int, state: str,
 ) -> list[bytes] | None:
     """The list's bytes: the file itself, or — with form_button — what the
     page's own button returns, once per `form_select` choice. None when any
-    fetch fails, the page does not name this year's election, or no choice
-    is on offer."""
+    fetch fails or no choice is on offer; [] when the page does not name
+    this year's election yet -- a list not published, which is the normal
+    state for most of a cycle and not a failed fetch."""
     payload = await fetch_bytes_with_retry(client, _rate_limiter, url, f"{state} certified list {year}")
     if payload is None:
         return None
     year_regex = discovery.get("year_regex")
     if year_regex and not re.search(year_regex.replace("{year}", str(year)), payload.decode("utf-8", "replace")):
         logger.info("%s candidate list does not show the %d election yet", state, year)
-        return None
+        return []
     if discovery.get("next_page_regex"):
         return await _pages(client, url, payload, discovery["next_page_regex"], year, state)
     button = discovery.get("form_button")
@@ -787,6 +773,13 @@ async def _pages(
 
 
 def _records(state: str, rows: list[dict], fmt: dict, state_offices: bool = False) -> list[dict] | None:
+    over = _overfilled(rows, fmt)
+    if over:
+        # A list that still holds more of one party's candidates for an
+        # office than it has seats is not the November ballot yet -- it is
+        # the filings before a primary settles them. Not yet, not broken.
+        logger.info("%s certified list is not the November ballot yet: %s", state, over)
+        return []
     records = parse_certified_rows(rows, fmt, state_offices)
     federal = [r for r in records if r["office"] in ("S", "H")]
     if not federal:
@@ -796,4 +789,71 @@ def _records(state: str, rows: list[dict], fmt: dict, state_offices: bool = Fals
         "%s certified list: %d federal candidates, %d state-office candidates",
         state, len(federal), len(records) - len(federal),
     )
+    missing = _slate_gaps(records, fmt) if state_offices else []
+    if missing:
+        logger.info("%s certified list's state offices wait for %s", state, "; ".join(missing))
+        return federal_only(records)
     return records
+
+
+def _overfilled(rows: list[dict], fmt: dict) -> str | None:
+    """The first office on the list holding more candidates of one party
+    than it has seats, or None. Needs format.seats_regex, whose first group
+    is the seat count printed in the office cell (Michigan's "(1) Position",
+    "(2) Positions"). Read only where a gate reads the office (a judgeship
+    is non-partisan), only for rows the status filter keeps, and never for
+    independents, several of whom may run for one seat."""
+    seats_re = fmt.get("seats_regex")
+    if not seats_re:
+        return None
+    statuses = {str(v).strip().upper() for v in fmt.get("status_values") or []}
+    counts: dict[tuple[str, str], int] = {}
+    for row in rows:
+        if statuses and str(row.get(fmt.get("status_column") or "") or "").strip().upper() not in statuses:
+            continue
+        cell = " ".join(str(row.get(fmt["office_column"]) or "").split())
+        seats = re.search(seats_re, cell)
+        if not seats:
+            continue
+        label = cell
+        if fmt.get("office_regex"):
+            found = re.search(fmt["office_regex"], cell)
+            label = found.group(1).strip() if found else cell
+        if not (parse_office(label) or parse_statewide_office(label) or parse_state_leg_office(label)):
+            continue
+        party = " ".join(
+            str(row[col]).strip() for col in _party_columns(fmt) if str(row.get(col) or "").strip()
+        ).upper()
+        if not party or normalize_party(party, ballot_list=True) == "I":
+            continue
+        key = (cell, party)
+        counts[key] = counts.get(key, 0) + 1
+        if counts[key] > int(seats.group(1)):
+            return f"{party} x{counts[key]} for {cell}"
+    return None
+
+
+def _slate_gaps(records: list[dict], fmt: dict) -> list[str]:
+    """What format.slate_complete says the list still lacks: for every
+    party with a candidate for its `office`, a candidate for each office in
+    `requires`. Michigan's parties nominate their Secretary of State and
+    Attorney General at conventions held weeks after the primary (2026:
+    August 24 and 31), and until they do the list names the Governor's
+    ticket without them -- publishing it then would record those offices
+    as the whole ballot. Read from the list itself, never a date: a party
+    that genuinely fields a governor but no attorney general would hold the
+    state offices back, which is the safe way to be wrong."""
+    rule = fmt.get("slate_complete") or {}
+    if not rule.get("office"):
+        return []
+    def key(r):
+        return (r.get("party"), r.get("party_label"))
+    have: dict[str, set] = {}
+    for r in records:
+        have.setdefault(r["office"], set()).add(key(r))
+    gaps = []
+    for party in sorted(have.get(rule["office"], set()), key=str):
+        for office in rule.get("requires") or []:
+            if party not in have.get(office, set()):
+                gaps.append(f"{party[1] or party[0]} {office}")
+    return gaps

@@ -1697,6 +1697,13 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
         general_records = None
         if general:
             general_records = await _fetch(client, cycle, state, general, "Certified general list")
+            if general_records is not None and not general_records:
+                # A list not published yet (its page does not name this
+                # year's election, or it is not due until after the
+                # primary) answers [] -- healthy, not a failed fetch. It
+                # speaks for no race, so it is handled exactly like one
+                # that did not answer.
+                general_records = None
 
         records = await _fetch(client, cycle, state, source, "Confirmed-candidate")
 
@@ -1829,14 +1836,21 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
                 races=covered & races_here,
             )
         else:
+            # An empty answer is a ballot not published yet: it names no
+            # race, so it may neither unconfirm anyone nor record the state's
+            # ballot as the complete certified one (general_ballot_complete
+            # describes the document once it exists, not its absence).
+            published = bool(records)
             applied = _apply_ballot(
                 db, cycle, state, records,
                 keep_unlisted=not ballot_is_elsewhere,
-                authoritative=bool(source.get("general_ballot_complete")) and not ballot_is_elsewhere,
-                prune=_may_prune(configured, source),
+                authoritative=bool(source.get("general_ballot_complete")) and not ballot_is_elsewhere and published,
+                prune=_may_prune(configured, source) and published,
             )
             if not ballot_is_elsewhere:
-                _record_ballot_basis(db, cycle, state, source)
+                _record_ballot_basis(
+                    db, cycle, state, source if published else {**source, "general_ballot_complete": False},
+                )
         confirmed, unmatched = applied["confirmed"], applied["unmatched"]
 
         results[state] = {
