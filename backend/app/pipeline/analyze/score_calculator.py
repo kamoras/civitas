@@ -1440,8 +1440,20 @@ def party_break_rate(voting_record: dict) -> tuple[float | None, int]:
     research note validated (party-unity votes, unweighted). It used to be
     weighted by partyAlignmentWeight, the bill's CONTENT lean, with 0.0
     read as 1.0; a content-bipartisan bill that split on party lines then
-    counted a hundred times more than one with a 0.01 lean."""
+    counted a hundred times more than one with a 0.01 lean.
+
+    Since v6.20 the rate is the member's party-line record over the whole
+    Congress when the pipeline has measured it (partyLineRecord,
+    party_line_record.py): breaks toward the other party only, each measure
+    once. The stored votes are read only when it hasn't."""
     from app.pipeline.transform.normalize_votes import dedupe_votes
+
+    record = voting_record.get("partyLineRecord")
+    if isinstance(record, dict) and isinstance(record.get("votes"), int):
+        n = record["votes"]
+        if n < CONSTITUENT_MIN_VOTES:
+            return None, n
+        return len(record.get("breaks") or []) / n, n
 
     votes = dedupe_votes([
         v for v in (voting_record.get("keyVotes") or []) + (voting_record.get("recentVotes") or [])
@@ -2030,6 +2042,7 @@ def _constituent_alignment_core(
             "score": round(congruence_score, 1),
             "detail": congruence_detail,
         })
+    record = voting_record.get("partyLineRecord")
     return {
         "score": score,
         "components": components,
@@ -2043,6 +2056,9 @@ def _constituent_alignment_core(
             "breaks": round(break_rate * n_party) if break_rate is not None else None,
             "breakRate": round(break_rate, 4) if break_rate is not None else None,
             "expectedBreakRate": round(expected, 4) if expected is not None else None,
+            # Votes against the party from its flank (party_line_record):
+            # shown beside the breaks, not counted. None without a record.
+            "flankBreaks": len(record.get("flankBreaks") or []) if record else None,
         },
     }
 

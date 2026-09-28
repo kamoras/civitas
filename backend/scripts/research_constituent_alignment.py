@@ -44,6 +44,7 @@ Run:
 
 import argparse
 import pathlib
+import re
 import sys
 import unicodedata
 import urllib.request
@@ -78,10 +79,10 @@ SOURCES = {
 }
 SENATES, HOUSES = range(101, 120), range(101, 112)  # the 119th Senate: party means only (no election yet)
 for _c in SENATES:
-    for _k in ("votes", "members"):
+    for _k in ("votes", "members", "rollcalls"):
         SOURCES[f"S{_c}_{_k}.csv"] = f"{VOTEVIEW}/{_k}/S{_c}_{_k}.csv"
 for _c in HOUSES:
-    for _k in ("votes", "members"):
+    for _k in ("votes", "members", "rollcalls"):
         SOURCES[f"H{_c}_{_k}.csv"] = f"{VOTEVIEW}/{_k}/H{_c}_{_k}.csv"
 # Congress -> presidential year whose district results describe the same
 # district lines. The outcome is the election at the END of the congress.
@@ -512,12 +513,40 @@ def ascii_upper(s: pd.Series) -> pd.Series:
     return s.map(lambda x: unicodedata.normalize("NFD", str(x)).encode("ascii", "ignore").decode().upper())
 
 
-def voteview_breaks(p, chamber_prefix, c):
+# Section 12: roll calls that are stages of one measure -- cloture then
+# confirmation of a nominee, cloture then passage of a bill. An amendment,
+# a motion to commit or waive, a point of order is its own question.
+MEASURE_STAGE = re.compile(r"cloture|nomination|motion to proceed|passage|pass\b|joint resolution|concurrent resolution"
+                           r"|the resolution|conference report|ratification|veto|concur", re.I)
+OWN_QUESTION = re.compile(r"amdt|amendment", re.I)
+
+
+def measure_units(R: pd.DataFrame) -> pd.Series:
+    """rollnumber -> the measure a roll call is a stage of, or the roll call
+    itself when it is its own question."""
+    q = R.vote_question.fillna("")
+    stage = q.str.contains(MEASURE_STAGE) & ~(q.str.contains(OWN_QUESTION) & ~q.str.contains("concur", case=False))
+    return pd.Series(np.where(stage & R.bill_number.notna(), R.bill_number.astype(str), "rc" + R.rollnumber.astype(str)),
+                     index=R.rollnumber)
+
+
+def voteview_breaks(p, chamber_prefix, c, centerward=False, once_per_measure=False):
     """Per-member share of party-unity votes cast against their party's
     majority, from Voteview's per-congress CSVs, plus the members. An
     Independent is scored as the party they caucus with, as the pipeline
     does (normalize_votes._infer_caucus_party): here, the party whose
-    majority they vote with more often on party-unity roll calls."""
+    majority they vote with more often on party-unity roll calls.
+
+    centerward (section 11): count a break only when it goes toward the
+    other party — on that roll call, the member's party's defectors sit
+    nearer the other party (mean NOMINATE dim1) than the party as a whole.
+    A break from the flank (the defectors further from the other party
+    than the party, as when a party's hardliners vote down its own bill)
+    is not counted. The denominator stays every party-unity vote.
+
+    once_per_measure (section 12): every stage of one measure counts once --
+    a member broke on the measure when they broke on any of its party-unity
+    roll calls, and the denominator is measures, not roll calls."""
     V = pd.read_csv(p[f"{chamber_prefix}{c}_votes.csv"])
     M = pd.read_csv(p[f"{chamber_prefix}{c}_members.csv"])
     M = M[M.chamber != "President"]
@@ -539,6 +568,18 @@ def voteview_breaks(p, chamber_prefix, c):
     V = V[V.rollnumber.isin(unity.index)]
     pmaj = V.rollnumber.map(unity[100] > .5).where(V.party_code == 100, V.rollnumber.map(unity[200] > .5))
     V["against"] = V.yea != pmaj.astype(bool)
+    if centerward:
+        V["dim1"] = V.icpsr.map(M.set_index("icpsr").nominate_dim1)
+        party_mean = V.groupby(["rollnumber", "party_code"]).dim1.transform("mean")
+        defector_mean = V[V.against].groupby(["rollnumber", "party_code"]).dim1.mean()
+        dmean = pd.Series(list(zip(V.rollnumber, V.party_code)), index=V.index).map(defector_mean)
+        # Democrats sit at negative dim1, Republicans positive: toward the
+        # other party is up for a Democrat, down for a Republican.
+        toward = np.where(V.party_code == 100, dmean > party_mean, dmean < party_mean)
+        V["against"] = V.against & toward
+    if once_per_measure:
+        V["unit"] = V.rollnumber.map(measure_units(pd.read_csv(p[f"{chamber_prefix}{c}_rollcalls.csv"])))
+        V = V.groupby(["icpsr", "unit"], as_index=False).against.any()
     M["brk"] = M.icpsr.map(V.groupby("icpsr").against.mean())
     M["n"] = M.icpsr.map(V.groupby("icpsr").size())
     M["party"] = M.party_code.map({100: "D", 200: "R"})
@@ -648,7 +689,13 @@ def compare_v616(S, y, base, fit, groups):
         print(f"   {cz:.1f} / {lz:.1f}: {r.params['sc']:.3f}/pt (t={r.tvalues['sc']:.1f}) dR2={r.rsquared - b0.rsquared:.4f}")
 
 
-def senate_general_test(p):
+def _label(centerward, once_per_measure):
+    if once_per_measure:
+        return "Centerward, each measure once (section 12)" if centerward else "Each measure once (section 12)"
+    return "Centerward breaks only (section 11)" if centerward else "Breaking far above expectation"
+
+
+def senate_general_test(p, centerward=False, once_per_measure=False):
     pres = pd.read_csv(p["president_1976_2024.csv"])
     sen = pd.read_csv(p["senate_1976_2024.csv"])
     st, nat = two_party_r(pres, ["year", "state_po"]), two_party_r(pres, "year")
@@ -662,7 +709,7 @@ def senate_general_test(p):
     rows, party_means = [], []
     for c in SENATES:
         yr, py = 1788 + 2 * c, max(y for y in nat.index if y <= 1786 + 2 * c)
-        M = voteview_breaks(p, "S", c)
+        M = voteview_breaks(p, "S", c, centerward, once_per_measure)
         M["presR"] = [st.get((py, s), np.nan) for s in M.state_abbrev]
         M["sign"] = np.where(M.party == "R", 1.0, -1.0)
         M["alignment"] = ((M.presR - nat[py]) * 100 * M.sign / 15).clip(-1, 1)
@@ -687,7 +734,7 @@ def senate_general_test(p):
     S = pd.concat(rows, ignore_index=True)
     S = overbreak_terms(S[S.own.notna()])
     S["fe"] = S.year.astype(str) + S.party
-    print(f"\n== Breaking far above expectation, Senate general elections 1990-2024: "
+    print(f"\n== {_label(centerward, once_per_measure)}, Senate general elections 1990-2024: "
           f"N = {len(S)} contested incumbents, {S.year.nunique()} elections ==")
     print_overbreak(S, "own", "x + I(x**2) + C(fe)")
     for label, d in (("1990-2008", S[S.year <= 2008]), ("2010-2024", S[S.year >= 2010])):
@@ -711,7 +758,7 @@ def senate_general_test(p):
                  lambda f: smf.ols(f, S).fit(cov_type="cluster", cov_kwds={"groups": S.gid}), S.fe)
 
 
-def house_primary_test(p):
+def house_primary_test(p, centerward=False, once_per_measure=False):
     P = pd.read_stata(p["house_primaries.dta"])
     P = P[(P.inc == 1) & P.year.between(1990, 2010) & (P.runoff == 0)].copy()
     P["party"] = P.party.astype(int).map({0: "R", 1: "D"})
@@ -722,7 +769,7 @@ def house_primary_test(p):
     rows = []
     for c in HOUSES:
         yr = 1788 + 2 * c
-        M = voteview_breaks(p, "H", c)
+        M = voteview_breaks(p, "H", c, centerward, once_per_measure)
         M["last"] = ascii_upper(M.bioname).str.split(",").str[0].str.replace(r"[^A-Z]", "", regex=True)
         M = M.merge(P[P.year == yr][["state_po", "party", "last", "candnumber", "candpct", "winner", "prez"]],
                     left_on=["state_abbrev", "party", "last"], right_on=["state_po", "party", "last"])
@@ -736,7 +783,7 @@ def house_primary_test(p):
         rows.append(M)
     A = overbreak_terms(pd.concat(rows, ignore_index=True))
     A["challenged"], A["lost"], A["pshare"] = (A.candnumber > 1) * 1.0, (A.winner == 0) * 1.0, A.candpct * 100
-    print(f"\n== Breaking far above expectation, own-party voters: House primaries 1990-2010, "
+    print(f"\n== {_label(centerward, once_per_measure)}, own-party voters: House primaries 1990-2010, "
           f"N = {len(A)} incumbents, {A.challenged.mean():.0%} challenged, {int(A.lost.sum())} lost ==")
     print(" drew a primary challenger (linear probability):")
     print_overbreak(A, "challenged", "alignment + C(fe)")
@@ -764,6 +811,12 @@ def main():
     senate_test(paths)
     senate_general_test(paths)
     house_primary_test(paths)
+    # Section 11: the same tests, counting only breaks toward the other party.
+    senate_general_test(paths, centerward=True)
+    house_primary_test(paths, centerward=True)
+    # Section 12: every stage of one measure (cloture, then confirmation) counted once.
+    senate_general_test(paths, centerward=True, once_per_measure=True)
+    house_primary_test(paths, centerward=True, once_per_measure=True)
 
 
 if __name__ == "__main__":

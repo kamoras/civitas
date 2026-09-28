@@ -275,6 +275,35 @@ describe("MemberScorecard", () => {
     );
   });
 
+  it("lists the breaks the score counts, and the flank's apart, from the breakdown", async () => {
+    const counted = {
+      ...breakdown,
+      constituentAlignment: {
+        ...breakdown.constituentAlignment,
+        facts: {
+          party: "R",
+          partyVotes: 292,
+          breaks: 1,
+          breakRate: 0.0034,
+          expectedBreakRate: 0.004,
+          flankBreaks: 1,
+          breakVotes: [{ vote: "Nay", rollCall: { ...recommit.rollCall!, number: 12, billId: "HR.1" } }],
+          flankBreakVotes: [{ vote: "Yea", rollCall: recommit.rollCall! }],
+        },
+      },
+    };
+    render(
+      <MemberScorecard member={member} chamber="house" breakdown={counted} district={2}
+        stateName="Tennessee" rank={{ rank: 412, of: 433 }} committees={[]} />
+    );
+    expect(screen.getByText("Votes against party (1)")).toBeInTheDocument();
+    expect(screen.getByText("From the right flank, not counted (1)")).toBeInTheDocument();
+    expect(screen.getByText(/Each bill or nomination counts once/)).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "H.R. 8800" })).toHaveLength(2);
+    // Served with the score: nothing to fetch.
+    expect(fetchRepVotes).not.toHaveBeenCalled();
+  });
+
   it("opens the full record in a drawer and closes it with Escape", async () => {
     renderCard();
     await userEvent.click(screen.getByRole("button", { name: /All 65 sponsored bills/ }));
